@@ -1,7 +1,7 @@
 version: 2
 
 # Grouped so a routine bump week is one PR per ecosystem, not thirty. Security
-# updates are ungrouped by design — they arrive on their own so they can be
+# updates are ungrouped by design; they arrive on their own so they can be
 # reviewed and merged without waiting on unrelated bumps.
 updates:
   - package-ecosystem: cargo

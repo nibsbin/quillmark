@@ -1,4 +1,4 @@
-//! Markdown-string input normalization — the boundary preprocessing content
+//! Markdown-string input normalization: the boundary preprocessing content
 //! import runs before parsing. Converts line endings to `\n`, strips invisible
 //! Unicode bidi controls (which sit adjacent to `**`/`_` and defeat delimiter
 //! recognition), and repairs `<!-- ... -->` HTML-comment fences that would
@@ -96,7 +96,7 @@ pub fn fix_html_comment_fences(s: &str) -> String {
 
             current_pos = after_fence;
         } else {
-            // Unclosed comment — append the rest and stop.
+            // Unclosed comment: append the rest and stop.
             result.push_str(&s[current_pos..]);
             current_pos = s.len();
             break;

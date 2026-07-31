@@ -4,8 +4,8 @@
 //! [`seed_main`](super::Quill::seed_main), and
 //! [`seed_card`](super::Quill::seed_card) build a starter document by committing
 //! each schema field's `example` value and leaving **every other field absent**.
-//! Absent fields are interpolated at render time — schema `default`, else
-//! type-empty zero — by the zero-filled render in
+//! Absent fields are interpolated at render time (schema `default`, else
+//! type-empty zero) by the zero-filled render in
 //! [`Quill::compile_data`](super::Quill::compile_data); they are never written
 //! into the document.
 //!
@@ -19,8 +19,8 @@
 //! preserves the absence-based completeness signal for fields that have no
 //! `example` to seed.
 //!
-//! Provenance — distinguishing an untouched seeded `example` from authored
-//! content — is out of scope by design; correctness and renderability do not
+//! Provenance (distinguishing an untouched seeded `example` from authored
+//! content) is out of scope by design; correctness and renderability do not
 //! depend on it. A field carrying its seeded `example` reads as ordinary
 //! authored content.
 //!
@@ -39,7 +39,7 @@ use crate::{Card, Document, Payload, QuillReference, QuillValue, SeedOverlay};
 /// `overlay › example › absent`; the overlay may also add a field the base
 /// omits (a `default`-only field with no `example`). The final fields are
 /// ordered by schema declaration order (matching the blueprint). Only fields declared on the
-/// schema are included — an overlay key naming no schema field is ignored here
+/// schema are included: an overlay key naming no schema field is ignored here
 /// (the editor-surface validator flags it). Body: `overlay › body.example ›
 /// empty`, honored only when the kind enables bodies. The `$quill` / `$kind`
 /// system metadata is attached by the caller.
@@ -52,12 +52,12 @@ use crate::{Card, Document, Payload, QuillReference, QuillValue, SeedOverlay};
 /// next `compile_data`.
 fn seed_parts(schema: &CardSchema, overlay: Option<&SeedOverlay>) -> (Payload, Content) {
     // Drive by `schema.fields` (declaration order), so the result is in
-    // declaration order natively — no merge-then-sort. Per field the precedence
+    // declaration order natively: no merge-then-sort. Per field the precedence
     // is `overlay › example_content › example › absent`: a richtext-bearing field
     // seeds from its pre-validated content companion, every other from its raw
     // `example`, and the overlay overrides either (and can supply a value for a
     // `default`-only field the base omits). An overlay key naming no schema
-    // field is skipped — it is never iterated here.
+    // field is skipped: it is never iterated here.
     let mut fields: IndexMap<String, QuillValue> = IndexMap::new();
     for (name, field) in &schema.fields {
         let value = overlay
@@ -70,7 +70,7 @@ fn seed_parts(schema: &CardSchema, overlay: Option<&SeedOverlay>) -> (Payload, C
     }
 
     // Body region as a content: an overlay body (authored markdown) is imported;
-    // otherwise the `body.example` content cache is used; else empty — and only
+    // otherwise the `body.example` content cache is used; else empty, and only
     // when bodies are enabled for the kind.
     let body = if schema.body_enabled() {
         if let Some(overlay_body) = overlay.and_then(|o| o.body.clone()) {
@@ -102,7 +102,7 @@ fn main_reference(quill: &Quill) -> QuillReference {
 }
 
 pub(crate) fn seed_main(quill: &Quill) -> Card {
-    // The main card is never seeded from an overlay — `$seed` keys range over
+    // The main card is never seeded from an overlay: `$seed` keys range over
     // composable `card_kinds`, and `main` is not one of them.
     let (mut payload, body) = seed_parts(&quill.config().main, None);
     payload.set_quill(main_reference(quill));

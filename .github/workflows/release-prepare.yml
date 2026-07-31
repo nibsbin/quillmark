@@ -16,7 +16,7 @@ on:
         type: boolean
         default: false
       version_override:
-        description: Explicit next version (e.g. 0.94.0), used verbatim and overriding bump — set to skip a minor
+        description: Explicit next version (e.g. 0.94.0), used verbatim and overriding bump, set to skip a minor
         required: false
         type: string
         default: ""
@@ -120,7 +120,7 @@ jobs:
           # A curated "## Unreleased" section is the seed body: its entries
           # become the version section (and the GitHub Release notes), with the
           # raw commit list riding below in an HTML comment as a coverage
-          # cross-check — invisible in rendered notes if left unedited. With no
+          # cross-check, invisible in rendered notes if left unedited. With no
           # curated section, the commit list is the seed body itself.
           # Only the first "## Unreleased" is consumed; any later one is
           # stray data and passes through untouched rather than corrupting
@@ -133,7 +133,7 @@ jobs:
             echo
             if grep -q '[^[:space:]]' unreleased.md; then
               sed -e '/./,$!d' unreleased.md
-              echo "<!-- seed: commits since ${LAST:-the first commit} — confirm the entries above cover them, then delete this comment"
+              echo "<!-- seed: commits since ${LAST:-the first commit}, confirm the entries above cover them, then delete this comment"
               git log --no-merges --pretty='- %s' ${LAST:+"${LAST}..HEAD"}
               echo "-->"
             else
@@ -168,7 +168,7 @@ jobs:
             --title "chore(release): v${VERSION}" \
             --body "Automated version bump to \`v${VERSION}\`.
 
-          **Before merging:** review and edit the \`v${VERSION}\` section at the top of \`CHANGELOG.md\` on this branch — seeded from the curated \`## Unreleased\` section when one exists (raw commits ride in an HTML comment as a coverage check), else from the raw commit list. The final section becomes the GitHub Release notes.
+          **Before merging:** review and edit the \`v${VERSION}\` section at the top of \`CHANGELOG.md\` on this branch, seeded from the curated \`## Unreleased\` section when one exists (raw commits ride in an HTML comment as a coverage check), else from the raw commit list. The final section becomes the GitHub Release notes.
 
           Merging this PR will tag and publish the release." \
             --base main \

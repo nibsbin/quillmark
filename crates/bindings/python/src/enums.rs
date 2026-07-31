@@ -29,7 +29,7 @@ macro_rules! py_enum {
                 }
             }
 
-            // Static all() — pyo3 enums expose iteration via a classmethod-style static.
+            // Static all(): pyo3 enums expose iteration via a classmethod-style static.
             #[staticmethod]
             fn all() -> Vec<Self> {
                 vec![$(Self::$variant),*]
@@ -72,8 +72,8 @@ impl From<OutputFormat> for PyOutputFormat {
             // Forced by `#[non_exhaustive]`, unreachable in practice: this
             // crate is `publish = false` and path-deps the core beside it, so
             // the two variant lists ship together. No fallback format is
-            // honest — every one of them promises bytes the caller did not ask
-            // for — so the arm refuses instead of guessing.
+            // honest (every one of them promises bytes the caller did not ask
+            // for) so the arm refuses instead of guessing.
             other => unreachable!("OutputFormat::{other:?} has no PyOutputFormat member"),
         }
     }

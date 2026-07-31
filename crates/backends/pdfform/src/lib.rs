@@ -1,12 +1,12 @@
-//! # quillmark-pdfform — the PDF-form backend
+//! # quillmark-pdfform: the PDF-form backend
 //!
-//! A Typst-free Quillmark backend dedicated to filling existing PDF forms —
+//! A Typst-free Quillmark backend dedicated to filling existing PDF forms:
 //! something the Typst backend fundamentally cannot do. A `pdfform` quill ships
 //! two assets the (out-of-scope) qualification layer produced upstream:
 //!
-//! - **`form.pdf`** — the *stripped background*: the normalized form with
+//! - **`form.pdf`**, the *stripped background*: the normalized form with
 //!   its `/AcroForm`, widget annotations, and page `/Annots` removed.
-//! - **`form.json`** — the complete, value-free field reconstruction spec.
+//! - **`form.json`**: the complete, value-free field reconstruction spec.
 //!
 //! The backend reads both, binds document values against `compile_data`, and
 //! writes a fresh AcroForm onto the background via the shared `quillmark-pdf`
@@ -96,7 +96,7 @@ impl Backend for PdfformBackend {
         // geometry is placed once, at load.
         let page_boxes = quillmark_pdf::page_media_boxes(&base_pdf)?;
 
-        // Bind at load: resolve every field against the two static inputs — the
+        // Bind at load: resolve every field against the two static inputs, the
         // quill schema (kind, options, multiline, tooltip) and the page geometry
         // (final rect, page-range check). A dangling/unbindable `schema_field` or
         // an out-of-range page is a load error here, not a silent blank or a
@@ -121,7 +121,7 @@ impl Backend for PdfformBackend {
     }
 }
 
-/// Resolve the bound widgets' values against document data — the per-document
+/// Resolve the bound widgets' values against document data: the per-document
 /// half of `open`, re-run by each `apply`. Intrinsics and geometry were already
 /// resolved at bind time, so this pass only fills in values; nothing here can
 /// fail.
@@ -216,13 +216,13 @@ impl SessionHandle for PdfformSession {
         Some((w, h, bytes))
     }
 
-    /// Schema-field geometry from the resolved specs — keyed on the schema path,
+    /// Schema-field geometry from the resolved specs: keyed on the schema path,
     /// skipping unbound widgets. Computed from cached state, no rasterization.
     fn regions(&self) -> Vec<RenderedRegion> {
         regions_of(&self.field_specs)
     }
 
-    /// Full re-resolve + re-flatten against new document data — this backend's
+    /// Full re-resolve + re-flatten against new document data: this backend's
     /// compile is cheap, so `apply` recomputes rather than incrementally
     /// recompiling. Transactional: specs and flat PDF swap together only after
     /// both succeed. Dirty pages are those carrying a field whose resolved spec
@@ -305,7 +305,7 @@ impl PdfformSession {
     }
 }
 
-/// Uniform scale on both axes over an opaque white page — the raster settings
+/// Uniform scale on both axes over an opaque white page: the raster settings
 /// behind both the RGBA canvas path and the PNG artifact path, which must agree
 /// or a preview and its export drift apart.
 fn scaled_render_settings(scale: f32) -> RenderSettings {

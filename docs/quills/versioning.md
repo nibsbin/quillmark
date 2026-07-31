@@ -44,7 +44,7 @@ Supported selectors:
 
 A selector is a **pin**, not a resolver: Quillmark renders with the Quill it was
 handed and never picks among versions. At render time (and in `dry_run`) it
-checks that Quill against the reference and **rejects a mismatch** — rendering a
+checks that Quill against the reference and **rejects a mismatch**: rendering a
 document against the wrong format is a footgun, so it errors rather than
 silently producing undefined output:
 
@@ -55,7 +55,7 @@ silently producing undefined output:
   `quill::version_mismatch`.
 
 Fix either by pointing at the Quill the document targets, or by amending the
-`$quill` line — correct the name, or widen the selector (e.g. `@3` or `@latest`).
+`$quill` line: correct the name, or widen the selector (e.g. `@3` or `@latest`).
 A bare name or `@latest` matches any version, so a document that targets its
 Quill correctly never trips these checks.
 

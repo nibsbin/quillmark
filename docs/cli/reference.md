@@ -21,7 +21,7 @@ quillmark render [OPTIONS] <QUILL_PATH> [MARKDOWN_FILE]
 **Arguments:**
 
 - `<QUILL_PATH>`: Path to quill directory
-- `[MARKDOWN_FILE]`: Path to markdown file with a root card-yaml block (optional — when omitted, the quill's seeded document is rendered, each field populated from its `example:` value, with `default:` used as fallback)
+- `[MARKDOWN_FILE]`: Path to markdown file with a root card-yaml block (optional, when omitted, the quill's seeded document is rendered, each field populated from its `example:` value, with `default:` used as fallback)
 
 The file must open with a `~~~` block containing a `$quill:` key identifying the quill. The `~~~card-yaml` opener is also accepted.
 
@@ -81,7 +81,7 @@ quillmark schema ./my-quill -o schema.yaml
 
 ### blueprint
 
-Print a quill's Markdown blueprint — an annotated document showing the quill's fields, constraints, and examples, itself a valid document an author can fill in.
+Print a quill's Markdown blueprint: an annotated document showing the quill's fields, constraints, and examples, itself a valid document an author can fill in.
 
 ```bash
 quillmark blueprint [OPTIONS] <QUILL_PATH>
@@ -149,7 +149,7 @@ quillmark info [OPTIONS] <QUILL_PATH>
 
 **Fields shown:** name, description, version, author, backend, field count, and
 card count (when nonzero), plus a metadata section for any non-standard
-`Quill.yaml` keys — the standard keys (`backend`, `version`, `author`,
+`Quill.yaml` keys: the standard keys (`backend`, `version`, `author`,
 `description`) are excluded from it. The text output additionally shows a
 defaults count when nonzero; `--json` has no defaults count.
 
@@ -165,5 +165,5 @@ quillmark info ./my-quill --json
 
 ## Exit Codes
 
-- `0` — success
-- `1` — error (invalid arguments, file not found, parse error, compilation error, etc.)
+- `0`: success
+- `1`: error (invalid arguments, file not found, parse error, compilation error, etc.)

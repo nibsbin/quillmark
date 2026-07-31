@@ -1,24 +1,24 @@
-//! The `Content` content model — one text sequence per field carrying line
+//! The `Content` content model: one text sequence per field carrying line
 //! attributes, anchored marks, and embedded islands, over a single coordinate
 //! space of Unicode scalar values (Rust `char`).
 //!
 //! This is the freeze: the mark set, the three
 //! normalization rules, and the invariants are what canonical serialization
 //! commits to. Everything an editor disagrees on (edge-expand,
-//! adjacent-merge-at-insertion) is *not* encoded — the model only ever stores
+//! adjacent-merge-at-insertion) is *not* encoded: the model only ever stores
 //! the resulting range, so the stored form is identical whatever the editor
 //! did.
 
 use crate::normalize::is_bidi_char;
 use serde_json::Value as JsonValue;
 
-/// A position in a [`Content`], counted in Unicode scalar values (USV) — never
+/// A position in a [`Content`], counted in Unicode scalar values (USV): never
 /// bytes, never UTF-16 units. One astral char is 1 USV / 4 UTF-8 bytes / 2
 /// UTF-16 units. Conversions to/from the JS (UTF-16) and Rust (UTF-8)
 /// boundaries live in [`crate::usv`].
 pub type Usv = usize;
 
-/// U+FFFC OBJECT REPLACEMENT CHARACTER — the single-USV slot an island occupies
+/// U+FFFC OBJECT REPLACEMENT CHARACTER: the single-USV slot an island occupies
 /// in the content. One slot per island; every slot has a backing island. A stray
 /// slot (or a slot with no island) is an invariant violation.
 pub const ISLAND_SLOT: char = '\u{FFFC}';
@@ -34,7 +34,7 @@ pub struct Content {
     /// The content. `\n` is a line boundary; [`ISLAND_SLOT`] is an island slot.
     pub text: String,
     /// One entry per `\n`-separated segment of `text`, in order. The line tree
-    /// is *derived* from this flat list plus each line's `containers` path — it
+    /// is *derived* from this flat list plus each line's `containers` path: it
     /// is never stored, so a split/join is a single-char edit with no identity
     /// crisis (there are no paragraph IDs).
     pub lines: Vec<Line>,
@@ -71,7 +71,7 @@ pub struct Line {
 /// **Open**, on the same terms as [`MarkKind`]: an unrecognized role round-trips
 /// as [`LineKind::Unknown`] and *projects* as [`LineKind::Para`], so adding a
 /// block construct (a callout, a footnote, a task item) is not a document schema
-/// event — an older reader renders the future construct as a plain paragraph
+/// event, an older reader renders the future construct as a plain paragraph
 /// instead of refusing the whole document, and the opaque tag+attrs still reach a
 /// reader that understands them (`DOCUMENT_STORAGE.md` § Open vocabularies).
 #[derive(Debug, Clone, PartialEq)]
@@ -89,11 +89,11 @@ pub enum LineKind {
     },
     /// A block-level island: the line's sole content is one [`ISLAND_SLOT`].
     Island,
-    /// A thematic break (`---`/`***`/`___`). The line carries no text — the
+    /// A thematic break (`---`/`***`/`___`). The line carries no text: the
     /// break is the line itself, parallel to how an island's content is its
     /// one slot char.
     Rule,
-    /// Open-set escape hatch — a block role this build does not know,
+    /// Open-set escape hatch: a block role this build does not know,
     /// round-tripped opaque and projected as [`LineKind::Para`]. Carries
     /// arbitrary text, like the `Para` it projects as, so no
     /// [`LineKindMismatch`] constrains it.
@@ -106,13 +106,13 @@ pub enum LineKind {
 impl LineKind {
     /// Whether the line projects as a paragraph: [`LineKind::Para`] itself, or an
     /// unknown role, which every projection renders as one. For the tests a
-    /// `match` cannot serve — a `matches!(kind, Para)` that special-cases the
+    /// `match` cannot serve: a `matches!(kind, Para)` that special-cases the
     /// paragraph (suppressing an empty block, say) reads as complete but drops
     /// the open arm, and the two emitters then drift on the construct neither
     /// knows.
     ///
     /// An exhaustive `match` keeps listing both arms, and in this crate the
-    /// compiler still polices that — `#[non_exhaustive]` does not apply within
+    /// compiler still polices that: `#[non_exhaustive]` does not apply within
     /// the defining crate. It does apply to the typst backend, whose emitter
     /// folds both arms into one wildcard; there the ladder, not the compiler,
     /// is what keeps a new role rendering.
@@ -124,7 +124,7 @@ impl LineKind {
 /// A container a line nests inside. The ancestor path is a `Vec<Container>`.
 ///
 /// **Open**, on [`LineKind`]'s terms: an unrecognized container round-trips as
-/// [`Container::Unknown`] and projects *transparently* — its lines render at the
+/// [`Container::Unknown`] and projects *transparently*, its lines render at the
 /// enclosing level, with no prefix, no wrapper, and no grouping of their own.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -132,11 +132,11 @@ pub enum Container {
     /// A list item. `ordered` distinguishes `1.` from `-`; `start` is the list's
     /// first number (1 by default); `ordinal` is this item's 0-based index in
     /// its list. Two *adjacent* lines belong to the same item iff their whole
-    /// container path (ordinals included) is equal — so a multi-paragraph item
+    /// container path (ordinals included) is equal, so a multi-paragraph item
     /// is two lines sharing one `ListItem`, while the next item differs by
     /// `ordinal`. (Identity is path **plus contiguity**: two sibling inner lists
     /// under one outer item can produce equal first-item paths, distinguished
-    /// only by the non-adjacency of their runs.) Positional and deterministic —
+    /// only by the non-adjacency of their runs.) Positional and deterministic,
     /// no minted ids.
     ListItem {
         ordered: bool,
@@ -145,9 +145,9 @@ pub enum Container {
     },
     /// A block quote. Adjacent lines sharing `[Quote]` are one multi-paragraph
     /// quote; two adjacent separate quotes are not distinguished (they merge on
-    /// round-trip — a documented canonicalization).
+    /// round-trip: a documented canonicalization).
     Quote,
-    /// Open-set escape hatch — a container this build does not know, kept in the
+    /// Open-set escape hatch: a container this build does not know, kept in the
     /// path so it round-trips, transparent to both projections. Two adjacent
     /// lines sit in the same one iff their whole `(tag, attrs)` is equal, the
     /// path-plus-contiguity rule the known containers use.
@@ -166,14 +166,14 @@ pub struct Mark {
     pub kind: MarkKind,
 }
 
-/// The mark set — **open**: an unknown kind round-trips as [`MarkKind::Unknown`],
+/// The mark set, **open**: an unknown kind round-trips as [`MarkKind::Unknown`],
 /// absorbed as a new *type*, never a changed semantics of a known one. Two
 /// algebra classes: formatting is a property of a range (two coincident are
 /// redundant); identity is a handle (two over the same range are two things).
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum MarkKind {
-    // Formatting — round-trippable projection marks. `is_formatting()`.
+    // Formatting: round-trippable projection marks. `is_formatting()`.
     Strong,
     Emph,
     Underline,
@@ -182,7 +182,7 @@ pub enum MarkKind {
     Link {
         url: String,
     },
-    // Identity — a handle, not a property. Never merged, may be zero-width.
+    // Identity: a handle, not a property. Never merged, may be zero-width.
     /// A comment thread or stable anchor, carried by id and rebased across
     /// edits like any position. The id is caller-supplied, unique per `Content`,
     /// opaque and invariant while the mark lives; positions rebase, the id never
@@ -192,18 +192,18 @@ pub enum MarkKind {
     Anchor {
         id: String,
     },
-    // Open-set escape hatch — an unknown mark type, round-tripped opaque.
+    // Open-set escape hatch: an unknown mark type, round-tripped opaque.
     Unknown {
         tag: String,
         attrs: JsonValue,
     },
 }
 
-/// A structured object with no honest text encoding — a table, figure, or future
-/// embed — occupying one [`ISLAND_SLOT`] in the content.
+/// A structured object with no honest text encoding (a table, figure, or future
+/// embed) occupying one [`ISLAND_SLOT`] in the content.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Island {
-    /// Deterministically minted, session-stable id — `isl-{n}` by import
+    /// Deterministically minted, session-stable id: `isl-{n}` by import
     /// position (`import::mint_island`). Part of the canonical form and thus
     /// hash input; deterministic by contract, never ambient, so equal content
     /// hashes equal (`DOCUMENT_STORAGE.md` § Island-id determinism). Edits keep
@@ -220,7 +220,7 @@ pub struct Island {
     pub loss: Loss,
 }
 
-/// The markdown-projection loss class of an island — a **description** of how
+/// The markdown-projection loss class of an island: a **description** of how
 /// faithfully the projection carries it, for a consumer to surface (a caller
 /// warned that a form field silently dropped a table). It is not a
 /// switch: [`crate::export::to_markdown`] dispatches on
@@ -232,11 +232,11 @@ pub enum Loss {
     Lossless,
     /// Markdown carries an approximation (round-trips visibly, not identically).
     Degraded,
-    /// No markdown encoding — what an island type with no projection carries.
+    /// No markdown encoding: what an island type with no projection carries.
     Unrepresentable,
     /// A class a future writer stamped that this build lacks, carried verbatim.
     ///
-    /// `loss` is open on the terms the other four vocabularies use — mark
+    /// `loss` is open on the terms the other four vocabularies use: mark
     /// `type`, line `kind`, container, island `type` all round-trip an
     /// unrecognized member opaque. Carrying the raw tag rather than rewriting it
     /// is what keeps a reader that merely opens a document from moving that
@@ -287,7 +287,7 @@ impl MarkKind {
     }
 
     /// Total order over kinds for the canonical sort tie-break, after
-    /// `(start, end)`. Stable across releases — part of the freeze.
+    /// `(start, end)`. Stable across releases: part of the freeze.
     ///
     /// A new variant takes the slot immediately **before** [`MarkKind::Unknown`],
     /// pushing `Unknown` up by one. That is the only placement where a build that
@@ -312,7 +312,7 @@ impl MarkKind {
     /// Attribute tie-break string, appended after `ord` in the canonical sort so
     /// two marks that differ only in attrs order deterministically. Also the
     /// grouping key for same-kind union (two formatting marks union only when
-    /// this matches — e.g. two `link`s union only at the same url).
+    /// this matches; e.g. two `link`s union only at the same url).
     pub fn attrs_key(&self) -> String {
         match self {
             MarkKind::Link { url } => url.clone(),
@@ -327,13 +327,13 @@ impl MarkKind {
 }
 
 /// A `serde_json::Value` rendered to a string with object keys recursively
-/// sorted — order-insensitive, so it is a stable comparison/grouping key.
+/// sorted: order-insensitive, so it is a stable comparison/grouping key.
 fn canonical_json_string(v: &JsonValue) -> String {
     serde_json::to_string(&sort_keys_owned(v.clone())).unwrap_or_default()
 }
 
 /// Whether every object in `v` already has its keys in ascending order,
-/// recursively — the cheap allocation-free check that lets a re-normalize skip
+/// recursively: the cheap allocation-free check that lets a re-normalize skip
 /// rebuilding an already-canonical `props`/`attrs` tree.
 /// Once normalized, an untouched tree stays sorted, so a per-keystroke
 /// re-normalize pays a scan instead of a full clone.
@@ -348,7 +348,7 @@ pub(crate) fn is_value_key_sorted(v: &JsonValue) -> bool {
     }
 }
 
-/// `true` when `v` nests deeper than `max` container levels — the guard that
+/// `true` when `v` nests deeper than `max` container levels: the guard that
 /// keeps the recursive walkers above ([`is_value_key_sorted`], [`sort_keys_owned`])
 /// and `Value`'s own `Drop` inside a bounded frame count.
 ///
@@ -398,7 +398,7 @@ pub(crate) fn check_json_depth(v: &JsonValue, what: &'static str) -> Result<(), 
 }
 
 /// Put `v` in canonical key order, rebuilding it only when a key is actually out
-/// of order — an untouched tree (a pure text splice) stays sorted, so the
+/// of order: an untouched tree (a pure text splice) stays sorted, so the
 /// per-keystroke path pays the scan and skips the deep clone.
 pub(crate) fn canonicalize_keys(v: &mut JsonValue) {
     if !is_value_key_sorted(v) {
@@ -416,7 +416,7 @@ pub(crate) fn canonicalize_keys(v: &mut JsonValue) {
 /// The fixed struct keys land alphabetically and an already-sorted
 /// `props`/`attrs` re-sorts to itself. The leaves (the `text` string, mark
 /// attrs, arrays) move rather than deep-clone, so a tree built once by
-/// `to_value` is canonicalized without a second full clone — and the encoders
+/// `to_value` is canonicalized without a second full clone, and the encoders
 /// emit their payload bags verbatim, one pass over the finished tree rather
 /// than one per bag.
 pub(crate) fn sort_keys_owned(v: JsonValue) -> JsonValue {
@@ -460,14 +460,14 @@ pub enum Invariant {
     FirstLineContinues,
     /// An [`MarkKind::Unknown`] reused a reserved built-in `type` name.
     ReservedUnknownTag(String),
-    /// A [`LineKind::Unknown`] reused a reserved built-in `kind` name — its
+    /// A [`LineKind::Unknown`] reused a reserved built-in `kind` name: its
     /// serialization would parse back as the built-in, dropping its attrs.
     ReservedUnknownLineKind(String),
     /// A [`Container::Unknown`] reused a reserved built-in `container` name, the
     /// same non-injectivity as [`Invariant::ReservedUnknownLineKind`].
     ReservedUnknownContainer(String),
     /// A formatting mark edge sits on a `\n` (normalization should have trimmed
-    /// it) — a hand-built content that skipped `normalize`.
+    /// it): a hand-built content that skipped `normalize`.
     MarkEdgeOnNewline { at: Usv },
     /// A table island's `aligns` length differs from its column count (the
     /// header width). `normalize` syncs `aligns` to the column count.
@@ -475,7 +475,7 @@ pub enum Invariant {
     /// A table island body row's width differs from the column count (the header
     /// width). `normalize` pads short rows (and the header) to the widest.
     TableRaggedRow { row: usize, width: usize, cols: usize },
-    /// A table cell's text carries a `\n` — cells are single-line (a newline
+    /// A table cell's text carries a `\n`: cells are single-line (a newline
     /// would break the exported table). `cell` is the flat header-then-rows
     /// index; `normalize` rewrites the newline to a space.
     TableCellNewline { cell: usize },
@@ -483,7 +483,7 @@ pub enum Invariant {
     /// identities (hash input, so never ambient); import mints them by index so
     /// they never collide, but a hand-built or round-tripped content can.
     /// Downstream code that keys islands by id would otherwise silently pick the
-    /// wrong one. Uniqueness is the id invariant `validate` enforces — positional
+    /// wrong one. Uniqueness is the id invariant `validate` enforces: positional
     /// equality is not, since edits keep an island's id stable across renumbers.
     IslandIdCollision { id: String },
     /// Two prose anchors share an `id`, or one carries the empty id. An anchor
@@ -491,9 +491,9 @@ pub enum Invariant {
     /// never ambient in the twin's sense; `DOCUMENT_STORAGE.md` § Anchor-id
     /// identity). `RemoveAnchor { id }` retains-out *every* match, so a shared id
     /// makes removing one destroy both; the empty id is a degenerate handle.
-    /// Scope is prose marks — cell anchors are outside the op surface.
+    /// Scope is prose marks: cell anchors are outside the op surface.
     AnchorIdCollision { id: String },
-    /// A table island's `header` prop is present but not a JSON array — it
+    /// A table island's `header` prop is present but not a JSON array: it
     /// cannot carry column cells. `normalize` rewrites a non-array header to an
     /// empty array (a zero-column, content-free table).
     TableHeaderNotArray,
@@ -511,10 +511,10 @@ pub enum Invariant {
         depth: usize,
         max: usize,
     },
-    /// An opaque JSON payload — an island's `props`, an unknown line/container/
-    /// mark's `attrs` — nests deeper than [`MAX_JSON_DEPTH`](crate::MAX_JSON_DEPTH):
+    /// An opaque JSON payload (an island's `props`, an unknown line/container/
+    /// mark's `attrs`) nests deeper than [`MAX_JSON_DEPTH`](crate::MAX_JSON_DEPTH):
     /// [`Invariant::NestingTooDeep`] on the payload axis. `what` names the bag.
-    /// No true depth — the check bails at the first over-deep container rather
+    /// No true depth: the check bails at the first over-deep container rather
     /// than measuring past the limit.
     JsonTooDeep { what: &'static str, max: usize },
 }
@@ -527,7 +527,7 @@ pub enum Invariant {
 pub enum LineKindMismatch {
     /// [`LineKind::Island`] whose text is not exactly one [`ISLAND_SLOT`].
     IslandNotOneSlot,
-    /// [`LineKind::Rule`] carrying text — the break is the line itself.
+    /// [`LineKind::Rule`] carrying text: the break is the line itself.
     RuleNotEmpty,
     /// [`LineKind::Code`] carrying an [`ISLAND_SLOT`]. A fence emits its text
     /// verbatim, so the slot lands raw in the output and re-imports as nothing:
@@ -535,7 +535,7 @@ pub enum LineKindMismatch {
     CodeHasSlot,
 }
 
-/// How a line's text contradicts `kind`, if it does — the single reading behind
+/// How a line's text contradicts `kind`, if it does, the single reading behind
 /// the [`Invariant::LineKindMismatch`] and
 /// [`ApplyError::LineKindMismatch`](crate::ops::ApplyError::LineKindMismatch)
 /// twins, so the validate-time and op-time checks cannot drift.
@@ -590,7 +590,7 @@ impl Content {
     /// islands, and every line is a plain `Para` sitting in no container. It is
     /// the multi-line generalization of [`is_inline`](Self::is_inline) (which
     /// additionally pins the content to one line) with the mark/island exclusion
-    /// made explicit — a plaintext value carries prose the author navigates but
+    /// made explicit: a plaintext value carries prose the author navigates but
     /// no formatting. `continues` is unconstrained: a lone `\n` may be a
     /// within-paragraph break. [`Content::empty`] is plain.
     ///
@@ -615,21 +615,21 @@ impl Content {
         self.text.trim().is_empty()
     }
 
-    /// Number of `\n`-separated segments — the required `lines.len()`.
+    /// Number of `\n`-separated segments: the required `lines.len()`.
     pub fn segment_count(&self) -> usize {
         self.text.chars().filter(|c| *c == '\n').count() + 1
     }
 
     /// Normalize marks in place: drop zero-width formatting, union same-kind
     /// formatting that is adjacent or overlapping, recursively key-sort island
-    /// props and unknown-mark attrs, then sort marks canonically. Idempotent —
+    /// props and unknown-mark attrs, then sort marks canonically. Idempotent:
     /// the fixed point the canonical serialization commits to.
     pub fn normalize(&mut self) {
         // Line kinds whose contract names their content, against the content
         // they now hold. A splice writes text, never kinds: typing into a table
         // line leaves it `Island` over prose, joining a fence to an image line
         // leaves it `Code` over a slot, and export reads the kind and not the
-        // text — so the un-repaired line projects its content away. Demote to
+        // text, so the un-repaired line projects its content away. Demote to
         // `Para`, the kind that carries anything (an inline island is a slot in a
         // `Para`), which is what re-importing the line's own markdown yields.
         // The repair-side twin of the [`Invariant::LineKindMismatch`] check; the
@@ -658,7 +658,7 @@ impl Content {
         // inline `{text, marks}`; repair its shape (pad the header/rows/aligns to
         // one column count, rewrite any cell `\n` to a space) and canonicalize
         // each cell's marks (sort, union, drop zero-width) first so equal cells
-        // serialize to equal bytes and `validate` holds — the props are
+        // serialize to equal bytes and `validate` holds: the props are
         // otherwise opaque here.
         for island in &mut self.islands {
             crate::island::normalize_island_structure(island);
@@ -672,7 +672,7 @@ impl Content {
         // A formatting mark's edges never sit on a line boundary: markdown can't
         // bold a `\n`, so two producers that disagree only about whether the
         // boundary is "inside" the mark must canonicalize to the same bounds.
-        // Trim leading/trailing `\n` (interior boundaries are kept — a mark may
+        // Trim leading/trailing `\n` (interior boundaries are kept: a mark may
         // legitimately span lines). Zero-width results are dropped below.
         // Skip the full-text char collection when nothing needs trimming.
         if self.marks.iter().any(|m| m.kind.is_formatting()) {
@@ -693,7 +693,7 @@ impl Content {
 
     /// Mark `type` names the projection reserves; an [`MarkKind::Unknown`] may
     /// not reuse one (its serialization would parse back as the built-in,
-    /// silently dropping its attrs — non-injective).
+    /// silently dropping its attrs: non-injective).
     ///
     /// Two enforcement points, on two lanes. [`Content::validate`] catches an
     /// in-process Rust construction. The wire never reaches it: a decoder resolves
@@ -723,13 +723,13 @@ impl Content {
         "anchor",
     ];
 
-    /// Line `kind` names the projection reserves — the [`LineKind`] twin of
+    /// Line `kind` names the projection reserves: the [`LineKind`] twin of
     /// [`RESERVED_MARK_TYPES`](Self::RESERVED_MARK_TYPES), for the same
     /// injectivity reason.
     pub const RESERVED_LINE_KINDS: &'static [&'static str] =
         &["para", "heading", "code", "island", "rule"];
 
-    /// Container names the projection reserves — the [`Container`] twin of
+    /// Container names the projection reserves: the [`Container`] twin of
     /// [`RESERVED_MARK_TYPES`](Self::RESERVED_MARK_TYPES).
     pub const RESERVED_CONTAINERS: &'static [&'static str] = &["list_item", "quote"];
 
@@ -767,8 +767,8 @@ impl Content {
         let len = self.len_usv();
         let chars: Vec<char> = self.text.chars().collect();
         // Prose anchor ids: unique, non-empty, caller-supplied opaque handles
-        // (`DOCUMENT_STORAGE.md` § Anchor-id identity). Uniqueness — the same
-        // invariant the island loop enforces below — is what `RemoveAnchor`
+        // (`DOCUMENT_STORAGE.md` § Anchor-id identity). Uniqueness (the same
+        // invariant the island loop enforces below) is what `RemoveAnchor`
         // presumes; scope is prose marks, cell anchors excluded by construction.
         let mut seen_anchor_ids = std::collections::HashSet::new();
         for m in &self.marks {
@@ -814,7 +814,7 @@ impl Content {
                 }
                 // An unknown role may not reuse a built-in `kind` name: it would
                 // serialize as the built-in and parse back as one, dropping its
-                // attrs — the mark-side rule, one axis over.
+                // attrs, the mark-side rule, one axis over.
                 LineKind::Unknown { tag, attrs } => {
                     if Self::RESERVED_LINE_KINDS.contains(&tag.as_str()) {
                         return Err(Invariant::ReservedUnknownLineKind(tag.clone()));
@@ -848,7 +848,7 @@ impl Content {
         let mut seen_ids = std::collections::HashSet::with_capacity(self.islands.len());
         for island in &self.islands {
             // Ids are deterministic, session-stable identities (hash input), so
-            // two islands may not share one. Uniqueness — not `id == isl-{i}` —
+            // two islands may not share one. Uniqueness (not `id == isl-{i}`)
             // is the invariant: edits keep an island's id across renumbers.
             if !seen_ids.insert(island.id.as_str()) {
                 return Err(Invariant::IslandIdCollision {
@@ -860,7 +860,7 @@ impl Content {
             // the loop below reads as well.
             check_json_depth(&island.props, "island props")?;
             // Structural shape (table column/row/aligns consistency, `\n`-free
-            // cells) before the per-cell mark ranges — a ragged island is
+            // cells) before the per-cell mark ranges: a ragged island is
             // ill-formed regardless of its marks.
             if let Some(e) = crate::island::island_shape_error(island) {
                 return Err(e);
@@ -926,7 +926,7 @@ pub(crate) fn normalize_marks(marks: Vec<Mark>) -> Vec<Mark> {
         let mut cur = ranges[0];
         for &(s, e) in &ranges[1..] {
             if s <= cur.1 {
-                // adjacent (s == cur.1) or overlapping — union
+                // adjacent (s == cur.1) or overlapping: union
                 cur.1 = cur.1.max(e);
             } else {
                 out.push(Mark {
@@ -950,7 +950,7 @@ pub(crate) fn normalize_marks(marks: Vec<Mark>) -> Vec<Mark> {
     out.sort_by_cached_key(|m| (m.start, m.end, m.kind.ord(), m.kind.attrs_key()));
     // Drop byte-identical duplicates. Identity/unknown handles never *merge*
     // (Spike-A rule 3), but two marks equal in range, kind, and attrs are the
-    // same handle recorded twice — redundant bytes, not two handles. The sort
+    // same handle recorded twice: redundant bytes, not two handles. The sort
     // above makes any such pair adjacent, so `dedup` (structural `PartialEq`,
     // order-independent for `Unknown` attrs under `preserve_order`) removes it.
     out.dedup();
@@ -996,7 +996,7 @@ mod tests {
         assert!(!island_only.is_blank());
     }
 
-    /// A single-line content over `text` tagged `kind` — the shape a `SetKind`
+    /// A single-line content over `text` tagged `kind`: the shape a `SetKind`
     /// or a splice can leave behind.
     fn tagged(text: &str, kind: LineKind) -> Content {
         Content {
@@ -1013,7 +1013,7 @@ mod tests {
 
     /// A line kind that contradicts the line's text is refused.
     /// Export trusts the kind and never re-reads the segment, so `Island` over
-    /// prose projects to the island alone and `Rule` over prose to `---` — the
+    /// prose projects to the island alone and `Rule` over prose to `---`: the
     /// text silently gone.
     #[test]
     fn line_kind_must_agree_with_line_text() {
@@ -1038,7 +1038,7 @@ mod tests {
                 mismatch: LineKindMismatch::RuleNotEmpty
             })
         );
-        // `Para`/`Heading` carry slots — an inline image is a slot in prose —
+        // `Para`/`Heading` carry slots (an inline image is a slot in prose)
         // so only a fence, whose text is emitted verbatim, refuses one.
         let mut code = tagged(&format!("a{ISLAND_SLOT}b"), LineKind::Code { lang: None });
         code.islands = vec![Island {
@@ -1066,7 +1066,7 @@ mod tests {
 
     /// A splice writes text, never kinds, so it can strand an
     /// `Island` line over prose. `normalize` demotes the stranded kind to `Para`
-    /// rather than let export drop the text — the repair-side twin of the
+    /// rather than let export drop the text: the repair-side twin of the
     /// invariant, and what keeps every op path's terminal normalize total.
     #[test]
     fn normalize_demotes_a_stranded_line_kind() {
@@ -1092,7 +1092,7 @@ mod tests {
 
     /// Container nesting is capped at the same depth import
     /// enforces, so a content that never went through import cannot reach the
-    /// emitters — which recurse one frame per container — with an unbounded path.
+    /// emitters (which recurse one frame per container) with an unbounded path.
     #[test]
     fn container_nesting_is_capped() {
         let mut rt = tagged("hi", LineKind::Para);
@@ -1304,7 +1304,7 @@ mod tests {
 
     /// A table cell built with un-normalized marks (reversed order, an adjacent
     /// same-kind pair, a zero-width formatting mark) canonicalizes to the same
-    /// marks whatever the input order — the live-model determinism invariant.
+    /// marks whatever the input order: the live-model determinism invariant.
     #[test]
     fn table_cell_marks_normalize_and_are_idempotent() {
         fn table(cell_marks: serde_json::Value) -> Content {
@@ -1354,7 +1354,7 @@ mod tests {
     }
 
     /// A cell is canonicalized in place, so a key this build does
-    /// not recognize survives. The rule has no slack — `normalize` runs on
+    /// not recognize survives. The rule has no slack: `normalize` runs on
     /// decode, on every op apply, and on every serialize, so a cell rebuilt
     /// whole drops the key on first contact and every contact after.
     #[test]
@@ -1405,7 +1405,7 @@ mod tests {
         );
     }
 
-    /// A `Content` holding a single table island with the given props — the
+    /// A `Content` holding a single table island with the given props: the
     /// shared fixture for the table-shape invariant tests.
     fn table_rt(props: serde_json::Value) -> Content {
         let mut rt = Content::empty();
@@ -1429,7 +1429,7 @@ mod tests {
     }
 
     /// `validate` rejects a ragged body row, an `aligns`/column mismatch, and a
-    /// cell carrying a `\n` — the three table-shape invariants.
+    /// cell carrying a `\n`: the three table-shape invariants.
     #[test]
     fn validate_catches_table_shape() {
         // Ragged row: header has 2 columns, the row has 3.
@@ -1467,9 +1467,9 @@ mod tests {
         assert_eq!(rt.validate(), Err(Invariant::TableCellNewline { cell: 1 }));
     }
 
-    /// `normalize` repairs every table-shape violation — pads the header and
+    /// `normalize` repairs every table-shape violation: pads the header and
     /// short rows to the widest column count, syncs `aligns`, and rewrites a
-    /// cell `\n` to a space — so the result validates and is idempotent. This is
+    /// cell `\n` to a space, so the result validates and is idempotent. This is
     /// also the one-column-count unification: the widest row (3) drives the
     /// header width, so the markdown (header-derived) and Typst (widest-row)
     /// projections agree.
@@ -1580,7 +1580,7 @@ mod tests {
             end,
             kind: MarkKind::Anchor { id: id.into() },
         };
-        // Same id at two ranges — `RemoveAnchor` can't disambiguate them.
+        // Same id at two ranges: `RemoveAnchor` can't disambiguate them.
         rt.marks = vec![anchor(0, 2, "x"), anchor(2, 4, "x")];
         assert_eq!(
             rt.validate(),
@@ -1598,7 +1598,7 @@ mod tests {
     }
 
     /// `normalize` drops a byte-identical duplicate identity mark (same range,
-    /// same id) — the same handle recorded twice is redundant, not two handles.
+    /// same id): the same handle recorded twice is redundant, not two handles.
     /// Distinct-id anchors over the same range are kept.
     #[test]
     fn normalize_dedupes_identical_identity_marks() {
@@ -1612,7 +1612,7 @@ mod tests {
         rt.marks = vec![anchor("x"), anchor("x")];
         rt.normalize();
         assert_eq!(rt.marks, vec![anchor("x")]);
-        // Different ids over the same range are distinct handles — both survive.
+        // Different ids over the same range are distinct handles: both survive.
         rt.marks = vec![anchor("x"), anchor("y")];
         rt.normalize();
         assert_eq!(rt.marks.len(), 2);

@@ -5,7 +5,7 @@
 //! its data. The tree is the authoritative representation. For the data
 //! API (`as_json`, `as_array`, `as_object`, `Deref`) a plain
 //! [`serde_json::Value`] projection is materialized lazily and cached; that
-//! projection is **fill-free** — it is a derived view of the data, not a
+//! projection is **fill-free**: it is a derived view of the data, not a
 //! second source of truth. Fill never reaches the JSON projection, so
 //! rendering and wire layers that consume `as_json()` are unaffected by it.
 
@@ -20,9 +20,9 @@ use std::sync::OnceLock;
 ///
 /// Construction (`from_json`, `from_yaml_str`, the scalar constructors)
 /// produces nodes with `fill = false`; the `!must_fill` markers are applied
-/// by the document layer. `QuillValue` exposes no data-mutating methods —
-/// only the fill setter `set_fill_at`, which does not affect the JSON
-/// projection — so the cached projection never goes stale.
+/// by the document layer. `QuillValue` exposes no data-mutating methods
+/// (only the fill setter `set_fill_at`, which does not affect the JSON
+/// projection) so the cached projection never goes stale.
 pub struct QuillValue {
     node: Node,
     /// Lazily materialized, fill-free [`serde_json::Value`] view of `node`.
@@ -143,13 +143,13 @@ impl Node {
 
 /// `true` when `value` nests deeper than `max_depth` container levels.
 ///
-/// Every path that stores a value into a `Document` — markdown parse,
-/// DTO/wire deserialization, the typed mutators, the binding converters —
+/// Every path that stores a value into a `Document` (markdown parse,
+/// DTO/wire deserialization, the typed mutators, the binding converters)
 /// bounds nesting at the spec §8 limit
 /// ([`crate::document::limits::MAX_YAML_DEPTH`]), which makes the recursive
 /// consumers (emit, plate-JSON serialization, DTO conversion) bounded by
 /// construction. The walk is iterative (explicit stack), so the check
-/// itself cannot overflow on adversarially deep input — the very condition
+/// itself cannot overflow on adversarially deep input: the very condition
 /// it exists to detect.
 ///
 /// The unit is **container levels**, not nodes: only arrays/objects are
@@ -157,8 +157,8 @@ impl Node {
 /// checked. So `max_depth` nested containers are accepted whether the deepest
 /// holds a scalar, is empty, or holds another container; `max_depth + 1` is
 /// rejected in every case. A container occupies a level whether or not it has
-/// contents — reaching an empty array/object at level `max_depth + 1` still
-/// cost the recursive consumers that many frames to get there — so an
+/// contents: reaching an empty array/object at level `max_depth + 1` still
+/// cost the recursive consumers that many frames to get there, so an
 /// over-deep *empty* container is rejected exactly like a non-empty one.
 ///
 /// The Python binding's `py_to_json_at` charges levels the same way (its guard
@@ -192,7 +192,7 @@ pub fn json_depth_exceeds(value: &serde_json::Value, max_depth: usize) -> bool {
 /// Depth-bound an owned `$ext` / `$seed` map against
 /// [`MAX_YAML_DEPTH`](crate::document::limits::MAX_YAML_DEPTH), returning it
 /// unchanged when within bounds. On overflow, `on_too_deep` builds the caller's
-/// boundary error from the limit — each write surface (`EditError` /
+/// boundary error from the limit: each write surface (`EditError` /
 /// `StorageError` / `WireError`) keeps its own type and message while the
 /// wrap-check-rebuild dance lives here once.
 pub(crate) fn depth_check_meta_map<E>(
@@ -298,7 +298,7 @@ impl QuillValue {
         out
     }
 
-    /// Fill paths *nested inside* this value — every [`fill_paths`](Self::fill_paths)
+    /// Fill paths *nested inside* this value: every [`fill_paths`](Self::fill_paths)
     /// entry except the empty (root) path. A root fill is carried separately as
     /// the `fill` flag on the owning field, so the wire / storage DTO record
     /// only the nested ones here.
@@ -404,8 +404,8 @@ impl QuillValue {
     /// The one accessor that is not reachable through [`Deref`]: it returns a
     /// `QuillValue`, so the child keeps its fill marker. The scalar reads
     /// (`is_null`, `as_str`, `as_bool`, `as_i64`, `as_u64`, `as_f64`,
-    /// `as_array`, `as_object`) come from the `serde_json::Value` deref target
-    /// — fill markers are not observable through them anyway.
+    /// `as_array`, `as_object`) come from the `serde_json::Value` deref target:
+    /// fill markers are not observable through them anyway.
     pub fn get(&self, key: &str) -> Option<QuillValue> {
         match &self.node.kind {
             Kind::Object(entries) => entries.get(key).map(|n| QuillValue::from_node(n.clone())),
@@ -537,7 +537,7 @@ mod tests {
 
         // A container occupies a level even when empty. With `max_depth = 1`,
         // a single empty container is at the limit (accepted); a nested empty
-        // container is one level past it (rejected) — same as if its innermost
+        // container is one level past it (rejected): same as if its innermost
         // slot held a non-empty container.
         assert!(!json_depth_exceeds(&json!([]), 1));
         assert!(!json_depth_exceeds(&json!({}), 1));
@@ -579,7 +579,7 @@ mod tests {
         assert!(json_depth_exceeds(&scalar_terminated(101), 100));
 
         // A non-empty container leaf lands at the same boundary: the deepest
-        // container — not its contents — is what occupies the last level.
+        // container (not its contents) is what occupies the last level.
         let container_terminated = |levels: usize| {
             let mut v = serde_json::json!([1, 2, 3]);
             for _ in 1..levels {

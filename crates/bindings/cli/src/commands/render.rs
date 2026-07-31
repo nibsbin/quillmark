@@ -79,7 +79,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
                 Some(markdown_path.clone()),
             )
         } else {
-            // No input file: render the seeded document — the committed
+            // No input file: render the seeded document, the committed
             // "filled-out one" (each field's `example:`, with `default:`/zero
             // interpolated at the render floor), so the quill renders without
             // the caller supplying any field values.

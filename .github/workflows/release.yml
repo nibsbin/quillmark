@@ -83,7 +83,7 @@ jobs:
           ./scripts/strip-seed-comment.sh notes.md
           # Fall back to a generic note if the section is missing or made of
           # only whitespace (e.g. an RC with no curated changelog, or every
-          # curated line was the now-stripped seed comment) — `-s` alone is
+          # curated line was the now-stripped seed comment), `-s` alone is
           # true for a whitespace-only file and would publish blank notes.
           grep -q '[^[:space:]]' notes.md || echo "Release v${VERSION}" > notes.md
 
@@ -131,7 +131,7 @@ jobs:
 
       - name: Publish workspace crates
         # --workspace: bare `cargo publish` operates on default-members, which
-        # exclude crates/content — the leaf every published crate depends on.
+        # exclude crates/content, the leaf every published crate depends on.
         # publish = false members (fixtures, fuzz, bindings) are skipped; cargo
         # orders the rest by dependency and skips versions already on the
         # registry, so a re-run resumes a partially-uploaded release.
@@ -139,7 +139,7 @@ jobs:
         # Each published crate needs its own crates.io Trusted Publisher (this
         # repo + this workflow + the Publish environment). A crate missing one
         # 403s ("access token is not valid for crate <name>") when the ordered
-        # publish reaches it — add the config on crates.io, then re-run.
+        # publish reaches it, add the config on crates.io, then re-run.
         run: cargo publish --workspace --locked --no-verify
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.crates-auth.outputs.token }}
@@ -170,12 +170,12 @@ jobs:
       - name: Restore WASM build cache
         uses: actions/cache@v6
         with:
-          # Cache only the wasm cargo build dir — not pkg/. build-wasm.sh always
+          # Cache only the wasm cargo build dir, not pkg/. build-wasm.sh always
           # regenerates pkg/ (and the version-assert below refuses to publish a
           # mismatched stamp), so a partially-restored pkg/ can never ship. That
           # removes the stale-pkg hazard the `restore-keys` prefix once carried.
           # Namespaced under wasm-release- so a CI cache (wasm-ci-...) can never
-          # satisfy this restore — that would publish an unoptimized bundle.
+          # satisfy this restore, that would publish an unoptimized bundle.
           path: target/wasm32-unknown-unknown/wasm-release
           key: wasm-release-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
@@ -194,7 +194,7 @@ jobs:
 
       - name: Build WASM packages
         # --release-stamp: stamp the workspace version verbatim. This checkout
-        # is the bumped release tag, so the number is truthful here — and only
+        # is the bumped release tag, so the number is truthful here, and only
         # here; every other build gets the script's default -dev.<sha> stamp.
         run: ./scripts/build-wasm.sh --release-stamp
 
@@ -204,7 +204,7 @@ jobs:
         run: |
           PKG_VERSION=$(jq -r .version pkg/package.json)
           if [ "$PKG_VERSION" != "${{ needs.prepare.outputs.version }}" ]; then
-            echo "pkg/package.json is $PKG_VERSION, expected ${{ needs.prepare.outputs.version }} — refusing to publish." >&2
+            echo "pkg/package.json is $PKG_VERSION, expected ${{ needs.prepare.outputs.version }}, refusing to publish." >&2
             exit 1
           fi
 

@@ -2,7 +2,7 @@
 //! `form-field` call. The helper emits a `<__qm_field__>`-labelled `metadata`
 //! whose value carries `(kind, name, field-type, value, options, multiline,
 //! width, height, field)`, followed by an invisible same-sized box. Metadata
-//! has zero size, so its `introspector.position()` equals the box's top-left —
+//! has zero size, so its `introspector.position()` equals the box's top-left:
 //! no frame walk.
 
 use std::collections::HashMap;
@@ -86,15 +86,15 @@ pub(crate) fn extract(doc: &PagedDocument) -> Result<Vec<FieldPlacement>, Render
     // within a page: a stable sort preserves the query order among equal pages.
     // `field_at` relies on this to resolve two spatially-overlapping widgets by
     // "later-painted wins", matching the content-field path's documented rule
-    // (span_scan::field_at) — an alphabetical `name` tie-break would silently
+    // (span_scan::field_at): an alphabetical `name` tie-break would silently
     // violate it.
     placements.sort_by_key(|p| p.page);
     Ok(placements)
 }
 
 /// Resolve the metadata dict into a [`FieldKind`], reading only the keys that
-/// apply to `field_type`. The `value` key is polymorphic — a Typst `Str`,
-/// `Bool`, `Int`/`Float` (stringified), or `None` — read via the per-kind
+/// apply to `field_type`. The `value` key is polymorphic (a Typst `Str`,
+/// `Bool`, `Int`/`Float` (stringified), or `None`) read via the per-kind
 /// helpers below so each kind interprets it correctly.
 fn read_field_kind(
     d: &typst::foundations::Dict,
@@ -215,7 +215,7 @@ fn read_value_str(d: &typst::foundations::Dict, key: &str) -> Result<Option<Stri
 
 /// Read an optional boolean key: a `Bool` passes through; `None` or a missing
 /// key yields `None`; any other present type errors. Used for the checkbox
-/// `value` binding and the text `multiline` flag — both treat a `none` as the
+/// `value` binding and the text `multiline` flag: both treat a `none` as the
 /// unset default rather than an error.
 fn read_value_bool(d: &typst::foundations::Dict, key: &str) -> Result<Option<bool>, RenderError> {
     match d.get(key) {

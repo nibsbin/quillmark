@@ -14,7 +14,7 @@
 //! - an optional **hint** that names the concrete textual fix.
 //!
 //! The hint is attached to the resulting [`crate::Diagnostic`] in the `hint`
-//! field, so every binding (CLI, Python, MCP) surfaces the same advice — no
+//! field, so every binding (CLI, Python, MCP) surfaces the same advice: no
 //! per-binding error enrichment.
 
 /// Output of [`enrich_yaml_error`]: a cleaned message plus an optional hint.
@@ -31,7 +31,7 @@ pub(crate) struct EnrichedYamlError {
 ///
 /// The content slice is the YAML payload of a single `~~~` card-yaml block
 /// (the same string passed to the parser). The function never panics on
-/// non-UTF8 byte offsets — all inspection is over `&str` / `chars()`.
+/// non-UTF8 byte offsets: all inspection is over `&str` / `chars()`.
 pub(crate) fn enrich_yaml_error(raw: &str, content: &str) -> EnrichedYamlError {
     let sanitized = sanitize_message(raw);
     let hint = derive_hint(&sanitized, content);
@@ -93,7 +93,7 @@ fn derive_hint(message: &str, content: &str) -> Option<String> {
         return Some(
             "Plain-scalar values cannot start with `*` or `&` (reserved as YAML \
              alias/anchor indicators). For markdown emphasis or a literal `*`/`&`, \
-             wrap the value in single quotes — e.g. `field: '**bold text**'`."
+             wrap the value in single quotes; e.g. `field: '**bold text**'`."
                 .to_string(),
         );
     }
@@ -108,7 +108,7 @@ fn derive_hint(message: &str, content: &str) -> Option<String> {
         }
         return Some(
             "Unquoted values cannot contain `:` (it starts a nested mapping key). \
-             Wrap the value in double quotes — e.g. `field: \"value: with colon\"`."
+             Wrap the value in double quotes; e.g. `field: \"value: with colon\"`."
                 .to_string(),
         );
     }
@@ -147,8 +147,8 @@ fn derive_hint(message: &str, content: &str) -> Option<String> {
         return Some(
             "A `- item` list was found where a mapping key was expected. Either \
              indent the sequence two spaces under the key it belongs to \
-             (`field:` newline `  - item`), or — if this field expects a single \
-             scalar value — drop the `-` and put the value on the same line: \
+             (`field:` newline `  - item`), or, if this field expects a single \
+             scalar value, drop the `-` and put the value on the same line: \
              `field: value`."
                 .to_string(),
         );
@@ -168,7 +168,7 @@ fn derive_hint(message: &str, content: &str) -> Option<String> {
         );
     }
 
-    // S2-3: anchor-scan failure — same root cause as the alias case above
+    // S2-3: anchor-scan failure, same root cause as the alias case above
     // (unquoted value starts with `&`), matched via different message wording:
     // "scanning an anchor or alias" rather than "anchor" + "not found".
     if m.contains("scanning an anchor") || m.contains("scanning an alias") {
@@ -181,13 +181,13 @@ fn derive_hint(message: &str, content: &str) -> Option<String> {
         }
         return Some(
             "Plain-scalar values cannot start with `*` or `&` (reserved as YAML \
-             alias/anchor indicators). Wrap the value in single quotes — e.g. \
+             alias/anchor indicators). Wrap the value in single quotes; e.g. \
              `field: '&literal value'`."
                 .to_string(),
         );
     }
 
-    // Gap 5: a multi-line double-quoted scalar — block scalars are friendlier.
+    // Gap 5: a multi-line double-quoted scalar, block scalars are friendlier.
     if m.contains("invalid indentation in multiline quoted scalar")
         || (m.contains("indentation") && m.contains("quoted scalar"))
     {
@@ -209,7 +209,7 @@ fn derive_hint(message: &str, content: &str) -> Option<String> {
 
 /// Find the first `key: <scalar>` line whose scalar's first non-whitespace
 /// character matches `prefixes` (e.g. `*` or `&`). Scans only the first line
-/// of each plain mapping entry — multi-line values are not relevant for
+/// of each plain mapping entry: multi-line values are not relevant for
 /// alias/anchor diagnostics.
 fn first_field_with_unquoted_prefix(content: &str, prefixes: &[char]) -> Option<String> {
     for line in content.lines() {
@@ -228,7 +228,7 @@ fn first_field_with_unquoted_prefix(content: &str, prefixes: &[char]) -> Option<
         let Some(first) = value.chars().next() else {
             continue;
         };
-        // Skip quoted scalars — they wouldn't trigger the anchor/alias error.
+        // Skip quoted scalars: they wouldn't trigger the anchor/alias error.
         if first == '\'' || first == '"' {
             continue;
         }
@@ -240,7 +240,7 @@ fn first_field_with_unquoted_prefix(content: &str, prefixes: &[char]) -> Option<
 }
 
 /// Find the first `key: <value>` line whose unquoted value contains an
-/// additional `:` (the second colon — first triggers the parser's
+/// additional `:` (the second colon: first triggers the parser's
 /// "mapping values are not allowed in this context" error).
 fn first_field_with_unquoted_colon(content: &str) -> Option<(String, String)> {
     for line in content.lines() {
@@ -274,7 +274,7 @@ fn first_field_with_unquoted_colon(content: &str) -> Option<(String, String)> {
 
 /// Find the first `key: "...` line whose double-quoted scalar does not close
 /// on the same line. A useful proxy for "the model wrote a multi-line
-/// double-quoted scalar" — relevant for gap 5.
+/// double-quoted scalar": relevant for gap 5.
 fn first_field_with_unterminated_dquote(content: &str) -> Option<String> {
     for line in content.lines() {
         let trimmed = line.trim_start();
@@ -428,7 +428,7 @@ mod tests {
 
     #[test]
     fn does_not_panic_on_multibyte_content() {
-        // Em-dash and curly quotes are multibyte in UTF-8 — must not panic.
+        // Em-dash and curly quotes are multibyte in UTF-8: must not panic.
         let content = "briefer: Maj Sarah Chen — INDOPACOM/A2\nbluf: **\u{201c}peer\u{201d}**\n";
         let _ = enrich_yaml_error("alias references unknown anchor", content);
         let _ = enrich_yaml_error("mapping values are not allowed in this context", content);

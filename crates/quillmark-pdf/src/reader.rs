@@ -1,5 +1,5 @@
 //! Minimal byte-level PDF reader and incremental-update writer. Not a general
-//! PDF parser — a deliberately small scanner that parses just enough of a base
+//! PDF parser: a deliberately small scanner that parses just enough of a base
 //! PDF to splice a single incremental update onto it, and hard-errors on shapes
 //! a modern PDF can carry but this reader does not handle.
 //!
@@ -11,7 +11,7 @@
 //! tree shallow enough to walk. This is the precise inverse of the scanner's
 //! error branches; the qualification layer (and the hand-authored fixture)
 //! guarantee it. `hayro-syntax` is read-only and exposes no byte spans, so it
-//! cannot drive a byte-splice append — hence this bespoke scanner.
+//! cannot drive a byte-splice append: hence this bespoke scanner.
 
 use std::collections::HashSet;
 
@@ -45,7 +45,7 @@ pub(crate) fn find_startxref(pdf: &[u8]) -> Result<usize, PdfError> {
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| err(CODE_PARSE, "startxref offset is not a valid integer"))?;
     // Bound the offset so every downstream `pdf[offset..]` / `offset + N` slice
-    // is in range — an out-of-range value (e.g. a ~20-digit near-usize::MAX
+    // is in range: an out-of-range value (e.g. a ~20-digit near-usize::MAX
     // offset) becomes a clean parse error rather than an overflow/panic.
     if offset >= pdf.len() {
         return Err(err(CODE_PARSE, "startxref offset is past end of file"));
@@ -180,7 +180,7 @@ pub(crate) fn append_incremental_update(
 /// Locate object `id` via linear scan and return `(obj_start, endobj_end)`.
 ///
 /// Matches the object header `<id> <generation> obj` at a token boundary (so `19 0 obj`
-/// isn't found inside `519 0 obj`) for *any* generation — re-saved PDFs can
+/// isn't found inside `519 0 obj`) for *any* generation: re-saved PDFs can
 /// carry non-zero generations. When a base PDF carries prior incremental updates
 /// the same id can be serialized more than once; the live copy is the *last* one
 /// (xref liveness), so this returns the last match. For the common
@@ -207,7 +207,7 @@ pub fn find_object_bytes(pdf: &[u8], id: u32) -> Option<(usize, usize)> {
 /// Find the `endobj` keyword that closes the object body starting at `from`,
 /// returning the index just past it. Literal `( … )` strings and `%`-comments
 /// are skipped so the bytes `endobj` appearing inside a string value (e.g. an
-/// `/Info` `/Title`) or a comment cannot truncate the object early — the same
+/// `/Info` `/Title`) or a comment cannot truncate the object early: the same
 /// string-aware skip [`extract_outer_dict`] already relies on.
 fn find_endobj_end(pdf: &[u8], from: usize) -> Option<usize> {
     let needle = b"endobj";
@@ -244,7 +244,7 @@ pub(crate) fn object_generation(pdf: &[u8], id: u32) -> Option<u16> {
 /// as generation 0 (the trailer's `/Root … 0 R`, page/widget refs). The reader, by
 /// contrast, accepts an object header at *any* generation. So a base whose
 /// catalog / page / `/Info` lives at a non-zero generation parses fine yet would
-/// produce a malformed update — the new xref/`/Root` would point at generation 0 while
+/// produce a malformed update: the new xref/`/Root` would point at generation 0 while
 /// the prior xref still resolves the object at its true generation. This guard
 /// closes that one gap in the spine's "reject out-of-contract input cleanly"
 /// posture, consistent with the xref-stream / `/Encrypt` rejections.
@@ -290,7 +290,7 @@ fn is_obj_header_tail(rest: &[u8]) -> bool {
 /// Name, then consumes its value wholesale via `read_value_end` (which steps
 /// over nested `<<>>` / `[]` / `()` / `<>` as a unit). Because every value is
 /// consumed as a value, a Name that appears in *value* position (e.g.
-/// `/Subtype /Producer`) is never mistaken for a key — only keys are tested
+/// `/Subtype /Producer`) is never mistaken for a key: only keys are tested
 /// against `km`. The returned slice begins exactly after the matched key token
 /// (callers such as `upsert_producer` derive the key span by subtraction).
 pub fn find_dict_value<'a>(dict_bytes: &'a [u8], key: &str) -> Option<&'a [u8]> {
@@ -322,7 +322,7 @@ pub fn find_dict_value<'a>(dict_bytes: &'a [u8], key: &str) -> Option<&'a [u8]> 
     }
 }
 
-/// Replace `key`'s value in a flat dict, given the current `value` slice — which
+/// Replace `key`'s value in a flat dict, given the current `value` slice: which
 /// MUST be the subslice [`find_dict_value`] returned for that key. Its start
 /// locates the key span by pointer subtraction (`[value_start - key.len,
 /// value_end)`), not by re-scanning, so a `key` token appearing inside another
@@ -331,7 +331,7 @@ pub fn find_dict_value<'a>(dict_bytes: &'a [u8], key: &str) -> Option<&'a [u8]> 
 ///
 /// `key` is the on-page byte form including the leading slash (`b"/Producer"`).
 /// Callers that build the replacement value from `value`'s own bytes must do so
-/// before calling — `dict` is borrowed immutably here.
+/// before calling: `dict` is borrowed immutably here.
 pub fn splice_dict_value(dict: &[u8], key: &[u8], value: &[u8], new_value: &[u8]) -> Vec<u8> {
     let value_start = value.as_ptr() as usize - dict.as_ptr() as usize;
     let value_end = value_start + value.len();
@@ -369,7 +369,7 @@ fn skip_ws_and_comments(b: &[u8], start: usize) -> usize {
 /// `<<`/`>>`/`[`/`]`/`endobj` bytes without treating them as structure. Hex
 /// strings (`<…>`) need no handling: a well-formed one holds only hex digits, so
 /// it can't carry a stray `<`/`>` that would derail the byte walk. `None` when
-/// `b[i]` is neither — the caller advances one byte.
+/// `b[i]` is neither: the caller advances one byte.
 fn skip_string_or_comment(b: &[u8], i: usize) -> Option<usize> {
     match b.get(i)? {
         b'(' => Some(skip_pdf_string(b, i)),
@@ -555,7 +555,7 @@ pub fn extract_outer_dict(obj_bytes: &[u8]) -> Option<&[u8]> {
     let mut depth = 0i32;
     let mut i = open;
     while i + 1 < obj_bytes.len() {
-        // Skip literal strings and `%`-comments — either can carry `<<` / `>>` as
+        // Skip literal strings and `%`-comments: either can carry `<<` / `>>` as
         // raw bytes that would otherwise skew the nesting depth.
         if let Some(ni) = skip_string_or_comment(obj_bytes, i) {
             i = ni;
@@ -595,7 +595,7 @@ pub(crate) fn resolve_page_ids(pdf: &[u8], catalog_id: u32) -> Result<Vec<u32>, 
     let mut out = Vec::new();
     let mut stack = vec![root_pages_id];
     // A node id reached twice means the `/Pages` tree is cyclic or shares a node
-    // across parents — malformed, and an amplification vector without this
+    // across parents, malformed, and an amplification vector without this
     // guard: every visit re-scans the whole file via `find_object_bytes`, so a
     // tiny `/Kids` self-cycle would otherwise drive up to MAX_NODES full-file
     // scans before the count cap trips.
@@ -753,7 +753,7 @@ fn normalize_rect(mb: [f32; 4]) -> [f32; 4] {
 ///
 /// Reads each page's `/MediaBox`, falling back to the root `/Pages` node's
 /// `/MediaBox` (the common inheritance case) when a page declares none. The
-/// full rect — not just width/height — is returned so a caller that owns
+/// full rect (not just width/height) is returned so a caller that owns
 /// page-relative top-left geometry can honour a non-zero page origin when
 /// flipping to bottom-left PDF user space.
 pub(crate) fn page_media_boxes(pdf: &[u8]) -> Result<Vec<[f32; 4]>, PdfError> {
@@ -781,7 +781,7 @@ pub(crate) fn page_media_boxes(pdf: &[u8]) -> Result<Vec<[f32; 4]>, PdfError> {
     Ok(out)
 }
 
-/// The root `/Pages` node's `/MediaBox`, if present — the value pages inherit.
+/// The root `/Pages` node's `/MediaBox`, if present: the value pages inherit.
 fn root_pages_media_box(pdf: &[u8], catalog_id: u32) -> Option<[f32; 4]> {
     let pages_id = root_pages_id(pdf, catalog_id).ok()?;
     let (s, e) = find_object_bytes(pdf, pages_id)?;

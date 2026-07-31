@@ -1,20 +1,20 @@
 //! Unified payload representation.
 //!
 //! A [`Payload`] is the typed representation of a card-yaml block's full
-//! YAML content. It carries — in source order, as variants of a single
+//! YAML content. It carries, in source order, as variants of a single
 //! [`PayloadItem`] enum:
 //!
-//! - **System metadata** — typed `$quill` / `$kind` / `$id` / `$ext`
+//! - **System metadata**: typed `$quill` / `$kind` / `$id` / `$ext`
 //!   entries.
-//! - **User fields** — `key: value` pairs with an optional `!must_fill` flag.
-//! - **Comments** — own-line or trailing inline, attached to whichever
+//! - **User fields**: `key: value` pairs with an optional `!must_fill` flag.
+//! - **Comments**: own-line or trailing inline, attached to whichever
 //!   item they immediately follow at emit time.
 //!
 //! The unified item list is the canonical storage of the block; treating
 //! `$` entries as just another variant means a comment adjacent to a `$`
 //! line round-trips through the same mechanism as a comment adjacent to a
 //! user field. No "metadata region" vs "payload region" routing decision is
-//! ever made — there is only the source-ordered list.
+//! ever made: there is only the source-ordered list.
 //!
 //! ## Comments at every level
 //!
@@ -24,13 +24,13 @@
 //! the [`PayloadItem::Field`] / [`PayloadItem::Meta`] that owns that
 //! value, as a `nested_comments` slice with paths relative to the
 //! field's value tree. One storage surface, scoped to the item that
-//! "owns" each comment — no sidecar Vec hanging off `Payload`.
+//! "owns" each comment: no sidecar Vec hanging off `Payload`.
 //!
 //! ## Two faces
 //!
 //! [`Payload`] exposes both ordered iteration (over the raw items vec) and
 //! map-keyed access (`get`, `iter`, `insert`, `remove`). The map-style
-//! accessors filter to [`PayloadItem::Field`] only — they intentionally
+//! accessors filter to [`PayloadItem::Field`] only: they intentionally
 //! don't expose `$` entries because typed `$` access has dedicated methods
 //! (`quill`, `kind`, `id`, `ext`, `seed`, `set_quill`, `set_kind`, `set_id`,
 //! `set_ext`, `set_seed`).
@@ -48,19 +48,19 @@ use crate::version::QuillReference;
 
 /// Which out-of-band system-metadata map a [`PayloadItem::Meta`] carries.
 ///
-/// `$ext` and `$seed` are the same shape — an opaque `Map<String, Value>` that
+/// `$ext` and `$seed` are the same shape: an opaque `Map<String, Value>` that
 /// never reaches the plate JSON and round-trips through Markdown and the storage
-/// DTO — so the live model represents them as one variant discriminated by this
+/// DTO, so the live model represents them as one variant discriminated by this
 /// key. They differ only in their canonical sort rank, whether they are
 /// root-only, and (downstream of storage) whether the seeding layer interprets
 /// them: `$ext` is opaque; `$seed` is read by [`crate::SeedOverlay::from_json`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum MetaKey {
-    /// `$ext` — opaque out-of-band consumer state (editor renames, agent
+    /// `$ext`: opaque out-of-band consumer state (editor renames, agent
     /// annotations). Allowed on any card.
     Ext,
-    /// `$seed` — per-card-kind seed overlays. **Root-only** (like `$quill`).
+    /// `$seed`: per-card-kind seed overlays. **Root-only** (like `$quill`).
     Seed,
 }
 
@@ -108,19 +108,19 @@ impl MetaKey {
 pub enum PayloadItem {
     /// `$quill` system metadata, holding the parsed quill reference.
     Quill { reference: QuillReference },
-    /// `$kind` system metadata — the card's kind name.
+    /// `$kind` system metadata: the card's kind name.
     Kind { value: String },
-    /// `$id` system metadata — the durable card handle: opaque,
+    /// `$id` system metadata, the durable card handle: opaque,
     /// caller-supplied, unique per document across composable cards
     /// (`DOCUMENT_STORAGE.md` §Card-id identity).
     Id { value: String },
-    /// `$ext` / `$seed` system metadata — an opaque mapping (discriminated by
+    /// `$ext` / `$seed` system metadata: an opaque mapping (discriminated by
     /// [`MetaKey`]) reserved for out-of-band data. Never emitted into the plate
     /// JSON, always round-trips through Markdown and the storage DTO.
     /// `nested_comments` carries YAML comments inside the mapping; paths are
     /// **relative** to the value tree (the `$ext` / `$seed` key itself is not
     /// part of the path). `$seed` is additionally interpreted by the seeding
-    /// layer — see [`crate::SeedOverlay::from_json`] and [`crate::Quill::seed_card`].
+    /// layer; see [`crate::SeedOverlay::from_json`] and [`crate::Quill::seed_card`].
     Meta {
         key: MetaKey,
         value: JsonMap<String, JsonValue>,
@@ -246,7 +246,7 @@ impl Payload {
     /// `Key(field)` matching a Field or Meta (`$ext` / `$seed`) entry in `items`;
     /// that first segment is stripped and the remainder attached to the
     /// owning item. Comments whose first segment matches nothing in
-    /// `items` are dropped silently — this can only arise from a
+    /// `items` are dropped silently: this can only arise from a
     /// hand-crafted storage DTO that references a non-existent field.
     pub(crate) fn from_items_with_flat_nested(
         mut items: Vec<PayloadItem>,
@@ -342,7 +342,7 @@ impl Payload {
 
     /// Mutable access to the raw item list. Callers must preserve the
     /// invariants (at most one `Quill`/`Kind`/`Id`/`Ext`, no duplicate
-    /// field keys, every field name matches `[A-Za-z_][A-Za-z0-9_]*`) — use
+    /// field keys, every field name matches `[A-Za-z_][A-Za-z0-9_]*`): use
     /// the typed mutators when in doubt.
     pub fn items_mut(&mut self) -> &mut [PayloadItem] {
         &mut self.items
@@ -390,7 +390,7 @@ impl Payload {
         })
     }
 
-    /// The `$ext` map, if declared. The map is opaque — Quillmark does not
+    /// The `$ext` map, if declared. The map is opaque: Quillmark does not
     /// interpret its contents and never emits them into the plate JSON.
     pub fn ext(&self) -> Option<&JsonMap<String, JsonValue>> {
         self.meta(MetaKey::Ext)
@@ -549,7 +549,7 @@ impl Payload {
     }
 
     /// Look up a user-field value by key. `$` entries are not visible via
-    /// this accessor — use [`quill`](Self::quill) / [`kind`](Self::kind) /
+    /// this accessor: use [`quill`](Self::quill) / [`kind`](Self::kind) /
     /// [`id`](Self::id).
     pub fn get(&self, key: &str) -> Option<&QuillValue> {
         self.items.iter().find_map(|item| match item {
@@ -606,8 +606,8 @@ impl Payload {
     }
 
     /// [`insert`](Self::insert) without the field-invariant check. `pub(crate)`
-    /// for callers that have already validated the exact stored `(name, value)`
-    /// — `resolve_field_write` and the batch setters that validate the whole
+    /// for callers that have already validated the exact stored `(name, value)`:
+    /// `resolve_field_write` and the batch setters that validate the whole
     /// batch before applying any of it.
     pub(crate) fn insert_unchecked(
         &mut self,
@@ -750,7 +750,7 @@ mod tests {
         // Nothing was applied on any rejection.
         assert!(fm.items().is_empty());
 
-        // The unchecked path is the deliberate escape hatch — no validation.
+        // The unchecked path is the deliberate escape hatch: no validation.
         fm.insert_unchecked("bad name", qv("v"));
         assert_eq!(fm.items().len(), 1);
     }

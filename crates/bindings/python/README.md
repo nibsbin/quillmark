@@ -1,4 +1,4 @@
-# Quillmark — Python bindings
+# Quillmark: Python bindings
 
 Python bindings for Quillmark, a schema-driven document engine.
 
@@ -39,7 +39,7 @@ result.artifacts[0].save("output.pdf")
 
 Python is a **Tier-1 binding**: field I/O flows through `quill.writer(doc)` and
 `quill.reader(doc)`, the schema-bound write/read front doors. `Document` carries
-the quill-free surface — parse, storage, structure, `$ext` / `$seed`, and
+the quill-free surface: parse, storage, structure, `$ext` / `$seed`, and
 `remove_field`. There is no opaque field store and no anchor-preserving content
 lane (`install` / `revise` / `apply_change` + the `import_markdown` /
 `export_markdown` / `rebase` / `map_pos` codec); those are WASM-only by scope,
@@ -52,7 +52,7 @@ Names follow `snake_case`; the shared model (the `Document` / `Card` shapes,
 `engine.render`; the iterative render-session and canvas-preview surface is
 WASM-only (see `prose/canon/PREVIEW.md`).
 
-**Capability principle:** a `Quill` is portable, declarative config data —
+**Capability principle:** a `Quill` is portable, declarative config data,
 `quill.metadata` is a pure, infallible snapshot of the `quill:` section.
 The format probe (`supported_formats`) and rendering (`render`) are resolved
 by the engine, against a quill; they raise `QuillmarkError`
@@ -71,7 +71,7 @@ engine.supported_formats(quill)           # [OutputFormat.PDF, ...] (raises if b
 ### `Quill`
 
 ```python
-quill = Quill.from_path("path/to/quill")  # pure config load — no backend resolved here
+quill = Quill.from_path("path/to/quill")  # pure config load: no backend resolved here
 
 quill.backend_id            # "typst" (declared backend)
 quill.blueprint             # auto-generated annotated Markdown blueprint
@@ -88,11 +88,11 @@ writer  = quill.writer(doc)               # schema-bound typed write front door
 reader  = quill.reader(doc)                 # schema-bound interpreted read front door
 ```
 
-### `Writer` — `quill.writer(doc)`
+### `Writer`: `quill.writer(doc)`
 
 The typed write front door. Resolves each field's type from the bound quill, so a
 name the schema does not declare is a typo (`UnknownField`), not a fallback. Holds
-both handles by reference and owns neither — ephemeral by convention: bind, write,
+both handles by reference and owns neither, ephemeral by convention: bind, write,
 discard.
 
 ```python
@@ -106,7 +106,7 @@ w.remove_card(0)
 w.card(0).set("author", "Issa")           # a CardWriter: .index, .kind, .set, .set_all, .set_body, .revise_field
 ```
 
-### `Reader` — `quill.reader(doc)`
+### `Reader`: `quill.reader(doc)`
 
 The interpreted read front door and the read twin of `Writer`. One `get` reads
 each field by its declared type: a richtext field to its markdown projection,
@@ -163,7 +163,7 @@ doc.card_index_by_id("intro")                    # the durable $id handle → in
 doc.seed_overlay("note")                         # one $seed[kind] overlay, or None
 doc.set_quill_ref("other@1.0")
 
-# Structure (quill-free — a card kind is a name, not a schema fact):
+# Structure (quill-free, a card kind is a name, not a schema fact):
 doc.insert_card(Document.make_card("note", {"x": 1}, "..."), at=None)  # at appends/inserts
 doc.remove_card(0)                               # returns the Card dict, or None
 doc.move_card(2, 0); doc.set_card_kind(0, "summary")
@@ -177,7 +177,7 @@ doc.store_seed_namespace("note", {"tag": "T"})   # per-kind $seed overlay; new c
 doc.remove_seed_namespace("note")
 ```
 
-Setting a field's value is the writer's job (`quill.writer(doc).set(...)`) — a
+Setting a field's value is the writer's job (`quill.writer(doc).set(...)`): a
 field write needs the schema, and `Document` is quill-free. Reading a field's
 interpreted value is the reader's (`quill.reader(doc).get(...)`).
 
@@ -185,13 +185,13 @@ interpreted value is the reader's (`quill.reader(doc).get(...)`).
 
 A field's *cell* is inferred from whether the schema declares a `default:`:
 
-- **Unendorsed** (no `default:`) — the blueprint renders the `!must_fill`
+- **Unendorsed** (no `default:`): the blueprint renders the `!must_fill`
   marker (carrying the field's `example` as a suggested value when one
   exists). An absent Unendorsed field zero-fills silently. A `!must_fill`
   marker left in the document is non-fatal: it emits the
   `validation::must_fill` warning and still renders. Partial documents are
   accepted; `engine.render(quill, doc)` only raises for malformed input.
-- **Endorsed** (with `default:`) — the blueprint renders the default
+- **Endorsed** (with `default:`): the blueprint renders the default
   value with a type-only `# <type>` annotation (shippable as-is), and the
   default is used when the document omits the field.
 
@@ -199,7 +199,7 @@ There is no `required:` axis on `FieldSchema`.
 
 ## Error contract
 
-A single exception type — `QuillmarkError` — is raised for every failure
+A single exception type (`QuillmarkError`) is raised for every failure
 mode. Every raised exception carries a non-empty `.diagnostics` list of
 `Diagnostic` objects. This matches the WASM binding's contract.
 
@@ -213,8 +213,8 @@ except QuillmarkError as exc:
 ```
 
 Mutator failures (invalid field names, kind names, out-of-range indices) carry
-a namespaced `edit::*` `code` on `diagnostics[0]` — `edit::invalid_field_name`,
-`edit::unknown_field`, `edit::index_out_of_range`, `edit::field_conform`, … —
+a namespaced `edit::*` `code` on `diagnostics[0]`: `edit::invalid_field_name`,
+`edit::unknown_field`, `edit::index_out_of_range`, `edit::field_conform`, …:
 the same taxonomy WASM uses. Route on `diagnostics[0].code`, never on message
 text.
 

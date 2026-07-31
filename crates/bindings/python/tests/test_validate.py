@@ -1,6 +1,6 @@
 """Marshalling tests for quill.validate and the seed verbs.
 
-The diagnostic set and the seed layering rules are core's — `validate`'s
+The diagnostic set and the seed layering rules are core's: `validate`'s
 decision matrix lives in `crates/quillmark/tests/validate_test.rs`, the seed
 semantics in `core/src/quill/seed/tests.rs`. What is pyo3's is the crossing:
 each verb returns the right Python shape, and an error keeps its `code`.

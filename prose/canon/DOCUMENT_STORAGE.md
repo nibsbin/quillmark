@@ -6,7 +6,7 @@
 
 `Document` is the typed in-memory model of a Quillmark Markdown file. Its
 layout tracks the evolving Quillmark model and is **not** a stable interface.
-To persist documents — e.g. in a database — without storing Markdown (whose
+To persist documents (e.g. in a database) without storing Markdown (whose
 syntax also evolves), `Document` serializes to a **versioned JSON envelope**,
 `StoredDocument`, whose wire format is frozen per schema version.
 
@@ -14,8 +14,8 @@ syntax also evolves), `Document` serializes to a **versioned JSON envelope**,
 
 | Form | Round-trips? | Stable for storage? |
 |---|---|---|
-| Markdown (`Document::to_markdown`) | Yes — valid documents (§ Card-id identity) | No — syntax evolves |
-| `StoredDocument` JSON | Yes — lossless | Yes — frozen per schema version |
+| Markdown (`Document::to_markdown`) | Yes (valid documents (§ Card-id identity) | No) syntax evolves |
+| `StoredDocument` JSON | Yes (lossless | Yes) frozen per schema version |
 
 Use `StoredDocument` JSON whenever a `Document` must survive a process
 restart or a crate upgrade: database rows, caches, message payloads.
@@ -26,25 +26,25 @@ bindings) and never a storage option.
 
 ## Design Principles
 
-1. **Versioned envelope** — every blob carries a `schema` tag; readers
+1. **Versioned envelope**: every blob carries a `schema` tag; readers
    dispatch on it and reject unknown versions.
-2. **Frozen DTO per version** — each schema version has its own standalone
+2. **Frozen DTO per version**: each schema version has its own standalone
    type tree (`DocumentV0_92_0`, `CardV0_92_0`, …). These are never changed
    once shipped.
-3. **Decoupled from the live model** — internal refactors of `Document` and
+3. **Decoupled from the live model**: internal refactors of `Document` and
    its components only touch conversion code, never the wire format.
-4. **Transparent API** — `Document` serializes through the envelope via
+4. **Transparent API**: `Document` serializes through the envelope via
    `#[serde(into / try_from)]`; callers use `serde_json` directly.
 
 ## The Format
 
 The current schema (`quillmark/document@0.93.0`) carries each card's full
-ordered payload — typed `$` system metadata, user fields, and YAML
-comments interleaved in source order — as a single discriminated-union
+ordered payload: typed `$` system metadata, user fields, and YAML
+comments interleaved in source order: as a single discriminated-union
 item list. This is what makes inline-comment preservation symmetric across
 the `$`/non-`$` boundary. The payload shape is unchanged since `0.92.0`;
 `body` is the canonical `Content` embedded structurally (a nested
-object, not a markdown string) — see Byte-stability.
+object, not a markdown string); see Byte-stability.
 
 ```json
 {
@@ -95,13 +95,13 @@ the same `schema` produces the same bytes. This is load-bearing for
 consumers that content-hash stored documents (template-divergence
 detection, cache keys).
 
-**Two disciplines in one envelope.** The outer envelope — struct field
-order, the `cards` array, payload field values — stays compact,
+**Two disciplines in one envelope.** The outer envelope: struct field
+order, the `cards` array, payload field values: stays compact,
 insertion-ordered `serde_json`: `serde_json::Value` inside payload field
 values keeps YAML insertion order via the workspace's
 `serde_json/preserve_order` feature, and no whole-envelope key sort is
 applied. Every `body` subtree, by contrast, is the recursively key-sorted
-**canonical content form** (`CanonicalContent` in `dto.rs`) — byte-identical
+**canonical content form** (`CanonicalContent` in `dto.rs`): byte-identical
 to `rt.to_canonical_json()` and independent of `preserve_order`, even in a
 consumer crate graph that lacks the feature. Sortedness is semantic
 *inside* the content (mark/island/attribute order carries no meaning, so the
@@ -111,7 +111,7 @@ serializer commits to one bit pattern); insertion order is semantic
 The guarantee follows from: struct field order is fixed in the frozen
 DTO tree; `Vec` fields preserve order by definition; the two disciplines
 above each hold at their respective level. No whitespace normalization is
-applied — the output is `serde_json`'s compact form otherwise. Bumping the
+applied: the output is `serde_json`'s compact form otherwise. Bumping the
 `schema` version is the only event that may change the byte layout of a
 document written by the current writer.
 
@@ -126,8 +126,8 @@ bump can move the migrated bytes even though the schema tag does not
 change. Two ways to manage this:
 
 - **Read-repair.** Rewrite a row under its current schema tag once it has
-  been read and migrated, so the content form — not the legacy markdown
-  string — becomes its byte-stable resting state.
+  been read and migrated, so the content form: not the legacy markdown
+  string: becomes its byte-stable resting state.
 - **Accept the movement.** For rows left un-repaired, treat a forced
   parser/security bump as either a schema-version event (if a hard
   guarantee is required) or an accepted, logged hash movement on
@@ -135,7 +135,7 @@ change. Two ways to manage this:
 
 ## Open vocabularies
 
-The envelope's version-and-reject discipline covers the document's **shape** —
+The envelope's version-and-reject discipline covers the document's **shape**:
 the schema tag, the DTO tree, the keys a `body` object carries. It does *not*
 cover the content's **vocabularies**. Every discriminator inside a `body` is an
 open set: a mark `type`, an island `type`, a line `kind`, a container name, and
@@ -148,8 +148,8 @@ byte-identically, and project as their nearest safe neighbor.
 | Mark `type` | no delimiters (the text renders bare) |
 | Island `type` | a placeholder comment; the props survive in storage |
 | Line `kind` | a paragraph |
-| Container | transparent — its lines render at the enclosing level |
-| Island `loss` | `Unrepresentable`, via `Loss::fidelity` — never a claim of fidelity on a name this build cannot read |
+| Container | transparent: its lines render at the enclosing level |
+| Island `loss` | `Unrepresentable`, via `Loss::fidelity`: never a claim of fidelity on a name this build cannot read |
 
 The consequence, and the point: **adding a construct to any of these
 vocabularies is not a schema-version event.** An older reader degrades a future
@@ -157,7 +157,7 @@ callout to a plain paragraph rather than refusing the document, and a reader
 that does understand it sees it whole, because the tag and attrs round-tripped
 untouched. The rule is the same on all five axes: the block axes are open on the
 mark axis' terms, not one step behind it, and `loss` carries its raw tag rather
-than rewriting it — a reader that merely opens a document must not move its
+than rewriting it: a reader that merely opens a document must not move its
 content hash (§ Byte-stability).
 
 Unknown *keys* survive in designated carriers only, and the boundary is worth
@@ -183,11 +183,11 @@ Three rules bound the openness:
 - **Payload depth is capped at `MAX_JSON_DEPTH` (128).** An opaque bag is host
   JSON of arbitrary shape, but not arbitrary depth: key canonicalization, the
   content-hash key, and `serde_json::Value`'s own `Drop` each recurse one frame
-  per level, so an unbounded bag overflows the stack — on wasm32, a trap that
+  per level, so an unbounded bag overflows the stack: on wasm32, a trap that
   takes the module down rather than an error the host can catch. The cap is the
   one `serde_json::from_str` already enforces, so it refuses nothing a stored
-  blob can carry. It is stated on its own because the `Value` lane — the
-  host-authored one, which `install` reaches — is not parsed from a string, so
+  blob can carry. It is stated on its own because the `Value` lane: the
+  host-authored one, which `install` reaches: is not parsed from a string, so
   nothing else bounds it. A bag is refused where the decoder reads it off the
   wire, before it is cloned into the model; `Content::validate` restates it as
   `Invariant::JsonTooDeep` for content that never went through a decoder. This
@@ -196,7 +196,7 @@ Three rules bound the openness:
 - **Payload rides `attrs`.** A built-in carries its payload in named sibling
   keys (`level`, `lang`, `url`); an unknown carries it in one opaque `attrs`
   object. A *new* construct must therefore put its payload under `attrs` to
-  survive a reader that predates it — a sibling key an old reader does not
+  survive a reader that predates it: a sibling key an old reader does not
   read is dropped on re-encode.
 - **No reserved name reuse.** An unknown may not take a built-in's name
   (`heading`, `quote`, `link`, …): it would serialize as the built-in and parse
@@ -213,7 +213,7 @@ Three rules bound the openness:
       twins for the op wire, `serial::from_authored_value` for a whole content).
       An op or an `install` is host-authored now, so that shape means a stale
       copy of the built-in list, never a document from the past. Reads that hand
-      back stored content — `exportMarkdown`, `rebase` — are storage-lane, not
+      back stored content (`exportMarkdown`, `rebase`) are storage-lane, not
       this one. The same split governs an unreadable **table-cell mark**.
       Storage skips it: `serial::parse_cell` is lenient, and normalization makes
       the skip permanent. The authored lane refuses it, because a host's
@@ -223,14 +223,14 @@ Three rules bound the openness:
       was unknown carries `{"kind": "callout", "attrs": {…}}`; the release that
       promotes `callout` to a built-in has to keep opening it. Rejecting at
       `from_canonical_json` would refuse documents at rest exactly when the
-      vocabulary grows — the failure this section exists to prevent. Opening it
+      vocabulary grows: the failure this section exists to prevent. Opening it
       is half: the promoted arm also *reads* the bag rather than dropping it, see
       Promoting a vocabulary member.
 
 The opaque attrs are hash input like everything else in the canonical form, so
 they are recursively key-sorted along with the rest (see Byte-stability). What
 *does* remain a schema event is a change to the content object's own structure
-— a new top-level key beside `text`/`lines`/`marks`/`islands`, or a changed
+: a new top-level key beside `text`/`lines`/`marks`/`islands`, or a changed
 meaning for an existing discriminator.
 
 ### What openness buys a consumer
@@ -243,7 +243,7 @@ two:
 - **Read-modify-write.** An editor lowers a whole-field diff, restating every
   line's `kind` and `containers` whenever any of them changed. A construct its
   tree cannot hold is gone on the next keystroke: the document opens intact and
-  saves mangled. Such a consumer carries unknowns *inertly* instead — a carrier
+  saves mangled. Such a consumer carries unknowns *inertly* instead: a carrier
   node per axis that renders as the nearest safe neighbor and re-emits the tag
   and `attrs` verbatim.
 
@@ -256,13 +256,13 @@ built-in.
 
 The bound: **the carrier preserves unknown tags, not unknown payloads on known
 tags.** A future `kind: "footnote"` carrying a sibling `ref` loses `ref` at any
-consumer that predates it, predicates or no — the first rule above (*payload
+consumer that predates it, predicates or no: the first rule above (*payload
 rides `attrs`*) read from the other end.
 
 ## Promoting a vocabulary member
 
-Adding an unknown is not a schema event. The reverse trip — a later release
-**promoting** a tag to a built-in, which is what the open set exists for — moves
+Adding an unknown is not a schema event. The reverse trip: a later release
+**promoting** a tag to a built-in, which is what the open set exists for: moves
 four things at once.
 
 | What moves | How |
@@ -277,7 +277,7 @@ last two move canonical bytes for a document nobody edited. Four rules bound
 them.
 
 **A promoted built-in's decoder also reads the legacy `attrs` form.** This is
-the load-bearing one — without it the first promotion eats every stored blob's
+the load-bearing one: without it the first promotion eats every stored blob's
 payload, silently. It is structural rather than a discipline: `fold_legacy_attrs`
 folds an `attrs` bag into the object whenever the discriminator names a reserved
 member, before the built-in arms run, on all three block-and-mark axes. A named
@@ -295,7 +295,7 @@ does `loss`, which carries no payload.
 one placement where a build that knows the type and a build that reads it as
 `Unknown` order the mark identically against every built-in; any other slot gives
 one document two canonical forms, one per reader. The rule is stated on
-`MarkKind::ord` itself. It is the mark axis' alone — the block axes sort by
+`MarkKind::ord` itself. It is the mark axis' alone: the block axes sort by
 nothing.
 
 **Promoting a mark into the formatting class changes stored meaning**, since
@@ -306,7 +306,7 @@ that § Byte-stability sets out for migrated rows.
 **`RESERVED_*` growth rejects previously-valid authored content**, by design. A
 host still authoring `Unknown { tag: "callout" }` after the promotion gets
 `ReservedUnknownLineKind`, and `from_authored_value` starts refusing `attrs`
-beside `"callout"` — the reserved-name rule above, applied to a name that changed
+beside `"callout"`: the reserved-name rule above, applied to a name that changed
 sides. From the host's seat it reads as a release breaking its writes, so it is a
 release note, not a silent tightening.
 
@@ -314,44 +314,44 @@ release note, not a silent tightening.
 
 Islands, anchors, and cards each carry an id, and all three are the same handle:
 **opaque, unique within a scope, hash input, stable for the session, rebased
-through edits and never rewritten.** They differ on one axis — **who mints one,
+through edits and never rewritten.** They differ on one axis: **who mints one,
 and why only they can.** Uniqueness scope, collision response, and markdown
 round-trip all follow from that.
 
 |                     | Island `id`                                        | Anchor `id`                                        | Card `$id`                                                            |
 | ------------------- | -------------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------- |
 | Minted by           | the engine, at import                              | the caller                                         | the caller                                                            |
-| Because             | content determines it — the nth island minted      | the referent is external; no content determines it | nothing external does, but the scope that validates it is out of view |
+| Because             | content determines it: the nth island minted      | the referent is external; no content determines it | nothing external does, but the scope that validates it is out of view |
 | Unique across       | the `Content`'s islands                            | the `Content`'s prose marks                        | the document's composable cards                                       |
-| Required            | yes                                                | yes — the empty id is rejected                     | no; the handle is opt-in                                              |
-| On collision        | unreachable — mint is sequential; `validate` scans | `add` rejects                                      | parse repairs, mutators and storage reject                            |
-| Markdown round-trip | re-minted identically                              | lost — export emits none, import mints none        | carried verbatim                                                      |
+| Required            | yes                                                | yes: the empty id is rejected                     | no; the handle is opt-in                                              |
+| On collision        | unreachable: mint is sequential; `validate` scans | `add` rejects                                      | parse repairs, mutators and storage reject                            |
+| Markdown round-trip | re-minted identically                              | lost: export emits none, import mints none        | carried verbatim                                                      |
 
 Each section below states one handle's policy whole.
 
 ## Island-id determinism
 
 An island's `id` is part of the canonical form (`{id, type, props, loss}`),
-so it is hash input like every other field, and byte-stability's promise —
-equal content → equal bytes, *whatever the producer* — requires that equal
+so it is hash input like every other field, and byte-stability's promise:
+equal content → equal bytes, *whatever the producer*: requires that equal
 islands carry equal ids. The rule: **an id is a deterministic function of
 content, never drawn from an ambient source** (RNG, wall-clock, UUID,
 allocation identity, session or process state). An ambient id would make
 re-importing the same markdown yield different bytes for the same document,
 silently breaking divergence detection and cache keys.
 
-The normative scheme is the importer's positional `isl-{n}` — the nth island
+The normative scheme is the importer's positional `isl-{n}`: the nth island
 minted takes `isl-{n-1}` (`mint_island`), so cold import is a pure function
 of its markdown; export drops ids and re-import re-mints the same sequence.
-Ids then travel with their island across edits — deleting a slot drops that
-island and survivors keep their ids — so an id is *stable within a session*,
+Ids then travel with their island across edits: deleting a slot drops that
+island and survivors keep their ids, so an id is *stable within a session*,
 not re-derived from position. The invariant that holds for every `Content`,
 checked by `Content::validate`, is therefore **uniqueness**
 (`Invariant::IslandIdCollision`), not `id == isl-{index}`: after an edit
 `isl-1` may legitimately sit at index 0.
 
 The id stays in the hash input, so "canonical bytes == hash input" holds
-exact — no id-stripping, no separate hash form. Any future id-minting
+exact: no id-stripping, no separate hash form. Any future id-minting
 producer (a live editor, a richer island type) is bound by the same rule:
 continue the positional sequence for appended islands; never mint an ambient
 id.
@@ -359,7 +359,7 @@ id.
 ## Anchor-id identity
 
 An anchor (`MarkKind::Anchor { id }`) sits at the caller-minted end of the mint
-axis (§ The three id handles) because it has **no markdown projection** — it
+axis (§ The three id handles) because it has **no markdown projection**: it
 names an external referent (a comment thread, an editor bookmark) that no
 content determines. The never-ambient rule therefore cannot apply, and need not:
 that rule exists to keep *import* a pure function of markdown, and import mints
@@ -369,16 +369,16 @@ The policy: **an anchor id is caller-supplied, unique per `Content`, opaque and
 invariant while the mark lives; the mark is best-effort under edits and absent
 from markdown.**
 
-- **Caller-supplied.** The engine mints no anchor id and cannot — only the
+- **Caller-supplied.** The engine mints no anchor id and cannot: only the
   consumer knows the referent. Each consumer (editor, MCP writer) supplies its
   own; the runtime persists it verbatim. Engine-minting is a non-goal by
   design: a counter is history-dependent (the same final content reached two
-  ways carries different ids — the ambient source the twin rule forbids) and
+  ways carries different ids: the ambient source the twin rule forbids) and
   forfeits referent-convergence (two `add`s for one thread would mint two
   handles). A client wanting generated ids mints them client-side and supplies
   them; the auto-fallback middle ground (engine mints when the caller omits) is
   a non-goal too.
-- **Unique per `Content`.** `add` *rejects* a collision — not replace (which
+- **Unique per `Content`.** `add` *rejects* a collision: not replace (which
   silently retargets a live thread) nor coexist (already incoherent: an anchor
   is *the* handle `RemoveAnchor { id }` retains-out, so a shared id makes
   removing one destroy both). The empty id is rejected as a degenerate handle.
@@ -386,28 +386,28 @@ from markdown.**
   (`Invariant::AnchorIdCollision`, the uniqueness scan the island check shares).
   Scope is prose `marks`: an anchor inside an island cell is unreachable by
   `RemoveAnchor` (it scans prose marks only), so it sits outside the op surface
-  and outside this uniqueness check — explicit partial enforcement, not silent
+  and outside this uniqueness check: explicit partial enforcement, not silent
   half-enforcement.
 - **Opaque and invariant.** The runtime never rewrites an id. Positions rebase
   through splices (`map_pos`); the id passes untouched. A mark whose text is
-  deleted, or moved-and-rewritten in one round, drops *whole* — never
+  deleted, or moved-and-rewritten in one round, drops *whole*: never
   partially, never re-id'd (the documented diff-rebase residual).
 
 No markdown round-trip guarantee: export emits nothing for an anchor and import
 mints none, so a cold export→import loses every anchor. Anchors are edit-lane
-infrastructure — they survive only through diff-rebase (`revise` / `rebase`).
+infrastructure: they survive only through diff-rebase (`revise` / `rebase`).
 Non-rendering is a property of review-time metadata, not a gap; a future render
 projection (proof annotations, PDF destinations) would render the referent or a
 position, never the id, so this policy holds either way.
 
 ## Card-id identity
 
-A card's `$id` is the **durable card handle** — the address that survives
+A card's `$id` is the **durable card handle**: the address that survives
 reorder, kind change, and both round-trips, where a card's index does not
 (`Document::find_card` resolves it). Unlike an anchor's referent, nothing
 external determines it; the caller still mints it because the scope that makes
 one valid, the document, is out of view at the creation site (`Quill::seed_card`
-returns a detached card). The engine lacks the scope, not the referent — the
+returns a detached card). The engine lacks the scope, not the referent: the
 third position on the mint axis (§ The three id handles).
 
 The policy: **a card `$id` is caller-supplied, optional, unique across the
@@ -419,37 +419,37 @@ parse repairs a violation, every other boundary rejects one.**
   `Document::set_card_id` is the guarded door for a placed card. Minting at
   import would break equal-markdown → equal-bytes; stamping at load would
   move stored-row hashes under Byte-stability. A card without `$id` stays
-  legal — the handle is opt-in, and positional addressing remains.
+  legal: the handle is opt-in, and positional addressing remains.
 - **Unique per document, enforced per boundary.** Markdown is the lenient
-  hand-authoring boundary: parse **repairs** — the empty id (a degenerate
+  hand-authoring boundary: parse **repairs**, the empty id (a degenerate
   handle, as for anchors) and every duplicate after the first occupant drop
   under a warning (`parse::card_id_empty` / `parse::card_id_duplicate`), so
   a hand-edited or merge-conflicted file still loads and one emit converges
   on a valid document (the markdown twin of legacy-row read-repair above).
   Keep-first hands the handle to the card `find_card` resolves; it is
-  position-dependent — pasting a copy of a card above its original hands the
-  copy the handle — but the two blocks are byte-identical at paste time, so
+  position-dependent: pasting a copy of a card above its original hands the
+  copy the handle, but the two blocks are byte-identical at paste time, so
   no tie-break can recover "the original". Mutators **reject**
   (`EditError::CardIdCollision` / `EmptyCardId` on `push_card` /
   `insert_card` / `set_card_id`), and storage **rejects**
   (`StorageError::Malformed`): the writer cannot produce a violating blob,
   so one carrying a violation is corrupt, not a repair candidate. The wire
   form (`CardWire`) is card-scoped and carries no document; its documents
-  are checked where they assemble — at insertion.
+  are checked where they assemble: at insertion.
 - **Scope is the composable-card list.** `main` is addressed structurally,
   never by id; a `$id` on `main` is preserved verbatim, outside the handle
-  domain and the uniqueness scan — explicit partial scope, like the
+  domain and the uniqueness scan: explicit partial scope, like the
   island-cell anchors above.
 - **Opaque and invariant.** No mutator rewrites an id: `move_card`,
   `set_card_kind`, and both round-trips pass it untouched. Removing a card
   (or its id) retires the handle, and a retired handle is free for re-supply
-  — undo reconstructs a deleted card, stamp included, exactly because the
+: undo reconstructs a deleted card, stamp included, exactly because the
   collision check guarantees the id it re-supplies is unused.
 
 ## Schema Versioning
 
 The schema version is tied to the **crate version at which the `Document`
-wire format was last changed** — not the running crate version. The
+wire format was last changed**: not the running crate version. The
 current format was fixed in `0.93.0`, so the version tag is
 `quillmark/document@0.93.0`; every later patch release writes that same
 value, because patches do not change the format.
@@ -460,7 +460,7 @@ The oldest wire format still read is `0.92.0`: a unified payload-item list
 nested inside a field value survive a storage round-trip (the JSON `value`
 projection is fill-free), and the `seed` payload-item variant (the `$seed`
 per-card-kind overlay map). `0.93.0` leaves the payload model unchanged and
-instead embeds the card `body` as the **canonical content** —
+instead embeds the card `body` as the **canonical content**:
 structurally, as a nested object, not a markdown string (see Byte-stability).
 
 The V0_92_0 → V0_93_0 migration is the one hop that can fail: it
@@ -479,25 +479,25 @@ because no stored population in those shapes remains on this lineage (see
 
 When the `Document` wire format changes again:
 
-1. **Freeze** the current `DocumentV0_93_0` type tree — leave its struct
+1. **Freeze** the current `DocumentV0_93_0` type tree: leave its struct
    /enum definitions and serde derives untouched so existing rows still parse.
 2. **Remove** the conversions binding the old DTO to the *live* `Document`
-   (`From<&Document>` and `TryFrom<… for Document>`) — a frozen tree cannot
+   (`From<&Document>` and `TryFrom<… for Document>`): a frozen tree cannot
    convert to a model it predates, and step 3 supersedes them.
 3. **Add** a new frozen tree `DocumentV0_NN_0` reflecting the new model,
    plus its `From<&Document>` and `TryFrom<… for Document>` conversions.
 4. **Add** the `StoredDocument::V0_NN_0` variant, tagged
    `#[serde(rename = "quillmark/document@0.NN.0")]`.
-5. **Write the migration** — `From<DocumentV0_93_0> for DocumentV0_NN_0` if
+5. **Write the migration**: `From<DocumentV0_93_0> for DocumentV0_NN_0` if
    the mapping cannot fail (a purely structural rename/restructure), or
    `TryFrom<DocumentV0_93_0> for DocumentV0_NN_0` if it can reject, as the
    V0_92_0 → V0_93_0 cold-import does for an over-nested legacy body. This is
    the only real labor: it encodes how old fields map to the new model
-   (renames, restructures, defaults for new fields, and — for a `TryFrom`
-   hop — which malformed inputs get rejected).
+   (renames, restructures, defaults for new fields, and: for a `TryFrom`
+   hop: which malformed inputs get rejected).
 6. **Extend** the reader (each older blob migrates one hop, then chains).
    Every arm below the newest already funnels through the V0_92_0 → V0_93_0
-   hop, which can reject — so every one of those arms threads `?`, whether
+   hop, which can reject, so every one of those arms threads `?`, whether
    or not the new V0_93_0 → V0_NN_0 hop (shown here as infallible) adds
    another:
    ```rust
@@ -513,7 +513,7 @@ When the `Document` wire format changes again:
    `DocumentV0_NN_0::try_from(...)` in every arm.
 
 A new frozen DTO can also reject at parse time through a custom
-`Deserialize` rather than through a `TryFrom` migration — `CanonicalContent`
+`Deserialize` rather than through a `TryFrom` migration: `CanonicalContent`
 (the `body` field's type) normalizes and validates the embedded content,
 failing with a serde error before any `TryFrom` in the chain above runs.
 Design a new DTO's `Deserialize` to fail the same way if it embeds
@@ -526,8 +526,8 @@ still-supported past version always loads. Migrations chain
 cost is one frozen type tree per schema version plus one migration function
 per version bump.
 
-A legacy variant may be **retired** — its DTO tree, migration, and tests
-deleted — once a product/release-history call confirms no stored population
+A legacy variant may be **retired**: its DTO tree, migration, and tests
+deleted: once a product/release-history call confirms no stored population
 remains in that shape (the `0.81.0` and `0.82.0` shims were dropped this
 way). A row that later surfaces in a retired shape then fails as an unknown
 version, so retirement is reserved for shapes with no live rows.
@@ -535,17 +535,17 @@ version, so retirement is reserved for shapes with no live rows.
 ## Gotchas
 
 - The schema version is a hand-set constant (`SCHEMA_V0_93_0`), **not**
-  `CARGO_PKG_VERSION` — bumping it is a deliberate act tied to a model change.
+  `CARGO_PKG_VERSION`: bumping it is a deliberate act tied to a model change.
 - Unknown schema versions are rejected on read, never silently ignored.
 - DTO type names carry version suffixes with underscores
   (`DocumentV0_92_0`); `non_camel_case_types` is allowed module-wide for this.
 - No file extension is part of the storage contract: the interchange forms
   are card-yaml markdown **text** and `StoredDocument` **JSON**. `.qmd` in
-  particular is unsanctioned — it collides with Quarto's extension.
+  particular is unsanctioned: it collides with Quarto's extension.
 
 ## Links
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) — `Document` in the core type overview
-- [markdown-spec.md](../references/markdown-spec.md) — Markdown syntax and the in-memory data model
-- [VERSIONING.md](VERSIONING.md) — quill version resolution (a separate concern)
-- `QuillValue` (`crates/core/src/value.rs` rustdoc) — value type stored inside payload fields
+- [ARCHITECTURE.md](ARCHITECTURE.md): `Document` in the core type overview
+- [markdown-spec.md](../references/markdown-spec.md): Markdown syntax and the in-memory data model
+- [VERSIONING.md](VERSIONING.md): quill version resolution (a separate concern)
+- `QuillValue` (`crates/core/src/value.rs` rustdoc): value type stored inside payload fields

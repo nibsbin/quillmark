@@ -143,7 +143,7 @@ fn seed_document_emits_one_seeded_card_per_kind() {
 
 /// The whole point of `example → absent`: a seeded document needs no
 /// provenance to render, and absent fields pick up `default` then type-empty
-/// zero at the render layer — never persisted, so editor and preview agree.
+/// zero at the render layer, never persisted, so editor and preview agree.
 #[test]
 fn seeded_document_compiles_with_default_then_zero_for_absent_fields() {
     let quill = quill_from_yaml(QUILL);
@@ -338,7 +338,7 @@ fn seed_overlay_type_mismatch_is_advisory_and_does_not_gate_render() {
         "seed diagnostics are advisory, not errors",
     );
 
-    // The malformed overlay never blocks render — `$seed` is stripped.
+    // The malformed overlay never blocks render: `$seed` is stripped.
     assert!(
         quill.compile_data(&doc).is_ok(),
         "compile_data must ignore $seed"

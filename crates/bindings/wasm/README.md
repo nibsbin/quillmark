@@ -10,16 +10,16 @@ Use Quillmark in browsers/Node.js with explicit in-memory trees (`Map<string, Ui
 
 The package exposes **one import surface**:
 
-- `@quillmark/wasm` (the root) — the **canonical API**: `Quill`, `Document`, and
+- `@quillmark/wasm` (the root), the **canonical API**: `Quill`, `Document`, and
   an `Engine` that renders them.
 
 `Quill` and `Document` are re-exported verbatim from the internal Typst-less
 core build, so editor/validation code (`Quill.fromTree`,
-`Document.fromMarkdown`) loads only that small core binary — no backend is
+`Document.fromMarkdown`) loads only that small core binary: no backend is
 loaded until you render. The `Engine` hides everything else: each backend
 (`typst`, `pdfform`) is a separate, private WASM binary with its own linear
 memory, lazily loaded on the first render. The Engine clones a `Quill` /
-`Document` into the backend's memory as data and frees the clones — you never
+`Document` into the backend's memory as data and frees the clones: you never
 hold a backend object or cross a memory boundary yourself.
 
 ## Build
@@ -28,8 +28,8 @@ hold a backend object or cross a memory boundary yourself.
 bash scripts/build-wasm.sh
 ```
 
-The script builds three variants — the core (no backend), the Typst backend
-(default features), and the Typst-free pdfform backend (`pdfform` feature) —
+The script builds three variants: the core (no backend), the Typst backend
+(default features), and the Typst-free pdfform backend (`pdfform` feature):
 each with `--target bundler` and `--weak-refs` enabled (see
 [Lifecycle](#lifecycle)).
 
@@ -66,7 +66,7 @@ const result = await engine.render(quill, parsed, { format: "pdf" });
 
 ### `new Engine(options?)`
 Create the render dispatcher. Routes each quill to its backend by
-`quill.backendId`, lazily loads that backend binary, and renders — cloning the
+`quill.backendId`, lazily loads that backend binary, and renders: cloning the
 quill/document into the backend's memory and freeing the clones internally.
 `render`, `open`, `supportedFormats`, and `supportsCanvas` are **async** (the
 first call may load a backend). Pass `{ backends }` to register or override
@@ -78,16 +78,16 @@ the backend id.
 
 **Capability probes are always free.** `supportedFormats` and `supportsCanvas`
 depend only on `quill.backendId`, and answer from the descriptor's required
-`formats`/`canvas` manifest — never loading the multi-MB backend binary and
+`formats`/`canvas` manifest: never loading the multi-MB backend binary and
 never cloning the quill. Use them as non-failing pre-render probes.
 
 ### `Quill.fromTree(tree)`
-Build + validate a `Quill` from an in-memory tree. Pure — the declared backend
+Build + validate a `Quill` from an in-memory tree. Pure: the declared backend
 is resolved at render time, not here. Loads no backend binary.
 
 ### `new Document(quillRef)`
 A blank document: a main card carrying only `$quill`, an empty body, and no
-composable cards — the programmatic blank canvas. Absent fields resolve at
+composable cards: the programmatic blank canvas. Absent fields resolve at
 render time (schema `default`, else type-empty zero), so nothing the caller
 did not set reaches the output. Build it up with `storeFields` / `insertCard`.
 For an example-filled starter use `quill.seedDocument()`. Throws on an
@@ -103,12 +103,12 @@ root `$quill` metadata line, malformed YAML, and inputs over the 10 MiB
 Emit canonical Quillmark Markdown. Type-fidelity round-trip safe:
 `Document.fromMarkdown(doc.toMarkdown())` returns a document equal to `doc`
 under [`doc.equals`](#docequalsother). The output is **not** guaranteed
-byte-equal to the original source — YAML quoting, key ordering, and
+byte-equal to the original source: YAML quoting, key ordering, and
 whitespace are normalised. Use `equals` (not string comparison) to test
 semantic equality.
 
 ### `doc.toJson()`
-Serialize the document to a versioned storage DTO — a JSON **string**
+Serialize the document to a versioned storage DTO: a JSON **string**
 carrying a `schema` version. Use this (not `toMarkdown`) to persist a
 document across a process restart or crate upgrade: the wire format is
 frozen per `schema` version, whereas Markdown syntax evolves. Parse-time
@@ -116,11 +116,11 @@ frozen per `schema` version, whereas Markdown syntax evolves. Parse-time
 
 The string is produced inside the module by `serde_json`; the JS `JSON`
 global is not involved. It is standard JSON text, so callers may
-`JSON.parse` it to inspect it — but it is intended as an opaque blob you
+`JSON.parse` it to inspect it, but it is intended as an opaque blob you
 persist and hand back.
 
 `toJson()` is **deterministic**: a `Document` that is `equals` to another
-serializes to a byte-identical string — across repeated calls, and across
+serializes to a byte-identical string: across repeated calls, and across
 any crate upgrade that keeps the same `schema` version (every release does until
 the `Document` model changes; see [Storage compatibility](#storage-compatibility-across-versions)).
 Field order is fixed and object key order is preserved, so content hashes
@@ -145,7 +145,7 @@ not a valid storage DTO. Use it to branch on format without a heuristic or
 `try`/`catch` as control flow:
 
 ```ts
-// "JSON canonical, Markdown fallback" — no exceptions, no string sniffing
+// "JSON canonical, Markdown fallback": no exceptions, no string sniffing
 const doc = Document.tryFromJson(content) ?? Document.fromMarkdown(content);
 ```
 
@@ -156,14 +156,14 @@ genuinely malformed Markdown.
 
 The `schema` value (`quillmark/document@0.93.0`) is the **model version**,
 not the running crate version. It is a hand-set constant, bumped only when
-the `Document` model itself changes — so every `0.93.x` patch release reads
+the `Document` model itself changes, so every `0.93.x` patch release reads
 and writes that same value.
 
 - **Upgrading is safe.** A newer build always reads documents written by an
   older one. Each schema version's wire format is frozen and never changes;
   when the model does change, the new build ships a migration that converts
   old payloads on `fromJson`. A document you commit as your canonical
-  on-disk format keeps loading across crate upgrades — there is no need to
+  on-disk format keeps loading across crate upgrades: there is no need to
   pin old wasm to read old data.
 - **Downgrading is not.** `fromJson` rejects an *unknown* (i.e. newer)
   `schema` version rather than guessing at a format it predates. Don't feed
@@ -178,13 +178,13 @@ if (v && v !== Document.currentSchemaVersion()) {
 }
 ```
 
-`schemaVersionOf` does not validate the payload — it only reads the
+`schemaVersionOf` does not validate the payload: it only reads the
 `schema` field, returning `undefined` for non-JSON, non-objects, or
 payloads that don't carry one. Use it to distinguish "wrong version" from
 "corrupt" when `fromJson` throws.
 
 In short: persist the `toJson` string, upgrade freely, never downgrade. The
-full design — including how migrations are added — is in
+full design (including how migrations are added) is in
 `prose/canon/DOCUMENT_STORAGE.md`.
 
 ### `doc.equals(other)`
@@ -201,7 +201,7 @@ Use this to validate indices before calling card mutators (`removeCard`,
 
 ### `quill.validate(doc)`
 
-Returns `Diagnostic[]` — the document validated against the quill schema,
+Returns `Diagnostic[]`: the document validated against the quill schema,
 without invoking the backend. An empty array means the document is valid.
 Each diagnostic carries the canonical `validation::*` `code`, `path`, and
 `hint`. Includes the non-fatal `validation::must_fill` warning for each
@@ -214,14 +214,14 @@ const errors = diagnostics.filter(d => d.severity === "error");
 ```
 
 To render a form editor, read field definitions from `quill.schema` (walk
-`fields` in key order — declaration order is display order) and the authored
-values from the `Document` payload — there is no separate form-view projection.
+`fields` in key order: declaration order is display order) and the authored
+values from the `Document` payload: there is no separate form-view projection.
 
 ### `quill.seedDocument()`
 
 Returns a starter `Document` seeded from the schema: each field's `example:`
 is committed and every other field is left absent (the render layer fills
-`default:` → type-empty zero). Illustration-first — a field with both an
+`default:` → type-empty zero). Illustration-first: a field with both an
 `example` and a `default` renders its example. Use as the initial state for a
 "new document" editor.
 
@@ -243,7 +243,7 @@ doc.insertCard({ kind: "note" }, 0);                    // insert at index 0
 ```
 
 Reads and writes are two aligned shapes. A read `Card` always has `body:
-Content` (canonical content, never a raw string) — no narrowing, no guessing
+Content` (canonical content, never a raw string): no narrowing, no guessing
 whether the body was normalized. The write shape `CardInput` widens `body` to
 `Content | string` (a markdown string imports to the content) and makes every
 field but `kind` optional. Every `Card` is a valid `CardInput`, so `insertCard`
@@ -251,8 +251,8 @@ still takes exactly what `cards` / `removeCard` / `seedCard` return.
 Build a fresh card from a flat field map with
 `Document.makeCard(kind, fields?, body?)`.
 
-**One address for the whole surface.** Reads and writes navigate by an `Addr` —
-`{ card?, field? }`, absent `card` = main, absent `field` = body — and a bare
+**One address for the whole surface.** Reads and writes navigate by an `Addr`:
+`{ card?, field? }`, absent `card` = main, absent `field` = body, and a bare
 string is shorthand for `{ field }`. So `doc.storeField("qty", 3)` targets the
 main card's `qty`, `doc.storeField({ card: 2, field: "qty" }, 3)` a composable
 card's. Reads are total over the field axis (`getStored` → `undefined`, `isFill` → `false` for
@@ -263,10 +263,10 @@ markdown is read through `quill.reader(doc).get(field)`). Card-scoped verbs take
 `CardAddr` (`{ card? }`) first: `doc.getExt({ card: 2 })`, and the batch below.
 
 Batch mutation: `doc.storeFields({}, {...})` / `doc.storeFields({ card: index }, {...})`
-apply a whole object atomically — on any invalid field nothing is applied and
+apply a whole object atomically: on any invalid field nothing is applied and
 the thrown error carries one diagnostic per offending field (`path` = field
 name). The address is first (never shape-overloaded, since `card` is a legal
-field name), and parses strictly — a stray key throws rather than silently
+field name), and parses strictly: a stray key throws rather than silently
 reading as `{}`. The main card is `{}`, or **`MAIN_CARD_ADDR`** (from
 `@quillmark/wasm/runtime`), a frozen alias that spells the intent:
 `doc.storeFields(MAIN_CARD_ADDR, {...})`.
@@ -277,12 +277,12 @@ A `Document` holds only a `$quill` *reference*, not the resolved schema, so type
 writes go through the schema-bound writer while the quill-free opaque store sits
 on `Document` itself (**store** = verbatim, **set** = typed):
 
-- **`quill.writer(doc)` — the typed door whenever a quill is in hand.** Bind the
+- **`quill.writer(doc)`: the typed door whenever a quill is in hand.** Bind the
   schema once and issue bare `set` / `setAll` / `setBody` / `reviseField` /
   `addCard` / `card(i)`. Each resolves the field's schema `type`, coerces the
   value to its canonical form (`"3"` → `3`, a markdown string → a richtext
   content), and **fails now** on a mismatch instead of at render. A name the schema
-  does not declare throws `UnknownField` rather than falling to the opaque store —
+  does not declare throws `UnknownField` rather than falling to the opaque store:
   on the typed path an undeclared name is a typo, not a fallback. The batch form
   (`setAll`) is all-or-nothing: an undeclared name aborts the whole write and its
   per-field diagnostics name every offending field, so a whole-form submit
@@ -290,21 +290,21 @@ on `Document` itself (**store** = verbatim, **set** = typed):
   carries the quill-taking `_commitField` / `_commitFields` / `_addCard` /
   `_reviseField` ABI the writer delegates to, hidden from the `.d.ts`.)
 
-- **`store*` — the deliberate quill-free primitive.** `doc.storeField(addr, value)`
+- **`store*`: the deliberate quill-free primitive.** `doc.storeField(addr, value)`
   / `doc.storeFields(cardAddr, {...})` (and `storeFill`) validate only the field
   name/depth/kind and store the value verbatim, no quill required. Reach for it
   on purpose when you *want* the opaque store: quill-agnostic storage/migration
   infra that has no bundle and must write regardless of a drifted schema;
   store-now-validate-later editors holding in-progress input that `commit`
   would reject; or verbatim passthrough of fields the schema doesn't own. It is
-  the lower layer, not a lighter `commit` — a typo'd field name stores silently
+  the lower layer, not a lighter `commit`: a typo'd field name stores silently
   and only surfaces at `quill.validate` / render.
 
 Per-keystroke cost is the same either way (both mutate the in-memory `Document`
 in place; no seam is crossed), so steering to the writer buys the type check for
 free.
 
-#### `DocumentWriter` / `CardWriter` — bind the quill once
+#### `DocumentWriter` / `CardWriter`: bind the quill once
 
 `quill.writer(doc)` binds the quill's schema to the document once, so a form
 editor or MCP writer that holds both issues bare verbs (the writer forwards to
@@ -315,25 +315,25 @@ const ed = quill.writer(doc);                       // Rust `quill.writer(doc)` 
 ed.set("subject", "Q3 results");                    // strict-committed to the schema type
 ed.setAll({ qty: "3", subject: "Q3" });             // all-or-nothing batch
 ed.reviseField("subject", "Q3 **results**");        // typed AND anchor-preserving; returns a Delta
-ed.set("titel", "x");                               // throws UnknownField — a typo, not a fallback
+ed.set("titel", "x");                               // throws UnknownField: a typo, not a fallback
 ed.card(2).set("body", "**note**");                 // composable card, resolved by its $kind
 ```
 
 `DocumentWriter` / `CardWriter` are pure JS holding references to your existing
-`quill` and `doc` — no WASM handle of their own, nothing to `free()`. `card(i)`
+`quill` and `doc`: no WASM handle of their own, nothing to `free()`. `card(i)`
 is lazy: it never throws; an out-of-range index throws `IndexOutOfRange` at the
 write.
 
 ### `engine.render(quill, parsed, opts?)` vs. `engine.open(quill, parsed)`
 
-Use **`engine.render`** for one-shot exports (PDF/SVG/PNG) — compiles, emits
+Use **`engine.render`** for one-shot exports (PDF/SVG/PNG): compiles, emits
 artifacts, done. Use **`LiveSession`** (returned by `engine.open`) for
 reactive previews: the session is a persistent compiler. `paint` / `render` /
 `regions` / `fieldAt` read its current compile without recompiling, and `apply(doc)`
 recompiles in place on each edit, returning a `ChangeSet` whose `dirtyPages`
-tells you which pages to repaint (`dirty ∩ visible`). Apply is transactional —
+tells you which pages to repaint (`dirty ∩ visible`). Apply is transactional:
 on throw, every read keeps serving the last-good compile. Don't open a session
-per export, and don't re-open per edit — `apply` instead.
+per export, and don't re-open per edit: `apply` instead.
 
 ### `engine.render(quill, parsed, opts?)`
 Render a pre-parsed `Document` against `quill`. Throws an
@@ -344,7 +344,7 @@ declared backend.
 Open once, render all or selected pages (`opts.pages`).
 
 The session also exposes `pageCount`, `backendId`, `supportsCanvas`,
-`warnings` (non-fatal diagnostics of the current compile — set at `open`,
+`warnings` (non-fatal diagnostics of the current compile: set at `open`,
 refreshed by each committed `apply`),
 `apply(doc)` for in-place recompiles, `pageSize(page)`, and
 `paint(ctx, page, opts?)` for canvas previews. See below.
@@ -361,7 +361,7 @@ render a "no pages to preview" UI without relying on the throw.
 `OffscreenCanvasRenderingContext2D` (Worker), skipping PNG/SVG byte
 round-trips.
 
-The painter owns `canvas.width` / `canvas.height` — it sizes the backing
+The painter owns `canvas.width` / `canvas.height`: it sizes the backing
 store itself. Consumers own `canvas.style.*` (or the layout system that
 sets them) and read `layoutWidth` / `layoutHeight` from the returned
 `PaintResult`.
@@ -390,16 +390,16 @@ canvas.style.height = `${result.layoutHeight}px`;
   clamped page renders soft at the same `canvas.style` size.
 - `paint` writes the whole backing store with `putImageData`, which
   ignores the 2D context transform, `globalAlpha`, and clip. Give each
-  visible page its own `<canvas>` element — you cannot composite two pages,
+  visible page its own `<canvas>` element: you cannot composite two pages,
   a sub-rect, or a context transform through `paint`.
-- `paint` is always a full repaint — setting the backing-store width /
+- `paint` is always a full repaint: setting the backing-store width /
   height clears it. No `clearRect` required. Each call re-rasterizes from
   scratch (no per-page raster cache), so keep a page's canvas alive while
   it stays near the viewport rather than pooling one canvas across pages:
   an idle canvas retains its pixels for free, whereas reusing a canvas on
   scroll re-runs a full render.
 - `pageCount` and `pageSize(page)` are stable for the session's
-  lifetime (immutable snapshot) — cache them.
+  lifetime (immutable snapshot): cache them.
 - Worker support: pass an `OffscreenCanvasRenderingContext2D` and the
   same call signature works. `layoutWidth` / `layoutHeight` are
   informational in that mode (no CSS layout box); fold everything into
@@ -415,14 +415,14 @@ canvas.style.height = `${result.layoutHeight}px`;
 
 A field's *cell* is inferred from whether its schema declares a `default:`:
 
-- **Unendorsed** (no `default:`) — `quill.blueprint` renders the
+- **Unendorsed** (no `default:`): `quill.blueprint` renders the
   `!must_fill` marker in the value cell (carrying the field's `example` as a
   suggested value when one exists). An absent Unendorsed field zero-fills
   silently. A `!must_fill` marker left in the document is non-fatal: it emits
   the `validation::must_fill` warning and still renders. Partial documents
   are accepted; `engine.render(quill, doc)` only throws for malformed
   input.
-- **Endorsed** (with `default:`) — `quill.blueprint` renders the
+- **Endorsed** (with `default:`): `quill.blueprint` renders the
   default value with a type-only `# <type>` annotation (shippable as-is),
   and the default is used when the document omits the field.
 
@@ -431,7 +431,7 @@ document emits the non-fatal `validation::must_fill` warning.
 
 ### Errors
 
-Every method that can fail throws a **`QuillmarkError`** — a JS `Error` with
+Every method that can fail throws a **`QuillmarkError`**: a JS `Error` with
 `.diagnostics` attached. The type and a guard are exported from the root:
 
 ```ts
@@ -443,17 +443,17 @@ try {
   if (isQuillmarkError(e)) {
     for (const d of e.diagnostics) console.error(d.severity, d.message);
   } else {
-    throw e; // not a quillmark failure — programming error, re-throw
+    throw e; // not a quillmark failure: programming error, re-throw
   }
 }
 ```
 
-`QuillmarkError` is a **structural interface, not a class** — the WASM layer
+`QuillmarkError` is a **structural interface, not a class**: the WASM layer
 throws a real `Error` and attaches the property, so there is no constructor to
 `instanceof` against; narrow with `isQuillmarkError` (which also works on
 errors from any build or WASM instance in the page).
 
-`diagnostics` is always non-empty — length 1 for most failures, length N for
+`diagnostics` is always non-empty: length 1 for most failures, length N for
 backend compilation errors. `message` is derived from `diagnostics`
 (`diagnostics[0].message` for single-diagnostic errors; an aggregate
 `"<N> error(s): <first.message>"` summary for compilation failures).
@@ -461,14 +461,14 @@ backend compilation errors. `message` is derived from `diagnostics`
 Read `err.diagnostics[0]` for the primary diagnostic; iterate the array for
 compilation failures. The same shape applies to every throw site:
 
-- `Document.fromMarkdown` — parse errors (missing root `$quill` metadata, YAML
+- `Document.fromMarkdown`: parse errors (missing root `$quill` metadata, YAML
   errors, `parse::input_too_large` for inputs > 10 MiB).
-- `Document` mutators (`storeField`, the writer's `set`, etc.) — mutator
+- `Document` mutators (`storeField`, the writer's `set`, etc.): mutator
   failures carry a namespaced `edit::*` `code` on `diagnostics[0]`
   (`edit::invalid_field_name`, `edit::unknown_field`, `edit::index_out_of_range`,
   `edit::field_conform`, …). Route on `diagnostics[0].code`, never on message
   text.
-- `engine.render` / `session.render` — backend compilation failures and
+- `engine.render` / `session.render`: backend compilation failures and
   validation errors.
 
 ### Lifecycle
@@ -480,8 +480,8 @@ teardown hook for callers that want deterministic release.
 
 `engine.render` and `engine.open` read the `quill` and `doc` handles
 synchronously, before their first await, so freeing a handle as soon as the
-call returns — `try { return engine.render(quill, doc); } finally
-{ doc.free(); }` — is safe even on the first render, while the backend
+call returns: `try { return engine.render(quill, doc); } finally
+{ doc.free(); }`: is safe even on the first render, while the backend
 binary is still loading.
 
 The package floor is Node 22+ (`engines: { node: ">=22" }`) and current

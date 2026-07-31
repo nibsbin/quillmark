@@ -51,7 +51,7 @@ fn test_malformed_quill_reference_carries_code_and_grammar_hint() {
 #[test]
 fn test_root_dash_frontmatter_without_quill_reports_missing_quill() {
     // `---` is an accepted opener for the root block. A `---` block without
-    // `$quill` surfaces the standard MissingQuill error — not a
+    // `$quill` surfaces the standard MissingQuill error: not a
     // "use `~~~card-yaml` instead of `---`" hint, which would be misleading.
     let err = decompose("---\nquill: usaf_memo\ntitle: Memo\n---\n\nBody\n").unwrap_err();
     let msg = err.to_string();
@@ -77,7 +77,7 @@ fn test_missing_block_with_bare_yaml_calls_out_missing_fence() {
 // YAML frontmatter when generating Markdown. The parser accepts this shape
 // for the document's first (root) block only. Composable cards still
 // require the canonical `~~~card-yaml` / `~~~` fences, and the emitter is
-// unchanged — `to_markdown()` always emits the canonical form.
+// unchanged: `to_markdown()` always emits the canonical form.
 // -----------------------------------------------------------------------
 
 #[test]
@@ -121,7 +121,7 @@ fn test_dash_root_block_emits_canonical_card_yaml() {
 
 #[test]
 fn test_dash_root_with_composable_card_yaml_parses() {
-    // `---` root, canonical composable card after — the common LLM shape.
+    // `---` root, canonical composable card after: the common LLM shape.
     let markdown = "---\n$quill: test_quill\n$kind: main\ntitle: Test\n---\n\nBody.\n\n\
                     ~~~card-yaml\n$kind: note\nlabel: a\n~~~\n\nNote body.";
     let doc = decompose(markdown).expect("mixed shape should parse");
@@ -149,7 +149,7 @@ fn test_dash_opener_in_composable_card_position_errors() {
 #[test]
 fn test_dash_opener_with_tilde_closer_falls_through() {
     // Mixed fences: a `---` opener with no matching `---` closer is not
-    // frontmatter — per CommonMark the lone `---` is a thematic break. No root
+    // frontmatter, per CommonMark the lone `---` is a thematic break. No root
     // block is recognised, so the document surfaces MissingQuill.
     let markdown = "---\n$quill: test_quill\n$kind: main\ntitle: T\n~~~\n\nBody.";
     let err = decompose(markdown).unwrap_err();
@@ -680,7 +680,7 @@ id: 2
         // break in the root body) exercising the shapes described in
         // markdown-spec.md. `***` (thematic break) has no content
         // representation and is dropped by the projection; the surrounding
-        // paragraphs survive — hence `main_body_contains` rather than
+        // paragraphs survive: hence `main_body_contains` rather than
         // `main_body_eq`.
         Case {
             name: "spec_example",
@@ -963,7 +963,7 @@ More content.
     assert_eq!(doc.cards().len(), 0);
 }
 
-/// Flow-sequence YAML (`[a, b]`) reaches the payload as an array — the block
+/// Flow-sequence YAML (`[a, b]`) reaches the payload as an array: the block
 /// form is covered by `emit_tests.rs::round_trip_sequence`.
 #[test]
 fn test_flow_sequence_array_field_parses() {
@@ -1040,7 +1040,7 @@ title: Test
 fn test_over_nested_body_surfaces_body_import_error() {
     // A body whose container nesting exceeds MAX_NESTING_DEPTH cannot import into
     // the content; the parse fails with the dedicated `parse::body_import` code
-    // (such a body never rendered — the backend rejected the same depth).
+    // (such a body never rendered: the backend rejected the same depth).
     let deep = ">".repeat(crate::error::MAX_NESTING_DEPTH + 5);
     let markdown =
         format!("~~~card-yaml\n$quill: test_quill\n$kind: main\n~~~\n\n{deep} too deep\n");
@@ -1054,10 +1054,10 @@ fn test_over_nested_body_surfaces_body_import_error() {
 #[test]
 fn test_canonical_root_with_kind_round_trips_byte_equal() {
     // §9.1: a canonical document is a parse-emit fixed point. Adding the
-    // implicit-kind synthesis must not perturb canonical input — when
+    // implicit-kind synthesis must not perturb canonical input: when
     // `$kind: main` is already written, the emitter produces the same line.
-    // The canonical body carries a single trailing newline — the content
-    // projection's block terminator — so the document is a parse-emit fixed point.
+    // The canonical body carries a single trailing newline (the content
+    // projection's block terminator) so the document is a parse-emit fixed point.
     let canonical = "~~~\n$quill: test_quill\n$kind: main\ntitle: Test\n~~~\n\nBody.\n";
     let doc = decompose(canonical).unwrap();
     assert_eq!(doc.to_markdown(), canonical);
@@ -1168,7 +1168,7 @@ Body.";
 
 #[test]
 fn fill_on_dollar_key_is_rejected() {
-    // `!must_fill` is not permitted on `$` metadata keys — they are extracted
+    // `!must_fill` is not permitted on `$` metadata keys: they are extracted
     // into typed metadata and have no placeholder semantics.
     let markdown = "~~~card-yaml
 $quill: !must_fill test_quill
@@ -1291,7 +1291,7 @@ Second paragraph.";
     assert!(body.contains("First paragraph."));
     assert!(body.contains("Second paragraph."));
     // `---` is delegated to CommonMark (thematic break / setext underline),
-    // never treated as a card fence — the document stays a single card.
+    // never treated as a card fence: the document stays a single card.
     assert!(doc.cards().is_empty(), "--- must not split a card");
 }
 
@@ -1313,7 +1313,7 @@ Second paragraph.";
     assert!(body.contains("First paragraph."));
     assert!(body.contains("Second paragraph."));
     // `---` is delegated to CommonMark (thematic break / setext underline),
-    // never treated as a card fence — the document stays a single card.
+    // never treated as a card fence: the document stays a single card.
     assert!(doc.cards().is_empty(), "--- must not split a card");
 }
 
@@ -1475,7 +1475,7 @@ fn test_yaml_depth_limit() {
 // Guillemet preservation tests
 
 /// Guillemet/chevron sequences (`<<...>>`) must survive parsing unmodified in
-/// every context — body, YAML string values, YAML arrays, nested maps, code
+/// every context: body, YAML string values, YAML arrays, nested maps, code
 /// blocks, inline code, and card bodies/fields. A single integrative document
 /// exercises all of these.
 #[test]
@@ -1666,7 +1666,7 @@ fn test_unicode_in_body() {
 
 // ── Single-field YAML scalar types (table-driven) ─────────────────────────────
 // `|` (literal) and `>` (folded) block scalars are exercised nowhere else in
-// the workspace — keep them as explicit rows here.
+// the workspace: keep them as explicit rows here.
 #[test]
 fn single_field_yaml_scalar_types() {
     enum Check {
@@ -1882,7 +1882,7 @@ fn test_blank_separator_strip_global_body_followed_by_card_crlf() {
         "~~~card-yaml\r\n$quill: q\r\n$kind: main\r\n~~~\r\n\r\nbody\r\n\r\n~~~card-yaml\r\n$kind: x\r\n~~~\r\n";
     let doc = decompose(markdown).unwrap();
     // CRLF normalizes to LF; the blank-line separator is stripped and the value
-    // projection carries no trailing newline — identical to the `_lf` sibling.
+    // projection carries no trailing newline: identical to the `_lf` sibling.
     assert_eq!(doc.main().body_markdown(), "body");
 }
 
@@ -2048,7 +2048,7 @@ Card body here.
 }
 
 /// A kindless composable card (no `$kind`) carries no `$kind` key in the raw
-/// plate — the serializer never fabricates `$kind: ""` (issue 1030, "absent on
+/// plate: the serializer never fabricates `$kind: ""` (issue 1030, "absent on
 /// undefined"). The schema-free serializer still emits `$body` for every card;
 /// the schema-gated body drop is the render plate's job (`compile_data`).
 #[test]
@@ -2092,7 +2092,7 @@ fn test_to_plate_json_quill_first() {
 /// Regression test for the `serde_json::Map::remove` / `shift_remove` bug.
 ///
 /// `serde_json::Map::remove` with `preserve_order` uses `swap_remove` under
-/// the hood (O(1), moves last element into removed slot) — NOT the order-
+/// the hood (O(1), moves last element into removed slot): NOT the order-
 /// preserving `shift_remove` (O(n)).  Payload field order must be
 /// preserved.
 #[test]

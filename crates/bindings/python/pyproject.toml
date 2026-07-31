@@ -39,7 +39,7 @@ dev = [
 features = ["pyo3/extension-module"]
 python-source = "python"
 module-name = "quillmark._quillmark"
-# `py.typed` and the `.pyi` are the typed surface — a wheel without them types
+# `py.typed` and the `.pyi` are the typed surface: a wheel without them types
 # as `Any` no matter what the source tree carries, so they ship explicitly.
 include = [
     "python/quillmark/**/*.py",

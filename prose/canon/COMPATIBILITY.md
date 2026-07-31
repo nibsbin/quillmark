@@ -8,7 +8,7 @@
 Every publishable crate carries one workspace version and one SemVer promise to
 crates.io consumers. No CI job checks it: the rules below are what holds it, and
 a writer decides them as the change is written. This page is about the Rust
-crate API — [VERSIONING.md](VERSIONING.md) is about quill versions, a separate
+crate API: [VERSIONING.md](VERSIONING.md) is about quill versions, a separate
 axis.
 
 ## What the promise covers
@@ -46,8 +46,8 @@ happens.
 Mark it, unless a downstream `_` arm can be **silently** wrong.
 
 The question is what a missed variant does, not whether the concept feels
-closed. Ontological arguments — "a severity is two levels", "a tree is files and
-directories" — are the ones that get falsified, and `OutputFormat` has already
+closed. Ontological arguments: "a severity is two levels", "a tree is files and
+directories": are the ones that get falsified, and `OutputFormat` has already
 lost a variant. Ask instead:
 
 - **Loud on a miss** → mark it. A `_` arm that raises, refuses, or degrades to a
@@ -66,7 +66,7 @@ A forced `_` arm is a new opportunity to re-spell an existing behavior slightly
 differently. Two rules keep that from drifting:
 
 - Take the direction that cannot be silently wrong. `Severity` escalates to
-  `Error` — over-reporting shows a note too loudly, the other direction hides a
+  `Error`: over-reporting shows a note too loudly, the other direction hides a
   fatal. `HitGranularity` degrades to `Segment`, a lower bound on precision.
 - Where no safe direction exists, refuse. No fallback `OutputFormat` is honest;
   every one of them promises bytes the caller did not ask for.
@@ -81,8 +81,8 @@ built and three call sites cannot spell it three ways.
 Mark it, and give it a constructor when another crate builds one.
 
 A struct with private fields needs nothing: it is already unconstructible from
-outside. For one with `pub` fields the attribute buys exactly one freedom —
-adding a field — and no others, since every field stays readable and assignable.
+outside. For one with `pub` fields the attribute buys exactly one freedom:
+adding a field, and no others, since every field stays readable and assignable.
 Making a field private, changing its type, or computing it lazily still needs
 private fields plus accessors, the shape `YamlError` uses.
 

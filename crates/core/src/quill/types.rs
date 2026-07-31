@@ -16,7 +16,7 @@ use crate::value::QuillValue;
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[non_exhaustive]
 pub struct UiFieldSchema {
-    /// Display label for the field — decoupled from the snake_case wire key.
+    /// Display label for the field: decoupled from the snake_case wire key.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -28,11 +28,11 @@ pub struct UiFieldSchema {
     pub multiline: Option<bool>,
 }
 
-/// Migration message for the retired `ui.order` key — shared by the
+/// Migration message for the retired `ui.order` key: shared by the
 /// [`UiFieldSchema`] deserializer's error and `QuillConfig::field_parse_hint`'s
 /// hint text, so the two can't drift.
 pub(crate) const UI_ORDER_REMOVED_MSG: &str = "ui.order is no longer accepted; \
-     field display order is declaration order — reorder the fields in Quill.yaml instead";
+     field display order is declaration order: reorder the fields in Quill.yaml instead";
 
 /// Wire shape of a `ui:` block. `order` is declared so its rejection carries
 /// the migration message rather than serde's generic unknown-key error.
@@ -74,7 +74,7 @@ pub struct BodyCardSchema {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub example: Option<String>,
     /// Canonical-content form of [`example`](Self::example), imported once at
-    /// quill load (`QuillConfig::from_yaml`) and cached here — a pure function of
+    /// quill load (`QuillConfig::from_yaml`) and cached here: a pure function of
     /// the Quill.yaml bytes, never serialized. Seeding commits this instead of
     /// re-importing the markdown per document, so a seeded body is content from
     /// birth. `None` when there is no example or the schema was built outside the
@@ -88,7 +88,7 @@ pub struct BodyCardSchema {
 #[serde(deny_unknown_fields)]
 #[non_exhaustive]
 pub struct UiCardSchema {
-    /// Display label for the card kind — literal string or `{field_name}`
+    /// Display label for the card kind: literal string or `{field_name}`
     /// template. See `docs/quills/quill-yaml-reference.md`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
@@ -103,7 +103,7 @@ pub struct UiCardSchema {
 
 /// One entry in a card's [`GroupRegistry`]: a snake_case identity plus an
 /// optional display-label override. The `id` decouples identity from label the
-/// same way a field's snake_case key decouples from its `ui.title` — a rename
+/// same way a field's snake_case key decouples from its `ui.title`: a rename
 /// of the label touches one line and never breaks a `ui.group` reference or
 /// persisted per-group editor state. When `title` is `None`, consumers derive
 /// the label from `id` (`memo_for` → "Memo For"), exactly as they derive a
@@ -118,8 +118,8 @@ pub struct GroupSchema {
 }
 
 /// A card's ordered group registry (`main.ui.groups` or a card kind's
-/// `ui.groups`). Declaration order **is** display order — the same contract
-/// fields carry through their ordered map — so it is held as a `Vec` that
+/// `ui.groups`). Declaration order **is** display order (the same contract
+/// fields carry through their ordered map) so it is held as a `Vec` that
 /// survives regardless of surface form. Authored as either a sequence of ids
 /// (`[addressing, letterhead]`, titles derived) or a mapping of id to
 /// attributes (`{ letterhead: { title: … } }`, for label overrides); both fold
@@ -147,7 +147,7 @@ impl<'de> Deserialize<'de> for GroupRegistry {
                 f.write_str("a sequence of group ids or a mapping of group id to attributes")
             }
 
-            // Sequence form: `[addressing, letterhead]` — bare ids, titles derived.
+            // Sequence form: `[addressing, letterhead]`, bare ids, titles derived.
             fn visit_seq<A: serde::de::SeqAccess<'de>>(
                 self,
                 mut seq: A,
@@ -273,7 +273,7 @@ pub enum FieldType {
     Array,
     Object,
     /// A calendar date, `YYYY-MM-DD`, stored verbatim as a string. Rejects any
-    /// time component — a time-bearing string is a [`DateTime`](Self::DateTime),
+    /// time component: a time-bearing string is a [`DateTime`](Self::DateTime),
     /// not a truncated date. The common case in a document engine, so it is the
     /// unmarked date type. Lowers to Typst `datetime(year:, month:, day:)`.
     Date,
@@ -281,27 +281,27 @@ pub enum FieldType {
     /// verbatim as a string. Rejects timezone offsets (`Z`, `±HH:MM`), the space
     /// separator, fractional seconds, and a bare date (which is a
     /// [`Date`](Self::Date)); seconds are optional and zero-fill. The engine does
-    /// no zone math — an offset is rejected, never dropped. Lowers to the
+    /// no zone math: an offset is rejected, never dropped. Lowers to the
     /// six-component Typst `datetime(year:, month:, day:, hour:, minute:,
     /// second:)`.
     DateTime,
-    /// Rich text — the canonical content model ([`Content`]). Surfaced
+    /// Rich text: the canonical content model ([`Content`]). Surfaced
     /// as `type: richtext`; single-line shape is declared with the sibling `inline:` key.
     /// The transform schema marks it `contentMediaType:
     /// application/quillmark-content+json` and, when inline, `quillmark:inline:
-    /// true`. The pre-richtext `markdown` spelling is not accepted — a
+    /// true`. The pre-richtext `markdown` spelling is not accepted: a
     /// Quill.yaml must declare `richtext` explicitly (`from_str` returns `None`
     /// for `markdown`, so the loader raises a schema load error).
     ///
     /// [`Content`]: quillmark_content::Content
     RichText {
-        /// When `true`, the field is `richtext(inline)` — exactly one `Para`
+        /// When `true`, the field is `richtext(inline)`: exactly one `Para`
         /// line, no container, no islands. Populated from the wire `inline:` key
         /// at load; editors mount a one-line surface. Enforced at coercion,
         /// validation, and load-time example import.
         inline: bool,
     },
-    /// Plain text — the same [`Content`] as the `richtext` codec produces,
+    /// Plain text, the same [`Content`] as the `richtext` codec produces,
     /// constrained mark-free and island-free (all `Para` lines, no containers),
     /// but authored and projected through a *literal* codec
     /// ([`from_plaintext`]/[`to_plaintext`]) rather than markdown: `*hi*` is four
@@ -319,16 +319,16 @@ pub enum FieldType {
     /// [`from_plaintext`]: quillmark_content::from_plaintext
     /// [`to_plaintext`]: quillmark_content::to_plaintext
     PlainText {
-        /// When `true`, the field is single-line plaintext — one `Para` line, no
+        /// When `true`, the field is single-line plaintext: one `Para` line, no
         /// container. Populated from the wire `inline:` key at load, mirroring
         /// richtext. Enforced at coercion, validation, and load-time import.
         inline: bool,
     },
-    /// A closed finite domain of string values — the "branch on this" data type.
+    /// A closed finite domain of string values: the "branch on this" data type.
     /// Surfaced as `type: enum` with a required `values:` list (carried in
     /// [`FieldSchema::enum_values`], the single storage shared with the
     /// deprecated `enum:` modifier on `string`). Projects to the idiomatic
-    /// JSON-Schema `{type: string, enum: [...]}` — exactly the shape backends
+    /// JSON-Schema `{type: string, enum: [...]}`: exactly the shape backends
     /// already consume, so promoting the token costs zero backend edits. Scoped
     /// to string-valued members: an enum is a branching key, and numeric
     /// domains are range constraints on `number`, not enums.
@@ -380,7 +380,7 @@ impl Serialize for FieldType {
     }
 }
 
-/// Migration message for the retired `type: richtext(inline)` token — the
+/// Migration message for the retired `type: richtext(inline)` token: the
 /// single source of truth shared by this deserializer's error and
 /// `QuillConfig::field_parse_hint`'s hint text, so the two can't drift.
 pub(crate) const RICHTEXT_INLINE_TOKEN_MSG: &str =
@@ -412,7 +412,7 @@ impl<'de> Deserialize<'de> for FieldType {
 /// render. A surviving `!must_fill` placeholder is surfaced as the non-fatal
 /// `validation::must_fill` warning. There is no separate `required:` axis.
 ///
-/// The richtext single-line constraint has **one** carrier — the
+/// The richtext single-line constraint has **one** carrier: the
 /// `FieldType::RichText { inline }` enum. The wire's sibling `inline:` key folds
 /// into that enum at deserialize (via [`from_quill_value`](Self::from_quill_value),
 /// which the custom `Deserialize` below routes through), and the custom
@@ -448,14 +448,14 @@ pub struct FieldSchema {
     /// `object` carrying its own `properties`.
     pub items: Option<Box<FieldSchema>>,
     /// Canonical-content form of [`default`](Self::default) for a richtext-bearing
-    /// field, imported once at quill load and cached — never serialized. The
+    /// field, imported once at quill load and cached: never serialized. The
     /// render floor (`resolve_value_sourced`) commits this for an absent field, so a
     /// richtext default crosses the seam as content, not a re-imported string.
     /// `None` for a non-richtext field, a null/absent default, or a schema built
     /// outside the loader.
     pub default_content: Option<QuillValue>,
     /// Canonical-content form of [`example`](Self::example) for a richtext-bearing
-    /// field, imported once at quill load and cached — never serialized. Seeding
+    /// field, imported once at quill load and cached: never serialized. Seeding
     /// commits this so a seeded field is content from birth. `None` under the same
     /// conditions as [`default_content`](Self::default_content).
     pub example_content: Option<QuillValue>,
@@ -623,8 +623,8 @@ impl FieldSchema {
 impl Serialize for FieldSchema {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeMap;
-        // `inline: true` is projected back out of the enum — the flag's single
-        // carrier — so the wire round-trips. `name` rides the map key; the
+        // `inline: true` is projected back out of the enum (the flag's single
+        // carrier) so the wire round-trips. `name` rides the map key; the
         // `*_content` caches are load-time derivations, never serialized.
         let inline = matches!(self.r#type, FieldType::RichText { inline: true }).then_some(true);
         let len = 1
@@ -637,7 +637,7 @@ impl Serialize for FieldSchema {
             + self.properties.is_some() as usize
             + self.items.is_some() as usize;
         // Field order matches the struct declaration (what a derived impl
-        // emits), so `inline` trails the block — golden schema snapshots don't
+        // emits), so `inline` trails the block: golden schema snapshots don't
         // drift.
         let mut map = serializer.serialize_map(Some(len))?;
         map.serialize_entry("type", &self.r#type)?;

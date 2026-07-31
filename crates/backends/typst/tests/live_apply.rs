@@ -1,4 +1,4 @@
-//! Acceptance tests for `LiveSession::apply` — the incremental edit verb of
+//! Acceptance tests for `LiveSession::apply`: the incremental edit verb of
 //! a live preview.
 //!
 //! The session persists its `QuillWorld`; `apply` swaps new document data into
@@ -75,7 +75,7 @@ fn apply_commits_and_dirties_only_the_touched_suffix() {
 /// through the span-tracked helper path (`#data.body`), not a scalar reference
 /// into the static plate. This is the dirty-every-reapply shape: content
 /// fields route glyph spans into the helper `lib.typ`, which is regenerated per
-/// `apply` — the frame data `page_hashes` must fingerprint without folding in
+/// `apply`, the frame data `page_hashes` must fingerprint without folding in
 /// those spans.
 fn markdown_quill() -> Quill {
     const YAML: &str = r#"quill:
@@ -103,7 +103,7 @@ main:
 fn identical_reapply_of_markdown_content_is_clean() {
     // A page's fingerprint must not fold in glyph/shape/image `Span`s
     // (source-location metadata, not pixels), so reapplying byte-identical
-    // markdown to a content-field session reports NOTHING dirty — every time,
+    // markdown to a content-field session reports NOTHING dirty: every time,
     // including a second consecutive no-op (not a one-time settling artifact).
     let backend = TypstBackend;
     let q = markdown_quill();
@@ -125,7 +125,7 @@ fn identical_reapply_of_markdown_content_is_clean() {
         );
     }
 
-    // A real content change still dirties — the fingerprint didn't go blind.
+    // A real content change still dirties: the fingerprint didn't go blind.
     let cs = session
         .apply(&json!({ "body": format!("{body} plus a genuinely new sentence.") }))
         .expect("apply changed");

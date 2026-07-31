@@ -149,7 +149,7 @@ impl Artifact {
 /// `#[non_exhaustive]` forbids every out-of-crate struct expression, functional
 /// update included, so the setters are the construction path rather than a
 /// convenience beside one. Reading and assigning an individual field still
-/// works — `opts.ppi = Some(300.0)` is equivalent to the setter.
+/// works: `opts.ppi = Some(300.0)` is equivalent to the setter.
 ///
 /// This is the render surface's growth point: a new option is a new field here.
 /// Under the attribute that costs a caller nothing.
@@ -165,7 +165,7 @@ pub struct RenderOptions {
     /// Optional 0-based page indices to render (e.g., `vec![0, 2]` for
     /// the first and third pages). `None` renders all pages. Any index
     /// `>= page_count` fails with a `RenderError` carrying the
-    /// `typst::page_index_out_of_bounds` code — call
+    /// `typst::page_index_out_of_bounds` code: call
     /// `LiveSession::page_count()` first if validation is needed.
     /// Backends that do not support page selection (notably PDF) fail with a
     /// `RenderError` carrying `typst::pdf_page_selection_not_supported` when
@@ -178,12 +178,12 @@ pub struct RenderOptions {
     /// Populate [`RenderResult::regions`](crate::RenderResult) with the
     /// schema-field geometry sidecar (the same entries
     /// [`LiveSession::regions`](crate::LiveSession::regions) serves), for
-    /// consumers without a live session — static overlays over exported SVG,
+    /// consumers without a live session, static overlays over exported SVG,
     /// PDF post-processing, CI coverage probes. Default `false`: exports pay
     /// no introspection cost, and the sidecar stays a request, not a promise.
     ///
-    /// The sidecar always describes the **whole document** — page indices are
-    /// document-space and unaffected by a `pages` subset selection — so it
+    /// The sidecar always describes the **whole document** (page indices are
+    /// document-space and unaffected by a `pages` subset selection) so it
     /// never disagrees with the geometry of the compile it came from.
     pub regions: bool,
 }

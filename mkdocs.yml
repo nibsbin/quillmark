@@ -56,7 +56,7 @@ nav:
       - Markdown Specification: reference/markdown-spec.md
   - Migration: migrations/index.md
 
-# The guides stay published — reachable from the Migration overview and by URL —
+# The guides stay published (reachable from the Migration overview and by URL)
 # but the nav carries only the overview, which is the one list to maintain.
 not_in_nav: |
   /migrations/wasm-0.77-to-0.80.md

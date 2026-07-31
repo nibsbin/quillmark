@@ -98,7 +98,7 @@
       card_date
     }
     // The card's `$path` prefix composes its canonical schema addresses
-    // (`$cards.indorsement.<n>.…`, per-kind ordinal) — the absolute loop
+    // (`$cards.indorsement.<n>.…`, per-kind ordinal): the absolute loop
     // index `i` is NOT that ordinal once kinds interleave, so it stays a
     // widget-name suffix only. The card body's region rides its own glyph
     // spans through the package rebuild, per-card because each card's body

@@ -22,7 +22,7 @@ fn cmu_letter_real_date_surfaces_a_region_and_blank_falls_back() {
 
     // Blank date → native `today()` fallback: it still renders (the shim keeps
     // native method sugar), and being native plate ink it exposes no field
-    // region — there is no schema value to click.
+    // region; there is no schema value to click.
     assert!(
         !session.regions().iter().any(|r| r.field == "date"),
         "a blank date falls back to today() and surfaces no `date` region"

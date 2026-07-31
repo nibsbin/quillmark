@@ -1,10 +1,10 @@
 /* @ts-self-types="./runtime.d.ts" */
 //
-// @quillmark/wasm/runtime — the canonical consumer API.
+// @quillmark/wasm/runtime: the canonical consumer API.
 //
 // Consumers import `Quill`, `Document`, and `Engine` from here and never touch
 // the build-specific subpaths. The package ships multiple WASM binaries with
-// SEPARATE linear memories — a Typst-less `core` build (small, eager) that is
+// SEPARATE linear memories: a Typst-less `core` build (small, eager) that is
 // the canonical home of `Quill`/`Document`, and one private backend binary per
 // backend (`backends/typst/` today; more later) that carries an engine. A
 // handle from one memory cannot be used by another. This module hides that seam
@@ -22,16 +22,16 @@
 //     renders, and the backend handles never escape.
 //
 //     CLONE LIFETIMES (not all transient): the per-call `Document` clone IS
-//     transient — built and freed inside each call, because documents are small
+//     transient, built and freed inside each call, because documents are small
 //     and mutate freely. The `Quill` clone is CACHED instead: re-cloning a quill
 //     per call means re-serializing its whole file tree Rust→JS, copying it into
-//     backend memory, and re-parsing + re-validating the bundle every time — and
+//     backend memory, and re-parsing + re-validating the bundle every time, and
 //     quills are validated, effectively-immutable bundles. So each `Engine`
 //     memoizes the backend-memory quill per (engine, backendId, canonical quill
 //     instance) in a `WeakMap` keyed on the canonical `Quill`: when the consumer
 //     drops the core quill the cache entry becomes collectable and wasm-bindgen
 //     weak-refs (`--weak-refs`) free the backend handle. The CONTRACT this buys:
-//     a `Quill` instance's contents never change after construction — mutate by
+//     a `Quill` instance's contents never change after construction, mutate by
 //     replacing the instance (the clone is dropped with it via WeakMap +
 //     weak-refs).
 //
@@ -39,14 +39,14 @@
 // `Quill`/`Document` to `engine.render(...)` and gets a `RenderResult` back.
 
 // ── CANONICAL INVARIANT: re-export the core build, never wrap ───────────────
-// The root re-exports the core build's `Quill`/`Document` classes verbatim —
+// The root re-exports the core build's `Quill`/`Document` classes verbatim,
 // NOT subclasses or wrappers. There is exactly ONE public entry point (this
 // module), so this identity is a structural fact: `Quill`/`Document` ARE the
 // core classes, and the only boundary that needs crossing is core→backend (a
 // separate WASM memory), which `Engine` does internally as data
 // (`toTree`/`toJson`).
 //
-// Do NOT replace this with a wrapper class — that breaks the identity and turns
+// Do NOT replace this with a wrapper class: that breaks the identity and turns
 // a structural fact into a converted type (a breaking design change, not a
 // refactor). Keep `Engine` duck-typed on `.toTree()`/`.backendId`/`.toJson()`
 // (it is) so it tolerates handles from any core instance. The `runtime.test.js`
@@ -59,11 +59,11 @@
 // core handles" below.
 //
 // Imported (not bare re-exported) so `Quill` is a local binding this module can
-// augment — `quill.writer(doc)` is patched onto its prototype below. The
+// augment: `quill.writer(doc)` is patched onto its prototype below. The
 // re-export keeps the identity: the exported `Quill` IS the core class.
 import { Quill, Document, init } from '../core/wasm.js';
 export { Quill, Document, init };
-// The document-free content codec — re-exported verbatim from the core build so
+// The document-free content codec: re-exported verbatim from the core build so
 // the runtime subpath exposes `exportMarkdown(body)` (the on-demand markdown
 // projection), `importMarkdown`, and the position-mapping pair (`rebase`,
 // `mapPos`).
@@ -75,10 +75,10 @@ export { parseDocPath, formatDocPath } from '../core/wasm.js';
 
 // ── The main-card address ───────────────────────────────────────────────────
 /**
- * The main card's address — the default target of the card-scoped verbs
+ * The main card's address: the default target of the card-scoped verbs
  * (`storeFields` / `storeExt` / `commitFields` / …). A named, `CardAddr`-typed
  * alias for the empty address `{}`, so a main-card write names its target:
- * `doc.storeFields(MAIN_CARD_ADDR, fields)`. It IS `{}` (frozen), a pure alias —
+ * `doc.storeFields(MAIN_CARD_ADDR, fields)`. It IS `{}` (frozen), a pure alias:
  * `{}` and `undefined` stay equally valid. Card axis only: a card selector,
  * never a field address.
  * @type {import('../core/wasm.js').CardAddr}
@@ -86,14 +86,14 @@ export { parseDocPath, formatDocPath } from '../core/wasm.js';
 export const MAIN_CARD_ADDR = Object.freeze({});
 
 /**
- * Narrow an unknown caught value to a `QuillmarkError` — the error every
+ * Narrow an unknown caught value to a `QuillmarkError`, the error every
  * fallible method in this package throws: a real `Error` with a non-empty
  * `diagnostics` array attached (same entry shape as `RenderResult.warnings`).
  *
  * Structural by necessity AND by design: the WASM layer constructs a plain
  * `Error` and attaches the property (there is no error class to `instanceof`),
  * and a structural check works on errors from any build or WASM instance in
- * the page — consistent with the duck-typed handling of handles elsewhere in
+ * the page, consistent with the duck-typed handling of handles elsewhere in
  * this layer.
  *
  * @param {unknown} e
@@ -122,7 +122,7 @@ function quillmarkError(code, message, hint) {
 // ── Foreign core handles: the duplicate-install lane ────────────────────────
 // A duplicate install (two copies of this package in one `node_modules` tree)
 // is two `core` builds: two linear memories and two distinct `Quill`/`Document`
-// classes. `Engine` already tolerates that crossing, being duck-typed on
+// classes. `Engine` already tolerates that crossing: it is duck-typed on
 // `.toTree()`/`.toJson()`/`.backendId` and clones into backend memory as data,
 // so a `Quill` from copy A renders on an `Engine` from copy B.
 //
@@ -136,7 +136,7 @@ function quillmarkError(code, message, hint) {
 // leaves this package's error contract.
 //
 // The policy follows the line the codebase already draws, every existing
-// crossing (`render`, `open`, `apply`) being read-only: READ-ONLY crossings are
+// crossing (`render`, `open`, `apply`) is read-only: READ-ONLY crossings are
 // transparent, mutating ones are not.
 //
 //   - Reads (`equals`, `validate`, `resolve`, the reader verbs) admit anything
@@ -257,8 +257,8 @@ function requireLocalDoc(doc, method) {
 
 // Marker for the patches below. `Symbol.for`, not a module-local `Symbol()`:
 // re-evaluating THIS module (Vite HMR, a Vitest worker sharing a module graph)
-// against a core build that is cached, and so already patched, must see the
-// existing marker, or each pass wraps the previous wrapper.
+// against an already-patched (because cached) core build must see the existing
+// marker, or each pass wraps the previous wrapper.
 const FOREIGN_TOLERANT = Symbol.for('@quillmark/wasm:foreign-tolerant');
 
 /**
@@ -292,7 +292,7 @@ patchForeignTolerant(Document.prototype, 'equals', (original) =>
 );
 
 // `validate` and `resolve` read the document's model, so they need a real local
-// handle: adopt, use, free. Only the argument can be foreign, the receiver being
+// handle: adopt, use, free. Only the argument can be foreign: the receiver is
 // whichever copy the caller reached for.
 for (const name of /** @type {const} */ (['validate', 'resolve'])) {
 	patchForeignTolerant(Quill.prototype, name, (original) =>
@@ -315,10 +315,10 @@ for (const name of /** @type {const} */ (['validate', 'resolve'])) {
 // `ContentIsland.type`, `ContentMark.type`, `ContentLine.kind`, and
 // `ContentContainer.container` are OPEN sets: each union carries a residual
 // `{ …: string; … }` arm, so a bare `x.type === 'table'` check never narrows the
-// payload — TS keeps the residual arm live (a `string` can be `'table'`),
+// payload, TS keeps the residual arm live (a `string` can be `'table'`),
 // leaving `props` / the mark payload / `level` opaque at every consumer. These
 // are the checked narrowing path: on the true branch the payload's pinned shape
-// is asserted. Only the payload-carrying arms get a guard — an island always
+// is asserted. Only the payload-carrying arms get a guard: an island always
 // carries `props`, a `link` mark carries `url`, an `anchor` mark carries `id`, a
 // `heading` line carries `level` and a `code` line `lang`, a `list_item`
 // container its shape; the payload-free arms (`strong`/`emph`/`underline`/
@@ -383,10 +383,10 @@ export function isListItemContainer(container) {
 }
 
 // ── Open-set membership guards ──────────────────────────────────────────────
-// The guards above each answer "is this arm X" — one pinned arm at a time. These
+// The guards above each answer "is this arm X": one pinned arm at a time. These
 // four answer the other question: "is this a value this build knows?" A consumer
-// that must branch known-vs-unknown — any read-modify-write consumer, since
-// lowering an edit restates every line's kind and containers — otherwise
+// that must branch known-vs-unknown, any read-modify-write consumer, since
+// lowering an edit restates every line's kind and containers, otherwise
 // enumerates the built-in names in its own source, recreating the closed-set
 // coupling the open set exists to remove. That list is correct until the release
 // that adds a built-in, at which point the new construct is misclassified as
@@ -441,7 +441,7 @@ export function isUnknownIsland(island) {
 	return typeof island?.type === 'string' && !KNOWN_ISLAND_TYPES.has(island.type);
 }
 
-// Backend builds are NEVER statically imported here — that would pull a
+// Backend builds are NEVER statically imported here: that would pull a
 // multi-MB binary into the eager graph and defeat lazy loading. Each entry is a
 // DESCRIPTOR: `load` is a thunk returning a dynamic `import()` (a backend's
 // chunk is fetched only when something actually renders against that backend),
@@ -472,7 +472,7 @@ const DEFAULT_BACKENDS = {
  * backend id on any malformed entry. Descriptors are the ONLY accepted form:
  * `{ load, formats, canvas }` with a callable `load`, a `formats` array, and a
  * boolean `canvas`. Failing at construction (not deep inside a render) keeps the
- * capability probes free — they can answer from the manifest unconditionally.
+ * capability probes free; they can answer from the manifest unconditionally.
  * @param {string} id
  * @param {unknown} entry
  * @returns {{ load: () => Promise<unknown>, formats: string[], canvas: boolean }}
@@ -521,7 +521,7 @@ export class Engine {
 	 * @param {{ backends?: Record<string, { load: () => Promise<unknown>, formats: string[], canvas: boolean }> }} [options]
 	 *   Extra or overriding backend descriptors, merged over the built-ins. Each
 	 *   entry is a descriptor (`{ load, formats, canvas }`) with `formats` and
-	 *   `canvas` REQUIRED — that static manifest is what makes
+	 *   `canvas` REQUIRED: that static manifest is what makes
 	 *   `supportedFormats`/`supportsCanvas` always free (no binary load, no quill
 	 *   clone). Malformed entries throw here, at construction. The default
 	 *   registry maps `"typst"` to the bundled Typst build.
@@ -538,7 +538,7 @@ export class Engine {
 
 	/**
 	 * Look up the registered descriptor for `backendId`, throwing the canonical
-	 * "no backend registered" error if none. Pure — touches no binary.
+	 * "no backend registered" error if none. Pure, touches no binary.
 	 * @param {string} backendId
 	 * @returns {{ load: () => Promise<unknown>, formats: string[], canvas: boolean }}
 	 */
@@ -586,9 +586,9 @@ export class Engine {
 
 	/**
 	 * Get (or materialize-and-cache) the backend-memory `Quill` clone for
-	 * `quill` under `backendId`. On a cache miss the clone is built from `tree`
-	 * — the caller's pre-await `toTree()` snapshot; the canonical handle may be
-	 * freed by now — and stored in the per-backend `WeakMap` keyed on the
+	 * `quill` under `backendId`. On a cache miss the clone is built from `tree`,
+	 * the caller's pre-await `toTree()` snapshot; the canonical handle may be
+	 * freed by now, and stored in the per-backend `WeakMap` keyed on the
 	 * canonical `Quill` instance, so a later call with the same instance reuses
 	 * it (the hot-path fix: no re-serialize / re-copy / re-validate per call).
 	 * @param {any} mod the backend build module
@@ -618,12 +618,12 @@ export class Engine {
 	 *
 	 * OWNERSHIP WINDOW: both caller handles are snapshotted (`doc.toJson()`, and
 	 * `quill.toTree()` on a clone-cache miss) BEFORE the first await. The backend
-	 * load below is a real suspension point — a multi-MB `import()` on first
-	 * render — so reading the handles after it would race a caller that
+	 * load below is a real suspension point (a multi-MB `import()` on first
+	 * render) so reading the handles after it would race a caller that
 	 * `free()`s them as soon as this call returns its promise ("null pointer
 	 * passed to rust"). The snapshot makes that natural calling pattern correct.
 	 *
-	 * Clone lifetimes differ by design: the `doc` clone is TRANSIENT — freed in
+	 * Clone lifetimes differ by design: the `doc` clone is TRANSIENT, freed in
 	 * the `finally` of every call. The `quill` clone is CACHED per (engine,
 	 * backend, canonical quill instance) and is NOT freed here; a `Quill`
 	 * instance's contents never change after construction, so it is dropped with
@@ -643,7 +643,7 @@ export class Engine {
 		// clone is transient. Bring the doc clone + `fn` under one try so the doc
 		// clone is freed even if a later step throws (e.g. `Document.fromJson`
 		// rejecting a cross-version DTO). The cached quill clone is intentionally
-		// NOT freed here. `fn` MUST be synchronous — the doc clone is freed as soon
+		// NOT freed here. `fn` MUST be synchronous: the doc clone is freed as soon
 		// as it returns, so an async `fn` would have it freed mid-flight.
 		const backendQuill = this.#cachedQuillClone(mod, backendId, quill, quillTree);
 		let backendDoc = null;
@@ -693,7 +693,7 @@ export class Engine {
 	/**
 	 * The output formats `quill`'s backend can emit. A cheap, non-failing,
 	 * ALWAYS-free pre-render probe: it answers from the descriptor's required
-	 * `formats` manifest — NO binary load and NO quill clone — depending only on
+	 * `formats` manifest (NO binary load and NO quill clone) depending only on
 	 * `quill.backendId`. Stays `async` for API stability (it never awaits a load).
 	 * @param {Quill} quill
 	 * @returns {Promise<import('./runtime.js').OutputFormat[]>}
@@ -705,12 +705,12 @@ export class Engine {
 	}
 
 	/**
-	 * Whether `quill`'s BACKEND can paint sessions to a canvas — a pre-session
+	 * Whether `quill`'s BACKEND can paint sessions to a canvas: a pre-session
 	 * ESTIMATE, not a fact about any particular compile. Same ALWAYS-free probe
 	 * as `supportedFormats`: answered from the descriptor's required `canvas`
 	 * manifest, no load and no clone. A specific compile can still refuse to
 	 * paint (e.g. a 0-page document), so this can answer `true` while the
-	 * resulting `LiveSession.supportsCanvas` answers `false` — gate mounting a
+	 * resulting `LiveSession.supportsCanvas` answers `false`: gate mounting a
 	 * canvas UI on this, gate the actual `paint` call on the session's getter.
 	 * @param {Quill} quill
 	 * @returns {Promise<boolean>}
@@ -725,16 +725,16 @@ export class Engine {
  * Thin wrapper over a backend's live render session. Reads serve the current
  * compile; `apply(doc)` recompiles in place (transactional: on throw, reads
  * keep serving the last-good compile). The quill/document clones it was
- * opened from have already been freed — the session retains what `apply`
+ * opened from have already been freed: the session retains what `apply`
  * needs.
  *
  * Geometry reads (`regions`, `positionAt`, `locate`) resolve against the
  * current compile; anchoring a caret or selection across edits is the editor's
- * job (its own transaction mapping) — re-read geometry after each committed
+ * job (its own transaction mapping): re-read geometry after each committed
  * `apply`.
  *
- * `paint` writes a COMPLETE page raster — all content visible, no caller-side
- * compositing — for every backend that supports canvas (Typst rasterizes
+ * `paint` writes a COMPLETE page raster (all content visible, no caller-side
+ * compositing) for every backend that supports canvas (Typst rasterizes
  * natively; pdfform rasterizes its pre-flattened page). See `runtime.d.ts`.
  */
 export class LiveSession {
@@ -750,7 +750,7 @@ export class LiveSession {
 	#mod;
 
 	/**
-	 * Recompile the session against `doc` — the edit verb of a live preview.
+	 * Recompile the session against `doc`: the edit verb of a live preview.
 	 * Transactional: on throw every read keeps serving the last-good compile.
 	 * On success reads serve the new compile; repaint `dirtyPages ∩ visible`.
 	 * @param {Document} doc
@@ -773,7 +773,7 @@ export class LiveSession {
 		return this.#inner.backendId;
 	}
 	/**
-	 * `true` iff `paint`/`pageSize` will succeed for THIS compile — the
+	 * `true` iff `paint`/`pageSize` will succeed for THIS compile: the
 	 * authoritative answer, derived from the session's canvas seam, so it can
 	 * never disagree with what `paint` actually does. This can be `false` even
 	 * when `Engine.supportsCanvas` answered `true` for the same `quill` (that
@@ -795,7 +795,7 @@ export class LiveSession {
 	}
 
 	/**
-	 * Schema-field geometry for this compiled session — one region per
+	 * Schema-field geometry for this compiled session: one region per
 	 * schema-bound field, keyed on its quill schema field path. A session-level
 	 * query (no render); read it to place field overlays / cross-navigation over
 	 * a `paint`-ed canvas.
@@ -806,11 +806,11 @@ export class LiveSession {
 	}
 
 	/**
-	 * The whole-field highlight boxes for `field` — one union rect per page,
+	 * The whole-field highlight boxes for `field`: one union rect per page,
 	 * over the field's `span`-bearing content segments. Owns the union
 	 * `regions()` leaves derived (span-filter + per-page union), so a "highlight
 	 * the focused field" consumer stops reimplementing it. Content only: a field
-	 * placed solely as a scalar reference or a bound widget returns `[]` — its
+	 * placed solely as a scalar reference or a bound widget returns `[]`, its
 	 * box is a single `regions()` rect.
 	 * @param {string} field
 	 * @returns {import('./runtime.d.ts').FieldRegion[]}
@@ -820,7 +820,7 @@ export class LiveSession {
 	}
 
 	/**
-	 * The schema field whose content is under a point on `page` — the forward
+	 * The schema field whose content is under a point on `page`: the forward
 	 * (click → field) direction, resolving *every* placement, not just the first
 	 * that `regions` enumerates. `x`/`y` are PDF points with a bottom-left origin
 	 * (the `FieldRegion.rect` space). See `runtime.d.ts` for the click-to-point
@@ -859,8 +859,8 @@ export class LiveSession {
 	}
 
 	/**
-	 * Paint `page` into a 2D canvas context. The painted raster is COMPLETE —
-	 * all page content visible, no caller-side compositing — for both the Typst
+	 * Paint `page` into a 2D canvas context. The painted raster is COMPLETE
+	 * (all page content visible, no caller-side compositing) for both the Typst
 	 * and pdfform backends. See `runtime.d.ts` for the DPR/clamp math and the
 	 * region-overlay coordinate transform.
 	 * @param {CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D} ctx
@@ -879,21 +879,21 @@ export class LiveSession {
 // ── Typed-writer sugar: bind the quill once ─────────────────────────────────
 // Rust exposes `quill.writer(&mut doc)` so a caller issues bare `set` / `set_all`
 // without threading the schema per write. The WASM `commit*` verbs can't borrow
-// like that — a `Document` carries only a `$quill` REFERENCE, not the resolved
+// like that: a `Document` carries only a `$quill` REFERENCE, not the resolved
 // schema, so each `commit*` method takes the `quill` handle as its first
 // argument. These pure-JS classes restore the Rust ergonomics: bind `quill` +
 // `doc` once, then issue `set` / `setAll` / `card(i).set`.
 //
-// They hold JS references to the caller's EXISTING handles — no WASM object of
-// their own, no `free()` burden, no second owner of either handle — and every
+// They hold JS references to the caller's EXISTING handles (no WASM object of
+// their own, no `free()` burden, no second owner of either handle) and every
 // write delegates straight to the underlying `commit*` verb: a schema field is
 // typed-committed (coerced to canonical form, mismatch throws now), and a name
 // the schema does not declare throws `UnknownField` rather than falling to the
-// opaque store — on the typed path an undeclared name is a typo. Opaque storage
+// opaque store, on the typed path an undeclared name is a typo. Opaque storage
 // stays available through the raw addressed `Document.storeField` verb.
 
 /**
- * A {@link Document} bound to its {@link Quill} for typed writes — the JS twin
+ * A {@link Document} bound to its {@link Quill} for typed writes: the JS twin
  * of Rust's `quill.writer(&mut doc)`. Writes target the main card; use
  * {@link card} for a composable card. Holds both handles by reference and owns
  * neither, so there is nothing to `free()`.
@@ -910,7 +910,7 @@ export class DocumentWriter {
 		this.#quill = quill;
 		this.#doc = doc;
 	}
-	/** The bound document — the same instance passed in, mutated in place. */
+	/** The bound document: the same instance passed in, mutated in place. */
 	get document() {
 		return this.#doc;
 	}
@@ -925,7 +925,7 @@ export class DocumentWriter {
 		return this.#doc._commitField(this.#quill, name, value);
 	}
 	/**
-	 * Typed-commit several main-card fields atomically — nothing is applied on
+	 * Typed-commit several main-card fields atomically: nothing is applied on
 	 * error (throws a per-field diagnostic bundle, including an `UnknownField`
 	 * for each undeclared name).
 	 * @param {Record<string, unknown>} fields
@@ -936,7 +936,7 @@ export class DocumentWriter {
 	}
 	/**
 	 * Set the main body from markdown (edit semantics: surviving anchors rebase),
-	 * discarding the text delta — the receipt-free body write. Call
+	 * discarding the text delta, the receipt-free body write. Call
 	 * `doc.revise({}, md)` for the {@link Delta} receipt.
 	 * @param {string} markdown
 	 * @returns {void}
@@ -945,7 +945,7 @@ export class DocumentWriter {
 		this.#doc.revise({}, markdown);
 	}
 	/**
-	 * Revise the richtext main-card field `name` from markdown — typed *and*
+	 * Revise the richtext main-card field `name` from markdown: typed *and*
 	 * anchor-preserving. Surviving anchors rebase, then the diffed result is
 	 * schema-conformed (`richtext(inline)` rejects a multi-block result). Throws
 	 * `UnknownField` for a name the schema does not declare. Returns the text
@@ -959,7 +959,7 @@ export class DocumentWriter {
 	}
 	/**
 	 * Build a composable card of `kind`, typed-commit `fields` onto it, set its
-	 * body from optional markdown, and place it — the fused `makeCard` + typed
+	 * body from optional markdown, and place it: the fused `makeCard` + typed
 	 * commit + insertion. `at` picks the position: omitted appends, a number
 	 * inserts at that index (`0..=cardCount`), so a positioned typed insert is one
 	 * atomic call rather than `addCard` + `moveCard`. Transactional: the card is
@@ -977,7 +977,7 @@ export class DocumentWriter {
 	}
 	/**
 	 * Remove the composable card at `index`, returning it (or `undefined` if the
-	 * index is out of range) — the writer spelling of `Document.removeCard`.
+	 * index is out of range): the writer spelling of `Document.removeCard`.
 	 * @param {number} index
 	 * @returns {import('../core/wasm.js').Card | undefined}
 	 */
@@ -989,7 +989,7 @@ export class DocumentWriter {
 	 * validity is checked lazily by the underlying write (it throws
 	 * `IndexOutOfRange` at commit time), so constructing one never throws.
 	 *
-	 * The cursor is ephemeral — bind, write, discard. It holds `index`, not the
+	 * The cursor is ephemeral: bind, write, discard. It holds `index`, not the
 	 * card: a `removeCard`/`addCard` between binding and writing silently
 	 * retargets it. For durable addressing stamp `$id` and re-resolve the index
 	 * at write time.
@@ -1027,7 +1027,7 @@ export class CardWriter {
 	}
 	/**
 	 * The bound card's `$kind` (empty string when it carries none), read through
-	 * the document — mirrors core `CardWriter::kind()`. Ephemeral like the cursor
+	 * the document: mirrors core `CardWriter::kind()`. Ephemeral like the cursor
 	 * itself: throws `IndexOutOfRange` if the bound index is out of range.
 	 * @returns {string}
 	 */
@@ -1056,7 +1056,7 @@ export class CardWriter {
 		return this.#doc._commitFields(this.#quill, { card: this.#index }, fields);
 	}
 	/**
-	 * Set this card's body from markdown (edit semantics), discarding the delta —
+	 * Set this card's body from markdown (edit semantics), discarding the delta:
 	 * the card twin of {@link DocumentWriter.setBody}.
 	 * @param {string} markdown
 	 * @returns {void}
@@ -1065,7 +1065,7 @@ export class CardWriter {
 		this.#doc.revise({ card: this.#index }, markdown);
 	}
 	/**
-	 * Revise the richtext field `name` on this card from markdown — typed *and*
+	 * Revise the richtext field `name` on this card from markdown: typed *and*
 	 * anchor-preserving; the card twin of {@link DocumentWriter.reviseField}.
 	 * Throws `UnknownField` for an undeclared name and `IndexOutOfRange` if the
 	 * bound index is out of range. Returns the text {@link Delta}.
@@ -1078,16 +1078,16 @@ export class CardWriter {
 	}
 }
 
-// ── `quill.writer(doc)` — the typed front door ──────────────────────────────
+// ── `quill.writer(doc)`, the typed front door ──────────────────────────────
 // The schema-bound writer: bind the quill's schema to a document and issue bare
-// typed writes. Mirrors core's `quill.writer(&mut doc)` — the schema grants the
+// typed writes. Mirrors core's `quill.writer(&mut doc)`: the schema grants the
 // typing, so the quill (not the document) is the factory. Patched onto the
 // re-exported `Quill` prototype rather than wrapped: `Quill === CoreQuill`
 // stays true (the identity invariant above); this only adds a method that
 // constructs the pure-JS writer, which owns no WASM handle.
 /**
  * A {@link DocumentWriter} binding this quill's schema to `doc` for typed
- * writes — the documented front door. The returned writer holds both handles by
+ * writes: the documented front door. The returned writer holds both handles by
  * reference and owns neither, so there is nothing to `free()`. Ephemeral by
  * convention: bind, write, discard.
  * @this {Quill}
@@ -1099,8 +1099,8 @@ Quill.prototype.writer = function writer(doc) {
 };
 
 // ── Typed-reader sugar: the schema-plane read surface ──────────────────────────
-// The read twin of the writer above. The transport `Document.getStored` is schema-free
-// — a `Document` cannot say which fields are richtext, so an unknown field name
+// The read twin of the writer above. The transport `Document.getStored` is schema-free:
+// a `Document` cannot say which fields are richtext, so an unknown field name
 // reads back `undefined` rather than as the typo it is. Binding the quill's
 // schema (`_readerGet` takes the handle, like the `commit*` verbs) lets one `get`
 // interpret by declared type: a richtext field to markdown, a plaintext field to
@@ -1110,7 +1110,7 @@ Quill.prototype.writer = function writer(doc) {
 // reference, own no WASM object, and have nothing to `free()`.
 
 /**
- * A {@link Document} bound to its {@link Quill} for typed reads — the JS twin of
+ * A {@link Document} bound to its {@link Quill} for typed reads: the JS twin of
  * Rust's `quill.reader(&doc)` and the read counterpart of {@link DocumentWriter}.
  * Reads target the main card; use {@link card} for a composable card. Holds both
  * handles by reference and owns neither, so there is nothing to `free()`.
@@ -1126,7 +1126,7 @@ export class DocumentReader {
 		this.#quill = quill;
 		this.#doc = doc;
 	}
-	/** The bound document — the same instance passed in. */
+	/** The bound document: the same instance passed in. */
 	get document() {
 		return this.#doc;
 	}
@@ -1144,7 +1144,7 @@ export class DocumentReader {
 		return readOnLocalDoc(this.#doc, 'reader.get(addr)', (d) => d._readerGet(this.#quill, addr));
 	}
 	/**
-	 * The main body's markdown — the quill-free body read (a body's type is a
+	 * The main body's markdown: the quill-free body read (a body's type is a
 	 * format fact, not a schema fact). Equivalent to `get({})`.
 	 * @returns {string}
 	 */
@@ -1154,7 +1154,7 @@ export class DocumentReader {
 	/**
 	 * A {@link CardReader} bound to the composable card at `index`. Index validity
 	 * is checked lazily by the underlying read (it throws `IndexOutOfRange` at read
-	 * time), so constructing one never throws. Ephemeral like the writer cursor —
+	 * time), so constructing one never throws. Ephemeral like the writer cursor:
 	 * it holds `index`, not the card, so a `removeCard`/`addCard` between binding
 	 * and reading silently retargets it.
 	 * @param {number} index
@@ -1209,7 +1209,7 @@ export class CardReader {
 		);
 	}
 	/**
-	 * This card's body markdown — the card twin of {@link DocumentReader.getBody}.
+	 * This card's body markdown: the card twin of {@link DocumentReader.getBody}.
 	 * @returns {string}
 	 */
 	getBody() {
@@ -1219,13 +1219,13 @@ export class CardReader {
 	}
 }
 
-// ── `quill.reader(doc)` — the schema-plane read front door ─────────────────────
+// ── `quill.reader(doc)`: the schema-plane read front door ─────────────────────
 // The read twin of `quill.writer(doc)`, patched onto the same re-exported `Quill`
-// prototype (the `Quill === CoreQuill` identity invariant holds — this only adds
+// prototype (the `Quill === CoreQuill` identity invariant holds: this only adds
 // a method constructing the pure-JS reader, which owns no WASM handle).
 /**
  * A {@link DocumentReader} binding this quill's schema to `doc` for interpreted
- * reads — the read front door, mirroring core's `quill.reader(&doc)`. The returned
+ * reads: the read front door, mirroring core's `quill.reader(&doc)`. The returned
  * reader holds both handles by reference and owns neither, so there is nothing to
  * `free()`. Ephemeral by convention: bind, read, discard.
  * @this {Quill}

@@ -35,15 +35,15 @@ cargo test --package quillmark-fuzz parse_fuzz
 
 | Module | Target |
 |---|---|
-| `coerce_fuzz.rs` | `QuillConfig::coerce_payload` — no panic on arbitrary `(FieldSchema, Value)` pairs, well-formed error paths, idempotent successful coercions |
+| `coerce_fuzz.rs` | `QuillConfig::coerce_payload`: no panic on arbitrary `(FieldSchema, Value)` pairs, well-formed error paths, idempotent successful coercions |
 | `convert_fuzz.rs` | Markdown → Typst: `escape_string` / `escape_markup` in `quillmark-typst`, and the import-then-lower render path |
-| `decode_fuzz.rs` | The four JSON decode lanes — storage DTO, card wire, canonical content, op wire — where arbitrary JSON yields `Err`, never a panic |
+| `decode_fuzz.rs` | The four JSON decode lanes (storage DTO, card wire, canonical content, op wire) where arbitrary JSON yields `Err`, never a panic |
 | `emit_roundtrip_fuzz.rs` | `parse → emit → re-parse` stability, and idempotence on the canonical form |
 | `parse_fuzz.rs` | card-yaml payloads: malformed YAML, composable card kinds, nested structures, Unicode and special characters |
 
 ## Security properties
 
-1. **No injection**: quotes are always escaped in string contexts, so nothing breaks out — including `\"); eval(...)`-shaped payloads.
+1. **No injection**: quotes are always escaped in string contexts, so nothing breaks out; including `\"); eval(...)`-shaped payloads.
 2. **Escaping completeness**: every Typst special character is escaped in markup context.
 3. **Control-character safety**: null bytes and ASCII control characters escape as `\u{...}`.
 4. **Backslash handling**: backslashes escape first, so nothing double-escapes.

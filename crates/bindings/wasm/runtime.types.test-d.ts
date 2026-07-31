@@ -6,7 +6,7 @@
 // re-exporting them from the private Typst backend build. This file asserts that
 // those canonical declarations and the Typst backend's GENERATED declarations
 // (`pkg/backends/typst/wasm.d.ts`, produced from the `typescript_custom_section`
-// blocks in `crates/bindings/wasm/src/engine.rs`) stay mutually assignable — if
+// blocks in `crates/bindings/wasm/src/engine.rs`) stay mutually assignable: if
 // either side drifts, one of the assignments below stops compiling.
 //
 // Run via `npm run typecheck` (tsc --noEmit). This file emits no runtime code.
@@ -47,7 +47,7 @@ import type {
 // Mutual assignability alone cannot catch a missing OPTIONAL member: for an
 // all-optional interface pair (RenderOptions, PaintOptions) both assignments
 // compile even when one side lacks a member entirely. The `KeysEqual`
-// assertions close that hole — `true` only when both sides declare exactly
+// assertions close that hole: `true` only when both sides declare exactly
 // the same property names.
 
 type KeysEqual<A, B> = [Exclude<keyof A, keyof B>, Exclude<keyof B, keyof A>] extends [
@@ -130,7 +130,7 @@ void contentHitKeys;
 // The content edit vocabulary is DECLARED in the core build but consumed through
 // the single runtime entry point. Importing every name from the runtime root
 // here asserts the re-export in `runtime/runtime.d.ts` stays present: drop any
-// one and this import stops resolving, failing `npm run typecheck`. Type-only —
+// one and this import stops resolving, failing `npm run typecheck`. Type-only:
 // no runtime code, no assignability claim, pure existence.
 import type {
 	Content,
@@ -179,20 +179,20 @@ export type ContentExportsPresent = [
 // ── MAIN_CARD_ADDR is a CardAddr ────────────────────────────────────
 // The named main-card address must type as a `CardAddr` so it flows into every
 // card-scoped verb's address slot. `typeof import(...)` keeps this purely
-// type-level — no value import, no runtime code — and the assignment fails
+// type-level (no value import, no runtime code) and the assignment fails
 // `npm run typecheck` if the constant's declared type ever drifts off `CardAddr`.
 type MainCardAddrType = typeof import('../../../pkg/runtime/runtime.d.ts').MAIN_CARD_ADDR;
 const mainCardAddrIsCardAddr: CardAddr = {} as MainCardAddrType;
 void mainCardAddrIsCardAddr;
 
 // ── Open-set discriminant guards ────────────────────────────────────
-// The guards must NARROW the open `type` unions — the whole point, since a bare
+// The guards must NARROW the open `type` unions: the whole point, since a bare
 // `x.type === 'table'` check cannot (the residual `{ type: string; … }` arm
 // stays live). Each `if` body reads a payload reachable only after narrowing, so
 // a guard that stops narrowing fails `npm run typecheck`. `ContentIsland`,
 // `TableProps`, `ImageProps`, `ContentMark`, `ContentLine`, and
 // `ContentContainer` are the types imported above. (The block
-// vocabulary — `kind` and `container` — is open on the same terms.)
+// vocabulary (`kind` and `container`) is open on the same terms.)
 import {
 	isTableIsland,
 	isImageIsland,
@@ -270,7 +270,7 @@ if (isUnknownIsland(guardIsland)) {
 // ── ContentLineKind is nameable ─────────────────────────────────────
 // `ContentLineKind` is exactly `setKind`'s payload, so building the op is a
 // whole-lift: drop a line's envelope, spread the rest. That spelling survives
-// every arm added upstream — including the open one, whose shape an arm-by-arm
+// every arm added upstream; including the open one, whose shape an arm-by-arm
 // switch would have to guess at. It only type-checks if the type is nameable
 // from the package entry point, which is the point of the re-export.
 function kindPart(line: ContentLine): ContentLineKind {

@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 include.workspace = true
 readme.workspace = true
-description = "A schema-driven document engine — turn Markdown into a fully typeset document with a Quill"
+description = "A schema-driven document engine: turn Markdown into a fully typeset document with a Quill"
 license.workspace = true
 documentation = "https://docs.rs/quillmark"
 homepage.workspace = true
@@ -29,6 +29,6 @@ serde_json = { workspace = true }
 default = ["typst", "pdfform"]
 typst = ["dep:quillmark-typst"]
 # The pdfform backend renders forms → PDF, plus SVG/PNG/canvas raster via its
-# always-linked hayro seam — so the pdfform session reports
+# always-linked hayro seam, so the pdfform session reports
 # `supports_canvas() == true` and a canvas binding can paint pdfform quills.
 pdfform = ["dep:quillmark-pdfform"]

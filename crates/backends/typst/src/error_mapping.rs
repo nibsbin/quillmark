@@ -22,7 +22,7 @@ fn map_single_diagnostic(error: &SourceDiagnostic, world: &QuillWorld) -> Diagno
 
     // Content fields now ride generated markup **blocks**, not `eval` of an
     // ephemeral source, so an error in field content resolves to a real
-    // position in the helper `lib.typ` — no synthetic "dynamically evaluated
+    // position in the helper `lib.typ`: no synthetic "dynamically evaluated
     // content" hint is needed. Any hint Typst itself supplied is kept.
     let hint = error.hints.first().map(|h| h.v.to_string());
 
@@ -101,7 +101,7 @@ mod tests {
         Some(Quill::from_tree(tree).expect("load source"))
     }
 
-    /// An unresolvable span with no Typst-supplied hint carries none — content
+    /// An unresolvable span with no Typst-supplied hint carries none: content
     /// rides resolvable markup blocks rather than an ephemeral eval source, so
     /// there is no synthetic hint to fall back to.
     #[test]

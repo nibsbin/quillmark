@@ -1,12 +1,12 @@
 //! Span-tracked content produces schema-path-keyed regions read from the
-//! laid-out frames — each field's **first placement**, one region per page it
+//! laid-out frames, each field's **first placement**, one region per page it
 //! touches: a top-level markdown field, per-page fragments when content
 //! breaks across pages, first-placement-only when a field is placed twice,
 //! and the canonical card address `$cards.<kind>.<n>.<field>` (per-kind
 //! 0-based ordinal, surviving interleaved kinds). Scalars need no tagging:
 //! every direct `data.<field>` reference site surfaces its own region. Plus
 //! the `form-field` `field:` schema-path binding, which keys a widget region
-//! on a schema path rather than its `/T` name, and the forward direction —
+//! on a schema path rather than its `/T` name, and the forward direction:
 //! `field_at` resolves a point to a field on *any* placement, not just the
 //! first.
 
@@ -16,7 +16,7 @@ use quillmark_typst::TypstBackend;
 mod common;
 use common::quill_with_plate as quill;
 
-/// The canonical content JSON the render seam carries for a richtext field —
+/// The canonical content JSON the render seam carries for a richtext field:
 /// these tests drive `Backend::open` directly, so they build the content the way
 /// `compile_data` would (`import` then the canonical serializer) rather than
 /// passing a raw markdown string.
@@ -65,7 +65,7 @@ main:
     let session = TypstBackend.open(&quill(YAML, PLATE), &data).expect("open");
     let regions = session.regions();
 
-    // intro: one placement, one page — exactly one region, keyed on the schema
+    // intro: one placement, one page: exactly one region, keyed on the schema
     // path (not a widget name).
     let intro: Vec<_> = regions.iter().filter(|r| r.field == "intro").collect();
     assert_eq!(intro.len(), 1, "intro is one region: {regions:?}");
@@ -103,10 +103,10 @@ fn field_placed_twice_surfaces_first_region_but_field_at_resolves_every_placemen
     // One content value placed at two sites with unrelated ink between them.
     // Span data cannot distinguish a genuine second placement from package
     // chrome interrupting one placement, so `regions()` promises the first
-    // placement only — never a spanning union that would claim the middle
+    // placement only: never a spanning union that would claim the middle
     // content. The forward direction differs: a click identifies one drawn
-    // item, so *both* placements resolve via `field_at` — including the second
-    // one `regions()` deliberately does not enumerate — while a point on
+    // item, so *both* placements resolve via `field_at` (including the second
+    // one `regions()` deliberately does not enumerate) while a point on
     // unrelated ink resolves to nothing.
     const YAML: &str = r#"
 quill:
@@ -166,7 +166,7 @@ main:
         "a click inside the first placement resolves"
     );
 
-    // The second placement sits below the lorem filler — probe downward from
+    // The second placement sits below the lorem filler: probe downward from
     // the first placement until ink resolves again; it must still say `intro`.
     let mut second_hit = None;
     let mut y = first.rect[1] - 12.0;
@@ -194,7 +194,7 @@ main:
 fn scalar_reference_sites_each_surface_a_region() {
     // A plain scalar needs no tagging: every direct `data.<field>` reference
     // site in the plate is its own tracked window, so a field shown twice
-    // (e.g. header and body) surfaces both sites — full per-site fidelity,
+    // (e.g. header and body) surfaces both sites, full per-site fidelity,
     // because two source expressions are two origins, not one value counted
     // twice.
     const YAML: &str = r#"
@@ -247,7 +247,7 @@ typst:
 fn widget_and_tracked_content_both_surface_widget_ordered_first() {
     // A field bound to both a `field:`-bound widget and a tracked content
     // placement surfaces both (they route to the same field; a consumer
-    // groups by `field`), deterministically ordered widget-first — the
+    // groups by `field`), deterministically ordered widget-first: the
     // contract documented on `SessionHandle::regions` and `TypstSession::regions`.
     const YAML: &str = r#"
 quill:
@@ -469,10 +469,10 @@ card_kinds:
 #[test]
 fn date_field_display_surfaces_a_clickable_region() {
     // A present date lowers to a value-object whose `display` closure
-    // returns `text(v.display(..))` — content born at a generated `text(..)`
+    // returns `text(v.display(..))`: content born at a generated `text(..)`
     // node inside a recorded segment-less window. Rendering it through the
     // shipping `(data.<field>.display)(..)` call surfaces one whole-placement
-    // region keyed by the schema path, and a click resolves back to it — an
+    // region keyed by the schema path, and a click resolves back to it: an
     // atomic, picker-editable click-to-edit target.
     const YAML: &str = r#"
 quill:
@@ -511,7 +511,7 @@ main:
         "the date region has positive area: {:?}",
         issued[0].rect
     );
-    // It is segment-less (a scalar/widget-shaped site) — no content span.
+    // It is segment-less (a scalar/widget-shaped site): no content span.
     assert!(
         issued[0].span.is_none(),
         "a date region is whole-placement, carrying no content span: {:?}",
@@ -529,12 +529,12 @@ main:
 fn card_dates_surface_per_instance_regions_through_laundering() {
     // The driving case: card dates. `scalar_windows` deliberately does not
     // chase the shared `card.<field>` loop variable, so a card date needs its
-    // own per-instance node to surface a region — which the value-object gives
+    // own per-instance node to surface a region, which the value-object gives
     // it: each card instance emits its own `text(..)` node in its own generated
     // block, so two cards yield two distinct windows keyed by their per-kind
     // ordinal address. And because a closure's body ink is born at its lexical
     // definition site, laundering the value through `#let d = card.at("on")`
-    // (or into a package) keeps it attributable — the region rides the value's
+    // (or into a package) keeps it attributable: the region rides the value's
     // closure, not the reference site. A blank card date stays `none`, so its
     // guard skips and it draws no ink and surfaces no region.
     const YAML: &str = r#"
@@ -579,7 +579,7 @@ card_kinds:
     let session = TypstBackend.open(&quill(YAML, PLATE), &data).expect("open");
     let fields: std::collections::HashSet<String> =
         session.regions().into_iter().map(|r| r.field).collect();
-    // Each present card date is its own per-instance region — the loop-variable
+    // Each present card date is its own per-instance region: the loop-variable
     // blindness is defeated.
     assert!(
         fields.contains("$cards.stamp.0.on"),
@@ -590,7 +590,7 @@ card_kinds:
         "third card's date regions per-instance: {fields:?}"
     );
     // The blank card's date is `none`: its guard skips, it draws no ink, so no
-    // region — present-and-empty is absent, not a zero-area box.
+    // region, present-and-empty is absent, not a zero-area box.
     assert!(
         !fields.contains("$cards.stamp.1.on"),
         "a blank card date surfaces no region: {fields:?}"
@@ -612,7 +612,7 @@ card_kinds:
 
 #[test]
 fn form_field_unknown_path_fails_the_compile() {
-    // `field:` validates against the schema address tables — a typo'd path
+    // `field:` validates against the schema address tables: a typo'd path
     // is a loud compile error, not a silent no-region widget.
     const YAML: &str = r#"
 quill:
@@ -651,7 +651,7 @@ fn failed_apply_keeps_serving_last_good_regions() {
     // apply is transactional for regions too: a failed compile has already
     // written the next injection's helper source into the world, but the
     // served document's spans must keep resolving against the compile they
-    // came from — regions and clicks may not shift or vanish.
+    // came from, regions and clicks may not shift or vanish.
     const YAML: &str = r#"
 quill:
   name: failed_apply_regions
@@ -807,7 +807,7 @@ typst:
 #[test]
 fn spike_990_text_wrapped_ink_surfaces_a_region() {
     // Spike 2, shipping-API view. The date value-object's `display:`
-    // closure emits `text(datetime(..).display(..))` — *content* whose glyphs
+    // closure emits `text(datetime(..).display(..))`: *content* whose glyphs
     // must carry the constructing node's span, not detached decoration ink, so
     // a recorded window claims them. This pins the load-bearing half through
     // the same `regions()` surface: a scalar shown via `#text(data.subject)`
@@ -863,7 +863,7 @@ typst:
 #[test]
 fn form_field_path_rejected_when_address_tables_are_empty() {
     // `__meta__` present with empty address tables (a body-disabled main
-    // with no fields and no cards) validates against the empty set — every
+    // with no fields and no cards) validates against the empty set: every
     // address rejects. Only `__meta__` *absent* is permissive.
     const YAML: &str = r#"
 quill:
@@ -935,8 +935,8 @@ main:
         .expect("adversarial data (unterminated <u>, i64::MIN) must still compile");
 }
 
-/// Two spatially-overlapping widgets resolve `field_at` by paint order — the
-/// later-painted widget wins — not by their alphabetical `/T` names. The widget
+/// Two spatially-overlapping widgets resolve `field_at` by paint order (the
+/// later-painted widget wins) not by their alphabetical `/T` names. The widget
 /// hit-test once sorted placements by `(page, name)` and `find`-first, silently
 /// violating the "later-painted wins" rule the content-field path documents
 /// (`span_scan::field_at`). `aaa` is painted first, `zzz` on top of it; a click
@@ -994,7 +994,7 @@ main:
 fn segment_regions_carry_span_and_field_union_is_striped() {
     // The visible change: a content field breaks into one region **per
     // paragraph**, each keyed on its content span. The whole-field highlight is
-    // the consumer's union of a page's segment rects — so the inter-paragraph
+    // the consumer's union of a page's segment rects, so the inter-paragraph
     // whitespace stays uncovered (striped), unlike the old single solid box.
     const YAML: &str = r#"
 quill:
@@ -1043,7 +1043,7 @@ main:
     );
     assert!(s0[1] <= s1[0], "spans disjoint and ordered: {s0:?} {s1:?}");
 
-    // The derived field box (the documented consumer formula — union of a
+    // The derived field box (the documented consumer formula, union of a
     // page's segment rects) leaves the inter-paragraph whitespace uncovered:
     // the union is taller than the two segment boxes stacked, so a solid
     // highlight would have to invent the gap between them.
@@ -1110,7 +1110,7 @@ main:
         "pos {} within span {span:?}",
         hit.pos
     );
-    // A hit on prose ink resolves through an owning run — cluster-exact, the
+    // A hit on prose ink resolves through an owning run: cluster-exact, the
     // signal a caret UI trusts.
     assert_eq!(
         hit.granularity,
@@ -1145,8 +1145,8 @@ fn position_at_on_a_raw_block_degrades_to_the_segment_start() {
     // one resolved node wider than any per-line run, so per-run inversion cannot
     // pick a line. position_at degrades to the code **segment's** content start.
     // Clicks on different fence lines therefore resolve to the *same* content
-    // position — segment-level correctness kept, per-line precision unavailable
-    // — and to a position distinct from the prose paragraph's.
+    // position (segment-level correctness kept, per-line precision unavailable)
+    // and to a position distinct from the prose paragraph's.
     const YAML: &str = r#"
 quill:
   name: raw_degrade

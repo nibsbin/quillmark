@@ -1,5 +1,5 @@
 /**
- * Smoke tests for quillmark-wasm — Document API
+ * Smoke tests for quillmark-wasm: Document API
  *
  * These tests cover the canonical flow:
  *   Quill.fromTree(tree) → Document.fromMarkdown(markdown) → engine.render(quill, doc, opts)
@@ -164,10 +164,10 @@ This document has no $quill metadata.`
 })
 
 // ---------------------------------------------------------------------------
-// Document.toMarkdown — emitter integration tests
+// Document.toMarkdown: emitter integration tests
 // ---------------------------------------------------------------------------
 
-describe('Document.toMarkdown — fromMarkdown → mutate → emit → re-parse', () => {
+describe('Document.toMarkdown: fromMarkdown → mutate → emit → re-parse', () => {
   it('general round-trip: mutated document survives emit → re-parse', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     const originalCardCount = doc.cards.length  // 0 for TEST_MARKDOWN
@@ -214,12 +214,12 @@ describe('Document.toMarkdown — fromMarkdown → mutate → emit → re-parse'
 })
 
 // ---------------------------------------------------------------------------
-// Document.toJson / Document.fromJson — versioned storage DTO round-trip
+// Document.toJson / Document.fromJson: versioned storage DTO round-trip
 // ---------------------------------------------------------------------------
 
-describe('Document JSON DTO — toJson / fromJson', () => {
-  // The DTO's content rules — what round-trips, what a reconstruction drops,
-  // which payloads are refused — are core's
+describe('Document JSON DTO: toJson / fromJson', () => {
+  // The DTO's content rules (what round-trips, what a reconstruction drops,
+  // which payloads are refused) are core's
   // (`core/src/document/dto.rs`). At this boundary the questions are narrower:
   // does the DTO cross as a plain JSON string, does a handle survive the
   // round-trip, and do the JS-only statics (`tryFromJson`, `schemaVersionOf`)
@@ -276,12 +276,12 @@ describe('Document JSON DTO — toJson / fromJson', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Authoring text — core's canonical strings, re-exposed
+// Authoring text: core's canonical strings, re-exposed
 // ---------------------------------------------------------------------------
 //
 // Four statics whose bodies are `quillmark_core` constants: the single source
 // of truth an LLM/MCP consumer authors against. Wording is core's to assert.
-// What the binding owns is that each one reaches JS at all — a re-export that
+// What the binding owns is that each one reaches JS at all: a re-export that
 // returns "" is indistinguishable from a working one until a consumer pastes it
 // into a prompt.
 
@@ -352,7 +352,7 @@ describe('Quillmark.quill', () => {
       expect(result).toBeDefined()
       expect(result.artifacts).toBeDefined()
       expect(result.artifacts.length).toBeGreaterThan(0)
-      // The declared TS type is Uint8Array — assert the runtime matches so
+      // The declared TS type is Uint8Array: assert the runtime matches so
       // consumers don't need to defensively coerce `new Uint8Array(bytes)`.
       expect(result.artifacts[0].bytes).toBeInstanceOf(Uint8Array)
       expect(result.artifacts[0].bytes.length).toBeGreaterThan(0)
@@ -418,7 +418,7 @@ title: Mismatch Test
 // Document editor surface
 // ---------------------------------------------------------------------------
 
-describe('Document editor surface — storeField / removeField', () => {
+describe('Document editor surface: storeField / removeField', () => {
   it('storeField inserts a new payload field', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     doc.storeField('subtitle', 'A subtitle')
@@ -486,7 +486,7 @@ describe('Document blank-canvas constructor', () => {
   })
 })
 
-describe('Document editor surface — storeFields', () => {
+describe('Document editor surface: storeFields', () => {
   it('storeFields applies every entry, in object order', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     doc.storeFields({}, { subtitle: 'A subtitle', pages: 3 })
@@ -537,7 +537,7 @@ describe('Document editor surface — storeFields', () => {
   })
 })
 
-describe('Document editor surface — setQuillRef / install / revise', () => {
+describe('Document editor surface: setQuillRef / install / revise', () => {
   it('setQuillRef changes the quillRef', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     doc.setQuillRef('new_quill')
@@ -581,8 +581,8 @@ describe('Document editor surface — setQuillRef / install / revise', () => {
   })
 
   // Island `props` and unknown `attrs` are opaque host payload, and
-  // every consumer of them — key canonicalization, the hash key, the JS→JSON
-  // conversion, the tree's own drop — recurses one frame per level. On wasm32 the
+  // every consumer of them (key canonicalization, the hash key, the JS→JSON
+  // conversion, the tree's own drop) recurses one frame per level. On wasm32 the
   // stack is 1 MB and an overflow is a trap that takes the module down rather than
   // an error the host can catch, so an over-deep value must throw and leave the
   // module serving. `install` is the reachable door: the value arrives from JS and
@@ -603,7 +603,7 @@ describe('Document editor surface — setQuillRef / install / revise', () => {
   })
 })
 
-describe('Content codec — importMarkdown / exportMarkdown / rebase / mapPos', () => {
+describe('Content codec: importMarkdown / exportMarkdown / rebase / mapPos', () => {
   it('importMarkdown ∘ exportMarkdown round-trips a body', () => {
     const rt = importMarkdown('A **bold** line.')
     expect(typeof rt).toBe('object')
@@ -622,7 +622,7 @@ describe('Content codec — importMarkdown / exportMarkdown / rebase / mapPos', 
   })
 })
 
-describe('Document-model path — parseDocPath / formatDocPath', () => {
+describe('Document-model path: parseDocPath / formatDocPath', () => {
   // Every emitted shape routes on tagged segments, not on a regex.
   const cases = [
     ['main.title', [{ seg: 'main' }, { seg: 'field', name: 'title' }]],
@@ -677,7 +677,7 @@ describe('Document-model path — parseDocPath / formatDocPath', () => {
 
 // The typed-commit ABI is `_commitField` / `_commitFields` (hidden from the
 // `.d.ts`); `quill.writer(doc)` delegates here. These exercise the ABI directly.
-describe('Document typed-commit ABI — _commitField / _commitFields', () => {
+describe('Document typed-commit ABI: _commitField / _commitFields', () => {
   const COMMIT_QUILL_YAML = `quill:
   name: commit_test
   version: "1.0"
@@ -769,18 +769,18 @@ card_kinds:
   it('applyChange setContinues lowers a hard break op-wise', () => {
     const doc = blankDoc()
     // Two paragraph lines (a delta-inserted `\n` mints `continues:false`), so
-    // export separates them with a blank line — two blocks.
+    // export separates them with a blank line: two blocks.
     doc.revise({}, 'one two')
     doc.applyChange({}, { delta: { ops: [{ retain: 3 }, { insert: '\n' }, { retain: 4 }] } })
     expect(exportMarkdown(doc.main.body)).toContain('\n\n')
 
     // setContinues turns the boundary into a within-block hard break: one block,
-    // no blank-line separator — and identity anchors ride through (op, not install).
+    // no blank-line separator, and identity anchors ride through (op, not install).
     doc.applyChange({}, { lineOps: [{ op: 'setContinues', line: 1, continues: true }] })
     expect(exportMarkdown(doc.main.body)).not.toContain('\n\n')
     expect(doc.main.body.lines[1].continues).toBe(true)
 
-    // `continues:true` on line 0 has nothing to continue — rejected, value intact.
+    // `continues:true` on line 0 has nothing to continue: rejected, value intact.
     expect(() =>
       doc.applyChange({}, { lineOps: [{ op: 'setContinues', line: 0, continues: true }] }),
     ).toThrow()
@@ -834,7 +834,7 @@ card_kinds:
   it('commitFields aborts the whole batch on a typo, reporting the unknown field', () => {
     const quill = buildQuill()
     const doc = blankDoc()
-    // `qty` is a schema field; `titel` is a typo the schema does not own — the
+    // `qty` is a schema field; `titel` is a typo the schema does not own: the
     // undeclared name aborts the all-or-nothing batch and nothing is applied.
     expectEditCode(() => doc._commitFields(quill, {}, { qty: '5', titel: 'oops' }), 'edit::unknown_field')
     expect(hasField(doc.main, 'qty')).toBe(false)
@@ -845,7 +845,7 @@ card_kinds:
     const quill = buildQuill()
     const doc = blankDoc()
     // `subject` is richtext(inline); a multi-block value violates it, so nothing
-    // is applied — `qty` must not linger.
+    // is applied: `qty` must not linger.
     expectEditCode(
       () => doc._commitFields(quill, {}, { qty: '5', subject: 'line one\n\nline two' }),
       'edit::field_richtext_not_inline',
@@ -866,7 +866,7 @@ card_kinds:
   })
 })
 
-describe('Document editor surface — card mutations', () => {
+describe('Document editor surface: card mutations', () => {
   const MD_WITH_CARDS = `~~~card-yaml
 $quill: test_quill
 $kind: main
@@ -1059,7 +1059,7 @@ describe('Document.equals', () => {
   })
 })
 
-describe('Document editor surface — setCardField / install / revise (card)', () => {
+describe('Document editor surface: setCardField / install / revise (card)', () => {
   const MD_WITH_CARD = `~~~card-yaml
 $quill: test_quill
 $kind: main
@@ -1143,7 +1143,7 @@ Card body.
   })
 })
 
-describe('Document editor surface — parse→mutate→read round-trip', () => {
+describe('Document editor surface: parse→mutate→read round-trip', () => {
   it('mutated document reflects changes in subsequent reads', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
 
@@ -1169,7 +1169,7 @@ describe('Document editor surface — parse→mutate→read round-trip', () => {
   })
 })
 
-describe('Document editor surface — $ext mutators', () => {
+describe('Document editor surface: $ext mutators', () => {
   it('storeExt adds an opaque map readable via card.ext', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     doc.storeExt({}, { editor: { title: 'Greeting' } })
@@ -1254,7 +1254,7 @@ describe('Document editor surface — $ext mutators', () => {
 // open + session.render
 // ---------------------------------------------------------------------------
 
-describe('Document editor surface — $ext reads', () => {
+describe('Document editor surface: $ext reads', () => {
   it('getExt returns the whole map, undefined when the card carries none', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     expect(doc.getExt({})).toBeUndefined()
@@ -1283,7 +1283,7 @@ describe('Document editor surface — $ext reads', () => {
   })
 })
 
-describe('Document editor surface — storeFill / isFill', () => {
+describe('Document editor surface: storeFill / isFill', () => {
   it('storeFill stores the value and marks the field !must_fill', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     doc.storeFill('subject', 'Subject of the Memorandum')
@@ -1298,7 +1298,7 @@ describe('Document editor surface — storeFill / isFill', () => {
     expect(doc.isFill('subject')).toBe(false)
   })
 
-  it('isFill is total over the field axis — only a bad card throws', () => {
+  it('isFill is total over the field axis: only a bad card throws', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     // Absent field: truthfully unmarked, not an error.
     expect(doc.isFill('nonesuch')).toBe(false)
@@ -1395,7 +1395,7 @@ card_kinds:
       makeQuill({ name: 'meta_test_quill', plate: TEST_PLATE, quillYaml: META_QUILL_YAML }),
     )
 
-    // metadata mirrors the `quill:` section of Quill.yaml — identity only.
+    // metadata mirrors the `quill:` section of Quill.yaml: identity only.
     const meta = quill.metadata
     expect(meta).toBeDefined()
     expect(meta.name).toBe('meta_test_quill')
@@ -1463,7 +1463,7 @@ describe('Document.clone', () => {
 })
 
 // ---------------------------------------------------------------------------
-// quill.validate — editor-facing schema validation
+// quill.validate: editor-facing schema validation
 // Run via `npm test` after scripts/build-wasm.sh has produced the bundle;
 // vitest loads it in a Node environment.
 // ---------------------------------------------------------------------------
@@ -1542,7 +1542,7 @@ count: "nope"
 })
 
 // ---------------------------------------------------------------------------
-// Schema / blueprint / validation — Unendorsed vs Endorsed
+// Schema / blueprint / validation: Unendorsed vs Endorsed
 // ---------------------------------------------------------------------------
 //
 // The schema axis is implicit: a field with a `default:` is Endorsed (the
@@ -1573,11 +1573,11 @@ main:
   fields:
     title:
       type: string
-      description: Document title (Unendorsed — no default)
+      description: Document title (Unendorsed, no default)
     subtitle:
       type: string
       default: "Untitled subtitle"
-      description: Document subtitle (Endorsed — default shippable)
+      description: Document subtitle (Endorsed, default shippable)
 `
 
   const SCHEMA_PLATE = `#import "@local/quillmark-helper:0.1.0": data
@@ -1702,13 +1702,13 @@ addr:
 })
 
 // ---------------------------------------------------------------------------
-// quill.resolve — the resolved-value view
+// quill.resolve: the resolved-value view
 // ---------------------------------------------------------------------------
 //
 // For every declared field: the value the render projection would use and the
 // source rung it came from ("authored" | "default" | "zero"). Rows are an
 // ordered array carrying their own `name`; the card body is a `body` sibling,
-// not a row in `fields`. Value and provenance only — diagnostics stay
+// not a row in `fields`. Value and provenance only: diagnostics stay
 // validate(), guidance stays the schema. See prose/canon/SCHEMAS.md
 // § "Value sources and projections".
 
@@ -1759,7 +1759,7 @@ title: Hello
 `
     const f = quill.resolve(Document.fromMarkdown(md)).main.fields
 
-    // Declaration order is structural — the array order is the contract.
+    // Declaration order is structural: the array order is the contract.
     expect(f.map((r) => r.name)).toEqual(['title', 'status', 'notes', 'count', 'author'])
 
     expect(byName(f, 'title').source).toBe('authored')
@@ -1797,7 +1797,7 @@ title: T
     expect(noBody.main.body.source).toBe('zero')
   })
 
-  it('carries value and source only — no diagnostics, no example', () => {
+  it('carries value and source only: no diagnostics, no example', () => {
     const quill = buildQuill()
     const md = `~~~card-yaml
 $quill: field_states_test
@@ -1806,7 +1806,7 @@ title: T
 ~~~
 `
     const f = quill.resolve(Document.fromMarkdown(md)).main.fields
-    // Each row is exactly { name, value, source } — schema guidance (example:)
+    // Each row is exactly { name, value, source }, schema guidance (example:)
     // and diagnostics read from quill.schema / quill.validate, not duplicated.
     const author = byName(f, 'author')
     expect(Object.keys(author).sort()).toEqual(['name', 'source', 'value'])
@@ -1847,7 +1847,7 @@ count: "not-a-number"
 ~~~
 `
     // A value the render coercion cannot conform is kept raw and Authored,
-    // exactly as compile_data leaves it — the error surfaces via validate(),
+    // exactly as compile_data leaves it: the error surfaces via validate(),
     // not this view (which carries no diagnostics).
     const row = byName(quill.resolve(Document.fromMarkdown(md)).main.fields, 'count')
     expect(row.source).toBe('authored')

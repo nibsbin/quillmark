@@ -91,8 +91,8 @@ For command options and output controls, see the [CLI Reference](../cli/referenc
 
 ## 6. Next steps
 
-- [Quill.yaml Reference](quill-yaml-reference.md) — full field types, UI hints, `card_kinds`, `typst` section
-- [Typst Backend](typst-backend.md) — data access patterns, `$cards` iteration, helper package
+- [Quill.yaml Reference](quill-yaml-reference.md): full field types, UI hints, `card_kinds`, `typst` section
+- [Typst Backend](typst-backend.md): data access patterns, `$cards` iteration, helper package
 - [Quill Versioning](versioning.md)
 
 **Tip:** To exclude files (fonts, build artifacts) from the bundle when loading from disk, add a `.quillignore` file at the bundle root using gitignore syntax.

@@ -1,6 +1,6 @@
 //! End-to-end guard for the overlapping wrap+code emit fix: a content
-//! that an editor can build but markdown import never produces — `strong[0,4)`
-//! partially overlapping `code[2,6)` — must lower to Typst that actually
+//! that an editor can build but markdown import never produces (`strong[0,4)`
+//! partially overlapping `code[2,6)`) must lower to Typst that actually
 //! *compiles*, not merely markup that "looks balanced". The emitter's output is
 //! embedded in a `#let _qm_cN = [ .. ]` content block, so a single unclosed `[`
 //! breaks the whole generated helper file's parse and fails the render. This
@@ -39,8 +39,8 @@ fn overlap_content() -> serde_json::Value {
         ],
         islands: vec![],
     };
-    // The overlap survives normalize/validate — there is no cross-kind overlap
-    // invariant — so the seam carries it straight to the emitter.
+    // The overlap survives normalize/validate (there is no cross-kind overlap
+    // invariant) so the seam carries it straight to the emitter.
     quillmark_content::serial::to_canonical_value(&rt)
 }
 

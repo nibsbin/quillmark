@@ -10,7 +10,7 @@ use crate::value::QuillValue;
 /// Validation error with a structured field path.
 ///
 /// Field-level type and presence errors carry the field path, the
-/// schema-declared type, and any verbatim YAML source token / default —
+/// schema-declared type, and any verbatim YAML source token / default:
 /// enough for the `Display` impl to render the uniform diagnostic message
 /// described in `ERROR.md` ("Validation message contract").
 ///
@@ -59,14 +59,14 @@ pub enum ValidationError {
 
     /// A `richtext(inline)` field whose content is not single-`Para` (a block, a
     /// list/quote container, or an island). Same fatality class as
-    /// `TypeMismatch` — the value is well-typed richtext but the wrong *shape*
+    /// `TypeMismatch`: the value is well-typed richtext but the wrong *shape*
     /// for an inline field.
     NotInline {
         path: String,
     },
 
     /// A `plaintext` field whose content carries marks, islands, or block
-    /// formatting. Same fatality class as `TypeMismatch` — the value is a
+    /// formatting. Same fatality class as `TypeMismatch`: the value is a
     /// well-formed content but the wrong *shape* for a plaintext field, which
     /// takes prose the author navigates but no formatting.
     NotPlain {
@@ -122,7 +122,7 @@ impl std::fmt::Display for ValidationError {
             ValidationError::BodyDisabled { path, card } => {
                 write!(
                     f,
-                    "card `{card}` at `{path}` has body content but the card kind declares `body.enabled: false` — {hint}",
+                    "card `{card}` at `{path}` has body content but the card kind declares `body.enabled: false`: {hint}",
                     hint = body_disabled_hint(),
                 )
             }
@@ -130,14 +130,14 @@ impl std::fmt::Display for ValidationError {
                 write!(
                     f,
                     "field `{path}` is `richtext(inline)` but its content is not a single \
-                     paragraph — {hint}",
+                     paragraph: {hint}",
                     hint = not_inline_hint(),
                 )
             }
             ValidationError::NotPlain { path } => {
                 write!(
                     f,
-                    "field `{path}` is `plaintext` but its content carries formatting — {hint}",
+                    "field `{path}` is `plaintext` but its content carries formatting: {hint}",
                     hint = not_plain_hint(),
                 )
             }
@@ -208,7 +208,7 @@ impl ValidationError {
         }
     }
 
-    /// Actionable hint for this error, when defined for the variant — the same
+    /// Actionable hint for this error, when defined for the variant: the same
     /// string the `Display` impl bakes in, exposed so consumers can surface it
     /// without re-parsing prose.
     pub fn hint(&self) -> Option<String> {
@@ -286,7 +286,7 @@ pub fn validate_typed_document(
     let mut errors = validate_fields_for_card_indexmap(&config.main, &main_fields, &DocPath::main());
 
     // Enforce body.enabled on the main card. Whitespace-only bodies are
-    // treated as empty — only meaningful prose triggers the diagnostic.
+    // treated as empty: only meaningful prose triggers the diagnostic.
     if !config.main.body_enabled() && !doc.main().body().is_blank() {
         errors.push(ValidationError::BodyDisabled {
             path: DocPath::main_body().to_string(),
@@ -344,7 +344,7 @@ fn validate_fields_for_card_indexmap(
         let schema = &card.fields[field_name];
         let path = base.field(field_name);
         // Absence is a completeness concern, not a well-formedness one: an
-        // absent field — like a present-null one — is zero-filled at render and
+        // absent field (like a present-null one) is zero-filled at render and
         // raises nothing here.
         if let Some(value) = fields.get(field_name) {
             errors.extend(validate_field(schema, value, &path));
@@ -389,7 +389,7 @@ fn validate_value(
 
     let type_valid = match field.r#type {
         // In a document a bare bool/number is type-valid as a string (the
-        // coercion layer adopts it) — in lockstep with `conform_value`
+        // coercion layer adopts it): in lockstep with `conform_value`
         // via `scalar_as_string`. Schema literals stay strict so the blueprint
         // keeps quoting ambiguous string literals.
         // Enum is string-valued data (domain membership is checked separately
@@ -401,7 +401,7 @@ fn validate_value(
         }
         // Post-coercion (Document) a richtext/plaintext value is a canonical
         // content object; an authored `default`/`example` (Schema) is a string
-        // (markdown for richtext, literal for plaintext). Accept both shapes —
+        // (markdown for richtext, literal for plaintext). Accept both shapes:
         // the content's own invariants were enforced at coercion, and a bare
         // scalar still stringifies. The plaintext-specific plain constraint is
         // checked in the shape pass below, parallel to the inline check.
@@ -495,7 +495,7 @@ fn validate_value(
     // the empty content, which is both inline and plain). Mirror the
     // coercion-layer checks so a content that bypassed coercion (e.g. a direct
     // `validate_document`) is still caught. A decode failure is not this layer's
-    // error to report — swallow it and flag only a well-formed but mis-shaped
+    // error to report: swallow it and flag only a well-formed but mis-shaped
     // content.
     if type_valid {
         match field.r#type {
@@ -546,7 +546,7 @@ fn validate_value(
             actual: yaml_scalar_type(value.as_json()).to_string(),
             source_token: verbatim_yaml_scalar(value.as_json()),
             // The `default:` token is a document-authoring aid ("omit the line
-            // and the default fills in") — meaningless when validating the
+            // and the default fills in"): meaningless when validating the
             // schema's own literals.
             default: match ctx {
                 ValueContext::Document => field
@@ -583,8 +583,8 @@ pub(crate) fn validate_field(
     validate_value(field, value, path, ValueContext::Document)
 }
 
-/// Validate a schema literal value — an `example:` or `default:` declared in
-/// Quill.yaml — against a field schema.
+/// Validate a schema literal value (an `example:` or `default:` declared in
+/// Quill.yaml) against a field schema.
 ///
 /// Shares the type/enum/format/recursion core with [`validate_field`] (see
 /// [`validate_value`]) but omits the document-authoring concerns: it does not
@@ -727,7 +727,7 @@ main:
     #[test]
     fn present_null_is_treated_as_absent() {
         // `memo_for:` (a bare/null value) carries no data, so it validates the
-        // same as an omitted field — no type mismatch — for every type.
+        // same as an omitted field (no type mismatch) for every type.
         let config = config_with(
             "    memo_for:\n      type: string\n    n:\n      type: integer",
             "",
@@ -927,7 +927,7 @@ main:
         // Gracious scalar→string: a bare integer/boolean/number under a
         // `string` schema is unambiguously representable as its canonical text,
         // so it validates (the coercion layer adopts the token). No
-        // TypeMismatch — see `quill::config::scalar_as_string`.
+        // TypeMismatch; see `quill::config::scalar_as_string`.
         for value in [json!(42), json!(true), json!(1.5)] {
             let config = config_with(
                 "    build_number:\n      type: string\n      default: \"\"",

@@ -64,7 +64,7 @@ Deleting whole sentences is half the work; the other half is more fact per word.
 
 ## Voice
 
-Present tense. Lead with the invariant or contract, then the mechanism. Reuse the codebase's terms-of-art (*card-yaml block, plate, quill, backend, seam*). No em-dashes: fold with a colon, semicolon, comma, or parentheses. Match the density of the exemplars: the comments in `crates/core/src/document/` and the "Decisions and rationale" section of `prose/canon/PREVIEW.md`.
+Present tense. Lead with the invariant or contract, then the mechanism. Reuse the codebase's terms-of-art (*card-yaml block, plate, quill, backend, seam*). No em-dashes: fold to a colon when what follows names or explains what precedes it, a comma before a conjunction, a semicolon before an independent clause, and parentheses for a matched pair. One colon per sentence. Match the density of the exemplars: the comments in `crates/core/src/document/` and the "Decisions and rationale" section of `prose/canon/PREVIEW.md`.
 
 A paragraph is one line: never hard-wrap prose at a column. A line break in markdown means a new paragraph, list item, or table row; nothing else. Comments wrap to the code's line budget. `prose/README.md` sets the numeric bound on a prose line: 700 characters, gated by `scripts/check-canon.mjs` over `prose/canon/` and `docs/`, with 300 as the target you write to. Split a long line when you are editing near it; below the gate, nothing mechanical reminds you.
 
@@ -73,7 +73,8 @@ A paragraph is one line: never hard-wrap prose at a column. A line break in mark
 | Surface | Rule |
 |---|---|
 | Code and test comments, `prose/canon/`, `docs/` (non-migration) | Apply in full. |
-| `docs/migrations/**`, and era-stamped records generally | **Never touch.** Accurate to their moment, immutable. |
+| `docs/migrations/**`, `CHANGELOG.md`, and era-stamped records generally | **Never touch.** Accurate to their moment, immutable. |
+| An em-dash that is the subject, not punctuation (an encoding table, a Unicode fixture, rendered sample output) | Keep: it is data. `crates/quillmark-pdf/src/writer.rs` maps the character to its WinAnsi byte; `prescan.rs` parses it. |
 | `prose/references/`, `prose/proposals/`, `prose/plans/` | Strip marketing only; discussing other or future states is their job. |
 | Load-bearing legacy (`crates/core/src/document/dto.rs` versioned wire schemas) | Keep: the old-format description *is* current reader behavior. Tighten wording, keep the fact. |
 | Identifiers (fn / test / var names) | Never rename; out of scope, churn. |

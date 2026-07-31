@@ -4,26 +4,26 @@
 //! Under Technique A the AcroForm widget uses `/Helv 0 Tf` (the viewer
 //! auto-sizes), but the *flatten* path has to draw the value itself, so it must
 //! commit to a concrete font and size. These policy constants/functions are the
-//! one place that decision lives, so the flattener — and any future surface that
-//! composites a value over a page — agree by construction. That is the
+//! one place that decision lives, so the flattener (and any future surface that
+//! composites a value over a page) agree by construction. That is the
 //! "preview and flattening agree exactly" invariant: there is exactly one place
 //! that answers "what font and size does this value render at."
 //!
 //! ## Regions carry no typography
 //!
 //! The region sidecar carries only geometry and the schema-field address for
-//! cross-navigation — no resolved font/size/align. No consumer composites a
+//! cross-navigation: no resolved font/size/align. No consumer composites a
 //! value onto a region: the flatten technique already gives both canvas
 //! backends a **complete** raster (the pdfform session pre-flattens values
 //! into the page content, then rasterizes), so there is nothing left for a
 //! region-based compositor to draw. A font-accurate-compositing consumer, if
 //! one is added, reads sizes from *this* module, not from the region.
 
-/// House text font — PDF base-14 Helvetica, registered as `/Helv`. Used for
+/// House text font: PDF base-14 Helvetica, registered as `/Helv`. Used for
 /// text and choice values.
 pub(crate) const TEXT_FONT: &str = "Helvetica";
 
-/// House symbol font — PDF base-14 ZapfDingbats, registered as `/ZaDb`. Used for
+/// House symbol font: PDF base-14 ZapfDingbats, registered as `/ZaDb`. Used for
 /// the checkbox check glyph.
 pub(crate) const CHECK_FONT: &str = "ZapfDingbats";
 

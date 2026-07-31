@@ -9,7 +9,7 @@ Plates are plain Typst code. Document metadata reaches the plate as a JSON dicti
 ```typst
 #import "@local/quillmark-helper:0.1.0": data
 
-#data.title                                  // direct — errors if missing
+#data.title                                  // direct: errors if missing
 #data.at("title", default: "Untitled")       // safe with default
 ```
 
@@ -28,10 +28,10 @@ A present `type: date` / `type: datetime` field arrives as a small value-object 
 #if data.issued != none { .. }                                          // presence
 ```
 
-- **`display` renders and is clickable.** It is a closure returning Typst *content*, so its glyphs carry a region keyed on the field's schema path — the atomic, picker-editable click-to-edit target. Note the **parentheses**: `(data.issued.display)(..)`, not `data.issued.display(..)`. Typst reserves dict-key method sugar for built-in dict methods, so the stored closure must be called through the parenthesized form. The date it wraps is the field's declared type, so a `date`-only field's `display` inherits Typst's native error on a `[hour]` pattern.
+- **`display` renders and is clickable.** It is a closure returning Typst *content*, so its glyphs carry a region keyed on the field's schema path: the atomic, picker-editable click-to-edit target. Note the **parentheses**: `(data.issued.display)(..)`, not `data.issued.display(..)`. Typst reserves dict-key method sugar for built-in dict methods, so the stored closure must be called through the parenthesized form. The date it wraps is the field's declared type, so a `date`-only field's `display` inherits Typst's native error on a `[hour]` pattern.
 - **`.value` is the native escape hatch.** It is the underlying `datetime` for arithmetic, comparison, `.year()`/`.weekday()`/… components, and any datetime-consuming package. `data.issued.value.display("…")` returns a native `str` (no region).
 
-One rule: **native anything → `.value`; region render → `(…display)(…)`.** A package that formats a date internally still needs `.value` when it does native `datetime` work, but placing `(data.issued.display)(..)` — even deep inside a package — keeps the region, because the closure's ink is born at its generated definition site, not the call site.
+One rule: **native anything → `.value`; region render → `(…display)(…)`.** A package that formats a date internally still needs `.value` when it does native `datetime` work, but placing `(data.issued.display)(..)` (even deep inside a package) keeps the region, because the closure's ink is born at its generated definition site, not the call site.
 
 ### Checking for Optional Fields
 
@@ -128,13 +128,13 @@ Witness:
 #signature-field("witness", width: 220pt, height: 60pt)
 ```
 
-PDF output gains a clickable AcroForm SigField widget at each call site. Open the result in Acrobat (or any reader that supports form signing) and the widget presents a "Sign Here" affordance. SVG and PNG outputs reserve the same invisible layout space — useful for preview but no widget visual.
+PDF output gains a clickable AcroForm SigField widget at each call site. Open the result in Acrobat (or any reader that supports form signing) and the widget presents a "Sign Here" affordance. SVG and PNG outputs reserve the same invisible layout space: useful for preview but no widget visual.
 
 **Important:** the widget is **unsigned**. Quillmark does not perform any cryptography. To produce a signed PDF, run the output through pyHanko, Acrobat, endesive, or another signing tool.
 
 ### Positioning
 
-`signature-field` is ordinary Typst inline content sized `width × height`. It participates in layout the same way `#rect(width: 200pt, height: 50pt)` would — content after it gets pushed by the box's dimensions. Two modes:
+`signature-field` is ordinary Typst inline content sized `width × height`. It participates in layout the same way `#rect(width: 200pt, height: 50pt)` would: content after it gets pushed by the box's dimensions. Two modes:
 
 **In-flow (reserves layout space).** Drop the call where you want to claim that block of space and let the rest of the document flow around it:
 
@@ -144,7 +144,7 @@ Sign here:
 The above signature acknowledges receipt.
 ```
 
-**Overlay (no displacement).** Wrap in `#place(...)` to anchor the widget without consuming flow. This is what you want when the surrounding template *already* reserves space — for example, the four blank lines above a typed-name signature block in a USAF memo:
+**Overlay (no displacement).** Wrap in `#place(...)` to anchor the widget without consuming flow. This is what you want when the surrounding template *already* reserves space, for example, the four blank lines above a typed-name signature block in a USAF memo:
 
 ```typst
 // At the cursor position where the typed-name signature block begins:
@@ -154,14 +154,14 @@ The above signature acknowledges receipt.
 
 `#place` without an alignment argument anchors the widget at the current cursor (then offsets by `dx`/`dy`); `#place(top + left, ...)` anchors to the containing block's top-left. Either way, the call consumes no flow space and the surrounding template stays put.
 
-Inside `#box`, `#table`, `#figure`, `#footnote`, `#move`, `#pad` — `signature-field` tracks the layout system normally. Multi-page documents work; each field's `page` is the page it lays out on, not where it was written in source.
+Inside `#box`, `#table`, `#figure`, `#footnote`, `#move`, `#pad`: `signature-field` tracks the layout system normally. Multi-page documents work; each field's `page` is the page it lays out on, not where it was written in source.
 
 ### Parameters
 
 | Name | Type | Default | Notes |
 |---|---|---|---|
-| `name` | `str` | required (positional) | Field name — must be unique within the document and match `[A-Za-z0-9_.]+` (`.` allowed for fully-qualified names). Surfaces as the widget's `/T` entry. |
-| `width` | `length` | `200pt` | Must be an absolute length (`pt`, `mm`, `cm`, `in`) — relative lengths like `2em` or `50%` are rejected. |
+| `name` | `str` | required (positional) | Field name: must be unique within the document and match `[A-Za-z0-9_.]+` (`.` allowed for fully-qualified names). Surfaces as the widget's `/T` entry. |
+| `width` | `length` | `200pt` | Must be an absolute length (`pt`, `mm`, `cm`, `in`): relative lengths like `2em` or `50%` are rejected. |
 | `height` | `length` | `50pt` | Same constraint as `width`. |
 
 ### Errors
@@ -170,7 +170,7 @@ Inside `#box`, `#table`, `#figure`, `#footnote`, `#move`, `#pad` — `signature-
 - A non-absolute `width` or `height` raises a Typst assert pointing at `form-field`.
 - Names violating `[A-Za-z0-9_.]+` raise a Typst assert.
 
-The label `<__qm_field__>` and metadata `kind: "__qm_field__"` are reserved for this hand-off — don't use them for unrelated metadata in your plate.
+The label `<__qm_field__>` and metadata `kind: "__qm_field__"` are reserved for this hand-off: don't use them for unrelated metadata in your plate.
 
 > `signature-field` emits a document-global `metadata` element (standard Typst
 > introspection). If your plate or its packages read config via
@@ -179,19 +179,19 @@ The label `<__qm_field__>` and metadata `kind: "__qm_field__"` are reserved for 
 
 ## Form Fields
 
-`signature-field` is a thin wrapper over the general `form-field` primitive, which backs all four widget kinds — text inputs, checkboxes, choice dropdowns, and signature boxes. Import it from the same helper package:
+`signature-field` is a thin wrapper over the general `form-field` primitive, which backs all four widget kinds: text inputs, checkboxes, choice dropdowns, and signature boxes. Import it from the same helper package:
 
 ```typst
 #import "@local/quillmark-helper:0.1.0": form-field
 ```
 
-Each call drops an AcroForm widget at its call site (a clickable field in PDF; reserved invisible layout space in SVG/PNG, same as `signature-field`). Value binding is the plate author's job — pass `value:` straight from your data; there is no resolver on the Typst side.
+Each call drops an AcroForm widget at its call site (a clickable field in PDF; reserved invisible layout space in SVG/PNG, same as `signature-field`). Value binding is the plate author's job: pass `value:` straight from your data; there is no resolver on the Typst side.
 
 ### Parameters
 
 | Name | Type | Default | Notes |
 |---|---|---|---|
-| `name` | `str` | required (positional) | Widget `/T` name — unique within the document, matching `[A-Za-z0-9_.]+`. Shares one uniqueness domain with `signature-field`. |
+| `name` | `str` | required (positional) | Widget `/T` name: unique within the document, matching `[A-Za-z0-9_.]+`. Shares one uniqueness domain with `signature-field`. |
 | `type` | `str` | `"text"` | One of `"text"`, `"checkbox"`, `"choice"`, `"signature"`. |
 | `value` | per type | `none` | The delivered field value; interpretation depends on `type` (see below). |
 | `options` | `array` of `str` | `()` | Display strings for `type: "choice"`; ignored otherwise. |
@@ -200,32 +200,32 @@ Each call drops an AcroForm widget at its call site (a clickable field in PDF; r
 | `height` | `length` | `20pt` | Same constraint as `width`. |
 | `field` | `str` or `none` | `none` | Schema-field address this widget's region is keyed on (see "Binding to a schema field"). |
 
-Positioning works exactly as for `signature-field` (in-flow reserves space; wrap in `#place(...)` to overlay without displacement) — see the "Positioning" notes above.
+Positioning works exactly as for `signature-field` (in-flow reserves space; wrap in `#place(...)` to overlay without displacement); see the "Positioning" notes above.
 
 ### The four field types
 
 `value:` is forwarded verbatim; the Rust adapter maps it to the AcroForm value per `type`:
 
-**Text** — `value` is a string (numbers stringify). A blank value emits no `/V`. Set `multiline: true` for a multi-line box.
+**Text**: `value` is a string (numbers stringify). A blank value emits no `/V`. Set `multiline: true` for a multi-line box.
 
 ```typst
 #form-field("full_name", type: "text", value: data.name)
 #form-field("bio", type: "text", value: data.bio, multiline: true, height: 80pt)
 ```
 
-**Checkbox** — `value` is a bool; `true` renders checked.
+**Checkbox**: `value` is a bool; `true` renders checked.
 
 ```typst
 #form-field("agree", type: "checkbox", value: data.agree)
 ```
 
-**Choice** — `value` is a string, bound only if it matches an entry in `options`.
+**Choice**: `value` is a string, bound only if it matches an entry in `options`.
 
 ```typst
 #form-field("size", type: "choice", options: ("S", "M", "L"), value: data.size)
 ```
 
-**Signature** — `value` is ignored; the widget is an unsigned SigField (Quillmark performs no cryptography — sign the output with pyHanko, Acrobat, endesive, etc.). `signature-field(name, ...)` is exactly `form-field(name, type: "signature", ...)`.
+**Signature**: `value` is ignored; the widget is an unsigned SigField (Quillmark performs no cryptography: sign the output with pyHanko, Acrobat, endesive, etc.). `signature-field(name, ...)` is exactly `form-field(name, type: "signature", ...)`.
 
 ```typst
 #form-field("approver", type: "signature", height: 50pt)
@@ -239,14 +239,14 @@ By default a widget's only identity is its `/T` name. Pass `field:` to additiona
 #form-field("Signature", type: "signature", field: "signature_block")
 ```
 
-`field:` is **region-only** — the `/T` widget name stays `name`; only the sidecar entry keys on `field:`. The address must be a real schema field: a bare field name, an array element like `"refs.2"`, or a card path built from the card's `$path` prefix (a bad address raises a Typst assert). Omit `field:` and the widget exposes no region — a click has no schema field to route to.
+`field:` is **region-only**: the `/T` widget name stays `name`; only the sidecar entry keys on `field:`. The address must be a real schema field: a bare field name, an array element like `"refs.2"`, or a card path built from the card's `$path` prefix (a bad address raises a Typst assert). Omit `field:` and the widget exposes no region: a click has no schema field to route to.
 
 ### Errors
 
 - Duplicate `name` across any `form-field`/`signature-field` calls → `typst::duplicate_form_field`.
 - A non-absolute `width`/`height`, a `type` outside the four values, a name violating `[A-Za-z0-9_.]+`, or a `field:` that is not a known schema address → a Typst assert pointing at `form-field`.
 
-The label `<__qm_field__>` and metadata `kind: "__qm_field__"` are reserved for this hand-off — the same `query(metadata)` caveat noted for `signature-field` applies.
+The label `<__qm_field__>` and metadata `kind: "__qm_field__"` are reserved for this hand-off: the same `query(metadata)` caveat noted for `signature-field` applies.
 
 ## Output Formats
 
@@ -266,7 +266,7 @@ engine.render(quill, doc, { format: 'png' });           // 144 PPI
 engine.render(quill, doc, { format: 'png', ppi: 300 });  // print quality
 ```
 
-PNG resolution is set via the `ppi` option (default **144** — 2× at 72pt/inch, suitable for retina previews):
+PNG resolution is set via the `ppi` option (default **144**, 2× at 72pt/inch, suitable for retina previews):
 
 | PPI | Use case |
 |-----|----------|
@@ -279,7 +279,7 @@ PNG resolution is set via the `ppi` option (default **144** — 2× at 72pt/inch
 ## Resources
 
 - [Typst Documentation](https://typst.app/docs/)
-- [Typst Universe](https://typst.app/universe/) — package directory
+- [Typst Universe](https://typst.app/universe/): package directory
 
 ## Next Steps
 

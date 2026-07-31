@@ -1,13 +1,13 @@
 # Error Handling
 
-Every failure — parse, validation, quill config, backend compile — travels as a **`Diagnostic`**, and each binding raises a single error type that always carries a non-empty `diagnostics` list. Consumers route on a diagnostic's namespaced `code`, never on an exception subclass.
+Every failure (parse, validation, quill config, backend compile) travels as a **`Diagnostic`**, and each binding raises a single error type that always carries a non-empty `diagnostics` list. Consumers route on a diagnostic's namespaced `code`, never on an exception subclass.
 
 ## The Diagnostic shape
 
 | Field | Meaning |
 |---|---|
 | `severity` | `Error` (blocks its stage) or `Warning` (never blocks) |
-| `code` | Namespaced id — e.g. `parse::missing_quill`, `validation::type_mismatch`, `quill::version_mismatch` — the machine-routable identity |
+| `code` | Namespaced id; e.g. `parse::missing_quill`, `validation::type_mismatch`, `quill::version_mismatch`: the machine-routable identity |
 | `message` | Human-readable text |
 | `location` | Optional text anchor: `file`, `line` (1-based), `column` |
 | `path` | Optional document-model anchor: `main.recipient`, `cards.indorsement[0].author` |
@@ -51,15 +51,15 @@ The `code` namespaces are the routing surface:
 
 `parse::*` · `validation::*` · `quill::*` · `edit::*` (mutators) · `typst::*` · `pdfform::*` · `backend::*` · `engine::*`.
 
-Notable codes: `quill::name_mismatch` / `quill::version_mismatch` (a well-formed document paired with the wrong quill — see [Versioning](../quills/versioning.md)); `engine::backend_not_found` (the quill's declared backend is not registered); `parse::input_too_large` (input over 10 MiB).
+Notable codes: `quill::name_mismatch` / `quill::version_mismatch` (a well-formed document paired with the wrong quill; see [Versioning](../quills/versioning.md)); `engine::backend_not_found` (the quill's declared backend is not registered); `parse::input_too_large` (input over 10 MiB).
 
 ## Warnings vs errors
 
 Fatality is a two-value ladder: `Error` blocks the stage that emits it; `Warning` never does. There is no lint-level configuration and no warning-to-error promotion. Warnings ride the same `Diagnostic` currency on non-fatal channels:
 
-- **Parse warnings** — e.g. a `~~~` opener missing its blank line — carried on the parsed document (`doc.warnings`) and spliced into a render's warnings.
-- **Validation warnings** — `quill.validate(doc)` returns every diagnostic; `validation::must_fill` (an outstanding `!must_fill` marker) and the `$seed` checks are the non-fatal ones. The render path never gates on incompleteness — an absent field zero-fills.
-- **Compile warnings** — a backend's non-fatal diagnostics (font fallback, overfull pages), carried on `result.warnings`.
+- **Parse warnings** (e.g. a `~~~` opener missing its blank line) carried on the parsed document (`doc.warnings`) and spliced into a render's warnings.
+- **Validation warnings**: `quill.validate(doc)` returns every diagnostic; `validation::must_fill` (an outstanding `!must_fill` marker) and the `$seed` checks are the non-fatal ones. The render path never gates on incompleteness: an absent field zero-fills.
+- **Compile warnings**: a backend's non-fatal diagnostics (font fallback, overfull pages), carried on `result.warnings`.
 
 A successful render returns artifacts **and** a `warnings` list, so inspect it even on success.
 

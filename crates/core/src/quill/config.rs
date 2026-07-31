@@ -13,7 +13,7 @@ use super::types::{RICHTEXT_INLINE_TOKEN_MSG, UI_ORDER_REMOVED_MSG};
 use super::{BodyCardSchema, CardSchema, FieldSchema, FieldType, GroupRegistry, UiCardSchema};
 
 /// Canonical string text for a bare scalar unambiguously representable as a
-/// string — a boolean (`true`/`false`) or number (`47`, `1.0`). `None` for
+/// string: a boolean (`true`/`false`) or number (`47`, `1.0`). `None` for
 /// `null` (≡ absent), strings (already strings), and collections.
 ///
 /// Shared by `QuillConfig::conform_value` (to adopt the value) and
@@ -135,7 +135,7 @@ pub enum CoercionError {
     },
 }
 
-/// Write-side leniency mode for [`QuillConfig::conform_value`] — the one axis
+/// Write-side leniency mode for [`QuillConfig::conform_value`]: the one axis
 /// that separates the render floor's forgiving coercion from a strict typed
 /// write.
 ///
@@ -151,14 +151,14 @@ pub(crate) enum Leniency {
     /// value-parsing normalizations still apply (`"3"` → `3`, a bare scalar
     /// wraps into a singleton array, richtext markdown imports to content), but
     /// cross-type `Boolean`↔`Number` coercions are dropped and every
-    /// defer-to-validation fall-through becomes a `CoercionError` — so a
+    /// defer-to-validation fall-through becomes a `CoercionError`, so a
     /// mismatched value fails at the write, not silently at a later render.
     ///
     /// "Strict" is asymmetric by target, not absolute: `string` and `array` are
     /// universal sinks, so a scalar→`string` (`true` → `"true"`) and a
     /// scalar→singleton-`array` wrap stay lenient even here (both are lossless,
-    /// unambiguous, and author-intended); only the lossy/ambiguous crossings —
-    /// scalar→`object`, `String`→`number`/`bool`, `Boolean`↔`Number` — are
+    /// unambiguous, and author-intended); only the lossy/ambiguous crossings
+    /// (scalar→`object`, `String`→`number`/`bool`, `Boolean`↔`Number`) are
     /// rejected. A strict write thus still reshapes toward `string`/`array`
     /// while refusing to invent structure or reinterpret a scalar's type.
     Write,
@@ -313,7 +313,7 @@ impl QuillConfig {
                 } else {
                     // Defensive fallback: schema-load rejects any array without
                     // `items` (quill::array_missing_items), so a validated
-                    // config never reaches here — pass the array through as-is.
+                    // config never reaches here, pass the array through as-is.
                     Ok(QuillValue::from_json(serde_json::Value::Array(arr)))
                 }
             }
@@ -432,7 +432,7 @@ impl QuillConfig {
                     reason: "value is not coercible to integer".to_string(),
                 })
             }
-            // Enum is open scalar data drawn from a closed domain — coerced as a
+            // Enum is open scalar data drawn from a closed domain: coerced as a
             // string here; domain membership is checked at the validation layer
             // (an out-of-domain string is a value error, not a type error).
             FieldType::String | FieldType::Enum => {
@@ -464,7 +464,7 @@ impl QuillConfig {
                 // *literal* codec: a string is imported verbatim via
                 // `from_plaintext` (no markdown parsing, no escaping), an
                 // already-structured content is validated plain. A wire content
-                // carrying marks or islands is rejected, not silently stripped —
+                // carrying marks or islands is rejected, not silently stripped:
                 // matching the `inline` precedent and keeping coercion lossless.
                 let plain_check =
                     |rt: &quillmark_content::Content| -> Result<(), CoercionError> {
@@ -550,7 +550,7 @@ impl QuillConfig {
                         }
                         Ok(())
                     };
-                // A strict write uses `decode_richtext_value` semantics — a
+                // A strict write uses `decode_richtext_value` semantics: a
                 // canonical content object or a markdown string, nothing else. No
                 // scalar→string reduction (the render floor's lenient cascade
                 // below): a bare scalar for a richtext field fails the write. The
@@ -662,7 +662,7 @@ impl QuillConfig {
 
                 // The two date types share extraction and verbatim storage;
                 // only the grammar differs. A `date` rejects any time component,
-                // a `datetime` rejects offsets/space/fraction/bare-date — neither
+                // a `datetime` rejects offsets/space/fraction/bare-date: neither
                 // truncates, so the stored string is exactly the authored one.
                 let (valid, reason) = match field_schema.r#type {
                     FieldType::Date => {
@@ -746,12 +746,12 @@ impl QuillConfig {
     /// one-level nesting contract in a single pass. The `position` records
     /// what shapes are legal at the current depth:
     ///
-    /// - [`ShapePosition::Top`] — a field declared directly on a card: scalar,
+    /// - [`ShapePosition::Top`], a field declared directly on a card: scalar,
     ///   `object` (typed dictionary), or `array` (primitive list or typed
     ///   table).
-    /// - [`ShapePosition::ArrayItem`] — an array's `items`: a scalar or an
+    /// - [`ShapePosition::ArrayItem`], an array's `items`: a scalar or an
     ///   `object` (the typed-table row), but **not** another array.
-    /// - [`ShapePosition::Leaf`] — an object's property (whether a top-level
+    /// - [`ShapePosition::Leaf`], an object's property (whether a top-level
     ///   typed dictionary or a typed-table row): scalar only. No deeper
     ///   containers, so `array<object<array>>` and `object<array>` are
     ///   rejected here.
@@ -782,7 +782,7 @@ impl QuillConfig {
         // `from_quill_value` folds the wire key into the `FieldType` enum
         // (`resolve_prose_inline`); no second check belongs here.
 
-        // `ui.group` clusters card-level fields only — the blueprint's grouping
+        // `ui.group` clusters card-level fields only: the blueprint's grouping
         // pass never descends into object properties or array items, so a nested
         // `group` is an inert knob. Reject it rather than let it silently do
         // nothing, the same dead-knob class this walk exists to catch.
@@ -831,7 +831,7 @@ impl QuillConfig {
                         ),
                     );
                 }
-                // Object properties are leaves — scalars only.
+                // Object properties are leaves: scalars only.
                 props.iter().find_map(|(name, prop)| {
                     Self::validate_field_schema_shape(
                         prop,
@@ -858,7 +858,7 @@ impl QuillConfig {
                         "quill::array_properties_not_supported",
                         format!(
                             "Field '{owner}' is type: array with a bare 'properties' map. \
-                             Declare the element type under 'items' instead — for a list \
+                             Declare the element type under 'items' instead: for a list \
                              of objects use items: {{ type: object, properties: … }}."
                         ),
                     );
@@ -973,7 +973,7 @@ impl QuillConfig {
     /// With a registry present, `ui.group` is a *reference*: registry ids carry
     /// the same snake_case discipline as field keys and must be unique, and a
     /// reference to an id the registry does not declare is `quill::unknown_group`
-    /// (the "no mixing implicit and declared" rule falls out of this — with a
+    /// (the "no mixing implicit and declared" rule falls out of this, with a
     /// registry there is no implicit fallback). With no registry, each `ui.group`
     /// is a deprecated implicit group (label-as-identity) and the card earns one
     /// `quill::implicit_group` warning.
@@ -1008,7 +1008,7 @@ impl QuillConfig {
                         );
                     }
                     // Insert regardless of snake_case validity so a reference to
-                    // an ill-named id resolves — one diagnostic, not a cascade.
+                    // an ill-named id resolves: one diagnostic, not a cascade.
                     if !ids.insert(g.id.as_str()) {
                         errors.push(
                             Diagnostic::new(
@@ -1062,8 +1062,8 @@ impl QuillConfig {
     /// schema, pushing `quill::*`-namespaced [`Diagnostic`]s for any violations.
     ///
     /// Delegates type/enum/format/recursion checking to
-    /// [`super::validation::validate_schema_literal`] — the shared conformance
-    /// primitive — then converts each [`ValidationError`] into a Quill.yaml
+    /// [`super::validation::validate_schema_literal`] (the shared conformance
+    /// primitive) then converts each [`ValidationError`] into a Quill.yaml
     /// load-time diagnostic with the appropriate `quill::{slot}_*` error code
     /// and author-friendly hint.
     fn validate_schema_slot(
@@ -1320,7 +1320,7 @@ impl QuillConfig {
     ///
     /// Returns `Ok((config, warnings))` on success, or `Err(errors)` containing all
     /// parse/validation errors when the config is invalid. Errors are always collected
-    /// exhaustively — callers see every problem, not just the first.
+    /// exhaustively: callers see every problem, not just the first.
     pub fn from_yaml_with_warnings(
         yaml_content: &str,
     ) -> Result<(Self, Vec<Diagnostic>), Vec<Diagnostic>> {
@@ -1344,7 +1344,7 @@ impl QuillConfig {
             }
         };
 
-        // Extract [quill] section (required) — fail immediately if absent since all
+        // Extract [quill] section (required): fail immediately if absent since all
         // subsequent validation depends on it.
         let quill_section = match quill_yaml_val.get("quill") {
             Some(v) => v,
@@ -1379,7 +1379,7 @@ impl QuillConfig {
             }
         }
 
-        // Extract required fields — collect all missing-field errors before returning.
+        // Extract required fields: collect all missing-field errors before returning.
         let name = match quill_section.get("name").and_then(|v| v.as_str()) {
             Some(n) => {
                 if !Self::is_valid_quill_name(n) {
@@ -1595,7 +1595,7 @@ impl QuillConfig {
         };
 
         // Extract main.ui (optional). Fail loudly on malformed UI metadata rather
-        // than silently dropping it — see `quill.ui` handling above.
+        // than silently dropping it; see `quill.ui` handling above.
         let main_ui: Option<UiCardSchema> = match main_obj_opt
             .and_then(|main_obj| main_obj.get("ui"))
             .cloned()
@@ -1732,7 +1732,7 @@ impl QuillConfig {
             }
         }
 
-        // Warn when `body.example` is set together with `body.enabled: false` —
+        // Warn when `body.example` is set together with `body.enabled: false`:
         // the example has no effect since the body editor is disabled.
         let warn_example_unused = |label: &str,
                                    body: &Option<BodyCardSchema>|
@@ -1812,7 +1812,7 @@ impl QuillConfig {
         }
 
         // Import every richtext `default` / `example` / `body.example` literal
-        // once into its canonical-content companion cache — a pure function of the
+        // once into its canonical-content companion cache: a pure function of the
         // Quill.yaml bytes, never serialized. This is where `richtext(inline)`
         // violations and malformed richtext literals surface as load errors, and
         // where seeding and the render floor later read a pre-validated content
@@ -1860,7 +1860,7 @@ fn example_contains_fence_line(text: &str) -> bool {
     })
 }
 
-/// Whether a field's type tree contains any content leaf — the gate for caching
+/// Whether a field's type tree contains any content leaf: the gate for caching
 /// a content companion. Both `richtext` and its literal-codec sibling `plaintext`
 /// are content leaves; a scalar (`string`, `integer`, `enum`, …) never carries
 /// one; an `array<richtext>` or an `object` with a content property does.
@@ -1898,7 +1898,7 @@ fn populate_field_content(field: &mut FieldSchema, owner: &str, errors: &mut Vec
 }
 
 /// Populate every content companion on a card: each field's
-/// `default`/`example`, and the card's `body.example` (block richtext — no
+/// `default`/`example`, and the card's `body.example` (block richtext, no
 /// inline constraint; skipped when the body is disabled, since its example is
 /// inert).
 fn populate_card_content(card: &mut CardSchema, label: &str, errors: &mut Vec<Diagnostic>) {
@@ -1940,7 +1940,7 @@ fn literal_content(
     label: &str,
 ) -> Result<Option<QuillValue>, Diagnostic> {
     let json = value.as_json();
-    // Null ≡ absent — no data to import, so no companion is cached.
+    // Null ≡ absent: no data to import, so no companion is cached.
     if json.is_null() {
         return Ok(None);
     }

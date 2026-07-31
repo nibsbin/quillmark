@@ -12,13 +12,13 @@
 //! To pulldown-cmark a card-yaml block is just a fenced code block (or, for
 //! the `---` root alias, a YAML metadata block). So:
 //!
-//! > **Every card-yaml block the scanner recognizes must coincide — same
-//! > opening offset, same fence span — with a fenced code block or YAML
+//! > **Every card-yaml block the scanner recognizes must coincide: same
+//! > opening offset, same fence span: with a fenced code block or YAML
 //! > metadata block that pulldown-cmark delimits on the same source.**
 //!
 //! The relationship is one-directional (⊆): pulldown legitimately sees *more*
-//! fenced blocks than we do — code blocks inside prose bodies, and `~~~`
-//! fences that fail our blank-line-above rule — and those are correctly left
+//! fenced blocks than we do (code blocks inside prose bodies, and `~~~`
+//! fences that fail our blank-line-above rule) and those are correctly left
 //! in the body. We only require that none of *our* blocks invent or misplace a
 //! fence relative to CommonMark.
 //!
@@ -59,7 +59,7 @@ fn trim_fence(s: &str) -> &str {
 }
 
 /// Assert the ⊆ invariant for one document. Returns a human-readable failure
-/// description, or `None` if conformant (or if our scanner rejects the input —
+/// description, or `None` if conformant (or if our scanner rejects the input:
 /// error paths are out of scope for this cross-check).
 fn nonconformance(md: &str) -> Option<String> {
     let Ok((blocks, _warnings)) = find_metadata_blocks(md) else {

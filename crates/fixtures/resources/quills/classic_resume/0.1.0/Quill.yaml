@@ -33,7 +33,7 @@ card_kinds:
   experience_section:
     description: An entry with a heading, subheading, and bullet points.
     ui:
-      title: "{heading_left} — {subheading_left}"
+      title: "{heading_left}, {subheading_left}"
     fields:
       title:
         type: string
