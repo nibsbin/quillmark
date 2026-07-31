@@ -1573,11 +1573,11 @@ main:
   fields:
     title:
       type: string
-      description: Document title (Unendorsed: no default)
+      description: Document title (Unendorsed, no default)
     subtitle:
       type: string
       default: "Untitled subtitle"
-      description: Document subtitle (Endorsed: default shippable)
+      description: Document subtitle (Endorsed, default shippable)
 `
 
   const SCHEMA_PLATE = `#import "@local/quillmark-helper:0.1.0": data

@@ -147,7 +147,7 @@ fn derive_hint(message: &str, content: &str) -> Option<String> {
         return Some(
             "A `- item` list was found where a mapping key was expected. Either \
              indent the sequence two spaces under the key it belongs to \
-             (`field:` newline `  - item`), or: if this field expects a single \
+             (`field:` newline `  - item`), or, if this field expects a single \
              scalar value, drop the `-` and put the value on the same line: \
              `field: value`."
                 .to_string(),
