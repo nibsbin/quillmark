@@ -1000,7 +1000,7 @@ impl Document {
     /// field's declared type is.** A richtext field holds a content object when a
     /// typed write landed it (`install` / `commitField` / `writer.set`) and the
     /// markdown string it parsed when the document came from
-    /// [`fromMarkdown`](Self::parse) — both are the stored value, and this read
+    /// [`fromMarkdown`](Self::from_markdown) — both are the stored value, and this read
     /// reports each as it is. A consumer that wants one shape regardless of entry
     /// point reads a projection instead: [`getContent`](Self::get_content) for the
     /// content model, [`getMarkdown`](Self::get_markdown) (body) or `reader.get`

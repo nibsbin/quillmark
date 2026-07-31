@@ -50,7 +50,16 @@ coercion deferred to render) and the addressed content lane — `install` / `rev
 / `applyChange` plus the `importMarkdown` / `exportMarkdown` / `rebase` / `mapPos`
 codec — which navigate by `Addr` and return `Delta` receipts but never consult a
 schema. **Transport** reads (`getStored` / `isFill` / `getExt`) return the stored
-value verbatim, need no schema, and sit on `Document` too.
+value verbatim, need no schema, and sit on `Document` too. Verbatim means the
+result shape reports *how a value was written*, not what the field's declared
+type is: a richtext field holds content after a typed write and the markdown
+string it parsed after `fromMarkdown`. Both are the design — the stored bytes
+round-trip either way — so the flattening belongs to a projection, not to the
+transport read. `getContent(addr)` is that projection on the quill-free plane:
+the read twin of `install`, decoding through the same object-or-markdown
+dispatch the writer commits, so a codec consumer reads one shape whichever door
+the document came through. It is the binding's exposure of core's
+`Card::field_richtext`.
 
 The one **interpreting** read — projecting a field by its type — is a
 schema-shaped question ("this field's richtext, as markdown"), so it gains a
@@ -128,6 +137,9 @@ table.
 | Card cursor | `writer.card(i)?` (eager check) | `writer.card(i)` (lazy check) | **FFI** — no borrow to validate against; the index is checked at the write |
 | Cursor kind | `writer.card(i)?.kind()` | `writer.card(i).kind` | identical — the JS getter reads through `doc.card(i)` |
 | Reads (value / body markdown / fill / `$ext`) | `body_markdown(..)` / `payload().get(..)` / `payload().is_fill(..)` / `card.ext()` (borrow chain; index for a card) | `doc.getStored(addr?)` / `doc.getMarkdown(cardAddr?)` / `doc.isFill(addr)` / `doc.getExt(cardAddr?)` / `doc.getExtNamespace(cardAddr, ns)` (JS) | **idiom** / **FFI** / **scope** — WASM fuses the transport reads onto the one `Addr` (a bare string ⇒ `{field}` for `getStored`/`isFill`) and names the verbatim field read `getStored`, not `get`, so it never collides with the interpreted `reader.get` (core's `payload().get` has no such neighbor); *total over the field axis* (absent field → `undefined`, `isFill` → `false`; only an out-of-range card throws); `getMarkdown` is the **body** read (a `CardAddr`; a present `field` throws). Python has no quill-free field read — interpreted field reads go through `quill.reader(doc).get`, and `$ext` / body content read off the `main` / `cards` dict snapshots |
+| Content read (codec plane) | `card.field_richtext(name)` / `card.body()` (borrow chain) | `doc.getContent(addr)` (JS) | **FFI** / **scope** — WASM-only, fusing field and body onto the one `Addr`; the entry-point-independent read `getStored` cannot be, since transport reports the storage shape. Python reads content through the schema plane |
+| Card-tree shape | `cards().iter().map(Card::kind)` | `doc.cardKinds` (JS) | **FFI** — a borrow chain is free in Rust; across the boundary `cards` would serialize every payload and body to answer it |
+| Handle edit count | — | `doc.revision` (JS) | **FFI** — a handle has history a value type does not; core's `Document` has value semantics, so the counter lives on the binding wrapper |
 | Reads (whole card / `$id` / seed) | `card(i)` / `find_card(id)` / `main().seed()` | `doc.card(i)` / `doc.cardIndexById(id)` / `doc.seedOverlay(kind)` (JS), `doc.card(i)` / `doc.card_index_by_id(id)` / `doc.seed_overlay(kind)` (py) | **idiom** — both bindings fuse each into one named verb on `Document`, quill-free structure reads that spare the caller the whole-`cards` / whole-`main` projection; `card(i)` throws out of range, the other two are total (no such `$id` / no such kind → `undefined`/`None`). `find_card`/`cardIndexById`/`card_index_by_id` resolve the durable `$id` handle (unique per document — [DOCUMENT_STORAGE.md](DOCUMENT_STORAGE.md) § Card-id identity); JS returns the `Card` object, Python the same dict shape its `main` / `cards` getters project |
 | Richtext revise (content lane) | `Card::revise_field(name, md)?` (schema-blind, borrow chain) | `doc.revise({card, field}, md)` (addr literal, JS) | **FFI** / **scope** — same model, flattened navigation, schema-blind, `Delta` in hand; WASM-only. Python's anchor-preserving write is the typed `writer.revise_field` |
 | Opaque store | `store_field` / `store_fields` / `store_fill` | `storeField` / `storeFields` / `storeFill` (JS, `Addr`) | **scope** — the quill-free verbatim write, WASM-only; Python has no opaque field store (the typed writer is the only field write). A field write without a loadable quill operates on the storage DTO directly |
