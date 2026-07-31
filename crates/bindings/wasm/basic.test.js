@@ -414,6 +414,69 @@ title: Mismatch Test
   })
 })
 
+describe('Quill.satisfies / Quill.satisfiesRef', () => {
+  const quill = () =>
+    Quill.fromTree(makeQuill({ name: 'test_quill', version: '2.1.0', plate: TEST_PLATE }))
+
+  // One case per selector arm: the table a resolver would otherwise re-derive.
+  const CASES = [
+    { ref: 'test_quill', want: true },
+    { ref: 'test_quill@latest', want: true },
+    { ref: 'test_quill@2', want: true },
+    { ref: 'test_quill@3', want: false },
+    { ref: 'test_quill@2.1', want: true },
+    { ref: 'test_quill@2.2', want: false },
+    { ref: 'test_quill@2.1.0', want: true },
+    { ref: 'test_quill@2.1.1', want: false },
+    { ref: 'other_quill', want: false },
+    { ref: 'other_quill@2.1.0', want: false },
+  ]
+
+  it.each(CASES)('$ref against 2.1.0 → $want', ({ ref, want }) => {
+    expect(quill().satisfies(ref)).toBe(want)
+    expect(Quill.satisfiesRef(ref, 'test_quill', '2.1.0')).toBe(want)
+  })
+
+  // The predicate's whole promise is about `open`, so the two are checked
+  // against each other rather than against a second copy of the table. Only
+  // the mismatch codes count: a blank document can fail `open` for its own
+  // reasons, and those are not what `satisfies` answers.
+  it.each(CASES)('agrees with what open raises for $ref', ({ ref, want }) => {
+    const engine = new Quillmark()
+    let mismatch = null
+    try {
+      engine.open(quill(), new Document(ref))
+    } catch (err) {
+      const code = err.diagnostics?.[0]?.code ?? ''
+      if (/^quill::(name|version)_mismatch$/.test(code)) mismatch = code
+    }
+    expect(mismatch === null).toBe(want)
+  })
+
+  it('throws the parser’s coded diagnostic on a malformed reference', () => {
+    for (const call of [
+      () => quill().satisfies('Not A Ref'),
+      () => Quill.satisfiesRef('Not A Ref', 'test_quill', '2.1.0'),
+    ]) {
+      let thrown
+      try {
+        call()
+      } catch (err) {
+        thrown = err
+      }
+      expect(thrown, 'expected a throw, got none').toBeDefined()
+      expect(thrown.diagnostics[0].code).toBe('parse::invalid_quill_reference')
+      expect(thrown.diagnostics[0].hint.length).toBeGreaterThan(0)
+    }
+  })
+
+  // A version the engine cannot read skips the selector rather than failing it,
+  // so the predicate keeps agreeing with the engine on a malformed quill.
+  it('treats an unreadable version as satisfying any selector', () => {
+    expect(Quill.satisfiesRef('test_quill@2.1.0', 'test_quill', 'not-a-version')).toBe(true)
+  })
+})
+
 // ---------------------------------------------------------------------------
 // Document editor surface
 // ---------------------------------------------------------------------------

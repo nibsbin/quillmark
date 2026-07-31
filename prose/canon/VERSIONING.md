@@ -39,6 +39,20 @@ No registry consumes the selector — there is no collection of installed versio
 
 A quill mismatch is distinct from a validation failure (a malformed document): here the document is well-formed but paired with the wrong Quill, so the remedy is to render with the referenced Quill or amend `$quill`. A bare name or `@latest` matches any version, so correctly-targeted documents never trip either check.
 
+### The predicate, without the exception
+
+Both checks are one function, `QuillReference::check`, which names the failing half as a `RefMismatch`; `Quill::check_quill_reference` is its wording. The higher layer that *does* resolve reads the same function, so a resolver and the engine cannot disagree about a pairing:
+
+| Surface | Loaded Quill | Bare identity |
+| --- | --- | --- |
+| Rust | `reference.satisfied_by(name, version)` | same |
+| WASM | `quill.satisfies(ref)` | `Quill.satisfiesRef(ref, name, version)` |
+| Python | `quill.satisfies(ref)` | `Quill.satisfies_ref(ref, name, version)` |
+
+A `true` is the guarantee that `open` will not raise either mismatch code for that pairing, so a resolver tests a candidate rather than running exceptions as control flow. The bare-identity form takes [`metadata`](QUILL.md)'s two identity keys, for a cache index of quills not yet paid to load. A malformed *reference* throws `parse::invalid_quill_reference`; a `false` means well-formed and unsatisfied, so the two stay distinguishable. A quill `version` that does not parse satisfies any selector, the engine's own leniency toward a version load already validated.
+
+This is the whole of what the engine offers resolution. Fetch policy, auth, and the cache stay above it: they need I/O, and the engine does none.
+
 ## Error Handling
 
 Three distinct failure paths, and the parser owns one of them outright:

@@ -144,12 +144,11 @@ impl QuillConfig {
     /// — a different format, or an incompatible version of one — which yields
     /// undefined output, so it errors rather than warns.
     ///
-    /// The wording of [`QuillReference::check`], which decides. Name is the
-    /// prerequisite (a selector belongs to a *named* quill): a name mismatch
-    /// (`quill::name_mismatch`) short-circuits and the version is left
-    /// unevaluated; otherwise the selector is checked
-    /// (`quill::version_mismatch`). A consumer that wants the same verdict
-    /// without the exception reads it through the bindings' `quill.satisfies`.
+    /// The wording of [`QuillReference::check`], which decides the order: a
+    /// name mismatch (`quill::name_mismatch`) short-circuits, otherwise the
+    /// selector is checked (`quill::version_mismatch`). A consumer wanting the
+    /// same verdict without the exception reads it through the bindings'
+    /// `quill.satisfies`.
     pub fn check_quill_reference(&self, doc: &Document) -> Result<(), RenderError> {
         let doc_ref = doc.quill_reference();
 

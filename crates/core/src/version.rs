@@ -200,8 +200,8 @@ pub struct QuillReference {
 /// Which half of a [`QuillReference`] a quill's identity failed.
 ///
 /// The two arms are the two `quill::*_mismatch` codes, minus the diagnostic:
-/// [`QuillReference::check`] returns this so an enforcement site can word a
-/// coded error while a consumer-side resolver reads a plain `false`.
+/// [`QuillReference::check`] returns this so an enforcement site words a coded
+/// error while a consumer-side resolver reads a plain `false`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum RefMismatch {
@@ -220,17 +220,17 @@ impl QuillReference {
     /// Whether a quill named `name` at `version` satisfies this reference.
     ///
     /// The predicate the engine enforces with, exposed for the layer that does
-    /// *resolution* — picking a quill out of a set it already holds — which
-    /// this crate deliberately does not do (see `VERSIONING.md` §"Document
-    /// Syntax"). A `true` here is the guarantee that `Quillmark::open` will not
-    /// raise a `quill::*_mismatch` for this pairing.
+    /// *resolution* (picking a quill out of a set it already holds), which this
+    /// crate does not do: see `VERSIONING.md` §"Document Syntax". A `true` is
+    /// the guarantee that `Quillmark::open` will not raise a
+    /// `quill::*_mismatch` for this pairing.
     pub fn satisfied_by(&self, name: &str, version: &str) -> bool {
         self.check(name, version).is_ok()
     }
 
     /// [`satisfied_by`](Self::satisfied_by) with the failing half named.
     ///
-    /// Name is the prerequisite — a selector belongs to a *named* quill — so a
+    /// Name is the prerequisite (a selector belongs to a *named* quill), so a
     /// name mismatch short-circuits and the version is left unevaluated.
     /// `version` is the quill's declared version string, parsed leniently: one
     /// that doesn't parse skips the selector check rather than failing it,
@@ -492,7 +492,7 @@ mod tests {
         assert!(hint.contains("@MAJOR.MINOR.PATCH"), "got: {hint}");
     }
 
-    /// One case per selector arm, satisfied and not — the table a consumer
+    /// One case per selector arm, satisfied and not: the table a consumer
     /// would otherwise re-derive in JS or Python.
     #[test]
     fn satisfied_by_covers_every_selector_arm() {
@@ -534,8 +534,8 @@ mod tests {
         assert_eq!(reference.check("letter", "9.9.9"), Err(RefMismatch::Name));
     }
 
-    /// A version the engine could not parse skips the selector rather than
-    /// failing it — the check agrees with `check_quill_reference`, which
+    /// A version the engine cannot parse skips the selector rather than
+    /// failing it, so the check agrees with `check_quill_reference`, which
     /// accepts that pairing rather than rejecting one load already blessed.
     #[test]
     fn check_skips_an_unparseable_version() {

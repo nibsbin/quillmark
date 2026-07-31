@@ -665,14 +665,14 @@ impl Quill {
         serialize_or_throw(&val, "metadata")
     }
 
-    /// Whether this quill satisfies a `$quill` reference — `true` guarantees
+    /// Whether this quill satisfies a `$quill` reference: a `true` guarantees
     /// [`Quillmark.open`](Quillmark::open) will not raise a `quill::*_mismatch`
     /// for this pairing.
     ///
     /// The engine's own predicate, so a resolver holding a document and a cache
     /// of quills tests a candidate instead of running exceptions as control
     /// flow: `quill.satisfies(doc.quillRef)`. Resolution stays a consumer
-    /// concern — this answers only the comparison it needs.
+    /// concern; this answers only the comparison it needs.
     ///
     /// Throws on a reference that is not well-formed; a `false` means
     /// well-formed and unsatisfied. `doc.quillRef` is always well-formed (the
@@ -684,8 +684,8 @@ impl Quill {
     }
 
     /// [`satisfies`](Self::satisfies) against a bare identity rather than a
-    /// loaded quill — the same verdict for a resolver filtering a cache index
-    /// of `{name, version}` entries it has not paid to load.
+    /// loaded quill: the same verdict for a resolver filtering a cache index of
+    /// `{name, version}` entries it has not paid to load.
     ///
     /// `name` and `version` are [`metadata`](Self::metadata)'s two identity
     /// keys. A `version` that does not parse satisfies any selector, matching
@@ -2281,9 +2281,9 @@ fn serialize_or_throw<T: serde::Serialize + ?Sized>(
 }
 
 /// Parse a `$quill` reference, throwing the same shape document parsing emits
-/// — `parse::invalid_quill_reference` carrying core's grammar hint — so no
-/// surface that takes a reference string words the failure its own way.
-/// `ctx` names the calling verb, since the throw is far from the parser.
+/// (`parse::invalid_quill_reference`, carrying core's grammar hint), so no
+/// surface taking a reference string words the failure its own way. `ctx` names
+/// the calling verb, since the throw is far from the parser.
 fn parse_quill_ref(
     quill_ref: &str,
     ctx: &str,

@@ -149,14 +149,14 @@ impl PyQuill {
         format!("{}@{}", source.name(), version)
     }
 
-    /// Whether this quill satisfies a `$quill` reference — `True` guarantees
-    /// `Quillmark.render`/`process` will not raise a `quill::*_mismatch` for
-    /// this pairing. Mirrors WASM `quill.satisfies`.
+    /// Whether this quill satisfies a `$quill` reference: a `True` guarantees
+    /// `Quillmark.render` will not raise a `quill::*_mismatch` for this
+    /// pairing. Mirrors WASM `quill.satisfies`.
     ///
     /// The engine's own predicate, so a resolver holding a document and a cache
     /// of quills tests a candidate instead of running exceptions as control
     /// flow: `quill.satisfies(doc.quill_ref)`. Resolution stays a consumer
-    /// concern — this answers only the comparison it needs.
+    /// concern; this answers only the comparison it needs.
     ///
     /// Raises `ValueError` on a reference that is not well-formed; a `False`
     /// means well-formed and unsatisfied. `doc.quill_ref` is always
@@ -166,8 +166,8 @@ impl PyQuill {
         Ok(parse_quill_ref(quill_ref)?.satisfied_by(&config.name, &config.version))
     }
 
-    /// `satisfies` against a bare identity rather than a loaded quill — the
-    /// same verdict for a resolver filtering a cache index of `(name, version)`
+    /// `satisfies` against a bare identity rather than a loaded quill: the same
+    /// verdict for a resolver filtering a cache index of `(name, version)`
     /// entries it has not paid to load. Mirrors WASM `Quill.satisfiesRef`.
     ///
     /// `name` and `version` are `metadata`'s two identity keys. A `version`

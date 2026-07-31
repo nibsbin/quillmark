@@ -128,3 +128,5 @@ through the `Quillmark` engine (`engine.render` / `engine.open`).
 `FileTreeNode` exposes the file and directory reads over the bundle. Paths use
 forward slashes, the root is `""`, absolute paths and `..` traversal are
 rejected, and every file reads back as `&[u8]`.
+
+The bindings' `Quill` handle also answers whether it satisfies a document's `$quill` reference: `quill.satisfies(ref)`, with `Quill.satisfiesRef` for a bare `{name, version}` identity. Core spells it on the reference (`QuillReference::satisfied_by`), since that is what the selector belongs to. See [VERSIONING.md](VERSIONING.md) § "The predicate, without the exception".
