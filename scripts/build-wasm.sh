@@ -18,9 +18,11 @@ set -o pipefail
 #                           private backend binary, NOT a public export)
 #
 # These generated artifacts plus the hand-written canonical layer ship as one
-# npm package. Public surface: the root `.` export (`@quillmark/wasm`) is the
-# canonical `Quill`/`Document`/`Engine` API (see pkg/runtime/), and `./core` is
-# the render-free escape hatch. The backends are reached only internally, by the
+# npm package with exactly ONE public entry: the root `.` export
+# (`@quillmark/wasm`), the canonical `Quill`/`Document`/`Engine` API (see
+# pkg/runtime/). `core` and the backends ship as files but are absent from the
+# package.json `exports` map, so no consumer can import them by subpath — core
+# is reached through the root's re-export, the backends only internally, by the
 # canonical layer's lazy `import("../backends/<id>/wasm.js")`.
 #
 # Profile selection. Default is the size-optimized release build used for

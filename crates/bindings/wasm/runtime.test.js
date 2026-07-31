@@ -10,7 +10,7 @@
  *
  * Aliased to pkg/runtime/runtime.js in vitest.config.js.
  */
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, vi } from 'vitest'
 import {
   Quill,
   Document,
@@ -881,5 +881,131 @@ main:
     const quill = makeRuntimeQuill()
     const badDoc = { backendId: 'typst', toJson: () => '{"not":"a valid storage DTO"}' }
     await expect(engine.render(quill, badDoc)).rejects.toThrow()
+  })
+})
+
+// A duplicate install is two copies of this package: two core builds, two
+// linear memories, two distinct `Document` classes. `Engine` already tolerates
+// that crossing (it is duck-typed and clones as data); the three core methods
+// taking another core handle BY REFERENCE did not, because wasm-bindgen's
+// generated `_assertClass` rejects the foreign class before any of our code
+// runs. These pin the one policy the runtime layer now applies everywhere: a
+// foreign handle crosses as data. See runtime.js § "Foreign core handles".
+//
+// A foreign `Document` is modelled two ways: a duck-typed stand-in (anything
+// carrying `toJson`, the contract the patches actually check) and — closer to
+// the real thing — a SECOND core instance loaded under a cache-busting query,
+// which is genuinely a different class over a different linear memory.
+describe('@quillmark/wasm/runtime — foreign core handles (duplicate install)', () => {
+  const foreignOf = (doc) => ({ toJson: () => doc.toJson() })
+
+  it('accepts a foreign Document on equals, and warns exactly once', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const doc = Document.fromMarkdown(TEST_MARKDOWN)
+      const same = Document.fromMarkdown(TEST_MARKDOWN)
+      const other = Document.fromMarkdown(TEST_MARKDOWN.replace('Test Document', 'Other'))
+
+      expect(doc.equals(foreignOf(same))).toBe(true)
+      expect(doc.equals(foreignOf(other))).toBe(false)
+      // Local handles keep the generated fast path and never warn.
+      expect(doc.equals(same)).toBe(true)
+
+      // Warn-once: a broken install would otherwise warn per keystroke. This
+      // is the first foreign handle in the file, so the count is exact.
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(warn.mock.calls[0][0]).toMatch(/npm ls @quillmark\/wasm/)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('accepts a foreign Document on validate and resolve, matching the local answer', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const quill = makeRuntimeQuill()
+      const doc = Document.fromMarkdown(TEST_MARKDOWN)
+      expect(quill.validate(foreignOf(doc))).toEqual(quill.validate(doc))
+      expect(quill.resolve(foreignOf(doc))).toEqual(quill.resolve(doc))
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('rejects a non-document argument with a QuillmarkError naming the method', () => {
+    const quill = makeRuntimeQuill()
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    for (const [call, method] of [
+      [() => doc.equals(null), 'Document.equals'],
+      [() => quill.validate({}), 'Quill.validate'],
+      [() => quill.resolve(42), 'Quill.resolve'],
+    ]) {
+      let caught
+      try {
+        call()
+      } catch (e) {
+        caught = e
+      }
+      // The failure stays inside this package's error contract — the thing the
+      // raw `_assertClass` throw escaped.
+      expect(isQuillmarkError(caught)).toBe(true)
+      expect(caught.message).toContain(method)
+      expect(caught.diagnostics[0].code).toBe('runtime::not_a_document')
+    }
+  })
+
+  it('reports both schema versions when the foreign DTO is unreadable', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const quill = makeRuntimeQuill()
+      const fromTheFuture = { toJson: () => '{"schema":"v99.0.0"}' }
+      let caught
+      try {
+        quill.validate(fromTheFuture)
+      } catch (e) {
+        caught = e
+      }
+      expect(isQuillmarkError(caught)).toBe(true)
+      expect(caught.diagnostics[0].code).toBe('runtime::foreign_document')
+      expect(caught.message).toContain('v99.0.0')
+      expect(caught.message).toContain(Document.currentSchemaVersion())
+      expect(caught.diagnostics[0].hint).toMatch(/npm ls @quillmark\/wasm/)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('handles a Document from a genuinely separate core instance', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      // A query suffix makes vite resolve a distinct module id, so this is a
+      // second core build with its own WASM memory — the real duplicate-install
+      // shape, not a stand-in.
+      const copyB = await import('../../../pkg/core/wasm.js?duplicate-install')
+      expect(copyB.Document).not.toBe(Document)
+
+      const quill = makeRuntimeQuill()
+      const docB = copyB.Document.fromMarkdown(TEST_MARKDOWN)
+      const docA = Document.fromMarkdown(TEST_MARKDOWN)
+
+      expect(docA.equals(docB)).toBe(true)
+      expect(quill.validate(docB)).toEqual(quill.validate(docA))
+      expect(quill.resolve(docB)).toEqual(quill.resolve(docA))
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  // Re-evaluating the runtime module against an already-patched (because
+  // cached) core build must not wrap the wrappers — the Vite HMR / shared
+  // Vitest worker case the `Symbol.for` marker exists for.
+  it('patches once across a re-evaluation of the runtime module', async () => {
+    const before = Document.prototype.equals
+    expect(before[Symbol.for('@quillmark/wasm:foreign-tolerant')]).toBe(true)
+
+    const reevaluated = await import('@quillmark-wasm/runtime?hmr')
+    expect(reevaluated.Document).toBe(Document)
+    expect(Document.prototype.equals).toBe(before)
+    expect(Quill.prototype.validate[Symbol.for('@quillmark/wasm:foreign-tolerant')]).toBe(true)
   })
 })
