@@ -127,7 +127,8 @@ fn merge_mark(m: &mut Map<String, Value>, start: Usv, end: Usv, kind: &MarkKind)
 }
 
 /// Decode a [`MarkOp`] from its wire object. Dispatches on `op`; `add`/`remove`
-/// read the mark vocabulary through [`mark_from_authored_value`].
+/// read the mark vocabulary on the authored lane, which refuses `attrs` beside a
+/// built-in `type` rather than resolving to the built-in and dropping them.
 pub fn mark_op_from_value(v: &Value) -> Result<MarkOp, ParseError> {
     let o = v.as_object().ok_or(ParseError::Shape("mark op"))?;
     match o.get("op").and_then(Value::as_str) {
