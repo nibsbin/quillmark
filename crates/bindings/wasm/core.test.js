@@ -11,6 +11,7 @@
 import { describe, it, expect } from 'vitest'
 import * as core from '@quillmark-wasm/core'
 import { Quill, Document } from '@quillmark-wasm/core'
+import { expectEditCode } from './test-helpers.js'
 
 const enc = new TextEncoder()
 
@@ -231,5 +232,108 @@ title: Draft
     doc.storeSeedNamespace('note', { author: 'Seeded' })
     expect(doc.seedOverlay('note')).toEqual({ author: 'Seeded' })
     expect(doc.seedOverlay('absent')).toBeUndefined()
+  })
+
+  it('getContent reads one content shape whichever entry point wrote it', () => {
+    // The storage shape says how a value was written: a parsed document holds
+    // the markdown string it parsed, a typed write holds content. `getStored`
+    // is transport and reports each as it is; `getContent` decodes both.
+    const doc = Document.fromMarkdown(`~~~
+$quill: core_test
+$kind: main
+subject: Hello *world*
+~~~
+
+# Body`)
+
+    expect(doc.getStored('subject')).toBe('Hello *world*')
+    const parsed = doc.getContent('subject')
+    expect(parsed.text).toBe('Hello world')
+    expect(parsed.marks.length).toBeGreaterThan(0)
+
+    // Install the same content back: now the stored shape is an object, and
+    // getContent is unmoved — the entry-point independence is the point.
+    doc.install('subject', parsed)
+    expect(typeof doc.getStored('subject')).toBe('object')
+    expect(doc.getContent('subject')).toEqual(parsed)
+
+    // An absent field is undefined, as on getStored; a body address reads the
+    // body, which is content already.
+    expect(doc.getContent('missing')).toBeUndefined()
+    expect(doc.getContent({}).text).toContain('Body')
+
+    // A scalar an opaque storeField wrote is neither content nor importable
+    // markdown, so the decode surfaces the mismatch rather than blanking.
+    doc.storeField('qty', 3)
+    expectEditCode(() => doc.getContent('qty'), 'edit::field_richtext_decode')
+
+    // Out-of-range card is a boundary error, as everywhere else.
+    expect(() => doc.getContent({ card: 9, field: 'subject' })).toThrow()
+  })
+
+  it('cardKinds is the card-tree shape without the card bodies', () => {
+    const doc = Document.fromMarkdown(`~~~
+$quill: core_test
+$kind: main
+title: Draft
+~~~
+
+# Body`)
+    expect(doc.cardKinds).toEqual([])
+
+    doc.insertCard(Document.makeCard('note', { author: 'Alice' }, 'A note.'))
+    doc.insertCard(Document.makeCard('endorsement', {}, 'An endorsement.'))
+
+    // Positionally total against `cards`, which costs every payload and body to
+    // answer the same question.
+    expect(doc.cardKinds).toEqual(['note', 'endorsement'])
+    expect(doc.cardKinds).toEqual(doc.cards.map((c) => c.kind))
+
+    doc.moveCard(1, 0)
+    expect(doc.cardKinds).toEqual(['endorsement', 'note'])
+  })
+
+  it('revision counts edits against a handle, and no reads', () => {
+    const doc = Document.fromMarkdown(`~~~
+$quill: core_test
+$kind: main
+title: Draft
+~~~
+
+# Body`)
+    expect(doc.revision).toBe(0)
+
+    doc.storeField('title', 'Final')
+    const afterWrite = doc.revision
+    expect(afterWrite).toBeGreaterThan(0)
+
+    // Reads never bump — the whole point of the signal.
+    doc.getStored('title')
+    doc.getContent({})
+    void doc.cards
+    void doc.cardKinds
+    void doc.cardCount
+    doc.toMarkdown()
+    expect(doc.revision).toBe(afterWrite)
+
+    // Every mutator family bumps: field, card, and the loadJson replace.
+    doc.insertCard(Document.makeCard('note', {}, 'A note.'))
+    expect(doc.revision).toBeGreaterThan(afterWrite)
+    const afterCard = doc.revision
+
+    doc.loadJson(doc.toJson())
+    expect(doc.revision).toBeGreaterThan(afterCard)
+
+    // It counts a handle's history, not a document's identity: a clone of an
+    // equal document restarts at 0.
+    const copy = doc.clone()
+    expect(copy.equals(doc)).toBe(true)
+    expect(copy.revision).toBe(0)
+
+    // A mutator that fails its own validation still counts — the count is an
+    // upper bound on real changes, never a lower one.
+    const before = doc.revision
+    expect(() => doc.moveCard(9, 0)).toThrow()
+    expect(doc.revision).toBeGreaterThanOrEqual(before)
   })
 })
