@@ -96,7 +96,7 @@ invalid quill reference.
 ### `Document.fromMarkdown(markdown)`
 Parse markdown to a parsed document. Throws a JS `Error` (with `.diagnostics`
 attached, see [Errors](#errors)) on any parse failure, including a missing
-root `$quill` metadata line, malformed YAML, and inputs over the 10 MB
+root `$quill` metadata line, malformed YAML, and inputs over the 10 MiB
 `parse::input_too_large` limit.
 
 ### `doc.toMarkdown()`
@@ -462,7 +462,7 @@ Read `err.diagnostics[0]` for the primary diagnostic; iterate the array for
 compilation failures. The same shape applies to every throw site:
 
 - `Document.fromMarkdown` — parse errors (missing root `$quill` metadata, YAML
-  errors, `parse::input_too_large` for inputs > 10 MB).
+  errors, `parse::input_too_large` for inputs > 10 MiB).
 - `Document` mutators (`storeField`, the writer's `set`, etc.) — mutator
   failures carry a namespaced `edit::*` `code` on `diagnostics[0]`
   (`edit::invalid_field_name`, `edit::unknown_field`, `edit::index_out_of_range`,
