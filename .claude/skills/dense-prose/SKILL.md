@@ -64,7 +64,7 @@ Deleting whole sentences is half the work; the other half is more fact per word.
 
 ## Voice
 
-Present tense. Lead with the invariant or contract, then the mechanism. Reuse the codebase's terms-of-art (*card-yaml block, plate, quill, backend, seam*). No em-dashes: fold with a colon, semicolon, comma, or parentheses. Match the density of the exemplars: the comments in `crates/core/src/document/` and the "Decisions and rationale" section of `prose/canon/PREVIEW.md`.
+Present tense. Lead with the invariant or contract, then the mechanism. Reuse the codebase's terms-of-art (*card-yaml block, plate, quill, backend, seam*). The em-dash breaks to an appositive naming or explaining what precedes it, one break per sentence; a matched pair encloses a parenthetical. Match the density of the exemplars: the comments in `crates/core/src/document/` and the "Decisions and rationale" section of `prose/canon/PREVIEW.md`.
 
 A paragraph is one line: never hard-wrap prose at a column. A line break in markdown means a new paragraph, list item, or table row; nothing else. Comments wrap to the code's line budget. `prose/README.md` sets the numeric bound on a prose line: 700 characters, gated by `scripts/check-canon.mjs` over `prose/canon/` and `docs/`, with 300 as the target you write to. Split a long line when you are editing near it; below the gate, nothing mechanical reminds you.
 

@@ -122,7 +122,7 @@ function quillmarkError(code, message, hint) {
 // ── Foreign core handles: the duplicate-install lane ────────────────────────
 // A duplicate install (two copies of this package in one `node_modules` tree)
 // is two `core` builds: two linear memories and two distinct `Quill`/`Document`
-// classes. `Engine` already tolerates that crossing, being duck-typed on
+// classes. `Engine` already tolerates that crossing — it is duck-typed on
 // `.toTree()`/`.toJson()`/`.backendId` and clones into backend memory as data,
 // so a `Quill` from copy A renders on an `Engine` from copy B.
 //
@@ -135,8 +135,8 @@ function quillmarkError(code, message, hint) {
 // copy, as a bare `Error`: `isQuillmarkError` returns false and the failure
 // leaves this package's error contract.
 //
-// The policy follows the line the codebase already draws, every existing
-// crossing (`render`, `open`, `apply`) being read-only: READ-ONLY crossings are
+// The policy follows the line the codebase already draws — every existing
+// crossing (`render`, `open`, `apply`) is read-only: READ-ONLY crossings are
 // transparent, mutating ones are not.
 //
 //   - Reads (`equals`, `validate`, `resolve`, the reader verbs) admit anything
@@ -257,8 +257,8 @@ function requireLocalDoc(doc, method) {
 
 // Marker for the patches below. `Symbol.for`, not a module-local `Symbol()`:
 // re-evaluating THIS module (Vite HMR, a Vitest worker sharing a module graph)
-// against a core build that is cached, and so already patched, must see the
-// existing marker, or each pass wraps the previous wrapper.
+// against an already-patched — because cached — core build must see the existing
+// marker, or each pass wraps the previous wrapper.
 const FOREIGN_TOLERANT = Symbol.for('@quillmark/wasm:foreign-tolerant');
 
 /**
@@ -292,7 +292,7 @@ patchForeignTolerant(Document.prototype, 'equals', (original) =>
 );
 
 // `validate` and `resolve` read the document's model, so they need a real local
-// handle: adopt, use, free. Only the argument can be foreign, the receiver being
+// handle: adopt, use, free. Only the argument can be foreign — the receiver is
 // whichever copy the caller reached for.
 for (const name of /** @type {const} */ (['validate', 'resolve'])) {
 	patchForeignTolerant(Quill.prototype, name, (original) =>
