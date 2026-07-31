@@ -13,7 +13,9 @@ create_exception!(_quillmark, QuillmarkError, PyException);
 
 pub fn convert_edit_error(err: EditError) -> PyErr {
     let diagnostic =
-        Diagnostic::new(Severity::Error, err.to_string()).with_code(err.code().to_string());
+        Diagnostic::new(Severity::Error, err.to_string())
+            .with_code(err.code().to_string())
+            .with_args(err.args());
     let message = diagnostic.message.clone();
     raise_with_diagnostics(vec![diagnostic], message)
 }
@@ -28,6 +30,7 @@ pub fn convert_edit_errors(errors: Vec<(String, EditError)>) -> PyErr {
         .map(|(name, err)| {
             Diagnostic::new(Severity::Error, err.to_string())
                 .with_code(err.code().to_string())
+                .with_args(err.args())
                 .with_path(name)
         })
         .collect();
