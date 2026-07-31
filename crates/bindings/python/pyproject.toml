@@ -33,7 +33,6 @@ Changelog = "https://github.com/borb-sh/quillmark/blob/main/CHANGELOG.md"
 dev = [
     "pytest>=8.0",
     "maturin>=1.7,<2.0",
-    "mypy>=1.18",  # `mypy.stubtest` is the .pyi drift guard; 1.18 for --ignore-disjoint-bases
 ]
 
 [tool.maturin]

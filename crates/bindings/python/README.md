@@ -230,11 +230,16 @@ release notes and version history.
 uv venv
 uv pip install -e ".[dev]"
 uv run pytest
-uv run python -m mypy.stubtest --ignore-disjoint-bases quillmark  # .pyi drift guard
 ```
 
-`python/quillmark/_quillmark.pyi` is hand-written and must track `src/`;
-stubtest diffs it against the built module, so a resignatured verb fails there.
+`python/quillmark/_quillmark.pyi` is hand-written and must track `src/`. No CI
+job gates it, so after changing the surface run the stub against the built
+module yourself:
+
+```bash
+uv pip install mypy
+uv run python -m mypy.stubtest --ignore-disjoint-bases quillmark
+```
 
 ## License
 

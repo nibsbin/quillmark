@@ -163,9 +163,11 @@ in the parity table above: `card=None` selectors fold the composable-card `$ext`
 
 **The surface is typed.** pyo3 docstrings are runtime-only, so the wheel ships a
 `py.typed` marker beside a hand-written `_quillmark.pyi` — without them every
-class resolves to `Any`. `mypy.stubtest` diffs that stub against the *built*
-module in CI, the Python twin of WASM's `runtime.d.ts` typecheck: a verb added,
-renamed, or resignatured in `src/` without the stub fails there.
+class resolves to `Any`. The stub is signatures only, the prose staying in
+`src/`, and nothing gates the two together: unlike WASM's `runtime.d.ts`, which
+CI typechecks against the generated backend declarations, a Python verb can be
+added or resignatured without the stub following. `python -m mypy.stubtest
+--ignore-disjoint-bases quillmark` is the check to run by hand when it changes.
 
 ## WebAssembly — `bindings/quillmark-wasm`
 

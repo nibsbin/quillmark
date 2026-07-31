@@ -1,16 +1,13 @@
 """Type stubs for the compiled `quillmark._quillmark` extension.
 
-The Tier-1 surface `prose/canon/BINDINGS.md` freezes, spelled for type checkers:
-pyo3 docstrings are runtime-only, so without these the whole API resolves to
-`Any`. Each declaration mirrors its `#[pymethods]` twin in `src/types.rs` /
-`src/enums.rs`; the docstrings there are the long form, these the one-line
-summaries an IDE shows. The drift guard is
-`python -m mypy.stubtest --ignore-disjoint-bases quillmark`, run in CI against
-the built module — a signature that diverges from `src/` fails there.
+Signatures only — pyo3 docstrings are runtime-only, so without this file the
+whole surface resolves to `Any`. Each declaration mirrors its `#[pymethods]`
+twin in `src/types.rs` / `src/enums.rs`, which carries the prose; the two are
+kept in step by hand.
 
-A `Card` crosses as a plain dict — `{kind, quill, id, payload_items, ext, seed,
-body}` — and a payload value as whatever JSON maps to, so both are `Any`-shaped
-rather than protocol-typed: their schemas are the quill's, not Python's.
+A `Card` crosses as a plain dict (`{kind, quill, id, payload_items, ext, seed,
+body}`) and a payload value as whatever JSON maps to, so both are `Any`-shaped:
+their schemas are the quill's, not Python's.
 """
 
 from pathlib import Path
@@ -35,14 +32,10 @@ __all__ = [
 
 @final
 class QuillmarkError(Exception):
-    """The one raised exception; always carries a non-empty `diagnostics` list."""
-
     diagnostics: list[Diagnostic]
 
 @final
 class Severity:
-    """Diagnostic level."""
-
     ERROR: Severity
     WARNING: Severity
 
@@ -54,8 +47,6 @@ class Severity:
 
 @final
 class OutputFormat:
-    """A format a backend can emit."""
-
     PDF: OutputFormat
     SVG: OutputFormat
     PNG: OutputFormat
@@ -68,8 +59,6 @@ class OutputFormat:
 
 @final
 class Location:
-    """A file position on a diagnostic."""
-
     @property
     def file(self) -> str: ...
     @property
@@ -79,8 +68,6 @@ class Location:
 
 @final
 class Diagnostic:
-    """One diagnostic. Route on `code`, not on message text."""
-
     @property
     def severity(self) -> Severity: ...
     @property
@@ -100,8 +87,6 @@ class Diagnostic:
 
 @final
 class Artifact:
-    """One rendered output — bytes plus the format that produced them."""
-
     @property
     def bytes(self) -> bytes: ...
     @property
@@ -112,8 +97,6 @@ class Artifact:
 
 @final
 class RenderResult:
-    """What one `Quillmark.render` produced."""
-
     @property
     def artifacts(self) -> list[Artifact]: ...
     @property
@@ -123,14 +106,10 @@ class RenderResult:
     @property
     def render_time_ms(self) -> float: ...
     @property
-    def regions(self) -> list[dict[str, Any]]:
-        """Field-geometry sidecar, populated only by `render(..., regions=True)`."""
+    def regions(self) -> list[dict[str, Any]]: ...
 
 @final
 class Document:
-    """Quill-free document data and structure — parse, the storage DTO, cards,
-    `$ext` / `$seed`. Field I/O lives on `Quill.writer(doc)` / `Quill.reader(doc)`."""
-
     def __new__(cls, quill_ref: str) -> Document: ...
     @staticmethod
     def from_markdown(markdown: str) -> Document: ...
@@ -151,9 +130,7 @@ class Document:
     @staticmethod
     def make_card(
         kind: str, fields: dict[str, Any] | None = None, body: str | None = None
-    ) -> dict[str, Any]:
-        """A fresh card dict from a kind and a flat field mapping."""
-
+    ) -> dict[str, Any]: ...
     def to_markdown(self) -> str: ...
     def to_json(self) -> str: ...
     @property
@@ -168,30 +145,16 @@ class Document:
     @property
     def card_count(self) -> int: ...
     @property
-    def warnings(self) -> list[Diagnostic]:
-        """Parse warnings — session state, excluded from `equals` and the DTO."""
-
+    def warnings(self) -> list[Diagnostic]: ...
     @property
-    def body(self) -> Any:
-        """Main body as canonical Content-JSON."""
-
+    def body(self) -> Any: ...
     @property
-    def main(self) -> dict[str, Any]:
-        """Main (entry) card dict."""
-
+    def main(self) -> dict[str, Any]: ...
     @property
-    def cards(self) -> list[dict[str, Any]]:
-        """Ordered composable card dicts."""
-
-    def card(self, index: int) -> dict[str, Any]:
-        """One composable card, same dict shape as `main`; out of range raises."""
-
-    def card_index_by_id(self, id: str) -> int | None:
-        """The index of the card carrying `$id`, or `None`."""
-
-    def seed_overlay(self, kind: str) -> Any:
-        """The main card's `$seed[kind]` overlay dict, or `None`."""
-
+    def cards(self) -> list[dict[str, Any]]: ...
+    def card(self, index: int) -> dict[str, Any]: ...
+    def card_index_by_id(self, id: str) -> int | None: ...
+    def seed_overlay(self, kind: str) -> Any: ...
     def remove_field(self, name: str, card: int | None = None) -> Any: ...
     def store_ext(self, value: Any, card: int | None = None) -> None: ...
     def remove_ext(self, card: int | None = None) -> Any: ...
@@ -208,9 +171,6 @@ class Document:
 
 @final
 class Quill:
-    """Portable, declarative config data. The backend it declares is resolved at
-    render time by a `Quillmark` engine, never here."""
-
     @staticmethod
     def from_path(path: str | Path) -> Quill: ...
     @property
@@ -223,15 +183,9 @@ class Quill:
     def schema(self) -> Any: ...
     @property
     def blueprint(self) -> str: ...
-    def writer(self, doc: Document) -> Writer:
-        """Bind this quill's schema to `doc` for typed writes."""
-
-    def reader(self, doc: Document) -> Reader:
-        """Bind this quill's schema to `doc` for interpreted reads."""
-
-    def validate(self, doc: Document) -> list[dict[str, Any]]:
-        """Canonical `validation::*` diagnostic dicts; empty when valid."""
-
+    def writer(self, doc: Document) -> Writer: ...
+    def reader(self, doc: Document) -> Reader: ...
+    def validate(self, doc: Document) -> list[dict[str, Any]]: ...
     def seed_document(self) -> Document: ...
     def seed_main(self) -> dict[str, Any]: ...
     def seed_card(
@@ -240,17 +194,12 @@ class Quill:
 
 @final
 class Writer:
-    """A `Document` bound to its `Quill` for typed writes, from `Quill.writer(doc)`.
-    Ephemeral by convention: bind, write, discard."""
-
     @property
     def document(self) -> Document: ...
     def set(self, name: str, value: Any) -> None: ...
     def set_all(self, fields: dict[str, Any]) -> None: ...
     def set_body(self, markdown: str) -> None: ...
-    def revise_field(self, name: str, markdown: str) -> None:
-        """Typed *and* anchor-preserving richtext write; the `Delta` is discarded."""
-
+    def revise_field(self, name: str, markdown: str) -> None: ...
     def add_card(
         self,
         kind: str,
@@ -259,13 +208,10 @@ class Writer:
         at: int | None = None,
     ) -> None: ...
     def remove_card(self, index: int) -> dict[str, Any] | None: ...
-    def card(self, index: int) -> CardWriter:
-        """A cursor on the composable card at `index`; the index is checked at the write."""
+    def card(self, index: int) -> CardWriter: ...
 
 @final
 class CardWriter:
-    """A composable card bound to its `Quill` for typed writes, from `Writer.card`."""
-
     @property
     def index(self) -> int: ...
     @property
@@ -277,24 +223,14 @@ class CardWriter:
 
 @final
 class Reader:
-    """A `Document` bound to its `Quill` for interpreted reads, from
-    `Quill.reader(doc)`. The field read surface — `Document` carries no quill-free
-    field read. Ephemeral by convention: bind, read, discard."""
-
     @property
     def document(self) -> Document: ...
-    def get(self, name: str) -> Any:
-        """A main-card field read by its declared type; `None` when absent."""
-
-    def get_body(self) -> str:
-        """The main body's markdown — quill-free, never raising."""
-
+    def get(self, name: str) -> Any: ...
+    def get_body(self) -> str: ...
     def card(self, index: int) -> CardReader: ...
 
 @final
 class CardReader:
-    """A composable card bound to its `Quill` for interpreted reads, from `Reader.card`."""
-
     @property
     def index(self) -> int: ...
     @property
@@ -304,8 +240,6 @@ class CardReader:
 
 @final
 class Quillmark:
-    """The render / capability dispatcher — the one object that resolves backends."""
-
     def __init__(self) -> None: ...
     def render(
         self,
@@ -317,8 +251,5 @@ class Quillmark:
         producer: str | None = None,
         regions: bool = False,
     ) -> RenderResult: ...
-    def supported_formats(self, quill: Quill) -> list[OutputFormat]:
-        """The formats `quill`'s backend can emit."""
-
-    def registered_backends(self) -> list[str]:
-        """The backend ids this build compiled in, in no guaranteed order."""
+    def supported_formats(self, quill: Quill) -> list[OutputFormat]: ...
+    def registered_backends(self) -> list[str]: ...
