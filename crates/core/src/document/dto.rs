@@ -2,8 +2,8 @@
 //!
 //! [`Document`] and its component types (`Card`, `Payload`, …) track the
 //! evolving Quillmark model; their in-memory layout is an internal detail
-//! and is deliberately *not* serialized directly. To persist a document —
-//! e.g. in a database — it is converted to a [`StoredDocument`]: a versioned
+//! and is deliberately *not* serialized directly. To persist a document
+//! (e.g. in a database) it is converted to a [`StoredDocument`]: a versioned
 //! envelope whose wire format is frozen per schema version.
 //!
 //! `Document` itself serializes through this envelope via
@@ -12,7 +12,7 @@
 //!
 //! ## Schema versions
 //!
-//! - **`quillmark/document@0.93.0`** — current. The V0_92_0 payload model with
+//! - **`quillmark/document@0.93.0`**: current. The V0_92_0 payload model with
 //!   the card `body` stored as the **canonical content** embedded
 //!   structurally (a nested object byte-identical to `to_canonical_json`), not a
 //!   markdown string. The envelope carries two byte disciplines: the outer
@@ -20,7 +20,7 @@
 //!   order (`preserve_order`), while every `body` subtree is the recursively
 //!   key-sorted canonical form. This is the format newly serialized documents
 //!   use.
-//! - **`quillmark/document@0.92.0`** — legacy, and the oldest wire format still
+//! - **`quillmark/document@0.92.0`**: legacy, and the oldest wire format still
 //!   read. The unified [`Payload`] item list (typed `$` entries, user fields,
 //!   and comments interleaved in source order) with a per-field `nested_fills`
 //!   list (so `!must_fill` markers nested inside a field value survive a storage
@@ -28,8 +28,8 @@
 //!   overlays), with the body as a markdown string. Kept read-only; the body
 //!   cold-imports to a content and it migrates forward to V0_93_0 on read.
 //!
-//! The canonical design — including the step-by-step procedure for adding
-//! a schema version — is `prose/canon/DOCUMENT_STORAGE.md`.
+//! The canonical design (including the step-by-step procedure for adding
+//! a schema version) is `prose/canon/DOCUMENT_STORAGE.md`.
 
 // Storage DTO types are named after the crate version that fixed their shape
 // (e.g. `DocumentV0_92_0`); the underscores are intentional.
@@ -59,7 +59,7 @@ pub const SCHEMA_V0_93_0: &str = "quillmark/document@0.93.0";
 ///
 /// Returns `None` if `json` is not valid JSON, is not an object, or has no
 /// `schema` field. The returned string is **not** validated against the
-/// set of supported schema versions — callers use this to distinguish
+/// set of supported schema versions: callers use this to distinguish
 /// "unknown future version" from "corrupt payload" when [`Document`]
 /// deserialization fails.
 pub fn peek_schema_version(json: &str) -> Option<String> {
@@ -79,11 +79,11 @@ pub fn peek_schema_version(json: &str) -> Option<String> {
 #[serde(tag = "schema")]
 #[non_exhaustive]
 pub enum StoredDocument {
-    /// Current (V0_93_0) document model — the V0_92_0 payload with the card
+    /// Current (V0_93_0) document model: the V0_92_0 payload with the card
     /// `body` embedded as the canonical content (a nested object).
     #[serde(rename = "quillmark/document@0.93.0")]
     V0_93_0(DocumentV0_93_0),
-    /// Legacy (V0_92_0) document model — unified payload items with per-field
+    /// Legacy (V0_92_0) document model: unified payload items with per-field
     /// nested fill paths and `$seed`, body as a markdown string. Read-only;
     /// migrated forward to V0_93_0 on reconstruction.
     #[serde(rename = "quillmark/document@0.92.0")]
@@ -94,8 +94,8 @@ pub enum StoredDocument {
 ///
 /// The taxonomy is intentionally minimal: only [`Self::InvalidQuillReference`]
 /// is typed, because that is the one error a non-malicious caller hits at
-/// the document/quill boundary. Every other defect — wrong-role card,
-/// invalid kind, duplicate key, too many fields — can only arise from a
+/// the document/quill boundary. Every other defect (wrong-role card,
+/// invalid kind, duplicate key, too many fields) can only arise from a
 /// hand-crafted storage DTO (the markdown parser already rejects them)
 /// and is reported through [`Self::Malformed`] with a descriptive message.
 #[derive(Debug, Clone, PartialEq)]
@@ -146,12 +146,12 @@ pub struct CardV0_93_0 {
     pub body: CanonicalContent,
 }
 
-/// The V0_93_0 payload shape — identical to V0_92_0. Aliased rather than copied
+/// The V0_93_0 payload shape: identical to V0_92_0. Aliased rather than copied
 /// because payload is outside this freeze; a future payload change forks it.
 pub type PayloadV0_93_0 = PayloadV0_92_0;
 
 /// A card body embedded as the **canonical content**. Its serde *is* the
-/// frozen canonical serializer (`quillmark_content::serial`), delegated to — not
+/// frozen canonical serializer (`quillmark_content::serial`), delegated to, not
 /// a hand-mirrored DTO tree that could drift from the frozen wire format:
 ///
 /// - `Serialize` emits the recursively key-sorted structure byte-identical to
@@ -193,7 +193,7 @@ impl<'de> Deserialize<'de> for CanonicalContent {
 //
 // Dual role: `DocumentV0_92_0` / `CardV0_92_0` are read + migrate-forward only
 // (a 0.92 blob migrates to V0_93_0 on read), while the payload types
-// (`PayloadV0_92_0`, `PayloadItemV0_92_0`, …) are also the *current* write path —
+// (`PayloadV0_92_0`, `PayloadItemV0_92_0`, …) are also the *current* write path,
 // `PayloadV0_93_0` aliases them and `From<&Document>` builds them.
 
 /// Frozen `0.92.0` representation of a [`Document`].
@@ -227,23 +227,23 @@ pub struct PayloadV0_92_0 {
 ///
 /// **Deliberately exhaustive**, like every `V0_92_0` type: a shipped schema
 /// version never changes, so there is no variant to leave room for. A new item
-/// kind is a new schema version with its own type tree — which is what
+/// kind is a new schema version with its own type tree: which is what
 /// [`StoredDocument`] being `#[non_exhaustive]` makes room for.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum PayloadItemV0_92_0 {
-    /// `$quill` system metadata — the quill reference string.
+    /// `$quill` system metadata: the quill reference string.
     Quill { value: String },
     /// `$kind` system metadata.
     Kind { value: String },
     /// `$id` system metadata.
     Id { value: String },
-    /// `$ext` system metadata — an opaque mapping carrying out-of-band
+    /// `$ext` system metadata: an opaque mapping carrying out-of-band
     /// extension data. Never emitted into the plate JSON.
     Ext {
         value: serde_json::Map<String, serde_json::Value>,
     },
-    /// `$seed` system metadata — a mapping keyed by card-kind carrying the
+    /// `$seed` system metadata: a mapping keyed by card-kind carrying the
     /// per-kind seed overlays. Never emitted into the plate JSON.
     Seed {
         value: serde_json::Map<String, serde_json::Value>,
@@ -349,7 +349,7 @@ impl From<&PayloadItem> for PayloadItemV0_92_0 {
             },
             // The storage DTO keeps `$ext` / `$seed` as explicit, self-describing
             // variants; the live model's unified `Meta` is split back out by key.
-            // Neither wire variant carries a `nested_comments` field — their
+            // Neither wire variant carries a `nested_comments` field: their
             // comments live in the payload-level sidecar after
             // `flat_nested_comments` re-prefixes them with `$ext` / `$seed`.
             PayloadItem::Meta {
@@ -367,7 +367,7 @@ impl From<&PayloadItem> for PayloadItemV0_92_0 {
                 value: value.clone(),
             },
             // The JSON `value` projection is fill-free; nested `!must_fill`
-            // markers ride alongside as `nested_fills` (root path omitted —
+            // markers ride alongside as `nested_fills` (root path omitted:
             // a top-level marker is the `fill` flag).
             PayloadItem::Field {
                 key, value, fill, ..
@@ -445,7 +445,7 @@ impl TryFrom<DocumentV0_93_0> for Document {
             .collect::<Result<Vec<_>, _>>()?;
         // `$id` is unique per document and never empty; the writer cannot
         // produce a violation (parse repairs, mutators reject), so a stored
-        // blob carrying one is malformed, not a repair candidate — storage is
+        // blob carrying one is malformed, not a repair candidate: storage is
         // the strict machine boundary where parse is the lenient one
         // (`DOCUMENT_STORAGE.md` §Card-id identity).
         let mut seen_ids: std::collections::HashSet<&str> = std::collections::HashSet::new();
@@ -502,7 +502,7 @@ impl TryFrom<CardV0_93_0> for Card {
     fn try_from(card: CardV0_93_0) -> Result<Self, Self::Error> {
         let payload = Payload::try_from(card.payload)?;
         validate_dto_payload(&payload)?;
-        // `body` is already a normalized, validated content — `CanonicalContent`
+        // `body` is already a normalized, validated content: `CanonicalContent`
         // enforced that on deserialize (and the V0_92 → V0_93 migration produced
         // it via cold import). Take it directly.
         Ok(Card::from_parts(payload, card.body.0))
@@ -736,7 +736,7 @@ This body and the metadata above are an indorsement card.
         assert_eq!(doc, restored);
 
         // The writer cannot produce a duplicate or empty `$id`, so a blob
-        // carrying one is malformed — storage rejects where parse repairs.
+        // carrying one is malformed: storage rejects where parse repairs.
         let mut two = sample();
         two.set_card_id(0, "id_a").unwrap();
         let second = crate::document::Card::new("indorsement").unwrap();
@@ -992,7 +992,7 @@ title: Hi
     // ─── V0_93_0 storage cutover ──────────────────────────────────────────────
 
     /// Slice the value of the first top-level `"body":` object out of a compact
-    /// `serde_json` envelope — the exact bytes embedded, balanced-brace and
+    /// `serde_json` envelope: the exact bytes embedded, balanced-brace and
     /// string-aware. Used to prove the body subtree equals `to_canonical_json`.
     fn locate_body_subtree(envelope: &str) -> &str {
         const KEY: &str = "\"body\":";

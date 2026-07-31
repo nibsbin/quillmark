@@ -1,7 +1,7 @@
 """Tests for the API requirements.
 
 Python is a Tier-1 binding: field I/O flows through `quill.writer(doc)` /
-`quill.reader(doc)`. `Document` carries the quill-free surface — parse, storage,
+`quill.reader(doc)`. `Document` carries the quill-free surface: parse, storage,
 structure, `$ext` / `$seed`, and `remove_field`. There is no opaque field store
 and no content lane (`install` / `revise` / `apply_change` + codec); those are
 WASM-only by scope.
@@ -67,7 +67,7 @@ def test_quill_properties(engine, taro_quill_dir):
     metadata = quill.metadata
     assert isinstance(metadata, dict)
     assert metadata["name"] == "taro"
-    # metadata is a pure config snapshot — no capability key baked in.
+    # metadata is a pure config snapshot: no capability key baked in.
     assert "supportedFormats" not in metadata
     assert quill.backend_id == "typst"
     assert isinstance(quill.blueprint, str) and quill.blueprint != ""
@@ -84,7 +84,7 @@ def test_quill_properties(engine, taro_quill_dir):
 
 
 def test_registered_backends(engine):
-    """The engine's backend roster — which backends this build compiled in, as
+    """The engine's backend roster: which backends this build compiled in, as
     opposed to which formats a given quill supports (`supported_formats`)."""
     backends = engine.registered_backends()
     assert isinstance(backends, list)
@@ -143,7 +143,7 @@ def test_blank_document_renders(engine):
 
 
 # ---------------------------------------------------------------------------
-# Document surface — quill-free structure, removal, and $ext
+# Document surface: quill-free structure, removal, and $ext
 # ---------------------------------------------------------------------------
 
 SIMPLE_MD = "~~~card-yaml\n$quill: test_quill\n$kind: main\ntitle: Hello\nauthor: Alice\n~~~\n\nBody text.\n"
@@ -211,7 +211,7 @@ def test_insert_card_invalid_kind():
 
 def test_remove_card_then_insert_card_round_trips_fields():
     """A card returned by remove_card feeds straight back into insert_card with
-    its fields intact — the one-Card-shape contract. Exercises the explicit
+    its fields intact: the one-Card-shape contract. Exercises the explicit
     quill/id/ext=None keys the dict carries against `deny_unknown_fields`."""
     doc = Document.from_markdown(SIMPLE_MD)
     doc.insert_card(Document.make_card("note", {"author": "Alice"}, "Body"))
@@ -230,7 +230,7 @@ def test_remove_card_then_insert_card_round_trips_fields():
 
 def test_insert_card_accepts_content_dict_body():
     """`body` on an inserted card may be the canonical content dict (the shape
-    `cards()`/`remove_card` emit), not just a markdown string — exercises
+    `cards()`/`remove_card` emit), not just a markdown string: exercises
     `py_dict_to_card`'s content-dict input path."""
     doc = Document.from_markdown(SIMPLE_MD)
     doc.insert_card({"kind": "note", "body": "**Bold** body."})
@@ -320,7 +320,7 @@ def test_move_card_out_of_range():
 
 
 def test_card_reads_one_card_without_projecting_the_rest():
-    """card(i) is the card-indexed twin of `main` — the same dict shape `cards`
+    """card(i) is the card-indexed twin of `main`: the same dict shape `cards`
     projects, for one card. Out of range raises, matching the write verbs."""
     doc = Document.from_markdown(MD_WITH_CARDS)
     assert doc.card(0)["kind"] == "note"
@@ -332,7 +332,7 @@ def test_card_reads_one_card_without_projecting_the_rest():
 
 def test_card_index_by_id_resolves_the_durable_handle():
     """card_index_by_id resolves `$id` without a hand-rolled scan over `cards`;
-    total over the id axis — no such id reads back None."""
+    total over the id axis: no such id reads back None."""
     doc = Document.from_markdown(SIMPLE_MD)
     doc.insert_card({"kind": "note", "id": "first", "body": "A"})
     doc.insert_card({"kind": "note", "id": "other", "body": "B"})
@@ -342,8 +342,8 @@ def test_card_index_by_id_resolves_the_durable_handle():
 
 
 def test_seed_overlay_reads_one_kind_off_the_main_card():
-    """seed_overlay reads one `$seed[kind]` entry — the overlay that feeds
-    quill.seed_card(kind, overlay) — without projecting the whole main card.
+    """seed_overlay reads one `$seed[kind]` entry: the overlay that feeds
+    quill.seed_card(kind, overlay): without projecting the whole main card.
     Total over the kind axis: an absent kind reads back None."""
     doc = Document.from_markdown(SIMPLE_MD)
     doc.store_seed_namespace("note", {"author": "Seeded"})
@@ -412,7 +412,7 @@ def test_remove_ext_returns_previous_and_clears():
 
 
 def test_card_ext_mutators():
-    """store_ext / remove_ext with card=i target the composable card at index —
+    """store_ext / remove_ext with card=i target the composable card at index:
     the same verbs the main card uses, one `card=` selector over the whole axis."""
     doc = Document.from_markdown(MD_WITH_CARDS)
     doc.store_ext({"agent": {"note": "y"}}, card=0)
@@ -557,7 +557,7 @@ def test_to_markdown_ambiguous_string_survival():
     assert field(card, "date_str") == "2024-01-15"
 
 
-# ── Tier-1 typed writer — quill.writer(doc) front door ────────────────────────
+# ── Tier-1 typed writer: quill.writer(doc) front door ────────────────────────
 
 
 def test_writer_front_door_set_and_reads():
@@ -577,7 +577,7 @@ def test_writer_front_door_set_and_reads():
 
 
 def test_writer_set_rejects_unknown_field():
-    """An undeclared name is a typo on the typed path — it raises, nothing lands."""
+    """An undeclared name is a typo on the typed path: it raises, nothing lands."""
     quill = _taro_quill()
     doc = Document("taro@0.1.0")
     with raises_edit_code("edit::unknown_field"):
@@ -587,7 +587,7 @@ def test_writer_set_rejects_unknown_field():
 
 def test_writer_set_all_reports_every_unknown_field():
     """set_all is all-or-nothing and reports one diagnostic per undeclared name
-    (path = field name) — externally-sourced keys surface every violation at once."""
+    (path = field name): externally-sourced keys surface every violation at once."""
     quill = _taro_quill()
     doc = Document("taro@0.1.0")
     with raises_edit_code("edit::unknown_field") as exc_info:
@@ -668,7 +668,7 @@ def test_writer_set_rejects_inline_violation():
 
 
 def test_writer_set_all_is_all_or_nothing():
-    """A mid-batch inline violation aborts set_all — nothing lingers."""
+    """A mid-batch inline violation aborts set_all: nothing lingers."""
     quill = _richtext_form_quill()
     doc = Document("richtext_form@0.1.0")
     with raises_edit_code("edit::field_richtext_not_inline"):
@@ -677,7 +677,7 @@ def test_writer_set_all_is_all_or_nothing():
 
 
 def test_writer_revise_field_typed_and_anchor_preserving():
-    """writer.revise_field is the typed, anchor-preserving richtext field write —
+    """writer.revise_field is the typed, anchor-preserving richtext field write:
     diff-imports the markdown and schema-conforms the result."""
     quill = _richtext_form_quill()
     doc = Document("richtext_form@0.1.0")
@@ -687,7 +687,7 @@ def test_writer_revise_field_typed_and_anchor_preserving():
 
 def test_writer_revise_field_rejects_inline_and_unknown():
     """revise_field conforms to the field schema (inline rejects multi-block) and
-    rejects an undeclared name — same guards as `set`."""
+    rejects an undeclared name: same guards as `set`."""
     quill = _richtext_form_quill()
     doc = Document("richtext_form@0.1.0")
     with raises_edit_code("edit::field_richtext_not_inline"):
@@ -712,7 +712,7 @@ def test_typed_set_clears_must_fill_marker():
     assert field(doc.main, "title") == "Real Title"
 
 
-# ── Tier-1 typed reader — quill.reader(doc) front door ──────────────────────────
+# ── Tier-1 typed reader: quill.reader(doc) front door ──────────────────────────
 
 
 def test_view_interprets_by_declared_type():
@@ -753,7 +753,7 @@ def test_view_richtext_holding_scalar_raises_mismatch():
 
 
 def test_view_body_read_is_quill_free():
-    """view.get_body reads the main body markdown — the quill-free body read."""
+    """view.get_body reads the main body markdown: the quill-free body read."""
     quill = _taro_quill()
     doc = Document("taro@0.1.0")
     quill.writer(doc).set_body("A **taro** essay.")

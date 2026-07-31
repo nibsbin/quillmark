@@ -5,12 +5,12 @@
 //!
 //! Under zero-filled render (see `prose/canon/SCHEMAS.md`),
 //! every absent field is filled with its type-empty (zero) value in the plate
-//! projection. An empty document is therefore the type-minimal valid input —
-//! the worst-case-but-renderable shape — so a plate that renders it has shown
+//! projection. An empty document is therefore the type-minimal valid input
+//! (the worst-case-but-renderable shape) so a plate that renders it has shown
 //! it degrades gracefully on every type-valid input.
 //!
 //! A second test (`every_quill_blueprint_round_trips_and_renders`) additionally
-//! generates each quill's `blueprint()`, round-trips it, and renders it — the
+//! generates each quill's `blueprint()`, round-trips it, and renders it: the
 //! BLUEPRINT.md §Guarantees contract.
 
 #![cfg(feature = "typst")]
@@ -39,7 +39,7 @@ fn every_quill_in_quiver_renders() {
         let quill = quillmark::quill_from_path(quills_path(&name))
             .unwrap_or_else(|e| panic!("quill '{name}' failed to load: {e:?}"));
 
-        // An empty document — zero-filled render fills every absent field with
+        // An empty document: zero-filled render fills every absent field with
         // its type-empty value in the plate projection.
         let config = quill.config();
         let markdown = format!(

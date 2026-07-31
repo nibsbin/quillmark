@@ -4,7 +4,7 @@ use quillmark_core::Document;
 proptest! {
     /// Shaped payloads of growing width: every generated field survives parse.
     /// No-oracle siblings (generate, parse, then `let _ =` the accessors) are not
-    /// carried here — they prove only "did not panic" over input classes
+    /// carried here: they prove only "did not panic" over input classes
     /// `emit_roundtrip_fuzz` already covers under a round-trip equality oracle.
     #[test]
     fn fuzz_decompose_large_payload(size in 1usize..100) {

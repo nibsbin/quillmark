@@ -28,7 +28,7 @@ proptest! {
     fn fuzz_emit_roundtrip_arbitrary(s in "\\PC{0,1000}") {
         let doc_a = match Document::parse(&s) {
             Ok(d) => d.document,
-            Err(_) => return Ok(()), // invalid input — discard
+            Err(_) => return Ok(()), // invalid input: discard
         };
 
         let emit1 = doc_a.to_markdown();

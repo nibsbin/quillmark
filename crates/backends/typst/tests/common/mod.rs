@@ -11,7 +11,7 @@ use quillmark_core::{FileTreeNode, Quill};
 use std::collections::HashMap;
 
 /// A self-contained quill from a `Quill.yaml` plus the named files. No fonts
-/// dir is needed — Typst's embedded defaults render text — and the helper
+/// dir is needed (Typst's embedded defaults render text) and the helper
 /// package (`@local/quillmark-helper`) is injected by the backend.
 pub fn quill(yaml: &str, files: &[(&str, &[u8])]) -> Quill {
     let mut map = HashMap::new();
@@ -38,7 +38,7 @@ pub fn quill_with_plate(yaml: &str, plate: &str) -> Quill {
 }
 
 /// The `usaf_memo` fixture as an in-memory tree. Reused as a host because the
-/// features under test don't depend on any quill-specific config — any valid
+/// features under test don't depend on any quill-specific config: any valid
 /// quill skeleton (fonts, packages) works.
 pub fn host_tree() -> FileTreeNode {
     quillmark::tree_from_path(quillmark_fixtures::quills_path("usaf_memo")).expect("walk fixture")

@@ -234,7 +234,7 @@ mod tests {
     #[test]
     fn upsert_producer_ignores_producer_name_in_value_position() {
         // A `/Producer` Name in *value* position (here as the value of
-        // `/Marker`) must not be overwritten as if it were the key — doing so
+        // `/Marker`) must not be overwritten as if it were the key: doing so
         // would clobber the wrong token and drop a trailing entry.
         let info = b"/Title (Hi) /Marker /Producer /Creator (X)";
         let out = upsert_producer(info, b"(New)");

@@ -9,8 +9,8 @@
 //!
 //! Both `$`-prefixed system metadata and user fields end up as variants of
 //! [`PayloadItem`] in the card's [`Payload`] item list, in source order.
-//! There is no separate "metadata region" or "metadata vs payload" routing
-//! — a comment is a comment, attached to whichever item precedes it. This
+//! There is no separate "metadata region" or "metadata vs payload" routing:
+//! a comment is a comment, attached to whichever item precedes it. This
 //! is what keeps inline-comment preservation symmetric across the
 //! `$`/non-`$` boundary.
 //!
@@ -71,7 +71,7 @@ fn missing_block_message(markdown: &str) -> String {
 ///
 /// Every card-yaml block requires a blank line immediately above it. When a
 /// body is followed by another block, the raw slice ends with that blank
-/// line's terminator — exactly one `\n` or `\r\n`. This helper strips that
+/// line's terminator: exactly one `\n` or `\r\n`. This helper strips that
 /// single line ending so stored bodies contain only authored content. The
 /// emitter re-adds the separator on output via `ensure_blank_before_fence`.
 fn strip_blank_separator(body: &str) -> &str {
@@ -132,13 +132,13 @@ pub(super) fn build_block(
         return Err(ParseError::InvalidStructure(err.clone()));
     }
 
-    // `!must_fill` is not permitted on `$` metadata keys — those are extracted into
+    // `!must_fill` is not permitted on `$` metadata keys: those are extracted into
     // typed values and have no placeholder semantics.
     for item in &pre.items {
         if let PreItem::Field { key, fill: true } = item {
             if key.starts_with('$') {
                 return Err(ParseError::InvalidStructure(format!(
-                    "`!must_fill` on `{}` is not permitted — system-metadata keys \
+                    "`!must_fill` on `{}` is not permitted: system-metadata keys \
                      cannot be placeholders",
                     key
                 )));
@@ -170,7 +170,7 @@ pub(super) fn build_block(
         (meta, Some(parsed))
     };
 
-    // Per-block field-count check (spec §8) — applied after `$`-key
+    // Per-block field-count check (spec §8): applied after `$`-key
     // extraction so the user-data field count is what is bounded.
     if let Some(serde_json::Value::Object(ref map)) = yaml_value {
         if map.len() > crate::error::MAX_FIELD_COUNT {
@@ -318,7 +318,7 @@ pub(super) fn decompose_with_warnings(
             .any(|m| matches!(m, PayloadItem::Quill { .. }))
         {
             return Err(ParseError::InvalidStructure(
-                "A composable card-yaml block must not declare `$quill` — only \
+                "A composable card-yaml block must not declare `$quill`: only \
                  the document's root block binds the document to a quill."
                     .to_string(),
             ));
@@ -331,7 +331,7 @@ pub(super) fn decompose_with_warnings(
         });
         if kind_is_main {
             return Err(ParseError::InvalidStructure(
-                "A composable card-yaml block must not declare `$kind: main` — \
+                "A composable card-yaml block must not declare `$kind: main`: \
                  `main` is reserved for the document root."
                     .to_string(),
             ));
@@ -344,7 +344,7 @@ pub(super) fn decompose_with_warnings(
             .any(|m| matches!(m, PayloadItem::Meta { key, .. } if key.is_root_only()))
         {
             return Err(ParseError::InvalidStructure(
-                "A composable card-yaml block must not carry `$seed` — only the \
+                "A composable card-yaml block must not carry `$seed`: only the \
                  document's root block carries seeding overlays."
                     .to_string(),
             ));
@@ -397,14 +397,14 @@ pub(super) fn decompose_with_warnings(
 
 /// Repair `$id` violations across the composable cards: `$id` is the durable
 /// card handle, unique per document (`DOCUMENT_STORAGE.md` §Card-id
-/// identity), and parse is the lenient hand-authoring boundary — an empty
+/// identity), and parse is the lenient hand-authoring boundary, an empty
 /// `$id` (degenerate handle) and every duplicate after the first occupant
 /// are **dropped under a warning** rather than rejected, so hand-edited or
 /// merge-conflicted markdown still loads and one emit converges on a valid
 /// document. Keep-first hands the handle to the card [`Document::find_card`]
 /// resolves. `main` is addressed structurally, never by id, so its `$id`
 /// sits outside the scan. Duplicate `$id` *keys within one block* never
-/// reach here — the YAML parser rejects them.
+/// reach here: the YAML parser rejects them.
 fn normalize_card_ids(cards: &mut [Card], warnings: &mut Vec<Diagnostic>) {
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     for card in cards.iter_mut() {
@@ -416,7 +416,7 @@ fn normalize_card_ids(cards: &mut [Card], warnings: &mut Vec<Diagnostic>) {
             warnings.push(
                 Diagnostic::new(
                     Severity::Warning,
-                    "empty `$id` dropped — a card handle cannot be the empty string"
+                    "empty `$id` dropped: a card handle cannot be the empty string"
                         .to_string(),
                 )
                 .with_code("parse::card_id_empty".to_string()),
@@ -427,7 +427,7 @@ fn normalize_card_ids(cards: &mut [Card], warnings: &mut Vec<Diagnostic>) {
                 Diagnostic::new(
                     Severity::Warning,
                     format!(
-                        "duplicate `$id: {id}` dropped — `$id` is unique per document; \
+                        "duplicate `$id: {id}` dropped: `$id` is unique per document; \
                          the first card carrying it keeps the handle"
                     ),
                 )
@@ -596,7 +596,7 @@ fn apply_nested_fills(
         }
         // The path came from our own prescan over the same source, so it must
         // resolve against the parsed tree. A miss means prescan and the YAML
-        // parser disagreed on structure — surface it loudly in dev/test builds
+        // parser disagreed on structure: surface it loudly in dev/test builds
         // rather than silently dropping the marker.
         let applied = value.set_fill_at(rest);
         debug_assert!(

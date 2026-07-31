@@ -11,7 +11,7 @@ use crate::helper;
 use quillmark_core::{Diagnostic, Quill, Severity};
 
 /// A file Typst's [`VirtualPath`] would not accept, skipped rather than loaded.
-/// One shape for both populations — an asset and a package file fail this the
+/// One shape for both populations: an asset and a package file fail this the
 /// same way, and a consumer routing on the code should not have to know which.
 fn skipped_path(path: &Path, err: impl std::fmt::Display) -> Diagnostic {
     Diagnostic::new(
@@ -53,7 +53,7 @@ pub struct QuillWorld {
     /// Non-fatal defects from loading the quill's assets and packages: a file
     /// the loader had to skip, a manifest it could not read.
     ///
-    /// Without them each defect degrades the compile unattributably — a skipped
+    /// Without them each defect degrades the compile unattributably: a skipped
     /// package surfaces as an unresolved `#import` naming the plate, three files
     /// from the cause.
     ///
@@ -101,7 +101,7 @@ impl QuillWorld {
         Self::load_assets_from_quill(source, &mut binaries, &mut load_warnings)?;
 
         // Load packages from quill's in-memory file system. Quillmark does
-        // not download external packages — every package a quill imports
+        // not download external packages: every package a quill imports
         // must be vendored under `packages/` in the quill tree.
         Self::load_packages_from_quill(source, &mut sources, &mut binaries, &mut load_warnings)?;
 
@@ -172,7 +172,7 @@ impl QuillWorld {
     }
 
     /// Replace-or-insert a source. An existing source is edited via
-    /// [`Source::replace`] — a prefix/suffix diff reparses only the changed
+    /// [`Source::replace`]: a prefix/suffix diff reparses only the changed
     /// span, preserving spans on the untouched regions so `comemo` constraints
     /// keep matching across an edit. A new source is inserted whole.
     pub(crate) fn set_source(&mut self, id: FileId, text: &str) {
@@ -191,8 +191,8 @@ impl QuillWorld {
     /// `set_source` on the helper `lib.typ` makes a repeat injection (a session
     /// edit) an incremental reparse rather than a fresh parse. The helper's
     /// `typst.toml` is constant and set once at construction. Returns each
-    /// generated content block's byte window, paired with the helper file's id
-    /// — the span scan's classification table.
+    /// generated content block's byte window, paired with the helper file's id:
+    /// the span scan's classification table.
     pub(crate) fn inject_helper_package(
         &mut self,
         data: &serde_json::Value,
@@ -218,7 +218,7 @@ impl QuillWorld {
     ) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error + Send + Sync>> {
         let mut font_data = Vec::new();
 
-        // Asset fonts first — `QuillWorld` gives them priority over package
+        // Asset fonts first: `QuillWorld` gives them priority over package
         // fonts of the same family, and `Vec` order is that priority.
         for glob in ["assets/fonts/*", "packages/**"] {
             for font_path in source.find_files(glob) {
@@ -628,7 +628,7 @@ name = "minimal-package"
     }
 
     /// A package the loader has to skip is a warning on the session, not a line
-    /// on a stderr nobody reads — on wasm32 there is no stderr at all, and the
+    /// on a stderr nobody reads: on wasm32 there is no stderr at all, and the
     /// only other signal is an unresolved `#import` naming the plate rather
     /// than the manifest three files away.
     #[test]

@@ -7,25 +7,25 @@ Complete reference for authoring `Quill.yaml` configuration files. For a hands-o
 A `Quill.yaml` has these top-level sections:
 
 ```yaml
-quill:        # Required — format metadata
+quill:        # Required: format metadata
   ...
 
-main:         # Optional — main entry-point card: field schemas and optional ui/body
+main:         # Optional, main entry-point card: field schemas and optional ui/body
   fields:
     ...
   ui:         # optional UI hints (e.g. title)
   body:       # optional body-region config (e.g. enabled, example)
 
-card_kinds:   # Optional — additional composable card kinds
+card_kinds:   # Optional: additional composable card kinds
   ...
 
-typst:        # Optional — backend-specific configuration
+typst:        # Optional: backend-specific configuration
   ...
 ```
 
 Root-level `fields:` is not supported; define the main document's field schemas under `main.fields`.
 
-`Quill.yaml` is parsed strictly. Unknown keys in the `quill:` section, unknown top-level sections, malformed `ui:` blocks, and field schemas that can't be parsed all produce errors — they are never silently dropped. Every error is collected in a single pass, so authors see all problems at once. Run `quillmark validate <quill_dir>` to surface them.
+`Quill.yaml` is parsed strictly. Unknown keys in the `quill:` section, unknown top-level sections, malformed `ui:` blocks, and field schemas that can't be parsed all produce errors: they are never silently dropped. Every error is collected in a single pass, so authors see all problems at once. Run `quillmark validate <quill_dir>` to surface them.
 
 ---
 
@@ -64,9 +64,9 @@ typst:
 
 ## `main` Section
 
-The main document card holds **root-block field schemas** under `main.fields`. Optional `main.description` describes the schema itself (independent of `quill.description`, which describes the quill package). Optional `main.ui` sets container-level UI for that card. `quill.ui` is a fallback for `main.ui`, not a merge: any `main.ui` — even an empty `ui: {}` — wins wholesale, and `quill.ui` applies only when `main.ui` is absent.
+The main document card holds **root-block field schemas** under `main.fields`. Optional `main.description` describes the schema itself (independent of `quill.description`, which describes the quill package). Optional `main.ui` sets container-level UI for that card. `quill.ui` is a fallback for `main.ui`, not a merge: any `main.ui` (even an empty `ui: {}`) wins wholesale, and `quill.ui` applies only when `main.ui` is absent.
 
-Field order under `main.fields` **is** display order in UIs: the declaration order of the keys is carried structurally through parsing and schema emission, so consumers walk the fields in key order. There is no `ui.order` knob — to reorder fields, reorder them in `Quill.yaml`.
+Field order under `main.fields` **is** display order in UIs: the declaration order of the keys is carried structurally through parsing and schema emission, so consumers walk the fields in key order. There is no `ui.order` knob: to reorder fields, reorder them in `Quill.yaml`.
 
 Field keys must be `snake_case` (`^[a-z][a-z0-9_]*$`). Capitalized field keys are reserved.
 
@@ -84,8 +84,8 @@ main:
 |---------------|-------------------|----------|-------------|
 | `type`        | string            | yes      | Data type (see [Field Types](#field-types)) |
 | `description` | string            | no       | Detailed help text |
-| `default`     | matches `type`    | no       | The value the **majority of authors want**. When the field is omitted, the default is filled in. **Declaring `default` makes the field Endorsed**: the blueprint renders the concrete default value with a type-only annotation (no marker), shippable as-is. Omitting `default` makes the field **Unendorsed**: the blueprint stamps the `!must_fill` marker (carrying the field's `example` as a suggested value when present, else bare). A surviving marker raises the non-fatal `validation::must_fill` warning — it never gates render, since an absent or present-null field zero-fills. |
-| `example`     | matches `type`    | no       | A value matching the **type and shape** of what the author wants, but **not** the value desired most of the time. Documents shape only — surfaced in the [blueprint](https://github.com/borb-sh/quillmark/blob/main/prose/canon/BLUEPRINT.md)'s `# e.g.` line for documentation and LLM authoring, never rendered as the value. |
+| `default`     | matches `type`    | no       | The value the **majority of authors want**. When the field is omitted, the default is filled in. **Declaring `default` makes the field Endorsed**: the blueprint renders the concrete default value with a type-only annotation (no marker), shippable as-is. Omitting `default` makes the field **Unendorsed**: the blueprint stamps the `!must_fill` marker (carrying the field's `example` as a suggested value when present, else bare). A surviving marker raises the non-fatal `validation::must_fill` warning: it never gates render, since an absent or present-null field zero-fills. |
+| `example`     | matches `type`    | no       | A value matching the **type and shape** of what the author wants, but **not** the value desired most of the time. Documents shape only: surfaced in the [blueprint](https://github.com/borb-sh/quillmark/blob/main/prose/canon/BLUEPRINT.md)'s `# e.g.` line for documentation and LLM authoring, never rendered as the value. |
 | `values`      | array of strings  | for `enum` | The closed set of allowed string values. Required on every `enum` field. |
 | `enum`        | array of strings  | no       | **Deprecated** alias of `values`, accepted on `type: string` for one release. Prefer `type: enum` with `values:`. |
 | `ui`          | object            | no       | UI rendering hints (see [UI Properties](#ui-properties)) |
@@ -97,9 +97,9 @@ main:
 
 | Type       | Notes |
 |------------|-------|
-| `string`   | Open scalar UTF-8 text — a value the template computes with (a URL, path, identifier, or reference key), not prose it lays out |
+| `string`   | Open scalar UTF-8 text: a value the template computes with (a URL, path, identifier, or reference key), not prose it lays out |
 | `enum`     | A closed set of string values; requires a `values:` list. Projects to JSON-Schema `{type: string, enum: […]}` |
-| `plaintext`| Navigable, **unformatted** prose over the canonical content — the same nav/regions as `richtext`, but a literal codec (delimiters stay literal, no markup). Add `inline: true` for the single-line variant |
+| `plaintext`| Navigable, **unformatted** prose over the canonical content: the same nav/regions as `richtext`, but a literal codec (delimiters stay literal, no markup). Add `inline: true` for the single-line variant |
 | `number`   | Numeric scalar (integers and decimals) |
 | `integer`  | Integer-only numeric scalar |
 | `boolean`  | `true` or `false` |
@@ -137,7 +137,7 @@ release. `enum:`/`values:` on any other type is a load error.
 
 ### Primitive Arrays, Typed Tables, and Typed Dictionaries
 
-Every array declares its element type under `items:`. For a **primitive list**, give `items` a scalar type — coercion and validation then apply element-wise (e.g. each element of an `integer[]` is coerced to an integer, and a bad element fails at its indexed path like `counts[1]`):
+Every array declares its element type under `items:`. For a **primitive list**, give `items` a scalar type, coercion and validation then apply element-wise (e.g. each element of an `integer[]` is coerced to an integer, and a bad element fails at its indexed path like `counts[1]`):
 
 ```yaml
 main:
@@ -156,7 +156,7 @@ main:
         type: richtext   # each element's content is lowered to backend markup
 ```
 
-For a **typed table** — a list of structured rows — give `items` an `object` type with its own `properties:`. Coercion recurses into each element and converts property values to their declared types:
+For a **typed table** (a list of structured rows) give `items` an `object` type with its own `properties:`. Coercion recurses into each element and converts property values to their declared types:
 
 ```yaml
 main:
@@ -186,7 +186,7 @@ main:
           type: string
 ```
 
-Nesting beyond one level is not supported — an array element may not itself be an array.
+Nesting beyond one level is not supported: an array element may not itself be an array.
 
 ---
 
@@ -238,9 +238,9 @@ main:
         group: letterhead
 ```
 
-The registry is the card's table of contents. Its keys are **snake_case ids** (same discipline as field keys), and their declaration order fixes the group display order — the contract every consumer follows, exactly as field declaration order fixes field display order. A field's `ui.group` names one of those ids; a value with no matching registry key is a load error (`quill::unknown_group`), so a one-character typo cannot silently split a section.
+The registry is the card's table of contents. Its keys are **snake_case ids** (same discipline as field keys), and their declaration order fixes the group display order: the contract every consumer follows, exactly as field declaration order fixes field display order. A field's `ui.group` names one of those ids; a value with no matching registry key is a load error (`quill::unknown_group`), so a one-character typo cannot silently split a section.
 
-**Identity is the id, not the label.** Consumers derive a group's display label from its id (`addressing` → "Addressing"), just as a field label is derived from its key. Override the derived label with `title:` — which requires the mapping form of the registry:
+**Identity is the id, not the label.** Consumers derive a group's display label from its id (`addressing` → "Addressing"), just as a field label is derived from its key. Override the derived label with `title:`, which requires the mapping form of the registry:
 
 ```yaml
 main:
@@ -258,7 +258,7 @@ The two registry forms are interchangeable: a bare sequence of ids (`[addressing
 
 ### field order
 
-Field display order is **declaration order** — the order the keys appear in `Quill.yaml`. This holds at every level: card-level fields, and the properties of a typed dictionary or typed-table row. The order is carried structurally (the schema's field maps preserve key order, and `schema()` re-emits that order), so no per-field knob is involved.
+Field display order is **declaration order**: the order the keys appear in `Quill.yaml`. This holds at every level: card-level fields, and the properties of a typed dictionary or typed-table row. The order is carried structurally (the schema's field maps preserve key order, and `schema()` re-emits that order), so no per-field knob is involved.
 
 There is no `ui.order` key: an authored `ui: { order: N }` is a load error (`quill::field_parse_error`) directing you to reorder the fields instead. To move a field, move its block in `Quill.yaml`.
 
@@ -297,7 +297,7 @@ main:
     tagline:
       type: richtext
       description: One-sentence tagline
-      # no multiline — single-line input that expands on demand
+      # no multiline: single-line input that expands on demand
 ```
 
 Meaningful on `string` and `richtext` fields; ignored on other types.
@@ -306,7 +306,7 @@ Meaningful on `string` and `richtext` fields; ignored on other types.
 
 ## `card_kinds` Section
 
-`card_kinds` define composable, repeatable content blocks (the *kinds* — a document can then carry zero or more *instances* of each kind, interleaved with body content). Each entry is shaped exactly like `main:` (`fields`, optional `description`, `ui`, `body`); think of `main:` as the single mandatory card-kind for the document body, and `card_kinds:` as the library of additional kinds that may attach to it.
+`card_kinds` define composable, repeatable content blocks (the *kinds*: a document can then carry zero or more *instances* of each kind, interleaved with body content). Each entry is shaped exactly like `main:` (`fields`, optional `description`, `ui`, `body`); think of `main:` as the single mandatory card-kind for the document body, and `card_kinds:` as the library of additional kinds that may attach to it.
 
 Card-kind names (the keys under `card_kinds`) must match `[a-z_][a-z0-9_]*` (leading underscore is allowed).
 
@@ -391,9 +391,9 @@ With the template form, a UI rendering a list of cards can title each instance (
 
 **Interpolation rules (for UI consumers):**
 - `{field_name}` is replaced with the current value of that field.
-- A title with no `{}` tokens is rendered verbatim — it's just a literal label.
+- A title with no `{}` tokens is rendered verbatim: it's just a literal label.
 - If a referenced field is absent or empty, the token resolves to an empty string.
-- UI consumers are responsible for trimming degenerate separators (e.g. `" — "` with one empty side).
+- UI consumers are responsible for trimming degenerate separators (e.g. `": "` with one empty side).
 
 When omitted, UI consumers fall back to the prettified map key.
 
@@ -533,6 +533,6 @@ card_kinds:
 
 ## Next Steps
 
-- [Creating Quills](creating-quills.md) — hands-on tutorial
-- [Markdown Syntax](../authoring/markdown-syntax.md) — document authoring syntax
-- [CLI Reference](../cli/reference.md) — validating quills with the `validate` command
+- [Creating Quills](creating-quills.md): hands-on tutorial
+- [Markdown Syntax](../authoring/markdown-syntax.md): document authoring syntax
+- [CLI Reference](../cli/reference.md): validating quills with the `validate` command

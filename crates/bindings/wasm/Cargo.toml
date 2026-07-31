@@ -14,7 +14,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # Direct path dep (not `workspace = true`) so `default-features = false` is
-# honoured — workspace inheritance forces the default `typst` feature on, which
+# honoured: workspace inheritance forces the default `typst` feature on, which
 # would pull Typst into the core build. This crate is `publish = false`, so no
 # version pin is needed. `typst` re-enables Typst via `quillmark/typst`.
 quillmark = { path = "../../quillmark", default-features = false }
@@ -49,15 +49,15 @@ default = ["typst"]
 # binding depends on `quillmark-typst` only transitively.
 typst = ["quillmark/typst", "dep:web-sys"]
 # pdfform build: add the Typst-free PDF-form backend so the engine can render
-# `pdfform` quills → PDF (and SVG/PNG). Does NOT require `typst` — the engine /
+# `pdfform` quills → PDF (and SVG/PNG). Does NOT require `typst`: the engine /
 # LiveSession surface is available with `pdfform` alone, giving a Typst-free
 # WASM bundle. The pdfform session rasterizes pages via its always-linked hayro
 # seam, so `web-sys` ships the generic canvas painter (page_size / paint,
 # dispatching through the core `SessionHandle` seam) and this build reports
-# `supportsCanvas == true` — mirroring how `typst` enables the same surface.
+# `supportsCanvas == true`: mirroring how `typst` enables the same surface.
 pdfform = ["quillmark/pdfform", "dep:web-sys"]
 # Core build = no features: Document + Quill (parse / load / validate / schema
-# / seed / blueprint). No engine, no Typst — ~0.34MB gzipped.
+# / seed / blueprint). No engine, no Typst: ~0.34MB gzipped.
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"

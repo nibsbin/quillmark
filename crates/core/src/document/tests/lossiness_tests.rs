@@ -9,7 +9,7 @@
 //! even when its position shifts. `!must_fill` on scalars and sequences round-
 //! trips. String quoting is normalised to saphyr's canonical form (plain
 //! when safe, quoted when the value would otherwise be misread on
-//! re-parse) — type fidelity is guaranteed; the exact quoting style is
+//! re-parse): type fidelity is guaranteed; the exact quoting style is
 //! not.
 
 use crate::document::Document;
@@ -117,7 +117,7 @@ fn custom_tags_lose_tag_but_keep_value() {
 }
 
 /// `!fill` is not an alias for `!must_fill`: it is treated like any other
-/// noncanonical tag — dropped with an unsupported-tag warning, the value kept,
+/// noncanonical tag, dropped with an unsupported-tag warning, the value kept,
 /// and no fill marker recorded.
 #[test]
 fn fill_tag_is_rejected_as_noncanonical() {
@@ -147,8 +147,8 @@ fn fill_tag_is_rejected_as_noncanonical() {
     );
 }
 
-/// `!must_fill` in a position prescan cannot lift — inside a flow collection
-/// or on a bare sequence element — would be silently dropped by the YAML
+/// `!must_fill` in a position prescan cannot lift (inside a flow collection
+/// or on a bare sequence element) would be silently dropped by the YAML
 /// parser, so it is reported with a warning rather than lost quietly.
 /// Block-style nested markers (the supported form) do not warn.
 #[test]
@@ -250,7 +250,7 @@ fn fill_tag_mapping_rejected() {
 /// `!must_fill` round-trips across every supported shape: each scalar type
 /// on a shared document (including the bare-null form, `key: !must_fill`
 /// with no value), and top-level sequences in block, flow, and empty form.
-/// Sequences get their own sibling table below — each needs its own document
+/// Sequences get their own sibling table below: each needs its own document
 /// and a full-document equality check, which doesn't fit the shared-document
 /// loop the scalar types use.
 #[test]
@@ -377,14 +377,14 @@ fn fill_tag_all_scalar_types_round_trip() {
 
 // ── Category: Canonical quoting style ────────────────────────────────────────
 
-/// Quoting style is normalized on emit — saphyr picks the canonical form
+/// Quoting style is normalized on emit: saphyr picks the canonical form
 /// (plain when safe, quoted when the unquoted form would be re-parsed as
 /// the wrong type). The original quoting in the source is not preserved,
 /// but values survive round-trip with type fidelity, which is what
 /// callers actually depend on.
 #[test]
 fn quoting_normalises_to_canonical_form_with_type_fidelity() {
-    // Mix of single-quoted, unquoted, and double-quoted strings — all of
+    // Mix of single-quoted, unquoted, and double-quoted strings: all of
     // them safe-to-emit-plain after parse.
     let src = "~~~card-yaml\n$quill: q\n$kind: main\nsingle_q: 'hello'\nunquoted: world\ndouble_q: \"already\"\nambiguous: \"on\"\nnumeric_str: \"01234\"\n~~~\n";
 
@@ -436,7 +436,7 @@ fn quoting_normalises_to_canonical_form_with_type_fidelity() {
 /// A comment placed at each of these structural positions in a card-yaml
 /// document survives a markdown round-trip: parse, emit, and confirm the
 /// comment (and any position-specific marker) lands where it should; then
-/// re-parse the emission and re-emit — a stable second round confirms the
+/// re-parse the emission and re-emit, a stable second round confirms the
 /// first is idempotent.
 #[test]
 fn comment_position_round_trips() {
@@ -610,8 +610,8 @@ fn fill_with_inline_comment_round_trips() {
     assert_eq!(emitted, emitted2, "round-trip must be idempotent");
 }
 
-/// Multiple inline comments — top-level scalar, nested scalar, sequence
-/// item — all preserved in one document.
+/// Multiple inline comments (top-level scalar, nested scalar, sequence
+/// item) all preserved in one document.
 #[test]
 fn mixed_inline_comments_round_trip() {
     let src = "~~~card-yaml\n$quill: q\n$kind: main\ntitle: Hello # greeting\nitems:\n  - a # first\n  - b\nouter:\n  inner: 1 # nested tail\n~~~\n";
@@ -661,7 +661,7 @@ fn orphan_inline_after_remove_degrades_to_own_line() {
     );
 }
 
-/// Inline comment on an empty-mapping field — the field is omitted on emit
+/// Inline comment on an empty-mapping field: the field is omitted on emit
 /// per the canonical-emission rule, but the inline trailer survives as an
 /// own-line comment at the same indent so its text is not lost.
 #[test]

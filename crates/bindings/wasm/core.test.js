@@ -6,7 +6,7 @@
  * render surface. The render suite (basic/canvas) covers the superset.
  *
  * Setup: imports from `@quillmark-wasm/core` (aliased to pkg/core/wasm.js in
- * vitest.config.js) — the no-features build with Typst excluded.
+ * vitest.config.js): the no-features build with Typst excluded.
  */
 import { describe, it, expect } from 'vitest'
 import * as core from '@quillmark-wasm/core'
@@ -18,7 +18,7 @@ const enc = new TextEncoder()
 const field = (card, key) =>
   card.payloadItems.find((i) => i.type === 'field' && i.key === key)?.value
 
-// A minimal quill with one schema field — no plate/font needed; core never
+// A minimal quill with one schema field: no plate/font needed; core never
 // renders, it only reads config.
 function makeCoreQuill() {
   const yaml = `quill:
@@ -54,7 +54,7 @@ describe('@quillmark/wasm/core surface', () => {
     expect(quill.supportsCanvas).toBeUndefined()
   })
 
-  it('metadata is identity-only — no supportedFormats', () => {
+  it('metadata is identity-only: no supportedFormats', () => {
     const quill = Quill.fromTree(makeCoreQuill())
     const meta = quill.metadata
     expect(meta.name).toBe('core_test')
@@ -156,12 +156,12 @@ title: Draft
     expect(doc.cards[0].kind).toBe('note')
 
     doc.storeField({ card: 0, field: 'author' }, 'Bob')
-    // Keyed card read — mirrors the write, no payloadItems walk. Agrees
+    // Keyed card read: mirrors the write, no payloadItems walk. Agrees
     // with the hand-rolled projection it replaces.
     expect(doc.getStored({ card: 0, field: 'author' })).toBe('Bob')
     expect(doc.getStored({ card: 0, field: 'author' })).toBe(field(doc.cards[0], 'author'))
 
-    // Storage DTO round-trips losslessly — the editor's persistence path.
+    // Storage DTO round-trips losslessly: the editor's persistence path.
     const restored = Document.fromJson(doc.toJson())
     expect(restored.equals(doc)).toBe(true)
 
@@ -180,7 +180,7 @@ title: Draft
 # Body`)
     doc.insertCard(Document.makeCard('note', { author: 'Alice' }, 'A note body.'))
 
-    // getStored — value keyed by name; undefined when the field is absent.
+    // getStored: value keyed by name; undefined when the field is absent.
     expect(doc.getStored({ card: 0, field: 'author' })).toBe('Alice')
     expect(doc.getStored({ card: 0, field: 'missing' })).toBeUndefined()
 
@@ -190,12 +190,12 @@ title: Draft
     expect(doc.getMarkdown({ card: 0 })).toContain('A note body.')
     expect(() => doc.getMarkdown({ card: 0, field: 'author' })).toThrow(/body-only/)
 
-    // An out-of-range index is a boundary error — it throws, the way the card
+    // An out-of-range index is a boundary error: it throws, the way the card
     // write verbs do, rather than reading back as undefined/"".
     expect(() => doc.getStored({ card: 1, field: 'author' })).toThrow()
     expect(() => doc.getMarkdown({ card: 1 })).toThrow()
 
-    // getStored still reads the raw value verbatim (transport) — including a scalar a
+    // getStored still reads the raw value verbatim (transport); including a scalar a
     // storeField wrote under a would-be richtext field.
     doc.storeField({ card: 0, field: 'qty' }, 3)
     expect(doc.getStored({ card: 0, field: 'qty' })).toBe(3)
@@ -211,7 +211,7 @@ title: Draft
 # Body`)
     doc.insertCard({ kind: 'note', id: 'first', body: 'A' })
     doc.insertCard({ kind: 'note', id: 'other', body: 'B' })
-    // $id is unique per document — a colliding insert is rejected
+    // $id is unique per document: a colliding insert is rejected
     // (edit::card_id_collision), and the empty id is a degenerate handle.
     expect(() => doc.insertCard({ kind: 'note', id: 'first', body: 'C' })).toThrow()
     expect(() => doc.insertCard({ kind: 'note', id: '', body: 'C' })).toThrow()
@@ -221,7 +221,7 @@ title: Draft
     expect(doc.card(1).id).toBe('other')
     expect(() => doc.card(2)).toThrow() // out of range is a boundary error
 
-    // cardIndexById resolves the durable $id handle — at most one match.
+    // cardIndexById resolves the durable $id handle: at most one match.
     expect(doc.cardIndexById('first')).toBe(0)
     expect(doc.cardIndexById('other')).toBe(1)
     expect(doc.cardIndexById('missing')).toBeUndefined()

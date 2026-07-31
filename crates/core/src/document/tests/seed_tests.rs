@@ -3,7 +3,7 @@
 //! `$seed` is the per-card-kind seed-overlay map: parsers accept it, the
 //! emitter preserves it, the storage DTO round-trips it, and the plate JSON
 //! consumed by backends strips it. Unlike `$ext` the seeding layer interprets
-//! it — see `crate::Quill::seed_card` and the `quill::seed` tests for layering.
+//! it; see `crate::Quill::seed_card` and the `quill::seed` tests for layering.
 
 use serde_json::json;
 
@@ -355,7 +355,7 @@ $kind: main
         Err(crate::document::EditError::InvalidKindName(_))
     ));
 
-    // A rejected write leaves the card untouched — no `$seed` map appears.
+    // A rejected write leaves the card untouched: no `$seed` map appears.
     assert!(card.seed().is_none());
 }
 
@@ -386,7 +386,7 @@ fn seed_overlay_drops_reserved_keys_other_than_body() {
 
 #[test]
 fn seed_is_stripped_from_plate_json() {
-    // Backends must never see `$seed` — it is curation data, not template data.
+    // Backends must never see `$seed`: it is curation data, not template data.
     let doc = parse(
         "\
 ~~~card-yaml

@@ -5,22 +5,22 @@
 
 ## TL;DR
 
-A `Quill` is a loaded template bundle — file tree plus parsed `Quill.yaml`
-config — tagged with its declared backend id but holding no backend and
+A `Quill` is a loaded template bundle: file tree plus parsed `Quill.yaml`
+config: tagged with its declared backend id but holding no backend and
 needing no engine. It carries the pure config-read operations (`validate`,
 `schema`, `blueprint`, `seed_*`, `compile_data`, `dry_run`); rendering is the
 engine's job.
 
 ## The `Quill` type
 
-One type models a loaded quill: **`Quill`** (in `quillmark-core`) — portable,
+One type models a loaded quill: **`Quill`** (in `quillmark-core`), portable,
 declarative data. It is the authored input (file bundle, parsed config, metadata)
 tagged with its *declared* backend id, and it carries the pure config-read
 operations (`validate`, `schema`, `metadata`, `blueprint`, `seed_*`,
 `compile_data`, `dry_run`). It holds **no backend** and needs **no engine** to
 construct or use; rendering is the engine's job (see
 [ARCHITECTURE.md](ARCHITECTURE.md)). A `Quill` is `Send + Sync` and portable
-across engines — any engine with a backend matching its `backend_id()` can
+across engines: any engine with a backend matching its `backend_id()` can
 render it.
 
 Bindings expose `Quill` directly.
@@ -50,7 +50,7 @@ pub struct Quill {
 
 ## In-memory Tree Contract (`Quill::from_tree`)
 
-In-memory construction is `Quill::from_tree(tree)` — a pure constructor in
+In-memory construction is `Quill::from_tree(tree)`: a pure constructor in
 `quillmark-core` with no backend and no engine. Filesystem loading
 (`quillmark::quill_from_path`) lives in `quillmark` rather than in core, so core
 stays filesystem-agnostic. Input is a `FileTreeNode` directory tree with UTF-8
@@ -79,7 +79,7 @@ section (`typst`). Every key, type, and UI property is documented in the
 [Quill.yaml reference](../../docs/quills/quill-yaml-reference.md); what follows
 is what the engine enforces.
 
-Field names must be `snake_case` (match `[a-z][a-z0-9_]*`). Capitalized or `$`-prefixed keys are rejected at config parse time with `quill::invalid_field_name` — document-level metadata sits on dedicated `$`-prefixed keys in the plate JSON (`$quill`, `$body`, `$cards`, `$kind`), and user fields stay lowercase so they cannot shadow it. Standalone `object` fields require a `properties` map. Every `array` field requires an `items:` element schema: use `items: { type: string }` (or `integer`, `richtext`, …) for a list of scalars, and `items: { type: object, properties: … }` for a list of objects.
+Field names must be `snake_case` (match `[a-z][a-z0-9_]*`). Capitalized or `$`-prefixed keys are rejected at config parse time with `quill::invalid_field_name`: document-level metadata sits on dedicated `$`-prefixed keys in the plate JSON (`$quill`, `$body`, `$cards`, `$kind`), and user fields stay lowercase so they cannot shadow it. Standalone `object` fields require a `properties` map. Every `array` field requires an `items:` element schema: use `items: { type: string }` (or `integer`, `richtext`, …) for a list of scalars, and `items: { type: object, properties: … }` for a list of objects.
 
 Metadata resolution:
 - `name`, `description`, `backend`, `version`, `author` are direct struct fields on `QuillConfig`. `description` (required, non-empty in the `quill:` section) describes the quill itself; it is independent of `QuillConfig.main.description`, which is the optional schema description authored under `main:` like any other card kind.
@@ -115,14 +115,14 @@ When loading from disk, `quillmark::quill_from_path` respects a `.quillignore` f
 ## API
 
 Construction:
-- `Quill::from_tree(tree)` (`quillmark-core`) — pure in-memory constructor;
+- `Quill::from_tree(tree)` (`quillmark-core`): pure in-memory constructor;
   returns `Result<Quill, Vec<Diagnostic>>`. Exposed to JS as `Quill.fromTree`.
-- `quillmark::quill_from_path(path)` — load from a filesystem directory (fs walk
+- `quillmark::quill_from_path(path)`: load from a filesystem directory (fs walk
   lives in `quillmark`, not core); returns `Result<Quill, RenderError>`.
 
 The two differ in error shape: the pure constructor hands back the raw
 `Vec<Diagnostic>` and bindings map it at the call site, while the loader wraps
-it in `RenderError`. Either way the `Quill` carries no backend — rendering goes
+it in `RenderError`. Either way the `Quill` carries no backend: rendering goes
 through the `Quillmark` engine (`engine.render` / `engine.open`).
 
 `FileTreeNode` exposes the file and directory reads over the bundle. Paths use

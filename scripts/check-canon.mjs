@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Canon spine lint — enforces the doc spine and the link invariants specified
+// Canon spine lint: enforces the doc spine and the link invariants specified
 // in prose/README.md. Zero dependencies, no arguments.
 //
 // Every rule here is a gate, and every gate catches a dead link or a dead
@@ -11,7 +11,7 @@ import { join, posix } from 'node:path';
 const problems = [];
 const fail = (file, msg) => problems.push(`${file}: ${msg}`);
 
-// A file path — a slashed token with a dotted basename — inside an anchor.
+// A file path (a slashed token with a dotted basename) inside an anchor.
 // Keys on path shape, not an extension list, so a new file type can't slip past.
 const FILE_IN_ANCHOR = /[\w-]+\/[\w/-]*\.[a-z0-9]+\b/;
 // A markdown link target into the proposal/plan tiers, segment-anchored so a
@@ -19,7 +19,7 @@ const FILE_IN_ANCHOR = /[\w-]+\/[\w/-]*\.[a-z0-9]+\b/;
 const PLAN_LINK = /\]\([^)]*\/(?:proposals|plans)\//;
 // A relative markdown link target to a .md file (an outbound prose link).
 const PROSE_LINK = /\]\((?!https?:)[^)]*\.md(?=[)#])/;
-// A backticked slashed token — an anchor's folder reference.
+// A backticked slashed token: an anchor's folder reference.
 const ANCHOR_PATH = /`([\w.-]+\/[\w./-]*)`/g;
 // A relative markdown link target of any kind.
 const REL_LINK = /\]\((?!https?:|#)([^)\s]+)/g;
@@ -32,7 +32,7 @@ const HARD = 700;
 const mdFiles = (dir) =>
   existsSync(dir) ? readdirSync(dir).filter((n) => n.endsWith('.md')).sort() : [];
 
-// Every .md under `dir`, minus `docs/migrations/` — released guides are
+// Every .md under `dir`, minus `docs/migrations/`: released guides are
 // era-accurate and immutable, so no rule applies to them.
 const walkDocs = (dir) =>
   !existsSync(dir)
@@ -67,7 +67,7 @@ for (const name of mdFiles('prose/canon')) {
   const lines = text.split('\n');
 
   const planLink = text.match(PLAN_LINK);
-  if (planLink) fail(file, `links into proposals/ or plans/ (\`${planLink[0]}\`) — canon never references them`);
+  if (planLink) fail(file, `links into proposals/ or plans/ (\`${planLink[0]}\`): canon never references them`);
 
   if (name === 'INDEX.md') continue; // the index has no spine
 
@@ -83,7 +83,7 @@ for (const name of mdFiles('prose/canon')) {
     const impl = quote.filter((l) => l.startsWith('> **Implementation**:'));
     if (!impl.length) fail(file, 'anchor blockquote has no `> **Implementation**:` line');
     const m = quote.join('\n').match(FILE_IN_ANCHOR);
-    if (m) fail(file, `Implementation anchor names a file (\`${m[0]}\`) — anchors point at folders or modules`);
+    if (m) fail(file, `Implementation anchor names a file (\`${m[0]}\`): anchors point at folders or modules`);
 
     // An anchor that no longer resolves is the rot the folder rule exists to
     // prevent; it only prevents it if something checks.
@@ -92,7 +92,7 @@ for (const name of mdFiles('prose/canon')) {
   }
 
   const firstH2 = lines.find((l) => l.startsWith('## '));
-  if (firstH2 !== '## TL;DR') fail(file, `first section is \`${firstH2 ?? '(none)'}\` — canon docs open with \`## TL;DR\``);
+  if (firstH2 !== '## TL;DR') fail(file, `first section is \`${firstH2 ?? '(none)'}\`: canon docs open with \`## TL;DR\``);
 }
 
 // INDEX is the only entry point canon promises, so a page missing from it is
@@ -101,7 +101,7 @@ if (existsSync('prose/canon/INDEX.md')) {
   const index = readFileSync('prose/canon/INDEX.md', 'utf8');
   for (const name of mdFiles('prose/canon')) {
     if (name === 'INDEX.md') continue;
-    if (!index.includes(`(${name})`)) fail('prose/canon/INDEX.md', `does not link \`${name}\` — every canon page is reachable from the index`);
+    if (!index.includes(`(${name})`)) fail('prose/canon/INDEX.md', `does not link \`${name}\`: every canon page is reachable from the index`);
   }
   for (const [, target] of index.matchAll(REL_LINK)) {
     const resolved = posix.normalize(join('prose/canon', target.split('#')[0]));
@@ -112,12 +112,12 @@ if (existsSync('prose/canon/INDEX.md')) {
 for (const name of mdFiles('prose/references')) {
   const file = join('prose/references', name);
   const m = readFileSync(file, 'utf8').match(PROSE_LINK);
-  if (m) fail(file, `links to another prose doc (\`${m[0]}\`) — references are self-contained`);
+  if (m) fail(file, `links to another prose doc (\`${m[0]}\`): references are self-contained`);
 }
 
 for (const file of [...mdFiles('prose/canon').map((n) => join('prose/canon', n)), ...walkDocs('docs')])
   for (const [n, line] of proseLines(readFileSync(file, 'utf8')))
-    if (line.length > HARD) fail(file, `line ${n} is ${line.length} chars (max ${HARD}) — one claim per sentence; split the clauses into bullets or a table`);
+    if (line.length > HARD) fail(file, `line ${n} is ${line.length} chars (max ${HARD}): one claim per sentence; split the clauses into bullets or a table`);
 
 if (problems.length) {
   for (const p of problems) console.error(`check-canon: ${p}`);

@@ -2,7 +2,7 @@
 //!
 //! The canvas contract (`prose/canon/PREVIEW.md`) says a backend whose session
 //! returns `Some` from `render_rgba` produces a *complete* page raster: every
-//! piece of page content — including bound field values — is already visible in
+//! piece of page content (including bound field values) is already visible in
 //! the pixels, with no caller-side compositing. pdfform satisfies this by
 //! pre-flattening the field values into the page content streams at
 //! session-open, then rasterizing that flat PDF via hayro.
@@ -11,7 +11,7 @@
 //!   1. `render_rgba(0, scale)` returns a raster whose dimensions match
 //!      `page_size_pt × scale` (within rounding), and
 //!   2. that raster contains NON-WHITE, opaque pixels inside at least one
-//!      field's region rect — i.e. the pre-flatten values are baked into the
+//!      field's region rect; i.e. the pre-flatten values are baked into the
 //!      raster, not left for the caller to draw.
 //!
 //! The region geometry is in PDF points (bottom-left origin); the raster is
@@ -72,7 +72,7 @@ fn pdfform_canvas_raster_is_complete() {
 
     // 2. Field-value ink: locate a bound text field via the session's region
     //    geometry and prove the flat raster has non-white opaque pixels inside
-    //    its rect. Geometry is a session-level query — no second byte render.
+    //    its rect. Geometry is a session-level query: no second byte render.
     let regions = session.regions();
 
     // Pick the bound text field (schema path `full_name` = "Ada Lovelace") on
@@ -117,7 +117,7 @@ fn pdfform_canvas_raster_is_complete() {
     );
     assert!(
         ink > 0,
-        "field region box must contain NON-WHITE opaque pixels — \
+        "field region box must contain NON-WHITE opaque pixels: \
          proof the pre-flattened value is baked into the raster"
     );
 }

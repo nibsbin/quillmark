@@ -26,7 +26,7 @@ export interface QuillFieldUi {
 }
 
 /** One entry in a card's `ui.groups` registry: a display-label override for the
- * group id (the map key). An empty object carries no override — the consumer
+ * group id (the map key). An empty object carries no override: the consumer
  * derives the label from the id (`memo_for` → "Memo For"), as it does a field
  * label from its key. */
 export interface QuillGroupUi {
@@ -38,7 +38,7 @@ export interface QuillCardUi {
     title?: string;
     /** The card's group registry: the ordered table of contents naming every
      * group a field's `ui.group` may reference. The map key is the group id, and
-     * key order is declaration order — the display-order contract, the same one
+     * key order is declaration order: the display-order contract, the same one
      * `fields` key order carries. Absent when the card declares no groups (or
      * uses the deprecated implicit-group form). */
     groups?: Record<string, QuillGroupUi>;
@@ -76,7 +76,7 @@ export interface QuillFieldSchema {
     properties?: Record<string, QuillFieldSchema>;
     items?: QuillFieldSchema;
     /** Present (and `true`) on a `richtext` or `plaintext` field declared
-     *  `inline` — the single-paragraph, container-free, island-free constraint.
+     *  `inline`: the single-paragraph, container-free, island-free constraint.
      *  Core serializes `inline: true` into the schema JSON; absent otherwise. */
     inline?: boolean;
 }
@@ -169,7 +169,7 @@ export interface Card {
     seed?: Record<string, unknown>;
     payloadItems: PayloadItem[];
     /**
-     * The card body as canonical `Content` — the source-of-truth content model.
+     * The card body as canonical `Content`: the source-of-truth content model.
      * Always this content shape on read, never a markdown string. For the markdown
      * projection call the codec `exportMarkdown(card.body)`. Write a body back
      * with `doc.install(addr, rt)` / `doc.revise(addr, md)`, or via `CardInput.body`.
@@ -178,10 +178,10 @@ export interface Card {
 }
 
 /**
- * A card written *into* a document — the input twin of `Card`, accepted by
+ * A card written *into* a document: the input twin of `Card`, accepted by
  * `Document.insertCard`. Like `Card` but `body` also
  * takes a markdown `string` (imported to the content, so a markdown / LLM writer
- * needn't build the `Content` shape), and every field but `kind` is optional —
+ * needn't build the `Content` shape), and every field but `kind` is optional:
  * an absent field defaults (no payload items, an empty body). Write one inline
  * (`{ kind, body }`) or build it with `Document.makeCard`.
  */
@@ -196,7 +196,7 @@ export interface CardInput {
 }
 
 /**
- * Canonical richtext content — the content model for a card body (and richtext
+ * Canonical richtext content: the content model for a card body (and richtext
  * fields). One text sequence over a single coordinate space (Unicode scalar
  * values): `text` plus line attributes, anchored `marks`, and embedded
  * `islands`. Every edit is a splice; markdown is a projection, not the model.
@@ -220,7 +220,7 @@ export type ContentLine = {
     continues?: boolean;
 } & ContentLineKind;
 
-/** A line's block role, declared once for `ContentLine` and the `setKind` op —
+/** A line's block role, declared once for `ContentLine` and the `setKind` op:
  * a new role is one edit here, as for `ContentContainer`. */
 export type ContentLineKind =
     | { kind: "para" }
@@ -240,7 +240,7 @@ export type ContentContainer =
 
 /** A mark over char range `[start, end)` into `Content.text`. The open `type`
  * arm blocks discriminant narrowing (as on `ContentIsland`), so read a
- * payload-carrying arm behind its guard — `isLinkMark` (`url`) / `isAnchorMark`
+ * payload-carrying arm behind its guard: `isLinkMark` (`url`) / `isAnchorMark`
  * (`id`), from `@quillmark/wasm/runtime`; the bare arms carry no payload. An
  * `anchor`'s `id` is a caller-supplied, opaque handle, unique per `Content` and
  * invariant while the mark lives (positions rebase, the id never does); it has no
@@ -253,7 +253,7 @@ export type ContentMark = { start: number; end: number } & (
     | { type: string; attrs: unknown }
 );
 
-/** A cell in a `TableProps` — its plain `text` plus the `marks` over it. `marks`
+/** A cell in a `TableProps`: its plain `text` plus the `marks` over it. `marks`
  * rides the same wire shape as prose `ContentMark`, but each mark's `start`/`end`
  * are USV offsets into this cell's `text` (`0..text.length`), not into
  * `Content.text`. */
@@ -281,7 +281,7 @@ export interface ImageProps {
  * open set: the engine pins `props` as `TableProps` for `table` and `ImageProps`
  * for `image`; an island of any other type round-trips with opaque `props`. Like
  * `ContentMark`, the open `type` arm means a discriminant check does not itself
- * narrow `props` — read `props` as the matching shape behind the `isTableIsland` /
+ * narrow `props`: read `props` as the matching shape behind the `isTableIsland` /
  * `isImageIsland` guards (from `@quillmark/wasm/runtime`), which narrow it. */
 export type ContentIsland = {
     id: string;
@@ -296,14 +296,14 @@ export type ContentIsland = {
 );
 
 /**
- * A write address — one navigation concept for the whole `Document` surface. An
+ * A write address: one navigation concept for the whole `Document` surface. An
  * absent `field` targets the card body; an absent `card` targets the main card.
  * `{}` is the main-card body; `{ card: 2 }` the body of the composable card at
  * index 2; `{ field: "intro" }` the main card's `intro` field; `{ card: 2,
  * field: "intro" }` a card field.
  *
  * On the `Addr`-taking verbs a **bare string** is shorthand for `{ field: name }`
- * — `doc.storeField("qty", 3)`, `doc.revise("intro", md)` — the one coercion
+ * (`doc.storeField("qty", 3)`, `doc.revise("intro", md)`) the one coercion
  * rule. A bare number is *not* an addr (`{ card: 2 }` is the self-documenting
  * spelling), so no third navigation idiom re-fragments the surface.
  */
@@ -313,7 +313,7 @@ export interface Addr {
 }
 
 /**
- * A card-only address — the axis the card-scoped verbs (`storeFields`,
+ * A card-only address: the axis the card-scoped verbs (`storeFields`,
  * `storeExt`, `getExt`, `commitFields`, …) take. An absent `card` targets the
  * main card. A present `field` throws: a card address takes only `card`, and a
  * would-be nested write is a bug the error names rather than silently ignores.
@@ -324,7 +324,7 @@ export interface CardAddr {
 
 /**
  * A text-splice change set over the USV content (CodeMirror `ChangeSet`
- * semantics) — plain, structured-clone-able data. Returned by `revise` and by
+ * semantics): plain, structured-clone-able data. Returned by `revise` and by
  * the `rebase` codec; map a stored position through it with `mapPos`.
  */
 export interface Delta {
@@ -338,7 +338,7 @@ export type Assoc = "before" | "after";
  * A mark edit in final-text coordinates (post-delta, post-line-op). `add` /
  * `remove` carry the `ContentMark` vocabulary (`{ type, … }`); `removeAnchor`
  * drops one identity anchor by id. An `add` of an `anchor` requires a non-empty
- * `id` not already live in the field — a collision or the empty id throws
+ * `id` not already live in the field: a collision or the empty id throws
  * (ids are caller-supplied and unique per `Content`; DOCUMENT_STORAGE
  * § Anchor-id identity).
  */
@@ -354,7 +354,7 @@ export type MarkOp =
 /**
  * A line/block edit. `split`/`join` splice `\n`; `setKind`/`setContainers`/
  * `setContinues` touch metadata. `setContinues` sets/clears a line's within-block
- * hard-break flag (`ContentLine.continues`) — the op-grained way to lower a
+ * hard-break flag (`ContentLine.continues`): the op-grained way to lower a
  * Shift+Enter hard break or a new code-fence interior line; `continues: true` on
  * line 0 is rejected (nothing precedes it to continue).
  */
@@ -405,7 +405,7 @@ fn now_ms() -> f64 {
     }
 }
 
-/// Render engine: a backend registry and render dispatcher. Render build only —
+/// Render engine: a backend registry and render dispatcher. Render build only:
 /// the core build constructs and validates quills without it.
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 #[wasm_bindgen]
@@ -422,7 +422,7 @@ pub struct Quill {
 /// `fieldAt`, `positionAt`, `locate`) serve the current compile. `apply(doc)`
 /// recompiles a whole document in place, transactionally (on throw every read
 /// keeps serving the last-good compile). Geometry reads reflect the current
-/// compile; anchoring a caret across edits is the editor's job — re-read
+/// compile; anchoring a caret across edits is the editor's job: re-read
 /// geometry after each committed `apply`.
 ///
 /// **Empty documents.** A zero-page document yields a valid session
@@ -435,7 +435,7 @@ pub struct LiveSession {
     inner: quillmark_core::LiveSession,
     backend_id: String,
     /// Retained for `apply`: recompiles `doc` → data through the same schema
-    /// pipeline as `open`. The config alone — schemas, not the quill's
+    /// pipeline as `open`. The config alone: schemas, not the quill's
     /// font/package bytes, which the backend session already owns.
     config: quillmark_core::quill::QuillConfig,
     /// The current compile's ordered card kinds (`None` = a kindless card), the
@@ -445,7 +445,7 @@ pub struct LiveSession {
     card_kinds: Vec<Option<String>>,
 }
 
-/// The ordered card kinds of `doc` — the geometry-translation lookup a
+/// The ordered card kinds of `doc`: the geometry-translation lookup a
 /// [`LiveSession`] retains.
 fn card_kinds_of(doc: &quillmark_core::Document) -> Vec<Option<String>> {
     doc.cards()
@@ -528,7 +528,7 @@ impl Quillmark {
         })
     }
 
-    /// The output formats `quill`'s backend can emit. Static capability —
+    /// The output formats `quill`'s backend can emit. Static capability:
     /// resolves the backend but compiles nothing. Throws `engine::backend_not_found`
     /// if no registered backend matches the quill's declared backend.
     #[wasm_bindgen(js_name = supportedFormats, unchecked_return_type = "OutputFormat[]")]
@@ -557,7 +557,7 @@ impl Quillmark {
 
 #[wasm_bindgen]
 impl Quill {
-    /// Build a quill from a file tree. Pure — no backend, no engine; the
+    /// Build a quill from a file tree. Pure: no backend, no engine; the
     /// declared backend is resolved later, at render time.
     ///
     /// Accepts either a `Map<string, Uint8Array>` or a plain object
@@ -574,7 +574,7 @@ impl Quill {
         Ok(Quill { inner: quill })
     }
 
-    /// Flatten this quill back into its canonical file tree — the inverse of
+    /// Flatten this quill back into its canonical file tree: the inverse of
     /// [`fromTree`](Self::from_tree). Round-trips: `Quill.fromTree(q.toTree())`
     /// reproduces an equivalent quill.
     ///
@@ -595,7 +595,7 @@ impl Quill {
     }
 
     /// The *declared* backend identifier (`config.backend`, e.g. `"typst"`).
-    /// Intent, not a resolved capability — capability (`supportedFormats` /
+    /// Intent, not a resolved capability: capability (`supportedFormats` /
     /// `supportsCanvas`) is read from the engine.
     #[wasm_bindgen(getter, js_name = backendId)]
     pub fn backend_id(&self) -> String {
@@ -609,8 +609,8 @@ impl Quill {
 
     /// Document schema for the quill: the user-fillable fields plus their
     /// `ui` hints (title / group / compact / multiline). The single
-    /// field-metadata surface — drives form editors and LLM/MCP consumers
-    /// alike. Key order in `fields`/`properties` is declaration order — the
+    /// field-metadata surface: drives form editors and LLM/MCP consumers
+    /// alike. Key order in `fields`/`properties` is declaration order: the
     /// ordering contract. Returns the `QuillSchema` shape.
     #[wasm_bindgen(getter, js_name = schema, unchecked_return_type = "QuillSchema")]
     pub fn schema(&self) -> Result<JsValue, JsValue> {
@@ -619,7 +619,7 @@ impl Quill {
     }
 
     /// Identity snapshot of the `quill:` section of `Quill.yaml` plus any extra
-    /// `quill:` keys. Pure config — the backend's output formats are a
+    /// `quill:` keys. Pure config: the backend's output formats are a
     /// resolved-backend capability read from the engine
     /// (`Quillmark.supportedFormats`), not part of this snapshot.
     #[wasm_bindgen(getter, js_name = metadata, unchecked_return_type = "QuillMetadata")]
@@ -668,8 +668,8 @@ impl Quill {
     /// Validate `doc` against this quill's schema, returning every diagnostic
     /// (an empty array when the document is valid).
     ///
-    /// Forwards the canonical `validation::*` diagnostics — same `code`,
-    /// `path`, and `hint` the engine emits — including the non-fatal
+    /// Forwards the canonical `validation::*` diagnostics (same `code`,
+    /// `path`, and `hint` the engine emits) including the non-fatal
     /// `validation::must_fill` warning for each `!must_fill` marker left in
     /// the document. Field values, defaults, and order are not part of this
     /// surface: read them from the `Document` payload and `Quill.schema`
@@ -685,11 +685,11 @@ impl Quill {
         })
     }
 
-    /// The resolved-value view of `doc` against this quill's schema — for every
+    /// The resolved-value view of `doc` against this quill's schema: for every
     /// declared field the value the render projection would use and the
     /// `FieldSource` rung it came from (`"authored" | "default" | "zero"`), in
     /// one call. The card body is a `body` sibling on its card (row `name`
-    /// `"body"`), never a row in `fields` — `null` when the kind enables no body.
+    /// `"body"`), never a row in `fields`: `null` when the kind enables no body.
     ///
     /// Value and provenance only: completeness and errors stay `validate`'s
     /// (a consumer merges it with its own diagnostic producers regardless), and
@@ -705,7 +705,7 @@ impl Quill {
         })
     }
 
-    /// Seed a starter `Document` from the schema — the main card plus one
+    /// Seed a starter `Document` from the schema, the main card plus one
     /// instance of each composable card kind, each committing its fields'
     /// `example:` values and leaving every other field absent (interpolated at
     /// render: `default:`, else type-empty zero). Illustration-first: a field
@@ -719,7 +719,7 @@ impl Quill {
         }
     }
 
-    /// Seed a starter main `Card` (carries `$quill`) from the schema — the
+    /// Seed a starter main `Card` (carries `$quill`) from the schema: the
     /// `$kind: main` card of [`seedDocument`](Self::seed_document) in
     /// isolation, committing each field's `example:` value. Returns the same
     /// `Card` shape as the `Document.main` getter.
@@ -737,7 +737,7 @@ impl Quill {
     /// Pass `document.seedOverlay(cardKind)` as `overlay` so a card added to a
     /// template-derived document inherits its curated starting values; omit it
     /// (or pass `undefined` / `null`) for the bare schema seed. `overlay` is a
-    /// plain object — this reads the document, it does not mutate it.
+    /// plain object: this reads the document, it does not mutate it.
     #[wasm_bindgen(js_name = seedCard, unchecked_return_type = "Card | undefined")]
     pub fn seed_card(
         &self,
@@ -760,7 +760,7 @@ impl Quill {
 
 #[wasm_bindgen]
 impl Document {
-    /// `new Document(quillRef)` — a blank document: a main card carrying only
+    /// `new Document(quillRef)`, a blank document: a main card carrying only
     /// `$quill`, an empty body, and no composable cards. The programmatic
     /// blank canvas: absent fields resolve at render time (`default`, else
     /// type-empty zero), so nothing the caller did not set reaches the
@@ -808,7 +808,7 @@ impl Document {
     }
 
     /// Like [`fromJson`](Document::from_json) but returns `undefined` instead
-    /// of throwing when `json` is not a valid storage DTO — use to
+    /// of throwing when `json` is not a valid storage DTO: use to
     /// discriminate format without exceptions as control flow.
     /// `undefined` means "not a storage DTO"; `fromMarkdown` still throws on
     /// genuinely malformed markdown.
@@ -826,7 +826,7 @@ impl Document {
     }
 
     /// Read the `schema` version tag from a raw storage DTO string without a
-    /// full parse, or `undefined`. Returns unknown future versions as-is —
+    /// full parse, or `undefined`. Returns unknown future versions as-is:
     /// useful to distinguish "build too old" from "payload corrupt" when
     /// `fromJson` throws.
     #[wasm_bindgen(js_name = schemaVersionOf)]
@@ -863,7 +863,7 @@ impl Document {
 
     /// The canonical `$quill` reference grammar as author-facing text. Core is
     /// the single source of truth: drive schema `describe` and validation
-    /// messages from this instead of re-stating the rule — it matches the
+    /// messages from this instead of re-stating the rule; it matches the
     /// `hint` on `parse::invalid_quill_reference`. Cache it; the value never
     /// changes.
     #[wasm_bindgen(js_name = quillRefHint)]
@@ -890,7 +890,7 @@ impl Document {
     /// Serialize this document to a versioned storage DTO string.
     ///
     /// Prefer this over `toMarkdown` for persistence across restarts or crate
-    /// upgrades — the wire format is frozen per `schema` version. Parse-time
+    /// upgrades: the wire format is frozen per `schema` version. Parse-time
     /// `warnings` are excluded from the DTO.
     ///
     /// Output is **byte-deterministic** within a `schema` version: equal
@@ -898,7 +898,7 @@ impl Document {
     #[wasm_bindgen(js_name = toJson)]
     pub fn to_json(&self) -> String {
         // Infallible: every field of `Document` and its DTO serializes via
-        // standard derives into a `String` buffer — there is no `io::Write`
+        // standard derives into a `String` buffer: there is no `io::Write`
         // and no custom `Serialize` that can return an error.
         serde_json::to_string(&self.inner).expect("Document serialization is infallible")
     }
@@ -912,13 +912,13 @@ impl Document {
     }
 
     /// Replace this document's contents **in place** from a versioned storage
-    /// DTO string — the mutating twin of the static
+    /// DTO string: the mutating twin of the static
     /// [`fromJson`](Document::from_json) constructor. Parse-time `warnings` are
     /// cleared. Throws (leaving the document unchanged) on an invalid DTO.
     ///
     /// The cross-WASM-memory `Document` bridge: mutate a document on a
     /// backend-memory clone, then write the mutated state back into the caller's
-    /// canonical document with this — the one way to update a live handle across
+    /// canonical document with this, the one way to update a live handle across
     /// the linear-memory seam without the caller re-binding its variable.
     #[wasm_bindgen(js_name = loadJson)]
     pub fn load_json(&mut self, json: &str) -> Result<(), JsValue> {
@@ -936,7 +936,7 @@ impl Document {
     }
 
     /// The document's main (entry) card. Allocates and serializes on each
-    /// call — cache locally if read in a hot loop.
+    /// call: cache locally if read in a hot loop.
     #[wasm_bindgen(getter, js_name = main, unchecked_return_type = "Card")]
     pub fn main(&self) -> Result<JsValue, JsValue> {
         card_to_js(self.inner.main())
@@ -949,13 +949,13 @@ impl Document {
         serialize_or_throw(&cards, "cards")
     }
 
-    /// Read the **verbatim stored value** at `addr` — the raw payload value of a
+    /// Read the **verbatim stored value** at `addr`: the raw payload value of a
     /// field (a content object for a richtext field, a scalar/array/object
     /// otherwise), or the **body content** when `addr.field` is absent. A bare
     /// string is `Addr` shorthand for `{ field }`. Reads are total over the field
     /// axis: an absent field is `undefined`; only an out-of-range `addr.card`
     /// throws `edit::index_out_of_range`. Needs no schema, so it lives on
-    /// `Document` — the read echo of the verbatim `store*` write, distinct from
+    /// `Document`: the read echo of the verbatim `store*` write, distinct from
     /// the interpreted schema-plane [`reader.get`](Self::reader_get). For the
     /// markdown projection use [`getMarkdown`](Self::get_markdown) (body) or
     /// `reader.get` (a field's declared type).
@@ -978,13 +978,13 @@ impl Document {
         }
     }
 
-    /// The **body** markdown projection — the main body, or a composable card's
-    /// body (`{ card }`) — the on-demand, lossy export (content-only marks do not
+    /// The **body** markdown projection (the main body, or a composable card's
+    /// body (`{ card }`)) the on-demand, lossy export (content-only marks do not
     /// survive markdown). A body's type is a format fact, not a schema fact, so
     /// this read stays quill-free; a body is never absent.
     ///
     /// `addr` is an optional **card address** (`{ card }`, absent = main). A
-    /// present `field` throws — a field's markdown is read through the
+    /// present `field` throws: a field's markdown is read through the
     /// schema-plane `quill.reader(doc).get(field)`, which interprets by declared
     /// type. An out-of-range `addr.card` throws.
     #[wasm_bindgen(js_name = getMarkdown, unchecked_return_type = "string")]
@@ -995,7 +995,7 @@ impl Document {
         let addr = Addr::from_js(&addr)?;
         if addr.field.is_some() {
             return Err(WasmError::from(
-                "getMarkdown is body-only — read a field's markdown with \
+                "getMarkdown is body-only: read a field's markdown with \
                  quill.reader(doc).get(field)",
             )
             .to_js_value());
@@ -1004,7 +1004,7 @@ impl Document {
     }
 
     /// Interpreted read at `addr`, resolving the field's declared `type` from
-    /// `quill` — the stable ABI under the runtime `reader.get` / `reader.card(i).get`.
+    /// `quill`: the stable ABI under the runtime `reader.get` / `reader.card(i).get`.
     /// The schema-plane twin of the quill-free [`getStored`](Self::get_stored): a `richtext`
     /// field returns its markdown projection, every other declared type its
     /// canonical value verbatim, so a consumer holding the quill reads by field
@@ -1013,10 +1013,10 @@ impl Document {
     /// A bare string is `Addr` shorthand for `{ field }`; `{ card, field }`
     /// targets a composable card (its `$kind` resolves the schema). Returns
     /// `undefined` for an **absent** field. An absent `addr.field` reads the body
-    /// markdown — quill-free, mirroring [`getMarkdown`](Self::get_markdown), since
+    /// markdown: quill-free, mirroring [`getMarkdown`](Self::get_markdown), since
     /// a body's type is a format fact, not a schema fact. A name the schema does
     /// not declare throws `edit::unknown_field` (the authority `getMarkdown`
-    /// lacks — there an unknown name reads back `undefined`); a `richtext` field
+    /// lacks: there an unknown name reads back `undefined`); a `richtext` field
     /// holding a value that does not decode throws `edit::field_richtext_decode`;
     /// an out-of-range `addr.card` throws.
     ///
@@ -1070,7 +1070,7 @@ impl Document {
     }
 
     /// Whether the field at `addr` is marked `!must_fill`. A bare string is `Addr`
-    /// shorthand for `{ field }`. `false` for an absent field (truthful — it isn't
+    /// shorthand for `{ field }`. `false` for an absent field (truthful: it isn't
     /// marked) and for a body address (a body is never a fill). Only an
     /// out-of-range `addr.card` throws.
     #[wasm_bindgen(js_name = isFill)]
@@ -1087,7 +1087,7 @@ impl Document {
     }
 
     /// The whole `$ext` map at `addr` (a card address, absent `card` = main), or
-    /// `undefined` when the card carries none. The fine-grained `$ext` read —
+    /// `undefined` when the card carries none. The fine-grained `$ext` read:
     /// your own state without serializing the whole card. Throws on a present
     /// `field` (a card address takes only `card`) or an out-of-range card.
     #[wasm_bindgen(js_name = getExt, unchecked_return_type = "Record<string, unknown> | undefined")]
@@ -1104,7 +1104,7 @@ impl Document {
     }
 
     /// The value stored under `$ext[ns]` at `addr` (a card address, absent `card`
-    /// = main), or `undefined`. The namespace-scoped `$ext` read — your own slot
+    /// = main), or `undefined`. The namespace-scoped `$ext` read: your own slot
     /// without a whole-card serialize, and non-destructive (unlike
     /// `removeExtNamespace`). Throws on a present `field` or an out-of-range card.
     #[wasm_bindgen(js_name = getExtNamespace, unchecked_return_type = "unknown")]
@@ -1127,7 +1127,7 @@ impl Document {
         self.inner.cards().len()
     }
 
-    /// A single composable card by index — the whole `Card`, the card-indexed
+    /// A single composable card by index: the whole `Card`, the card-indexed
     /// twin of the [`main`](Self::main) getter, so reading one card need not
     /// materialize every card via [`cards`](Self::cards). An out-of-range
     /// `index` throws `edit::index_out_of_range`, matching the card write
@@ -1152,7 +1152,7 @@ impl Document {
     /// The main card's `$seed` overlay object for `kind` (the `$seed[kind]`
     /// entry), or `undefined` when absent. The cheap read that feeds
     /// `quill.seedCard(kind, overlay)` without serializing the whole main card
-    /// via [`main`](Self::main) to fish out one key — and it keeps `seedCard`
+    /// via [`main`](Self::main) to fish out one key, and it keeps `seedCard`
     /// pure: the quill still never reads the document.
     #[wasm_bindgen(js_name = seedOverlay, unchecked_return_type = "Record<string, unknown> | undefined")]
     pub fn seed_overlay(&self, kind: &str) -> Result<JsValue, JsValue> {
@@ -1182,12 +1182,12 @@ impl Document {
 
     // ── Mutators ──────────────────────────────────────────────────────────────
 
-    /// Store a field verbatim at `addr` — the opaque store (**store** = verbatim,
+    /// Store a field verbatim at `addr`: the opaque store (**store** = verbatim,
     /// coercion deferred to render; the typed write is
     /// [`commitField`](Document::commit_field)). A bare string is `Addr`
     /// shorthand for `{ field }`, so `doc.storeField("qty", 3)` reads as written;
     /// `{ card: 2, field: "qty" }` targets a composable card. Clears any
-    /// `!must_fill` marker. A body address (no `field`) throws — a body is never
+    /// `!must_fill` marker. A body address (no `field`) throws: a body is never
     /// opaque; write it with `revise` / `install` / `writer.setBody`. Throws on
     /// an out-of-range card or a malformed name.
     #[wasm_bindgen(js_name = storeField)]
@@ -1206,7 +1206,7 @@ impl Document {
             .map_err(|e| edit_error_to_js(&e, &base))
     }
 
-    /// Store a field verbatim at `addr` and mark it `!must_fill` — the opaque
+    /// Store a field verbatim at `addr` and mark it `!must_fill`: the opaque
     /// store's fill variant, card-capable (a bare string or `{ field }` for main,
     /// `{ card, field }` for a composable card). A body address throws. Same
     /// validation as [`storeField`](Document::store_field).
@@ -1226,12 +1226,12 @@ impl Document {
             .map_err(|e| edit_error_to_js(&e, &base))
     }
 
-    /// Store several fields verbatim and atomically on the card `addr` targets —
+    /// Store several fields verbatim and atomically on the card `addr` targets:
     /// the opaque store's batch. `addr` is a **card address** (`{ card }`, absent
     /// = main); a present `field` throws. The batch verb takes the address first
     /// and is never shape-overloaded, because `card` is a legal field name:
     /// `storeFields({}, fields)` is the main card, `storeFields({ card: 2 },
-    /// fields)` a composable one — never ambiguous with "set field `card`".
+    /// fields)` a composable one, never ambiguous with "set field `card`".
     /// Nothing is applied on error; the thrown error's `diagnostics` carry one
     /// entry per offending field. Throws on an out-of-range card.
     #[wasm_bindgen(js_name = storeFields)]
@@ -1274,7 +1274,7 @@ impl Document {
     /// Replace the opaque `$ext` map on the card `addr` targets (a card address,
     /// absent `card` = main). `value` must be a plain object. `$ext` carries
     /// out-of-band consumer state and never reaches the rendered output; pass
-    /// `{}` for an explicit empty `$ext`. Quill-free and verbatim — an opaque
+    /// `{}` for an explicit empty `$ext`. Quill-free and verbatim: an opaque
     /// `store` verb. Throws on a present `field` or an out-of-range card.
     #[wasm_bindgen(js_name = storeExt)]
     pub fn store_ext(
@@ -1292,7 +1292,7 @@ impl Document {
     }
 
     /// Remove the `$ext` map on the card `addr` targets *entirely*, returning the
-    /// previous map or `undefined` — a blunt escape hatch that discards every
+    /// previous map or `undefined`: a blunt escape hatch that discards every
     /// namespace at once (prefer `removeExtNamespace`). `addr` is a card address
     /// (absent = main). Throws on a present `field` or an out-of-range card.
     #[wasm_bindgen(js_name = removeExt, unchecked_return_type = "Record<string, unknown> | undefined")]
@@ -1306,8 +1306,8 @@ impl Document {
     }
 
     /// Merge `value` into `$ext[ns]` on the card `addr` targets, preserving
-    /// sibling namespaces — the recommended `$ext` write. `addr` is a card
-    /// address (absent = main). Quill-free and verbatim — an opaque `store` verb.
+    /// sibling namespaces: the recommended `$ext` write. `addr` is a card
+    /// address (absent = main). Quill-free and verbatim: an opaque `store` verb.
     /// Throws on a present `field` or an out-of-range card.
     #[wasm_bindgen(js_name = storeExtNamespace)]
     pub fn store_ext_namespace(
@@ -1341,9 +1341,9 @@ impl Document {
     }
 
     /// Merge a card-kind's seed `overlay` into the **main** card's `$seed` map
-    /// under `cardKind`, preserving sibling kinds — `$seed` lives on the main
+    /// under `cardKind`, preserving sibling kinds: `$seed` lives on the main
     /// card by model, so this takes no address. Sets the starting values new
-    /// cards of that kind spawn with. Quill-free and verbatim — an opaque `store`
+    /// cards of that kind spawn with. Quill-free and verbatim: an opaque `store`
     /// verb. Throws if `overlay` cannot be serialized or nests too deep.
     #[wasm_bindgen(js_name = storeSeedNamespace)]
     pub fn store_seed_namespace(
@@ -1388,7 +1388,7 @@ impl Document {
         Ok(())
     }
 
-    /// **Install** a richtext value at `addr` — **value semantics**, content only.
+    /// **Install** a richtext value at `addr`: **value semantics**, content only.
     /// Stores exactly `rt` (a canonical `Content` content object); the identity
     /// anchors of any previous value are gone. An absent `addr.field` targets the
     /// body, an absent `addr.card` the main card. For "here's new markdown," use
@@ -1419,7 +1419,7 @@ impl Document {
         }
     }
 
-    /// **Revise** the richtext value at `addr` from a markdown string — **edit
+    /// **Revise** the richtext value at `addr` from a markdown string: **edit
     /// semantics**, the default write path, returning the text `Delta`. Imports
     /// the markdown, diffs it against the current value, rebases surviving
     /// identity anchors, and returns the change an editor bridge maps its own
@@ -1446,7 +1446,7 @@ impl Document {
     }
 
     /// Revise the richtext field at `addr` from markdown, typed *and*
-    /// anchor-preserving — the ABI under `writer.reviseField`. Resolves the
+    /// anchor-preserving: the ABI under `writer.reviseField`. Resolves the
     /// field's schema from `quill` (main card, or the addressed card's `$kind`)
     /// and defers to [`TypedWriter::revise_field`](quillmark_core::TypedWriter::revise_field):
     /// surviving anchors rebase (as [`revise`](Self::revise)), then the diffed
@@ -1455,7 +1455,7 @@ impl Document {
     /// text `Delta`.
     ///
     /// `addr` must name a field (a bare string is `{ field }`); a body address
-    /// throws (a body carries no field schema — use [`revise`](Self::revise)). A
+    /// throws (a body carries no field schema: use [`revise`](Self::revise)). A
     /// name the schema does not declare throws `edit::unknown_field`. Throws
     /// on an out-of-range card. Hidden from the `.d.ts`; the visible verb is
     /// `writer.reviseField` in the runtime layer.
@@ -1482,7 +1482,7 @@ impl Document {
     }
 
     /// **Apply** a committed content edit `bundle` (`{ delta?, lineOps?, markOps? }`)
-    /// at `addr` — the editor splice: text delta first, then line ops, then mark
+    /// at `addr`, the editor splice: text delta first, then line ops, then mark
     /// ops (mark ranges in final-text coordinates), each all-or-nothing. An absent
     /// `addr.field` targets the body, an absent `addr.card` the main card.
     ///
@@ -1509,7 +1509,7 @@ impl Document {
     }
 
     /// Typed field write at `addr`, resolving the field's schema `type` from
-    /// `quill` — the stable ABI under the runtime `writer.set` / `writer.card(i).set`.
+    /// `quill`: the stable ABI under the runtime `writer.set` / `writer.card(i).set`.
     /// The one write verb for **every** field type (richtext, scalar, array,
     /// object); the schema carries the `inline` constraint, so no type token or
     /// flag is passed. A richtext-typed field stores the canonical content, so
@@ -1520,10 +1520,10 @@ impl Document {
     ///
     /// A bare string is `Addr` shorthand for `{ field }`; `{ card, field }`
     /// targets a composable card (its `$kind` resolves the schema). A body
-    /// address throws — a body has no field schema; write it with `writer.setBody`
+    /// address throws: a body has no field schema; write it with `writer.setBody`
     /// / `revise`. A field declared in the schema is strict-committed (a mismatch
     /// throws now, not at render); a name the schema does not declare throws
-    /// `edit::unknown_field` rather than falling to the opaque store — on
+    /// `edit::unknown_field` rather than falling to the opaque store: on
     /// the typed path it is a typo. Use [`storeField`](Document::store_field) for
     /// opaque storage. Also throws `edit::field_conform` /
     /// `edit::field_richtext_decode` / `edit::field_richtext_not_inline`
@@ -1560,7 +1560,7 @@ impl Document {
     /// field's schema `type` from `quill`. `addr` is a **card address**
     /// (`{ card }`, absent = main; a present `field` throws). All-or-nothing with
     /// the same per-field-diagnostic error contract as
-    /// [`storeFields`](Document::store_fields) — nothing is applied on error and
+    /// [`storeFields`](Document::store_fields): nothing is applied on error and
     /// the thrown error's `diagnostics` carry one entry per offending field,
     /// including an `edit::unknown_field` for any name the schema does not
     /// declare, so a whole-form submit sees every typo in one pass. Throws on an
@@ -1590,7 +1590,7 @@ impl Document {
     }
 
     /// Build a composable card of `kind`, typed-commit `fields` onto it, set its
-    /// body from optional markdown, and place it — the ABI under `writer.addCard`.
+    /// body from optional markdown, and place it: the ABI under `writer.addCard`.
     /// `at` picks the position: absent appends, a number inserts at that index
     /// (`0..=cards.length`), so a positioned typed insert is one atomic call
     /// rather than `addCard` + `moveCard`. Fuses `makeCard` + typed commit +
@@ -1626,7 +1626,7 @@ impl Document {
             .map_err(|errs| edit_errors_to_js(errs, &quillmark_core::DocPath::new()))
     }
 
-    /// Build a fresh `Card` from a kind and a flat field map — the ergonomic
+    /// Build a fresh `Card` from a kind and a flat field map: the ergonomic
     /// constructor for `insertCard`. `fields` is an optional
     /// `Record<string, unknown>` (each entry becomes a card field, in
     /// insertion order); `body` defaults to `""`.
@@ -1636,8 +1636,8 @@ impl Document {
     /// here.
     ///
     /// Checks only what a detached card can decide alone: field-name grammar
-    /// and value depth. Kind validity is positional — `main` is right for the
-    /// root, reserved for a composable card — so `insertCard` is its gate, and
+    /// and value depth. Kind validity is positional (`main` is right for the
+    /// root, reserved for a composable card) so `insertCard` is its gate, and
     /// any kind string is accepted here.
     #[wasm_bindgen(js_name = makeCard, unchecked_return_type = "Card")]
     pub fn make_card(
@@ -1684,9 +1684,9 @@ impl Document {
         })
     }
 
-    /// Insert a card — the single insertion verb: `at` absent appends, a number
+    /// Insert a card, the single insertion verb: `at` absent appends, a number
     /// inserts at that index (must be in `0..=cards.length`). Accepts a
-    /// `CardInput` — a card read back (`cards` / `removeCard` / `quill.seedCard`),
+    /// `CardInput`: a card read back (`cards` / `removeCard` / `quill.seedCard`),
     /// a [`makeCard`](Document::make_card) result, or a bare `{ kind, body }`
     /// (every returned `Card` is a valid `CardInput`). Throws if `card.kind` is
     /// not a valid kind name, or if `at` is out of range.
@@ -1789,7 +1789,7 @@ impl Document {
         }
     }
 
-    /// The `DocPath` card root an [`Addr`] targets — `main` for the main card,
+    /// The `DocPath` card root an [`Addr`] targets: `main` for the main card,
     /// `cards.<kind>[i]` for a composable one (kind read off the live card,
     /// `None` when the index is out of range, where the error self-anchors at
     /// `cards[i]` anyway). The base every addressed mutator passes to
@@ -1809,7 +1809,7 @@ impl Document {
 
 /// A richtext write address (`{ card?, field? }`). Absent `field` = body, absent
 /// `card` = main. Mirrors the `Addr` TS interface. Unknown keys are rejected in
-/// [`from_js`](Addr::from_js), not via `deny_unknown_fields` — `serde_wasm_bindgen`
+/// [`from_js`](Addr::from_js), not via `deny_unknown_fields`: `serde_wasm_bindgen`
 /// looks up known fields rather than visiting every key, so it never enforces it.
 #[derive(serde::Deserialize, Default)]
 struct Addr {
@@ -1823,8 +1823,8 @@ impl Addr {
     /// Deserialize an `Addr` from its JS object (`undefined`/`null`/`{}` all mean
     /// the main-card body). Rejects a stray key first (as [`js_to_card`] does,
     /// since `serde_wasm_bindgen` does not enforce `deny_unknown_fields`) so a
-    /// swapped-arg call — `storeFields(fields, {})`, the fields object read as an
-    /// address — throws instead of silently parsing as the empty main-card
+    /// swapped-arg call (`storeFields(fields, {})`, the fields object read as an
+    /// address) throws instead of silently parsing as the empty main-card
     /// address and writing an empty batch.
     fn from_js(value: &JsValue) -> Result<Addr, JsValue> {
         if value.is_undefined() || value.is_null() {
@@ -1847,8 +1847,8 @@ impl Addr {
             .map_err(|e| WasmError::from(format!("addr must be an Addr object: {e}")).to_js_value())
     }
 
-    /// Accept a bare string — `Addr` shorthand for `{ field: name }`, the terse
-    /// common case — or an `Addr` object. The one coercion rule: only a string
+    /// Accept a bare string (`Addr` shorthand for `{ field: name }`, the terse
+    /// common case) or an `Addr` object. The one coercion rule: only a string
     /// collapses to `{ field }` (a bare number is not an addr), so a third
     /// navigation idiom never re-fragments the surface.
     fn from_js_or_string(value: &JsValue) -> Result<Addr, JsValue> {
@@ -1862,12 +1862,12 @@ impl Addr {
     }
 
     /// The field an opaque/typed field write targets. A body address (absent
-    /// `field`) is not a field write, so it throws naming the body verbs — reads
+    /// `field`) is not a field write, so it throws naming the body verbs: reads
     /// are total over the field axis, but a body has no field lane to write.
     fn require_field(&self, ctx: &str) -> Result<&str, JsValue> {
         self.field.as_deref().ok_or_else(|| {
             WasmError::from(format!(
-                "{ctx}: a body address (no `field`) is not a field write — \
+                "{ctx}: a body address (no `field`) is not a field write, \
                  write the body with revise / install / writer.setBody"
             ))
             .to_js_value()
@@ -1894,7 +1894,7 @@ impl Addr {
 /// content only). Rejects a markdown string: the cold path is spelled
 /// `install(addr, importMarkdown(md))`.
 ///
-/// The **storage** lane — `exportMarkdown(card.body)` and `rebase(base, md)` are
+/// The **storage** lane: `exportMarkdown(card.body)` and `rebase(base, md)` are
 /// handed content read back out of a document, which must keep opening whatever
 /// it was written as. A host authoring content goes through
 /// [`js_to_authored_content`].
@@ -1902,7 +1902,7 @@ fn js_to_content(value: JsValue, ctx: &str) -> Result<quillmark_core::Content, J
     js_to_content_with(value, ctx, quillmark_content::serial::from_canonical_value)
 }
 
-/// [`js_to_content`] on the **authored** lane — the `install` input. The host is
+/// [`js_to_content`] on the **authored** lane: the `install` input. The host is
 /// writing this content now, so `attrs` beside a built-in discriminator is a
 /// stale copy of the built-in list rather than a document predating that
 /// built-in, and is reported instead of silently dropped.
@@ -1948,7 +1948,7 @@ fn parse_change_bundle(
 
 // ── Content codec (document-free) ────────────────────────────────────────────────
 
-/// Import a markdown string to a canonical `Content` content — the pure,
+/// Import a markdown string to a canonical `Content` content: the pure,
 /// document-free codec. Pair with `install(addr, importMarkdown(md))` to spell
 /// the cold (anchor-losing) write at the call site; prefer `revise` for edit
 /// semantics. Throws on an over-nested input.
@@ -1962,7 +1962,7 @@ pub fn import_markdown(markdown: &str) -> Result<JsValue, JsValue> {
     )
 }
 
-/// Export a canonical `Content` content to its markdown projection — the pure
+/// Export a canonical `Content` content to its markdown projection: the pure
 /// on-demand codec behind `exportMarkdown(card.body)`. Throws if `rt` is not a
 /// canonical content.
 #[wasm_bindgen(js_name = exportMarkdown)]
@@ -1973,7 +1973,7 @@ pub fn export_markdown(
     Ok(quillmark_content::to_markdown(&content))
 }
 
-/// Rebase `markdown` onto a `base` content — the pure, document-free twin of
+/// Rebase `markdown` onto a `base` content, the pure, document-free twin of
 /// `revise`: cold-import + `diff_import`, returning the new `content` and the
 /// text `delta` (its offsets USV indices into `Content.text`, surviving anchors
 /// rebased). Use it to compute a revise without a document in hand; `revise(addr,
@@ -1994,14 +1994,14 @@ pub fn rebase(
     serialize_or_throw(&out, "rebase")
 }
 
-/// The structured form of a `Diagnostic.path` — one tagged segment per
+/// The structured form of a `Diagnostic.path`: one tagged segment per
 /// `DocPathSeg`. Emitted here as the single source of truth for the parser
 /// boundary so a consumer routes on segments instead of splitting the string.
 #[wasm_bindgen(typescript_custom_section)]
 const DOCPATH_TS: &'static str = r#"
 /**
  * One segment of a parsed `Diagnostic.path` (see `parseDocPath`). The head
- * carries the document-model root — `main` (only before `body`), a `card`
+ * carries the document-model root: `main` (only before `body`), a `card`
  * (`kind: null` is the unknown-kind `cards[i]` form), or a `field`; the tail is
  * `field` / `index` / a terminal `body`.
  */
@@ -2022,7 +2022,7 @@ export type FieldSource = "authored" | "default" | "zero";
 
 /**
  * One resolved row: its `name`, the value the render projection would use, and
- * the `FieldSource` rung it came from. Rows are an ordered array — declaration
+ * the `FieldSource` rung it came from. Rows are an ordered array: declaration
  * order is structural, not object-key order. The card body is a `body` sibling
  * on its card, never a row in `fields`. Diagnostics stay `Quill.validate`'s;
  * schema guidance (`example:`, labels) reads from `Quill.schema`.
@@ -2034,7 +2034,7 @@ export interface ResolvedField {
 }
 
 /**
- * The main card's resolved rows in declaration order, plus its body row —
+ * The main card's resolved rows in declaration order, plus its body row:
  * `null` when the main enables no body.
  */
 export interface ResolvedMain {
@@ -2045,7 +2045,7 @@ export interface ResolvedMain {
 /**
  * One composable card's resolved rows in declaration order, with its authored
  * `kind` (`null` for an unknown-kind card), its document-array `index`, and its
- * body row — `null` when the kind enables no body.
+ * body row: `null` when the kind enables no body.
  */
 export interface ResolvedCard {
     kind: string | null;
@@ -2056,7 +2056,7 @@ export interface ResolvedCard {
 
 /**
  * The resolved-value view (`Quill.resolve`): the main card and every
- * composable card. Value and provenance only — completeness and errors stay
+ * composable card. Value and provenance only: completeness and errors stay
  * `Quill.validate`.
  */
 export interface Resolved {
@@ -2067,7 +2067,7 @@ export interface Resolved {
 
 /// Parse a canonical document-model `Diagnostic.path`
 /// (`cards.<kind>[<i>].<field>`, `main.body`, `recipients[0].name`) into its
-/// structured [`DocPathSeg`] segments — the exported inverse of the engine's
+/// structured [`DocPathSeg`] segments: the exported inverse of the engine's
 /// one path serializer, so a consumer routes on segments instead of regexing
 /// the string. Throws on a malformed path.
 #[wasm_bindgen(js_name = parseDocPath, unchecked_return_type = "DocPathSeg[]")]
@@ -2077,7 +2077,7 @@ pub fn parse_doc_path(path: &str) -> Result<JsValue, JsValue> {
         .map_err(|e| WasmError::from(e.to_string()).to_js_value())?;
     // Via `serde_json::Value` so the tagged segments cross as plain objects,
     // sidestepping serde-wasm-bindgen's tagged-enum handling; `missing_as_null`
-    // so an unknown-kind card's `kind` is JS `null`, not `undefined` — the
+    // so an unknown-kind card's `kind` is JS `null`, not `undefined`: the
     // `DocPathSeg` contract is `kind: string | null`.
     let json = serde_json::to_value(&doc_path)
         .map_err(|e| WasmError::from(format!("parseDocPath: {e}")).to_js_value())?;
@@ -2089,7 +2089,7 @@ pub fn parse_doc_path(path: &str) -> Result<JsValue, JsValue> {
 }
 
 /// Serialize structured [`DocPathSeg`] segments back to the canonical path
-/// string — the inverse of `parseDocPath`, for a consumer that builds a path
+/// string: the inverse of `parseDocPath`, for a consumer that builds a path
 /// rather than reads one. Throws on a segment array the deserializer rejects,
 /// and on an empty segment array (symmetric with `parseDocPath("")`, which
 /// throws "empty path").
@@ -2106,8 +2106,8 @@ pub fn format_doc_path(
     Ok(doc_path.to_string())
 }
 
-/// Map a base content position — a USV index into `Content.text`, not a UTF-16
-/// offset — through a `delta` to its new USV position: the pure position-mapping
+/// Map a base content position (a USV index into `Content.text`, not a UTF-16
+/// offset) through a `delta` to its new USV position: the pure position-mapping
 /// codec an editor bridge composes to hold a caret stable across a `revise`.
 /// `assoc` decides the side of a same-position insertion (`"after"` moves past
 /// it). Throws on a malformed `delta`.
@@ -2135,7 +2135,7 @@ pub fn map_pos(
 
 /// Maps `EditError` to a JS `Error` carrying one diagnostic with the mutator's
 /// namespaced `edit::` code, its `Display` text as the message, and the
-/// `DocPath` it anchors to relative to `base` — the card root the mutator ran
+/// `DocPath` it anchors to relative to `base`: the card root the mutator ran
 /// against (empty for main, `cards.<kind>[i]` for a card). One envelope shape
 /// for every producer: `{ severity, code, message, path? }`.
 fn edit_error_to_js(err: &quillmark_core::EditError, base: &quillmark_core::DocPath) -> JsValue {
@@ -2152,7 +2152,7 @@ fn edit_error_to_js(err: &quillmark_core::EditError, base: &quillmark_core::DocP
 }
 
 /// Batched-mutator twin of [`edit_error_to_js`]: one diagnostic per offending
-/// field, each carrying the `edit::` code and its `DocPath` — the field keyed
+/// field, each carrying the `edit::` code and its `DocPath`, the field keyed
 /// under `base` (a `$kind` / `$body` structural batch key rides the same
 /// serializer as an opaque head).
 fn edit_errors_to_js(
@@ -2202,14 +2202,14 @@ fn js_value_to_json(value: JsValue, ctx: &str) -> Result<serde_json::Value, JsVa
 /// `serde_wasm_bindgen::from_value` recurses one frame per level while
 /// constructing the `serde_json::Value`, so a deep enough input overflows during
 /// conversion, before any decoder sees a tree to check. On wasm32 the stack is
-/// 1 MB and an overflow is a trap that takes the module down — not a `WasmError`
+/// 1 MB and an overflow is a trap that takes the module down: not a `WasmError`
 /// the host can catch. `let v = []; for (…) v = [v]` builds such a value in one
 /// loop, so the check belongs on the JS side of the boundary or nowhere.
 ///
 /// Iterative, and early-exits at the first over-deep container, so it neither
 /// overflows on the input it detects nor walks past the limit. Arrays, plain
 /// objects, and `Map`s are the three containers `serde_wasm_bindgen` descends
-/// into, and each is charged one level — the reading in
+/// into, and each is charged one level: the reading in
 /// [`quillmark_content::MAX_JSON_DEPTH`].
 fn reject_deep_js_value(value: &JsValue, ctx: &str) -> Result<(), JsValue> {
     const MAX: usize = quillmark_content::MAX_JSON_DEPTH;
@@ -2281,7 +2281,7 @@ fn ext_map_to_js(
 
 /// Serialize a core [`Card`](quillmark_core::Card) to its `Card` JS shape via
 /// the canonical [`CardWire`](quillmark_core::CardWire). The single place WASM
-/// turns a core card into JS — used by `Document.main`, `cards`, `removeCard`,
+/// turns a core card into JS: used by `Document.main`, `cards`, `removeCard`,
 /// and the seed getters.
 fn card_to_js(card: &quillmark_core::Card) -> Result<JsValue, JsValue> {
     serialize_or_throw(&quillmark_core::CardWire::from(card), "card")
@@ -2289,7 +2289,7 @@ fn card_to_js(card: &quillmark_core::Card) -> Result<JsValue, JsValue> {
 
 /// Deserialize a `CardInput`-shaped JS value into a core
 /// [`Card`](quillmark_core::Card) via [`CardWire`](quillmark_core::CardWire).
-/// The single place WASM turns JS into a core card — used by `insertCard`.
+/// The single place WASM turns JS into a core card: used by `insertCard`.
 fn js_to_card(value: &JsValue) -> Result<quillmark_core::Card, JsValue> {
     // `serde_wasm_bindgen` does not honor the core type's
     // `#[serde(deny_unknown_fields)]` (it looks up known fields rather than
@@ -2311,7 +2311,7 @@ fn js_to_card(value: &JsValue) -> Result<quillmark_core::Card, JsValue> {
                 if !ALLOWED.contains(&k.as_str()) {
                     return Err(WasmError::from(format!(
                         "card has unknown field `{k}`; expected a CardInput \
-                         {{ kind, payloadItems, body, … }} — build one with \
+                         {{ kind, payloadItems, body, … }}: build one with \
                          Document.makeCard(kind, fields, body)"
                     ))
                     .to_js_value());
@@ -2409,7 +2409,7 @@ fn js_bytes_for_tree_entry(path: &str, value: JsValue) -> Result<Vec<u8>, JsValu
 const CANVAS_PREVIEW_TS: &'static str = r#"
 /**
  * Page dimensions in points (1 pt = 1/72 inch). Typst measures in Typst
- * points; pdfform measures in PDF points — the same unit.
+ * points; pdfform measures in PDF points: the same unit.
  *
  * Report-only: the painter sizes the canvas itself based on
  * `PaintOptions`. `pageSize` is exposed for callers that need page
@@ -2425,16 +2425,16 @@ export interface PageSize {
  * Inputs to `LiveSession.paint`. Both fields are optional and default
  * to `1`.
  *
- * - `layoutScale` — layout-space pixels per point (Typst point / PDF
- *   point — the same 1/72″ unit). For on-screen
+ * - `layoutScale` (layout-space pixels per point (Typst point / PDF
+ *   point) the same 1/72″ unit). For on-screen
  *   canvases this is CSS pixels per pt; the page's layout-pixel size is
  *   `widthPt * layoutScale × heightPt * layoutScale`. The painter
  *   surfaces these dimensions as `layoutWidth` / `layoutHeight` so
  *   consumers can drive `canvas.style.*` (or any layout system).
- * - `densityScale` — backing-store density multiplier. Fold
+ * - `densityScale`: backing-store density multiplier. Fold
  *   `window.devicePixelRatio`, in-app zoom, and `visualViewport.scale`
  *   (pinch-zoom) into a single value here. Defaults to `1`, which
- *   produces a non-retina backing store — pass `window.devicePixelRatio`
+ *   produces a non-retina backing store: pass `window.devicePixelRatio`
  *   for crisp output on high-DPI displays.
  *
  * The effective rasterization scale is `layoutScale * densityScale`.
@@ -2450,22 +2450,22 @@ export interface PaintOptions {
 /**
  * Returned by `LiveSession.paint`.
  *
- * - `layoutWidth` / `layoutHeight` — layout-pixel dimensions of the
+ * - `layoutWidth` / `layoutHeight`: layout-pixel dimensions of the
  *   canvas's display box. For on-screen canvases this is CSS pixels:
  *   set `canvas.style.width = layoutWidth + "px"` and
  *   `canvas.style.height = layoutHeight + "px"` (or feed these into
  *   your layout system). Independent of `densityScale`.
- * - `pixelWidth` / `pixelHeight` — integer backing-store pixel
+ * - `pixelWidth` / `pixelHeight`: integer backing-store pixel
  *   dimensions the painter wrote to `canvas.width` / `canvas.height`.
  *   Equal to `round(layoutWidth * densityScale)` ×
  *   `round(layoutHeight * densityScale)` *unless* the requested backing
  *   exceeded the painter's safe maximum (16384 px per side), in which
  *   case `densityScale` was clamped to fit.
- * - `clamped` — `true` when that 16384-px clamp fired, so the page is
+ * - `clamped`: `true` when that 16384-px clamp fired, so the page is
  *   painted at fewer device pixels than requested and renders soft at the
  *   same `canvas.style` size. Reads the clamp off the return value instead
  *   of the `pixelWidth < round(layoutWidth * densityScale)` derivation.
- * - `effectiveDensityScale` — the `densityScale` actually applied: the
+ * - `effectiveDensityScale`, the `densityScale` actually applied: the
  *   requested value unless `clamped`, then reduced proportionally.
  *   `layoutScale * effectiveDensityScale` is the scale the backing store
  *   was rasterized at.
@@ -2474,11 +2474,11 @@ export interface PaintOptions {
  * write to them. The painter does **not** touch `canvas.style.*`;
  * consumers own layout. The write is a whole-backing-store `putImageData`,
  * which bypasses the 2D context transform, `globalAlpha`, and clip: give
- * each visible page its own `<canvas>` — you cannot composite two pages, a
+ * each visible page its own `<canvas>`; you cannot composite two pages, a
  * sub-rect, or a context transform through `paint`.
  *
  * For `OffscreenCanvasRenderingContext2D` (Worker rasterization, no
- * DOM), `layoutWidth` / `layoutHeight` are informational — there's no
+ * DOM), `layoutWidth` / `layoutHeight` are informational: there's no
  * CSS layout box to apply them to.
  */
 export interface PaintResult {
@@ -2493,7 +2493,7 @@ export interface PaintResult {
 
 /// A backend plate-space geometry address → its `DocPath` string, keeping the
 /// original when it does not fit the geometry grammar. `kinds` is the compile's
-/// ordered card kinds — build it once per query and pass the slice, never per
+/// ordered card kinds: build it once per query and pass the slice, never per
 /// region.
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 fn plate_to_docpath(addr: &str, kinds: &[Option<&str>]) -> String {
@@ -2514,7 +2514,7 @@ fn docpath_to_plate(addr: &str, kinds: &[Option<&str>]) -> String {
 
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 impl LiveSession {
-    /// The card-kind lookup as `&[Option<&str>]` for the core translators —
+    /// The card-kind lookup as `&[Option<&str>]` for the core translators:
     /// built once per query.
     fn kinds(&self) -> Vec<Option<&str>> {
         self.card_kinds.iter().map(|k| k.as_deref()).collect()
@@ -2537,14 +2537,14 @@ impl LiveSession {
 
     /// `true` iff `paint` and `pageSize` will succeed for this session. Derived
     /// from the session's canvas seam, so it reflects exactly what `paint` will
-    /// do — no separately captured flag.
+    /// do: no separately captured flag.
     #[wasm_bindgen(getter, js_name = supportsCanvas)]
     pub fn supports_canvas(&self) -> bool {
         self.inner.supports_canvas()
     }
 
     /// Non-fatal diagnostics of the session's **current compile** (e.g. Typst
-    /// font fallback) — set at open and refreshed by each committed `apply`;
+    /// font fallback): set at open and refreshed by each committed `apply`;
     /// a failed apply keeps the last-good compile's warnings. Also appended
     /// to `RenderResult.warnings` on each `render()` call.
     #[wasm_bindgen(getter, js_name = warnings, unchecked_return_type = "Diagnostic[]")]
@@ -2559,7 +2559,7 @@ impl LiveSession {
         serialize_or_throw(&diags, "warnings")
     }
 
-    /// Recompile the session against `doc` — the edit verb of a live preview.
+    /// Recompile the session against `doc`: the edit verb of a live preview.
     /// The document is compiled through the same schema pipeline as `open`
     /// (same quill), then applied transactionally: on throw every read
     /// (`render`, `paint`, `pageSize`, `regions`, `fieldAt`) keeps serving the last-good
@@ -2572,7 +2572,7 @@ impl LiveSession {
             .inner
             .apply(&json_data)
             .map_err(|e| WasmError::from(e).to_js_value())?;
-        // The apply committed, so geometry now reflects `doc` — refresh the
+        // The apply committed, so geometry now reflects `doc`: refresh the
         // card-kind lookup the address translation reads.
         self.card_kinds = card_kinds_of(&doc.inner);
         Ok(ChangeSet {
@@ -2596,7 +2596,7 @@ impl LiveSession {
             warnings: result.warnings.into_iter().map(Into::into).collect(),
             output_format: result.output_format.into(),
             render_time_ms: now_ms() - start,
-            // Same `DocPath` grammar as `regions()` — one address grammar per session.
+            // Same `DocPath` grammar as `regions()`: one address grammar per session.
             regions: quillmark_core::regions_to_doc_path(result.regions, &self.kinds())
                 .into_iter()
                 .map(Into::into)
@@ -2604,7 +2604,7 @@ impl LiveSession {
         })
     }
 
-    /// Schema-field geometry for this compiled session — each content field's
+    /// Schema-field geometry for this compiled session: each content field's
     /// **first placement** (one region per page it touches) plus widget and
     /// scalar-reference-site regions, keyed on the canonical `DocPath` address
     /// (`parseDocPath`-routable; the session resolves the backend's plate-space
@@ -2622,12 +2622,12 @@ impl LiveSession {
         serialize_or_throw(&regions, "regions")
     }
 
-    /// The whole-field highlight boxes for `field` — one union rect per page,
+    /// The whole-field highlight boxes for `field`: one union rect per page,
     /// over the field's `span`-bearing content segments. The convenience that
     /// owns the union `regions()` leaves derived: it keeps `regions()` the
     /// low-level disjoint truth and folds the span-filter + per-page
     /// union here, so a "highlight the focused field" consumer stops
-    /// reimplementing it. **Content only** — a field placed solely as a scalar
+    /// reimplementing it. **Content only**: a field placed solely as a scalar
     /// reference or a bound widget carries no `span` and returns `[]`; its box
     /// is a single `regions()` rect. Reflects the current compile, like
     /// `regions()`.
@@ -2643,11 +2643,11 @@ impl LiveSession {
         serialize_or_throw(&boxes, "fieldBoxes")
     }
 
-    /// The schema field whose content is under a point on `page` — the
+    /// The schema field whose content is under a point on `page`, the
     /// forward (click → field) direction: hit-test a click against the
     /// compiled document and get back the `DocPath` field address to focus in
     /// the editor, or `undefined` off any field's ink. `x`/`y` are PDF points
-    /// with a **bottom-left** origin, the same space as `FieldRegion.rect` —
+    /// with a **bottom-left** origin, the same space as `FieldRegion.rect`,
     /// from a canvas click, invert the overlay transform documented on
     /// `FieldRegion`: `x = clickPx.x / renderScale`,
     /// `y = pageHeightPt - clickPx.y / renderScale`. Unlike `regions()`,
@@ -2659,11 +2659,11 @@ impl LiveSession {
             .map(|f| plate_to_docpath(&f, &self.kinds()))
     }
 
-    /// A point → **content position** — the fine-grained click direction:
+    /// A point → **content position**, the fine-grained click direction:
     /// hit-test a point and get back the field *and* a USV offset into its
     /// `Content` (for placing a caret or mapping a selection into the content
     /// model), or `undefined` off all content ink. `x`/`y` are PDF points,
-    /// bottom-left origin — the same space as `fieldAt`. The offset is
+    /// bottom-left origin: the same space as `fieldAt`. The offset is
     /// cluster-exact and degrades to the containing segment's start on
     /// origin-less ink (list markers, a code fence's interior). See
     /// `ContentHit`.
@@ -2675,7 +2675,7 @@ impl LiveSession {
         })
     }
 
-    /// A content position → **caret rect** — the reverse of `positionAt`: given
+    /// A content position → **caret rect**, the reverse of `positionAt`: given
     /// a field and a USV offset into its `Content`, return the box (in the
     /// same bottom-left PDF-point space as `FieldRegion.rect`) to draw a caret
     /// at, its `span` collapsed to `[pos, pos]`; `undefined` when the field
@@ -2714,12 +2714,12 @@ impl LiveSession {
     /// `OffscreenCanvasRenderingContext2D`. The painter owns
     /// `canvas.width`/`height` (no `clearRect` needed); consumers own
     /// `canvas.style.*`. If `layoutScale * densityScale` exceeds 16384 px
-    /// per side, `densityScale` is clamped — `PaintResult.clamped` reports it and
+    /// per side, `densityScale` is clamped: `PaintResult.clamped` reports it and
     /// `PaintResult.effectiveDensityScale` carries the density actually applied.
     ///
     /// `put_image_data` writes the whole backing store, bypassing the 2D
     /// context's transform, `globalAlpha`, and clip: the painter owns the entire
-    /// canvas, so each visible page needs its own `<canvas>` — you cannot composite
+    /// canvas, so each visible page needs its own `<canvas>`; you cannot composite
     /// two pages, a sub-rect, or a context transform through this call.
     ///
     /// Throws if the backend has no canvas painter, `page` is out of range,
@@ -2783,7 +2783,7 @@ impl LiveSession {
         let render_scale = (layout_scale as f64) * effective_density;
         // `layout_scale` and `density` are each validated finite/positive, but
         // their product (or the f64->f32 cast) can still overflow to infinity
-        // for extreme inputs — e.g. a zero-dimension page bypasses the
+        // for extreme inputs; e.g. a zero-dimension page bypasses the
         // MAX_BACKING_DIMENSION clamp. Guard before handing it to the renderer.
         if !render_scale.is_finite() || render_scale <= 0.0 || render_scale > f32::MAX as f64 {
             return Err(WasmError::from(
@@ -2794,7 +2794,7 @@ impl LiveSession {
 
         // `page_size_pt(page)` already succeeded above, so `page` is in range;
         // a `None` here therefore means the backend reported a canvas
-        // (`ensure_canvas` passed) but produced no raster — a capability/impl
+        // (`ensure_canvas` passed) but produced no raster: a capability/impl
         // disagreement, not a bad page index. Label it as such instead of
         // mislabelling it page-out-of-range.
         let (pixel_w, pixel_h, mut rgba) = self
@@ -2839,7 +2839,7 @@ impl LiveSession {
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 impl LiveSession {
     /// Gate a canvas operation on the session's canvas capability, derived from
-    /// the core `SessionHandle` seam (`page_size_pt` / `render_rgba`) — the same
+    /// the core `SessionHandle` seam (`page_size_pt` / `render_rgba`): the same
     /// seam the painter dispatches through, so the gate cannot disagree with the
     /// paint.
     fn ensure_canvas(&self, op: &str) -> Result<(), JsValue> {
@@ -2956,7 +2956,7 @@ struct PaintResult {
     /// same `canvas.style` size. The honest form of the pixel-dim derivation
     /// consumers would otherwise reinvent.
     clamped: bool,
-    /// The `densityScale` actually applied — equal to the requested value unless
+    /// The `densityScale` actually applied: equal to the requested value unless
     /// `clamped`, then reduced proportionally. `layoutScale × effectiveDensityScale`
     /// is the scale the backing store was rasterized at.
     effective_density_scale: f64,

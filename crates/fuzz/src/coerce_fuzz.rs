@@ -26,7 +26,7 @@
 //! - **W2 (typed error):** a failure is one of the typed-write `EditError`
 //!   variants (`FieldConform`, `FieldRichtext*`, `ValueTooDeep`,
 //!   `InvalidFieldName`), never a panic or an unrelated variant.
-//! - **W3 (commit ∘ commit = commit):** a committed value is a fixed point —
+//! - **W3 (commit ∘ commit = commit):** a committed value is a fixed point,
 //!   re-committing it yields the same stored value.
 
 
@@ -56,7 +56,7 @@ fn arb_leaf_field_type() -> impl Strategy<Value = FieldType> {
 
 /// `FieldSchema` of bounded depth. `Object` carries a `properties` map; an
 /// `Array` carries an `items` element schema (here, an object sharing that
-/// same property map) — the same way `conform_value` consumes them.
+/// same property map): the same way `conform_value` consumes them.
 fn arb_field_schema(max_depth: u32) -> impl Strategy<Value = FieldSchema> {
     let leaf = arb_leaf_field_type().prop_map(|ty| FieldSchema::new(String::new(), ty, None));
     leaf.prop_recursive(max_depth, 24, 3, |inner| {
@@ -120,7 +120,7 @@ fn arb_json_value(max_depth: u32) -> impl Strategy<Value = serde_json::Value> {
 /// Build a minimal `QuillConfig` whose `main.fields` declares a single field
 /// named [`ROOT_FIELD`] with the given schema. Bypasses `from_yaml` so the
 /// generator is free to produce schemas the YAML parser would reject (e.g.
-/// `Object` nested inside `Object`) — exactly the adversarial surface we want
+/// `Object` nested inside `Object`): exactly the adversarial surface we want
 /// `coerce_payload` to survive.
 fn config_with_one_field(schema: FieldSchema) -> QuillConfig {
     let mut schema = schema;
@@ -179,7 +179,7 @@ fn validate_path_grammar(path: &str) -> bool {
 // -- Properties ---------------------------------------------------------------
 
 proptest! {
-    // T1 — never panic, regardless of how adversarial the (schema, value) pair is.
+    // T1: never panic, regardless of how adversarial the (schema, value) pair is.
     #[test]
     fn coerce_never_panics(
         schema in arb_field_schema(4),
@@ -190,7 +190,7 @@ proptest! {
         let _ = config.coerce_payload(&fm);
     }
 
-    // T2 — when coercion fails, the error path is structurally well-formed.
+    // T2: when coercion fails, the error path is structurally well-formed.
     #[test]
     fn coerce_error_path_well_formed(
         schema in arb_field_schema(4),
@@ -208,7 +208,7 @@ proptest! {
         }
     }
 
-    // T3 — idempotence on Ok: re-coercing the output yields the same output.
+    // T3, idempotence on Ok: re-coercing the output yields the same output.
     #[test]
     fn coerce_is_idempotent(
         schema in arb_field_schema(4),
@@ -236,7 +236,7 @@ fn commit_once(schema: &FieldSchema, value: serde_json::Value) -> Result<QuillVa
 }
 
 proptest! {
-    // W1 — never panic, however adversarial the (schema, value) pair.
+    // W1: never panic, however adversarial the (schema, value) pair.
     #[test]
     fn commit_never_panics(
         schema in arb_field_schema(4),
@@ -245,7 +245,7 @@ proptest! {
         let _ = commit_once(&schema, value);
     }
 
-    // W2 — a commit failure is one of the typed-write EditError variants.
+    // W2: a commit failure is one of the typed-write EditError variants.
     #[test]
     fn commit_error_is_typed(
         schema in arb_field_schema(4),
@@ -266,7 +266,7 @@ proptest! {
         }
     }
 
-    // W3 — commit ∘ commit = commit: re-committing a committed value is stable.
+    // W3, commit ∘ commit = commit: re-committing a committed value is stable.
     #[test]
     fn commit_is_idempotent(
         schema in arb_field_schema(4),
@@ -299,7 +299,7 @@ fn regression_t2_array_of_object_path() {
     arr.items = Some(Box::new(item));
     let config = config_with_one_field(arr);
 
-    // [ { "x": "not-an-int" } ] — should fail at f[0].x
+    // [ { "x": "not-an-int" } ], should fail at f[0].x
     let val = serde_json::json!([{ "x": "not-an-int" }]);
     let err = config
         .coerce_payload(&single_field_payload(val))

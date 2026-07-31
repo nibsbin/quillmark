@@ -1,8 +1,8 @@
 //! The pdfform backend exports PDF, SVG, and PNG.
 //!
 //! PDF is the interactive AcroForm deliverable (stamped). SVG and PNG are
-//! raster/vector views of the *flattened* form — field values baked into the
-//! page content via hayro — so they render in any viewer without appearance
+//! raster/vector views of the *flattened* form (field values baked into the
+//! page content via hayro) so they render in any viewer without appearance
 //! synthesis. This test renders the `sample_form` fixture to all three and
 //! asserts each artifact is well-formed for its format.
 

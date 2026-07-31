@@ -46,7 +46,7 @@ jobs:
       - name: Check strip-seed-comment.sh strips the comment, and is a no-op without one
         run: |
           cd "$RUNNER_TEMP"
-          printf '## v1.0.0 - 2026-01-01\n\n- entry one\n\n<!-- seed: commits since v0.9.0 — confirm the entries above cover them, then delete this comment\n- commit a\n- commit b\n-->\n\n## v0.9.0 - 2025-12-01\n\n- old entry\n' > seeded.md
+          printf '## v1.0.0 - 2026-01-01\n\n- entry one\n\n<!-- seed: commits since v0.9.0, confirm the entries above cover them, then delete this comment\n- commit a\n- commit b\n-->\n\n## v0.9.0 - 2025-12-01\n\n- old entry\n' > seeded.md
           printf '## v1.0.0 - 2026-01-01\n\n- entry one\n\n## v0.9.0 - 2025-12-01\n\n- old entry\n' > seeded.expected.md
           "$GITHUB_WORKSPACE/scripts/strip-seed-comment.sh" seeded.md
           diff seeded.expected.md seeded.md
@@ -65,10 +65,10 @@ jobs:
       # (a11caa45), the tree made clippy-clean, then the gate removed
       # (68c3751a) as not worth the CI time; `cargo doc -Dwarnings` is the
       # standing lint gate. Do not re-add a "make clippy clean" pass expecting
-      # CI to enforce it — record the policy change here first if that changes.
+      # CI to enforce it, record the policy change here first if that changes.
       #
       # `--workspace`, not a bare `cargo doc`: bare walks default-members, and
-      # a crate outside it is never linted — the blind spot that let two broken
+      # a crate outside it is never linted, the blind spot that let two broken
       # `Delta` links accumulate on the JS surface (#1034) and four more in
       # quillmark-content, which is published, so its rustdoc is what docs.rs
       # serves. Every member documents on the host toolchain, the wasm32
@@ -94,9 +94,9 @@ jobs:
       - name: Tests
         run: cargo test --workspace --all-features --locked
 
-      # --all-features forces `typst` on, so the zero-backend branch — the
+      # --all-features forces `typst` on, so the zero-backend branch, the
       # "no backends registered" path in orchestration/engine.rs and the
-      # `#[cfg(not(feature = "typst"))]` half of feature_flag_test.rs — never
+      # `#[cfg(not(feature = "typst"))]` half of feature_flag_test.rs, never
       # compiles above. The WASM `core` variant has this covered by
       # build-wasm.sh + core.test.js; this is the native equivalent.
       - name: Tests (zero-backend configuration)
@@ -117,7 +117,7 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
 
-      # Builds every publishable crate from its packaged archive — the step
+      # Builds every publishable crate from its packaged archive, the step
       # `cargo publish --no-verify` drops. The four `publish = false` crates are
       # excluded because `--workspace` would package them too, and the wasm
       # binding deliberately carries a version-less path dep on `quillmark`
@@ -183,7 +183,7 @@ jobs:
       #
       # Deliberately `cargo audit` and not rustsec/audit-check: the action fails
       # the check on warnings too, and `unmaintained`/`yanked` fire on six crates
-      # Typst pins that no change here can move — a gate that is red no matter
+      # Typst pins that no change here can move, a gate that is red no matter
       # what the PR does gets clicked past, which is worse than no gate. Bare
       # `cargo audit` fails on vulnerabilities and prints warnings. The two
       # vulnerabilities that are themselves pinned out of reach are listed, with
@@ -211,7 +211,7 @@ jobs:
 
       - name: Verify core build excludes Typst
         # `cargo tree -i` exits 0 only when quillmark-typst IS in the no-features
-        # graph — i.e. a leak. The release size budget catches this too, but only
+        # graph; i.e. a leak. The release size budget catches this too, but only
         # on release; behavioural tests never see it (a leak doesn't change the
         # API, just bloats the bundle ~12x). This is the PR-level guard.
         run: |
@@ -230,7 +230,7 @@ jobs:
       - name: Cache WASM cargo build
         uses: actions/cache@v6
         with:
-          # Cache only the wasm cargo build dir — not pkg/. build-wasm.sh always
+          # Cache only the wasm cargo build dir, not pkg/. build-wasm.sh always
           # regenerates pkg/ from a warm target/ (a quick incremental rebuild +
           # wasm-bindgen), so pkg/ never needs to survive across runs, no pkg
           # inputs need enumerating in the key, and no stale pkg/ can be served
@@ -281,7 +281,7 @@ jobs:
         with:
           enable-cache: true
 
-      # `maturin develop` builds the pyo3 extension in the DEBUG (dev) profile —
+      # `maturin develop` builds the pyo3 extension in the DEBUG (dev) profile,
       # far faster to compile than the release build a `pip install -e` (maturin
       # PEP-517 default) would trigger, and opt-level is irrelevant to test
       # outcomes. Matches `cargo test --workspace` (also debug) and the documented

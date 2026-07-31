@@ -4,9 +4,9 @@
 
 Quillmark separates content, schema, and presentation:
 
-- **A Quill's schema drives the data** — it validates the card-yaml metadata and applies coercion, defaults, and scaffolding. The schema is the contract every render consumes.
-- **A Quill's plate controls presentation** — it defines layout and typesets the output artifact.
-- **Markdown provides content** — authors write plain Markdown with card-yaml blocks; the Quill renders it into a fully typeset document.
+- **A Quill's schema drives the data**: it validates the card-yaml metadata and applies coercion, defaults, and scaffolding. The schema is the contract every render consumes.
+- **A Quill's plate controls presentation**: it defines layout and typesets the output artifact.
+- **Markdown provides content**: authors write plain Markdown with card-yaml blocks; the Quill renders it into a fully typeset document.
 
 ## Core Components
 
@@ -25,7 +25,7 @@ card-yaml block is delimited by bare `~~~` / `~~~` fences and may begin
 with a run of `$`-prefixed system metadata lines followed by a YAML payload.
 (`~~~card-yaml` is also accepted as a non-canonical alias; the
 canonical opener is a bare `~~~`. To write a literal fenced *code* block in
-prose, use a backtick fence or a `~~~` fence with a language info string —
+prose, use a backtick fence or a `~~~` fence with a language info string:
 adding more tildes does not escape, as a `~~~~` block is still a card.)
 
 ```markdown
@@ -59,7 +59,7 @@ Each document must declare its target format in the root block's `$quill` system
 
 Quillmark follows a three-stage pipeline:
 
-1. **Parse & Normalize** - Extract card-yaml blocks and body prose; apply schema coercion/defaults, strip bidi characters, fix HTML fences. Absent fields are zero-filled in the backend projection (never persisted) — partial documents are always renderable.
+1. **Parse & Normalize** - Extract card-yaml blocks and body prose; apply schema coercion/defaults, strip bidi characters, fix HTML fences. Absent fields are zero-filled in the backend projection (never persisted): partial documents are always renderable.
 2. **Compile** - Backend receives plate content + JSON data and converts them into final artifacts (PDF, SVG, PNG, etc.)
 3. **Output** - Return artifacts with metadata
 

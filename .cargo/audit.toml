@@ -1,6 +1,6 @@
 # Advisories the workspace cannot act on. `cargo audit` already reports
 # unmaintained/yanked crates as non-fatal warnings, so only vulnerabilities that
-# are pinned out of reach belong here — each with the reason it is out of reach
+# are pinned out of reach belong here: each with the reason it is out of reach
 # and the condition that retires the entry. Anything not listed fails CI.
 
 [advisories]

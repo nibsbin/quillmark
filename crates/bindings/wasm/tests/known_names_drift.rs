@@ -3,7 +3,7 @@
 //! `runtime/runtime.js`'s `isUnknown*` guards decide known-vs-unknown from
 //! hand-spelled name tables. A table that lags a new built-in reports that
 //! built-in as unknown, and a read-modify-write consumer round-trips it through
-//! its unknown carrier, dropping the payload — silently, since the wire accepts
+//! its unknown carrier, dropping the payload: silently, since the wire accepts
 //! the resulting write. So the tables are checked against the Rust constants
 //! they mirror rather than against a comment asking someone to remember.
 //!
@@ -37,15 +37,15 @@ fn js_known_name_tables_match_the_rust_open_sets() {
     assert_eq!(js_set("KNOWN_LINE_KINDS"), Content::RESERVED_LINE_KINDS);
     assert_eq!(js_set("KNOWN_CONTAINERS"), Content::RESERVED_CONTAINERS);
     assert_eq!(js_set("KNOWN_MARK_TYPES"), Content::RESERVED_MARK_TYPES);
-    // The island axis has no reserved-name rule — its `type` is a bare `String`,
-    // never an `Unknown` variant — so `KnownIslandType` is the known half.
+    // The island axis has no reserved-name rule (its `type` is a bare `String`,
+    // never an `Unknown` variant) so `KnownIslandType` is the known half.
     let island_types: Vec<_> = KnownIslandType::ALL.iter().map(|k| k.as_str()).collect();
     assert_eq!(js_set("KNOWN_ISLAND_TYPES"), island_types);
 }
 
 /// The same names are spelled a third time as TypeScript unions in
 /// `src/engine.rs`. A union that lags a new built-in is a consumer that cannot
-/// narrow the new arm, so it is pinned here too — one place to look when adding
+/// narrow the new arm, so it is pinned here too: one place to look when adding
 /// a built-in. Arm *shape* varies (the payload-free mark types share one arm),
 /// so this asserts the name appears in the union, not how it is spelled there.
 #[test]

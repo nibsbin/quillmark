@@ -18,7 +18,7 @@ pub mod sealed {
 ///
 /// Unsupported, and the trait's shape is why. [`Backend::open`] returns a
 /// [`LiveSession`], which only a `SessionHandle` implementation can build,
-/// through `LiveSession::new` — and both of those are `#[doc(hidden)]`, so an
+/// through `LiveSession::new`, and both of those are `#[doc(hidden)]`, so an
 /// out-of-workspace backend writes against items this crate neither documents
 /// nor holds stable.
 ///
@@ -49,7 +49,7 @@ pub trait Backend: sealed::Sealed + Send + Sync + std::fmt::Debug {
 }
 
 /// The refusal every backend owes a format outside its
-/// [`Backend::supported_formats`], under `backend::format_not_supported` —
+/// [`Backend::supported_formats`], under `backend::format_not_supported`:
 /// the one code a caller matches for this condition, so it is built once here
 /// rather than once per backend.
 ///
@@ -70,16 +70,16 @@ pub fn unsupported_format(format: OutputFormat, backend: &str, supported: &[Outp
 /// mount a canvas preview without first paying to open one).
 ///
 /// Canvas paint needs a per-page *visual image* of the laid-out page, so the
-/// predicate keys off the visual-page output formats — [`OutputFormat::Png`]
-/// (raster) and [`OutputFormat::Svg`] (vector) — as opposed to
+/// predicate keys off the visual-page output formats ([`OutputFormat::Png`]
+/// (raster) and [`OutputFormat::Svg`] (vector)) as opposed to
 /// [`OutputFormat::Pdf`] (a document). A backend that can rasterize a page
 /// advertises one of these in [`Backend::supported_formats`].
 ///
 /// This is only a hint. The **authoritative** answer is
 /// [`LiveSession::supports_canvas`](crate::LiveSession::supports_canvas),
 /// which is derived from the session's actual canvas seam
-/// ([`SessionHandle::page_size_pt`](crate::session::SessionHandle::page_size_pt))
-/// — there is no separately maintained capability flag to drift from the
+/// ([`SessionHandle::page_size_pt`](crate::session::SessionHandle::page_size_pt));
+/// there is no separately maintained capability flag to drift from the
 /// implementation (a canvas backend pairs `render_rgba` with `page_size_pt`).
 pub fn formats_support_canvas(formats: &[OutputFormat]) -> bool {
     formats

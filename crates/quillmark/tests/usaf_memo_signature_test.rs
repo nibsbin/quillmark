@@ -17,7 +17,7 @@ const PT_PER_IN: f32 = 72.0;
 const SIG_BLOCK_LEFT_IN: f32 = 4.5;
 
 /// Pull every `/FT /Sig` widget's `/Rect` out of a PDF as `[x0, y0, x1, y1]` in
-/// points. Byte-level scan — good enough for the uncompressed widget dicts the
+/// points. Byte-level scan: good enough for the uncompressed widget dicts the
 /// overlay pass appends.
 fn signature_widget_rects(pdf: &[u8]) -> Vec<[f32; 4]> {
     let mut rects = Vec::new();

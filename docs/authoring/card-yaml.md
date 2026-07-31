@@ -1,6 +1,6 @@
 # card-yaml Blocks
 
-Quillmark documents carry structured metadata in **card-yaml blocks** —
+Quillmark documents carry structured metadata in **card-yaml blocks**:
 explicitly delimited blocks that isolate YAML data from the surrounding
 Markdown prose. The first such block (the *root block*) names the format used
 to render the document; later blocks are composable [cards](#card-blocks).
@@ -22,27 +22,27 @@ tags: ["important", "draft"]
 
 A card-yaml block has three parts, in order:
 
-1. **Opening fence** — a bare `~~~` (three tildes, no info string). No leading
+1. **Opening fence**: a bare `~~~` (three tildes, no info string). No leading
    indentation. The `~~~card-yaml` info string is also accepted on
    input as a non-canonical alias; it parses identically and re-emits as a bare
    `~~~`.
-2. **YAML payload** — a standard YAML mapping. The reserved keys `$quill`,
+2. **YAML payload**: a standard YAML mapping. The reserved keys `$quill`,
    `$kind`, `$id`, `$ext`, and `$seed` carry system metadata (see below); every
    other key is a user-defined data field.
-3. **Closing fence** — a tilde run at least as long as the opener. The canonical opener and closer are both `~~~`; a longer opener (e.g. `~~~~`) requires an equally long closer.
+3. **Closing fence**: a tilde run at least as long as the opener. The canonical opener and closer are both `~~~`; a longer opener (e.g. `~~~~`) requires an equally long closer.
 
 The unstructured Markdown body begins immediately after the closing `~~~`
 fence and runs to the next opening fence or the end of the document.
 
 A blank line is required immediately above every `~~~` opener,
 *except* when the opener is the very first line of the document. A
-`~~~` line without a blank line above it is **not** an opener — it is
+`~~~` line without a blank line above it is **not** an opener: it is
 treated as an ordinary code block.
 
 Because every column-zero `~~~` block is a card-yaml block, writing a literal
 fenced code block in prose requires the escape hatch: use a **backtick fence**
 (or a `~~~` fence carrying a language info string, e.g. `~~~rust`). Adding more
-tildes does not escape — a `~~~~` block is still a card (its closer must just
+tildes does not escape: a `~~~~` block is still a card (its closer must just
 be at least as long). A `~~~` fence whose info string is anything other than
 `card-yaml` stays an ordinary code block.
 
@@ -54,18 +54,18 @@ on the block's typed metadata.
 
 - **`$quill: <name>@<version>`** names the format used to render the
   document. The root block (the first block, identified by position) **must
-  declare `$quill`** — it is the only required `$` entry. If the root block
+  declare `$quill`**: it is the only required `$` entry. If the root block
   is missing `$quill`, parsing fails.
 - **`$kind: <kind>`** identifies a card's kind. The root block's kind is
-  `main` by position; `$kind: main` may be omitted or declared explicitly —
+  `main` by position; `$kind: main` may be omitted or declared explicitly:
   any other value is a parse error. Every composable card must declare a kind
   matching `[a-z_][a-z0-9_]*` other than `main`.
-- **`$id: <value>`** is an opaque, optional identifier — the durable card
+- **`$id: <value>`** is an opaque, optional identifier: the durable card
   handle, carried through the round-trip. Unique per document: the first
   card carrying a given `$id` keeps it, and a later duplicate (or an empty
   `$id`) is dropped with a warning.
 - **`$ext: <mapping>`** is an opaque YAML mapping reserved for out-of-band
-  extension data — UI editor state, agent annotations, anything bespoke to a
+  extension data: UI editor state, agent annotations, anything bespoke to a
   consumer that should not reach the rendered output. Round-trips through
   Markdown and the storage DTO; **never** appears in the plate JSON consumed
   by backends. The value must be a mapping (scalars and sequences are
@@ -81,7 +81,7 @@ on the block's typed metadata.
 
 `$` metadata entries may appear anywhere in the block's payload (the
 canonical emission puts them first, in the order `$quill`, `$kind`,
-`$id`, `$ext`, `$seed`). Any other `$`-prefixed key is a parse error — the set
+`$id`, `$ext`, `$seed`). Any other `$`-prefixed key is a parse error: the set
 is closed.
 
 ### Version Selectors
@@ -159,14 +159,14 @@ is significant). Only `$`-prefixed keys are reserved for system metadata.
 ## Comments
 
 YAML comments are supported in the payload and round-trip through
-`toMarkdown` — both own-line comments and inline comments:
+`toMarkdown`, both own-line comments and inline comments:
 
 ```yaml
 # An own-line comment.
 title: My Document  # an inline comment
 ```
 
-Comments adjacent to `$` metadata keys — own-line or inline — round-trip
+Comments adjacent to `$` metadata keys (own-line or inline) round-trip
 identically to comments on data fields.
 
 ## Placeholder Fields (`!must_fill`)
@@ -195,13 +195,13 @@ is the only placeholder tag; every other custom YAML tag (`!include`, `!env`,
 
 Use **block style** for placeholders. A marker written inside a flow
 collection (`addr: {street: !must_fill}`), on a bare sequence element
-(`- !must_fill`), or under a YAML anchor/merge key is **not** preserved — the
+(`- !must_fill`), or under a YAML anchor/merge key is **not** preserved: the
 flow and bare-element cases emit a `parse::fill_marker_unsupported_position`
 warning so the loss is never silent.
 
 ## Card Blocks
 
-Every block after the root is a *card* — a composable, repeatable record. A card
+Every block after the root is a *card*: a composable, repeatable record. A card
 declares `$kind: <kind>` (matching `[a-z_][a-z0-9_]*`, never `main`) alongside its
 data fields; the Markdown after its closing `~~~` fence is the card's body.
 
@@ -233,9 +233,9 @@ price: 29.99
 Gadget description.
 ```
 
-Each card is collected into the plate JSON's `$cards` array. Its body Markdown —
+Each card is collected into the plate JSON's `$cards` array. Its body Markdown:
 everything between that card's closing `~~~` fence and the next block's opener
-(or document end) — is carried as the card's `$body` value.
+(or document end): is carried as the card's `$body` value.
 
 Card kinds and their field schemas are declared in `Quill.yaml` under
 `card_kinds`; see the
@@ -243,7 +243,7 @@ Card kinds and their field schemas are declared in `Quill.yaml` under
 
 ## Emission
 
-`toMarkdown` always emits the canonical block form — a bare `~~~`
+`toMarkdown` always emits the canonical block form: a bare `~~~`
 opener, the `$` metadata lines in the canonical order `$quill`, `$kind`,
 `$id`, `$ext`, `$seed`, the remaining data fields, and a `~~~` closer. The root
 block emits `$quill` and `$kind: main` plus any `$id` / `$ext` / `$seed` it

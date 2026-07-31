@@ -1,21 +1,21 @@
 //! The per-field edit surface: a [`Delta`] of text splices over the USV content,
-//! plus the **stale-text writer** path — cold-parse a full new markdown document,
+//! plus the **stale-text writer** path, cold-parse a full new markdown document,
 //! char-diff it against the base, and rebase the base's identity marks
 //! (anchors/comments) through the diff so annotations survive an LLM
 //! full-document rewrite with no preservation contract on the LLM.
 //!
 //! ## Text splices, not attributed ops
 //!
-//! [`Delta`] is `retain` / `insert` / `delete` over the character sequence —
+//! [`Delta`] is `retain` / `insert` / `delete` over the character sequence:
 //! CodeMirror `ChangeSet` / OT text semantics, **not** Quill-Delta. It carries
 //! no formatting attributes: marks and islands are separate `(range, kind)` data
 //! that *rebase through* a delta ([`Delta::map_pos`]), they do not ride it as op
-//! attributes. This is deliberate — an attribute map is a per-character property
+//! attributes. This is deliberate: an attribute map is a per-character property
 //! map and cannot represent overlapping same-kind marks or two distinct
 //! identity anchors over one range, the exact algebra the content model keeps
 //! (Peritext free overlap + identity handles). Editing marks and line/block
 //! attributes are their own op channels, not attributes on this delta. The
-//! positional channel stays isomorphic to a text CRDT's op stream — the shape
+//! positional channel stays isomorphic to a text CRDT's op stream: the shape
 //! real-time collaborative editing would need.
 //!
 //! [`diff`] computes a Myers/LCS minimal edit script and pairs it with a
@@ -31,7 +31,7 @@
 //! naive rebase collapses an anchor in the moved text to the deletion point. The
 //! detector re-homes an anchor onto a **single, verbatim block move** by locating
 //! the moved text in the new content. Text both *moved and rewritten* in one round
-//! (the match is lost) drops the anchor — the accepted residual, stated not
+//! (the match is lost) drops the anchor: the accepted residual, stated not
 //! hidden.
 
 use crate::model::{Mark, MarkKind, Content};
@@ -42,8 +42,8 @@ use similar::{ChangeTag, TextDiff};
 /// base positions; `Retain`/`Delete` advance the base cursor, `Insert` adds new
 /// text. USV throughout.
 ///
-/// Serializes as `{ "ops": [ {"retain": n} | {"insert": s} | {"delete": n} ] }`
-/// — plain, structured-clone-able data an editor bridge stores in a change
+/// Serializes as `{ "ops": [ {"retain": n} | {"insert": s} | {"delete": n} ] }`:
+/// plain, structured-clone-able data an editor bridge stores in a change
 /// record and maps its own positions through ([`map_pos`](Self::map_pos)). The
 /// serde shape is the wire the `rebase` codec and `applyChange` bundle carry
 /// across the language bindings.
@@ -78,7 +78,7 @@ pub enum Assoc {
     After,
 }
 
-/// A delta's expected base length disagreed with the text it was applied to —
+/// A delta's expected base length disagreed with the text it was applied to:
 /// the delta was built against a different revision of the base.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BaseLengthMismatch {
@@ -87,7 +87,7 @@ pub struct BaseLengthMismatch {
 }
 
 impl Delta {
-    /// Chars of base the `Retain`/`Delete` ops together consume — the base
+    /// Chars of base the `Retain`/`Delete` ops together consume: the base
     /// length this delta was built against.
     pub fn expected_base_len(&self) -> usize {
         self.ops
@@ -100,7 +100,7 @@ impl Delta {
     }
 
     /// Apply to `base`, producing the new text. Base beyond what the ops
-    /// consume is retained implicitly — a *short* delta names only the region
+    /// consume is retained implicitly: a *short* delta names only the region
     /// it changes (a bare prepend, an edit near the start) and the untouched
     /// remainder carries through. **Panics** if the ops consume *more* base than
     /// exists (`expected_base_len() > base.chars().count()`): a delta built
@@ -114,7 +114,7 @@ impl Delta {
         let mut i = 0usize;
         for op in &self.ops {
             match op {
-                // Over-long Retain/Delete index past `chars` and panic here —
+                // Over-long Retain/Delete index past `chars` and panic here:
                 // the intended failure on a wrong-revision base.
                 Op::Retain(n) => {
                     out.extend(&chars[i..i + n]);
@@ -129,7 +129,7 @@ impl Delta {
     }
 
     /// [`Self::apply`], but returns [`BaseLengthMismatch`] instead of panicking
-    /// when the ops consume *more* base than `base` has — a delta built against
+    /// when the ops consume *more* base than `base` has: a delta built against
     /// a longer revision. Implicit trailing retain is the contract: a *short*
     /// delta (ops consuming less than `base`) is accepted and the untouched
     /// remainder is retained, matching [`map_pos`](Self::map_pos)'s implicit
@@ -168,7 +168,7 @@ impl Delta {
                 }
                 Op::Delete(n) => {
                     if pos < old + n {
-                        // Inside (or at the start of) the deletion — collapse to
+                        // Inside (or at the start of) the deletion: collapse to
                         // the deletion point.
                         return new;
                     }
@@ -191,8 +191,8 @@ impl Delta {
     }
 
     /// Whether base position `pos` sits strictly inside a deleted span. The
-    /// deletion's left edge (`pos == old`) survives — a point anchor there stays
-    /// put — so only `old < pos < old + n` counts as deleted.
+    /// deletion's left edge (`pos == old`) survives (a point anchor there stays
+    /// put) so only `old < pos < old + n` counts as deleted.
     fn is_deleted(&self, pos: usize) -> bool {
         let mut old = 0usize;
         for op in &self.ops {
@@ -210,7 +210,7 @@ impl Delta {
         false
     }
 
-    /// New-text char ranges covered by `Insert` ops — the only regions an anchor
+    /// New-text char ranges covered by `Insert` ops: the only regions an anchor
     /// may be re-homed into (moved text must have been *inserted*, not merely
     /// present in surviving text elsewhere).
     fn inserted_spans(&self) -> Vec<(usize, usize)> {
@@ -233,20 +233,20 @@ impl Delta {
     }
 }
 
-/// A relocation match shorter than this many chars is too weak to trust — the
+/// A relocation match shorter than this many chars is too weak to trust: the
 /// verbatim-move detector's length floor.
 const MIN_MOVE: usize = 4;
 
 /// Above this many USV chars, the single-line path skips `similar`'s
 /// char-level Myers diff and falls back to [`coarse_replace`].
 /// `TextDiff::from_chars` is O(N·D) with no deadline; on two long, unrelated
-/// single-line strings (no newlines to fall back to line granularity — the
+/// single-line strings (no newlines to fall back to line granularity: the
 /// realistic shape of an LLM full-document rewrite) D grows with N, so cost
 /// is effectively quadratic. Two unrelated 30,000-char lines measured 86s in
 /// a debug build. This threshold sits comfortably below that (6x headroom)
 /// while still covering a real single-paragraph field, which plausibly runs
 /// to a few thousand chars. A fixed cutoff was chosen over
-/// `TextDiffConfig::timeout` — nothing in this crate uses `TextDiffConfig`
+/// `TextDiffConfig::timeout`: nothing in this crate uses `TextDiffConfig`
 /// today, and a char budget is deterministic (no wall-clock flakiness in
 /// CI, no partial-diff result to reason about).
 const CHAR_DIFF_LIMIT: usize = 5_000;
@@ -287,7 +287,7 @@ pub fn diff(base: &str, new: &str) -> Delta {
 /// Linear-time fallback for [`diff`] above [`CHAR_DIFF_LIMIT`]: trims the
 /// longest common prefix and suffix (plain char comparison, no Myers) and
 /// replaces only the middle. Not a minimal edit script, but still useful for
-/// anchor rebasing — an anchor sitting in the untouched prefix or suffix maps
+/// anchor rebasing: an anchor sitting in the untouched prefix or suffix maps
 /// through a real `Retain` exactly as it would from a full diff; only an
 /// anchor inside the replaced middle depends on the move detector.
 fn coarse_replace(base: &str, new: &str) -> Delta {
@@ -353,7 +353,7 @@ fn push_insert(ops: &mut Vec<Op>, s: &str) {
 /// the diff (re-homing verbatim block moves). The returned content is `new_rt`
 /// (structure/marks/islands from the fresh import) plus the surviving anchors.
 ///
-/// Returns the new content and the [`Delta`] used — the text change an editor
+/// Returns the new content and the [`Delta`] used: the text change an editor
 /// bridge can map its own positions through.
 pub fn diff_import(
     base: &Content,
@@ -378,7 +378,7 @@ pub fn diff_import(
                 kind: m.kind.clone(),
             });
         }
-        // else: detached — the accepted residual drop.
+        // else: detached: the accepted residual drop.
     }
     new_rt.normalize();
     Ok((new_rt, delta))
@@ -399,7 +399,7 @@ fn rebase_anchor(
             let p = delta.map_pos(m.start, Assoc::Before);
             return Some((p, p));
         }
-        // Its surrounding text was deleted — relocate only if that text was
+        // Its surrounding text was deleted: relocate only if that text was
         // re-inserted verbatim elsewhere (a move).
         return relocate_point(base_chars, new_chars, inserted, m.start);
     }
@@ -409,7 +409,7 @@ fn rebase_anchor(
     if ns < ne {
         return Some((ns, ne)); // survived a surrounding edit
     }
-    // Collapsed — try a verbatim block move: the annotated span must reappear
+    // Collapsed, try a verbatim block move: the annotated span must reappear
     // inside inserted text (not merely somewhere in the surviving content).
     relocate_span(base_chars, new_chars, inserted, m.start, m.end)
 }
@@ -432,7 +432,7 @@ fn relocate_span(
 }
 
 /// Relocate a point anchor by its left context (text immediately before it),
-/// but only if that context reappears inside inserted text — the same
+/// but only if that context reappears inside inserted text: the same
 /// move-only, length-floored discipline as [`relocate_span`].
 fn relocate_point(
     base_chars: &[char],
@@ -455,12 +455,12 @@ fn relocate_point(
 }
 
 /// First index where `needle` occurs in `hay` while *overlapping* an inserted
-/// span — i.e. the match touches text the rewrite actually inserted, not purely
+/// span; i.e. the match touches text the rewrite actually inserted, not purely
 /// surviving text. Overlap (not full containment) is required because a diff
 /// can split a moved block across an inserted region and the retained
 /// suffix; demanding containment would miss real moves, while demanding overlap
 /// still rejects an unrelated occurrence sitting entirely in retained text.
-/// Enforces [`MIN_MOVE`]. O(hay × needle) naive scan — fine at memo/document
+/// Enforces [`MIN_MOVE`]. O(hay × needle) naive scan: fine at memo/document
 /// scale; a large-document target would want a substring-search algorithm
 /// (e.g. KMP) here.
 fn find_in_spans(hay: &[char], needle: &[char], spans: &[(usize, usize)]) -> Option<usize> {
@@ -506,7 +506,7 @@ mod tests {
         assert_eq!(short.try_apply("hello").unwrap(), "NEW hello");
 
         // An edit near the start, naming only its region, applies against the
-        // whole base — same result whether or not a trailing retain is written.
+        // whole base: same result whether or not a trailing retain is written.
         let partial = Delta {
             ops: vec![Op::Retain(1), Op::Insert("X".into())],
         };
@@ -516,7 +516,7 @@ mod tests {
     #[test]
     fn try_apply_rejects_over_long_delta() {
         // Consuming more base than exists is a wrong-revision delta, not an
-        // abbreviated one — it errors, it does not clamp.
+        // abbreviated one: it errors, it does not clamp.
         let over = Delta {
             ops: vec![Op::Retain(9)],
         };
@@ -602,7 +602,7 @@ mod tests {
         });
         base.normalize();
         // First paragraph deleted; the second (with its own "target") survives
-        // as retained text — the anchor must drop, not jump to it.
+        // as retained text: the anchor must drop, not jump to it.
         let (new_rt, _) = diff_import(&base, "keep the target two").unwrap();
         assert!(
             !new_rt
@@ -682,7 +682,7 @@ mod tests {
     }
 
     /// Deterministic filler with no long common substring between the two
-    /// variants — worst case for a char-level Myers diff.
+    /// variants: worst case for a char-level Myers diff.
     fn filler(n: usize, offset: u8) -> String {
         (0..n)
             .map(|i| char::from(b'a' + ((i as u8).wrapping_mul(7).wrapping_add(offset)) % 26))
@@ -691,7 +691,7 @@ mod tests {
 
     #[test]
     fn large_single_line_diff_stays_fast() {
-        // Two long, unrelated single-line strings — exactly the shape
+        // Two long, unrelated single-line strings: exactly the shape
         // `similar::TextDiff::from_chars` chokes on with no cutoff
         // (30,000 unrelated chars measured 86s in a debug build). Above
         // CHAR_DIFF_LIMIT, `diff` must skip Myers and stay far under budget

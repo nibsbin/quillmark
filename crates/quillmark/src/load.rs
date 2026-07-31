@@ -12,14 +12,14 @@ use quillmark_core::{Diagnostic, FileTreeNode, Quill, QuillIgnore, RenderError, 
 /// Load a quill from a filesystem directory. Honours a root `.quillignore`,
 /// else a default ignore set. (The fs walk lives here; core stays fs-agnostic.)
 ///
-/// Pure config load — no backend, no engine; the declared backend is resolved
+/// Pure config load: no backend, no engine; the declared backend is resolved
 /// later, at render time. For an in-memory tree, call [`Quill::from_tree`].
 pub fn quill_from_path<P: AsRef<Path>>(path: P) -> Result<Quill, RenderError> {
     quill_from_path_with_warnings(path).map(|(quill, _)| quill)
 }
 
 /// [`quill_from_path`], keeping the config's advisory diagnostics rather than
-/// dropping them — the door for a caller that reports them (`quillmark
+/// dropping them: the door for a caller that reports them (`quillmark
 /// validate -v`).
 pub fn quill_from_path_with_warnings<P: AsRef<Path>>(
     path: P,
@@ -33,7 +33,7 @@ pub fn quill_from_path_with_warnings<P: AsRef<Path>>(
     Quill::from_tree_with_warnings(tree).map_err(RenderError::new)
 }
 
-/// Walk a filesystem path into an in-memory [`FileTreeNode`] — the tree half of
+/// Walk a filesystem path into an in-memory [`FileTreeNode`]: the tree half of
 /// [`quill_from_path`], for a caller that wants to edit the tree before
 /// [`Quill::from_tree`] reads it.
 ///

@@ -71,7 +71,7 @@ pub(crate) struct PreScan {
     /// value tree by the assembler. Top-level fills ride on `PreItem::Field`.
     pub nested_fills: Vec<Vec<CommentPathSegment>>,
     pub warnings: Vec<Diagnostic>,
-    /// `!must_fill` on mappings — turned into `ParseError::InvalidStructure` by the parser.
+    /// `!must_fill` on mappings: turned into `ParseError::InvalidStructure` by the parser.
     pub fill_target_errors: Vec<String>,
 }
 
@@ -118,7 +118,7 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
         }
 
         // Inside a block scalar: lines indented deeper than the opening key
-        // are literal text — a markdown heading (`## …`), a `- ` bullet, or a
+        // are literal text, a markdown heading (`## …`), a `- ` bullet, or a
         // `key: value` line in the content must pass through verbatim, never
         // parsed as a comment, sequence item, or nested key. A line at or
         // below the key's indent ends the scalar and is reprocessed normally.
@@ -144,7 +144,7 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
             let frame = stack.last().expect("root frame always present");
 
             if frame.path.is_empty() {
-                // Top-level comment — preserve via PreItem::Comment.
+                // Top-level comment: preserve via PreItem::Comment.
                 out.items.push(PreItem::Comment {
                     text: text.to_string(),
                     inline: false,
@@ -403,8 +403,8 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
     // Catch-all: prescan lifts every `!must_fill` it can preserve (block-style
     // `key: !must_fill` and `- key: !must_fill`), stripping the tag from the
     // cleaned text. Any tag that survives here sits in a position we cannot
-    // round-trip — inside a flow collection (`{…}` / `[…]`) or on a bare
-    // sequence element — where serde_saphyr would silently drop it. Warn rather
+    // round-trip (inside a flow collection (`{…}` / `[…]`) or on a bare
+    // sequence element) where serde_saphyr would silently drop it. Warn rather
     // than lose the marker quietly.
     if cleaned_lines
         .iter()
@@ -438,12 +438,12 @@ fn line_has_unsupported_fill_tag(line: &str) -> bool {
             let at = from + rel;
             let after = at + tag.len();
             // Trailing boundary: a real tag ends at whitespace, flow
-            // punctuation, or end of line — not mid-word (`!fillet`).
+            // punctuation, or end of line, not mid-word (`!fillet`).
             let trailing_ok = line[after..]
                 .chars()
                 .next()
                 .is_none_or(|c| c.is_whitespace() || matches!(c, ',' | '}' | ']'));
-            // Leading boundary: the tag sits in value/element position —
+            // Leading boundary: the tag sits in value/element position,
             // directly after `{` / `[` / `,`, or after whitespace following
             // `:` / `-` / `,` / `{` / `[`.
             let before = line[..at].trim_end_matches([' ', '\t']);
@@ -504,7 +504,7 @@ fn is_block_scalar_header(value: &str) -> bool {
     t.starts_with('|') || t.starts_with('>')
 }
 
-/// `true` when the value portion of a `key:` line is empty — real value is on
+/// `true` when the value portion of a `key:` line is empty: real value is on
 /// subsequent indented lines.
 fn has_empty_inline_value(after_colon: &str) -> bool {
     let (v, _) = split_trailing_comment(after_colon);
@@ -542,7 +542,7 @@ fn split_key(line: &str) -> Option<(String, String)> {
 
 /// Split `value` into `(value_without_comment, trailing_comment)` following
 /// YAML's rules. A `#` preceded by whitespace (or at value start) begins a
-/// comment, except inside a quoted scalar — and a quote opens a quoted
+/// comment, except inside a quoted scalar, and a quote opens a quoted
 /// scalar only when it is the *first* character of the scalar, or appears
 /// inside a flow collection (`[`/`{`). Inside a plain scalar, `'` and `"`
 /// are ordinary characters: `x: it's fine # note` carries a comment.
@@ -553,7 +553,7 @@ fn split_trailing_comment(value: &str) -> (String, Option<String>) {
     };
     match bytes[first] {
         // Quoted scalar: skip the quoted body, then scan for a comment. An
-        // unterminated quote means the scalar continues on the next line —
+        // unterminated quote means the scalar continues on the next line:
         // no comment on this one.
         b'"' | b'\'' => match find_quote_end(bytes, first) {
             Some(end) => find_comment_from(value, end + 1),
@@ -649,7 +649,7 @@ fn split_flow_trailing_comment(value: &str) -> (String, Option<String>) {
 }
 
 /// The placeholder tag. `!must_fill` is the only recognized fill tag; any
-/// other custom tag is treated as a noncanonical tag — dropped with a
+/// other custom tag is treated as a noncanonical tag: dropped with a
 /// `parse::unsupported_yaml_tag` warning.
 const FILL_TAGS: [&str; 1] = ["!must_fill"];
 
@@ -987,7 +987,7 @@ mod tests {
             "arr:\n  - \u{2013}line\n  - \u{2014}line\n",
             "arr:\n  - \u{201C}smart-quoted\u{201D}\n",
             "arr:\n  - \u{1F600} emoji\n",
-            // A literal block scalar holding mixed dashes — mirrors the eval
+            // A literal block scalar holding mixed dashes: mirrors the eval
             // payload (`bullets: |` with `–` substituted for `-`).
             "bullets: |\n  - (U) **A:** text\n  – (U) **B:** text\n",
         ];
@@ -1002,7 +1002,7 @@ mod tests {
     #[test]
     fn block_scalar_content_is_not_parsed_as_structure() {
         // A markdown block scalar whose content contains a `#` heading, a
-        // `- ` bullet, and a `key:` line. None of these are YAML structure —
+        // `- ` bullet, and a `key:` line. None of these are YAML structure:
         // they must survive verbatim in the cleaned YAML, and the field after
         // the block must still parse as a top-level field.
         let input =

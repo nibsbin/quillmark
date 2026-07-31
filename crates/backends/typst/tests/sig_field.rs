@@ -232,7 +232,7 @@ Just a doc.
     );
 
     // The signature overlay is skipped (no fields), but the always-on
-    // `/Producer` metadata pass appends exactly one incremental update — so
+    // `/Producer` metadata pass appends exactly one incremental update, so
     // expect two startxref markers and a single `/Prev` chain entry.
     let startxref_count = pdf
         .windows(b"startxref\n".len())
@@ -255,11 +255,11 @@ Just a doc.
 // ─── generalized form-field types ────────────────────────────────────────────
 //
 // These assert the typst→spec *mapping* (the bound `/V`, checkbox truthiness,
-// choice option-matching). The spine bytes — the MULTILINE/COMBO `Ff` flag bits
-// and the `/MK /CA (4)` checkbox glyph — are owned by
+// choice option-matching). The spine bytes (the MULTILINE/COMBO `Ff` flag bits
+// and the `/MK /CA (4)` checkbox glyph) are owned by
 // `quillmark-pdf/tests/stamp.rs` at the spine seam, not re-checked here.
 
-/// case: text fields — single-line and multiline; the bound `/V` string lands
+/// case: text fields: single-line and multiline; the bound `/V` string lands
 /// on the widget.
 #[test]
 fn form_field_text_single_and_multiline() {
@@ -279,7 +279,7 @@ fn form_field_text_single_and_multiline() {
     assert_eq!(multi.get(b"FT").unwrap().as_name().unwrap(), b"Tx");
 }
 
-/// case: checkbox — `/FT /Btn`; `/V` and `/AS` are `/Yes` when bound truthy and
+/// case: checkbox: `/FT /Btn`; `/V` and `/AS` are `/Yes` when bound truthy and
 /// `/Off` when not.
 #[test]
 fn form_field_checkbox_checked_and_unchecked() {
@@ -302,7 +302,7 @@ fn form_field_checkbox_checked_and_unchecked() {
     assert_eq!(off.get(b"AS").unwrap().as_name().unwrap(), b"Off");
 }
 
-/// case: choice — `/FT /Ch`; `/Opt` carries the options; `/V` carries the
+/// case: choice: `/FT /Ch`; `/Opt` carries the options; `/V` carries the
 /// chosen option when it matches, and is absent when it does not.
 #[test]
 fn form_field_choice_options_and_value_matching() {
@@ -338,7 +338,7 @@ fn form_field_choice_options_and_value_matching() {
     }
 }
 
-/// case: signature via the general helper — `/FT /Sig`, value-free, unchanged
+/// case: signature via the general helper: `/FT /Sig`, value-free, unchanged
 /// from the dedicated `signature-field`.
 #[test]
 fn form_field_signature_via_general_helper() {
@@ -359,7 +359,7 @@ fn form_field_signature_via_general_helper() {
     assert_eq!(af.get(b"SigFlags").unwrap().as_i64().unwrap(), 1);
 }
 
-/// case: value binding from real `json_data` — the plate reads `data.*` and the
+/// case: value binding from real `json_data`: the plate reads `data.*` and the
 /// bound values land in each widget's `/V`.
 #[test]
 fn form_field_value_binding_from_data() {
@@ -423,11 +423,11 @@ fn form_field_value_binding_from_data() {
 
 /// case: `session.regions()` exposes a region only for a `field:`-bound widget,
 /// keyed on that schema path (of any field type), each carrying page+geometry. A
-/// widget that binds no schema field has only a `/T` name — not a schema
-/// address — and surfaces nothing. A session-level query, not a render output.
+/// widget that binds no schema field has only a `/T` name (not a schema
+/// address) and surfaces nothing. A session-level query, not a render output.
 /// `field:` validates against the schema like `tagged`, so the test owns its
 /// schema (declaring every bound field) rather than borrowing the host
-/// fixture's field inventory — a fixture edit cannot break a widget test.
+/// fixture's field inventory: a fixture edit cannot break a widget test.
 #[test]
 fn form_field_regions_key_on_bound_schema_field() {
     const YAML: &str = r#"
@@ -489,7 +489,7 @@ main:
         "an unbound widget exposes no region: {:?}",
         fields.keys().collect::<Vec<_>>()
     );
-    // A bound widget keys only on its schema path — its `/T` name must not also
+    // A bound widget keys only on its schema path: its `/T` name must not also
     // leak as a region key.
     for t_name in ["txt", "chk", "cho", "sig"] {
         assert!(

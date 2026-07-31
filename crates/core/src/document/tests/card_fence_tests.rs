@@ -97,7 +97,7 @@ fn card_fence_preserves_yaml_comments() {
 
 #[test]
 fn card_fence_without_kind_is_allowed() {
-    // A composable block with no `$kind` — `$kind` is optional metadata.
+    // A composable block with no `$kind`: `$kind` is optional metadata.
     let src = "~~~card-yaml\n$quill: q\n$kind: main\n~~~\n\n~~~card-yaml\nname: Widget\n~~~\n";
     let doc = Document::parse(src).unwrap().document;
     assert_eq!(doc.cards().len(), 1);
@@ -142,7 +142,7 @@ fn legacy_card_yaml_info_string_normalizes_to_bare_tilde() {
 
 #[test]
 fn longer_tilde_run_still_opens_a_card() {
-    // A four-tilde fence is NOT an escape hatch — it is a (non-canonical) card
+    // A four-tilde fence is NOT an escape hatch: it is a (non-canonical) card
     // opener whose closer must be at least as long, and which re-emits as the
     // canonical three-tilde form.
     let src = "~~~\n$quill: q\n$kind: main\n~~~\n\n~~~~\n$kind: note\nname: Widget\n~~~~\n";
@@ -176,7 +176,7 @@ fn shorter_tilde_run_does_not_close_a_longer_fence() {
 #[test]
 fn backtick_fence_is_the_code_block_escape_hatch() {
     // The way to write a literal fenced code block in body prose is a backtick
-    // fence — it is never a card-yaml block, even when it contains `~~~` lines.
+    // fence: it is never a card-yaml block, even when it contains `~~~` lines.
     let src = "~~~\n$quill: q\n$kind: main\n~~~\n\n```\n~~~\nnot a card\n~~~\n```\n";
     let doc = Document::parse(src).unwrap().document;
     assert_eq!(doc.cards().len(), 0);
@@ -196,7 +196,7 @@ fn tilde_fence_with_language_info_is_an_ordinary_code_block() {
 #[test]
 fn tilde_code_block_without_blank_line_above_stays_in_body() {
     // A `~~~` fence with no blank line above it fails the blank-line rule, so
-    // the scanner does NOT claim it as a card-yaml opener — it is left in the
+    // the scanner does NOT claim it as a card-yaml opener: it is left in the
     // body verbatim for the CommonMark renderer to treat as a code block.
     let src = "~~~\n$quill: q\n$kind: main\n~~~\n\nText line\n~~~\ncode\n~~~\n";
     let doc = Document::parse(src).unwrap().document;
@@ -257,7 +257,7 @@ fn card_yaml_info_inside_outer_code_fence_is_not_a_card() {
 
 #[test]
 fn card_fence_without_blank_line_above_is_not_a_card() {
-    // The blank-line rule fails — the `~~~card-yaml` fence is delegated to
+    // The blank-line rule fails: the `~~~card-yaml` fence is delegated to
     // CommonMark as a code block, with a non-fatal lint warning.
     let src = "~~~card-yaml\n$quill: q\n$kind: main\n~~~\n\nSome prose.\n~~~card-yaml\n$kind: product\nname: Widget\n~~~\n";
     let out = Document::parse(src).unwrap();
@@ -302,7 +302,7 @@ The body.
 fn indented_tilde_line_never_closes_a_card_fence() {
     // An indented `~~~` (1–3 spaces, valid as a CommonMark closer) is not a
     // card-yaml closer. With no column-zero closer, the opener falls through
-    // to CommonMark as an unclosed code block, with the standard warning —
+    // to CommonMark as an unclosed code block, with the standard warning:
     // a diagnostic, not silent truncation.
     let src = "~~~\n$quill: q@1.0\n$kind: main\nx: 1\n  ~~~\n";
     let err = Document::parse(src).unwrap_err();

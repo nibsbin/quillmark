@@ -10,7 +10,7 @@ use crate::value::QuillValue;
 
 /// The `contentMediaType` marking a richtext field in the transform schema. The
 /// value crossing the seam for such a field is canonical Content-JSON (an
-/// object), not a string — backends classify on this media type to lower the
+/// object), not a string: backends classify on this media type to lower the
 /// content rather than a scalar.
 pub const CONTENT_MEDIA_TYPE: &str = "application/quillmark-content+json";
 
@@ -19,7 +19,7 @@ pub const CONTENT_MEDIA_TYPE: &str = "application/quillmark-content+json";
 /// this key is the JSON Schema–shaped wire for editor and backend consumers.
 pub const QUILLMARK_INLINE_KEY: &str = "quillmark:inline";
 
-/// Transform-schema keyword marking a `plaintext` field — the literal-codec
+/// Transform-schema keyword marking a `plaintext` field: the literal-codec
 /// sibling of richtext. It rides the same [`CONTENT_MEDIA_TYPE`], so backends
 /// lower it identically; this annotation only tells editors to mount a
 /// formatting-free surface and to author/project through the literal codec.
@@ -68,7 +68,7 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
             }
             FieldType::PlainText { inline } => {
                 // Plaintext rides the *same* content and media type as richtext, so
-                // a backend classifies and lowers it identically — no backend edit.
+                // a backend classifies and lowers it identically: no backend edit.
                 // The distinction (literal codec, no formatting) is carried by the
                 // `quillmark:plain` annotation, which only editors consult.
                 schema.insert(
@@ -89,7 +89,7 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
             }
             FieldType::Enum => {
                 // The promoted token projects to the idiomatic JSON-Schema
-                // spelling `{type: string, enum: [...]}` — exactly what a backend
+                // spelling `{type: string, enum: [...]}`: exactly what a backend
                 // dispatches on today (a plain string), plus the finite domain.
                 schema.insert(
                     "type".to_string(),

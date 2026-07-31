@@ -4,7 +4,7 @@
 //! [`field_at`](crate::LiveSession::field_at).
 //!
 //! A region ties a rectangle on the rendered page to the **quill schema field**
-//! that produced it — the address the document author already uses to refer to
+//! that produced it: the address the document author already uses to refer to
 //! that field (the same address the Typst plate reads as `data.*` and the
 //! pdfform binder resolves against `compile_data`). The two directions a
 //! consumer navigates get two queries: `regions` answers *field → rectangle*
@@ -17,14 +17,14 @@
 //!   content field) are tracked by the **spans** their glyphs carry: the
 //!   backend evaluates each one's value at its own generated call site and
 //!   records the site's byte window, so every glyph of that content resolves
-//!   back to its field — through *any* placement context, including a package
+//!   back to its field, through *any* placement context, including a package
 //!   that rebuilds the content (a `show`-rule pass that captures paragraphs
 //!   into a state buffer and re-emits them), because the origin rides the
 //!   glyph, not a sibling marker a rebuild could drop. A field that is blank
 //!   or draws nothing (an empty or whitespace-only body) has no inked extent
-//!   to bound and surfaces no region — present-but-empty is not the same as
+//!   to bound and surfaces no region: present-but-empty is not the same as
 //!   placed.
-//! - **Direct scalar references** — every `data.<field>` / `data.at("field")`
+//! - **Direct scalar references**, every `data.<field>` / `data.at("field")`
 //!   expression in the plate is its own tracked site: the interpolated
 //!   value's glyphs carry a span at or around that reference expression. A
 //!   scalar shown in both a header and a footer surfaces both sites, because
@@ -35,21 +35,21 @@
 //!   has no single owner), a value laundered through an intermediate binding
 //!   (`#let s = data.x` … `#s`), and card scalars read from the per-card
 //!   loop variable (`card.from` is *one* expression site shared by every card
-//!   instance — span data holds no per-instance identity; bind a widget for
+//!   instance, span data holds no per-instance identity; bind a widget for
 //!   those).
 //! - **Form-field widgets** carry a schema path explicitly: pdfform binds it
 //!   from the form mapping; a Typst `form-field` binds it from its `field:`
-//!   argument. A widget that binds none produces **no** region — its backend
+//!   argument. A widget that binds none produces **no** region: its backend
 //!   identifier (the `/T` widget name) is not a schema address, so there is
 //!   nothing for a consumer to route to. Only schema-addressable fields surface
 //!   a region.
 //!
 //! **First placement only.** A content value placed at two sites surfaces one
-//! region set — its first placement's — because span data cannot distinguish
+//! region set (its first placement's) because span data cannot distinguish
 //! "package chrome interrupting one placement" from "a second placement of
 //! the same value", and a spanning union would claim the ink between them.
 //! The first placement is one region per page it touches, in page order, so
-//! highlighting covers continuation pages — page marginals (headers, footers,
+//! highlighting covers continuation pages, page marginals (headers, footers,
 //! page numbers) between one page's body and the next's do not end it, only a
 //! same-page interruption does: foreign ink within a page (a rebuild's
 //! numbering chrome) shrinks the region to the placement's true start rather
@@ -64,7 +64,7 @@
 //!
 //! Regions are primarily a session-level query: the geometry is a property of
 //! the current compile, re-read from the session per edit without producing
-//! any byte artifact — the interactive-preview path (overlays over a
+//! any byte artifact, the interactive-preview path (overlays over a
 //! `paint`-ed canvas) reads it that way. A one-shot byte render carries the
 //! same sidecar only on request ([`RenderOptions::regions`](crate::RenderOptions))
 //! for consumers without a live session (static SVG overlays, PDF
@@ -75,7 +75,7 @@
 
 /// One schema field placement's extent on a rendered page.
 ///
-/// `rect` is `[x0, y0, x1, y1]` in PDF points with a **bottom-left** origin —
+/// `rect` is `[x0, y0, x1, y1]` in PDF points with a **bottom-left** origin:
 /// the same final geometry the stamp spine writes to the widget `/Rect`, so the
 /// region and the rendered field describe the identical box.
 ///
@@ -85,7 +85,7 @@
 /// fence) and per page each segment touches, a scalar referenced at several
 /// plate sites yields one per site, and tracked content plus a bound widget
 /// yields both. Consumers group by `field`; every entry routes to that field.
-/// The whole-field box is **derived** — the union of a page's `span`-bearing
+/// The whole-field box is **derived**, the union of a page's `span`-bearing
 /// segment rects, so inter-paragraph whitespace stays uncovered; the
 /// [`field_boxes`] helper (and
 /// [`LiveSession::field_boxes`](crate::LiveSession::field_boxes)) owns that
@@ -94,7 +94,7 @@
 #[serde(rename_all = "camelCase")]
 #[non_exhaustive]
 pub struct RenderedRegion {
-    /// The field's plate-space schema address as the backend keys it —
+    /// The field's plate-space schema address as the backend keys it:
     /// `"signature_block"` or `"$cards.<kind>.<ordinal>.<field>"` (a per-kind
     /// ordinal). This is the backend-native form; a binding that owns the
     /// document's card kinds translates it to a canonical
@@ -109,14 +109,14 @@ pub struct RenderedRegion {
     pub rect: [f32; 4],
     /// The content slice this box covers: USV `[start, end)` into the field's
     /// `Content` for content ink (one segment's range), `None` for a scalar
-    /// reference site or a widget — geometry with no content address. Additive
+    /// reference site or a widget, geometry with no content address. Additive
     /// and optional: omitted from the wire when `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub span: Option<[usize; 2]>,
 }
 
 impl RenderedRegion {
-    /// A geometry entry with no content address — a scalar reference site or a
+    /// A geometry entry with no content address: a scalar reference site or a
     /// widget. Content ink adds its slice with [`with_span`](Self::with_span).
     pub fn new(field: String, page: usize, rect: [f32; 4]) -> Self {
         Self {
@@ -150,8 +150,8 @@ impl RenderedRegion {
 /// union rect per page, over that field's **`span`-bearing** (content) regions.
 ///
 /// This owns the subtle part [`regions`](crate::LiveSession::regions) leaves to
-/// consumers — filter by field, keep only the segment rects that carry a `span`,
-/// union per page, inherit first-placement-only from the input — so a
+/// consumers, filter by field, keep only the segment rects that carry a `span`,
+/// union per page, inherit first-placement-only from the input, so a
 /// "highlight the focused field" consumer never reimplements it and cannot
 /// reintroduce the field-level union the disjointness invariant exists to
 /// prevent (the input is already striped; this unions the *bounding* box per
@@ -164,7 +164,7 @@ impl RenderedRegion {
 ///
 /// **Content only.** A scalar-reference site or a widget carries no `span`
 /// ([`RenderedRegion::span`] is `None`), so a field placed *only* as a scalar
-/// reference or a bound widget yields an empty result here — its highlight box
+/// reference or a bound widget yields an empty result here: its highlight box
 /// is a single region's `rect`, read straight from the region set with no
 /// derivation. Each returned region carries the union `span`
 /// (`[min start, max end)` over the page's contributing segments);
@@ -206,7 +206,7 @@ pub fn field_boxes(regions: &[RenderedRegion], field: &str) -> Vec<RenderedRegio
 // there; it must not cross to a consumer, which speaks one canonical
 // [`DocPath`]. The session owns the translation, resolving the per-kind ordinal
 // to the document-array absolute index (and back) against the ordered card
-// kinds of the current compile — so `regions` / `fieldAt` / `positionAt` /
+// kinds of the current compile, so `regions` / `fieldAt` / `positionAt` /
 // `locate` speak `DocPath`, never `$cards.` ordinals.
 
 use crate::path::{DocPath, DocSeg};
@@ -224,7 +224,7 @@ fn abs_card_index(card_kinds: &[Option<&str>], kind: &str, ord: usize) -> Option
         .map(|(i, _)| i)
 }
 
-/// The per-kind ordinal of the card at absolute index `abs` — how many cards of
+/// The per-kind ordinal of the card at absolute index `abs`: how many cards of
 /// the same kind precede it, matching the plate's `emit_cards` counter. `None`
 /// when `abs` is out of range or the card is kindless.
 fn per_kind_ordinal(card_kinds: &[Option<&str>], abs: usize) -> Option<usize> {
@@ -237,7 +237,7 @@ fn per_kind_ordinal(card_kinds: &[Option<&str>], abs: usize) -> Option<usize> {
     )
 }
 
-/// Rewrite each region's plate-space `field` to its [`DocPath`] string — the
+/// Rewrite each region's plate-space `field` to its [`DocPath`] string: the
 /// translation [`RenderedRegion`] puts at a binding boundary. One funnel for
 /// every region a binding hands out, render sidecar and session query alike, so
 /// a consumer never sees the two address spaces mixed. An address outside the
@@ -260,7 +260,7 @@ pub fn regions_to_doc_path(
 /// (main body), a bare `<field>` (main field), `$cards.<kind>.<ord>.<field>`
 /// (card field), and `$cards.<kind>.<ord>.$body` (card body). `None` for an
 /// address outside that grammar or one naming a card the kind list cannot
-/// place — the caller keeps the original string.
+/// place: the caller keeps the original string.
 pub fn plate_addr_to_doc_path(addr: &str, card_kinds: &[Option<&str>]) -> Option<DocPath> {
     if addr == "$body" {
         return Some(DocPath::main_body());
@@ -317,7 +317,7 @@ pub fn doc_path_to_plate_addr(path: &DocPath, card_kinds: &[Option<&str>]) -> Op
     }
 }
 
-/// How precisely a [`ContentHit::pos`] resolved — the marker a caret UI reads to
+/// How precisely a [`ContentHit::pos`] resolved: the marker a caret UI reads to
 /// decide whether to trust the offset. The value is never sub-cluster; the two
 /// variants distinguish the finest this API offers from the segment floor it
 /// degrades to.
@@ -326,13 +326,13 @@ pub fn doc_path_to_plate_addr(path: &DocPath, card_kinds: &[Option<&str>]) -> Op
 #[non_exhaustive]
 pub enum HitGranularity {
     /// Cluster-exact: `pos` is the first content char of the grapheme cluster
-    /// under the point. The finest resolution — a char that escaped to several
+    /// under the point. The finest resolution: a char that escaped to several
     /// generated bytes (`*`→`\*`, `你`→3, the `//`→`\/\/` coupling) still floors
     /// to its cluster's first char, so this is *not* sub-character. A caret UI
     /// can place the caret at `pos` directly.
     Cluster,
     /// Segment-floored: the point landed on origin-less ink (list markers,
-    /// numbering, a multi-line code fence's interior — spans that resolve to no
+    /// numbering, a multi-line code fence's interior: spans that resolve to no
     /// single run), so `pos` degraded to the containing segment's content start
     /// rather than a wrong finer position. A caret UI should treat `pos` as the
     /// segment it selected, not a within-segment caret.
@@ -347,8 +347,8 @@ pub enum HitGranularity {
 /// `pos` is **cluster-exact, not sub-character**: a hit inside a char that
 /// escaped to several generated bytes (`*`→`\*`, `你`→3, the `//`→`\/\/`
 /// coupling) floors to that cluster's first content char. A click on
-/// origin-less ink (list markers, numbering, a multi-line code fence's interior
-/// — spans that resolve to no single run) degrades to the containing segment's
+/// origin-less ink (list markers, numbering, a multi-line code fence's interior:
+/// spans that resolve to no single run) degrades to the containing segment's
 /// content start rather than a wrong finer position, and a click off all content
 /// ink resolves to nothing. [`granularity`](Self::granularity) reports which of
 /// those two happened, so a caret UI need not guess.
@@ -406,7 +406,7 @@ mod tests {
         assert_eq!(back, region);
     }
 
-    /// `span` is omitted when `None` and defaults back on read — the
+    /// `span` is omitted when `None` and defaults back on read: the
     /// additive-optional discipline that lets a scalar/widget region (no content
     /// address) parse the same as a content region carrying a span.
     #[test]
@@ -448,7 +448,7 @@ mod tests {
         assert_eq!(serde_json::from_str::<ContentHit>(&json).unwrap(), seg);
     }
 
-    /// `granularity` omits when `None` and defaults back on read — the
+    /// `granularity` omits when `None` and defaults back on read: the
     /// additive-optional discipline, so a hit straight from a backend (no source
     /// map) parses the same as one that reports it.
     #[test]
@@ -477,7 +477,7 @@ mod tests {
     }
 
     /// `field_boxes` unions a page's span-bearing segment rects into one box and
-    /// ignores other fields — the whole-field highlight a consumer would
+    /// ignores other fields: the whole-field highlight a consumer would
     /// otherwise derive by hand. The union `span` bounds `[min start, max end)`,
     /// and each page gets its own box, page-ascending.
     #[test]
@@ -498,7 +498,7 @@ mod tests {
     }
 
     /// A field placed only as a scalar reference or widget (no `span`) yields no
-    /// derived content box — its highlight is a single region's `rect`, read
+    /// derived content box: its highlight is a single region's `rect`, read
     /// straight from the set.
     #[test]
     fn field_boxes_empty_for_span_less_field() {
@@ -562,7 +562,7 @@ mod tests {
 
     #[test]
     fn translation_rejects_unplaceable_and_foreign_shapes() {
-        // A 3rd `note` (ordinal 2) does not exist — only two notes.
+        // A 3rd `note` (ordinal 2) does not exist: only two notes.
         assert_eq!(to_doc("$cards.note.2.on"), None);
         // A DocPath whose kind disagrees with the slot does not translate back.
         assert_eq!(

@@ -4,8 +4,8 @@
 //! the static inputs at load ([`crate::bind`]); this module resolves only the
 //! per-document *value* and copies the rest through.
 //!
-//! Binding is against `compile_data` — the same validated, zero-filled object
-//! the Typst plate reads as `data.*` — so zero-fill, schema validation,
+//! Binding is against `compile_data` (the same validated, zero-filled object
+//! the Typst plate reads as `data.*`) so zero-fill, schema validation,
 //! defaults, and scalar coercion are inherited, not re-implemented. Addressing
 //! is a shallow path: a root field name, optionally followed by an array index
 //! or nested key (`field`, `field.0`, `field.sub`). Coercion is type-directed;
@@ -15,7 +15,7 @@
 //!
 //! A `schema_field` rooted at the reserved `$cards` key binds to one card
 //! instance in the document's `$cards` array (the same array the Typst plate
-//! iterates), by kind + index: `$cards.<kind>.<i>.<field>` — the `i`-th card
+//! iterates), by kind + index: `$cards.<kind>.<i>.<field>`, the `i`-th card
 //! whose `$kind` is `<kind>` (e.g. `$cards.indorsement.1.from` is the second
 //! indorsement). This survives reordering and intervening cards of other kinds.
 //! Absolute-index addressing (`$cards.<i>`) is not supported: a widget kind must
@@ -122,7 +122,7 @@ fn number_to_string(n: &serde_json::Number) -> String {
 fn coerce_text(v: &Value) -> Option<String> {
     match v {
         // An array (e.g. an `array<richtext>`, richtext-content elements, or a
-        // `string[]` field) joins its element texts with newlines — the
+        // `string[]` field) joins its element texts with newlines: the
         // multiline text fill.
         Value::Array(arr) => {
             let s = arr
@@ -139,7 +139,7 @@ fn coerce_text(v: &Value) -> Option<String> {
 }
 
 /// A scalar's (or richtext object's) display text: a string/number/bool
-/// directly, or a richtext content via its plaintext — the content text minus
+/// directly, or a richtext content via its plaintext, the content text minus
 /// island slots (tables/images have no plaintext form; a non-content object
 /// binds nothing). Shared by top-level scalar coercion and per-element array
 /// joining, which is why an empty string survives here and is blanked by the
@@ -158,7 +158,7 @@ fn element_text(e: &Value) -> Option<String> {
 /// (island slots stripped). `None` for a non-content object or an empty result.
 ///
 /// Tables and images carry no plaintext, so a content whose content is only a
-/// table binds nothing here — the field renders blank, no diagnostic. This is
+/// table binds nothing here: the field renders blank, no diagnostic. This is
 /// the decided pdfform limitation; see `to_plaintext`.
 fn richtext_plaintext(v: &Value) -> Option<String> {
     let rt = quillmark_content::serial::from_canonical_value(v).ok()?;
@@ -258,7 +258,7 @@ mod tests {
     #[test]
     fn richtext_content_lowers_to_plaintext() {
         // A richtext field crosses the seam as canonical content JSON; the widget
-        // value is its plaintext — markup dropped (marks live off the text),
+        // value is its plaintext: markup dropped (marks live off the text),
         // island slots stripped.
         let rt =
             quillmark_content::import::from_markdown("A **bold** claim.\n\nSecond line.").unwrap();
@@ -415,7 +415,7 @@ mod tests {
     /// Card slots on a STATIC multi-page form, end-to-end through `field_spec`:
     /// a form with one card slot per page binds each card INSTANCE to its own
     /// page via card-instance addressing. Two cards of one kind, two slots on two
-    /// different pages — instance 0's value must land on page 0 and instance 1's
+    /// different pages: instance 0's value must land on page 0 and instance 1's
     /// on page 1, each as a full `FieldSpec`. (The form's page set is fixed;
     /// page composition / continuation is out of scope.)
     #[test]

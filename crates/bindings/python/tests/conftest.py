@@ -20,7 +20,7 @@ QUILLS_PATH = RESOURCES_PATH / "quills"
 def raises_edit_code(code):
     """Assert the block raises `QuillmarkError` whose primary diagnostic carries
     the given namespaced `edit::` code. Mutator identity rides on `code`, not on
-    message text, so tests route on it — see prose/canon/ERROR.md."""
+    message text, so tests route on it; see prose/canon/ERROR.md."""
     with pytest.raises(QuillmarkError) as exc_info:
         yield exc_info
     assert exc_info.value.diagnostics[0].code == code
@@ -54,7 +54,7 @@ def taro_quill_dir():
 
 @pytest.fixture
 def engine():
-    """A fresh `Quillmark` engine — the render / capability dispatcher.
+    """A fresh `Quillmark` engine: the render / capability dispatcher.
 
     A `Quill` is engine-free, validated data (`Quill.from_path`); rendering
     (`render`) and the format probe (`supported_formats`) are asked of the
@@ -85,6 +85,6 @@ Without taro ice cream, life would be a mistake.
 def taro_md():
     """Return a sample taro markdown document.
 
-    The test owns its input — it does not depend on a bundled fixture file.
+    The test owns its input: it does not depend on a bundled fixture file.
     """
     return TARO_MARKDOWN

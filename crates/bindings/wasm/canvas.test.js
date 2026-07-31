@@ -44,7 +44,7 @@ class FakeCanvasRenderingContext2D {
 }
 
 // In real browsers, OffscreenCanvasRenderingContext2D and
-// CanvasRenderingContext2D do NOT share an inheritance chain — they're
+// CanvasRenderingContext2D do NOT share an inheritance chain: they're
 // siblings. Defining the polyfill as an independent class (not a subclass)
 // ensures the Rust-side `instanceof` dispatch actually exercises the
 // second branch, instead of matching `CanvasRenderingContext2D` via
@@ -75,7 +75,7 @@ const { Quillmark, Quill, Document } = await import('@quillmark-wasm')
 // The pdfform backend bundle: same engine + LiveSession + canvas
 // surface as the typst bundle, but a Typst-free PDF-form backend that paints by
 // rasterizing its pre-flattened page. SEPARATE WASM memory from the typst
-// bundle — its handles never mix with the typst ones.
+// bundle: its handles never mix with the typst ones.
 const {
   Quillmark: PdfformQuillmark,
   Quill: PdfformQuill,
@@ -109,7 +109,7 @@ function openSession() {
 }
 
 /** Asserts a captured `putImageData` call's RGBA buffer carries both visible
- * ink (non-white, opaque pixels) and opaque background — catches a rasterizer
+ * ink (non-white, opaque pixels) and opaque background: catches a rasterizer
  * regression that wrote zeros, swapped channels, or skipped demultiply.
  * Shared by the typst and pdfform paint tests below; the two rasterizers
  * differ, but this ink/opacity scan is the same check on either buffer. */
@@ -186,7 +186,7 @@ describe('LiveSession canvas preview', () => {
     const ctx = new FakeCanvasRenderingContext2D()
     const result = session.paint(ctx, 0, { layoutScale, densityScale })
 
-    // Layout dimensions reflect layoutScale only — independent of density.
+    // Layout dimensions reflect layoutScale only: independent of density.
     expect(result.layoutWidth).toBeCloseTo(widthPt * layoutScale, 4)
     expect(result.layoutHeight).toBeCloseTo(heightPt * layoutScale, 4)
 
@@ -198,7 +198,7 @@ describe('LiveSession canvas preview', () => {
     expect(result.clamped).toBe(false)
     expect(result.effectiveDensityScale).toBeCloseTo(densityScale, 6)
 
-    // Painter owns canvas.width/height — they must equal the reported
+    // Painter owns canvas.width/height: they must equal the reported
     // pixel dimensions.
     expect(ctx.canvas.width).toBe(result.pixelWidth)
     expect(ctx.canvas.height).toBe(result.pixelHeight)
@@ -325,7 +325,7 @@ describe('LiveSession canvas preview (pdfform backend)', () => {
     const ctx = new FakeCanvasRenderingContext2D()
     const result = session.paint(ctx, 0, { layoutScale, densityScale })
 
-    // Layout dimensions reflect layoutScale only — independent of density.
+    // Layout dimensions reflect layoutScale only: independent of density.
     expect(result.layoutWidth).toBeCloseTo(widthPt * layoutScale, 4)
     expect(result.layoutHeight).toBeCloseTo(heightPt * layoutScale, 4)
 
@@ -334,7 +334,7 @@ describe('LiveSession canvas preview (pdfform backend)', () => {
     expect(result.pixelWidth).toBeCloseTo(Math.round(widthPt * layoutScale * densityScale), -1)
     expect(result.pixelHeight).toBeCloseTo(Math.round(heightPt * layoutScale * densityScale), -1)
 
-    // Painter owns canvas.width/height — they equal the reported pixel dims.
+    // Painter owns canvas.width/height: they equal the reported pixel dims.
     expect(ctx.canvas.width).toBe(result.pixelWidth)
     expect(ctx.canvas.height).toBe(result.pixelHeight)
 

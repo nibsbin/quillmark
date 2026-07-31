@@ -1,5 +1,5 @@
 //! End-to-end acceptance test for the `richtext_form` fixture: a pdfform quill
-//! that binds richtext fields. It exercises the content → plaintext lowering —
+//! that binds richtext fields. It exercises the content → plaintext lowering:
 //! a richtext field crosses the seam as canonical content JSON and pdfform lowers
 //! it to `Content.text` (markup dropped, island slots stripped) for the widget
 //! `/V`. No pdfform field carries rich formatting; the Adobe-only `/RV` entry is
@@ -36,7 +36,7 @@ fn richtext_fields_lower_to_plaintext_field_values() {
     assert_eq!(result.output_format, OutputFormat::Pdf);
 
     let pdf = &result.artifacts[0].bytes;
-    let doc = PdfDoc::load_mem(pdf).expect("lopdf reparse — structurally valid");
+    let doc = PdfDoc::load_mem(pdf).expect("lopdf reparse: structurally valid");
     let cat = doc.catalog().expect("catalog");
     let af = doc
         .get_object(cat.get(b"AcroForm").unwrap().as_reference().unwrap())
@@ -64,7 +64,7 @@ fn richtext_fields_lower_to_plaintext_field_values() {
 /// each is **stored as a canonical content object** rather than an authored
 /// markdown string. This exercises coercion's object branch (re-validate +
 /// re-canonicalize) end-to-end and proves it lowers identically to the
-/// string-authored path — the content-from-write form renders the same PDF.
+/// string-authored path: the content-from-write form renders the same PDF.
 #[test]
 fn richtext_fields_written_as_content_render_identically() {
     let quill = quillmark::quill_from_path(quillmark_fixtures::quills_path("richtext_form"))
@@ -97,7 +97,7 @@ fn richtext_fields_written_as_content_render_identically() {
         .expect("render ok");
 
     let pdf = &result.artifacts[0].bytes;
-    let doc = PdfDoc::load_mem(pdf).expect("lopdf reparse — structurally valid");
+    let doc = PdfDoc::load_mem(pdf).expect("lopdf reparse: structurally valid");
     let cat = doc.catalog().expect("catalog");
     let af = doc
         .get_object(cat.get(b"AcroForm").unwrap().as_reference().unwrap())

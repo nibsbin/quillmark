@@ -1,6 +1,6 @@
 //! Consumer-facing operations on a [`Quill`]: validation, seeding, and the
 //! zero-filled compile to backend wire JSON. All pure reads of the quill's
-//! config — no backend, no engine (those live in the `quillmark` crate).
+//! config: no backend, no engine (those live in the `quillmark` crate).
 
 use std::str::FromStr;
 
@@ -33,24 +33,24 @@ impl Quill {
 }
 
 /// The document→data compile is a pure config read: coercion, validation,
-/// normalization, and zero-fill consult only the parsed schemas — never the
+/// normalization, and zero-fill consult only the parsed schemas, never the
 /// quill's file tree. Living on [`QuillConfig`] lets a consumer that only
 /// compiles data (e.g. a live session's `apply`) retain the config alone
 /// rather than the whole quill with its font/package bytes.
 impl QuillConfig {
     /// Applies coercion, validation, normalization, and **zero-filled render**:
     /// every absent schema field is resolved to its authored value, else its
-    /// schema default, else its type-empty zero value — in this plate-JSON
+    /// schema default, else its type-empty zero value, in this plate-JSON
     /// projection only, never in the persisted document. A merely *incomplete*
     /// document compiles fine; only a *malformed* one (a value that won't
-    /// coerce/validate) errors. A `!must_fill` placeholder never gates render —
+    /// coerce/validate) errors. A `!must_fill` placeholder never gates render:
     /// it surfaces as a non-fatal warning from `validate`. See
     /// `prose/canon/SCHEMAS.md`.
     pub fn compile_data(&self, doc: &Document) -> Result<serde_json::Value, RenderError> {
         // The gate is the **one** coercion pass: `coerce_and_validate` conforms
         // every field (Render leniency, fallible) and validates, erroring on a
         // malformed document. The ladder below consumes its coerced, NFC-normalized
-        // output rather than re-conforming — a document that reaches the ladder is
+        // output rather than re-conforming: a document that reaches the ladder is
         // already Render-conformed, so the plate is the sourced ladder with its
         // rungs dropped. `resolve()` runs the total (keep-raw) conform for its own
         // fallibility-free path; both cut the same [`ladder_sourced`].
@@ -68,7 +68,7 @@ impl QuillConfig {
             normalized.main().body().clone(),
         );
         // A card's `$body` is defined for the plate iff its kind resolves to a
-        // body-enabled schema — the `$body` half of "absent on
+        // body-enabled schema: the `$body` half of "absent on
         // undefined". Capture it here, where the schema is already in hand for
         // field lowering, and hand it to the plate builder, so the decision is
         // never re-derived from the serialized plate. (`$kind`, the document-
@@ -84,7 +84,7 @@ impl QuillConfig {
                     Some(schema) => {
                         plate_fields(ladder_sourced(schema, &card.payload().to_index_map()))
                     }
-                    // Unknown-kind card: authored fields verbatim, no ladder — as
+                    // Unknown-kind card: authored fields verbatim, no ladder, as
                     // the resolved-value view leaves it (`card_states`).
                     None => card.payload().to_index_map(),
                 };
@@ -125,7 +125,7 @@ impl QuillConfig {
         let coerced_doc = Document::from_main_and_cards(coerced_main, coerced_cards);
 
         // Only *malformed* input is fatal (a value that won't coerce/validate).
-        // An incomplete document — absent fields or `!must_fill` placeholders —
+        // An incomplete document (absent fields or `!must_fill` placeholders)
         // renders fine via zero-fill. `validate_document` returns `Err` only
         // with a non-empty error list; each error keeps its own `path` for UI
         // navigation.
@@ -140,7 +140,7 @@ impl QuillConfig {
     /// quill, failing with a `quill::name_mismatch` / `quill::version_mismatch`
     /// diagnostic if either component diverges. The document is well-formed; it
     /// was paired with the wrong quill
-    /// — a different format, or an incompatible version of one — which yields
+    /// (a different format, or an incompatible version of one) which yields
     /// undefined output, so it errors rather than warns.
     ///
     /// Name is the prerequisite (a selector belongs to a *named* quill): a name
@@ -188,11 +188,11 @@ impl Quill {
     /// `validation::*` diagnostics verbatim (same code, `path`, `hint`) so
     /// consumers route on the code without parsing message text: type
     /// mismatches, unknown card kinds, body-on-disabled-body, and the non-fatal
-    /// `validation::must_fill` warning — the only non-fatal one; the rest are
+    /// `validation::must_fill` warning, the only non-fatal one; the rest are
     /// blockers. Field absence is not surfaced (it zero-fills at render).
     ///
     /// Field values, defaults, and presentation order are not part of this
-    /// surface — read them from the [`Document`] payload and the quill schema
+    /// surface: read them from the [`Document`] payload and the quill schema
     /// (`quill.config().schema()`, whose key order is display order).
     pub fn validate(&self, doc: &Document) -> Vec<Diagnostic> {
         let mut diags = match self.config().validate_document(doc) {
@@ -293,7 +293,7 @@ impl Quill {
     /// Seed a starter composable [`Card`] of the given kind (carries `$kind`),
     /// layering an optional per-kind [`SeedOverlay`] over the schema-example
     /// base (`overlay › example › absent`); `None` if the kind is not declared.
-    /// Use to add a new card to a document — pass the document's `$seed` entry
+    /// Use to add a new card to a document: pass the document's `$seed` entry
     /// for the kind (`doc.main().seed().and_then(|m| m.get(card_kind)).and_then(SeedOverlay::from_json)`)
     /// so a card spawned into a template-derived document inherits its curated
     /// starting values, and `None` for the bare schema seed.
@@ -302,7 +302,7 @@ impl Quill {
     }
 }
 
-/// A single-diagnostic quill-mismatch failure. `path` is unset — the
+/// A single-diagnostic quill-mismatch failure. `path` is unset: the
 /// mismatch is the root `$quill` line, not a field.
 fn quill_mismatch(message: String, code: &str, hint: &str) -> RenderError {
     RenderError::from_diag(
@@ -312,8 +312,8 @@ fn quill_mismatch(message: String, code: &str, hint: &str) -> RenderError {
     )
 }
 
-/// Render a seed-overlay validation error as a **warning**-severity diagnostic
-/// — seed overlays are advisory and never gate render. The error's `path` is
+/// Render a seed-overlay validation error as a **warning**-severity diagnostic:
+/// seed overlays are advisory and never gate render. The error's `path` is
 /// already rooted at `$seed.<kind>.<field>` by the caller.
 fn seed_violation_diagnostic(v: &super::validation::ValidationError) -> Diagnostic {
     let mut diag = Diagnostic::new(Severity::Warning, v.to_string())
@@ -326,7 +326,7 @@ fn seed_violation_diagnostic(v: &super::validation::ValidationError) -> Diagnost
 }
 
 /// Wrap a coercion error into a `validation::coercion_failed` failure.
-/// `Diagnostic::path` is unset — coercion runs before structured validation.
+/// `Diagnostic::path` is unset: coercion runs before structured validation.
 fn coercion_error(e: impl std::fmt::Display) -> RenderError {
     RenderError::from_diag(
         Diagnostic::new(Severity::Error, e.to_string())
@@ -336,11 +336,11 @@ fn coercion_error(e: impl std::fmt::Display) -> RenderError {
 }
 
 /// The total (keep-raw) resolver behind [`Quill::resolve`](crate::Quill::resolve):
-/// conform each authored value under Render leniency (keep-raw on failure — the
+/// conform each authored value under Render leniency (keep-raw on failure, the
 /// fallibility-free path a consumer-side view needs), NFC-normalize the key, then
 /// cut the shared [`ladder_sourced`]. The render plate reaches the same rows by a
-/// different route — its gate does the fallible conform, and `compile_data` hands
-/// the coerced result straight to `ladder_sourced` — so the two cut one ladder
+/// different route: its gate does the fallible conform, and `compile_data` hands
+/// the coerced result straight to `ladder_sourced`, so the two cut one ladder
 /// over equal input (a document that passes the gate never takes the keep-raw
 /// branch), never a parallel precedence policy.
 pub(crate) fn resolve_card_sourced(
@@ -351,7 +351,7 @@ pub(crate) fn resolve_card_sourced(
 }
 
 /// Conform one card's authored fields under Render leniency, keep-raw on failure,
-/// NFC-normalizing each key — the total (infallible) coercion the resolved-value
+/// NFC-normalizing each key: the total (infallible) coercion the resolved-value
 /// view runs in place of the render gate's fallible one. Every validated ingress
 /// (parse, the mutators) restricts field names to ASCII (NFC-invariant), so the
 /// normalization only respells keys on a directly-constructed payload
@@ -375,18 +375,18 @@ fn conform_card_render(schema: &CardSchema, card: &Card) -> IndexMap<String, Qui
     coerced
 }
 
-/// The shared sourced ladder both canon projections cut — the render-fidelity
+/// The shared sourced ladder both canon projections cut, the render-fidelity
 /// plate ([`compile_data`](QuillConfig::compile_data)) and the resolved-value view
-/// ([`Quill::resolve`](crate::Quill::resolve)) — over an already-coerced,
+/// ([`Quill::resolve`](crate::Quill::resolve)), over an already-coerced,
 /// NFC-normalized field map. For every declared field it reports the value the
 /// render projection uses and the [`FieldSource`] rung that produced it; undeclared
-/// authored fields carry through verbatim ([`Authored`](FieldSource::Authored)) —
+/// authored fields carry through verbatim ([`Authored`](FieldSource::Authored)):
 /// the schema is a floor, not an allowlist.
 ///
 /// Field order is authored-first with declared-but-absent fields appended: the
 /// render plate's order. Each projection re-cuts the presentation order it wants
-/// from this one value-and-source map — the view rows declared fields first in
-/// declaration order — rather than re-deriving the ladder against a parallel
+/// from this one value-and-source map (the view rows declared fields first in
+/// declaration order) rather than re-deriving the ladder against a parallel
 /// precedence policy (`prose/canon/SCHEMAS.md` § "Value sources and projections").
 /// Null ≡ absent applies recursively inside [`resolve_value_sourced`], so no bare
 /// null reaches either projection.
@@ -395,8 +395,8 @@ pub(crate) fn ladder_sourced(
     coerced: &IndexMap<String, QuillValue>,
 ) -> IndexMap<String, (QuillValue, FieldSource)> {
     // Undeclared authored fields seed the map in authored order (verbatim,
-    // Authored); the declared fields then overlay in place — or append when
-    // absent — each carrying its ladder value and the source rung that produced
+    // Authored); the declared fields then overlay in place (or append when
+    // absent) each carrying its ladder value and the source rung that produced
     // it. Insert on an existing key preserves its authored position, so the
     // order is authored-first, declared-but-absent appended.
     let mut out: IndexMap<String, (QuillValue, FieldSource)> = coerced
@@ -412,7 +412,7 @@ pub(crate) fn ladder_sourced(
     out
 }
 
-/// Drop the source rungs from [`resolve_card_sourced`]'s map — the render plate
+/// Drop the source rungs from [`resolve_card_sourced`]'s map: the render plate
 /// consumes the value half only; the resolved-value view keeps both.
 fn plate_fields(
     sourced: IndexMap<String, (QuillValue, FieldSource)>,
@@ -423,7 +423,7 @@ fn plate_fields(
         .collect()
 }
 
-/// The value half of [`resolve_value_sourced`], discarding the rung tag — the
+/// The value half of [`resolve_value_sourced`], discarding the rung tag: the
 /// nested-recursion helper for a typed dictionary's properties and a typed
 /// array's elements, where the source of an inner cell is not surfaced (a
 /// present dict/array is [`Authored`](FieldSource::Authored) as a whole). Both
@@ -443,7 +443,7 @@ fn resolve_value(value: Option<&QuillValue>, field: &FieldSchema) -> QuillValue 
 /// - A present **typed dictionary** is rebuilt from its declared properties so a
 ///   null/absent property zero-fills and the projection matches the schema shape.
 ///   Source keys the schema does not declare pass through verbatim, matching
-///   `config::coerce_object_props`'s coercion-time behavior — the schema is a
+///   `config::coerce_object_props`'s coercion-time behavior: the schema is a
 ///   floor, not an allowlist, so an undeclared `note:` on a typed dict reaches
 ///   the plate instead of being silently dropped.
 /// - A present **typed array** resolves each element against the item schema, so
@@ -527,7 +527,7 @@ pub(crate) fn resolve_value_sourced(
 }
 
 /// Build a [`Payload`] from a coerced/defaulted field map, re-attaching `$quill`
-/// / `$kind` / `$id` from `source`. Comments are dropped — this payload feeds
+/// / `$kind` / `$id` from `source`. Comments are dropped: this payload feeds
 /// backend rendering, not round-trip storage.
 fn rebuild_payload_with_meta(source: &Card, fields: IndexMap<String, QuillValue>) -> Payload {
     let mut payload = Payload::from_index_map(fields);
@@ -583,7 +583,7 @@ fn fill_warning(path: &DocPath) -> Diagnostic {
     let path = path.to_string();
     Diagnostic::new(
         Severity::Warning,
-        format!("Field `{path}` is marked `!must_fill` — a placeholder awaiting a value."),
+        format!("Field `{path}` is marked `!must_fill`: a placeholder awaiting a value."),
     )
     .with_code("validation::must_fill".to_string())
     .with_path(path)
@@ -628,8 +628,8 @@ properties:
     }
 
     // A card whose declared `$kind` has no schema anchors its `!must_fill`
-    // warning at the bare-index root `cards[<i>].<field>` — matching
-    // `validate_typed_document`'s unknown-card path — never `cards.<kind>[<i>]`.
+    // warning at the bare-index root `cards[<i>].<field>` (matching
+    // `validate_typed_document`'s unknown-card path) never `cards.<kind>[<i>]`.
     // A truly kindless card (no `$kind`) stays bare-index the same way.
     #[test]
     fn unknown_kind_card_fill_path_is_bare_index() {
@@ -716,7 +716,7 @@ items:
     // ── "Absent on undefined": the render plate omits `$body` wherever the
     //    schema defines none (issue 1030). The `$kind` half is structural in
     //    `to_plate_json`; these pin the schema-gated `$body` half. Only the
-    //    body-disabled edge is reachable here — `validate_document` rejects an
+    //    body-disabled edge is reachable here: `validate_document` rejects an
     //    unknown-kind or kindless card before render.
 
     fn plate_of(yaml: &str, md: &str) -> serde_json::Value {

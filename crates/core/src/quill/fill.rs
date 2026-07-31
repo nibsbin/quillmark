@@ -1,13 +1,13 @@
-//! The per-field **zero value** — the type-minimal valid value for a field.
+//! The per-field **zero value**: the type-minimal valid value for a field.
 //!
 //! This is the single source of truth for "the zero value for this field,"
 //! shared by two callers (see `prose/canon/SCHEMAS.md` and `BLUEPRINT.md`):
 //!
-//! - **blueprint/example emission** ([`super::blueprint`]) — the `example`
+//! - **blueprint/example emission** ([`super::blueprint`]): the `example`
 //!   document's fallback, when a field carries neither an `example:` nor a
 //!   `default:`.
 //! - **zero-filled render** ([`QuillConfig::compile_data`](super::QuillConfig::compile_data),
-//!   invoked from `quillmark::orchestration`) — each absent field is filled
+//!   invoked from `quillmark::orchestration`), each absent field is filled
 //!   with its zero value in the plate-JSON projection only, never in the
 //!   persisted document.
 
@@ -19,7 +19,7 @@ use crate::value::QuillValue;
 /// The type-empty (zero) value for `field`: the leanest value satisfying its
 /// declared type.
 ///
-/// Blank for most types — `""` (string/datetime), `0`, `false`, `[]`, and the
+/// Blank for most types: `""` (string/datetime), `0`, `false`, `[]`, and the
 /// empty content for richtext. `enum` has no empty member, so it zeroes to the
 /// first declared variant. An `object` with `properties` is shape-valid only
 /// when every property is present, so it zeroes (recursively) to an object with
@@ -34,7 +34,7 @@ pub fn zero_value(field: &FieldSchema) -> QuillValue {
         FieldType::Array => json!([]),
         FieldType::Object => match &field.properties {
             // Recurse so each property is zero-filled to its own type-empty
-            // leaf — the result is a shape-valid object, not a bare `{}`.
+            // leaf: the result is a shape-valid object, not a bare `{}`.
             Some(properties) => serde_json::Value::Object(
                 properties
                     .iter()
@@ -47,7 +47,7 @@ pub fn zero_value(field: &FieldSchema) -> QuillValue {
         },
         FieldType::Integer | FieldType::Number => json!(0),
         FieldType::Boolean => json!(false),
-        // A content field's zero is the empty content, not `""` — the seam carries
+        // A content field's zero is the empty content, not `""`: the seam carries
         // canonical Content-JSON, so the render floor must zero-fill an absent
         // richtext or plaintext field with a content the backend can lower. The
         // empty content is single-`Para`, so it satisfies `inline` and is `plain`.

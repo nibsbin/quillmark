@@ -6,7 +6,7 @@
 
 Every failure travels as a `Diagnostic`: severity, namespaced `code`, message,
 optional text `location` and document-model `path`. `RenderError` carries a
-non-empty `Vec<Diagnostic>` and has no failure taxonomy beyond them —
+non-empty `Vec<Diagnostic>` and has no failure taxonomy beyond them:
 consumers route on codes, not types. Warnings ride the same currency and
 never block.
 
@@ -20,42 +20,42 @@ severity.
 
 **`Location`**: file name, line (1-indexed), column (1-indexed)
 
-**`Diagnostic`**: severity, optional error `code`, `message`, optional `location` (text anchor: file/line/column), optional `path` (document-model anchor — dotted/bracketed path into the typed `Document`, set by schema validation/coercion), optional `hint`, `source_chain` (omitted from serialization when empty). `location` and `path` are independent and may co-exist.
+**`Diagnostic`**: severity, optional error `code`, `message`, optional `location` (text anchor: file/line/column), optional `path` (document-model anchor, dotted/bracketed path into the typed `Document`, set by schema validation/coercion), optional `hint`, `source_chain` (omitted from serialization when empty). `location` and `path` are independent and may co-exist.
 
-**`ParseError`**: parsing-stage error enum — `InputTooLarge`, `InvalidStructure`, `EmptyInput`, `MissingQuill`, `InvalidQuillReference`, `YamlErrorWithLocation`; converts to `Diagnostic` via `to_diagnostic()`. The `InvalidQuillReference` case (`parse::invalid_quill_reference`) attaches the canonical `$quill` grammar — `quill_ref_hint()` — as the diagnostic hint. That hint is the single source of truth for the reference grammar: bindings surface it verbatim (e.g. WASM `Document.quillRefHint`) rather than re-stating the rule.
+**`ParseError`**: parsing-stage error enum, `InputTooLarge`, `InvalidStructure`, `EmptyInput`, `MissingQuill`, `InvalidQuillReference`, `YamlErrorWithLocation`; converts to `Diagnostic` via `to_diagnostic()`. The `InvalidQuillReference` case (`parse::invalid_quill_reference`) attaches the canonical `$quill` grammar (`quill_ref_hint()`) as the diagnostic hint. That hint is the single source of truth for the reference grammar: bindings surface it verbatim (e.g. WASM `Document.quillRefHint`) rather than re-stating the rule.
 
-**`YamlError`**: the one adapter every `serde-saphyr` error passes through. Sanitizes the message (the engine appends its own Rust API names — `from_multiple`, `DuplicateKeyPolicy` — which `yaml_hints::enrich_yaml_error` strips), derives the hint, and carries the 1-indexed line/column the engine located; `to_diagnostic(code, file)` renders all three. The emit side has no input to point at, so it carries neither position nor hint.
+**`YamlError`**: the one adapter every `serde-saphyr` error passes through. Sanitizes the message (the engine appends its own Rust API names (`from_multiple`, `DuplicateKeyPolicy`) which `yaml_hints::enrich_yaml_error` strips), derives the hint, and carries the 1-indexed line/column the engine located; `to_diagnostic(code, file)` renders all three. The emit side has no input to point at, so it carries neither position nor hint.
 
 It exists so no public signature names `serde-saphyr`, whose `0.0.x` series makes every release of it a semver break. That promise covers the message as much as the type, which is why the sanitizer is inside the adapter rather than beside it.
 
-Two surfaces return one directly (`QuillValue::from_yaml_str`, `QuillConfig::schema_yaml`); `QuillConfig::from_yaml_with_warnings` converts through it to `quill::yaml_parse_error`. The card-yaml path does not travel this way — it becomes `ParseError::YamlErrorWithLocation`, which additionally knows the enclosing block.
+Two surfaces return one directly (`QuillValue::from_yaml_str`, `QuillConfig::schema_yaml`); `QuillConfig::from_yaml_with_warnings` converts through it to `quill::yaml_parse_error`. The card-yaml path does not travel this way: it becomes `ParseError::YamlErrorWithLocation`, which additionally knows the enclosing block.
 
-**`RenderError`**: the main rendering error — a struct carrying a non-empty
+**`RenderError`**: the main rendering error, a struct carrying a non-empty
 `Vec<Diagnostic>` (`RenderError::new` / `from_diag`; `diagnostics()` borrows,
 `into_diagnostics()` consumes). There is no failure taxonomy beyond the
 diagnostics themselves: the machine-routable identity of a failure is each
 diagnostic's namespaced `code` (`parse::*`, `validation::*`, `quill::*`,
-`edit::*`, `typst::*`, `pdfform::*`, `backend::*`, `engine::*`) — consumers
+`edit::*`, `typst::*`, `pdfform::*`, `backend::*`, `engine::*`): consumers
 route on codes, not on a type. Multi-problem stages (validation, quill config, backend
 compilation) carry several diagnostics so every problem reaches the caller in
 one pass. `Display` follows the count-based message rule shared with both
 bindings: the primary diagnostic's message for a single diagnostic, an
 `"<N> error(s): <first message>"` aggregate for more.
 
-Notable codes: `quill::name_mismatch` / `quill::version_mismatch` — the
+Notable codes: `quill::name_mismatch` / `quill::version_mismatch`, the
 document is well-formed but paired with the wrong quill (see
-[VERSIONING.md](VERSIONING.md)); `backend::apply_unsupported` — the default
+[VERSIONING.md](VERSIONING.md)); `backend::apply_unsupported`: the default
 for a backend session that does not override the incremental-`apply` seam
-(both built-in backends override it); `backend::format_not_supported` — the
+(both built-in backends override it); `backend::format_not_supported`: the
 requested format is outside the backend's `supported_formats`, one code on
 every backend so a caller matches the condition once; `engine::backend_not_found`
-— the quill's declared backend is not registered.
+: the quill's declared backend is not registered.
 
-**`edit::*` — mutator diagnostics.** Document and card mutators fail with the
+**`edit::*`: mutator diagnostics.** Document and card mutators fail with the
 `EditError` enum (`crates/core/src/document/edit.rs`), one namespaced code per
 variant via `EditError::code()` (`edit::invalid_field_name`,
 `edit::unknown_field`, `edit::index_out_of_range`, `edit::field_conform`, …).
-Both bindings stamp that code onto the `Diagnostic` they raise — the mutator
+Both bindings stamp that code onto the `Diagnostic` they raise: the mutator
 peer of the render-path namespaces. Identity is the code, never message text:
 routing coercion-vs-undeclared is `edit::field_conform` vs.
 `edit::unknown_field`, read off `diagnostics[0].code`.
@@ -67,26 +67,26 @@ routing coercion-vs-undeclared is `edit::field_conform` vs.
 Warnings travel the same `Diagnostic` currency as errors, on three producer
 families:
 
-- **Parse warnings** — the `warnings` on the `Parsed` that `Document::parse`
+- **Parse warnings**: the `warnings` on the `Parsed` that `Document::parse`
   returns (e.g. a `~~~` opener missing its blank line). The CLI render and the
   WASM one-shot render splice them into `RenderResult.warnings` ahead of any
   compile warnings.
-- **Validation warnings** — `Quill::validate(doc)` returns every
+- **Validation warnings**: `Quill::validate(doc)` returns every
   `validation::*` diagnostic, mixing severities; `validation::must_fill` and
   the `$seed` checks are the non-fatal ones. This is the editor-facing
   surface; the render pipeline zero-fills instead of warning on incomplete
   documents.
-- **Compile warnings** — the Typst backend maps `typst::compile`'s non-fatal
+- **Compile warnings**: the Typst backend maps `typst::compile`'s non-fatal
   diagnostics (font fallback, overfull pages, …) through the same span
   resolution as errors. They are state of the session's current compile:
   exposed via `LiveSession::warnings()` (the `SessionHandle::warnings` seam,
-  default empty), refreshed by each committed `apply` — a failed apply keeps
-  the last-good compile *and* its warnings — and appended to
+  default empty), refreshed by each committed `apply`: a failed apply keeps
+  the last-good compile *and* its warnings, and appended to
   `RenderResult.warnings` on every `render()`, including the one-shot
   `open` → `render` path.
 
 Ordering in a merged `RenderResult.warnings` is pipeline order: parse
-warnings first, then compile warnings. No dedup — the families cannot
+warnings first, then compile warnings. No dedup: the families cannot
 overlap (parse warnings anchor `location` in the markdown source, compile
 warnings in Typst sources).
 
@@ -95,7 +95,7 @@ warnings in Typst sources).
 Python and WASM bindings delegate to core types:
 
 - **Python**: `PyDiagnostic` wraps `Diagnostic`. Every raised exception is `QuillmarkError` (a single type). Every exception carries a `diagnostics` list; `str(exc)` follows the shared count-based message rule.
-- **WASM**: `WasmError` carries a single `diagnostics: Vec<Diagnostic>` (always non-empty). The thrown JS `Error` has a `.diagnostics` array attached and a `.message` derived from `diagnostics` by the same count-based rule. Consumers read `err.diagnostics[0]` for the primary diagnostic and iterate `err.diagnostics` for the rest. Parse failures (`Document.fromMarkdown`) carry the same shape — including the `parse::input_too_large` diagnostic for inputs over `MAX_INPUT_SIZE` (10 MiB) and the `edit::*` codes for post-parse mutators.
+- **WASM**: `WasmError` carries a single `diagnostics: Vec<Diagnostic>` (always non-empty). The thrown JS `Error` has a `.diagnostics` array attached and a `.message` derived from `diagnostics` by the same count-based rule. Consumers read `err.diagnostics[0]` for the primary diagnostic and iterate `err.diagnostics` for the rest. Parse failures (`Document.fromMarkdown`) carry the same shape; including the `parse::input_too_large` diagnostic for inputs over `MAX_INPUT_SIZE` (10 MiB) and the `edit::*` codes for post-parse mutators.
 
 ## Backend Error Mapping
 
@@ -110,29 +110,29 @@ See `crates/backends/typst/src/error_mapping.rs`.
 
 **Quill-load warnings** are the backend's other warning source, hand-coded
 rather than derived from a Typst diagnostic: `typst::path_skipped` (a file
-Typst's `VirtualPath` rejected — asset or package file alike),
+Typst's `VirtualPath` rejected: asset or package file alike),
 `typst::package_manifest`, and `typst::package_entrypoint_missing`. Each marks a
 file the world had to skip, which otherwise surfaces only as an unresolved
 `#import` pointing at the plate instead of at the defect. They are properties of the quill, not of a compile, so
 `QuillWorld` holds them and the session serves them ahead of every compile's own
-— an `apply` swaps the compile half and keeps these.
+: an `apply` swaps the compile half and keeps these.
 
 ## Validation message contract
 
-Field-level validation diagnostics — `validation::type_mismatch` (fatal) and
-`validation::must_fill` (non-fatal, `Severity::Warning`) — emit a single
+Field-level validation diagnostics: `validation::type_mismatch` (fatal) and
+`validation::must_fill` (non-fatal, `Severity::Warning`): emit a single
 canonical shape:
 
-- **Field path** — the document-model anchor of the offending field
+- **Field path**: the document-model anchor of the offending field
   (`recipient`, `cards.indorsement[2].author`); see [Document-model
   paths](#document-model-paths).
-- **Source token** — the YAML scalar that triggered the error, rendered
+- **Source token**: the YAML scalar that triggered the error, rendered
   verbatim in its YAML-canonical form (`42`, `null`, `true`, `""`). Strings
   appear quoted; primitives appear bare. (Absent fields have no source
   token.)
-- **Schema declaration** — the field's declared type and, when present,
+- **Schema declaration**: the field's declared type and, when present,
   its default. Defaults render with the same verbatim formatting.
-- **Both exits when applicable** — the message names two ways out. The
+- **Both exits when applicable**: the message names two ways out. The
   parser does not silently coerce; the message is the lever.
 
 Example messages:
@@ -144,7 +144,7 @@ Either quote the value (`build_number: "42"`) or change the schema's
 ```
 
 ```
-Field `name` is marked `!must_fill` — a placeholder awaiting a value.
+Field `name` is marked `!must_fill`: a placeholder awaiting a value.
 ```
 
 with the hint *"Replace the value and drop the `!must_fill` marker, or remove
@@ -153,7 +153,7 @@ the field still renders (the marked cell zero-fills or uses its suggested
 value).
 
 A present-null value (`subtitle:`, `subtitle: null`, `subtitle: ~`) is
-treated exactly like an omitted field — null ≡ absent. It validates clean
+treated exactly like an omitted field: null ≡ absent. It validates clean
 and zero-fills at render (authored › `default:` › type-zero), so it produces
 no diagnostic. Field absence is likewise not surfaced as a diagnostic (see
 [SCHEMAS.md](SCHEMAS.md) § "Native validation"), so a merely incomplete
@@ -167,7 +167,7 @@ Implementation: `crates/core/src/quill/validation.rs` (the `ValidationError`
 ## Document-model paths
 
 `Diagnostic.path` is a **document-model** anchor into a typed `Document`:
-one canonical grammar, one serializer, one parser — `DocPath`
+one canonical grammar, one serializer, one parser: `DocPath`
 (`crates/core/src/path.rs`). Every emit site (schema validation,
 `!must_fill` collection) constructs a `DocPath`; no site assembles a path
 with `format!`, so the engine never ships two shapes for one anchor.
@@ -182,7 +182,7 @@ with `format!`, so the engine never ships two shapes for one anchor.
 | Body on a typed card | `cards.indorsement[0].body` |
 | Card with unknown kind | `cards[0]` |
 
-Every path is **rooted** — a main field at `main.<field>`, a card field
+Every path is **rooted**: a main field at `main.<field>`, a card field
 kind-qualified at `cards.<kind>[<index>].<field>` (kind and document-array index
 fused so a consumer gets both without a second lookup). The unknown-kind
 whole-card `cards[<index>]` is the only bare-index form. Rooting keeps the
@@ -198,7 +198,7 @@ only `Diagnostic.path`. Mutator (`edit::*`) diagnostics carry it (a field error
 at `main.<field>` or `cards.<kind>[<i>].<field>`, a structural out-of-range op at
 `cards[<i>]`);
 and `LiveSession` geometry (`regions` / `fieldAt` / `positionAt` / `locate`)
-keys on it — the session translates the backend's plate-space
+keys on it: the session translates the backend's plate-space
 `$cards.<kind>.<ordinal>` form to the `DocPath` absolute index at the boundary,
 so one parser routes diagnostics and geometry alike.
 
@@ -206,12 +206,12 @@ so one parser routes diagnostics and geometry alike.
 other two stay backend/template-internal and are named here so they are not
 confused with it:
 
-- **Plate JSON** — the sigiled `data.$cards` a template author composes
+- **Plate JSON**: the sigiled `data.$cards` a template author composes
   ([CARDS.md](CARDS.md)), and the plate-space `$cards.<kind>.<ordinal>.<field>`
   geometry address a plate's `$path` mints. A template-author contract, so it
   keeps its own spelling (renaming it is a blast radius) and translates to
   `DocPath` before it crosses.
-- **Schema-space coercion anchors** — `CoercionError` keeps its own
+- **Schema-space coercion anchors**: `CoercionError` keeps its own
   `card_kinds.<kind>.<field>` / bare-field anchors, a schema-declaration
   namespace, not a document path. Where a coercion becomes an
   `edit::field_conform`, the binding re-anchors it in `DocPath` space at the
@@ -229,7 +229,7 @@ labels) ride the `DocPath` serializer with their prefix as a leading segment.
   hint: Check variable spelling
 ```
 
-**Source chain**: `with_source` walks an attached cause eagerly into `source_chain`. No Rust formatter prints it — `fmt_pretty` covers severity, message, code, location, and hint only. It reaches consumers through serialization instead: WASM as the `source_chain` field, Python as `Diagnostic.source_chain`.
+**Source chain**: `with_source` walks an attached cause eagerly into `source_chain`. No Rust formatter prints it: `fmt_pretty` covers severity, message, code, location, and hint only. It reaches consumers through serialization instead: WASM as the `source_chain` field, Python as `Diagnostic.source_chain`.
 
 **Consolidated printing**: `print_errors()` pretty-prints every diagnostic a `RenderError` carries.
 

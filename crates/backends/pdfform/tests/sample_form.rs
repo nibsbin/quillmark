@@ -32,7 +32,7 @@ fn render(markdown: &str) -> quillmark::RenderResult {
         .expect("render ok")
 }
 
-/// Open a compiled session — the surface that carries schema-field geometry
+/// Open a compiled session: the surface that carries schema-field geometry
 /// (`session.regions()`), independent of any byte render.
 fn open_session(markdown: &str) -> quillmark::LiveSession {
     let quill = quillmark::quill_from_path(quillmark_fixtures::quills_path("sample_form"))
@@ -51,7 +51,7 @@ fn fixture_renders_structurally_valid_filled_pdf() {
     assert_eq!(result.output_format, OutputFormat::Pdf);
     let pdf = &result.artifacts[0].bytes;
 
-    let doc = PdfDoc::load_mem(pdf).expect("lopdf reparse — structurally valid");
+    let doc = PdfDoc::load_mem(pdf).expect("lopdf reparse: structurally valid");
     let cat = doc.catalog().expect("catalog");
     let af = doc
         .get_object(cat.get(b"AcroForm").unwrap().as_reference().unwrap())
@@ -62,7 +62,7 @@ fn fixture_renders_structurally_valid_filled_pdf() {
     assert_eq!(af.get(b"SigFlags").unwrap().as_i64().unwrap(), 1);
     assert_eq!(af.get(b"Fields").unwrap().as_array().unwrap().len(), 8);
 
-    // This e2e pins the *binding* layer — markdown/schema → field values,
+    // This e2e pins the *binding* layer: markdown/schema → field values,
     // tooltip, array join, regions, producer default. The spine bytes it once
     // re-checked (the `Ff` multiline/combo flags, `/Opt` length, checkbox
     // `/V`+`/AS`, and `/FT` names) are owned by the spine seam in
@@ -92,7 +92,7 @@ fn fixture_renders_structurally_valid_filled_pdf() {
     // Region geometry is a session-level query (`session.regions()`), not on the
     // render result: one per *schema-bound* field, keyed on the schema path. The
     // fixture's four unbound widgets carry no `schema_field`, so they are
-    // backend-only artifacts and emit no region — four regions, not eight.
+    // backend-only artifacts and emit no region: four regions, not eight.
     let regions = open_session(FILLED).regions();
     assert_eq!(regions.len(), 4);
     assert!(
