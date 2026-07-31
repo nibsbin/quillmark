@@ -104,7 +104,7 @@ export function isQuillmarkError(e) {
 }
 
 /**
- * Build a `QuillmarkError` JS-side — a real `Error` carrying `diagnostics`, the
+ * Build a `QuillmarkError` JS-side: a real `Error` carrying `diagnostics`, the
  * shape `isQuillmarkError` narrows and the shape Rust's `WasmError::to_js_value`
  * produces. Errors raised by this hand-written layer belong to the same contract
  * as the ones raised across the WASM boundary.
@@ -122,40 +122,37 @@ function quillmarkError(code, message, hint) {
 // ── Foreign core handles: the duplicate-install lane ────────────────────────
 // A duplicate install (two copies of this package in one `node_modules` tree)
 // is two `core` builds: two linear memories and two distinct `Quill`/`Document`
-// classes. `Engine` already tolerates that crossing — it is duck-typed on
+// classes. `Engine` already tolerates that crossing, being duck-typed on
 // `.toTree()`/`.toJson()`/`.backendId` and clones into backend memory as data,
 // so a `Quill` from copy A renders on an `Engine` from copy B.
 //
-// The core methods that take ANOTHER core handle do not, and they fail worse
-// than they need to. `Document.equals(&Document)`, `Quill.validate(&Document)`,
-// `Quill.resolve(&Document)`, and the five writer/reader primitives that take
-// `&Quill` (`Document._commitField` and friends) take the handle by reference,
-// so wasm-bindgen's generated glue runs `_assertClass` before any of our code
-// (emitted unconditionally, not gated on the build profile). The throw is
-// `expected instance of Document` — at a value that IS a `Document`, from the
-// other copy — and it is a bare `Error`, so `isQuillmarkError` says false and the
-// failure escapes this package's error contract entirely.
+// The core methods taking ANOTHER core handle do not. `Document.equals`,
+// `Quill.validate`, `Quill.resolve` and the five writer/reader primitives that
+// take `&Quill` (`Document._commitField` and friends) declare a reference
+// parameter, so wasm-bindgen's generated glue runs `_assertClass` before any of
+// our code (emitted unconditionally, not gated on the build profile). It throws
+// `expected instance of Document` at a value that IS a `Document` from the other
+// copy, as a bare `Error`: `isQuillmarkError` returns false and the failure
+// leaves this package's error contract.
 //
-// So the split-brain is: render works, validate explodes, and the message names
-// neither the cause nor the cure. This section picks ONE policy along the line
-// the codebase already draws — READ-ONLY crossings are transparent, mutating
-// ones are not:
+// The policy follows the line the codebase already draws, every existing
+// crossing (`render`, `open`, `apply`) being read-only: READ-ONLY crossings are
+// transparent, mutating ones are not.
 //
 //   - Reads (`equals`, `validate`, `resolve`, the reader verbs) admit anything
 //     carrying `.toJson()`, route it through the storage DTO, and warn once.
-//     Nothing is written back, so the caller's handle is untouched. This is what
-//     `Engine` already does to reach backend memory.
+//     Nothing is written back, so the caller's handle is untouched.
 //
 //   - Writes (the writer verbs) refuse, at the bind rather than at the first
-//     write. See `requireLocalDoc` for why a write-back cannot be transparent.
+//     write. `requireLocalDoc` carries why a write-back cannot be transparent.
 //
-// A value that is not document-shaped at all, or a DTO this build cannot read,
-// throws a `QuillmarkError` naming the duplicate install either way.
+// A value that is not document-shaped, or a DTO this build cannot read, throws a
+// `QuillmarkError` naming the duplicate install either way.
 //
-// This is a safety net, not an API widening: the declared parameter types stay
-// `Document`, and the fast path is an `instanceof` that costs nothing.
+// A safety net, not an API widening: the declared parameter types stay
+// `Document`, and the local path is an `instanceof`.
 
-/** Warn once per copy — a broken install would otherwise warn per keystroke. */
+/** Warn once per copy: a broken install would otherwise warn per keystroke. */
 let warnedForeignHandle = false;
 
 /**
@@ -179,8 +176,8 @@ function isLocalDoc(value, method) {
 }
 
 /**
- * A foreign document's storage DTO, warning once on the way. Call only after
- * `isLocalDoc` has returned false.
+ * A foreign document's storage DTO, warning once. Call only after `isLocalDoc`
+ * has returned false.
  * @param {any} value
  * @param {string} method
  * @returns {string}
@@ -189,7 +186,7 @@ function foreignDocJson(value, method) {
 	if (!warnedForeignHandle) {
 		warnedForeignHandle = true;
 		console.warn(
-			`@quillmark/wasm: ${method} received a Document that is not this copy's Document class — the usual cause is two copies of @quillmark/wasm installed. Handling it by value: correct, but slower, and Engine's quill clone cache is split per copy. Run \`npm ls @quillmark/wasm\` and dedupe to one. Further occurrences are not reported.`
+			`@quillmark/wasm: ${method} received a Document that is not this copy's Document class. The usual cause is two copies of @quillmark/wasm installed. Handling it by value: correct, but slower, and Engine's quill clone cache is split per copy. Run \`npm ls @quillmark/wasm\` and dedupe to one. Further occurrences are not reported.`
 		);
 	}
 	return value.toJson();
@@ -197,9 +194,9 @@ function foreignDocJson(value, method) {
 
 /**
  * Materialize a foreign DTO as a local `Document`. The caller owns the handle
- * and must `free()` it. A DTO this build cannot read means the two copies are
- * far enough apart to disagree on the wire format — report that, with both
- * schema versions, rather than the raw parse error.
+ * and must `free()` it. A DTO this build cannot read means the two copies
+ * disagree on the wire format: report that, with both schema versions, rather
+ * than the raw parse error.
  * @param {string} json
  * @param {string} method
  * @returns {Document}
@@ -218,9 +215,9 @@ function adoptForeignDoc(json, method) {
 }
 
 /**
- * Run `fn` against a LOCAL `Document`, adopting a foreign one for the duration
- * and freeing it after. READ-ONLY: nothing is written back, so the caller's
- * handle is untouched and a stale clone cannot outlive the call.
+ * Run `fn` against a LOCAL `Document`, adopting a foreign one for the call and
+ * freeing it after. READ-ONLY: nothing is written back, so the caller's handle
+ * is untouched and no clone outlives the call.
  * @template T
  * @param {any} doc
  * @param {string} method
@@ -240,13 +237,12 @@ function readOnLocalDoc(doc, method, fn) {
 /**
  * Reject a foreign `Document` at a MUTATING seam.
  *
- * Reads, renders and validations cross as data because they are read-only —
- * the adopted clone is freed and nothing about the caller's handle changes. A
- * typed write cannot: it would run on the clone and be written back with
- * `loadJson`, which CLEARS the document's parse-time warnings. Silently
- * dropping `doc.warnings` on the primary write path is worse than not crossing,
- * so fail at the bind, where the message can still name the cause. `Engine`'s
- * render path is unaffected — it never writes back either.
+ * Reads, renders and validations cross as data because they are read-only: the
+ * adopted clone is freed and the caller's handle is untouched. A typed write
+ * cannot. It would run on the clone and be written back with `loadJson`, which
+ * CLEARS the document's parse-time warnings. Silently dropping `doc.warnings` on
+ * the primary write path is worse than not crossing, so fail at the bind, where
+ * the message can still name the cause.
  * @param {any} doc
  * @param {string} method
  */
@@ -260,8 +256,8 @@ function requireLocalDoc(doc, method) {
 }
 
 // Marker for the patches below. `Symbol.for`, not a module-local `Symbol()`:
-// a re-evaluation of THIS module (Vite HMR, a Vitest worker sharing a module
-// graph) against an already-patched — because cached — core build must see the
+// re-evaluating THIS module (Vite HMR, a Vitest worker sharing a module graph)
+// against a core build that is cached, and so already patched, must see the
 // existing marker, or each pass wraps the previous wrapper.
 const FOREIGN_TOLERANT = Symbol.for('@quillmark/wasm:foreign-tolerant');
 
@@ -281,14 +277,13 @@ function patchForeignTolerant(proto, name, wrap) {
 	/** @type {any} */ (proto)[name] = patched;
 }
 
-// `equals` needs no handle at all on the foreign path. `toJson` is
-// byte-deterministic within a schema version and excludes parse-time warnings —
-// exactly the equality `equals` documents — so comparing DTOs answers it without
-// allocating into this memory. Across MISMATCHED schema versions the tags differ
-// and equal documents can compare unequal; that direction is safe (`equals` is a
-// debounce primitive, so a false "changed" costs a redundant re-parse) and the
-// unsafe direction cannot happen, since differing versions never produce equal
-// bytes.
+// `equals` adopts nothing on the foreign path. `toJson` is byte-deterministic
+// within a schema version and excludes parse-time warnings, which is exactly the
+// equality `equals` documents, so comparing DTOs answers it without a handle.
+// Across MISMATCHED schema versions the tags differ, so equal documents can
+// compare unequal. That direction is safe: `equals` is a debounce primitive, so
+// a false "changed" costs a redundant re-parse. The unsafe direction cannot
+// happen, since differing versions never produce equal bytes.
 patchForeignTolerant(Document.prototype, 'equals', (original) =>
 	function equals(/** @type {any} */ other) {
 		if (isLocalDoc(other, 'Document.equals')) return original.call(this, other);
@@ -297,7 +292,7 @@ patchForeignTolerant(Document.prototype, 'equals', (original) =>
 );
 
 // `validate` and `resolve` read the document's model, so they need a real local
-// handle: adopt, use, free. Only the argument can be foreign — the receiver is
+// handle: adopt, use, free. Only the argument can be foreign, the receiver being
 // whichever copy the caller reached for.
 for (const name of /** @type {const} */ (['validate', 'resolve'])) {
 	patchForeignTolerant(Quill.prototype, name, (original) =>
@@ -309,9 +304,9 @@ for (const name of /** @type {const} */ (['validate', 'resolve'])) {
 
 // The typed writer/reader primitives (`Document._commitField` and friends) take
 // the QUILL by reference, so they hit the same `_assertClass` from the other
-// direction — and the quill is unreachable in the foreign document's memory
-// (nothing hands out that copy's `Quill` class). The document is the side that
-// can move, so the reader lane adopts it per call and the writer lane refuses.
+// direction, and the quill is the unreachable side (nothing hands out the
+// foreign document's copy of the `Quill` class). The document is what can move,
+// so the reader lane adopts it per call and the writer lane refuses.
 // Wired at the four writer/reader classes below, not patched onto `Document`:
 // a foreign document carries its OWN prototype, so patching this copy's would
 // never run.

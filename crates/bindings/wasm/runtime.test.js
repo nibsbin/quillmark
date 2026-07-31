@@ -889,22 +889,22 @@ main:
 })
 
 // A duplicate install is two copies of this package: two core builds, two
-// linear memories, two distinct `Document` classes. `Engine` already tolerates
-// that crossing (it is duck-typed and clones as data); the three core methods
-// taking another core handle BY REFERENCE did not, because wasm-bindgen's
-// generated `_assertClass` rejects the foreign class before any of our code
-// runs. These pin the one policy the runtime layer now applies everywhere: a
-// foreign handle crosses as data. See runtime.js § "Foreign core handles".
+// linear memories, two distinct `Document` classes. `Engine` tolerates that
+// crossing (duck-typed, clones as data); the core methods taking another core
+// handle BY REFERENCE do not, because wasm-bindgen's generated `_assertClass`
+// rejects the foreign class before any of our code runs. These pin the runtime
+// layer's policy: reads cross as data, writes refuse at the bind. See
+// runtime.js § "Foreign core handles".
 //
 // A foreign `Document` is modelled two ways: a duck-typed stand-in (anything
-// carrying `toJson`, the contract the patches actually check) and — closer to
-// the real thing — a SECOND core instance loaded under a cache-busting query,
-// which is genuinely a different class over a different linear memory.
+// carrying `toJson`, the contract the checks actually apply) and a second copy
+// of the built core artifact on disk, which is a different class over a
+// different linear memory.
 describe('@quillmark/wasm/runtime — foreign core handles (duplicate install)', () => {
   const foreignOf = (doc) => ({ toJson: () => doc.toJson() })
 
   // The reader verbs are schema-bound, so they need a quill that DECLARES the
-  // fields TEST_MARKDOWN sets — the default test quill declares none.
+  // fields TEST_MARKDOWN sets; the default test quill declares none.
   const READER_QUILL_YAML = `quill:
   name: test_quill
   version: "1.0"
@@ -972,8 +972,8 @@ main:
       } catch (e) {
         caught = e
       }
-      // The failure stays inside this package's error contract — the thing the
-      // raw `_assertClass` throw escaped.
+      // The failure stays inside this package's error contract, which the raw
+      // `_assertClass` throw escapes.
       expect(isQuillmarkError(caught)).toBe(true)
       expect(caught.message).toContain(method)
       expect(caught.diagnostics[0].code).toBe('runtime::not_a_document')
@@ -1034,9 +1034,10 @@ main:
   })
 
   // The real shape: a SECOND COPY of the built core artifact on disk, which is
-  // what npm produces. A query suffix is not enough — `wasm.js?x` re-evaluates
-  // but still imports the cached `./wasm_bg.js`, so the classes stay identical.
-  // Copying the whole directory forks the module graph and the linear memory.
+  // what npm produces. A query suffix is not enough, since `wasm.js?x`
+  // re-evaluates but still imports the cached `./wasm_bg.js`, leaving the
+  // classes identical. Copying the directory forks the module graph and the
+  // linear memory.
   describe('against a second copy of the core build on disk', () => {
     let copyB
     beforeAll(async () => {
@@ -1065,7 +1066,7 @@ main:
         const rq = readerQuill()
         expect(rq.reader(docB).get('title')).toEqual(rq.reader(docA).get('title'))
         expect(rq.reader(docB).getBody()).toEqual(rq.reader(docA).getBody())
-        // The foreign handle is never freed by us — it is the caller's.
+        // The foreign handle is never freed by us: it is the caller's.
         expect(docB.quillRef).toBe('test_quill')
       } finally {
         warn.mockRestore()
@@ -1079,11 +1080,11 @@ main:
     })
   })
 
-  // Re-evaluating the runtime module against an already-patched (because
-  // cached) core build must not wrap the wrappers — the Vite HMR / shared
-  // Vitest worker case the `Symbol.for` marker exists for. A copy of
-  // runtime.js beside the original re-evaluates while its relative
-  // `../core/wasm.js` import still resolves to the cached module.
+  // Re-evaluating the runtime module against a cached, and so already patched,
+  // core build must not wrap the wrappers: the Vite HMR / shared Vitest worker
+  // case the `Symbol.for` marker exists for. A copy of runtime.js beside the
+  // original re-evaluates while its relative `../core/wasm.js` import still
+  // resolves to the cached module.
   it('patches once across a re-evaluation of the runtime module', async () => {
     const before = Document.prototype.equals
     expect(before[Symbol.for('@quillmark/wasm:foreign-tolerant')]).toBe(true)

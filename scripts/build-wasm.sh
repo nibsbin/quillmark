@@ -21,8 +21,8 @@ set -o pipefail
 # npm package with exactly ONE public entry: the root `.` export
 # (`@quillmark/wasm`), the canonical `Quill`/`Document`/`Engine` API (see
 # pkg/runtime/). `core` and the backends ship as files but are absent from the
-# package.json `exports` map, so no consumer can import them by subpath — core
-# is reached through the root's re-export, the backends only internally, by the
+# package.json `exports` map, so no consumer can import them by subpath: core is
+# reached through the root's re-export, the backends only internally, by the
 # canonical layer's lazy `import("../backends/<id>/wasm.js")`.
 #
 # Profile selection. Default is the size-optimized release build used for
