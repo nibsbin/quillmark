@@ -6,10 +6,10 @@
 ## TL;DR
 
 Every publishable crate carries one workspace version and one SemVer promise to
-crates.io consumers. `cargo semver-checks` in CI is what holds it; the rules
-below are what a writer decides *before* the tool sees the change. This page is
-about the Rust crate API — [VERSIONING.md](VERSIONING.md) is about quill
-versions, a separate axis.
+crates.io consumers. No CI job checks it: the rules below are what holds it, and
+a writer decides them as the change is written. This page is about the Rust
+crate API — [VERSIONING.md](VERSIONING.md) is about quill versions, a separate
+axis.
 
 ## What the promise covers
 
@@ -107,8 +107,9 @@ bound, a public type losing `Send`/`Sync` through a private field, and a public
 signature naming a `0.0.x` dependency (see [ERROR.md](ERROR.md) on the YAML
 boundary) are all majors that no attribute sweep sees.
 
-The `semver` job in [CI_CD.md](CI_CD.md) runs `cargo semver-checks` over the
-published crates against their last release, which catches that whole class on
-every PR. It is advisory while the version is `0.x` — cargo reads a `0.x` minor
-bump as major, so there is no stable baseline to judge against yet — and becomes
-a gate at 1.0.0.
+Nothing mechanical catches that class, so it rides on the writer and the
+reviewer. `cargo semver-checks check-release` covers most of it and is worth
+running by hand against a release baseline when a change's blast radius is
+unclear; it wants a real version bump to compare against, since cargo reads a
+`0.x` minor bump as major and a working tree still carrying the last released
+version compares that version against itself.

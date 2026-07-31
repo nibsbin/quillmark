@@ -27,12 +27,12 @@ jobs:
       # App token is required because the tag-creation ruleset blocks GITHUB_TOKEN.
       - name: Generate token
         id: app
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.TAGGER_APP_ID }}
           private-key: ${{ secrets.TAGGER_PRIVATE_KEY }}
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: main
@@ -115,7 +115,7 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: v${{ needs.prepare.outputs.version }}
 
@@ -155,7 +155,7 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: v${{ needs.prepare.outputs.version }}
 
@@ -168,7 +168,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Restore WASM build cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           # Cache only the wasm cargo build dir — not pkg/. build-wasm.sh always
           # regenerates pkg/ (and the version-assert below refuses to publish a
@@ -182,13 +182,13 @@ jobs:
             wasm-release-${{ runner.os }}-
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install wasm-bindgen-cli
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@v2.85.2
         with:
           tool: wasm-bindgen-cli@0.2.118
 
@@ -239,7 +239,7 @@ jobs:
       matrix:
         target: [x86_64, aarch64]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: v${{ needs.prepare.outputs.version }}
 
@@ -253,7 +253,7 @@ jobs:
           working-directory: crates/bindings/python
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-linux-${{ matrix.target }}
           path: crates/bindings/python/dist/*.whl
@@ -262,7 +262,7 @@ jobs:
     needs: [prepare]
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: v${{ needs.prepare.outputs.version }}
 
@@ -275,7 +275,7 @@ jobs:
           working-directory: crates/bindings/python
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-windows-x64
           path: crates/bindings/python/dist/*.whl
@@ -284,7 +284,7 @@ jobs:
     needs: [prepare]
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: v${{ needs.prepare.outputs.version }}
 
@@ -297,7 +297,7 @@ jobs:
           working-directory: crates/bindings/python
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-macos-aarch64
           path: crates/bindings/python/dist/*.whl
@@ -306,7 +306,7 @@ jobs:
     needs: [prepare]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: v${{ needs.prepare.outputs.version }}
 
@@ -318,7 +318,7 @@ jobs:
           working-directory: crates/bindings/python
 
       - name: Upload sdist
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-sdist
           path: crates/bindings/python/dist/*.tar.gz
@@ -331,7 +331,7 @@ jobs:
       id-token: write
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: wheels-*
           merge-multiple: true

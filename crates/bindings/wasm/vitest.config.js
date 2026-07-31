@@ -1,6 +1,5 @@
 import { defineConfig } from 'vitest/config'
 import wasm from 'vite-plugin-wasm'
-import topLevelAwait from 'vite-plugin-top-level-await'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
@@ -23,10 +22,12 @@ export const WASM_CORE_BUNDLE_PATH = path.join(WORKSPACE_ROOT, 'pkg', 'core', 'w
 export const WASM_RUNTIME_BUNDLE_PATH = path.join(WORKSPACE_ROOT, 'pkg', 'runtime', 'runtime.js')
 
 export default defineConfig({
-  plugins: [wasm(), topLevelAwait()],
+  // `vite-plugin-wasm` emits top-level await, which Node's ESM loader executes
+  // natively: the suites run under `environment: 'node'`, so no TLA transform.
+  plugins: [wasm()],
   resolve: {
     alias: {
-      // More specific first: rollup alias matches `find` followed by `/` or end,
+      // More specific first: the alias match is `find` followed by `/` or end,
       // so `@quillmark-wasm/{core,runtime,pdfform}` must precede the `@quillmark-wasm` prefix.
       '@quillmark-wasm/runtime': WASM_RUNTIME_BUNDLE_PATH,
       '@quillmark-wasm/pdfform': WASM_PDFFORM_BUNDLE_PATH,
