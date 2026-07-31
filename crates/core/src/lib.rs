@@ -81,4 +81,4 @@ pub use path::{DocPath, DocSeg};
 pub mod normalize;
 
 pub mod version;
-pub use version::{quill_ref_hint, QuillReference, Version, VersionSelector};
+pub use version::{quill_ref_hint, QuillReference, RefMismatch, Version, VersionSelector};

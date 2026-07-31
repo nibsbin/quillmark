@@ -197,9 +197,58 @@ pub struct QuillReference {
     pub selector: VersionSelector,
 }
 
+/// Which half of a [`QuillReference`] a quill's identity failed.
+///
+/// The two arms are the two `quill::*_mismatch` codes, minus the diagnostic:
+/// [`QuillReference::check`] returns this so an enforcement site can word a
+/// coded error while a consumer-side resolver reads a plain `false`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum RefMismatch {
+    /// The quill's name differs from the reference's — `quill::name_mismatch`.
+    Name,
+    /// Names agree; the version falls outside the selector —
+    /// `quill::version_mismatch`.
+    Version,
+}
+
 impl QuillReference {
     pub fn new(name: String, selector: VersionSelector) -> Self {
         Self { name, selector }
+    }
+
+    /// Whether a quill named `name` at `version` satisfies this reference.
+    ///
+    /// The predicate the engine enforces with, exposed for the layer that does
+    /// *resolution* — picking a quill out of a set it already holds — which
+    /// this crate deliberately does not do (see `VERSIONING.md` §"Document
+    /// Syntax"). A `true` here is the guarantee that `Quillmark::open` will not
+    /// raise a `quill::*_mismatch` for this pairing.
+    pub fn satisfied_by(&self, name: &str, version: &str) -> bool {
+        self.check(name, version).is_ok()
+    }
+
+    /// [`satisfied_by`](Self::satisfied_by) with the failing half named.
+    ///
+    /// Name is the prerequisite — a selector belongs to a *named* quill — so a
+    /// name mismatch short-circuits and the version is left unevaluated.
+    /// `version` is the quill's declared version string, parsed leniently: one
+    /// that doesn't parse skips the selector check rather than failing it,
+    /// since load already validated it and a second opinion here would reject
+    /// a pairing the engine accepts.
+    pub fn check(&self, name: &str, version: &str) -> Result<(), RefMismatch> {
+        if self.name != name {
+            return Err(RefMismatch::Name);
+        }
+
+        let Ok(version) = Version::from_str(version) else {
+            return Ok(());
+        };
+        if !self.selector.matches(version) {
+            return Err(RefMismatch::Version);
+        }
+
+        Ok(())
     }
 
     pub fn latest(name: String) -> Self {
@@ -441,5 +490,63 @@ mod tests {
         assert!(hint.contains("[a-z_][a-z0-9_]*"), "got: {hint}");
         assert!(hint.contains("@latest"), "got: {hint}");
         assert!(hint.contains("@MAJOR.MINOR.PATCH"), "got: {hint}");
+    }
+
+    /// One case per selector arm, satisfied and not — the table a consumer
+    /// would otherwise re-derive in JS or Python.
+    #[test]
+    fn satisfied_by_covers_every_selector_arm() {
+        let cases = [
+            ("resume", "2.1.0", true),
+            ("resume@latest", "2.1.0", true),
+            ("resume@2", "2.9.9", true),
+            ("resume@2", "3.0.0", false),
+            ("resume@2.1", "2.1.7", true),
+            ("resume@2.1", "2.2.0", false),
+            ("resume@2.1.0", "2.1.0", true),
+            ("resume@2.1.0", "2.1.1", false),
+        ];
+
+        for (reference, version, want) in cases {
+            let parsed = QuillReference::from_str(reference).unwrap();
+            assert_eq!(
+                parsed.satisfied_by("resume", version),
+                want,
+                "{reference} against {version}"
+            );
+        }
+    }
+
+    #[test]
+    fn check_names_the_failing_half() {
+        let reference = QuillReference::from_str("resume@2.1.0").unwrap();
+
+        assert_eq!(reference.check("resume", "2.1.0"), Ok(()));
+        assert_eq!(reference.check("letter", "2.1.0"), Err(RefMismatch::Name));
+        assert_eq!(reference.check("resume", "3.0.0"), Err(RefMismatch::Version));
+    }
+
+    /// Name is the prerequisite: a pairing that fails both halves reports the
+    /// name, since a selector belongs to a *named* quill.
+    #[test]
+    fn check_short_circuits_on_the_name() {
+        let reference = QuillReference::from_str("resume@2.1.0").unwrap();
+        assert_eq!(reference.check("letter", "9.9.9"), Err(RefMismatch::Name));
+    }
+
+    /// A version the engine could not parse skips the selector rather than
+    /// failing it — the check agrees with `check_quill_reference`, which
+    /// accepts that pairing rather than rejecting one load already blessed.
+    #[test]
+    fn check_skips_an_unparseable_version() {
+        let reference = QuillReference::from_str("resume@2.1.0").unwrap();
+        assert!(reference.satisfied_by("resume", "not-a-version"));
+    }
+
+    /// Two-segment declarations parse, so they compare by the patch they mean.
+    #[test]
+    fn satisfied_by_accepts_a_two_segment_version() {
+        let reference = QuillReference::from_str("resume@2.1.0").unwrap();
+        assert!(reference.satisfied_by("resume", "2.1"));
     }
 }

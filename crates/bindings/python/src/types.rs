@@ -149,6 +149,35 @@ impl PyQuill {
         format!("{}@{}", source.name(), version)
     }
 
+    /// Whether this quill satisfies a `$quill` reference — `True` guarantees
+    /// `Quillmark.render`/`process` will not raise a `quill::*_mismatch` for
+    /// this pairing. Mirrors WASM `quill.satisfies`.
+    ///
+    /// The engine's own predicate, so a resolver holding a document and a cache
+    /// of quills tests a candidate instead of running exceptions as control
+    /// flow: `quill.satisfies(doc.quill_ref)`. Resolution stays a consumer
+    /// concern — this answers only the comparison it needs.
+    ///
+    /// Raises `ValueError` on a reference that is not well-formed; a `False`
+    /// means well-formed and unsatisfied. `doc.quill_ref` is always
+    /// well-formed (the parser validated it).
+    fn satisfies(&self, quill_ref: &str) -> PyResult<bool> {
+        let config = self.inner.config();
+        Ok(parse_quill_ref(quill_ref)?.satisfied_by(&config.name, &config.version))
+    }
+
+    /// `satisfies` against a bare identity rather than a loaded quill — the
+    /// same verdict for a resolver filtering a cache index of `(name, version)`
+    /// entries it has not paid to load. Mirrors WASM `Quill.satisfiesRef`.
+    ///
+    /// `name` and `version` are `metadata`'s two identity keys. A `version`
+    /// that does not parse satisfies any selector, matching what the engine
+    /// does with a quill whose declared version it cannot read.
+    #[staticmethod]
+    fn satisfies_ref(quill_ref: &str, name: &str, version: &str) -> PyResult<bool> {
+        Ok(parse_quill_ref(quill_ref)?.satisfied_by(name, version))
+    }
+
     /// Identity snapshot mirroring the `quill:` section of `Quill.yaml`.
     /// A pure config read — it never resolves a backend and never raises for
     /// an unregistered one. Capability lives on the engine: read
@@ -278,11 +307,8 @@ impl PyDocument {
     /// `new Document(quillRef)`.
     #[new]
     fn new(quill_ref: &str) -> PyResult<Self> {
-        let qr: quillmark_core::QuillReference = quill_ref.parse().map_err(|e| {
-            PyValueError::new_err(format!("invalid QuillReference '{}': {}", quill_ref, e))
-        })?;
         Ok(PyDocument {
-            inner: Document::new(qr),
+            inner: Document::new(parse_quill_ref(quill_ref)?),
             parse_warnings: Vec::new(),
         })
     }
@@ -597,10 +623,7 @@ impl PyDocument {
     }
 
     fn set_quill_ref(&mut self, ref_str: &str) -> PyResult<()> {
-        let qr: quillmark_core::QuillReference = ref_str.parse().map_err(|e| {
-            PyValueError::new_err(format!("invalid QuillReference '{}': {}", ref_str, e))
-        })?;
-        self.inner.set_quill_ref(qr);
+        self.inner.set_quill_ref(parse_quill_ref(ref_str)?);
         Ok(())
     }
 
@@ -1537,6 +1560,14 @@ fn py_to_json_at(value: &Bound<'_, PyAny>, depth: usize) -> PyResult<serde_json:
     }
     let s = value.str()?.to_string();
     Ok(serde_json::Value::String(s))
+}
+
+/// Parse a `$quill` reference, raising `ValueError` — one wording for every
+/// surface that takes a reference string, so none of them drifts.
+fn parse_quill_ref(quill_ref: &str) -> PyResult<quillmark_core::QuillReference> {
+    quill_ref.parse().map_err(|e| {
+        PyValueError::new_err(format!("invalid QuillReference '{}': {}", quill_ref, e))
+    })
 }
 
 /// Convert a Python value into a JSON object map, rejecting non-objects. Used

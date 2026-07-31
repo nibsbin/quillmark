@@ -665,6 +665,36 @@ impl Quill {
         serialize_or_throw(&val, "metadata")
     }
 
+    /// Whether this quill satisfies a `$quill` reference — `true` guarantees
+    /// [`Quillmark.open`](Quillmark::open) will not raise a `quill::*_mismatch`
+    /// for this pairing.
+    ///
+    /// The engine's own predicate, so a resolver holding a document and a cache
+    /// of quills tests a candidate instead of running exceptions as control
+    /// flow: `quill.satisfies(doc.quillRef)`. Resolution stays a consumer
+    /// concern — this answers only the comparison it needs.
+    ///
+    /// Throws on a reference that is not well-formed; a `false` means
+    /// well-formed and unsatisfied. `doc.quillRef` is always well-formed (the
+    /// parser validated it), so a throw here is a hand-built string.
+    #[wasm_bindgen(js_name = satisfies)]
+    pub fn satisfies(&self, quill_ref: &str) -> Result<bool, JsValue> {
+        let config = self.inner.config();
+        Ok(parse_quill_ref(quill_ref, "satisfies")?.satisfied_by(&config.name, &config.version))
+    }
+
+    /// [`satisfies`](Self::satisfies) against a bare identity rather than a
+    /// loaded quill — the same verdict for a resolver filtering a cache index
+    /// of `{name, version}` entries it has not paid to load.
+    ///
+    /// `name` and `version` are [`metadata`](Self::metadata)'s two identity
+    /// keys. A `version` that does not parse satisfies any selector, matching
+    /// what the engine does with a quill whose declared version it cannot read.
+    #[wasm_bindgen(js_name = satisfiesRef)]
+    pub fn satisfies_ref(quill_ref: &str, name: &str, version: &str) -> Result<bool, JsValue> {
+        Ok(parse_quill_ref(quill_ref, "satisfiesRef")?.satisfied_by(name, version))
+    }
+
     /// Validate `doc` against this quill's schema, returning every diagnostic
     /// (an empty array when the document is valid).
     ///
@@ -1371,20 +1401,8 @@ impl Document {
     /// Replace the QUILL reference string. Throws if `ref_str` is invalid.
     #[wasm_bindgen(js_name = setQuillRef)]
     pub fn set_quill_ref(&mut self, ref_str: &str) -> Result<(), JsValue> {
-        let qr: quillmark_core::QuillReference = ref_str.parse().map_err(|e| {
-            // Same shape document parsing emits, so mutator and parser don't drift.
-            let diag = quillmark_core::Diagnostic::new(
-                quillmark_core::Severity::Error,
-                format!("setQuillRef: invalid reference '{}': {}", ref_str, e),
-            )
-            .with_code("parse::invalid_quill_reference".to_string())
-            .with_hint(quillmark_core::quill_ref_hint().to_string());
-            WasmError {
-                diagnostics: vec![diag],
-            }
-            .to_js_value()
-        })?;
-        self.inner.set_quill_ref(qr);
+        self.inner
+            .set_quill_ref(parse_quill_ref(ref_str, "setQuillRef")?);
         Ok(())
     }
 
@@ -2260,6 +2278,28 @@ fn serialize_or_throw<T: serde::Serialize + ?Sized>(
     value
         .serialize(&serializer)
         .map_err(|e| WasmError::from(format!("{what}: serialization failed: {e}")).to_js_value())
+}
+
+/// Parse a `$quill` reference, throwing the same shape document parsing emits
+/// — `parse::invalid_quill_reference` carrying core's grammar hint — so no
+/// surface that takes a reference string words the failure its own way.
+/// `ctx` names the calling verb, since the throw is far from the parser.
+fn parse_quill_ref(
+    quill_ref: &str,
+    ctx: &str,
+) -> Result<quillmark_core::QuillReference, JsValue> {
+    quill_ref.parse().map_err(|e| {
+        let diag = quillmark_core::Diagnostic::new(
+            quillmark_core::Severity::Error,
+            format!("{}: invalid reference '{}': {}", ctx, quill_ref, e),
+        )
+        .with_code("parse::invalid_quill_reference".to_string())
+        .with_hint(quillmark_core::quill_ref_hint().to_string());
+        WasmError {
+            diagnostics: vec![diag],
+        }
+        .to_js_value()
+    })
 }
 
 /// Serialize an optional JSON value to JS, or `undefined` when `None`. Backs

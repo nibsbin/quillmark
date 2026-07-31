@@ -12,7 +12,8 @@ use crate::normalize::{normalize_document, normalize_field_name};
 use crate::quill::zero_value;
 use crate::path::DocPath;
 use crate::{
-    Card, Diagnostic, Document, Payload, QuillValue, RenderError, SeedOverlay, Severity, Version,
+    Card, Diagnostic, Document, Payload, QuillValue, RefMismatch, RenderError, SeedOverlay,
+    Severity, Version,
 };
 
 impl Quill {
@@ -143,40 +144,39 @@ impl QuillConfig {
     /// — a different format, or an incompatible version of one — which yields
     /// undefined output, so it errors rather than warns.
     ///
-    /// Name is the prerequisite (a selector belongs to a *named* quill): a name
-    /// mismatch (`quill::name_mismatch`) short-circuits and the version is left
-    /// unevaluated; otherwise the selector is checked (`quill::version_mismatch`).
-    /// The version parses infallibly in practice (validated at load); if it
-    /// somehow doesn't, the version check is skipped.
+    /// The wording of [`QuillReference::check`], which decides. Name is the
+    /// prerequisite (a selector belongs to a *named* quill): a name mismatch
+    /// (`quill::name_mismatch`) short-circuits and the version is left
+    /// unevaluated; otherwise the selector is checked
+    /// (`quill::version_mismatch`). A consumer that wants the same verdict
+    /// without the exception reads it through the bindings' `quill.satisfies`.
     pub fn check_quill_reference(&self, doc: &Document) -> Result<(), RenderError> {
         let doc_ref = doc.quill_reference();
 
-        if doc_ref.name.as_str() != self.name {
-            return Err(quill_mismatch(
+        match doc_ref.check(&self.name, &self.version) {
+            Ok(()) => Ok(()),
+            Err(RefMismatch::Name) => Err(quill_mismatch(
                 format!(
                     "document declares $quill '{}' but was rendered with '{}'",
                     doc_ref, self.name
                 ),
                 "quill::name_mismatch",
                 "render with the quill named by $quill, or update the $quill name",
-            ));
-        }
-
-        let Ok(quill_version) = Version::from_str(&self.version) else {
-            return Ok(());
-        };
-        if !doc_ref.selector.matches(quill_version) {
-            return Err(quill_mismatch(
+            )),
+            // Only reached once `self.version` parsed, so the message shows the
+            // canonical three-segment rendering of it.
+            Err(RefMismatch::Version) => Err(quill_mismatch(
                 format!(
                     "document declares $quill '{}' but the loaded quill is version '{}'",
-                    doc_ref, quill_version
+                    doc_ref,
+                    Version::from_str(&self.version)
+                        .map(|v| v.to_string())
+                        .unwrap_or_else(|_| self.version.clone())
                 ),
                 "quill::version_mismatch",
                 "render with a quill whose version satisfies the selector, or update the $quill selector",
-            ));
+            )),
         }
-
-        Ok(())
     }
 }
 
