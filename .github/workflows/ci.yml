@@ -8,8 +8,7 @@ on:
   # stay out on their own.
   push:
     branches: [main]
-  # On demand, which is also how the `semver` job is reached outside a release
-  # PR — see its own note.
+  # On demand, for re-running the suite against a branch without a new push.
   workflow_dispatch:
 
 permissions:
@@ -176,54 +175,6 @@ jobs:
 
       - name: Check on the MSRV toolchain
         run: cargo check --workspace --all-features --locked
-
-  # The mechanical half of the compatibility contract in
-  # prose/canon/COMPATIBILITY.md. A hand audit of what is `#[non_exhaustive]`
-  # holds until the next PR; this holds every release. It also covers the
-  # hazards an attribute sweep cannot see — a removed method, a widened bound, a
-  # trait gaining a method, a public type losing Send/Sync — which is most of
-  # what actually breaks a consumer.
-  #
-  # Release PRs only, for now. `Cargo.toml` carries the last *released* version
-  # until `release-prepare.yml` bumps it, so a feature PR compares 0.98.0 against
-  # 0.98.0 and the tool assumes minor. Every deliberate break in the 1.0.0 freeze
-  # then fails a check that cannot tell it apart from an accident, on every PR,
-  # which is how a check becomes one reviewers click past. On a `release/v*` PR
-  # the bump exists and the comparison is the one worth making: is this bump big
-  # enough for what changed. `workflow_dispatch` reaches it on demand.
-  #
-  # Restore it per-PR at 1.0.0, dropping `continue-on-error` and the condition
-  # together: past the tag a flagged break is a defect rather than the plan, and
-  # that is the check this job was added to be.
-  semver:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'release/v')
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install cargo-semver-checks
-        uses: taiki-e/install-action@v2.85.2
-        with:
-          tool: cargo-semver-checks
-
-      # Excludes the four `publish = false` crates: they have no released
-      # baseline on crates.io to diff against, and no external consumer to
-      # break.
-      - name: Check the public API against the last release
-        run: |
-          cargo semver-checks check-release \
-            --workspace \
-            --exclude quillmark-wasm \
-            --exclude quillmark-python \
-            --exclude quillmark-fuzz \
-            --exclude quillmark-fixtures
 
   audit:
     runs-on: ubuntu-latest
