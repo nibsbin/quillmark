@@ -54,8 +54,9 @@
 // (`Quill === CoreQuill`) is the executable guard for this invariant.
 //
 // Tolerating a foreign handle is a WHOLE-LAYER policy, not an `Engine` quirk:
-// the core methods that take another core handle by reference are patched to
-// accept one by value too. See § "Foreign core handles" below.
+// every read that takes another core handle by reference accepts one by value
+// too. Writes are the one exception, and refuse at the bind. See § "Foreign
+// core handles" below.
 //
 // Imported (not bare re-exported) so `Quill` is a local binding this module can
 // augment — `quill.writer(doc)` is patched onto its prototype below. The
@@ -125,21 +126,31 @@ function quillmarkError(code, message, hint) {
 // `.toTree()`/`.toJson()`/`.backendId` and clones into backend memory as data,
 // so a `Quill` from copy A renders on an `Engine` from copy B.
 //
-// The three core methods that take ANOTHER core handle do not, and they fail
-// worse than they need to. `Document.equals(&Document)`,
-// `Quill.validate(&Document)` and `Quill.resolve(&Document)` take the handle by
-// reference, so wasm-bindgen's generated glue runs `_assertClass` before any of
-// our code (emitted unconditionally, not gated on the build profile). The throw
-// is `expected instance of Document` — at a value that IS a `Document`, from the
+// The core methods that take ANOTHER core handle do not, and they fail worse
+// than they need to. `Document.equals(&Document)`, `Quill.validate(&Document)`,
+// `Quill.resolve(&Document)`, and the five writer/reader primitives that take
+// `&Quill` (`Document._commitField` and friends) take the handle by reference,
+// so wasm-bindgen's generated glue runs `_assertClass` before any of our code
+// (emitted unconditionally, not gated on the build profile). The throw is
+// `expected instance of Document` — at a value that IS a `Document`, from the
 // other copy — and it is a bare `Error`, so `isQuillmarkError` says false and the
 // failure escapes this package's error contract entirely.
 //
 // So the split-brain is: render works, validate explodes, and the message names
-// neither the cause nor the cure. These patches pick ONE policy, the one the
-// `Engine` lane already picked: a foreign handle crosses AS DATA. Each method
-// admits anything carrying `.toJson()`, routes it through the storage DTO, and
-// warns once. A value that is not document-shaped at all, or a DTO this build
-// cannot read, throws a `QuillmarkError` naming the duplicate install.
+// neither the cause nor the cure. This section picks ONE policy along the line
+// the codebase already draws — READ-ONLY crossings are transparent, mutating
+// ones are not:
+//
+//   - Reads (`equals`, `validate`, `resolve`, the reader verbs) admit anything
+//     carrying `.toJson()`, route it through the storage DTO, and warn once.
+//     Nothing is written back, so the caller's handle is untouched. This is what
+//     `Engine` already does to reach backend memory.
+//
+//   - Writes (the writer verbs) refuse, at the bind rather than at the first
+//     write. See `requireLocalDoc` for why a write-back cannot be transparent.
+//
+// A value that is not document-shaped at all, or a DTO this build cannot read,
+// throws a `QuillmarkError` naming the duplicate install either way.
 //
 // This is a safety net, not an API widening: the declared parameter types stay
 // `Document`, and the fast path is an `instanceof` that costs nothing.
@@ -148,14 +159,15 @@ function quillmarkError(code, message, hint) {
 let warnedForeignHandle = false;
 
 /**
- * The foreign handle's storage DTO, or `null` when `value` is a local
- * `Document` (call straight through). Throws when `value` is not a document.
+ * `true` when `value` is THIS copy's `Document` (take the generated fast path),
+ * `false` when it is a document from another copy. Throws when it is not a
+ * document at all.
  * @param {unknown} value
  * @param {string} method
- * @returns {string | null}
+ * @returns {boolean}
  */
-function foreignDocJson(value, method) {
-	if (value instanceof Document) return null;
+function isLocalDoc(value, method) {
+	if (value instanceof Document) return true;
 	if (!value || typeof (/** @type {any} */ (value).toJson) !== 'function') {
 		throw quillmarkError(
 			'runtime::not_a_document',
@@ -163,13 +175,24 @@ function foreignDocJson(value, method) {
 			'Pass a Document built by Document.fromMarkdown / fromJson or quill.seedDocument.'
 		);
 	}
+	return false;
+}
+
+/**
+ * A foreign document's storage DTO, warning once on the way. Call only after
+ * `isLocalDoc` has returned false.
+ * @param {any} value
+ * @param {string} method
+ * @returns {string}
+ */
+function foreignDocJson(value, method) {
 	if (!warnedForeignHandle) {
 		warnedForeignHandle = true;
 		console.warn(
 			`@quillmark/wasm: ${method} received a Document that is not this copy's Document class — the usual cause is two copies of @quillmark/wasm installed. Handling it by value: correct, but slower, and Engine's quill clone cache is split per copy. Run \`npm ls @quillmark/wasm\` and dedupe to one. Further occurrences are not reported.`
 		);
 	}
-	return /** @type {any} */ (value).toJson();
+	return value.toJson();
 }
 
 /**
@@ -192,6 +215,48 @@ function adoptForeignDoc(json, method) {
 			'Two copies of @quillmark/wasm are installed. Run `npm ls @quillmark/wasm` and dedupe to one.'
 		);
 	}
+}
+
+/**
+ * Run `fn` against a LOCAL `Document`, adopting a foreign one for the duration
+ * and freeing it after. READ-ONLY: nothing is written back, so the caller's
+ * handle is untouched and a stale clone cannot outlive the call.
+ * @template T
+ * @param {any} doc
+ * @param {string} method
+ * @param {(doc: Document) => T} fn
+ * @returns {T}
+ */
+function readOnLocalDoc(doc, method, fn) {
+	if (isLocalDoc(doc, method)) return fn(doc);
+	const local = adoptForeignDoc(foreignDocJson(doc, method), method);
+	try {
+		return fn(local);
+	} finally {
+		local.free();
+	}
+}
+
+/**
+ * Reject a foreign `Document` at a MUTATING seam.
+ *
+ * Reads, renders and validations cross as data because they are read-only —
+ * the adopted clone is freed and nothing about the caller's handle changes. A
+ * typed write cannot: it would run on the clone and be written back with
+ * `loadJson`, which CLEARS the document's parse-time warnings. Silently
+ * dropping `doc.warnings` on the primary write path is worse than not crossing,
+ * so fail at the bind, where the message can still name the cause. `Engine`'s
+ * render path is unaffected — it never writes back either.
+ * @param {any} doc
+ * @param {string} method
+ */
+function requireLocalDoc(doc, method) {
+	if (isLocalDoc(doc, method)) return;
+	throw quillmarkError(
+		'runtime::foreign_document',
+		`${method}: cannot bind a Document from a different copy of @quillmark/wasm for typed writes. Reads and renders cross between copies; writes do not, because the round-trip would clear the document's parse-time warnings.`,
+		'Two copies of @quillmark/wasm are installed. Run `npm ls @quillmark/wasm` and dedupe to one.'
+	);
 }
 
 // Marker for the patches below. `Symbol.for`, not a module-local `Symbol()`:
@@ -226,8 +291,8 @@ function patchForeignTolerant(proto, name, wrap) {
 // bytes.
 patchForeignTolerant(Document.prototype, 'equals', (original) =>
 	function equals(/** @type {any} */ other) {
-		const json = foreignDocJson(other, 'Document.equals');
-		return json === null ? original.call(this, other) : this.toJson() === json;
+		if (isLocalDoc(other, 'Document.equals')) return original.call(this, other);
+		return this.toJson() === foreignDocJson(other, 'Document.equals');
 	}
 );
 
@@ -237,17 +302,19 @@ patchForeignTolerant(Document.prototype, 'equals', (original) =>
 for (const name of /** @type {const} */ (['validate', 'resolve'])) {
 	patchForeignTolerant(Quill.prototype, name, (original) =>
 		function (/** @type {any} */ doc) {
-			const json = foreignDocJson(doc, `Quill.${name}`);
-			if (json === null) return original.call(this, doc);
-			const local = adoptForeignDoc(json, `Quill.${name}`);
-			try {
-				return original.call(this, local);
-			} finally {
-				local.free();
-			}
+			return readOnLocalDoc(doc, `Quill.${name}`, (d) => original.call(this, d));
 		}
 	);
 }
+
+// The typed writer/reader primitives (`Document._commitField` and friends) take
+// the QUILL by reference, so they hit the same `_assertClass` from the other
+// direction — and the quill is unreachable in the foreign document's memory
+// (nothing hands out that copy's `Quill` class). The document is the side that
+// can move, so the reader lane adopts it per call and the writer lane refuses.
+// Wired at the four writer/reader classes below, not patched onto `Document`:
+// a foreign document carries its OWN prototype, so patching this copy's would
+// never run.
 
 // ── Open-set discriminant guards ────────────────────────────────────────────
 // `ContentIsland.type`, `ContentMark.type`, `ContentLine.kind`, and
@@ -844,6 +911,7 @@ export class DocumentWriter {
 	 * @param {Document} doc the document to mutate, held by reference (not owned)
 	 */
 	constructor(quill, doc) {
+		requireLocalDoc(doc, 'quill.writer(doc)');
 		this.#quill = quill;
 		this.#doc = doc;
 	}
@@ -953,6 +1021,7 @@ export class CardWriter {
 	 * @param {number} index the composable card's index
 	 */
 	constructor(quill, doc, index) {
+		requireLocalDoc(doc, 'writer.card(index)');
 		this.#quill = quill;
 		this.#doc = doc;
 		this.#index = index;
@@ -1077,7 +1146,7 @@ export class DocumentReader {
 	 * @returns {unknown}
 	 */
 	get(addr) {
-		return this.#doc._readerGet(this.#quill, addr);
+		return readOnLocalDoc(this.#doc, 'reader.get(addr)', (d) => d._readerGet(this.#quill, addr));
 	}
 	/**
 	 * The main body's markdown — the quill-free body read (a body's type is a
@@ -1085,7 +1154,7 @@ export class DocumentReader {
 	 * @returns {string}
 	 */
 	getBody() {
-		return this.#doc._readerGet(this.#quill, {});
+		return readOnLocalDoc(this.#doc, 'reader.getBody()', (d) => d._readerGet(this.#quill, {}));
 	}
 	/**
 	 * A {@link CardReader} bound to the composable card at `index`. Index validity
@@ -1140,14 +1209,18 @@ export class CardReader {
 	 * @returns {unknown}
 	 */
 	get(name) {
-		return this.#doc._readerGet(this.#quill, { card: this.#index, field: name });
+		return readOnLocalDoc(this.#doc, 'cardReader.get(name)', (d) =>
+			d._readerGet(this.#quill, { card: this.#index, field: name })
+		);
 	}
 	/**
 	 * This card's body markdown — the card twin of {@link DocumentReader.getBody}.
 	 * @returns {string}
 	 */
 	getBody() {
-		return this.#doc._readerGet(this.#quill, { card: this.#index });
+		return readOnLocalDoc(this.#doc, 'cardReader.getBody()', (d) =>
+			d._readerGet(this.#quill, { card: this.#index })
+		);
 	}
 }
 

@@ -11,6 +11,8 @@
  * Aliased to pkg/runtime/runtime.js in vitest.config.js.
  */
 import { describe, it, expect, beforeAll, vi } from 'vitest'
+import fs from 'node:fs'
+import path from 'node:path'
 import {
   Quill,
   Document,
@@ -61,6 +63,8 @@ This is a test document.`
 function makeRuntimeQuill() {
   return Quill.fromTree(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
 }
+
+const PKG_DIR = path.resolve(import.meta.dirname, '..', '..', '..', 'pkg')
 
 /** Read a field value from a card's payloadItems list by key. */
 const fieldOf = (card, key) =>
@@ -899,6 +903,28 @@ main:
 describe('@quillmark/wasm/runtime — foreign core handles (duplicate install)', () => {
   const foreignOf = (doc) => ({ toJson: () => doc.toJson() })
 
+  // The reader verbs are schema-bound, so they need a quill that DECLARES the
+  // fields TEST_MARKDOWN sets — the default test quill declares none.
+  const READER_QUILL_YAML = `quill:
+  name: test_quill
+  version: "1.0"
+  backend: typst
+  description: Foreign-handle reader test
+
+main:
+  fields:
+    title:
+      type: richtext
+      inline: true
+    author:
+      type: richtext
+      inline: true
+`
+  const readerQuill = () =>
+    Quill.fromTree(
+      makeQuill({ name: 'test_quill', plate: TEST_PLATE, quillYaml: READER_QUILL_YAML })
+    )
+
   it('accepts a foreign Document on equals, and warns exactly once', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     try {
@@ -975,35 +1001,106 @@ describe('@quillmark/wasm/runtime — foreign core handles (duplicate install)',
     }
   })
 
-  it('handles a Document from a genuinely separate core instance', async () => {
+  it('refuses to bind a foreign Document for typed writes, naming why', () => {
+    const quill = makeRuntimeQuill()
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    let caught
+    try {
+      quill.writer(foreignOf(doc))
+    } catch (e) {
+      caught = e
+    }
+    // Writes are the one crossing that is NOT transparent: the write-back would
+    // clear parse-time warnings. Fail at the bind, in contract, naming the cause.
+    expect(isQuillmarkError(caught)).toBe(true)
+    expect(caught.diagnostics[0].code).toBe('runtime::foreign_document')
+    expect(caught.message).toMatch(/writes do not/)
+    expect(caught.diagnostics[0].hint).toMatch(/npm ls @quillmark\/wasm/)
+  })
+
+  it('reads a foreign Document through the reader lane', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     try {
-      // A query suffix makes vite resolve a distinct module id, so this is a
-      // second core build with its own WASM memory — the real duplicate-install
-      // shape, not a stand-in.
-      const copyB = await import('../../../pkg/core/wasm.js?duplicate-install')
-      expect(copyB.Document).not.toBe(Document)
-
-      const quill = makeRuntimeQuill()
-      const docB = copyB.Document.fromMarkdown(TEST_MARKDOWN)
-      const docA = Document.fromMarkdown(TEST_MARKDOWN)
-
-      expect(docA.equals(docB)).toBe(true)
-      expect(quill.validate(docB)).toEqual(quill.validate(docA))
-      expect(quill.resolve(docB)).toEqual(quill.resolve(docA))
+      const quill = readerQuill()
+      const doc = Document.fromMarkdown(TEST_MARKDOWN)
+      // Reads are read-only, so they cross like validate/resolve do.
+      expect(quill.reader(foreignOf(doc)).get('title')).toEqual(
+        quill.reader(doc).get('title')
+      )
+      expect(quill.reader(foreignOf(doc)).getBody()).toEqual(quill.reader(doc).getBody())
     } finally {
       warn.mockRestore()
     }
   })
 
+  // The real shape: a SECOND COPY of the built core artifact on disk, which is
+  // what npm produces. A query suffix is not enough — `wasm.js?x` re-evaluates
+  // but still imports the cached `./wasm_bg.js`, so the classes stay identical.
+  // Copying the whole directory forks the module graph and the linear memory.
+  describe('against a second copy of the core build on disk', () => {
+    let copyB
+    beforeAll(async () => {
+      const src = path.join(PKG_DIR, 'core')
+      const dst = path.join(PKG_DIR, 'dup-core')
+      fs.rmSync(dst, { recursive: true, force: true })
+      fs.cpSync(src, dst, { recursive: true })
+      copyB = await import(/* @vite-ignore */ path.join(dst, 'wasm.js'))
+    })
+
+    it('is genuinely a different class over a different memory', () => {
+      expect(copyB.Document).not.toBe(Document)
+      expect(copyB.Quill).not.toBe(Quill)
+    })
+
+    it('crosses on equals, validate, resolve and the reader lane', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        const quill = makeRuntimeQuill()
+        const docA = Document.fromMarkdown(TEST_MARKDOWN)
+        const docB = copyB.Document.fromMarkdown(TEST_MARKDOWN)
+
+        expect(docA.equals(docB)).toBe(true)
+        expect(quill.validate(docB)).toEqual(quill.validate(docA))
+        expect(quill.resolve(docB)).toEqual(quill.resolve(docA))
+        const rq = readerQuill()
+        expect(rq.reader(docB).get('title')).toEqual(rq.reader(docA).get('title'))
+        expect(rq.reader(docB).getBody()).toEqual(rq.reader(docA).getBody())
+        // The foreign handle is never freed by us — it is the caller's.
+        expect(docB.quillRef).toBe('test_quill')
+      } finally {
+        warn.mockRestore()
+      }
+    })
+
+    it('refuses the write bind', () => {
+      const quill = makeRuntimeQuill()
+      const docB = copyB.Document.fromMarkdown(TEST_MARKDOWN)
+      expect(() => quill.writer(docB)).toThrow(/writes do not/)
+    })
+  })
+
   // Re-evaluating the runtime module against an already-patched (because
   // cached) core build must not wrap the wrappers — the Vite HMR / shared
-  // Vitest worker case the `Symbol.for` marker exists for.
+  // Vitest worker case the `Symbol.for` marker exists for. A copy of
+  // runtime.js beside the original re-evaluates while its relative
+  // `../core/wasm.js` import still resolves to the cached module.
   it('patches once across a re-evaluation of the runtime module', async () => {
     const before = Document.prototype.equals
     expect(before[Symbol.for('@quillmark/wasm:foreign-tolerant')]).toBe(true)
 
-    const reevaluated = await import('@quillmark-wasm/runtime?hmr')
+    // The twin has to sit BESIDE the original for its `../core/wasm.js` import
+    // to resolve to the same cached module. `pkg/runtime/` is a published
+    // directory, so remove it as soon as it is loaded rather than leave a stray
+    // file that a publish from an unrebuilt pkg/ would ship.
+    const twin = path.join(PKG_DIR, 'runtime', 'runtime.hmr.js')
+    fs.copyFileSync(path.join(PKG_DIR, 'runtime', 'runtime.js'), twin)
+    let reevaluated
+    try {
+      reevaluated = await import(/* @vite-ignore */ twin)
+    } finally {
+      fs.rmSync(twin, { force: true })
+    }
+
     expect(reevaluated.Document).toBe(Document)
     expect(Document.prototype.equals).toBe(before)
     expect(Quill.prototype.validate[Symbol.for('@quillmark/wasm:foreign-tolerant')]).toBe(true)
