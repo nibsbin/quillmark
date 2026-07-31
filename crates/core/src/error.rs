@@ -221,19 +221,19 @@ pub struct Diagnostic {
     pub path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub hint: Option<String>,
-    /// The facts [`Self::message`] interpolates, keyed by name — with
+    /// The facts [`Self::message`] interpolates, keyed by name: with
     /// [`Self::code`], the substitution unit a consumer needs to word this
     /// diagnostic in its own language.
     ///
     /// One code carries one key set, tabulated per code in
-    /// `prose/canon/ERROR.md`. Values keep their JSON shape: a list stays a
-    /// list and a count stays a number, so joining and pluralizing remain the
-    /// consumer's locale decisions rather than the engine's.
+    /// `prose/canon/ERROR.md` § "Diagnostic args" and tested against it.
+    /// Values keep their JSON shape, so joining and pluralizing stay the
+    /// consumer's locale decisions.
     ///
-    /// Empty for any code outside the structured surface, which is the signal
-    /// to render `message` verbatim. Engine prose never rides under a key —
-    /// a consumer's own sentence may be coarser than ours, never
-    /// half-translated.
+    /// Empty either because the code is outside the structured surface or
+    /// because its sentence needs no facts beyond the code; canon tells the
+    /// two apart. Engine prose never rides under a key: a consumer's sentence
+    /// may be coarser than ours, never half-translated.
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     pub args: BTreeMap<String, serde_json::Value>,
     /// Flattened cause chain (outermost first). Upstream English, and
@@ -389,16 +389,11 @@ pub enum ParseError {
 impl ParseError {
     /// The facts this error's message interpolates. See [`Diagnostic::args`].
     ///
-    /// Arms bind every field rather than eliding with `..`, so a new field on
-    /// a variant does not compile until this decides about it.
-    ///
-    /// Four variants carry only prose and so contribute no keys. `EmptyInput`
-    /// is a single fixed sentence a consumer writes from the code alone;
-    /// `InvalidStructure` and `BodyImport` wrap messages minted at ~20 sites
-    /// and by the content importer; `MissingQuill` selects one of three
-    /// sentences by inspecting the source, a branch no structured field
-    /// records. All four render `message` verbatim — see `ERROR.md`
-    /// § "Diagnostic args".
+    /// The four `String` variants contribute no keys, for two different
+    /// reasons canon distinguishes: `EmptyInput` is one fixed sentence, while
+    /// `InvalidStructure`, `BodyImport`, and `MissingQuill` carry prose minted
+    /// per-site. `MissingQuill` looks fixed and is not: it picks one of three
+    /// sentences by re-reading the source, and no field records which.
     pub fn args(&self) -> BTreeMap<String, serde_json::Value> {
         match self {
             ParseError::InputTooLarge { size, max } => diag_args! {
@@ -409,14 +404,14 @@ impl ParseError {
             ParseError::EmptyInput(_) => diag_args! {},
             ParseError::MissingQuill(_) => diag_args! {},
             ParseError::BodyImport(_) => diag_args! {},
-            // `reason` is the `from_str` violation in English, so it stays in
+            // `reason` is the `from_str` violation in English and stays in
             // `message`; `value` alone carries the consumer's sentence.
             ParseError::InvalidQuillReference { value, reason: _ } => diag_args! {
                 "value" => value,
             },
-            // No `location` is set on this diagnostic, so `args` is the only
-            // structured route to the coordinates the message names. `message`
-            // is the YAML engine's own prose and keeps no key.
+            // This diagnostic sets no `location`, so `args` is the only
+            // structured route to the coordinates the message names. The
+            // message is the YAML engine's own prose and keeps no key.
             ParseError::YamlErrorWithLocation {
                 message: _,
                 line,

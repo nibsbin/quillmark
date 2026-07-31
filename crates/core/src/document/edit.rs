@@ -15,6 +15,8 @@
 //! enforce the §8 value-depth bound: `$ext` flows through the recursive
 //! emit and DTO paths like any other value.
 
+use std::collections::BTreeMap;
+
 use unicode_normalization::UnicodeNormalization;
 
 use quillmark_content::delta::diff_import;
@@ -22,6 +24,7 @@ use quillmark_content::import::ImportError;
 use quillmark_content::{ApplyError, Delta, LineOp, MarkOp, Content};
 
 use crate::document::meta::{validate_composable_kind, CardKindError};
+use crate::error::diag_args;
 use crate::document::payload::MetaKey;
 use crate::document::{Card, Document, Payload};
 use crate::quill::{CoercionError, FieldSchema, Leniency, QuillConfig};
@@ -188,26 +191,17 @@ impl EditError {
     }
 
     /// The facts this error's message interpolates. See
-    /// [`Diagnostic::args`](crate::error::Diagnostic::args).
+    /// [`Diagnostic::args`](crate::error::Diagnostic::args); `ERROR.md`
+    /// § "Diagnostic args" says per code whether an empty map means a fixed
+    /// sentence or a fallback to `message`.
     ///
-    /// Arms bind every field rather than eliding with `..`, so a new field on
-    /// a variant does not compile until this decides about it.
-    ///
-    /// `field` and `kind` ride here even though [`doc_path`](Self::doc_path)
-    /// also folds them into the diagnostic's anchor, which is not the
-    /// duplication the no-anchor-in-args rule forbids: that rule bars the
-    /// assembled `path` string, and recovering a name from one is not sound in
-    /// general. [`DocPath`] renders field segments unescaped and parses on `.`
-    /// and `[`, so precisely the malformed names `InvalidFieldName` reports can
-    /// round-trip into different segments.
-    ///
-    /// The message-only variants carry prose: `Import` and `ContentApply` wrap
-    /// another codec's error, and the two `message` fields hold the coercion
-    /// `reason` (see [`CoercionError::args`](crate::quill::CoercionError::args)).
-    /// `ReservedKind` and `EmptyCardId` are fixed sentences a consumer writes
-    /// from the code alone.
-    pub fn args(&self) -> std::collections::BTreeMap<String, serde_json::Value> {
-        use crate::error::diag_args;
+    /// `field` and `kind` ride here despite [`doc_path`](Self::doc_path) also
+    /// folding them into the anchor. The rule against duplicating an anchor
+    /// bars the assembled `path` string, and recovering a name from one is
+    /// unsound anyway: [`DocPath`](crate::path::DocPath) renders field
+    /// segments unescaped and parses on `.` and `[`, so exactly the malformed
+    /// names `InvalidFieldName` reports can round-trip into other segments.
+    pub fn args(&self) -> BTreeMap<String, serde_json::Value> {
         match self {
             EditError::InvalidFieldName(field) => diag_args! { "field" => field },
             EditError::UnknownField(field) => diag_args! { "field" => field },

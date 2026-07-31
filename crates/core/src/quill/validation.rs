@@ -213,19 +213,15 @@ impl ValidationError {
     /// The facts this error's message interpolates. See
     /// [`Diagnostic::args`](crate::error::Diagnostic::args).
     ///
-    /// Arms bind every field rather than eliding with `..`, so a new field on
-    /// a variant does not compile until this decides about it.
-    ///
-    /// `path` is deliberately absent: it is the diagnostic's anchor, and an
-    /// anchor reachable by two routes acquires two spellings. `NotInline` and
+    /// `path` stays out: it is the diagnostic's anchor, and an anchor
+    /// reachable by two routes acquires two spellings. `NotInline` and
     /// `NotPlain` carry nothing else, so their sentence follows from the code
     /// and the anchor alone.
     ///
-    /// `default` is present only when the schema declares one — the same
-    /// condition [`type_mismatch_hint`] branches on, so a consumer selects its
-    /// own exit clause from the key's presence rather than re-deriving the
-    /// branch. Emitting it as `null` instead would read as a default spelled
-    /// `null`.
+    /// `default` is present only when the schema declares one, the same
+    /// condition [`type_mismatch_hint`] branches on, so a consumer picks its
+    /// own exit clause from the key's presence instead of re-deriving the
+    /// branch. Emitting `null` instead would read as a default spelled `null`.
     pub fn args(&self) -> BTreeMap<String, serde_json::Value> {
         match self {
             ValidationError::TypeMismatch {
