@@ -166,7 +166,7 @@ function foreignDocJson(value, method) {
 	if (!warnedForeignHandle) {
 		warnedForeignHandle = true;
 		console.warn(
-			`@quillmark/wasm: ${method} received a Document minted by a DIFFERENT copy of this package — two copies are installed. Handling it by value, which works but is slower, and Engine's quill clone cache is split per copy. Run \`npm ls @quillmark/wasm\` and dedupe to one. Further occurrences are not reported.`
+			`@quillmark/wasm: ${method} received a Document that is not this copy's Document class — the usual cause is two copies of @quillmark/wasm installed. Handling it by value: correct, but slower, and Engine's quill clone cache is split per copy. Run \`npm ls @quillmark/wasm\` and dedupe to one. Further occurrences are not reported.`
 		);
 	}
 	return /** @type {any} */ (value).toJson();
@@ -211,6 +211,8 @@ function patchForeignTolerant(proto, name, wrap) {
 	if (typeof original !== 'function' || original[FOREIGN_TOLERANT]) return;
 	const patched = wrap(original);
 	/** @type {any} */ (patched)[FOREIGN_TOLERANT] = true;
+	// Keep the method's name so a stack trace still reads `Quill.validate`.
+	Object.defineProperty(patched, 'name', { value: name, configurable: true });
 	/** @type {any} */ (proto)[name] = patched;
 }
 
