@@ -457,7 +457,7 @@ fn card_kinds_of(doc: &quillmark_core::Document) -> Vec<Option<String>> {
 /// Typed in-memory Quillmark document.
 #[wasm_bindgen]
 pub struct Document {
-    inner: quillmark_core::Document,
+    inner: crate::tracked::Tracked,
     /// Parse-time warnings (e.g. a `~~~` opener missing its blank line).
     parse_warnings: Vec<quillmark_core::Diagnostic>,
 }
@@ -714,7 +714,7 @@ impl Quill {
     #[wasm_bindgen(js_name = seedDocument)]
     pub fn seed_document(&self) -> Document {
         Document {
-            inner: self.inner.seed_document(),
+            inner: crate::tracked::Tracked::new(self.inner.seed_document()),
             parse_warnings: Vec::new(),
         }
     }
@@ -772,7 +772,7 @@ impl Document {
             WasmError::from(format!("invalid QuillReference '{quill_ref}': {e}")).to_js_value()
         })?;
         Ok(Document {
-            inner: quillmark_core::Document::new(qr),
+            inner: crate::tracked::Tracked::new(quillmark_core::Document::new(qr)),
             parse_warnings: Vec::new(),
         })
     }
@@ -785,7 +785,7 @@ impl Document {
             .map_err(|e| e.to_js_value())?;
 
         Ok(Document {
-            inner: output.document,
+            inner: crate::tracked::Tracked::new(output.document),
             parse_warnings: output.warnings,
         })
     }
@@ -802,7 +802,7 @@ impl Document {
             WasmError::from(format!("fromJson: invalid storage DTO: {e}")).to_js_value()
         })?;
         Ok(Document {
-            inner,
+            inner: crate::tracked::Tracked::new(inner),
             parse_warnings: Vec::new(),
         })
     }
@@ -820,7 +820,7 @@ impl Document {
     pub fn try_from_json(json: &str) -> Option<Document> {
         let inner: quillmark_core::Document = serde_json::from_str(json).ok()?;
         Some(Document {
-            inner,
+            inner: crate::tracked::Tracked::new(inner),
             parse_warnings: Vec::new(),
         })
     }
@@ -900,13 +900,13 @@ impl Document {
         // Infallible: every field of `Document` and its DTO serializes via
         // standard derives into a `String` buffer — there is no `io::Write`
         // and no custom `Serialize` that can return an error.
-        serde_json::to_string(&self.inner).expect("Document serialization is infallible")
+        serde_json::to_string(&*self.inner).expect("Document serialization is infallible")
     }
 
     #[wasm_bindgen(js_name = clone)]
     pub fn clone_doc(&self) -> Document {
         Document {
-            inner: self.inner.clone(),
+            inner: crate::tracked::Tracked::new((*self.inner).clone()),
             parse_warnings: self.parse_warnings.clone(),
         }
     }
@@ -925,7 +925,7 @@ impl Document {
         let inner: quillmark_core::Document = serde_json::from_str(json).map_err(|e| {
             WasmError::from(format!("loadJson: invalid storage DTO: {e}")).to_js_value()
         })?;
-        self.inner = inner;
+        self.inner.replace(inner);
         self.parse_warnings.clear();
         Ok(())
     }
@@ -935,6 +935,24 @@ impl Document {
         self.inner.quill_reference().to_string()
     }
 
+    /// Edits taken against **this handle**, monotonic from 0 — the change signal
+    /// a consumer polls instead of diffing the document. Every mutator bumps it,
+    /// including [`loadJson`](Self::load_json); no read does.
+    ///
+    /// It counts a handle's history, not a document's identity, so it compares
+    /// only against itself: `clone` restarts at 0, and two handles holding equal
+    /// documents may sit at different revisions. The one question it answers is
+    /// "has this handle changed since I last looked", which is the one a
+    /// framework binding over an opaque handle rebuilds by hand.
+    ///
+    /// A mutator that bumps and then fails its own validation still counts — the
+    /// count is an upper bound on real changes, never a lower one, so a consumer
+    /// keyed on it can do redundant work but never miss a change.
+    #[wasm_bindgen(getter, js_name = revision)]
+    pub fn revision(&self) -> f64 {
+        self.inner.revision()
+    }
+
     /// The document's main (entry) card. Allocates and serializes on each
     /// call — cache locally if read in a hot loop.
     #[wasm_bindgen(getter, js_name = main, unchecked_return_type = "Card")]
@@ -942,6 +960,10 @@ impl Document {
         card_to_js(self.inner.main())
     }
 
+    /// The composable cards, in document order. Serializes every card whole —
+    /// payload items and body content JSON included — on each call, so it is a
+    /// snapshot verb, not a hot-path one. For the shape most callers reach
+    /// `cards` for, read [`cardKinds`](Self::card_kinds) instead.
     #[wasm_bindgen(getter, js_name = cards, unchecked_return_type = "Card[]")]
     pub fn cards(&self) -> Result<JsValue, JsValue> {
         let cards: Vec<quillmark_core::CardWire> =
@@ -949,16 +971,40 @@ impl Document {
         serialize_or_throw(&cards, "cards")
     }
 
+    /// Each composable card's `$kind`, in document order — the card-tree shape
+    /// without the card bodies. An undeclared `$kind` is the empty string, as on
+    /// `Card.kind`, so the array is positionally total: `cardKinds[i]` describes
+    /// `cards[i]`. The read a caller wants when it is resolving an address or
+    /// dispatching on kind, where [`cards`](Self::cards) would serialize every
+    /// payload and body to answer it.
+    #[wasm_bindgen(getter, js_name = cardKinds, unchecked_return_type = "string[]")]
+    pub fn card_kinds(&self) -> Result<JsValue, JsValue> {
+        let kinds: Vec<&str> = self
+            .inner
+            .cards()
+            .iter()
+            .map(|c| c.kind().unwrap_or_default())
+            .collect();
+        serialize_or_throw(&kinds, "cardKinds")
+    }
+
     /// Read the **verbatim stored value** at `addr` — the raw payload value of a
-    /// field (a content object for a richtext field, a scalar/array/object
-    /// otherwise), or the **body content** when `addr.field` is absent. A bare
+    /// field, or the **body content** when `addr.field` is absent. A bare
     /// string is `Addr` shorthand for `{ field }`. Reads are total over the field
     /// axis: an absent field is `undefined`; only an out-of-range `addr.card`
     /// throws `edit::index_out_of_range`. Needs no schema, so it lives on
     /// `Document` — the read echo of the verbatim `store*` write, distinct from
-    /// the interpreted schema-plane [`reader.get`](Self::reader_get). For the
-    /// markdown projection use [`getMarkdown`](Self::get_markdown) (body) or
-    /// `reader.get` (a field's declared type).
+    /// the interpreted schema-plane [`reader.get`](Self::reader_get).
+    ///
+    /// **Verbatim means the shape says how the value was written, not what the
+    /// field's declared type is.** A richtext field holds a content object when a
+    /// typed write landed it (`install` / `commitField` / `writer.set`) and the
+    /// markdown string it parsed when the document came from
+    /// [`fromMarkdown`](Self::parse) — both are the stored value, and this read
+    /// reports each as it is. A consumer that wants one shape regardless of entry
+    /// point reads a projection instead: [`getContent`](Self::get_content) for the
+    /// content model, [`getMarkdown`](Self::get_markdown) (body) or `reader.get`
+    /// (a field's declared type) for markdown.
     #[wasm_bindgen(js_name = getStored, unchecked_return_type = "unknown")]
     pub fn get_stored(
         &self,
@@ -976,6 +1022,54 @@ impl Document {
                 None => Ok(JsValue::UNDEFINED),
             },
         }
+    }
+
+    /// Read the **content model** at `addr` — the read twin of
+    /// [`install`](Self::install), and the entry-point-independent read
+    /// [`getStored`](Self::get_stored) cannot be. A field decodes through the same
+    /// object-or-markdown dispatch the writer commits, so a content object reads
+    /// back losslessly (identity marks intact) and a parsed markdown string
+    /// imports; an absent `addr.field` reads the body, which is content already. A
+    /// bare string is `Addr` shorthand for `{ field }`.
+    ///
+    /// This is the read a codec consumer wants: `reader.get` projects a richtext
+    /// field to markdown, which is lossy (content-only marks do not survive), and
+    /// `getStored` reports the storage shape. Quill-free, so it cannot itself tell
+    /// a richtext field from a plain string one — the caller names a field it
+    /// knows is richtext, exactly as it does when writing.
+    ///
+    /// An absent field is `undefined`. A field present but neither a content
+    /// object nor an importable markdown string (a number an opaque `storeField`
+    /// wrote) throws `edit::field_richtext_decode`; an out-of-range `addr.card`
+    /// throws `edit::index_out_of_range`.
+    #[wasm_bindgen(js_name = getContent, unchecked_return_type = "Content | undefined")]
+    pub fn get_content(
+        &self,
+        #[wasm_bindgen(unchecked_param_type = "Addr | string")] addr: JsValue,
+    ) -> Result<JsValue, JsValue> {
+        let addr = Addr::from_js_or_string(&addr)?;
+        let base = self.addr_base(&addr);
+        let card = self.addr_card_ref(&addr)?;
+        let content = match &addr.field {
+            None => std::borrow::Cow::Borrowed(card.body()),
+            Some(field) => match card.field_richtext(field) {
+                None => return Ok(JsValue::UNDEFINED),
+                Some(Ok(rt)) => std::borrow::Cow::Owned(rt),
+                Some(Err(e)) => {
+                    return Err(edit_error_to_js(
+                        &quillmark_core::EditError::FieldRichtextDecode {
+                            field: field.clone(),
+                            message: e.into_message(),
+                        },
+                        &base,
+                    ))
+                }
+            },
+        };
+        serialize_or_throw(
+            &quillmark_content::serial::to_canonical_value(&content),
+            "getContent",
+        )
     }
 
     /// The **body** markdown projection — the main body, or a composable card's
@@ -1166,7 +1260,7 @@ impl Document {
     /// upstream prop updates instead of re-parsing on every keystroke.
     #[wasm_bindgen(js_name = equals)]
     pub fn equals(&self, other: &Document) -> bool {
-        self.inner == other.inner
+        *self.inner == *other.inner
     }
 
     #[wasm_bindgen(getter, js_name = warnings, unchecked_return_type = "Diagnostic[]")]
@@ -1355,6 +1449,7 @@ impl Document {
         // Main-only: `$seed` is config-space, so a kind/depth error here carries
         // no field anchor (empty base → `doc_path` returns `None`).
         self.inner
+            .edit()
             .main_mut()
             .store_seed_namespace(card_kind, json)
             .map_err(|e| edit_error_to_js(&e, &quillmark_core::DocPath::new()))
@@ -1365,7 +1460,7 @@ impl Document {
     /// survive. `$seed` is main-only, so this takes no address.
     #[wasm_bindgen(js_name = removeSeedNamespace)]
     pub fn remove_seed_namespace(&mut self, card_kind: &str) -> Result<JsValue, JsValue> {
-        json_value_to_js(self.inner.main_mut().remove_seed_namespace(card_kind))
+        json_value_to_js(self.inner.edit().main_mut().remove_seed_namespace(card_kind))
     }
 
     /// Replace the QUILL reference string. Throws if `ref_str` is invalid.
@@ -1384,7 +1479,7 @@ impl Document {
             }
             .to_js_value()
         })?;
-        self.inner.set_quill_ref(qr);
+        self.inner.edit().set_quill_ref(qr);
         Ok(())
     }
 
@@ -1469,7 +1564,7 @@ impl Document {
         let addr = Addr::from_js_or_string(&addr)?;
         let field = addr.require_field("reviseField")?.to_string();
         let base = self.addr_base(&addr);
-        let mut writer = quill.inner.writer(&mut self.inner);
+        let mut writer = quill.inner.writer(self.inner.edit());
         let delta = match addr.card {
             None => writer.revise_field(&field, markdown),
             Some(index) => writer
@@ -1544,7 +1639,7 @@ impl Document {
         let json = js_value_to_json(value, "commitField")?;
         let qv = quillmark_core::QuillValue::from_json(json);
         let base = self.addr_base(&addr);
-        let mut writer = quill.inner.writer(&mut self.inner);
+        let mut writer = quill.inner.writer(self.inner.edit());
         match addr.card {
             None => writer.set(&field, qv).map_err(|e| edit_error_to_js(&e, &base)),
             Some(index) => writer
@@ -1576,7 +1671,7 @@ impl Document {
         addr.require_card_only("commitFields")?;
         let batch = js_value_to_field_batch(&fields, "commitFields")?;
         let base = self.addr_base(&addr);
-        let mut writer = quill.inner.writer(&mut self.inner);
+        let mut writer = quill.inner.writer(self.inner.edit());
         match addr.card {
             None => writer
                 .set_all(batch)
@@ -1621,7 +1716,7 @@ impl Document {
         // ride the same serializer.
         quill
             .inner
-            .writer(&mut self.inner)
+            .writer(self.inner.edit())
             .add_card(kind, batch, body.as_deref(), at)
             .map_err(|errs| edit_errors_to_js(errs, &quillmark_core::DocPath::new()))
     }
@@ -1704,15 +1799,15 @@ impl Document {
             quillmark_core::DocPath::card(None, i)
         });
         match at {
-            Some(index) => self.inner.insert_card(index, core_card),
-            None => self.inner.push_card(core_card),
+            Some(index) => self.inner.edit().insert_card(index, core_card),
+            None => self.inner.edit().push_card(core_card),
         }
         .map_err(|e| edit_error_to_js(&e, &base))
     }
 
     #[wasm_bindgen(js_name = removeCard, unchecked_return_type = "Card | undefined")]
     pub fn remove_card(&mut self, index: usize) -> Result<JsValue, JsValue> {
-        match self.inner.remove_card(index) {
+        match self.inner.edit().remove_card(index) {
             Some(core_card) => card_to_js(&core_card),
             None => Ok(JsValue::UNDEFINED),
         }
@@ -1723,6 +1818,7 @@ impl Document {
     pub fn move_card(&mut self, from: usize, to: usize) -> Result<(), JsValue> {
         // An out-of-range `from`/`to` anchors at `cards[index]` via the error.
         self.inner
+            .edit()
             .move_card(from, to)
             .map_err(|e| edit_error_to_js(&e, &quillmark_core::DocPath::new()))
     }
@@ -1735,6 +1831,7 @@ impl Document {
         // Both an out-of-range index and an invalid `newKind` anchor at the
         // target slot `cards[index]`.
         self.inner
+            .edit()
             .set_card_kind(index, new_kind)
             .map_err(|e| edit_error_to_js(&e, &quillmark_core::DocPath::card(None, index)))
     }
@@ -1747,7 +1844,7 @@ impl Document {
     /// index-taking half of [`addr_card_mut`](Self::addr_card_mut).
     fn card_mut_or_throw(&mut self, index: usize) -> Result<&mut quillmark_core::Card, JsValue> {
         let len = self.inner.cards().len();
-        self.inner.card_mut(index).ok_or_else(|| {
+        self.inner.edit().card_mut(index).ok_or_else(|| {
             edit_error_to_js(
                 &quillmark_core::EditError::IndexOutOfRange { index, len },
                 &quillmark_core::DocPath::new(),
@@ -1774,7 +1871,7 @@ impl Document {
     /// static address axis the addressed content verbs share.
     fn addr_card_mut(&mut self, addr: &Addr) -> Result<&mut quillmark_core::Card, JsValue> {
         match addr.card {
-            None => Ok(self.inner.main_mut()),
+            None => Ok(self.inner.edit().main_mut()),
             Some(index) => self.card_mut_or_throw(index),
         }
     }

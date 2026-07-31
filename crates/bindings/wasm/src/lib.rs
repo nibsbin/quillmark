@@ -48,6 +48,7 @@ use wasm_bindgen::prelude::*;
 
 mod engine;
 mod error;
+mod tracked;
 mod types;
 
 pub use engine::{Document, Quill};
