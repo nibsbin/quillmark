@@ -585,8 +585,9 @@ describe('Document editor surface: setQuillRef / install / revise', () => {
   // conversion, the tree's own drop) recurses one frame per level. On wasm32 the
   // stack is 1 MB and an overflow is a trap that takes the module down rather than
   // an error the host can catch, so an over-deep value must throw and leave the
-  // module serving. `install` is the reachable door: the value arrives from JS and
-  // one loop builds it.
+  // module serving. Every door that takes host JSON is checked below: `install`
+  // (a content's island props), and the card lane, whose field values are opaque
+  // in the same way.
   it('install rejects a deeply nested props instead of trapping the module', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     let deep = []
@@ -598,6 +599,28 @@ describe('Document editor surface: setQuillRef / install / revise', () => {
     expect(() => doc.install({}, rt)).toThrow(/nests deeper/)
     // Still alive: the guard errored rather than trapping, so the module keeps
     // serving. A trap would fail every later call in the file, not just this one.
+    doc.install({}, importMarkdown('after'))
+    expect(doc.main.body.text).toBe('after')
+  })
+
+  // A card field value is opaque host JSON on the same terms as island props, and
+  // reaches `serde_wasm_bindgen` through two doors of its own. `CardWire`'s own
+  // depth check on `$ext`/`$seed` runs a conversion too late to help.
+  it('the card lane rejects a deeply nested field value instead of trapping', () => {
+    let deep = []
+    for (let i = 0; i < 5000; i++) deep = [deep]
+
+    expect(() => Document.makeCard('note', { f: deep }, '')).toThrow(/nests deeper/)
+
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    const card = {
+      kind: 'note',
+      payloadItems: [{ type: 'field', key: 'f', value: deep, fill: false, nestedFills: [] }],
+      body: ''
+    }
+    expect(() => doc.insertCard(card)).toThrow(/nests deeper/)
+
+    // Both guards errored rather than trapping, so the module keeps serving.
     doc.install({}, importMarkdown('after'))
     expect(doc.main.body.text).toBe('after')
   })

@@ -1649,6 +1649,7 @@ impl Document {
     ) -> Result<JsValue, JsValue> {
         let field_map: serde_json::Map<String, serde_json::Value> = match fields {
             Some(fields) if !fields.is_undefined() && !fields.is_null() => {
+                reject_deep_js_value(&fields, "makeCard")?;
                 serde_wasm_bindgen::from_value(fields).map_err(|e| {
                     WasmError::from(format!("makeCard: `fields` must be an object: {e}"))
                         .to_js_value()
@@ -2319,6 +2320,11 @@ fn js_to_card(value: &JsValue) -> Result<quillmark_core::Card, JsValue> {
             }
         }
     }
+    // Before the conversion, not after: `CardWire::try_from` depth-checks `$ext`
+    // and `$seed`, but a field `value` is opaque host JSON and
+    // `serde_wasm_bindgen` spends a frame per level building it, so the trap
+    // lands while the wire is still being assembled.
+    reject_deep_js_value(value, "card")?;
     let wire: quillmark_core::CardWire = serde_wasm_bindgen::from_value(value.clone())
         .map_err(|e| WasmError::from(format!("card must be a Card object: {e}")).to_js_value())?;
     quillmark_core::Card::try_from(wire).map_err(|e| WasmError::from(e.to_string()).to_js_value())

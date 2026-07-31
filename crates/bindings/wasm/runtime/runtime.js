@@ -346,9 +346,10 @@ export function isListItemContainer(container) {
 // A predicate rather than an exported name list, because the known tables below
 // are upstream's business. They are pinned against the Rust source
 // (`Content::RESERVED_*` and `KnownIslandType`) by the
-// `known_open_set_names_are_pinned` drift-guard test in
-// `crates/content/src/model.rs`: adding a built-in means editing there, here, and
-// the TS unions in `crates/bindings/wasm/src/engine.rs` in one commit.
+// `js_known_name_tables_match_the_rust_open_sets` drift-guard test in
+// `crates/bindings/wasm/tests/known_names_drift.rs`: adding a built-in means
+// editing there, here, and the TS unions in `crates/bindings/wasm/src/engine.rs`
+// in one commit.
 //
 // These classify unknown *tags*, not unknown *payloads on known tags*. A future
 // `kind: "footnote"` with a sibling `ref` loses `ref` at a consumer that predates

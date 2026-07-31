@@ -13,7 +13,11 @@ use crate::value::QuillValue;
 /// maps ([`CardSchema::fields`], [`FieldSchema::properties`]) and by key order
 /// on the emitted-schema wire. The retired `ui.order` key is rejected with a
 /// pointed message (`UI_ORDER_REMOVED_MSG`).
-#[derive(Debug, Clone, PartialEq, Serialize)]
+///
+/// Built from [`Default`] and narrowed by the `with_*` setters: every knob is
+/// optional, so there is no `new`. Assigning a field works too, and is shorter
+/// when the caller already holds an `Option`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 #[non_exhaustive]
 pub struct UiFieldSchema {
     /// Display label for the field: decoupled from the snake_case wire key.
@@ -26,6 +30,33 @@ pub struct UiFieldSchema {
     /// Valid on `string` fields (plain text with newlines preserved) and `richtext` fields.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub multiline: Option<bool>,
+}
+
+impl UiFieldSchema {
+    /// Set [`title`](Self::title).
+    pub fn with_title(mut self, title: String) -> Self {
+        self.title = Some(title);
+        self
+    }
+
+    /// Set [`group`](Self::group), a reference into the card's
+    /// [`GroupRegistry`].
+    pub fn with_group(mut self, group: String) -> Self {
+        self.group = Some(group);
+        self
+    }
+
+    /// Set [`compact`](Self::compact).
+    pub fn with_compact(mut self, compact: bool) -> Self {
+        self.compact = Some(compact);
+        self
+    }
+
+    /// Set [`multiline`](Self::multiline).
+    pub fn with_multiline(mut self, multiline: bool) -> Self {
+        self.multiline = Some(multiline);
+        self
+    }
 }
 
 /// Migration message for the retired `ui.order` key: shared by the
@@ -62,7 +93,11 @@ impl<'de> Deserialize<'de> for UiFieldSchema {
 }
 
 /// Body namespace configuration for a card kind
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+///
+/// Built from [`Default`] and narrowed by the `with_*` setters; assigning a
+/// field works too. [`example_content`](Self::example_content) has no setter:
+/// it is the loader's cache of `example`, not a knob a caller sets.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[non_exhaustive]
 pub struct BodyCardSchema {
@@ -84,7 +119,25 @@ pub struct BodyCardSchema {
     pub example_content: Option<QuillValue>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+impl BodyCardSchema {
+    /// Set [`enabled`](Self::enabled).
+    pub fn with_enabled(mut self, enabled: bool) -> Self {
+        self.enabled = Some(enabled);
+        self
+    }
+
+    /// Set [`example`](Self::example). Leaves
+    /// [`example_content`](Self::example_content) absent, so consumers import
+    /// the markdown themselves: only the loader mints the cache.
+    pub fn with_example(mut self, example: String) -> Self {
+        self.example = Some(example);
+        self
+    }
+}
+
+/// Built from [`Default`] and narrowed by the `with_*` setters; assigning a
+/// field works too.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[non_exhaustive]
 pub struct UiCardSchema {
@@ -101,6 +154,21 @@ pub struct UiCardSchema {
     pub groups: Option<GroupRegistry>,
 }
 
+impl UiCardSchema {
+    /// Set [`title`](Self::title).
+    pub fn with_title(mut self, title: String) -> Self {
+        self.title = Some(title);
+        self
+    }
+
+    /// Set [`groups`](Self::groups), the registry a field's `ui.group` refers
+    /// into.
+    pub fn with_groups(mut self, groups: GroupRegistry) -> Self {
+        self.groups = Some(groups);
+        self
+    }
+}
+
 /// One entry in a card's [`GroupRegistry`]: a snake_case identity plus an
 /// optional display-label override. The `id` decouples identity from label the
 /// same way a field's snake_case key decouples from its `ui.title`: a rename
@@ -115,6 +183,20 @@ pub struct GroupSchema {
     pub id: String,
     /// Display-label override; `None` means derive the label from `id`.
     pub title: Option<String>,
+}
+
+impl GroupSchema {
+    /// The identity every entry carries. `title` starts absent, which is the
+    /// derive-from-`id` reading.
+    pub fn new(id: String) -> Self {
+        Self { id, title: None }
+    }
+
+    /// Set [`title`](Self::title), the display-label override.
+    pub fn with_title(mut self, title: String) -> Self {
+        self.title = Some(title);
+        self
+    }
 }
 
 /// A card's ordered group registry (`main.ui.groups` or a card kind's
