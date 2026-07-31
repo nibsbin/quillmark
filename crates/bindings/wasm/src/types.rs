@@ -122,15 +122,12 @@ pub struct Diagnostic {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub hint: Option<String>,
     /// The facts `message` interpolates, keyed by name. With `code`, the
-    /// substitution unit a consumer needs to word this diagnostic itself.
-    /// Absent for any code outside the structured surface, which is the signal
-    /// to render `message` verbatim. See the Rust `Diagnostic::args` docs and
-    /// `prose/canon/ERROR.md` for the per-code keys.
+    /// substitution unit needed to word this diagnostic in another language;
+    /// `prose/canon/ERROR.md` § "Diagnostic args" tabulates the keys per code.
     ///
-    /// Declared optional explicitly: `tsify` does not read
-    /// `skip_serializing_if`, so a field omitted at runtime is declared
-    /// required unless said so here (`sourceChain` predates this and still
-    /// carries that mismatch).
+    /// Declared optional explicitly because `tsify` does not read
+    /// `skip_serializing_if`: without this, a field the runtime omits is
+    /// declared required. `sourceChain` carries that mismatch.
     #[tsify(optional, type = "Record<string, unknown>")]
     #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty", default)]
     pub args: std::collections::BTreeMap<String, serde_json::Value>,
