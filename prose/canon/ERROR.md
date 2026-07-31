@@ -220,6 +220,124 @@ confused with it:
 Config-space anchors (`$seed.<kind>.<field>`, Quill.yaml schema-literal owner
 labels) ride the `DocPath` serializer with their prefix as a leading segment.
 
+## Diagnostic args
+
+`message` is the canonical English rendering. `args` is what it interpolates,
+keyed by name, so a consumer with its own string table selects a sentence by
+`code` and fills it itself. `code` + `args` is the substitution unit; `code` +
+`message` is not.
+
+Values keep their JSON shape — `allowed` arrives as a list, `len` as a number —
+because joining and pluralizing are locale decisions, not the engine's.
+
+**Engine prose never rides under a key.** Where a message bottoms out in text
+minted per-site — `CoercionError`'s `reason`, the ~20 `parse::invalid_structure`
+sites, another codec's error — that text stays in `message` and contributes no
+arg. A consumer's own sentence is then coarser than ours (`edit::field_conform`
+says which field and which target type, not which of a dozen ways the value
+failed to become one). That is the contract, not a gap in it: a coarser sentence
+a consumer owns beats a fluent one half in the wrong language. The full-fidelity
+alternative — a key holding English — is worse than omission, because the
+fallback below cannot fire on a key that is present.
+
+**Falling back is wholesale.** A formatter whose template needs a key that is
+absent renders `message`, never a sentence with a hole in it. It takes `hint`
+from the engine in the same breath: the hint is the same English as the message
+tail (`ValidationError`'s `Display` appends it verbatim), so translating one and
+passing the other through ships a two-language diagnostic. Localize a code and
+you own both sentences; fall back and you take both.
+
+**`hint` needs no code of its own.** It is a function of `code` and `args`:
+three of the four hinted variants are per-variant constants, and
+`type_mismatch_hint` branches only on whether a default exists — which is why
+`default` is present as a key exactly when the schema declares one, rather than
+present-and-null. Any datum a hint branches on is message-relevant by
+definition and belongs in `args`; a parallel `hint_code` would be derived state
+on the wire, free to drift.
+
+**Anchors do not travel twice.** `path` is never an arg. `field` and `kind` are,
+even though `doc_path` also folds them into the anchor — the rule bars the
+assembled path string, and recovering a name from one is unsound anyway, since
+`DocPath` renders field segments unescaped and parses on `.` and `[`, so exactly
+the malformed names `edit::invalid_field_name` reports can round-trip into
+different segments. `CoercionError`'s `path` stays out for the separate reason
+below in § "Three grammars": it is a schema-space anchor and does not cross.
+
+**Growth is additive.** Per code, keys are append-only and never retyped, and
+value spellings are as frozen as the keys — `sourceToken`'s verbatim-YAML form
+(`42`, `null`, `""`), `actual`'s `integer`-vs-`number` vocabulary. Codes
+themselves are governed the same way, which is what makes them safe to key a
+string table on. Without that, an upgrade turns into a silent English
+regression in every localized consumer.
+
+### Coverage
+
+The table is the contract; `diagnostic_args_match_canon` in
+`crates/core/src/quill/validation.rs` fails if code and canon disagree.
+Each error enum's `args()` binds every field rather than eliding with `..`, so a
+new field on a variant does not compile until it decides whether it is
+message-relevant.
+
+Three outcomes, and the wire tells them apart only with this table in hand —
+"no keys" reads identically for the second and third:
+
+- **structured** — keys present; the consumer writes the whole sentence.
+- **code-determined** — no keys needed; the sentence follows from `code` and the
+  anchor alone. Fully localizable.
+- **fallback** — render `message`.
+
+| Code | Args | Outcome |
+|---|---|---|
+| `validation::type_mismatch` | `expected`, `actual`, `sourceToken`, `default`? | structured |
+| `validation::enum_violation` | `value`, `allowed` | structured |
+| `validation::format_violation` | `format` | structured |
+| `validation::unknown_card` | `card` | structured |
+| `validation::body_disabled` | `card` | structured |
+| `validation::coercion_failed` | `value`, `target` | structured, coarser |
+| `validation::must_fill` | — | code-determined |
+| `richtext::not_inline` | — | code-determined |
+| `plaintext::not_plain` | — | code-determined |
+| `edit::invalid_field_name` | `field` | structured |
+| `edit::unknown_field` | `field` | structured |
+| `edit::invalid_kind_name` | `kind` | structured |
+| `edit::index_out_of_range` | `index`, `len` | structured |
+| `edit::card_id_collision` | `id` | structured |
+| `edit::value_too_deep` | `max` | structured |
+| `edit::field_richtext_not_inline` | `field` | structured |
+| `edit::field_conform` | `field`, `target` | structured, coarser |
+| `edit::field_richtext_decode` | `field` | structured, coarser |
+| `edit::reserved_kind` | — | code-determined |
+| `edit::empty_card_id` | — | code-determined |
+| `edit::import` | — | fallback |
+| `edit::content_apply` | — | fallback |
+| `parse::input_too_large` | `size`, `max` | structured |
+| `parse::invalid_quill_reference` | `value` | structured, coarser |
+| `parse::yaml_error_with_location` | `line`, `blockIndex` | structured, coarser |
+| `parse::empty_input` | — | code-determined |
+| `parse::invalid_structure` | — | fallback |
+| `parse::missing_quill` | — | fallback |
+| `parse::body_import` | — | fallback |
+
+`parse::missing_quill` looks code-determined and is not: it picks one of three
+sentences by re-reading the source, and no field records which.
+
+### Scope
+
+`validation::*`, `edit::*`, and `parse::*` are the codes an end user meets, and
+the table covers them. The rest carry no args, which is the domain's shape
+rather than a phase of the work:
+
+- **`quill::*`** is quill-authoring. Its reader is a template author debugging
+  `Quill.yaml`, the one audience for whom canonical English is the deliverable.
+  Three of its codes are `format!`-built per slot besides.
+- **`typst::*`** is an open set — the code is Typst's own message text up to the
+  first `:` (`error_mapping.rs`), so it re-spells itself whenever Typst rewords
+  a diagnostic and cannot key a string table at all.
+
+Because those codes carry no args, every consumer template falls back on them by
+the rule above. That is what makes a surface covering a third of the codes total
+rather than partial.
+
 ## Error Presentation
 
 **Pretty printing** (`Diagnostic::fmt_pretty()`):
