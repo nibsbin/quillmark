@@ -336,4 +336,57 @@ title: Draft
     expect(() => doc.moveCard(9, 0)).toThrow()
     expect(doc.revision).toBeGreaterThanOrEqual(before)
   })
+
+  it('every boundary error carries a routable code', () => {
+    // ERROR.md makes the namespaced code the machine-routable identity of a
+    // failure. The binding mints its own `binding::*` for the failures that
+    // never reach a core producer — caller mistakes, which are the errors a
+    // consumer hits most and the ones it most needs to route or translate.
+    const codeOf = (fn) => {
+      let thrown
+      try {
+        fn()
+      } catch (err) {
+        thrown = err
+      }
+      expect(thrown, 'expected a throw, got none').toBeDefined()
+      return thrown.diagnostics[0].code
+    }
+
+    const doc = Document.fromMarkdown(`~~~
+$quill: core_test
+$kind: main
+title: Draft
+~~~
+
+# Body`)
+
+    // The families that name their own code.
+    expect(codeOf(() => Document.fromJson('{"nope":1}'))).toBe('binding::invalid_dto')
+    expect(codeOf(() => doc.loadJson('not json at all'))).toBe('binding::invalid_dto')
+    expect(codeOf(() => doc.install('subject', 42))).toBe('binding::invalid_content')
+
+    // The caller-mistake floor: an argument the signature cannot accept.
+    expect(codeOf(() => new Document('not a quill ref'))).toBe('binding::invalid_argument')
+    expect(codeOf(() => doc.getMarkdown({ card: 0, field: 'title' }))).toBe(
+      'binding::invalid_argument',
+    )
+
+    // Core producers keep their own namespaces — the binding floor never
+    // overwrites one.
+    expect(codeOf(() => doc.getStored({ card: 9 }))).toBe('edit::index_out_of_range')
+    expect(codeOf(() => Document.fromMarkdown('no front matter here'))).toMatch(/^parse::/)
+
+    // The floor is total: no boundary throw reaches a consumer uncoded.
+    for (const fn of [
+      () => new Document('bad ref'),
+      () => Document.fromJson('nope'),
+      () => doc.install('subject', 42),
+      () => doc.storeField('bad name!', 1),
+      () => doc.getMarkdown({ card: 0, field: 'title' }),
+      () => doc.moveCard(9, 0),
+    ]) {
+      expect(codeOf(fn)).toMatch(/^[a-z]+::[a-z_]+$/)
+    }
+  })
 })

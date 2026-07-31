@@ -35,7 +35,7 @@ Two surfaces return one directly (`QuillValue::from_yaml_str`, `QuillConfig::sch
 `into_diagnostics()` consumes). There is no failure taxonomy beyond the
 diagnostics themselves: the machine-routable identity of a failure is each
 diagnostic's namespaced `code` (`parse::*`, `validation::*`, `quill::*`,
-`edit::*`, `typst::*`, `pdfform::*`, `backend::*`, `engine::*`) — consumers
+`edit::*`, `typst::*`, `pdfform::*`, `backend::*`, `engine::*`, `binding::*`) — consumers
 route on codes, not on a type. Multi-problem stages (validation, quill config, backend
 compilation) carry several diagnostics so every problem reaches the caller in
 one pass. `Display` follows the count-based message rule shared with both
@@ -59,6 +59,18 @@ Both bindings stamp that code onto the `Diagnostic` they raise — the mutator
 peer of the render-path namespaces. Identity is the code, never message text:
 routing coercion-vs-undeclared is `edit::field_conform` vs.
 `edit::unknown_field`, read off `diagnostics[0].code`.
+
+**`binding::*` — boundary diagnostics.** The codes a binding mints itself, for
+the failures that never reach a core producer: a JS value the signature cannot
+accept (`binding::invalid_argument`, the floor), a storage DTO that is not one
+(`binding::invalid_dto`), a value that is not canonical Content
+(`binding::invalid_content`), a result the boundary could not serialize back
+(`binding::serialize`), and a canvas host object the paint path cannot use
+(`binding::canvas`). The uncoded-message door (`From<String> for WasmError`) is
+floored at `invalid_argument`, so no diagnostic reaches a consumer without a
+routable code — the promise the rest of this document makes, kept at the surface
+that produces caller mistakes. A core producer's own code is never overwritten:
+an `edit::*` mutator failure crosses the boundary as itself.
 
 **`RenderResult`**: successful result carrying artifacts, output format, and non-fatal `Vec<Diagnostic>` warnings
 

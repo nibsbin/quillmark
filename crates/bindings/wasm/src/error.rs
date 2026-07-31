@@ -20,7 +20,41 @@ pub struct WasmError {
     pub diagnostics: Vec<Diagnostic>,
 }
 
+/// The `binding::*` namespace — the codes this boundary mints itself, for the
+/// failures that never reach a core producer: a JS value the signature cannot
+/// accept, and the boundary's own invariants.
+///
+/// [ERROR.md] makes the namespaced `code` the machine-routable identity of a
+/// failure ("identity is the code, never message text"), and every core and
+/// backend producer stamps one. The binding's own argument errors are the
+/// exception a consumer hits most, because they are the ones a *caller mistake*
+/// produces — so they are the errors most in need of routing, and the ones a
+/// consumer most needs to translate.
+pub mod codes {
+    /// A JS value whose shape or type the signature does not accept — the
+    /// caller-mistake floor, and the default for an uncoded boundary message.
+    pub const INVALID_ARGUMENT: &str = "binding::invalid_argument";
+    /// A storage DTO string that is not one (`fromJson` / `loadJson`).
+    pub const INVALID_DTO: &str = "binding::invalid_dto";
+    /// A value that is not canonical Content JSON.
+    pub const INVALID_CONTENT: &str = "binding::invalid_content";
+    /// A result the boundary could not serialize back to JS — a boundary
+    /// invariant failure, not a caller mistake.
+    pub const SERIALIZE: &str = "binding::serialize";
+    /// A canvas/preview host object the paint path cannot use.
+    pub const CANVAS: &str = "binding::canvas";
+}
+
 impl WasmError {
+    /// A single-diagnostic error carrying `code`.
+    pub fn coded(code: &str, message: impl Into<String>) -> Self {
+        WasmError {
+            diagnostics: vec![
+                Diagnostic::new(Severity::Error, message.into()).with_code(code.to_string()),
+            ],
+        }
+    }
+
     /// Display message for the JS `Error` constructor.
     ///
     /// For single-diagnostic errors this is the diagnostic's `message`. For
@@ -71,11 +105,13 @@ impl From<RenderError> for WasmError {
     }
 }
 
+/// The uncoded-message door, floored at [`codes::INVALID_ARGUMENT`]. Every
+/// boundary message reaches a consumer with *some* routable code; a site whose
+/// failure is not a caller mistake names its own through
+/// [`coded`](WasmError::coded) rather than falling here.
 impl From<String> for WasmError {
     fn from(message: String) -> Self {
-        WasmError {
-            diagnostics: vec![Diagnostic::new(Severity::Error, message)],
-        }
+        WasmError::coded(codes::INVALID_ARGUMENT, message)
     }
 }
 

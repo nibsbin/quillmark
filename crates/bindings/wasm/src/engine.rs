@@ -799,7 +799,7 @@ impl Document {
     #[wasm_bindgen(js_name = fromJson)]
     pub fn from_json(json: &str) -> Result<Document, JsValue> {
         let inner: quillmark_core::Document = serde_json::from_str(json).map_err(|e| {
-            WasmError::from(format!("fromJson: invalid storage DTO: {e}")).to_js_value()
+            WasmError::coded(crate::error::codes::INVALID_DTO, format!("fromJson: invalid storage DTO: {e}")).to_js_value()
         })?;
         Ok(Document {
             inner: crate::tracked::Tracked::new(inner),
@@ -923,7 +923,7 @@ impl Document {
     #[wasm_bindgen(js_name = loadJson)]
     pub fn load_json(&mut self, json: &str) -> Result<(), JsValue> {
         let inner: quillmark_core::Document = serde_json::from_str(json).map_err(|e| {
-            WasmError::from(format!("loadJson: invalid storage DTO: {e}")).to_js_value()
+            WasmError::coded(crate::error::codes::INVALID_DTO, format!("loadJson: invalid storage DTO: {e}")).to_js_value()
         })?;
         self.inner.replace(inner);
         self.parse_warnings.clear();
@@ -2016,13 +2016,15 @@ fn js_to_content_with(
 ) -> Result<quillmark_core::Content, JsValue> {
     let json = js_value_to_json(value, ctx)?;
     if !json.is_object() {
-        return Err(WasmError::from(format!(
+        return Err(WasmError::coded(
+            crate::error::codes::INVALID_CONTENT,
+            format!(
             "{ctx}: expected a Content content object; for markdown use importMarkdown(md) first"
         ))
         .to_js_value());
     }
     read(&json).map_err(|e| {
-        WasmError::from(format!("{ctx}: not a canonical Content content: {e}")).to_js_value()
+        WasmError::coded(crate::error::codes::INVALID_CONTENT, format!("{ctx}: not a canonical Content content: {e}")).to_js_value()
     })
 }
 
@@ -2356,7 +2358,7 @@ fn serialize_or_throw<T: serde::Serialize + ?Sized>(
     let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
     value
         .serialize(&serializer)
-        .map_err(|e| WasmError::from(format!("{what}: serialization failed: {e}")).to_js_value())
+        .map_err(|e| WasmError::coded(crate::error::codes::SERIALIZE, format!("{what}: serialization failed: {e}")).to_js_value())
 }
 
 /// Serialize an optional JSON value to JS, or `undefined` when `None`. Backs
@@ -2914,7 +2916,7 @@ impl LiveSession {
             pixel_h,
         )
         .map_err(|e| {
-            WasmError::from(format!("paint: ImageData construction failed: {:?}", e)).to_js_value()
+            WasmError::coded(crate::error::codes::CANVAS, format!("paint: ImageData construction failed: {:?}", e)).to_js_value()
         })?;
         canvas_ctx.put_image_data(&img)?;
 
@@ -2929,7 +2931,7 @@ impl LiveSession {
         let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
         result
             .serialize(&serializer)
-            .map_err(|e| WasmError::from(format!("paint: serialization failed: {e}")).to_js_value())
+            .map_err(|e| WasmError::coded(crate::error::codes::SERIALIZE, format!("paint: serialization failed: {e}")).to_js_value())
     }
 }
 
@@ -2998,7 +3000,7 @@ impl<'a> CanvasCtx<'a> {
         match self {
             Self::OnScreen(c) => {
                 let canvas = c.canvas().ok_or_else(|| {
-                    WasmError::from("paint: rendering context has no associated <canvas> element")
+                    WasmError::coded(crate::error::codes::CANVAS, "paint: rendering context has no associated <canvas> element")
                         .to_js_value()
                 })?;
                 canvas.set_width(width);
