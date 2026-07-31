@@ -140,16 +140,15 @@ impl CoercionError {
     /// [`Diagnostic::args`](crate::error::Diagnostic::args).
     ///
     /// Two of the four fields stay behind. `path` is a schema-space anchor
-    /// (`card_kinds.<kind>.<field>`), which `ERROR.md` § "Three grammars, one
-    /// that crosses" keeps engine-internal; an args key would re-open that
-    /// door under a new name. `reason` is English minted at ~20 coercion arms
-    /// and sometimes wraps a decode error's own prose, so it stays in
-    /// `message` where a consumer reads it as a whole or not at all; carrying
-    /// it under a key would invite it into a translated sentence.
+    /// (`card_kinds.<kind>.<field>`) that `ERROR.md` § "Three grammars, one
+    /// that crosses" keeps engine-internal, and an args key would re-open that
+    /// door under a new name. `reason` is English minted at ~20 coercion arms,
+    /// sometimes wrapping a decode error's own prose; under a key it would be
+    /// interpolated into a translated sentence, so it stays in `message` where
+    /// a consumer takes it whole or not at all.
     ///
     /// What remains states the failure at lower resolution than the English
-    /// does ("`{value}` is not a `{target}`"), which is the contract: a
-    /// consumer's sentence may be coarser than ours, never half-translated.
+    /// does ("`{value}` is not a `{target}`"), which is the contract.
     pub fn args(&self) -> BTreeMap<String, serde_json::Value> {
         match self {
             CoercionError::Uncoercible {

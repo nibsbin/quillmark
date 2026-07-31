@@ -1218,10 +1218,8 @@ impl PyDiagnostic {
     }
 
     /// The facts `message` interpolates, keyed by name. With `code`, the
-    /// substitution unit needed to word this diagnostic in another language.
-    /// Empty for any code outside the structured surface, which is the signal
-    /// to render `message` verbatim. `prose/canon/ERROR.md` tabulates the keys
-    /// per code.
+    /// substitution unit needed to word this diagnostic in another language;
+    /// `prose/canon/ERROR.md` § "Diagnostic args" tabulates the keys per code.
     #[getter]
     fn args<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let map = serde_json::Map::from_iter(
