@@ -10,7 +10,7 @@
  *
  * Aliased to pkg/runtime/runtime.js in vitest.config.js.
  */
-import { describe, it, expect, beforeAll, vi } from 'vitest'
+import { describe, it, expect, beforeAll } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import {
@@ -881,84 +881,108 @@ main:
     // is the T3 caching contract), only the per-call doc clone is freed in the
     // finally. We can only assert the error surfaces (cache/leak state is not
     // observable from JS), but this pins the throw path #withClones guards.
-    const engine = new Engine()
+    //
+    // The failure is injected through the backend REGISTRY, not through a
+    // stand-in Document: both caller handles are checked before the clone runs
+    // (see "handles from another copy" below), so they have to be real. Same
+    // Proxy-over-the-real-module shape as fromTreeCountingEngine, so the quill
+    // clone left cached is a real backend quill and only `fromJson` misbehaves.
+    const engine = new Engine({
+      backends: {
+        typst: {
+          load: async () => {
+            const real = await import('../../../pkg/backends/typst/wasm.js')
+            const refusingDocument = new Proxy(real.Document, {
+              get(target, prop, receiver) {
+                if (prop === 'fromJson') {
+                  return () => {
+                    throw new Error('doc clone refused')
+                  }
+                }
+                return Reflect.get(target, prop, receiver)
+              },
+            })
+            return new Proxy(real, {
+              get(target, prop, receiver) {
+                if (prop === 'Document') return refusingDocument
+                return Reflect.get(target, prop, receiver)
+              },
+            })
+          },
+          formats: ['pdf', 'svg', 'png'],
+          canvas: true,
+        },
+      },
+    })
     const quill = makeRuntimeQuill()
-    const badDoc = { backendId: 'typst', toJson: () => '{"not":"a valid storage DTO"}' }
-    await expect(engine.render(quill, badDoc)).rejects.toThrow()
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    await expect(engine.render(quill, doc)).rejects.toThrow('doc clone refused')
   })
 })
 
 // A duplicate install is two copies of this package: two core builds, two
-// linear memories, two distinct `Document` classes. `Engine` tolerates that
-// crossing (duck-typed, clones as data); the core methods taking another core
-// handle BY REFERENCE do not, because wasm-bindgen's generated `_assertClass`
-// rejects the foreign class before any of our code runs. These pin the runtime
-// layer's policy: reads cross as data, writes refuse at the bind. See
-// runtime.js § "Foreign core handles".
+// linear memories, two distinct `Quill`/`Document` classes. A handle never
+// crosses between them; every seam taking one checks, and throws in contract
+// naming the duplicate install and `npm ls`. See runtime.js § "Handles from
+// another copy". These pin that the rule is UNIFORM: the by-reference core
+// methods (which wasm-bindgen would reject anyway, as a bare `Error`), the
+// writer and reader binds, `Engine`, and `LiveSession.apply`. The last two are
+// the seams that cross as data and would otherwise silently work.
 //
-// A foreign `Document` is modelled two ways: a duck-typed stand-in (anything
-// carrying `toJson`, the contract the checks actually apply) and a second copy
-// of the built core artifact on disk, which is a different class over a
+// A foreign handle is modelled two ways: a stand-in carrying the serializer a
+// real handle has (the shape most likely to slip a check), and a second copy of
+// the built core artifact on disk, which is a genuinely different class over a
 // different linear memory.
-describe('@quillmark/wasm/runtime: foreign core handles (duplicate install)', () => {
-  const foreignOf = (doc) => ({ toJson: () => doc.toJson() })
+describe('@quillmark/wasm/runtime: handles from another copy (duplicate install)', () => {
+  const foreignDoc = (doc) => ({ toJson: () => doc.toJson() })
+  const foreignQuill = (quill) => ({
+    toTree: () => quill.toTree(),
+    backendId: quill.backendId,
+  })
 
-  // The reader verbs are schema-bound, so they need a quill that DECLARES the
-  // fields TEST_MARKDOWN sets; the default test quill declares none.
-  const READER_QUILL_YAML = `quill:
-  name: test_quill
-  version: "1.0"
-  backend: typst
-  description: Foreign-handle reader test
-
-main:
-  fields:
-    title:
-      type: richtext
-      inline: true
-    author:
-      type: richtext
-      inline: true
-`
-  const readerQuill = () =>
-    Quill.fromTree(
-      makeQuill({ name: 'test_quill', plate: TEST_PLATE, quillYaml: READER_QUILL_YAML })
+  /** Every rejection is in contract, codes `runtime::foreign_handle`, and names `npm ls`. */
+  const assertForeign = (caught, method) => {
+    // wasm-bindgen's bare `_assertClass` throw (`expected instance of Document`
+    // at a value that IS a Document) fails every line below.
+    expect(isQuillmarkError(caught)).toBe(true)
+    expect(caught.diagnostics[0].code).toBe('runtime::foreign_handle')
+    expect(caught.message).toContain(method)
+    expect(caught.diagnostics[0].hint).toMatch(/npm ls @quillmark\/wasm/)
+    return caught
+  }
+  /** The thrown value, `undefined` if `call` returned. */
+  const caughtFrom = (call) => {
+    try {
+      call()
+    } catch (e) {
+      return e
+    }
+  }
+  const expectForeign = (call, method) => assertForeign(caughtFrom(call), method)
+  // Kept separate from the sync form rather than folded into one async helper:
+  // a forgotten `await` on an async assertion passes silently.
+  const expectForeignAsync = (promise, method) =>
+    promise.then(
+      () => expect.unreachable(`${method} resolved instead of refusing a foreign handle`),
+      (e) => assertForeign(e, method)
     )
 
-  it('accepts a foreign Document on equals, and warns exactly once', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    try {
-      const doc = Document.fromMarkdown(TEST_MARKDOWN)
-      const same = Document.fromMarkdown(TEST_MARKDOWN)
-      const other = Document.fromMarkdown(TEST_MARKDOWN.replace('Test Document', 'Other'))
+  it('rejects a foreign Document on the by-reference core methods', () => {
+    const quill = makeRuntimeQuill()
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    const other = Document.fromMarkdown(TEST_MARKDOWN)
 
-      expect(doc.equals(foreignOf(same))).toBe(true)
-      expect(doc.equals(foreignOf(other))).toBe(false)
-      // Local handles keep the generated fast path and never warn.
-      expect(doc.equals(same)).toBe(true)
+    expectForeign(() => doc.equals(foreignDoc(other)), 'Document.equals')
+    expectForeign(() => quill.validate(foreignDoc(doc)), 'Quill.validate')
+    expectForeign(() => quill.resolve(foreignDoc(doc)), 'Quill.resolve')
 
-      // Warn-once: a broken install would otherwise warn per keystroke. This
-      // is the first foreign handle in the file, so the count is exact.
-      expect(warn).toHaveBeenCalledTimes(1)
-      expect(warn.mock.calls[0][0]).toMatch(/npm ls @quillmark\/wasm/)
-    } finally {
-      warn.mockRestore()
-    }
+    // A local handle still takes the generated path unchanged.
+    expect(doc.equals(other)).toBe(true)
   })
 
-  it('accepts a foreign Document on validate and resolve, matching the local answer', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    try {
-      const quill = makeRuntimeQuill()
-      const doc = Document.fromMarkdown(TEST_MARKDOWN)
-      expect(quill.validate(foreignOf(doc))).toEqual(quill.validate(doc))
-      expect(quill.resolve(foreignOf(doc))).toEqual(quill.resolve(doc))
-    } finally {
-      warn.mockRestore()
-    }
-  })
-
-  it('rejects a non-document argument with a QuillmarkError naming the method', () => {
+  it('rejects a non-handle argument with a distinct code, naming the method', () => {
+    // A different bug with a different cure: `npm ls` is the wrong advice for a
+    // caller who passed null, so the two do not share a diagnostic.
     const quill = makeRuntimeQuill()
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     for (const [call, method] of [
@@ -966,72 +990,89 @@ main:
       [() => quill.validate({}), 'Quill.validate'],
       [() => quill.resolve(42), 'Quill.resolve'],
     ]) {
-      let caught
-      try {
-        call()
-      } catch (e) {
-        caught = e
-      }
-      // The failure stays inside this package's error contract, which the raw
-      // `_assertClass` throw escapes.
+      const caught = caughtFrom(call)
       expect(isQuillmarkError(caught)).toBe(true)
       expect(caught.message).toContain(method)
       expect(caught.diagnostics[0].code).toBe('runtime::not_a_document')
     }
+    expectEditCode(() => quill.writer(null), 'runtime::not_a_document')
+    expect(() => new DocumentWriter(null, doc)).toThrow(/expected a Quill/)
   })
 
-  it('reports both schema versions when the foreign DTO is unreadable', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    try {
-      const quill = makeRuntimeQuill()
-      const fromTheFuture = { toJson: () => '{"schema":"v99.0.0"}' }
-      let caught
-      try {
-        quill.validate(fromTheFuture)
-      } catch (e) {
-        caught = e
-      }
-      expect(isQuillmarkError(caught)).toBe(true)
-      expect(caught.diagnostics[0].code).toBe('runtime::foreign_document')
-      expect(caught.message).toContain('v99.0.0')
-      expect(caught.message).toContain(Document.currentSchemaVersion())
-      expect(caught.diagnostics[0].hint).toMatch(/npm ls @quillmark\/wasm/)
-    } finally {
-      warn.mockRestore()
-    }
-  })
-
-  it('refuses to bind a foreign Document for typed writes, naming why', () => {
+  it('refuses a foreign Document at the writer and reader binds', () => {
     const quill = makeRuntimeQuill()
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
-    let caught
-    try {
-      quill.writer(foreignOf(doc))
-    } catch (e) {
-      caught = e
-    }
-    // Writes are the one crossing that is NOT transparent: the write-back would
-    // clear parse-time warnings. Fail at the bind, in contract, naming the cause.
-    expect(isQuillmarkError(caught)).toBe(true)
-    expect(caught.diagnostics[0].code).toBe('runtime::foreign_document')
-    expect(caught.message).toMatch(/writes do not/)
-    expect(caught.diagnostics[0].hint).toMatch(/npm ls @quillmark\/wasm/)
+    expectForeign(() => quill.writer(foreignDoc(doc)), 'quill.writer(doc)')
+    expectForeign(() => quill.reader(foreignDoc(doc)), 'quill.reader(doc)')
+    // The card cursors are their own bind, and construct directly.
+    expectForeign(
+      () => new CardWriter(quill, foreignDoc(doc), 0),
+      'writer.card(index)'
+    )
+    expectForeign(
+      () => new CardReader(quill, foreignDoc(doc), 0),
+      'reader.card(index)'
+    )
   })
 
-  it('reads a foreign Document through the reader lane', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    try {
-      const quill = readerQuill()
-      const doc = Document.fromMarkdown(TEST_MARKDOWN)
-      // Reads are read-only, so they cross like validate/resolve do.
-      expect(quill.reader(foreignOf(doc)).get('title')).toEqual(
-        quill.reader(doc).get('title')
-      )
-      expect(quill.reader(foreignOf(doc)).getBody()).toEqual(quill.reader(doc).getBody())
-    } finally {
-      warn.mockRestore()
-    }
+  it('refuses a foreign Quill at the writer and reader binds', () => {
+    const quill = makeRuntimeQuill()
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    expectForeign(() => new DocumentWriter(foreignQuill(quill), doc), 'quill.writer(doc)')
+    expectForeign(() => new DocumentReader(foreignQuill(quill), doc), 'quill.reader(doc)')
   })
+
+  // Engine is the seam with no `_assertClass` to front-run: it crosses into
+  // backend memory as data, so a foreign handle would render correctly and pay
+  // a per-copy quill clone cache for it. It checks instead.
+  it('refuses a foreign handle at every Engine entry point', async () => {
+    const engine = new Engine()
+    const quill = makeRuntimeQuill()
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+
+    const m = 'engine.render(quill, doc)'
+    await expectForeignAsync(engine.render(foreignQuill(quill), doc), m)
+    await expectForeignAsync(engine.render(quill, foreignDoc(doc)), m)
+    await expectForeignAsync(engine.open(foreignQuill(quill), doc), 'engine.open(quill, doc)')
+    await expectForeignAsync(engine.open(quill, foreignDoc(doc)), 'engine.open(quill, doc)')
+    // The free probes check too, though they never touch the handle's memory:
+    // the rule is about the handle, not about what a given verb happens to read.
+    await expectForeignAsync(
+      engine.supportedFormats(foreignQuill(quill)),
+      'engine.supportedFormats(quill)'
+    )
+    await expectForeignAsync(
+      engine.supportsCanvas(foreignQuill(quill)),
+      'engine.supportsCanvas(quill)'
+    )
+  })
+
+  // "Every seam checks" is enforced by hand-placed calls, so the set of seams
+  // is pinned like the backend manifest above: a fifth Engine verb fails here
+  // until it is classified, rather than silently accepting a foreign handle.
+  // Inside the class the check is structural (`#backendOf` is the only route to
+  // `backendId`, and `#withClones` checks the doc); this guards the boundary.
+  it('has no Engine verb outside the checked set (drift guard)', () => {
+    const TAKES_A_QUILL = ['render', 'open', 'supportedFormats', 'supportsCanvas']
+    const TAKES_NO_HANDLE = ['constructor']
+    expect(Object.getOwnPropertyNames(Engine.prototype).sort()).toEqual(
+      [...TAKES_A_QUILL, ...TAKES_NO_HANDLE].sort()
+    )
+  })
+
+  it('refuses a foreign Document on session.apply', async () => {
+    const engine = new Engine()
+    const quill = makeRuntimeQuill()
+    const session = await engine.open(quill, Document.fromMarkdown(TEST_MARKDOWN))
+    try {
+      const next = Document.fromMarkdown(TEST_MARKDOWN.replace('Hello World', 'Next'))
+      expectForeign(() => session.apply(foreignDoc(next)), 'session.apply(doc)')
+      // The session is untouched by the refusal and still applies a local doc.
+      expect(session.apply(next).pageCount).toBe(session.pageCount)
+    } finally {
+      session.free()
+    }
+  }, 120000)
 
   // The real shape: a SECOND COPY of the built core artifact on disk, which is
   // what npm produces. A query suffix is not enough, since `wasm.js?x`
@@ -1053,30 +1094,37 @@ main:
       expect(copyB.Quill).not.toBe(Quill)
     })
 
-    it('crosses on equals, validate, resolve and the reader lane', () => {
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-      try {
-        const quill = makeRuntimeQuill()
-        const docA = Document.fromMarkdown(TEST_MARKDOWN)
-        const docB = copyB.Document.fromMarkdown(TEST_MARKDOWN)
+    it('refuses copy B handles everywhere, in contract', async () => {
+      const quillA = makeRuntimeQuill()
+      const docA = Document.fromMarkdown(TEST_MARKDOWN)
+      const docB = copyB.Document.fromMarkdown(TEST_MARKDOWN)
+      const quillB = copyB.Quill.fromTree(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
 
-        expect(docA.equals(docB)).toBe(true)
-        expect(quill.validate(docB)).toEqual(quill.validate(docA))
-        expect(quill.resolve(docB)).toEqual(quill.resolve(docA))
-        const rq = readerQuill()
-        expect(rq.reader(docB).get('title')).toEqual(rq.reader(docA).get('title'))
-        expect(rq.reader(docB).getBody()).toEqual(rq.reader(docA).getBody())
-        // The foreign handle is never freed by us: it is the caller's.
-        expect(docB.quillRef).toBe('test_quill')
-      } finally {
-        warn.mockRestore()
-      }
+      expectForeign(() => docA.equals(docB), 'Document.equals')
+      expectForeign(() => quillA.validate(docB), 'Quill.validate')
+      expectForeign(() => quillA.resolve(docB), 'Quill.resolve')
+      expectForeign(() => quillA.writer(docB), 'quill.writer(doc)')
+      expectForeign(() => quillA.reader(docB), 'quill.reader(doc)')
+      expectForeign(() => new DocumentWriter(quillB, docA), 'quill.writer(doc)')
+
+      const engine = new Engine()
+      await expectForeignAsync(engine.render(quillA, docB), 'engine.render(quill, doc)')
+      await expectForeignAsync(
+        engine.supportedFormats(quillB),
+        'engine.supportedFormats(quill)'
+      )
+
+      // Nothing we did freed or mutated the caller's handles.
+      expect(docB.quillRef).toBe('test_quill')
+      expect(quillB.backendId).toBe('typst')
     })
 
-    it('refuses the write bind', () => {
-      const quill = makeRuntimeQuill()
+    it('reads copy B handles fine through copy B, which is the point', () => {
+      // The rule is about CROSSING, not about copy B being defective. Copy B's
+      // own classes work together; only mixing them throws.
       const docB = copyB.Document.fromMarkdown(TEST_MARKDOWN)
-      expect(() => quill.writer(docB)).toThrow(/writes do not/)
+      const quillB = copyB.Quill.fromTree(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
+      expect(quillB.validate(docB)).toBeDefined()
     })
   })
 
@@ -1087,7 +1135,7 @@ main:
   // resolves to the cached module.
   it('patches once across a re-evaluation of the runtime module', async () => {
     const before = Document.prototype.equals
-    expect(before[Symbol.for('@quillmark/wasm:foreign-tolerant')]).toBe(true)
+    expect(before[Symbol.for('@quillmark/wasm:handle-checked')]).toBe(true)
 
     // The twin has to sit BESIDE the original for its `../core/wasm.js` import
     // to resolve to the same cached module. `pkg/runtime/` is a published
@@ -1104,6 +1152,6 @@ main:
 
     expect(reevaluated.Document).toBe(Document)
     expect(Document.prototype.equals).toBe(before)
-    expect(Quill.prototype.validate[Symbol.for('@quillmark/wasm:foreign-tolerant')]).toBe(true)
+    expect(Quill.prototype.validate[Symbol.for('@quillmark/wasm:handle-checked')]).toBe(true)
   })
 })
