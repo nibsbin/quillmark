@@ -83,11 +83,11 @@ jobs:
           RUSTDOCFLAGS: -Dwarnings
         run: cargo doc --no-deps --locked -p quillmark-wasm
 
-      # Same blind spot, published crate: quillmark-content is `publish = true`
-      # but not a default member (core path-deps it), so the first step never
-      # documented it and four broken intra-doc links accumulated — two of them
-      # naming `serial::*_from_op_value` readers that do not exist. A published
-      # crate's rustdoc is what docs.rs renders, so it is gated like the rest.
+      # Same blind spot, on a published crate: quillmark-content is
+      # `publish = true` but not a default member (core path-deps it), so the
+      # first step never documented it and four broken intra-doc links
+      # accumulated. What a published crate's rustdoc renders is what docs.rs
+      # serves, so it is gated like the rest.
       - name: Build docs (content)
         env:
           RUSTDOCFLAGS: -Dwarnings

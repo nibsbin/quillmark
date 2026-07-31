@@ -699,11 +699,11 @@ impl Content {
     /// in-process Rust construction. The wire never reaches it: a decoder resolves
     /// the built-in name before the `Unknown` fallthrough, so a reserved tag
     /// *becomes* the built-in rather than arriving as an `Unknown`. The authored
-    /// lane therefore rejects the shape up front —
-    /// [`serial::from_authored_value`](crate::serial::from_authored_value) for
-    /// whole content, [`ops::mark_op_from_value`](crate::ops::mark_op_from_value)
+    /// lane therefore rejects the shape up front
+    /// ([`serial::from_authored_value`](crate::serial::from_authored_value) for
+    /// whole content; [`ops::mark_op_from_value`](crate::ops::mark_op_from_value)
     /// and [`ops::line_op_from_value`](crate::ops::line_op_from_value) for the op
-    /// wire — while storage decode stays lenient by design; see there.
+    /// wire), while storage decode stays lenient by design; see there.
     ///
     /// This list and its two siblings are re-spelled by hand on the TypeScript
     /// surface: the unions in `crates/bindings/wasm/src/engine.rs` and the
