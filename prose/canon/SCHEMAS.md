@@ -150,10 +150,10 @@ Every field value comes from one of a small set of **sources**, ordered by
 | Rung | Source | Persisted into a `Document`? | Renders? |
 |---|---|---|---|
 | top | authored value | yes: it *is* the document content | yes |
-| | `default:` | **never** by the engine (lives in the schema, interpolated only into the ephemeral render projection | yes) the fidelity value |
+| | `default:` | **never** by the engine: lives in the schema, interpolated only into the ephemeral render projection | yes: the fidelity value |
 | | `example:` | only by [seeding](#document-seeding) | yes: once committed by seeding |
 | floor | type-empty `zero` (`zero_value`) | never ([Non-persist invariant](#zero-filled-render)) | last resort |
-| (signal) | `!must_fill` marker | yes (rides on the value as a YAML tag | yes) the marked value (suggested value or zero-fill); raises the non-fatal `validation::must_fill` warning |
+| (signal) | `!must_fill` marker | yes: rides on the value as a YAML tag | yes: the marked value (suggested value or zero-fill); raises the non-fatal `validation::must_fill` warning |
 
 A `default` is never written back into a document: it lives in `Quill.yaml`,
 the render path interpolates it into the plate-JSON projection only, and seeding
