@@ -5,8 +5,16 @@
 //! insensitive to the order marks/islands were discovered in. Three order
 //! sources are closed here and in `normalize`: mark order (canonical sort),
 //! island order (slot position), and object-key order inside island `props` /
-//! unknown-mark `attrs` (recursively sorted). `deserialize ∘ serialize` is a
-//! fixed point on canonical bytes.
+//! unknown-mark `attrs` (recursively sorted).
+//!
+//! Two fixed points, and they are not the same promise. **Bytes**:
+//! `to_canonical_json(from_canonical_json(b)) == b` for canonical `b`, which is
+//! what a consumer hashing stored documents spends (`DOCUMENT_STORAGE.md` §
+//! Byte-stability). **Values**: `from_canonical_json(to_canonical_json(rt)) == rt`
+//! for a normalized `rt`, which is what an in-process producer spends, and which
+//! holds only while every discriminator's encoding is injective. An axis can keep
+//! the first and lose the second: a value that encodes to some *other* value's
+//! bytes moves nothing on disk and still fails to survive its own round trip.
 //!
 //! The seam encoding (Option A) and the storage encoding are the *same*
 //! canonical form: one serializer, not two to keep aligned.
