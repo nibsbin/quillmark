@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.99.0 - 2026-08-01
+## Unreleased
 
 The 1.0.0 API freeze lands ahead of the tag, and the content codec closes its
 last open gaps. All breaking changes are covered by

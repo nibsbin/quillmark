@@ -20,9 +20,9 @@ quillmark-content = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 # PDF-flatten → hayro raster, backing the SVG and PNG render outputs. Always
-# linked: the backend supports SVG/PNG out of the box, so the raster tree is
-# not feature-gated. (The no-features WASM `core` build excludes the whole
-# pdfform crate, so hayro never reaches it.)
+# linked: SVG and PNG are unconditional outputs of this backend, so the raster
+# tree is not feature-gated. (The no-features WASM `core` build excludes the
+# whole pdfform crate, so hayro never reaches it.)
 hayro = "0.7.1"
 hayro-svg = "0.7.0"
 
