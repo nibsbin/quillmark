@@ -1654,6 +1654,9 @@ impl Document {
                 // A field value is opaque host JSON, so this door is as open
                 // as `install`'s. `reject_deep_js_value` has why the check
                 // precedes `from_value` rather than riding a Rust-side guard.
+                // A backstop under `Card::try_from`'s 100-level field cap, not
+                // a second spelling of it: it catches only what would trap
+                // before that check could run.
                 reject_deep_js_value(&fields, "makeCard")?;
                 serde_wasm_bindgen::from_value(fields).map_err(|e| {
                     WasmError::from(format!("makeCard: `fields` must be an object: {e}"))

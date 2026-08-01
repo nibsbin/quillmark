@@ -20,14 +20,16 @@ use serde_json::Value;
 
 /// The island types this build understands. The wire discriminator is the open
 /// string [`Island::island_type`](crate::model::Island::island_type); this is its
-/// closed parse. Adding a variant forces every dispatch arm (here and in the two
-/// emitters) to be supplied before the workspace compiles.
+/// closed parse. Adding a variant forces every dispatch arm (here, the markdown
+/// emitter, and the Typst one) to be supplied before the workspace compiles.
 ///
 /// **Deliberately not `#[non_exhaustive]`**, unlike every other public enum in
-/// this crate. The attribute forces a `_` arm on downstream matchers, and two of
-/// the dispatch sites this enum exists to police (the typst backend's markdown
-/// and Typst emitters) are in another crate, where that `_` would swallow
-/// exactly the compile error described above.
+/// this crate. The attribute forces a `_` arm on downstream matchers, and the
+/// Typst emitter dispatches over the whole set from another crate, where that
+/// `_` would swallow exactly the compile error described above. The markdown
+/// emitter ([`crate::export`]) and the `table` codec ([`crate::serial`]) sit in
+/// this crate, where the attribute would do nothing either way; the one
+/// out-of-crate site is what the exemption is for.
 ///
 /// The cost is that **adding a variant is a semver-major change**, since a
 /// downstream exhaustive match stops compiling. That is the price of the

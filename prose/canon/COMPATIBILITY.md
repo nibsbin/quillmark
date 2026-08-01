@@ -60,7 +60,7 @@ Three enums keep the exemption, each saying so in its own rustdoc:
 | Enum | What a missed variant costs |
 |---|---|
 | `quillmark_pdf::FieldType` | `pdfform`'s value resolver and its content-stream flattener both dispatch over the whole set from another crate: the field **draws nothing on the page and reports nothing**. |
-| `KnownIslandType` | The typst backend's two emitters dispatch over it from another crate: the island **leaves the projection entirely**. |
+| `KnownIslandType` | The Typst emitter dispatches over the whole set from another crate: the island **leaves the projection entirely**. (Its markdown twin is in `quillmark-content` itself, where the attribute changes nothing.) |
 | `Fidelity` | A ladder a consumer reads to decide what to warn about, with no safe rung to fall through to. |
 
 For all three the compile error is the guardrail, and a new member is a
