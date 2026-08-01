@@ -271,7 +271,7 @@ pub(super) fn decompose_with_warnings(
 
     // Build the root block's payload, then synthesise `$kind: main` if the
     // source omitted it. Using `set_kind` here inserts at the canonical
-    // position (after `$quill`, before any `$id`/`$ext`/user fields), so
+    // position (after `$quill`, before any `$ext`/user fields), so
     // canonical input round-trips byte-equal and non-canonical input
     // converges on first emit (markdown-spec.md §9).
     let mut main_payload = build_payload(
@@ -445,7 +445,7 @@ fn build_payload(
     for m in meta_items {
         let k = meta_key(m).expect(
             "build_payload: meta_items must contain only system variants \
-             ($quill/$kind/$id/$ext); got a Field or Comment",
+             ($quill/$kind/$ext/$seed); got a Field or Comment",
         );
         typed_by_key.insert(k, m.clone());
     }
