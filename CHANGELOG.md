@@ -13,10 +13,12 @@ loads byte-identically and `0.99` writes the same bytes for the same content.
   `with_*` setters. `Backend` is sealed, `OutputFormat::ALL` and
   `Content::RESERVED_{MARK_TYPES,LINE_KINDS,CONTAINERS}` become slices, and
   `RenderOptions { .., ..Default::default() }` becomes
-  `RenderOptions::default().with_output_format(fmt)`. Two types stay exhaustive
-  and say so: the `V0_92_0` storage DTOs and `quillmark_pdf::FieldType`, where a
-  missed variant draws nothing and reports nothing. The rules are canonized in
-  `prose/canon/COMPATIBILITY.md` (#1090, #1103). See
+  `RenderOptions::default().with_output_format(fmt)`. Four stay exhaustive and
+  say so: the storage DTOs, frozen per schema version, plus
+  `quillmark_pdf::FieldType`, `KnownIslandType`, and `Fidelity`, where an
+  out-of-crate `_` arm is silent (a field that draws nothing, an island dropped
+  from the projection, a fidelity rung nothing warns about). The rules are
+  canonized in `prose/canon/COMPATIBILITY.md` (#1090, #1103). See
   `docs/migrations/0.98-to-0.99.md`
 - refactor(core)!: the YAML engine leaves the public API. `QuillValue::from_yaml_str`
   and `QuillConfig::schema_yaml` return `quillmark_core::YamlError` instead of
