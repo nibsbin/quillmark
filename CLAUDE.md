@@ -13,7 +13,8 @@ Design docs: [`prose/canon/INDEX.md`](prose/canon/INDEX.md). Comments and docs f
 
 ## Tests
 
-- `cargo test --workspace`
-- WASM: `./scripts/build-wasm.sh && cd crates/bindings/wasm && npm test`
-- Python: `cd crates/bindings/python && uv run maturin develop && uv run pytest`
-- Binding surfaces build slowly; defer `bindings/{python,wasm}` to PR CI.
+- `cargo test --workspace`: the working loop, run freely.
+- Binding surfaces compile in minutes and PR CI runs both on every push. Build one locally only to reproduce a red CI job, or when the change is in that binding's own code and no Rust test reaches it.
+- WASM: `./scripts/build-wasm.sh --ci && cd crates/bindings/wasm && npm test`. `--ci` is the fast-compile profile; bare `build-wasm.sh` is the publish build (opt-level=z, fat LTO).
+- Python: `cd crates/bindings/python && uv venv && source .venv/bin/activate && uv pip install maturin pytest && maturin develop && pytest`. `maturin develop` builds debug.
+- `uv run` in that directory syncs the project first, and the sync is maturin's PEP 517 backend building release: `uv run maturin --version` compiles the extension to print a version string. `--release` and `pip install -e .` reach the same build by hand. The flow above is CI's (`.github/workflows/ci.yml`) and never syncs.
