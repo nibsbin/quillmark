@@ -2,17 +2,17 @@
 set -e
 # pipefail so a failing `gzip` in `gzip -c … | wc -c` propagates instead of
 # being masked by `wc`'s exit 0. Without it the core size-budget check below
-# can silently read 0 bytes on a gzip failure and false-pass — defeating the
+# can silently read 0 bytes on a gzip failure and false-pass, defeating the
 # one guard rail that catches a Typst leak into the no-features core build.
 set -o pipefail
 
 # Builds THREE wasm artifacts from the one crate (the as-built design is
 # documented in docs/migrations/0.89-to-0.90.md):
 #
-#   pkg/core/             — no Typst: parse / load / validate / schema / seed / blueprint
-#   pkg/backends/typst/   — Typst-backed engine + LiveSession + canvas (a private
+#   pkg/core/               no Typst: parse / load / validate / schema / seed / blueprint
+#   pkg/backends/typst/     Typst-backed engine + LiveSession + canvas (a private
 #                           backend binary, NOT a public export)
-#   pkg/backends/pdfform/ — Typst-free PDF-form backend (engine + LiveSession +
+#   pkg/backends/pdfform/   Typst-free PDF-form backend (engine + LiveSession +
 #                           canvas; the pdfform feature ships the web-sys canvas
 #                           painter over the always-linked hayro raster;
 #                           private backend binary, NOT a public export)
@@ -55,13 +55,13 @@ cd "$(dirname "$0")/.."
 
 # Start from a clean pkg/. CI restores a cached pkg/ from a previous build
 # (restore-keys partial-matches an older release), and this script only ever
-# mkdir/cp/sed *into* pkg/ — it never removes files. Without this, any file
+# mkdir/cp/sed *into* pkg/; it never removes files. Without this, any file
 # dropped from the pkg layout between builds lingers and ships on `npm publish`.
 rm -rf pkg
 
 # Check for required tools. The CLI's version must match the wasm-bindgen
 # crate in Cargo.lock; wasm-bindgen itself only detects a mismatch when it
-# runs — after the multi-minute cargo build — so check it up front.
+# runs (after the multi-minute cargo build), so check it up front.
 LOCKED_WBG=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | sed -n 's/^version = "\(.*\)"/\1/p')
 if ! command -v wasm-bindgen &> /dev/null; then
     echo "wasm-bindgen not found. Install it with:" >&2
@@ -82,7 +82,7 @@ fi
 # Build one variant: cargo build with the given feature flags, then run
 # wasm-bindgen into pkg/<subdir>/. Both variants emit the same wasm artifact
 # name (quillmark_wasm.wasm) to the same target path, so they must run
-# sequentially — each wasm-bindgen pass consumes the build before the next
+# sequentially: each wasm-bindgen pass consumes the build before the next
 # cargo build overwrites it.
 #
 # `--weak-refs` opts into FinalizationRegistry-based auto-free for
@@ -132,11 +132,11 @@ cp crates/bindings/wasm/runtime/runtime.d.ts pkg/runtime/runtime.d.ts
 # Note: a wasm-opt -Oz pass was tried and removed. With the current
 # `wasm-release` profile (opt-level=z, fat LTO, codegen-units=1,
 # panic=abort, strip=true) it saves only ~15 KB raw / ~10 KB gzipped
-# (<0.1%) — not worth the build dependency or the extra build time.
+# (<0.1%): not worth the build dependency or the extra build time.
 
 # Extract version and create package.json from template. Cargo.toml carries
 # the LAST RELEASED version, so a from-source build is ahead of the number it
-# would stamp. Default: mark it — next patch plus `-dev.<short-sha>` — so a
+# would stamp. Default: mark it (next patch plus `-dev.<short-sha>`) so a
 # dev pkg/ can never pass for a published release (npm dedupe, peer ranges,
 # humans debugging read an honest number). `--release-stamp` stamps the
 # version verbatim; only release.yml passes it, from the bumped release tag,
@@ -165,9 +165,9 @@ fi
 if [ -f "CHANGELOG.md" ]; then
     cp CHANGELOG.md pkg/
 fi
-# The workspace ships one license, at LICENSE. Guarded, but the guard is not
-# the point: the file is the license grant the package.json `license` field
-# names, so a miss here publishes a package that grants nothing.
+# The workspace ships one license, at LICENSE. It is the grant package.json's
+# `license` field names, so a miss fails the build: a silent skip publishes a
+# package whose declared license has no text behind it.
 if [ -f "LICENSE" ]; then
     cp LICENSE pkg/
 else
@@ -186,7 +186,7 @@ echo "WASM build complete!"
 echo "Output directory: pkg/  (core/ + backends/typst/ + backends/pdfform/ + runtime/)"
 echo "Package version: $VERSION"
 
-# Show sizes — transport size (gzip/brotli) is what matters for delivery.
+# Show sizes: transport size (gzip/brotli) is what matters for delivery.
 report_size() {
     local label="$1" file="$2"
     [ -f "$file" ] || return 0
@@ -206,7 +206,7 @@ report_size "pdfform backend" pkg/backends/pdfform/wasm_bg.wasm
 
 # Size budget on the core artifact: the split only pays off if core stays
 # Typst-free. Typst is megabytes, so a leak back into the no-features build
-# would blow past this ceiling — fail rather than ship it silently. The gzip
+# would blow past this ceiling; fail rather than ship it silently. The gzip
 # ceiling sits well above core's real size and far below anything carrying Typst.
 #
 # Only enforced on the size-optimized release profile (where the artifact
