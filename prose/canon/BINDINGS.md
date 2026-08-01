@@ -96,8 +96,7 @@ verbatim read is the map-idiomatic `payload().get`, already lexically distinct f
 address (the quill + document, or an index), never a cache; every call reads
 through the document, so a `removeCard` / `addCard` between binding a cursor and
 writing through it silently retargets it. A caller whose cards move re-resolves
-the index at write time ([PROGRAMMATIC.md](PROGRAMMATIC.md)); the engine offers no
-durable card handle.
+the index at write time ([PROGRAMMATIC.md](PROGRAMMATIC.md)).
 
 **The hand-written runtime is the real API; the wasm class is its ABI.** The
 quill-taking `_commitField` / `_commitFields` / `_addCard` / `_reviseField`

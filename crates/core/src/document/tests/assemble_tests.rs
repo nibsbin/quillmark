@@ -2112,8 +2112,8 @@ fn payload_field_order_preserved_after_quill_removal() {
 
 #[test]
 fn card_id_is_rejected_as_an_unknown_system_key() {
-    // `$id` left the closed set: it is an unknown `$` key like any other, on a
-    // composable card and on the root alike.
+    // `$id` is not a system key: it is rejected like any other unknown `$`
+    // key, on a composable card and on the root alike.
     let md = "~~~\n$quill: q@0.1\n~~~\n\n~~~\n$kind: note\n$id: a\n~~~\n";
     let err = Document::parse(md).unwrap_err().to_string();
     assert!(
@@ -2130,7 +2130,7 @@ fn card_id_is_rejected_as_an_unknown_system_key() {
 
 #[test]
 fn a_user_field_named_id_is_untouched() {
-    // The reserved key is gone; the unsigiled `id` is an ordinary user field.
+    // The unsigiled `id` is an ordinary user field.
     let md = "~~~\n$quill: q@0.1\n~~~\n\n~~~\n$kind: note\nid: a\n~~~\n";
     let doc = Document::parse(md).unwrap().document;
     assert_eq!(

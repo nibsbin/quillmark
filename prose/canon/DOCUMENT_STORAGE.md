@@ -337,10 +337,7 @@ follow from that.
 | On collision        | unreachable: mint is sequential; `validate` scans | `add` rejects                                      |
 | Markdown round-trip | re-minted identically                              | lost: export emits none, import mints none        |
 
-A card carries no id handle: it is addressed by index, and a consumer needing a
-durable per-card key of its own carries one in `$ext` under its own namespace
-([CARDS.md](CARDS.md) § Out-of-band Metadata), which the engine round-trips and
-never interprets.
+A card is addressed by index and carries no id handle. A consumer needing a durable per-card key carries one in `$ext` under its own namespace ([CARDS.md](CARDS.md) § Out-of-band Metadata), which the engine round-trips and never interprets.
 
 Each section below states one handle's policy whole.
 

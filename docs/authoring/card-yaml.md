@@ -78,8 +78,8 @@ on the block's typed metadata.
 `$` metadata entries may appear anywhere in the block's payload (the
 canonical emission puts them first, in the order `$quill`, `$kind`,
 `$ext`, `$seed`). Any other `$`-prefixed key is a parse error: the set
-is closed. `$id` is not among them: to carry a per-card key of your own, put it
-in `$ext` under a namespace you own.
+is closed. To carry a per-card key of your own, put it in `$ext` under a
+namespace you own.
 
 ### Version Selectors
 

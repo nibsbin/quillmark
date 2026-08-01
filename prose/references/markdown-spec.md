@@ -214,9 +214,8 @@ author wrote the line.
 - A duplicate `$key` within a single block is a parse error (a YAML mapping
   cannot carry two entries under the same key).
 - An unknown `$key` (anything outside `{quill, kind, ext, seed}`) is a parse
-  error. `$id` is not a reserved key: a block declaring one is rejected like any
-  other unknown `$key`. A consumer needing a per-card key of its own carries it
-  in `$ext` under its own namespace, uninterpreted and unguaranteed.
+  error. A consumer needing a per-card key of its own carries it in `$ext` under
+  its own namespace, uninterpreted and unguaranteed.
 - An invalid `$quill` reference is a parse error.
 - A `$`-prefixed key whose value type is wrong for the key (e.g. a sequence
   under `$quill`, a scalar under `$ext`) is a parse error.

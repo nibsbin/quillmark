@@ -102,18 +102,18 @@ core-vs-bindings parity table.
 
 ## Addressing cards for re-render
 
-Card mutators address by index, and an index is positional: a `remove_card` / `add_card` moves it. The engine offers no durable card handle. For patch-and-re-render automation (a source row changed, re-render the document), carry your own key in the card's `$ext` under a namespace you own, and resolve the index when patching:
+Card mutators address by index, and the engine offers no durable card handle: a `remove_card` / `add_card` moves every index after it. For patch-and-re-render automation (a source row changed, re-render the document), carry your own key in the card's `$ext` under a namespace you own, and resolve the index when patching:
 
 ```python
-store_ext_namespace("myapp", {"row_id": row_id}, card=i)   # at build time
+doc.store_ext_namespace("myapp", {"row_id": row_id}, card=i)   # at build time
 idx = next(i for i, c in enumerate(doc.cards)
-           if c["ext"]["myapp"]["row_id"] == row_id)       # at patch time
+           if c["ext"]["myapp"]["row_id"] == row_id)           # at patch time
 quill.writer(doc).card(idx).set_all({"qty": new_qty})
 ```
 
 `$ext` round-trips through Markdown and the storage DTO and never reaches a backend ([CARDS.md](CARDS.md) § Out-of-band Metadata). **The engine guarantees nothing about what a consumer puts there**: no uniqueness, no collision check, no repair on a hand-edited file. A key duplicated across two cards resolves to whichever the scan hits first. Namespacing (`$ext.myapp`) is what keeps two tools on one card from colliding, and it is a convention, not an enforced rule.
 
-Patching one card presupposes the document is no longer a pure projection of its source data: rebuild is the answer whenever data → document is a pure function. Reach for this only when the document carries hand edits a rebuild would destroy.
+Patching one card at a time is for a document that is no longer a pure projection of its source data: where data → document is a pure function, rebuild instead. Reach for this only when a rebuild would destroy accumulated hand edits.
 
 ## Links
 
