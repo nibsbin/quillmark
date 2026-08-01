@@ -77,6 +77,12 @@ loads byte-identically and `0.99` writes the same bytes for the same content.
   become `RenderResult` warnings (`typst::path_skipped`,
   `typst::package_manifest`, `typst::package_entrypoint_missing`) instead of
   `eprintln!` that wasm32 has nowhere to print (#1102)
+- fix(wasm): the npm package states the license the workspace actually grants.
+  `package.json` declared `MIT OR Apache-2.0` where every Rust crate, the
+  workspace manifest, and the only `LICENSE` file in the tree are `Apache-2.0`,
+  and the package shipped no license text at all: `build-wasm.sh` copied
+  `LICENSE-MIT` and `LICENSE-APACHE`, neither of which exists. It now copies
+  `LICENSE`, or refuses to produce a package
 - ci: the release gates the tag actually needs. New `package` (builds every
   publishable crate from its own archive and asserts each ships its `LICENSE`),
   `msrv` (holds `rust-version` to something true), and `audit` (bare `cargo
