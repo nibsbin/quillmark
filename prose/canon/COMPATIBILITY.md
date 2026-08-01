@@ -55,8 +55,7 @@ lost a variant. Ask instead:
 - **Silent on a miss** → keep it exhaustive, say so in the rustdoc, and accept
   semver-major as the price.
 
-Three enums keep the exemption, each for the same reason and each saying so in
-its own rustdoc:
+Three enums keep the exemption, each saying so in its own rustdoc:
 
 | Enum | What a missed variant costs |
 |---|---|
@@ -64,9 +63,9 @@ its own rustdoc:
 | `KnownIslandType` | The typst backend's two emitters dispatch over it from another crate: the island **leaves the projection entirely**. |
 | `Fidelity` | A ladder a consumer reads to decide what to warn about, with no safe rung to fall through to. |
 
-There the compile error is the guardrail, and adding a member is a major bump on
-purpose. The storage DTOs are exhaustive on a different ground: a shipped schema
-version is frozen, so it does not grow at all.
+For all three the compile error is the guardrail, and a new member is a
+semver-major. The storage DTOs are exhaustive on separate grounds: a shipped
+schema version is frozen, so it does not grow at all.
 
 ### Picking the fallback
 
