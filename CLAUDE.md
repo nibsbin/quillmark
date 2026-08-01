@@ -13,7 +13,7 @@ Design docs: [`prose/canon/INDEX.md`](prose/canon/INDEX.md). Comments and docs f
 
 ## Tests
 
-- `cargo test --workspace`
-- WASM: `./scripts/build-wasm.sh && cd crates/bindings/wasm && npm test`
-- Python: `cd crates/bindings/python && uv run maturin develop && uv run pytest`
-- Binding surfaces build slowly; defer `bindings/{python,wasm}` to PR CI.
+- `cargo test --workspace` is the working loop; run it freely.
+- The binding surfaces cost minutes to compile and PR CI runs both on every push. Build them locally only to reproduce a red CI job, or when the change is in that binding's own code and no Rust test reaches it. Rust tests passing is not a reason to rebuild them.
+- WASM: `./scripts/build-wasm.sh --ci && cd crates/bindings/wasm && npm test`. `--ci` selects the fast-compile profile. Bare `build-wasm.sh` is the publish build (opt-level=z, fat LTO) and belongs to release.
+- Python: `cd crates/bindings/python && uv run maturin develop && uv run pytest`. `maturin develop` builds debug; keep it there. `--release` and `pip install -e .` (release by PEP 517 default) both spend minutes on an opt-level no test outcome depends on.
