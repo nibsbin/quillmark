@@ -50,14 +50,16 @@ Markdown authoring, the [blueprint](../quills/blueprint.md) (for LLMs), and thes
 
 ## Addressing cards for re-render
 
-Card mutators address by index. For patch-and-re-render automation (a source row changed, re-render the document), stamp `$id` at build time and resolve the index when patching:
+Card mutators address by index, and an index is positional: a `remove_card` / `add_card` moves it. The engine offers no durable card handle. For patch-and-re-render automation (a source row changed, re-render the document), carry your own key in the card's `$ext` under a namespace you own, and resolve the index when patching:
 
 ```python
-idx = next(i for i, c in enumerate(doc.cards) if c["id"] == row_id)
+doc.store_ext_namespace("myapp", {"row_id": row_id}, card=i)   # at build time
+idx = next(i for i, c in enumerate(doc.cards)
+           if c["ext"]["myapp"]["row_id"] == row_id)           # at patch time
 quill.writer(doc).card(idx).set_all({"qty": new_qty})
 ```
 
-`$id` is optional and opaque; when present it is unique per document: mutators reject a collision, and parse repairs one under a warning.
+`$ext` round-trips through Markdown and the storage DTO and never reaches a backend. The engine guarantees nothing about its contents: no uniqueness, no collision check, no repair. A key duplicated across two cards resolves to whichever the scan hits first.
 
 ## Scope note
 

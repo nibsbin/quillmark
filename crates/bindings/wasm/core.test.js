@@ -201,7 +201,7 @@ title: Draft
     expect(doc.getStored({ card: 0, field: 'qty' })).toBe(3)
   })
 
-  it('single-card, $id, and seed-overlay reads', () => {
+  it('single-card and seed-overlay reads', () => {
     const doc = Document.fromMarkdown(`~~~
 $quill: core_test
 $kind: main
@@ -209,22 +209,15 @@ title: Draft
 ~~~
 
 # Body`)
-    doc.insertCard({ kind: 'note', id: 'first', body: 'A' })
-    doc.insertCard({ kind: 'note', id: 'other', body: 'B' })
-    // $id is unique per document: a colliding insert is rejected
-    // (edit::card_id_collision), and the empty id is a degenerate handle.
+    doc.insertCard({ kind: 'note', body: 'A' })
+    doc.insertCard({ kind: 'note', body: 'B' })
+    // `id` is not a CardInput key: the allow-list rejects it like any unknown.
     expect(() => doc.insertCard({ kind: 'note', id: 'first', body: 'C' })).toThrow()
-    expect(() => doc.insertCard({ kind: 'note', id: '', body: 'C' })).toThrow()
 
     // card(i) reads one whole card without materializing the cards array.
     expect(doc.card(1).kind).toBe('note')
-    expect(doc.card(1).id).toBe('other')
+    expect(doc.card(1).id).toBeUndefined()
     expect(() => doc.card(2)).toThrow() // out of range is a boundary error
-
-    // cardIndexById resolves the durable $id handle: at most one match.
-    expect(doc.cardIndexById('first')).toBe(0)
-    expect(doc.cardIndexById('other')).toBe(1)
-    expect(doc.cardIndexById('missing')).toBeUndefined()
 
     // seedOverlay reads one $seed[kind] entry off the main card cheaply, the
     // overlay you feed straight into quill.seedCard(kind, overlay).

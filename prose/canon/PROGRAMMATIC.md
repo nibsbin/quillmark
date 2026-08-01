@@ -102,18 +102,18 @@ core-vs-bindings parity table.
 
 ## Addressing cards for re-render
 
-Card mutators address by index. For patch-and-re-render automation (a source
-row changed, re-render the document), stamp `$id` at build time and resolve
-the index when patching:
+Card mutators address by index, and an index is positional: a `remove_card` / `add_card` moves it. The engine offers no durable card handle. For patch-and-re-render automation (a source row changed, re-render the document), carry your own key in the card's `$ext` under a namespace you own, and resolve the index when patching:
 
 ```python
-idx = next(i for i, c in enumerate(doc.cards) if c["id"] == row_id)
+store_ext_namespace("myapp", {"row_id": row_id}, card=i)   # at build time
+idx = next(i for i, c in enumerate(doc.cards)
+           if c["ext"]["myapp"]["row_id"] == row_id)       # at patch time
 quill.writer(doc).card(idx).set_all({"qty": new_qty})
 ```
 
-`$id` is optional and opaque; when present it is unique per document:
-mutators reject a collision, parse repairs one under a warning
-([DOCUMENT_STORAGE.md](DOCUMENT_STORAGE.md) § Card-id identity).
+`$ext` round-trips through Markdown and the storage DTO and never reaches a backend ([CARDS.md](CARDS.md) § Out-of-band Metadata). **The engine guarantees nothing about what a consumer puts there**: no uniqueness, no collision check, no repair on a hand-edited file. A key duplicated across two cards resolves to whichever the scan hits first. Namespacing (`$ext.myapp`) is what keeps two tools on one card from colliding, and it is a convention, not an enforced rule.
+
+Patching one card presupposes the document is no longer a pure projection of its source data: rebuild is the answer whenever data → document is a pure function. Reach for this only when the document carries hand edits a rebuild would destroy.
 
 ## Links
 
