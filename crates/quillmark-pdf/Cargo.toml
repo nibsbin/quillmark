@@ -2,7 +2,6 @@
 name = "quillmark-pdf"
 version.workspace = true
 edition.workspace = true
-rust-version.workspace = true
 include = ["src/**", "Cargo.toml", "README*", "LICENSE*"]
 readme.workspace = true
 description = "Typst-free AcroForm stamping spine for Quillmark: (base_pdf, &[FieldSpec]) -> stamped PDF + regions"

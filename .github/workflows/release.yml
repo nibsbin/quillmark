@@ -46,21 +46,6 @@ jobs:
           echo "next=$NEXT" >> "$GITHUB_OUTPUT"
           echo "Releasing v${NEXT}"
 
-      # release-prepare.yml seeds each version section with a coverage
-      # cross-check comment for the merging maintainer to delete; a skipped
-      # deletion must not reach main's CHANGELOG.md or the tagged commit, so
-      # strip it here unconditionally rather than leaving it a manual step.
-      - name: Strip leftover seed coverage comment
-        run: |
-          ./scripts/strip-seed-comment.sh CHANGELOG.md
-          if ! git diff --quiet -- CHANGELOG.md; then
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add CHANGELOG.md
-            git commit -m "chore(release): strip seed coverage comment"
-            git push origin main
-          fi
-
       - name: Tag and push
         run: |
           VERSION="${{ steps.version.outputs.next }}"
@@ -77,9 +62,11 @@ jobs:
           awk -v v="## v${VERSION}" \
             '$0 ~ "^"v {f=1; next} /^## / && f {exit} f {print}' \
             CHANGELOG.md > notes.md || true
-          # Defense in depth: the previous step already strips CHANGELOG.md,
-          # but the Release body must stay comment-free even if that step's
-          # push race-loses to a concurrent run.
+          # release-prepare.yml seeds each version section with a coverage
+          # cross-check comment for the merging maintainer to delete. A skipped
+          # deletion rides onto main, where only a pull request removes it, so
+          # the notes strip their own copy: the Release body is comment-free
+          # whatever main's CHANGELOG.md holds.
           ./scripts/strip-seed-comment.sh notes.md
           # Fall back to a generic note if the section is missing or made of
           # only whitespace (e.g. an RC with no curated changelog, or every
@@ -124,6 +111,42 @@ jobs:
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
+
+      # Both checks answer a question only the tag can ask, at the last moment
+      # the answer is still free: a failure here leaves a tag with no upload
+      # behind it, where a failure after the first `cargo publish` leaves a
+      # crates.io version that can never be replaced. Ahead of the token mint
+      # because packaging seven crates takes minutes and a Trusted Publishing
+      # token expires 30 minutes after issue.
+      #
+      # `cargo package` (verifying, unlike the `--no-verify` publish below)
+      # builds every crate from its own archive, so a file the build needs but
+      # `include` omits fails here instead of on docs.rs. The four
+      # `publish = false` crates are excluded because `--workspace` would
+      # package them too, and the wasm binding deliberately carries a
+      # version-less path dep on `quillmark` (so `default-features = false` is
+      # honoured), which `cargo package` rejects.
+      - name: Package all publishable crates
+        run: |
+          cargo package --workspace --locked \
+            --exclude quillmark-wasm \
+            --exclude quillmark-python \
+            --exclude quillmark-fuzz \
+            --exclude quillmark-fixtures
+
+      # `include` lists `LICENSE*`, which resolves against the package
+      # directory, not the workspace root; each published crate carries a
+      # symlink so the Apache-2.0 text actually ships (Apache-2.0 §4(a)).
+      - name: Every published crate ships its license text
+        run: |
+          status=0
+          for crate in target/package/*.crate; do
+            if ! tar tzf "$crate" | grep -qE '/LICENSE$'; then
+              echo "::error::$(basename "$crate") ships no LICENSE"
+              status=1
+            fi
+          done
+          exit $status
 
       - name: Authenticate with crates.io (Trusted Publishing)
         id: crates-auth

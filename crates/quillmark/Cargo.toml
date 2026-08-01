@@ -2,7 +2,6 @@
 name = "quillmark"
 version.workspace = true
 edition.workspace = true
-rust-version.workspace = true
 include.workspace = true
 readme.workspace = true
 description = "A schema-driven document engine: turn Markdown into a fully typeset document with a Quill"
