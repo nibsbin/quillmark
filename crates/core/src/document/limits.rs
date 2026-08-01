@@ -24,11 +24,9 @@ pub const MAX_YAML_DEPTH: usize = 100;
 /// Centralizes the [`serde_saphyr::Budget`] so every YAML entry point
 /// (card-yaml payloads and `Quill.yaml`) enforces the same nesting limit.
 pub(crate) fn yaml_parse_options() -> serde_saphyr::Options {
-    serde_saphyr::Options {
-        budget: Some(serde_saphyr::Budget {
+    serde_saphyr::options! {
+        budget: serde_saphyr::budget! {
             max_depth: MAX_YAML_DEPTH,
-            ..Default::default()
-        }),
-        ..Default::default()
+        },
     }
 }
