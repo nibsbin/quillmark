@@ -41,12 +41,11 @@ pub const MAX_FIELD_COUNT: usize = 1000;
 
 /// A YAML parse or emit failure, owned by this crate.
 ///
-/// The YAML engine is `serde-saphyr`, whose version series is `0.0.x`: every
-/// release of it is a semver break under Cargo's rules. Returning its error
-/// types from a public signature would chain this crate's major version to
-/// that cadence, so the boundary converts to this type instead and no public
-/// signature names the engine. The engine is an implementation detail; this is
-/// what the contract says it is.
+/// The YAML engine is `serde-saphyr`. Returning its error types from a public
+/// signature would chain this crate's major version to that crate's, and to
+/// the choice of engine at all, so the boundary converts to this type instead
+/// and no public signature names the engine. The engine is an implementation
+/// detail; this is what the contract says it is.
 ///
 /// `line`/`column` are 1-indexed and present only when the engine located the
 /// failure: always absent on the emit side, which has no input to point at.

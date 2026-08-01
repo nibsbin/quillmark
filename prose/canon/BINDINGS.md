@@ -180,8 +180,8 @@ Ships **multiple artifacts from one crate** behind a single public root export.
 The root `@quillmark/wasm` is a hand-written **canonical runtime layer** that
 re-exports the internal Typst-less **core** build's `Document` + `Quill`
 (load / validate / schema / seed / blueprint) verbatim and adds an `Engine`
-render dispatcher. Each backend (Typst today) is a **private** build with its
-own linear memory, lazily loaded on the first render: there is no public
+render dispatcher. Each backend (Typst and pdfform) is a **private** build with
+its own linear memory, lazily loaded on the first render: there is no public
 `/core` or `/render` subpath. The core build is ~0.66 MB gzip; the Typst backend
 ~8 MB (Typst dominates), loaded only when something renders. Backend handles
 never escape the `Engine`: it clones the quill tree + `doc.toJson()` into the

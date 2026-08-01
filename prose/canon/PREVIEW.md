@@ -107,8 +107,8 @@ keeps the pageable document is a *mode* to add, not a second type.
 `apply` is the only edit verb: a whole-document recompile. Anchoring a caret
 or selection across edits is the **editor's** job: its own transaction mapping
 (a ProseMirror / CodeMirror `StepMap`) carries positions through local edits, so
-the session holds no change log, no revision stamp, and no per-field delta path
-: `FieldRegion` / `ContentHit` carry no `revision`. Geometry
+the session holds no change log, no revision stamp, and no per-field delta
+path: `FieldRegion` / `ContentHit` carry no `revision`. Geometry
 (`regions`, `positionAt`, `locate`) is read against the current compile and
 re-read after each committed `apply`. `positionAt` (point → content position) and
 `locate` (content position → caret rect) are exact inverses over that compile:
@@ -147,9 +147,9 @@ paying re-rasterization on every scroll reversal.
 
 Field geometry is primarily a **session-level query**, `LiveSession::regions()`
 (see the region type in `crates/core/src/region.rs`): the interactive-preview
-path holds a session and reads geometry off the current compile with no render
-: re-read it after each committed `apply`. A one-shot byte render carries the
-same sidecar only on request (`RenderOptions::regions` → `RenderResult::regions`),
+path holds a session and reads geometry off the current compile with no
+render: re-read it after each committed `apply`. A one-shot byte render
+carries the same sidecar only on request (`RenderOptions::regions` → `RenderResult::regions`),
 for consumers without a live session: static overlays over an exported SVG,
 PDF post-processing, CI coverage probes. The sidecar always describes the
 whole document: page indices are document-space even under a `pages` subset
@@ -375,7 +375,7 @@ painter cannot disagree:
 
 | Build                                     | Backend  | Canvas | Notes                                                    |
 | ----------------------------------------- | -------- | ------ | -------------------------------------------------------- |
-| `pkg/core/` (no features)                 |:        | no     | `Document` + `Quill` only; no engine, no Typst           |
+| `pkg/core/` (no features)                 | —        | no     | `Document` + `Quill` only; no engine, no Typst           |
 | `pkg/backends/typst/` (`typst`)           | typst    | yes    | native page raster                                       |
 | `pkg/backends/pdfform/` (`pdfform`)       | pdfform  | yes    | pre-flatten + hayro raster/SVG/PNG; `web-sys` canvas painter |
 

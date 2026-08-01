@@ -68,8 +68,8 @@ Coercion rules per type:
   `quillmark:inline: true`
 - **`plaintext` coercion and enforcement.** A `plaintext` value rides the same
   content as `richtext`, differing only at the codec:
-  - a string imports through the **literal** codec (`from_plaintext`, verbatim
-: no markdown parse, no escaping);
+  - a string imports through the **literal** codec (`from_plaintext`,
+    verbatim: no markdown parse, no escaping);
   - an editor-supplied content object is validated **plain**
     (`Content::is_plain`: no marks, no islands, all `Para` lines) rather than
     markdown-decoded. A formatted wire content is rejected, not stripped.
@@ -223,11 +223,12 @@ surfaces as a diagnostic beyond the non-fatal `validation::must_fill` warning
 (see [Native validation](#native-validation)).
 
 Rendering and the *completeness verdict* are orthogonal. The render path
-(`compile_data` / `resolve_fields` in `quillmark::orchestration`) uses
-**zero-filled render**: every absent schema field is resolved by precedence
-: an authored value, else the `default:`, else the type-empty zero value
-(`zero_value`, defined below): in the plate-JSON projection that feeds the
-backend **only, never in the persisted document**.
+(`QuillConfig::compile_data` and the ladder it cuts, `ladder_sourced`, both in
+core's `quill::compose`; the engine calls it) uses **zero-filled render**:
+every absent schema field is resolved by precedence: an authored value, else
+the `default:`, else the type-empty zero value (`zero_value`, defined below):
+in the plate-JSON projection that feeds the backend **only, never in the
+persisted document**.
 
 - **Incomplete is renderable.** A document that merely omits an Unendorsed
   field (or leaves it present-null) renders fine: the field is zero-filled
@@ -270,7 +271,7 @@ re-importing markdown per document. The authored markdown literal is retained
 untouched: it is the source of truth the schema emits and the blueprint prints;
 the content is a derived projection of it.
 
-Committing *only* `example` is the whole design. `resolve_fields` already
+Committing *only* `example` is the whole design. The render ladder already
 produces `default` and `zero` at compile time but **never `example`** (example
 is excluded from the render path; see [BLUEPRINT.md](BLUEPRINT.md)), so
 `example` is the one source the render floor cannot reproduce. Persisting a
@@ -309,7 +310,7 @@ blueprint shows the form to fill (`!must_fill` markers, `# e.g.` hints), while t
 hands back a committed `Document` already carrying the `example:` values, the
 rest deferred to the render floor for fidelity. It is the only "filled-out"
 projection: there is no annotated `example` string. Implemented by
-`Quill::seed_document` (with `seed_main` / `seed_card`) in `quillmark`.
+`Quill::seed_document` (with `seed_main` / `seed_card`) in `quillmark-core`.
 
 ### Per-document seed overlays (`$seed`)
 
@@ -367,8 +368,8 @@ encode opposite author intents:
 - **`default`** is the value the *majority* of authors want. Because most
   authors want it, the field can be omitted entirely: at render time the
   default fills any field the document leaves out (an
-  authored value always wins: `resolve_fields` in
-  `quillmark::orchestration`). A field with a `default:` is **Endorsed**: the
+  authored value always wins: `ladder_sourced` in core's
+  `quill::compose`). A field with a `default:` is **Endorsed**: the
   rendered value is shippable as-is, and the blueprint renders that concrete
   default value with a type-only annotation (no marker). Type-empty defaults
   (`default: ""`, `[]`, `false`, `0`) are the canonical way to mark a

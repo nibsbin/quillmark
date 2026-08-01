@@ -26,7 +26,7 @@ severity.
 
 **`YamlError`**: the one adapter every `serde-saphyr` error passes through. Sanitizes the message (the engine appends its own Rust API names (`from_multiple`, `DuplicateKeyPolicy`) which `yaml_hints::enrich_yaml_error` strips), derives the hint, and carries the 1-indexed line/column the engine located; `to_diagnostic(code, file)` renders all three. The emit side has no input to point at, so it carries neither position nor hint.
 
-It exists so no public signature names `serde-saphyr`, whose `0.0.x` series makes every release of it a semver break. That promise covers the message as much as the type, which is why the sanitizer is inside the adapter rather than beside it.
+It exists so no public signature names `serde-saphyr`. A third-party error type in a published signature chains this crate's major to that crate's, and to the choice of engine at all; the workspace pins `~1.0` and keeps the engine an implementation detail. That promise covers the message as much as the type, which is why the sanitizer is inside the adapter rather than beside it.
 
 Two surfaces return one directly (`QuillValue::from_yaml_str`, `QuillConfig::schema_yaml`); `QuillConfig::from_yaml_with_warnings` converts through it to `quill::yaml_parse_error`. The card-yaml path does not travel this way: it becomes `ParseError::YamlErrorWithLocation`, which additionally knows the enclosing block.
 
@@ -48,8 +48,8 @@ document is well-formed but paired with the wrong quill (see
 for a backend session that does not override the incremental-`apply` seam
 (both built-in backends override it); `backend::format_not_supported`: the
 requested format is outside the backend's `supported_formats`, one code on
-every backend so a caller matches the condition once; `engine::backend_not_found`
-: the quill's declared backend is not registered.
+every backend so a caller matches the condition once;
+`engine::backend_not_found`: the quill's declared backend is not registered.
 
 **`edit::*`: mutator diagnostics.** Document and card mutators fail with the
 `EditError` enum (`crates/core/src/document/edit.rs`), one namespaced code per
@@ -114,8 +114,8 @@ Typst's `VirtualPath` rejected: asset or package file alike),
 `typst::package_manifest`, and `typst::package_entrypoint_missing`. Each marks a
 file the world had to skip, which otherwise surfaces only as an unresolved
 `#import` pointing at the plate instead of at the defect. They are properties of the quill, not of a compile, so
-`QuillWorld` holds them and the session serves them ahead of every compile's own
-: an `apply` swaps the compile half and keeps these.
+`QuillWorld` holds them and the session serves them ahead of every compile's
+own: an `apply` swaps the compile half and keeps these.
 
 ## Validation message contract
 
