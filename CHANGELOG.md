@@ -37,16 +37,32 @@ loads byte-identically and `0.99` writes the same bytes for the same content.
   JS side of the boundary, since `serde_wasm_bindgen` recurses while building the
   value (#1093). See `docs/migrations/0.98-to-0.99.md`
 - fix(content)!: island `loss` becomes the fifth open set. An unrecognized class
-  round-trips verbatim as `Loss::Unknown` instead of being rewritten to
-  `unrepresentable`, so merely opening a document no longer moves its content
-  hash. `Loss` consequently loses its `Copy` derive; read fidelity through
-  `Loss::fidelity` (#1091). See `docs/migrations/0.98-to-0.99.md`
+  round-trips verbatim instead of being rewritten to `unrepresentable`, so merely
+  opening a document no longer moves its content hash. `Loss` opens on the island
+  `type` axis' terms rather than the block axes': it becomes an opaque string
+  wrapper with `LOSSLESS` / `DEGRADED` / `UNREPRESENTABLE` consts, one value per
+  wire string, so a built-in's name has no second spelling and needs no
+  reserved-name rule. `Fidelity` is the closed view `Loss::fidelity` returns, and
+  is where a consumer switches; `Loss` consequently loses its `Copy` derive
+  (#1091, #1142). See `docs/migrations/0.98-to-0.99.md`
 - refactor(core,typst,pdf)!: workspace-internal seams leave the published
   surface. `quillmark-pdf`'s `reader`/`writer` modules and `quillmark_typst::emit`
   become `#[doc(hidden)]`; the op-wire encoders emit an unknown's `attrs` in
   caller key order, the redundant per-encoder sort having been dropped (canonical
   content bytes are unchanged, the terminal sort still running) (#1095). See
   `docs/migrations/0.98-to-0.99.md`
+- fix(wasm)!: a `Quill` or `Document` from a second copy of `@quillmark/wasm` is
+  refused everywhere, as a `QuillmarkError` coded `runtime::foreign_handle` that
+  names the cause and hints `npm ls @quillmark/wasm`. 0.98 half-worked there:
+  `Engine` was duck-typed, so a quill from copy A rendered on an engine from copy
+  B at a per-copy clone cache nobody could see, while `Document.equals`,
+  `Quill.validate`, `Quill.resolve` and the typed writer met wasm-bindgen's bare
+  `expected instance of Document` at a value that *is* a `Document`. The check
+  covers `Engine` (`render`, `open`, `supportedFormats`, `supportsCanvas`),
+  `LiveSession.apply`, the writer and reader binds, and the three by-reference
+  core methods; a value that is not a handle at all keeps its own
+  `runtime::not_a_document` / `runtime::not_a_quill`. Nothing changes for a
+  one-copy install (#1132, #1136). See `docs/migrations/0.98-to-0.99.md`
 - feat(wasm): `isUnknownLine` / `isUnknownContainer` / `isUnknownMark` /
   `isUnknownIsland` answer known-vs-unknown on each open set, so a consumer no
   longer enumerates built-in names in its own source. `ContentLineKind` is
