@@ -1,10 +1,11 @@
 use std::sync::LazyLock;
 
-use time::format_description::{self, FormatItem};
+use time::format_description::{self, FormatDescriptionV3};
 use time::{Date, PrimitiveDateTime};
 
-static DATE_FMT: LazyLock<Vec<FormatItem<'static>>> =
-    LazyLock::new(|| format_description::parse("[year]-[month]-[day]").expect("valid format"));
+static DATE_FMT: LazyLock<FormatDescriptionV3<'static>> = LazyLock::new(|| {
+    format_description::parse_borrowed::<3>("[year]-[month]-[day]").expect("valid format")
+});
 
 // Strict offset-less wall-clock datetime forms: the `type: datetime` grammar.
 // T separator required, seconds optional (zero-filled); no offset, no space
@@ -12,11 +13,12 @@ static DATE_FMT: LazyLock<Vec<FormatItem<'static>>> =
 // with-seconds string does not partially match the minute-only variant. The
 // `time` parser consumes the whole input, so a trailing offset / fraction /
 // stray character fails rather than silently truncating.
-static DATETIME_FMTS: LazyLock<[Vec<FormatItem<'static>>; 2]> = LazyLock::new(|| {
+static DATETIME_FMTS: LazyLock<[FormatDescriptionV3<'static>; 2]> = LazyLock::new(|| {
     [
-        format_description::parse("[year]-[month]-[day]T[hour]:[minute]:[second]")
+        format_description::parse_borrowed::<3>("[year]-[month]-[day]T[hour]:[minute]:[second]")
             .expect("valid format"),
-        format_description::parse("[year]-[month]-[day]T[hour]:[minute]").expect("valid format"),
+        format_description::parse_borrowed::<3>("[year]-[month]-[day]T[hour]:[minute]")
+            .expect("valid format"),
     ]
 });
 
