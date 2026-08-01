@@ -112,6 +112,12 @@ loads byte-identically and `0.99` writes the same bytes for the same content.
   and paths are unchanged. The character stays where it is the subject rather
   than punctuation: the WinAnsi encoding table, the YAML en/em-dash fixtures, and
   `docs/migrations/` (#1135)
+- chore(core): `serde-saphyr` moves to `1.0`. The two call sites that built
+  `Options`/`SerializerOptions` with struct-literal-plus-`..Default::default()`
+  now go through the crate's own `options!`/`ser_options!`/`budget!` macros,
+  which the 1.0 release requires since both structs are `#[non_exhaustive]`.
+  `serde_saphyr` types stay out of `quillmark-core`'s public API (see the YAML
+  engine entry above), so nothing downstream moves
 
 ## v0.98.0 - 2026-07-28
 

@@ -769,9 +769,8 @@ fn emit_key_at(out: &mut String, key: &str, indent: usize) {
 /// `prefer_block_scalars: false` forces multi-line strings to double-quoted
 /// inline scalars (no `|` / `>` block forms in v1).
 fn saphyr_opts() -> SerializerOptions {
-    SerializerOptions {
+    serde_saphyr::ser_options! {
         prefer_block_scalars: false,
-        ..SerializerOptions::default()
     }
 }
 

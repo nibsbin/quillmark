@@ -39,7 +39,7 @@ homepage = "https://borb-sh.github.io/quillmark/"
 [workspace.dependencies]
 # Core dependencies
 serde = { version = "~1.0", features = ["derive"] }
-serde-saphyr = "~0.0"
+serde-saphyr = "~1.0"
 serde_json = { version = "~1.0", features = ["preserve_order"] }
 
 
@@ -89,7 +89,7 @@ proptest = "~1.11"
 quillmark-fixtures = { path = "crates/fixtures" }
 # PDF *reader*, test-only: reparses stamped output to assert on it. The
 # production writer is `pdf-writer`; the two are not interchangeable.
-lopdf = "0.42"
+lopdf = "0.44"
 
 [profile.dev]
 opt-level = 0
