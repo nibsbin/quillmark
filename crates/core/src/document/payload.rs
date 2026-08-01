@@ -516,7 +516,7 @@ impl Payload {
 
     /// Look up a user-field value by key. `$` entries are not visible via
     /// this accessor: use [`quill`](Self::quill) / [`kind`](Self::kind) /
-    /// [`id`](Self::id).
+    /// [`ext`](Self::ext) / [`seed`](Self::seed).
     pub fn get(&self, key: &str) -> Option<&QuillValue> {
         self.items.iter().find_map(|item| match item {
             PayloadItem::Field { key: k, value, .. } if k == key => Some(value),
