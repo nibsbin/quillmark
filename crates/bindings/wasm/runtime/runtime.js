@@ -964,8 +964,7 @@ export class DocumentWriter {
 	 *
 	 * The cursor is ephemeral: bind, write, discard. It holds `index`, not the
 	 * card: a `removeCard`/`addCard` between binding and writing silently
-	 * retargets it. For durable addressing stamp `$id` and re-resolve the index
-	 * at write time.
+	 * retargets it. Re-resolve the index at write time when cards may move.
 	 * @param {number} index
 	 * @returns {CardWriter}
 	 */

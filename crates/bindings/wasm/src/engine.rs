@@ -157,14 +157,13 @@ export type PayloadItem =
  *
  * `$` system entries are hoisted to named fields: `kind` (the `$kind`, empty
  * string when none), optional `quill` (the `$quill` `name@version`, main card
- * only), optional `id` (`$id`), optional `ext` (`$ext`), and optional `seed`
+ * only), optional `ext` (`$ext`), and optional `seed`
  * (the `$seed` per-kind overlay map, main card only). `payloadItems` carries
  * user fields and comments in order.
  */
 export interface Card {
     kind: string;
     quill?: string;
-    id?: string;
     ext?: Record<string, unknown>;
     seed?: Record<string, unknown>;
     payloadItems: PayloadItem[];
@@ -188,7 +187,6 @@ export interface Card {
 export interface CardInput {
     kind: string;
     quill?: string;
-    id?: string;
     ext?: Record<string, unknown>;
     seed?: Record<string, unknown>;
     payloadItems?: PayloadItem[];
@@ -1137,18 +1135,6 @@ impl Document {
     #[wasm_bindgen(js_name = card, unchecked_return_type = "Card")]
     pub fn card(&self, index: usize) -> Result<JsValue, JsValue> {
         card_to_js(self.card_or_throw(index)?)
-    }
-
-    /// The index of the composable card whose `$id` equals `id`, or
-    /// `undefined` when none carries it. Resolves the durable card handle
-    /// without a hand-rolled scan over [`cards`](Self::cards); `$id` is
-    /// unique per document, so at most one card matches.
-    #[wasm_bindgen(js_name = cardIndexById, unchecked_return_type = "number | undefined")]
-    pub fn card_index_by_id(&self, id: &str) -> JsValue {
-        match self.inner.find_card(id) {
-            Some((index, _)) => JsValue::from_f64(index as f64),
-            None => JsValue::UNDEFINED,
-        }
     }
 
     /// The main card's `$seed` overlay object for `kind` (the `$seed[kind]`
@@ -2309,7 +2295,6 @@ fn js_to_card(value: &JsValue) -> Result<quillmark_core::Card, JsValue> {
         const ALLOWED: &[&str] = &[
             "kind",
             "quill",
-            "id",
             "ext",
             "seed",
             "payloadItems",

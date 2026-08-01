@@ -225,9 +225,6 @@ fn emit_payload_items(out: &mut String, items: &[PayloadItem]) {
             PayloadItem::Kind { value } => {
                 emit_meta_line(out, "kind", value, trailer);
             }
-            PayloadItem::Id { value } => {
-                emit_meta_line(out, "id", value, trailer);
-            }
             PayloadItem::Meta {
                 key,
                 value,

@@ -239,7 +239,6 @@ fn set_seed_inserts_after_ext_and_before_user_fields() {
 ~~~card-yaml
 $quill: q@1.0
 $kind: main
-$id: rev-1
 $ext:
   a: 1
 title: Hi
@@ -251,25 +250,24 @@ title: Hi
     doc.main_mut().payload_mut().set_seed(seed);
 
     let items = doc.main().payload().items();
-    // Canonical order: $quill, $kind, $id, $ext, $seed, then user fields.
+    // Canonical order: $quill, $kind, $ext, $seed, then user fields.
     assert!(matches!(items[0], PayloadItem::Quill { .. }));
     assert!(matches!(items[1], PayloadItem::Kind { .. }));
-    assert!(matches!(items[2], PayloadItem::Id { .. }));
     assert!(matches!(
-        items[3],
+        items[2],
         PayloadItem::Meta {
             key: MetaKey::Ext,
             ..
         }
     ));
     assert!(matches!(
-        items[4],
+        items[3],
         PayloadItem::Meta {
             key: MetaKey::Seed,
             ..
         }
     ));
-    assert!(matches!(items[5], PayloadItem::Field { .. }));
+    assert!(matches!(items[4], PayloadItem::Field { .. }));
 }
 
 #[test]

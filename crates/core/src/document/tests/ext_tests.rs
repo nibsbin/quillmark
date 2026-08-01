@@ -212,13 +212,12 @@ $ext:
 // ── Programmatic construction ──────────────────────────────────────────────
 
 #[test]
-fn set_ext_inserts_after_id_and_before_user_fields() {
+fn set_ext_inserts_after_kind_and_before_user_fields() {
     let mut doc = parse(
         "\
 ~~~card-yaml
 $quill: q@1.0
 $kind: main
-$id: rev-1
 title: Hi
 ~~~
 ",
@@ -228,19 +227,17 @@ title: Hi
     doc.main_mut().payload_mut().set_ext(ext);
 
     let items = doc.main().payload().items();
-    // Canonical order: $quill, $kind, $id, $ext, then user fields in
-    // source order.
+    // Canonical order: $quill, $kind, $ext, then user fields in source order.
     assert!(matches!(items[0], PayloadItem::Quill { .. }));
     assert!(matches!(items[1], PayloadItem::Kind { .. }));
-    assert!(matches!(items[2], PayloadItem::Id { .. }));
     assert!(matches!(
-        items[3],
+        items[2],
         PayloadItem::Meta {
             key: MetaKey::Ext,
             ..
         }
     ));
-    assert!(matches!(items[4], PayloadItem::Field { .. }));
+    assert!(matches!(items[3], PayloadItem::Field { .. }));
 }
 
 #[test]

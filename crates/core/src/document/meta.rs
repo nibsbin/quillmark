@@ -1,6 +1,6 @@
 //! Validation helpers for card-yaml `$`-prefixed system metadata.
 //!
-//! The closed set of `$` keys (`$quill`, `$kind`, `$id`, `$ext`, `$seed`) and
+//! The closed set of `$` keys (`$quill`, `$kind`, `$ext`, `$seed`) and
 //! their typed values are stored as variants of [`super::PayloadItem`] inside a
 //! card's unified [`super::Payload`] item list: they sit alongside user
 //! fields and comments in source order, which is what makes inline-comment
@@ -26,26 +26,25 @@ pub(super) fn meta_key(item: &PayloadItem) -> Option<&'static str> {
     match item {
         PayloadItem::Quill { .. } => Some("$quill"),
         PayloadItem::Kind { .. } => Some("$kind"),
-        PayloadItem::Id { .. } => Some("$id"),
         PayloadItem::Meta { key, .. } => Some(key.as_str()),
         PayloadItem::Field { .. } | PayloadItem::Comment { .. } => None,
     }
 }
 
 /// Walk the parsed YAML payload, extracting `$`-prefixed reserved keys into
-/// typed system-metadata [`PayloadItem`]s (`Quill` / `Kind` / `Id` / `Ext`)
+/// typed system-metadata [`PayloadItem`]s (`Quill` / `Kind` / `Meta`)
 /// in source order. The keys are removed from `payload` so the caller can
 /// build the user-field portion from what remains.
 ///
-/// The accepted keys are the closed set `{$quill, $kind, $id, $ext, $seed}`.
+/// The accepted keys are the closed set `{$quill, $kind, $ext, $seed}`.
 /// Any other `$`-prefixed key is a parse error. Duplicate keys cannot arise
 /// here: the YAML parser rejects them as duplicate mapping keys before
 /// this function runs.
 ///
 /// `$quill` and `$kind` require string scalars (non-string YAML types are
-/// rejected). `$id` accepts any scalar and stringifies it. `$ext` and `$seed`
-/// each require a YAML mapping (object); `$ext` contents are carried opaquely,
-/// while `$seed` is a map keyed by card-kind interpreted by the seeding layer.
+/// rejected). `$ext` and `$seed` each require a YAML mapping (object); `$ext`
+/// contents are carried opaquely, while `$seed` is a map keyed by card-kind
+/// interpreted by the seeding layer.
 pub(super) fn extract_meta_items(payload: &mut JsonValue) -> Result<Vec<PayloadItem>, ParseError> {
     let map = match payload {
         JsonValue::Object(m) => m,
@@ -90,9 +89,6 @@ pub(super) fn extract_meta_items(payload: &mut JsonValue) -> Result<Vec<PayloadI
                 }
                 PayloadItem::Kind { value: s }
             }
-            "$id" => PayloadItem::Id {
-                value: scalar_to_string(&key, value)?,
-            },
             "$ext" | "$seed" => {
                 let meta_key = MetaKey::from_key_str(&key).expect("matched $ext/$seed above");
                 match value {
@@ -113,7 +109,7 @@ pub(super) fn extract_meta_items(payload: &mut JsonValue) -> Result<Vec<PayloadI
             other => {
                 return Err(ParseError::InvalidStructure(format!(
                     "Unknown `{}` system-metadata key: the card-yaml block \
-                     accepts only `$quill`, `$kind`, `$id`, `$ext`, and `$seed`",
+                     accepts only `$quill`, `$kind`, `$ext`, and `$seed`",
                     other
                 )));
             }
@@ -130,23 +126,6 @@ fn require_string(label: &str, value: JsonValue) -> Result<String, ParseError> {
         other => Err(ParseError::InvalidStructure(format!(
             "Invalid {}: expected a string scalar, got {}",
             label,
-            yaml_type_name(&other)
-        ))),
-    }
-}
-
-fn scalar_to_string(key: &str, value: JsonValue) -> Result<String, ParseError> {
-    match value {
-        JsonValue::String(s) => Ok(s),
-        JsonValue::Bool(b) => Ok(b.to_string()),
-        JsonValue::Number(n) => Ok(n.to_string()),
-        JsonValue::Null => Err(ParseError::InvalidStructure(format!(
-            "`{}` cannot be null: provide a scalar value",
-            key
-        ))),
-        other => Err(ParseError::InvalidStructure(format!(
-            "`{}` must be a scalar value, got {}",
-            key,
             yaml_type_name(&other)
         ))),
     }
@@ -224,13 +203,6 @@ mod tests {
         assert!(matches!(items[0], PayloadItem::Quill { .. }));
         assert!(matches!(items[1], PayloadItem::Kind { .. }));
         assert_eq!(payload, json!({"title": "Doc"}));
-    }
-
-    #[test]
-    fn extracts_id_from_number() {
-        let mut payload = json!({"$id": 42});
-        let items = extract_meta_items(&mut payload).unwrap();
-        assert!(matches!(items[0], PayloadItem::Id { ref value } if value == "42"));
     }
 
     #[test]

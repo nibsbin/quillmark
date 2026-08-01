@@ -199,10 +199,6 @@ impl Card {
         self.payload.kind()
     }
 
-    pub fn id(&self) -> Option<&str> {
-        self.payload.id()
-    }
-
     /// Opaque `$ext` map for out-of-band extension data (UI editor state,
     /// agent annotations, …). Carried through Markdown and storage DTO
     /// round-trips; never emitted into the plate JSON consumed by
@@ -397,16 +393,6 @@ impl Document {
             cards.iter().all(|c| c.seed().is_none()),
             "composable cards must not carry `$seed`"
         );
-        debug_assert!(
-            {
-                let mut seen = std::collections::HashSet::new();
-                cards
-                    .iter()
-                    .filter_map(|c| c.id())
-                    .all(|id| !id.is_empty() && seen.insert(id))
-            },
-            "composable card `$id`s must be non-empty and unique per document"
-        );
         Self { main, cards }
     }
 
@@ -451,20 +437,6 @@ impl Document {
     /// when out of range.
     pub fn card(&self, index: usize) -> Option<&Card> {
         self.cards.get(index)
-    }
-
-    /// The composable card whose `$id` equals `id`, with its index:
-    /// resolving the durable card handle ([PROGRAMMATIC.md]) without a
-    /// hand-rolled scan over [`cards`](Document::cards). `$id` is unique per
-    /// document (parse repairs a duplicate, mutators and storage reject one),
-    /// so at most one card matches; `None` when none carries it.
-    ///
-    /// [PROGRAMMATIC.md]: https://github.com/borb-sh/quillmark/blob/main/prose/canon/PROGRAMMATIC.md
-    pub fn find_card(&self, id: &str) -> Option<(usize, &Card)> {
-        self.cards
-            .iter()
-            .enumerate()
-            .find(|(_, card)| card.id() == Some(id))
     }
 
     pub(crate) fn cards_vec_mut(&mut self) -> &mut Vec<Card> {

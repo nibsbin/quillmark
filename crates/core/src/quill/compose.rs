@@ -527,7 +527,7 @@ pub(crate) fn resolve_value_sourced(
 }
 
 /// Build a [`Payload`] from a coerced/defaulted field map, re-attaching `$quill`
-/// / `$kind` / `$id` from `source`. Comments are dropped: this payload feeds
+/// / `$kind` from `source`. Comments are dropped: this payload feeds
 /// backend rendering, not round-trip storage.
 fn rebuild_payload_with_meta(source: &Card, fields: IndexMap<String, QuillValue>) -> Payload {
     let mut payload = Payload::from_index_map(fields);
@@ -536,9 +536,6 @@ fn rebuild_payload_with_meta(source: &Card, fields: IndexMap<String, QuillValue>
     }
     if let Some(k) = source.kind() {
         payload.set_kind(k.to_string());
-    }
-    if let Some(id) = source.id() {
-        payload.set_id(id.to_string());
     }
     payload
 }

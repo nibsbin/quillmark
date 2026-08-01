@@ -4,7 +4,7 @@
 //! YAML content. It carries, in source order, as variants of a single
 //! [`PayloadItem`] enum:
 //!
-//! - **System metadata**: typed `$quill` / `$kind` / `$id` / `$ext`
+//! - **System metadata**: typed `$quill` / `$kind` / `$ext` / `$seed`
 //!   entries.
 //! - **User fields**: `key: value` pairs with an optional `!must_fill` flag.
 //! - **Comments**: own-line or trailing inline, attached to whichever
@@ -32,8 +32,8 @@
 //! map-keyed access (`get`, `iter`, `insert`, `remove`). The map-style
 //! accessors filter to [`PayloadItem::Field`] only: they intentionally
 //! don't expose `$` entries because typed `$` access has dedicated methods
-//! (`quill`, `kind`, `id`, `ext`, `seed`, `set_quill`, `set_kind`, `set_id`,
-//! `set_ext`, `set_seed`).
+//! (`quill`, `kind`, `ext`, `seed`, `set_quill`, `set_kind`, `set_ext`,
+//! `set_seed`).
 //!
 //! The map-style accessors present the payload as a key/value map of user
 //! data, while comment preservation and `$` access ride on the same
@@ -82,11 +82,11 @@ impl MetaKey {
         }
     }
 
-    /// Canonical sort rank among typed `$` entries (after `$id`).
+    /// Canonical sort rank among typed `$` entries (after `$kind`).
     fn rank(self) -> u8 {
         match self {
-            MetaKey::Ext => 3,
-            MetaKey::Seed => 4,
+            MetaKey::Ext => 2,
+            MetaKey::Seed => 3,
         }
     }
 
@@ -110,10 +110,6 @@ pub enum PayloadItem {
     Quill { reference: QuillReference },
     /// `$kind` system metadata: the card's kind name.
     Kind { value: String },
-    /// `$id` system metadata, the durable card handle: opaque,
-    /// caller-supplied, unique per document across composable cards
-    /// (`DOCUMENT_STORAGE.md` §Card-id identity).
-    Id { value: String },
     /// `$ext` / `$seed` system metadata: an opaque mapping (discriminated by
     /// [`MetaKey`]) reserved for out-of-band data. Never emitted into the plate
     /// JSON, always round-trips through Markdown and the storage DTO.
@@ -190,13 +186,12 @@ impl PayloadItem {
     }
 
     /// Canonical sort rank for typed `$` entries: `$quill` < `$kind` <
-    /// `$id` < `$ext` < `$seed`. Returns `None` for user fields and comments,
+    /// `$ext` < `$seed`. Returns `None` for user fields and comments,
     /// which are positioned by source order and never reshuffled.
     fn meta_rank(&self) -> Option<u8> {
         match self {
             PayloadItem::Quill { .. } => Some(0),
             PayloadItem::Kind { .. } => Some(1),
-            PayloadItem::Id { .. } => Some(2),
             PayloadItem::Meta { key, .. } => Some(key.rank()),
             _ => None,
         }
@@ -349,7 +344,7 @@ impl Payload {
     }
 
     /// Remove the first item matching `pred` and return it. The typed
-    /// removers (`take_id`, `take_meta`, `remove`) wrap this and destructure
+    /// removers (`take_meta`, `remove`) wrap this and destructure
     /// the returned variant, which `pred` guarantees.
     fn take_item(&mut self, pred: impl Fn(&PayloadItem) -> bool) -> Option<PayloadItem> {
         let pos = self.items.iter().position(pred)?;
@@ -370,14 +365,6 @@ impl Payload {
     pub fn kind(&self) -> Option<&str> {
         self.items.iter().find_map(|i| match i {
             PayloadItem::Kind { value } => Some(value.as_str()),
-            _ => None,
-        })
-    }
-
-    /// The `$id` value, if declared.
-    pub fn id(&self) -> Option<&str> {
-        self.items.iter().find_map(|i| match i {
-            PayloadItem::Id { value } => Some(value.as_str()),
             _ => None,
         })
     }
@@ -405,7 +392,7 @@ impl Payload {
     }
 
     /// Set or replace the `$quill` entry. Inserts at canonical position
-    /// (before any `$kind` / `$id` / `$ext`) when adding. Comments are
+    /// (before any `$kind` / `$ext` / `$seed`) when adding. Comments are
     /// untouched.
     pub fn set_quill(&mut self, reference: QuillReference) {
         self.upsert_meta(PayloadItem::Quill { reference });
@@ -415,27 +402,6 @@ impl Payload {
     /// [`set_quill`](Self::set_quill).
     pub fn set_kind(&mut self, kind: impl Into<String>) {
         self.upsert_meta(PayloadItem::Kind { value: kind.into() });
-    }
-
-    /// Set or replace the `$id` entry. Same insertion rules as
-    /// [`set_quill`](Self::set_quill).
-    ///
-    /// This is the stamping door for a card **not yet placed** in a document
-    /// (mint → stamp → insert); uniqueness is checked at insertion. For a
-    /// placed card, write through the guarded
-    /// [`Document::set_card_id`](crate::Document::set_card_id) so the
-    /// per-document uniqueness of `$id` holds.
-    pub fn set_id(&mut self, id: impl Into<String>) {
-        self.upsert_meta(PayloadItem::Id { value: id.into() });
-    }
-
-    /// Remove the `$id` entry, returning the previous value if any. Removal
-    /// cannot collide, so no document-level guard exists or is needed.
-    pub fn take_id(&mut self) -> Option<String> {
-        match self.take_item(|i| matches!(i, PayloadItem::Id { .. }))? {
-            PayloadItem::Id { value } => Some(value),
-            _ => unreachable!(),
-        }
     }
 
     /// Set or replace an out-of-band meta entry at its canonical position.
@@ -451,7 +417,7 @@ impl Payload {
 
     /// Set or replace the `$ext` entry. Same insertion rules as
     /// [`set_quill`](Self::set_quill); the canonical position is after
-    /// `$quill` / `$kind` / `$id` and before any user field.
+    /// `$quill` / `$kind` and before any user field.
     ///
     /// Nested comments on a replaced `$ext` entry are dropped (the new value
     /// tree may not contain matching positions).
@@ -460,7 +426,7 @@ impl Payload {
     }
 
     /// Set or replace the `$seed` entry. Inserted at the canonical position
-    /// (after `$quill` / `$kind` / `$id` / `$ext`, before any user field).
+    /// (after `$quill` / `$kind` / `$ext`, before any user field).
     /// Nested comments on a replaced `$seed` are dropped, like
     /// [`set_ext`](Self::set_ext).
     pub fn set_seed(&mut self, value: JsonMap<String, JsonValue>) {
@@ -505,7 +471,7 @@ impl Payload {
             .unwrap_or_else(|| {
                 // No higher-ranked `$` item; insert after the last lower
                 // (or equal-rank-impossible) `$` item, before any non-`$`
-                // entry. This keeps the `$quill < $kind < $id` ordering
+                // entry. This keeps the `$quill < $kind < $ext` ordering
                 // while not displacing user fields.
                 self.items
                     .iter()
@@ -782,16 +748,6 @@ mod tests {
         fm.set_quill("foo@0.1".parse().unwrap());
         assert!(matches!(fm.items()[0], PayloadItem::Quill { .. }));
         assert!(matches!(fm.items()[1], PayloadItem::Kind { .. }));
-    }
-
-    #[test]
-    fn set_id_inserts_after_quill_and_kind() {
-        let mut fm = Payload::new();
-        fm.set_quill("foo@0.1".parse().unwrap());
-        fm.set_kind("main");
-        fm.set_id("rev-1");
-        assert_eq!(fm.items().len(), 3);
-        assert!(matches!(fm.items()[2], PayloadItem::Id { .. }));
     }
 
     #[test]
