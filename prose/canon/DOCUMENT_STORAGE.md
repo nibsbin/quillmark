@@ -14,8 +14,8 @@ syntax also evolves), `Document` serializes to a **versioned JSON envelope**,
 
 | Form | Round-trips? | Stable for storage? |
 |---|---|---|
-| Markdown (`Document::to_markdown`) | Yes (valid documents (§ Card-id identity) | No) syntax evolves |
-| `StoredDocument` JSON | Yes (lossless | Yes) frozen per schema version |
+| Markdown (`Document::to_markdown`) | Yes: valid documents (§ Card-id identity) | No: syntax evolves |
+| `StoredDocument` JSON | Yes: lossless | Yes: frozen per schema version |
 
 Use `StoredDocument` JSON whenever a `Document` must survive a process
 restart or a crate upgrade: database rows, caches, message payloads.

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.99.0 - 2026-08-01
 
 The 1.0.0 API freeze lands ahead of the tag, and the content codec closes its
 last open gaps. All breaking changes are covered by
@@ -13,10 +13,12 @@ loads byte-identically and `0.99` writes the same bytes for the same content.
   `with_*` setters. `Backend` is sealed, `OutputFormat::ALL` and
   `Content::RESERVED_{MARK_TYPES,LINE_KINDS,CONTAINERS}` become slices, and
   `RenderOptions { .., ..Default::default() }` becomes
-  `RenderOptions::default().with_output_format(fmt)`. Two types stay exhaustive
-  and say so: the `V0_92_0` storage DTOs and `quillmark_pdf::FieldType`, where a
-  missed variant draws nothing and reports nothing. The rules are canonized in
-  `prose/canon/COMPATIBILITY.md` (#1090, #1103). See
+  `RenderOptions::default().with_output_format(fmt)`. Four stay exhaustive and
+  say so: the storage DTOs, frozen per schema version, plus
+  `quillmark_pdf::FieldType`, `KnownIslandType`, and `Fidelity`, where an
+  out-of-crate `_` arm is silent (a field that draws nothing, an island dropped
+  from the projection, a fidelity rung nothing warns about). The rules are
+  canonized in `prose/canon/COMPATIBILITY.md` (#1090, #1103). See
   `docs/migrations/0.98-to-0.99.md`
 - refactor(core)!: the YAML engine leaves the public API. `QuillValue::from_yaml_str`
   and `QuillConfig::schema_yaml` return `quillmark_core::YamlError` instead of
@@ -35,18 +37,36 @@ loads byte-identically and `0.99` writes the same bytes for the same content.
   `Value` lane, where an unbounded one took the WASM module down with a
   stack-overflow trap rather than a catchable error. The WASM guard sits on the
   JS side of the boundary, since `serde_wasm_bindgen` recurses while building the
-  value (#1093). See `docs/migrations/0.98-to-0.99.md`
+  value, and covers every door that takes opaque host JSON: `install` and
+  `applyChange`, plus `makeCard`'s field values and `insertCard`'s payload items
+  (#1093). See `docs/migrations/0.98-to-0.99.md`
 - fix(content)!: island `loss` becomes the fifth open set. An unrecognized class
-  round-trips verbatim as `Loss::Unknown` instead of being rewritten to
-  `unrepresentable`, so merely opening a document no longer moves its content
-  hash. `Loss` consequently loses its `Copy` derive; read fidelity through
-  `Loss::fidelity` (#1091). See `docs/migrations/0.98-to-0.99.md`
+  round-trips verbatim instead of being rewritten to `unrepresentable`, so merely
+  opening a document no longer moves its content hash. `Loss` opens on the island
+  `type` axis' terms rather than the block axes': it becomes an opaque string
+  wrapper with `LOSSLESS` / `DEGRADED` / `UNREPRESENTABLE` consts, one value per
+  wire string, so a built-in's name has no second spelling and needs no
+  reserved-name rule. `Fidelity` is the closed view `Loss::fidelity` returns, and
+  is where a consumer switches; `Loss` consequently loses its `Copy` derive
+  (#1091, #1142). See `docs/migrations/0.98-to-0.99.md`
 - refactor(core,typst,pdf)!: workspace-internal seams leave the published
   surface. `quillmark-pdf`'s `reader`/`writer` modules and `quillmark_typst::emit`
   become `#[doc(hidden)]`; the op-wire encoders emit an unknown's `attrs` in
   caller key order, the redundant per-encoder sort having been dropped (canonical
   content bytes are unchanged, the terminal sort still running) (#1095). See
   `docs/migrations/0.98-to-0.99.md`
+- fix(wasm)!: a `Quill` or `Document` from a second copy of `@quillmark/wasm` is
+  refused everywhere, as a `QuillmarkError` coded `runtime::foreign_handle` that
+  names the cause and hints `npm ls @quillmark/wasm`. 0.98 half-worked there:
+  `Engine` was duck-typed, so a quill from copy A rendered on an engine from copy
+  B at a per-copy clone cache nobody could see, while `Document.equals`,
+  `Quill.validate`, `Quill.resolve` and the typed writer met wasm-bindgen's bare
+  `expected instance of Document` at a value that *is* a `Document`. The check
+  covers `Engine` (`render`, `open`, `supportedFormats`, `supportsCanvas`),
+  `LiveSession.apply`, the writer and reader binds, and the three by-reference
+  core methods; a value that is not a handle at all keeps its own
+  `runtime::not_a_document` / `runtime::not_a_quill`. Nothing changes for a
+  one-copy install (#1132, #1136). See `docs/migrations/0.98-to-0.99.md`
 - feat(wasm): `isUnknownLine` / `isUnknownContainer` / `isUnknownMark` /
   `isUnknownIsland` answer known-vs-unknown on each open set, so a consumer no
   longer enumerates built-in names in its own source. `ContentLineKind` is
@@ -61,6 +81,12 @@ loads byte-identically and `0.99` writes the same bytes for the same content.
   become `RenderResult` warnings (`typst::path_skipped`,
   `typst::package_manifest`, `typst::package_entrypoint_missing`) instead of
   `eprintln!` that wasm32 has nowhere to print (#1102)
+- fix(wasm): the npm package states the license the workspace actually grants.
+  `package.json` declared `MIT OR Apache-2.0` where every Rust crate, the
+  workspace manifest, and the only `LICENSE` file in the tree are `Apache-2.0`,
+  and the package shipped no license text at all: `build-wasm.sh` copied
+  `LICENSE-MIT` and `LICENSE-APACHE`, neither of which exists. It now copies
+  `LICENSE`, or refuses to produce a package
 - ci: the release gates the tag actually needs. New `package` (builds every
   publishable crate from its own archive and asserts each ships its `LICENSE`),
   `msrv` (holds `rust-version` to something true), and `audit` (bare `cargo
@@ -86,6 +112,89 @@ loads byte-identically and `0.99` writes the same bytes for the same content.
   and paths are unchanged. The character stays where it is the subject rather
   than punctuation: the WinAnsi encoding table, the YAML en/em-dash fixtures, and
   `docs/migrations/` (#1135)
+
+<!-- seed: commits since v0.98.0, confirm the entries above cover them, then delete this comment
+- Split serial.rs's fixed-point claim into the two it conflated
+- Make Fidelity the one place a loss class is spelled
+- Make an island's loss class injective instead of guarded
+- dense-prose and simplify passes over the handle-check work
+- Keep the colon out of embedded YAML values
+- Sweep the em-dash out of comments and prose
+- Refuse a core handle from a second copy, everywhere
+- Replace the em-dash ban with the rule the exemplars follow
+- dense-prose pass over the foreign-handle prose
+- Extend the policy to the writer/reader lane, and draw the read/write line
+- Keep the patched method names, and stop over-claiming in the warning
+- Tolerate foreign core handles on the by-reference methods
+- Correct the quill file-size cap doc and MiB units
+- Collapse the rustdoc gate onto --workspace
+- dense-prose pass over the release-readiness fixes
+- Close the release-readiness gaps found against v0.98.0
+- Drop the semver job
+- Trim the Python typing work to its load-bearing parts
+- Revert "Record KnownIslandType::ALL's slice shape in the 0.99 guide"
+- Record KnownIslandType::ALL's slice shape in the 0.99 guide
+- Close the Python Tier-1 gaps: single-card reads and a typed surface
+- Drop the top-level-await plugin the vite 8 test config cannot load
+- Shape the reserved-name lists as slices
+- Shape the island ALL as a slice; list the 0.99 guide as published
+- Prune rottable duplication from CLAUDE.md
+- Adopt the editor's dense-prose rewrite; compress CLAUDE.md
+- build(deps): bump the cargo group across 1 directory with 12 updates
+- build(deps): bump the actions group across 1 directory with 11 updates
+- build(deps): bump tsify from 0.4.5 to 0.5.6
+- build(deps): bump toml from 0.8.23 to 1.1.3+spec-1.1.0
+- build(deps): bump similar from 2.7.0 to 3.1.1
+- build(deps): bump serde-saphyr from 0.0.23 to 0.0.29
+- Run the semver job on release PRs, not on every one
+- Drop the dead check-cfg rustflag that crashed the semver job
+- docs: dense-prose pass over the new test comments
+- dense-prose pass over the branch
+- Gate the compatibility promise mechanically, and write it down
+- test(bindings): cover the WASM and Python exports nothing exercised
+- Close the struct half of the 1.0.0 non_exhaustive sweep, and seal Backend
+- test(pdfform): drive unbound text/checkbox/choice through the fixture
+- Move the workspace to edition 2024
+- build(deps-dev): bump vitest in /crates/bindings/wasm
+- build(deps-dev): bump typescript in /crates/bindings/wasm
+- prose: drop the readiness proposal and SECURITY.md
+- ci: drop the Windows matrix from the test job
+- Finish the coerce_value_strict cleanup in the fuzz crate
+- dense-prose pass across the code and docs
+- Revert the wasm job to `npm install`
+- Trim CI to the checks v1.0.0 actually needs
+- Cut the two CI costs that buy nothing
+- Clear the RUSTSEC vulnerabilities the audit job actually found
+- Pin the tree to LF so the Windows runner reads what the test wrote
+- Cleanup pass: cut the machinery the fix did not need
+- prose: record what landed against the v1.0.0 readiness findings
+- fuzz: cover the four JSON decode lanes the bindings expose
+- Declare and hold an MSRV
+- Ship the license text, verify the packages, scan the dependencies
+- Open the engine crates' public enums ahead of the 1.0.0 freeze
+- Hide the workspace-internal seams from the published surface
+- typst: quill-load defects become session warnings, not stderr
+- core: own the YAML boundary error, and budget the third entry point
+- prose: index the v1.0.0 readiness findings against their issues
+- prose: v1.0.0 production-readiness review
+- Drop issue markers; dense-prose the unreleased 0.99 guide
+- dense-prose pass over the PR 1097 scope
+- docs: record the op-wire key-order change in the unreleased guide
+- content: carry the `<u>` bit on the event, not in a shared set
+- content: one key sorter for the canonical form
+- content: bound opaque JSON payload depth on the Value lane
+- content: make a vocabulary promotion carry its own legacy form
+- content: simplify pass over the codec-gap changes
+- content: house voice on the codec-gap comments
+- content: close the three v1.0.0 codec gaps before the freeze
+- content: cut the enumerated halves of the two open-set tests
+- content: prune tests that assert what a neighbour already pins
+- content: fold the authored-lane scan into the shared cell walk
+- content: split the wire lanes on reserved-name reuse (#1084, #1085, #1086)
+- docs: trim the migration index to a routing table; drop duplicate links
+- refactor(typst): re-export span_scan/extract instead of forwarding
+-->
+
 
 ## v0.98.0 - 2026-07-28
 

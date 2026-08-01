@@ -1651,6 +1651,13 @@ impl Document {
     ) -> Result<JsValue, JsValue> {
         let field_map: serde_json::Map<String, serde_json::Value> = match fields {
             Some(fields) if !fields.is_undefined() && !fields.is_null() => {
+                // A field value is opaque host JSON, so this door is as open
+                // as `install`'s. `reject_deep_js_value` has why the check
+                // precedes `from_value` rather than riding a Rust-side guard.
+                // A backstop under `Card::try_from`'s 100-level field cap, not
+                // a second spelling of it: it catches only what would trap
+                // before that check could run.
+                reject_deep_js_value(&fields, "makeCard")?;
                 serde_wasm_bindgen::from_value(fields).map_err(|e| {
                     WasmError::from(format!("makeCard: `fields` must be an object: {e}"))
                         .to_js_value()
@@ -2321,6 +2328,9 @@ fn js_to_card(value: &JsValue) -> Result<quillmark_core::Card, JsValue> {
             }
         }
     }
+    // A payload item's `value` is opaque host JSON, the same axis
+    // `reject_deep_js_value` guards for `install`.
+    reject_deep_js_value(value, "insertCard")?;
     let wire: quillmark_core::CardWire = serde_wasm_bindgen::from_value(value.clone())
         .map_err(|e| WasmError::from(format!("card must be a Card object: {e}")).to_js_value())?;
     quillmark_core::Card::try_from(wire).map_err(|e| WasmError::from(e.to_string()).to_js_value())

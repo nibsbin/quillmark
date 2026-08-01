@@ -55,10 +55,17 @@ lost a variant. Ask instead:
 - **Silent on a miss** → keep it exhaustive, say so in the rustdoc, and accept
   semver-major as the price.
 
-`quillmark_pdf::FieldType` is the case that keeps the exemption: `pdfform`'s
-value resolver and its content-stream flattener both dispatch over the whole set
-from another crate, and a variant they miss **draws nothing on the page and
-reports nothing**. There the compile error is the guardrail.
+Three enums keep the exemption, each saying so in its own rustdoc:
+
+| Enum | What a missed variant costs |
+|---|---|
+| `quillmark_pdf::FieldType` | `pdfform`'s value resolver and its content-stream flattener both dispatch over the whole set from another crate: the field **draws nothing on the page and reports nothing**. |
+| `KnownIslandType` | The Typst emitter dispatches over the whole set from another crate: the island **leaves the projection entirely**. (Its markdown twin is in `quillmark-content` itself, where the attribute changes nothing.) |
+| `Fidelity` | A ladder a consumer reads to decide what to warn about, with no safe rung to fall through to. |
+
+For all three the compile error is the guardrail, and a new member is a
+semver-major. The storage DTOs are exhaustive on separate grounds: a shipped
+schema version is frozen, so it does not grow at all.
 
 ### Picking the fallback
 

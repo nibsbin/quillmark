@@ -470,6 +470,11 @@ compilation failures. The same shape applies to every throw site:
   text.
 - `engine.render` / `session.render`: backend compilation failures and
   validation errors.
+- Any method taking a `Quill` or `Document`: a handle from a *second* copy of
+  `@quillmark/wasm` is refused with `runtime::foreign_handle`, hinting `npm ls
+  @quillmark/wasm`. Two copies are two WASM memories and two `Quill`/`Document`
+  classes; dedupe to one. A value that is not a handle at all keeps its own
+  `runtime::not_a_document` / `runtime::not_a_quill`.
 
 ### Lifecycle
 
