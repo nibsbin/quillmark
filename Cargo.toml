@@ -26,12 +26,11 @@ resolver = "2"
 [workspace.package]
 version = "0.99.0"
 edition = "2024"
-# No `rust-version`. The floor the Typst toolchain forces moves whenever that
-# tree moves, so the field was only ever true because a job rebuilt the
-# workspace on it every PR. Without that job the number is a claim nothing
-# checks, and an unverified floor is worse than none: it reads as a promise and
-# the resolver enforces it on consumers. Declare one again the day something
-# verifies it again.
+# No `rust-version`. The floor the Typst toolchain forces moves when that tree
+# moves, so a declared floor holds only while something rebuilds the workspace
+# on it. Nothing does, and an unverified floor is worse than none: it reads as a
+# promise and the resolver enforces it on consumers. Declare one again the day
+# something verifies it.
 include = ["src/**", "Cargo.toml", "README*", "LICENSE*"]
 readme = "README.md"
 license = "Apache-2.0"

@@ -64,10 +64,9 @@ jobs:
             CHANGELOG.md > notes.md || true
           # release-prepare.yml seeds each version section with a coverage
           # cross-check comment for the merging maintainer to delete. A skipped
-          # deletion rides the merge onto main, where only a pull request may
-          # remove it, so the notes strip their own copy: the Release body is
-          # comment-free whatever main's CHANGELOG.md holds, and the next
-          # release-prepare run clears main's copy before it splices.
+          # deletion rides onto main, where only a pull request removes it, so
+          # the notes strip their own copy: the Release body is comment-free
+          # whatever main's CHANGELOG.md holds.
           ./scripts/strip-seed-comment.sh notes.md
           # Fall back to a generic note if the section is missing or made of
           # only whitespace (e.g. an RC with no curated changelog, or every
@@ -113,12 +112,12 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
 
-      # The two checks that only the tag can consult, run at the last moment
-      # they still cost nothing: a failure here leaves a tag with no upload
+      # Both checks answer a question only the tag can ask, at the last moment
+      # the answer is still free: a failure here leaves a tag with no upload
       # behind it, where a failure after the first `cargo publish` leaves a
       # crates.io version that can never be replaced. Ahead of the token mint
-      # below, because packaging seven crates takes minutes and a Trusted
-      # Publishing token expires 30 of them after it is issued.
+      # because packaging seven crates takes minutes and a Trusted Publishing
+      # token expires 30 minutes after issue.
       #
       # `cargo package` (verifying, unlike the `--no-verify` publish below)
       # builds every crate from its own archive, so a file the build needs but

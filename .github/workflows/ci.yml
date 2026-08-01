@@ -2,10 +2,9 @@ name: CI
 
 on:
   pull_request:
-  # main only. A branch push used to fire this too, so a PR branch ran the
-  # whole suite twice for one commit; the PR event is the one with the merge
-  # result in it, so it wins. Tags cannot match `branches`, so release tags
-  # stay out on their own.
+  # main only: the PR event already carries the merge result, so a branch push
+  # would run the whole suite twice for one commit. Tags cannot match
+  # `branches`, so release tags stay out on their own.
   push:
     branches: [main]
   # On demand, for re-running the suite against a branch without a new push.
@@ -27,22 +26,19 @@ env:
   CARGO_PROFILE_TEST_DEBUG: 0
 
 # One job per shipped surface: the Rust workspace, the WASM bundle, the Python
-# wheel. Two rules keep it at three.
+# wheel.
 #
-# A gate whose verdict matters only at the tag belongs in release.yml. Packaging
+# A gate whose verdict matters only at the tag belongs in release.yml: packaging
 # each crate from its own archive and the license-text assert run in
-# `publish-crates` immediately before the upload: the last point a failure still
-# costs nothing, and the only point their answer is consulted.
+# `publish-crates`, the last point a failure still costs nothing.
 #
-# A gate that reads a file the diff rarely touches earns its runner elsewhere.
-# Dependabot alerts watch Cargo.lock continuously and for free, quiet weeks with
-# no PR included; RUSTSEC-2026-0194 and -0195 stay recorded in .cargo/audit.toml
-# with the condition that retires them, so a local `cargo audit` reads clean.
-# There is no `rust-version` to verify (Cargo.toml says why), so nothing here
-# stands up a second toolchain.
+# A gate reading a file the diff rarely touches earns its runner elsewhere.
+# Dependabot alerts watch Cargo.lock continuously, quiet weeks included;
+# .cargo/audit.toml records why RUSTSEC-2026-0194 and -0195 are accepted, so a
+# local `cargo audit` reads clean. No `rust-version` exists to verify.
 #
-# Setup is what makes a job expensive: toolchain plus cache cost 10-25s before
-# a job does work of its own, so work that can share a runner does.
+# Toolchain and cache cost 10-25s before a job does work of its own, so work
+# that can share a runner shares one.
 
 jobs:
   test:
@@ -78,11 +74,10 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
 
-      # Clippy is intentionally NOT gated. A clippy gate was tried (a11caa45),
-      # the tree made clippy-clean, then the gate removed (68c3751a) as not
-      # worth the CI time; `cargo doc -Dwarnings` is the standing lint gate. Do
-      # not re-add a "make clippy clean" pass expecting CI to enforce it,
-      # record the policy change here first if that changes.
+      # Clippy is not gated: `cargo doc -Dwarnings` is the standing lint gate. A
+      # clippy gate (a11caa45) bought a clippy-clean tree for more CI time than
+      # it was worth (68c3751a). Do not re-add a "make clippy clean" pass
+      # expecting CI to enforce it; record the policy change here first.
       #
       # `--workspace`, not a bare `cargo doc`: bare walks default-members, and
       # a crate outside it is never linted, the blind spot that let two broken
