@@ -281,7 +281,7 @@ struct TableAcc {
     /// url is dropped. Mirrors the top-level `image_depth` interception.
     img_depth: usize,
     /// Whether any cell dropped an image's url, the island is then minted
-    /// [`Loss::DEGRADED`], not `Lossless`: the markdown/Typst projection carries
+    /// [`Loss::DEGRADED`], not `LOSSLESS`: the markdown/Typst projection carries
     /// the alt text but not the image.
     degraded: bool,
 }

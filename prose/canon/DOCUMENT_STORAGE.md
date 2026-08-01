@@ -211,8 +211,8 @@ Three rules bound the openness:
   (`Invariant::ReservedUnknownTag` / `ReservedUnknownLineKind` /
   `ReservedUnknownContainer`) for an in-process Rust construction. The rule is
   the three carrier axes' alone, and the `Unknown` arm is what makes it
-  necessary: a view axis has one value per wire string, so a built-in's name
-  simply *is* that built-in, with no second spelling to collide with it. The wire
+  necessary: a view axis has one value per wire string, so a built-in's name *is*
+  that built-in, with no second spelling to collide with it. The wire
   reaches that check on neither block axis nor the mark axis: a decoder resolves
   the built-in name *before* the `Unknown` fallthrough, so `{"kind": "para",
   "attrs": {…}}` decodes to `Para` and the attrs are dropped unread. The two

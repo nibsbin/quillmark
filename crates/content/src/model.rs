@@ -232,30 +232,37 @@ pub struct Island {
 /// is carried verbatim, so a reader that merely opens a document does not move
 /// its content hash (`DOCUMENT_STORAGE.md` § Byte-stability).
 ///
-/// One value per wire string, so the encoding is injective and the
-/// reserved-name rule the payload-carrying axes need
-/// ([`Invariant::ReservedUnknownTag`] and its two siblings) has nothing to bite
-/// on here: there is no second spelling of `"lossless"` to collide with the
-/// first. Read fidelity through [`Loss::fidelity`], never by comparing against
-/// [`Loss::LOSSLESS`]: an unrecognized class degrades to
+/// One value per wire string, so the encoding is injective: a built-in's name
+/// spells that built-in and nothing else, and the reserved-name rule the
+/// payload-carrying axes need ([`Invariant::ReservedUnknownTag`] and its two
+/// siblings) has nothing to guard here.
+///
+/// Read fidelity through [`Loss::fidelity`], never by comparing against
+/// [`Loss::LOSSLESS`]: an uninterpretable class degrades to
 /// [`Fidelity::Unrepresentable`], so nothing is claimed to carry faithfully on
-/// the strength of a name this build cannot interpret.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// the strength of a name this build cannot read.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Loss(Cow<'static, str>);
 
 impl Loss {
     /// Markdown carries it faithfully (round-trips identically).
-    pub const LOSSLESS: Loss = Loss(Cow::Borrowed("lossless"));
+    pub const LOSSLESS: Loss = Loss(Cow::Borrowed(Fidelity::Lossless.as_str()));
     /// Markdown carries an approximation (round-trips visibly, not identically).
-    pub const DEGRADED: Loss = Loss(Cow::Borrowed("degraded"));
+    pub const DEGRADED: Loss = Loss(Cow::Borrowed(Fidelity::Degraded.as_str()));
     /// No markdown encoding: what an island type with no projection carries.
-    pub const UNREPRESENTABLE: Loss = Loss(Cow::Borrowed("unrepresentable"));
+    pub const UNREPRESENTABLE: Loss = Loss(Cow::Borrowed(Fidelity::Unrepresentable.as_str()));
 
-    /// Wrap a wire class. Every string is a class, including one this build
-    /// cannot interpret; [`Loss::fidelity`] is where that is resolved. Equality
-    /// is by class name, so `Loss::new("lossless") == Loss::LOSSLESS`.
-    pub fn new(class: impl Into<String>) -> Loss {
-        Loss(Cow::Owned(class.into()))
+    /// Wrap a wire class. Every string is a class, uninterpretable ones included;
+    /// [`Loss::fidelity`] is where that is resolved.
+    ///
+    /// An interpretable class borrows its `'static` spelling, so decoding an
+    /// island allocates only for the uninterpretable. Equality is by name either
+    /// way, so `Loss::new("lossless") == Loss::LOSSLESS`.
+    pub fn new(class: &str) -> Loss {
+        match Fidelity::parse(class) {
+            Some(f) => Loss(Cow::Borrowed(f.as_str())),
+            None => Loss(Cow::Owned(class.to_string())),
+        }
     }
 
     /// The wire discriminator, and the canonical-form bytes.
@@ -263,18 +270,14 @@ impl Loss {
         &self.0
     }
 
-    /// The fidelity this class describes, with a class this build cannot
-    /// interpret degraded to the safe end.
+    /// The fidelity this class describes, with an uninterpretable class degraded
+    /// to the safe end.
     ///
     /// Carrying the raw class preserves the byte round-trip. Reading it through
     /// here keeps that carriage from being mistaken for a claim about the
     /// projection.
     pub fn fidelity(&self) -> Fidelity {
-        match self.as_str() {
-            "lossless" => Fidelity::Lossless,
-            "degraded" => Fidelity::Degraded,
-            _ => Fidelity::Unrepresentable,
-        }
+        Fidelity::parse(self.as_str()).unwrap_or(Fidelity::Unrepresentable)
     }
 }
 
@@ -282,9 +285,9 @@ impl Loss {
 /// over [`Loss`], and what a consumer switches on.
 ///
 /// The [`KnownIslandType`](crate::island::KnownIslandType) twin, one axis over,
-/// and exhaustive for the same reason: a consumer that ladders on fidelity has
-/// no safe fallthrough for a rung it does not know, so a new rung is a major
-/// bump rather than a silent gap.
+/// and exhaustive for the same reason: a consumer laddering on fidelity has no
+/// safe fallthrough for a rung it does not know, so a new rung is a major bump
+/// rather than a silent gap.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Fidelity {
     /// Round-trips identically.
@@ -305,14 +308,21 @@ impl Fidelity {
         Fidelity::Unrepresentable,
     ];
 
-    /// The class naming this level: `l.class().fidelity() == l` for every level,
-    /// and the three classes this build interprets are exactly `ALL`'s images.
-    pub fn class(self) -> Loss {
+    /// The wire class naming this level: the one place a class is spelled, which
+    /// [`Loss`]'s consts and [`Fidelity::parse`] both read.
+    pub const fn as_str(self) -> &'static str {
         match self {
-            Fidelity::Lossless => Loss::LOSSLESS,
-            Fidelity::Degraded => Loss::DEGRADED,
-            Fidelity::Unrepresentable => Loss::UNREPRESENTABLE,
+            Self::Lossless => "lossless",
+            Self::Degraded => "degraded",
+            Self::Unrepresentable => "unrepresentable",
         }
+    }
+
+    /// Parse a wire class into the closed view. `None` is the open-set escape
+    /// hatch (an uninterpretable class), which [`Loss::fidelity`] reads as
+    /// [`Unrepresentable`](Fidelity::Unrepresentable).
+    pub fn parse(class: &str) -> Option<Fidelity> {
+        Self::ALL.iter().copied().find(|f| f.as_str() == class)
     }
 }
 

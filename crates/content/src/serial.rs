@@ -1186,11 +1186,10 @@ mod tests {
         assert_eq!(rt.to_canonical_json(), json);
     }
 
-    /// The class is the stored value, so there is one `Loss` per wire string and
-    /// no second spelling of a class this build interprets. What the block axes
-    /// need `Invariant::ReservedUnknownTag` and its siblings for is unreachable
-    /// here: the value a caller hand-builds from a built-in's name **is** that
-    /// built-in, and survives the round trip as itself.
+    /// The class is the stored value, so a built-in's name has one spelling and
+    /// the reserved-name rule the block axes need has nothing to guard: what a
+    /// caller hand-builds from that name **is** the built-in, and survives the
+    /// round trip as itself.
     #[test]
     fn a_built_in_class_name_has_one_spelling() {
         assert_eq!(Loss::new("lossless"), Loss::LOSSLESS);
@@ -1218,7 +1217,7 @@ mod tests {
     #[test]
     fn every_fidelity_level_round_trips_through_its_class() {
         for &f in Fidelity::ALL {
-            assert_eq!(f.class().fidelity(), f);
+            assert_eq!(Loss::new(f.as_str()).fidelity(), f);
         }
     }
 
