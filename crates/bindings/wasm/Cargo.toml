@@ -2,7 +2,6 @@
 name = "quillmark-wasm"
 version.workspace = true
 edition.workspace = true
-rust-version.workspace = true
 description = "WebAssembly bindings for Quillmark, a schema-driven document engine"
 license.workspace = true
 repository = "https://github.com/borb-sh/quillmark"

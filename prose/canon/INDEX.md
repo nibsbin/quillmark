@@ -36,5 +36,4 @@ page and its internals are rustdoc.
 
 ## Infrastructure
 
-- **[CI_CD.md](CI_CD.md)** - CI/CD workflows
 - **[COMPATIBILITY.md](COMPATIBILITY.md)** - What the published crates promise, and the `#[non_exhaustive]` rules behind it

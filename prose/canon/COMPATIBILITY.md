@@ -1,7 +1,7 @@
 # Crate API Compatibility
 
 > **Implementation**: `crates/core/src`, `.github/workflows`
-> **Related**: [CI_CD.md](CI_CD.md), [VERSIONING.md](VERSIONING.md)
+> **Related**: [VERSIONING.md](VERSIONING.md)
 
 ## TL;DR
 
