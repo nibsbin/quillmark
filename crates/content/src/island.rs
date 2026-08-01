@@ -87,8 +87,8 @@ impl KnownIslandType {
     /// table cell dropping an inline image's url) but never above.
     pub fn default_loss(self) -> Loss {
         match self {
-            Self::Table => Loss::Lossless,
-            Self::Image => Loss::Lossless,
+            Self::Table => Loss::LOSSLESS,
+            Self::Image => Loss::LOSSLESS,
         }
     }
 

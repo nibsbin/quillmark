@@ -59,10 +59,10 @@ use crate::model::{Container, Island, LineKind, MarkKind, Content, ISLAND_SLOT};
 /// decides whether a projection exists at all.
 ///
 /// Keeping the two apart is what makes a decode-time degrade safe. A known type
-/// a future writer stamped with a loss class this build lacks arrives as
-/// `Loss::Unknown` (carried verbatim, reading as `Unrepresentable` through
-/// `Loss::fidelity`) and still emits its table: the conservative reading
-/// describes the value, it does not suppress it.
+/// a future writer stamped with a loss class this build lacks keeps that class
+/// verbatim (reading as `Fidelity::Unrepresentable` through `Loss::fidelity`)
+/// and still emits its table: the conservative reading describes the value, it
+/// does not suppress it.
 pub fn to_markdown(rt: &Content) -> String {
     // Per-line char ranges, so global marks can be clipped to a line.
     let segments = line_segments(rt);
@@ -1165,7 +1165,7 @@ mod tests {
                 id: String::new(),
                 island_type: "image".into(),
                 props: serde_json::Value::Null,
-                loss: Loss::Unrepresentable,
+                loss: Loss::UNREPRESENTABLE,
             }],
         };
         rt.normalize();

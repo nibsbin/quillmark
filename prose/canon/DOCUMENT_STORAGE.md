@@ -139,26 +139,33 @@ The envelope's version-and-reject discipline covers the document's **shape**:
 the schema tag, the DTO tree, the keys a `body` object carries. It does *not*
 cover the content's **vocabularies**. Every discriminator inside a `body` is an
 open set: a mark `type`, an island `type`, a line `kind`, a container name, and
-an island's `loss` class this build does not recognize each decode to an opaque
-`Unknown` carrying the tag plus its `attrs` (`props` for an island), round-trip
-byte-identically, and project as their nearest safe neighbor.
+an island's `loss` class this build does not recognize each round-trip
+byte-identically and project as their nearest safe neighbor.
 
-| Axis | Unknown value projects as |
-|---|---|
-| Mark `type` | no delimiters (the text renders bare) |
-| Island `type` | a placeholder comment; the props survive in storage |
-| Line `kind` | a paragraph |
-| Container | transparent: its lines render at the enclosing level |
-| Island `loss` | `Unrepresentable`, via `Loss::fidelity`: never a claim of fidelity on a name this build cannot read |
+**Two mechanisms, split by payload.** A block axis carries one, so its built-ins
+decode eagerly into typed fields (`LineKind::Heading { level }`) and an
+unrecognized member needs a sibling `Unknown` arm to hold its `attrs`. The two
+island axes carry none, so the wire string *is* the stored value and the closed
+set is a **view** over it (`KnownIslandType::parse`, `Loss::fidelity`). The
+split decides which axes need the reserved-name rule below: a carrier axis has
+two spellings of a built-in's name and must reject one, a view axis has one.
+
+| Axis | Carrier | Unknown value projects as |
+|---|---|---|
+| Mark `type` | `Unknown { tag, attrs }` | no delimiters (the text renders bare) |
+| Line `kind` | `Unknown { tag, attrs }` | a paragraph |
+| Container | `Unknown { tag, attrs }` | transparent: its lines render at the enclosing level |
+| Island `type` | the `String` itself | a placeholder comment; the props survive in storage |
+| Island `loss` | the `String` itself | `Fidelity::Unrepresentable`, via `Loss::fidelity`: never a claim of fidelity on a class this build cannot read |
 
 The consequence, and the point: **adding a construct to any of these
 vocabularies is not a schema-version event.** An older reader degrades a future
 callout to a plain paragraph rather than refusing the document, and a reader
 that does understand it sees it whole, because the tag and attrs round-tripped
-untouched. The rule is the same on all five axes: the block axes are open on the
-mark axis' terms, not one step behind it, and `loss` carries its raw tag rather
-than rewriting it: a reader that merely opens a document must not move its
-content hash (§ Byte-stability).
+untouched. Openness is the same on all five axes: the block axes are open on the
+mark axis' terms, not one step behind it, and both island axes carry their raw
+string rather than rewriting it: a reader that merely opens a document must not
+move its content hash (§ Byte-stability).
 
 Unknown *keys* survive in designated carriers only, and the boundary is worth
 stating because it is not the discriminator boundary:
@@ -202,7 +209,10 @@ Three rules bound the openness:
   (`heading`, `quote`, `link`, …): it would serialize as the built-in and parse
   back as one, silently dropping its attrs. `Content::validate` rejects this
   (`Invariant::ReservedUnknownTag` / `ReservedUnknownLineKind` /
-  `ReservedUnknownContainer`) for an in-process Rust construction. The wire
+  `ReservedUnknownContainer`) for an in-process Rust construction. The rule is
+  the three carrier axes' alone, and the `Unknown` arm is what makes it
+  necessary: a view axis has one value per wire string, so a built-in's name
+  simply *is* that built-in, with no second spelling to collide with it. The wire
   reaches that check on neither block axis nor the mark axis: a decoder resolves
   the built-in name *before* the `Unknown` fallthrough, so `{"kind": "para",
   "attrs": {…}}` decodes to `Para` and the attrs are dropped unread. The two

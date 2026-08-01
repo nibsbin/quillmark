@@ -283,12 +283,14 @@ export interface ImageProps {
  * `ContentMark`, the open `type` arm means a discriminant check does not itself
  * narrow `props`: read `props` as the matching shape behind the `isTableIsland` /
  * `isImageIsland` guards (from `@quillmark/wasm/runtime`), which narrow it. */
+/** How faithfully the markdown projection can carry an island. Open like an
+ * island `type`: a class this build does not know round-trips verbatim, and
+ * reads as `unrepresentable`. */
+export type ContentLossClass = "lossless" | "degraded" | "unrepresentable" | (string & {});
+
 export type ContentIsland = {
     id: string;
-    /** How faithfully the markdown projection can carry this island. Open like
-     * `type`: a class this build does not know round-trips verbatim, and reads
-     * as `unrepresentable`. */
-    loss: "lossless" | "degraded" | "unrepresentable" | (string & {});
+    loss: ContentLossClass;
 } & (
     | { type: "table"; props: TableProps }
     | { type: "image"; props: ImageProps }

@@ -337,7 +337,7 @@ proptest! {
                 id: "isl-0".into(),
                 island_type: "image".into(),
                 props: json!({ "alt": alt, "url": img_url }),
-                loss: Loss::Lossless,
+                loss: Loss::LOSSLESS,
             }],
         };
         rt.normalize();
@@ -632,7 +632,7 @@ fn table_content(aligns: Vec<&str>, header: Vec<Value>, rows: Vec<Vec<Value>>) -
             id: "isl-0".into(),
             island_type: "table".into(),
             props: json!({ "aligns": aligns, "header": header, "rows": rows }),
-            loss: Loss::Lossless,
+            loss: Loss::LOSSLESS,
         }],
     }
 }

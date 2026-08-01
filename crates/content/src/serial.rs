@@ -882,7 +882,7 @@ fn island_to_value(island: &Island) -> Value {
     m.insert("id".into(), Value::String(island.id.clone()));
     m.insert("type".into(), Value::String(island.island_type.clone()));
     m.insert("props".into(), island.props.clone());
-    m.insert("loss".into(), loss_to_str(&island.loss).into());
+    m.insert("loss".into(), island.loss.as_str().into());
     Value::Object(m)
 }
 
@@ -900,37 +900,21 @@ fn island_from_value(v: &Value) -> Result<Island, ParseError> {
             .ok_or(ParseError::Shape("island type"))?
             .to_string(),
         props: bag_from_wire(o, "props", "island props")?,
-        loss: loss_from_str(o.get("loss").and_then(Value::as_str).unwrap_or("lossless")),
+        // The class is carried whether or not this build interprets it, and
+        // reads through `Loss::fidelity` at the *safe* end: never claim a class
+        // the reader cannot interpret "carries faithfully". A missing key is the
+        // faithful class, which is what an island with no loss recorded means.
+        loss: o
+            .get("loss")
+            .and_then(Value::as_str)
+            .map_or(Loss::LOSSLESS, Loss::new),
     })
-}
-
-fn loss_to_str(loss: &Loss) -> &str {
-    match loss {
-        Loss::Lossless => "lossless",
-        Loss::Degraded => "degraded",
-        Loss::Unrepresentable => "unrepresentable",
-        // Verbatim, so a class this build lacks survives a reader that merely
-        // opened the document.
-        Loss::Unknown(raw) => raw,
-    }
-}
-
-fn loss_from_str(s: &str) -> Loss {
-    match s {
-        "lossless" => Loss::Lossless,
-        "degraded" => Loss::Degraded,
-        "unrepresentable" => Loss::Unrepresentable,
-        // Unknown/future loss class is carried, and reads through
-        // `Loss::fidelity` at the *safe* end: never claim a value the reader
-        // can't interpret "carries faithfully".
-        other => Loss::Unknown(other.to_string()),
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Line, LineKind};
+    use crate::model::{Fidelity, Line, LineKind};
 
     fn sample() -> Content {
         Content {
@@ -1136,7 +1120,7 @@ mod tests {
             id: "i1".into(),
             island_type: "table".into(),
             props: serde_json::json!({"b": 1, "a": 2}),
-            loss: Loss::Lossless,
+            loss: Loss::LOSSLESS,
         }];
         let mut two = one.clone();
         two.islands[0].props = serde_json::json!({"a": 2, "b": 1}); // keys reversed
@@ -1186,8 +1170,8 @@ mod tests {
         ));
     }
 
-    /// `loss` is the fifth open vocabulary, on the terms the four
-    /// below use. A class this build lacks is **carried**, not rewritten, so a
+    /// `loss` is an open vocabulary on [`Island::island_type`]'s terms, not the
+    /// block axes'. A class this build lacks is **carried**, not rewritten, so a
     /// reader that merely opens the document neither destroys the class nor
     /// moves the content hash. Reading it degrades to the safe end.
     #[test]
@@ -1197,9 +1181,45 @@ mod tests {
             r#""lines":[{"containers":[],"kind":"island"}],"marks":[],"text":"￼"}"#
         );
         let rt = Content::from_canonical_json(json).unwrap();
-        assert_eq!(rt.islands[0].loss, Loss::Unknown("partial".into()));
-        assert_eq!(rt.islands[0].loss.fidelity(), Loss::Unrepresentable);
+        assert_eq!(rt.islands[0].loss, Loss::new("partial"));
+        assert_eq!(rt.islands[0].loss.fidelity(), Fidelity::Unrepresentable);
         assert_eq!(rt.to_canonical_json(), json);
+    }
+
+    /// The class is the stored value, so there is one `Loss` per wire string and
+    /// no second spelling of a class this build interprets. What the block axes
+    /// need `Invariant::ReservedUnknownTag` and its siblings for is unreachable
+    /// here: the value a caller hand-builds from a built-in's name **is** that
+    /// built-in, and survives the round trip as itself.
+    #[test]
+    fn a_built_in_class_name_has_one_spelling() {
+        assert_eq!(Loss::new("lossless"), Loss::LOSSLESS);
+        let mut rt = Content::empty();
+        rt.text = "\u{FFFC}".into();
+        rt.lines = vec![Line {
+            kind: LineKind::Island,
+            containers: vec![],
+            continues: false,
+        }];
+        rt.islands = vec![Island {
+            id: "i1".into(),
+            island_type: "widget".into(),
+            props: serde_json::json!({}),
+            loss: Loss::new("lossless"),
+        }];
+        assert_eq!(rt.validate(), Ok(()));
+        let back = Content::from_canonical_json(&rt.to_canonical_json()).unwrap();
+        assert_eq!(back.islands[0].loss, rt.islands[0].loss);
+        assert_eq!(back.islands[0].loss.fidelity(), Fidelity::Lossless);
+    }
+
+    /// Every class `Fidelity` names round-trips to its own level, so the closed
+    /// view and the wire spellings cannot drift apart.
+    #[test]
+    fn every_fidelity_level_round_trips_through_its_class() {
+        for &f in Fidelity::ALL {
+            assert_eq!(f.class().fidelity(), f);
+        }
     }
 
     /// The block vocabulary is open on the mark axis' terms. A

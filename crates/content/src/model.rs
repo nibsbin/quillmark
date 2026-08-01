@@ -11,6 +11,7 @@
 
 use crate::normalize::is_bidi_char;
 use serde_json::Value as JsonValue;
+use std::borrow::Cow;
 
 /// A position in a [`Content`], counted in Unicode scalar values (USV): never
 /// bytes, never UTF-16 units. One astral char is 1 USV / 4 UTF-8 bytes / 2
@@ -225,42 +226,92 @@ pub struct Island {
 /// warned that a form field silently dropped a table). It is not a
 /// switch: [`crate::export::to_markdown`] dispatches on
 /// [`Island::island_type`], never on this.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum Loss {
-    /// Markdown carries it faithfully (round-trips identically).
-    Lossless,
-    /// Markdown carries an approximation (round-trips visibly, not identically).
-    Degraded,
-    /// No markdown encoding: what an island type with no projection carries.
-    Unrepresentable,
-    /// A class a future writer stamped that this build lacks, carried verbatim.
-    ///
-    /// `loss` is open on the terms the other four vocabularies use: mark
-    /// `type`, line `kind`, container, island `type` all round-trip an
-    /// unrecognized member opaque. Carrying the raw tag rather than rewriting it
-    /// is what keeps a reader that merely opens a document from moving that
-    /// document's content hash (`DOCUMENT_STORAGE.md` § Byte-stability).
-    ///
-    /// Read fidelity through [`Loss::fidelity`], never by matching this arm: an
-    /// unrecognized class degrades to [`Unrepresentable`](Loss::Unrepresentable),
-    /// so nothing is claimed to carry faithfully on the strength of a name this
-    /// build cannot interpret.
-    Unknown(String),
-}
+///
+/// Open on [`Island::island_type`]'s terms: the wire string *is* the stored
+/// value, and [`Fidelity`] is the closed view over it. A class this build lacks
+/// is carried verbatim, so a reader that merely opens a document does not move
+/// its content hash (`DOCUMENT_STORAGE.md` § Byte-stability).
+///
+/// One value per wire string, so the encoding is injective and the
+/// reserved-name rule the payload-carrying axes need
+/// ([`Invariant::ReservedUnknownTag`] and its two siblings) has nothing to bite
+/// on here: there is no second spelling of `"lossless"` to collide with the
+/// first. Read fidelity through [`Loss::fidelity`], never by comparing against
+/// [`Loss::LOSSLESS`]: an unrecognized class degrades to
+/// [`Fidelity::Unrepresentable`], so nothing is claimed to carry faithfully on
+/// the strength of a name this build cannot interpret.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Loss(Cow<'static, str>);
 
 impl Loss {
-    /// The fidelity this class describes, with an unrecognized class degraded to
-    /// the safe end. Never returns [`Unknown`](Loss::Unknown).
+    /// Markdown carries it faithfully (round-trips identically).
+    pub const LOSSLESS: Loss = Loss(Cow::Borrowed("lossless"));
+    /// Markdown carries an approximation (round-trips visibly, not identically).
+    pub const DEGRADED: Loss = Loss(Cow::Borrowed("degraded"));
+    /// No markdown encoding: what an island type with no projection carries.
+    pub const UNREPRESENTABLE: Loss = Loss(Cow::Borrowed("unrepresentable"));
+
+    /// Wrap a wire class. Every string is a class, including one this build
+    /// cannot interpret; [`Loss::fidelity`] is where that is resolved. Equality
+    /// is by class name, so `Loss::new("lossless") == Loss::LOSSLESS`.
+    pub fn new(class: impl Into<String>) -> Loss {
+        Loss(Cow::Owned(class.into()))
+    }
+
+    /// The wire discriminator, and the canonical-form bytes.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// The fidelity this class describes, with a class this build cannot
+    /// interpret degraded to the safe end.
     ///
-    /// Carrying the raw tag preserves the byte round-trip. Reading it through
+    /// Carrying the raw class preserves the byte round-trip. Reading it through
     /// here keeps that carriage from being mistaken for a claim about the
     /// projection.
-    pub fn fidelity(&self) -> Loss {
+    pub fn fidelity(&self) -> Fidelity {
+        match self.as_str() {
+            "lossless" => Fidelity::Lossless,
+            "degraded" => Fidelity::Degraded,
+            _ => Fidelity::Unrepresentable,
+        }
+    }
+}
+
+/// How faithfully the markdown projection carries an island: the closed view
+/// over [`Loss`], and what a consumer switches on.
+///
+/// The [`KnownIslandType`](crate::island::KnownIslandType) twin, one axis over,
+/// and exhaustive for the same reason: a consumer that ladders on fidelity has
+/// no safe fallthrough for a rung it does not know, so a new rung is a major
+/// bump rather than a silent gap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Fidelity {
+    /// Round-trips identically.
+    Lossless,
+    /// Round-trips visibly, not identically.
+    Degraded,
+    /// No markdown encoding, and where an uninterpretable class lands.
+    Unrepresentable,
+}
+
+impl Fidelity {
+    /// Every level, faithful first. The one enumeration point, so a reader that
+    /// needs the closed set whole (the WASM surface's class union, say) asks
+    /// rather than re-spelling it.
+    pub const ALL: &'static [Fidelity] = &[
+        Fidelity::Lossless,
+        Fidelity::Degraded,
+        Fidelity::Unrepresentable,
+    ];
+
+    /// The class naming this level: `l.class().fidelity() == l` for every level,
+    /// and the three classes this build interprets are exactly `ALL`'s images.
+    pub fn class(self) -> Loss {
         match self {
-            Loss::Lossless => Loss::Lossless,
-            Loss::Degraded => Loss::Degraded,
-            Loss::Unrepresentable | Loss::Unknown(_) => Loss::Unrepresentable,
+            Fidelity::Lossless => Loss::LOSSLESS,
+            Fidelity::Degraded => Loss::DEGRADED,
+            Fidelity::Unrepresentable => Loss::UNREPRESENTABLE,
         }
     }
 }
@@ -1045,7 +1096,7 @@ mod tests {
             id: "isl-0".into(),
             island_type: "image".into(),
             props: serde_json::json!({"alt": "x", "url": "y.png"}),
-            loss: Loss::Lossless,
+            loss: Loss::LOSSLESS,
         }];
         assert_eq!(
             code.validate(),
@@ -1083,7 +1134,7 @@ mod tests {
             id: "isl-0".into(),
             island_type: "image".into(),
             props: serde_json::json!({"alt": "x", "url": "y.png"}),
-            loss: Loss::Lossless,
+            loss: Loss::LOSSLESS,
         }];
         rt.normalize();
         assert_eq!(rt.lines[0].kind, LineKind::Island);
@@ -1164,7 +1215,7 @@ mod tests {
             id: "i1".into(),
             island_type: "widget".into(),
             props: nested(crate::MAX_JSON_DEPTH + 1),
-            loss: Loss::Lossless,
+            loss: Loss::LOSSLESS,
         }];
         assert_eq!(rt.validate(), too_deep("island props"));
     }
@@ -1323,7 +1374,7 @@ mod tests {
                     "header": [{"text": "abcd", "marks": cell_marks}],
                     "rows": [],
                 }),
-                loss: Loss::Lossless,
+                loss: Loss::LOSSLESS,
             }];
             rt
         }
@@ -1393,7 +1444,7 @@ mod tests {
                 "header": [{"text": "ab", "marks": [{"start": 0, "end": 5, "type": "strong"}]}],
                 "rows": [],
             }),
-            loss: Loss::Lossless,
+            loss: Loss::LOSSLESS,
         }];
         assert_eq!(
             rt.validate(),
@@ -1419,7 +1470,7 @@ mod tests {
             id: "i".into(),
             island_type: "table".into(),
             props,
-            loss: Loss::Lossless,
+            loss: Loss::LOSSLESS,
         }];
         rt
     }
@@ -1556,7 +1607,7 @@ mod tests {
             id: id.into(),
             island_type: "table".into(),
             props: serde_json::json!({ "header": [cell("h")], "aligns": ["none"], "rows": [] }),
-            loss: Loss::Lossless,
+            loss: Loss::LOSSLESS,
         };
         rt.islands = vec![table("dup"), table("dup")];
         assert_eq!(
