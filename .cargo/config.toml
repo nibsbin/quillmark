@@ -1,6 +1,6 @@
 [alias]
-# The `test` job's doc gate, minus `--locked`. A hand-listed subset drifts from
-# what CI documents, which is the whole workspace.
+# The lint job's gate, minus `--locked`. A hand-listed subset drifts from what
+# CI documents, which is the whole workspace.
 doc-workspace = "doc --no-deps --workspace"
 
 [target.wasm32-unknown-unknown]

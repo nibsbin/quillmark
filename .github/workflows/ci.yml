@@ -25,8 +25,8 @@ env:
   CARGO_PROFILE_DEV_DEBUG: 0
   CARGO_PROFILE_TEST_DEBUG: 0
 
-# One job per shipped surface: the Rust workspace, the WASM bundle, the Python
-# wheel.
+# Four jobs: the lint gate, then one per shipped surface (the Rust workspace,
+# the WASM bundle, the Python wheel).
 #
 # A gate whose verdict matters only at the tag belongs in release.yml: packaging
 # each crate from its own archive and the license-text assert run in
@@ -37,12 +37,9 @@ env:
 # `cargo audit` reports RUSTSEC-2026-0194 and -0195, both reachable only through
 # typst's `<0.41` quick-xml pin and neither actionable here. No `rust-version`
 # exists to verify.
-#
-# Toolchain and cache cost 10-25s before a job does work of its own, so work
-# that can share a runner shares one.
 
 jobs:
-  test:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -55,8 +52,9 @@ jobs:
       # Guards scripts/strip-seed-comment.sh, which release.yml relies on to
       # keep the release-prepare coverage comment out of published Release
       # notes, and release-prepare.yml to keep it out of a freshly seeded
-      # CHANGELOG.md section. Runs in RUNNER_TEMP so the fixtures never dirty
-      # the checkout.
+      # CHANGELOG.md section. Rides here rather than in its own job: the
+      # assertions take 0s, so a runner for them is pure overhead. Runs in
+      # RUNNER_TEMP so the fixtures never dirty the checkout.
       - name: Check strip-seed-comment.sh strips the comment, and is a no-op without one
         run: |
           cd "$RUNNER_TEMP"
@@ -88,12 +86,21 @@ jobs:
       # cdylib included (it carries an rlib target too), so this needs no
       # `--exclude` and a crate added outside default-members is covered the
       # day it lands.
-      #
-      # Ahead of the tests because it fails in 14s where they take 60.
       - name: Build docs
         env:
           RUSTDOCFLAGS: -Dwarnings
         run: cargo doc --no-deps --locked --workspace
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
 
       # `cargo test` builds each cdylib's rlib for the harness and stops there,
       # so nothing links `quillmark_wasm`, `_quillmark`, or the `quillmark` bin
