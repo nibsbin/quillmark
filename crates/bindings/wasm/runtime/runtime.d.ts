@@ -696,8 +696,8 @@ export declare class DocumentWriter {
 	 * A {@link CardWriter} for the composable card at `index`. Index validity is
 	 * checked lazily at commit time, so an out-of-range index does not throw here.
 	 * The cursor is ephemeral: a `removeCard`/`addCard` between binding and writing
-	 * silently retargets it; for durable addressing stamp `$id` and re-resolve at
-	 * write.
+	 * silently retargets it; re-resolve the index at write time when cards may
+	 * move.
 	 */
 	card(index: number): CardWriter;
 }

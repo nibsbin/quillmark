@@ -2108,78 +2108,33 @@ fn payload_field_order_preserved_after_quill_removal() {
     );
 }
 
-// ── Card-id normalization (§ Card-id identity) ────────────────────────────────
+// ── `$id` is not a system key ────────────────────────────────────────────────
 
 #[test]
-fn parse_drops_duplicate_card_id_keeps_first_and_warns() {
-    let md = "~~~\n$quill: q@0.1\n~~~\n\n~~~\n$kind: note\n$id: dup\n~~~\n\n\
-              ~~~\n$kind: note\n$id: dup\n~~~\n\n~~~\n$kind: note\n$id: solo\n~~~\n";
-    let parsed = Document::parse(md).unwrap();
-    let doc = &parsed.document;
-    assert_eq!(
-        doc.cards()[0].id(),
-        Some("dup"),
-        "first occupant keeps the handle"
+fn card_id_is_rejected_as_an_unknown_system_key() {
+    // `$id` left the closed set: it is an unknown `$` key like any other, on a
+    // composable card and on the root alike.
+    let md = "~~~\n$quill: q@0.1\n~~~\n\n~~~\n$kind: note\n$id: a\n~~~\n";
+    let err = Document::parse(md).unwrap_err().to_string();
+    assert!(
+        err.contains("Unknown `$id`"),
+        "expected unknown-key parse error, got: {err}"
     );
-    assert_eq!(doc.cards()[1].id(), None, "later duplicate is dropped");
-    assert_eq!(doc.cards()[2].id(), Some("solo"), "unrelated ids untouched");
-    assert_eq!(doc.find_card("dup").map(|(i, _)| i), Some(0));
-    let dupes = parsed
-        .warnings
-        .iter()
-        .filter(|d| d.code.as_deref() == Some("parse::card_id_duplicate"))
-        .count();
-    assert_eq!(dupes, 1, "one dropped id, one warning");
 
-    // Repair is idempotent: one emit converges on a valid document that
-    // re-parses equal and warning-free.
-    let repaired = doc.to_markdown();
-    let again = Document::parse(&repaired).unwrap();
-    assert_eq!(again.document, *doc);
-    assert!(again
-        .warnings
-        .iter()
-        .all(|d| d.code.as_deref() != Some("parse::card_id_duplicate")));
+    let root = "~~~\n$quill: q@0.1\n$id: x\n~~~\n";
+    assert!(Document::parse(root)
+        .unwrap_err()
+        .to_string()
+        .contains("Unknown `$id`"));
 }
 
 #[test]
-fn parse_drops_empty_card_id_and_warns() {
-    let md = "~~~\n$quill: q@0.1\n~~~\n\n~~~\n$kind: note\n$id: \"\"\n~~~\n";
-    let parsed = Document::parse(md).unwrap();
-    assert_eq!(parsed.document.cards()[0].id(), None, "degenerate handle dropped");
-    assert!(parsed
-        .warnings
-        .iter()
-        .any(|d| d.code.as_deref() == Some("parse::card_id_empty")));
-}
-
-#[test]
-fn main_card_id_is_outside_the_handle_domain() {
-    // `main` is addressed structurally, never by id: its `$id` is preserved
-    // verbatim and takes no part in the composable-card uniqueness scope.
-    let md = "~~~\n$quill: q@0.1\n$id: x\n~~~\n\n~~~\n$kind: note\n$id: x\n~~~\n";
-    let parsed = Document::parse(md).unwrap();
-    assert_eq!(parsed.document.main().id(), Some("x"));
+fn a_user_field_named_id_is_untouched() {
+    // The reserved key is gone; the unsigiled `id` is an ordinary user field.
+    let md = "~~~\n$quill: q@0.1\n~~~\n\n~~~\n$kind: note\nid: a\n~~~\n";
+    let doc = Document::parse(md).unwrap().document;
     assert_eq!(
-        parsed.document.cards()[0].id(),
-        Some("x"),
-        "no collision against main"
+        doc.cards()[0].payload().get("id").map(|v| v.as_json().clone()),
+        Some(serde_json::json!("a"))
     );
-    assert!(parsed
-        .warnings
-        .iter()
-        .all(|d| d.code.as_deref() != Some("parse::card_id_duplicate")));
-}
-
-#[test]
-fn valid_card_ids_round_trip_markdown() {
-    let md = "~~~\n$quill: q@0.1\n~~~\n\n~~~\n$kind: note\n$id: a\n~~~\n\n\
-              ~~~\n$kind: note\n$id: b\n~~~\n";
-    let parsed = Document::parse(md).unwrap();
-    assert!(parsed.warnings.is_empty(), "valid ids parse clean");
-    let doc = parsed.document;
-    let again = Document::parse(&doc.to_markdown()).unwrap().document;
-    assert_eq!(again, doc);
-    assert_eq!(again.cards()[0].id(), Some("a"));
-    assert_eq!(again.cards()[1].id(), Some("b"));
 }

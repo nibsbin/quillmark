@@ -468,14 +468,6 @@ impl PyDocument {
         card_to_pydict(py, card)
     }
 
-    /// The index of the composable card whose `$id` equals `id`, or `None` when
-    /// none carries it. Resolves the durable card handle without a hand-rolled
-    /// scan over `cards`; `$id` is unique per document, so at most one card
-    /// matches. Mirrors WASM `doc.cardIndexById(id)`.
-    fn card_index_by_id(&self, id: &str) -> Option<usize> {
-        self.inner.find_card(id).map(|(index, _)| index)
-    }
-
     /// The main card's `$seed[kind]` overlay dict, or `None` when absent. The
     /// cheap read that feeds `quill.seed_card(kind, overlay)` without
     /// projecting the whole main card via `main` to fish out one key, and it
@@ -835,7 +827,7 @@ impl PyWriter {
     /// A `CardWriter` for the composable card at `index`. The index is checked
     /// lazily at the write, so this never raises. The cursor is ephemeral: a
     /// `remove_card`/`add_card` between binding and writing silently retargets
-    /// it; for durable addressing stamp `$id` and re-resolve at write time.
+    /// it; re-resolve the index at write time when cards may move.
     fn card(&self, py: Python<'_>, index: usize) -> PyCardWriter {
         PyCardWriter {
             quill: self.quill.clone_ref(py),
@@ -1297,7 +1289,6 @@ fn card_to_pydict<'py>(
     let d = PyDict::new(py);
     d.set_item("kind", &wire.kind)?;
     d.set_item("quill", wire.quill.as_deref())?;
-    d.set_item("id", wire.id.as_deref())?;
 
     let items = PyList::empty(py);
     for item in &wire.payload_items {

@@ -17,7 +17,7 @@
 //!
 //! ## Shape
 //!
-//! The `$` system entries are hoisted to named fields (`kind`, `quill`, `id`,
+//! The `$` system entries are hoisted to named fields (`kind`, `quill`,
 //! `ext`, `seed`); `payload_items` carries only user fields and comments, in order.
 //! Field/`$ext` *nested* comments are not represented here: they survive the
 //! Markdown and storage round-trips, not this editable projection.
@@ -114,9 +114,6 @@ pub struct CardWire {
     /// main card only. Omitted when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub quill: Option<String>,
-    /// The block's `$id`, if any. Omitted when absent.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub id: Option<String>,
     /// The block's opaque `$ext` map, if declared. Omitted when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ext: Option<JsonMap<String, JsonValue>>,
@@ -148,7 +145,6 @@ impl CardWire {
         Self {
             kind,
             quill: None,
-            id: None,
             ext: None,
             seed: None,
             payload_items: Vec::new(),
@@ -189,7 +185,6 @@ impl From<&Card> for CardWire {
         let mut wire = CardWire {
             kind: String::new(),
             quill: None,
-            id: None,
             ext: None,
             seed: None,
             payload_items: Vec::new(),
@@ -199,7 +194,6 @@ impl From<&Card> for CardWire {
             match item {
                 PayloadItem::Quill { reference } => wire.quill = Some(reference.to_string()),
                 PayloadItem::Kind { value } => wire.kind = value.clone(),
-                PayloadItem::Id { value } => wire.id = Some(value.clone()),
                 PayloadItem::Meta {
                     key: MetaKey::Ext,
                     value,
@@ -270,7 +264,7 @@ impl TryFrom<CardWire> for Card {
             .collect::<Result<Vec<_>, WireError>>()?;
 
         // Build the user fields/comments, then apply each `$` entry through its
-        // setter so the canonical `$quill < $kind < $id < $ext < $seed` ordering
+        // setter so the canonical `$quill < $kind < $ext < $seed` ordering
         // holds regardless of input order.
         let mut payload = Payload::from_items(items);
         if let Some(value) = wire.quill {
@@ -283,17 +277,14 @@ impl TryFrom<CardWire> for Card {
         // reference above. `$kind` validity is positional (`main` is right for
         // the root and reserved for a composable card) and a `CardWire` carries
         // no signal of which it is. So it belongs to `push_card`/`insert_card`,
-        // which know the position and the sibling `$id`s, and which report
-        // `edit::invalid_kind_name` / `edit::reserved_kind`.
+        // which know the position, and which report `edit::invalid_kind_name` /
+        // `edit::reserved_kind`.
         //
         // Checking the context-free half (the `[a-z_][a-z0-9_]*` grammar) here
         // would split one user-facing concept across two error types, and the
         // earlier `WireError` would shadow the routable `EditError` code.
         if !wire.kind.is_empty() {
             payload.set_kind(wire.kind);
-        }
-        if let Some(id) = wire.id {
-            payload.set_id(id);
         }
         let too_deep = |key: &str| {
             let key = key.to_string();
@@ -478,7 +469,6 @@ mod tests {
         let card = Card::try_from(CardWire {
             kind: "note".to_string(),
             quill: None,
-            id: None,
             ext: None,
             seed: None,
             payload_items: vec![PayloadItemWire::Field {
@@ -503,7 +493,6 @@ mod tests {
         let err = Card::try_from(CardWire {
             kind: String::new(),
             quill: Some("@nope".to_string()),
-            id: None,
             ext: None,
             seed: None,
             payload_items: Vec::new(),
@@ -521,7 +510,6 @@ mod tests {
         let card = Card::try_from(CardWire {
             kind: "BadKind".to_string(),
             quill: None,
-            id: None,
             ext: None,
             seed: None,
             payload_items: Vec::new(),

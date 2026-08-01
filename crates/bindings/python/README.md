@@ -159,7 +159,6 @@ doc.equals(other)
 doc.card_count
 doc.main; doc.cards; doc.body; doc.warnings      # total-read snapshots (dicts); body is a content dict
 doc.card(0)                                      # one card, same dict shape as main (out of range raises)
-doc.card_index_by_id("intro")                    # the durable $id handle → index, or None
 doc.seed_overlay("note")                         # one $seed[kind] overlay, or None
 doc.set_quill_ref("other@1.0")
 
