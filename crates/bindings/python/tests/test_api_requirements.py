@@ -212,13 +212,13 @@ def test_insert_card_invalid_kind():
 def test_remove_card_then_insert_card_round_trips_fields():
     """A card returned by remove_card feeds straight back into insert_card with
     its fields intact: the one-Card-shape contract. Exercises the explicit
-    quill/id/ext=None keys the dict carries against `deny_unknown_fields`."""
+    quill/ext=None keys the dict carries against `deny_unknown_fields`."""
     doc = Document.from_markdown(SIMPLE_MD)
     doc.insert_card(Document.make_card("note", {"author": "Alice"}, "Body"))
 
     removed = doc.remove_card(0)
     # The returned dict carries explicit None for the absent $ entries.
-    assert removed["quill"] is None and removed["id"] is None
+    assert removed["quill"] is None
     assert field(removed, "author") == "Alice"
 
     doc.insert_card(removed)  # must not raise (deny_unknown_fields accepts the shape)
@@ -330,15 +330,11 @@ def test_card_reads_one_card_without_projecting_the_rest():
         doc.card(2)
 
 
-def test_card_index_by_id_resolves_the_durable_handle():
-    """card_index_by_id resolves `$id` without a hand-rolled scan over `cards`;
-    total over the id axis: no such id reads back None."""
+def test_card_input_rejects_an_id_key():
+    """`id` is not a card key: the dict shape rejects it like any unknown."""
     doc = Document.from_markdown(SIMPLE_MD)
-    doc.insert_card({"kind": "note", "id": "first", "body": "A"})
-    doc.insert_card({"kind": "note", "id": "other", "body": "B"})
-    assert doc.card_index_by_id("first") == 0
-    assert doc.card_index_by_id("other") == 1
-    assert doc.card_index_by_id("missing") is None
+    with pytest.raises(Exception):
+        doc.insert_card({"kind": "note", "id": "first", "body": "A"})
 
 
 def test_seed_overlay_reads_one_kind_off_the_main_card():

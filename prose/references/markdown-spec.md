@@ -59,7 +59,6 @@ This is the primary document container body text.
 
 ~~~
 $kind: endorsement
-$id: rev-1
 from: "charlie"
 role: "reviewer"
 clearance: "alpha"
@@ -157,18 +156,17 @@ with the same payload.
 ### 3.3 System Metadata (`$`)
 
 A block's YAML payload may contain **`$`-prefixed reserved keys** that carry
-system metadata. The set is **closed**: only `$quill`, `$kind`, `$id`,
-`$ext`, and `$seed` are accepted. Any other `$`-prefixed key is a parse error. These
+system metadata. The set is **closed**: only `$quill`, `$kind`, `$ext`,
+and `$seed` are accepted. Any other `$`-prefixed key is a parse error. These
 keys are ordinary YAML: they are read by the same YAML parser that handles
 the rest of the payload, but they are **extracted** from the user field
 set after parsing; they are not part of the data model's field map (§3.4).
 
 In the typed model, the `$` entries live as typed variants of the
-unified payload-item list (`PayloadItem::Quill`, `PayloadItem::Kind`,
-`PayloadItem::Id`, and `PayloadItem::Meta` keyed by `MetaKey::Ext` /
-`MetaKey::Seed`), interleaved in
+unified payload-item list (`PayloadItem::Quill`, `PayloadItem::Kind`, and
+`PayloadItem::Meta` keyed by `MetaKey::Ext` / `MetaKey::Seed`), interleaved in
 source order with user fields and YAML comments. They are surfaced through typed
-accessors: `card.quill()`, `card.kind()`, `card.id()`, `card.ext()`,
+accessors: `card.quill()`, `card.kind()`, `card.ext()`,
 `card.seed()`: which return `Option<…>`. On a successfully parsed document the root
 card always returns `Some(_)` for both `quill()` and `kind()` (with
 `kind() == "main"`); composable cards return `None` for `quill()` and
@@ -188,13 +186,6 @@ author wrote the line.
   byte-equal); omitting it is also accepted and synthesised at parse time.
   A non-`main` `$kind` on the root is a parse error. No composable card may
   declare `$kind: main`.
-- **`$id: <value>`**, an opaque, optional identifier: the durable card
-  handle, carried through round-trip unchanged. Unique across a document's
-  composable cards: the parser keeps the first card carrying a given `$id`
-  and drops the entry from any later duplicate under a warning; an empty
-  `$id` (a degenerate handle) is dropped the same way. A `$id` on the root
-  block is outside this scope: the root is addressed by position, never by
-  id, and is preserved verbatim.
 - **`$ext: <mapping>`**: an opaque, optional **mapping** reserved for
   out-of-band extension data (UI editor state, agent annotations, …).
   Required to be a YAML mapping (object); scalars and sequences are
@@ -219,11 +210,13 @@ author wrote the line.
 - `$` metadata entries may appear at any position within the payload, and
   may be interleaved with data fields. The emitter preserves source order
   (see §9); newly constructed metadata that does not have a source-order
-  is emitted in the canonical key order `$quill`, `$kind`, `$id`, `$ext`, `$seed`.
+  is emitted in the canonical key order `$quill`, `$kind`, `$ext`, `$seed`.
 - A duplicate `$key` within a single block is a parse error (a YAML mapping
   cannot carry two entries under the same key).
-- An unknown `$key` (anything outside `{quill, kind, id, ext, seed}`) is a parse
-  error.
+- An unknown `$key` (anything outside `{quill, kind, ext, seed}`) is a parse
+  error. `$id` is not a reserved key: a block declaring one is rejected like any
+  other unknown `$key`. A consumer needing a per-card key of its own carries it
+  in `$ext` under its own namespace, uninterpreted and unguaranteed.
 - An invalid `$quill` reference is a parse error.
 - A `$`-prefixed key whose value type is wrong for the key (e.g. a sequence
   under `$quill`, a scalar under `$ext`) is a parse error.
@@ -482,7 +475,7 @@ alias and the `---`-fenced root alias (§3.2.1) both re-emit as bare `~~~`.
 round-trip.
 
 Programmatically constructed metadata that does not have a source-order
-emits in the canonical key order `$quill`, `$kind`, `$id`, `$ext`, `$seed`: the
+emits in the canonical key order `$quill`, `$kind`, `$ext`, `$seed`: the
 typed mutators (`set_quill` / `set_kind` / `set_id` / `set_ext` / `set_seed`)
 insert at these positions.
 

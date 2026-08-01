@@ -18,6 +18,7 @@ order; each states its own breaks in full.
 
 | Step | What changes |
 |---|---|
+| [0.99 → 1.0](0.99-to-1.0.md) | Card `$id` is removed: the reserved key, `find_card` / `set_card_id` / `remove_card_id`, the collision errors, and `cardIndexById` / `card_index_by_id` plus the projected `id` on both bindings. Per-card consumer keys move to `$ext` under a namespace you own, with no uniqueness guarantee. |
 | [0.98 → 0.99](0.98-to-0.99.md) | The Rust API opens ahead of 1.0.0: `#[non_exhaustive]` across the published crates, so an exhaustive `match` needs a `_` arm and a struct literal gives way to `new` plus `with_*` setters. `attrs` beside a built-in discriminator is rejected where a host authors it, instead of resolving to the built-in and dropping the payload in silence. Island `loss` opens; a handle from a second copy of `@quillmark/wasm` is refused. |
 | [0.97 → 0.98](0.97-to-0.98.md) | The block vocabulary opens — an unrecognized line kind or container round-trips opaque instead of failing the load. `OutputFormat::Txt` retires on every surface. |
 | [0.96 → 0.97](0.96-to-0.97.md) | The WASM transport read renames to `Document.getStored`. A card `$id` becomes unique per document and never empty. |

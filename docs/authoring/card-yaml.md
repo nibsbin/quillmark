@@ -27,7 +27,7 @@ A card-yaml block has three parts, in order:
    input as a non-canonical alias; it parses identically and re-emits as a bare
    `~~~`.
 2. **YAML payload**: a standard YAML mapping. The reserved keys `$quill`,
-   `$kind`, `$id`, `$ext`, and `$seed` carry system metadata (see below); every
+   `$kind`, `$ext`, and `$seed` carry system metadata (see below); every
    other key is a user-defined data field.
 3. **Closing fence**: a tilde run at least as long as the opener. The canonical opener and closer are both `~~~`; a longer opener (e.g. `~~~~`) requires an equally long closer.
 
@@ -60,10 +60,6 @@ on the block's typed metadata.
   `main` by position; `$kind: main` may be omitted or declared explicitly:
   any other value is a parse error. Every composable card must declare a kind
   matching `[a-z_][a-z0-9_]*` other than `main`.
-- **`$id: <value>`** is an opaque, optional identifier: the durable card
-  handle, carried through the round-trip. Unique per document: the first
-  card carrying a given `$id` keeps it, and a later duplicate (or an empty
-  `$id`) is dropped with a warning.
 - **`$ext: <mapping>`** is an opaque YAML mapping reserved for out-of-band
   extension data: UI editor state, agent annotations, anything bespoke to a
   consumer that should not reach the rendered output. Round-trips through
@@ -81,8 +77,9 @@ on the block's typed metadata.
 
 `$` metadata entries may appear anywhere in the block's payload (the
 canonical emission puts them first, in the order `$quill`, `$kind`,
-`$id`, `$ext`, `$seed`). Any other `$`-prefixed key is a parse error: the set
-is closed.
+`$ext`, `$seed`). Any other `$`-prefixed key is a parse error: the set
+is closed. `$id` is not among them: to carry a per-card key of your own, put it
+in `$ext` under a namespace you own.
 
 ### Version Selectors
 
@@ -245,10 +242,10 @@ Card kinds and their field schemas are declared in `Quill.yaml` under
 
 `toMarkdown` always emits the canonical block form: a bare `~~~`
 opener, the `$` metadata lines in the canonical order `$quill`, `$kind`,
-`$id`, `$ext`, `$seed`, the remaining data fields, and a `~~~` closer. The root
-block emits `$quill` and `$kind: main` plus any `$id` / `$ext` / `$seed` it
+`$ext`, `$seed`, the remaining data fields, and a `~~~` closer. The root
+block emits `$quill` and `$kind: main` plus any `$ext` / `$seed` it
 declared (`$seed` is root-only); composable cards emit `$kind: <kind>` plus
-any `$id` / `$ext` they declared. Fence markers,
+any `$ext` they declared. Fence markers,
 key ordering, and YAML quoting are normalised; `!must_fill` tags and YAML
 comments (own-line and inline trailing, including those adjacent to `$`
 lines) survive the round-trip.
