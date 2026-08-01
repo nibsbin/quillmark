@@ -111,10 +111,10 @@ jobs:
 
           [ -f CHANGELOG.md ] || printf '# Changelog\n\n' > CHANGELOG.md
 
-          # Defense in depth: a seed comment from a prior cycle should already
-          # be gone (release.yml strips it once that release publishes), but
-          # splicing a new section must never build on top of one that
-          # survived.
+          # A seed comment the last cycle's maintainer left in place is still on
+          # main: release.yml strips only the Release notes it derives, because
+          # main's ruleset admits no push outside a pull request. This is where
+          # it goes, so a new section never splices on top of one.
           ./scripts/strip-seed-comment.sh CHANGELOG.md
 
           # A curated "## Unreleased" section is the seed body: its entries

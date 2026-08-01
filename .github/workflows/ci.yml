@@ -37,9 +37,10 @@ jobs:
       - name: Check canon spine
         run: node scripts/check-canon.mjs
 
-      # Guards scripts/strip-seed-comment.sh, which release.yml and
-      # release-prepare.yml rely on to keep the release-prepare coverage comment
-      # out of published Release notes and merged CHANGELOG.md. Rides along here
+      # Guards scripts/strip-seed-comment.sh, which release.yml relies on to
+      # keep the release-prepare coverage comment out of published Release
+      # notes, and release-prepare.yml to keep it out of a freshly seeded
+      # CHANGELOG.md section. Rides along here
       # rather than in its own job: the assertions take 0s, so standing up a
       # runner for them was ~100% overhead. Runs in RUNNER_TEMP so the fixtures
       # never dirty the checkout.
