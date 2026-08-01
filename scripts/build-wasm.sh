@@ -165,11 +165,14 @@ fi
 if [ -f "CHANGELOG.md" ]; then
     cp CHANGELOG.md pkg/
 fi
-if [ -f "LICENSE-MIT" ]; then
-    cp LICENSE-MIT pkg/
-fi
-if [ -f "LICENSE-APACHE" ]; then
-    cp LICENSE-APACHE pkg/
+# The workspace ships one license, at LICENSE. Guarded, but the guard is not
+# the point: the file is the license grant the package.json `license` field
+# names, so a miss here publishes a package that grants nothing.
+if [ -f "LICENSE" ]; then
+    cp LICENSE pkg/
+else
+    echo "error: LICENSE not found; refusing to build an unlicensed package" >&2
+    exit 1
 fi
 
 # .gitignore for pkg directory
