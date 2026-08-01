@@ -483,7 +483,7 @@ impl Card {
     }
 
     /// Replace the card's opaque `$ext` map wholesale, inserting it at the
-    /// canonical position (after `$quill`/`$kind`/`$id`, before user fields)
+    /// canonical position (after `$quill`/`$kind`, before user fields)
     /// when none existed. Passing an empty map records an explicit `$ext: {}`.
     ///
     /// `$ext` carries out-of-band consumer state (editor renames, agent

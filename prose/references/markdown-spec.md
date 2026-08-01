@@ -476,7 +476,7 @@ round-trip.
 
 Programmatically constructed metadata that does not have a source-order
 emits in the canonical key order `$quill`, `$kind`, `$ext`, `$seed`: the
-typed mutators (`set_quill` / `set_kind` / `set_id` / `set_ext` / `set_seed`)
+typed mutators (`set_quill` / `set_kind` / `set_ext` / `set_seed`)
 insert at these positions.
 
 ### 9.1 Canonical Idempotence
