@@ -107,8 +107,8 @@ Form: **`# <type>[<format>]`**
   as `array<object>`.)
 - **Format slot** (optional, in `<…>` angle brackets): refines the type
   when the refinement carries information beyond the type name itself.
-  - `date<YYYY-MM-DD>`: a bare calendar date; `datetime<YYYY-MM-DDThh:mm[:ss]>`
-: an offset-less wall-clock datetime (no offset/space/fractional forms)
+  - `date<YYYY-MM-DD>`: a bare calendar date; `datetime<YYYY-MM-DDThh:mm[:ss]>`:
+    an offset-less wall-clock datetime (no offset/space/fractional forms)
   - `richtext<markdown>`, `richtext(inline)<markdown>`: the `<markdown>` slot
     names the surface encoding an author writes over the content model
   - `plaintext<plain>`, `plaintext(inline)<plain>`: the `<plain>` slot names

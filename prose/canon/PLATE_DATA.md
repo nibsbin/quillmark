@@ -106,8 +106,8 @@ Helper contents (generated in `backends/typst/helper.rs` from `lib.typ.template`
     survives the value being laundered (`#let d = card.on`) or handed into a
     vendored package that formats it internally. Emitting one `text(..)` node
     per cell manufactures the per-instance identity a shared loop variable
-    (`card.<field>`) lacks: the case `span_scan`'s "Not chased" note describes
-, so each card's date surfaces its own region. Wrapping `v.display` (not a
+    (`card.<field>`) lacks: the case `span_scan`'s "Not chased" note describes,
+    so each card's date surfaces its own region. Wrapping `v.display` (not a
     re-literalized date) inherits `v`'s type, so a `date`-only field's `display`
     throws Typst's native error on an `[hour]` pattern.
 

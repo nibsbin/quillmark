@@ -239,8 +239,8 @@ Three rules bound the openness:
 
 The opaque attrs are hash input like everything else in the canonical form, so
 they are recursively key-sorted along with the rest (see Byte-stability). What
-*does* remain a schema event is a change to the content object's own structure
-: a new top-level key beside `text`/`lines`/`marks`/`islands`, or a changed
+*does* remain a schema event is a change to the content object's own structure:
+a new top-level key beside `text`/`lines`/`marks`/`islands`, or a changed
 meaning for an existing discriminator.
 
 ### What openness buys a consumer
@@ -452,8 +452,8 @@ parse repairs a violation, every other boundary rejects one.**
   island-cell anchors above.
 - **Opaque and invariant.** No mutator rewrites an id: `move_card`,
   `set_card_kind`, and both round-trips pass it untouched. Removing a card
-  (or its id) retires the handle, and a retired handle is free for re-supply
-: undo reconstructs a deleted card, stamp included, exactly because the
+  (or its id) retires the handle, and a retired handle is free for re-supply:
+  undo reconstructs a deleted card, stamp included, exactly because the
   collision check guarantees the id it re-supplies is unused.
 
 ## Schema Versioning

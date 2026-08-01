@@ -111,8 +111,9 @@ an option that cannot be added in 1.4 costs a 2.0.
 Most of what breaks a consumer is not a new variant or a new field. Adding a
 method to an unsealed public trait, removing or renaming anything, widening a
 bound, a public type losing `Send`/`Sync` through a private field, and a public
-signature naming a `0.0.x` dependency (see [ERROR.md](ERROR.md) on the YAML
-boundary) are all majors that no attribute sweep sees.
+signature naming a dependency's own type, which chains this crate's major to
+that dependency's (see [ERROR.md](ERROR.md) on the YAML boundary), are all
+majors that no attribute sweep sees.
 
 Nothing mechanical catches that class, so it rides on the writer and the
 reviewer. `cargo semver-checks check-release` covers most of it and is worth
