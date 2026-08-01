@@ -11,7 +11,7 @@
 //! browser and no instantiated module.
 
 use quillmark_content::island::KnownIslandType;
-use quillmark_content::Content;
+use quillmark_content::{Content, Fidelity};
 
 const RUNTIME_JS: &str = include_str!("../runtime/runtime.js");
 
@@ -65,10 +65,15 @@ fn ts_unions_name_every_built_in() {
         &body[..body.find("\n\n").expect("unterminated type alias")]
     }
 
+    // The loss axis has no reserved list to mirror, being injective (one `Loss`
+    // per wire string), so what it pins is its closed view's spellings.
+    let loss_names: Vec<_> = Fidelity::ALL.iter().map(|f| f.as_str()).collect();
+
     for (union, names) in [
-        (ts_union("ContentLineKind"), &Content::RESERVED_LINE_KINDS[..]),
-        (ts_union("ContentContainer"), &Content::RESERVED_CONTAINERS[..]),
-        (ts_union("ContentMark"), &Content::RESERVED_MARK_TYPES[..]),
+        (ts_union("ContentLineKind"), Content::RESERVED_LINE_KINDS),
+        (ts_union("ContentContainer"), Content::RESERVED_CONTAINERS),
+        (ts_union("ContentMark"), Content::RESERVED_MARK_TYPES),
+        (ts_union("ContentLossClass"), loss_names.as_slice()),
     ] {
         for name in names {
             assert!(

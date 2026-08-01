@@ -281,7 +281,7 @@ struct TableAcc {
     /// url is dropped. Mirrors the top-level `image_depth` interception.
     img_depth: usize,
     /// Whether any cell dropped an image's url, the island is then minted
-    /// [`Loss::Degraded`], not `Lossless`: the markdown/Typst projection carries
+    /// [`Loss::DEGRADED`], not `LOSSLESS`: the markdown/Typst projection carries
     /// the alt text but not the image.
     degraded: bool,
 }
@@ -830,7 +830,7 @@ impl Builder {
             // describes fidelity for a consumer to surface; no
             // projection branches on it.
             let loss = if acc.degraded {
-                Loss::Degraded
+                Loss::DEGRADED
             } else {
                 KnownIslandType::Table.default_loss()
             };
@@ -1248,7 +1248,7 @@ mod tests {
         assert_eq!(rt.lines[0].kind, LineKind::Island);
         assert_eq!(rt.islands.len(), 1);
         assert_eq!(rt.islands[0].island_type, "table");
-        assert_eq!(rt.islands[0].loss, Loss::Lossless);
+        assert_eq!(rt.islands[0].loss, Loss::LOSSLESS);
     }
 
     /// The cell lane's own `<u>` classification. A cell reuses the prose mark
@@ -1289,12 +1289,12 @@ mod tests {
         let rt = imp("| a | b |\n|---|---|\n| ![a cat](cat.png) | 2 |");
         assert_eq!(rt.islands.len(), 1);
         assert_eq!(rt.islands[0].island_type, "table");
-        assert_eq!(rt.islands[0].loss, Loss::Degraded);
+        assert_eq!(rt.islands[0].loss, Loss::DEGRADED);
         // The dropped image left no nested island; alt survived as cell text.
         assert_eq!(rt.islands[0].props["rows"][0][0]["text"], "a cat");
         // A table with no cell image stays Lossless (regression guard).
         let plain = imp("| a | b |\n|---|---|\n| 1 | 2 |");
-        assert_eq!(plain.islands[0].loss, Loss::Lossless);
+        assert_eq!(plain.islands[0].loss, Loss::LOSSLESS);
     }
 
     #[test]

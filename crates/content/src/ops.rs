@@ -1377,7 +1377,7 @@ mod tests {
             id: id.into(),
             island_type: "image".into(),
             props: serde_json::json!({}),
-            loss: crate::model::Loss::Lossless,
+            loss: crate::model::Loss::LOSSLESS,
         }
     }
 
