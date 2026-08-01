@@ -35,7 +35,9 @@ loads byte-identically and `0.99` writes the same bytes for the same content.
   `Value` lane, where an unbounded one took the WASM module down with a
   stack-overflow trap rather than a catchable error. The WASM guard sits on the
   JS side of the boundary, since `serde_wasm_bindgen` recurses while building the
-  value (#1093). See `docs/migrations/0.98-to-0.99.md`
+  value, and covers every door that takes opaque host JSON: `install` and
+  `applyChange`, plus `makeCard`'s field values and `insertCard`'s payload items
+  (#1093). See `docs/migrations/0.98-to-0.99.md`
 - fix(content)!: island `loss` becomes the fifth open set. An unrecognized class
   round-trips verbatim instead of being rewritten to `unrepresentable`, so merely
   opening a document no longer moves its content hash. `Loss` opens on the island
