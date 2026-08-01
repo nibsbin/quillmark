@@ -550,8 +550,7 @@ version, so retirement is reserved for shapes with no live rows.
 - DTO type names carry version suffixes with underscores
   (`DocumentV0_92_0`); `non_camel_case_types` is allowed module-wide for this.
 - No file extension is part of the storage contract: the interchange forms
-  are card-yaml markdown **text** and `StoredDocument` **JSON**. `.qmd` in
-  particular is unsanctioned: it collides with Quarto's extension.
+  are card-yaml markdown **text** and `StoredDocument` **JSON**.
 
 ## Links
 
