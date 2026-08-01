@@ -601,6 +601,28 @@ describe('Document editor surface: setQuillRef / install / revise', () => {
     doc.install({}, importMarkdown('after'))
     expect(doc.main.body.text).toBe('after')
   })
+
+  // Every door taking opaque host JSON carries the guard, not just `install`:
+  // a card field value and a payload item's `value` cross on the same
+  // `serde_wasm_bindgen` recursion, so each gets its own case.
+  it('makeCard rejects a deeply nested field value instead of trapping the module', () => {
+    let deep = []
+    for (let i = 0; i < 5000; i++) deep = [deep]
+    expect(() => Document.makeCard('note', { tree: deep })).toThrow(/nests deeper/)
+    // Still serving: a trap would take every later call in the file with it.
+    expect(Document.makeCard('note', { ok: 1 }).kind).toBe('note')
+  })
+
+  it('insertCard rejects a deeply nested payload item value instead of trapping the module', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    let deep = []
+    for (let i = 0; i < 5000; i++) deep = [deep]
+    const card = Document.makeCard('note', { ok: 1 }, 'Hello')
+    card.payloadItems[0].value = deep
+    expect(() => doc.insertCard(card)).toThrow(/nests deeper/)
+    doc.insertCard(Document.makeCard('note', { ok: 2 }, 'Hello'))
+    expect(doc.cardCount).toBe(1)
+  })
 })
 
 describe('Content codec: importMarkdown / exportMarkdown / rebase / mapPos', () => {
