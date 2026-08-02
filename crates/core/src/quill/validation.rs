@@ -1,7 +1,9 @@
+use std::collections::BTreeMap;
+
 use indexmap::IndexMap;
 
 use crate::document::Document;
-use crate::error::{Diagnostic, Severity};
+use crate::error::{Diagnostic, Severity, diag_args};
 use crate::path::DocPath;
 use crate::quill::formats::{is_valid_date, is_valid_datetime};
 use crate::quill::{CardSchema, FieldSchema, FieldType, QuillConfig};
@@ -208,6 +210,59 @@ impl ValidationError {
         }
     }
 
+    /// The facts this error's message interpolates. See
+    /// [`Diagnostic::args`](crate::error::Diagnostic::args).
+    ///
+    /// `path` stays out: it is the diagnostic's anchor, and an anchor
+    /// reachable by two routes acquires two spellings. `NotInline` and
+    /// `NotPlain` carry nothing else, so their sentence follows from the code
+    /// and the anchor alone.
+    ///
+    /// `default` is present only when the schema declares one, the same
+    /// condition `type_mismatch_hint` branches on, so a consumer picks its
+    /// own exit clause from the key's presence instead of re-deriving the
+    /// branch. Emitting `null` instead would read as a default spelled `null`.
+    pub fn args(&self) -> BTreeMap<String, serde_json::Value> {
+        match self {
+            ValidationError::TypeMismatch {
+                path: _,
+                expected,
+                actual,
+                source_token,
+                default,
+            } => {
+                let mut args = diag_args! {
+                    "expected" => expected,
+                    "actual" => actual,
+                    "sourceToken" => source_token,
+                };
+                if let Some(default) = default {
+                    args.insert("default".to_string(), serde_json::json!(default));
+                }
+                args
+            }
+            ValidationError::EnumViolation {
+                path: _,
+                value,
+                allowed,
+            } => diag_args! {
+                "value" => value,
+                "allowed" => allowed,
+            },
+            ValidationError::FormatViolation { path: _, format } => diag_args! {
+                "format" => format,
+            },
+            ValidationError::UnknownCard { path: _, card } => diag_args! {
+                "card" => card,
+            },
+            ValidationError::BodyDisabled { path: _, card } => diag_args! {
+                "card" => card,
+            },
+            ValidationError::NotInline { path: _ } => diag_args! {},
+            ValidationError::NotPlain { path: _ } => diag_args! {},
+        }
+    }
+
     /// Actionable hint for this error, when defined for the variant: the same
     /// string the `Display` impl bakes in, exposed so consumers can surface it
     /// without re-parsing prose.
@@ -234,7 +289,8 @@ impl ValidationError {
     pub fn to_diagnostic(&self) -> Diagnostic {
         let mut diag = Diagnostic::new(Severity::Error, self.to_string())
             .with_code(self.code().to_string())
-            .with_path(self.path().to_string());
+            .with_path(self.path().to_string())
+            .with_args(self.args());
         if let Some(hint) = self.hint() {
             diag = diag.with_hint(hint);
         }
@@ -999,5 +1055,213 @@ main:
         let content = quillmark_content::serial::to_canonical_value(&rt);
         let doc = doc_from_fm(&[("tag", content)]);
         assert!(validate_typed_document(&config, &doc).is_ok());
+    }
+}
+
+/// The canon table in `prose/canon/ERROR.md` § "Diagnostic args" is the contract
+/// a consumer writes its string table against, so it is tested like one rather
+/// than maintained by hand beside the code.
+#[cfg(test)]
+mod args_canon {
+    use std::collections::BTreeMap;
+
+    use super::ValidationError;
+    use crate::document::EditError;
+    use crate::error::ParseError;
+    use crate::quill::CoercionError;
+
+    /// `code` → its arg keys, sorted. Every variant of every enum on the
+    /// structured surface appears once.
+    fn minted() -> BTreeMap<String, Vec<String>> {
+        let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        let mut add = |code: &str, args: BTreeMap<String, serde_json::Value>| {
+            let keys: Vec<String> = args.keys().cloned().collect();
+            assert!(
+                out.insert(code.to_string(), keys).is_none(),
+                "two samples for `{code}`: one code carries one payload"
+            );
+        };
+
+        for e in [
+            ValidationError::TypeMismatch {
+                path: "main.n".into(),
+                expected: "string".into(),
+                actual: "integer".into(),
+                source_token: "42".into(),
+                default: Some("\"x\"".into()),
+            },
+            ValidationError::EnumViolation {
+                path: "main.tone".into(),
+                value: "loud".into(),
+                allowed: vec!["quiet".into()],
+            },
+            ValidationError::FormatViolation {
+                path: "main.when".into(),
+                format: "date".into(),
+            },
+            ValidationError::UnknownCard {
+                path: "cards[0]".into(),
+                card: "ghost".into(),
+            },
+            ValidationError::BodyDisabled {
+                path: "cards.sig[0].body".into(),
+                card: "sig".into(),
+            },
+            ValidationError::NotInline {
+                path: "main.title".into(),
+            },
+            ValidationError::NotPlain {
+                path: "main.title".into(),
+            },
+        ] {
+            add(e.code(), e.args());
+        }
+
+        for e in [
+            EditError::InvalidFieldName("9bad".into()),
+            EditError::UnknownField("nope".into()),
+            EditError::InvalidKindName("Bad".into()),
+            EditError::ReservedKind,
+            EditError::IndexOutOfRange { index: 3, len: 1 },
+            EditError::ValueTooDeep { max: 8 },
+            EditError::Import(quillmark_content::import::ImportError::NestingTooDeep {
+                depth: 9,
+                max: 8,
+            }),
+            EditError::FieldRichtextDecode {
+                field: "body".into(),
+                message: "x".into(),
+            },
+            EditError::FieldRichtextNotInline("body".into()),
+            EditError::FieldConform {
+                field: "n".into(),
+                target: "integer".into(),
+                message: "x".into(),
+            },
+            EditError::ContentApply(quillmark_content::ApplyError::LineOutOfRange {
+                line: 3,
+                lines: 1,
+            }),
+        ] {
+            add(e.code(), e.args());
+        }
+
+        for e in [
+            ParseError::InputTooLarge { size: 2, max: 1 },
+            ParseError::InvalidStructure("x".into()),
+            ParseError::EmptyInput("x".into()),
+            ParseError::MissingQuill("x".into()),
+            ParseError::BodyImport("x".into()),
+            ParseError::InvalidQuillReference {
+                value: "a@b".into(),
+                reason: "x".into(),
+            },
+            ParseError::YamlErrorWithLocation {
+                message: "x".into(),
+                line: 3,
+                block_index: 1,
+                hint: None,
+            },
+        ] {
+            let diag = e.to_diagnostic();
+            add(diag.code.as_deref().expect("parse errors carry a code"), diag.args);
+        }
+
+        // Two codes are minted beside their error rather than from a variant:
+        // `compose::coercion_error` wraps the whole `CoercionError`, and
+        // `compose::fill_warning` has no error type at all.
+        add(
+            "validation::coercion_failed",
+            CoercionError::Uncoercible {
+                path: "card_kinds.sig.n".into(),
+                value: "\"x\"".into(),
+                target: "integer".into(),
+                reason: "string is not a valid integer".into(),
+            }
+            .args(),
+        );
+        add("validation::must_fill", BTreeMap::new());
+
+        out
+    }
+
+    /// The `| code | args | outcome |` rows of the canon table, keyed the same
+    /// way. `—` is no keys; a trailing `?` marks a conditional key, which the
+    /// sample above supplies.
+    fn declared() -> BTreeMap<String, Vec<String>> {
+        let canon = include_str!("../../../../prose/canon/ERROR.md");
+        let mut rows = canon
+            .lines()
+            .skip_while(|l| !l.starts_with("| Code | Args | Outcome |"))
+            .skip(2)
+            .take_while(|l| l.starts_with('|'));
+
+        let mut out = BTreeMap::new();
+        for row in &mut rows {
+            let cells: Vec<&str> = row.trim_matches('|').split('|').map(str::trim).collect();
+            assert_eq!(cells.len(), 3, "malformed canon row: {row}");
+            let code = cells[0].trim_matches('`').to_string();
+            let keys = if cells[1] == "—" {
+                Vec::new()
+            } else {
+                let mut keys: Vec<String> = cells[1]
+                    .split(',')
+                    .map(|k| k.trim().trim_end_matches('?').trim_matches('`').to_string())
+                    .collect();
+                keys.sort();
+                keys
+            };
+            assert!(out.insert(code, keys).is_none(), "duplicate canon row: {row}");
+        }
+        assert!(!out.is_empty(), "canon args table not found in ERROR.md");
+        out
+    }
+
+    /// The other direction: a code off the table carries no args, so a
+    /// consumer's template falls back rather than half-filling. `quill::*` is
+    /// the largest such family and the one with `format!`-built codes.
+    #[test]
+    fn out_of_scope_codes_carry_no_args() {
+        let diags = crate::quill::QuillConfig::from_yaml_with_warnings(
+            r#"
+Quill:
+  name: t
+  version: "1.0"
+  backend: typst
+  description: A slot whose literal contradicts its declared type
+
+main:
+  fields:
+    title:
+      type: string
+      default: 42
+"#,
+        )
+        .expect_err("a default that contradicts its type fails config validation");
+
+        assert!(
+            diags.iter().any(|d| d
+                .code
+                .as_deref()
+                .is_some_and(|c| c.starts_with("quill::"))),
+            "expected a quill:: diagnostic, got {:?}",
+            diags.iter().map(|d| &d.code).collect::<Vec<_>>()
+        );
+        for d in &diags {
+            assert!(
+                d.args.is_empty(),
+                "`{:?}` is off the canon table and must carry no args",
+                d.code
+            );
+        }
+    }
+
+    #[test]
+    fn diagnostic_args_match_canon() {
+        assert_eq!(
+            declared(),
+            minted(),
+            "`ERROR.md` § \"Diagnostic args\" and the minted args disagree"
+        );
     }
 }

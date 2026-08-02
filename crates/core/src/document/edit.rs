@@ -15,6 +15,8 @@
 //! enforce the §8 value-depth bound: `$ext` flows through the recursive
 //! emit and DTO paths like any other value.
 
+use std::collections::BTreeMap;
+
 use unicode_normalization::UnicodeNormalization;
 
 use quillmark_content::delta::diff_import;
@@ -22,6 +24,7 @@ use quillmark_content::import::ImportError;
 use quillmark_content::{ApplyError, Delta, LineOp, MarkOp, Content};
 
 use crate::document::meta::{validate_composable_kind, CardKindError};
+use crate::error::diag_args;
 use crate::document::payload::MetaKey;
 use crate::document::{Card, Document, Payload};
 use crate::quill::{CoercionError, FieldSchema, Leniency, QuillConfig};
@@ -114,7 +117,14 @@ pub enum EditError {
     /// [`FieldRichtextNotInline`](Self::FieldRichtextNotInline) variants
     /// instead, so the richtext write surface is unchanged.
     #[error("field '{field}' does not conform to its schema type: {message}")]
-    FieldConform { field: String, message: String },
+    FieldConform {
+        field: String,
+        /// The schema type the write was conformed against, carried across
+        /// from [`CoercionError`] so the failure
+        /// states what the value had to become. `message` alone is English.
+        target: String,
+        message: String,
+    },
 
     /// A content field-change bundle (text delta, line ops, mark ops) applied
     /// out of bounds or broke an invariant normalization could not repair.
@@ -160,6 +170,45 @@ impl EditError {
             EditError::FieldRichtextNotInline(_) => "edit::field_richtext_not_inline",
             EditError::FieldConform { .. } => "edit::field_conform",
             EditError::ContentApply(_) => "edit::content_apply",
+        }
+    }
+
+    /// The facts this error's message interpolates. See
+    /// [`Diagnostic::args`](crate::error::Diagnostic::args); `ERROR.md`
+    /// § "Diagnostic args" says per code whether an empty map means a fixed
+    /// sentence or a fallback to `message`.
+    ///
+    /// `field` and `kind` ride here despite [`doc_path`](Self::doc_path) also
+    /// folding them into the anchor. The rule against duplicating an anchor
+    /// bars the assembled `path` string, and recovering a name from one is
+    /// unsound anyway: [`DocPath`](crate::path::DocPath) renders field
+    /// segments unescaped and parses on `.` and `[`, so exactly the malformed
+    /// names `InvalidFieldName` reports can round-trip into other segments.
+    pub fn args(&self) -> BTreeMap<String, serde_json::Value> {
+        match self {
+            EditError::InvalidFieldName(field) => diag_args! { "field" => field },
+            EditError::UnknownField(field) => diag_args! { "field" => field },
+            EditError::InvalidKindName(kind) => diag_args! { "kind" => kind },
+            EditError::ReservedKind => diag_args! {},
+            EditError::IndexOutOfRange { index, len } => diag_args! {
+                "index" => index,
+                "len" => len,
+            },
+            EditError::ValueTooDeep { max } => diag_args! { "max" => max },
+            EditError::Import(_) => diag_args! {},
+            EditError::FieldRichtextDecode { field, message: _ } => diag_args! {
+                "field" => field,
+            },
+            EditError::FieldRichtextNotInline(field) => diag_args! { "field" => field },
+            EditError::FieldConform {
+                field,
+                target,
+                message: _,
+            } => diag_args! {
+                "field" => field,
+                "target" => target,
+            },
+            EditError::ContentApply(_) => diag_args! {},
         }
     }
 
@@ -259,17 +308,25 @@ pub fn validate_field(key: &str, value: &serde_json::Value) -> Result<(), FieldV
 /// (see `QuillConfig::conform_value`); every other target uses the general
 /// [`EditError::FieldConform`].
 fn conform_error_to_edit(name: &str, err: CoercionError) -> EditError {
-    let CoercionError::Uncoercible { target, reason, .. } = err;
-    match target.as_str() {
-        "richtext(inline)" => EditError::FieldRichtextNotInline(name.to_string()),
-        "richtext" => EditError::FieldRichtextDecode {
+    let CoercionError::Uncoercible {
+        path: _,
+        value: _,
+        target,
+        reason,
+    } = err;
+    if target == "richtext(inline)" {
+        EditError::FieldRichtextNotInline(name.to_string())
+    } else if target == "richtext" {
+        EditError::FieldRichtextDecode {
             field: name.to_string(),
             message: reason,
-        },
-        _ => EditError::FieldConform {
+        }
+    } else {
+        EditError::FieldConform {
             field: name.to_string(),
+            target,
             message: reason,
-        },
+        }
     }
 }
 
@@ -893,6 +950,7 @@ mod tests {
         assert_eq!(
             EditError::FieldConform {
                 field: "font_size".into(),
+                target: "integer".into(),
                 message: "x".into(),
             }
             .doc_path(&main)
