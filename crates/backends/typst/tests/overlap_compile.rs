@@ -18,27 +18,10 @@ use common::quill_with_plate as quill;
 /// `to_canonical_value`).
 fn overlap_content() -> serde_json::Value {
     use quillmark_content::model::Mark;
-    let rt = Content {
-        text: "abcdef".to_string(),
-        lines: vec![Line {
-            kind: LineKind::Para,
-            containers: vec![],
-            continues: false,
-        }],
-        marks: vec![
-            Mark {
-                start: 0,
-                end: 4,
-                kind: MarkKind::Strong,
-            },
-            Mark {
-                start: 2,
-                end: 6,
-                kind: MarkKind::Code,
-            },
-        ],
-        islands: vec![],
-    };
+    let rt = Content::new("abcdef".to_string(), vec![Line::new(LineKind::Para)]).with_marks(vec![
+        Mark::new(0, 4, MarkKind::Strong),
+        Mark::new(2, 6, MarkKind::Code),
+    ]);
     // The overlap survives normalize/validate (there is no cross-kind overlap
     // invariant) so the seam carries it straight to the emitter.
     quillmark_content::serial::to_canonical_value(&rt)

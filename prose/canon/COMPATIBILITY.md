@@ -97,6 +97,18 @@ Constructor shape: `new` takes the fields a value *always* carries; everything
 optional starts absent and has a `with_*` setter beside it. A `new` that takes
 every field is exactly as brittle as the literal it replaced.
 
+Three structs keep the exemption, each saying so in its own rustdoc:
+
+| Struct | Why the literal is worth keeping |
+|---|---|
+| `Delta` | `{ops}` *is* the serde wire, so a second field is a wire change every binding's codec learns either way: the one freedom the attribute buys, this type cannot spend. |
+| `Segment` | A derived view `line_segments` recomputes whole, holding one line's position in the two coordinate spaces the model has. A third space moves the model first. |
+| `BaseLengthMismatch` | Two lengths are the whole of one comparison. |
+
+For all three a new field is a semver-major. Note the seam an integration test
+sits on: `crates/content/tests/` is out-of-crate, so the crate's own property
+tests build through the constructors like any consumer.
+
 `RenderOptions` is the type this cost is real for. `#[non_exhaustive]` forbids
 functional update, so `RenderOptions { .., ..Default::default() }` does not
 compile out-of-crate and `RenderOptions::default().with_output_format(…)` is the

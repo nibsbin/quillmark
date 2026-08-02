@@ -108,6 +108,13 @@ struct Ctx<'a> {
 /// One line's char range `[start, end)` into the content, with the matching byte
 /// range and the count of island slots before the line, so a caller indexes
 /// the content text and the island list in O(1) without rescanning.
+///
+/// **Deliberately not `#[non_exhaustive]`**, unlike the model types it indexes.
+/// It is a derived view, not a stored one: [`line_segments`] recomputes the
+/// whole of it from a [`Content`], and the five fields are one line's position
+/// in the two coordinate spaces the model has. A sixth would mean a third
+/// space, which moves the model before it moves this, so the literal is worth
+/// keeping and a new field is a semver-major.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Segment {
     /// USV index of the line's first char.
