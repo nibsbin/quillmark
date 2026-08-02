@@ -51,8 +51,7 @@ use similar::{ChangeTag, TextDiff};
 /// **Deliberately not `#[non_exhaustive]`**, unlike the model types. The
 /// attribute buys exactly one freedom, adding a field, and this type cannot
 /// spend it: `{ops}` *is* the wire, so a second field is a wire change every
-/// binding's codec has to learn either way. Paying the literal's cost for a
-/// freedom the serde shape already denies buys nothing.
+/// binding's codec has to learn either way.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Delta {
     pub ops: Vec<Op>,
