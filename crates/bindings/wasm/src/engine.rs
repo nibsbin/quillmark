@@ -685,6 +685,60 @@ impl Quill {
         })
     }
 
+    /// Parse `markdown` and conform it against this quill: the **primary
+    /// ingestion path**, and the bound twin of the schema-free
+    /// `Document.fromMarkdown`. The returned document rests at its canonical
+    /// form (a `richtext` field as a content object, a `plaintext` field as its
+    /// literal string), so `getStored` no longer answers "corpus or string?"
+    /// with "depends how this document was built".
+    ///
+    /// Parse warnings and the `conform::*` diagnostics both land on
+    /// `doc.warnings`. Throws on a parse failure, or when `markdown` declares a
+    /// `$quill` this quill does not answer to: nothing conforms under the wrong
+    /// schema. To open a document whose `$quill` is stale, use the transport
+    /// door (`Document.fromMarkdown`, `setQuillRef`, then
+    /// [`conform`](Self::conform)).
+    #[wasm_bindgen(js_name = parse)]
+    pub fn parse(&self, markdown: &str) -> Result<Document, JsValue> {
+        let parsed = self
+            .inner
+            .parse(markdown)
+            .map_err(|e| WasmError::from(e.to_diagnostics()).to_js_value())?;
+        Ok(Document {
+            inner: parsed.document,
+            parse_warnings: parsed.warnings,
+        })
+    }
+
+    /// Land `doc`'s declared content fields at their canonical rest **in
+    /// place**, returning the `conform::*` diagnostics for the values that would
+    /// not commit (an empty array when everything rested).
+    ///
+    /// The read-repair verb: a document that arrived through the transport door
+    /// (`fromMarkdown`, `fromJson`, a stored row) converges here, and is then
+    /// eligible for rewrite under its current schema tag. Idempotent, and a
+    /// no-op on an already-canonical document: an equal value is not rewritten,
+    /// so YAML comments and stored bytes survive.
+    ///
+    /// A `!must_fill` marker anywhere in a field's value skips that field (the
+    /// marker is the state), and a value the strict write refuses stays as
+    /// authored with a diagnostic. Throws when `doc` declares a different
+    /// `$quill`, before any mutation.
+    #[wasm_bindgen(js_name = conform, unchecked_return_type = "Diagnostic[]")]
+    pub fn conform(&self, doc: &mut Document) -> Result<JsValue, JsValue> {
+        let diags = self
+            .inner
+            .conform(&mut doc.inner)
+            .map_err(WasmError::from)
+            .map_err(|e| e.to_js_value())?;
+        let serializer = serde_wasm_bindgen::Serializer::new()
+            .serialize_maps_as_objects(true)
+            .serialize_missing_as_null(true);
+        diags.serialize(&serializer).map_err(|e| {
+            WasmError::from(format!("conform: serialization failed: {e}")).to_js_value()
+        })
+    }
+
     /// The resolved-value view of `doc` against this quill's schema: for every
     /// declared field the value the render projection would use and the
     /// `FieldSource` rung it came from (`"authored" | "default" | "zero"`), in
@@ -959,13 +1013,15 @@ impl Document {
     /// markdown projection use [`getMarkdown`](Self::get_markdown) (body) or
     /// `reader.get` (a field's declared type).
     ///
-    /// **A content field's stored form is construction-dependent.** A committed
-    /// richtext field holds a canonical content object; one a markdown parse
-    /// left holds the authored string, until an edit commits it. Both are
-    /// intended, and this read reports what is there. For the corpus
-    /// whichever lane built the document, use the
-    /// schema-plane `reader.getContent`, which decodes through the codec the
-    /// field's declared type names.
+    /// **A content field at rest has one stored form per codec**: a `richtext`
+    /// field holds the canonical content object, a `plaintext` field its literal
+    /// string. A document that came through the bound door (`quill.parse` /
+    /// `quill.conform`) is at rest, so this read no longer depends on which lane
+    /// built it. A document that came through the transport door
+    /// (`Document.fromMarkdown`, a legacy stored row) may rest as authored until
+    /// it is conformed, and this read reports what is there. For the corpus
+    /// either way, use the schema-plane `reader.getContent`, which decodes
+    /// through the codec the field's declared type names.
     #[wasm_bindgen(js_name = getStored, unchecked_return_type = "unknown")]
     pub fn get_stored(
         &self,
@@ -1219,6 +1275,10 @@ impl Document {
         self.inner == other.inner
     }
 
+    /// The non-fatal diagnostics of the load that produced this document: parse
+    /// warnings, plus the `conform::*` warnings when it came through
+    /// `quill.parse`. Session state, not document value: `equals` and the
+    /// storage DTO exclude it, and `fromJson` / `loadJson` clear it.
     #[wasm_bindgen(getter, js_name = warnings, unchecked_return_type = "Diagnostic[]")]
     pub fn warnings(&self) -> Result<JsValue, JsValue> {
         let diags: Vec<Diagnostic> = self

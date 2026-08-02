@@ -244,7 +244,7 @@ patchHandleChecked(Document.prototype, 'equals', (original) =>
 		return original.call(this, other);
 	}
 );
-for (const name of /** @type {const} */ (['validate', 'resolve'])) {
+for (const name of /** @type {const} */ (['validate', 'resolve', 'conform'])) {
 	// Named once per patch, not per call: `validate` runs per keystroke.
 	const method = `Quill.${name}`;
 	patchHandleChecked(Quill.prototype, name, (original) =>
