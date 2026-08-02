@@ -183,6 +183,12 @@ pub(crate) enum Leniency {
     /// defer-to-validation fall-through becomes a `CoercionError`, so a
     /// mismatched value fails at the write, not silently at a later render.
     ///
+    /// This mode is also the **resting form** a content field converges to
+    /// ([`Quill::conform`](crate::Quill::conform)): `richtext` rests as the
+    /// canonical content object, `plaintext` as its literal string. Only the
+    /// `PlainText` arm's output shape differs between the two modes; the plate
+    /// keeps the content object under `Render`.
+    ///
     /// "Strict" is asymmetric by target, not absolute: `string` and `array` are
     /// universal sinks, so a scalar→`string` (`true` → `"true"`) and a
     /// scalar→singleton-`array` wrap stay lenient even here (both are lossless,
@@ -495,6 +501,15 @@ impl QuillConfig {
                 // already-structured content is validated plain. A wire content
                 // carrying marks or islands is rejected, not silently stripped:
                 // matching the `inline` precedent and keeping coercion lossless.
+                //
+                // The two modes commit **different forms of the same content**:
+                // `Render` the content object the plate carries, `Write` the
+                // literal string that is plaintext's canonical rest
+                // (`prose/canon/SCHEMAS.md` § plaintext). The codec is lossless
+                // on plain content (`to_plaintext ∘ from_plaintext` is identity),
+                // so the string loses nothing; object rest would, because emit is
+                // schema-free and would markdown-escape it (`a *literal* line` →
+                // `a \*literal\* line`).
                 let plain_check =
                     |rt: &quillmark_content::Content| -> Result<(), CoercionError> {
                         if !rt.is_plain() {
@@ -517,6 +532,16 @@ impl QuillConfig {
                         }
                         Ok(())
                     };
+                let commit = |rt: &quillmark_content::Content| -> QuillValue {
+                    match mode {
+                        Leniency::Render => QuillValue::from_json(
+                            quillmark_content::serial::to_canonical_value(rt),
+                        ),
+                        Leniency::Write => QuillValue::from_json(serde_json::Value::String(
+                            quillmark_content::export::to_plaintext(rt),
+                        )),
+                    }
+                };
                 if json_value.is_object() {
                     let rt = quillmark_content::serial::from_canonical_value(json_value).map_err(
                         |e| CoercionError::Uncoercible {
@@ -527,9 +552,7 @@ impl QuillConfig {
                         },
                     )?;
                     plain_check(&rt)?;
-                    return Ok(QuillValue::from_json(
-                        quillmark_content::serial::to_canonical_value(&rt),
-                    ));
+                    return Ok(commit(&rt));
                 }
                 // Reduce to the authored literal string via the shared leniency
                 // cascade, then import verbatim.
@@ -546,9 +569,7 @@ impl QuillConfig {
                 };
                 let rt = quillmark_content::from_plaintext(&text);
                 plain_check(&rt)?;
-                Ok(QuillValue::from_json(
-                    quillmark_content::serial::to_canonical_value(&rt),
-                ))
+                Ok(commit(&rt))
             }
             FieldType::RichText { inline } => {
                 // The seam carries the content, so coercion commits the content
@@ -1893,7 +1914,7 @@ fn example_contains_fence_line(text: &str) -> bool {
 /// a content companion. Both `richtext` and its literal-codec sibling `plaintext`
 /// are content leaves; a scalar (`string`, `integer`, `enum`, …) never carries
 /// one; an `array<richtext>` or an `object` with a content property does.
-fn field_contains_content(field: &FieldSchema) -> bool {
+pub(crate) fn field_contains_content(field: &FieldSchema) -> bool {
     match &field.r#type {
         FieldType::RichText { .. } | FieldType::PlainText { .. } => true,
         FieldType::Array => field.items.as_deref().is_some_and(field_contains_content),

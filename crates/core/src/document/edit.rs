@@ -27,7 +27,7 @@ use crate::document::meta::{validate_composable_kind, CardKindError};
 use crate::error::diag_args;
 use crate::document::payload::MetaKey;
 use crate::document::{Card, Document, Payload};
-use crate::quill::{CoercionError, FieldSchema, Leniency, QuillConfig};
+use crate::quill::{CoercionError, FieldSchema, FieldType, Leniency, QuillConfig};
 use crate::value::QuillValue;
 use crate::version::QuillReference;
 
@@ -711,6 +711,11 @@ impl Card {
     /// (schema-blind, like [`apply_field_richtext_change`](Self::apply_field_richtext_change),
     /// [`commit_field`](Self::commit_field) is the typed door). Returns
     /// [`EditError::InvalidFieldName`] for a malformed name.
+    ///
+    /// **Richtext only.** A `plaintext` field rests as its literal string, so an
+    /// object landed here is off that field's resting form: a repairable
+    /// departure the next bound load ([`Quill::conform`](crate::Quill::conform))
+    /// converges. Write one through the typed door.
     pub fn install_field(&mut self, name: &str, content: Content) -> Result<(), EditError> {
         if !is_valid_field_name(name) {
             return Err(EditError::InvalidFieldName(name.to_string()));
@@ -747,6 +752,12 @@ impl Card {
     ///   stores canonical content JSON, so identity marks (anchors, island ids)
     ///   live on the stored value from the write; a `richtext(inline)` schema
     ///   rejects a multi-block value with [`EditError::FieldRichtextNotInline`].
+    /// - **plaintext**: stores the **literal string**, importing a string
+    ///   verbatim or projecting a content object through `to_plaintext`. The
+    ///   codec is lossless on plain content, so the string is the whole value;
+    ///   the plate still carries the content object (the render floor coerces to
+    ///   it). A value carrying marks, islands, or block formatting is rejected,
+    ///   not stripped.
     /// - **scalars** (`string`/`integer`/`number`/`boolean`/`datetime`): stores
     ///   the coerced canonical (`"3"` → `3`), applying only value-parsing
     ///   normalizations; a cross-type value that the render floor would coerce
@@ -840,6 +851,13 @@ impl Card {
     /// [`commit_field`](Self::commit_field) is the typed door that enforces
     /// `richtext(inline)`, and a violation otherwise surfaces at validate/render.
     ///
+    /// **Richtext only**, and the exclusion bites: this decodes the current value
+    /// as markdown, which eats a `plaintext` field's escapes (`a \*b\*` commits
+    /// back as `a *b*`) and leaves the corpus where that field's rest is a
+    /// string. The typed
+    /// [`TypedWriter::revise_field`](crate::TypedWriter::revise_field) resolves
+    /// the codec from the schema and is the plaintext-safe door.
+    ///
     /// Returns [`EditError::InvalidFieldName`] for a malformed name,
     /// [`EditError::FieldRichtextDecode`] when the field is present but is not a
     /// richtext content (a scalar a `store_field` wrote), and
@@ -882,6 +900,15 @@ impl Card {
         body: impl Into<String>,
         schema: &FieldSchema,
     ) -> Result<Delta, EditError> {
+        // A `plaintext` field has no anchors to rebase (`is_plain` forbids every
+        // mark), so the anchor lane is meaningless for it and the markdown codec
+        // is actively wrong: decoding the current value as markdown eats its
+        // escapes, so a byte-identical revise of `a \*b\*` would silently commit
+        // `a *b*`. It takes the literal codec instead: a plain-text diff and the
+        // same strict write, `Delta` receipt unchanged.
+        if matches!(schema.r#type, FieldType::PlainText { .. }) {
+            return self.revise_field_plaintext(name, body, schema);
+        }
         let (content, delta) = self.diff_field(name, body)?;
         // Enforce `schema` on the diffed (anchor-rebased) content through the same
         // typed path `commit_field` uses: re-canonicalizing a content object keeps
@@ -889,6 +916,45 @@ impl Card {
         // on the value anchors survived onto and the error surface is identical.
         let canonical = quillmark_content::serial::to_canonical_value(&content);
         let stored = resolve_field_write(name, QuillValue::from_json(canonical), schema)?;
+        self.payload_mut().insert_unchecked(name.to_string(), stored);
+        Ok(delta)
+    }
+
+    /// The `plaintext` arm of [`revise_field_checked`](Self::revise_field_checked):
+    /// diff the authored literal text against the field's current literal
+    /// projection and commit it through the same strict write. No markdown
+    /// import in either direction, so escapes, `*`, and `_` are ordinary
+    /// characters on both sides of the diff and a byte-identical revise is a
+    /// byte no-op. The `Delta` is over the literal text: the coordinate space
+    /// [`TypedReader::get`](crate::TypedReader::get) hands a plaintext field back in.
+    fn revise_field_plaintext(
+        &mut self,
+        name: &str,
+        text: impl Into<String>,
+        schema: &FieldSchema,
+    ) -> Result<Delta, EditError> {
+        if !is_valid_field_name(name) {
+            return Err(EditError::InvalidFieldName(name.to_string()));
+        }
+        let base = match self.field_plaintext_content(name) {
+            Some(Ok(rt)) => quillmark_content::export::to_plaintext(&rt),
+            Some(Err(e)) => {
+                return Err(EditError::FieldRichtextDecode {
+                    field: name.to_string(),
+                    message: e.into_message(),
+                })
+            }
+            None => String::new(),
+        };
+        // The strict write is the codec: it runs the same `from_plaintext`
+        // boundary cleanup (CRLF, bidi, island slot) and enforces
+        // `plaintext(inline)`, so the committed string is what the diff must
+        // measure against. On any refusal the field is unchanged.
+        let stored = resolve_field_write(name, QuillValue::from(text.into()), schema)?;
+        let delta = quillmark_content::delta::diff(
+            &base,
+            stored.as_json().as_str().unwrap_or_default(),
+        );
         self.payload_mut().insert_unchecked(name.to_string(), stored);
         Ok(delta)
     }
@@ -923,6 +989,10 @@ impl Card {
     /// stored value is not a richtext content (the caller addresses a field it
     /// knows is richtext, exactly as when writing it), and
     /// [`EditError::ContentApply`] when the bundle applies out of bounds.
+    ///
+    /// **Richtext only**: a `plaintext` field rests as a string, so a splice
+    /// lands it off its resting form (and its stored string decodes here as
+    /// markdown). The next bound load converges it.
     pub fn apply_field_richtext_change(
         &mut self,
         name: &str,

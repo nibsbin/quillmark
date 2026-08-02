@@ -84,13 +84,18 @@ impl<'a> TypedWriter<'a> {
         self.doc.main_mut().revise_body(markdown).map(|_| ())
     }
 
-    /// Revise a richtext field on the main card from markdown: typed *and*
+    /// Revise a content field on the main card from authored text: typed *and*
     /// anchor-preserving. Resolves the field's schema and defers to
     /// [`Card::revise_field_checked`](crate::Card::revise_field_checked), so
     /// surviving anchors rebase and the diffed result is schema-conformed
     /// (`richtext(inline)` rejects a multi-block result). Returns the text
     /// [`Delta`]. A name the schema does not declare fails with
     /// [`EditError::UnknownField`], as [`set`](Self::set).
+    ///
+    /// The codec comes from the declared type: `richtext` diffs markdown and
+    /// rebases anchors; `plaintext` diffs the literal text (nothing to rebase,
+    /// `is_plain` forbids every mark) and never imports markdown, so a
+    /// byte-identical revise of a value carrying escapes is a byte no-op.
     pub fn revise_field(&mut self, name: &str, markdown: &str) -> Result<Delta, EditError> {
         match self.config.main.fields.get(name) {
             Some(schema) => self.doc.main_mut().revise_field_checked(name, markdown, schema),
