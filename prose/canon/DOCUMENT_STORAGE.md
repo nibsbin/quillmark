@@ -72,9 +72,11 @@ payload items is `type` (not `kind`) to keep it unambiguous next to the
 ext | seed | field | comment`; the `ext` and `seed` variants carry the
 `$ext` / `$seed` maps verbatim and are stripped from `to_plate_json()`
 before backends see it.
-Parse-time warnings live on `Document` (`warnings: Vec<Diagnostic>`) but
-are excluded from `PartialEq` and not serialized, so they never reach this
-format.
+Load-time warnings (a parse's, plus the `conform::*` diagnostics when the
+document came through the bound door) live on the `Parsed` record, not on
+`Document`, so they never reach this format; the bindings stash them on
+their `Document` handle as session state and exclude them from `equals` and
+the DTO alike.
 
 ### Legacy schema (V0_92_0)
 
@@ -115,6 +117,26 @@ applied: the output is `serde_json`'s compact form otherwise. Bumping the
 `schema` version is the only event that may change the byte layout of a
 document written by the current writer.
 
+**Resting form.** Byte-equality is over `Document` values, so it is only
+as useful as the model's agreement on what a given document *is*. A
+content field has one resting form per codec: a `richtext` field rests as
+the canonical content object, a `plaintext` field as its literal string
+([SCHEMAS.md](SCHEMAS.md) § "Content fields rest per codec").
+`Quill::conform` is what holds that: it walks a document's declared
+content fields through the same strict write the typed writer commits
+through, so a parse-then-conform and a typed write of the same values are
+byte-equal. Documents that have converged hash equal when they are
+semantically equal, so `equals` and content hashing hold for content
+fields by construction rather than by construction history.
+Non-content-typed fields keep their authored shorthands (`qty: "3"` stays
+a string until something writes it); the typed write remains their
+canonicalizer.
+
+A document that entered through the transport door (`Document::parse`, a
+stored row, `store_field`) rests as authored until it is conformed. That is
+a named state, not a second resting form: it is readable, round-trippable,
+and one bound load away from converging.
+
 **Migrated rows: a conditional caveat.** The guarantee above is unconditional
 for a document the current writer serializes directly. A row still carrying
 a legacy schema tag migrates forward on read, and the `0.92.0 → 0.93.0` hop
@@ -127,7 +149,11 @@ change. Two ways to manage this:
 
 - **Read-repair.** Rewrite a row under its current schema tag once it has
   been read and migrated, so the content form: not the legacy markdown
-  string: becomes its byte-stable resting state.
+  string: becomes its byte-stable resting state. This is the same lane
+  `Quill::conform` uses, the second named driver of read-repair byte
+  movement: a row read through the bound door converges to canonical rest
+  and is eligible for rewrite under its current tag. Neither is a
+  schema-version event; a population converges once and then holds.
 - **Accept the movement.** For rows left un-repaired, treat a forced
   parser/security bump as either a schema-version event (if a hard
   guarantee is required) or an accepted, logged hash movement on

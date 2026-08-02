@@ -3,7 +3,7 @@
 mod blueprint;
 mod compose;
 mod config;
-mod conform;
+pub(crate) mod conform;
 mod resolved;
 mod fill;
 mod formats;

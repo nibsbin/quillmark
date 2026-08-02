@@ -22,6 +22,12 @@
 //! The writer holds `&mut Document` and `&QuillConfig`, so a bound `TypedWriter`
 //! cannot cross a binding boundary that carries no lifetimes (wasm-bindgen /
 //! pyo3 objects); those surfaces construct one per call from the quill handle.
+//!
+//! [`Quill::conform`](crate::Quill::conform) is this same strict commit driven
+//! by the schema rather than by a caller: it walks a document's declared content
+//! fields through [`resolve_field_write`], so what an ingestion lands and what a
+//! write lands are the same bytes. Where a write refuses, conform leaves the
+//! value authored under a `conform::*` warning.
 
 use indexmap::IndexMap;
 

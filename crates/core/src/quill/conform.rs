@@ -198,7 +198,7 @@ fn conform_card(
 /// to a **warning**. Conform leaves the value authored, so this reports a
 /// repairable departure rather than a refusal; the code family lets a consumer
 /// route on "this field is not at rest" without parsing message text.
-fn conform_diagnostic(err: &EditError, base: &DocPath) -> Diagnostic {
+pub(crate) fn conform_diagnostic(err: &EditError, base: &DocPath) -> Diagnostic {
     let code = err.code().strip_prefix("edit::").unwrap_or(err.code());
     let mut diag = Diagnostic::new(Severity::Warning, err.to_string())
         .with_code(format!("conform::{code}"))

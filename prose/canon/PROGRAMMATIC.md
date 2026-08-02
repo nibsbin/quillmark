@@ -16,8 +16,8 @@ the blueprint serves LLM/MCP consumers.
 
 | Surface | Consumer | Entry |
 |---|---|---|
-| card-yaml Markdown | humans | `Document::parse` |
-| annotated blueprint | LLMs / MCP | `blueprint()` → fill → `parse` |
+| card-yaml Markdown | humans | `Quill::parse` (the bound door; `Document::parse` is the quill-free transport one) |
+| annotated blueprint | LLMs / MCP | `blueprint()` → fill → `Quill::parse` |
 | structured mutators | programs | `Document::new` → `store_fields` / `push_card` |
 
 All three produce the same `Document`; render, validation, storage, and
@@ -84,6 +84,18 @@ a typo, not a fallback, so it is refused at the write rather than surfacing late
 at validation. `set_all` is all-or-nothing and reports every undeclared name
 (and every conform failure) in one pass, so a whole-form batch surfaces every
 typo at once.
+
+**Conform is the third stratum, and it is the typed commit run by the schema
+instead of by a caller.** `Quill::conform(&mut doc)` walks every declared
+content field through the same strict write `set` commits through, so a
+document that arrived through the opaque primitive (a parse, a stored row, a
+`store_field`) lands where the typed writer would have put it:
+`Quill::parse(md)` is parse-then-conform and the documented ingestion path.
+Where the writer refuses a value, conform leaves it authored and reports a
+`conform::*` warning: an ingestion pass must open a document it can repair, not
+reject it. Neither the resting form nor the diagnostics depend on which lane
+built the document ([SCHEMAS.md](SCHEMAS.md) § "Content fields rest per
+codec").
 
 The primitive stays load-bearing: it is what lets a `Document` be constructed
 and `from_json`'d with no bundle (standalone data), what quill-agnostic

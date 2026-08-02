@@ -37,11 +37,12 @@
 //! rejects it on the write side.
 //!
 //! [`get_content`](TypedReader::get_content) is the same read at the other end of
-//! the codec: the corpus rather than the projection. It exists because the two
-//! write lanes disagree on the resting form (a committed richtext field stores a
-//! canonical corpus, a markdown parse leaves the authored string, and coercion
-//! only reconciles them at render), so the verbatim payload read answers "corpus
-//! or string?" with "depends how this document was built". Decoding needs the
+//! the codec: the corpus rather than the projection. A document that came
+//! through the bound door ([`Quill::parse`](crate::Quill::parse) /
+//! [`Quill::conform`](crate::Quill::conform)) rests at one form per codec, but
+//! one the transport door left rests as authored, so the verbatim payload read
+//! still answers "corpus or string?" with "depends where this document came
+//! from" and this one does not. Decoding needs the
 //! schema, not the payload: a `richtext` string is markdown and a `plaintext`
 //! string is literal text, so the same bytes decode two ways and only the
 //! declared type says which. That is why the corpus read binds the quill and
