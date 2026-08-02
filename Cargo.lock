@@ -2345,6 +2345,7 @@ version = "0.99.0"
 dependencies = [
  "pyo3",
  "quillmark",
+ "quillmark-content",
  "quillmark-core",
  "serde_json",
 ]

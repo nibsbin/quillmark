@@ -971,6 +971,28 @@ impl PyReader {
         read_value_to_py(py, read)
     }
 
+    /// Read a main-card content field as its canonical Content-JSON corpus (a
+    /// dict, `{text, lines, marks, islands}`): the corpus twin of `get`, which
+    /// projects. Decodes through the codec the declared type names (`richtext` as
+    /// markdown, `plaintext` as literal text), so a field the writer committed as
+    /// a corpus and one a markdown parse left as an authored string read back the
+    /// same — the storage form stops being the caller's business.
+    ///
+    /// `None` when the field is absent. Raises `edit::unknown_field` for an
+    /// undeclared name, `edit::field_not_content` for a declared type that carries
+    /// no content, and `edit::field_richtext_decode` for a stored value that
+    /// decodes under neither encoding. Mirrors WASM `reader.getContent`.
+    fn get_content<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
+        let quill = self.quill.borrow(py);
+        let doc = self.doc.borrow(py);
+        let read = quill
+            .inner
+            .reader(&doc.inner)
+            .get_content(name)
+            .map_err(convert_edit_error)?;
+        content_to_py(py, read)
+    }
+
     /// The main body's markdown: the quill-free body read (a body's type is a
     /// format fact, not a schema fact), never raising.
     fn get_body(&self, py: Python<'_>) -> String {
@@ -1032,6 +1054,21 @@ impl PyCardReader {
             .get(name)
             .map_err(convert_edit_error)?;
         read_value_to_py(py, read)
+    }
+
+    /// Read a content field on this card as its canonical Content-JSON corpus:
+    /// the card-indexed twin of `Reader.get_content`, carrying the same outcomes
+    /// plus `edit::index_out_of_range` for a bad index.
+    fn get_content<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
+        let quill = self.quill.borrow(py);
+        let doc = self.doc.borrow(py);
+        let reader = quill.inner.reader(&doc.inner);
+        let read = reader
+            .card(self.index)
+            .map_err(convert_edit_error)?
+            .get_content(name)
+            .map_err(convert_edit_error)?;
+        content_to_py(py, read)
     }
 
     /// This card's body markdown: the card twin of `Reader.get_body`. Raises
@@ -1247,6 +1284,22 @@ fn quillvalue_to_py<'py>(
     value: &quillmark_core::QuillValue,
 ) -> PyResult<Bound<'py, PyAny>> {
     json_to_py(py, value.as_json())
+}
+
+/// Serialize a decoded corpus into canonical Content-JSON for the
+/// `Reader.get_content` surfaces, an absent field staying `None`. The corpus twin
+/// of `read_value_to_py`, which flattens to a projection.
+fn content_to_py<'py>(
+    py: Python<'py>,
+    content: Option<quillmark_content::Content>,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    match content {
+        None => Ok(None),
+        Some(content) => Ok(Some(json_to_py(
+            py,
+            &quillmark_content::serial::to_canonical_value(&content),
+        )?)),
+    }
 }
 
 /// Flatten a [`ReadValue`](quillmark_core::ReadValue) into a Python object for

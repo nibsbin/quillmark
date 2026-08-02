@@ -259,7 +259,11 @@ card's. Reads are total over the field axis (`getStored` → `undefined`, `isFil
 an absent field; only an out-of-range card throws); field writes throw on a body
 address. `getStored` is the verbatim transport read, distinct from the interpreted
 `quill.reader(doc).get`; `getMarkdown` is the body markdown read (a `CardAddr`; a field's
-markdown is read through `quill.reader(doc).get(field)`). Card-scoped verbs take a
+markdown is read through `quill.reader(doc).get(field)`). A content field's stored
+form follows how the document was built — a canonical content object when the
+typed writer committed it, the authored string when a markdown parse produced it —
+so for the corpus either way read `quill.reader(doc).getContent(addr)`, which
+decodes through the codec the field's declared type names. Card-scoped verbs take a
 `CardAddr` (`{ card? }`) first: `doc.getExt({ card: 2 })`, and the batch below.
 
 Batch mutation: `doc.storeFields({}, {...})` / `doc.storeFields({ card: index }, {...})`

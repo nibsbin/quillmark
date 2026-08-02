@@ -950,8 +950,7 @@ impl Document {
     }
 
     /// Read the **verbatim stored value** at `addr`: the raw payload value of a
-    /// field (a content object for a richtext field, a scalar/array/object
-    /// otherwise), or the **body content** when `addr.field` is absent. A bare
+    /// field, or the **body content** when `addr.field` is absent. A bare
     /// string is `Addr` shorthand for `{ field }`. Reads are total over the field
     /// axis: an absent field is `undefined`; only an out-of-range `addr.card`
     /// throws `edit::index_out_of_range`. Needs no schema, so it lives on
@@ -959,6 +958,14 @@ impl Document {
     /// the interpreted schema-plane [`reader.get`](Self::reader_get). For the
     /// markdown projection use [`getMarkdown`](Self::get_markdown) (body) or
     /// `reader.get` (a field's declared type).
+    ///
+    /// **A content field's stored form is construction-dependent.** A committed
+    /// richtext field holds a canonical content object; one a markdown parse
+    /// left holds the authored string, until an edit commits it. Both are
+    /// intended, and this read reports what is there rather than smoothing it
+    /// over. For the corpus whichever lane built the document, use the
+    /// schema-plane `reader.getContent`, which decodes through the codec the
+    /// field's declared type names.
     #[wasm_bindgen(js_name = getStored, unchecked_return_type = "unknown")]
     pub fn get_stored(
         &self,
@@ -1064,6 +1071,61 @@ impl Document {
                         "reader.get: this build cannot project that field's value",
                     )
                     .to_js_value()),
+                }
+            }
+        }
+    }
+
+    /// Interpreted **corpus** read at `addr`: the stable ABI under the runtime
+    /// `reader.getContent` / `reader.card(i).getContent`. The corpus twin of
+    /// [`reader.get`](Self::reader_get), which projects; this decodes the stored
+    /// value through the codec the field's declared type names (`richtext` as
+    /// markdown, `plaintext` as literal text) and returns the canonical `Content`.
+    ///
+    /// Total over the storage form, which is what makes it worth having: a
+    /// committed field holds a content object and a parsed one holds the authored
+    /// string, and both read back as a corpus here, so a consumer mounting a
+    /// corpus editor stops branching on how the document was built.
+    ///
+    /// A bare string is `Addr` shorthand for `{ field }`; `{ card, field }`
+    /// targets a composable card. Returns `undefined` for an **absent** field. An
+    /// absent `addr.field` reads the **body** corpus, quill-free, mirroring
+    /// [`getStored`](Self::get_stored). Throws `edit::unknown_field` for a name
+    /// the schema does not declare, `edit::field_not_content` for a declared type
+    /// that carries no content, `edit::field_richtext_decode` for a stored value
+    /// that decodes under neither encoding, and `edit::index_out_of_range` for a
+    /// bad `addr.card`.
+    #[wasm_bindgen(js_name = _readerGetContent, skip_typescript, unchecked_return_type = "Content | undefined")]
+    pub fn reader_get_content(
+        &self,
+        quill: &Quill,
+        #[wasm_bindgen(unchecked_param_type = "Addr | string")] addr: JsValue,
+    ) -> Result<JsValue, JsValue> {
+        let addr = Addr::from_js_or_string(&addr)?;
+        let base = self.addr_base(&addr);
+        match &addr.field {
+            // Absent field = body: the body is a corpus by construction, so this
+            // is the quill-free `getStored` body read.
+            None => serialize_or_throw(
+                &quillmark_content::serial::to_canonical_value(self.addr_card_ref(&addr)?.body()),
+                "reader.getContent",
+            ),
+            Some(field) => {
+                let reader = quill.inner.reader(&self.inner);
+                let read = match addr.card {
+                    None => reader.get_content(field),
+                    Some(index) => reader
+                        .card(index)
+                        .map_err(|e| edit_error_to_js(&e, &base))?
+                        .get_content(field),
+                }
+                .map_err(|e| edit_error_to_js(&e, &base))?;
+                match read {
+                    None => Ok(JsValue::UNDEFINED),
+                    Some(content) => serialize_or_throw(
+                        &quillmark_content::serial::to_canonical_value(&content),
+                        "reader.getContent",
+                    ),
                 }
             }
         }

@@ -52,8 +52,8 @@ codec: which navigate by `Addr` and return `Delta` receipts but never consult a
 schema. **Transport** reads (`getStored` / `isFill` / `getExt`) return the stored
 value verbatim, need no schema, and sit on `Document` too.
 
-The one **interpreting** read (projecting a field by its type) is a
-schema-shaped question ("this field's richtext, as markdown"), so it gains a
+The **interpreting** reads (reading a field by its type) are schema-shaped
+questions ("this field's richtext, as markdown"), so they gain a
 schema-bound home: `quill.reader(doc)`, the read twin of `quill.writer(doc)`
 (mirroring core's `quill.reader(&doc)`). `reader.get(addr)` reads each field by its
 declared type: a `richtext` field to markdown, a `plaintext` field to its
@@ -67,6 +67,18 @@ stays on `Document` (a body's type is a format fact, not a schema fact, so
 `reader.getBody` mirrors it rather than gating it on the schema). The placement rule
 generalizes: *a verb that needs a schema lives on the writer (writes) or the view
 (reads); `Document` is quill-free data.*
+
+`reader.getContent` is the same read at the other end of the codec, returning
+the **corpus** rather than the projection. It is the read that makes a content
+field's storage form an implementation detail: the typed write commits a
+canonical corpus and a markdown parse leaves the authored string (coercion only
+reconciles them at render), so the transport read answers "corpus or string?"
+with "depends how this document was built". Decoding needs the schema and not
+the payload: a `richtext` string is markdown and a `plaintext` string is literal
+text, so the same stored bytes decode two ways and only the declared type says
+which. That is the whole reason the corpus read binds the quill instead of
+sitting beside `getStored` — a quill-free version would have to guess a codec,
+and would guess markdown.
 
 `reviseField` is the writer verb that is both typed *and* anchor-preserving: it
 rebases surviving anchors like the content `revise`, then conforms the diffed
@@ -118,6 +130,7 @@ table.
 | Typed writer front door | `quill.writer(&mut doc)` | `quill.writer(doc)` | **idiom**: core holds `&mut Document` under the checker; the bindings re-borrow per call (pyo3/wasm objects carry no lifetime), so the guarantee becomes the ephemerality convention |
 | Typed reader front door | `quill.reader(&doc)` | `quill.reader(doc)` | **idiom**: the read twin; same re-borrow/ephemerality as the writer |
 | Interpreted read | `reader.get(name)?` → `ReadValue` (richtext → markdown, plaintext → literal text, else canonical); `reader.card(i)?.get(..)?` | `reader.get(addr)` / `reader.card(i).get(name)` (JS), `reader.get(name)` / `reader.card(i).get(name)` (py) | **idiom** / **FFI**: one `get` interprets by declared type; absent → `undefined`/`None`, unknown name → `UnknownField`, undecodable content → `FieldRichtextDecode`; a field's markdown reads here, not on the body-only `getMarkdown`. Body read (`reader.getBody` / absent-field addr) stays quill-free |
+| Interpreted corpus read | `reader.get_content(name)?` → `Option<Content>`; `reader.card(i)?.get_content(..)?` | `reader.getContent(addr)` / `reader.card(i).getContent(name)` (JS), `reader.get_content(name)` / `reader.card(i).get_content(name)` (py) | **idiom** / **FFI**: the corpus twin of the projecting `get`, decoding through the codec the declared type names, so both storage forms (committed corpus, parsed string) read alike; a declared type carrying no content is `FieldNotContent`. JS/Python return canonical Content-JSON; the absent-field addr reads the body corpus (JS) |
 | Scalar / batch write | `set` / `set_all` | `set` / `setAll` (JS), `set` / `set_all` (py) | identical |
 | Receipt-free body write | `set_body(md)` | `setBody(md)` / `set_body(md)` | identical: core also exposes the delta via `revise_body` |
 | Typed richtext field revise | `TypedWriter::revise_field(name, md)?` / `CardWriter::revise_field(..)?` | `writer.reviseField(name, md)` / `writer.card(i).reviseField(..)` (JS); `writer.revise_field(name, md)` / `writer.card(i).revise_field(..)` (py) | **idiom**: typed *and* anchor-preserving; both wrap `Card::revise_field_checked`. JS returns the `Delta`; Python discards it (the position-mapping receipt is an editor concern, WASM-only) |

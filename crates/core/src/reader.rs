@@ -36,6 +36,17 @@
 //! [`EditError::UnknownField`], exactly as [`TypedWriter::set`](crate::TypedWriter::set)
 //! rejects it on the write side.
 //!
+//! [`get_content`](TypedReader::get_content) is the same read at the other end of
+//! the codec: the corpus rather than the projection. It exists because the two
+//! write lanes disagree on the resting form — a committed richtext field stores a
+//! canonical corpus, a markdown parse leaves the authored string, and coercion
+//! only reconciles them at render — so the verbatim payload read answers "corpus
+//! or string?" with "depends how this document was built". Decoding needs the
+//! schema, not the payload: a `richtext` string is markdown and a `plaintext`
+//! string is literal text, so the same bytes decode two ways and only the
+//! declared type says which. That is why the corpus read binds the quill and
+//! `Document` carries none.
+//!
 //! The body read stays quill-free: a body's type is a format fact, not a schema
 //! fact, so [`get_body`](TypedReader::get_body) mirrors
 //! [`Card::body_markdown`](crate::Card::body_markdown) rather than consulting the
@@ -47,6 +58,7 @@
 //! pyo3); those surfaces construct one per call from the quill handle.
 
 use indexmap::IndexMap;
+use quillmark_content::Content;
 
 use crate::document::{Card, Document, EditError, RichtextDecodeError};
 use crate::quill::{CardSchema, FieldSchema, FieldType, QuillConfig};
@@ -99,6 +111,27 @@ impl<'a> TypedReader<'a> {
         read_field(self.doc.main(), Some(&self.config.main.fields), name)
     }
 
+    /// Read a main-card content field as its [`Content`] corpus, decoded through
+    /// the codec its declared type names: the corpus twin of [`get`](Self::get),
+    /// which returns a projection. Total over the storage form, so a field the
+    /// writer committed as a canonical corpus and one a markdown parse left as an
+    /// authored string both read back as a corpus, and which lane built the
+    /// document stops being the caller's business.
+    ///
+    /// `Ok(None)` when the field is absent;
+    /// [`EditError::UnknownField`] for a name the schema does not declare;
+    /// [`EditError::FieldNotContent`] for a declared type that carries no content
+    /// (an `integer` has no corpus even when it holds a string);
+    /// [`EditError::FieldRichtextDecode`] when the stored value decodes under
+    /// neither encoding.
+    ///
+    /// The codec is the schema's to name, which is why this read is here and not
+    /// on `Document`: a `richtext` string is markdown, a `plaintext` string is
+    /// literal text, and a quill-free read would have to guess.
+    pub fn get_content(&self, name: &str) -> Result<Option<Content>, EditError> {
+        read_content(self.doc.main(), Some(&self.config.main.fields), name)
+    }
+
     /// The main body's markdown projection, the quill-free body read
     /// ([`Card::body_markdown`](crate::Card::body_markdown)). A body's type is a
     /// format fact, not a schema fact, so this consults no schema and never
@@ -147,6 +180,12 @@ impl CardReader<'_> {
         read_field(self.card, self.schema.map(|s| &s.fields), name)
     }
 
+    /// Read a content field on this card as its [`Content`] corpus: the card twin
+    /// of [`TypedReader::get_content`], carrying the same outcomes.
+    pub fn get_content(&self, name: &str) -> Result<Option<Content>, EditError> {
+        read_content(self.card, self.schema.map(|s| &s.fields), name)
+    }
+
     /// This card's body markdown: the card twin of [`TypedReader::get_body`],
     /// quill-free and never raising.
     pub fn get_body(&self) -> String {
@@ -180,6 +219,41 @@ fn read_field(
             .payload()
             .get(name)
             .map(|v| ReadValue::Value(v.clone()))),
+    }
+}
+
+/// The shared corpus dispatch behind [`TypedReader::get_content`] and
+/// [`CardReader::get_content`]: resolve `name` against `fields_schema`, then
+/// decode through the codec the declared type names ([`Card::field_richtext`] for
+/// `richtext`, [`Card::field_plaintext_content`] for `plaintext`). A type that
+/// carries no content is [`EditError::FieldNotContent`], answered from the schema
+/// before the payload is read: whether a field has a corpus is a declared-type
+/// fact, so a `string` field holding markdown-looking text is still not content.
+fn read_content(
+    card: &Card,
+    fields_schema: Option<&IndexMap<String, FieldSchema>>,
+    name: &str,
+) -> Result<Option<Content>, EditError> {
+    let schema = fields_schema
+        .and_then(|m| m.get(name))
+        .ok_or_else(|| EditError::UnknownField(name.to_string()))?;
+    let decoded = match schema.r#type {
+        FieldType::RichText { .. } => card.field_richtext(name),
+        FieldType::PlainText { .. } => card.field_plaintext_content(name),
+        ref other => {
+            return Err(EditError::FieldNotContent {
+                field: name.to_string(),
+                declared: other.as_str().to_string(),
+            })
+        }
+    };
+    match decoded {
+        None => Ok(None),
+        Some(Ok(content)) => Ok(Some(content)),
+        Some(Err(e)) => Err(EditError::FieldRichtextDecode {
+            field: name.to_string(),
+            message: e.into_message(),
+        }),
     }
 }
 
@@ -320,6 +394,120 @@ card_kinds:
         assert!(matches!(
             view.get("subject"),
             Err(EditError::FieldRichtextDecode { field, .. }) if field == "subject"
+        ));
+    }
+
+    // A `plaintext` field parsed from markdown rests as an authored string, and
+    // its codec is literal: `*literal*` is nine characters, not emphasis. The
+    // object lane is covered above; this is the string lane, which decoded
+    // through the markdown codec until it read its own declared type.
+    #[test]
+    fn parse_lane_plaintext_reads_through_the_literal_codec() {
+        let config = config();
+        let mut doc = blank_doc();
+        doc.main_mut()
+            .store_field(
+                "note",
+                QuillValue::from_json(serde_json::json!("a *literal* line")),
+            )
+            .unwrap();
+        let view = TypedReader::new(&config, &doc);
+        assert_eq!(
+            view.get("note").unwrap(),
+            Some(ReadValue::Plaintext("a *literal* line".to_string()))
+        );
+    }
+
+    // The corpus read is total over the storage form: the seeded (committed)
+    // lane and the parsed (authored-string) lane return the same corpus.
+    #[test]
+    fn content_read_spans_both_storage_forms() {
+        let config = config();
+        let committed = seeded_doc(&config);
+        let mut authored = blank_doc();
+        authored
+            .main_mut()
+            .store_field(
+                "subject",
+                QuillValue::from_json(serde_json::json!("Hello **world**")),
+            )
+            .unwrap();
+
+        let from_corpus = TypedReader::new(&config, &committed)
+            .get_content("subject")
+            .unwrap()
+            .unwrap();
+        let from_string = TypedReader::new(&config, &authored)
+            .get_content("subject")
+            .unwrap()
+            .unwrap();
+        assert_eq!(from_corpus.text, "Hello world");
+        assert_eq!(from_corpus.text, from_string.text);
+        assert_eq!(from_corpus.marks, from_string.marks);
+    }
+
+    // The codec follows the declared type, so the same stored bytes decode two
+    // ways: markdown under `richtext`, literal under `plaintext`.
+    #[test]
+    fn content_read_decodes_by_declared_type() {
+        let config = config();
+        let mut doc = blank_doc();
+        let text = serde_json::json!("a *literal* line");
+        {
+            let card = doc.main_mut();
+            card.store_field("subject", QuillValue::from_json(text.clone())).unwrap();
+            card.store_field("note", QuillValue::from_json(text)).unwrap();
+        }
+        let view = TypedReader::new(&config, &doc);
+        // `richtext`: the asterisks are emphasis, so they leave the text.
+        assert_eq!(view.get_content("subject").unwrap().unwrap().text, "a literal line");
+        // `plaintext`: the asterisks are characters.
+        assert_eq!(view.get_content("note").unwrap().unwrap().text, "a *literal* line");
+    }
+
+    #[test]
+    fn content_read_absent_unknown_and_non_content() {
+        let config = config();
+        let doc = seeded_doc(&config);
+        let view = TypedReader::new(&config, &doc);
+        assert_eq!(view.get_content("note").unwrap(), None);
+        assert!(matches!(
+            view.get_content("nope"),
+            Err(EditError::UnknownField(n)) if n == "nope"
+        ));
+        // A declared type carrying no content answers from the schema, not the
+        // payload: `qty` holds 3 and is still not content.
+        assert!(matches!(
+            view.get_content("qty"),
+            Err(EditError::FieldNotContent { field, declared })
+                if field == "qty" && declared == "integer"
+        ));
+    }
+
+    #[test]
+    fn content_read_undecodable_value_raises() {
+        let config = config();
+        let mut doc = blank_doc();
+        doc.main_mut()
+            .store_field("subject", QuillValue::from_json(serde_json::json!(3)))
+            .unwrap();
+        let view = TypedReader::new(&config, &doc);
+        assert!(matches!(
+            view.get_content("subject"),
+            Err(EditError::FieldRichtextDecode { field, .. }) if field == "subject"
+        ));
+    }
+
+    #[test]
+    fn card_content_reads_through_kind_schema() {
+        let config = config();
+        let doc = seeded_doc(&config);
+        let view = TypedReader::new(&config, &doc);
+        let card = view.card(0).unwrap();
+        assert_eq!(card.get_content("body").unwrap().unwrap().text, "a card");
+        assert!(matches!(
+            card.get_content("nope"),
+            Err(EditError::UnknownField(_))
         ));
     }
 

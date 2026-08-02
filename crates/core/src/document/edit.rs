@@ -98,6 +98,14 @@ pub enum EditError {
     #[error("richtext field '{field}' decode failed: {message}")]
     FieldRichtextDecode { field: String, message: String },
 
+    /// A corpus read ([`TypedReader::get_content`](crate::TypedReader::get_content))
+    /// addressed a field whose declared type carries no content. Content is a
+    /// property of the declared type, not of the stored shape, so the schema
+    /// answers this before the payload is consulted: an `integer` field has no
+    /// corpus to return even when it happens to hold a string.
+    #[error("field '{field}' is declared '{declared}', which carries no content")]
+    FieldNotContent { field: String, declared: String },
+
     /// A richtext field written under the `richtext(inline)` constraint decoded
     /// to a multi-block content (more than one line, a container, or an island).
     /// The write-time counterpart of the coercion/validation `richtext(inline)`
@@ -136,6 +144,7 @@ impl EditError {
             EditError::ValueTooDeep { .. } => "ValueTooDeep",
             EditError::Import(_) => "Import",
             EditError::FieldRichtextDecode { .. } => "FieldRichtextDecode",
+            EditError::FieldNotContent { .. } => "FieldNotContent",
             EditError::FieldRichtextNotInline(_) => "FieldRichtextNotInline",
             EditError::FieldConform { .. } => "FieldConform",
             EditError::ContentApply(_) => "ContentApply",
@@ -157,6 +166,7 @@ impl EditError {
             EditError::ValueTooDeep { .. } => "edit::value_too_deep",
             EditError::Import(_) => "edit::import",
             EditError::FieldRichtextDecode { .. } => "edit::field_richtext_decode",
+            EditError::FieldNotContent { .. } => "edit::field_not_content",
             EditError::FieldRichtextNotInline(_) => "edit::field_richtext_not_inline",
             EditError::FieldConform { .. } => "edit::field_conform",
             EditError::ContentApply(_) => "edit::content_apply",
@@ -186,6 +196,7 @@ impl EditError {
             | EditError::UnknownField(f)
             | EditError::FieldRichtextNotInline(f)
             | EditError::FieldConform { field: f, .. }
+            | EditError::FieldNotContent { field: f, .. }
             | EditError::FieldRichtextDecode { field: f, .. } => Some(base.field(f)),
             EditError::IndexOutOfRange { index, .. } => Some(DocPath::card(None, *index)),
             _ => (!base.segs().is_empty()).then(|| base.clone()),
