@@ -5,8 +5,9 @@
 //! quill resolved, the value commits under the strict write, and no
 //! `!must_fill` marker rides anywhere in it: `richtext` as the canonical
 //! content object, `plaintext` as its literal string
-//! (`prose/canon/SCHEMAS.md` § plaintext). Every departure is a named state
-//! carrying a marker or a diagnostic, never a silent second resting form.
+//! (`prose/canon/SCHEMAS.md` § "Content fields rest per codec"). Every
+//! departure is a named state carrying a marker or a diagnostic, never a silent
+//! second resting form.
 //!
 //! [`Quill::conform`] is the primitive and [`Quill::parse`] (parse, then
 //! conform) the convenience: the documented primary ingestion path. The
@@ -120,21 +121,17 @@ impl Quill {
         let config = self.config();
         let mut diags = Vec::new();
         conform_card(&config.main, doc.main_mut(), &DocPath::main(), &mut diags);
-        // A card whose `$kind` declares no schema has no declared field to
-        // conform: it passes untouched, exactly as the render gate passes it.
-        let kinds: Vec<Option<String>> = doc
-            .cards()
-            .iter()
-            .map(|c| c.kind().map(str::to_string))
-            .collect();
         for (index, card) in doc.cards_mut().iter_mut().enumerate() {
-            let Some(kind) = kinds[index].as_deref() else {
+            // A card whose `$kind` declares no schema has no declared field to
+            // conform: it passes untouched, as the render gate passes it. The
+            // kind is copied out so the card is free to be borrowed mutably.
+            let Some(kind) = card.kind().map(str::to_string) else {
                 continue;
             };
-            let Some(schema) = config.card_kind(kind) else {
+            let Some(schema) = config.card_kind(&kind) else {
                 continue;
             };
-            conform_card(schema, card, &DocPath::card(Some(kind), index), &mut diags);
+            conform_card(schema, card, &DocPath::card(Some(&kind), index), &mut diags);
         }
         Ok(diags)
     }
@@ -173,7 +170,8 @@ fn conform_card(
         if !field_contains_content(field) {
             continue;
         }
-        // Null ≡ absent carries no data to conform.
+        // A marker anywhere in the value (the payload item's own flag, or a
+        // nested one) is the state, and a null carries no data to conform.
         if *fill || value.as_json().is_null() || !value.fill_paths().is_empty() {
             continue;
         }

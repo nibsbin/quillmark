@@ -696,8 +696,7 @@ impl Quill {
     /// `doc.warnings`. Throws on a parse failure, or when `markdown` declares a
     /// `$quill` this quill does not answer to: nothing conforms under the wrong
     /// schema. To open a document whose `$quill` is stale, use the transport
-    /// door (`Document.fromMarkdown`, `setQuillRef`, then
-    /// [`conform`](Self::conform)).
+    /// door (`Document.fromMarkdown`, `setQuillRef`, then `quill.conform`).
     #[wasm_bindgen(js_name = parse)]
     pub fn parse(&self, markdown: &str) -> Result<Document, JsValue> {
         let parsed = self
