@@ -1016,20 +1016,8 @@ main:
         // part a suspended run would swallow.
         const TEXT: &str = "Start uline and then a long trailing plain run of text.";
         let region_width = |kind: MarkKind| -> f32 {
-            let rt = Content {
-                text: TEXT.to_string(),
-                lines: vec![Line {
-                    containers: vec![],
-                    kind: LineKind::Para,
-                    continues: false,
-                }],
-                marks: vec![Mark {
-                    start: 6,
-                    end: 11,
-                    kind,
-                }],
-                islands: vec![],
-            };
+            let rt = Content::new(TEXT.to_string(), vec![Line::new(LineKind::Para)])
+                .with_marks(vec![Mark::new(6, 11, kind)]);
             let q = quill(YAML, PLATE);
             let plate = crate::read_plate(&q).expect("plate");
             let schema = quillmark_core::quill::build_transform_schema(q.config());

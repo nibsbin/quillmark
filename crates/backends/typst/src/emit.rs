@@ -1488,27 +1488,11 @@ mod tests {
     #[test]
     fn overlapping_marks_close_and_reopen() {
         use quillmark_content::model::{Line, Mark};
-        let mut rt = Content {
-            text: "abcdef".to_string(),
-            lines: vec![Line {
-                kind: LineKind::Para,
-                containers: vec![],
-                continues: false,
-            }],
-            marks: vec![
-                Mark {
-                    start: 0,
-                    end: 4,
-                    kind: MarkKind::Strong,
-                },
-                Mark {
-                    start: 2,
-                    end: 6,
-                    kind: MarkKind::Emph,
-                },
-            ],
-            islands: vec![],
-        };
+        let mut rt = Content::new("abcdef".to_string(), vec![Line::new(LineKind::Para)])
+            .with_marks(vec![
+                Mark::new(0, 4, MarkKind::Strong),
+                Mark::new(2, 6, MarkKind::Emph),
+            ]);
         rt.normalize();
         assert_eq!(rt.validate(), Ok(()));
         let out = emit_content(&rt).unwrap().markup;
@@ -1528,26 +1512,19 @@ mod tests {
             tag: "indent".to_string(),
             attrs: serde_json::Value::Null,
         };
-        let mut rt = Content {
-            text: "heads up\nsecond".to_string(),
-            lines: vec![
-                Line {
-                    kind: LineKind::Unknown {
-                        tag: "callout".to_string(),
-                        attrs: serde_json::json!({"variant": "warn"}),
-                    },
-                    containers: vec![indent()],
-                    continues: false,
-                },
-                Line {
-                    kind: LineKind::Para,
-                    containers: vec![indent()],
-                    continues: true,
-                },
+        let mut rt = Content::new(
+            "heads up\nsecond".to_string(),
+            vec![
+                Line::new(LineKind::Unknown {
+                    tag: "callout".to_string(),
+                    attrs: serde_json::json!({"variant": "warn"}),
+                })
+                .with_containers(vec![indent()]),
+                Line::new(LineKind::Para)
+                    .with_containers(vec![indent()])
+                    .with_continues(true),
             ],
-            marks: vec![],
-            islands: vec![],
-        };
+        );
         rt.normalize();
         assert_eq!(rt.validate(), Ok(()));
         // One block (the `continues` join is a hard break), no wrapper.
@@ -1569,16 +1546,8 @@ mod tests {
     /// normalize + validate it, and lower it.
     fn emit_marked(text: &str, marks: Vec<Mark>) -> String {
         use quillmark_content::model::Line;
-        let mut rt = Content {
-            text: text.to_string(),
-            lines: vec![Line {
-                kind: LineKind::Para,
-                containers: vec![],
-                continues: false,
-            }],
-            marks,
-            islands: vec![],
-        };
+        let mut rt =
+            Content::new(text.to_string(), vec![Line::new(LineKind::Para)]).with_marks(marks);
         rt.normalize();
         assert_eq!(rt.validate(), Ok(()), "content invariants");
         emit_content(&rt).unwrap().markup
@@ -1602,11 +1571,7 @@ mod tests {
         ] {
             let out = emit_marked(
                 "abc",
-                vec![Mark {
-                    start: 0,
-                    end: 3,
-                    kind: kind.clone(),
-                }],
+                vec![Mark::new(0, 3, kind.clone())],
             );
             assert_eq!(out, expected, "{kind:?} lowers wrong");
         }
@@ -1619,16 +1584,8 @@ mod tests {
         let nested = emit_marked(
             "abc",
             vec![
-                Mark {
-                    start: 0,
-                    end: 3,
-                    kind: MarkKind::Strong,
-                },
-                Mark {
-                    start: 0,
-                    end: 3,
-                    kind: MarkKind::Underline,
-                },
+                Mark::new(0, 3, MarkKind::Strong),
+                Mark::new(0, 3, MarkKind::Underline),
             ],
         );
         assert!(
@@ -1640,11 +1597,7 @@ mod tests {
         // Intraword: a strike over the middle character only.
         let intraword = emit_marked(
             "abc",
-            vec![Mark {
-                start: 1,
-                end: 2,
-                kind: MarkKind::Strike,
-            }],
+            vec![Mark::new(1, 2, MarkKind::Strike)],
         );
         assert_eq!(intraword, "a#strike[b]c\n\n");
     }
@@ -1664,16 +1617,8 @@ mod tests {
         let out = emit_marked(
             "abcdef",
             vec![
-                Mark {
-                    start: 0,
-                    end: 4,
-                    kind: MarkKind::Strong,
-                },
-                Mark {
-                    start: 2,
-                    end: 6,
-                    kind: MarkKind::Code,
-                },
+                Mark::new(0, 4, MarkKind::Strong),
+                Mark::new(2, 6, MarkKind::Code),
             ],
         );
         assert_eq!(out, "#strong[ab]#raw(\"cdef\")\n\n");
@@ -1683,16 +1628,8 @@ mod tests {
         let out = emit_marked(
             "abcdef",
             vec![
-                Mark {
-                    start: 0,
-                    end: 4,
-                    kind: MarkKind::Code,
-                },
-                Mark {
-                    start: 2,
-                    end: 6,
-                    kind: MarkKind::Strong,
-                },
+                Mark::new(0, 4, MarkKind::Code),
+                Mark::new(2, 6, MarkKind::Strong),
             ],
         );
         assert_eq!(out, "#raw(\"abcd\")#strong[ef]\n\n");
@@ -1703,16 +1640,8 @@ mod tests {
         let out = emit_marked(
             "abcdef",
             vec![
-                Mark {
-                    start: 0,
-                    end: 6,
-                    kind: MarkKind::Strong,
-                },
-                Mark {
-                    start: 2,
-                    end: 4,
-                    kind: MarkKind::Code,
-                },
+                Mark::new(0, 6, MarkKind::Strong),
+                Mark::new(2, 4, MarkKind::Code),
             ],
         );
         assert_eq!(out, "#strong[ab#raw(\"cd\")ef]\n\n");
@@ -1725,11 +1654,7 @@ mod tests {
     fn wrap_trailing_to_end_closes() {
         let out = emit_marked(
             "abcdef",
-            vec![Mark {
-                start: 0,
-                end: 6,
-                kind: MarkKind::Strong,
-            }],
+            vec![Mark::new(0, 6, MarkKind::Strong)],
         );
         assert_eq!(out, "#strong[abcdef]\n\n");
         assert!(balanced(&out));
@@ -1746,25 +1671,13 @@ mod tests {
         let out = emit_marked(
             "abcdef",
             vec![
-                Mark {
-                    start: 0,
-                    end: 6,
-                    kind: MarkKind::Link {
+                Mark::new(0, 6, MarkKind::Link {
                         url: "wrong".into(),
-                    },
-                },
-                Mark {
-                    start: 0,
-                    end: 4,
-                    kind: MarkKind::Strong,
-                },
-                Mark {
-                    start: 2,
-                    end: 6,
-                    kind: MarkKind::Link {
+                    }),
+                Mark::new(0, 4, MarkKind::Strong),
+                Mark::new(2, 6, MarkKind::Link {
                         url: "right".into(),
-                    },
-                },
+                    }),
             ],
         );
         // The reopened tail after the strong closes carries the inner link's URL.
@@ -1857,7 +1770,7 @@ mod tests {
         assert_eq!(
             emit_marked(
                 "= x",
-                vec![Mark { start: 0, end: 3, kind: MarkKind::Strong }],
+                vec![Mark::new(0, 3, MarkKind::Strong)],
             ),
             "#strong[= x]\n\n",
         );
@@ -1865,12 +1778,7 @@ mod tests {
         // Source-map integrity: every run's generated slice equals the escape of
         // its content, and the leading `\` is not inside any run.
         use quillmark_content::model::Line;
-        let mut rt = Content {
-            text: "= x".to_string(),
-            lines: vec![Line { kind: LineKind::Para, containers: vec![], continues: false }],
-            marks: vec![],
-            islands: vec![],
-        };
+        let mut rt = Content::new("= x".to_string(), vec![Line::new(LineKind::Para)]);
         rt.normalize();
         let ec = emit_content(&rt).unwrap();
         let chars: Vec<char> = rt.text.chars().collect();

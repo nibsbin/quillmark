@@ -16,7 +16,7 @@ use quillmark_content::delta::diff_import;
 use quillmark_content::export::to_markdown;
 use quillmark_content::import::from_markdown;
 use quillmark_content::model::{Line, Mark, MarkKind};
-use quillmark_content::{Delta, Island, LineKind, LineOp, Loss, MarkOp, Op, Content};
+use quillmark_content::{Content, Delta, Island, LineKind, LineOp, MarkOp, Op};
 use serde_json::{json, Value};
 
 // ---------------------------------------------------------------------------
@@ -206,15 +206,10 @@ proptest! {
         let e2 = n;
 
         let marks = vec![
-            Mark { start: s1, end: e1, kind: ov_kind(k1i) },
-            Mark { start: s2, end: e2, kind: ov_kind(k2i) },
+            Mark::new(s1, e1, ov_kind(k1i)),
+            Mark::new(s2, e2, ov_kind(k2i)),
         ];
-        let mut rt = Content {
-            text: text.clone(),
-            lines: vec![Line { kind: LineKind::Para, containers: vec![], continues: false }],
-            marks,
-            islands: vec![],
-        };
+        let mut rt = Content::new(text.clone(), vec![Line::new(LineKind::Para)]).with_marks(marks);
         rt.normalize();
         prop_assert_eq!(rt.validate(), Ok(()), "hand-built content invalid");
 
@@ -268,12 +263,7 @@ proptest! {
             .chain(std::iter::once('a'))
             .collect();
         let n = text.chars().count();
-        let mut rt = Content {
-            text: text.clone(),
-            lines: vec![Line { kind: LineKind::Para, containers: vec![], continues: false }],
-            marks: vec![],
-            islands: vec![],
-        };
+        let mut rt = Content::new(text.clone(), vec![Line::new(LineKind::Para)]);
         rt.normalize();
         // Stay in the valid domain and only mark when the text length is intact
         // (normalization can reshape whitespace-only content).
@@ -328,18 +318,11 @@ proptest! {
         // that so the hand-built content stays inside the fixed-point domain.
         let alt = alt.trim().to_string();
         let text = "lnk\u{FFFC}".to_string(); // link over "lnk", image slot after
-        let mut rt = Content {
-            text,
-            lines: vec![Line { kind: LineKind::Para, containers: vec![], continues: false }],
-            marks: vec![Mark { start: 0, end: 3, kind: MarkKind::Link { url: link_url } }],
-            islands: vec![Island {
-                // The id import mints for the first island, so re-import compares equal.
-                id: "isl-0".into(),
-                island_type: "image".into(),
-                props: json!({ "alt": alt, "url": img_url }),
-                loss: Loss::LOSSLESS,
-            }],
-        };
+        let mut rt = Content::new(text, vec![Line::new(LineKind::Para)])
+            .with_marks(vec![Mark::new(0, 3, MarkKind::Link { url: link_url })])
+            // The id import mints for the first island, so re-import compares equal.
+            .with_islands(vec![Island::new("isl-0".into(), "image".into())
+                .with_props(json!({ "alt": alt, "url": img_url }))]);
         rt.normalize();
         prop_assert_eq!(rt.validate(), Ok(()), "hand-built content invalid");
         let md = to_markdown(&rt);
@@ -378,7 +361,7 @@ proptest! {
         let start = 5;
         let end = 5 + a.chars().count();
         prop_assert_eq!(&base.text[start..end], a.as_str());
-        base.marks.push(Mark { start, end, kind: MarkKind::Anchor { id: "c1".into() } });
+        base.marks.push(Mark::new(start, end, MarkKind::Anchor { id: "c1".into() }));
         base.normalize();
 
         // Rewrite prepends `b` (edit before the anchor); anchored text unchanged.
@@ -475,11 +458,7 @@ proptest! {
         let len = rt.len_usv();
         let a = a_seed % (len + 1);
         let b = b_seed % (len + 1);
-        rt.marks.push(Mark {
-            start: a.min(b),
-            end: a.max(b),
-            kind: MarkKind::Anchor { id: ID.into() },
-        });
+        rt.marks.push(Mark::new(a.min(b), a.max(b), MarkKind::Anchor { id: ID.into() }));
         rt.normalize();
         prop_assert_eq!(rt.validate(), Ok(()), "seeded content invalid for {:?}", md);
 
@@ -620,21 +599,10 @@ fn import_row(contents: &[String]) -> Vec<Value> {
 /// A single-table content with the given (possibly ill-shaped) props. `id` is the
 /// first-island id import mints (`isl-0`), so a re-imported table compares equal.
 fn table_content(aligns: Vec<&str>, header: Vec<Value>, rows: Vec<Vec<Value>>) -> Content {
-    Content {
-        text: "\u{FFFC}".into(),
-        lines: vec![Line {
-            kind: LineKind::Island,
-            containers: vec![],
-            continues: false,
-        }],
-        marks: vec![],
-        islands: vec![Island {
-            id: "isl-0".into(),
-            island_type: "table".into(),
-            props: json!({ "aligns": aligns, "header": header, "rows": rows }),
-            loss: Loss::LOSSLESS,
-        }],
-    }
+    Content::new("\u{FFFC}".into(), vec![Line::new(LineKind::Island)]).with_islands(vec![
+        Island::new("isl-0".into(), "table".into())
+            .with_props(json!({ "aligns": aligns, "header": header, "rows": rows })),
+    ])
 }
 
 proptest! {
