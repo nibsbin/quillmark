@@ -199,8 +199,8 @@ pub struct Mark {
 }
 
 impl Mark {
-    /// A mark of `kind` over `[start, end)`. All three are what a mark is, so
-    /// there is nothing optional to set beside them.
+    /// A mark of `kind` over `[start, end)`. The three fields are the whole of a
+    /// mark: nothing optional sits beside them.
     pub fn new(start: Usv, end: Usv, kind: MarkKind) -> Self {
         Mark { start, end, kind }
     }
@@ -689,9 +689,9 @@ impl Content {
     /// [`with_islands`](Self::with_islands) beside them.
     ///
     /// Constructing does not normalize or check: the invariants in this type's
-    /// docs are still the caller's until [`validate`](Self::validate) runs. The
-    /// codecs ([`crate::import`], [`Content::from_canonical_json`]) are the paths
-    /// that establish them, and are what a consumer normally builds through.
+    /// docs are the caller's until [`validate`](Self::validate) runs. The codecs
+    /// ([`crate::import`], [`Content::from_canonical_json`]) establish them, and
+    /// are what a consumer normally builds through.
     pub fn new(text: String, lines: Vec<Line>) -> Self {
         Content {
             text,
