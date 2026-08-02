@@ -982,13 +982,11 @@ mod tests {
         // import would instead parse `- `/`+ `/`N. ` as real lists, which is not
         // the bug). Each line is its own paragraph, so each starts at column 0.
         use quillmark_content::model::{Line, LineKind, Content};
-        let para = |_: usize| Line { kind: LineKind::Para, containers: vec![], continues: false };
-        let mut rt = Content {
-            text: "= Heading\n- bullet\n+ numbered\n1. dotted\n/ term: desc".to_string(),
-            lines: (0..5).map(para).collect(),
-            marks: vec![],
-            islands: vec![],
-        };
+        let para = |_: usize| Line::new(LineKind::Para);
+        let mut rt = Content::new(
+            "= Heading\n- bullet\n+ numbered\n1. dotted\n/ term: desc".to_string(),
+            (0..5).map(para).collect(),
+        );
         rt.normalize();
         assert_eq!(rt.validate(), Ok(()), "content invariants");
         let q = quill();

@@ -31,6 +31,7 @@ pub const ISLAND_SLOT: char = '\u{FFFC}';
 /// count of [`ISLAND_SLOT`] equals `islands.len()`; `lines.len()` equals the
 /// number of `\n`-separated segments; marks are normalized (sorted, unioned).
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct Content {
     /// The content. `\n` is a line boundary; [`ISLAND_SLOT`] is an island slot.
     pub text: String,
@@ -48,6 +49,7 @@ pub struct Content {
 
 /// A line's attributes: its block role plus the container path it sits in.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct Line {
     pub kind: LineKind,
     /// Ancestor containers, outermost first. A multi-paragraph list item is two
@@ -63,6 +65,34 @@ pub struct Line {
     /// the freeze, and what groups a code fence's lines without an
     /// adjacency heuristic.
     pub continues: bool,
+}
+
+impl Line {
+    /// A line of `kind` at the top level: no containers, starting a new block.
+    /// Both defaults are what the wire reads off an absent key (`containers`
+    /// empty, `continues` omitted); set either with
+    /// [`with_containers`](Self::with_containers) /
+    /// [`with_continues`](Self::with_continues).
+    pub fn new(kind: LineKind) -> Self {
+        Line {
+            kind,
+            containers: Vec::new(),
+            continues: false,
+        }
+    }
+
+    /// Set [`containers`](Self::containers), the ancestor path, outermost first.
+    pub fn with_containers(mut self, containers: Vec<Container>) -> Self {
+        self.containers = containers;
+        self
+    }
+
+    /// Set [`continues`](Self::continues): `true` makes this line a within-block
+    /// break off the previous one rather than a new block.
+    pub fn with_continues(mut self, continues: bool) -> Self {
+        self.continues = continues;
+        self
+    }
 }
 
 /// The block role of a line. The tree between lines is inferred: two adjacent
@@ -161,10 +191,19 @@ pub enum Container {
 /// A mark over a char range `[start, end)`. `start == end` (zero-width) is legal
 /// only for [`MarkKind::Anchor`]; normalization drops zero-width formatting.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct Mark {
     pub start: Usv,
     pub end: Usv,
     pub kind: MarkKind,
+}
+
+impl Mark {
+    /// A mark of `kind` over `[start, end)`. The three fields are the whole of a
+    /// mark: nothing optional sits beside them.
+    pub fn new(start: Usv, end: Usv, kind: MarkKind) -> Self {
+        Mark { start, end, kind }
+    }
 }
 
 /// The mark set, **open**: an unknown kind round-trips as [`MarkKind::Unknown`],
@@ -203,6 +242,7 @@ pub enum MarkKind {
 /// A structured object with no honest text encoding (a table, figure, or future
 /// embed) occupying one [`ISLAND_SLOT`] in the content.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct Island {
     /// Deterministically minted, session-stable id: `isl-{n}` by import
     /// position (`import::mint_island`). Part of the canonical form and thus
@@ -219,6 +259,34 @@ pub struct Island {
     pub props: JsonValue,
     /// How faithfully the markdown projection can carry this island.
     pub loss: Loss,
+}
+
+impl Island {
+    /// An island of `island_type` under `id`, carrying no payload and claiming
+    /// no projection loss. Both defaults are what the wire reads off an absent
+    /// key: `props` absent is `Null`, and a missing `loss` is the faithful
+    /// class, which is what an island with no loss recorded means. Set either
+    /// with [`with_props`](Self::with_props) / [`with_loss`](Self::with_loss).
+    pub fn new(id: String, island_type: String) -> Self {
+        Island {
+            id,
+            island_type,
+            props: JsonValue::Null,
+            loss: Loss::LOSSLESS,
+        }
+    }
+
+    /// Set [`props`](Self::props), the typed payload.
+    pub fn with_props(mut self, props: JsonValue) -> Self {
+        self.props = props;
+        self
+    }
+
+    /// Set [`loss`](Self::loss), how faithfully markdown carries this island.
+    pub fn with_loss(mut self, loss: Loss) -> Self {
+        self.loss = loss;
+        self
+    }
 }
 
 /// The markdown-projection loss class of an island: a **description** of how
@@ -616,18 +684,38 @@ pub fn line_kind_mismatch(kind: &LineKind, seg: &str) -> Option<LineKindMismatch
 }
 
 impl Content {
-    /// An empty content: one empty `Para` line, no marks, no islands.
-    pub fn empty() -> Self {
+    /// The text and its per-line attributes: what a content always carries.
+    /// Marks and islands start empty and have [`with_marks`](Self::with_marks) /
+    /// [`with_islands`](Self::with_islands) beside them.
+    ///
+    /// Constructing does not normalize or check: the invariants in this type's
+    /// docs are the caller's until [`validate`](Self::validate) runs. The codecs
+    /// ([`crate::import`], [`Content::from_canonical_json`]) establish them, and
+    /// are what a consumer normally builds through.
+    pub fn new(text: String, lines: Vec<Line>) -> Self {
         Content {
-            text: String::new(),
-            lines: vec![Line {
-                kind: LineKind::Para,
-                containers: Vec::new(),
-                continues: false,
-            }],
+            text,
+            lines,
             marks: Vec::new(),
             islands: Vec::new(),
         }
+    }
+
+    /// Set [`marks`](Self::marks), the range-anchored marks over the text.
+    pub fn with_marks(mut self, marks: Vec<Mark>) -> Self {
+        self.marks = marks;
+        self
+    }
+
+    /// Set [`islands`](Self::islands), one per [`ISLAND_SLOT`] in slot order.
+    pub fn with_islands(mut self, islands: Vec<Island>) -> Self {
+        self.islands = islands;
+        self
+    }
+
+    /// An empty content: one empty `Para` line, no marks, no islands.
+    pub fn empty() -> Self {
+        Content::new(String::new(), vec![Line::new(LineKind::Para)])
     }
 
     /// Total length in USV.

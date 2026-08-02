@@ -708,11 +708,7 @@ This body and the metadata above are an indorsement card.
 
         let mut doc = sample();
         let mut content = quillmark_content::import::from_markdown("underlined intro").unwrap();
-        content.marks.push(Mark {
-            start: 0,
-            end: 10,
-            kind: MarkKind::Underline,
-        });
+        content.marks.push(Mark::new(0, 10, MarkKind::Underline));
         content.normalize();
         let json = quillmark_content::serial::to_canonical_value(&content);
         let schema = crate::quill::FieldSchema::new(

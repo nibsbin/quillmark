@@ -487,11 +487,7 @@ fn test_install_body_sets_directly() {
 
     let mut content = quillmark_content::import::from_markdown("underlined body").unwrap();
     // An `underline` mark has no markdown projection: the content path must keep it.
-    content.marks.push(Mark {
-        start: 0,
-        end: 10,
-        kind: MarkKind::Underline,
-    });
+    content.marks.push(Mark::new(0, 10, MarkKind::Underline));
     content.normalize();
 
     let mut card = Card::new("note").unwrap();
@@ -512,11 +508,7 @@ fn test_install_field_sets_directly() {
     use quillmark_content::model::{Mark, MarkKind};
 
     let mut content = quillmark_content::import::from_markdown("underlined intro").unwrap();
-    content.marks.push(Mark {
-        start: 0,
-        end: 10,
-        kind: MarkKind::Underline,
-    });
+    content.marks.push(Mark::new(0, 10, MarkKind::Underline));
     content.normalize();
 
     let mut card = Card::new("note").unwrap();
@@ -547,11 +539,9 @@ fn test_revise_field_diff_imports_and_returns_delta() {
 
     // Anchor the field, then revise: the anchor rebases onto surviving text.
     let mut base = card.field_richtext("intro").unwrap().unwrap();
-    base.marks.push(Mark {
-        start: 6,
-        end: 12, // "target"
-        kind: MarkKind::Anchor { id: "c1".into() },
-    });
+    // 6..12 is "target".
+    base.marks
+        .push(Mark::new(6, 12, MarkKind::Anchor { id: "c1".into() }));
     base.normalize();
     card.install_field("intro", base).unwrap();
     card.revise_field("intro", "why keep the target here").unwrap();
@@ -595,11 +585,9 @@ fn test_revise_field_checked_preserves_anchors_and_enforces_inline() {
     // Anchor "target", then revise: the anchor rebases onto surviving text and
     // the single-line result still conforms.
     let mut base = card.field_richtext("subject").unwrap().unwrap();
-    base.marks.push(Mark {
-        start: 6,
-        end: 12, // "target"
-        kind: MarkKind::Anchor { id: "c1".into() },
-    });
+    // 6..12 is "target".
+    base.marks
+        .push(Mark::new(6, 12, MarkKind::Anchor { id: "c1".into() }));
     base.normalize();
     card.install_field("subject", base).unwrap();
     card.revise_field_checked("subject", "why keep the target here", &inline)
@@ -641,11 +629,7 @@ fn test_commit_field_richtext_content_object_reads_back() {
 
     let mut content = quillmark_content::import::from_markdown("underlined intro").unwrap();
     // `underline` has no markdown projection: the content store must keep it.
-    content.marks.push(Mark {
-        start: 0,
-        end: 10,
-        kind: MarkKind::Underline,
-    });
+    content.marks.push(Mark::new(0, 10, MarkKind::Underline));
     content.normalize();
     let json = quillmark_content::serial::to_canonical_value(&content);
 
@@ -943,11 +927,7 @@ fn test_revise_body_rebases_anchor() {
 
     let mut base = quillmark_content::import::from_markdown("keep the target word").unwrap();
     // Anchor over "target" (chars 9..15).
-    base.marks.push(Mark {
-        start: 9,
-        end: 15,
-        kind: MarkKind::Anchor { id: "c1".into() },
-    });
+    base.marks.push(Mark::new(9, 15, MarkKind::Anchor { id: "c1".into() }));
     base.normalize();
     let mut card = Card::new("note").unwrap();
     card.install_body(base);

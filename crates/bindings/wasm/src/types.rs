@@ -121,6 +121,16 @@ pub struct Diagnostic {
     pub path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub hint: Option<String>,
+    /// The facts `message` interpolates, keyed by name. With `code`, the
+    /// substitution unit needed to word this diagnostic in another language;
+    /// `prose/canon/ERROR.md` § "Diagnostic args" tabulates the keys per code.
+    ///
+    /// Declared optional explicitly because `tsify` does not read
+    /// `skip_serializing_if`: without this, a field the runtime omits is
+    /// declared required. `sourceChain` carries that mismatch.
+    #[tsify(optional, type = "Record<string, unknown>")]
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty", default)]
+    pub args: std::collections::BTreeMap<String, serde_json::Value>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub source_chain: Vec<String>,
 }
@@ -134,6 +144,7 @@ impl From<quillmark_core::Diagnostic> for Diagnostic {
             location: diag.location.map(Into::into),
             path: diag.path,
             hint: diag.hint,
+            args: diag.args,
             source_chain: diag.source_chain,
         }
     }
@@ -146,6 +157,7 @@ impl From<Diagnostic> for quillmark_core::Diagnostic {
         out.location = diag.location.map(Into::into);
         out.path = diag.path;
         out.hint = diag.hint;
+        out.args = diag.args;
         out.source_chain = diag.source_chain;
         out
     }
