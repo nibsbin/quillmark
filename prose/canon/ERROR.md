@@ -263,6 +263,7 @@ Three outcomes, and the wire tells them apart only with this table in hand, sinc
 | `edit::index_out_of_range` | `index`, `len` | structured |
 | `edit::value_too_deep` | `max` | structured |
 | `edit::field_richtext_not_inline` | `field` | structured |
+| `edit::field_not_content` | `field`, `declared` | structured |
 | `edit::field_conform` | `field`, `target` | structured, coarser |
 | `edit::field_richtext_decode` | `field` | structured, coarser |
 | `edit::reserved_kind` | — | code-determined |

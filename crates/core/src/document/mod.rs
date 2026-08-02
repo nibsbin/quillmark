@@ -281,17 +281,52 @@ impl Card {
         Some(self.field_richtext(name)?.map(|rt| quillmark_content::export::to_markdown(&rt)))
     }
 
+    /// Read a plaintext-valued user field back as a [`Content`] content: the
+    /// literal-codec twin of [`field_richtext`](Card::field_richtext). A stored
+    /// string imports verbatim (`*hi*` is four characters, not emphasis), an
+    /// already-canonical content decodes losslessly: the same dispatch coercion
+    /// and validation run for a `plaintext` field, so the read and the render
+    /// agree on the codec.
+    ///
+    /// - `None`: the field is absent.
+    /// - `Some(Ok(rt))`: decoded content.
+    /// - `Some(Err(_))`: the field is present but neither a content object nor a
+    ///   string (e.g. a bare number a `store_field` wrote).
+    ///
+    /// A `Document` carries no schema, so the caller names a field it knows is
+    /// plaintext; the schema-bound door is
+    /// [`TypedReader::get_content`](crate::TypedReader::get_content).
+    pub fn field_plaintext_content(
+        &self,
+        name: &str,
+    ) -> Option<Result<Content, RichtextDecodeError>> {
+        let value = self.payload.get(name)?.as_json();
+        Some(match crate::document::decode_plaintext_value(value) {
+            Some(result) => result.map_err(RichtextDecodeError::NotContent),
+            None => match value {
+                serde_json::Value::Null => Ok(Content::empty()),
+                _ => Err(RichtextDecodeError::NotContent(
+                    "expected a plaintext content object or a string".to_string(),
+                )),
+            },
+        })
+    }
+
     /// The plaintext projection of a content-valued field (`to_plaintext ∘
     /// decode`), the literal-codec twin of [`field_markdown`](Card::field_markdown),
     /// for a `plaintext`-typed field: marks are never interpreted, so the text is
-    /// verbatim both ways. Carries [`field_richtext`](Card::field_richtext)'s
-    /// `Ok`/`Err` decode outcome:
+    /// verbatim both ways. Carries
+    /// [`field_plaintext_content`](Card::field_plaintext_content)'s `Ok`/`Err`
+    /// decode outcome:
     ///
     /// - `None`: the field is absent.
     /// - `Some(Ok(text))`: the projected literal text.
     /// - `Some(Err(_))`: the field is present but does not decode as content.
     pub fn field_plaintext(&self, name: &str) -> Option<Result<String, RichtextDecodeError>> {
-        Some(self.field_richtext(name)?.map(|rt| quillmark_content::export::to_plaintext(&rt)))
+        Some(
+            self.field_plaintext_content(name)?
+                .map(|rt| quillmark_content::export::to_plaintext(&rt)),
+        )
     }
 }
 

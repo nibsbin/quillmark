@@ -14,4 +14,5 @@ crate-type = ["cdylib"]
 pyo3 = { version = "0.29", features = ["extension-module", "abi3-py310"] }
 quillmark = { workspace = true, default-features = true }
 quillmark-core = { workspace = true }
+quillmark-content = { workspace = true }
 serde_json = { workspace = true }

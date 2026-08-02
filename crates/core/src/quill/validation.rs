@@ -1132,6 +1132,10 @@ mod args_canon {
                 field: "body".into(),
                 message: "x".into(),
             },
+            EditError::FieldNotContent {
+                field: "qty".into(),
+                declared: "integer".into(),
+            },
             EditError::FieldRichtextNotInline("body".into()),
             EditError::FieldConform {
                 field: "n".into(),

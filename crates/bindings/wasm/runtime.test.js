@@ -353,6 +353,54 @@ card_kinds:
     expect(cardReader).toBeInstanceOf(CardReader)
     expectEditCode(() => cardReader.get('body'), 'edit::index_out_of_range')
   })
+
+  // getContent is the same read at the other end of the codec: the corpus, not
+  // the projection. Its point is spanning the two storage forms, so the lane
+  // that built the document stops being the caller's business.
+  it('getContent returns the corpus for both storage forms', () => {
+    const quill = buildQuill()
+    // Committed lane: the writer stores a canonical content object.
+    const committed = seededDoc(quill)
+    expect(typeof committed.getStored('subject')).toBe('object')
+    // Parsed lane: a markdown-authored field rests as the authored string.
+    const parsed = Document.fromMarkdown(
+      '~~~card-yaml\n$quill: view_test\nsubject: Q3 **results**\n~~~\n\nBody.'
+    )
+    expect(typeof parsed.getStored('subject')).toBe('string')
+
+    const a = quill.reader(committed).getContent('subject')
+    const b = quill.reader(parsed).getContent('subject')
+    expect(a.text).toBe('Q3 results')
+    expect(b.text).toBe(a.text)
+    expect(b.marks).toEqual(a.marks)
+  })
+
+  it('getContent decodes by declared type: markdown for richtext, literal for plaintext', () => {
+    const quill = buildQuill()
+    const doc = Document.fromMarkdown(
+      "~~~card-yaml\n$quill: view_test\nsubject: 'a *literal* line'\nnote: 'a *literal* line'\n~~~\n\nBody."
+    )
+    const v = quill.reader(doc)
+    // Same stored bytes, two codecs: only the declared type says which.
+    expect(v.getContent('subject').text).toBe('a literal line')
+    expect(v.getContent('note').text).toBe('a *literal* line')
+  })
+
+  it('getContent: absence, unknown name, non-content type, body addr, cards', () => {
+    const quill = buildQuill()
+    const doc = seededDoc(quill)
+    const v = quill.reader(doc)
+    expectEditCode(() => v.getContent('nope'), 'edit::unknown_field')
+    expectEditCode(() => v.getContent('qty'), 'edit::field_not_content')
+    expect(v.getContent({}).text).toBe('Main body.') // absent field = body corpus
+    expect(v.card(0).getContent('body').text).toBe('A card field.')
+    expectEditCode(() => v.card(9).getContent('body'), 'edit::index_out_of_range')
+
+    const empty = quill.reader(
+      Document.fromMarkdown('~~~card-yaml\n$quill: view_test\n~~~\n\nBody.')
+    )
+    expect(empty.getContent('subject')).toBeUndefined()
+  })
 })
 
 // MAIN_CARD_ADDR names the empty main-card address `{}` the card-scoped verbs

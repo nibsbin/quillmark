@@ -745,6 +745,12 @@ export declare class CardWriter {
  * decode throws `FieldRichtextDecode`. A field's markdown lives here, not on the
  * body-only `Document.getMarkdown`. The body read stays quill-free (a body's type
  * is a format fact) and never throws.
+ *
+ * `getContent` is the same read at the other end of the codec, returning the
+ * corpus rather than the projection. It binds the quill for the same reason
+ * `get` does: a `richtext` string is markdown and a `plaintext` string is
+ * literal text, so the same stored bytes decode two ways and only the declared
+ * type says which.
  */
 export declare class DocumentReader {
 	constructor(quill: Quill, doc: Document);
@@ -759,6 +765,17 @@ export declare class DocumentReader {
 	 * `IndexOutOfRange` for a bad `addr.card`.
 	 */
 	get(addr: Addr | string): unknown;
+	/**
+	 * Read the content field at `addr` as its canonical `Content` corpus: the
+	 * corpus twin of {@link get}, which projects. Decodes through the codec the
+	 * declared type names (`richtext` as markdown, `plaintext` as literal text),
+	 * so a committed field and a parsed one read back the same corpus and the
+	 * storage form stops being the caller's business. An absent `addr.field`
+	 * reads the body corpus. `undefined` for an absent field; throws
+	 * `UnknownField`, `FieldNotContent` for a declared type carrying no content,
+	 * `FieldRichtextDecode` for an undecodable value, and `IndexOutOfRange`.
+	 */
+	getContent(addr: Addr | string): Content | undefined;
 	/** The main body's markdown: the quill-free body read. Equals `get({})`. */
 	getBody(): string;
 	/**
@@ -791,6 +808,11 @@ export declare class CardReader {
 	 * `IndexOutOfRange` for a bad index.
 	 */
 	get(name: string): unknown;
+	/**
+	 * Read the content field `name` on this card as its canonical `Content`
+	 * corpus: the card twin of {@link DocumentReader.getContent}.
+	 */
+	getContent(name: string): Content | undefined;
 	/** This card's body markdown: the card twin of {@link DocumentReader.getBody}. */
 	getBody(): string;
 }

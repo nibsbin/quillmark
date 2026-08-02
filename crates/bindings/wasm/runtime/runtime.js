@@ -1119,6 +1119,22 @@ export class DocumentReader {
 		return this.#doc._readerGet(this.#quill, addr);
 	}
 	/**
+	 * Read the content field at `addr` as its canonical `Content` corpus: the
+	 * corpus twin of {@link get}, which projects. Decodes through the codec the
+	 * declared type names (`richtext` as markdown, `plaintext` as literal text),
+	 * so a field the writer committed as a corpus and one a markdown parse left
+	 * as an authored string read back the same; no branching on how the
+	 * document was built. An absent `addr.field` reads the body corpus.
+	 * `undefined` for an absent field; throws `UnknownField`, `FieldNotContent`
+	 * for a type carrying no content, `FieldRichtextDecode` for an undecodable
+	 * value, and `IndexOutOfRange` for a bad `addr.card`.
+	 * @param {import('../core/wasm.js').Addr | string} addr
+	 * @returns {import('../core/wasm.js').Content | undefined}
+	 */
+	getContent(addr) {
+		return this.#doc._readerGetContent(this.#quill, addr);
+	}
+	/**
 	 * The main body's markdown: the quill-free body read (a body's type is a
 	 * format fact, not a schema fact). Equivalent to `get({})`.
 	 * @returns {string}
@@ -1182,6 +1198,15 @@ export class CardReader {
 	 */
 	get(name) {
 		return this.#doc._readerGet(this.#quill, { card: this.#index, field: name });
+	}
+	/**
+	 * Read the content field `name` on this card as its canonical `Content`
+	 * corpus: the card twin of {@link DocumentReader.getContent}.
+	 * @param {string} name
+	 * @returns {import('../core/wasm.js').Content | undefined}
+	 */
+	getContent(name) {
+		return this.#doc._readerGetContent(this.#quill, { card: this.#index, field: name });
 	}
 	/**
 	 * This card's body markdown: the card twin of {@link DocumentReader.getBody}.

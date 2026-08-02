@@ -748,6 +748,45 @@ def test_view_richtext_holding_scalar_raises_mismatch():
         quill.reader(doc).get("bio")
 
 
+def test_view_get_content_spans_both_storage_forms():
+    """get_content returns the corpus whichever lane built the document.
+
+    The writer commits a canonical content dict; a markdown parse leaves the
+    authored string. Both read back as the same corpus, so the storage form
+    stops being the caller's business."""
+    quill = _richtext_form_quill()
+    committed = Document("richtext_form@0.1.0")
+    quill.writer(committed).set("bio", "A **bold** intro.")
+    assert isinstance(field(committed.main, "bio"), dict)  # committed lane
+
+    parsed = Document.from_markdown(
+        "~~~card-yaml\n$quill: richtext_form@0.1.0\n$kind: main\nbio: A **bold** intro.\n~~~\n"
+    )
+    assert isinstance(field(parsed.main, "bio"), str)  # parsed lane
+
+    a = quill.reader(committed).get_content("bio")
+    b = quill.reader(parsed).get_content("bio")
+    assert a["text"] == "A bold intro."
+    assert b["text"] == a["text"]
+    assert b["marks"] == a["marks"]
+
+
+def test_view_get_content_absence_unknown_and_non_content():
+    """Absent → None; an undeclared name and a non-content type each raise."""
+    quill = _richtext_form_quill()
+    assert quill.reader(Document("richtext_form@0.1.0")).get_content("bio") is None
+    with raises_edit_code("edit::unknown_field"):
+        quill.reader(Document("richtext_form@0.1.0")).get_content("nope")
+
+    taro = _taro_quill()
+    tdoc = Document("taro@0.1.0")
+    taro.writer(tdoc).set("author", "Ada")
+    # A declared type carrying no content answers from the schema, not the
+    # payload: `author` holds a string and is still not content.
+    with raises_edit_code("edit::field_not_content"):
+        taro.reader(tdoc).get_content("author")
+
+
 def test_view_body_read_is_quill_free():
     """view.get_body reads the main body markdown: the quill-free body read."""
     quill = _taro_quill()
