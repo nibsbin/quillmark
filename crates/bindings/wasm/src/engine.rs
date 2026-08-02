@@ -962,8 +962,8 @@ impl Document {
     /// **A content field's stored form is construction-dependent.** A committed
     /// richtext field holds a canonical content object; one a markdown parse
     /// left holds the authored string, until an edit commits it. Both are
-    /// intended, and this read reports what is there rather than smoothing it
-    /// over. For the corpus whichever lane built the document, use the
+    /// intended, and this read reports what is there. For the corpus
+    /// whichever lane built the document, use the
     /// schema-plane `reader.getContent`, which decodes through the codec the
     /// field's declared type names.
     #[wasm_bindgen(js_name = getStored, unchecked_return_type = "unknown")]
@@ -1082,10 +1082,10 @@ impl Document {
     /// value through the codec the field's declared type names (`richtext` as
     /// markdown, `plaintext` as literal text) and returns the canonical `Content`.
     ///
-    /// Total over the storage form, which is what makes it worth having: a
-    /// committed field holds a content object and a parsed one holds the authored
-    /// string, and both read back as a corpus here, so a consumer mounting a
-    /// corpus editor stops branching on how the document was built.
+    /// Total over the storage form: a committed field holds a content object and
+    /// a parsed one holds the authored string, and both read back as a corpus
+    /// here, so a consumer mounting a corpus editor stops branching on how the
+    /// document was built.
     ///
     /// A bare string is `Addr` shorthand for `{ field }`; `{ card, field }`
     /// targets a composable card. Returns `undefined` for an **absent** field. An

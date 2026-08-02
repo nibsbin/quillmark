@@ -77,7 +77,7 @@ with "depends how this document was built". Decoding needs the schema and not
 the payload: a `richtext` string is markdown and a `plaintext` string is literal
 text, so the same stored bytes decode two ways and only the declared type says
 which. That is the whole reason the corpus read binds the quill instead of
-sitting beside `getStored` — a quill-free version would have to guess a codec,
+sitting beside `getStored`: a quill-free version would have to guess a codec,
 and would guess markdown.
 
 `reviseField` is the writer verb that is both typed *and* anchor-preserving: it

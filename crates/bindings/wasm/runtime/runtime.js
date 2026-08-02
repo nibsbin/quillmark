@@ -1123,7 +1123,7 @@ export class DocumentReader {
 	 * corpus twin of {@link get}, which projects. Decodes through the codec the
 	 * declared type names (`richtext` as markdown, `plaintext` as literal text),
 	 * so a field the writer committed as a corpus and one a markdown parse left
-	 * as an authored string read back the same — no branching on how the
+	 * as an authored string read back the same; no branching on how the
 	 * document was built. An absent `addr.field` reads the body corpus.
 	 * `undefined` for an absent field; throws `UnknownField`, `FieldNotContent`
 	 * for a type carrying no content, `FieldRichtextDecode` for an undecodable

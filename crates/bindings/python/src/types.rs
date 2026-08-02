@@ -976,7 +976,7 @@ impl PyReader {
     /// projects. Decodes through the codec the declared type names (`richtext` as
     /// markdown, `plaintext` as literal text), so a field the writer committed as
     /// a corpus and one a markdown parse left as an authored string read back the
-    /// same — the storage form stops being the caller's business.
+    /// same; the storage form stops being the caller's business.
     ///
     /// `None` when the field is absent. Raises `edit::unknown_field` for an
     /// undeclared name, `edit::field_not_content` for a declared type that carries

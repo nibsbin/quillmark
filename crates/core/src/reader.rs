@@ -38,9 +38,9 @@
 //!
 //! [`get_content`](TypedReader::get_content) is the same read at the other end of
 //! the codec: the corpus rather than the projection. It exists because the two
-//! write lanes disagree on the resting form — a committed richtext field stores a
+//! write lanes disagree on the resting form (a committed richtext field stores a
 //! canonical corpus, a markdown parse leaves the authored string, and coercion
-//! only reconciles them at render — so the verbatim payload read answers "corpus
+//! only reconciles them at render), so the verbatim payload read answers "corpus
 //! or string?" with "depends how this document was built". Decoding needs the
 //! schema, not the payload: a `richtext` string is markdown and a `plaintext`
 //! string is literal text, so the same bytes decode two ways and only the
