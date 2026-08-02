@@ -92,9 +92,9 @@ verbatim read is the map-idiomatic `payload().get`, already lexically distinct f
 `reader.get`; the collision is a WASM/pyo3 artifact of fusing the read onto the one
 `Document` handle, so only the bindings rename it.)
 
-**`equals` is the change gate.** A consumer driving a live preview gates `apply` on structural equality against a retained clone (`if (doc.equals(last)) return; last = doc.clone()`), so a document it did not mutate itself, swapped in from storage or written through a writer held elsewhere, recompiles only when its content differs. The compare walks a kilobyte-scale document inside wasm linear memory, orders of magnitude under the recompile it skips; `toJson` is byte-deterministic within a schema version for a hashed gate instead.
+**`equals` is the change gate.** A consumer driving a live preview gates `apply` on structural equality against a retained clone: `if (doc.equals(last)) return; last = doc.clone()`. It covers the document the consumer did not mutate itself: one swapped in from storage, or written through a writer held elsewhere. `toJson` is byte-deterministic within a schema version, for a consumer that prefers a hashed gate.
 
-**No revision counter.** `Document` carries no mutation stamp and neither does the session ([PREVIEW.md](PREVIEW.md)). A counter reports that something was written where the consumer asks whether this is the content it last compiled: it re-applies on a load that is content-identical to the live compile, and core cannot back one regardless, since `main_mut` / `cards_mut` / `payload_mut` hand out raw `&mut` that no bump site sees.
+**No revision counter.** Neither `Document` nor the session carries one ([PREVIEW.md](PREVIEW.md)). Equality answers whether this is the content last compiled. A counter answers only whether something was written, so it re-applies on a load that is content-identical to the live compile. Core cannot back one regardless: `main_mut` / `cards_mut` / `payload_mut` hand out raw `&mut`, so no bump site sees every write.
 
 **Writers and card cursors are ephemeral: bind, write, discard.** They hold an
 address (the quill + document, or an index), never a cache; every call reads
