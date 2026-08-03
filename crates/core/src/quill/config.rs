@@ -1,6 +1,5 @@
 //! Quill configuration parsing and normalization.
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::error::Error as StdError;
 
 use indexmap::IndexMap;
 
@@ -1348,21 +1347,6 @@ impl QuillConfig {
         name == "__default__" || Self::is_snake_case_identifier(name)
     }
 
-    /// Parse QuillConfig from YAML content
-    pub fn from_yaml(yaml_content: &str) -> Result<Self, Box<dyn StdError + Send + Sync>> {
-        match Self::from_yaml_with_warnings(yaml_content) {
-            Ok((config, _warnings)) => Ok(config),
-            Err(diags) => {
-                let msg = diags
-                    .iter()
-                    .map(|d| d.fmt_pretty())
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                Err(msg.into())
-            }
-        }
-    }
-
     /// Parse QuillConfig from YAML content while collecting non-fatal warnings.
     ///
     /// Returns `Ok((config, warnings))` on success, or `Err(errors)` containing all
@@ -2120,4 +2104,24 @@ fn richtext_inline_error(label: &str) -> Diagnostic {
     .with_hint(
         "Reduce the value to one paragraph, or change the field `type:` to `richtext`.".to_string(),
     )
+}
+
+#[cfg(test)]
+impl QuillConfig {
+    /// Test-only `from_yaml`: the config, or every load diagnostic joined into
+    /// one pretty string. Flattening `Vec<Diagnostic>` drops code, hint, and
+    /// location, which is why it is not on the published surface — a test
+    /// asserting on message text is the one caller the loss costs nothing.
+    /// Real loads go through [`QuillConfig::from_yaml_with_warnings`].
+    pub(crate) fn from_yaml(yaml_content: &str) -> Result<Self, String> {
+        Self::from_yaml_with_warnings(yaml_content)
+            .map(|(config, _warnings)| config)
+            .map_err(|diags| {
+                diags
+                    .iter()
+                    .map(|d| d.fmt_pretty())
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
+    }
 }

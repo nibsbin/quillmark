@@ -4,7 +4,7 @@ use quillmark_core::quill::QuillConfig;
 fn test_markdown_type_is_a_load_error() {
     // `markdown` is not a field type: no silent alias for block `richtext`, no
     // parallel accepted spelling. A Quill.yaml that declares it fails to load.
-    let err = QuillConfig::from_yaml(
+    let diags = QuillConfig::from_yaml_with_warnings(
         r#"
 quill:
   name: markdown_schema
@@ -20,7 +20,11 @@ main:
     )
     .unwrap_err();
 
-    let msg = err.to_string();
+    let msg = diags
+        .iter()
+        .map(|d| d.fmt_pretty())
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(
         msg.contains("markdown"),
         "load error should name the offending type: {msg}"
@@ -29,7 +33,7 @@ main:
 
 #[test]
 fn test_richtext_field_schema_emission() {
-    let config = QuillConfig::from_yaml(
+    let (config, _warnings) = QuillConfig::from_yaml_with_warnings(
         r#"
 quill:
   name: richtext_schema
