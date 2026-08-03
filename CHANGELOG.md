@@ -6,9 +6,46 @@ A content field gets one resting form, and the last reserved `$` key with no
 reader is removed. All breaking changes are covered by
 `docs/migrations/0.99-to-0.100.md`. Stored documents load unchanged, but a row
 read through the bound door converges once: read-repair, not a schema-version
-event.
+event. One ordering matters, and the guide's "Legacy data" section states it —
+conform a stored population before exporting markdown from it.
 
-- **breaking** core,wasm,python: card `$id` is removed — the reserved key, its
+- refactor(core,wasm,python)!: content fields have one resting form, enforced at
+  load. `Quill::conform(&mut doc)` is the primitive and `Quill::parse(md)`
+  (parse, then conform) the convenience — the documented primary ingestion path,
+  `quill.parse` / `quill.conform` on both bindings. A `richtext` field rests as
+  the canonical content object, a `plaintext` field as its **literal string**, so
+  the stored shape is a property of the codec instead of the construction lane:
+  `equals` and content hashes stop separating semantically identical documents.
+  The typed writer commits `plaintext` as a string, and `revise_field` diffs it
+  through the literal codec (a byte-identical revise of `a \*b\*` used to commit
+  `a *b*`). `Document::parse` / `Document.fromMarkdown` stay exactly as they
+  were, demoted to the transport/repair door. Conform is idempotent, a byte no-op
+  on an already-canonical document, and reports a `conform::*` warning where the
+  strict write refuses rather than retyping or rejecting; a `$quill` naming
+  another quill errors before any mutation (#1160, #1162). See
+  `docs/migrations/0.99-to-0.100.md`
+- fix(core)!: markdown exported from a `plaintext` field resting as a content
+  object is markdown-escaped. Emit is schema-free and cannot tell a `plaintext`
+  content from a `richtext` one, so `a *literal* line` leaves as
+  `a \*literal\* line` and re-parses with the backslashes as characters — one
+  more layer per save cycle. Only the typed writer produced that rest, and the
+  string rest above deletes it rather than managing it: load, conform, and
+  re-store a population before exporting markdown from it. Markdown already
+  exported under ≤0.99 is corrupt at rest, its escapes indistinguishable from
+  authored ones, so re-export it from the conformed rows (#1159). See
+  `docs/migrations/0.99-to-0.100.md`
+- fix(core,wasm,python)!: a `plaintext` field resting as a string reads through
+  the **literal** codec, not markdown — `note: 'a *literal* line'` read back as
+  `a literal line` while render and validation kept the asterisks. Only the
+  string lane was wrong; the committed-object lane always decoded correctly, so
+  a consumer that pre-escaped a `plaintext` field to survive the read drops the
+  escaping. Alongside it, `reader.get_content` / `reader.getContent` returns a
+  content field's `Content` corpus whichever lane stored it, so a consumer
+  holding a corpus editor stops branching on the wire shape. `EditError` gains
+  `FieldNotContent` (`edit::field_not_content`) for a declared type that is not a
+  content leaf; core adds `Card::field_plaintext_content` (#1154). See
+  `docs/migrations/0.99-to-0.100.md`
+- refactor(core,wasm,python)!: card `$id` is removed — the reserved key, its
   resolver (`Document::find_card` / `doc.cardIndexById` / `doc.card_index_by_id`),
   the uniqueness contract (`EditError::CardIdCollision` / `EmptyCardId`, the
   `parse::card_id_*` warnings, the storage rejection), `Card::id` /
@@ -21,32 +58,7 @@ event.
   tolerate-and-ignore window. Per-card consumer keys move to `$ext` under a
   namespace you own, with no uniqueness, no collision check, and no repair
   (#1151). See `docs/migrations/0.99-to-0.100.md`
-- **breaking** core,wasm,python: content fields have one resting form, enforced at
-  load. `Quill::conform(&mut doc)` is the primitive and `Quill::parse(md)`
-  (parse, then conform) the convenience — the documented primary ingestion path,
-  `quill.parse` / `quill.conform` on both bindings. A `richtext` field rests as
-  the canonical content object, a `plaintext` field as its **literal string**, so
-  the stored shape is a property of the codec instead of the construction lane:
-  `equals` and content hashes stop separating semantically identical documents.
-  The typed writer commits `plaintext` as a string and `revise_field` diffs it
-  through the literal codec (a byte-identical revise of `a \*b\*` used to commit
-  `a *b*`); emit is schema-free, so object-rest `plaintext` was markdown-escaped
-  on the way out. `Document::parse` / `Document.fromMarkdown` stay exactly as they
-  were, demoted to the transport/repair door. Conform is idempotent, a byte no-op
-  on an already-canonical document, and reports a `conform::*` warning where the
-  strict write refuses rather than retyping or rejecting (#1159, #1160, #1162).
-  See `docs/migrations/0.99-to-0.100.md`
-- **breaking** core,wasm,python: a `plaintext` field resting as a string reads
-  through the **literal** codec, not markdown — `note: 'a *literal* line'` read
-  back as `a literal line` while render and validation kept the asterisks. Only
-  the string lane was wrong; the committed-object lane always decoded correctly.
-  Alongside it, `reader.get_content` / `reader.getContent` returns a content
-  field's `Content` corpus whichever lane stored it, so a consumer holding a
-  corpus editor stops branching on the wire shape. `EditError` gains
-  `FieldNotContent` (`edit::field_not_content`) for a declared type that is not a
-  content leaf; core adds `Card::field_plaintext_content` (#1154). See
-  `docs/migrations/0.99-to-0.100.md`
-- **breaking** content: `Content`, `Line`, `Mark`, and `Island` take
+- refactor(content)!: `Content`, `Line`, `Mark`, and `Island` take
   `#[non_exhaustive]` — the four public structs the 0.99 sweep missed, that pass
   having run as two issues split by crate. Their literals give way to `new` plus
   the `with_*` setters on the same terms as the rest of the API; every field stays
@@ -61,41 +73,19 @@ event.
   formatter missing a key falls back to `message` wholesale. `prose/canon/ERROR.md`
   § "Diagnostic args" tabulates the keys per code and a test fails when code and
   canon disagree (#1130)
-
-<!-- seed: commits since v0.99.0, confirm the entries above cover them, then delete this comment
-- Move the args canon gate beside the type it specifies
-- Dense-prose pass over the repair
-- Repair the stale docs the 0.100 cycle left, and two misleading messages
-- Keep the writer's module doc off a private item
-- Prune the conform tests to one fact each
-- Dense-prose pass over the conform change
-- Pin the 0.92.0 envelope through the bound door
-- Polish the conform walk and its rustdoc
-- Canon and migration guide for the resting-form invariant
-- Fuzz the resting-form invariant
-- Bindings: the bound door on WASM and Python
-- Conform-on-load: canonical rest for content fields
-- Repair the two gates the merge tripped
-- Fold the new prose to the house voice
-- docs(canon): unwrap BINDINGS prose to one line per paragraph
-- docs(canon): tighten the equals-gate paragraphs
-- docs(canon): name the equals change gate in BINDINGS
-- Read a content field through the codec its declared type names
-- dense-prose the #[non_exhaustive] rustdoc and the struct-exemption table
-- Close the content model over #[non_exhaustive]
-- dense-prose pass over the args contract
-- Make the args contract testable against canon
-- Carry a diagnostic's substitution facts in Diagnostic.args
-- Retarget the migration guide at 0.100.0
-- Repoint the `get` doc link off the removed `Payload::id`
-- Tighten the replacement prose to the house voice
-- Drop `$id` from the format rules and the last stale comments
-- Retire `$id` from the canon, the spec, and the docs
-- Delete card `$id` from the document model
-- docs: remove .qmd mentions from changelog and migration guide
-- docs(canon): drop unsanctioned .qmd callout from DOCUMENT_STORAGE.md
-- Correct four stale canon claims and repair eleven broken wraps
--->
+- fix(core): the `$quill` mismatch message and hint name the pairing rather than
+  the verb. `check_quill_reference` gates every schema-bound door now, not the
+  render path alone, so a `quill.parse` failure no longer reads "was rendered
+  with". The codes (`quill::name_mismatch` / `quill::version_mismatch`) are
+  unchanged
+- test(fuzz): the resting-form invariant gains a target, stated as three
+  properties — conform is a fixed point, parse-then-conform equals typed-write
+  per content field, and a document through the markdown surface and back settles
+  after one pass (exactly, for `plaintext`, whose codec is lossless both ways)
+- docs: the cycle's stale pages are repaired. Both binding READMEs gain the bound
+  door and the corpus read, `revise_field` is documented per declared type on all
+  four surfaces instead of as a markdown-only richtext verb, and four canon claims
+  that outran the tree are corrected
 
 
 ## v0.99.0 - 2026-08-01
