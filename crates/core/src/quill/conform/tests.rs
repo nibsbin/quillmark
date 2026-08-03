@@ -469,3 +469,121 @@ fn a_stored_row_converges_through_the_bound_door() {
         "and the object-rest plaintext converges to its literal string"
     );
 }
+
+/// The legacy envelope, end to end: a hand-authored `@0.92.0` blob (markdown
+/// `body`, payload verbatim) migrates forward, conforms, and re-stores fully
+/// canonical under the current tag. The `0.92.0 → 0.93.0` hop cold-imports the
+/// body and carries the payload untouched, so every content field arrives at
+/// the transport door's as-authored rest and conform is what finishes the job.
+#[test]
+fn a_0_92_0_row_migrates_then_converges() {
+    let quill = quill();
+    let legacy = json!({
+        "schema": "quillmark/document@0.92.0",
+        "main": {
+            "payload": { "items": [
+                { "type": "quill", "value": "conform_test@1.0.0" },
+                { "type": "kind", "value": "main" },
+                { "type": "field", "key": "subject", "value": "Q3 **results**" },
+                // Written by a typed writer of that era: plaintext rested as a
+                // content object, the form emit would markdown-escape.
+                { "type": "field", "key": "note", "value":
+                    quillmark_content::serial::to_canonical_value(
+                        &quillmark_content::from_plaintext("a *literal* line")) },
+                { "type": "field", "key": "qty", "value": 3 },
+            ]},
+            "body": "Main **body**."
+        },
+        "cards": [{
+            "payload": { "items": [
+                { "type": "kind", "value": "entry" },
+                { "type": "field", "key": "body", "value": "card **body**" },
+            ]},
+            "body": "Entry body."
+        }]
+    })
+    .to_string();
+
+    let mut doc = Document::try_from(
+        serde_json::from_str::<StoredDocument>(&legacy).expect("a 0.92.0 blob still loads"),
+    )
+    .expect("and migrates forward");
+    // The hop cold-imports the body; the payload arrives verbatim.
+    assert_eq!(doc.main().body_markdown(), "Main **body**.");
+    assert!(doc.main().payload().get("subject").unwrap().as_json().is_string());
+
+    let diags = quill.conform(&mut doc).expect("the quill matches");
+    assert!(diags.is_empty(), "{diags:?}");
+    assert!(
+        doc.main().payload().get("subject").unwrap().as_json().is_object(),
+        "the authored richtext string converges to the corpus"
+    );
+    assert_eq!(
+        doc.main().payload().get("note").unwrap().as_json(),
+        &json!("a *literal* line"),
+        "and the object-rest plaintext converges to its literal string"
+    );
+    assert!(doc.cards()[0].payload().get("body").unwrap().as_json().is_object());
+
+    // Re-stored under the current tag, the row is at rest: byte-equal to the
+    // same document authored as markdown and taken through the bound door, and
+    // a second conform is a no-op.
+    let restored = bytes(&doc);
+    assert!(restored.contains("quillmark/document@0.93.0"));
+    let (authored, _) = parse_bound(
+        &quill,
+        "\
+~~~card-yaml
+$quill: conform_test@1.0.0
+$kind: main
+subject: Q3 **results**
+note: a *literal* line
+qty: 3
+~~~
+
+Main **body**.
+
+~~~card-yaml
+$kind: entry
+body: card **body**
+~~~
+
+Entry body.
+",
+    );
+    assert_eq!(restored, bytes(&authored), "one document, two ingress routes");
+    quill.conform(&mut doc).expect("the quill matches");
+    assert_eq!(bytes(&doc), restored);
+}
+
+/// A `@0.92.0` field holding an object that is not a decodable content is the
+/// non-conforming case, not a corruption: it rests as stored under a
+/// `conform::*` warning, and the document still renders.
+#[test]
+fn a_legacy_field_that_is_not_content_rests_as_stored() {
+    let quill = quill();
+    let legacy = json!({
+        "schema": "quillmark/document@0.92.0",
+        "main": {
+            "payload": { "items": [
+                { "type": "quill", "value": "conform_test@1.0.0" },
+                { "type": "kind", "value": "main" },
+                { "type": "field", "key": "subject", "value": { "prose": "an older shape" } },
+            ]},
+            "body": "Body."
+        }
+    })
+    .to_string();
+
+    let mut doc = Document::try_from(
+        serde_json::from_str::<StoredDocument>(&legacy).expect("loads"),
+    )
+    .expect("migrates");
+    let before = bytes(&doc);
+    let diags = quill.conform(&mut doc).expect("the quill matches");
+    assert_eq!(
+        diags[0].code.as_deref(),
+        Some("conform::field_richtext_decode")
+    );
+    assert_eq!(bytes(&doc), before, "the value is left exactly as stored");
+}
