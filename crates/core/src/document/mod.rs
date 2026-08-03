@@ -188,9 +188,10 @@ pub struct Card {
 impl Card {
     /// Create a `Card` from its parts without validation. `body` is the content
     /// form; to build from an authored markdown string, import it first via the
-    /// crate-internal `import_body` boundary. For user-facing construction of
-    /// composable cards use [`Card::new`].
-    pub fn from_parts(payload: Payload, body: Content) -> Self {
+    /// crate-internal `import_body` boundary. Crate-internal, with [`Payload`]'s
+    /// mutation half: user-facing construction of composable cards is
+    /// [`Card::new`].
+    pub(crate) fn from_parts(payload: Payload, body: Content) -> Self {
         Self { payload, body }
     }
 
@@ -210,11 +211,14 @@ impl Card {
         self.payload.ext()
     }
 
+    /// The card's card-yaml storage as a read view. Writes go through the
+    /// enforcing verbs ([`store_field`](Card::store_field),
+    /// [`TypedWriter`](crate::TypedWriter)), not through here.
     pub fn payload(&self) -> &Payload {
         &self.payload
     }
 
-    pub fn payload_mut(&mut self) -> &mut Payload {
+    pub(crate) fn payload_mut(&mut self) -> &mut Payload {
         &mut self.payload
     }
 

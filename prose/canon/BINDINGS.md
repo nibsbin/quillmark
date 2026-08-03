@@ -46,7 +46,7 @@ A field's markdown lives here: `getMarkdown` / `get_markdown` / `get_card_markdo
 
 **`equals` is the change gate.** A consumer driving a live preview gates `apply` on structural equality against a retained clone: `if (doc.equals(last)) return; last = doc.clone()`. It covers the document the consumer did not mutate itself: one swapped in from storage, or written through a writer held elsewhere. `toJson` is byte-deterministic within a schema version, for a consumer that prefers a hashed gate.
 
-**No revision counter.** Neither `Document` nor the session carries one ([PREVIEW.md](PREVIEW.md)). Equality answers whether this is the content last compiled. A counter answers only whether something was written, so it re-applies on a load that is content-identical to the live compile. Core cannot back one regardless: `main_mut` / `cards_mut` / `payload_mut` hand out raw `&mut`, so no bump site sees every write.
+**No revision counter.** Neither `Document` nor the session carries one ([PREVIEW.md](PREVIEW.md)). Equality answers whether this is the content last compiled. A counter answers only whether something was written, so it re-applies on a load that is content-identical to the live compile. Core cannot back one regardless: `main_mut` / `cards_mut` hand out raw `&mut`, so no bump site sees every write.
 
 **Writers and card cursors are ephemeral: bind, write, discard.** They hold an address (the quill + document, or an index), never a cache; every call reads through the document, so a `removeCard` / `addCard` between binding a cursor and writing through it silently retargets it. A caller whose cards move re-resolves the index at write time ([PROGRAMMATIC.md](PROGRAMMATIC.md)).
 
