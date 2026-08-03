@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.100.0 - 2026-08-03
 
 A content field gets one resting form, and the last reserved `$` key with no
 reader is removed. All breaking changes are covered by
@@ -61,6 +61,42 @@ event.
   formatter missing a key falls back to `message` wholesale. `prose/canon/ERROR.md`
   § "Diagnostic args" tabulates the keys per code and a test fails when code and
   canon disagree (#1130)
+
+<!-- seed: commits since v0.99.0, confirm the entries above cover them, then delete this comment
+- Move the args canon gate beside the type it specifies
+- Dense-prose pass over the repair
+- Repair the stale docs the 0.100 cycle left, and two misleading messages
+- Keep the writer's module doc off a private item
+- Prune the conform tests to one fact each
+- Dense-prose pass over the conform change
+- Pin the 0.92.0 envelope through the bound door
+- Polish the conform walk and its rustdoc
+- Canon and migration guide for the resting-form invariant
+- Fuzz the resting-form invariant
+- Bindings: the bound door on WASM and Python
+- Conform-on-load: canonical rest for content fields
+- Repair the two gates the merge tripped
+- Fold the new prose to the house voice
+- docs(canon): unwrap BINDINGS prose to one line per paragraph
+- docs(canon): tighten the equals-gate paragraphs
+- docs(canon): name the equals change gate in BINDINGS
+- Read a content field through the codec its declared type names
+- dense-prose the #[non_exhaustive] rustdoc and the struct-exemption table
+- Close the content model over #[non_exhaustive]
+- dense-prose pass over the args contract
+- Make the args contract testable against canon
+- Carry a diagnostic's substitution facts in Diagnostic.args
+- Retarget the migration guide at 0.100.0
+- Repoint the `get` doc link off the removed `Payload::id`
+- Tighten the replacement prose to the house voice
+- Drop `$id` from the format rules and the last stale comments
+- Retire `$id` from the canon, the spec, and the docs
+- Delete card `$id` from the document model
+- docs: remove .qmd mentions from changelog and migration guide
+- docs(canon): drop unsanctioned .qmd callout from DOCUMENT_STORAGE.md
+- Correct four stale canon claims and repair eleven broken wraps
+-->
+
 
 ## v0.99.0 - 2026-08-01
 
@@ -180,109 +216,6 @@ loads byte-identically and `0.99` writes the same bytes for the same content.
   which the 1.0 release requires since both structs are `#[non_exhaustive]`.
   `serde_saphyr` types stay out of `quillmark-core`'s public API (see the YAML
   engine entry above), so nothing downstream moves
-
-<!-- seed: commits since v0.98.0, confirm the entries above cover them, then delete this comment
-- chore(core): move the time format descriptions to parse_borrowed::<3>
-- build(deps): bump lopdf from 0.42.0 to 0.44.0
-- build(deps): bump thiserror in the cargo group across 1 directory
-- build(deps): bump taiki-e/install-action
-- chore(core): bump serde-saphyr to 1.0
-- Split lint back out of test
-- Link every shipped artifact in CI, and carry v0.99.0's notes forward
-- dense-prose pass over the CI scope
-- Cut CI to one job per shipped surface
-- Stop the release from pushing to a branch that takes only PRs
-- Fix three claims the independent review falsified
-- Correct the release notes' exhaustive-type count
-- dense-prose pass over the review's scope
-- Close the two payload doors the depth guard missed
-- Ship the license the workspace actually grants
-- Correct the release docs against the tree they describe
-- CLAUDE.md: tighten the Tests section to house voice
-- CLAUDE.md: drop `uv run` from the Python binding flow
-- CLAUDE.md: gate local binding builds, name the cheap profiles
-- chore(release): v0.99.0
-- Split serial.rs's fixed-point claim into the two it conflated
-- Make Fidelity the one place a loss class is spelled
-- Make an island's loss class injective instead of guarded
-- dense-prose and simplify passes over the handle-check work
-- Keep the colon out of embedded YAML values
-- Sweep the em-dash out of comments and prose
-- Refuse a core handle from a second copy, everywhere
-- Replace the em-dash ban with the rule the exemplars follow
-- dense-prose pass over the foreign-handle prose
-- Extend the policy to the writer/reader lane, and draw the read/write line
-- Keep the patched method names, and stop over-claiming in the warning
-- Tolerate foreign core handles on the by-reference methods
-- Correct the quill file-size cap doc and MiB units
-- Collapse the rustdoc gate onto --workspace
-- dense-prose pass over the release-readiness fixes
-- Close the release-readiness gaps found against v0.98.0
-- Drop the semver job
-- Trim the Python typing work to its load-bearing parts
-- Revert "Record KnownIslandType::ALL's slice shape in the 0.99 guide"
-- Record KnownIslandType::ALL's slice shape in the 0.99 guide
-- Close the Python Tier-1 gaps: single-card reads and a typed surface
-- Drop the top-level-await plugin the vite 8 test config cannot load
-- Shape the reserved-name lists as slices
-- Shape the island ALL as a slice; list the 0.99 guide as published
-- Prune rottable duplication from CLAUDE.md
-- Adopt the editor's dense-prose rewrite; compress CLAUDE.md
-- build(deps): bump the cargo group across 1 directory with 12 updates
-- build(deps): bump the actions group across 1 directory with 11 updates
-- build(deps): bump tsify from 0.4.5 to 0.5.6
-- build(deps): bump toml from 0.8.23 to 1.1.3+spec-1.1.0
-- build(deps): bump similar from 2.7.0 to 3.1.1
-- build(deps): bump serde-saphyr from 0.0.23 to 0.0.29
-- Run the semver job on release PRs, not on every one
-- Drop the dead check-cfg rustflag that crashed the semver job
-- docs: dense-prose pass over the new test comments
-- dense-prose pass over the branch
-- Gate the compatibility promise mechanically, and write it down
-- test(bindings): cover the WASM and Python exports nothing exercised
-- Close the struct half of the 1.0.0 non_exhaustive sweep, and seal Backend
-- test(pdfform): drive unbound text/checkbox/choice through the fixture
-- Move the workspace to edition 2024
-- build(deps-dev): bump vitest in /crates/bindings/wasm
-- build(deps-dev): bump typescript in /crates/bindings/wasm
-- prose: drop the readiness proposal and SECURITY.md
-- ci: drop the Windows matrix from the test job
-- Finish the coerce_value_strict cleanup in the fuzz crate
-- dense-prose pass across the code and docs
-- Revert the wasm job to `npm install`
-- Trim CI to the checks v1.0.0 actually needs
-- Cut the two CI costs that buy nothing
-- Clear the RUSTSEC vulnerabilities the audit job actually found
-- Pin the tree to LF so the Windows runner reads what the test wrote
-- Cleanup pass: cut the machinery the fix did not need
-- prose: record what landed against the v1.0.0 readiness findings
-- fuzz: cover the four JSON decode lanes the bindings expose
-- Declare and hold an MSRV
-- Ship the license text, verify the packages, scan the dependencies
-- Open the engine crates' public enums ahead of the 1.0.0 freeze
-- Hide the workspace-internal seams from the published surface
-- typst: quill-load defects become session warnings, not stderr
-- core: own the YAML boundary error, and budget the third entry point
-- prose: index the v1.0.0 readiness findings against their issues
-- prose: v1.0.0 production-readiness review
-- Drop issue markers; dense-prose the unreleased 0.99 guide
-- dense-prose pass over the PR 1097 scope
-- docs: record the op-wire key-order change in the unreleased guide
-- content: carry the `<u>` bit on the event, not in a shared set
-- content: one key sorter for the canonical form
-- content: bound opaque JSON payload depth on the Value lane
-- content: make a vocabulary promotion carry its own legacy form
-- content: simplify pass over the codec-gap changes
-- content: house voice on the codec-gap comments
-- content: close the three v1.0.0 codec gaps before the freeze
-- content: cut the enumerated halves of the two open-set tests
-- content: prune tests that assert what a neighbour already pins
-- content: fold the authored-lane scan into the shared cell walk
-- content: split the wire lanes on reserved-name reuse (#1084, #1085, #1086)
-- docs: trim the migration index to a routing table; drop duplicate links
-- refactor(typst): re-export span_scan/extract instead of forwarding
--->
-
 
 ## v0.98.0 - 2026-07-28
 
