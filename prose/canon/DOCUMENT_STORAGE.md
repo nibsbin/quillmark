@@ -359,7 +359,7 @@ follow from that.
 | Minted by           | the engine at import, the caller on an insert op   | the caller                                         |
 | Because             | content determines it: the nth island minted      | the referent is external; no content determines it |
 | Unique across       | the `Content`'s islands                            | the `Content`'s prose marks                        |
-| Required            | yes: the empty id is rejected                      | yes: the empty id is rejected                     |
+| Required            | yes: `insert` rejects the empty id                 | yes: the empty id is rejected                     |
 | On collision        | `insert` rejects; `validate` scans                 | `add` rejects                                      |
 | Markdown round-trip | re-minted identically                              | lost: export emits none, import mints none        |
 

@@ -366,12 +366,12 @@ export type LineOp =
     | { op: "setContinues"; line: number; continues: boolean };
 
 /**
- * An island edit: the only channel that reaches an island's payload (a table's
- * cells, an image's url), which `delta`, `lineOps` and `markOps` all miss.
+ * An island edit: the only channel that reaches an island's payload, a table's
+ * cells or an image's url.
  *
  * Both ops move one island entry and leave the field's text and marks alone, so
- * an island edit keeps every identity anchor in the field, which is why a table
- * edit lowers to `applyChange` rather than `install`.
+ * an island edit keeps every identity anchor in the field. That is why a table
+ * edit lowers to `applyChange` rather than `install`, which drops them all.
  *
  * `set` addresses an existing island by `id`; an `id` no island carries throws
  * rather than passing silently. `insert` places a new island's slot at `at` (a
@@ -386,7 +386,7 @@ export type LineOp =
  * otherwise. A **block** island is one bundle of all three channels, in the
  * order they apply: `delta` inserts the `\n` that opens the line, `islandOps`
  * inserts the slot, `lineOps` tags the line `{ op: "setKind", kind: "island" }`.
- * `{ op: "split" }` cannot open that line: line ops run after island ops.
+ * `{ op: "split" }` cannot open that line, since line ops run after island ops.
  */
 export type IslandOp =
     | ({ op: "set" } & ContentIsland)
@@ -1629,9 +1629,9 @@ impl Document {
     /// (mark ranges in final-text coordinates), each all-or-nothing. An absent
     /// `addr.field` targets the body, an absent `addr.card` the main card.
     ///
-    /// The island channel is what keeps a table or image edit on the op path:
-    /// it moves the island alone, so the identity anchors elsewhere in the field
-    /// survive an edit that `install` would clear.
+    /// The island channel keeps a table or image edit on the op path: it moves
+    /// the island alone, so the anchors elsewhere in the field survive an edit
+    /// `install` would clear.
     ///
     /// Throws on an out-of-range card, a field that is not richtext, a malformed
     /// bundle, or an op that applies out of bounds (the value is unchanged on a

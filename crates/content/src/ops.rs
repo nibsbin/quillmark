@@ -86,10 +86,9 @@ pub enum LineOp {
 ///
 /// Both ops are **value semantics over one island entry**, not over the field:
 /// the slot stays put, so every identity anchor in the field's text survives an
-/// island edit. That is the whole point of the channel. Without it a table edit
-/// lowers to a whole-field `install`, which drops every anchor in the field:
-/// the same argument [`LineOp::SetContinues`] documents for a hard break, at the
-/// scale of a table.
+/// island edit. Without them a table edit lowers to a whole-field `install`,
+/// which drops every anchor in the field: [`LineOp::SetContinues`]'s argument at
+/// the scale of a table.
 ///
 /// Removal needs no op: a text delta that deletes a slot drops the backing
 /// entry ([`Content::apply_text_delta`]'s cascade).
@@ -101,13 +100,12 @@ pub enum IslandOp {
     /// hash input and stable across edits by contract
     /// (`DOCUMENT_STORAGE.md` § Island-id determinism). An id no island carries
     /// is [`ApplyError::UnknownIslandId`], never a silent no-op: swallowing it
-    /// would leave the store on the old value with the caller believing it
-    /// committed, which is the defect this channel exists to close.
+    /// leaves the store on the old value with the caller believing it committed.
     ///
-    /// `props`, `island_type` and `loss` all come from the op. Nothing here
-    /// derives `loss` from the props: this op stores what the caller hands it,
-    /// exactly as `install` does, so a write that changes a table's shape must
-    /// restate its class or carry the stale one forward.
+    /// `props`, `island_type` and `loss` all come from the op. Nothing derives
+    /// `loss` from the props: like `install`, the op stores what the caller hands
+    /// it, so a write that changes what markdown can carry restates the class or
+    /// carries the stale one forward.
     Set { island: Island },
     /// Insert an island: the [`ISLAND_SLOT`] at `at` and its backing entry in
     /// one op, so a slot never exists without the [`Island`] behind it (the
@@ -116,10 +114,10 @@ pub enum IslandOp {
     ///
     /// `at` is a post-delta USV position; the entry lands at its slot-order
     /// index. The id is caller-supplied, non-empty, and unique in the field, on
-    /// the same terms as an anchor id: [`ApplyError::EmptyIslandId`] and
-    /// [`ApplyError::IslandIdCollision`] are the anchor rules' twins, and for
-    /// the same reason: `Set` addresses by id, so a degenerate or shared id is
-    /// an island that cannot be edited or cannot be told from another.
+    /// an anchor id's terms ([`ApplyError::EmptyIslandId`],
+    /// [`ApplyError::IslandIdCollision`]). `Set` addresses by id, so a
+    /// degenerate or shared id is an island that cannot be edited, or cannot be
+    /// told from another.
     ///
     /// **Block islands.** The slot alone is an *inline* island (a slot in a
     /// `Para`). A block island is that slot alone on its own line under
@@ -146,7 +144,7 @@ pub enum IslandOp {
 /// `ChangeBundle { delta, ..Default::default() }`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChangeBundle {
-    /// The text splice. The identity delta (no ops) is no text change.
+    /// The text splice; the identity delta (no ops) is no text change.
     pub delta: Delta,
     /// Island edits, in post-delta coordinates.
     pub island_ops: Vec<IslandOp>,
@@ -176,7 +174,6 @@ impl ChangeBundle {
         }
     }
 
-    /// Whether every op channel is empty, so the bundle is its text delta alone.
     fn is_delta_only(&self) -> bool {
         self.island_ops.is_empty() && self.line_ops.is_empty() && self.mark_ops.is_empty()
     }
@@ -475,10 +472,8 @@ pub enum ApplyError {
     /// A [`MarkOp::Add`] of an anchor with the empty `id`: a degenerate handle,
     /// refused so every anchor carries a usable referent.
     EmptyAnchorId,
-    /// An [`IslandOp::Set`] naming an `id` no island in the field carries. The
-    /// op is refused rather than ignored: a silent no-op leaves the store on the
-    /// old island while the caller believes the edit committed, which is exactly
-    /// the divergence this channel exists to close.
+    /// An [`IslandOp::Set`] naming an `id` no island in the field carries,
+    /// refused rather than ignored ([`IslandOp::Set`] states why).
     UnknownIslandId { id: String },
     /// An [`IslandOp::Insert`] whose `id` is already live in the field. Island
     /// ids are unique per `Content` (the
@@ -739,7 +734,7 @@ impl Content {
                         })?;
                     // In place: the entry's slot-order index is its slot's, and
                     // the slot does not move. Nothing here touches `text` or
-                    // `marks`, which is why an island edit costs no anchors.
+                    // `marks`: an island edit costs no anchors.
                     self.islands[idx] = island.clone();
                 }
                 IslandOp::Insert { at, island } => {
@@ -865,13 +860,12 @@ impl Content {
     ///
     /// **Stage order is a coordinate contract**, not a convenience: each stage
     /// reads the text the earlier ones left. Island ops sit between the delta
-    /// and the line ops because both neighbors need it there: an island insert
-    /// splices a slot, so a `LineOp::SetKind { kind: Island }` in the same
-    /// bundle can only validate against a line that already carries it, while
-    /// `LineOp::Split`/`Join` and every mark range are then measured in a frame
-    /// that includes the new slots. Creating a block island in one bundle
-    /// follows from that: the delta's `\n` opens the line, the island op fills
-    /// it, `SetKind` tags it.
+    /// and the line ops because both neighbors need them there. An island insert
+    /// splices a slot, so a `LineOp::SetKind { kind: Island }` in the same bundle
+    /// can only validate against a line that already carries it; `Split`/`Join`
+    /// and every mark range are then measured in a frame that includes the new
+    /// slots. The one-bundle block island ([`IslandOp::Insert`]) follows from
+    /// that.
     ///
     /// The stages run on their non-normalizing inner forms and `normalize` runs
     /// once at the end. One terminal normalize suffices because split/join
