@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.101.0 - 2026-08-03
+
+- refactor(core): gate the raw-plate seam behind a feature, and fixes from review
+- docs(core): state the conform gate's codes instead of linking a private item
+- refactor(core): bind a live session to its quill so apply takes a Document
+- feat(quillmark): the facade names what the read and preview flows return
+- docs(content,wasm): density pass over the island channel's prose
+- feat(content,core,wasm)!: reach islands through the op vocabulary
+- refactor(core)!: `Payload` becomes a read view
+- refactor(core)!: collapse the schema-free field projection
+- refactor(core)!: fold `Quill`'s file queries into `FileTreeNode`
+- fix(core): repoint the doc references the `from_yaml` removal orphaned
+- refactor(quillmark): move the facade gate off the front page, and stop tests reaching past it
+- docs: migration guide for the 0.101 surface removals
+- refactor(core)!: drop the lossy `QuillConfig::from_yaml`
+- refactor(core)!: `Document::from_main_and_cards` becomes crate-internal
+- feat(quillmark): the facade covers authoring, and the examples enter through the bound door
+
+
 ## v0.100.0 - 2026-08-03
 
 A content field gets one resting form, and the last reserved `$` key with no
