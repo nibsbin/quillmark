@@ -36,11 +36,18 @@
 // `QuillIgnore` from here) or from disk with the `quill_from_path` helper
 // below. `QuillConfig` and the schema types come along, since a caller holding
 // a `Quill` reads its schema through them.
+//
+// A verb's return type belongs here whenever the verb does: `Quill::reader`
+// yields `TypedReader`, which yields `ReadValue` and `CardReader`, and
+// `LiveSession`'s preview queries yield `RenderedRegion` and `ContentHit` (with
+// the `HitGranularity` it carries). A name that cannot be spelled blocks the
+// flow that returns it, so the gate exercises each flow rather than the list.
 pub use quillmark_core::{
-    Artifact, Backend, BoundParseError, Card, CardSchema, ChangeBundle, ChangeSet, Content, Delta,
-    Diagnostic, Document, EditError, FieldSchema, FieldType, FileTreeNode, LiveSession, Location,
-    OutputFormat, ParseError, Parsed, Quill, QuillConfig, QuillIgnore, QuillReference, QuillValue,
-    RenderError, RenderOptions, RenderResult, Severity, TypedWriter, ValidationError,
+    Artifact, Backend, BoundParseError, Card, CardReader, CardSchema, ChangeBundle, ChangeSet,
+    Content, ContentHit, Delta, Diagnostic, Document, EditError, FieldSchema, FieldType,
+    FileTreeNode, HitGranularity, LiveSession, Location, OutputFormat, ParseError, Parsed, Quill,
+    QuillConfig, QuillIgnore, QuillReference, QuillValue, ReadValue, RenderError, RenderOptions,
+    RenderResult, RenderedRegion, Severity, TypedReader, TypedWriter, ValidationError,
 };
 
 mod load;
