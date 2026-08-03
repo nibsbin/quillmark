@@ -22,8 +22,14 @@ fn main() {
     let yaml = std::fs::read_to_string(&yaml_path)
         .unwrap_or_else(|e| panic!("could not read {}: {}", yaml_path.display(), e));
 
-    let cfg = QuillConfig::from_yaml(&yaml)
-        .unwrap_or_else(|e| panic!("could not parse {}: {}", yaml_path.display(), e));
+    let (cfg, _warnings) = QuillConfig::from_yaml_with_warnings(&yaml).unwrap_or_else(|diags| {
+        let msg = diags
+            .iter()
+            .map(|d| d.fmt_pretty())
+            .collect::<Vec<_>>()
+            .join("\n");
+        panic!("could not parse {}: {}", yaml_path.display(), msg)
+    });
 
     print!("{}", cfg.blueprint());
 }

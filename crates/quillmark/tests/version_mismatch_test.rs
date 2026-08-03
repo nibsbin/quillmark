@@ -6,8 +6,7 @@
 //! outside the selector) is a footgun, so it is a hard error
 //! (`quill::name_mismatch` / `quill::version_mismatch`), never a warning.
 
-use quillmark::Document;
-use quillmark_core::RenderError;
+use quillmark::{Document, RenderError};
 use std::fs;
 use tempfile::TempDir;
 
@@ -18,7 +17,7 @@ use tempfile::TempDir;
 #[cfg(feature = "typst")]
 use quillmark::Quillmark;
 #[cfg(feature = "typst")]
-use quillmark_core::{OutputFormat, RenderOptions};
+use quillmark::{OutputFormat, RenderOptions, RenderResult};
 
 /// Write a minimal typst quill named `test_quill` at the given version.
 fn make_quill(temp_dir: &TempDir, version: &str) -> std::path::PathBuf {
@@ -40,7 +39,7 @@ fn make_quill(temp_dir: &TempDir, version: &str) -> std::path::PathBuf {
 fn render_ref(
     quill_path: &std::path::Path,
     quill_ref: &str,
-) -> Result<quillmark_core::RenderResult, RenderError> {
+) -> Result<RenderResult, RenderError> {
     let engine = Quillmark::new();
     let quill = quillmark::quill_from_path(quill_path).expect("from_path failed");
     let markdown = format!(

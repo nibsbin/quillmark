@@ -419,7 +419,7 @@ card_kinds:
 "#;
 
     fn config() -> QuillConfig {
-        QuillConfig::from_yaml(YAML).expect("schema parses")
+        QuillConfig::from_yaml_with_warnings(YAML).expect("schema parses").0
     }
 
     fn kind(path: &str) -> Result<WidgetType, BindError> {
@@ -566,7 +566,7 @@ main:
       type: string
       description: Also schema.
 "#;
-        let cfg = QuillConfig::from_yaml(yaml).unwrap();
+        let cfg = QuillConfig::from_yaml_with_warnings(yaml).unwrap().0;
         let spec = FormSpec::parse(
             br#"{
               "schema": "quillmark/form@0.2.0",

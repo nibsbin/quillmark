@@ -3,11 +3,10 @@
 
 use std::collections::HashMap;
 
-use quillmark::{Document, Quill};
-use quillmark_core::quill::FileTreeNode;
+use quillmark::{Document, FileTreeNode, Quill};
 
 /// Build a minimal quill from inline `Quill.yaml` with no filesystem deps.
-fn quill_from_yaml(yaml: &str) -> quillmark::Quill {
+fn quill_from_yaml(yaml: &str) -> Quill {
     let mut files = HashMap::new();
     files.insert(
         "Quill.yaml".to_string(),
@@ -108,7 +107,7 @@ fn validate_warns_on_must_fill_marker() {
     let marked: Vec<_> = diags
         .iter()
         .filter(|d| d.code.as_deref() == Some("validation::must_fill"))
-        .inspect(|d| assert_eq!(d.severity, quillmark_core::Severity::Warning))
+        .inspect(|d| assert_eq!(d.severity, quillmark::Severity::Warning))
         .filter_map(|d| d.path.clone())
         .collect();
     assert!(

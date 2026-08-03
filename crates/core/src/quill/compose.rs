@@ -471,16 +471,16 @@ pub(crate) fn resolve_value_sourced(
 ) -> (QuillValue, FieldSource) {
     let present = value.filter(|v| !v.as_json().is_null());
     let Some(v) = present else {
-        // A content-bearing field (`richtext` or its literal sibling `plaintext`)
-        // commits the *content* form of its default (`default_content`, cached at
-        // load by `from_yaml`), so the seam carries canonical Content-JSON the
-        // backend can classify. It must NOT fall through to the raw `default`:
-        // the ladder injects this default without re-coercing it (coercion
-        // touched only authored values), so a bare authored string here would
-        // reach the plate uncoerced and be misread. A
-        // content field with no cached `default_content` (only reachable via a
-        // serde-built `QuillConfig`, never `from_yaml`) zero-fills to the empty
-        // content.
+        // A content-bearing field (`richtext` or its literal sibling
+        // `plaintext`) commits the *content* form of its default
+        // (`default_content`, cached at load by `from_yaml_with_warnings`), so
+        // the seam carries canonical Content-JSON the backend can classify. It
+        // must NOT fall through to the raw `default`: the ladder injects this
+        // default without re-coercing it (coercion touched only authored
+        // values), so a bare authored string here would reach the plate
+        // uncoerced and be misread. A content field with no cached
+        // `default_content` (only reachable via a serde-built `QuillConfig`,
+        // never the loader) zero-fills to the empty content.
         if matches!(
             field.r#type,
             FieldType::RichText { .. } | FieldType::PlainText { .. }
