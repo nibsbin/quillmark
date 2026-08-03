@@ -1,5 +1,67 @@
 # Changelog
 
+## Unreleased
+
+A content field gets one resting form, and the last reserved `$` key with no
+reader is removed. All breaking changes are covered by
+`docs/migrations/0.99-to-0.100.md`. Stored documents load unchanged, but a row
+read through the bound door converges once: read-repair, not a schema-version
+event.
+
+- **breaking** core,wasm,python: card `$id` is removed — the reserved key, its
+  resolver (`Document::find_card` / `doc.cardIndexById` / `doc.card_index_by_id`),
+  the uniqueness contract (`EditError::CardIdCollision` / `EmptyCardId`, the
+  `parse::card_id_*` warnings, the storage rejection), `Card::id` /
+  `Payload::{id, set_id, take_id}` / `Document::{set_card_id, remove_card_id}`,
+  the `PayloadItem::Id` and `CardWire.id` wire members, and the projected `id` on
+  both bindings' card shape. Nothing in the engine read it and it never reached a
+  backend, so what is left after removing the machinery that served the resolver
+  is `$ext` with a reserved name. A block declaring `$id` no longer parses and a
+  blob carrying an `id` payload item no longer loads: a hard cutover, no
+  tolerate-and-ignore window. Per-card consumer keys move to `$ext` under a
+  namespace you own, with no uniqueness, no collision check, and no repair
+  (#1151). See `docs/migrations/0.99-to-0.100.md`
+- **breaking** core,wasm,python: content fields have one resting form, enforced at
+  load. `Quill::conform(&mut doc)` is the primitive and `Quill::parse(md)`
+  (parse, then conform) the convenience — the documented primary ingestion path,
+  `quill.parse` / `quill.conform` on both bindings. A `richtext` field rests as
+  the canonical content object, a `plaintext` field as its **literal string**, so
+  the stored shape is a property of the codec instead of the construction lane:
+  `equals` and content hashes stop separating semantically identical documents.
+  The typed writer commits `plaintext` as a string and `revise_field` diffs it
+  through the literal codec (a byte-identical revise of `a \*b\*` used to commit
+  `a *b*`); emit is schema-free, so object-rest `plaintext` was markdown-escaped
+  on the way out. `Document::parse` / `Document.fromMarkdown` stay exactly as they
+  were, demoted to the transport/repair door. Conform is idempotent, a byte no-op
+  on an already-canonical document, and reports a `conform::*` warning where the
+  strict write refuses rather than retyping or rejecting (#1159, #1160, #1162).
+  See `docs/migrations/0.99-to-0.100.md`
+- **breaking** core,wasm,python: a `plaintext` field resting as a string reads
+  through the **literal** codec, not markdown — `note: 'a *literal* line'` read
+  back as `a literal line` while render and validation kept the asterisks. Only
+  the string lane was wrong; the committed-object lane always decoded correctly.
+  Alongside it, `reader.get_content` / `reader.getContent` returns a content
+  field's `Content` corpus whichever lane stored it, so a consumer holding a
+  corpus editor stops branching on the wire shape. `EditError` gains
+  `FieldNotContent` (`edit::field_not_content`) for a declared type that is not a
+  content leaf; core adds `Card::field_plaintext_content` (#1154). See
+  `docs/migrations/0.99-to-0.100.md`
+- **breaking** content: `Content`, `Line`, `Mark`, and `Island` take
+  `#[non_exhaustive]` — the four public structs the 0.99 sweep missed, that pass
+  having run as two issues split by crate. Their literals give way to `new` plus
+  the `with_*` setters on the same terms as the rest of the API; every field stays
+  `pub`, so reading and assigning are unchanged. `Delta`, `Segment`, and
+  `BaseLengthMismatch` stay open deliberately and now say so in their rustdoc.
+  A Rust source break only: nothing about the wire, the canonical bytes, or the
+  bindings moves (#1146). See `docs/migrations/0.99-to-0.100.md`
+- feat(core,wasm,python): `Diagnostic.args` — the facts `message` interpolates,
+  keyed by name, so a consumer with its own string table selects a sentence by
+  `code` and fills it itself. Values keep their JSON shape (a list arrives as a
+  list, a count as a number), engine prose never rides under a key, and a
+  formatter missing a key falls back to `message` wholesale. `prose/canon/ERROR.md`
+  § "Diagnostic args" tabulates the keys per code and a test fails when code and
+  canon disagree (#1130)
+
 ## v0.99.0 - 2026-08-01
 
 The 1.0.0 API freeze lands ahead of the tag, and the content codec closes its

@@ -674,12 +674,16 @@ export declare class DocumentWriter {
 	 */
 	setBody(markdown: string): void;
 	/**
-	 * Revise the richtext main-card field `name` from markdown: typed *and*
+	 * Revise the content main-card field `name` from authored text: typed *and*
 	 * anchor-preserving. Surviving anchors rebase, then the diffed result is
 	 * schema-conformed (`richtext(inline)` rejects a multi-block result). Throws
 	 * `UnknownField` for a name the schema does not declare. Returns the `Delta`.
+	 *
+	 * The codec comes from the declared type: `richtext` diffs markdown, while
+	 * `plaintext` diffs the literal text and never imports markdown, so a
+	 * byte-identical revise of a value carrying escapes is a byte no-op.
 	 */
-	reviseField(name: string, markdown: string): Delta;
+	reviseField(name: string, text: string): Delta;
 	/**
 	 * Build a composable card of `kind`, typed-commit `fields` onto it, set its
 	 * body from optional markdown, and place it: the fused `makeCard` + typed
@@ -723,12 +727,12 @@ export declare class CardWriter {
 	/** Set this card's body from markdown (edit semantics), discarding the delta. */
 	setBody(markdown: string): void;
 	/**
-	 * Revise the richtext field `name` on this card from markdown: typed *and*
-	 * anchor-preserving; the card twin of {@link DocumentWriter.reviseField}.
-	 * Throws `UnknownField` for an undeclared name and `IndexOutOfRange` if the
-	 * bound index is out of range. Returns the `Delta`.
+	 * Revise the content field `name` on this card from authored text: typed *and*
+	 * anchor-preserving; the card twin of {@link DocumentWriter.reviseField},
+	 * codec included. Throws `UnknownField` for an undeclared name and
+	 * `IndexOutOfRange` if the bound index is out of range. Returns the `Delta`.
 	 */
-	reviseField(name: string, markdown: string): Delta;
+	reviseField(name: string, text: string): Delta;
 }
 
 /**
@@ -772,8 +776,8 @@ export declare class DocumentReader {
 	 * so a committed field and a parsed one read back the same corpus and the
 	 * storage form stops being the caller's business. An absent `addr.field`
 	 * reads the body corpus. `undefined` for an absent field; throws
-	 * `UnknownField`, `FieldNotContent` for a declared type carrying no content,
-	 * `FieldRichtextDecode` for an undecodable value, and `IndexOutOfRange`.
+	 * `UnknownField`, `FieldNotContent` for a declared type that is not a content
+	 * leaf, `FieldRichtextDecode` for an undecodable value, and `IndexOutOfRange`.
 	 */
 	getContent(addr: Addr | string): Content | undefined;
 	/** The main body's markdown: the quill-free body read. Equals `get({})`. */
