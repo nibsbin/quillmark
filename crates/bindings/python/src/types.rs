@@ -968,8 +968,7 @@ impl PyCardWriter {
 
     /// Revise the content field `name` on this card from authored text: typed
     /// *and* anchor-preserving; the card twin of `Writer.revise_field`, codec
-    /// included. Raises
-    /// `edit::unknown_field` for an undeclared name and
+    /// included. Raises `edit::unknown_field` for an undeclared name and
     /// `edit::index_out_of_range` for a bad index. The `Delta` is discarded
     /// (see `Writer.revise_field`).
     fn revise_field(&self, py: Python<'_>, name: &str, text: &str) -> PyResult<()> {

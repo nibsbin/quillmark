@@ -106,9 +106,10 @@ below is the bound door that lands it at its canonical rest.
 The **bound door**, and the primary ingestion path. `quill.parse` is
 `Document.fromMarkdown` followed by `conform`: the returned document's declared
 content fields rest at one form per codec (a `richtext` field as the canonical
-content object, a `plaintext` field as its literal string), so `getStored` no
-longer answers "corpus or string?" with "depends how this document was built".
-Parse warnings and the `conform::*` warnings both ride `doc.warnings`.
+content object, a `plaintext` field as its literal string), so `getStored`
+answers "corpus or string?" by the field's declared codec rather than by how the
+document was built. Parse warnings and the `conform::*` warnings both ride
+`doc.warnings`.
 
 `quill.conform(doc)` is the same walk in place on a document that arrived any
 other way (`fromJson`, a stored row), returning the `conform::*` `Diagnostic[]`
@@ -356,8 +357,7 @@ write.
 
 #### `DocumentReader` / `CardReader`: the read twin
 
-`quill.reader(doc)` is the read side of the same binding, with the same
-ephemerality and the same schema authority:
+`quill.reader(doc)` carries the writer's ephemerality and its schema authority:
 
 ```ts
 const v = quill.reader(doc);

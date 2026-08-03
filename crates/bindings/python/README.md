@@ -125,7 +125,6 @@ v.get_content("bio")                      # the corpus dict {text, lines, marks,
 v.get_body()                              # the main body markdown (quill-free body read)
 v.card(0).kind                            # the composable card's $kind
 v.card(0).get("author")                   # a card field, interpreted by its $kind schema
-v.card(0).get_content("author")
 v.card(0).get_body()
 ```
 

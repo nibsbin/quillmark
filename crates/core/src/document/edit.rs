@@ -110,8 +110,8 @@ pub enum EditError {
     ///
     /// The condition is a *leaf* one, narrower than the subtree test conform
     /// walks (`field_contains_content`): an `array<richtext>` carries content and
-    /// still has no single corpus to hand back, so it lands here too. Read its
-    /// elements through [`get`](crate::TypedReader::get).
+    /// still has no one corpus, so it lands here. Read its elements through
+    /// [`get`](crate::TypedReader::get).
     #[error("field '{field}' is declared '{declared}', which is not a content field")]
     FieldNotContent { field: String, declared: String },
 

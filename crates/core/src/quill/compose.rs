@@ -143,10 +143,10 @@ impl QuillConfig {
     /// (a different format, or an incompatible version of one) which yields
     /// undefined output, so it errors rather than warns.
     ///
-    /// Every schema-bound door runs it, not the render path alone: the bound
-    /// ingestion ([`Quill::parse`](crate::Quill::parse) /
-    /// [`Quill::conform`](crate::Quill::conform)) gates on it too, so the message
-    /// names the pairing rather than the verb.
+    /// Every schema-bound door runs it, the bound ingestion
+    /// ([`Quill::parse`](crate::Quill::parse) /
+    /// [`Quill::conform`](crate::Quill::conform)) included, so the message names
+    /// the pairing rather than a verb.
     ///
     /// Name is the prerequisite (a selector belongs to a *named* quill): a name
     /// mismatch (`quill::name_mismatch`) short-circuits and the version is left
