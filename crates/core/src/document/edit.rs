@@ -21,7 +21,7 @@ use unicode_normalization::UnicodeNormalization;
 
 use quillmark_content::delta::diff_import;
 use quillmark_content::import::ImportError;
-use quillmark_content::{ApplyError, Delta, LineOp, MarkOp, Content};
+use quillmark_content::{ApplyError, ChangeBundle, Content, Delta};
 
 use crate::document::meta::{validate_composable_kind, CardKindError};
 use crate::error::diag_args;
@@ -972,21 +972,16 @@ impl Card {
     }
 
     /// Apply a committed field-change bundle to the body content: the native
-    /// form-editor writer. Order is text delta → line ops → mark ops, then one
-    /// terminal normalization ([`Content::apply_field_change`]); mark ranges are
-    /// in final-text coordinates. Returns
+    /// form-editor writer. Order is text delta → island ops → line ops → mark
+    /// ops, then one terminal normalization ([`Content::apply_field_change`]);
+    /// mark ranges are in final-text coordinates. Returns
     /// [`EditError::ContentApply`] when an op is out of bounds; the apply is
     /// all-or-nothing ([`Content::apply_field_change`]), so the body is
     /// unchanged on error: apply the bundle against the body the delta was
     /// computed from.
-    pub fn apply_body_change(
-        &mut self,
-        text_delta: &Delta,
-        line_ops: &[LineOp],
-        mark_ops: &[MarkOp],
-    ) -> Result<(), EditError> {
+    pub fn apply_body_change(&mut self, bundle: &ChangeBundle) -> Result<(), EditError> {
         self.body_mut()
-            .apply_field_change(text_delta, line_ops, mark_ops)
+            .apply_field_change(bundle)
             .map_err(EditError::ContentApply)
     }
 
@@ -994,8 +989,8 @@ impl Card {
     /// stored content: the field-path twin of [`apply_body_change`](Self::apply_body_change),
     /// and what lets identity marks (anchors, island ids) persist on field
     /// content across incremental edits. Decodes the field's canonical content,
-    /// applies the text delta plus any line/mark ops in the same all-or-nothing
-    /// bundle, and re-stores the canonical result.
+    /// applies the text delta plus any island/line/mark ops in the same
+    /// all-or-nothing bundle, and re-stores the canonical result.
     ///
     /// Returns [`EditError::FieldRichtextDecode`] when the field is absent or its
     /// stored value is not a richtext content (the caller addresses a field it
@@ -1008,9 +1003,7 @@ impl Card {
     pub fn apply_field_richtext_change(
         &mut self,
         name: &str,
-        text_delta: &Delta,
-        line_ops: &[LineOp],
-        mark_ops: &[MarkOp],
+        bundle: &ChangeBundle,
     ) -> Result<(), EditError> {
         let mut content = match self.field_richtext(name) {
             Some(Ok(rt)) => rt,
@@ -1028,7 +1021,7 @@ impl Card {
             }
         };
         content
-            .apply_field_change(text_delta, line_ops, mark_ops)
+            .apply_field_change(bundle)
             .map_err(EditError::ContentApply)?;
         self.store_field_content(name, &content);
         Ok(())

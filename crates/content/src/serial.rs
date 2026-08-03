@@ -885,7 +885,7 @@ pub(crate) fn table_shape_error(props: &Value) -> Option<Invariant> {
 
 // ---- Island ----
 
-fn island_to_value(island: &Island) -> Value {
+pub(crate) fn island_to_value(island: &Island) -> Value {
     let mut m = Map::new();
     m.insert("id".into(), Value::String(island.id.clone()));
     m.insert("type".into(), Value::String(island.island_type.clone()));
@@ -894,7 +894,7 @@ fn island_to_value(island: &Island) -> Value {
     Value::Object(m)
 }
 
-fn island_from_value(v: &Value) -> Result<Island, ParseError> {
+pub(crate) fn island_from_value(v: &Value) -> Result<Island, ParseError> {
     let o = v.as_object().ok_or(ParseError::Shape("island"))?;
     Ok(Island {
         id: o

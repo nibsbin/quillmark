@@ -366,12 +366,41 @@ export type LineOp =
     | { op: "setContinues"; line: number; continues: boolean };
 
 /**
+ * An island edit: the only channel that reaches an island's payload (a table's
+ * cells, an image's url), which `delta`, `lineOps` and `markOps` all miss.
+ *
+ * Both ops move one island entry and leave the field's text and marks alone, so
+ * an island edit keeps every identity anchor in the field, which is why a table
+ * edit lowers to `applyChange` rather than `install`.
+ *
+ * `set` addresses an existing island by `id`; an `id` no island carries throws
+ * rather than passing silently. `insert` places a new island's slot at `at` (a
+ * post-delta USV position) together with its entry, so a slot never exists
+ * without an island behind it; its `id` must be non-empty and unused. Deleting
+ * an island needs no op: a `delta` that removes its slot drops the island.
+ *
+ * A `set` stores the `loss` it is given: nothing re-derives the class from the
+ * new `props`, so a write that changes what markdown can carry must say so.
+ *
+ * An island is *inline* (a slot inside a paragraph) unless its line says
+ * otherwise. A **block** island is one bundle of all three channels, in the
+ * order they apply: `delta` inserts the `\n` that opens the line, `islandOps`
+ * inserts the slot, `lineOps` tags the line `{ op: "setKind", kind: "island" }`.
+ * `{ op: "split" }` cannot open that line: line ops run after island ops.
+ */
+export type IslandOp =
+    | ({ op: "set" } & ContentIsland)
+    | ({ op: "insert"; at: number } & ContentIsland);
+
+/**
  * A committed content edit bundle for `applyChange`: a text `delta` (default no
- * text change), then `lineOps`, then `markOps` (mark ranges are in post-delta
- * coordinates). Every field is optional.
+ * text change), then `islandOps`, then `lineOps`, then `markOps` (mark ranges
+ * are in final-text coordinates: every earlier channel applied). Every field is
+ * optional.
  */
 export interface ChangeBundle {
     delta?: Delta;
+    islandOps?: IslandOp[];
     lineOps?: LineOp[];
     markOps?: MarkOp[];
 }
@@ -1594,10 +1623,15 @@ impl Document {
         serialize_or_throw(&delta, "reviseField")
     }
 
-    /// **Apply** a committed content edit `bundle` (`{ delta?, lineOps?, markOps? }`)
-    /// at `addr`, the editor splice: text delta first, then line ops, then mark
-    /// ops (mark ranges in final-text coordinates), each all-or-nothing. An absent
+    /// **Apply** a committed content edit `bundle`
+    /// (`{ delta?, islandOps?, lineOps?, markOps? }`) at `addr`, the editor
+    /// splice: text delta first, then island ops, then line ops, then mark ops
+    /// (mark ranges in final-text coordinates), each all-or-nothing. An absent
     /// `addr.field` targets the body, an absent `addr.card` the main card.
+    ///
+    /// The island channel is what keeps a table or image edit on the op path:
+    /// it moves the island alone, so the identity anchors elsewhere in the field
+    /// survive an edit that `install` would clear.
     ///
     /// Throws on an out-of-range card, a field that is not richtext, a malformed
     /// bundle, or an op that applies out of bounds (the value is unchanged on a
@@ -1609,14 +1643,12 @@ impl Document {
         #[wasm_bindgen(unchecked_param_type = "ChangeBundle")] bundle: JsValue,
     ) -> Result<(), JsValue> {
         let addr = Addr::from_js_or_string(&addr)?;
-        let (delta, line_ops, mark_ops) = parse_change_bundle(&bundle)?;
+        let bundle = parse_change_bundle(&bundle)?;
         let base = self.addr_base(&addr);
         let card = self.addr_card_mut(&addr)?;
         match &addr.field {
-            None => card.apply_body_change(&delta, &line_ops, &mark_ops),
-            Some(field) => {
-                card.apply_field_richtext_change(field, &delta, &line_ops, &mark_ops)
-            }
+            None => card.apply_body_change(&bundle),
+            Some(field) => card.apply_field_richtext_change(field, &bundle),
         }
         .map_err(|e| edit_error_to_js(&e, &base))
     }
@@ -2049,18 +2081,9 @@ fn js_to_content_with(
     })
 }
 
-/// Lower a `ChangeBundle` (`{ delta?, lineOps?, markOps? }`) to core ops via the
-/// shared richtext reader, mapping its message to a `WasmError`.
-fn parse_change_bundle(
-    value: &JsValue,
-) -> Result<
-    (
-        quillmark_core::Delta,
-        Vec<quillmark_core::LineOp>,
-        Vec<quillmark_core::MarkOp>,
-    ),
-    JsValue,
-> {
+/// Lower a `ChangeBundle` (`{ delta?, islandOps?, lineOps?, markOps? }`) to core
+/// ops via the shared richtext reader, mapping its message to a `WasmError`.
+fn parse_change_bundle(value: &JsValue) -> Result<quillmark_content::ChangeBundle, JsValue> {
     let json = js_value_to_json(value.clone(), "applyChange")?;
     quillmark_content::change_bundle_from_value(&json)
         .map_err(|e| WasmError::from(format!("applyChange: {e}")).to_js_value())
