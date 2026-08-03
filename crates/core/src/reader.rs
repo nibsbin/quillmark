@@ -8,9 +8,8 @@
 //! read. Projecting a field to
 //! markdown is *interpretation*: a schema-shaped question ("this field's
 //! richtext, as markdown") that a schema-free `Document` cannot answer without
-//! guessing which fields are even richtext. [`Card::field_markdown`] carries the
-//! projection but has no schema to name the field set, so an unknown field name
-//! reads back as absent rather than as the typo it is.
+//! guessing which fields are even richtext. So the projection has one door, and
+//! it binds the schema.
 //!
 //! [`Quill::reader`](crate::Quill::reader) binds the schema (where the authority
 //! already lives, the writer's twin) so a single verb interprets by the field's
@@ -31,8 +30,7 @@
 //! returns its canonical value verbatim ([`ReadValue::Value`]): the same
 //! transport `Document` reads, now reached with schema authority. A present value
 //! that does not decode under a content field raises
-//! [`EditError::FieldRichtextDecode`], the mismatch [`Card::field_markdown`] /
-//! [`Card::field_plaintext`] surfaces. A name the schema does not declare raises
+//! [`EditError::FieldRichtextDecode`]. A name the schema does not declare raises
 //! [`EditError::UnknownField`], exactly as [`TypedWriter::set`](crate::TypedWriter::set)
 //! rejects it on the write side.
 //!

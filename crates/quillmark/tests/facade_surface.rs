@@ -8,12 +8,19 @@
 //! `Quill::writer` returns a `TypedWriter`, the writer verbs fail as
 //! `EditError`, `Quill::parse` fails as `BoundParseError`, and a field reads
 //! back as a `QuillValue`.
+//!
+//! The typed read (`BINDINGS.md` § "Typed reader front door") and the preview
+//! queries (`PREVIEW.md`) are the same claim on the other two flows:
+//! `Quill::reader` returns a `TypedReader`, whose verbs yield `ReadValue` and
+//! `CardReader`, and a `LiveSession` answers in `RenderedRegion` and
+//! `ContentHit`. Each test annotates the return types explicitly — an inferred
+//! binding would compile with the name absent and gate nothing.
 
 use std::collections::HashMap;
 
 use quillmark::{
-    BoundParseError, Document, EditError, FileTreeNode, Parsed, Quill, QuillReference, QuillValue,
-    TypedWriter,
+    BoundParseError, CardReader, Document, EditError, FileTreeNode, Parsed, Quill, QuillReference,
+    QuillValue, ReadValue, TypedReader, TypedWriter,
 };
 
 const QUILL: &str = r#"
@@ -27,6 +34,15 @@ main:
   fields:
     title:
       type: string
+    subject:
+      type: richtext
+      inline: true
+
+card_kinds:
+  note:
+    fields:
+      body:
+        type: richtext
 "#;
 
 fn quill() -> Quill {
@@ -77,4 +93,74 @@ fn bound_parse_spells_through_the_facade() {
         mismatch.is_err(),
         "a $quill naming another quill fails at the bound door"
     );
+}
+
+#[test]
+fn typed_read_spells_through_the_facade() {
+    let quill = quill();
+    let reference: QuillReference = "facade_surface".parse().expect("reference parses");
+    let mut doc = Document::new(reference);
+    {
+        let mut writer: TypedWriter = quill.writer(&mut doc);
+        writer.set("subject", "Hello **world**").expect("richtext");
+        writer
+            .add_card("note", [("body", "a *card*")], None, None)
+            .expect("note is a declared card kind");
+    }
+
+    let reader: TypedReader = quill.reader(&doc);
+
+    let subject: Option<ReadValue> = reader.get("subject").expect("subject is declared");
+    assert!(
+        matches!(subject, Some(ReadValue::Markdown(ref md)) if md == "Hello **world**"),
+        "a richtext field projects to markdown: {subject:?}"
+    );
+
+    // The authority the quill-free projection lacked: an undeclared name is a
+    // typo, not an absence.
+    let typo: Result<Option<ReadValue>, EditError> = reader.get("nope");
+    assert!(matches!(typo, Err(EditError::UnknownField(_))), "{typo:?}");
+
+    let card: CardReader = reader.card(0).expect("the note card resolves its schema");
+    assert_eq!(card.kind(), Some("note"));
+    let body: Option<ReadValue> = card.get("body").expect("body is declared on `note`");
+    assert!(matches!(body, Some(ReadValue::Markdown(ref md)) if md == "a *card*"), "{body:?}");
+}
+
+/// The preview flow needs a real backend session, so it rides the typst
+/// feature. `RenderedRegion` and `ContentHit` are what every query here
+/// answers in; `HitGranularity` rides inside the hit.
+#[cfg(feature = "typst")]
+#[test]
+fn preview_regions_spell_through_the_facade() {
+    use quillmark::{ContentHit, HitGranularity, LiveSession, Quillmark, RenderedRegion};
+
+    let engine = Quillmark::new();
+    let quill = quillmark::quill_from_path(quillmark_fixtures::quills_path("usaf_memo"))
+        .expect("usaf_memo should load");
+    let parsed = quill.seed_document();
+    let session: LiveSession = engine.open(&quill, &parsed).expect("open a session");
+
+    let regions: Vec<RenderedRegion> = session.regions();
+    // Span-bearing: `field_boxes` and `position_at` are content-only, so a
+    // scalar-reference or widget region would answer nothing through them.
+    let region: &RenderedRegion = regions
+        .iter()
+        .find(|r| r.span.is_some())
+        .expect("the seeded memo places at least one content field");
+
+    let boxes: Vec<RenderedRegion> = session.field_boxes(&region.field);
+    assert!(!boxes.is_empty(), "a content field unions to at least one box");
+
+    let cx = (region.rect[0] + region.rect[2]) / 2.0;
+    let cy = (region.rect[1] + region.rect[3]) / 2.0;
+    assert_eq!(session.field_at(region.page, cx, cy).as_deref(), Some(region.field.as_str()));
+
+    let hit: Option<ContentHit> = session.position_at(region.page, cx, cy);
+    let hit: ContentHit = hit.expect("a content region's centre hit-tests to a content position");
+    assert_eq!(hit.field, region.field);
+    let _granularity: Option<HitGranularity> = hit.granularity;
+
+    let located: Option<RenderedRegion> = session.locate(&region.field, 0);
+    assert!(located.is_some(), "a field with a region locates position 0");
 }

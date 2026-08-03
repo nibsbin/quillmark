@@ -147,8 +147,11 @@ pub enum PayloadItem {
 }
 
 impl PayloadItem {
-    /// Build a plain (non-fill) field entry with no nested comments.
-    pub fn field(key: impl Into<String>, value: QuillValue) -> Self {
+    /// Build a plain (non-fill) field entry with no nested comments. The
+    /// variants are public and constructible; this is the shorthand core's own
+    /// tests build item lists with.
+    #[cfg(test)]
+    pub(crate) fn field(key: impl Into<String>, value: QuillValue) -> Self {
         PayloadItem::Field {
             key: key.into(),
             value,
@@ -171,14 +174,14 @@ impl PayloadItem {
         }
     }
 
-    pub fn comment(text: impl Into<String>) -> Self {
+    pub(crate) fn comment(text: impl Into<String>) -> Self {
         PayloadItem::Comment {
             text: text.into(),
             inline: false,
         }
     }
 
-    pub fn comment_inline(text: impl Into<String>) -> Self {
+    pub(crate) fn comment_inline(text: impl Into<String>) -> Self {
         PayloadItem::Comment {
             text: text.into(),
             inline: true,
@@ -198,24 +201,32 @@ impl PayloadItem {
     }
 }
 
-/// Ordered, comment-preserving payload of a card-yaml block.
+/// Ordered, comment-preserving payload of a card-yaml block: a **read view**
+/// onto card-yaml storage.
 ///
 /// Contains the block's `$` entries, user fields, and comments interleaved
 /// in source order. See the module docs for the full design.
-#[derive(Debug, Clone, PartialEq, Default)]
+///
+/// Mutation is crate-internal. The invariants an edit must hold — at most one
+/// `$quill` / `$kind` / `$ext` / `$seed`, no duplicate field keys, every field
+/// name matching `[A-Za-z_][A-Za-z0-9_]*` — are not all expressible in the
+/// mutators' signatures, so out-of-crate authoring goes through the verbs that
+/// do enforce them: `Card::store_field` / `store_ext` / `store_seed_namespace`,
+/// `Document::set_quill_ref`, and [`TypedWriter`](crate::TypedWriter).
+#[derive(Debug, Clone, PartialEq)]
 pub struct Payload {
     items: Vec<PayloadItem>,
 }
 
 impl Payload {
     /// Create an empty `Payload`.
-    pub fn new() -> Self {
-        Self::default()
+    pub(crate) fn new() -> Self {
+        Self { items: Vec::new() }
     }
 
     /// Build from an `IndexMap` of user fields. No `$` entries, no
     /// comments, no fill markers.
-    pub fn from_index_map(map: IndexMap<String, QuillValue>) -> Self {
+    pub(crate) fn from_index_map(map: IndexMap<String, QuillValue>) -> Self {
         let items = map
             .into_iter()
             .map(|(key, value)| PayloadItem::Field {
@@ -229,7 +240,7 @@ impl Payload {
     }
 
     /// Build from a pre-computed item list (parser and DTO entry point).
-    pub fn from_items(items: Vec<PayloadItem>) -> Self {
+    pub(crate) fn from_items(items: Vec<PayloadItem>) -> Self {
         Self { items }
     }
 
@@ -335,11 +346,13 @@ impl Payload {
         &self.items
     }
 
-    /// Mutable access to the raw item list. Callers must preserve the
-    /// invariants (at most one `Quill`/`Kind`/`Id`/`Ext`, no duplicate
-    /// field keys, every field name matches `[A-Za-z_][A-Za-z0-9_]*`): use
-    /// the typed mutators when in doubt.
-    pub fn items_mut(&mut self) -> &mut [PayloadItem] {
+    /// Mutable access to the raw item list, for the in-crate rewrites that
+    /// touch an item in place rather than through a key — `normalize` NFC-folds
+    /// field names here. The slice cannot add or drop items, so the arity
+    /// invariants (at most one `Quill`/`Kind`/`Ext`/`Seed`, no duplicate field
+    /// keys) survive any use of it; a caller that rewrites a `Field` key owns
+    /// keeping it well-formed and distinct.
+    pub(crate) fn items_mut(&mut self) -> &mut [PayloadItem] {
         &mut self.items
     }
 
@@ -394,13 +407,13 @@ impl Payload {
     /// Set or replace the `$quill` entry. Inserts at canonical position
     /// (before any `$kind` / `$ext` / `$seed`) when adding. Comments are
     /// untouched.
-    pub fn set_quill(&mut self, reference: QuillReference) {
+    pub(crate) fn set_quill(&mut self, reference: QuillReference) {
         self.upsert_meta(PayloadItem::Quill { reference });
     }
 
     /// Set or replace the `$kind` entry. Same insertion rules as
     /// [`set_quill`](Self::set_quill).
-    pub fn set_kind(&mut self, kind: impl Into<String>) {
+    pub(crate) fn set_kind(&mut self, kind: impl Into<String>) {
         self.upsert_meta(PayloadItem::Kind { value: kind.into() });
     }
 
@@ -421,7 +434,7 @@ impl Payload {
     ///
     /// Nested comments on a replaced `$ext` entry are dropped (the new value
     /// tree may not contain matching positions).
-    pub fn set_ext(&mut self, value: JsonMap<String, JsonValue>) {
+    pub(crate) fn set_ext(&mut self, value: JsonMap<String, JsonValue>) {
         self.set_meta(MetaKey::Ext, value);
     }
 
@@ -429,7 +442,7 @@ impl Payload {
     /// (after `$quill` / `$kind` / `$ext`, before any user field).
     /// Nested comments on a replaced `$seed` are dropped, like
     /// [`set_ext`](Self::set_ext).
-    pub fn set_seed(&mut self, value: JsonMap<String, JsonValue>) {
+    pub(crate) fn set_seed(&mut self, value: JsonMap<String, JsonValue>) {
         self.set_meta(MetaKey::Seed, value);
     }
 
@@ -444,14 +457,8 @@ impl Payload {
 
     /// Remove the `$ext` entry, returning the previous map if any. Any
     /// nested comments attached to the entry are dropped.
-    pub fn take_ext(&mut self) -> Option<JsonMap<String, JsonValue>> {
+    pub(crate) fn take_ext(&mut self) -> Option<JsonMap<String, JsonValue>> {
         self.take_meta(MetaKey::Ext)
-    }
-
-    /// Remove the `$seed` entry, returning the previous map if any. Any
-    /// nested comments attached to the entry are dropped.
-    pub fn take_seed(&mut self) -> Option<JsonMap<String, JsonValue>> {
-        self.take_meta(MetaKey::Seed)
     }
 
     fn upsert_meta(&mut self, new: PayloadItem) {
@@ -549,7 +556,7 @@ impl Payload {
     /// [`Card::payload_mut`](super::Card::payload_mut). Pre-validated callers
     /// (typed commit, all-or-nothing batches) use `insert_unchecked` to skip the
     /// redundant check.
-    pub fn insert(
+    pub(crate) fn insert(
         &mut self,
         key: impl Into<String>,
         value: QuillValue,
@@ -561,7 +568,7 @@ impl Payload {
 
     /// Insert or update a user field and mark it a `!must_fill` placeholder;
     /// same rules and boundary validation as [`insert`](Self::insert).
-    pub fn insert_fill(
+    pub(crate) fn insert_fill(
         &mut self,
         key: impl Into<String>,
         value: QuillValue,
@@ -613,7 +620,7 @@ impl Payload {
 
     /// Remove a user field by key, returning its value. Comments and `$`
     /// entries are untouched.
-    pub fn remove(&mut self, key: &str) -> Option<QuillValue> {
+    pub(crate) fn remove(&mut self, key: &str) -> Option<QuillValue> {
         match self.take_item(|item| matches!(item, PayloadItem::Field { key: k, .. } if k == key))? {
             PayloadItem::Field { value, .. } => Some(value),
             _ => unreachable!(),
@@ -727,7 +734,7 @@ mod tests {
         fm.set_quill("foo@0.1".parse().unwrap());
         fm.set_kind("main");
         let _ = fm.insert("title", qv("Hello"));
-        let items = std::mem::take(&mut fm).items().to_vec();
+        let items = fm.items().to_vec();
         // Reconstruct with an interleaved comment.
         let mut items_with_comment = items;
         items_with_comment.insert(2, PayloadItem::comment("c"));

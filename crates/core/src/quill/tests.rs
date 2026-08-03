@@ -144,13 +144,13 @@ fn test_in_memory_file_system() {
     let quill = load_from_path(quill_dir).unwrap();
 
     // Test file access
-    assert!(quill.file_exists("plate.typ"));
-    assert!(quill.file_exists("assets/test.txt"));
-    assert!(quill.file_exists("packages/package.typ"));
-    assert!(!quill.file_exists("nonexistent.txt"));
+    assert!(quill.files().file_exists("plate.typ"));
+    assert!(quill.files().file_exists("assets/test.txt"));
+    assert!(quill.files().file_exists("packages/package.typ"));
+    assert!(!quill.files().file_exists("nonexistent.txt"));
 
     // Test file content
-    let asset_content = quill.get_file("assets/test.txt").unwrap();
+    let asset_content = quill.files().get_file("assets/test.txt").unwrap();
     assert_eq!(asset_content, b"asset content");
 }
 
@@ -179,9 +179,9 @@ fn test_quillignore_integration() {
     let quill = load_from_path(quill_dir).unwrap();
 
     // Test that ignored files are not loaded
-    assert!(quill.file_exists("plate.typ"));
-    assert!(!quill.file_exists("should_ignore.tmp"));
-    assert!(!quill.file_exists("target/debug.txt"));
+    assert!(quill.files().file_exists("plate.typ"));
+    assert!(!quill.files().file_exists("should_ignore.tmp"));
+    assert!(!quill.files().file_exists("target/debug.txt"));
 }
 
 #[test]
@@ -210,10 +210,10 @@ fn test_find_files_pattern() {
     let quill = load_from_path(quill_dir).unwrap();
 
     // Test pattern matching
-    let all_assets = quill.find_files("assets/*");
+    let all_assets = quill.files().find_files("assets/*");
     assert!(all_assets.len() >= 3); // At least image.png, data.json, fonts/font.ttf
 
-    let typ_files = quill.find_files("*.typ");
+    let typ_files = quill.files().find_files("*.typ");
     assert_eq!(typ_files.len(), 1);
     assert!(typ_files.contains(&PathBuf::from("plate.typ")));
 }
@@ -450,17 +450,17 @@ fn test_dir_exists_and_list_apis() {
     let quill = Quill::from_tree(root).unwrap();
 
     // Test dir_exists
-    assert!(quill.dir_exists("assets"));
-    assert!(quill.dir_exists("assets/fonts"));
-    assert!(quill.dir_exists("empty"));
-    assert!(!quill.dir_exists("nonexistent"));
-    assert!(!quill.dir_exists("plate.typ")); // file, not directory
+    assert!(quill.files().dir_exists("assets"));
+    assert!(quill.files().dir_exists("assets/fonts"));
+    assert!(quill.files().dir_exists("empty"));
+    assert!(!quill.files().dir_exists("nonexistent"));
+    assert!(!quill.files().dir_exists("plate.typ")); // file, not directory
 
     // Test file_exists
-    assert!(quill.file_exists("plate.typ"));
-    assert!(quill.file_exists("assets/logo.png"));
-    assert!(quill.file_exists("assets/fonts/font.ttf"));
-    assert!(!quill.file_exists("assets")); // directory, not file
+    assert!(quill.files().file_exists("plate.typ"));
+    assert!(quill.files().file_exists("assets/logo.png"));
+    assert!(quill.files().file_exists("assets/fonts/font.ttf"));
+    assert!(!quill.files().file_exists("assets")); // directory, not file
 
     // The listing pair is read off the tree: `Quill` exposes only
     // `list_directories`, which is built on `FileTreeNode::list_subdirectories`.
@@ -487,7 +487,7 @@ fn test_dir_exists_and_list_apis() {
     assert_eq!(empty_subdirs.len(), 0);
 
     // The live wrapper over the same walk.
-    assert_eq!(quill.list_directories("").len(), 2);
+    assert_eq!(quill.files().list_directories("").len(), 2);
 }
 
 #[test]

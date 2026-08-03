@@ -8,7 +8,9 @@ A `Document` is built and mutated in memory (no Markdown text involved)
 through validated constructors and mutators: `Document::new` (blank canvas),
 `Card::new`, `store_field` / `store_fields`, `push_card`. Every mutator enforces
 the same field-name, depth, and kind invariants the Markdown parser does, so a
-constructed document cannot be invalid. This is the authoring surface for
+constructed document cannot be invalid — with no bypass, since `Payload`'s own
+mutation half is crate-internal and `card.payload()` is a read view. This is the
+authoring surface for
 programs (database row → rendered PDF); Markdown serves human authoring and
 the blueprint serves LLM/MCP consumers.
 

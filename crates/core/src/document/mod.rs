@@ -34,10 +34,11 @@ pub(crate) fn import_body(md: &str) -> Result<Content, ImportError> {
 
 /// Which encoding a `decode_richtext_value` failure came from, so a call site
 /// can prefix its diagnostic per encoding without re-deriving the dispatch.
-/// Surfaced publicly as the error of [`Card::field_richtext`].
+/// Crate-internal: the schema-bound reader converts it into
+/// [`EditError::FieldRichtextDecode`] before any caller sees it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum RichtextDecodeError {
+pub(crate) enum RichtextDecodeError {
     /// A JSON object that is not a valid canonical content.
     NotContent(String),
     /// A markdown string that failed to import.
@@ -46,7 +47,7 @@ pub enum RichtextDecodeError {
 
 impl RichtextDecodeError {
     /// The inner failure message, without an encoding-specific prefix.
-    pub fn into_message(self) -> String {
+    pub(crate) fn into_message(self) -> String {
         match self {
             RichtextDecodeError::NotContent(m) | RichtextDecodeError::BadMarkdown(m) => m,
         }
@@ -187,9 +188,10 @@ pub struct Card {
 impl Card {
     /// Create a `Card` from its parts without validation. `body` is the content
     /// form; to build from an authored markdown string, import it first via the
-    /// crate-internal `import_body` boundary. For user-facing construction of
-    /// composable cards use [`Card::new`].
-    pub fn from_parts(payload: Payload, body: Content) -> Self {
+    /// crate-internal `import_body` boundary. Crate-internal, with [`Payload`]'s
+    /// mutation half: user-facing construction of composable cards is
+    /// [`Card::new`].
+    pub(crate) fn from_parts(payload: Payload, body: Content) -> Self {
         Self { payload, body }
     }
 
@@ -209,11 +211,14 @@ impl Card {
         self.payload.ext()
     }
 
+    /// The card's card-yaml storage as a read view. Writes go through the
+    /// enforcing verbs ([`store_field`](Card::store_field),
+    /// [`TypedWriter`](crate::TypedWriter)), not through here.
     pub fn payload(&self) -> &Payload {
         &self.payload
     }
 
-    pub fn payload_mut(&mut self) -> &mut Payload {
+    pub(crate) fn payload_mut(&mut self) -> &mut Payload {
         &mut self.payload
     }
 
@@ -253,7 +258,7 @@ impl Card {
     /// A `Document` carries no schema, so this cannot itself tell a richtext
     /// field from a plain string field; the caller names a field it knows is
     /// richtext, exactly as it does when writing.
-    pub fn field_richtext(&self, name: &str) -> Option<Result<Content, RichtextDecodeError>> {
+    pub(crate) fn field_richtext(&self, name: &str) -> Option<Result<Content, RichtextDecodeError>> {
         let value = self.payload.get(name)?.as_json();
         Some(match crate::document::decode_richtext_value(value) {
             Some(result) => result,
@@ -279,7 +284,7 @@ impl Card {
     ///
     /// Absence returns `None`; a present non-richtext value returns `Some(Err)`,
     /// so the projection surfaces the type mismatch instead of blanking on it.
-    pub fn field_markdown(&self, name: &str) -> Option<Result<String, RichtextDecodeError>> {
+    pub(crate) fn field_markdown(&self, name: &str) -> Option<Result<String, RichtextDecodeError>> {
         Some(self.field_richtext(name)?.map(|rt| quillmark_content::export::to_markdown(&rt)))
     }
 
@@ -298,7 +303,7 @@ impl Card {
     /// A `Document` carries no schema, so the caller names a field it knows is
     /// plaintext; the schema-bound door is
     /// [`TypedReader::get_content`](crate::TypedReader::get_content).
-    pub fn field_plaintext_content(
+    pub(crate) fn field_plaintext_content(
         &self,
         name: &str,
     ) -> Option<Result<Content, RichtextDecodeError>> {
@@ -324,7 +329,7 @@ impl Card {
     /// - `None`: the field is absent.
     /// - `Some(Ok(text))`: the projected literal text.
     /// - `Some(Err(_))`: the field is present but does not decode as content.
-    pub fn field_plaintext(&self, name: &str) -> Option<Result<String, RichtextDecodeError>> {
+    pub(crate) fn field_plaintext(&self, name: &str) -> Option<Result<String, RichtextDecodeError>> {
         Some(
             self.field_plaintext_content(name)?
                 .map(|rt| quillmark_content::export::to_plaintext(&rt)),

@@ -9,7 +9,6 @@ mod fill;
 mod formats;
 mod ignore;
 mod load;
-mod query;
 mod schema;
 mod schema_yaml;
 mod seed;

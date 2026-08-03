@@ -221,7 +221,7 @@ impl QuillWorld {
         // Asset fonts first: `QuillWorld` gives them priority over package
         // fonts of the same family, and `Vec` order is that priority.
         for glob in ["assets/fonts/*", "packages/**"] {
-            for font_path in source.find_files(glob) {
+            for font_path in source.files().find_files(glob) {
                 let Some(ext) = font_path.extension() else {
                     continue;
                 };
@@ -231,7 +231,7 @@ impl QuillWorld {
                 ) {
                     continue;
                 }
-                if let Some(contents) = source.get_file(&font_path) {
+                if let Some(contents) = source.files().get_file(&font_path) {
                     font_data.push(contents.to_vec());
                 }
             }
@@ -247,10 +247,10 @@ impl QuillWorld {
         warnings: &mut Vec<Diagnostic>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Get all files that start with "assets/"
-        let asset_paths = source.find_files("assets/*");
+        let asset_paths = source.files().find_files("assets/*");
 
         for asset_path in asset_paths {
-            if let Some(contents) = source.get_file(&asset_path) {
+            if let Some(contents) = source.files().get_file(&asset_path) {
                 // Create virtual path for the asset
                 let virtual_path = match VirtualPath::new(asset_path.to_string_lossy().as_ref()) {
                     Ok(vpath) => vpath,
@@ -275,7 +275,7 @@ impl QuillWorld {
         warnings: &mut Vec<Diagnostic>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Get all subdirectories in packages/
-        let package_dirs = source.list_directories("packages");
+        let package_dirs = source.files().list_directories("packages");
 
         for package_dir in package_dirs {
             let package_name = package_dir
@@ -286,7 +286,7 @@ impl QuillWorld {
 
             // Look for typst.toml in this package
             let toml_path = package_dir.join("typst.toml");
-            if let Some(toml_contents) = source.get_file(&toml_path) {
+            if let Some(toml_contents) = source.files().get_file(&toml_path) {
                 let toml_content = String::from_utf8_lossy(toml_contents);
                 match parse_package_toml(&toml_content) {
                     Ok(package_info) => {
@@ -360,10 +360,10 @@ impl QuillWorld {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Find all files in the package directory
         let package_pattern = format!("{}/*", package_dir.to_string_lossy());
-        let package_files = source.find_files(&package_pattern);
+        let package_files = source.files().find_files(&package_pattern);
 
         for file_path in package_files {
-            if let Some(contents) = source.get_file(&file_path) {
+            if let Some(contents) = source.files().get_file(&file_path) {
                 // Calculate the relative path within the package
                 let relative_path = file_path.strip_prefix(package_dir).map_err(|_| {
                     format!("Failed to get relative path for {}", file_path.display())
