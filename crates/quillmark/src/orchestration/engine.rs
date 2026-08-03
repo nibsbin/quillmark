@@ -76,7 +76,7 @@ impl Quillmark {
     /// Open a live render session for `doc` against `quill`'s backend.
     pub fn open(&self, quill: &Quill, doc: &Document) -> Result<LiveSession, RenderError> {
         let backend = self.resolve_backend(quill)?;
-        let json_data = quill.config().compile_checked(doc)?;
+        let json_data = quill.compile_checked(doc)?;
         backend.open(quill, &json_data)
     }
 

@@ -200,7 +200,8 @@ impl LiveSession {
     /// backend has the [`Quill`](crate::Quill) in hand inside
     /// [`Backend::open`](crate::Backend::open), so binding costs it a
     /// `source.config().clone()` and buys [`apply`](Self::apply) a document
-    /// verb that cannot be handed the wrong quill's data.
+    /// verb whose plate is always compiled by *this* config: the pairing is
+    /// structural, not an obligation on the caller.
     #[doc(hidden)]
     pub fn new(inner: Box<dyn SessionHandle>, config: QuillConfig) -> Self {
         Self { inner, config }
@@ -359,12 +360,16 @@ impl LiveSession {
     /// straight to the backend, no `$quill` check and no compile.
     ///
     /// For a backend's own acceptance tests, which drive a session against
-    /// synthetic plate data to exercise recompile and dirty-page behavior —
-    /// including data a schema would reject, the only lever that makes a
-    /// backend's compile fail on demand. A consumer wanting to render a
-    /// document uses [`apply`](Self::apply), which cannot be handed the wrong
-    /// quill's data; this one carries that obligation uncheckable, which is
-    /// why it is hidden and outside the compatibility promise.
+    /// synthetic plate data to exercise recompile and dirty-page behavior,
+    /// including data a schema would reject: the only lever that makes a
+    /// backend's compile fail on demand.
+    ///
+    /// Behind the `internal-test-seam` feature rather than `#[doc(hidden)]`
+    /// alone: the attribute hides a method from rustdoc and leaves it one
+    /// identifier away in every consumer build, and this one carries the
+    /// obligation [`apply`](Self::apply) exists to discharge. Off by default,
+    /// so the seam is absent unless a crate asks for it.
+    #[cfg(feature = "internal-test-seam")]
     #[doc(hidden)]
     pub fn apply_data(&mut self, json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> {
         self.inner.apply(json_data)

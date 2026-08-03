@@ -98,9 +98,9 @@ fn name_mismatch_is_a_hard_error() {
 
 /// The check rides `apply`, not just the open door: a session is bound to the
 /// quill it was opened against, so an edit carrying another quill's `$quill`
-/// is refused at the same seam with the same code. Before the session held its
-/// config, `apply` took compiled data that no longer carried the reference,
-/// and this pairing was unrepresentable to it.
+/// is refused at the same seam with the same code. A session compiles every
+/// edit through its own config, which is what makes the pairing checkable at
+/// all: compiled plate data does not carry the reference.
 #[test]
 #[cfg(feature = "typst")]
 fn apply_rechecks_the_reference_against_the_sessions_quill() {
@@ -121,6 +121,7 @@ fn apply_rechecks_the_reference_against_the_sessions_quill() {
     let mut session = engine
         .open(&quill, &doc("test_quill@3"))
         .expect("open against the matching quill");
+    let pages = session.page_count();
 
     // A well-formed document that belongs to a different quill.
     let err = session
@@ -134,7 +135,13 @@ fn apply_rechecks_the_reference_against_the_sessions_quill() {
         .expect_err("apply must refuse an out-of-selector version");
     assert_eq!(mismatch_code(&err), Some("quill::version_mismatch"));
 
-    // The refusals are transactional: the session still serves its compile.
+    // A refusal is transactional like any other failed apply: it is raised
+    // before the backend is touched at all, so every read still serves the
+    // compile `open` produced.
+    assert_eq!(session.page_count(), pages);
+    session
+        .render(&RenderOptions::default().with_output_format(OutputFormat::Pdf))
+        .expect("reads still serve the last-good compile");
     session
         .apply(&doc("test_quill@3"))
         .expect("the matching document still applies");

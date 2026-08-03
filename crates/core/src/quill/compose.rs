@@ -21,6 +21,11 @@ impl Quill {
         self.config().compile_data(doc)
     }
 
+    /// [`QuillConfig::compile_checked`] on this quill's config.
+    pub fn compile_checked(&self, doc: &Document) -> Result<serde_json::Value, RenderError> {
+        self.config().compile_checked(doc)
+    }
+
     /// Validate without backend compilation.
     pub fn dry_run(&self, doc: &Document) -> Result<(), RenderError> {
         self.config().dry_run(doc)
@@ -99,8 +104,8 @@ impl QuillConfig {
     /// [`compile_data`](Self::compile_data) behind the `$quill` pairing check:
     /// the render door's whole preamble, in the one place that owns it. Every
     /// door that turns a document into plate data for *this* schema goes
-    /// through here — `Quillmark::open` for a session's first compile,
-    /// [`LiveSession::apply`](crate::LiveSession::apply) for each edit — so
+    /// through here (`Quillmark::open` for a session's first compile,
+    /// [`LiveSession::apply`](crate::LiveSession::apply) for each edit), so
     /// the pairing cannot be checked at one and skipped at the other.
     ///
     /// [`compile_data`](Self::compile_data) stays available unchecked for a
