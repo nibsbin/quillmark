@@ -94,8 +94,8 @@ impl Quill {
     /// the `conform::*` diagnostics for the values that would not commit.
     ///
     /// The document's `$quill` is checked against this quill **before any
-    /// mutation** ([`check_quill_reference`](Self::check_quill_reference)
-    /// semantics), so a mismatch leaves `doc` untouched.
+    /// mutation**, so a mismatch (`quill::name_mismatch` /
+    /// `quill::version_mismatch`) leaves `doc` untouched.
     ///
     /// The walk covers the main card and every composable card whose `$kind`
     /// resolves, recursing through array `items` and object `properties`. Per
