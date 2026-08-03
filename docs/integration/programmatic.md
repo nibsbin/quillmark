@@ -48,16 +48,16 @@ Markdown authoring, the [blueprint](../quills/blueprint.md) (for LLMs), and thes
 
 `quill.reader(doc)` is the read twin: `reader.get(name)` returns each field by its declared type (a `richtext` field as Markdown, every other type as its canonical value) with schema authority, so an undeclared name raises `edit::unknown_field` rather than reading back nothing.
 
-`reader.get_content(name)` (`getContent` in JavaScript) is the same read at the other end of the codec, returning the field's content corpus rather than its projection. Reach for it when you hold a content editor: a content field rests as a corpus when the typed writer committed it and as the authored string when a Markdown parse produced it, and this read decodes both through the codec the declared type names. A type that carries no content raises `edit::field_not_content`.
+`reader.get_content(name)` (`getContent` in JavaScript) is the same read at the other end of the codec, returning the field's content corpus rather than its projection. Reach for it when you hold a content editor: a content field rests as a corpus when the typed writer committed it and as the authored string when a Markdown parse produced it, and this read decodes both through the codec the declared type names. A type that is not a content leaf raises `edit::field_not_content`: an `integer` has no corpus, and an `array<richtext>` carries content without having one.
 
 ## Addressing cards for re-render
 
 Card mutators address by index, and the engine offers no durable card handle: a `remove_card` / `add_card` moves every index after it. For patch-and-re-render automation (a source row changed, re-render the document), carry your own key in the card's `$ext` under a namespace you own, and resolve the index when patching:
 
 ```python
-doc.store_ext_namespace("myapp", {"row_id": row_id}, card=i)   # at build time
-idx = next(i for i, c in enumerate(doc.cards)
-           if c["ext"]["myapp"]["row_id"] == row_id)           # at patch time
+doc.store_ext_namespace("myapp", {"row_id": row_id}, card=index)   # at build time
+idx = next(i for i, c in enumerate(doc.cards)                      # at patch time
+           if (c["ext"] or {}).get("myapp", {}).get("row_id") == row_id)
 quill.writer(doc).card(idx).set_all({"qty": new_qty})
 ```
 

@@ -94,10 +94,37 @@ For an example-filled starter use `quill.seedDocument()`. Throws on an
 invalid quill reference.
 
 ### `Document.fromMarkdown(markdown)`
-Parse markdown to a parsed document. Throws a JS `Error` (with `.diagnostics`
-attached, see [Errors](#errors)) on any parse failure, including a missing
-root `$quill` metadata line, malformed YAML, and inputs over the 10 MiB
-`parse::input_too_large` limit.
+Parse markdown to a parsed document, quill-free: the **transport door**
+(migrations, `$ext` stamping, a quill that will not load, opening a document to
+fix its `$quill`). Throws a JS `Error` (with `.diagnostics` attached, see
+[Errors](#errors)) on any parse failure, including a missing root `$quill`
+metadata line, malformed YAML, and inputs over the 10 MiB
+`parse::input_too_large` limit. A content field rests as authored; `quill.parse`
+below is the bound door that lands it at its canonical rest.
+
+### `quill.parse(markdown)` / `quill.conform(doc)`
+The **bound door**, and the primary ingestion path. `quill.parse` is
+`Document.fromMarkdown` followed by `conform`: the returned document's declared
+content fields rest at one form per codec (a `richtext` field as the canonical
+content object, a `plaintext` field as its literal string), so `getStored`
+answers "corpus or string?" by the field's declared codec rather than by how the
+document was built. Parse warnings and the `conform::*` warnings both ride
+`doc.warnings`.
+
+`quill.conform(doc)` is the same walk in place on a document that arrived any
+other way (`fromJson`, a stored row), returning the `conform::*` `Diagnostic[]`
+(`[]` when everything rested). It is idempotent and a byte no-op on an
+already-canonical document, YAML comments included, so calling it on every load
+is safe. A `!must_fill` marker anywhere in a field's value skips that field; a
+value the strict write refuses stays as authored under a warning. Both throw
+when the document declares a `$quill` this quill does not answer to, before any
+mutation.
+
+```ts
+const doc = quill.parse(markdown);          // rests canonical
+const stale = Document.fromJson(row);
+const diags = quill.conform(stale);         // converges in place
+```
 
 ### `doc.toMarkdown()`
 Emit canonical Quillmark Markdown. Type-fidelity round-trip safe:
@@ -327,6 +354,24 @@ ed.card(2).set("body", "**note**");                 // composable card, resolved
 `quill` and `doc`: no WASM handle of their own, nothing to `free()`. `card(i)`
 is lazy: it never throws; an out-of-range index throws `IndexOutOfRange` at the
 write.
+
+#### `DocumentReader` / `CardReader`: the read twin
+
+`quill.reader(doc)` carries the writer's ephemerality and its schema authority:
+
+```ts
+const v = quill.reader(doc);
+v.get("subject");                                   // by declared type: richtext → markdown, plaintext → literal text
+v.getContent("subject");                            // the same read as a Content corpus, whichever lane stored it
+v.getBody();                                        // the main body markdown (quill-free)
+v.card(0).get("body");                              // a card field, resolved by its $kind
+```
+
+`get` projects and `getContent` returns the corpus; both decode through the codec
+the field's **declared type** names, which is why they bind the quill and the
+verbatim `doc.getStored` does not. An undeclared name throws `UnknownField`, a
+type that is not a content leaf throws `FieldNotContent`, and an undecodable
+value throws `FieldRichtextDecode`; an absent field reads back `undefined`.
 
 ### `engine.render(quill, parsed, opts?)` vs. `engine.open(quill, parsed)`
 

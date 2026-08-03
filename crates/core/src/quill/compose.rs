@@ -143,6 +143,11 @@ impl QuillConfig {
     /// (a different format, or an incompatible version of one) which yields
     /// undefined output, so it errors rather than warns.
     ///
+    /// Every schema-bound door runs it, the bound ingestion
+    /// ([`Quill::parse`](crate::Quill::parse) /
+    /// [`Quill::conform`](crate::Quill::conform)) included, so the message names
+    /// the pairing rather than a verb.
+    ///
     /// Name is the prerequisite (a selector belongs to a *named* quill): a name
     /// mismatch (`quill::name_mismatch`) short-circuits and the version is left
     /// unevaluated; otherwise the selector is checked (`quill::version_mismatch`).
@@ -154,11 +159,11 @@ impl QuillConfig {
         if doc_ref.name.as_str() != self.name {
             return Err(quill_mismatch(
                 format!(
-                    "document declares $quill '{}' but was rendered with '{}'",
+                    "document declares $quill '{}' but was paired with '{}'",
                     doc_ref, self.name
                 ),
                 "quill::name_mismatch",
-                "render with the quill named by $quill, or update the $quill name",
+                "use the quill named by $quill, or update the $quill name",
             ));
         }
 
@@ -172,7 +177,7 @@ impl QuillConfig {
                     doc_ref, quill_version
                 ),
                 "quill::version_mismatch",
-                "render with a quill whose version satisfies the selector, or update the $quill selector",
+                "use a quill whose version satisfies the selector, or update the $quill selector",
             ));
         }
 

@@ -354,8 +354,10 @@ Body.
     };
     assert_eq!(text, r"a \*b\* line");
 
-    let mut w = quill.writer(&mut doc);
-    let delta = w.revise_field("note", &text).expect("revise");
+    let delta = quill
+        .writer(&mut doc)
+        .revise_field("note", &text)
+        .expect("revise");
     assert!(
         delta
             .ops
@@ -363,7 +365,6 @@ Body.
             .all(|op| matches!(op, quillmark_content::Op::Retain(_))),
         "a no-change revise is all-retain: {delta:?}"
     );
-    drop(w);
     assert_eq!(bytes(&doc), before, "a no-change revise moves no bytes");
 
     quill

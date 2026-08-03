@@ -102,11 +102,17 @@ pub enum EditError {
     FieldRichtextDecode { field: String, message: String },
 
     /// A corpus read ([`TypedReader::get_content`](crate::TypedReader::get_content))
-    /// addressed a field whose declared type carries no content. Content is a
-    /// property of the declared type, not of the stored shape, so the schema
-    /// answers this before the payload is consulted: an `integer` field has no
-    /// corpus to return even when it happens to hold a string.
-    #[error("field '{field}' is declared '{declared}', which carries no content")]
+    /// addressed a field whose declared type is not a content leaf. Which codec
+    /// decodes a value is a property of the declared type, not of the stored
+    /// shape, so the schema answers this before the payload is consulted: an
+    /// `integer` field has no corpus to return even when it happens to hold a
+    /// string.
+    ///
+    /// The condition is a *leaf* one, narrower than the subtree test conform
+    /// walks (`field_contains_content`): an `array<richtext>` carries content and
+    /// still has no one corpus, so it lands here. Read its elements through
+    /// [`get`](crate::TypedReader::get).
+    #[error("field '{field}' is declared '{declared}', which is not a content field")]
     FieldNotContent { field: String, declared: String },
 
     /// A richtext field written under the `richtext(inline)` constraint decoded
@@ -933,6 +939,9 @@ impl Card {
         text: impl Into<String>,
         schema: &FieldSchema,
     ) -> Result<Delta, EditError> {
+        // Ahead of the read, not folded into `resolve_field_write`'s own check:
+        // a directly-constructed payload can hold an ill-named field, and the
+        // read would then report its value's decode instead of the bad name.
         if !is_valid_field_name(name) {
             return Err(EditError::InvalidFieldName(name.to_string()));
         }

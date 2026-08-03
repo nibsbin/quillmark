@@ -79,6 +79,8 @@ quill.schema                # structured dict of the quill's document schema
 quill.metadata              # pure config snapshot of the quill: section (never raises)
 quill.quill_ref             # "name@version"
 
+doc     = quill.parse(markdown)           # the bound door: parse + conform, the primary ingestion path
+diags   = quill.conform(doc)              # the same walk in place on a transported document ([] = at rest)
 diags   = quill.validate(parsed)          # list of validation::* diagnostic dicts ([] = valid)
 seed    = quill.seed_document()           # starter Document seeded from `example:` values
 main    = quill.seed_main()               # just the $kind: main card (dict, like doc.main)
@@ -100,7 +102,7 @@ w = quill.writer(doc)
 w.set("title", "On Taro")                 # typed-commit one field (mismatch raises now)
 w.set_all({"title": "T", "author": "A"})  # atomic batch; one diagnostic per bad field
 w.set_body("A **taro** essay.")           # typed body write (edit semantics)
-w.revise_field("bio", "make it **bold**") # typed *and* anchor-preserving richtext write
+w.revise_field("bio", "make it **bold**") # typed *and* anchor-preserving content write (codec by declared type)
 w.add_card("quotes", {"author": "Basho"}, "…", at=None)  # make + typed commit + insert (at appends/inserts)
 w.remove_card(0)
 w.card(0).set("author", "Issa")           # a CardWriter: .index, .kind, .set, .set_all, .set_body, .revise_field
@@ -108,14 +110,18 @@ w.card(0).set("author", "Issa")           # a CardWriter: .index, .kind, .set, .
 
 ### `Reader`: `quill.reader(doc)`
 
-The interpreted read front door and the read twin of `Writer`. One `get` reads
-each field by its declared type: a richtext field to its markdown projection,
-every other type its canonical value verbatim.
+The interpreted read front door and the read twin of `Writer`. `get` reads each
+field by its declared type: a richtext field to its markdown projection, a
+plaintext field to its literal text, every other type its canonical value
+verbatim. `get_content` is the same read at the other end of the codec, handing
+back the field's `Content` corpus as a dict whichever lane stored it.
 
 ```python
 v = quill.reader(doc)
 v.get("bio")                              # richtext → markdown str; scalar → its value; absent → None
                                           # undeclared name raises UnknownField; undecodable content raises FieldRichtextDecode
+v.get_content("bio")                      # the corpus dict {text, lines, marks, islands}; absent → None
+                                          # a type that is not a content leaf raises FieldNotContent
 v.get_body()                              # the main body markdown (quill-free body read)
 v.card(0).kind                            # the composable card's $kind
 v.card(0).get("author")                   # a card field, interpreted by its $kind schema
