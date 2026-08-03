@@ -809,6 +809,78 @@ card_kinds:
     expect(doc.main.body.lines[1].continues).toBe(true)
   })
 
+  it('applyChange islandOps edits an island without costing the field its anchors', () => {
+    const doc = blankDoc()
+    doc.revise({}, 'intro\n\n| H |\n| --- |\n| a |')
+    const island = doc.main.body.islands[0]
+    expect(island.type).toBe('table')
+
+    // An anchor over "intro", above the table: the thing an `install` would drop.
+    doc.applyChange({}, { markOps: [{ op: 'add', start: 0, end: 5, type: 'anchor', id: 'c1' }] })
+
+    doc.applyChange(
+      {},
+      {
+        islandOps: [
+          {
+            op: 'set',
+            id: island.id,
+            type: 'table',
+            loss: 'lossless',
+            props: {
+              header: [{ text: 'H', marks: [] }],
+              rows: [[{ text: 'b', marks: [] }]],
+              aligns: ['none'],
+            },
+          },
+        ],
+      },
+    )
+    expect(doc.main.body.islands[0].props.rows[0][0].text).toBe('b')
+    expect(doc.main.body.marks.some((m) => m.type === 'anchor' && m.id === 'c1')).toBe(true)
+
+    // An id no island carries throws rather than passing as a silent no-op.
+    expect(() =>
+      doc.applyChange({}, { islandOps: [{ op: 'set', id: 'nope', type: 'table', props: {} }] }),
+    ).toThrow()
+  })
+
+  it('applyChange creates a block island in one bundle', () => {
+    const doc = blankDoc()
+    doc.revise({}, 'intro')
+    // The three channels in the order they apply: the delta opens the line, the
+    // island op fills it, setKind tags it. `split` could not open that line:
+    // line ops run after island ops.
+    doc.applyChange(
+      {},
+      {
+        delta: { ops: [{ retain: 5 }, { insert: '\n' }] },
+        islandOps: [
+          {
+            op: 'insert',
+            at: 6,
+            id: 'isl-new',
+            type: 'image',
+            loss: 'lossless',
+            props: { url: 'ex.com/a.png', alt: 'a' },
+          },
+        ],
+        lineOps: [{ op: 'setKind', line: 1, kind: 'island' }],
+      },
+    )
+    expect(doc.main.body.islands.map((i) => i.id)).toEqual(['isl-new'])
+    expect(exportMarkdown(doc.main.body)).toContain('![a](ex.com/a.png)')
+
+    // A duplicate id is refused, and the failed bundle changes nothing.
+    expect(() =>
+      doc.applyChange(
+        {},
+        { islandOps: [{ op: 'insert', at: 0, id: 'isl-new', type: 'image', props: {} }] },
+      ),
+    ).toThrow()
+    expect(doc.main.body.islands.length).toBe(1)
+  })
+
   it('commitCardField resolves the card-kind schema and errors on a bad index', () => {
     const quill = buildQuill()
     const doc = Document.fromMarkdown(

@@ -37,10 +37,10 @@
 // below. `QuillConfig` and the schema types come along, since a caller holding
 // a `Quill` reads its schema through them.
 pub use quillmark_core::{
-    Artifact, Backend, BoundParseError, Card, CardSchema, ChangeSet, Content, Delta, Diagnostic,
-    Document, EditError, FieldSchema, FieldType, FileTreeNode, LiveSession, Location, OutputFormat,
-    ParseError, Parsed, Quill, QuillConfig, QuillIgnore, QuillReference, QuillValue, RenderError,
-    RenderOptions, RenderResult, Severity, TypedWriter, ValidationError,
+    Artifact, Backend, BoundParseError, Card, CardSchema, ChangeBundle, ChangeSet, Content, Delta,
+    Diagnostic, Document, EditError, FieldSchema, FieldType, FileTreeNode, LiveSession, Location,
+    OutputFormat, ParseError, Parsed, Quill, QuillConfig, QuillIgnore, QuillReference, QuillValue,
+    RenderError, RenderOptions, RenderResult, Severity, TypedWriter, ValidationError,
 };
 
 mod load;

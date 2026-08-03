@@ -946,25 +946,24 @@ fn test_revise_body_rebases_anchor() {
 }
 
 /// `apply_body_change` applies a native field-change bundle (text delta, then
-/// line ops, then mark ops) to the body content.
+/// island ops, then line ops, then mark ops) to the body content.
 #[test]
 fn test_apply_body_change_applies_bundle() {
-    use crate::MarkOp;
+    use crate::{ChangeBundle, MarkOp};
     use quillmark_content::delta::diff;
     use quillmark_content::model::MarkKind;
 
     let mut card = Card::new("note").unwrap();
     card.revise_body("abc").unwrap();
-    let d = diff("abc", "abXc");
-    card.apply_body_change(
-        &d,
-        &[],
-        &[MarkOp::Add {
+    card.apply_body_change(&ChangeBundle {
+        delta: diff("abc", "abXc"),
+        mark_ops: vec![MarkOp::Add {
             start: 3,
             end: 4,
             kind: MarkKind::Strong,
         }],
-    )
+        ..Default::default()
+    })
     .unwrap();
     assert_eq!(card.body().text, "abXc");
     let strong = card
@@ -980,22 +979,21 @@ fn test_apply_body_change_applies_bundle() {
 /// panic or a silent no-op.
 #[test]
 fn test_apply_body_change_reports_out_of_range() {
-    use crate::MarkOp;
+    use crate::{ChangeBundle, MarkOp};
     use quillmark_content::delta::diff;
     use quillmark_content::model::MarkKind;
 
     let mut card = Card::new("note").unwrap();
     card.revise_body("abc").unwrap();
-    let identity = diff("abc", "abc");
-    let result = card.apply_body_change(
-        &identity,
-        &[],
-        &[MarkOp::Add {
+    let result = card.apply_body_change(&ChangeBundle {
+        delta: diff("abc", "abc"),
+        mark_ops: vec![MarkOp::Add {
             start: 0,
             end: 99,
             kind: MarkKind::Strong,
         }],
-    );
+        ..Default::default()
+    });
     match result {
         Err(EditError::ContentApply(_)) => {}
         other => panic!("expected ContentApply, got {other:?}"),
@@ -1008,22 +1006,23 @@ fn test_apply_body_change_reports_out_of_range() {
 /// content, which is what makes anchors persist on field content across edits.
 #[test]
 fn test_apply_field_richtext_change_splices_and_persists() {
-    use crate::MarkOp;
+    use crate::{ChangeBundle, MarkOp};
     use quillmark_content::delta::diff;
     use quillmark_content::model::MarkKind;
 
     let mut card = Card::new("note").unwrap();
     commit_richtext(&mut card, "intro", &serde_json::json!("abc"), false).unwrap();
-    let d = diff("abc", "abXc");
     card.apply_field_richtext_change(
         "intro",
-        &d,
-        &[],
-        &[MarkOp::Add {
-            start: 3,
-            end: 4,
-            kind: MarkKind::Strong,
-        }],
+        &ChangeBundle {
+            delta: diff("abc", "abXc"),
+            mark_ops: vec![MarkOp::Add {
+                start: 3,
+                end: 4,
+                kind: MarkKind::Strong,
+            }],
+            ..Default::default()
+        },
     )
     .unwrap();
 
@@ -1039,12 +1038,12 @@ fn test_apply_field_richtext_change_splices_and_persists() {
 /// knows is richtext.
 #[test]
 fn test_apply_field_richtext_change_rejects_non_richtext() {
-    use quillmark_content::delta::diff;
+    use crate::ChangeBundle;
 
     let mut card = Card::new("note").unwrap();
-    let identity = diff("", "");
+    let identity = ChangeBundle::default();
     assert_eq!(
-        card.apply_field_richtext_change("missing", &identity, &[], &[])
+        card.apply_field_richtext_change("missing", &identity)
             .unwrap_err()
             .variant_name(),
         "FieldRichtextDecode"
@@ -1052,7 +1051,7 @@ fn test_apply_field_richtext_change_rejects_non_richtext() {
 
     card.store_field("count", 3).unwrap();
     assert_eq!(
-        card.apply_field_richtext_change("count", &identity, &[], &[])
+        card.apply_field_richtext_change("count", &identity)
             .unwrap_err()
             .variant_name(),
         "FieldRichtextDecode"
