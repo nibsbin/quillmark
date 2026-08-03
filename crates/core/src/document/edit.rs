@@ -772,7 +772,7 @@ impl Card {
     ///   element/property schema.
     /// - **null**: passes through unchanged (the null ≡ absent rule); nothing
     ///   is coerced (a richtext `null` reads back as the empty content via
-    ///   [`field_richtext`](Self::field_richtext)).
+    ///   [`TypedReader::get_content`](crate::TypedReader::get_content)).
     ///
     /// The caller supplies the `schema` because a [`Document`] holds only a
     /// `$quill` *reference*, not the resolved schema; an editor holds it (see

@@ -27,7 +27,7 @@
 pub mod document;
 pub use document::{
     Card, CardWire, Document, EditError, Parsed, Payload, PayloadItem, PayloadItemWire,
-    RichtextDecodeError, SeedOverlay, WireError,
+    SeedOverlay, WireError,
 };
 
 pub mod writer;
