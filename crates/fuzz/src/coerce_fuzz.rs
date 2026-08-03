@@ -118,7 +118,7 @@ fn arb_json_value(max_depth: u32) -> impl Strategy<Value = serde_json::Value> {
 // -- Harness helpers ----------------------------------------------------------
 
 /// Build a minimal `QuillConfig` whose `main.fields` declares a single field
-/// named [`ROOT_FIELD`] with the given schema. Bypasses `from_yaml` so the
+/// named [`ROOT_FIELD`] with the given schema. Bypasses the YAML loader so the
 /// generator is free to produce schemas the YAML parser would reject (e.g.
 /// `Object` nested inside `Object`): exactly the adversarial surface we want
 /// `coerce_payload` to survive.

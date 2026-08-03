@@ -74,12 +74,12 @@ pub struct BodyCardSchema {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub example: Option<String>,
     /// Canonical-content form of [`example`](Self::example), imported once at
-    /// quill load (`QuillConfig::from_yaml`) and cached here: a pure function of
-    /// the Quill.yaml bytes, never serialized. Seeding commits this instead of
-    /// re-importing the markdown per document, so a seeded body is content from
-    /// birth. `None` when there is no example or the schema was built outside the
-    /// loader (e.g. a hand-built test schema), in which case consumers fall back
-    /// to importing `example`.
+    /// quill load (`QuillConfig::from_yaml_with_warnings`) and cached here: a
+    /// pure function of the Quill.yaml bytes, never serialized. Seeding commits
+    /// this instead of re-importing the markdown per document, so a seeded body
+    /// is content from birth. `None` when there is no example or the schema was
+    /// built outside the loader (e.g. a hand-built test schema), in which case
+    /// consumers fall back to importing `example`.
     #[serde(skip)]
     pub example_content: Option<QuillValue>,
 }
@@ -544,8 +544,9 @@ impl FieldSchema {
                 None
             },
             // Content caches are populated by the loader's post-pass
-            // (`QuillConfig::from_yaml`), which alone imports and validates the
-            // markdown literals; a bare `from_quill_value` leaves them empty.
+            // (`QuillConfig::from_yaml_with_warnings`), which alone imports and
+            // validates the markdown literals; a bare `from_quill_value` leaves
+            // them empty.
             default_content: None,
             example_content: None,
         })

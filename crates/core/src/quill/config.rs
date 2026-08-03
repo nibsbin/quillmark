@@ -80,9 +80,10 @@ impl QuillConfig {
     /// The four fields `Quill.yaml` requires. `description`, `author`,
     /// `card_kinds`, and `backend_config` start empty.
     ///
-    /// This bypasses [`Self::from_yaml`] and its validation, so a config built
-    /// here can hold shapes the parser refuses. Loading a quill goes through
-    /// `from_yaml`. This is for a caller assembling a schema in memory.
+    /// This bypasses [`Self::from_yaml_with_warnings`] and its validation, so a
+    /// config built here can hold shapes the parser refuses. Loading a quill
+    /// goes through that path; this one is for a caller assembling a schema in
+    /// memory.
     pub fn new(name: String, backend: String, version: String, main: CardSchema) -> Self {
         Self {
             name,
