@@ -1,7 +1,7 @@
 use crate::{
     ContentHit, Diagnostic, RenderError, RenderOptions, RenderResult, RenderedRegion, Severity,
 };
-pub use quillmark_content::{ApplyError, Assoc, Delta, LineOp, MarkOp, Op};
+pub use quillmark_content::{ApplyError, Assoc, ChangeBundle, Delta, IslandOp, LineOp, MarkOp, Op};
 
 /// What a committed [`LiveSession::apply`] changed.
 #[derive(Debug, Clone, PartialEq, Eq)]

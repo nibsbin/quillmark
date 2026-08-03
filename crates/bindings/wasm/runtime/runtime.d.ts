@@ -84,6 +84,7 @@ export type {
 	CardAddr,
 	Delta,
 	Assoc,
+	IslandOp,
 	LineOp,
 	MarkOp,
 	ChangeBundle,

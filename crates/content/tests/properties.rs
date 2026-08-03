@@ -16,7 +16,7 @@ use quillmark_content::delta::diff_import;
 use quillmark_content::export::to_markdown;
 use quillmark_content::import::from_markdown;
 use quillmark_content::model::{Line, Mark, MarkKind};
-use quillmark_content::{Content, Delta, Island, LineKind, LineOp, MarkOp, Op};
+use quillmark_content::{Content, Delta, Island, IslandOp, LineKind, LineOp, MarkOp, Op};
 use serde_json::{json, Value};
 
 // ---------------------------------------------------------------------------
@@ -487,6 +487,27 @@ proptest! {
                 }
             }
             prop_assert_eq!(rt.validate(), Ok(()), "splice broke an invariant");
+        }
+    }
+
+    /// `apply_island_ops` preserves `validate()`: an accepted insert lands a
+    /// slot and its entry together, so the slot count still matches the island
+    /// list wherever the position falls (including inside a code fence, whose
+    /// line normalization then demotes).
+    #[test]
+    fn apply_island_ops_preserves_validate(
+        md in document(),
+        pos_seed in 0usize..4096,
+    ) {
+        let mut rt = from_markdown(&md).unwrap();
+        let at = pos_seed % (rt.len_usv() + 1);
+        let op = IslandOp::Insert {
+            at,
+            island: Island::new("isl-prop".into(), "image".into())
+                .with_props(json!({ "url": "ex.com", "alt": "a" })),
+        };
+        if rt.apply_island_ops(&[op]).is_ok() {
+            prop_assert_eq!(rt.validate(), Ok(()), "island op broke an invariant");
         }
     }
 

@@ -356,11 +356,11 @@ follow from that.
 
 |                     | Island `id`                                        | Anchor `id`                                        |
 | ------------------- | -------------------------------------------------- | -------------------------------------------------- |
-| Minted by           | the engine, at import                              | the caller                                         |
+| Minted by           | the engine at import, the caller on an insert op   | the caller                                         |
 | Because             | content determines it: the nth island minted      | the referent is external; no content determines it |
 | Unique across       | the `Content`'s islands                            | the `Content`'s prose marks                        |
-| Required            | yes                                                | yes: the empty id is rejected                     |
-| On collision        | unreachable: mint is sequential; `validate` scans | `add` rejects                                      |
+| Required            | yes: `insert` rejects the empty id                 | yes: the empty id is rejected                     |
+| On collision        | `insert` rejects; `validate` scans                 | `add` rejects                                      |
 | Markdown round-trip | re-minted identically                              | lost: export emits none, import mints none        |
 
 A card is addressed by index and carries no id handle. A consumer needing a durable per-card key carries one in `$ext` under its own namespace ([CARDS.md](CARDS.md) § Out-of-band Metadata), which the engine round-trips and never interprets.
@@ -388,11 +388,9 @@ checked by `Content::validate`, is therefore **uniqueness**
 (`Invariant::IslandIdCollision`), not `id == isl-{index}`: after an edit
 `isl-1` may legitimately sit at index 0.
 
-The id stays in the hash input, so "canonical bytes == hash input" holds
-exact: no id-stripping, no separate hash form. Any future id-minting
-producer (a live editor, a richer island type) is bound by the same rule:
-continue the positional sequence for appended islands; never mint an ambient
-id.
+The id stays in the hash input, so "canonical bytes == hash input" holds exact: no id-stripping, no separate hash form.
+
+The importer is not the only minter: `IslandOp::Insert` carries the id of the island it lands, and the apply refuses the empty id and one already live in the field (`ApplyError::EmptyIslandId`, `ApplyError::IslandIdCollision`), since `IslandOp::Set` addresses by it. That producer is bound by the same never-ambient rule: continue the positional sequence past the field's highest `isl-{n}`, never a UUID, a clock reading, or a session counter. Import purity is unaffected either way, since export drops island ids and no edit-minted id reaches markdown; the rule holds at edit time so two producers making the same edit reach the same bytes.
 
 ## Anchor-id identity
 
