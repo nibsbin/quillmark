@@ -96,6 +96,57 @@ fn name_mismatch_is_a_hard_error() {
     assert_eq!(mismatch_code(&err), Some("quill::name_mismatch"));
 }
 
+/// The check rides `apply`, not just the open door: a session is bound to the
+/// quill it was opened against, so an edit carrying another quill's `$quill`
+/// is refused at the same seam with the same code. A session compiles every
+/// edit through its own config, which is what makes the pairing checkable at
+/// all: compiled plate data does not carry the reference.
+#[test]
+#[cfg(feature = "typst")]
+fn apply_rechecks_the_reference_against_the_sessions_quill() {
+    let temp_dir = TempDir::new().unwrap();
+    let quill_path = make_quill(&temp_dir, "3.0.0");
+    let quill = quillmark::quill_from_path(&quill_path).expect("from_path failed");
+
+    let doc = |quill_ref: &str| {
+        Document::parse(&format!(
+            "~~~card-yaml\n$quill: {}\n$kind: main\n~~~\n\n# Content\n",
+            quill_ref
+        ))
+        .expect("parse failed")
+        .document
+    };
+
+    let engine = Quillmark::new();
+    let mut session = engine
+        .open(&quill, &doc("test_quill@3"))
+        .expect("open against the matching quill");
+    let pages = session.page_count();
+
+    // A well-formed document that belongs to a different quill.
+    let err = session
+        .apply(&doc("other_quill@3"))
+        .expect_err("apply must refuse another quill's document");
+    assert_eq!(mismatch_code(&err), Some("quill::name_mismatch"));
+
+    // …and one whose version leaves the selector.
+    let err = session
+        .apply(&doc("test_quill@2"))
+        .expect_err("apply must refuse an out-of-selector version");
+    assert_eq!(mismatch_code(&err), Some("quill::version_mismatch"));
+
+    // A refusal is transactional like any other failed apply: it is raised
+    // before the backend is touched at all, so every read still serves the
+    // compile `open` produced.
+    assert_eq!(session.page_count(), pages);
+    session
+        .render(&RenderOptions::default().with_output_format(OutputFormat::Pdf))
+        .expect("reads still serve the last-good compile");
+    session
+        .apply(&doc("test_quill@3"))
+        .expect("the matching document still applies");
+}
+
 #[test]
 fn exact_selector_match_accepts() {
     let temp_dir = TempDir::new().unwrap();

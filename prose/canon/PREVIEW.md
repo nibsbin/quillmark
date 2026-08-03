@@ -66,7 +66,8 @@ format, PNG or SVG, can paint); the session-level answer is authoritative.
 
 ## Live edits: `apply` and `ChangeSet`
 
-`apply(json_data)` recompiles the session against new document data.
+`apply(doc)` recompiles the session against a new document, checking its
+`$quill` and compiling it through the config the session was opened against.
 **Transactional**: on `Err` the previous compile stays live, every read keeps
 serving the last-good document and its `warnings`, and the session recovers on
 the next successful apply. On `Ok` reads serve the new compile: `warnings`

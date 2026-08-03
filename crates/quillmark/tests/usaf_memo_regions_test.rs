@@ -69,13 +69,14 @@ fn usaf_memo_regions_cover_body_signature_and_cards() {
     // Give the indorsement a real body via apply (the per-field eval windows
     // regenerate with the helper on every committed edit) and its card
     // address surfaces through the same package rebuild.
-    let mut edited = quill.compile_data(&parsed).expect("compile seed data");
-    // An editor writes the card body as canonical content JSON through the seam.
-    let rt = quillmark_content::import::from_markdown(
-        "The indorsement **body**, rebuilt by render-body.",
-    )
-    .expect("import");
-    edited["$cards"][0]["$body"] = quillmark_content::serial::to_canonical_value(&rt);
+    // An editor writes the card body through the typed seam, which lands it as
+    // canonical content.
+    let mut edited = parsed.clone();
+    quillmark::TypedWriter::new(quill.config(), &mut edited)
+        .card(0)
+        .expect("the indorsement card")
+        .set_body("The indorsement **body**, rebuilt by render-body.")
+        .expect("set the card body");
     session.apply(&edited).expect("apply edited card body");
     let fields: HashSet<String> = session.regions().into_iter().map(|r| r.field).collect();
     assert!(
@@ -128,8 +129,10 @@ fn usaf_memo_date_region_rides_the_vendored_display() {
 
     // The seed leaves the date blank (→ a native `today()` fallback, no field
     // region). Commit a real date and it renders through the same vendored path.
-    let mut edited = quill.compile_data(&parsed).expect("compile seed data");
-    edited["date"] = serde_json::json!("2026-01-02");
+    let mut edited = parsed.clone();
+    quillmark::TypedWriter::new(quill.config(), &mut edited)
+        .set("date", "2026-01-02")
+        .expect("set a real date");
     session.apply(&edited).expect("apply a real memo date");
 
     let regions = session.regions();

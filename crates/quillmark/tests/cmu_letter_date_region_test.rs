@@ -30,8 +30,10 @@ fn cmu_letter_real_date_surfaces_a_region_and_blank_falls_back() {
 
     // Commit a real date; it renders through the same vendored `display-date`,
     // and the value-object's closure carries the region to the schema path.
-    let mut edited = quill.compile_data(&parsed).expect("compile seed data");
-    edited["date"] = serde_json::json!("2026-01-02");
+    let mut edited = parsed.clone();
+    quillmark::TypedWriter::new(quill.config(), &mut edited)
+        .set("date", "2026-01-02")
+        .expect("set a real date");
     session.apply(&edited).expect("apply a real letter date");
 
     let regions = session.regions();
