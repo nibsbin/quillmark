@@ -1,7 +1,7 @@
 //! In-memory file tree representation for quill bundles.
 use std::collections::HashMap;
 use std::error::Error as StdError;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 /// A node in the file tree structure
 ///
 /// Out-of-crate callers build these; `Quill::from_tree` takes one.
@@ -122,6 +122,41 @@ impl FileTreeNode {
         }
     }
 
+    /// List all directories in a directory, as paths joined onto `dir_path`.
+    /// The name twin is [`list_subdirectories`](Self::list_subdirectories);
+    /// results stay relative to the receiver either way.
+    pub fn list_directories<P: AsRef<Path>>(&self, dir_path: P) -> Vec<PathBuf> {
+        let dir_path = dir_path.as_ref();
+        self.list_subdirectories(dir_path)
+            .iter()
+            .map(|name| {
+                if dir_path == Path::new("") {
+                    PathBuf::from(name)
+                } else {
+                    dir_path.join(name)
+                }
+            })
+            .collect()
+    }
+
+    /// Get all files matching a pattern (supports glob-style wildcards).
+    /// An invalid pattern matches nothing.
+    pub fn find_files<P: AsRef<Path>>(&self, pattern: P) -> Vec<PathBuf> {
+        let Ok(glob_pattern) = glob::Pattern::new(&pattern.as_ref().to_string_lossy()) else {
+            return Vec::new();
+        };
+        let mut matches = Vec::new();
+        // Paths only: the visitor lends the contents, so no bundle bytes are
+        // copied to answer a name query.
+        self.for_each_file(&mut |path, _| {
+            if glob_pattern.matches(path) {
+                matches.push(PathBuf::from(path));
+            }
+        });
+        matches.sort();
+        matches
+    }
+
     /// Insert a file or directory at the given path
     pub fn insert<P: AsRef<Path>>(
         &mut self,
@@ -209,9 +244,9 @@ impl FileTreeNode {
     /// Visit every file in the tree with its `/`-joined path, depth-first in
     /// `HashMap` order (so unordered: callers that need a stable sequence sort
     /// the result). The one walk: [`flatten`](Self::flatten) copies out of it,
-    /// `Quill::find_files` only reads the paths, and neither pays for the
-    /// other's work.
-    pub(crate) fn for_each_file(&self, visit: &mut impl FnMut(&str, &[u8])) {
+    /// [`find_files`](Self::find_files) only reads the paths, and neither pays
+    /// for the other's work.
+    fn for_each_file(&self, visit: &mut impl FnMut(&str, &[u8])) {
         self.walk_files(String::new(), visit);
     }
 
