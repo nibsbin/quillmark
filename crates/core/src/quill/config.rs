@@ -502,14 +502,11 @@ impl QuillConfig {
                 // carrying marks or islands is rejected, not silently stripped:
                 // matching the `inline` precedent and keeping coercion lossless.
                 //
-                // The two modes commit **different forms of the same content**:
-                // `Render` the content object the plate carries, `Write` the
-                // literal string that is plaintext's canonical rest
-                // (`prose/canon/SCHEMAS.md` § plaintext). The codec is lossless
-                // on plain content (`to_plaintext ∘ from_plaintext` is identity),
-                // so the string loses nothing; object rest would, because emit is
-                // schema-free and would markdown-escape it (`a *literal* line` →
-                // `a \*literal\* line`).
+                // `Write` commits the literal string because the codec is
+                // lossless on plain content (`to_plaintext ∘ from_plaintext` is
+                // identity), so the string loses nothing, while object rest
+                // would: emit is schema-free and markdown-escapes any content
+                // object it projects (`a *literal* line` → `a \*literal\* line`).
                 let plain_check =
                     |rt: &quillmark_content::Content| -> Result<(), CoercionError> {
                         if !rt.is_plain() {

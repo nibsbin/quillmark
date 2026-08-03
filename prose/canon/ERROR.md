@@ -73,15 +73,12 @@ families:
   compile warnings.
 - **`conform::*`: resting-form warnings.** `Quill::conform` returns one per
   declared content field whose value the strict write refuses, and
-  `Quill::parse` appends them to the same `Parsed.warnings` the parse produced.
-  Each code is the `edit::*` code that write would have raised, re-namespaced
-  (`conform::field_richtext_decode`, `conform::field_richtext_not_inline`,
-  `conform::field_conform`, `conform::value_too_deep`) and demoted to
-  `Severity::Warning`: the value rests as authored rather than being refused or
-  silently retyped, so the state is repairable, not fatal. The walk is
-  stateless, so a repeat conform re-emits the identical set. `args` and `path`
-  are the underlying `EditError`'s, so a field diagnostic anchors at
-  `main.<field>` / `cards.<kind>[i].<field>` like a validation one.
+  `Quill::parse` appends them to the `Parsed.warnings` the parse produced. Each
+  is the `edit::*` diagnostic that write would have raised, re-namespaced and
+  demoted to `Severity::Warning` with its `args` and `path` intact: the value
+  rests as authored rather than being refused or silently retyped, so the state
+  is repairable. The walk is stateless, so a repeat conform re-emits the
+  identical set.
 - **Validation warnings**: `Quill::validate(doc)` returns every
   `validation::*` diagnostic, mixing severities; `validation::must_fill` and
   the `$seed` checks are the non-fatal ones. This is the editor-facing

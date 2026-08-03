@@ -953,7 +953,10 @@ impl Card {
         let stored = resolve_field_write(name, QuillValue::from(text.into()), schema)?;
         let delta = quillmark_content::delta::diff(
             &base,
-            stored.as_json().as_str().unwrap_or_default(),
+            stored
+                .as_json()
+                .as_str()
+                .expect("a plaintext field rests as a string"),
         );
         self.payload_mut().insert_unchecked(name.to_string(), stored);
         Ok(delta)

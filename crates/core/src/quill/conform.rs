@@ -112,10 +112,10 @@ impl Quill {
     ///   `nested_comments`, so an unguarded conform would strip YAML comments and
     ///   move bytes on an untouched document.
     ///
-    /// Undeclared fields, unknown card kinds, and nulls pass untouched, and
-    /// fields whose declared type carries no content are left to the typed write
-    /// to canonicalize. Idempotent: a second call is a byte no-op and re-emits
-    /// the identical diagnostics.
+    /// Undeclared fields, unknown card kinds, and nulls pass untouched, and a
+    /// field whose declared type carries no content is the typed write's to
+    /// canonicalize. Idempotent: a second call is a byte no-op and re-emits the
+    /// identical diagnostics.
     pub fn conform(&self, doc: &mut Document) -> Result<Vec<Diagnostic>, RenderError> {
         self.check_quill_reference(doc)?;
         let config = self.config();
@@ -170,9 +170,11 @@ fn conform_card(
         if !field_contains_content(field) {
             continue;
         }
-        // A marker anywhere in the value (the payload item's own flag, or a
-        // nested one) is the state, and a null carries no data to conform.
-        if *fill || value.as_json().is_null() || !value.fill_paths().is_empty() {
+        // A marker anywhere in the value is the state: the payload item's own
+        // flag carries a root marker, the value tree the nested ones. A null
+        // needs no guard, since the strict write passes it through and the
+        // no-op check below then skips the write.
+        if *fill || !value.fill_paths().is_empty() {
             continue;
         }
         match resolve_field_write(name, value.clone(), field) {

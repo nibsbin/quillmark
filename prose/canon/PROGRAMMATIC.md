@@ -89,13 +89,12 @@ typo at once.
 instead of by a caller.** `Quill::conform(&mut doc)` walks every declared
 content field through the same strict write `set` commits through, so a
 document that arrived through the opaque primitive (a parse, a stored row, a
-`store_field`) lands where the typed writer would have put it:
+`store_field`) lands where the typed writer would have put it, whichever lane
+built it ([SCHEMAS.md](SCHEMAS.md) § "Content fields rest per codec").
 `Quill::parse(md)` is parse-then-conform and the documented ingestion path.
 Where the writer refuses a value, conform leaves it authored and reports a
 `conform::*` warning: an ingestion pass must open a document it can repair, not
-reject it. Neither the resting form nor the diagnostics depend on which lane
-built the document ([SCHEMAS.md](SCHEMAS.md) § "Content fields rest per
-codec").
+reject it.
 
 The primitive stays load-bearing: it is what lets a `Document` be constructed
 and `from_json`'d with no bundle (standalone data), what quill-agnostic

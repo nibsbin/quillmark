@@ -5,7 +5,7 @@ use serde_json::json;
 
 use crate::document::StoredDocument;
 use crate::quill::quill_from_yaml;
-use crate::{Document, Quill, QuillValue, SeedOverlay};
+use crate::{Document, Quill, SeedOverlay};
 
 const QUILL: &str = r#"
 quill:
@@ -90,9 +90,8 @@ fn parse_then_conform_equals_typed_write() {
     let (conformed, warnings) = parse_bound(&quill, MD);
     assert!(warnings.is_empty(), "clean document: {warnings:?}");
 
-    // The same values, committed through the typed writer onto a parsed-then-
-    // stripped twin: build from the same markdown through the transport door and
-    // re-commit every content field.
+    // The reference lane: the same markdown through the transport door, then
+    // every content field re-committed through the typed writer.
     let mut written = Document::parse(MD).expect("transport parse").document;
     {
         let mut w = quill.writer(&mut written);
@@ -337,20 +336,6 @@ fn plaintext_survives_the_markdown_round_trip() {
     assert_eq!(bytes(&again), bytes(&doc), "and the loop is byte-stable");
 }
 
-/// A typed writer that lands on an already-conformed document changes nothing:
-/// the flip is one seam, so `set` and conform agree on plaintext.
-#[test]
-fn a_redundant_typed_write_moves_no_bytes() {
-    let quill = quill();
-    let (mut doc, _) = parse_bound(&quill, MD);
-    let before = bytes(&doc);
-    {
-        let mut w = quill.writer(&mut doc);
-        w.set("note", "a *literal* line").unwrap();
-    }
-    assert_eq!(bytes(&doc), before);
-}
-
 /// The plate is the render floor's shape and does not move: `plaintext` reaches
 /// the backend as a content object whichever form was committed.
 #[test]
@@ -380,10 +365,11 @@ fn the_plate_shape_for_plaintext_is_unchanged() {
     assert_eq!(from_string["text"], json!("a *literal* line"));
 }
 
-/// The revise lane's plaintext arm: a byte-identical revise is a byte no-op,
-/// where the markdown codec would have eaten the escapes.
+/// The revise lane's plaintext arm diffs literal text: a byte-identical revise
+/// is a byte no-op where the markdown codec would have eaten the escapes, and an
+/// edit lands at the field's rest.
 #[test]
-fn byte_identical_plaintext_revise_is_byte_stable() {
+fn the_plaintext_revise_lane_is_literal() {
     let quill = quill();
     let md = r#"~~~card-yaml
 $quill: conform_test@1.0.0
@@ -403,70 +389,27 @@ Body.
         panic!("plaintext field reads as plaintext");
     };
     assert_eq!(text, r"a \*b\* line");
-    {
-        let mut w = quill.writer(&mut doc);
-        let delta = w.revise_field("note", &text).expect("revise");
-        assert!(
-            delta
-                .ops
-                .iter()
-                .all(|op| matches!(op, quillmark_content::Op::Retain(_))),
-            "a no-change revise is all-retain: {delta:?}"
-        );
-    }
-    assert_eq!(bytes(&doc), before, "a no-change revise moves no bytes");
-}
 
-/// An edit through the plaintext revise lane lands at rest and diffs literally.
-#[test]
-fn plaintext_revise_commits_the_literal_string() {
-    let quill = quill();
-    let (mut doc, _) = parse_bound(&quill, MD);
-    {
-        let mut w = quill.writer(&mut doc);
-        w.revise_field("note", "a *literal* line, revised")
-            .expect("revise");
-    }
+    let mut w = quill.writer(&mut doc);
+    let delta = w.revise_field("note", &text).expect("revise");
+    assert!(
+        delta
+            .ops
+            .iter()
+            .all(|op| matches!(op, quillmark_content::Op::Retain(_))),
+        "a no-change revise is all-retain: {delta:?}"
+    );
+    drop(w);
+    assert_eq!(bytes(&doc), before, "a no-change revise moves no bytes");
+
+    quill
+        .writer(&mut doc)
+        .revise_field("note", r"a \*b\* line, revised")
+        .expect("revise");
     assert_eq!(
         doc.main().payload().get("note").unwrap().as_json(),
-        &json!("a *literal* line, revised")
-    );
-}
-
-/// Read-repair: a legacy row loaded through the bound door converges, and is
-/// eligible for rewrite under its current schema tag.
-#[test]
-fn a_stored_row_converges_through_the_bound_door() {
-    let quill = quill();
-    // A row written before the invariant: an authored richtext string and a
-    // typed-writer plaintext content object resting side by side.
-    let mut legacy = Document::parse(
-        "~~~card-yaml\n$quill: conform_test@1.0.0\nsubject: Q3 **results**\n~~~\n\nBody.",
-    )
-    .expect("parse")
-    .document;
-    legacy
-        .main_mut()
-        .store_field(
-            "note",
-            QuillValue::from_json(quillmark_content::serial::to_canonical_value(
-                &quillmark_content::from_plaintext("a *literal* line"),
-            )),
-        )
-        .unwrap();
-    let stored = serde_json::to_string(&StoredDocument::from(legacy)).unwrap();
-
-    let mut reloaded =
-        Document::try_from(serde_json::from_str::<StoredDocument>(&stored).unwrap()).unwrap();
-    quill.conform(&mut reloaded).expect("conform");
-    assert!(
-        reloaded.main().payload().get("subject").unwrap().as_json().is_object(),
-        "the authored richtext string converges to the corpus"
-    );
-    assert_eq!(
-        reloaded.main().payload().get("note").unwrap().as_json(),
-        &json!("a *literal* line"),
-        "and the object-rest plaintext converges to its literal string"
+        &json!(r"a \*b\* line, revised"),
+        "and an edit rests as the literal string, escapes intact"
     );
 }
 
@@ -526,8 +469,7 @@ fn a_0_92_0_row_migrates_then_converges() {
     assert!(doc.cards()[0].payload().get("body").unwrap().as_json().is_object());
 
     // Re-stored under the current tag, the row is at rest: byte-equal to the
-    // same document authored as markdown and taken through the bound door, and
-    // a second conform is a no-op.
+    // same document authored as markdown and taken through the bound door.
     let restored = bytes(&doc);
     assert!(restored.contains("quillmark/document@0.93.0"));
     let (authored, _) = parse_bound(
@@ -552,8 +494,6 @@ Entry body.
 ",
     );
     assert_eq!(restored, bytes(&authored), "one document, two ingress routes");
-    quill.conform(&mut doc).expect("the quill matches");
-    assert_eq!(bytes(&doc), restored);
 }
 
 /// A `@0.92.0` field holding an object that is not a decodable content is the

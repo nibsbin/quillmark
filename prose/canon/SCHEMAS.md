@@ -27,8 +27,8 @@ Supported field types:
 | `object` | Structured map; requires `properties:` |
 | `date` | A strict calendar date `YYYY-MM-DD`. Rejects any time component (a time-bearing string is a `datetime`, not a truncated date). The common case in a document engine, so it is the unmarked date type. Stored verbatim; lowers to a Typst value-object wrapping `datetime(year:, month:, day:)` (`.value` native, `(.display)(..)` renders: a click-to-edit region; see `PLATE_DATA.md`) |
 | `datetime` | A strict offset-less wall-clock datetime `YYYY-MM-DDThh:mm[:ss]`, seconds optional (zero-filled). Rejects timezone offsets (`Z`, `±HH:MM`), the space separator, fractional seconds, and a bare date (which is a `date`). An offset is **rejected, never dropped**: the engine does no zone math, keeping wall-clock semantics end to end. Stored verbatim; lowers to the same value-object over the six-component `datetime(year:, .., second:)` |
-| `plaintext` | Navigable **unformatted** prose over the same canonical content (`Content`) as `richtext` (same media type, nav, and regions) but a **literal** codec (`from_plaintext`/`to_plaintext`): delimiters stay literal, no markup, verbatim round-trip. Declare `inline: true` for the single-line variant. Constrained mark-/island-free (`Content::is_plain`); a formatted wire content is rejected (`plaintext::not_plain`), not stripped. **Rests as the literal string** (below) |
-| `richtext` | Rich **formatted** prose over a canonical content (`Content`); markdown is a projection of it. Declare `inline: true` for the single-line variant (exactly one `Para` line, no container, no islands). The pre-richtext `markdown` spelling and the retired `type: richtext(inline)` token are schema load errors (`quill::field_parse_error`). **Rests as the canonical content object** (below) |
+| `plaintext` | Navigable **unformatted** prose over the same canonical content (`Content`) as `richtext` (same media type, nav, and regions) but a **literal** codec (`from_plaintext`/`to_plaintext`): delimiters stay literal, no markup, verbatim round-trip. Declare `inline: true` for the single-line variant. Constrained mark-/island-free (`Content::is_plain`); a formatted wire content is rejected (`plaintext::not_plain`), not stripped. **Rests as the literal string** |
+| `richtext` | Rich **formatted** prose over a canonical content (`Content`); markdown is a projection of it. Declare `inline: true` for the single-line variant (exactly one `Para` line, no container, no islands). The pre-richtext `markdown` spelling and the retired `type: richtext(inline)` token are schema load errors (`quill::field_parse_error`). **Rests as the canonical content object** |
 
 The text-ish types form a **data vs content** × **open/plain vs closed/formatted**
 2×2: `enum` (closed data), `string` (open data), `plaintext` (plain content),
@@ -60,10 +60,10 @@ characters. String rest removes that; the plate is unaffected, since the render
 floor still coerces `plaintext` to the content object backends receive
 ([PLATE_DATA.md](PLATE_DATA.md)).
 
-Rest is enforced only for **declared content fields**: a field whose type tree
-bears a content leaf (`field_contains_content`), whose whole subtree conforms.
-Non-content-typed fields keep their authored shorthands; the typed write remains
-their canonicalizer.
+Rest is enforced only for a **declared content field**: one whose type tree
+bears a content leaf (`field_contains_content`), and its whole subtree conforms
+with it. Non-content-typed fields keep their authored shorthands; the typed
+write remains their canonicalizer.
 
 ## Type coercion
 

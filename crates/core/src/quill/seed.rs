@@ -96,11 +96,8 @@ fn seed_parts(schema: &CardSchema, overlay: Option<&SeedOverlay>) -> (Payload, C
 /// The form a seeded value commits at: the strict write's, for a field whose
 /// type tree bears a content leaf; verbatim for every other field (a scalar's
 /// authored shorthand is the typed write's to canonicalize, and conform leaves
-/// it alone). Routing through [`resolve_field_write`] rather than a parallel
-/// rule is what makes the seeder and [`Quill::conform`](crate::Quill::conform)
-/// agree by construction: a value the strict write refuses (an `example` the
-/// schema's own validation flagged at load) stays authored here exactly as
-/// conform would leave it.
+/// it alone). A value the strict write refuses (an `example` the schema's own
+/// validation flagged at load) stays authored, exactly as conform leaves it.
 fn seeded_rest(name: &str, value: &QuillValue, field: &crate::quill::FieldSchema) -> QuillValue {
     if !crate::quill::config::field_contains_content(field) {
         return value.clone();
