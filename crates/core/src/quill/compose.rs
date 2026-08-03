@@ -27,7 +27,7 @@ impl Quill {
     }
 
     /// [`QuillConfig::check_quill_reference`] on this quill's config.
-    pub fn check_quill_reference(&self, doc: &Document) -> Result<(), RenderError> {
+    pub(crate) fn check_quill_reference(&self, doc: &Document) -> Result<(), RenderError> {
         self.config().check_quill_reference(doc)
     }
 }
@@ -96,6 +96,21 @@ impl QuillConfig {
             .to_plate_json_gated(self.main.body_enabled(), Some(&card_bodies)))
     }
 
+    /// [`compile_data`](Self::compile_data) behind the `$quill` pairing check:
+    /// the render door's whole preamble, in the one place that owns it. Every
+    /// door that turns a document into plate data for *this* schema goes
+    /// through here — `Quillmark::open` for a session's first compile,
+    /// [`LiveSession::apply`](crate::LiveSession::apply) for each edit — so
+    /// the pairing cannot be checked at one and skipped at the other.
+    ///
+    /// [`compile_data`](Self::compile_data) stays available unchecked for a
+    /// caller that wants the plate alone (the CLI's `--output-data`), where no
+    /// render follows and the pairing is the caller's to assert.
+    pub fn compile_checked(&self, doc: &Document) -> Result<serde_json::Value, RenderError> {
+        self.check_quill_reference(doc)?;
+        self.compile_data(doc)
+    }
+
     /// Validate without backend compilation.
     pub fn dry_run(&self, doc: &Document) -> Result<(), RenderError> {
         self.check_quill_reference(doc)?;
@@ -153,7 +168,7 @@ impl QuillConfig {
     /// unevaluated; otherwise the selector is checked (`quill::version_mismatch`).
     /// The version parses infallibly in practice (validated at load); if it
     /// somehow doesn't, the version check is skipped.
-    pub fn check_quill_reference(&self, doc: &Document) -> Result<(), RenderError> {
+    pub(crate) fn check_quill_reference(&self, doc: &Document) -> Result<(), RenderError> {
         let doc_ref = doc.quill_reference();
 
         if doc_ref.name.as_str() != self.name {

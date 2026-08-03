@@ -96,6 +96,50 @@ fn name_mismatch_is_a_hard_error() {
     assert_eq!(mismatch_code(&err), Some("quill::name_mismatch"));
 }
 
+/// The check rides `apply`, not just the open door: a session is bound to the
+/// quill it was opened against, so an edit carrying another quill's `$quill`
+/// is refused at the same seam with the same code. Before the session held its
+/// config, `apply` took compiled data that no longer carried the reference,
+/// and this pairing was unrepresentable to it.
+#[test]
+#[cfg(feature = "typst")]
+fn apply_rechecks_the_reference_against_the_sessions_quill() {
+    let temp_dir = TempDir::new().unwrap();
+    let quill_path = make_quill(&temp_dir, "3.0.0");
+    let quill = quillmark::quill_from_path(&quill_path).expect("from_path failed");
+
+    let doc = |quill_ref: &str| {
+        Document::parse(&format!(
+            "~~~card-yaml\n$quill: {}\n$kind: main\n~~~\n\n# Content\n",
+            quill_ref
+        ))
+        .expect("parse failed")
+        .document
+    };
+
+    let engine = Quillmark::new();
+    let mut session = engine
+        .open(&quill, &doc("test_quill@3"))
+        .expect("open against the matching quill");
+
+    // A well-formed document that belongs to a different quill.
+    let err = session
+        .apply(&doc("other_quill@3"))
+        .expect_err("apply must refuse another quill's document");
+    assert_eq!(mismatch_code(&err), Some("quill::name_mismatch"));
+
+    // …and one whose version leaves the selector.
+    let err = session
+        .apply(&doc("test_quill@2"))
+        .expect_err("apply must refuse an out-of-selector version");
+    assert_eq!(mismatch_code(&err), Some("quill::version_mismatch"));
+
+    // The refusals are transactional: the session still serves its compile.
+    session
+        .apply(&doc("test_quill@3"))
+        .expect("the matching document still applies");
+}
+
 #[test]
 fn exact_selector_match_accepts() {
     let temp_dir = TempDir::new().unwrap();

@@ -1,5 +1,7 @@
+use crate::quill::QuillConfig;
 use crate::{
-    ContentHit, Diagnostic, RenderError, RenderOptions, RenderResult, RenderedRegion, Severity,
+    ContentHit, Diagnostic, Document, RenderError, RenderOptions, RenderResult, RenderedRegion,
+    Severity,
 };
 pub use quillmark_content::{ApplyError, Assoc, ChangeBundle, Delta, IslandOp, LineOp, MarkOp, Op};
 
@@ -185,12 +187,23 @@ pub trait SessionHandle: Send + Sync + 'static {
 /// [`apply`](Self::apply).
 pub struct LiveSession {
     inner: Box<dyn SessionHandle>,
+    /// The schema authority the session was opened against: what lets
+    /// [`apply`](Self::apply) take a [`Document`] and compile it the way the
+    /// first compile was compiled. Held as the config rather than the whole
+    /// [`Quill`](crate::Quill) because the compile is a pure config read; the
+    /// font and package bytes stay with the backend that needed them.
+    config: QuillConfig,
 }
 
 impl LiveSession {
+    /// Born bound: a session cannot exist without the schema it renders. The
+    /// backend has the [`Quill`](crate::Quill) in hand inside
+    /// [`Backend::open`](crate::Backend::open), so binding costs it a
+    /// `source.config().clone()` and buys [`apply`](Self::apply) a document
+    /// verb that cannot be handed the wrong quill's data.
     #[doc(hidden)]
-    pub fn new(inner: Box<dyn SessionHandle>) -> Self {
-        Self { inner }
+    pub fn new(inner: Box<dyn SessionHandle>, config: QuillConfig) -> Self {
+        Self { inner, config }
     }
 
     pub fn page_count(&self) -> usize {
@@ -330,13 +343,30 @@ impl LiveSession {
     /// so every read keeps serving the last-good document and its
     /// [`warnings`](Self::warnings); on `Ok` the session serves the new
     /// compile (warnings included) and the [`ChangeSet`] reports what
-    /// changed. Pass data compiled by the same schema pipeline as
-    /// `Backend::open`'s `json_data` (`Quill::compile_data`), and from the
-    /// *same quill*: the `$quill` reference check lives at the layer that
-    /// still holds a `Document` (`Quillmark::open`, the WASM `apply`);
-    /// compiled data does not carry the reference, so this seam cannot
-    /// re-check it.
-    pub fn apply(&mut self, json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> {
+    /// changed.
+    ///
+    /// `doc` is checked against the session's quill and compiled through the
+    /// same pipeline as the first compile ([`QuillConfig::compile_checked`]),
+    /// so an edit cannot reach the backend under a schema the session was not
+    /// opened against; a mismatch errors before anything is applied and leaves
+    /// the compile live like any other failed apply.
+    pub fn apply(&mut self, doc: &Document) -> Result<ChangeSet, RenderError> {
+        let json_data = self.config.compile_checked(doc)?;
+        self.inner.apply(&json_data)
+    }
+
+    /// [`apply`](Self::apply) with the schema layer cut away: plate data
+    /// straight to the backend, no `$quill` check and no compile.
+    ///
+    /// For a backend's own acceptance tests, which drive a session against
+    /// synthetic plate data to exercise recompile and dirty-page behavior —
+    /// including data a schema would reject, the only lever that makes a
+    /// backend's compile fail on demand. A consumer wanting to render a
+    /// document uses [`apply`](Self::apply), which cannot be handed the wrong
+    /// quill's data; this one carries that obligation uncheckable, which is
+    /// why it is hidden and outside the compatibility promise.
+    #[doc(hidden)]
+    pub fn apply_data(&mut self, json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> {
         self.inner.apply(json_data)
     }
 }
@@ -344,6 +374,30 @@ impl LiveSession {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::version::QuillReference;
+    use std::str::FromStr;
+
+    const QUILL_YAML: &str = "\
+quill:
+  name: memo
+  backend: typst
+  version: 1.0.0
+  description: Session test quill
+main:
+  fields:
+    subject:
+      type: plaintext
+";
+
+    /// The schema every session in these tests is born bound to.
+    fn config() -> QuillConfig {
+        QuillConfig::from_yaml(QUILL_YAML).expect("valid quill")
+    }
+
+    /// A document that pairs with [`config`], so `apply` reaches the handle.
+    fn doc() -> Document {
+        Document::new(QuillReference::from_str("memo@1.0.0").unwrap())
+    }
 
     /// A canvas-capable session: overrides the seam for `pages` pages.
     struct CanvasHandle {
@@ -407,13 +461,16 @@ mod tests {
     #[test]
     fn warnings_track_current_compile() {
         let open_warning = vec![Diagnostic::new(Severity::Warning, "open-time".to_string())];
-        let mut session = LiveSession::new(Box::new(WarningHandle {
-            current: open_warning,
-            applies: 0,
-        }));
+        let mut session = LiveSession::new(
+            Box::new(WarningHandle {
+                current: open_warning,
+                applies: 0,
+            }),
+            config(),
+        );
         assert_eq!(session.warnings()[0].message, "open-time");
 
-        session.apply(&serde_json::Value::Null).unwrap();
+        session.apply(&doc()).unwrap();
         assert_eq!(session.warnings()[0].message, "warning of compile 1");
 
         let result = session.render(&RenderOptions::default()).unwrap();
@@ -459,7 +516,7 @@ mod tests {
     /// `regions()`.
     #[test]
     fn field_boxes_derives_off_regions() {
-        let session = LiveSession::new(Box::new(RegionHandle));
+        let session = LiveSession::new(Box::new(RegionHandle), config());
         let boxes = session.field_boxes("subject");
         assert_eq!(boxes.len(), 1, "one span-bearing region → one box");
         assert_eq!(boxes[0].field, "subject");
@@ -470,13 +527,13 @@ mod tests {
     #[test]
     fn supports_canvas_derives_from_seam() {
         // A session that exposes page geometry is canvas-capable…
-        let canvas = LiveSession::new(Box::new(CanvasHandle { pages: 2 }));
+        let canvas = LiveSession::new(Box::new(CanvasHandle { pages: 2 }), config());
         assert!(canvas.supports_canvas());
         // …one that leaves the seam at its defaults is not…
-        let plain = LiveSession::new(Box::new(PlainHandle));
+        let plain = LiveSession::new(Box::new(PlainHandle), config());
         assert!(!plain.supports_canvas());
         // …and a canvas backend with no pages has nothing to paint.
-        let empty = LiveSession::new(Box::new(CanvasHandle { pages: 0 }));
+        let empty = LiveSession::new(Box::new(CanvasHandle { pages: 0 }), config());
         assert!(!empty.supports_canvas());
     }
 }

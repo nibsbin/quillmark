@@ -258,9 +258,7 @@ fn apply_rebinds_values_and_reports_dirty_pages() {
     let mut session = engine.open(&quill, &doc).expect("open ok");
 
     // Identical data → nothing dirty.
-    let cs = session
-        .apply(&quill.compile_data(&doc).expect("compile data"))
-        .expect("apply");
+    let cs = session.apply(&doc).expect("apply");
     assert_eq!(cs.page_count, session.page_count());
     assert!(cs.dirty_pages.is_empty(), "dirty: {:?}", cs.dirty_pages);
 
@@ -268,9 +266,7 @@ fn apply_rebinds_values_and_reports_dirty_pages() {
     let doc2 = Document::parse(&FILLED.replace("Ada Lovelace", "Grace Hopper"))
         .expect("parse markdown")
         .document;
-    let cs = session
-        .apply(&quill.compile_data(&doc2).expect("compile data"))
-        .expect("apply");
+    let cs = session.apply(&doc2).expect("apply");
     assert_eq!(cs.dirty_pages, vec![0]);
 
     let result = session

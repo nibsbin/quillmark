@@ -587,7 +587,10 @@ impl Backend for TypstBackend {
             page_hashes: hashes,
             warnings,
         };
-        Ok(LiveSession::new(Box::new(session)))
+        Ok(LiveSession::new(
+            Box::new(session),
+            source.config().clone(),
+        ))
     }
 }
 

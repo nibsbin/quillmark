@@ -53,20 +53,20 @@ fn apply_commits_and_dirties_only_the_touched_suffix() {
     // An end edit leaves every earlier page's content (and spans) intact:
     // the dirty set is exactly the last page.
     let cs = session
-        .apply(&json!({ "msg": msg(n, Some(n - 1), "EDITED") }))
+        .apply_data(&json!({ "msg": msg(n, Some(n - 1), "EDITED") }))
         .expect("apply");
     assert_eq!(cs.page_count, pages);
     assert_eq!(cs.dirty_pages, vec![pages - 1]);
 
     // A front edit dirties the first page (and possibly shifted successors).
     let cs = session
-        .apply(&json!({ "msg": msg(n, Some(0), "EDITED") }))
+        .apply_data(&json!({ "msg": msg(n, Some(0), "EDITED") }))
         .expect("apply");
     assert!(cs.dirty_pages.contains(&0), "dirty: {:?}", cs.dirty_pages);
 
     // An identical re-apply changes nothing.
     let cs = session
-        .apply(&json!({ "msg": msg(n, Some(0), "EDITED") }))
+        .apply_data(&json!({ "msg": msg(n, Some(0), "EDITED") }))
         .expect("apply");
     assert!(cs.dirty_pages.is_empty(), "dirty: {:?}", cs.dirty_pages);
 }
@@ -115,7 +115,7 @@ fn identical_reapply_of_markdown_content_is_clean() {
 
     for round in 0..3 {
         let cs = session
-            .apply(&json!({ "body": body }))
+            .apply_data(&json!({ "body": body }))
             .expect("apply identical");
         assert_eq!(cs.page_count, pages);
         assert!(
@@ -127,7 +127,7 @@ fn identical_reapply_of_markdown_content_is_clean() {
 
     // A real content change still dirties: the fingerprint didn't go blind.
     let cs = session
-        .apply(&json!({ "body": format!("{body} plus a genuinely new sentence.") }))
+        .apply_data(&json!({ "body": format!("{body} plus a genuinely new sentence.") }))
         .expect("apply changed");
     assert!(
         !cs.dirty_pages.is_empty(),
@@ -191,7 +191,7 @@ fn reapply_with_reordered_fields_same_content_is_clean() {
     .unwrap();
 
     let mut session = backend.open(&q, &opened).expect("open");
-    let cs = session.apply(&reordered).expect("apply reordered");
+    let cs = session.apply_data(&reordered).expect("apply reordered");
     assert!(
         cs.dirty_pages.is_empty(),
         "same content in a different field order moved no ink; got dirty {:?}",
@@ -201,7 +201,7 @@ fn reapply_with_reordered_fields_same_content_is_clean() {
     // And a genuine edit through the same reordered document still dirties.
     let mut edited = reordered.clone();
     edited["body"] = json!("**Body** paragraph with real ink, now extended further.");
-    let cs = session.apply(&edited).expect("apply edited");
+    let cs = session.apply_data(&edited).expect("apply edited");
     assert!(!cs.dirty_pages.is_empty(), "a real edit must still dirty");
 }
 
@@ -216,7 +216,7 @@ fn apply_is_transactional_on_compile_failure() {
     let pages = session.page_count();
 
     // No `msg` key → the plate's `data.at("msg")` fails at eval.
-    let err = session.apply(&json!({})).expect_err("compile must fail");
+    let err = session.apply_data(&json!({})).expect_err("compile must fail");
     assert!(!err.diagnostics().is_empty());
 
     // Every read still serves the last-good compile.
@@ -227,7 +227,7 @@ fn apply_is_transactional_on_compile_failure() {
 
     // The session recovers on the next good apply.
     let cs = session
-        .apply(&json!({ "msg": "recovered" }))
+        .apply_data(&json!({ "msg": "recovered" }))
         .expect("apply after failure");
     assert_eq!(cs.page_count, session.page_count());
 }
@@ -243,7 +243,7 @@ fn apply_tracks_page_count_growth_and_shrink() {
     let small = session.page_count();
 
     let cs = session
-        .apply(&json!({ "msg": msg(120, None, "") }))
+        .apply_data(&json!({ "msg": msg(120, None, "") }))
         .expect("grow");
     assert!(cs.page_count > small);
     assert_eq!(cs.page_count, session.page_count());
@@ -251,7 +251,7 @@ fn apply_tracks_page_count_growth_and_shrink() {
     assert!(cs.dirty_pages.contains(&(cs.page_count - 1)));
 
     let cs = session
-        .apply(&json!({ "msg": msg(4, None, "") }))
+        .apply_data(&json!({ "msg": msg(4, None, "") }))
         .expect("shrink");
     assert_eq!(cs.page_count, small);
     assert_eq!(cs.page_count, session.page_count());

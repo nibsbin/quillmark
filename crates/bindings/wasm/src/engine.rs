@@ -463,10 +463,6 @@ pub struct Quill {
 pub struct LiveSession {
     inner: quillmark_core::LiveSession,
     backend_id: String,
-    /// Retained for `apply`: recompiles `doc` → data through the same schema
-    /// pipeline as `open`. The config alone: schemas, not the quill's
-    /// font/package bytes, which the backend session already owns.
-    config: quillmark_core::quill::QuillConfig,
     /// The current compile's ordered card kinds (`None` = a kindless card), the
     /// lookup that resolves a geometry region's plate-space per-kind ordinal to
     /// its `DocPath` absolute index. Refreshed on every committed `apply`, so it
@@ -518,7 +514,6 @@ impl Quillmark {
         Ok(LiveSession {
             inner: session,
             backend_id: quill.inner.backend_id().to_string(),
-            config: quill.inner.config().clone(),
             card_kinds: card_kinds_of(&doc.inner),
         })
     }
@@ -2714,10 +2709,9 @@ impl LiveSession {
     /// success reads serve the new compile; repaint `dirtyPages ∩ visible`.
     #[wasm_bindgen(js_name = apply)]
     pub fn apply(&mut self, doc: &Document) -> Result<ChangeSet, JsValue> {
-        let json_data = self.compile_checked(&doc.inner)?;
         let cs = self
             .inner
-            .apply(&json_data)
+            .apply(&doc.inner)
             .map_err(|e| WasmError::from(e).to_js_value())?;
         // The apply committed, so geometry now reflects `doc`: refresh the
         // card-kind lookup the address translation reads.
@@ -3007,19 +3001,6 @@ impl LiveSession {
             self.inner.page_count()
         ))
         .to_js_value()
-    }
-
-    /// The compile preamble used by `apply`: verify
-    /// `doc` still references this session's quill, then compile it to plate
-    /// data through the same schema pipeline as `open`. Errors map to JS via
-    /// `WasmError`, as the render path does.
-    fn compile_checked(&self, doc: &quillmark_core::Document) -> Result<serde_json::Value, JsValue> {
-        self.config
-            .check_quill_reference(doc)
-            .map_err(|e| WasmError::from(e).to_js_value())?;
-        self.config
-            .compile_data(doc)
-            .map_err(|e| WasmError::from(e).to_js_value())
     }
 }
 

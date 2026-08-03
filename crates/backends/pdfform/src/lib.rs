@@ -111,13 +111,16 @@ impl Backend for PdfformBackend {
         // paint call.
         let flat_pdf = flatten_to_pdf(base_pdf.clone(), &field_specs)?;
 
-        Ok(LiveSession::new(Box::new(PdfformSession {
-            base_pdf,
-            bound,
-            field_specs,
-            page_boxes,
-            flat_pdf,
-        })))
+        Ok(LiveSession::new(
+            Box::new(PdfformSession {
+                base_pdf,
+                bound,
+                field_specs,
+                page_boxes,
+                flat_pdf,
+            }),
+            source.config().clone(),
+        ))
     }
 }
 

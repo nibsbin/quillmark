@@ -35,9 +35,10 @@ impl Backend for MockBackend {
             .get_file("plate.txt")
             .map(|b| b.to_vec())
             .unwrap_or_default();
-        Ok(quillmark::LiveSession::new(Box::new(MockSession {
-            bytes: plated,
-        })))
+        Ok(quillmark::LiveSession::new(
+            Box::new(MockSession { bytes: plated }),
+            source.config().clone(),
+        ))
     }
 }
 
