@@ -2108,11 +2108,12 @@ fn richtext_inline_error(label: &str) -> Diagnostic {
 
 #[cfg(test)]
 impl QuillConfig {
-    /// Test-only `from_yaml`: the config, or every load diagnostic joined into
-    /// one pretty string. Flattening `Vec<Diagnostic>` drops code, hint, and
-    /// location, which is why it is not on the published surface — a test
-    /// asserting on message text is the one caller the loss costs nothing.
-    /// Real loads go through [`QuillConfig::from_yaml_with_warnings`].
+    /// The config, or every load diagnostic joined into one pretty string.
+    /// Flattening `Vec<Diagnostic>` drops code, hint, and location, so the
+    /// shape stays off the published surface; a test asserting on message text
+    /// is the one caller that loss costs nothing.
+    /// [`from_yaml_with_warnings`](Self::from_yaml_with_warnings) is the real
+    /// load path.
     pub(crate) fn from_yaml(yaml_content: &str) -> Result<Self, String> {
         Self::from_yaml_with_warnings(yaml_content)
             .map(|(config, _warnings)| config)

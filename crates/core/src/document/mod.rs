@@ -422,11 +422,11 @@ impl Document {
     /// `main` must carry `$quill`; composable cards must not carry `$quill` or
     /// `$seed`.
     ///
-    /// Crate-internal: the invariants are `debug_assert`s, and
-    /// [`quill_reference`](Self::quill_reference) turns the first one into a
-    /// panic when it does not hold, so every caller pre-validates. The public
-    /// blank canvas is [`Document::new`]; the public door for external data is
-    /// `TryFrom<StoredDocument>`, which checks all three and returns
+    /// The invariants are `debug_assert`s, so a release build accepts a main
+    /// card without `$quill` and [`quill_reference`](Self::quill_reference)
+    /// panics on it: every caller pre-validates. [`Document::new`] is the
+    /// public blank canvas, and `TryFrom<StoredDocument>` the public door for
+    /// external data, checking all three and returning
     /// `StorageError::Malformed`.
     pub(crate) fn from_main_and_cards(main: Card, cards: Vec<Card>) -> Self {
         debug_assert!(main.quill().is_some(), "main card must carry `$quill`");
