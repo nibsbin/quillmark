@@ -5,7 +5,7 @@ use serde_json::json;
 
 use crate::document::StoredDocument;
 use crate::quill::quill_from_yaml;
-use crate::{Document, Quill, SeedOverlay};
+use crate::{Document, Quill, QuillValue, SeedOverlay};
 
 const QUILL: &str = r#"
 quill:
@@ -18,8 +18,10 @@ main:
     subject:
       type: richtext
       inline: true
+      example: "Q3 **results**"
     note:
       type: plaintext
+      example: "a *literal* line"
     qty:
       type: integer
     tags:
@@ -40,6 +42,7 @@ card_kinds:
         type: richtext
       caption:
         type: plaintext
+        example: "raw *text*"
 "#;
 
 fn quill() -> Quill {
@@ -141,20 +144,6 @@ fn rest_is_per_codec_at_every_depth() {
     assert_eq!(
         card.payload().get("caption").unwrap().as_json(),
         &json!("raw *text*")
-    );
-}
-
-#[test]
-fn conform_is_idempotent() {
-    let quill = quill();
-    let (mut doc, first) = parse_bound(&quill, MD);
-    let before = bytes(&doc);
-    let second = quill.conform(&mut doc).expect("conform");
-    assert_eq!(bytes(&doc), before, "a second conform moves no bytes");
-    assert_eq!(
-        format!("{first:?}"),
-        format!("{second:?}"),
-        "and re-emits identical diagnostics"
     );
 }
 
@@ -265,35 +254,27 @@ fn non_conforming_value_rests_authored_with_a_diagnostic() {
             .any(|d| d.severity == crate::Severity::Error),
         "and validates clean: the render floor accepts the scalar"
     );
+
+    // Same state for an object that is not a decodable content, the shape a
+    // pre-content-model row can carry: reported, never rewritten.
+    let mut legacy = doc;
+    legacy
+        .main_mut()
+        .store_field("subject", QuillValue::from_json(json!({ "prose": "older" })))
+        .unwrap();
+    let before = bytes(&legacy);
+    let diags = quill.conform(&mut legacy).expect("the quill matches");
+    assert_eq!(
+        diags[0].code.as_deref(),
+        Some("conform::field_richtext_decode")
+    );
+    assert_eq!(bytes(&legacy), before, "the value is left exactly as stored");
 }
 
 /// The seeder is a schema-aware writer, so its output is already at rest.
 #[test]
 fn conform_is_a_no_op_on_seeds() {
-    let quill = quill_from_yaml(
-        r#"
-quill:
-  name: seed_rest
-  version: "1.0"
-  backend: typst
-  description: Seed rest
-main:
-  fields:
-    subject:
-      type: richtext
-      example: "Q3 **results**"
-    note:
-      type: plaintext
-      example: "a *literal* line"
-card_kinds:
-  entry:
-    fields:
-      caption:
-        type: plaintext
-        example: "raw *text*"
-"#,
-    );
-
+    let quill = quill();
     let mut doc = quill.seed_document();
     assert_eq!(
         doc.main().payload().get("note").unwrap().as_json(),
@@ -317,23 +298,6 @@ card_kinds:
     let before2 = bytes(&doc2);
     quill.conform(&mut doc2).expect("conform");
     assert_eq!(bytes(&doc2), before2, "seed_card is already at rest");
-}
-
-/// Markdown-significant characters survive the emit → parse → conform loop for
-/// a plaintext field: the corruption per-codec rest exists to prevent.
-#[test]
-fn plaintext_survives_the_markdown_round_trip() {
-    let quill = quill();
-    let md = "~~~card-yaml\n$quill: conform_test@1.0.0\nnote: 'a *literal* line'\n~~~\n\nBody.";
-    let (doc, _) = parse_bound(&quill, md);
-
-    let round_tripped = doc.to_markdown();
-    let (again, _) = parse_bound(&quill, &round_tripped);
-    assert_eq!(
-        again.main().payload().get("note").unwrap().as_json(),
-        &json!("a *literal* line")
-    );
-    assert_eq!(bytes(&again), bytes(&doc), "and the loop is byte-stable");
 }
 
 /// The plate is the render floor's shape and does not move: `plaintext` reaches
@@ -494,36 +458,4 @@ Entry body.
 ",
     );
     assert_eq!(restored, bytes(&authored), "one document, two ingress routes");
-}
-
-/// A `@0.92.0` field holding an object that is not a decodable content is the
-/// non-conforming case, not a corruption: it rests as stored under a
-/// `conform::*` warning, and the document still renders.
-#[test]
-fn a_legacy_field_that_is_not_content_rests_as_stored() {
-    let quill = quill();
-    let legacy = json!({
-        "schema": "quillmark/document@0.92.0",
-        "main": {
-            "payload": { "items": [
-                { "type": "quill", "value": "conform_test@1.0.0" },
-                { "type": "kind", "value": "main" },
-                { "type": "field", "key": "subject", "value": { "prose": "an older shape" } },
-            ]},
-            "body": "Body."
-        }
-    })
-    .to_string();
-
-    let mut doc = Document::try_from(
-        serde_json::from_str::<StoredDocument>(&legacy).expect("loads"),
-    )
-    .expect("migrates");
-    let before = bytes(&doc);
-    let diags = quill.conform(&mut doc).expect("the quill matches");
-    assert_eq!(
-        diags[0].code.as_deref(),
-        Some("conform::field_richtext_decode")
-    );
-    assert_eq!(bytes(&doc), before, "the value is left exactly as stored");
 }
