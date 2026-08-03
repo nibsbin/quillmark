@@ -917,17 +917,21 @@ export class DocumentWriter {
 		this.#doc.revise({}, markdown);
 	}
 	/**
-	 * Revise the richtext main-card field `name` from markdown: typed *and*
+	 * Revise the content main-card field `name` from authored text: typed *and*
 	 * anchor-preserving. Surviving anchors rebase, then the diffed result is
 	 * schema-conformed (`richtext(inline)` rejects a multi-block result). Throws
 	 * `UnknownField` for a name the schema does not declare. Returns the text
 	 * {@link Delta}.
+	 *
+	 * The codec comes from the declared type: `richtext` diffs markdown, while
+	 * `plaintext` diffs the literal text and never imports markdown, so a
+	 * byte-identical revise of a value carrying escapes is a byte no-op.
 	 * @param {string} name
-	 * @param {string} markdown
+	 * @param {string} text
 	 * @returns {import('../core/wasm.js').Delta}
 	 */
-	reviseField(name, markdown) {
-		return this.#doc._reviseField(this.#quill, name, markdown);
+	reviseField(name, text) {
+		return this.#doc._reviseField(this.#quill, name, text);
 	}
 	/**
 	 * Build a composable card of `kind`, typed-commit `fields` onto it, set its
@@ -1038,16 +1042,17 @@ export class CardWriter {
 		this.#doc.revise({ card: this.#index }, markdown);
 	}
 	/**
-	 * Revise the richtext field `name` on this card from markdown: typed *and*
-	 * anchor-preserving; the card twin of {@link DocumentWriter.reviseField}.
-	 * Throws `UnknownField` for an undeclared name and `IndexOutOfRange` if the
-	 * bound index is out of range. Returns the text {@link Delta}.
+	 * Revise the content field `name` on this card from authored text: typed *and*
+	 * anchor-preserving; the card twin of {@link DocumentWriter.reviseField},
+	 * codec included. Throws `UnknownField` for an undeclared name and
+	 * `IndexOutOfRange` if the bound index is out of range. Returns the text
+	 * {@link Delta}.
 	 * @param {string} name
-	 * @param {string} markdown
+	 * @param {string} text
 	 * @returns {import('../core/wasm.js').Delta}
 	 */
-	reviseField(name, markdown) {
-		return this.#doc._reviseField(this.#quill, { card: this.#index, field: name }, markdown);
+	reviseField(name, text) {
+		return this.#doc._reviseField(this.#quill, { card: this.#index, field: name }, text);
 	}
 }
 
@@ -1126,7 +1131,7 @@ export class DocumentReader {
 	 * as an authored string read back the same; no branching on how the
 	 * document was built. An absent `addr.field` reads the body corpus.
 	 * `undefined` for an absent field; throws `UnknownField`, `FieldNotContent`
-	 * for a type carrying no content, `FieldRichtextDecode` for an undecodable
+	 * for a type that is not a content leaf, `FieldRichtextDecode` for an undecodable
 	 * value, and `IndexOutOfRange` for a bad `addr.card`.
 	 * @param {import('../core/wasm.js').Addr | string} addr
 	 * @returns {import('../core/wasm.js').Content | undefined}

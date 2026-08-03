@@ -1147,7 +1147,8 @@ impl Document {
     /// absent `addr.field` reads the **body** corpus, quill-free, mirroring
     /// [`getStored`](Self::get_stored). Throws `edit::unknown_field` for a name
     /// the schema does not declare, `edit::field_not_content` for a declared type
-    /// that carries no content, `edit::field_richtext_decode` for a stored value
+    /// that is not a content leaf (`array<richtext>` carries content and still has
+    /// no one corpus), `edit::field_richtext_decode` for a stored value
     /// that decodes under neither encoding, and `edit::index_out_of_range` for a
     /// bad `addr.card`.
     #[wasm_bindgen(js_name = _readerGetContent, skip_typescript, unchecked_return_type = "Content | undefined")]
@@ -1554,7 +1555,7 @@ impl Document {
         serialize_or_throw(&delta, "revise")
     }
 
-    /// Revise the richtext field at `addr` from markdown, typed *and*
+    /// Revise the content field at `addr` from authored text, typed *and*
     /// anchor-preserving: the ABI under `writer.reviseField`. Resolves the
     /// field's schema from `quill` (main card, or the addressed card's `$kind`)
     /// and defers to [`TypedWriter::revise_field`](quillmark_core::TypedWriter::revise_field):
@@ -1562,6 +1563,9 @@ impl Document {
     /// result is schema-conformed, so a `richtext(inline)` field rejects a
     /// multi-block result with `edit::field_richtext_not_inline`. Returns the
     /// text `Delta`.
+    ///
+    /// The codec is the declared type's: `richtext` diffs markdown, `plaintext`
+    /// the literal text.
     ///
     /// `addr` must name a field (a bare string is `{ field }`); a body address
     /// throws (a body carries no field schema: use [`revise`](Self::revise)). A
@@ -1573,18 +1577,18 @@ impl Document {
         &mut self,
         quill: &Quill,
         #[wasm_bindgen(unchecked_param_type = "Addr | string")] addr: JsValue,
-        markdown: &str,
+        text: &str,
     ) -> Result<JsValue, JsValue> {
         let addr = Addr::from_js_or_string(&addr)?;
         let field = addr.require_field("reviseField")?.to_string();
         let base = self.addr_base(&addr);
         let mut writer = quill.inner.writer(&mut self.inner);
         let delta = match addr.card {
-            None => writer.revise_field(&field, markdown),
+            None => writer.revise_field(&field, text),
             Some(index) => writer
                 .card(index)
                 .map_err(|e| edit_error_to_js(&e, &base))?
-                .revise_field(&field, markdown),
+                .revise_field(&field, text),
         }
         .map_err(|e| edit_error_to_js(&e, &base))?;
         serialize_or_throw(&delta, "reviseField")

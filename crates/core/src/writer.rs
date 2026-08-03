@@ -102,9 +102,9 @@ impl<'a> TypedWriter<'a> {
     /// rebases anchors; `plaintext` diffs the literal text (nothing to rebase,
     /// `is_plain` forbids every mark) and never imports markdown, so a
     /// byte-identical revise of a value carrying escapes is a byte no-op.
-    pub fn revise_field(&mut self, name: &str, markdown: &str) -> Result<Delta, EditError> {
+    pub fn revise_field(&mut self, name: &str, text: &str) -> Result<Delta, EditError> {
         match self.config.main.fields.get(name) {
-            Some(schema) => self.doc.main_mut().revise_field_checked(name, markdown, schema),
+            Some(schema) => self.doc.main_mut().revise_field_checked(name, text, schema),
             None => Err(EditError::UnknownField(name.to_string())),
         }
     }
@@ -206,14 +206,15 @@ impl CardWriter<'_> {
         self.card.revise_body(markdown).map(|_| ())
     }
 
-    /// Revise a richtext field on this card from markdown: typed *and*
-    /// anchor-preserving; the card twin of [`TypedWriter::revise_field`].
+    /// Revise a content field on this card from authored text: typed *and*
+    /// anchor-preserving; the card twin of [`TypedWriter::revise_field`], codec
+    /// included (`richtext` diffs markdown, `plaintext` the literal text).
     /// Resolves the field against the card's [`CardSchema`]; an undeclared name
     /// (or any field when the card kind is unknown) fails with
     /// [`EditError::UnknownField`].
-    pub fn revise_field(&mut self, name: &str, markdown: &str) -> Result<Delta, EditError> {
+    pub fn revise_field(&mut self, name: &str, text: &str) -> Result<Delta, EditError> {
         match self.schema.and_then(|s| s.fields.get(name)) {
-            Some(schema) => self.card.revise_field_checked(name, markdown, schema),
+            Some(schema) => self.card.revise_field_checked(name, text, schema),
             None => Err(EditError::UnknownField(name.to_string())),
         }
     }

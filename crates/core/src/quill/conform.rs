@@ -85,7 +85,6 @@ impl Quill {
         let Parsed {
             mut document,
             mut warnings,
-            ..
         } = Document::parse(markdown)?;
         warnings.extend(self.conform(&mut document)?);
         Ok(Parsed { document, warnings })

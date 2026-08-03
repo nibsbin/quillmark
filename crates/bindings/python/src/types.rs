@@ -814,8 +814,10 @@ impl PyWriter {
             .map_err(convert_edit_error)
     }
 
-    /// Revise the richtext main-card field `name` from markdown: typed *and*
-    /// anchor-preserving. Surviving anchors rebase, then the diffed result is
+    /// Revise the content main-card field `name` from authored text: typed *and*
+    /// anchor-preserving. The codec comes from the declared type: `richtext` diffs
+    /// markdown, while `plaintext` diffs the literal text and never imports
+    /// markdown. Surviving anchors rebase, then the diffed result is
     /// schema-conformed (a `richtext(inline)` field rejects a multi-block result
     /// with `edit::field_richtext_not_inline`). Raises
     /// `edit::unknown_field` for a name the schema does not declare. The
@@ -823,13 +825,13 @@ impl PyWriter {
     /// (`set` cold-imports). The text `Delta` is discarded: the position-mapping
     /// receipt is an editor concern, and that lane is WASM-only; core and WASM
     /// return it.
-    fn revise_field(&self, py: Python<'_>, name: &str, markdown: &str) -> PyResult<()> {
+    fn revise_field(&self, py: Python<'_>, name: &str, text: &str) -> PyResult<()> {
         let quill = self.quill.borrow(py);
         let mut doc = self.doc.borrow_mut(py);
         quill
             .inner
             .writer(&mut doc.inner)
-            .revise_field(name, markdown)
+            .revise_field(name, text)
             .map(|_| ())
             .map_err(convert_edit_error)
     }
@@ -964,19 +966,19 @@ impl PyCardWriter {
             .map_err(convert_edit_error)
     }
 
-    /// Revise the richtext field `name` on this card from markdown: typed *and*
-    /// anchor-preserving; the card twin of `Writer.revise_field`. Raises
-    /// `edit::unknown_field` for an undeclared name and
+    /// Revise the content field `name` on this card from authored text: typed
+    /// *and* anchor-preserving; the card twin of `Writer.revise_field`, codec
+    /// included. Raises `edit::unknown_field` for an undeclared name and
     /// `edit::index_out_of_range` for a bad index. The `Delta` is discarded
     /// (see `Writer.revise_field`).
-    fn revise_field(&self, py: Python<'_>, name: &str, markdown: &str) -> PyResult<()> {
+    fn revise_field(&self, py: Python<'_>, name: &str, text: &str) -> PyResult<()> {
         let quill = self.quill.borrow(py);
         let mut doc = self.doc.borrow_mut(py);
         let mut writer = quill.inner.writer(&mut doc.inner);
         writer
             .card(self.index)
             .map_err(convert_edit_error)?
-            .revise_field(name, markdown)
+            .revise_field(name, text)
             .map(|_| ())
             .map_err(convert_edit_error)
     }
@@ -1033,8 +1035,8 @@ impl PyReader {
     /// same; the storage form stops being the caller's business.
     ///
     /// `None` when the field is absent. Raises `edit::unknown_field` for an
-    /// undeclared name, `edit::field_not_content` for a declared type that carries
-    /// no content, and `edit::field_richtext_decode` for a stored value that
+    /// undeclared name, `edit::field_not_content` for a declared type that is not a
+    /// content leaf, and `edit::field_richtext_decode` for a stored value that
     /// decodes under neither encoding. Mirrors WASM `reader.getContent`.
     fn get_content<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
         let quill = self.quill.borrow(py);
@@ -1313,12 +1315,8 @@ impl PyDiagnostic {
     /// `prose/canon/ERROR.md` § "Diagnostic args" tabulates the keys per code.
     #[getter]
     fn args<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let map = serde_json::Map::from_iter(
-            self.inner
-                .args
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone())),
-        );
+        let map: serde_json::Map<String, serde_json::Value> =
+            self.inner.args.clone().into_iter().collect();
         json_to_py(py, &serde_json::Value::Object(map))
     }
 }

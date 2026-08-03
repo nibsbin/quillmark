@@ -159,11 +159,13 @@ pub fn blueprint_instruction(quill_name: &str) -> String {
 #[cfg(test)]
 mod tests;
 
-/// The record of one parse: the [`Document`] and any non-fatal warnings.
-/// Returned by [`Document::parse`], the single parse entry. Warnings live here
-/// and only here: `Document` is the value (equality, the storage DTO, and
-/// mutators all exclude warnings); `Parsed` is the parse *event*. A caller that
-/// wants only the document writes `Document::parse(md)?.document`.
+/// The record of one load: the [`Document`] and any non-fatal warnings.
+/// Returned by both doors, the quill-free [`Document::parse`] and the bound
+/// [`Quill::parse`](crate::Quill::parse), whose `warnings` carry the parse's
+/// plus the `conform::*` ones. Warnings live here and only here: `Document` is
+/// the value (equality, the storage DTO, and mutators all exclude warnings);
+/// `Parsed` is the load *event*. A caller that wants only the document writes
+/// `Document::parse(md)?.document`.
 #[derive(Debug)]
 #[must_use = "carries parse warnings; read `.document`/`.warnings` or bind it"]
 #[non_exhaustive]

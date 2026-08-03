@@ -121,8 +121,9 @@ impl<'a> TypedReader<'a> {
     ///
     /// `Ok(None)` when the field is absent;
     /// [`EditError::UnknownField`] for a name the schema does not declare;
-    /// [`EditError::FieldNotContent`] for a declared type that carries no content
-    /// (an `integer` has no corpus even when it holds a string);
+    /// [`EditError::FieldNotContent`] for a declared type that is not a content
+    /// leaf (an `integer` has no corpus even when it holds a string, and an
+    /// `array<richtext>` carries content without having one corpus);
     /// [`EditError::FieldRichtextDecode`] when the stored value decodes under
     /// neither encoding.
     ///
@@ -226,10 +227,12 @@ fn read_field(
 /// The shared corpus dispatch behind [`TypedReader::get_content`] and
 /// [`CardReader::get_content`]: resolve `name` against `fields_schema`, then
 /// decode through the codec the declared type names ([`Card::field_richtext`] for
-/// `richtext`, [`Card::field_plaintext_content`] for `plaintext`). A type that
-/// carries no content is [`EditError::FieldNotContent`], answered from the schema
-/// before the payload is read: whether a field has a corpus is a declared-type
-/// fact, so a `string` field holding markdown-looking text is still not content.
+/// `richtext`, [`Card::field_plaintext_content`] for `plaintext`). Every other
+/// type is [`EditError::FieldNotContent`], answered from the schema before the
+/// payload is read: whether a field has a corpus is a declared-type fact, so a
+/// `string` field holding markdown-looking text is still not content. The two
+/// content leaves are the whole domain, so an `array<richtext>` lands here as
+/// well: it carries content and still has no single corpus.
 fn read_content(
     card: &Card,
     fields_schema: Option<&IndexMap<String, FieldSchema>>,
@@ -476,8 +479,8 @@ card_kinds:
             view.get_content("nope"),
             Err(EditError::UnknownField(n)) if n == "nope"
         ));
-        // A declared type carrying no content answers from the schema, not the
-        // payload: `qty` holds 3 and is still not content.
+        // A non-leaf declared type answers from the schema, not the payload:
+        // `qty` holds 3 and is still not a content field.
         assert!(matches!(
             view.get_content("qty"),
             Err(EditError::FieldNotContent { field, declared })
