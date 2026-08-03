@@ -166,3 +166,91 @@ def test_document_seed_and_store_seed_namespace_round_trip(tmp_path):
 
     doc.remove_seed_namespace("note")
     assert seed_of(doc, "note") is None
+
+
+# ---------------------------------------------------------------------------
+# Tests: the bound door (parse / conform)
+# ---------------------------------------------------------------------------
+
+BOUND_QUILL_YAML = """quill:
+  name: py_bound_smoke
+  version: "1.0"
+  backend: typst
+  description: Python bound-door smoke test
+
+main:
+  fields:
+    subject:
+      type: richtext
+      inline: true
+    note:
+      type: plaintext
+"""
+
+
+def _fields_of(card):
+    """The card's user fields as a name → value map."""
+    return {
+        item["key"]: item["value"]
+        for item in card["payload_items"]
+        if item["type"] == "field"
+    }
+
+
+def _bound_md(*lines):
+    fields = "".join(f"{line}\n" for line in lines)
+    return f"~~~card-yaml\n$quill: py_bound_smoke\n$kind: main\n{fields}~~~\n\nBody.\n"
+
+
+def test_parse_lands_both_codecs_at_rest(tmp_path):
+    """The bound door's crossing: a richtext field arrives as the canonical
+    content dict, a plaintext one as its literal string, and warnings ride the
+    same `doc.warnings` carrier a `from_markdown` parse uses."""
+    quill = make_quill(tmp_path, BOUND_QUILL_YAML)
+    doc = quill.parse(_bound_md("subject: Q3 **results**", "note: 'a *literal* line'"))
+
+    assert doc.warnings == []
+    fields = _fields_of(doc.main)
+    assert isinstance(fields["subject"], dict), "richtext rests as the corpus"
+    assert fields["note"] == "a *literal* line", "plaintext rests as the literal"
+
+
+def test_conform_converges_a_transported_document(tmp_path):
+    """conform is the same walk on a document that arrived any other way: it
+    returns a list, converges to the bound door's bytes, and is idempotent."""
+    quill = make_quill(tmp_path, BOUND_QUILL_YAML)
+    md = _bound_md("subject: Q3 **results**", "note: 'a *literal* line'")
+    doc = Document.from_markdown(md)
+
+    diags = quill.conform(doc)
+    assert isinstance(diags, list) and diags == []
+    assert doc.to_json() == quill.parse(md).to_json()
+    assert quill.conform(doc) == []
+
+
+def test_conform_reports_a_non_conforming_value_and_leaves_it_authored(tmp_path):
+    """A value the strict write refuses rests as authored, carrying a
+    `conform::*` warning on `doc.warnings` rather than raising."""
+    quill = make_quill(tmp_path, BOUND_QUILL_YAML)
+    doc = quill.parse(_bound_md("subject: 42"))
+
+    assert "conform::field_richtext_decode" in [d.code for d in doc.warnings]
+    assert _fields_of(doc.main)["subject"] == 42, "the value stays authored"
+
+
+def test_the_wrong_quill_raises_before_any_mutation(tmp_path):
+    """Nothing conforms under the wrong schema, through either verb."""
+    from quillmark import QuillmarkError
+
+    quill = make_quill(tmp_path, BOUND_QUILL_YAML)
+    md = "~~~card-yaml\n$quill: other_quill\n$kind: main\nsubject: hi\n~~~\n\nBody.\n"
+
+    with pytest.raises(QuillmarkError) as excinfo:
+        quill.parse(md)
+    assert excinfo.value.diagnostics[0].code == "quill::name_mismatch"
+
+    doc = Document.from_markdown(md)
+    before = doc.to_json()
+    with pytest.raises(QuillmarkError):
+        quill.conform(doc)
+    assert doc.to_json() == before

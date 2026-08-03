@@ -355,14 +355,15 @@ card_kinds:
   })
 
   // getContent is the same read at the other end of the codec: the corpus, not
-  // the projection. Its point is spanning the two storage forms, so the lane
-  // that built the document stops being the caller's business.
-  it('getContent returns the corpus for both storage forms', () => {
+  // the projection. Rest is per-codec now, so what it spans is a document at
+  // rest versus one the transport door left as authored.
+  it('getContent returns the corpus for a conformed field and an authored one', () => {
     const quill = buildQuill()
-    // Committed lane: the writer stores a canonical content object.
+    // At rest: the writer (like the bound door) stores the canonical corpus.
     const committed = seededDoc(quill)
     expect(typeof committed.getStored('subject')).toBe('object')
-    // Parsed lane: a markdown-authored field rests as the authored string.
+    // Transport door: a markdown-authored field rests as authored until it is
+    // conformed.
     const parsed = Document.fromMarkdown(
       '~~~card-yaml\n$quill: view_test\nsubject: Q3 **results**\n~~~\n\nBody.'
     )
@@ -373,6 +374,54 @@ card_kinds:
     expect(a.text).toBe('Q3 results')
     expect(b.text).toBe(a.text)
     expect(b.marks).toEqual(a.marks)
+  })
+
+  // The bound door is what makes a stored form a property of the codec rather
+  // than of the construction lane.
+  it('the bound door lands both codecs at their canonical rest', () => {
+    const quill = buildQuill()
+    const md =
+      "~~~card-yaml\n$quill: view_test\nsubject: Q3 **results**\nnote: 'a *literal* line'\n~~~\n\nBody."
+    const bound = quill.parse(md)
+    expect(typeof bound.getStored('subject')).toBe('object') // richtext: the corpus
+    expect(bound.getStored('note')).toBe('a *literal* line') // plaintext: the literal
+    expect(bound.warnings).toEqual([])
+
+    // conform is the same walk on a document that arrived any other way, and it
+    // converges to identical bytes. A second pass is a no-op.
+    const transported = Document.fromMarkdown(md)
+    expect(quill.conform(transported)).toEqual([])
+    expect(transported.equals(bound)).toBe(true)
+    expect(quill.conform(transported)).toEqual([])
+    expect(transported.toJson()).toBe(bound.toJson())
+  })
+
+  it('a value the strict write refuses rests authored with a conform warning', () => {
+    const quill = buildQuill()
+    const doc = quill.parse('~~~card-yaml\n$quill: view_test\nsubject: 42\n~~~\n\nBody.')
+    expect(doc.getStored('subject')).toBe(42) // no silent retype
+    expect(doc.warnings.map((d) => d.code)).toContain('conform::field_richtext_decode')
+    expect(doc.warnings[0].severity).toBe('warning')
+  })
+
+  it('nothing conforms under the wrong quill', () => {
+    const quill = buildQuill()
+    const md = '~~~card-yaml\n$quill: other_quill\nsubject: hi\n~~~\n\nBody.'
+    let caught
+    try {
+      quill.parse(md)
+    } catch (e) {
+      caught = e
+    }
+    expect(isQuillmarkError(caught)).toBe(true)
+    expect(caught.diagnostics[0].code).toBe('quill::name_mismatch')
+
+    // The transport door still opens it, and conform reports the same mismatch
+    // without touching the document.
+    const doc = Document.fromMarkdown(md)
+    const before = doc.toJson()
+    expectEditCode(() => quill.conform(doc), 'quill::name_mismatch')
+    expect(doc.toJson()).toBe(before)
   })
 
   it('getContent decodes by declared type: markdown for richtext, literal for plaintext', () => {

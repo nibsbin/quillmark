@@ -71,6 +71,14 @@ impl From<RenderError> for WasmError {
     }
 }
 
+impl From<Vec<Diagnostic>> for WasmError {
+    /// A failure that already speaks in diagnostics (the bound door's
+    /// `BoundParseError`, whichever half it carries).
+    fn from(diagnostics: Vec<Diagnostic>) -> Self {
+        WasmError { diagnostics }
+    }
+}
+
 impl From<String> for WasmError {
     fn from(message: String) -> Self {
         WasmError {

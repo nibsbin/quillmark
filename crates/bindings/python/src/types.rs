@@ -1,7 +1,7 @@
 use pyo3::conversion::IntoPyObjectExt;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::pycell::PyRef;
+use pyo3::pycell::{PyRef, PyRefMut};
 use pyo3::types::{PyDict, PyList};
 use pyo3::Bound;
 
@@ -214,6 +214,60 @@ impl PyQuill {
         let list = py_obj
             .cast::<PyList>()
             .map_err(|_| PyValueError::new_err("validate: expected a list at top level"))?;
+        Ok(list.clone())
+    }
+
+    /// Parse `markdown` and conform it against this quill: the **primary
+    /// ingestion path**, and the bound twin of the schema-free
+    /// `Document.from_markdown`. The returned document rests at its canonical
+    /// form (a `richtext` field as a content object, a `plaintext` field as its
+    /// literal string), so its stored shape no longer depends on which lane
+    /// built it.
+    ///
+    /// Parse warnings and the `conform::*` diagnostics both land on
+    /// `doc.warnings`, the same carrier a `from_markdown` parse uses. Raises
+    /// `QuillmarkError` on a parse failure, or when `markdown` declares a
+    /// `$quill` this quill does not answer to. Mirrors WASM `parse`.
+    fn parse(&self, markdown: &str) -> PyResult<PyDocument> {
+        let parsed = self.inner.parse(markdown).map_err(|e| {
+            let diags = e.to_diagnostics();
+            let message = quillmark_core::RenderError::summary_message(&diags);
+            raise_with_diagnostics(diags, message)
+        })?;
+        Ok(PyDocument {
+            inner: parsed.document,
+            parse_warnings: parsed.warnings,
+        })
+    }
+
+    /// Land `doc`'s declared content fields at their canonical rest **in
+    /// place**, returning the `conform::*` diagnostic dicts for the values that
+    /// would not commit (an empty list when everything rested).
+    ///
+    /// The read-repair verb: a document that arrived through the transport door
+    /// (`from_markdown`, `from_json`, a stored row) converges here, and is then
+    /// eligible for rewrite under its current schema tag. Idempotent, and a
+    /// no-op on an already-canonical document, comments and stored bytes
+    /// included. A `!must_fill` marker anywhere in a field's value skips that
+    /// field; a value the strict write refuses stays as authored with a
+    /// diagnostic. Raises `QuillmarkError` when `doc` declares a different
+    /// `$quill`, before any mutation. Mirrors WASM `conform`.
+    fn conform<'py>(
+        &self,
+        py: Python<'py>,
+        mut doc: PyRefMut<'_, PyDocument>,
+    ) -> PyResult<Bound<'py, PyList>> {
+        let diags = self.inner.conform(&mut doc.inner).map_err(|e| {
+            let diags = e.into_diagnostics();
+            let message = quillmark_core::RenderError::summary_message(&diags);
+            raise_with_diagnostics(diags, message)
+        })?;
+        let json_value = serde_json::to_value(&diags)
+            .map_err(|e| PyValueError::new_err(format!("conform: serialization failed: {e}")))?;
+        let py_obj = json_to_py(py, &json_value)?;
+        let list = py_obj
+            .cast::<PyList>()
+            .map_err(|_| PyValueError::new_err("conform: expected a list at top level"))?;
         Ok(list.clone())
     }
 

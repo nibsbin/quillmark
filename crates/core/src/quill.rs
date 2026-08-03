@@ -3,6 +3,7 @@
 mod blueprint;
 mod compose;
 mod config;
+pub(crate) mod conform;
 mod resolved;
 mod fill;
 mod formats;
@@ -18,6 +19,7 @@ pub(crate) mod validation;
 
 pub use config::{CoercionError, QuillConfig};
 pub(crate) use config::Leniency;
+pub use conform::BoundParseError;
 pub use resolved::{FieldSource, Resolved, ResolvedCard, ResolvedField, ResolvedMain};
 pub use fill::zero_value;
 pub use formats::{parse_date, parse_datetime};

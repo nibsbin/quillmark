@@ -64,13 +64,21 @@ routing coercion-vs-undeclared is `edit::field_conform` vs.
 
 ## Warning flow
 
-Warnings travel the same `Diagnostic` currency as errors, on three producer
+Warnings travel the same `Diagnostic` currency as errors, on four producer
 families:
 
 - **Parse warnings**: the `warnings` on the `Parsed` that `Document::parse`
   returns (e.g. a `~~~` opener missing its blank line). The CLI render and the
   WASM one-shot render splice them into `RenderResult.warnings` ahead of any
   compile warnings.
+- **`conform::*`: resting-form warnings.** `Quill::conform` returns one per
+  declared content field whose value the strict write refuses, and
+  `Quill::parse` appends them to the `Parsed.warnings` the parse produced. Each
+  is the `edit::*` diagnostic that write would have raised, re-namespaced and
+  demoted to `Severity::Warning` with its `args` and `path` intact: the value
+  rests as authored rather than being refused or silently retyped, so the state
+  is repairable. The walk is stateless, so a repeat conform re-emits the
+  identical set.
 - **Validation warnings**: `Quill::validate(doc)` returns every
   `validation::*` diagnostic, mixing severities; `validation::must_fill` and
   the `$seed` checks are the non-fatal ones. This is the editor-facing
@@ -269,6 +277,11 @@ Three outcomes, and the wire tells them apart only with this table in hand, sinc
 | `edit::reserved_kind` | — | code-determined |
 | `edit::import` | — | fallback |
 | `edit::content_apply` | — | fallback |
+| `conform::invalid_field_name` | `field` | structured |
+| `conform::value_too_deep` | `max` | structured |
+| `conform::field_richtext_not_inline` | `field` | structured |
+| `conform::field_conform` | `field`, `target` | structured, coarser |
+| `conform::field_richtext_decode` | `field` | structured, coarser |
 | `parse::input_too_large` | `size`, `max` | structured |
 | `parse::invalid_quill_reference` | `value` | structured, coarser |
 | `parse::yaml_error_with_location` | `line`, `blockIndex` | structured, coarser |

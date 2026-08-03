@@ -1150,6 +1150,30 @@ mod args_canon {
             add(e.code(), e.args());
         }
 
+        // The `conform::*` family: the strict write's refusals, re-namespaced by
+        // `conform_diagnostic`. Minted through that function rather than
+        // re-derived, so the table cannot drift from the code that stamps it.
+        for e in [
+            EditError::InvalidFieldName("9bad".into()),
+            EditError::ValueTooDeep { max: 8 },
+            EditError::FieldRichtextNotInline("body".into()),
+            EditError::FieldRichtextDecode {
+                field: "body".into(),
+                message: "x".into(),
+            },
+            EditError::FieldConform {
+                field: "n".into(),
+                target: "integer".into(),
+                message: "x".into(),
+            },
+        ] {
+            let diag = crate::quill::conform::conform_diagnostic(&e, &crate::DocPath::main());
+            add(
+                diag.code.as_deref().expect("conform diagnostics carry a code"),
+                diag.args,
+            );
+        }
+
         for e in [
             ParseError::InputTooLarge { size: 2, max: 1 },
             ParseError::InvalidStructure("x".into()),

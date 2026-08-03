@@ -63,8 +63,8 @@ pub use quillmark_content::Content;
 
 pub mod quill;
 pub use quill::{
-    zero_value, FieldSource, FileTreeNode, Quill, Resolved, ResolvedCard, ResolvedField, ResolvedMain,
-    QuillIgnore, STANDARD_METADATA_KEYS,
+    zero_value, BoundParseError, FieldSource, FileTreeNode, Quill, Resolved, ResolvedCard,
+    ResolvedField, ResolvedMain, QuillIgnore, STANDARD_METADATA_KEYS,
 };
 /// The schema model behind [`Quill::config`], and the error
 /// [`QuillConfig::validate_document`] returns. Nameable from the root: reading

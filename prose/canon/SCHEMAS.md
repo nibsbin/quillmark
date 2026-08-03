@@ -27,8 +27,8 @@ Supported field types:
 | `object` | Structured map; requires `properties:` |
 | `date` | A strict calendar date `YYYY-MM-DD`. Rejects any time component (a time-bearing string is a `datetime`, not a truncated date). The common case in a document engine, so it is the unmarked date type. Stored verbatim; lowers to a Typst value-object wrapping `datetime(year:, month:, day:)` (`.value` native, `(.display)(..)` renders: a click-to-edit region; see `PLATE_DATA.md`) |
 | `datetime` | A strict offset-less wall-clock datetime `YYYY-MM-DDThh:mm[:ss]`, seconds optional (zero-filled). Rejects timezone offsets (`Z`, `±HH:MM`), the space separator, fractional seconds, and a bare date (which is a `date`). An offset is **rejected, never dropped**: the engine does no zone math, keeping wall-clock semantics end to end. Stored verbatim; lowers to the same value-object over the six-component `datetime(year:, .., second:)` |
-| `plaintext` | Navigable **unformatted** prose over the same canonical content (`Content`) as `richtext` (same media type, nav, and regions) but a **literal** codec (`from_plaintext`/`to_plaintext`): delimiters stay literal, no markup, verbatim round-trip. Declare `inline: true` for the single-line variant. Constrained mark-/island-free (`Content::is_plain`); a formatted wire content is rejected (`plaintext::not_plain`), not stripped |
-| `richtext` | Rich **formatted** prose over a canonical content (`Content`); markdown is a projection of it. Declare `inline: true` for the single-line variant (exactly one `Para` line, no container, no islands). The pre-richtext `markdown` spelling and the retired `type: richtext(inline)` token are schema load errors (`quill::field_parse_error`) |
+| `plaintext` | Navigable **unformatted** prose over the same canonical content (`Content`) as `richtext` (same media type, nav, and regions) but a **literal** codec (`from_plaintext`/`to_plaintext`): delimiters stay literal, no markup, verbatim round-trip. Declare `inline: true` for the single-line variant. Constrained mark-/island-free (`Content::is_plain`); a formatted wire content is rejected (`plaintext::not_plain`), not stripped. **Rests as the literal string** |
+| `richtext` | Rich **formatted** prose over a canonical content (`Content`); markdown is a projection of it. Declare `inline: true` for the single-line variant (exactly one `Para` line, no container, no islands). The pre-richtext `markdown` spelling and the retired `type: richtext(inline)` token are schema load errors (`quill::field_parse_error`). **Rests as the canonical content object** |
 
 The text-ish types form a **data vs content** × **open/plain vs closed/formatted**
 2×2: `enum` (closed data), `string` (open data), `plaintext` (plain content),
@@ -37,6 +37,33 @@ model, so `plaintext` and `richtext` share the entire nav/region/preview
 stack and the same backend lowering (both carry `contentMediaType:
 application/quillmark-content+json`); `plaintext` additionally carries
 `quillmark:plain: true`, an editor-only annotation backends ignore.
+
+### Content fields rest per codec
+
+A content field's **resting form** is the shape it is stored in once anything
+schema-aware has written it: the typed writer, the seeder, or `Quill::conform`
+(the bound door, [BINDINGS.md](BINDINGS.md)). It is per-codec, and the split is
+forced, not chosen:
+
+| Codec | Rest | Why |
+|---|---|---|
+| `richtext` | the canonical content object | the markdown projection is lossy (anchors, island ids, content-only marks), so string rest loses identity |
+| `plaintext` | the literal string | `from_plaintext`/`to_plaintext` are inverses on plain content and `is_plain` excludes every mark, so string rest loses nothing, while object rest corrupts at emit |
+
+Emit is schema-free: `project_content_field` routes every canonical content
+object it finds through `export::to_markdown`, and it cannot sniff the codec
+from the shape (a `richtext` content that happens to be plain is
+indistinguishable from a `plaintext` one). An object-rest `plaintext` field
+holding `a *literal* line` would therefore emit markdown-escaped
+(`a \*literal\* line`), and a re-parse would read the backslashes as
+characters. String rest removes that; the plate is unaffected, since the render
+floor still coerces `plaintext` to the content object backends receive
+([PLATE_DATA.md](PLATE_DATA.md)).
+
+Rest is enforced only for a **declared content field**: one whose type tree
+bears a content leaf (`field_contains_content`), and its whole subtree conforms
+with it. Non-content-typed fields keep their authored shorthands; the typed
+write remains their canonicalizer.
 
 ## Type coercion
 
@@ -260,14 +287,20 @@ seeded documents alike (see [BLUEPRINT.md](BLUEPRINT.md)).
 the compilation layer by [zero-filled render](#zero-filled-render) (`default:`,
 else type-empty zero), exactly as for any authored document.
 
-**Seed-commits-content.** A seeded richtext field (and the body) commits the
-canonical **content** form, not the authored markdown string, so a seeded
-document is content from birth: matching what an editor round-trip produces and
-what storage embeds. The content is imported once at quill load into a
+**Seed-commits-rest.** A seeded content field commits its codec's resting form
+(a richtext field and the body the canonical content, a plaintext field its
+literal string), so a seeded document is at rest from birth: `conform` of a
+seed is a byte no-op, and a seed → store → load → conform cycle cannot move a
+hash on a document nobody edited. The commit runs through the same strict write
+the typed writer uses, overlay values included, which is what makes the seeder
+and the bound door agree rather than merely coincide. The content is imported
+once at quill load into a
 `#[serde(skip)]` companion cache on the schema (`FieldSchema::default_content` /
 `example_content`, `BodyCardSchema::example_content`), a pure function of the
 `Quill.yaml` bytes; seeding and the render floor read that cache rather than
-re-importing markdown per document. The authored markdown literal is retained
+re-importing markdown per document. The cache is the *content* either way, since
+the render floor injects `default_content` into the plate uncoerced; only the
+seed's commit takes the extra step to the field's rest. The authored markdown literal is retained
 untouched: it is the source of truth the schema emits and the blueprint prints;
 the content is a derived projection of it.
 
