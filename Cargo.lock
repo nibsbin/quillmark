@@ -2245,7 +2245,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark"
-version = "0.99.0"
+version = "0.100.0"
 dependencies = [
  "quillmark-content",
  "quillmark-core",
@@ -2258,7 +2258,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-cli"
-version = "0.99.0"
+version = "0.100.0"
 dependencies = [
  "clap",
  "indexmap",
@@ -2269,7 +2269,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-content"
-version = "0.99.0"
+version = "0.100.0"
 dependencies = [
  "proptest",
  "pulldown-cmark",
@@ -2281,7 +2281,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-core"
-version = "0.99.0"
+version = "0.100.0"
 dependencies = [
  "glob",
  "indexmap",
@@ -2299,11 +2299,11 @@ dependencies = [
 
 [[package]]
 name = "quillmark-fixtures"
-version = "0.99.0"
+version = "0.100.0"
 
 [[package]]
 name = "quillmark-fuzz"
-version = "0.99.0"
+version = "0.100.0"
 dependencies = [
  "indexmap",
  "proptest",
@@ -2315,7 +2315,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-pdf"
-version = "0.99.0"
+version = "0.100.0"
 dependencies = [
  "lopdf",
  "pdf-writer",
@@ -2325,7 +2325,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-pdfform"
-version = "0.99.0"
+version = "0.100.0"
 dependencies = [
  "hayro",
  "hayro-svg",
@@ -2341,7 +2341,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-python"
-version = "0.99.0"
+version = "0.100.0"
 dependencies = [
  "pyo3",
  "quillmark",
@@ -2352,7 +2352,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-typst"
-version = "0.99.0"
+version = "0.100.0"
 dependencies = [
  "comemo",
  "js-sys",
@@ -2377,7 +2377,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-wasm"
-version = "0.99.0"
+version = "0.100.0"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
