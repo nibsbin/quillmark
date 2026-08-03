@@ -27,7 +27,7 @@ cargo add quillmark
 ## Quick Start (Rust)
 
 ```rust
-use quillmark::{quill_from_path, Document, OutputFormat, Quillmark, RenderOptions};
+use quillmark::{quill_from_path, OutputFormat, Quillmark, RenderOptions};
 
 // A `Quill` is portable, declarative data.
 let quill = quill_from_path("path/to/quill")?;
@@ -42,7 +42,8 @@ title: Example
 # Hello World
 "#;
 
-let doc = Document::parse(markdown)?.document;
+// The bound door: parse and conform against the quill that will render it.
+let doc = quill.parse(markdown)?.document;
 let result = engine.render(
     &quill,
     &doc,

@@ -3,27 +3,50 @@
 //! Quillmark is a schema-driven document engine that turns Markdown
 //! with card-yaml metadata blocks into a fully typeset document (PDF, SVG, PNG).
 //!
+//! Markdown in, through the bound door — `Quill::parse` conforms the document
+//! against the quill that will render it:
+//!
 //! ```no_run
-//! use quillmark::{quill_from_path, Document, OutputFormat, Quillmark, RenderOptions};
+//! use quillmark::{quill_from_path, BoundParseError, OutputFormat, Parsed, Quillmark, RenderOptions};
 //!
 //! let quill = quill_from_path("path/to/quill").unwrap();
 //! let engine = Quillmark::new();
 //!
-//! let parsed = Document::parse("~~~\n$quill: my_quill\n$kind: main\ntitle: Hello\n~~~\n\n# Hello World").unwrap().document;
-//! let result = engine.render(&quill, &parsed, &RenderOptions::default().with_output_format(OutputFormat::Pdf)).unwrap();
+//! let parsed: Result<Parsed, BoundParseError> = quill.parse("~~~\n$quill: my_quill\n$kind: main\ntitle: Hello\n~~~\n\n# Hello World");
+//! let result = engine.render(&quill, &parsed.unwrap().document, &RenderOptions::default().with_output_format(OutputFormat::Pdf)).unwrap();
+//! ```
+//!
+//! Or no Markdown at all — a blank canvas and the schema-bound writer:
+//!
+//! ```no_run
+//! use quillmark::{quill_from_path, Document, EditError, QuillReference, QuillValue, TypedWriter};
+//!
+//! let quill = quill_from_path("path/to/quill").unwrap();
+//! let reference: QuillReference = "my_quill@1.0.0".parse().unwrap();
+//! let mut doc = Document::new(reference);
+//!
+//! let mut writer: TypedWriter = quill.writer(&mut doc);
+//! let written: Result<(), EditError> = writer.set("title", "Hello");
+//! written.unwrap();
+//!
+//! let title: Option<&QuillValue> = doc.main().payload().get("title");
 //! ```
 
-// Re-export core types for convenience. `Quill` is the single quill type
+// Re-export core types for convenience: every flow the docs name — quill
+// construction, authoring, render, and reading the result back — is spellable
+// through this facade alone, with no direct `quillmark-core` dependency. The
+// two examples above are the compile check; a documented flow that stops
+// spelling here is a hole in this list. `Quill` is the single quill type
 // (portable, declarative data); construct it from an in-memory tree with
 // `Quill::from_tree` (taking `FileTreeNode` and `QuillIgnore` from here) or
-// from disk with the `quill_from_path` helper below. Neither path needs a
-// direct `quillmark-core` dependency. `QuillConfig` and the schema types come
-// along, since a caller holding a `Quill` reads its schema through them.
+// from disk with the `quill_from_path` helper below. `QuillConfig` and the
+// schema types come along, since a caller holding a `Quill` reads its schema
+// through them.
 pub use quillmark_core::{
-    Artifact, Backend, Card, CardSchema, ChangeSet, Delta, Diagnostic, Document, FieldSchema,
-    FieldType, FileTreeNode, LiveSession, Location, OutputFormat, ParseError, Parsed, Quill,
-    QuillConfig, QuillIgnore, RenderError, RenderOptions, RenderResult, ValidationError,
-    Content, Severity,
+    Artifact, Backend, BoundParseError, Card, CardSchema, ChangeSet, Content, Delta, Diagnostic,
+    Document, EditError, FieldSchema, FieldType, FileTreeNode, LiveSession, Location, OutputFormat,
+    ParseError, Parsed, Quill, QuillConfig, QuillIgnore, QuillReference, QuillValue, RenderError,
+    RenderOptions, RenderResult, Severity, TypedWriter, ValidationError,
 };
 
 mod load;
