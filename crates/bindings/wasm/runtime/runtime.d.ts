@@ -55,7 +55,7 @@ export type {
 } from '../core/wasm.js';
 
 // Content edit vocabulary: the op-grained content model `Document`'s methods
-// speak (`applyChange(addr, bundle)`, `install(addr, rt)`, `revise(…) => Delta`).
+// speak (`applyChange(addr, bundle)`, `overwrite(addr, rt)`, `revise(…) => Delta`).
 // Declared in the core build; re-exported here so the single public entry point
 // names every type its own re-exported surface already references: `Card.body`
 // is a `Content`, `PayloadItem.nestedFills` a `PathStep[][]`, `CardInput.body` a
@@ -411,7 +411,7 @@ export interface PaintResult {
 
 /**
  * Canonical contract every backend build must satisfy. Output of
- * {@link LiveSession.apply}: `dirtyPages` lists the pages whose rendered
+ * {@link LiveSession.update}: `dirtyPages` lists the pages whose rendered
  * content differs from the previous compile, including added pages; removed
  * pages are implied by `pageCount`. Repaint `dirty ∩ visible`.
  */
@@ -463,7 +463,7 @@ export declare class Engine {
 	render(quill: Quill, doc: Document, options?: RenderOptions): Promise<RenderResult>;
 
 	/**
-	 * Open a live render session (canvas preview / per-page paint / `apply`).
+	 * Open a live render session (canvas preview / per-page paint / `update`).
 	 * The `quill` and `doc` handles are read synchronously before the first
 	 * await, so the caller may `free()` them as soon as this call returns; the
 	 * caller owns the returned session and must `.free()` it.
@@ -524,10 +524,10 @@ export declare class LiveSession {
 	 * Recompile the session against `doc`: the edit verb of a live preview.
 	 * Transactional: on throw every read (`render`, `paint`, `pageSize`,
 	 * `regions`) keeps serving the last-good compile, and the session recovers
-	 * on the next successful `apply`. On success reads serve the new compile;
+	 * on the next successful `update`. On success reads serve the new compile;
 	 * repaint `dirtyPages ∩ visible`.
 	 */
-	apply(doc: Document): ChangeSet;
+	update(doc: Document): ChangeSet;
 	render(options?: RenderOptions): RenderResult;
 	/**
 	 * Schema-field geometry for this compiled session, keyed on the canonical
@@ -642,7 +642,7 @@ declare module '../core/wasm.js' {
 /**
  * A `Document` bound to its `Quill` for typed writes: the schema-bound writer,
  * constructed via {@link Quill.writer}. Speaks names, values, and markdown. Bare
- * `set` / `setAll` / `setBody` / `reviseField` / `addCard` / `card(i).set`
+ * `set` / `setAll` / `reviseBody` / `reviseField` / `addCard` / `card(i).set`
  * instead of threading the `quill` handle through the underscored ABI. Holds both
  * handles by reference and owns neither: nothing to `free()`.
  *
@@ -673,7 +673,7 @@ export declare class DocumentWriter {
 	 * the delta, the receipt-free body write. Use `doc.revise({}, md)` for the
 	 * `Delta` receipt.
 	 */
-	setBody(markdown: string): void;
+	reviseBody(markdown: string): void;
 	/**
 	 * Revise the content main-card field `name` from authored text: typed *and*
 	 * anchor-preserving. Surviving anchors rebase, then the diffed result is
@@ -726,7 +726,7 @@ export declare class CardWriter {
 	set(name: string, value: unknown): void;
 	setAll(fields: Record<string, unknown>): void;
 	/** Set this card's body from markdown (edit semantics), discarding the delta. */
-	setBody(markdown: string): void;
+	reviseBody(markdown: string): void;
 	/**
 	 * Revise the content field `name` on this card from authored text: typed *and*
 	 * anchor-preserving; the card twin of {@link DocumentWriter.reviseField},
@@ -747,12 +747,12 @@ export declare class CardWriter {
  * The schema authority is the point: unlike the quill-free transport `Document.getStored`,
  * a name the schema does not declare throws `UnknownField` (a typo) rather than
  * reading back `undefined`, and a content field holding a value that does not
- * decode throws `FieldRichtextDecode`. A field's markdown lives here, not on the
- * body-only `Document.getMarkdown`. The body read stays quill-free (a body's type
+ * decode throws `FieldDecode`. A field's markdown lives here, not on the
+ * body-only `Document.bodyMarkdown`. The body read stays quill-free (a body's type
  * is a format fact) and never throws.
  *
  * `getContent` is the same read at the other end of the codec, returning the
- * corpus rather than the projection. It binds the quill for the same reason
+ * `Content` rather than the projection. It binds the quill for the same reason
  * `get` does: a `richtext` string is markdown and a `plaintext` string is
  * literal text, so the same stored bytes decode two ways and only the declared
  * type says which.
@@ -766,23 +766,23 @@ export declare class DocumentReader {
 	 * to markdown, every other type verbatim. A bare string is `Addr` shorthand for
 	 * `{ field }`; an absent `addr.field` reads the body markdown. `undefined` for
 	 * an absent field; throws `UnknownField` for a name the schema does not declare,
-	 * `FieldRichtextDecode` for a richtext field holding an undecodable value, and
+	 * `FieldDecode` for a richtext field holding an undecodable value, and
 	 * `IndexOutOfRange` for a bad `addr.card`.
 	 */
 	get(addr: Addr | string): unknown;
 	/**
-	 * Read the content field at `addr` as its canonical `Content` corpus: the
-	 * corpus twin of {@link get}, which projects. Decodes through the codec the
+	 * Read the content field at `addr` as its canonical `Content`: the
+	 * `Content` twin of {@link get}, which projects. Decodes through the codec the
 	 * declared type names (`richtext` as markdown, `plaintext` as literal text),
-	 * so a committed field and a parsed one read back the same corpus and the
+	 * so a committed field and a parsed one read back the same `Content` and the
 	 * storage form stops being the caller's business. An absent `addr.field`
-	 * reads the body corpus. `undefined` for an absent field; throws
+	 * reads the body `Content`. `undefined` for an absent field; throws
 	 * `UnknownField`, `FieldNotContent` for a declared type that is not a content
-	 * leaf, `FieldRichtextDecode` for an undecodable value, and `IndexOutOfRange`.
+	 * leaf, `FieldDecode` for an undecodable value, and `IndexOutOfRange`.
 	 */
 	getContent(addr: Addr | string): Content | undefined;
 	/** The main body's markdown: the quill-free body read. Equals `get({})`. */
-	getBody(): string;
+	bodyMarkdown(): string;
 	/**
 	 * A {@link CardReader} for the composable card at `index`. Index validity is
 	 * checked lazily at read time, so an out-of-range index does not throw here.
@@ -815,9 +815,9 @@ export declare class CardReader {
 	get(name: string): unknown;
 	/**
 	 * Read the content field `name` on this card as its canonical `Content`
-	 * corpus: the card twin of {@link DocumentReader.getContent}.
+	 * `Content`: the card twin of {@link DocumentReader.getContent}.
 	 */
 	getContent(name: string): Content | undefined;
-	/** This card's body markdown: the card twin of {@link DocumentReader.getBody}. */
-	getBody(): string;
+	/** This card's body markdown: the card twin of {@link DocumentReader.bodyMarkdown}. */
+	bodyMarkdown(): string;
 }

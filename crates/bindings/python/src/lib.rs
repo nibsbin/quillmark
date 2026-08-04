@@ -13,7 +13,7 @@ pub use types::{
 
 // Python is Tier 1 + storage + render: field I/O flows through `quill.writer(doc)`
 // / `quill.reader(doc)`. The opaque store and the anchor-preserving content lane
-// (`install` / `revise` / `apply_change` + the `importMarkdown` / `exportMarkdown`
+// (`overwrite` / `revise` / `apply_change` + the `importMarkdown` / `exportMarkdown`
 // / `rebase` / `mapPos` codec) are WASM-only by scope. See prose/canon/BINDINGS.md.
 
 #[pymodule]

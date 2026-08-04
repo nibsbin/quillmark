@@ -231,7 +231,7 @@ impl SessionHandle for PdfformSession {
     /// both succeed. Dirty pages are those carrying a field whose resolved spec
     /// changed; the background never changes, so field deltas are the only
     /// visible delta.
-    fn apply(&mut self, json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> {
+    fn update(&mut self, json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> {
         let field_specs = resolve_field_specs(&self.bound, json_data);
         let flat_pdf = flatten_to_pdf(self.base_pdf.clone(), &field_specs)?;
 

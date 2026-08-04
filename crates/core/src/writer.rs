@@ -82,12 +82,15 @@ impl<'a> TypedWriter<'a> {
         set_all_impl(self.doc.main_mut(), schema, fields)
     }
 
-    /// Revise the main card's body from markdown (edit semantics: surviving
-    /// anchors rebase), discarding the text delta, the receipt-free body write.
-    /// Call [`Card::revise_body`](crate::Card::revise_body) on `doc.main_mut()`
-    /// for the [`Delta`] receipt.
-    pub fn set_body(&mut self, markdown: &str) -> Result<(), EditError> {
-        self.doc.main_mut().revise_body(markdown).map(|_| ())
+    /// Revise the main card's body from markdown: edit semantics, surviving
+    /// anchors rebase, text [`Delta`] returned. This is
+    /// [`Card::revise_body`](crate::Card::revise_body) reached through the
+    /// writer, and it is the content lane's verb rather than a typed one
+    /// because a body carries no field schema to type against. Discard the
+    /// receipt with `let _ = writer.revise_body(md)?;` when caret stability is
+    /// not needed.
+    pub fn revise_body(&mut self, markdown: &str) -> Result<Delta, EditError> {
+        self.doc.main_mut().revise_body(markdown)
     }
 
     /// Revise a content field on the main card from authored text: typed *and*
@@ -200,10 +203,10 @@ impl CardWriter<'_> {
         }
     }
 
-    /// Revise this card's body from markdown (edit semantics), discarding the
-    /// delta: the card twin of [`TypedWriter::set_body`].
-    pub fn set_body(&mut self, markdown: &str) -> Result<(), EditError> {
-        self.card.revise_body(markdown).map(|_| ())
+    /// Revise this card's body from markdown (edit semantics), returning the
+    /// text [`Delta`]: the card twin of [`TypedWriter::revise_body`].
+    pub fn revise_body(&mut self, markdown: &str) -> Result<Delta, EditError> {
+        self.card.revise_body(markdown)
     }
 
     /// Revise a content field on this card from authored text: typed *and*
@@ -333,7 +336,7 @@ card_kinds:
         // Unknown field on the typed path is a typo, not a fallback: it fails
         // here and nothing is written. Opaque storage is the raw `store_field`.
         let err = ed.set("notafield", "x").unwrap_err();
-        assert_eq!(err.variant_name(), "UnknownField");
+        assert_eq!(err.code(), "edit::unknown_field");
         assert!(doc.main().payload().get("notafield").is_none());
     }
 
@@ -370,7 +373,7 @@ card_kinds:
         let errs = ed.set_all([("qty", "3"), ("titel", "oops")]).unwrap_err();
         assert_eq!(errs.len(), 1);
         assert_eq!(errs[0].0, "titel");
-        assert_eq!(errs[0].1.variant_name(), "UnknownField");
+        assert_eq!(errs[0].1.code(), "edit::unknown_field");
         assert!(doc.main().payload().get("qty").is_none());
     }
 
@@ -379,7 +382,7 @@ card_kinds:
         let config = config();
         let mut doc = blank_doc();
         let mut ed = TypedWriter::new(&config, &mut doc);
-        ed.set_body("**hi**").unwrap();
+        ed.revise_body("**hi**").unwrap();
         assert_eq!(doc.main().body_markdown(), "**hi**");
     }
 
@@ -444,7 +447,7 @@ card_kinds:
             .add_card("note", [("stray", "x")], None, None)
             .unwrap_err();
         assert_eq!(errs[0].0, "stray");
-        assert_eq!(errs[0].1.variant_name(), "UnknownField");
+        assert_eq!(errs[0].1.code(), "edit::unknown_field");
         assert_eq!(doc.cards().len(), 0);
     }
 
@@ -472,7 +475,7 @@ card_kinds:
         card_ed.set("body", "**hi**").unwrap();
         // Unknown field on a known card → rejected as a typo.
         let err = card_ed.set("stray", "v").unwrap_err();
-        assert_eq!(err.variant_name(), "UnknownField");
+        assert_eq!(err.code(), "edit::unknown_field");
 
         assert_eq!(doc.cards()[0].field_markdown("body").unwrap().unwrap(), "**hi**");
 
@@ -496,12 +499,12 @@ card_kinds:
         // Unknown name is a typo, not a fallback.
         let mut ed = TypedWriter::new(&config, &mut doc);
         assert_eq!(
-            ed.revise_field("nope", "x").unwrap_err().variant_name(),
-            "UnknownField"
+            ed.revise_field("nope", "x").unwrap_err().code(),
+            "edit::unknown_field"
         );
         // richtext(inline) rejects a multi-block result; the field is unchanged.
         let err = ed.revise_field("subject", "a\n\nb").unwrap_err();
-        assert_eq!(err.variant_name(), "FieldRichtextNotInline");
+        assert_eq!(err.code(), "edit::field_not_inline");
         assert_eq!(doc.main().field_markdown("subject").unwrap().unwrap(), "Hello");
     }
 
@@ -521,8 +524,8 @@ card_kinds:
                 .unwrap()
                 .revise_field("stray", "x")
                 .unwrap_err()
-                .variant_name(),
-            "UnknownField"
+                .code(),
+            "edit::unknown_field"
         );
     }
 }

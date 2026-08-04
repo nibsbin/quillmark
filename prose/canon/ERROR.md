@@ -44,8 +44,8 @@ bindings: the primary diagnostic's message for a single diagnostic, an
 
 Notable codes: `quill::name_mismatch` / `quill::version_mismatch`, the
 document is well-formed but paired with the wrong quill (see
-[VERSIONING.md](VERSIONING.md)); `backend::apply_unsupported`: the default
-for a backend session that does not override the incremental-`apply` seam
+[VERSIONING.md](VERSIONING.md)); `backend::update_unsupported`: the default
+for a backend session that does not override the incremental-`update` seam
 (both built-in backends override it); `backend::format_not_supported`: the
 requested format is outside the backend's `supported_formats`, one code on
 every backend so a caller matches the condition once;
@@ -54,10 +54,10 @@ every backend so a caller matches the condition once;
 **`edit::*`: mutator diagnostics.** Document and card mutators fail with the
 `EditError` enum (`crates/core/src/document/edit.rs`), one namespaced code per
 variant via `EditError::code()` (`edit::invalid_field_name`,
-`edit::unknown_field`, `edit::index_out_of_range`, `edit::field_conform`, …).
+`edit::unknown_field`, `edit::index_out_of_range`, `edit::field_coercion_failed`, …).
 Both bindings stamp that code onto the `Diagnostic` they raise: the mutator
 peer of the render-path namespaces. Identity is the code, never message text:
-routing coercion-vs-undeclared is `edit::field_conform` vs.
+routing coercion-vs-undeclared is `edit::field_coercion_failed` vs.
 `edit::unknown_field`, read off `diagnostics[0].code`.
 
 **`RenderResult`**: successful result carrying artifacts, output format, and non-fatal `Vec<Diagnostic>` warnings
@@ -88,7 +88,7 @@ families:
   diagnostics (font fallback, overfull pages, …) through the same span
   resolution as errors. They are state of the session's current compile:
   exposed via `LiveSession::warnings()` (the `SessionHandle::warnings` seam,
-  default empty), refreshed by each committed `apply`: a failed apply keeps
+  default empty), refreshed by each committed `update`: a failed update keeps
   the last-good compile *and* its warnings, and appended to
   `RenderResult.warnings` on every `render()`, including the one-shot
   `open` → `render` path.
@@ -123,7 +123,7 @@ Typst's `VirtualPath` rejected: asset or package file alike),
 file the world had to skip, which otherwise surfaces only as an unresolved
 `#import` pointing at the plate instead of at the defect. They are properties of the quill, not of a compile, so
 `QuillWorld` holds them and the session serves them ahead of every compile's
-own: an `apply` swaps the compile half and keeps these.
+own: an `update` swaps the compile half and keeps these.
 
 ## Validation message contract
 
@@ -222,7 +222,7 @@ confused with it:
 - **Schema-space coercion anchors**: `CoercionError` keeps its own
   `card_kinds.<kind>.<field>` / bare-field anchors, a schema-declaration
   namespace, not a document path. Where a coercion becomes an
-  `edit::field_conform`, the binding re-anchors it in `DocPath` space at the
+  `edit::field_coercion_failed`, the binding re-anchors it in `DocPath` space at the
   field being written; the raw schema-space anchor does not cross.
 
 Config-space anchors (`$seed.<kind>.<field>`, Quill.yaml schema-literal owner
@@ -234,7 +234,7 @@ labels) ride the `DocPath` serializer with their prefix as a leading segment.
 
 Values keep their JSON shape (`allowed` arrives as a list, `len` as a number) because joining and pluralizing are locale decisions, not the engine's.
 
-**Engine prose never rides under a key.** Where a message bottoms out in text minted per-site (`CoercionError`'s `reason`, the ~20 `parse::invalid_structure` sites, another codec's error), that text stays in `message` and contributes no arg. A consumer's own sentence is then coarser than ours (`edit::field_conform` says which field and which target type, not which of a dozen ways the value failed to become one). That is the contract, not a gap in it: a coarser sentence a consumer owns beats a fluent one half in the wrong language. The full-fidelity alternative (a key holding English) is worse than omission, because the fallback below cannot fire on a key that is present.
+**Engine prose never rides under a key.** Where a message bottoms out in text minted per-site (`CoercionError`'s `reason`, the ~20 `parse::invalid_structure` sites, another codec's error), that text stays in `message` and contributes no arg. A consumer's own sentence is then coarser than ours (`edit::field_coercion_failed` says which field and which target type, not which of a dozen ways the value failed to become one). That is the contract, not a gap in it: a coarser sentence a consumer owns beats a fluent one half in the wrong language. The full-fidelity alternative (a key holding English) is worse than omission, because the fallback below cannot fire on a key that is present.
 
 **Falling back is wholesale.** A formatter whose template needs a key that is absent renders `message`, never a sentence with a hole in it. It takes `hint` from the engine in the same breath: the hint is the same English as the message tail (`ValidationError`'s `Display` appends it verbatim), so translating one and passing the other through ships a two-language diagnostic. Localize a code and you own both sentences; fall back and you take both.
 
@@ -263,25 +263,25 @@ Three outcomes, and the wire tells them apart only with this table in hand, sinc
 | `validation::body_disabled` | `card` | structured |
 | `validation::coercion_failed` | `value`, `target` | structured, coarser |
 | `validation::must_fill` | — | code-determined |
-| `richtext::not_inline` | — | code-determined |
-| `plaintext::not_plain` | — | code-determined |
+| `validation::not_inline` | — | code-determined |
+| `validation::not_plain` | — | code-determined |
 | `edit::invalid_field_name` | `field` | structured |
 | `edit::unknown_field` | `field` | structured |
 | `edit::invalid_kind_name` | `kind` | structured |
 | `edit::index_out_of_range` | `index`, `len` | structured |
 | `edit::value_too_deep` | `max` | structured |
-| `edit::field_richtext_not_inline` | `field` | structured |
+| `edit::field_not_inline` | `field`, `codec` | structured |
 | `edit::field_not_content` | `field`, `declared` | structured |
-| `edit::field_conform` | `field`, `target` | structured, coarser |
-| `edit::field_richtext_decode` | `field` | structured, coarser |
+| `edit::field_coercion_failed` | `field`, `target` | structured, coarser |
+| `edit::field_decode` | `field`, `codec` | structured, coarser |
 | `edit::reserved_kind` | — | code-determined |
 | `edit::import` | — | fallback |
 | `edit::content_apply` | — | fallback |
 | `conform::invalid_field_name` | `field` | structured |
 | `conform::value_too_deep` | `max` | structured |
-| `conform::field_richtext_not_inline` | `field` | structured |
-| `conform::field_conform` | `field`, `target` | structured, coarser |
-| `conform::field_richtext_decode` | `field` | structured, coarser |
+| `conform::field_not_inline` | `field`, `codec` | structured |
+| `conform::field_coercion_failed` | `field`, `target` | structured, coarser |
+| `conform::field_decode` | `field`, `codec` | structured, coarser |
 | `parse::input_too_large` | `size`, `max` | structured |
 | `parse::invalid_quill_reference` | `value` | structured, coarser |
 | `parse::yaml_error_with_location` | `line`, `blockIndex` | structured, coarser |

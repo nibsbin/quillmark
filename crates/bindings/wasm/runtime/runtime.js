@@ -143,7 +143,7 @@ function quillmarkError(code, message, hint) {
 // front-run it with a `QuillmarkError` that names both.
 //
 // They also cover the seams with NO `_assertClass` to front-run: `Engine` and
-// `LiveSession.apply` cross into backend memory as data (`toTree`/`toJson`), so
+// `LiveSession.update` cross into backend memory as data (`toTree`/`toJson`), so
 // a foreign handle there would silently work, at the price of the round-trip
 // above and a quill clone cache split per copy.
 //
@@ -641,8 +641,8 @@ export class Engine {
 	}
 
 	/**
-	 * Open a live render session (canvas preview / per-page paint / `apply`).
-	 * The session is self-contained (it retains what it needs for `apply`), so
+	 * Open a live render session (canvas preview / per-page paint / `update`).
+	 * The session is self-contained (it retains what it needs for `update`), so
 	 * the transient quill and document clones are freed before this returns;
 	 * the caller owns the returned session and must `.free()` it. The `quill`
 	 * and `doc` handles are read synchronously before the first await, so the
@@ -693,15 +693,15 @@ export class Engine {
 
 /**
  * Thin wrapper over a backend's live render session. Reads serve the current
- * compile; `apply(doc)` recompiles in place (transactional: on throw, reads
+ * compile; `update(doc)` recompiles in place (transactional: on throw, reads
  * keep serving the last-good compile). The quill/document clones it was
- * opened from have already been freed: the session retains what `apply`
+ * opened from have already been freed: the session retains what `update`
  * needs.
  *
  * Geometry reads (`regions`, `positionAt`, `locate`) resolve against the
  * current compile; anchoring a caret or selection across edits is the editor's
  * job (its own transaction mapping): re-read geometry after each committed
- * `apply`.
+ * `update`.
  *
  * `paint` writes a COMPLETE page raster (all content visible, no caller-side
  * compositing) for every backend that supports canvas (Typst rasterizes
@@ -709,8 +709,8 @@ export class Engine {
  */
 export class LiveSession {
 	/**
-	 * @param {{ pageCount: number, backendId: string, supportsCanvas: boolean, warnings: any[], apply: Function, render: Function, regions: Function, pageSize: Function, paint: Function, free: Function }} inner backend-build LiveSession (typst or pdfform)
-	 * @param {{ Document: { fromJson(json: string): any } }} mod the session's backend build, used to materialize `apply` documents in its linear memory
+	 * @param {{ pageCount: number, backendId: string, supportsCanvas: boolean, warnings: any[], update: Function, render: Function, regions: Function, pageSize: Function, paint: Function, free: Function }} inner backend-build LiveSession (typst or pdfform)
+	 * @param {{ Document: { fromJson(json: string): any } }} mod the session's backend build, used to materialize `update` documents in its linear memory
 	 */
 	constructor(inner, mod) {
 		this.#inner = inner;
@@ -726,12 +726,12 @@ export class LiveSession {
 	 * @param {Document} doc
 	 * @returns {import('./runtime.d.ts').ChangeSet}
 	 */
-	apply(doc) {
-		requireLocalDoc(doc, 'session.apply(doc)');
+	update(doc) {
+		requireLocalDoc(doc, 'session.update(doc)');
 		let backendDoc = null;
 		try {
 			backendDoc = this.#mod.Document.fromJson(doc.toJson());
-			return this.#inner.apply(backendDoc);
+			return this.#inner.update(backendDoc);
 		} finally {
 			backendDoc?.free();
 		}
@@ -913,7 +913,7 @@ export class DocumentWriter {
 	 * @param {string} markdown
 	 * @returns {void}
 	 */
-	setBody(markdown) {
+	reviseBody(markdown) {
 		this.#doc.revise({}, markdown);
 	}
 	/**
@@ -1034,11 +1034,11 @@ export class CardWriter {
 	}
 	/**
 	 * Set this card's body from markdown (edit semantics), discarding the delta:
-	 * the card twin of {@link DocumentWriter.setBody}.
+	 * the card twin of {@link DocumentWriter.reviseBody}.
 	 * @param {string} markdown
 	 * @returns {void}
 	 */
-	setBody(markdown) {
+	reviseBody(markdown) {
 		this.#doc.revise({ card: this.#index }, markdown);
 	}
 	/**
@@ -1084,7 +1084,7 @@ Quill.prototype.writer = function writer(doc) {
 // interpret by declared type: a richtext field to markdown, a plaintext field to
 // its literal text, every other type verbatim, and an unknown name throws
 // `UnknownField`. A field's markdown lives here, not on the body-only
-// `getMarkdown`. Like the writer classes these hold the caller's handles by
+// `bodyMarkdown`. Like the writer classes these hold the caller's handles by
 // reference, own no WASM object, and have nothing to `free()`.
 
 /**
@@ -1115,7 +1115,7 @@ export class DocumentReader {
 	 * to markdown, every other type verbatim. A bare string is `Addr` shorthand
 	 * for `{ field }`; an absent `addr.field` reads the body markdown. `undefined`
 	 * for an absent field; throws `UnknownField` for a name the schema does not
-	 * declare, `FieldRichtextDecode` for a richtext field holding an undecodable
+	 * declare, `FieldDecode` for a richtext field holding an undecodable
 	 * value, and `IndexOutOfRange` for a bad `addr.card`.
 	 * @param {import('../core/wasm.js').Addr | string} addr
 	 * @returns {unknown}
@@ -1124,14 +1124,14 @@ export class DocumentReader {
 		return this.#doc._readerGet(this.#quill, addr);
 	}
 	/**
-	 * Read the content field at `addr` as its canonical `Content` corpus: the
-	 * corpus twin of {@link get}, which projects. Decodes through the codec the
+	 * Read the content field at `addr` as its canonical `Content`: the
+	 * `Content` twin of {@link get}, which projects. Decodes through the codec the
 	 * declared type names (`richtext` as markdown, `plaintext` as literal text),
-	 * so a field the writer committed as a corpus and one a markdown parse left
+	 * so a field the writer committed as a `Content` and one a markdown parse left
 	 * as an authored string read back the same; no branching on how the
-	 * document was built. An absent `addr.field` reads the body corpus.
+	 * document was built. An absent `addr.field` reads the body `Content`.
 	 * `undefined` for an absent field; throws `UnknownField`, `FieldNotContent`
-	 * for a type that is not a content leaf, `FieldRichtextDecode` for an undecodable
+	 * for a type that is not a content leaf, `FieldDecode` for an undecodable
 	 * value, and `IndexOutOfRange` for a bad `addr.card`.
 	 * @param {import('../core/wasm.js').Addr | string} addr
 	 * @returns {import('../core/wasm.js').Content | undefined}
@@ -1144,7 +1144,7 @@ export class DocumentReader {
 	 * format fact, not a schema fact). Equivalent to `get({})`.
 	 * @returns {string}
 	 */
-	getBody() {
+	bodyMarkdown() {
 		return this.#doc._readerGet(this.#quill, {});
 	}
 	/**
@@ -1163,7 +1163,7 @@ export class DocumentReader {
 
 /**
  * A single composable card bound to its {@link Quill} for typed reads, from
- * {@link DocumentReader.card}. Same `get` / `getBody` verbs as
+ * {@link DocumentReader.card}. Same `get` / `bodyMarkdown` verbs as
  * {@link DocumentReader}, reading the card at its bound index.
  */
 export class CardReader {
@@ -1206,7 +1206,7 @@ export class CardReader {
 	}
 	/**
 	 * Read the content field `name` on this card as its canonical `Content`
-	 * corpus: the card twin of {@link DocumentReader.getContent}.
+	 * `Content`: the card twin of {@link DocumentReader.getContent}.
 	 * @param {string} name
 	 * @returns {import('../core/wasm.js').Content | undefined}
 	 */
@@ -1214,10 +1214,10 @@ export class CardReader {
 		return this.#doc._readerGetContent(this.#quill, { card: this.#index, field: name });
 	}
 	/**
-	 * This card's body markdown: the card twin of {@link DocumentReader.getBody}.
+	 * This card's body markdown: the card twin of {@link DocumentReader.bodyMarkdown}.
 	 * @returns {string}
 	 */
-	getBody() {
+	bodyMarkdown() {
 		return this.#doc._readerGet(this.#quill, { card: this.#index });
 	}
 }

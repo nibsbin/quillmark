@@ -545,7 +545,7 @@ impl QuillConfig {
                             path: path.to_string(),
                             value: "<object>".to_string(),
                             target: "plaintext".to_string(),
-                            reason: format!("not a valid richtext content: {e}"),
+                            reason: format!("not a valid content object: {e}"),
                         },
                     )?;
                     plain_check(&rt)?;
@@ -576,7 +576,7 @@ impl QuillConfig {
                 // An `inline` field additionally requires the resulting content to
                 // be single-`Para` (`richtext(inline)`): editors mount a one-line
                 // surface, so multi-block content is a coercion error here, in
-                // lockstep with the validation-layer `richtext::not_inline` check.
+                // lockstep with the validation-layer `validation::not_inline` check.
                 //
                 // This is the deliberately-lenient sibling of
                 // `document::decode_richtext_value` (used by the strict wire /
@@ -2101,7 +2101,7 @@ fn richtext_inline_error(label: &str) -> Diagnostic {
              headings, lists, quotes, or tables)"
         ),
     )
-    .with_code("richtext::not_inline".to_string())
+    .with_code("validation::not_inline".to_string())
     .with_hint(
         "Reduce the value to one paragraph, or change the field `type:` to `richtext`.".to_string(),
     )

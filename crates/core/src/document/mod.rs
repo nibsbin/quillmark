@@ -35,7 +35,7 @@ pub(crate) fn import_body(md: &str) -> Result<Content, ImportError> {
 /// Which encoding a `decode_richtext_value` failure came from, so a call site
 /// can prefix its diagnostic per encoding without re-deriving the dispatch.
 /// Crate-internal: the schema-bound reader converts it into
-/// [`EditError::FieldRichtextDecode`] before any caller sees it.
+/// [`EditError::FieldDecode`] before any caller sees it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub(crate) enum RichtextDecodeError {
@@ -117,7 +117,7 @@ pub(crate) mod prescan;
 pub mod wire;
 pub(crate) mod yaml_hints;
 
-pub use dto::{peek_schema_version, StorageError, StoredDocument, SCHEMA_V0_93_0};
+pub use dto::{peek_storage_version, StorageError, StoredDocument, STORAGE_V0_93_0};
 pub use edit::EditError;
 pub use meta::{is_valid_kind_name, validate_composable_kind, CardKindError};
 pub use payload::{MetaKey, Payload, PayloadItem};
@@ -233,10 +233,6 @@ impl Card {
     /// therefore canonicalizes the body (e.g. `__b__` → `**b**`).
     pub fn body_markdown(&self) -> String {
         quillmark_content::export::to_markdown(&self.body)
-    }
-
-    pub(crate) fn overwrite_body(&mut self, body: Content) {
-        self.body = body;
     }
 
     pub(crate) fn body_mut(&mut self) -> &mut Content {

@@ -5,7 +5,7 @@ use crate::{
 };
 pub use quillmark_content::{ApplyError, Assoc, ChangeBundle, Delta, IslandOp, LineOp, MarkOp, Op};
 
-/// What a committed [`LiveSession::apply`] changed.
+/// What a committed [`LiveSession::update`] changed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct ChangeSet {
@@ -18,7 +18,7 @@ pub struct ChangeSet {
 }
 
 impl ChangeSet {
-    /// Both facts an apply always reports.
+    /// Both facts an update always reports.
     pub fn new(page_count: usize, dirty_pages: Vec<usize>) -> Self {
         Self {
             page_count,
@@ -44,14 +44,14 @@ pub trait SessionHandle: Send + Sync + 'static {
     /// A backend with a persistent compilation environment recompiles
     /// incrementally; one whose compile is cheap recompiles fully. Either way
     /// the returned [`ChangeSet`] reports the pages the edit visibly changed.
-    /// Default: apply is unsupported.
-    fn apply(&mut self, _json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> {
+    /// Default: update is unsupported.
+    fn update(&mut self, _json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> {
         Err(RenderError::from_diag(
             Diagnostic::new(
                 Severity::Error,
-                "this backend's session does not support apply".to_string(),
+                "this backend's session does not support update".to_string(),
             )
-            .with_code("backend::apply_unsupported".to_string()),
+            .with_code("backend::update_unsupported".to_string()),
         ))
     }
 
@@ -166,7 +166,7 @@ pub trait SessionHandle: Send + Sync + 'static {
     /// Non-fatal diagnostics of the **current compile**. A backend whose
     /// compile emits warnings (Typst: font fallback, overfull pages, …)
     /// overrides this to expose them; they swap with the compile on each
-    /// committed [`apply`](Self::apply), so a failed apply keeps the last-good
+    /// committed [`update`](Self::update), so a failed update keeps the last-good
     /// compile's warnings alongside its document. Default empty: a backend
     /// whose compile cannot warn leaves it.
     fn warnings(&self) -> &[Diagnostic] {
@@ -176,19 +176,19 @@ pub trait SessionHandle: Send + Sync + 'static {
 
 /// Opaque, backend-backed live render session: a persistent compiler that
 /// serves reads (`render`, `paint` seams, `regions`) from its current compile
-/// and takes edits via [`apply`](LiveSession::apply). Reads between edits see
-/// a stable document (`apply` is transactional, swapping the compile only on
+/// and takes edits via [`update`](LiveSession::update). Reads between edits see
+/// a stable document (`update` is transactional, swapping the compile only on
 /// success) so immutability is an invariant between commits, not a type.
 ///
 /// Geometry reads (`regions`, `position_at`, `locate`) resolve against the
 /// current compile. Anchoring a caret or selection across edits is the editor's
 /// job (its own transaction mapping): the session holds no change log and maps
 /// no positions forward; a consumer re-reads geometry after each committed
-/// [`apply`](Self::apply).
+/// [`update`](Self::update).
 pub struct LiveSession {
     inner: Box<dyn SessionHandle>,
     /// The schema authority the session was opened against: what lets
-    /// [`apply`](Self::apply) take a [`Document`] and compile it the way the
+    /// [`update`](Self::update) take a [`Document`] and compile it the way the
     /// first compile was compiled. Held as the config rather than the whole
     /// [`Quill`](crate::Quill) because the compile is a pure config read; the
     /// font and package bytes stay with the backend that needed them.
@@ -199,7 +199,7 @@ impl LiveSession {
     /// Born bound: a session cannot exist without the schema it renders. The
     /// backend has the [`Quill`](crate::Quill) in hand inside
     /// [`Backend::open`](crate::Backend::open), so binding costs it a
-    /// `source.config().clone()` and buys [`apply`](Self::apply) a document
+    /// `source.config().clone()` and buys [`update`](Self::update) a document
     /// verb whose plate is always compiled by *this* config: the pairing is
     /// structural, not an obligation on the caller.
     #[doc(hidden)]
@@ -260,7 +260,7 @@ impl LiveSession {
     /// [`field_at`](Self::field_at).
     ///
     /// Reflects the current compile; re-read after each committed
-    /// [`apply`](Self::apply) to pair a highlight box with the edit it shows.
+    /// [`update`](Self::update) to pair a highlight box with the edit it shows.
     pub fn regions(&self) -> Vec<RenderedRegion> {
         self.inner.regions()
     }
@@ -316,8 +316,8 @@ impl LiveSession {
     }
 
     /// Non-fatal diagnostics of the session's **current compile**: set at
-    /// `Backend::open` and refreshed by each committed [`apply`](Self::apply);
-    /// a failed apply keeps the last-good compile *and* its warnings. Also
+    /// `Backend::open` and refreshed by each committed [`update`](Self::update);
+    /// a failed update keeps the last-good compile *and* its warnings. Also
     /// appended to [`RenderResult::warnings`] on each
     /// [`render`](Self::render) call. Exposed for consumers (e.g. canvas
     /// previews) that never call `render()`.
@@ -350,13 +350,13 @@ impl LiveSession {
     /// same pipeline as the first compile ([`QuillConfig::compile_checked`]),
     /// so an edit cannot reach the backend under a schema the session was not
     /// opened against; a mismatch errors before anything is applied and leaves
-    /// the compile live like any other failed apply.
-    pub fn apply(&mut self, doc: &Document) -> Result<ChangeSet, RenderError> {
+    /// the compile live like any other failed update.
+    pub fn update(&mut self, doc: &Document) -> Result<ChangeSet, RenderError> {
         let json_data = self.config.compile_checked(doc)?;
-        self.inner.apply(&json_data)
+        self.inner.update(&json_data)
     }
 
-    /// [`apply`](Self::apply) with the schema layer cut away: plate data
+    /// [`update`](Self::update) with the schema layer cut away: plate data
     /// straight to the backend, no `$quill` check and no compile.
     ///
     /// For a backend's own acceptance tests, which drive a session against
@@ -367,12 +367,12 @@ impl LiveSession {
     /// Behind the `internal-test-seam` feature rather than `#[doc(hidden)]`
     /// alone: the attribute hides a method from rustdoc and leaves it one
     /// identifier away in every consumer build, and this one carries the
-    /// obligation [`apply`](Self::apply) exists to discharge. Off by default,
+    /// obligation [`update`](Self::update) exists to discharge. Off by default,
     /// so the seam is absent unless a crate asks for it.
     #[cfg(feature = "internal-test-seam")]
     #[doc(hidden)]
-    pub fn apply_data(&mut self, json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> {
-        self.inner.apply(json_data)
+    pub fn update_data(&mut self, json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> {
+        self.inner.update(json_data)
     }
 }
 
@@ -399,7 +399,7 @@ main:
         QuillConfig::from_yaml(QUILL_YAML).expect("valid quill")
     }
 
-    /// A document that pairs with [`config`], so `apply` reaches the handle.
+    /// A document that pairs with [`config`], so `update` reaches the handle.
     fn doc() -> Document {
         Document::new(QuillReference::from_str("memo@1.0.0").unwrap())
     }
@@ -432,7 +432,7 @@ main:
     }
 
     /// A warning-emitting session: `warnings` reflects the current compile
-    /// (one warning per committed apply), and `render` succeeds empty.
+    /// (one warning per committed update), and `render` succeeds empty.
     struct WarningHandle {
         current: Vec<Diagnostic>,
         applies: usize,
@@ -444,7 +444,7 @@ main:
         fn page_count(&self) -> usize {
             1
         }
-        fn apply(&mut self, _: &serde_json::Value) -> Result<ChangeSet, RenderError> {
+        fn update(&mut self, _: &serde_json::Value) -> Result<ChangeSet, RenderError> {
             self.applies += 1;
             self.current = vec![Diagnostic::new(
                 Severity::Warning,
@@ -461,7 +461,7 @@ main:
     }
 
     /// `LiveSession::warnings` reflects the handle's current compile
-    /// (refreshed by a committed apply) and `render` appends the same set to
+    /// (refreshed by a committed update) and `render` appends the same set to
     /// `RenderResult::warnings`.
     #[test]
     fn warnings_track_current_compile() {
@@ -475,7 +475,7 @@ main:
         );
         assert_eq!(session.warnings()[0].message, "open-time");
 
-        session.apply(&doc()).unwrap();
+        session.update(&doc()).unwrap();
         assert_eq!(session.warnings()[0].message, "warning of compile 1");
 
         let result = session.render(&RenderOptions::default()).unwrap();

@@ -456,7 +456,7 @@ fn test_card_remove_field_invalid_name_throws() {
     }
 }
 
-// ── Card::replace_body ───────────────────────────────────────────────────────
+// ── Card::revise_body ───────────────────────────────────────────────────────
 
 #[test]
 fn test_card_set_body() {
@@ -479,10 +479,10 @@ fn test_replace_body_reports_import_error() {
     }
 }
 
-/// `install_body` installs a pre-built content verbatim: value semantics, no
+/// `overwrite_body` installs a pre-built content verbatim: value semantics, no
 /// markdown import, lossless for content-only marks a markdown projection drops.
 #[test]
-fn test_install_body_sets_directly() {
+fn test_overwrite_body_sets_directly() {
     use quillmark_content::model::{Mark, MarkKind};
 
     let mut content = quillmark_content::import::from_markdown("underlined body").unwrap();
@@ -491,7 +491,7 @@ fn test_install_body_sets_directly() {
     content.normalize();
 
     let mut card = Card::new("note").unwrap();
-    card.install_body(content.clone());
+    card.overwrite_body(content.clone());
     assert_eq!(card.body(), &content);
     assert!(card
         .body()
@@ -500,11 +500,11 @@ fn test_install_body_sets_directly() {
         .any(|m| matches!(m.kind, MarkKind::Underline)));
 }
 
-/// `install_field` installs a pre-built content into a richtext field verbatim:
-/// the field-level twin of `install_body`, lossless for content-only marks, and
+/// `overwrite_field` installs a pre-built content into a richtext field verbatim:
+/// the field-level twin of `overwrite_body`, lossless for content-only marks, and
 /// reads back through `field_richtext`. A malformed name is rejected.
 #[test]
-fn test_install_field_sets_directly() {
+fn test_overwrite_field_sets_directly() {
     use quillmark_content::model::{Mark, MarkKind};
 
     let mut content = quillmark_content::import::from_markdown("underlined intro").unwrap();
@@ -512,16 +512,16 @@ fn test_install_field_sets_directly() {
     content.normalize();
 
     let mut card = Card::new("note").unwrap();
-    card.install_field("intro", content.clone()).unwrap();
+    card.overwrite_field("intro", content.clone()).unwrap();
     let read = card.field_richtext("intro").unwrap().unwrap();
     assert_eq!(read, content);
     assert!(read.marks.iter().any(|m| matches!(m.kind, MarkKind::Underline)));
 
     assert_eq!(
-        card.install_field("$bad", quillmark_content::Content::empty())
+        card.overwrite_field("$bad", quillmark_content::Content::empty())
             .unwrap_err()
-            .variant_name(),
-        "InvalidFieldName"
+            .code(),
+        "edit::invalid_field_name"
     );
 }
 
@@ -543,7 +543,7 @@ fn test_revise_field_diff_imports_and_returns_delta() {
     base.marks
         .push(Mark::new(6, 12, MarkKind::Anchor { id: "c1".into() }));
     base.normalize();
-    card.install_field("intro", base).unwrap();
+    card.overwrite_field("intro", base).unwrap();
     card.revise_field("intro", "why keep the target here").unwrap();
     let read = card.field_richtext("intro").unwrap().unwrap();
     assert!(read
@@ -555,14 +555,14 @@ fn test_revise_field_diff_imports_and_returns_delta() {
     card.store_field("count", crate::QuillValue::from_json(serde_json::json!(3)))
         .unwrap();
     assert_eq!(
-        card.revise_field("count", "x").unwrap_err().variant_name(),
-        "FieldRichtextDecode"
+        card.revise_field("count", "x").unwrap_err().code(),
+        "edit::field_decode"
     );
 }
 
 /// `revise_field_checked` is both anchor-preserving (rebases surviving anchors,
 /// like `revise_field`) and schema-enforcing (rejects a multi-block result on a
-/// `richtext(inline)` schema with `FieldRichtextNotInline`, like `commit_field`),
+/// `richtext(inline)` schema with `FieldNotInline`, like `commit_field`),
 /// returning the text delta: the typed, anchor-preserving field write.
 #[test]
 fn test_revise_field_checked_preserves_anchors_and_enforces_inline() {
@@ -589,7 +589,7 @@ fn test_revise_field_checked_preserves_anchors_and_enforces_inline() {
     base.marks
         .push(Mark::new(6, 12, MarkKind::Anchor { id: "c1".into() }));
     base.normalize();
-    card.install_field("subject", base).unwrap();
+    card.overwrite_field("subject", base).unwrap();
     card.revise_field_checked("subject", "why keep the target here", &inline)
         .unwrap();
     let read = card.field_richtext("subject").unwrap().unwrap();
@@ -601,13 +601,13 @@ fn test_revise_field_checked_preserves_anchors_and_enforces_inline() {
     );
 
     // A multi-block result fails the inline check on the *diffed* content with the
-    // same FieldRichtextNotInline surface commit_field raises, and the field is
+    // same FieldNotInline surface commit_field raises, and the field is
     // left unchanged (the schema check runs before the store).
     let before = card.field_markdown("subject").unwrap().unwrap();
     let err = card
         .revise_field_checked("subject", "line one\n\nline two", &inline)
         .unwrap_err();
-    assert_eq!(err.variant_name(), "FieldRichtextNotInline");
+    assert_eq!(err.code(), "edit::field_not_inline");
     assert_eq!(card.field_markdown("subject").unwrap().unwrap(), before);
 
     // A block (non-inline) richtext schema accepts multi-block content.
@@ -622,7 +622,7 @@ fn test_revise_field_checked_preserves_anchors_and_enforces_inline() {
 /// `commit_field` on a richtext field accepts a **canonical content object**,
 /// stores it as the field's canonical value (lossless for content-only marks),
 /// and reads back through `field_richtext`: the typed door beside the
-/// value-semantics `install_field` / `body`.
+/// value-semantics `overwrite_field` / `body`.
 #[test]
 fn test_commit_field_richtext_content_object_reads_back() {
     use quillmark_content::model::{Mark, MarkKind};
@@ -647,7 +647,7 @@ fn test_commit_field_richtext_content_object_reads_back() {
 /// A richtext `commit_field` accepts a **markdown string** (imported) and passes
 /// `null` through (reading back as the empty content); `field_markdown` is the
 /// projection twin of `body_markdown`. A non-content object / other shape is
-/// `EditError::FieldRichtextDecode`.
+/// `EditError::FieldDecode`.
 #[test]
 fn test_commit_field_richtext_markdown_null_and_rejects_bad() {
     let mut card = Card::new("note").unwrap();
@@ -663,20 +663,20 @@ fn test_commit_field_richtext_markdown_null_and_rejects_bad() {
     assert_eq!(
         commit_richtext(&mut card, "intro", &serde_json::json!({ "not": "a content" }), false)
             .unwrap_err()
-            .variant_name(),
-        "FieldRichtextDecode"
+            .code(),
+        "edit::field_decode"
     );
     assert_eq!(
         commit_richtext(&mut card, "intro", &serde_json::json!(42), false)
             .unwrap_err()
-            .variant_name(),
-        "FieldRichtextDecode"
+            .code(),
+        "edit::field_decode"
     );
 }
 
 /// A richtext(inline) `commit_field` commits the `richtext(inline)` check at
 /// write: a single-`Para` content stores, a multi-block content is
-/// `EditError::FieldRichtextNotInline`, the write is the strict commit, not a
+/// `EditError::FieldNotInline`, the write is the strict commit, not a
 /// deferred render failure.
 #[test]
 fn test_commit_field_richtext_inline_enforced_at_write() {
@@ -694,12 +694,12 @@ fn test_commit_field_richtext_inline_enforced_at_write() {
         true,
     )
     .unwrap_err();
-    assert_eq!(err.variant_name(), "FieldRichtextNotInline");
+    assert_eq!(err.code(), "edit::field_not_inline");
     assert_eq!(card.field_markdown("title").unwrap().unwrap(), "A single line");
 }
 
 /// A multi-block element committed to an `array` of `richtext(inline)` items
-/// classifies as `FieldRichtextNotInline`, not the generic `FieldConform`: the
+/// classifies as `FieldNotInline`, not the generic `FieldCoercionFailed`: the
 /// mapper keys on the coercion target (`richtext(inline)`), so the richtext
 /// constraint is honored even when it is nested under an array.
 #[test]
@@ -723,7 +723,7 @@ fn test_commit_field_array_of_inline_richtext_reports_not_inline() {
     .unwrap();
 
     // A two-block element fails the inline check, surfaced as the richtext
-    // variant (not FieldConform) despite the field's own type being Array.
+    // variant (not FieldCoercionFailed) despite the field's own type being Array.
     let err = card
         .commit_field(
             "refs",
@@ -731,14 +731,14 @@ fn test_commit_field_array_of_inline_richtext_reports_not_inline() {
             &schema,
         )
         .unwrap_err();
-    assert_eq!(err.variant_name(), "FieldRichtextNotInline");
+    assert_eq!(err.code(), "edit::field_not_inline");
 }
 
 // ── commit_field (typed write) ───────────────────────────────────────────────
 
 /// `commit_field` on a scalar schema stores the coerced canonical (`"3"` → `3`);
 /// a strict write drops the render floor's cross-type coercions (a `bool` for an
-/// `integer` field) and fails a shape mismatch with `EditError::FieldConform`.
+/// `integer` field) and fails a shape mismatch with `EditError::FieldCoercionFailed`.
 #[test]
 fn test_commit_field_scalar_strict() {
     use crate::quill::{FieldSchema, FieldType};
@@ -758,14 +758,14 @@ fn test_commit_field_scalar_strict() {
     let err = card
         .commit_field("qty", QuillValue::from_json(serde_json::json!(true)), &int_schema)
         .unwrap_err();
-    assert_eq!(err.variant_name(), "FieldConform");
+    assert_eq!(err.code(), "edit::field_coercion_failed");
 
     // A non-numeric string is a mismatch and fails now, not at render.
     assert_eq!(
         card.commit_field("qty", QuillValue::from_json(serde_json::json!("x")), &int_schema)
             .unwrap_err()
-            .variant_name(),
-        "FieldConform"
+            .code(),
+        "edit::field_coercion_failed"
     );
     // The good value is untouched by the failed writes.
     assert_eq!(
@@ -775,7 +775,7 @@ fn test_commit_field_scalar_strict() {
 }
 
 /// `commit_field` on an `object` schema fails a non-object value with
-/// `FieldConform`, where the render floor would defer to validation.
+/// `FieldCoercionFailed`, where the render floor would defer to validation.
 #[test]
 fn test_commit_field_object_rejects_non_object() {
     use crate::quill::{FieldSchema, FieldType};
@@ -785,8 +785,8 @@ fn test_commit_field_object_rejects_non_object() {
     assert_eq!(
         card.commit_field("meta", QuillValue::from_json(serde_json::json!(42)), &schema)
             .unwrap_err()
-            .variant_name(),
-        "FieldConform"
+            .code(),
+        "edit::field_coercion_failed"
     );
 }
 
@@ -800,8 +800,8 @@ fn test_commit_field_rejects_bad_name() {
     assert_eq!(
         card.commit_field("$bad", QuillValue::from_json(serde_json::json!(1)), &schema)
             .unwrap_err()
-            .variant_name(),
-        "InvalidFieldName"
+            .code(),
+        "edit::invalid_field_name"
     );
 }
 
@@ -930,7 +930,7 @@ fn test_revise_body_rebases_anchor() {
     base.marks.push(Mark::new(9, 15, MarkKind::Anchor { id: "c1".into() }));
     base.normalize();
     let mut card = Card::new("note").unwrap();
-    card.install_body(base);
+    card.overwrite_body(base);
 
     card.revise_body("why keep the target word").unwrap();
     let anchor = card
@@ -1000,19 +1000,19 @@ fn test_apply_body_change_reports_out_of_range() {
     }
 }
 
-/// `apply_field_richtext_change` splices a bundle into a richtext field's stored
+/// `apply_field_change` splices a bundle into a richtext field's stored
 /// content and re-stores it: the field-path twin of `apply_body_change`.
 /// Identity marks (a strong span applied post-delta) survive on the re-stored
 /// content, which is what makes anchors persist on field content across edits.
 #[test]
-fn test_apply_field_richtext_change_splices_and_persists() {
+fn test_apply_field_change_splices_and_persists() {
     use crate::{ChangeBundle, MarkOp};
     use quillmark_content::delta::diff;
     use quillmark_content::model::MarkKind;
 
     let mut card = Card::new("note").unwrap();
     commit_richtext(&mut card, "intro", &serde_json::json!("abc"), false).unwrap();
-    card.apply_field_richtext_change(
+    card.apply_field_change(
         "intro",
         &ChangeBundle {
             delta: diff("abc", "abXc"),
@@ -1033,29 +1033,46 @@ fn test_apply_field_richtext_change_splices_and_persists() {
     assert!(rt.marks.iter().any(|m| matches!(m.kind, MarkKind::Strong)));
 }
 
-/// `apply_field_richtext_change` on an absent or non-richtext field is a
-/// `FieldRichtextDecode` error, not a panic: the caller must address a field it
-/// knows is richtext.
+/// `apply_field_change` on a present non-content field is a `FieldDecode`
+/// error, not a panic: the caller addresses a field it knows is content.
 #[test]
-fn test_apply_field_richtext_change_rejects_non_richtext() {
+fn test_apply_field_change_rejects_non_content() {
+    let mut card = Card::new("note").unwrap();
+    card.store_field("count", 3).unwrap();
+    assert_eq!(
+        card.apply_field_change("count", &crate::ChangeBundle::default())
+            .unwrap_err()
+            .code(),
+        "edit::field_decode"
+    );
+}
+
+/// An absent field splices against the empty content, as `revise_field` diffs
+/// against it. A bundle that expected content still fails, on the condition it
+/// hit: the text delta declares its base length, so a stale splice is
+/// `ContentApply` and leaves the field uncreated.
+#[test]
+fn test_apply_field_change_treats_an_absent_field_as_empty() {
     use crate::ChangeBundle;
 
     let mut card = Card::new("note").unwrap();
-    let identity = ChangeBundle::default();
-    assert_eq!(
-        card.apply_field_richtext_change("missing", &identity)
-            .unwrap_err()
-            .variant_name(),
-        "FieldRichtextDecode"
-    );
+    card.apply_field_change("intro", &ChangeBundle::default())
+        .expect("a zero-base bundle lands on the empty content");
+    assert_eq!(card.field_markdown("intro").unwrap().unwrap(), "");
 
-    card.store_field("count", 3).unwrap();
+    let stale = ChangeBundle {
+        delta: quillmark_content::Delta {
+            ops: vec![quillmark_content::delta::Op::Retain(4)],
+        },
+        ..ChangeBundle::default()
+    };
     assert_eq!(
-        card.apply_field_richtext_change("count", &identity)
+        card.apply_field_change("missing", &stale)
             .unwrap_err()
-            .variant_name(),
-        "FieldRichtextDecode"
+            .code(),
+        "edit::content_apply"
     );
+    assert!(card.payload().get("missing").is_none());
 }
 
 // ── Invariant check: sequence of mutations ───────────────────────────────────

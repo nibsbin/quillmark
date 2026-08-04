@@ -59,10 +59,12 @@ pub enum ValidationError {
         card: String,
     },
 
-    /// A `richtext(inline)` field whose content is not single-`Para` (a block, a
+    /// An `inline: true` field whose content is not a single line (a block, a
     /// list/quote container, or an island). Same fatality class as
-    /// `TypeMismatch`: the value is well-typed richtext but the wrong *shape*
-    /// for an inline field.
+    /// `TypeMismatch`: the value is well-typed content but the wrong *shape*
+    /// for an inline field. Both prose codecs declare `inline`, so this is one
+    /// condition under one code, the validation twin of
+    /// [`EditError::FieldNotInline`](crate::EditError::FieldNotInline).
     NotInline {
         path: String,
     },
@@ -131,8 +133,8 @@ impl std::fmt::Display for ValidationError {
             ValidationError::NotInline { path } => {
                 write!(
                     f,
-                    "field `{path}` is `richtext(inline)` but its content is not a single \
-                     paragraph: {hint}",
+                    "field `{path}` declares `inline` but its content is not a single \
+                     line: {hint}",
                     hint = not_inline_hint(),
                 )
             }
@@ -168,10 +170,11 @@ fn body_disabled_hint() -> &'static str {
     "remove the body content or set `body.enabled: true` on the card kind"
 }
 
-/// Actionable exit clause for a `NotInline` error.
+/// Actionable exit clause for a `NotInline` error. Codec-neutral: both prose
+/// types declare `inline`, and the way out is the same for either.
 fn not_inline_hint() -> &'static str {
-    "keep the value to a single paragraph (no blank lines, headings, lists, \
-     quotes, or tables), or change the schema's `type:` to `richtext`"
+    "keep the value to a single line (no blank lines, headings, lists, \
+     quotes, or tables), or drop `inline: true` from the schema"
 }
 
 /// Actionable exit clause for a `NotPlain` error.
@@ -205,8 +208,8 @@ impl ValidationError {
             ValidationError::FormatViolation { .. } => "validation::format_violation",
             ValidationError::UnknownCard { .. } => "validation::unknown_card",
             ValidationError::BodyDisabled { .. } => "validation::body_disabled",
-            ValidationError::NotInline { .. } => "richtext::not_inline",
-            ValidationError::NotPlain { .. } => "plaintext::not_plain",
+            ValidationError::NotInline { .. } => "validation::not_inline",
+            ValidationError::NotPlain { .. } => "validation::not_plain",
         }
     }
 

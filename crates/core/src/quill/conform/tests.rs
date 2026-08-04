@@ -237,7 +237,7 @@ fn non_conforming_value_rests_authored_with_a_diagnostic() {
         .iter()
         .find(|d| d.code.as_deref().is_some_and(|c| c.starts_with("conform::")))
         .expect("a conform diagnostic");
-    assert_eq!(diag.code.as_deref(), Some("conform::field_richtext_decode"));
+    assert_eq!(diag.code.as_deref(), Some("conform::field_decode"));
     assert_eq!(diag.path.as_deref(), Some("main.subject"));
     assert_eq!(
         doc.main().payload().get("subject").unwrap().as_json(),
@@ -266,7 +266,7 @@ fn non_conforming_value_rests_authored_with_a_diagnostic() {
     let diags = quill.conform(&mut legacy).expect("the quill matches");
     assert_eq!(
         diags[0].code.as_deref(),
-        Some("conform::field_richtext_decode")
+        Some("conform::field_decode")
     );
     assert_eq!(bytes(&legacy), before, "the value is left exactly as stored");
 }
@@ -424,7 +424,7 @@ fn a_0_92_0_row_migrates_then_converges() {
     assert!(diags.is_empty(), "{diags:?}");
     assert!(
         doc.main().payload().get("subject").unwrap().as_json().is_object(),
-        "the authored richtext string converges to the corpus"
+        "the authored richtext string converges to the canonical content object"
     );
     assert_eq!(
         doc.main().payload().get("note").unwrap().as_json(),

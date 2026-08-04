@@ -59,7 +59,7 @@ pub use session::{
 };
 
 /// The canonical content model: re-exported so consumers of the
-/// document mutators ([`Card::install_body`], [`Card::apply_body_change`])
+/// document mutators ([`Card::overwrite_body`], [`Card::apply_body_change`])
 /// can name the type without depending on `quillmark-content` directly.
 pub use quillmark_content::Content;
 

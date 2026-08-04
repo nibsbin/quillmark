@@ -332,8 +332,8 @@ impl SessionHandle for TypstSession {
     /// document, placements, hashes, and compile warnings swap together only
     /// after the compile *and* placement extraction succeed: on `Err` every
     /// read keeps serving the last-good compile and its warnings (the world
-    /// may hold the failed source; the next `apply` overwrites it).
-    fn apply(&mut self, json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> {
+    /// may hold the failed source; the next `update` overwrites it).
+    fn update(&mut self, json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> {
         let data = transformed_data(&self.schema_meta, json_data)?;
         let mut windows = self
             .world

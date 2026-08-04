@@ -117,19 +117,19 @@
       `result.effectiveDensityScale` is the density actually applied (a clamped
       page renders soft at the same `canvas.style` size).
     - `pageCount` and `pageSize(page)` reflect the session's current compile:
-      stable between edits, but re-read them after a committed `apply(doc)`,
+      stable between edits, but re-read them after a committed `update(doc)`,
       which recompiles in place and can change the page count
       (`ChangeSet.pageCount`).
     - In an edit loop, repaint `dirtyPages ∩ visible` rather than every page:
 
       ```javascript
       function onEdit(editedDoc) {
-        const { pageCount, dirtyPages } = session.apply(editedDoc);
+        const { pageCount, dirtyPages } = session.update(editedDoc);
         for (const p of dirtyPages) if (isVisible(p)) renderPage(canvases[p], p);
       }
       ```
 
-      `apply` is transactional: if it throws, the canvas still shows the
+      `update` is transactional: if it throws, the canvas still shows the
       last-good compile, so keep it up and surface the diagnostics.
 
     Full design rationale: [PREVIEW.md](https://github.com/borb-sh/quillmark/blob/main/prose/canon/PREVIEW.md).

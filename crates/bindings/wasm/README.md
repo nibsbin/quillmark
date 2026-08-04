@@ -107,7 +107,7 @@ The **bound door**, and the primary ingestion path. `quill.parse` is
 `Document.fromMarkdown` followed by `conform`: the returned document's declared
 content fields rest at one form per codec (a `richtext` field as the canonical
 content object, a `plaintext` field as its literal string), so `getStored`
-answers "corpus or string?" by the field's declared codec rather than by how the
+answers "content object or string?" by the field's declared codec rather than by how the
 document was built. Parse warnings and the `conform::*` warnings both ride
 `doc.warnings`.
 
@@ -199,13 +199,13 @@ and writes that same value.
 To detect a version mismatch before parsing, use the static accessors:
 
 ```ts
-const v = Document.schemaVersionOf(blob); // undefined | string
-if (v && v !== Document.currentSchemaVersion()) {
+const v = Document.storageVersionOf(blob); // undefined | string
+if (v && v !== Document.currentStorageVersion()) {
   // payload is from a build with a different model version
 }
 ```
 
-`schemaVersionOf` does not validate the payload: it only reads the
+`storageVersionOf` does not validate the payload: it only reads the
 `schema` field, returning `undefined` for non-JSON, non-objects, or
 payloads that don't carry one. Use it to distinguish "wrong version" from
 "corrupt" when `fromJson` throws.
@@ -285,11 +285,11 @@ main card's `qty`, `doc.storeField({ card: 2, field: "qty" }, 3)` a composable
 card's. Reads are total over the field axis (`getStored` → `undefined`, `isFill` → `false` for
 an absent field; only an out-of-range card throws); field writes throw on a body
 address. `getStored` is the verbatim transport read, distinct from the interpreted
-`quill.reader(doc).get`; `getMarkdown` is the body markdown read (a `CardAddr`; a field's
+`quill.reader(doc).get`; `bodyMarkdown` is the body markdown read (a `CardAddr`; a field's
 markdown is read through `quill.reader(doc).get(field)`). A content field's stored
 form follows how the document was built (a canonical content object when the
 typed writer committed it, the authored string when a markdown parse produced
-it), so for the corpus either way read `quill.reader(doc).getContent(addr)`, which
+it), so for the `Content` either way read `quill.reader(doc).getContent(addr)`, which
 decodes through the codec the field's declared type names. Card-scoped verbs take a
 `CardAddr` (`{ card? }`) first: `doc.getExt({ card: 2 })`, and the batch below.
 
@@ -309,7 +309,7 @@ writes go through the schema-bound writer while the quill-free opaque store sits
 on `Document` itself (**store** = verbatim, **set** = typed):
 
 - **`quill.writer(doc)`: the typed door whenever a quill is in hand.** Bind the
-  schema once and issue bare `set` / `setAll` / `setBody` / `reviseField` /
+  schema once and issue bare `set` / `setAll` / `reviseBody` / `reviseField` /
   `addCard` / `card(i)`. Each resolves the field's schema `type`, coerces the
   value to its canonical form (`"3"` → `3`, a markdown string → a richtext
   content), and **fails now** on a mismatch instead of at render. A name the schema
@@ -362,16 +362,16 @@ write.
 ```ts
 const v = quill.reader(doc);
 v.get("subject");                                   // by declared type: richtext → markdown, plaintext → literal text
-v.getContent("subject");                            // the same read as a Content corpus, whichever lane stored it
-v.getBody();                                        // the main body markdown (quill-free)
+v.getContent("subject");                            // the same read as a `Content`, whichever lane stored it
+v.bodyMarkdown();                                        // the main body markdown (quill-free)
 v.card(0).get("body");                              // a card field, resolved by its $kind
 ```
 
-`get` projects and `getContent` returns the corpus; both decode through the codec
+`get` projects and `getContent` returns the `Content`; both decode through the codec
 the field's **declared type** names, which is why they bind the quill and the
 verbatim `doc.getStored` does not. An undeclared name throws `UnknownField`, a
 type that is not a content leaf throws `FieldNotContent`, and an undecodable
-value throws `FieldRichtextDecode`; an absent field reads back `undefined`.
+value throws `FieldDecode`; an absent field reads back `undefined`.
 
 ### `engine.render(quill, parsed, opts?)` vs. `engine.open(quill, parsed)`
 
@@ -515,7 +515,7 @@ compilation failures. The same shape applies to every throw site:
 - `Document` mutators (`storeField`, the writer's `set`, etc.): mutator
   failures carry a namespaced `edit::*` `code` on `diagnostics[0]`
   (`edit::invalid_field_name`, `edit::unknown_field`, `edit::index_out_of_range`,
-  `edit::field_conform`, …). Route on `diagnostics[0].code`, never on message
+  `edit::field_coercion_failed`, …). Route on `diagnostics[0].code`, never on message
   text.
 - `engine.render` / `session.render`: backend compilation failures and
   validation errors.

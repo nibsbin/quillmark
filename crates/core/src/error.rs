@@ -738,16 +738,20 @@ mod args_canon {
                 depth: 9,
                 max: 8,
             }),
-            EditError::FieldRichtextDecode {
+            EditError::FieldDecode {
                 field: "body".into(),
+                codec: crate::document::edit::CODEC_RICHTEXT.into(),
                 message: "x".into(),
             },
             EditError::FieldNotContent {
                 field: "qty".into(),
                 declared: "integer".into(),
             },
-            EditError::FieldRichtextNotInline("body".into()),
-            EditError::FieldConform {
+            EditError::FieldNotInline {
+                field: "body".into(),
+                codec: crate::document::edit::CODEC_PLAINTEXT.into(),
+            },
+            EditError::FieldCoercionFailed {
                 field: "n".into(),
                 target: "integer".into(),
                 message: "x".into(),
@@ -766,12 +770,16 @@ mod args_canon {
         for e in [
             EditError::InvalidFieldName("9bad".into()),
             EditError::ValueTooDeep { max: 8 },
-            EditError::FieldRichtextNotInline("body".into()),
-            EditError::FieldRichtextDecode {
+            EditError::FieldNotInline {
                 field: "body".into(),
+                codec: crate::document::edit::CODEC_RICHTEXT.into(),
+            },
+            EditError::FieldDecode {
+                field: "body".into(),
+                codec: crate::document::edit::CODEC_PLAINTEXT.into(),
                 message: "x".into(),
             },
-            EditError::FieldConform {
+            EditError::FieldCoercionFailed {
                 field: "n".into(),
                 target: "integer".into(),
                 message: "x".into(),

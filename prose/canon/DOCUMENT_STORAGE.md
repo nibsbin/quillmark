@@ -220,7 +220,7 @@ Three rules bound the openness:
   takes the module down rather than an error the host can catch. The cap is the
   one `serde_json::from_str` already enforces, so it refuses nothing a stored
   blob can carry. It is stated on its own because the `Value` lane: the
-  host-authored one, which `install` reaches: is not parsed from a string, so
+  host-authored one, which `overwrite` reaches: is not parsed from a string, so
   nothing else bounds it. A bag is refused where the decoder reads it off the
   wire, before it is cloned into the model; `Content::validate` restates it as
   `Invariant::JsonTooDeep` for content that never went through a decoder. This
@@ -247,7 +247,7 @@ Three rules bound the openness:
     - **The authored lane rejects it.** `attrs` beside a built-in discriminator
       is a shape error (`serial::line_kind_from_authored_value` and its two
       twins for the op wire, `serial::from_authored_value` for a whole content).
-      An op or an `install` is host-authored now, so that shape means a stale
+      An op or an `overwrite` is host-authored now, so that shape means a stale
       copy of the built-in list, never a document from the past. Reads that hand
       back stored content (`exportMarkdown`, `rebase`) are storage-lane, not
       this one. The same split governs an unreadable **table-cell mark**.
@@ -528,7 +528,7 @@ version, so retirement is reserved for shapes with no live rows.
 
 ## Gotchas
 
-- The schema version is a hand-set constant (`SCHEMA_V0_93_0`), **not**
+- The schema version is a hand-set constant (`STORAGE_V0_93_0`), **not**
   `CARGO_PKG_VERSION`: bumping it is a deliberate act tied to a model change.
 - Unknown schema versions are rejected on read, never silently ignored.
 - DTO type names carry version suffixes with underscores

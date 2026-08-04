@@ -105,7 +105,7 @@ impl QuillConfig {
     /// the render door's whole preamble, in the one place that owns it. Every
     /// door that turns a document into plate data for *this* schema goes
     /// through here (`Quillmark::open` for a session's first compile,
-    /// [`LiveSession::apply`](crate::LiveSession::apply) for each edit), so
+    /// [`LiveSession::update`](crate::LiveSession::update) for each edit), so
     /// the pairing cannot be checked at one and skipped at the other.
     ///
     /// [`compile_data`](Self::compile_data) stays available unchecked for a

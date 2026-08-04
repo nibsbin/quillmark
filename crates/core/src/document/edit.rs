@@ -55,6 +55,15 @@ pub fn is_valid_field_name(name: &str) -> bool {
     true
 }
 
+/// The `richtext` codec, as [`EditError::FieldDecode`] and
+/// [`EditError::FieldNotInline`] name it on the wire. The spelling is the
+/// `richtext` schema keyword and is frozen with the diagnostic arg, not a
+/// display string.
+pub const CODEC_RICHTEXT: &str = "richtext";
+
+/// The `plaintext` codec. See [`CODEC_RICHTEXT`].
+pub const CODEC_PLAINTEXT: &str = "plaintext";
+
 /// Errors returned by document and card mutators.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 #[non_exhaustive]
@@ -91,49 +100,69 @@ pub enum EditError {
     #[error("markdown import failed: {0}")]
     Import(ImportError),
 
-    /// A richtext field value in the content-or-markdown encoding could not be
-    /// decoded: a JSON object that is not a canonical richtext content, a
-    /// markdown string that failed to import, or a shape that is neither
-    /// object, string, nor null. Returned by
-    /// [`Card::commit_field`](Card::commit_field) on a richtext field, by
-    /// [`Card::revise_field`](Card::revise_field) on a present non-content field,
-    /// and by [`Card::apply_field_richtext_change`](Card::apply_field_richtext_change).
-    #[error("richtext field '{field}' decode failed: {message}")]
-    FieldRichtextDecode { field: String, message: String },
+    /// A value could not become the field's content through `codec`: a JSON
+    /// object that is not a canonical content, a markdown string that failed to
+    /// import, a shape that is neither object nor string, or formatting under
+    /// the plain-only `plaintext` codec. `message` names which, as engine prose
+    /// riding no arg. Returned by [`Card::commit_field`](Card::commit_field) on
+    /// a content field, by [`Card::revise_field`](Card::revise_field) on a
+    /// present non-content field, and by the reads on
+    /// [`TypedReader`](crate::TypedReader).
+    ///
+    /// `codec` is the declared type's, not the stored shape's: the same bytes
+    /// decode two ways and only the schema says which ran.
+    ///
+    /// Absence is not this error. A missing field is `None` everywhere the API
+    /// meets one, and the content lane reads it as the empty content.
+    #[error("{codec} field '{field}': {message}")]
+    FieldDecode {
+        field: String,
+        /// The codec that ran, named by the field's declared type:
+        /// [`CODEC_RICHTEXT`] or [`CODEC_PLAINTEXT`].
+        codec: String,
+        message: String,
+    },
 
-    /// A corpus read ([`TypedReader::get_content`](crate::TypedReader::get_content))
+    /// A `Content` read ([`TypedReader::get_content`](crate::TypedReader::get_content))
     /// addressed a field whose declared type is not a content leaf. Which codec
     /// decodes a value is a property of the declared type, not of the stored
     /// shape, so the schema answers this before the payload is consulted: an
-    /// `integer` field has no corpus to return even when it happens to hold a
+    /// `integer` field has no `Content` to return even when it happens to hold a
     /// string.
     ///
     /// The condition is a *leaf* one, narrower than the subtree test conform
     /// walks (`field_contains_content`): an `array<richtext>` carries content and
-    /// still has no one corpus, so it lands here. Read its elements through
+    /// still has no one `Content`, so it lands here. Read its elements through
     /// [`get`](crate::TypedReader::get).
     #[error("field '{field}' is declared '{declared}', which is not a content field")]
     FieldNotContent { field: String, declared: String },
 
-    /// A richtext field written under the `richtext(inline)` constraint decoded
-    /// to a multi-block content (more than one line, a container, or an island).
-    /// The write-time counterpart of the coercion/validation `richtext(inline)`
-    /// check; returned by [`Card::commit_field`](Card::commit_field) when the
-    /// field's schema is `richtext` with `inline: true`.
-    #[error("richtext field '{0}' is not inline: richtext(inline) requires a single paragraph line with no list/quote container and no islands")]
-    FieldRichtextNotInline(String),
+    /// A content field written under an `inline: true` schema decoded to a
+    /// multi-line content: the write-time counterpart of the
+    /// coercion/validation `inline` check, raised by
+    /// [`Card::commit_field`](Card::commit_field). Both prose codecs declare
+    /// `inline`, so one code covers both and `codec` says which lane it came
+    /// from.
+    #[error("{codec} field '{field}' is not inline: {codec}(inline) requires a single line with no container or island")]
+    FieldNotInline {
+        field: String,
+        /// The codec whose inline constraint was violated: [`CODEC_RICHTEXT`]
+        /// or [`CODEC_PLAINTEXT`].
+        codec: String,
+    },
 
     /// A typed write ([`Card::commit_field`](Card::commit_field)) could not
-    /// conform the value to the field's schema type: the general write-commit
+    /// coerce the value to the field's schema type: the general write-commit
     /// failure for scalar/array/object types (a `"x"` for an `integer`, a
-    /// non-object for an `object`, …). Richtext fields report through the
-    /// dedicated [`FieldRichtextDecode`](Self::FieldRichtextDecode) /
-    /// [`FieldRichtextNotInline`](Self::FieldRichtextNotInline) variants
-    /// instead, so the richtext write surface is unchanged.
-    #[error("field '{field}' does not conform to its schema type: {message}")]
-    FieldConform {
+    /// non-object for an `object`, …). The mutator-plane twin of
+    /// `validation::coercion_failed`, minted from the same [`CoercionError`].
+    /// Content fields report through the dedicated
+    /// [`FieldDecode`](Self::FieldDecode) / [`FieldNotInline`](Self::FieldNotInline)
+    /// variants instead.
+    #[error("field '{field}' could not be coerced to its schema type: {message}")]
+    FieldCoercionFailed {
         field: String,
-        /// The schema type the write was conformed against, carried across
+        /// The schema type the write was coerced against, carried across
         /// from [`CoercionError`] so the failure
         /// states what the value had to become. `message` alone is English.
         target: String,
@@ -147,31 +176,13 @@ pub enum EditError {
 }
 
 impl EditError {
-    /// The bare variant name (e.g. `"InvalidFieldName"`). Retained as the
-    /// stable variant discriminator behind [`code`](Self::code); defined once
-    /// here so a new variant cannot drift between the two binding error mappers.
-    pub fn variant_name(&self) -> &'static str {
-        match self {
-            EditError::InvalidFieldName(_) => "InvalidFieldName",
-            EditError::UnknownField(_) => "UnknownField",
-            EditError::InvalidKindName(_) => "InvalidKindName",
-            EditError::ReservedKind => "ReservedKind",
-            EditError::IndexOutOfRange { .. } => "IndexOutOfRange",
-            EditError::ValueTooDeep { .. } => "ValueTooDeep",
-            EditError::Import(_) => "Import",
-            EditError::FieldRichtextDecode { .. } => "FieldRichtextDecode",
-            EditError::FieldNotContent { .. } => "FieldNotContent",
-            EditError::FieldRichtextNotInline(_) => "FieldRichtextNotInline",
-            EditError::FieldConform { .. } => "FieldConform",
-            EditError::ContentApply(_) => "ContentApply",
-        }
-    }
-
     /// The namespaced diagnostic `code` (e.g. `"edit::invalid_field_name"`),
-    /// one per variant. This is the machine-routable identity both bindings
-    /// stamp onto the `Diagnostic` they raise: the `edit::*` peer of
-    /// `parse::*`, `validation::*`, and the rest of the taxonomy in
-    /// `prose/canon/ERROR.md`. Consumers route on this, not on message text.
+    /// one per variant, and the variant's only stable discriminator. This is
+    /// the machine-routable identity both bindings stamp onto the `Diagnostic`
+    /// they raise: the `edit::*` peer of `parse::*`, `validation::*`, and the
+    /// rest of the taxonomy in `prose/canon/ERROR.md`. Consumers route on this,
+    /// not on message text; a Rust caller matching the enum has
+    /// `#[non_exhaustive]` to answer to and a `_` arm regardless.
     pub fn code(&self) -> &'static str {
         match self {
             EditError::InvalidFieldName(_) => "edit::invalid_field_name",
@@ -181,10 +192,10 @@ impl EditError {
             EditError::IndexOutOfRange { .. } => "edit::index_out_of_range",
             EditError::ValueTooDeep { .. } => "edit::value_too_deep",
             EditError::Import(_) => "edit::import",
-            EditError::FieldRichtextDecode { .. } => "edit::field_richtext_decode",
+            EditError::FieldDecode { .. } => "edit::field_decode",
             EditError::FieldNotContent { .. } => "edit::field_not_content",
-            EditError::FieldRichtextNotInline(_) => "edit::field_richtext_not_inline",
-            EditError::FieldConform { .. } => "edit::field_conform",
+            EditError::FieldNotInline { .. } => "edit::field_not_inline",
+            EditError::FieldCoercionFailed { .. } => "edit::field_coercion_failed",
             EditError::ContentApply(_) => "edit::content_apply",
         }
     }
@@ -212,15 +223,23 @@ impl EditError {
             },
             EditError::ValueTooDeep { max } => diag_args! { "max" => max },
             EditError::Import(_) => diag_args! {},
-            EditError::FieldRichtextDecode { field, message: _ } => diag_args! {
+            EditError::FieldDecode {
+                field,
+                codec,
+                message: _,
+            } => diag_args! {
                 "field" => field,
+                "codec" => codec,
             },
             EditError::FieldNotContent { field, declared } => diag_args! {
                 "field" => field,
                 "declared" => declared,
             },
-            EditError::FieldRichtextNotInline(field) => diag_args! { "field" => field },
-            EditError::FieldConform {
+            EditError::FieldNotInline { field, codec } => diag_args! {
+                "field" => field,
+                "codec" => codec,
+            },
+            EditError::FieldCoercionFailed {
                 field,
                 target,
                 message: _,
@@ -253,10 +272,10 @@ impl EditError {
         match self {
             EditError::InvalidFieldName(f)
             | EditError::UnknownField(f)
-            | EditError::FieldRichtextNotInline(f)
-            | EditError::FieldConform { field: f, .. }
+            | EditError::FieldNotInline { field: f, .. }
+            | EditError::FieldCoercionFailed { field: f, .. }
             | EditError::FieldNotContent { field: f, .. }
-            | EditError::FieldRichtextDecode { field: f, .. } => Some(base.field(f)),
+            | EditError::FieldDecode { field: f, .. } => Some(base.field(f)),
             EditError::IndexOutOfRange { index, .. } => Some(DocPath::card(None, *index)),
             _ => (!base.segs().is_empty()).then(|| base.clone()),
         }
@@ -319,15 +338,15 @@ pub fn validate_field(key: &str, value: &serde_json::Value) -> Result<(), FieldV
 
 /// Map a strict-write [`CoercionError`] to the field-write [`EditError`] surface.
 ///
-/// A failed richtext coercion routes to the dedicated `FieldRichtext*` variants:
-/// the same surface [`Card::apply_field_richtext_change`] produces, and the
-/// one the wasm/Python error mappers (and their tests) key on. This keys on the
-/// coercion `target`, not the top-level field type, because the richtext
-/// constraint can be **nested**: an `array` of `richtext(inline)` items fails
-/// with `target == "richtext(inline)"` while the field's own type is `Array`.
-/// The richtext coercion emits exactly `"richtext"` / `"richtext(inline)"`
-/// (see `QuillConfig::conform_value`); every other target uses the general
-/// [`EditError::FieldConform`].
+/// A failed content coercion routes to the dedicated `Field*` variants, the
+/// surface the wasm/Python error mappers (and their tests) key on. This keys on
+/// the coercion `target`, not the top-level field type, because the constraint
+/// can be **nested**: an `array` of `richtext(inline)` items fails with
+/// `target == "richtext(inline)"` while the field's own type is `Array`. The
+/// content coercions emit exactly `"<codec>"` / `"<codec>(inline)"` (see
+/// `QuillConfig::conform_value`); every other target uses the general
+/// [`EditError::FieldCoercionFailed`]. Both codecs route identically, so a
+/// consumer matches one code per condition and reads `codec` for the lane.
 fn conform_error_to_edit(name: &str, err: CoercionError) -> EditError {
     let CoercionError::Uncoercible {
         path: _,
@@ -335,19 +354,26 @@ fn conform_error_to_edit(name: &str, err: CoercionError) -> EditError {
         target,
         reason,
     } = err;
-    if target == "richtext(inline)" {
-        EditError::FieldRichtextNotInline(name.to_string())
-    } else if target == "richtext" {
-        EditError::FieldRichtextDecode {
-            field: name.to_string(),
+    let field = name.to_string();
+    match target.as_str() {
+        "richtext(inline)" => EditError::FieldNotInline {
+            field,
+            codec: CODEC_RICHTEXT.to_string(),
+        },
+        "plaintext(inline)" => EditError::FieldNotInline {
+            field,
+            codec: CODEC_PLAINTEXT.to_string(),
+        },
+        CODEC_RICHTEXT | CODEC_PLAINTEXT => EditError::FieldDecode {
+            field,
+            codec: target,
             message: reason,
-        }
-    } else {
-        EditError::FieldConform {
-            field: name.to_string(),
+        },
+        _ => EditError::FieldCoercionFailed {
+            field,
             target,
             message: reason,
-        }
+        },
     }
 }
 
@@ -675,7 +701,7 @@ impl Card {
     /// free-form namespaces of `$ext`. Returns [`EditError::ValueTooDeep`] when
     /// the merged map nests past the §8 depth limit; the card is unchanged on
     /// error. Quill-free and never coerced: an opaque `store_*` verb.
-    pub fn store_seed_namespace(
+    pub fn store_seed_overlay(
         &mut self,
         card_kind: impl Into<String>,
         value: serde_json::Value,
@@ -692,37 +718,40 @@ impl Card {
     /// stored there (or `None`). When removing the last kind empties the map,
     /// the `$seed` entry is dropped entirely (not left as `$seed: {}`).
     /// The seed analogue of [`Card::remove_ext_namespace`].
-    pub fn remove_seed_namespace(&mut self, card_kind: &str) -> Option<serde_json::Value> {
+    pub fn remove_seed_overlay(&mut self, card_kind: &str) -> Option<serde_json::Value> {
         self.remove_meta_namespace(MetaKey::Seed, card_kind)
     }
 
-    /// Install the body content directly from a pre-built [`Content`]: **value
-    /// semantics**, the native richtext writer. A content is valid by
-    /// construction, so this is infallible: no markdown import, no diff, no
-    /// schema check; the identity anchors of the previous body are *gone*
-    /// (install-this-exact-value, so a `to_markdown → install` round-trip cannot
-    /// resurrect them). Use it when the caller already holds a content (a decoded
-    /// canonical-JSON body, another field's value, an editor's serialized state).
-    /// For "here's new authored markdown," use [`revise_body`](Self::revise_body),
-    /// which rebases surviving anchors; the cold-import path is spelled at the
-    /// call site as `install_body(import_body(md)?)`.
-    pub fn install_body(&mut self, content: Content) {
-        self.overwrite_body(content);
+    /// Overwrite the body with a pre-built [`Content`]: **value semantics**, the
+    /// native content writer, and the bottom rung of the content lane's ladder
+    /// by anchor fate: **overwrite destroys, [`revise_body`](Self::revise_body)
+    /// rebases, [`apply_body_change`](Self::apply_body_change) preserves.** A
+    /// content is valid by construction, so this is infallible: no markdown
+    /// import, no diff, no schema check; the identity anchors of the previous
+    /// body are *gone* (write-this-exact-value, so a `to_markdown → overwrite`
+    /// round-trip cannot resurrect them). Use it when the caller already holds a
+    /// content (a decoded canonical-JSON body, another field's value, an
+    /// editor's serialized state). Cold-importing markdown is spelled
+    /// `overwrite_body(import_body(md)?)` at the call site, where the anchor
+    /// loss is visible.
+    pub fn overwrite_body(&mut self, content: Content) {
+        self.body = content;
     }
 
-    /// Install a richtext field's content directly from a pre-built [`Content`]:
-    /// the field-level twin of [`install_body`](Self::install_body). Value
+    /// Overwrite a content field's value with a pre-built [`Content`]: the
+    /// field-level twin of [`overwrite_body`](Self::overwrite_body). Value
     /// semantics: stores the canonical content JSON verbatim (identity marks and
     /// content-only marks such as `underline` intact), no diff, no schema check
-    /// (schema-blind, like [`apply_field_richtext_change`](Self::apply_field_richtext_change),
-    /// [`commit_field`](Self::commit_field) is the typed door). Returns
-    /// [`EditError::InvalidFieldName`] for a malformed name.
+    /// (schema-blind, like [`apply_field_change`](Self::apply_field_change);
+    /// [`commit_field`](Self::commit_field) is the typed door). The previous
+    /// value's anchors are gone; the incoming content's ride along exactly.
+    /// Returns [`EditError::InvalidFieldName`] for a malformed name.
     ///
-    /// **Richtext only.** A `plaintext` field rests as its literal string, so an
+    /// **Richtext codec.** A `plaintext` field rests as its literal string, so an
     /// object landed here is off that field's resting form: a repairable
     /// departure the next bound load ([`Quill::conform`](crate::Quill::conform))
     /// converges. Write one through the typed door.
-    pub fn install_field(&mut self, name: &str, content: Content) -> Result<(), EditError> {
+    pub fn overwrite_field(&mut self, name: &str, content: Content) -> Result<(), EditError> {
         if !is_valid_field_name(name) {
             return Err(EditError::InvalidFieldName(name.to_string()));
         }
@@ -732,8 +761,8 @@ impl Card {
 
     /// Store `content` as the canonical content-JSON value of field `name`: the
     /// one place a richtext field's content is committed to the payload, shared by
-    /// [`install_field`](Self::install_field), [`revise_field`](Self::revise_field),
-    /// and [`apply_field_richtext_change`](Self::apply_field_richtext_change).
+    /// [`overwrite_field`](Self::overwrite_field), [`revise_field`](Self::revise_field),
+    /// and [`apply_field_change`](Self::apply_field_change).
     /// Assumes `name` is already validated (all three callers check it or resolve
     /// an existing field first).
     fn store_field_content(&mut self, name: &str, content: &Content) {
@@ -757,7 +786,7 @@ impl Card {
     /// - **richtext**: imports a markdown string / adopts a content object and
     ///   stores canonical content JSON, so identity marks (anchors, island ids)
     ///   live on the stored value from the write; a `richtext(inline)` schema
-    ///   rejects a multi-block value with [`EditError::FieldRichtextNotInline`].
+    ///   rejects a multi-block value with [`EditError::FieldNotInline`].
     /// - **plaintext**: stores the **literal string**, importing a string
     ///   verbatim or projecting a content object through `to_plaintext`. The
     ///   codec is lossless on plain content, so the string is the whole value;
@@ -780,10 +809,17 @@ impl Card {
     /// this).
     ///
     /// Returns [`EditError::InvalidFieldName`] for a malformed name,
-    /// [`EditError::FieldRichtextDecode`] / [`EditError::FieldRichtextNotInline`]
-    /// for a richtext field, [`EditError::FieldConform`] for any other type
+    /// [`EditError::FieldDecode`] / [`EditError::FieldNotInline`]
+    /// for a content field, [`EditError::FieldCoercionFailed`] for any other type
     /// mismatch, and [`EditError::ValueTooDeep`] when the stored value nests
     /// past the §8 depth limit.
+    ///
+    /// **Hidden: the typed primitive, not a typed door.** A verb told apart from
+    /// its neighbor only by taking a schema argument is not a door;
+    /// [`Quill::writer`](crate::Quill::writer) is. Reachable for the fuzz
+    /// harness, which drives the coercion seam without a `QuillConfig` around
+    /// it, and unpromised like every hidden item (`COMPATIBILITY.md`).
+    #[doc(hidden)]
     pub fn commit_field(
         &mut self,
         name: &str,
@@ -832,8 +868,9 @@ impl Card {
         let base = match self.field_richtext(name) {
             Some(Ok(rt)) => rt,
             Some(Err(e)) => {
-                return Err(EditError::FieldRichtextDecode {
+                return Err(EditError::FieldDecode {
                     field: name.to_string(),
+                    codec: CODEC_RICHTEXT.to_string(),
                     message: e.into_message(),
                 })
             }
@@ -846,26 +883,26 @@ impl Card {
     /// field-level twin of [`revise_body`](Self::revise_body), and the
     /// field-level `diff_import`. The other field-content writers are the cold
     /// [`commit_field`](Self::commit_field) and the splice
-    /// [`apply_field_richtext_change`](Self::apply_field_richtext_change), so this
+    /// [`apply_field_change`](Self::apply_field_change), so this
     /// is the anchor-preserving path for rewriting a richtext field's markdown
     /// wholesale. Decodes the field's current content as the diff base (an **absent**
     /// field cold-imports from empty), rebases surviving anchors onto the new
     /// text, re-stores the canonical content, and returns the text [`Delta`].
     ///
     /// Schema-blind by design: the content-writer stratum splices without the
-    /// quill (like [`apply_field_richtext_change`](Self::apply_field_richtext_change));
+    /// quill (like [`apply_field_change`](Self::apply_field_change));
     /// [`commit_field`](Self::commit_field) is the typed door that enforces
     /// `richtext(inline)`, and a violation otherwise surfaces at validate/render.
     ///
     /// **Richtext only**, and the exclusion bites: this decodes the current value
     /// as markdown, which eats a `plaintext` field's escapes (`a \*b\*` commits
-    /// back as `a *b*`) and leaves the corpus where that field's rest is a
+    /// back as `a *b*`) and leaves a content object where that field's rest is a
     /// string. The typed
     /// [`TypedWriter::revise_field`](crate::TypedWriter::revise_field) resolves
     /// the codec from the schema and is the plaintext-safe door.
     ///
     /// Returns [`EditError::InvalidFieldName`] for a malformed name,
-    /// [`EditError::FieldRichtextDecode`] when the field is present but is not a
+    /// [`EditError::FieldDecode`] when the field is present but is not a
     /// richtext content (a scalar a `store_field` wrote), and
     /// [`EditError::Import`] on an over-nested markdown input.
     pub fn revise_field(&mut self, name: &str, body: impl Into<String>) -> Result<Delta, EditError> {
@@ -884,7 +921,7 @@ impl Card {
     /// (as [`revise_field`](Self::revise_field)), then enforce `schema` on the
     /// *diffed result* through the same typed-conform path
     /// [`commit_field`](Self::commit_field) runs, so a `richtext(inline)` schema
-    /// rejects a multi-block result with [`EditError::FieldRichtextNotInline`],
+    /// rejects a multi-block result with [`EditError::FieldNotInline`],
     /// the error surface unchanged, while the anchors survive. Returns the text
     /// [`Delta`] receipt.
     ///
@@ -892,14 +929,19 @@ impl Card {
     /// and [`CardWriter::revise_field`](crate::CardWriter::revise_field) wrap: they
     /// resolve `schema` from the bound quill and call here. The schema runs on the
     /// content the diff produced, so a non-richtext `schema` (nothing to preserve)
-    /// fails with the same [`EditError::FieldConform`]
+    /// fails with the same [`EditError::FieldCoercionFailed`]
     /// [`commit_field`](Self::commit_field) would raise.
     ///
-    /// Errors: [`EditError::InvalidFieldName`], [`EditError::FieldRichtextDecode`]
-    /// when the field is present but not a richtext content, [`EditError::Import`]
+    /// Errors: [`EditError::InvalidFieldName`], [`EditError::FieldDecode`]
+    /// when the field is present but not a content, [`EditError::Import`]
     /// on an over-nested markdown input, and the conform errors of
     /// [`commit_field`](Self::commit_field) on the diffed result. On any error the
     /// field is unchanged.
+    ///
+    /// **Hidden** on the same terms as [`commit_field`](Self::commit_field):
+    /// the typed primitive, whose door is
+    /// [`TypedWriter::revise_field`](crate::TypedWriter::revise_field).
+    #[doc(hidden)]
     pub fn revise_field_checked(
         &mut self,
         name: &str,
@@ -948,8 +990,9 @@ impl Card {
         let base = match self.field_plaintext_content(name) {
             Some(Ok(rt)) => quillmark_content::export::to_plaintext(&rt),
             Some(Err(e)) => {
-                return Err(EditError::FieldRichtextDecode {
+                return Err(EditError::FieldDecode {
                     field: name.to_string(),
+                    codec: CODEC_PLAINTEXT.to_string(),
                     message: e.into_message(),
                 })
             }
@@ -985,22 +1028,29 @@ impl Card {
             .map_err(EditError::ContentApply)
     }
 
-    /// Splice a content field-change bundle into a **richtext-valued field**'s
-    /// stored content: the field-path twin of [`apply_body_change`](Self::apply_body_change),
-    /// and what lets identity marks (anchors, island ids) persist on field
-    /// content across incremental edits. Decodes the field's canonical content,
-    /// applies the text delta plus any island/line/mark ops in the same
-    /// all-or-nothing bundle, and re-stores the canonical result.
+    /// Splice a content field-change bundle into a field's stored content: the
+    /// field-path twin of [`apply_body_change`](Self::apply_body_change), and
+    /// what lets identity marks (anchors, island ids) persist on field content
+    /// across incremental edits. Decodes the field's canonical content, applies
+    /// the text delta plus any island/line/mark ops in the same all-or-nothing
+    /// bundle, and re-stores the canonical result.
     ///
-    /// Returns [`EditError::FieldRichtextDecode`] when the field is absent or its
-    /// stored value is not a richtext content (the caller addresses a field it
-    /// knows is richtext, exactly as when writing it), and
-    /// [`EditError::ContentApply`] when the bundle applies out of bounds.
+    /// An **absent** field splices against the empty content, as
+    /// [`revise_field`](Self::revise_field) diffs against it. A bundle that
+    /// expected content still fails: its text delta declares the base length it
+    /// was computed against, so only a zero-base bundle lands, and a zero-base
+    /// bundle is one its producer computed against an empty field.
     ///
-    /// **Richtext only**: a `plaintext` field rests as a string, so a splice
-    /// lands it off its resting form (and its stored string decodes here as
-    /// markdown). The next bound load converges it.
-    pub fn apply_field_richtext_change(
+    /// Returns [`EditError::InvalidFieldName`] for a malformed name,
+    /// [`EditError::FieldDecode`] when the stored value is not a content (the
+    /// caller addresses a field it knows is content-typed, exactly as when
+    /// writing it), and [`EditError::ContentApply`] when the bundle applies out
+    /// of bounds.
+    ///
+    /// **Richtext codec**: schema-blind like [`revise_field`](Self::revise_field),
+    /// so a `plaintext` field's stored string decodes here as markdown and a
+    /// splice lands it off its resting form. The next bound load converges it.
+    pub fn apply_field_change(
         &mut self,
         name: &str,
         bundle: &ChangeBundle,
@@ -1008,16 +1058,19 @@ impl Card {
         let mut content = match self.field_richtext(name) {
             Some(Ok(rt)) => rt,
             Some(Err(e)) => {
-                return Err(EditError::FieldRichtextDecode {
+                return Err(EditError::FieldDecode {
                     field: name.to_string(),
+                    codec: CODEC_RICHTEXT.to_string(),
                     message: e.into_message(),
                 })
             }
+            // Only this arm creates, so only this arm needs the name check the
+            // `Some` arms got by resolving an existing field.
             None => {
-                return Err(EditError::FieldRichtextDecode {
-                    field: name.to_string(),
-                    message: "field is absent".to_string(),
-                })
+                if !is_valid_field_name(name) {
+                    return Err(EditError::InvalidFieldName(name.to_string()));
+                }
+                Content::empty()
             }
         };
         content
@@ -1038,7 +1091,7 @@ mod tests {
         // A main field write: the `main` base roots the field path.
         let main = DocPath::main();
         assert_eq!(
-            EditError::FieldConform {
+            EditError::FieldCoercionFailed {
                 field: "font_size".into(),
                 target: "integer".into(),
                 message: "x".into(),

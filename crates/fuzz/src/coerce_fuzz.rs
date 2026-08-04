@@ -24,7 +24,7 @@
 //!
 //! - **W1 (no-panic):** `commit_field` returns `Ok | Err(_)` for any pair.
 //! - **W2 (typed error):** a failure is one of the typed-write `EditError`
-//!   variants (`FieldConform`, `FieldRichtext*`, `ValueTooDeep`,
+//!   variants (`FieldCoercionFailed`, `FieldRichtext*`, `ValueTooDeep`,
 //!   `InvalidFieldName`), never a panic or an unrelated variant.
 //! - **W3 (commit ∘ commit = commit):** a committed value is a fixed point,
 //!   re-committing it yields the same stored value.
@@ -255,9 +255,9 @@ proptest! {
             prop_assert!(
                 matches!(
                     e,
-                    EditError::FieldConform { .. }
-                        | EditError::FieldRichtextDecode { .. }
-                        | EditError::FieldRichtextNotInline(_)
+                    EditError::FieldCoercionFailed { .. }
+                        | EditError::FieldDecode { .. }
+                        | EditError::FieldNotInline { .. }
                         | EditError::ValueTooDeep { .. }
                         | EditError::InvalidFieldName(_)
                 ),

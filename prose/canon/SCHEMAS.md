@@ -27,7 +27,7 @@ Supported field types:
 | `object` | Structured map; requires `properties:` |
 | `date` | A strict calendar date `YYYY-MM-DD`. Rejects any time component (a time-bearing string is a `datetime`, not a truncated date). The common case in a document engine, so it is the unmarked date type. Stored verbatim; lowers to a Typst value-object wrapping `datetime(year:, month:, day:)` (`.value` native, `(.display)(..)` renders: a click-to-edit region; see `PLATE_DATA.md`) |
 | `datetime` | A strict offset-less wall-clock datetime `YYYY-MM-DDThh:mm[:ss]`, seconds optional (zero-filled). Rejects timezone offsets (`Z`, `±HH:MM`), the space separator, fractional seconds, and a bare date (which is a `date`). An offset is **rejected, never dropped**: the engine does no zone math, keeping wall-clock semantics end to end. Stored verbatim; lowers to the same value-object over the six-component `datetime(year:, .., second:)` |
-| `plaintext` | Navigable **unformatted** prose over the same canonical content (`Content`) as `richtext` (same media type, nav, and regions) but a **literal** codec (`from_plaintext`/`to_plaintext`): delimiters stay literal, no markup, verbatim round-trip. Declare `inline: true` for the single-line variant. Constrained mark-/island-free (`Content::is_plain`); a formatted wire content is rejected (`plaintext::not_plain`), not stripped. **Rests as the literal string** |
+| `plaintext` | Navigable **unformatted** prose over the same canonical content (`Content`) as `richtext` (same media type, nav, and regions) but a **literal** codec (`from_plaintext`/`to_plaintext`): delimiters stay literal, no markup, verbatim round-trip. Declare `inline: true` for the single-line variant. Constrained mark-/island-free (`Content::is_plain`); a formatted wire content is rejected (`validation::not_plain`), not stripped. **Rests as the literal string** |
 | `richtext` | Rich **formatted** prose over a canonical content (`Content`); markdown is a projection of it. Declare `inline: true` for the single-line variant (exactly one `Para` line, no container, no islands). The pre-richtext `markdown` spelling and the retired `type: richtext(inline)` token are schema load errors (`quill::field_parse_error`). **Rests as the canonical content object** |
 
 The text-ish types form a **data vs content** × **open/plain vs closed/formatted**
@@ -88,7 +88,7 @@ Coercion rules per type:
   islands (`Content::is_inline`). The empty content satisfies it, so a blank or
   zero-filled inline field passes. The constraint is checked in three places:
   coercion (`CoercionError` for a document value), validation
-  (`richtext::not_inline`, the `TypeMismatch` fatality class, as a backstop for a
+  (`validation::not_inline`, the `TypeMismatch` fatality class, as a backstop for a
   content that bypassed coercion), and load-time example import (a schema literal
   that violates it is a load error). Blueprint still annotates inline fields as
   `richtext(inline)<markdown>`; `build_transform_schema` emits
@@ -102,7 +102,7 @@ Coercion rules per type:
     markdown-decoded. A formatted wire content is rejected, not stripped.
 
   Enforcement mirrors the `inline` precedent, in the same three places:
-  coercion (`CoercionError`); validation (`plaintext::not_plain`, the
+  coercion (`CoercionError`); validation (`validation::not_plain`, the
   `TypeMismatch` fatality class); load-time literal import. An `inline: true`
   plaintext field additionally requires a single line. The load-time content
   caches (`default_content`/`example_content`) and the render-floor zero (the
