@@ -1033,38 +1033,33 @@ fn test_apply_field_change_splices_and_persists() {
     assert!(rt.marks.iter().any(|m| matches!(m.kind, MarkKind::Strong)));
 }
 
-/// `apply_field_change` on a **present non-content** field is a `FieldDecode`
-/// error, not a panic: the caller must address a field it knows is content.
-/// Absence is not that error, and not any error: it splices against the empty
-/// content, as `revise_field` diffs against it.
+/// `apply_field_change` on a present non-content field is a `FieldDecode`
+/// error, not a panic: the caller addresses a field it knows is content.
 #[test]
-fn test_apply_field_change_rejects_non_content_but_not_absence() {
-    use crate::ChangeBundle;
-
+fn test_apply_field_change_rejects_non_content() {
     let mut card = Card::new("note").unwrap();
-    let identity = ChangeBundle::default();
-    card.apply_field_change("missing", &identity)
-        .expect("an absent field splices against the empty content");
-    assert_eq!(card.field_markdown("missing").unwrap().unwrap(), "");
-
     card.store_field("count", 3).unwrap();
     assert_eq!(
-        card.apply_field_change("count", &identity)
+        card.apply_field_change("count", &crate::ChangeBundle::default())
             .unwrap_err()
             .variant_name(),
         "FieldDecode"
     );
 }
 
-/// A stale splice against a vanished field still fails, and reports the
-/// condition it actually hit: the bundle's text delta declares the base length
-/// it was computed against, so the mismatch is `ContentApply`, not a decode
-/// error standing in for absence.
+/// An absent field splices against the empty content, as `revise_field` diffs
+/// against it. A bundle that expected content still fails, on the condition it
+/// hit: the text delta declares its base length, so a stale splice is
+/// `ContentApply` and leaves the field uncreated.
 #[test]
-fn test_apply_field_change_on_absent_field_rejects_a_stale_bundle() {
+fn test_apply_field_change_treats_an_absent_field_as_empty() {
     use crate::ChangeBundle;
 
     let mut card = Card::new("note").unwrap();
+    card.apply_field_change("intro", &ChangeBundle::default())
+        .expect("a zero-base bundle lands on the empty content");
+    assert_eq!(card.field_markdown("intro").unwrap().unwrap(), "");
+
     let stale = ChangeBundle {
         delta: quillmark_content::Delta {
             ops: vec![quillmark_content::delta::Op::Retain(4)],

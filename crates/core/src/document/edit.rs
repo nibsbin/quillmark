@@ -56,24 +56,13 @@ pub fn is_valid_field_name(name: &str) -> bool {
 }
 
 /// The `richtext` codec, as [`EditError::FieldDecode`] and
-/// [`EditError::FieldNotInline`] name it on the wire. The spelling is frozen
-/// with the diagnostic arg: it is the `richtext` schema keyword, not a
+/// [`EditError::FieldNotInline`] name it on the wire. The spelling is the
+/// `richtext` schema keyword and is frozen with the diagnostic arg, not a
 /// display string.
 pub const CODEC_RICHTEXT: &str = "richtext";
 
 /// The `plaintext` codec. See [`CODEC_RICHTEXT`].
 pub const CODEC_PLAINTEXT: &str = "plaintext";
-
-/// The codec a declared field type decodes through, or `None` for a type that
-/// carries no content leaf. One mapping, so a raise site never spells a codec
-/// by hand.
-pub(crate) fn codec_of(field_type: &FieldType) -> Option<&'static str> {
-    match field_type {
-        FieldType::RichText { .. } => Some(CODEC_RICHTEXT),
-        FieldType::PlainText { .. } => Some(CODEC_PLAINTEXT),
-        _ => None,
-    }
-}
 
 /// Errors returned by document and card mutators.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -111,26 +100,20 @@ pub enum EditError {
     #[error("markdown import failed: {0}")]
     Import(ImportError),
 
-    /// A content field's value could not be decoded through the codec its
-    /// declared type names: a JSON object that is not a canonical content, a
-    /// markdown string that failed to import, or a shape that is neither
-    /// object, string, nor null. `codec` is the one that ran (`"richtext"` or
-    /// `"plaintext"`), so a plaintext field's failure reads as a plaintext one:
-    /// the same stored bytes decode two ways and only the declared type says
-    /// which. Returned by [`Card::commit_field`](Card::commit_field) on a
-    /// content field, by [`Card::revise_field`](Card::revise_field) on a present
-    /// non-content field, and by the reads on
+    /// A value could not become the field's content through `codec`: a JSON
+    /// object that is not a canonical content, a markdown string that failed to
+    /// import, a shape that is neither object nor string, or formatting under
+    /// the plain-only `plaintext` codec. `message` names which, as engine prose
+    /// riding no arg. Returned by [`Card::commit_field`](Card::commit_field) on
+    /// a content field, by [`Card::revise_field`](Card::revise_field) on a
+    /// present non-content field, and by the reads on
     /// [`TypedReader`](crate::TypedReader).
     ///
-    /// Absence is not this error: it is `None` everywhere the API meets a
-    /// missing field, and the content lane reads an absent field as the empty
-    /// content.
+    /// `codec` is the declared type's, not the stored shape's: the same bytes
+    /// decode two ways and only the schema says which ran.
     ///
-    /// The condition is "this value could not become the field's content
-    /// through `codec`", so it spans a malformed content object, a markdown
-    /// import that failed, a shape that is neither object nor string, and a
-    /// formatted value under the plain-only `plaintext` codec. `message` names
-    /// which; it is engine prose and rides no arg.
+    /// Absence is not this error. A missing field is `None` everywhere the API
+    /// meets one, and the content lane reads it as the empty content.
     #[error("{codec} field '{field}': {message}")]
     FieldDecode {
         field: String,
@@ -155,12 +138,11 @@ pub enum EditError {
     FieldNotContent { field: String, declared: String },
 
     /// A content field written under an `inline: true` schema decoded to a
-    /// multi-line content. One condition per codec-independent constraint: both
-    /// `richtext` and `plaintext` declare `inline`, so a consumer routing on
-    /// "not inline" matches one code and reads `codec` for which lane it came
-    /// from. The write-time counterpart of the coercion/validation `inline`
-    /// check; returned by [`Card::commit_field`](Card::commit_field) when the
-    /// field's schema declares `inline: true`.
+    /// multi-line content: the write-time counterpart of the
+    /// coercion/validation `inline` check, raised by
+    /// [`Card::commit_field`](Card::commit_field). Both prose codecs declare
+    /// `inline`, so one code covers both and `codec` says which lane it came
+    /// from.
     #[error("{codec} field '{field}' is not inline: {codec}(inline) requires a single line with no container or island")]
     FieldNotInline {
         field: String,
@@ -176,7 +158,7 @@ pub enum EditError {
     /// `validation::coercion_failed`, minted from the same [`CoercionError`].
     /// Content fields report through the dedicated
     /// [`FieldDecode`](Self::FieldDecode) / [`FieldNotInline`](Self::FieldNotInline)
-    /// variants instead, so the content write surface is unchanged.
+    /// variants instead.
     #[error("field '{field}' could not be coerced to its schema type: {message}")]
     FieldCoercionFailed {
         field: String,
@@ -194,9 +176,9 @@ pub enum EditError {
 }
 
 impl EditError {
-    /// The bare variant name (e.g. `"InvalidFieldName"`). Retained as the
-    /// stable variant discriminator behind [`code`](Self::code); defined once
-    /// here so a new variant cannot drift between the two binding error mappers.
+    /// The bare variant name (e.g. `"InvalidFieldName"`), for assertions and
+    /// debug output. Not the routable identity: consumers and both binding
+    /// error mappers key on [`code`](Self::code).
     pub fn variant_name(&self) -> &'static str {
         match self {
             EditError::InvalidFieldName(_) => "InvalidFieldName",
@@ -381,12 +363,8 @@ pub fn validate_field(key: &str, value: &serde_json::Value) -> Result<(), FieldV
 /// `target == "richtext(inline)"` while the field's own type is `Array`. The
 /// content coercions emit exactly `"<codec>"` / `"<codec>(inline)"` (see
 /// `QuillConfig::conform_value`); every other target uses the general
-/// [`EditError::FieldCoercionFailed`].
-///
-/// Both codecs route the same way, which is the point: the `(inline)` targets
-/// are one condition carrying `codec`, and a bare codec target is one condition
-/// carrying `codec`. A consumer routing on "not inline" or "would not decode"
-/// matches one code for both lanes and reads `codec` for which one it was.
+/// [`EditError::FieldCoercionFailed`]. Both codecs route identically, so a
+/// consumer matches one code per condition and reads `codec` for the lane.
 fn conform_error_to_edit(name: &str, err: CoercionError) -> EditError {
     let CoercionError::Uncoercible {
         path: _,
@@ -771,10 +749,9 @@ impl Card {
     /// body are *gone* (write-this-exact-value, so a `to_markdown → overwrite`
     /// round-trip cannot resurrect them). Use it when the caller already holds a
     /// content (a decoded canonical-JSON body, another field's value, an
-    /// editor's serialized state). For "here's new authored markdown," use
-    /// [`revise_body`](Self::revise_body), which rebases surviving anchors; the
-    /// cold-import path is spelled at the call site as
-    /// `overwrite_body(import_body(md)?)`.
+    /// editor's serialized state). Cold-importing markdown is spelled
+    /// `overwrite_body(import_body(md)?)` at the call site, where the anchor
+    /// loss is visible.
     pub fn overwrite_body(&mut self, content: Content) {
         self.body = content;
     }
@@ -855,14 +832,11 @@ impl Card {
     /// mismatch, and [`EditError::ValueTooDeep`] when the stored value nests
     /// past the §8 depth limit.
     ///
-    /// **`#[doc(hidden)]`: the typed primitive, not a typed door.** The writer is
-    /// the one typed door on every surface, and a verb disambiguated from its
-    /// neighbor only by taking a schema argument is not a door. Reach for
-    /// [`Quill::writer`](crate::Quill::writer); this stays reachable for the
-    /// in-workspace fuzz harness, which drives the coercion seam without
-    /// assembling a `QuillConfig` around it, under the same
-    /// [COMPATIBILITY](https://github.com/borb-sh/quillmark/blob/main/prose/canon/COMPATIBILITY.md)
-    /// terms as the other hidden items: no stability promise.
+    /// **Hidden: the typed primitive, not a typed door.** A verb told apart from
+    /// its neighbor only by taking a schema argument is not a door;
+    /// [`Quill::writer`](crate::Quill::writer) is. Reachable for the fuzz
+    /// harness, which drives the coercion seam without a `QuillConfig` around
+    /// it, and unpromised like every hidden item (`COMPATIBILITY.md`).
     #[doc(hidden)]
     pub fn commit_field(
         &mut self,
@@ -982,8 +956,8 @@ impl Card {
     /// [`commit_field`](Self::commit_field) on the diffed result. On any error the
     /// field is unchanged.
     ///
-    /// **`#[doc(hidden)]`**, on the same terms as
-    /// [`commit_field`](Self::commit_field): the typed primitive, whose door is
+    /// **Hidden** on the same terms as [`commit_field`](Self::commit_field):
+    /// the typed primitive, whose door is
     /// [`TypedWriter::revise_field`](crate::TypedWriter::revise_field).
     #[doc(hidden)]
     pub fn revise_field_checked(
@@ -1080,16 +1054,16 @@ impl Card {
     /// bundle, and re-stores the canonical result.
     ///
     /// An **absent** field splices against the empty content, as
-    /// [`revise_field`](Self::revise_field) diffs against it: absence is not a
-    /// failure anywhere else in the API and is not one here. A bundle that
-    /// expected content still fails, and accurately: its text delta declares the
-    /// base length it was computed against, so a stale splice lands as
-    /// [`EditError::ContentApply`] rather than as a decode error.
+    /// [`revise_field`](Self::revise_field) diffs against it. A bundle that
+    /// expected content still fails: its text delta declares the base length it
+    /// was computed against, so only a zero-base bundle lands, and a zero-base
+    /// bundle is one its producer computed against an empty field.
     ///
-    /// Returns [`EditError::FieldDecode`] when the stored value is not a
-    /// content (the caller addresses a field it knows is content-typed, exactly
-    /// as when writing it), and [`EditError::ContentApply`] when the bundle
-    /// applies out of bounds.
+    /// Returns [`EditError::InvalidFieldName`] for a malformed name,
+    /// [`EditError::FieldDecode`] when the stored value is not a content (the
+    /// caller addresses a field it knows is content-typed, exactly as when
+    /// writing it), and [`EditError::ContentApply`] when the bundle applies out
+    /// of bounds.
     ///
     /// **Richtext codec**: schema-blind like [`revise_field`](Self::revise_field),
     /// so a `plaintext` field's stored string decodes here as markdown and a
@@ -1108,6 +1082,8 @@ impl Card {
                     message: e.into_message(),
                 })
             }
+            // Only this arm creates, so only this arm needs the name check the
+            // `Some` arms got by resolving an existing field.
             None => {
                 if !is_valid_field_name(name) {
                     return Err(EditError::InvalidFieldName(name.to_string()));

@@ -731,8 +731,8 @@ impl Quill {
     /// ingestion path**, and the bound twin of the schema-free
     /// `Document.fromMarkdown`. The returned document rests at its canonical
     /// form (a `richtext` field as a content object, a `plaintext` field as its
-    /// literal string), so `getStored` no longer answers "content object or string?"
-    /// with "depends how this document was built".
+    /// literal string), so `getStored` answers "content object or string?" by the
+    /// field's declared codec rather than by how the document was built.
     ///
     /// Parse warnings and the `conform::*` diagnostics both land on
     /// `doc.warnings`. Throws on a parse failure, or when `markdown` declares a
@@ -925,11 +925,10 @@ impl Document {
     /// useful to distinguish "build too old" from "payload corrupt" when
     /// `fromJson` throws.
     ///
-    /// The **storage** version, not a field schema: the two senses of "schema"
-    /// are named apart on this class, where [`schema`](Quill::schema) is the
-    /// quill's field declarations. The wire key stays spelled `"schema"`,
-    /// because it is the DTO's serde tag and retagging it would break the
-    /// version dispatch it exists to drive.
+    /// The storage version, not a field schema ([`schema`](Quill::schema) is the
+    /// quill's field declarations). The JSON key is spelled `"schema"`: it is
+    /// the DTO's serde tag, and retagging it would break the version dispatch
+    /// it drives.
     #[wasm_bindgen(js_name = storageVersionOf)]
     pub fn storage_version_of(json: &str) -> Option<String> {
         quillmark_core::document::peek_storage_version(json)
@@ -1552,10 +1551,9 @@ impl Document {
     /// content lane's ladder by anchor fate: `overwrite` destroys,
     /// [`revise`](Document::revise) rebases,
     /// [`applyChange`](Document::apply_change) preserves. An absent `addr.field`
-    /// targets the body, an absent `addr.card` the main card. For "here's new
-    /// markdown," use [`revise`](Document::revise); the cold-import path is
-    /// spelled at the call site as `overwrite(addr, importMarkdown(md))`, so
-    /// anchor loss is visible in source.
+    /// targets the body, an absent `addr.card` the main card. Cold-importing
+    /// markdown is spelled `overwrite(addr, importMarkdown(md))` at the call
+    /// site, where the anchor loss is visible.
     ///
     /// Throws on an out-of-range card, a malformed field name, or an `rt` that is
     /// not a canonical content object.

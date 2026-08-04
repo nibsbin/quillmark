@@ -53,10 +53,10 @@ use crate::version::QuillReference;
 /// structurally (byte-identical to `to_canonical_json`) rather than a markdown string;
 /// the payload shape is unchanged from V0_92_0.
 ///
-/// **Storage**, not a field schema. The wire key stays spelled `schema`: it is
-/// the serde tag [`StoredDocument`] dispatches on, so renaming it would break
-/// the versioning mechanism the tag exists to serve. The two senses part at the
-/// API, where a quill's field declarations are the only `schema`.
+/// Storage, not a field schema: a quill's field declarations are the only
+/// `schema` at the API. The wire key keeps that spelling because it is the serde
+/// tag [`StoredDocument`] dispatches on, and retagging it would break the
+/// versioning the tag exists to serve.
 pub const STORAGE_V0_93_0: &str = "quillmark/document@0.93.0";
 
 /// Read the storage version off a raw storage DTO payload without

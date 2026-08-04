@@ -40,7 +40,7 @@ A field's markdown lives here: `Document.bodyMarkdown` is **body-only** (it take
 
 `reviseField` is the writer verb that is both typed *and* anchor-preserving: it rebases surviving anchors like the content `revise`, then conforms the diffed result to the field schema like `set`. Because it needs the schema, it lives on the writer: wrapping core's `Card::revise_field_checked` primitive, which `Document` does not expose.
 
-**The writer is the only typed door, in core too.** The typed primitives (`Card::commit_field`, `Card::revise_field_checked`) take a resolved `FieldSchema` argument, and that argument was the only thing telling them apart from their opaque and schema-blind neighbours: an undocumented third disambiguation mechanism beside the receiver and the verb, and the reason one verb appeared to name two lanes. They are `#[doc(hidden)]`, off the documented surface on the same terms as the other hidden items ([COMPATIBILITY.md](COMPATIBILITY.md)); the bindings already enforced this structurally, and core no longer sits outside it.
+**The writer is the only typed door, core included.** The typed primitives (`Card::commit_field`, `Card::revise_field_checked`) are `#[doc(hidden)]`, unpromised on the same terms as the other hidden items ([COMPATIBILITY.md](COMPATIBILITY.md)). A resolved `FieldSchema` argument is the only thing that tells them from their opaque and schema-blind neighbours, and disambiguating by argument is a third mechanism beside the receiver and the verb: one the rule below does not name and a caller cannot see.
 
 **The verb carries the lane.** One vocabulary rule, stated once here:
 
@@ -50,17 +50,15 @@ A field's markdown lives here: `Document.bodyMarkdown` is **body-only** (it take
 | **set** | typed | the writer's strict commit at the write |
 | **overwrite** · **revise** · **apply** | content | identity-aware, and a ladder by **anchor fate** |
 
-The content lane is three rungs, not one group, and the distinction the names carry is what happens to the identity anchors already on the value:
+The content lane's three verbs are rungs, and what sorts them is the fate of the identity anchors already on the value:
 
 - **overwrite** *destroys* them. Value semantics: store exactly this content, no import, no diff. A `toMarkdown → overwrite` round-trip cannot resurrect an anchor, which is why the cold-import path is spelled `overwrite(addr, importMarkdown(md))` at the call site, where the loss is visible.
 - **revise** *rebases* them. Import the markdown, diff against the current value, carry surviving anchors onto the new text, hand back the `Delta`.
 - **apply** *preserves* them. Splice ops into the content in place; anchors and island ids are untouched because the text around them is what moved.
 
-Grouping the three as "identity-aware" hid the one distinction that matters: all three are aware of identity, and only one keeps it.
+**The rule governs user-field writes.** System metadata (`store_ext` / `store_seed_*`), structural operations (`insertCard` / `moveCard` / `setCardKind`), and the `remove_*` family sit outside it: `remove_*` has no lane because one verb serves every write path, and a structural op moves cards rather than writing into one. So `store_field` / `store_fields` / `store_fill` are the opaque store, `set` / `set_all` the typed writer, and a name never needs per-verb disambiguation against its neighbor (the opaque batch `store_fields` and the typed batch `set_all` are not near-homographs).
 
-**The rule governs user-field writes, and says so.** System metadata (`store_ext` / `store_seed_*`), structural operations (`insertCard` / `moveCard` / `setCardKind`), and the `remove_*` family sit outside it and always did: `remove_*` has no lane because one verb serves every write path, and a structural op moves cards rather than writing into one. So `store_field` / `store_fields` / `store_fill` are the opaque store, `set` / `set_all` the typed writer, and a name never needs per-verb disambiguation against its neighbor (the opaque batch `store_fields` and the typed batch `set_all` are not near-homographs).
-
-**Why the verb carries it at all, given receivers exist.** Where there is a receiver it names the lane too (`doc.storeField` vs `writer.set`), so the verb looks redundant. It is not, and the reason is a design choice rather than a law: the reference surface (WASM `Document`) **flattens all three lanes onto one class**, and the parity table below requires a binding verb be identical to its core twin. A verb that leaned on its receiver would need a different spelling on the flattened surface, and the table would have to admit a fourth difference class to hold it. Change the flattening and this rule loses its load.
+**Why the verb carries it when a receiver could.** Where a receiver exists it names the lane too (`doc.storeField` vs `writer.set`), so the verb looks redundant. It is not, on a design choice rather than a law: the reference surface (WASM `Document`) **flattens all three lanes onto one class**, and the parity table below requires a binding verb be identical to its core twin. A verb leaning on its receiver would need a different spelling on the flattened surface, and the table would have to admit a fourth difference class to hold it. Change the flattening and this rule loses its load.
 
 The body verbs follow from the same rule rather than from a separate one. `writer.reviseBody` is the content lane's `revise` reached through the writer: a body carries no field schema, so there is nothing for a typed verb to type, and the receipt it returns is the content lane's, not a typed lane's. The typed writer holds it because that is where a caller already is, not because the write is typed.
 

@@ -83,11 +83,12 @@ impl<'a> TypedWriter<'a> {
     }
 
     /// Revise the main card's body from markdown: edit semantics, surviving
-    /// anchors rebase, and the text [`Delta`] comes back. The writer spelling of
-    /// [`Card::revise_body`](crate::Card::revise_body), which it is: a body
-    /// carries no field schema, so there is nothing here for a typed verb to
-    /// type. Discard the receipt with `let _ = writer.revise_body(md)?;` when
-    /// caret stability is not needed.
+    /// anchors rebase, text [`Delta`] returned. This is
+    /// [`Card::revise_body`](crate::Card::revise_body) reached through the
+    /// writer, and it is the content lane's verb rather than a typed one
+    /// because a body carries no field schema to type against. Discard the
+    /// receipt with `let _ = writer.revise_body(md)?;` when caret stability is
+    /// not needed.
     pub fn revise_body(&mut self, markdown: &str) -> Result<Delta, EditError> {
         self.doc.main_mut().revise_body(markdown)
     }

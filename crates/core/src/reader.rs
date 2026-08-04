@@ -59,6 +59,7 @@
 use indexmap::IndexMap;
 use quillmark_content::Content;
 
+use crate::document::edit::{CODEC_PLAINTEXT, CODEC_RICHTEXT};
 use crate::document::{Card, Document, EditError, RichtextDecodeError};
 use crate::quill::{CardSchema, FieldSchema, FieldType, QuillConfig};
 use crate::value::QuillValue;
@@ -214,13 +215,13 @@ fn read_field(
         FieldType::RichText { .. } => project(
             card.field_markdown(name),
             name,
-            crate::document::edit::CODEC_RICHTEXT,
+            CODEC_RICHTEXT,
             ReadValue::Markdown,
         ),
         FieldType::PlainText { .. } => project(
             card.field_plaintext(name),
             name,
-            crate::document::edit::CODEC_PLAINTEXT,
+            CODEC_PLAINTEXT,
             ReadValue::Plaintext,
         ),
         _ => Ok(card
@@ -247,9 +248,11 @@ fn read_content(
     let schema = fields_schema
         .and_then(|m| m.get(name))
         .ok_or_else(|| EditError::UnknownField(name.to_string()))?;
-    let decoded = match schema.r#type {
-        FieldType::RichText { .. } => card.field_richtext(name),
-        FieldType::PlainText { .. } => card.field_plaintext_content(name),
+    // The codec rides out of the dispatch: it is the declared type's, not the
+    // stored shape's, and the same bytes decode two ways.
+    let (decoded, codec) = match schema.r#type {
+        FieldType::RichText { .. } => (card.field_richtext(name), CODEC_RICHTEXT),
+        FieldType::PlainText { .. } => (card.field_plaintext_content(name), CODEC_PLAINTEXT),
         ref other => {
             return Err(EditError::FieldNotContent {
                 field: name.to_string(),
@@ -257,10 +260,6 @@ fn read_content(
             })
         }
     };
-    // The codec is the declared type's, not the stored shape's: the same bytes
-    // decode two ways and only the schema says which ran.
-    let codec = crate::document::edit::codec_of(&schema.r#type)
-        .expect("the two content leaves are the only arms that reach here");
     match decoded {
         None => Ok(None),
         Some(Ok(content)) => Ok(Some(content)),
