@@ -392,6 +392,10 @@ The id stays in the hash input, so "canonical bytes == hash input" holds exact: 
 
 The importer is not the only minter: `IslandOp::Insert` carries the id of the island it lands, and the apply refuses the empty id and one already live in the field (`ApplyError::EmptyIslandId`, `ApplyError::IslandIdCollision`), since `IslandOp::Set` addresses by it. That producer is bound by the same never-ambient rule: continue the positional sequence past the field's highest `isl-{n}`, never a UUID, a clock reading, or a session counter. Import purity is unaffected either way, since export drops island ids and no edit-minted id reaches markdown; the rule holds at edit time so two producers making the same edit reach the same bytes.
 
+The continuation rule mints a *new* island. Re-landing a dropped one is not a mint: the delete freed the id and it travels back with its island, so restoring a deletion restores the bytes. A pasted copy of a live island is new and mints fresh. Swapping the two cases is `IslandIdCollision` on the paste, or a silently renamed island on the restore.
+
+The two compose because minting reads the *live* ids: deleting the highest island frees its number for the next mint, and restoring that delete would then collide. Linear undo never reaches the state, since a mint made after a delete is undone before it. A producer with non-linear history — selective undo, a merge — owns the case, and the apply refuses it rather than aliasing two islands.
+
 ## Anchor-id identity
 
 An anchor (`MarkKind::Anchor { id }`) sits at the caller-minted end of the mint
