@@ -101,11 +101,11 @@ discard.
 w = quill.writer(doc)
 w.set("title", "On Taro")                 # typed-commit one field (mismatch raises now)
 w.set_all({"title": "T", "author": "A"})  # atomic batch; one diagnostic per bad field
-w.set_body("A **taro** essay.")           # typed body write (edit semantics)
+w.revise_body("A **taro** essay.")           # typed body write (edit semantics)
 w.revise_field("bio", "make it **bold**") # typed *and* anchor-preserving content write (codec by declared type)
 w.add_card("quotes", {"author": "Basho"}, "…", at=None)  # make + typed commit + insert (at appends/inserts)
 w.remove_card(0)
-w.card(0).set("author", "Issa")           # a CardWriter: .index, .kind, .set, .set_all, .set_body, .revise_field
+w.card(0).set("author", "Issa")           # a CardWriter: .index, .kind, .set, .set_all, .revise_body, .revise_field
 ```
 
 ### `Reader`: `quill.reader(doc)`
@@ -119,13 +119,13 @@ back the field's `Content` corpus as a dict whichever lane stored it.
 ```python
 v = quill.reader(doc)
 v.get("bio")                              # richtext → markdown str; scalar → its value; absent → None
-                                          # undeclared name raises UnknownField; undecodable content raises FieldRichtextDecode
+                                          # undeclared name raises UnknownField; undecodable content raises FieldDecode
 v.get_content("bio")                      # the corpus dict {text, lines, marks, islands}; absent → None
                                           # a type that is not a content leaf raises FieldNotContent
-v.get_body()                              # the main body markdown (quill-free body read)
+v.body_markdown()                              # the main body markdown (quill-free body read)
 v.card(0).kind                            # the composable card's $kind
 v.card(0).get("author")                   # a card field, interpreted by its $kind schema
-v.card(0).get_body()
+v.card(0).body_markdown()
 ```
 
 ### `RenderResult` / `Artifact`
@@ -153,8 +153,8 @@ stored   = doc.to_json()
 restored = Document.from_json(stored)
 maybe    = Document.try_from_json(blob)          # None when not a DTO
 
-Document.schema_version_of(blob)                 # raw tag (incl. unknown futures)
-Document.current_schema_version()                # what this build writes
+Document.storage_version_of(blob)                 # raw tag (incl. unknown futures)
+Document.current_storage_version()                # what this build writes
 
 Document.format_rules()                          # card-yaml authoring rules (static text)
 Document.quill_ref_hint()                        # $quill reference grammar (static text)
@@ -178,8 +178,8 @@ doc.remove_field("title")                        # remove has no lane; card=i ta
 doc.store_ext({"agent": {"pinned": True}})       # whole $ext map; card=i for a composable card
 doc.store_ext_namespace("agent", {"n": 1})       # one slot, siblings preserved; card=i too
 doc.remove_ext_namespace("agent"); doc.remove_ext()
-doc.store_seed_namespace("note", {"tag": "T"})   # per-kind $seed overlay; new cards spawn with it
-doc.remove_seed_namespace("note")
+doc.store_seed_overlay("note", {"tag": "T"})   # per-kind $seed overlay; new cards spawn with it
+doc.remove_seed_overlay("note")
 ```
 
 Setting a field's value is the writer's job (`quill.writer(doc).set(...)`): a
@@ -219,7 +219,7 @@ except QuillmarkError as exc:
 
 Mutator failures (invalid field names, kind names, out-of-range indices) carry
 a namespaced `edit::*` `code` on `diagnostics[0]`: `edit::invalid_field_name`,
-`edit::unknown_field`, `edit::index_out_of_range`, `edit::field_conform`, …:
+`edit::unknown_field`, `edit::index_out_of_range`, `edit::field_coercion_failed`, …:
 the same taxonomy WASM uses. Route on `diagnostics[0].code`, never on message
 text.
 

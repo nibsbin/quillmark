@@ -3048,8 +3048,8 @@ fn inline_richtext_example_over_one_para_is_a_load_error() {
     .unwrap_err();
     assert!(
         err.iter()
-            .any(|d| d.code.as_deref() == Some("richtext::not_inline")),
-        "a two-paragraph inline example should fail load with richtext::not_inline, got: {err:?}"
+            .any(|d| d.code.as_deref() == Some("validation::not_inline")),
+        "a two-paragraph inline example should fail load with validation::not_inline, got: {err:?}"
     );
 }
 

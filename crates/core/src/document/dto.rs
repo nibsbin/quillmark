@@ -52,7 +52,7 @@ use crate::version::QuillReference;
 /// this tag. Stores the card `body` as the canonical content embedded
 /// structurally (byte-identical to `to_canonical_json`) rather than a markdown string;
 /// the payload shape is unchanged from V0_92_0.
-pub const SCHEMA_V0_93_0: &str = "quillmark/document@0.93.0";
+pub const STORAGE_V0_93_0: &str = "quillmark/document@0.93.0";
 
 /// Read the `schema` field from a raw storage DTO payload without
 /// performing full deserialization.
@@ -62,7 +62,7 @@ pub const SCHEMA_V0_93_0: &str = "quillmark/document@0.93.0";
 /// set of supported schema versions: callers use this to distinguish
 /// "unknown future version" from "corrupt payload" when [`Document`]
 /// deserialization fails.
-pub fn peek_schema_version(json: &str) -> Option<String> {
+pub fn peek_storage_version(json: &str) -> Option<String> {
     #[derive(Deserialize)]
     struct Peek {
         schema: Option<String>,
@@ -773,16 +773,16 @@ This body and the metadata above are an indorsement card.
     fn peek_schema_version_reads_field_without_full_parse() {
         let doc = sample();
         let json = serde_json::to_string(&doc).unwrap();
-        assert_eq!(peek_schema_version(&json).as_deref(), Some(SCHEMA_V0_93_0));
+        assert_eq!(peek_storage_version(&json).as_deref(), Some(STORAGE_V0_93_0));
 
         // Unknown future version: peek still succeeds.
         let future = r#"{"schema":"quillmark/document@0.99.0","main":{}}"#;
         assert_eq!(
-            peek_schema_version(future).as_deref(),
+            peek_storage_version(future).as_deref(),
             Some("quillmark/document@0.99.0")
         );
-        assert_eq!(peek_schema_version("not json"), None);
-        assert_eq!(peek_schema_version(r#"{"foo":"bar"}"#), None);
+        assert_eq!(peek_storage_version("not json"), None);
+        assert_eq!(peek_storage_version(r#"{"foo":"bar"}"#), None);
     }
 
     #[test]
@@ -1002,7 +1002,7 @@ title: Hi
             first, second,
             "V0_93_0 serialize→deserialize is a byte-fixed point"
         );
-        assert_eq!(peek_schema_version(&first).as_deref(), Some(SCHEMA_V0_93_0));
+        assert_eq!(peek_storage_version(&first).as_deref(), Some(STORAGE_V0_93_0));
     }
 
     #[test]
@@ -1050,7 +1050,7 @@ title: Hi
             "same legacy input → same migrated bytes"
         );
         let reser = serde_json::to_string(&doc).unwrap();
-        assert_eq!(peek_schema_version(&reser).as_deref(), Some(SCHEMA_V0_93_0));
+        assert_eq!(peek_storage_version(&reser).as_deref(), Some(STORAGE_V0_93_0));
     }
 
     #[test]

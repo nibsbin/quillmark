@@ -117,11 +117,11 @@ card_kinds:
     expect(field(quill.seedCard('note', overlay), 'author')).toBe('Custom Author')
     expect(field(quill.seedCard('note'), 'author')).toBe('A. Author')
 
-    // storeSeedNamespace writes an overlay; main.seed reads it back; remove clears.
+    // storeSeedOverlay writes an overlay; main.seed reads it back; remove clears.
     const doc2 = Document.fromMarkdown('~~~\n$quill: seed_core@1.0.0\n$kind: main\n~~~\n')
-    doc2.storeSeedNamespace('note', { author: 'Written' })
+    doc2.storeSeedOverlay('note', { author: 'Written' })
     expect(doc2.main.seed?.note.author).toBe('Written')
-    doc2.removeSeedNamespace('note')
+    doc2.removeSeedOverlay('note')
     expect(doc2.main.seed?.note).toBeUndefined()
   })
 
@@ -184,16 +184,16 @@ title: Draft
     expect(doc.getStored({ card: 0, field: 'author' })).toBe('Alice')
     expect(doc.getStored({ card: 0, field: 'missing' })).toBeUndefined()
 
-    // getMarkdown is the card body read (card address); a field address throws.
+    // bodyMarkdown is the card body read (card address); a field address throws.
     // A field's markdown reads through the schema-plane view,
     // quill.reader(doc).card(i).get(name).
-    expect(doc.getMarkdown({ card: 0 })).toContain('A note body.')
-    expect(() => doc.getMarkdown({ card: 0, field: 'author' })).toThrow(/body-only/)
+    expect(doc.bodyMarkdown({ card: 0 })).toContain('A note body.')
+    expect(() => doc.bodyMarkdown({ card: 0, field: 'author' })).toThrow(/body-only/)
 
     // An out-of-range index is a boundary error: it throws, the way the card
     // write verbs do, rather than reading back as undefined/"".
     expect(() => doc.getStored({ card: 1, field: 'author' })).toThrow()
-    expect(() => doc.getMarkdown({ card: 1 })).toThrow()
+    expect(() => doc.bodyMarkdown({ card: 1 })).toThrow()
 
     // getStored still reads the raw value verbatim (transport); including a scalar a
     // storeField wrote under a would-be richtext field.
@@ -221,7 +221,7 @@ title: Draft
 
     // seedOverlay reads one $seed[kind] entry off the main card cheaply, the
     // overlay you feed straight into quill.seedCard(kind, overlay).
-    doc.storeSeedNamespace('note', { author: 'Seeded' })
+    doc.storeSeedOverlay('note', { author: 'Seeded' })
     expect(doc.seedOverlay('note')).toEqual({ author: 'Seeded' })
     expect(doc.seedOverlay('absent')).toBeUndefined()
   })

@@ -43,7 +43,7 @@ def test_payload_access(taro_md):
 def test_body_is_content_dict(taro_md):
     """`body` is the canonical content dict (source of truth); its `text` carries
     the plain USV text quill-free. The markdown projection is
-    `quill.reader(doc).get_body()`."""
+    `quill.reader(doc).body_markdown()`."""
     doc = Document.from_markdown(taro_md)
     assert isinstance(doc.body, dict)
     assert "nutty" in doc.body["text"]
@@ -147,35 +147,35 @@ def test_try_from_json_returns_none_on_markdown(taro_md):
 
 
 def test_schema_version_of_reads_dto(taro_md):
-    """schema_version_of returns the schema tag from a stored DTO."""
+    """storage_version_of returns the schema tag from a stored DTO."""
     doc = Document.from_markdown(taro_md)
     dto = doc.to_json()
 
-    assert Document.schema_version_of(dto) == "quillmark/document@0.93.0"
+    assert Document.storage_version_of(dto) == "quillmark/document@0.93.0"
 
 
 def test_schema_version_of_returns_unknown_future_versions():
-    """schema_version_of returns the raw tag, even for unsupported versions."""
-    # Note: this would be rejected by from_json, but schema_version_of returns it
+    """storage_version_of returns the raw tag, even for unsupported versions."""
+    # Note: this would be rejected by from_json, but storage_version_of returns it
     # so callers can distinguish "build too old" from "payload corrupt".
     future = '{"schema":"quillmark/document@0.99.0"}'
-    assert Document.schema_version_of(future) == "quillmark/document@0.99.0"
+    assert Document.storage_version_of(future) == "quillmark/document@0.99.0"
 
 
 def test_schema_version_of_returns_none_for_non_dto():
-    """schema_version_of returns None when the input is not a schema-tagged object."""
-    assert Document.schema_version_of("not json") is None
-    assert Document.schema_version_of('{"foo":"bar"}') is None
+    """storage_version_of returns None when the input is not a schema-tagged object."""
+    assert Document.storage_version_of("not json") is None
+    assert Document.storage_version_of('{"foo":"bar"}') is None
 
 
 def test_current_schema_version_matches_emitted_tag(taro_md):
-    """current_schema_version equals the tag emitted by to_json."""
+    """current_storage_version equals the tag emitted by to_json."""
     doc = Document.from_markdown(taro_md)
     dto = doc.to_json()
 
-    current = Document.current_schema_version()
+    current = Document.current_storage_version()
     assert isinstance(current, str)
-    assert Document.schema_version_of(dto) == current
+    assert Document.storage_version_of(dto) == current
 
 
 def test_clone_preserves_state(taro_md):

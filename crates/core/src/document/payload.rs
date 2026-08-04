@@ -211,7 +211,7 @@ impl PayloadItem {
 /// `$quill` / `$kind` / `$ext` / `$seed`, no duplicate field keys, every field
 /// name matching `[A-Za-z_][A-Za-z0-9_]*` — are not all expressible in the
 /// mutators' signatures, so out-of-crate authoring goes through the verbs that
-/// do enforce them: `Card::store_field` / `store_ext` / `store_seed_namespace`,
+/// do enforce them: `Card::store_field` / `store_ext` / `store_seed_overlay`,
 /// `Document::set_quill_ref`, and [`TypedWriter`](crate::TypedWriter).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Payload {

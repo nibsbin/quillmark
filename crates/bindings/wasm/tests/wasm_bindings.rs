@@ -299,7 +299,7 @@ fn test_quill_metadata_and_schemas() {
 
 /// The seed verbs cross the boundary with their declared shapes: `seedDocument`
 /// as a `Document`, `seedMain` / `seedCard` as card objects, `seedCard` of an
-/// unknown kind as `undefined`, and `storeSeedNamespace` / `removeSeedNamespace`
+/// unknown kind as `undefined`, and `storeSeedOverlay` / `removeSeedOverlay`
 /// writing and clearing `main.seed[kind]`. What the seeds *contain* (example
 /// commitment, overlay layering) is core's (`core/src/quill/seed/tests.rs`,
 /// mirrored once in JS by `core.test.js`).
@@ -344,13 +344,13 @@ fn test_seed_verbs_cross_the_boundary() {
         Document::from_markdown("~~~card-yaml\n$quill: seed_quill@1.0\n$kind: main\n~~~\n")
             .expect("fromMarkdown failed");
     assert!(seed_of(&doc, "note").is_undefined());
-    doc.store_seed_namespace("note", js_sys::JSON::parse("{\"text\":\"WRITTEN\"}").unwrap())
+    doc.store_seed_overlay("note", js_sys::JSON::parse("{\"text\":\"WRITTEN\"}").unwrap())
         .unwrap();
     assert_eq!(
         get(&seed_of(&doc, "note"), "text").as_string().as_deref(),
         Some("WRITTEN")
     );
-    doc.remove_seed_namespace("note").unwrap();
+    doc.remove_seed_overlay("note").unwrap();
     assert!(seed_of(&doc, "note").is_undefined());
 }
 

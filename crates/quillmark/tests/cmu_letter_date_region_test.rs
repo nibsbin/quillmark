@@ -34,7 +34,7 @@ fn cmu_letter_real_date_surfaces_a_region_and_blank_falls_back() {
     quillmark::TypedWriter::new(quill.config(), &mut edited)
         .set("date", "2026-01-02")
         .expect("set a real date");
-    session.apply(&edited).expect("apply a real letter date");
+    session.update(&edited).expect("apply a real letter date");
 
     let regions = session.regions();
     let date = regions

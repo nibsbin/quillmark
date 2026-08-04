@@ -125,13 +125,13 @@ fn apply_rechecks_the_reference_against_the_sessions_quill() {
 
     // A well-formed document that belongs to a different quill.
     let err = session
-        .apply(&doc("other_quill@3"))
+        .update(&doc("other_quill@3"))
         .expect_err("apply must refuse another quill's document");
     assert_eq!(mismatch_code(&err), Some("quill::name_mismatch"));
 
     // …and one whose version leaves the selector.
     let err = session
-        .apply(&doc("test_quill@2"))
+        .update(&doc("test_quill@2"))
         .expect_err("apply must refuse an out-of-selector version");
     assert_eq!(mismatch_code(&err), Some("quill::version_mismatch"));
 
@@ -143,7 +143,7 @@ fn apply_rechecks_the_reference_against_the_sessions_quill() {
         .render(&RenderOptions::default().with_output_format(OutputFormat::Pdf))
         .expect("reads still serve the last-good compile");
     session
-        .apply(&doc("test_quill@3"))
+        .update(&doc("test_quill@3"))
         .expect("the matching document still applies");
 }
 

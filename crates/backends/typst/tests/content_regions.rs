@@ -690,7 +690,7 @@ main:
     // and the unparseable date fails the compile at data-assembly time.
     let bad = serde_json::json!({ "intro": content("X"), "when": "not-a-date" });
     session
-        .apply_data(&bad)
+        .update_data(&bad)
         .expect_err("the bad date must fail the compile");
 
     assert_eq!(

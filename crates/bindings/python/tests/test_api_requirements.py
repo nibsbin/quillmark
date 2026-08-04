@@ -3,7 +3,7 @@
 Python is a Tier-1 binding: field I/O flows through `quill.writer(doc)` /
 `quill.reader(doc)`. `Document` carries the quill-free surface: parse, storage,
 structure, `$ext` / `$seed`, and `remove_field`. There is no opaque field store
-and no content lane (`install` / `revise` / `apply_change` + codec); those are
+and no content lane (`overwrite` / `revise` / `apply_change` + codec); those are
 WASM-only by scope.
 """
 
@@ -135,7 +135,7 @@ def test_blank_document_renders(engine):
     doc = Document("taro@0.1.0")
     w = quill.writer(doc)
     w.set_all({"title": "Test", "author": "Test Author", "ice_cream": "Chocolate"})
-    w.set_body("Content.")
+    w.revise_body("Content.")
 
     result = engine.render(quill, doc, OutputFormat.PDF)
     assert len(result.artifacts) > 0
@@ -342,7 +342,7 @@ def test_seed_overlay_reads_one_kind_off_the_main_card():
     quill.seed_card(kind, overlay): without projecting the whole main card.
     Total over the kind axis: an absent kind reads back None."""
     doc = Document.from_markdown(SIMPLE_MD)
-    doc.store_seed_namespace("note", {"author": "Seeded"})
+    doc.store_seed_overlay("note", {"author": "Seeded"})
     assert doc.seed_overlay("note") == {"author": "Seeded"}
     assert doc.seed_overlay("absent") is None
     # Same entry the `main` dict carries, read cheaply.
@@ -495,7 +495,7 @@ def test_to_markdown_general_round_trip():
     # Mutate: typed field + typed body + a quill-free card.
     quill.writer(doc).set("title", "New Title")
     doc.insert_card(Document.make_card("note", {"author": "Alice"}, "Hello"))
-    quill.writer(doc).set_body("Updated body")
+    quill.writer(doc).revise_body("Updated body")
 
     # Emit
     emitted = doc.to_markdown()
@@ -568,8 +568,8 @@ def test_writer_front_door_set_and_reads():
     v = quill.reader(doc)
     assert v.get("author") == "Ada"
     assert v.get("ice_cream") is None  # declared but absent → None
-    ed.set_body("A **taro** essay.")
-    assert v.get_body() == "A **taro** essay."
+    ed.revise_body("A **taro** essay.")
+    assert v.body_markdown() == "A **taro** essay."
 
 
 def test_writer_set_rejects_unknown_field():
@@ -659,7 +659,7 @@ def test_writer_set_rejects_inline_violation():
     """A richtext(inline) field rejects multi-block content at the write."""
     quill = _richtext_form_quill()
     doc = Document("richtext_form@0.1.0")
-    with raises_edit_code("edit::field_richtext_not_inline"):
+    with raises_edit_code("edit::field_not_inline"):
         quill.writer(doc).set("headline", "line one\n\nline two")
 
 
@@ -667,7 +667,7 @@ def test_writer_set_all_is_all_or_nothing():
     """A mid-batch inline violation aborts set_all: nothing lingers."""
     quill = _richtext_form_quill()
     doc = Document("richtext_form@0.1.0")
-    with raises_edit_code("edit::field_richtext_not_inline"):
+    with raises_edit_code("edit::field_not_inline"):
         quill.writer(doc).set_all({"bio": "ok", "headline": "line one\n\nline two"})
     assert not has_field(doc.main, "bio")
 
@@ -686,7 +686,7 @@ def test_writer_revise_field_rejects_inline_and_unknown():
     rejects an undeclared name: same guards as `set`."""
     quill = _richtext_form_quill()
     doc = Document("richtext_form@0.1.0")
-    with raises_edit_code("edit::field_richtext_not_inline"):
+    with raises_edit_code("edit::field_not_inline"):
         quill.writer(doc).revise_field("headline", "line one\n\nline two")
     with raises_edit_code("edit::unknown_field"):
         quill.writer(doc).revise_field("nope", "x")
@@ -736,7 +736,7 @@ def test_view_absence_returns_none_unknown_name_raises():
 
 
 def test_view_richtext_holding_scalar_raises_mismatch():
-    """A present value that does not decode as richtext raises FieldRichtextDecode.
+    """A present value that does not decode as richtext raises FieldDecode.
 
     Seated quill-free via `from_markdown` (a bare number under a richtext field),
     since the opaque store is gone."""
@@ -744,7 +744,7 @@ def test_view_richtext_holding_scalar_raises_mismatch():
     doc = Document.from_markdown(
         "~~~card-yaml\n$quill: richtext_form@0.1.0\n$kind: main\nbio: 3\n~~~\n"
     )
-    with raises_edit_code("edit::field_richtext_decode"):
+    with raises_edit_code("edit::field_decode"):
         quill.reader(doc).get("bio")
 
 
@@ -788,11 +788,11 @@ def test_view_get_content_absence_unknown_and_non_content():
 
 
 def test_view_body_read_is_quill_free():
-    """view.get_body reads the main body markdown: the quill-free body read."""
+    """view.body_markdown reads the main body markdown: the quill-free body read."""
     quill = _taro_quill()
     doc = Document("taro@0.1.0")
-    quill.writer(doc).set_body("A **taro** essay.")
-    assert quill.reader(doc).get_body() == "A **taro** essay."
+    quill.writer(doc).revise_body("A **taro** essay.")
+    assert quill.reader(doc).body_markdown() == "A **taro** essay."
 
 
 def test_view_card_cursor_reads_through_kind_schema():
@@ -804,7 +804,7 @@ def test_view_card_cursor_reads_through_kind_schema():
     v = quill.reader(doc)
     assert v.card(0).kind == "quotes"
     assert v.card(0).get("author") == "Basho"
-    assert v.card(0).get_body() == "A quote body."
+    assert v.card(0).body_markdown() == "A quote body."
     with raises_edit_code("edit::unknown_field"):
         v.card(0).get("stray")
     with raises_edit_code("edit::index_out_of_range"):

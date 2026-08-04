@@ -171,7 +171,7 @@ export interface Card {
      * The card body as canonical `Content`: the source-of-truth content model.
      * Always this content shape on read, never a markdown string. For the markdown
      * projection call the codec `exportMarkdown(card.body)`. Write a body back
-     * with `doc.install(addr, rt)` / `doc.revise(addr, md)`, or via `CardInput.body`.
+     * with `doc.overwrite(addr, rt)` / `doc.revise(addr, md)`, or via `CardInput.body`.
      */
     body: Content;
 }
@@ -371,7 +371,7 @@ export type LineOp =
  *
  * Both ops move one island entry and leave the field's text and marks alone, so
  * an island edit keeps every identity anchor in the field. That is why a table
- * edit lowers to `applyChange` rather than `install`, which drops them all.
+ * edit lowers to `applyChange` rather than `overwrite`, which drops them all.
  *
  * `set` addresses an existing island by `id`; an `id` no island carries throws
  * rather than passing silently. `insert` places a new island's slot at `at`
@@ -924,17 +924,17 @@ impl Document {
     /// full parse, or `undefined`. Returns unknown future versions as-is:
     /// useful to distinguish "build too old" from "payload corrupt" when
     /// `fromJson` throws.
-    #[wasm_bindgen(js_name = schemaVersionOf)]
-    pub fn schema_version_of(json: &str) -> Option<String> {
-        quillmark_core::document::peek_schema_version(json)
+    #[wasm_bindgen(js_name = storageVersionOf)]
+    pub fn storage_version_of(json: &str) -> Option<String> {
+        quillmark_core::document::peek_storage_version(json)
     }
 
     /// Schema version this build writes via [`toJson`](Document::to_json).
     /// Tracks the `Document` model version (not the running crate version):
     /// the tag advances only when the wire format changes, not on every release.
-    #[wasm_bindgen(js_name = currentSchemaVersion)]
-    pub fn current_schema_version() -> String {
-        quillmark_core::document::SCHEMA_V0_93_0.to_string()
+    #[wasm_bindgen(js_name = currentStorageVersion)]
+    pub fn current_storage_version() -> String {
+        quillmark_core::document::STORAGE_V0_93_0.to_string()
     }
 
     /// Authoring-format rules for the card-yaml markdown surface. The canonical
@@ -1051,7 +1051,7 @@ impl Document {
     /// throws `edit::index_out_of_range`. Needs no schema, so it lives on
     /// `Document`: the read echo of the verbatim `store*` write, distinct from
     /// the interpreted schema-plane [`reader.get`](Self::reader_get). For the
-    /// markdown projection use [`getMarkdown`](Self::get_markdown) (body) or
+    /// markdown projection use [`bodyMarkdown`](Self::get_markdown) (body) or
     /// `reader.get` (a field's declared type).
     ///
     /// **A content field at rest has one stored form per codec**: a `richtext`
@@ -1091,7 +1091,7 @@ impl Document {
     /// present `field` throws: a field's markdown is read through the
     /// schema-plane `quill.reader(doc).get(field)`, which interprets by declared
     /// type. An out-of-range `addr.card` throws.
-    #[wasm_bindgen(js_name = getMarkdown, unchecked_return_type = "string")]
+    #[wasm_bindgen(js_name = bodyMarkdown, unchecked_return_type = "string")]
     pub fn get_markdown(
         &self,
         #[wasm_bindgen(unchecked_optional_param_type = "CardAddr")] addr: JsValue,
@@ -1099,7 +1099,7 @@ impl Document {
         let addr = Addr::from_js(&addr)?;
         if addr.field.is_some() {
             return Err(WasmError::from(
-                "getMarkdown is body-only: read a field's markdown with \
+                "bodyMarkdown is body-only: read a field's markdown with \
                  quill.reader(doc).get(field)",
             )
             .to_js_value());
@@ -1117,11 +1117,11 @@ impl Document {
     /// A bare string is `Addr` shorthand for `{ field }`; `{ card, field }`
     /// targets a composable card (its `$kind` resolves the schema). Returns
     /// `undefined` for an **absent** field. An absent `addr.field` reads the body
-    /// markdown: quill-free, mirroring [`getMarkdown`](Self::get_markdown), since
+    /// markdown: quill-free, mirroring [`bodyMarkdown`](Self::get_markdown), since
     /// a body's type is a format fact, not a schema fact. A name the schema does
-    /// not declare throws `edit::unknown_field` (the authority `getMarkdown`
+    /// not declare throws `edit::unknown_field` (the authority `bodyMarkdown`
     /// lacks: there an unknown name reads back `undefined`); a `richtext` field
-    /// holding a value that does not decode throws `edit::field_richtext_decode`;
+    /// holding a value that does not decode throws `edit::field_decode`;
     /// an out-of-range `addr.card` throws.
     ///
     /// The `quill` handle is passed per call because a `Document` carries only a
@@ -1136,13 +1136,13 @@ impl Document {
         let base = self.addr_base(&addr);
         let reader = quill.inner.reader(&self.inner);
         match &addr.field {
-            // Absent field = body: quill-free markdown, the getMarkdown body read.
+            // Absent field = body: quill-free markdown, the bodyMarkdown body read.
             None => Ok(JsValue::from_str(&match addr.card {
-                None => reader.get_body(),
+                None => reader.body_markdown(),
                 Some(index) => reader
                     .card(index)
                     .map_err(|e| edit_error_to_js(&e, &base))?
-                    .get_body(),
+                    .body_markdown(),
             })),
             Some(field) => {
                 let read = match addr.card {
@@ -1190,7 +1190,7 @@ impl Document {
     /// [`getStored`](Self::get_stored). Throws `edit::unknown_field` for a name
     /// the schema does not declare, `edit::field_not_content` for a declared type
     /// that is not a content leaf (`array<richtext>` carries content and still has
-    /// no one corpus), `edit::field_richtext_decode` for a stored value
+    /// no one corpus), `edit::field_decode` for a stored value
     /// that decodes under neither encoding, and `edit::index_out_of_range` for a
     /// bad `addr.card`.
     #[wasm_bindgen(js_name = _readerGetContent, skip_typescript, unchecked_return_type = "Content | undefined")]
@@ -1340,7 +1340,7 @@ impl Document {
     /// shorthand for `{ field }`, so `doc.storeField("qty", 3)` reads as written;
     /// `{ card: 2, field: "qty" }` targets a composable card. Clears any
     /// `!must_fill` marker. A body address (no `field`) throws: a body is never
-    /// opaque; write it with `revise` / `install` / `writer.setBody`. Throws on
+    /// opaque; write it with `revise` / `overwrite` / `writer.reviseBody`. Throws on
     /// an out-of-range card or a malformed name.
     #[wasm_bindgen(js_name = storeField)]
     pub fn store_field(
@@ -1497,27 +1497,27 @@ impl Document {
     /// card by model, so this takes no address. Sets the starting values new
     /// cards of that kind spawn with. Quill-free and verbatim: an opaque `store`
     /// verb. Throws if `overlay` cannot be serialized or nests too deep.
-    #[wasm_bindgen(js_name = storeSeedNamespace)]
-    pub fn store_seed_namespace(
+    #[wasm_bindgen(js_name = storeSeedOverlay)]
+    pub fn store_seed_overlay(
         &mut self,
         card_kind: &str,
         overlay: JsValue,
     ) -> Result<(), JsValue> {
-        let json = js_value_to_json(overlay, "storeSeedNamespace")?;
+        let json = js_value_to_json(overlay, "storeSeedOverlay")?;
         // Main-only: `$seed` is config-space, so a kind/depth error here carries
         // no field anchor (empty base → `doc_path` returns `None`).
         self.inner
             .main_mut()
-            .store_seed_namespace(card_kind, json)
+            .store_seed_overlay(card_kind, json)
             .map_err(|e| edit_error_to_js(&e, &quillmark_core::DocPath::new()))
     }
 
     /// Remove `cardKind` from the main card's `$seed` map, returning its
     /// overlay or `undefined`; drops `$seed` entirely once empty. Sibling kinds
     /// survive. `$seed` is main-only, so this takes no address.
-    #[wasm_bindgen(js_name = removeSeedNamespace)]
-    pub fn remove_seed_namespace(&mut self, card_kind: &str) -> Result<JsValue, JsValue> {
-        json_value_to_js(self.inner.main_mut().remove_seed_namespace(card_kind))
+    #[wasm_bindgen(js_name = removeSeedOverlay)]
+    pub fn remove_seed_overlay(&mut self, card_kind: &str) -> Result<JsValue, JsValue> {
+        json_value_to_js(self.inner.main_mut().remove_seed_overlay(card_kind))
     }
 
     /// Replace the QUILL reference string. Throws if `ref_str` is invalid.
@@ -1540,33 +1540,36 @@ impl Document {
         Ok(())
     }
 
-    /// **Install** a richtext value at `addr`: **value semantics**, content only.
-    /// Stores exactly `rt` (a canonical `Content` content object); the identity
-    /// anchors of any previous value are gone. An absent `addr.field` targets the
-    /// body, an absent `addr.card` the main card. For "here's new markdown," use
-    /// [`revise`](Document::revise); the cold-import path is spelled at the call
-    /// site as `install(addr, importMarkdown(md))`, so anchor loss is visible in
-    /// source.
+    /// **Overwrite** the content value at `addr`: **value semantics**, content
+    /// only. Stores exactly `rt` (a canonical `Content` content object); the
+    /// identity anchors of any previous value are gone. The bottom rung of the
+    /// content lane's ladder by anchor fate: `overwrite` destroys,
+    /// [`revise`](Document::revise) rebases,
+    /// [`applyChange`](Document::apply_change) preserves. An absent `addr.field`
+    /// targets the body, an absent `addr.card` the main card. For "here's new
+    /// markdown," use [`revise`](Document::revise); the cold-import path is
+    /// spelled at the call site as `overwrite(addr, importMarkdown(md))`, so
+    /// anchor loss is visible in source.
     ///
     /// Throws on an out-of-range card, a malformed field name, or an `rt` that is
     /// not a canonical content object.
-    #[wasm_bindgen(js_name = install)]
-    pub fn install(
+    #[wasm_bindgen(js_name = overwrite)]
+    pub fn overwrite(
         &mut self,
         #[wasm_bindgen(unchecked_param_type = "Addr | string")] addr: JsValue,
         #[wasm_bindgen(unchecked_param_type = "Content")] rt: JsValue,
     ) -> Result<(), JsValue> {
         let addr = Addr::from_js_or_string(&addr)?;
-        let content = js_to_authored_content(rt, "install")?;
+        let content = js_to_authored_content(rt, "overwrite")?;
         let base = self.addr_base(&addr);
         let card = self.addr_card_mut(&addr)?;
         match &addr.field {
             None => {
-                card.install_body(content);
+                card.overwrite_body(content);
                 Ok(())
             }
             Some(field) => card
-                .install_field(field, content)
+                .overwrite_field(field, content)
                 .map_err(|e| edit_error_to_js(&e, &base)),
         }
     }
@@ -1603,7 +1606,7 @@ impl Document {
     /// and defers to [`TypedWriter::revise_field`](quillmark_core::TypedWriter::revise_field):
     /// surviving anchors rebase (as [`revise`](Self::revise)), then the diffed
     /// result is schema-conformed, so a `richtext(inline)` field rejects a
-    /// multi-block result with `edit::field_richtext_not_inline`. Returns the
+    /// multi-block result with `edit::field_not_inline`. Returns the
     /// text `Delta`.
     ///
     /// The codec is the declared type's: `richtext` diffs markdown, `plaintext`
@@ -1644,7 +1647,7 @@ impl Document {
     ///
     /// The island channel keeps a table or image edit on the op path: it moves
     /// the island alone, so the anchors elsewhere in the field survive an edit
-    /// `install` would clear.
+    /// `overwrite` would clear.
     ///
     /// Throws on an out-of-range card, a field that is not richtext, a malformed
     /// bundle, or an op that applies out of bounds (the value is unchanged on a
@@ -1661,7 +1664,7 @@ impl Document {
         let card = self.addr_card_mut(&addr)?;
         match &addr.field {
             None => card.apply_body_change(&bundle),
-            Some(field) => card.apply_field_richtext_change(field, &bundle),
+            Some(field) => card.apply_field_change(field, &bundle),
         }
         .map_err(|e| edit_error_to_js(&e, &base))
     }
@@ -1678,13 +1681,13 @@ impl Document {
     ///
     /// A bare string is `Addr` shorthand for `{ field }`; `{ card, field }`
     /// targets a composable card (its `$kind` resolves the schema). A body
-    /// address throws: a body has no field schema; write it with `writer.setBody`
+    /// address throws: a body has no field schema; write it with `writer.reviseBody`
     /// / `revise`. A field declared in the schema is strict-committed (a mismatch
     /// throws now, not at render); a name the schema does not declare throws
     /// `edit::unknown_field` rather than falling to the opaque store: on
     /// the typed path it is a typo. Use [`storeField`](Document::store_field) for
-    /// opaque storage. Also throws `edit::field_conform` /
-    /// `edit::field_richtext_decode` / `edit::field_richtext_not_inline`
+    /// opaque storage. Also throws `edit::field_coercion_failed` /
+    /// `edit::field_decode` / `edit::field_not_inline`
     /// on a typed mismatch, `edit::invalid_field_name` on a malformed name,
     /// and `edit::index_out_of_range` on an out-of-range card.
     ///
@@ -1808,7 +1811,7 @@ impl Document {
         let field_map: serde_json::Map<String, serde_json::Value> = match fields {
             Some(fields) if !fields.is_undefined() && !fields.is_null() => {
                 // A field value is opaque host JSON, so this door is as open
-                // as `install`'s. `reject_deep_js_value` has why the check
+                // as `overwrite`'s. `reject_deep_js_value` has why the check
                 // precedes `from_value` rather than riding a Rust-side guard.
                 // A backstop under `Card::try_from`'s 100-level field cap, not
                 // a second spelling of it: it catches only what would trap
@@ -2033,7 +2036,7 @@ impl Addr {
         self.field.as_deref().ok_or_else(|| {
             WasmError::from(format!(
                 "{ctx}: a body address (no `field`) is not a field write, \
-                 write the body with revise / install / writer.setBody"
+                 write the body with revise / overwrite / writer.reviseBody"
             ))
             .to_js_value()
         })
@@ -2057,7 +2060,7 @@ impl Addr {
 
 /// Decode a JS value as a canonical `Content` content object (value semantics,
 /// content only). Rejects a markdown string: the cold path is spelled
-/// `install(addr, importMarkdown(md))`.
+/// `overwrite(addr, importMarkdown(md))`.
 ///
 /// The **storage** lane: `exportMarkdown(card.body)` and `rebase(base, md)` are
 /// handed content read back out of a document, which must keep opening whatever
@@ -2067,7 +2070,7 @@ fn js_to_content(value: JsValue, ctx: &str) -> Result<quillmark_core::Content, J
     js_to_content_with(value, ctx, quillmark_content::serial::from_canonical_value)
 }
 
-/// [`js_to_content`] on the **authored** lane: the `install` input. The host is
+/// [`js_to_content`] on the **authored** lane: the `overwrite` input. The host is
 /// writing this content now, so `attrs` beside a built-in discriminator is a
 /// stale copy of the built-in list rather than a document predating that
 /// built-in, and is reported instead of silently dropped.
@@ -2105,7 +2108,7 @@ fn parse_change_bundle(value: &JsValue) -> Result<quillmark_content::ChangeBundl
 // ── Content codec (document-free) ────────────────────────────────────────────────
 
 /// Import a markdown string to a canonical `Content` content: the pure,
-/// document-free codec. Pair with `install(addr, importMarkdown(md))` to spell
+/// document-free codec. Pair with `overwrite(addr, importMarkdown(md))` to spell
 /// the cold (anchor-losing) write at the call site; prefer `revise` for edit
 /// semantics. Throws on an over-nested input.
 #[wasm_bindgen(js_name = importMarkdown, unchecked_return_type = "Content")]
@@ -2477,7 +2480,7 @@ fn js_to_card(value: &JsValue) -> Result<quillmark_core::Card, JsValue> {
         }
     }
     // A payload item's `value` is opaque host JSON, the same axis
-    // `reject_deep_js_value` guards for `install`.
+    // `reject_deep_js_value` guards for `overwrite`.
     reject_deep_js_value(value, "insertCard")?;
     let wire: quillmark_core::CardWire = serde_wasm_bindgen::from_value(value.clone())
         .map_err(|e| WasmError::from(format!("card must be a Card object: {e}")).to_js_value())?;
@@ -2721,17 +2724,21 @@ impl LiveSession {
 
     /// Recompile the session against `doc`: the edit verb of a live preview.
     /// The document is compiled through the same schema pipeline as `open`
-    /// (same quill), then applied transactionally: on throw every read
+    /// (same quill), then swapped in transactionally: on throw every read
     /// (`render`, `paint`, `pageSize`, `regions`, `fieldAt`) keeps serving the last-good
-    /// compile, and the session recovers on the next successful `apply`. On
+    /// compile, and the session recovers on the next successful `update`. On
     /// success reads serve the new compile; repaint `dirtyPages ∩ visible`.
-    #[wasm_bindgen(js_name = apply)]
-    pub fn apply(&mut self, doc: &Document) -> Result<ChangeSet, JsValue> {
+    ///
+    /// Distinct from the content lane's [`applyChange`](Document::apply_change),
+    /// which splices ops into a document: this one recompiles a whole document
+    /// the caller already mutated.
+    #[wasm_bindgen(js_name = update)]
+    pub fn update(&mut self, doc: &Document) -> Result<ChangeSet, JsValue> {
         let cs = self
             .inner
-            .apply(&doc.inner)
+            .update(&doc.inner)
             .map_err(|e| WasmError::from(e).to_js_value())?;
-        // The apply committed, so geometry now reflects `doc`: refresh the
+        // The update committed, so geometry now reflects `doc`: refresh the
         // card-kind lookup the address translation reads.
         self.card_kinds = card_kinds_of(&doc.inner);
         Ok(ChangeSet {

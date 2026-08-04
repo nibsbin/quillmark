@@ -387,14 +387,14 @@ impl PyDocument {
 
     /// Read the `schema` version tag from a raw DTO string without a full parse, or `None`.
     #[staticmethod]
-    fn schema_version_of(json: &str) -> Option<String> {
-        quillmark_core::document::peek_schema_version(json)
+    fn storage_version_of(json: &str) -> Option<String> {
+        quillmark_core::document::peek_storage_version(json)
     }
 
     /// Schema version this build writes.
     #[staticmethod]
-    fn current_schema_version() -> &'static str {
-        quillmark_core::document::SCHEMA_V0_93_0
+    fn current_storage_version() -> &'static str {
+        quillmark_core::document::STORAGE_V0_93_0
     }
 
     /// Canonical card-yaml authoring rules: the core text every surface shows.
@@ -485,7 +485,7 @@ impl PyDocument {
     /// Main card's global body as canonical Content-JSON: the source-of-truth
     /// content model (a content dict, `{text, lines, marks, islands}`). The
     /// quill-free total-read snapshot; for the markdown projection use
-    /// `quill.reader(doc).get_body()`.
+    /// `quill.reader(doc).body_markdown()`.
     #[getter]
     fn body<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let wire = quillmark_core::CardWire::from(self.inner.main());
@@ -622,11 +622,11 @@ impl PyDocument {
     /// Merge a card-kind's seed `overlay` into the main card's `$seed` map
     /// under `card_kind`, preserving sibling kinds. Sets the starting values
     /// new cards of that kind spawn with.
-    fn store_seed_namespace(&mut self, card_kind: &str, overlay: Bound<'_, PyAny>) -> PyResult<()> {
+    fn store_seed_overlay(&mut self, card_kind: &str, overlay: Bound<'_, PyAny>) -> PyResult<()> {
         let json = py_to_json(&overlay)?;
         self.inner
             .main_mut()
-            .store_seed_namespace(card_kind, json)
+            .store_seed_overlay(card_kind, json)
             .map_err(convert_edit_error)?;
         Ok(())
     }
@@ -634,12 +634,12 @@ impl PyDocument {
     /// Remove `card_kind` from the main card's `$seed` map, returning its
     /// overlay or `None`; drops `$seed` entirely once empty. Sibling kinds
     /// survive.
-    fn remove_seed_namespace<'py>(
+    fn remove_seed_overlay<'py>(
         &mut self,
         py: Python<'py>,
         card_kind: &str,
     ) -> PyResult<Bound<'py, PyAny>> {
-        ext_value_to_py(py, self.inner.main_mut().remove_seed_namespace(card_kind))
+        ext_value_to_py(py, self.inner.main_mut().remove_seed_overlay(card_kind))
     }
 
     fn set_quill_ref(&mut self, ref_str: &str) -> PyResult<()> {
@@ -802,15 +802,17 @@ impl PyWriter {
             .map_err(convert_edit_errors)
     }
 
-    /// Set the main body from markdown (edit semantics: anchors rebase),
-    /// discarding the delta, the receipt-free body write.
-    fn set_body(&self, py: Python<'_>, markdown: &str) -> PyResult<()> {
+    /// Revise the main body from markdown (edit semantics: anchors rebase). The
+    /// `Delta` receipt is discarded, as on `revise_field`: the position-mapping
+    /// receipt is an editor concern and that lane is WASM-only.
+    fn revise_body(&self, py: Python<'_>, markdown: &str) -> PyResult<()> {
         let quill = self.quill.borrow(py);
         let mut doc = self.doc.borrow_mut(py);
         quill
             .inner
             .writer(&mut doc.inner)
-            .set_body(markdown)
+            .revise_body(markdown)
+            .map(|_| ())
             .map_err(convert_edit_error)
     }
 
@@ -819,7 +821,7 @@ impl PyWriter {
     /// markdown, while `plaintext` diffs the literal text and never imports
     /// markdown. Surviving anchors rebase, then the diffed result is
     /// schema-conformed (a `richtext(inline)` field rejects a multi-block result
-    /// with `edit::field_richtext_not_inline`). Raises
+    /// with `edit::field_not_inline`). Raises
     /// `edit::unknown_field` for a name the schema does not declare. The
     /// only field write that preserves a JS editor's anchors on a shared document
     /// (`set` cold-imports). The text `Delta` is discarded: the position-mapping
@@ -953,8 +955,9 @@ impl PyCardWriter {
             .map_err(convert_edit_errors)
     }
 
-    /// Set this card's body from markdown (edit semantics), discarding the delta.
-    fn set_body(&self, py: Python<'_>, markdown: &str) -> PyResult<()> {
+    /// Revise this card's body from markdown (edit semantics), discarding the
+    /// `Delta` receipt as `Writer.revise_body` does.
+    fn revise_body(&self, py: Python<'_>, markdown: &str) -> PyResult<()> {
         let quill = self.quill.borrow(py);
         let mut doc = self.doc.borrow_mut(py);
         quill
@@ -962,7 +965,8 @@ impl PyCardWriter {
             .writer(&mut doc.inner)
             .card(self.index)
             .map_err(convert_edit_error)?
-            .set_body(markdown)
+            .revise_body(markdown)
+            .map(|_| ())
             .map_err(convert_edit_error)
     }
 
@@ -991,7 +995,7 @@ impl PyCardWriter {
 /// canonical value verbatim. The schema authority is the point: a name the schema
 /// does not declare raises `edit::unknown_field` (a typo, as on the write
 /// side) rather than reading back `None`, and a content field holding an
-/// undecodable value raises `edit::field_richtext_decode`. This is the field
+/// undecodable value raises `edit::field_decode`. This is the field
 /// read surface: `Document` carries no quill-free field read. Holds both objects
 /// by reference and re-borrows them per call (pyo3 objects carry no lifetime), so
 /// it is ephemeral by convention: bind, read, discard. Mirrors WASM
@@ -1014,7 +1018,7 @@ impl PyReader {
     /// to its markdown projection (a `str`), every other type its canonical value
     /// (scalar/list/dict), or `None` when the field is absent. Raises
     /// `edit::unknown_field` for a name the schema does not declare (a typo,
-    /// as on the write side) and `edit::field_richtext_decode` for a richtext
+    /// as on the write side) and `edit::field_decode` for a richtext
     /// field holding a value that does not decode.
     fn get<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
         let quill = self.quill.borrow(py);
@@ -1036,7 +1040,7 @@ impl PyReader {
     ///
     /// `None` when the field is absent. Raises `edit::unknown_field` for an
     /// undeclared name, `edit::field_not_content` for a declared type that is not a
-    /// content leaf, and `edit::field_richtext_decode` for a stored value that
+    /// content leaf, and `edit::field_decode` for a stored value that
     /// decodes under neither encoding. Mirrors WASM `reader.getContent`.
     fn get_content<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
         let quill = self.quill.borrow(py);
@@ -1051,7 +1055,7 @@ impl PyReader {
 
     /// The main body's markdown: the quill-free body read (a body's type is a
     /// format fact, not a schema fact), never raising.
-    fn get_body(&self, py: Python<'_>) -> String {
+    fn body_markdown(&self, py: Python<'_>) -> String {
         let doc = self.doc.borrow(py);
         doc.inner.main().body_markdown()
     }
@@ -1127,9 +1131,9 @@ impl PyCardReader {
         content_to_py(py, read)
     }
 
-    /// This card's body markdown: the card twin of `Reader.get_body`. Raises
+    /// This card's body markdown: the card twin of `Reader.body_markdown`. Raises
     /// `edit::index_out_of_range` if the bound index is out of range.
-    fn get_body(&self, py: Python<'_>) -> PyResult<String> {
+    fn body_markdown(&self, py: Python<'_>) -> PyResult<String> {
         let doc = self.doc.borrow(py);
         let card = doc
             .inner
@@ -1477,7 +1481,7 @@ fn card_to_pydict<'py>(
     }
 
     // `body` is the canonical content (source of truth); the markdown projection
-    // is the schema-plane `quill.reader(doc).get_body()` read. The reverse path
+    // is the schema-plane `quill.reader(doc).body_markdown()` read. The reverse path
     // (`py_dict_to_card`) reads `body`.
     d.set_item("body", json_to_py(py, &wire.body)?)?;
     Ok(d)

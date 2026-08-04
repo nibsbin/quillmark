@@ -145,8 +145,8 @@ def test_seed_main_and_card(tmp_path):
 
 
 def test_document_seed_and_store_seed_namespace_round_trip(tmp_path):
-    """main['seed'][kind] reads what store_seed_namespace wrote; the overlay
-    feeds straight back into seed_card as a plain dict; remove_seed_namespace
+    """main['seed'][kind] reads what store_seed_overlay wrote; the overlay
+    feeds straight back into seed_card as a plain dict; remove_seed_overlay
     clears it."""
 
     def seed_of(document, kind):
@@ -158,13 +158,13 @@ def test_document_seed_and_store_seed_namespace_round_trip(tmp_path):
     doc = Document.from_markdown(_md())  # empty main card
 
     assert seed_of(doc, "note") is None
-    doc.store_seed_namespace("note", {"tag": "WRITTEN"})
+    doc.store_seed_overlay("note", {"tag": "WRITTEN"})
     assert seed_of(doc, "note")["tag"] == "WRITTEN"
 
     card = quill.seed_card("note", seed_of(doc, "note"))
     assert "WRITTEN" in json.dumps(card)
 
-    doc.remove_seed_namespace("note")
+    doc.remove_seed_overlay("note")
     assert seed_of(doc, "note") is None
 
 
@@ -234,7 +234,7 @@ def test_conform_reports_a_non_conforming_value_and_leaves_it_authored(tmp_path)
     quill = make_quill(tmp_path, BOUND_QUILL_YAML)
     doc = quill.parse(_bound_md("subject: 42"))
 
-    assert "conform::field_richtext_decode" in [d.code for d in doc.warnings]
+    assert "conform::field_decode" in [d.code for d in doc.warnings]
     assert _fields_of(doc.main)["subject"] == 42, "the value stays authored"
 
 

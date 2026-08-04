@@ -30,7 +30,7 @@
 //! returns its canonical value verbatim ([`ReadValue::Value`]): the same
 //! transport `Document` reads, now reached with schema authority. A present value
 //! that does not decode under a content field raises
-//! [`EditError::FieldRichtextDecode`]. A name the schema does not declare raises
+//! [`EditError::FieldDecode`]. A name the schema does not declare raises
 //! [`EditError::UnknownField`], exactly as [`TypedWriter::set`](crate::TypedWriter::set)
 //! rejects it on the write side.
 //!
@@ -47,7 +47,7 @@
 //! `Document` carries none.
 //!
 //! The body read stays quill-free: a body's type is a format fact, not a schema
-//! fact, so [`get_body`](TypedReader::get_body) mirrors
+//! fact, so [`body_markdown`](TypedReader::body_markdown) mirrors
 //! [`Card::body_markdown`](crate::Card::body_markdown) rather than consulting the
 //! schema.
 //!
@@ -103,7 +103,7 @@ impl<'a> TypedReader<'a> {
     /// ([`ReadValue::Plaintext`]), every other type verbatim
     /// ([`ReadValue::Value`]). `Ok(None)` when the field is absent;
     /// [`EditError::UnknownField`] for a name the schema does not declare (a typo,
-    /// as on the write side); [`EditError::FieldRichtextDecode`] when a content
+    /// as on the write side); [`EditError::FieldDecode`] when a content
     /// field holds a value that does not decode (a scalar an opaque
     /// [`store_field`](crate::Card::store_field) wrote).
     pub fn get(&self, name: &str) -> Result<Option<ReadValue>, EditError> {
@@ -122,7 +122,7 @@ impl<'a> TypedReader<'a> {
     /// [`EditError::FieldNotContent`] for a declared type that is not a content
     /// leaf (an `integer` has no corpus even when it holds a string, and an
     /// `array<richtext>` carries content without having one corpus);
-    /// [`EditError::FieldRichtextDecode`] when the stored value decodes under
+    /// [`EditError::FieldDecode`] when the stored value decodes under
     /// neither encoding.
     ///
     /// The codec is the schema's to name, which is why this read is here and not
@@ -136,7 +136,7 @@ impl<'a> TypedReader<'a> {
     /// ([`Card::body_markdown`](crate::Card::body_markdown)). A body's type is a
     /// format fact, not a schema fact, so this consults no schema and never
     /// raises; the body is never absent.
-    pub fn get_body(&self) -> String {
+    pub fn body_markdown(&self) -> String {
         self.doc.main().body_markdown()
     }
 
@@ -159,7 +159,7 @@ impl<'a> TypedReader<'a> {
 }
 
 /// A single composable card bound to its [`CardSchema`], from
-/// [`TypedReader::card`]. Same `get` / `get_body` verbs as [`TypedReader`],
+/// [`TypedReader::card`]. Same `get` / `body_markdown` verbs as [`TypedReader`],
 /// reading the card at its bound index.
 pub struct CardReader<'a> {
     schema: Option<&'a CardSchema>,
@@ -186,9 +186,9 @@ impl CardReader<'_> {
         read_content(self.card, self.schema.map(|s| &s.fields), name)
     }
 
-    /// This card's body markdown: the card twin of [`TypedReader::get_body`],
+    /// This card's body markdown: the card twin of [`TypedReader::body_markdown`],
     /// quill-free and never raising.
-    pub fn get_body(&self) -> String {
+    pub fn body_markdown(&self) -> String {
         self.card.body_markdown()
     }
 }
@@ -200,7 +200,7 @@ impl CardReader<'_> {
 /// content field projects through its codec (`richtext` via
 /// [`Card::field_markdown`], `plaintext` via [`Card::field_plaintext`]) each
 /// carrying the projection's absent (`None`) / mismatch
-/// ([`EditError::FieldRichtextDecode`]) outcomes; every other type returns its
+/// ([`EditError::FieldDecode`]) outcomes; every other type returns its
 /// canonical value verbatim, `None` when absent.
 fn read_field(
     card: &Card,
@@ -211,10 +211,18 @@ fn read_field(
         .and_then(|m| m.get(name))
         .ok_or_else(|| EditError::UnknownField(name.to_string()))?;
     match schema.r#type {
-        FieldType::RichText { .. } => project(card.field_markdown(name), name, ReadValue::Markdown),
-        FieldType::PlainText { .. } => {
-            project(card.field_plaintext(name), name, ReadValue::Plaintext)
-        }
+        FieldType::RichText { .. } => project(
+            card.field_markdown(name),
+            name,
+            crate::document::edit::CODEC_RICHTEXT,
+            ReadValue::Markdown,
+        ),
+        FieldType::PlainText { .. } => project(
+            card.field_plaintext(name),
+            name,
+            crate::document::edit::CODEC_PLAINTEXT,
+            ReadValue::Plaintext,
+        ),
         _ => Ok(card
             .payload()
             .get(name)
@@ -249,11 +257,16 @@ fn read_content(
             })
         }
     };
+    // The codec is the declared type's, not the stored shape's: the same bytes
+    // decode two ways and only the schema says which ran.
+    let codec = crate::document::edit::codec_of(&schema.r#type)
+        .expect("the two content leaves are the only arms that reach here");
     match decoded {
         None => Ok(None),
         Some(Ok(content)) => Ok(Some(content)),
-        Some(Err(e)) => Err(EditError::FieldRichtextDecode {
+        Some(Err(e)) => Err(EditError::FieldDecode {
             field: name.to_string(),
+            codec: codec.to_string(),
             message: e.into_message(),
         }),
     }
@@ -261,17 +274,19 @@ fn read_content(
 
 /// Lift a codec projection ([`Card::field_markdown`] / [`Card::field_plaintext`])
 /// into a [`ReadValue`]: `None` absent, `Some(Ok)` wrapped by `wrap`, `Some(Err)`
-/// the [`EditError::FieldRichtextDecode`] mismatch naming `name`.
+/// the [`EditError::FieldDecode`] naming `name` and the `codec` that ran.
 fn project(
     projection: Option<Result<String, RichtextDecodeError>>,
     name: &str,
+    codec: &str,
     wrap: fn(String) -> ReadValue,
 ) -> Result<Option<ReadValue>, EditError> {
     match projection {
         None => Ok(None),
         Some(Ok(text)) => Ok(Some(wrap(text))),
-        Some(Err(e)) => Err(EditError::FieldRichtextDecode {
+        Some(Err(e)) => Err(EditError::FieldDecode {
             field: name.to_string(),
+            codec: codec.to_string(),
             message: e.into_message(),
         }),
     }
@@ -395,7 +410,7 @@ card_kinds:
         let view = TypedReader::new(&config, &doc);
         assert!(matches!(
             view.get("subject"),
-            Err(EditError::FieldRichtextDecode { field, .. }) if field == "subject"
+            Err(EditError::FieldDecode { field, .. }) if field == "subject"
         ));
     }
 
@@ -496,7 +511,7 @@ card_kinds:
         let view = TypedReader::new(&config, &doc);
         assert!(matches!(
             view.get_content("subject"),
-            Err(EditError::FieldRichtextDecode { field, .. }) if field == "subject"
+            Err(EditError::FieldDecode { field, .. }) if field == "subject"
         ));
     }
 
@@ -544,6 +559,6 @@ card_kinds:
         let mut doc = blank_doc();
         doc.main_mut().revise_body("A **body**.").unwrap();
         let view = TypedReader::new(&config, &doc);
-        assert_eq!(view.get_body(), "A **body**.");
+        assert_eq!(view.body_markdown(), "A **body**.");
     }
 }

@@ -313,20 +313,20 @@ $kind: main
 ",
     );
     let card = doc.main_mut();
-    card.store_seed_namespace("indorsement", json!({ "from": "A" }))
+    card.store_seed_overlay("indorsement", json!({ "from": "A" }))
         .unwrap();
-    card.store_seed_namespace("attachment", json!({ "label": "B" }))
+    card.store_seed_overlay("attachment", json!({ "label": "B" }))
         .unwrap();
     assert_eq!(card.seed().map(|m| m.len()), Some(2));
 
     // Removing one kind leaves the sibling intact.
-    let removed = card.remove_seed_namespace("indorsement").unwrap();
+    let removed = card.remove_seed_overlay("indorsement").unwrap();
     assert_eq!(removed.get("from").and_then(|v| v.as_str()), Some("A"));
     assert_eq!(card.seed().map(|m| m.len()), Some(1));
     assert!(card.seed().unwrap().contains_key("attachment"));
 
     // Removing the last kind drops `$seed` entirely (not `$seed: {}`).
-    card.remove_seed_namespace("attachment");
+    card.remove_seed_overlay("attachment");
     assert!(card.seed().is_none());
 }
 
@@ -345,11 +345,11 @@ $kind: main
     let card = doc.main_mut();
 
     assert!(matches!(
-        card.store_seed_namespace("main", json!({ "from": "A" })),
+        card.store_seed_overlay("main", json!({ "from": "A" })),
         Err(crate::document::EditError::ReservedKind)
     ));
     assert!(matches!(
-        card.store_seed_namespace("Bad-Kind", json!({ "from": "A" })),
+        card.store_seed_overlay("Bad-Kind", json!({ "from": "A" })),
         Err(crate::document::EditError::InvalidKindName(_))
     ));
 

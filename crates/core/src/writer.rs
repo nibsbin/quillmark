@@ -82,12 +82,14 @@ impl<'a> TypedWriter<'a> {
         set_all_impl(self.doc.main_mut(), schema, fields)
     }
 
-    /// Revise the main card's body from markdown (edit semantics: surviving
-    /// anchors rebase), discarding the text delta, the receipt-free body write.
-    /// Call [`Card::revise_body`](crate::Card::revise_body) on `doc.main_mut()`
-    /// for the [`Delta`] receipt.
-    pub fn set_body(&mut self, markdown: &str) -> Result<(), EditError> {
-        self.doc.main_mut().revise_body(markdown).map(|_| ())
+    /// Revise the main card's body from markdown: edit semantics, surviving
+    /// anchors rebase, and the text [`Delta`] comes back. The writer spelling of
+    /// [`Card::revise_body`](crate::Card::revise_body), which it is: a body
+    /// carries no field schema, so there is nothing here for a typed verb to
+    /// type. Discard the receipt with `let _ = writer.revise_body(md)?;` when
+    /// caret stability is not needed.
+    pub fn revise_body(&mut self, markdown: &str) -> Result<Delta, EditError> {
+        self.doc.main_mut().revise_body(markdown)
     }
 
     /// Revise a content field on the main card from authored text: typed *and*
@@ -200,10 +202,10 @@ impl CardWriter<'_> {
         }
     }
 
-    /// Revise this card's body from markdown (edit semantics), discarding the
-    /// delta: the card twin of [`TypedWriter::set_body`].
-    pub fn set_body(&mut self, markdown: &str) -> Result<(), EditError> {
-        self.card.revise_body(markdown).map(|_| ())
+    /// Revise this card's body from markdown (edit semantics), returning the
+    /// text [`Delta`]: the card twin of [`TypedWriter::revise_body`].
+    pub fn revise_body(&mut self, markdown: &str) -> Result<Delta, EditError> {
+        self.card.revise_body(markdown)
     }
 
     /// Revise a content field on this card from authored text: typed *and*
@@ -379,7 +381,7 @@ card_kinds:
         let config = config();
         let mut doc = blank_doc();
         let mut ed = TypedWriter::new(&config, &mut doc);
-        ed.set_body("**hi**").unwrap();
+        ed.revise_body("**hi**").unwrap();
         assert_eq!(doc.main().body_markdown(), "**hi**");
     }
 
@@ -501,7 +503,7 @@ card_kinds:
         );
         // richtext(inline) rejects a multi-block result; the field is unchanged.
         let err = ed.revise_field("subject", "a\n\nb").unwrap_err();
-        assert_eq!(err.variant_name(), "FieldRichtextNotInline");
+        assert_eq!(err.variant_name(), "FieldNotInline");
         assert_eq!(doc.main().field_markdown("subject").unwrap().unwrap(), "Hello");
     }
 

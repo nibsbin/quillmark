@@ -222,14 +222,14 @@ describe('Document JSON DTO: toJson / fromJson', () => {
   // which payloads are refused) are core's
   // (`core/src/document/dto.rs`). At this boundary the questions are narrower:
   // does the DTO cross as a plain JSON string, does a handle survive the
-  // round-trip, and do the JS-only statics (`tryFromJson`, `schemaVersionOf`)
+  // round-trip, and do the JS-only statics (`tryFromJson`, `storageVersionOf`)
   // answer with `undefined` where their throwing twins throw.
 
   it('toJson emits a plain JSON string carrying the current schema version', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     const dto = doc.toJson()
     expect(typeof dto).toBe('string')
-    expect(JSON.parse(dto).schema).toBe(Document.currentSchemaVersion())
+    expect(JSON.parse(dto).schema).toBe(Document.currentStorageVersion())
   })
 
   it('round-trips a mutated document with cards back to an equal handle', () => {
@@ -261,17 +261,17 @@ describe('Document JSON DTO: toJson / fromJson', () => {
     ).toBeUndefined()
   })
 
-  it('schemaVersionOf reads the schema tag off any payload, or undefined', () => {
+  it('storageVersionOf reads the schema tag off any payload, or undefined', () => {
     const current = Document.fromMarkdown(TEST_MARKDOWN).toJson()
-    expect(Document.schemaVersionOf(current)).toBe(Document.currentSchemaVersion())
+    expect(Document.storageVersionOf(current)).toBe(Document.currentStorageVersion())
 
     // A future version reads back as-is, even though fromJson would reject it.
     expect(
-      Document.schemaVersionOf('{"schema":"quillmark/document@0.99.0","main":{}}'),
+      Document.storageVersionOf('{"schema":"quillmark/document@0.99.0","main":{}}'),
     ).toBe('quillmark/document@0.99.0')
 
-    expect(Document.schemaVersionOf('{"foo":"bar"}')).toBeUndefined()
-    expect(Document.schemaVersionOf(TEST_MARKDOWN)).toBeUndefined()
+    expect(Document.storageVersionOf('{"foo":"bar"}')).toBeUndefined()
+    expect(Document.storageVersionOf(TEST_MARKDOWN)).toBeUndefined()
   })
 })
 
@@ -537,7 +537,7 @@ describe('Document editor surface: storeFields', () => {
   })
 })
 
-describe('Document editor surface: setQuillRef / install / revise', () => {
+describe('Document editor surface: setQuillRef / overwrite / revise', () => {
   it('setQuillRef changes the quillRef', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     doc.setQuillRef('new_quill')
@@ -557,27 +557,27 @@ describe('Document editor surface: setQuillRef / install / revise', () => {
     expect(Array.isArray(delta.ops)).toBe(true)
   })
 
-  it('install({}, rt) installs a content object with value semantics', () => {
+  it('overwrite({}, rt) writes a content object with value semantics', () => {
     // The content is the source-of-truth shape doc.main.body reads back; the
     // cold path spells importMarkdown at the call site.
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     const content = importMarkdown('Content **body** here.')
     expect(typeof content).toBe('object')
-    doc.install({}, content)
+    doc.overwrite({}, content)
     expect(doc.main.body.text).toBe('Content body here.')
     expect(exportMarkdown(doc.main.body)).toBe('Content **body** here.')
   })
 
-  it('install({}, importMarkdown("")) clears the body', () => {
+  it('overwrite({}, importMarkdown("")) clears the body', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
-    doc.install({}, importMarkdown(''))
+    doc.overwrite({}, importMarkdown(''))
     expect(exportMarkdown(doc.main.body)).toBe('')
   })
 
-  it('install rejects a non-content value (markdown must go through importMarkdown)', () => {
+  it('overwrite rejects a non-content value (markdown must go through importMarkdown)', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
-    expect(() => doc.install({}, 'plain markdown')).toThrow()
-    expect(() => doc.install({}, { not: 'a content' })).toThrow()
+    expect(() => doc.overwrite({}, 'plain markdown')).toThrow()
+    expect(() => doc.overwrite({}, { not: 'a content' })).toThrow()
   })
 
   // Island `props` and unknown `attrs` are opaque host payload, and
@@ -585,9 +585,9 @@ describe('Document editor surface: setQuillRef / install / revise', () => {
   // conversion, the tree's own drop) recurses one frame per level. On wasm32 the
   // stack is 1 MB and an overflow is a trap that takes the module down rather than
   // an error the host can catch, so an over-deep value must throw and leave the
-  // module serving. `install` is the reachable door: the value arrives from JS and
+  // module serving. `overwrite` is the reachable door: the value arrives from JS and
   // one loop builds it.
-  it('install rejects a deeply nested props instead of trapping the module', () => {
+  it('overwrite rejects a deeply nested props instead of trapping the module', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     let deep = []
     for (let i = 0; i < 5000; i++) deep = [deep]
@@ -595,14 +595,14 @@ describe('Document editor surface: setQuillRef / install / revise', () => {
     rt.islands = [{ id: 'i1', type: 'widget', loss: 'lossless', props: deep }]
     // Matched on the message: a slot/shape complaint would pass a bare toThrow
     // while the depth door stayed open.
-    expect(() => doc.install({}, rt)).toThrow(/nests deeper/)
+    expect(() => doc.overwrite({}, rt)).toThrow(/nests deeper/)
     // Still alive: the guard errored rather than trapping, so the module keeps
     // serving. A trap would fail every later call in the file, not just this one.
-    doc.install({}, importMarkdown('after'))
+    doc.overwrite({}, importMarkdown('after'))
     expect(doc.main.body.text).toBe('after')
   })
 
-  // Every door taking opaque host JSON carries the guard, not just `install`:
+  // Every door taking opaque host JSON carries the guard, not just `overwrite`:
   // a card field value and a payload item's `value` cross on the same
   // `serde_wasm_bindgen` recursion, so each gets its own case.
   it('makeCard rejects a deeply nested field value instead of trapping the module', () => {
@@ -764,10 +764,10 @@ card_kinds:
   it('commitField fails a strict mismatch and a richtext(inline) violation', () => {
     const quill = buildQuill()
     const doc = blankDoc()
-    expectEditCode(() => doc._commitField(quill, 'qty', 'not-a-number'), 'edit::field_conform')
+    expectEditCode(() => doc._commitField(quill, 'qty', 'not-a-number'), 'edit::field_coercion_failed')
     expectEditCode(
       () => doc._commitField(quill, 'subject', 'line one\n\nline two'),
-      'edit::field_richtext_not_inline',
+      'edit::field_not_inline',
     )
   })
 
@@ -797,7 +797,7 @@ card_kinds:
     expect(exportMarkdown(doc.main.body)).toContain('\n\n')
 
     // setContinues turns the boundary into a within-block hard break: one block,
-    // no blank-line separator, and identity anchors ride through (op, not install).
+    // no blank-line separator, and identity anchors ride through (op, not overwrite).
     doc.applyChange({}, { lineOps: [{ op: 'setContinues', line: 1, continues: true }] })
     expect(exportMarkdown(doc.main.body)).not.toContain('\n\n')
     expect(doc.main.body.lines[1].continues).toBe(true)
@@ -815,7 +815,7 @@ card_kinds:
     const island = doc.main.body.islands[0]
     expect(island.type).toBe('table')
 
-    // An anchor over "intro", above the table: the thing an `install` would drop.
+    // An anchor over "intro", above the table: the thing an `overwrite` would drop.
     doc.applyChange({}, { markOps: [{ op: 'add', start: 0, end: 5, type: 'anchor', id: 'c1' }] })
 
     doc.applyChange(
@@ -942,7 +942,7 @@ card_kinds:
     // is applied: `qty` must not linger.
     expectEditCode(
       () => doc._commitFields(quill, {}, { qty: '5', subject: 'line one\n\nline two' }),
-      'edit::field_richtext_not_inline',
+      'edit::field_not_inline',
     )
     expect(hasField(doc.main, 'qty')).toBe(false)
   })
@@ -1153,7 +1153,7 @@ describe('Document.equals', () => {
   })
 })
 
-describe('Document editor surface: setCardField / install / revise (card)', () => {
+describe('Document editor surface: setCardField / overwrite / revise (card)', () => {
   const MD_WITH_CARD = `~~~card-yaml
 $quill: test_quill
 $kind: main
@@ -1215,25 +1215,25 @@ Card body.
     expectEditCode(() => doc.revise({ card: 0 }, 'x'), 'edit::index_out_of_range')
   })
 
-  it('install({card:0}, rt) installs a content into a card body', () => {
+  it('overwrite({card:0}, rt) writes a content into a card body', () => {
     // The content is the shape doc.cards[i].body reads back; the card-indexed
-    // twin of the main-body install path.
+    // twin of the main-body overwrite path.
     const content = importMarkdown('Card body from **markdown**.')
     const doc = Document.fromMarkdown(MD_WITH_CARD)
-    doc.install({ card: 0 }, content)
+    doc.overwrite({ card: 0 }, content)
     expect(doc.cards[0].body.text).toBe(content.text)
     expect(exportMarkdown(doc.cards[0].body)).toBe('Card body from **markdown**.')
   })
 
-  it('install({card:0}, importMarkdown("")) clears the card body', () => {
+  it('overwrite({card:0}, importMarkdown("")) clears the card body', () => {
     const doc = Document.fromMarkdown(MD_WITH_CARD)
-    doc.install({ card: 0 }, importMarkdown(''))
+    doc.overwrite({ card: 0 }, importMarkdown(''))
     expect(doc.cards[0].body.text).toBe('')
   })
 
-  it('install({card:0}, ...) throws IndexOutOfRange when card absent', () => {
+  it('overwrite({card:0}, ...) throws IndexOutOfRange when card absent', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN) // 0 cards
-    expectEditCode(() => doc.install({ card: 0 }, importMarkdown('x')), 'edit::index_out_of_range')
+    expectEditCode(() => doc.overwrite({ card: 0 }, importMarkdown('x')), 'edit::index_out_of_range')
   })
 })
 
