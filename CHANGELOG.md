@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.102.0 - 2026-08-04
+
+- Density pass over the wasm init change
+- Build the wasm variants with --target web; the runtime owns instantiation
+- Remove EditError::variant_name
+- Density pass over the vocabulary reset, and drop a one-caller helper
+- Repoint the doc link the session rename orphaned
+- Migration guide for the vocabulary reset
+- Rewrite the canon vocabulary rule and retire the prose-only "corpus"
+- Reset the core vocabulary: verbs, error taxonomy, two-altitude words
+- docs(migrations): open the 0.101 → 0.102 guide with the island-id split
+- docs(content): dense-prose pass over the island channel additions
+- docs(content): state the island channel's sequencing frame and its splice-split rule
+
+
 ## v0.101.0 - 2026-08-03
 
 - refactor(core): gate the raw-plate seam behind a feature, and fixes from review
