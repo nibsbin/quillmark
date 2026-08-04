@@ -702,11 +702,12 @@ export declare class DocumentWriter {
 	 */
 	setAll(fields: Record<string, unknown>): void;
 	/**
-	 * Set the main body from markdown (edit semantics: anchors rebase), discarding
-	 * the delta, the receipt-free body write. Use `doc.revise({}, md)` for the
-	 * `Delta` receipt.
+	 * Revise the main body from markdown (edit semantics: anchors rebase),
+	 * returning the text `Delta`. The content lane's `revise` reached through the
+	 * writer: a body carries no field schema to type against, so the receipt is
+	 * the content lane's.
 	 */
-	reviseBody(markdown: string): void;
+	reviseBody(markdown: string): Delta;
 	/**
 	 * Revise the content main-card field `name` from authored text: typed *and*
 	 * anchor-preserving. Surviving anchors rebase, then the diffed result is
@@ -758,8 +759,8 @@ export declare class CardWriter {
 	readonly kind: string;
 	set(name: string, value: unknown): void;
 	setAll(fields: Record<string, unknown>): void;
-	/** Set this card's body from markdown (edit semantics), discarding the delta. */
-	reviseBody(markdown: string): void;
+	/** Revise this card's body from markdown (edit semantics), returning the text `Delta`. */
+	reviseBody(markdown: string): Delta;
 	/**
 	 * Revise the content field `name` on this card from authored text: typed *and*
 	 * anchor-preserving; the card twin of {@link DocumentWriter.reviseField},

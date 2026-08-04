@@ -1065,14 +1065,15 @@ export class DocumentWriter {
 		return this.#doc._commitFields(this.#quill, MAIN_CARD_ADDR, fields);
 	}
 	/**
-	 * Set the main body from markdown (edit semantics: surviving anchors rebase),
-	 * discarding the text delta, the receipt-free body write. Call
-	 * `doc.revise({}, md)` for the {@link Delta} receipt.
+	 * Revise the main body from markdown (edit semantics: surviving anchors
+	 * rebase), returning the text {@link Delta}. The content lane's `revise`
+	 * reached through the writer: a body carries no field schema, so there is
+	 * nothing for a typed verb to type, and the receipt is the content lane's.
 	 * @param {string} markdown
-	 * @returns {void}
+	 * @returns {import('../core/wasm.js').Delta}
 	 */
 	reviseBody(markdown) {
-		this.#doc.revise({}, markdown);
+		return this.#doc.revise({}, markdown);
 	}
 	/**
 	 * Revise the content main-card field `name` from authored text: typed *and*
@@ -1191,13 +1192,13 @@ export class CardWriter {
 		return this.#doc._commitFields(this.#quill, { card: this.#index }, fields);
 	}
 	/**
-	 * Set this card's body from markdown (edit semantics), discarding the delta:
-	 * the card twin of {@link DocumentWriter.reviseBody}.
+	 * Revise this card's body from markdown (edit semantics), returning the text
+	 * {@link Delta}: the card twin of {@link DocumentWriter.reviseBody}.
 	 * @param {string} markdown
-	 * @returns {void}
+	 * @returns {import('../core/wasm.js').Delta}
 	 */
 	reviseBody(markdown) {
-		this.#doc.revise({ card: this.#index }, markdown);
+		return this.#doc.revise({ card: this.#index }, markdown);
 	}
 	/**
 	 * Revise the content field `name` on this card from authored text: typed *and*

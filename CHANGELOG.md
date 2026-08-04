@@ -2,17 +2,108 @@
 
 ## v0.102.0 - 2026-08-04
 
-- Density pass over the wasm init change
-- Build the wasm variants with --target web; the runtime owns instantiation
-- Remove EditError::variant_name
-- Density pass over the vocabulary reset, and drop a one-caller helper
-- Repoint the doc link the session rename orphaned
-- Migration guide for the vocabulary reset
-- Rewrite the canon vocabulary rule and retire the prose-only "corpus"
-- Reset the core vocabulary: verbs, error taxonomy, two-altitude words
-- docs(migrations): open the 0.101 → 0.102 guide with the island-id split
-- docs(content): dense-prose pass over the island channel additions
-- docs(content): state the island channel's sequencing frame and its splice-split rule
+The pre-1.0 vocabulary reset. Verbs, diagnostic codes, and two words that meant
+different things at different altitudes. Documents and stored blobs are
+untouched: no document reparses, no blob remigrates, and the storage wire format
+is byte-identical, but nearly every consumer touches at least one renamed verb.
+The diagnostic codes are the part that could not wait, since consumers route on
+them and 1.0 freezes them. All breaking changes are covered by
+`docs/migrations/0.101-to-0.102.md`. Only two behaviors change, both called out
+below. Separately, `@quillmark/wasm` ships `--target web`, which makes
+`await init()` mandatory and the bundler plugins the package used to demand
+unnecessary.
+
+- refactor(core,wasm,python)!: the verb vocabulary is reset to say what the code
+  does. `install_body` / `install_field` / `doc.install` become `overwrite_*` /
+  `doc.overwrite`: the content lane is a ladder sorted by the fate of the
+  identity anchors already on the value (overwrite destroys, revise rebases,
+  apply preserves), and only the first keeps nothing, which grouping the three as
+  "identity-aware" hid. `LiveSession::apply` becomes `update`, taking the trait
+  seam, the feature-gated raw-plate seam, and `backend::apply_unsupported` →
+  `backend::update_unsupported` with it, so the content lane's `applyChange`
+  splice is no longer a homograph of a whole-document recompile.
+  `apply_field_richtext_change` becomes `apply_field_change`, matching its
+  schema-blind neighbour `revise_field`, which never carried the codec in its
+  name. `store_seed_namespace` / `remove_seed_namespace` become
+  `store_seed_overlay` / `remove_seed_overlay`, closing the asymmetry with the
+  `seedOverlay` read and the `SeedOverlay` type that already shipped: `$seed` is
+  keyed by a validated card-kind, `$ext` by a free-form consumer namespace.
+  `getMarkdown` and reader `get_body` become `bodyMarkdown` / `body_markdown`,
+  the name core already used, so one projection has one name on every surface
+  (#1186). See `docs/migrations/0.101-to-0.102.md`
+- refactor(core,wasm,python)!: the mutator and validation diagnostic codes are
+  corrected, and the content-field failures carry the codec that ran.
+  `edit::field_richtext_decode` becomes `edit::field_decode` and
+  `edit::field_richtext_not_inline` becomes `edit::field_not_inline`, each
+  gaining a `codec` arg (`"richtext"` or `"plaintext"`): both were raised for
+  plaintext failures under a richtext name, and `plaintext(inline)` fell through
+  to the generic code. `edit::field_conform` becomes
+  `edit::field_coercion_failed`, killing the `conform::field_conform` stutter and
+  landing the variant beside its real twin `validation::coercion_failed`, minted
+  from the same `CoercionError`. `richtext::not_inline` and
+  `plaintext::not_plain` become `validation::not_inline` / `validation::not_plain`,
+  stage-namespaced like every other code. The `conform::*` twins rename in
+  lockstep. Route on the code and read `codec` for the lane (#1186). See
+  `docs/migrations/0.101-to-0.102.md`
+- fix(core)!: a splice against an absent field is no longer a decode error. The
+  writer `set_body` / `setBody` becomes `revise_body` / `reviseBody` and returns
+  the text `Delta` it was already computing (a body carries no field schema, so a
+  typed-lane verb had nothing to type); Python discards the receipt, as on
+  `revise_field`. `apply_field_change` on an absent field splices against the
+  empty content, as `revise_field` diffs against it, instead of reporting
+  `FieldRichtextDecode { message: "field is absent" }`: the one place in the API
+  where a missing field was not simply `None`. No error is lost. A bundle that
+  expected content still fails, and now reports the condition it hit, since the
+  text delta declares the base length it was computed against, so a stale splice
+  lands as `edit::content_apply`. Route a vanished-field check on that code, or
+  check presence before splicing. These are the release's only behavior changes
+  (#1186). See `docs/migrations/0.101-to-0.102.md`
+- refactor(core)!: `EditError::variant_name` is removed and the typed primitives
+  leave the documented surface. The bare variant name was a second discriminator
+  kept in lockstep with `code()` that nothing routed on: both binding error
+  mappers stamp `code()` onto the `Diagnostic` they raise, and `ERROR.md` has
+  said identity is the code since the `edit::*` family landed. Assert on `code()`
+  or match the enum, which is `#[non_exhaustive]` either way. `Card::commit_field`
+  and `Card::revise_field_checked` become `#[doc(hidden)]`: a resolved
+  `FieldSchema` argument was the only thing telling them from their opaque and
+  schema-blind neighbours, and disambiguating by argument is a third mechanism
+  beside the receiver and the verb. `quill.writer(&mut doc)` is the typed door on
+  every surface now, core included; the primitives stay callable on the same
+  terms as the other hidden items (#1186). See `docs/migrations/0.101-to-0.102.md`
+- docs(content,core)!: restoring a deleted island re-lands its original id, and
+  the island channel states two contracts it had left to the implementation. The
+  never-ambient minting rule (continue the field's positional `isl-{n}` sequence,
+  never a UUID or a clock reading) covers a *new* island; a delete frees its id
+  and the id travels back with the island, so an editor that mints fresh on undo
+  renames it, moving the content hash of a document the user believes they
+  restored. A pasted copy of a live island is new and mints fresh. Alongside it:
+  an island op's `at` is *sequenced*, counting the text the delta and this
+  bundle's earlier island ops left rather than the shared post-delta frame; and a
+  producer's whole-field diff that carries an island slot must split into the
+  slot-free `delta` plus one `Insert` per slot, since a slot in an insert string
+  orphans. Neither is a behavior change, and a producer that guessed wrong got a
+  wrong document rather than an error (#1185)
+- feat(wasm)!: the package ships `--target web` and the runtime owns
+  instantiation, so `await init()` once at startup is required before any export
+  is used. `--target bundler` emitted `import * as wasm from "./wasm_bg.wasm"`,
+  which no browser and no bundler resolves natively; the plugin that fixed it
+  rewrote the import into a top-level await, and because the runtime statically
+  re-exports core, that await landed on the static module graph of everything
+  importing `@quillmark/wasm`: a permanent constraint on consumer architecture
+  and a blank SvelteKit route in Safari's dev server that neither Chrome nor
+  `vite build` showed. In exchange, `vite-plugin-wasm` and
+  `vite-plugin-top-level-await` are no longer needed, a static import is safe
+  anywhere including SSR, and plain Node can import the package at all (the ESM
+  `.wasm` import needed `--experimental-wasm-modules`). Only
+  `optimizeDeps: { exclude: ['@quillmark/wasm'] }` stays, for Vite's dev server.
+  `init` memoizes its promise, so several entry points share one instantiation
+  and a failed attempt clears the memo for a retry; backends are not the
+  consumer's to initialize, since `Engine` instantiates one inside its lazy load.
+  Reaching the surface early throws `runtime::not_initialized` naming the fix,
+  and `build-wasm.sh` asserts both the guard's anchors and that no artifact
+  carries a `.wasm` import or a top-level await. `initSync` is not exported: the
+  capability remains through `init(source)`, which takes bytes, a `Response`, a
+  `WebAssembly.Module`, or a URL (#1189). See `docs/migrations/0.101-to-0.102.md`
 
 
 ## v0.101.0 - 2026-08-03
