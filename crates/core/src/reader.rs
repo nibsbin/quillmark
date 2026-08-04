@@ -39,11 +39,11 @@
 //! through the bound door ([`Quill::parse`](crate::Quill::parse) /
 //! [`Quill::conform`](crate::Quill::conform)) rests at one form per codec, but
 //! one the transport door left rests as authored, so the verbatim payload read
-//! still answers "content object or string?" with "depends where this document came
-//! from" and this one does not. Decoding needs the
-//! schema, not the payload: a `richtext` string is markdown and a `plaintext`
-//! string is literal text, so the same bytes decode two ways and only the
-//! declared type says which. That is why the `Content` read binds the quill and
+//! still answers "content object or string?" with "depends where this document
+//! came from" and this one does not. Decoding needs the schema, not the payload:
+//! a `richtext` string is markdown and a `plaintext` string is literal text, so
+//! the same bytes decode two ways and only the declared type says which. That is
+//! why the `Content` read binds the quill and
 //! `Document` carries none.
 //!
 //! The body read stays quill-free: a body's type is a format fact, not a schema
@@ -111,12 +111,12 @@ impl<'a> TypedReader<'a> {
         read_field(self.doc.main(), Some(&self.config.main.fields), name)
     }
 
-    /// Read a main-card content field as its [`Content`], decoded through
-    /// the codec its declared type names: the [`Content`] twin of [`get`](Self::get),
+    /// Read a main-card content field as its [`Content`], decoded through the
+    /// codec its declared type names: the [`Content`] twin of [`get`](Self::get),
     /// which returns a projection. Total over the storage form, so a field the
-    /// writer committed as a canonical content object and one a markdown parse left as an
-    /// authored string both read back as a [`Content`], and which lane built the
-    /// document stops being the caller's business.
+    /// writer committed as a canonical content object and one a markdown parse
+    /// left as an authored string both read back as a [`Content`], and which
+    /// lane built the document stops being the caller's business.
     ///
     /// `Ok(None)` when the field is absent;
     /// [`EditError::UnknownField`] for a name the schema does not declare;

@@ -459,7 +459,7 @@ fn test_card_remove_field_invalid_name_throws() {
 // ── Card::revise_body ───────────────────────────────────────────────────────
 
 #[test]
-fn test_card_set_body() {
+fn test_card_revise_body() {
     let mut card = Card::new("note").unwrap();
     card.revise_body("Card body text.").unwrap();
     assert_eq!(card.body_markdown(), "Card body text.");

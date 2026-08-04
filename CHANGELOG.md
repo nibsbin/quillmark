@@ -105,7 +105,6 @@ unnecessary.
   capability remains through `init(source)`, which takes bytes, a `Response`, a
   `WebAssembly.Module`, or a URL (#1189). See `docs/migrations/0.101-to-0.102.md`
 
-
 ## v0.101.0 - 2026-08-03
 
 - refactor(core): gate the raw-plate seam behind a feature, and fixes from review
