@@ -71,17 +71,25 @@ beforeAll(() => {
   globalThis.OffscreenCanvasRenderingContext2D = FakeOffscreenCanvasRenderingContext2D
 })
 
-const { Quillmark, Quill, Document } = await import('@quillmark-wasm')
+const typstBuild = await import('@quillmark-wasm')
+const { Quillmark, Quill, Document } = typstBuild
 // The pdfform backend bundle: same engine + LiveSession + canvas
 // surface as the typst bundle, but a Typst-free PDF-form backend that paints by
 // rasterizing its pre-flattened page. SEPARATE WASM memory from the typst
 // bundle: its handles never mix with the typst ones.
+const pdfformBuild = await import('@quillmark-wasm/pdfform')
 const {
   Quillmark: PdfformQuillmark,
   Quill: PdfformQuill,
   Document: PdfformDocument,
-} = await import('@quillmark-wasm/pdfform')
-const { makeQuill, makeSampleFormQuill, SAMPLE_FORM_MARKDOWN } = await import('./test-helpers.js')
+} = pdfformBuild
+const { makeQuill, makeSampleFormQuill, SAMPLE_FORM_MARKDOWN, initBuildSync } = await import(
+  './test-helpers.js'
+)
+
+// Each build carries its own memory, so each instantiates separately.
+initBuildSync(typstBuild, 'backends/typst')
+initBuildSync(pdfformBuild, 'backends/pdfform')
 
 const TEST_MARKDOWN = `~~~card-yaml
 $quill: test_quill

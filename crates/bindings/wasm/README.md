@@ -30,8 +30,10 @@ bash scripts/build-wasm.sh
 
 The script builds three variants: the core (no backend), the Typst backend
 (default features), and the Typst-free pdfform backend (`pdfform` feature):
-each with `--target bundler` and `--weak-refs` enabled (see
-[Lifecycle](#lifecycle)).
+each with `--target web` and `--weak-refs` enabled (see
+[Initialization](#initialization) and [Lifecycle](#lifecycle)). It then patches
+each generated build with the pre-init sentinel (`runtime/uninit.js`) and
+asserts none of them carries a `.wasm` ESM import or a top-level await.
 
 ## Test
 
@@ -45,7 +47,9 @@ npm test
 ## Usage
 
 ```ts
-import { Document, Quill, Engine } from "@quillmark/wasm";
+import { init, Document, Quill, Engine } from "@quillmark/wasm";
+
+await init();                         // once at startup; see Initialization
 
 const quill = Quill.fromTree(tree);   // no engine needed: build + validate
 const engine = new Engine();          // loads a backend lazily on first render
@@ -61,6 +65,52 @@ title: My Document
 const parsed = Document.fromMarkdown(markdown);
 const result = await engine.render(quill, parsed, { format: "pdf" });
 ```
+
+## Initialization
+
+`await init()` once, at startup, before any other export is used. Everything
+after it is the synchronous surface the rest of this README describes.
+
+```js
+import { init, Quill, Engine } from "@quillmark/wasm";
+await init();
+```
+
+The same line works everywhere: the binary streams from a URL in a browser and
+is read off disk under Node, chosen by the package's `#quillmark-env` subpath
+import rather than a runtime environment check. No bundler plugin is required:
+the builds are `--target web`, so nothing in the package graph imports a `.wasm`
+module or carries a top-level await, and a static `import` of this package is
+safe anywhere, SSR included.
+
+`init` is idempotent and concurrency-safe: every call returns the same promise,
+so several entry points may each `await init()` for one instantiation. A failed
+init clears the memo, so a retry works. Each realm initializes its own copy; a
+Worker calls `init()` too.
+
+**Backends need nothing.** `Engine` instantiates a backend inside its lazy load,
+on the first render against it.
+
+**Overriding the source.** `init(source)` accepts bytes, a `Response`, a
+`WebAssembly.Module`, or a URL, for hosts that route assets themselves or embed
+the binary. Pass it on the first call; a later call passing a *different* source
+throws `runtime::init_conflict` rather than silently ignoring it. Passing the
+same value again is fine, so several entry points may each `await init(BYTES)`
+against one constant.
+
+**If you forget.** Reaching the surface early throws a `QuillmarkError` coded
+`runtime::not_initialized` that names the fix, rather than a `TypeError` from
+inside generated code.
+
+**Vite's dev server** pre-bundles dependencies, which moves the package away
+from its binary. Exclude it:
+
+```js
+// vite.config.js
+export default { optimizeDeps: { exclude: ["@quillmark/wasm"] } };
+```
+
+A load failure surfaces as `runtime::init_failed`, whose hint names that line.
 
 ## API
 
@@ -526,6 +576,9 @@ compilation failures. The same shape applies to every throw site:
   `runtime::not_a_document` / `runtime::not_a_quill`.
 
 ### Lifecycle
+
+Handles begin at [`init`](#initialization), which instantiates the core build;
+`Engine` instantiates a backend on the first render against it.
 
 The wasm bindings are built with `--weak-refs`, so dropped `Document`,
 `Quill`, and `LiveSession` handles are reclaimed by `FinalizationRegistry`

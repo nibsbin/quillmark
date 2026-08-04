@@ -28,6 +28,7 @@ import {
   isUnknownContainer,
   isUnknownMark,
   isUnknownIsland,
+  init,
 } from '@quillmark-wasm/runtime'
 // Pin that the runtime's Quill IS the internal core build's class (re-export,
 // not a parallel wrapper). This imports the internal core artifact directly:
@@ -40,6 +41,12 @@ import {
   SAMPLE_FORM_MARKDOWN,
   expectEditCode,
 } from './test-helpers.js'
+
+// The consumer contract, exercised as a consumer writes it: one awaited gate
+// before the sync surface. This also instantiates the core build the `CoreQuill`
+// identity pin below imports directly (same resolved file, same module
+// instance).
+await init()
 
 const TEST_PLATE = `#import "@local/quillmark-helper:0.1.0": data
 #let title = data.title
@@ -1184,6 +1191,10 @@ describe('@quillmark/wasm/runtime: handles from another copy (duplicate install)
       fs.rmSync(dst, { recursive: true, force: true })
       fs.cpSync(src, dst, { recursive: true })
       copyB = await import(/* @vite-ignore */ path.join(dst, 'wasm.js'))
+      // A second copy is a second instantiation: its own memory, its own
+      // classes, and its own init. `dup-core` sits beside `core`, so the
+      // build's `../runtime/uninit.js` import still resolves.
+      copyB.initSync({ module: fs.readFileSync(path.join(dst, 'wasm_bg.wasm')) })
     })
 
     it('is genuinely a different class over a different memory', () => {

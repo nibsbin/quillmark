@@ -52,6 +52,10 @@
 // verbatim" case (`Quill === CoreQuill`) is the executable guard for this
 // invariant.
 //
+// It is also why the pre-init guard sits inside the generated builds instead
+// of here: nothing may stand between a consumer and these classes
+// (runtime/uninit.js).
+//
 // The identity is what makes `instanceof` the whole membership test: a handle
 // either belongs to this copy's classes or it belongs to another copy, and the
 // second is always a consumer bug. `Engine` is NOT duck-typed on its inputs; it
@@ -60,8 +64,16 @@
 // Imported (not bare re-exported) so `Quill` is a local binding this module can
 // augment: `quill.writer(doc)` is patched onto its prototype below. The
 // re-export keeps the identity: the exported `Quill` IS the core class.
-import { Quill, Document, init } from '../core/wasm.js';
-export { Quill, Document, init };
+//
+// The default import is the core build's generated instantiation entry
+// (`--target web`); `init` below is the only thing that calls it.
+import initCore, { Quill, Document } from '../core/wasm.js';
+export { Quill, Document };
+// The wasm byte source, resolved per environment by package.json's `imports`
+// map: a pass-through in a browser (the glue fetches and streams the URL
+// itself), a `node:fs` read under Node, whose `fetch` rejects `file:` URLs.
+// Resolution-time, so `node:fs` never enters a browser graph.
+import { toModuleSource } from '#quillmark-env';
 // The document-free content codec: re-exported verbatim from the core build so
 // the runtime subpath exposes `exportMarkdown(body)` (the on-demand markdown
 // projection), `importMarkdown`, and the position-mapping pair (`rebase`,
@@ -71,6 +83,100 @@ export { importMarkdown, exportMarkdown, rebase, mapPos } from '../core/wasm.js'
 // and its inverse `formatDocPath`, so a consumer routes on `Diagnostic.path`
 // segments instead of reverse-engineering the grammar.
 export { parseDocPath, formatDocPath } from '../core/wasm.js';
+
+// ── Initialization ──────────────────────────────────────────────────────────
+// The builds are `--target web`: they export their classes synchronously but
+// carry no wasm instance until something instantiates them. This module owns
+// that for core, behind one awaited gate; `Engine` owns it for the backends,
+// inside their lazy load, so a consumer never initializes a backend by hand.
+//
+// The gate is the shape the lazy-backend idiom (§ DEFAULT_BACKENDS) takes when
+// the surface it guards cannot be async: `Quill.fromTree` and `seedDocument`
+// are sync and static, so there is nowhere to hide an await except in front.
+//
+// Reaching core before the gate resolves is not a silent wrong answer: the
+// build is patched to throw `runtime::not_initialized` naming the fix
+// (runtime/uninit.js).
+
+/** The in-flight or settled core instantiation. The memo is the PROMISE, not a
+ * boolean, so concurrent callers share one instantiation instead of racing. */
+let coreInit;
+/** The source `init` was first called with; the conflict check reads it. */
+let coreInitSource;
+
+/**
+ * Instantiate the core WASM build. Call once at startup, before any other
+ * export is used; extra calls are free.
+ *
+ * ```js
+ * import { init, Quill, Engine } from '@quillmark/wasm';
+ * await init();
+ * ```
+ *
+ * Identical in every environment: in a browser the binary is fetched and
+ * streamed, under Node it is read off disk, and the call site is the same line.
+ *
+ * Idempotent and concurrency-safe: every call returns the same promise, so
+ * `await init()` at each of several entry points costs one instantiation. A
+ * failed init clears the memo, so a retry is possible.
+ *
+ * @param {import('../core/wasm.js').InitInput} [source] override the binary's
+ *   source (bytes, a `Response`, a `WebAssembly.Module`, a URL) for hosts that
+ *   route assets themselves or embed the binary. Pass it on the FIRST call; a
+ *   later call passing a *different* source throws `runtime::init_conflict`
+ *   rather than silently ignoring it. Passing the same value again is fine, so
+ *   several entry points may each `await init(BYTES)` against one constant.
+ * @returns {Promise<void>} resolves when the sync surface is usable
+ */
+export function init(source) {
+	if (coreInit) {
+		if (source !== undefined && source !== coreInitSource) {
+			throw quillmarkError(
+				'runtime::init_conflict',
+				'init(source): core is already initializing or initialized from a different source.',
+				'Pass a source on the first call only, or pass the same value every time.'
+			);
+		}
+		return coreInit;
+	}
+	coreInitSource = source;
+	// Assign before the first await so a synchronous second call sees the memo.
+	coreInit = instantiateCore(source).catch((err) => {
+		// Self-heal, as `#resolveBackend` does: one transient failure (a 404, an
+		// offline fetch) must not poison every later attempt.
+		coreInit = undefined;
+		coreInitSource = undefined;
+		throw err;
+	});
+	return coreInit;
+}
+
+/**
+ * @param {import('../core/wasm.js').InitInput | undefined} source
+ * @returns {Promise<void>}
+ */
+async function instantiateCore(source) {
+	// The literal `new URL(..., import.meta.url)` form: every bundler rewrites it
+	// into an emitted asset, and unbundled browsers and Node resolve it against
+	// the shipped package layout.
+	const resolved = await toModuleSource(
+		source ?? new URL('../core/wasm_bg.wasm', import.meta.url)
+	);
+	try {
+		await initCore({ module_or_path: resolved });
+	} catch (cause) {
+		throw Object.assign(
+			quillmarkError(
+				'runtime::init_failed',
+				`init(): could not load or instantiate the core WASM binary: ${
+					/** @type {any} */ (cause)?.message ?? cause
+				}`,
+				"The binary ships beside the package files; check the network tab for a 404 or an HTML response. Under Vite's dev server, dependency pre-bundling moves the package away from it: add optimizeDeps: { exclude: ['@quillmark/wasm'] }."
+			),
+			{ cause }
+		);
+	}
+}
 
 // ── The main-card address ───────────────────────────────────────────────────
 /**
@@ -391,11 +497,51 @@ export function isUnknownIsland(island) {
 	return typeof island?.type === 'string' && !KNOWN_ISLAND_TYPES.has(island.type);
 }
 
+/**
+ * Build a `load` thunk: dynamic-import a backend build, then instantiate it.
+ *
+ * Under `--target web` a freshly imported build is inert (the import resolves
+ * before there is a wasm instance behind the classes), so instantiation is part
+ * of loading and the consumer never sees it. Memoized at MODULE scope, not per
+ * `Engine`: two engines issuing their first render concurrently must share one
+ * instantiation, and the generated entry's own `wasm !== undefined` guard only
+ * catches a call that arrives after one finished, not one already in flight.
+ *
+ * @param {string} id backend id, for the failure message
+ * @param {() => Promise<any>} importThunk the dynamic `import()`
+ * @param {() => URL} wasmUrl the build's binary, resolved at call time
+ * @returns {() => Promise<any>} resolves to a ready-to-use module
+ */
+function backendLoad(id, importThunk, wasmUrl) {
+	/** @type {Promise<any> | undefined} */
+	let loaded;
+	return () =>
+		(loaded ??= (async () => {
+			const mod = await importThunk();
+			await mod.default({ module_or_path: await toModuleSource(wasmUrl()) });
+			return mod;
+		})().catch((cause) => {
+			// Self-heal, as core's `init` does.
+			loaded = undefined;
+			throw Object.assign(
+				quillmarkError(
+					'runtime::backend_load_failed',
+					`Engine: could not load the '${id}' backend: ${
+						/** @type {any} */ (cause)?.message ?? cause
+					}`,
+					'The backend binary ships beside the package files; check the network tab for a 404 or an HTML response.'
+				),
+				{ cause }
+			);
+		}));
+}
+
 // Backend builds are NEVER statically imported here: that would pull a
 // multi-MB binary into the eager graph and defeat lazy loading. Each entry is a
-// DESCRIPTOR: `load` is a thunk returning a dynamic `import()` (a backend's
-// chunk is fetched only when something actually renders against that backend),
-// and `formats`/`canvas` are the REQUIRED static capability manifest so the
+// DESCRIPTOR: `load` is a thunk that dynamically imports a backend's chunk and
+// instantiates it, so the binary is fetched only when something actually renders
+// against that backend and is ready to use when the promise resolves;
+// `formats`/`canvas` are the REQUIRED static capability manifest so the
 // cheap probes (`supportedFormats`/`supportsCanvas`) ALWAYS answer without
 // loading the binary or cloning the quill. The manifest values are verified
 // against each backend's Rust source (`crates/backends/<id>/src/lib.rs`
@@ -405,12 +551,20 @@ export function isUnknownIsland(island) {
 // format list includes a visual-page format (`svg` or `png`).
 const DEFAULT_BACKENDS = {
 	typst: {
-		load: () => import('../backends/typst/wasm.js'),
+		load: backendLoad(
+			'typst',
+			() => import('../backends/typst/wasm.js'),
+			() => new URL('../backends/typst/wasm_bg.wasm', import.meta.url)
+		),
 		formats: ['pdf', 'svg', 'png'], // crates/backends/typst/src/lib.rs SUPPORTED_FORMATS
 		canvas: true // has svg/png → formats_support_canvas == true
 	},
 	pdfform: {
-		load: () => import('../backends/pdfform/wasm.js'),
+		load: backendLoad(
+			'pdfform',
+			() => import('../backends/pdfform/wasm.js'),
+			() => new URL('../backends/pdfform/wasm_bg.wasm', import.meta.url)
+		),
 		// crates/backends/pdfform/src/lib.rs SUPPORTED_FORMATS == [Pdf, Svg, Png]
 		formats: ['pdf', 'svg', 'png'],
 		canvas: true // has svg/png → formats_support_canvas == true
@@ -475,6 +629,10 @@ export class Engine {
 	 *   `supportedFormats`/`supportsCanvas` always free (no binary load, no quill
 	 *   clone). Malformed entries throw here, at construction. The default
 	 *   registry maps `"typst"` to the bundled Typst build.
+	 *
+	 *   `load` resolves to a READY module: a registrant shipping its own
+	 *   `--target web` build instantiates inside the thunk. More than one
+	 *   `Engine` may call it, so memoize (the built-ins do, at module scope).
 	 */
 	constructor(options) {
 		const merged = { ...DEFAULT_BACKENDS, ...(options?.backends ?? {}) };

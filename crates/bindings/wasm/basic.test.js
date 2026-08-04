@@ -19,7 +19,10 @@ import {
   parseDocPath,
   formatDocPath,
 } from '@quillmark-wasm'
-import { makeQuill, expectEditCode } from './test-helpers.js'
+import * as typstBuild from '@quillmark-wasm'
+import { makeQuill, expectEditCode, initBuildSync } from './test-helpers.js'
+
+initBuildSync(typstBuild, 'backends/typst')
 
 /** Read a field value from a card's payloadItems list by key. */
 const field = (card, key) =>

@@ -88,6 +88,16 @@ fi
 # `--weak-refs` opts into FinalizationRegistry-based auto-free for
 # wasm-bindgen handles; `.free()` is still emitted for deterministic teardown.
 # (Runtime floor is the package.json `engines` field, not set here.)
+#
+# `--target web`, NOT `bundler`. The bundler target emits `import * as wasm from
+# "./wasm_bg.wasm"`, the ESM-integration form no browser and no bundler resolves
+# natively, so every consumer must add a wasm plugin whose rewrite puts a
+# top-level await on the module. Core is statically imported by the runtime
+# layer, so that await lands on the static module graph of everyone importing
+# @quillmark/wasm: a permanent constraint on consumer architecture, and a blank
+# page in Safari dev under SvelteKit. The web target emits neither; the runtime
+# layer owns instantiation (`runtime/runtime.js`, `init`), and assert_no_tla
+# below is the regression guard.
 build_variant() {
     local subdir="$1"; shift
     local cargo_feature_args=("$@")
@@ -105,8 +115,66 @@ build_variant() {
         "target/wasm32-unknown-unknown/$PROFILE/quillmark_wasm.wasm" \
         --out-dir "pkg/$subdir" \
         --out-name wasm \
-        --target bundler \
+        --target web \
         --weak-refs
+}
+
+# Patch a generated build so reaching it before instantiation throws a named
+# QuillmarkError instead of a `Cannot read properties of undefined` from inside
+# generated code. The sentinel and the reasoning are in runtime/uninit.js; this
+# is the three-line edit that installs it.
+#
+# The two anchors are wasm-bindgen's, not ours, so their shape is asserted
+# before anything is rewritten: a wasm-bindgen bump that renames the binding or
+# changes the guard count fails the build here rather than shipping a build
+# whose guard silently stopped biting. (`init.test.js` asserts the other end:
+# that the patched artifact really throws.) The CLI/Cargo.lock version check
+# above pins that shape per commit.
+#
+# `rel` is the path back to pkg/runtime/ from the variant's directory.
+# No `sed -i`: BSD sed requires an argument to it, so this stays on awk + mv.
+guard_wasm_js() {
+    local file="$1" rel="$2" msg="$3" hint="$4"
+    local decl="let wasmModule, wasm;"
+    local guard="    if (wasm !== undefined) return wasm;"
+
+    if [ "$(grep -cxF "$decl" "$file")" -ne 1 ]; then
+        echo "ERROR: uninit guard: expected exactly one '$decl' in $file." >&2
+        echo "  wasm-bindgen changed its generated shape; re-derive the anchors." >&2
+        exit 1
+    fi
+    if [ "$(grep -cxF "$guard" "$file")" -ne 2 ]; then
+        echo "ERROR: uninit guard: expected exactly two init guards in $file." >&2
+        echo "  wasm-bindgen changed its generated shape; re-derive the anchors." >&2
+        exit 1
+    fi
+
+    awk -v rel="$rel" -v msg="$msg" -v hint="$hint" -v decl="$decl" -v guard="$guard" '
+        $0 == decl {
+            printf "import { uninitSentinel, UNINIT } from \"%s/uninit.js\";\n", rel
+            printf "let wasmModule, wasm = uninitSentinel(\"%s\", \"%s\");\n", msg, hint
+            next
+        }
+        $0 == guard { print "    if (wasm !== undefined && !wasm[UNINIT]) return wasm;"; next }
+        { print }
+    ' "$file" > "$file.patched"
+    mv "$file.patched" "$file"
+}
+
+# The regression guard for the target choice itself. If these ever match, the
+# package has reacquired the ESM wasm import / top-level await that `--target
+# web` exists to remove, and every consumer silently reacquires the plugin
+# requirement and the Safari failure with it.
+assert_no_tla() {
+    local file="$1"
+    if grep -qE 'from "\./[A-Za-z0-9_]+\.wasm"' "$file"; then
+        echo "ERROR: $file carries an ESM .wasm import (the --target bundler form)." >&2
+        exit 1
+    fi
+    if grep -qE '^await |^const [A-Za-z0-9_]+ = await ' "$file"; then
+        echo "ERROR: $file carries a top-level await." >&2
+        exit 1
+    fi
 }
 
 # backends/typst   = default features (Typst).
@@ -120,14 +188,35 @@ build_variant backends/typst
 build_variant backends/pdfform --no-default-features --features pdfform
 build_variant core --no-default-features
 
+# Install the pre-init sentinel and assert the target choice held. Core's
+# message is the one a consumer can actually reach; a backend's marks an
+# internal bug, because `Engine` instantiates backends itself and no consumer
+# path touches a backend build before it is ready.
+echo ""
+echo "Guarding generated builds against pre-init use"
+guard_wasm_js pkg/core/wasm.js "../runtime" \
+    "@quillmark/wasm is not initialized. Call 'await init()' once at startup, before Quill, Document, Engine, or any other export is used." \
+    "Add: import { init } from '@quillmark/wasm'; await init(); once, anywhere before first use. Extra calls are free."
+for backend in typst pdfform; do
+    guard_wasm_js "pkg/backends/$backend/wasm.js" "../../runtime" \
+        "@quillmark/wasm internal error: the '$backend' backend was used before instantiation." \
+        "This is a bug in @quillmark/wasm, not in your code. Please report it."
+done
+for generated in pkg/core/wasm.js pkg/backends/typst/wasm.js pkg/backends/pdfform/wasm.js; do
+    assert_no_tla "$generated"
+done
+
 # runtime = the canonical consumer API: a hand-written JS layer (NOT generated
 # by wasm-bindgen) over core + the backend builds. It is plain source, so just
-# copy it into pkg/ alongside the generated variants.
+# copy it into pkg/ alongside the generated variants. `uninit.js` is the
+# sentinel the guard patch above imports; `env-{node,web}.js` are the two halves
+# of the `#quillmark-env` seam that package.json's `imports` map resolves.
 echo ""
 echo "Copying variant: runtime (hand-written canonical API)"
 mkdir -p pkg/runtime
-cp crates/bindings/wasm/runtime/runtime.js pkg/runtime/runtime.js
-cp crates/bindings/wasm/runtime/runtime.d.ts pkg/runtime/runtime.d.ts
+for source in runtime.js runtime.d.ts uninit.js env-node.js env-web.js; do
+    cp "crates/bindings/wasm/runtime/$source" "pkg/runtime/$source"
+done
 
 # Note: a wasm-opt -Oz pass was tried and removed. With the current
 # `wasm-release` profile (opt-level=z, fat LTO, codegen-units=1,

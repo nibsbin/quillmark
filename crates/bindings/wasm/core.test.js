@@ -11,6 +11,9 @@
 import { describe, it, expect } from 'vitest'
 import * as core from '@quillmark-wasm/core'
 import { Quill, Document } from '@quillmark-wasm/core'
+import { initBuildSync } from './test-helpers.js'
+
+initBuildSync(core, 'core')
 
 const enc = new TextEncoder()
 

@@ -1,5 +1,4 @@
 import { defineConfig } from 'vitest/config'
-import wasm from 'vite-plugin-wasm'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
@@ -22,10 +21,15 @@ export const WASM_CORE_BUNDLE_PATH = path.join(WORKSPACE_ROOT, 'pkg', 'core', 'w
 export const WASM_RUNTIME_BUNDLE_PATH = path.join(WORKSPACE_ROOT, 'pkg', 'runtime', 'runtime.js')
 
 export default defineConfig({
-  // `vite-plugin-wasm` emits top-level await, which Node's ESM loader executes
-  // natively: the suites run under `environment: 'node'`, so no TLA transform.
-  plugins: [wasm()],
+  // No wasm plugin: the builds are `--target web`, so nothing imports a `.wasm`
+  // module and nothing emits top-level await. The suites instantiate through
+  // the runtime's `init` (or `initSync` on the generated builds they drive
+  // directly), as a consumer does. A plugin here would mask that.
   resolve: {
+    // `pkg/runtime/runtime.js` resolves the wasm byte source through the
+    // `#quillmark-env` subpath import; pin the Node half, since these suites
+    // run under Node and the browser half's `fetch` rejects `file:` URLs.
+    conditions: ['node'],
     alias: {
       // More specific first: the alias match is `find` followed by `/` or end,
       // so `@quillmark-wasm/{core,runtime,pdfform}` must precede the `@quillmark-wasm` prefix.
