@@ -394,7 +394,7 @@ The importer is not the only minter: `IslandOp::Insert` carries the id of the is
 
 The continuation rule mints a *new* island. Re-landing a dropped one is not a mint: the delete freed the id and it travels back with its island, so restoring a deletion restores the bytes. A pasted copy of a live island is new and mints fresh. Swapping the two cases is `IslandIdCollision` on the paste, or a silently renamed island on the restore.
 
-The two compose because minting reads the *live* ids: deleting the highest island frees its number for the next mint, and restoring that delete would then collide. Linear undo never reaches the state, since a mint made after a delete is undone before it. A producer with non-linear history — selective undo, a merge — owns the case, and the apply refuses it rather than aliasing two islands.
+The two compose because minting reads the *live* ids: deleting the highest island frees its number for the next mint, and restoring that delete would then collide. Linear undo never reaches that state, since a mint made after a delete is undone before it. A producer with non-linear history (selective undo, a merge) owns the case, and the apply refuses it rather than aliasing two islands.
 
 ## Anchor-id identity
 

@@ -90,12 +90,12 @@ pub enum LineOp {
 /// which drops every anchor in the field: [`LineOp::SetContinues`]'s argument at
 /// the scale of a table.
 ///
-/// Removal needs no op, and is whole: a text delta that deletes a slot drops
-/// the backing entry from the store ([`Content::apply_text_delta`]'s cascade),
-/// so re-landing that island is an [`IslandOp::Insert`] carrying the whole
-/// [`Island`], which only the producer that deleted it still holds. A *block*
-/// island's line demotes to `Para` when its slot goes (the kind stops matching
-/// the text), so re-landing one re-tags the line as well.
+/// Removal needs no op: a text delta that deletes a slot drops the backing
+/// entry ([`Content::apply_text_delta`]'s cascade). The drop is whole, so
+/// re-landing that island is an [`IslandOp::Insert`] carrying the [`Island`]
+/// itself, which only the producer that deleted it still holds. A *block*
+/// island's line demotes to `Para` when its slot goes, so re-landing one
+/// re-tags the line too.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum IslandOp {
@@ -118,11 +118,11 @@ pub enum IslandOp {
     ///
     /// `at` is a USV position in the text the delta and this bundle's earlier
     /// island ops left: each insert splices its slot before the next op reads
-    /// the text, so slots after `a` and `b` of `abc` go in at 1 and 3, and of
-    /// two inserts at one position the later one's slot lands first. The entry
-    /// lands at its slot-order index, counted in that same frame, so text and
-    /// island list agree whatever the emission order: a stale frame misplaces
-    /// slots and never errors.
+    /// the text. Slots after `a` and `b` of `abc` therefore go in at 1 and 3,
+    /// and of two inserts at one position the later one lands first. The entry
+    /// files at its slot-order index in that same frame, so text and island
+    /// list agree whatever the emission order; a stale frame misplaces slots
+    /// and never errors.
     ///
     /// The id is caller-supplied, non-empty, and unique in the field, on an
     /// anchor id's terms ([`ApplyError::EmptyIslandId`],
@@ -158,7 +158,7 @@ pub enum IslandOp {
 /// text change, no ops), so a caller names only the channels it uses:
 /// `ChangeBundle { delta, ..Default::default() }`.
 ///
-/// Within a channel ops apply in sequence: op *n*'s coordinates are the state
+/// Within a channel ops apply in sequence: op *n*'s coordinates read the state
 /// ops `0..n` left, not the frame the channel opens in. That is USV positions
 /// for an island insert (its `at` counts the slots earlier inserts spliced) and
 /// line indices for [`LineOp::Split`] / [`LineOp::Join`], which renumber every
@@ -1901,12 +1901,11 @@ mod tests {
     }
 
     /// Island ops sequence: op *n*'s `at` counts the slots ops `0..n` already
-    /// spliced, not the shared post-delta frame, and the entry's index is
-    /// counted in that same frame rather than taken from emission order. Slots
-    /// after `a` and `b` of `abc` go in at 1 and 3, and a later op at an
-    /// earlier `at` files its entry ahead of an earlier op's. Under the
-    /// post-delta-only reading every assertion here lands differently, and
-    /// nothing errors either way.
+    /// spliced, not the shared post-delta frame, and its entry files at the
+    /// slot-order index that frame gives rather than at emission order. Slots
+    /// after `a` and `b` of `abc` go in at 1 and 3, and an op at an earlier
+    /// position emitted last still files first. Both assertions land
+    /// differently under the post-delta-only reading, which errors neither way.
     #[test]
     fn island_inserts_apply_in_sequence() {
         let mut rt = from_markdown("xabc").unwrap();
@@ -2002,8 +2001,8 @@ mod tests {
     }
 
     /// A block island's line demotes to `Para` when its slot goes: the kind
-    /// stops matching the text and `normalize` repairs rather than fails. So
-    /// re-landing one carries the re-tag too, not the island op alone.
+    /// stops matching the text and `normalize` repairs rather than fails.
+    /// Re-landing one therefore carries the re-tag, not the island op alone.
     #[test]
     fn block_island_restore_retags_its_line() {
         let mut rt = from_markdown("intro").unwrap();

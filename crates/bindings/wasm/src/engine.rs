@@ -352,9 +352,8 @@ export type MarkOp =
     | { op: "removeAnchor"; id: string };
 
 /**
- * A line/block edit. `split`/`join` splice `\n` in post-`delta`,
- * post-`islandOps` coordinates; `setKind`/`setContainers`/
- * `setContinues` touch metadata. `setContinues` sets/clears a line's within-block
+ * A line/block edit. `split`/`join` splice `\n` in post-`delta`, post-`islandOps`
+ * coordinates; `setKind`/`setContainers`/`setContinues` touch metadata. `setContinues` sets/clears a line's within-block
  * hard-break flag (`ContentLine.continues`): the op-grained way to lower a
  * Shift+Enter hard break or a new code-fence interior line; `continues: true` on
  * line 0 is rejected (nothing precedes it to continue).
@@ -377,22 +376,22 @@ export type LineOp =
  * `set` addresses an existing island by `id`; an `id` no island carries throws
  * rather than passing silently. `insert` places a new island's slot at `at`
  * together with its entry, so a slot never exists without an island behind it;
- * its `id` must be non-empty and unused. `at` counts the text as the `delta`
- * and this bundle's earlier island ops left it: each insert splices its slot
- * before the next op reads the text, so slots after `a` and `b` of `abc` go in
- * at 1 and 3. A stale frame misplaces slots and never throws.
+ * its `id` must be non-empty and unused. `at` is a position in the text the
+ * `delta` and this bundle's earlier island ops left: each insert splices its
+ * slot before the next op reads the text, so slots after `a` and `b` of `abc`
+ * go in at 1 and 3. A stale frame misplaces slots and never throws.
  *
  * A `delta` insert string may not carry a slot, which would orphan. A producer
  * that computes one splice over the whole field text carries slots in it on any
  * paste of an island or undo of a deletion; that splice splits into the
  * slot-free `delta` plus one `insert` per slot.
  *
- * Deleting an island needs no op, and is whole: a `delta` that removes its slot
- * drops the island from the store, so re-landing it is an `insert` of the full
- * island, which only the producer that deleted it still holds, under its
- * original id (a pasted copy of a live island is new and mints fresh:
- * DOCUMENT_STORAGE § Island-id determinism). A block island's line demotes to
- * `para` when its slot goes, so re-landing one re-tags the line as well.
+ * Deleting an island needs no op, and the drop is whole: a `delta` that removes
+ * its slot drops the island from the store. Re-landing it is an `insert` of the
+ * full island under its original id, and only the producer that deleted it
+ * still holds that value. A pasted copy of a live island is new and mints fresh
+ * (DOCUMENT_STORAGE § Island-id determinism). A block island's line demotes to
+ * `para` when its slot goes, so re-landing one re-tags the line too.
  *
  * A `set` stores the `loss` it is given: nothing re-derives the class from the
  * new `props`, so a write that changes what markdown can carry must say so.
