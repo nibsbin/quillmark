@@ -91,7 +91,11 @@ pub enum LineOp {
 /// the scale of a table.
 ///
 /// Removal needs no op: a text delta that deletes a slot drops the backing
-/// entry ([`Content::apply_text_delta`]'s cascade).
+/// entry ([`Content::apply_text_delta`]'s cascade). The drop is whole, so
+/// re-landing that island is an [`IslandOp::Insert`] carrying the [`Island`]
+/// itself, which only the producer that deleted it still holds. A *block*
+/// island's line demotes to `Para` when its slot goes, so re-landing one
+/// re-tags the line too.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum IslandOp {
@@ -112,12 +116,23 @@ pub enum IslandOp {
     /// orphan [`ApplyError::IslandSlotInInsert`] guards against on the text
     /// channel is unrepresentable here rather than rejected after the fact).
     ///
-    /// `at` is a post-delta USV position; the entry lands at its slot-order
-    /// index. The id is caller-supplied, non-empty, and unique in the field, on
-    /// an anchor id's terms ([`ApplyError::EmptyIslandId`],
+    /// `at` is a USV position in the text the delta and this bundle's earlier
+    /// island ops left: each insert splices its slot before the next op reads
+    /// the text. Slots after `a` and `b` of `abc` therefore go in at 1 and 3,
+    /// and of two inserts at one position the later one lands first. The entry
+    /// files at its slot-order index in that same frame, so text and island
+    /// list agree whatever the emission order; a stale frame misplaces slots
+    /// and never errors.
+    ///
+    /// The id is caller-supplied, non-empty, and unique in the field, on an
+    /// anchor id's terms ([`ApplyError::EmptyIslandId`],
     /// [`ApplyError::IslandIdCollision`]). `Set` addresses by id, so a
     /// degenerate or shared id is an island that cannot be edited, or cannot be
-    /// told from another.
+    /// told from another. Minting follows `DOCUMENT_STORAGE.md` § Island-id
+    /// determinism: a new island continues the field's positional sequence,
+    /// while re-landing a dropped one carries its original id back. A delete
+    /// earlier in the same bundle frees its id here, which is how a
+    /// replace-in-place lands as one bundle.
     ///
     /// **Block islands.** The slot alone is an *inline* island (a slot in a
     /// `Para`). A block island is that slot alone on its own line under
@@ -142,13 +157,21 @@ pub enum IslandOp {
 /// additive change at every call site. [`Default`] is the identity bundle (no
 /// text change, no ops), so a caller names only the channels it uses:
 /// `ChangeBundle { delta, ..Default::default() }`.
+///
+/// Within a channel ops apply in sequence: op *n*'s coordinates read the state
+/// ops `0..n` left, not the frame the channel opens in. That is USV positions
+/// for an island insert (its `at` counts the slots earlier inserts spliced) and
+/// line indices for [`LineOp::Split`] / [`LineOp::Join`], which renumber every
+/// later line. A stale frame stays in range, so the bundle applies cleanly and
+/// lands the wrong document.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChangeBundle {
     /// The text splice; the identity delta (no ops) is no text change.
     pub delta: Delta,
-    /// Island edits, in post-delta coordinates.
+    /// Island edits, opening in post-delta coordinates and sequenced.
     pub island_ops: Vec<IslandOp>,
-    /// Line edits, in post-delta, post-island-op coordinates.
+    /// Line edits, opening in post-delta, post-island-op coordinates and
+    /// sequenced.
     pub line_ops: Vec<LineOp>,
     /// Mark edits, in final-text coordinates (every earlier stage applied).
     pub mark_ops: Vec<MarkOp>,
@@ -461,6 +484,11 @@ pub enum ApplyError {
     /// backing [`Island`], an orphaned-slot invariant violation. Islands are
     /// created through [`IslandOp::Insert`], which carries the slot and its
     /// entry in one op, never a text splice.
+    ///
+    /// A producer that computes one splice over the whole field text carries
+    /// slots in it whenever the user pastes an island or undoes a deletion that
+    /// removed one. Such a splice splits: the delta with its slots stripped,
+    /// plus one [`IslandOp::Insert`] per slot at the frame that delta leaves.
     IslandSlotInInsert,
     /// A [`MarkOp::Add`] of an anchor whose `id` is already live in the field.
     /// An anchor id is a caller-supplied handle, unique per `Content`
@@ -484,7 +512,8 @@ pub enum ApplyError {
     /// An [`IslandOp::Insert`] carrying the empty `id`: an island `Set` could
     /// never address, refused on the same terms as [`Self::EmptyAnchorId`].
     EmptyIslandId,
-    /// An [`IslandOp::Insert`] whose `at` is past the end of the post-delta text.
+    /// An [`IslandOp::Insert`] whose `at` is past the end of the text the delta
+    /// and this bundle's earlier island ops left.
     IslandInsertOutOfRange { at: Usv, len: Usv },
     /// A [`LineOp::SetKind`] whose kind contradicts the line's text: tagging
     /// prose `Island` or `Rule`, or a slot-bearing line `Code`. Export trusts the
@@ -1765,6 +1794,12 @@ mod tests {
         })
     }
 
+    /// A minimal image island: the cheapest well-formed `Insert` payload.
+    fn image(id: &str) -> Island {
+        Island::new(id.into(), "image".into())
+            .with_props(serde_json::json!({ "url": "u", "alt": "a" }))
+    }
+
     #[test]
     fn island_op_wire_round_trips_each_variant() {
         let island = Island::new("isl-0".into(), "table".into())
@@ -1865,15 +1900,151 @@ mod tests {
         assert_eq!((anchor.start, anchor.end), (0, 1));
     }
 
+    /// Island ops sequence: op *n*'s `at` counts the slots ops `0..n` already
+    /// spliced, not the shared post-delta frame, and its entry files at the
+    /// slot-order index that frame gives rather than at emission order. Slots
+    /// after `a` and `b` of `abc` go in at 1 and 3, and an op at an earlier
+    /// position emitted last still files first. Both assertions land
+    /// differently under the post-delta-only reading, which errors neither way.
+    #[test]
+    fn island_inserts_apply_in_sequence() {
+        let mut rt = from_markdown("xabc").unwrap();
+        rt.apply_field_change(&ChangeBundle {
+            // Post-delta: the deleted `x` is out of the frame the ops read.
+            delta: diff("xabc", "abc"),
+            island_ops: vec![
+                IslandOp::Insert {
+                    at: 1,
+                    island: image("isl-b"),
+                },
+                // 3, not 2: op 0's slot is in the frame this op reads.
+                IslandOp::Insert {
+                    at: 3,
+                    island: image("isl-c"),
+                },
+                // An earlier position emitted last, so its slot lands first.
+                IslandOp::Insert {
+                    at: 1,
+                    island: image("isl-a"),
+                },
+            ],
+            ..Default::default()
+        })
+        .unwrap();
+
+        assert_eq!(
+            rt.text,
+            format!("a{ISLAND_SLOT}{ISLAND_SLOT}b{ISLAND_SLOT}c")
+        );
+        let ids: Vec<&str> = rt.islands.iter().map(|i| i.id.as_str()).collect();
+        assert_eq!(ids, ["isl-a", "isl-b", "isl-c"], "slot order, not emission");
+        assert_eq!(rt.validate(), Ok(()));
+    }
+
+    /// A computed splice carrying a slot is refused whole; the same edit lands
+    /// as its split form, the slot-free delta plus one `Insert` per slot.
+    #[test]
+    fn slot_bearing_splice_splits_into_delta_and_insert() {
+        let mut rt = from_markdown("ab").unwrap();
+        let before = rt.clone();
+
+        let paste = format!("x{ISLAND_SLOT}y");
+        assert_eq!(
+            rt.apply_field_change(&ChangeBundle::from_delta(Delta {
+                ops: vec![Op::Retain(1), Op::Insert(paste)],
+            })),
+            Err(ApplyError::IslandSlotInInsert)
+        );
+        assert_eq!(rt, before, "the refusal commits nothing");
+
+        rt.apply_field_change(&ChangeBundle {
+            delta: Delta {
+                ops: vec![Op::Retain(1), Op::Insert("xy".into())],
+            },
+            // The delta leaves `axyb`; the slot goes between `x` and `y`.
+            island_ops: vec![IslandOp::Insert {
+                at: 2,
+                island: image("isl-p"),
+            }],
+            ..Default::default()
+        })
+        .unwrap();
+        assert_eq!(rt.text, format!("ax{ISLAND_SLOT}yb"));
+        assert_eq!(rt.islands[0].id, "isl-p");
+        assert_eq!(rt.validate(), Ok(()));
+    }
+
+    /// The delete cascade is whole: the payload leaves the store with its slot,
+    /// so re-landing the island re-inserts the value the producer held, under
+    /// the original id the drop freed.
+    #[test]
+    fn island_delete_then_restore_round_trips() {
+        let mut rt = from_markdown("ab").unwrap();
+        rt.apply_field_change(&island_bundle(vec![IslandOp::Insert {
+            at: 1,
+            island: image("isl-a"),
+        }]))
+        .unwrap();
+        let before = rt.clone();
+        let held = rt.islands[0].clone();
+
+        rt.apply_field_change(&ChangeBundle::from_delta(diff(&before.text, "ab")))
+            .unwrap();
+        assert!(rt.islands.is_empty(), "the payload goes with its slot");
+
+        rt.apply_field_change(&island_bundle(vec![IslandOp::Insert {
+            at: 1,
+            island: held,
+        }]))
+        .unwrap();
+        assert_eq!(rt, before, "same content, original id included");
+    }
+
+    /// A block island's line demotes to `Para` when its slot goes: the kind
+    /// stops matching the text and `normalize` repairs rather than fails.
+    /// Re-landing one therefore carries the re-tag, not the island op alone.
+    #[test]
+    fn block_island_restore_retags_its_line() {
+        let mut rt = from_markdown("intro").unwrap();
+        rt.apply_field_change(&ChangeBundle {
+            delta: diff("intro", "intro\n"),
+            island_ops: vec![IslandOp::Insert {
+                at: 6,
+                island: image("isl-a"),
+            }],
+            line_ops: vec![LineOp::SetKind {
+                line: 1,
+                kind: LineKind::Island,
+            }],
+            ..Default::default()
+        })
+        .unwrap();
+        let before = rt.clone();
+        let held = rt.islands[0].clone();
+
+        rt.apply_field_change(&ChangeBundle::from_delta(diff(&before.text, "intro\n")))
+            .unwrap();
+        assert!(rt.islands.is_empty());
+        assert_eq!(rt.lines[1].kind, LineKind::Para, "demoted, not failed");
+
+        // The line stayed open, so the restore is the island op and the re-tag;
+        // only a delete that took the `\n` too would need a delta.
+        rt.apply_field_change(&ChangeBundle {
+            island_ops: vec![IslandOp::Insert { at: 6, island: held }],
+            line_ops: vec![LineOp::SetKind {
+                line: 1,
+                kind: LineKind::Island,
+            }],
+            ..Default::default()
+        })
+        .unwrap();
+        assert_eq!(rt, before, "same content, original id and kind included");
+    }
+
     /// An inserted island's id is caller-supplied on an anchor id's terms:
     /// non-empty and unused, since `Set` addresses by it.
     #[test]
     fn island_insert_id_and_position_rules() {
-        let image = |id: &str| {
-            Island::new(id.into(), "image".into())
-                .with_props(serde_json::json!({ "url": "u", "alt": "a" }))
-        };
-
         let mut rt = from_markdown("ab").unwrap();
         assert_eq!(
             rt.apply_field_change(&island_bundle(vec![IslandOp::Insert {
