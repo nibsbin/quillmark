@@ -385,13 +385,15 @@ impl PyDocument {
         })
     }
 
-    /// Read the `schema` version tag from a raw DTO string without a full parse, or `None`.
+    /// Read the storage version tag from a raw DTO string without a full parse, or `None`.
+    /// The **storage** version, not a field schema; the wire key stays `"schema"`,
+    /// the DTO's serde tag.
     #[staticmethod]
     fn storage_version_of(json: &str) -> Option<String> {
         quillmark_core::document::peek_storage_version(json)
     }
 
-    /// Schema version this build writes.
+    /// Storage version this build writes.
     #[staticmethod]
     fn current_storage_version() -> &'static str {
         quillmark_core::document::STORAGE_V0_93_0
@@ -1031,11 +1033,11 @@ impl PyReader {
         read_value_to_py(py, read)
     }
 
-    /// Read a main-card content field as its canonical Content-JSON corpus (a
-    /// dict, `{text, lines, marks, islands}`): the corpus twin of `get`, which
+    /// Read a main-card content field as its canonical Content-JSON (a
+    /// dict, `{text, lines, marks, islands}`): the `Content` twin of `get`, which
     /// projects. Decodes through the codec the declared type names (`richtext` as
     /// markdown, `plaintext` as literal text), so a field the writer committed as
-    /// a corpus and one a markdown parse left as an authored string read back the
+    /// a `Content` and one a markdown parse left as an authored string read back the
     /// same; the storage form stops being the caller's business.
     ///
     /// `None` when the field is absent. Raises `edit::unknown_field` for an
@@ -1116,7 +1118,7 @@ impl PyCardReader {
         read_value_to_py(py, read)
     }
 
-    /// Read a content field on this card as its canonical Content-JSON corpus:
+    /// Read a content field on this card as its canonical Content-JSON:
     /// the card-indexed twin of `Reader.get_content`, carrying the same outcomes
     /// plus `edit::index_out_of_range` for a bad index.
     fn get_content<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
@@ -1356,8 +1358,8 @@ fn quillvalue_to_py<'py>(
     json_to_py(py, value.as_json())
 }
 
-/// Serialize a decoded corpus into canonical Content-JSON for the
-/// `Reader.get_content` surfaces, an absent field staying `None`. The corpus twin
+/// Serialize a decoded `Content` into canonical Content-JSON for the
+/// `Reader.get_content` surfaces, an absent field staying `None`. The `Content` twin
 /// of `read_value_to_py`, which flattens to a projection.
 fn content_to_py<'py>(
     py: Python<'py>,

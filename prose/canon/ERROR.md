@@ -45,7 +45,7 @@ bindings: the primary diagnostic's message for a single diagnostic, an
 Notable codes: `quill::name_mismatch` / `quill::version_mismatch`, the
 document is well-formed but paired with the wrong quill (see
 [VERSIONING.md](VERSIONING.md)); `backend::update_unsupported`: the default
-for a backend session that does not override the incremental-`apply` seam
+for a backend session that does not override the incremental-`update` seam
 (both built-in backends override it); `backend::format_not_supported`: the
 requested format is outside the backend's `supported_formats`, one code on
 every backend so a caller matches the condition once;
@@ -88,7 +88,7 @@ families:
   diagnostics (font fallback, overfull pages, …) through the same span
   resolution as errors. They are state of the session's current compile:
   exposed via `LiveSession::warnings()` (the `SessionHandle::warnings` seam,
-  default empty), refreshed by each committed `apply`: a failed apply keeps
+  default empty), refreshed by each committed `update`: a failed update keeps
   the last-good compile *and* its warnings, and appended to
   `RenderResult.warnings` on every `render()`, including the one-shot
   `open` → `render` path.
@@ -123,7 +123,7 @@ Typst's `VirtualPath` rejected: asset or package file alike),
 file the world had to skip, which otherwise surfaces only as an unresolved
 `#import` pointing at the plate instead of at the defect. They are properties of the quill, not of a compile, so
 `QuillWorld` holds them and the session serves them ahead of every compile's
-own: an `apply` swaps the compile half and keeps these.
+own: an `update` swaps the compile half and keeps these.
 
 ## Validation message contract
 

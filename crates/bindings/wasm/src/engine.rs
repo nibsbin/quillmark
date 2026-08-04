@@ -731,7 +731,7 @@ impl Quill {
     /// ingestion path**, and the bound twin of the schema-free
     /// `Document.fromMarkdown`. The returned document rests at its canonical
     /// form (a `richtext` field as a content object, a `plaintext` field as its
-    /// literal string), so `getStored` no longer answers "corpus or string?"
+    /// literal string), so `getStored` no longer answers "content object or string?"
     /// with "depends how this document was built".
     ///
     /// Parse warnings and the `conform::*` diagnostics both land on
@@ -920,16 +920,22 @@ impl Document {
         })
     }
 
-    /// Read the `schema` version tag from a raw storage DTO string without a
+    /// Read the storage version tag from a raw storage DTO string without a
     /// full parse, or `undefined`. Returns unknown future versions as-is:
     /// useful to distinguish "build too old" from "payload corrupt" when
     /// `fromJson` throws.
+    ///
+    /// The **storage** version, not a field schema: the two senses of "schema"
+    /// are named apart on this class, where [`schema`](Quill::schema) is the
+    /// quill's field declarations. The wire key stays spelled `"schema"`,
+    /// because it is the DTO's serde tag and retagging it would break the
+    /// version dispatch it exists to drive.
     #[wasm_bindgen(js_name = storageVersionOf)]
     pub fn storage_version_of(json: &str) -> Option<String> {
         quillmark_core::document::peek_storage_version(json)
     }
 
-    /// Schema version this build writes via [`toJson`](Document::to_json).
+    /// Storage version this build writes via [`toJson`](Document::to_json).
     /// Tracks the `Document` model version (not the running crate version):
     /// the tag advances only when the wire format changes, not on every release.
     #[wasm_bindgen(js_name = currentStorageVersion)]
@@ -1060,7 +1066,7 @@ impl Document {
     /// `quill.conform`) is at rest, so this read no longer depends on which lane
     /// built it. A document that came through the transport door
     /// (`Document.fromMarkdown`, a legacy stored row) may rest as authored until
-    /// it is conformed, and this read reports what is there. For the corpus
+    /// it is conformed, and this read reports what is there. For the `Content`
     /// either way, use the schema-plane `reader.getContent`, which decodes
     /// through the codec the field's declared type names.
     #[wasm_bindgen(js_name = getStored, unchecked_return_type = "unknown")]
@@ -1173,24 +1179,24 @@ impl Document {
         }
     }
 
-    /// Interpreted **corpus** read at `addr`: the stable ABI under the runtime
-    /// `reader.getContent` / `reader.card(i).getContent`. The corpus twin of
+    /// Interpreted **`Content`** read at `addr`: the stable ABI under the runtime
+    /// `reader.getContent` / `reader.card(i).getContent`. The `Content` twin of
     /// [`reader.get`](Self::reader_get), which projects; this decodes the stored
     /// value through the codec the field's declared type names (`richtext` as
     /// markdown, `plaintext` as literal text) and returns the canonical `Content`.
     ///
     /// Total over the storage form: a committed field holds a content object and
-    /// a parsed one holds the authored string, and both read back as a corpus
-    /// here, so a consumer mounting a corpus editor stops branching on how the
+    /// a parsed one holds the authored string, and both read back as a `Content`
+    /// here, so a consumer mounting a content editor stops branching on how the
     /// document was built.
     ///
     /// A bare string is `Addr` shorthand for `{ field }`; `{ card, field }`
     /// targets a composable card. Returns `undefined` for an **absent** field. An
-    /// absent `addr.field` reads the **body** corpus, quill-free, mirroring
+    /// absent `addr.field` reads the **body** `Content`, quill-free, mirroring
     /// [`getStored`](Self::get_stored). Throws `edit::unknown_field` for a name
     /// the schema does not declare, `edit::field_not_content` for a declared type
     /// that is not a content leaf (`array<richtext>` carries content and still has
-    /// no one corpus), `edit::field_decode` for a stored value
+    /// no one `Content`), `edit::field_decode` for a stored value
     /// that decodes under neither encoding, and `edit::index_out_of_range` for a
     /// bad `addr.card`.
     #[wasm_bindgen(js_name = _readerGetContent, skip_typescript, unchecked_return_type = "Content | undefined")]
@@ -1202,7 +1208,7 @@ impl Document {
         let addr = Addr::from_js_or_string(&addr)?;
         let base = self.addr_base(&addr);
         match &addr.field {
-            // Absent field = body: the body is a corpus by construction, so this
+            // Absent field = body: the body is a `Content` by construction, so this
             // is the quill-free `getStored` body read.
             None => serialize_or_throw(
                 &quillmark_content::serial::to_canonical_value(self.addr_card_ref(&addr)?.body()),

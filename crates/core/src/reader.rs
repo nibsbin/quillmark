@@ -35,15 +35,15 @@
 //! rejects it on the write side.
 //!
 //! [`get_content`](TypedReader::get_content) is the same read at the other end of
-//! the codec: the corpus rather than the projection. A document that came
+//! the codec: the `Content` rather than the projection. A document that came
 //! through the bound door ([`Quill::parse`](crate::Quill::parse) /
 //! [`Quill::conform`](crate::Quill::conform)) rests at one form per codec, but
 //! one the transport door left rests as authored, so the verbatim payload read
-//! still answers "corpus or string?" with "depends where this document came
+//! still answers "content object or string?" with "depends where this document came
 //! from" and this one does not. Decoding needs the
 //! schema, not the payload: a `richtext` string is markdown and a `plaintext`
 //! string is literal text, so the same bytes decode two ways and only the
-//! declared type says which. That is why the corpus read binds the quill and
+//! declared type says which. That is why the `Content` read binds the quill and
 //! `Document` carries none.
 //!
 //! The body read stays quill-free: a body's type is a format fact, not a schema
@@ -110,18 +110,18 @@ impl<'a> TypedReader<'a> {
         read_field(self.doc.main(), Some(&self.config.main.fields), name)
     }
 
-    /// Read a main-card content field as its [`Content`] corpus, decoded through
-    /// the codec its declared type names: the corpus twin of [`get`](Self::get),
+    /// Read a main-card content field as its [`Content`], decoded through
+    /// the codec its declared type names: the [`Content`] twin of [`get`](Self::get),
     /// which returns a projection. Total over the storage form, so a field the
-    /// writer committed as a canonical corpus and one a markdown parse left as an
-    /// authored string both read back as a corpus, and which lane built the
+    /// writer committed as a canonical content object and one a markdown parse left as an
+    /// authored string both read back as a [`Content`], and which lane built the
     /// document stops being the caller's business.
     ///
     /// `Ok(None)` when the field is absent;
     /// [`EditError::UnknownField`] for a name the schema does not declare;
     /// [`EditError::FieldNotContent`] for a declared type that is not a content
-    /// leaf (an `integer` has no corpus even when it holds a string, and an
-    /// `array<richtext>` carries content without having one corpus);
+    /// leaf (an `integer` has no [`Content`] even when it holds a string, and an
+    /// `array<richtext>` carries content without having one [`Content`]);
     /// [`EditError::FieldDecode`] when the stored value decodes under
     /// neither encoding.
     ///
@@ -180,7 +180,7 @@ impl CardReader<'_> {
         read_field(self.card, self.schema.map(|s| &s.fields), name)
     }
 
-    /// Read a content field on this card as its [`Content`] corpus: the card twin
+    /// Read a content field on this card as its [`Content`]: the card twin
     /// of [`TypedReader::get_content`], carrying the same outcomes.
     pub fn get_content(&self, name: &str) -> Result<Option<Content>, EditError> {
         read_content(self.card, self.schema.map(|s| &s.fields), name)
@@ -230,15 +230,15 @@ fn read_field(
     }
 }
 
-/// The shared corpus dispatch behind [`TypedReader::get_content`] and
+/// The shared [`Content`] dispatch behind [`TypedReader::get_content`] and
 /// [`CardReader::get_content`]: resolve `name` against `fields_schema`, then
 /// decode through the codec the declared type names ([`Card::field_richtext`] for
 /// `richtext`, [`Card::field_plaintext_content`] for `plaintext`). Every other
 /// type is [`EditError::FieldNotContent`], answered from the schema before the
-/// payload is read: whether a field has a corpus is a declared-type fact, so a
+/// payload is read: whether a field has a [`Content`] is a declared-type fact, so a
 /// `string` field holding markdown-looking text is still not content. The two
 /// content leaves are the whole domain, so an `array<richtext>` lands here as
-/// well: it carries content and still has no single corpus.
+/// well: it carries content and still has no single [`Content`].
 fn read_content(
     card: &Card,
     fields_schema: Option<&IndexMap<String, FieldSchema>>,
@@ -435,8 +435,8 @@ card_kinds:
         );
     }
 
-    // The corpus read is total over the storage form: the seeded (committed)
-    // lane and the parsed (authored-string) lane return the same corpus.
+    // The `Content` read is total over the storage form: the seeded (committed)
+    // lane and the parsed (authored-string) lane return the same value.
     #[test]
     fn content_read_spans_both_storage_forms() {
         let config = config();
@@ -450,7 +450,7 @@ card_kinds:
             )
             .unwrap();
 
-        let from_corpus = TypedReader::new(&config, &committed)
+        let from_content = TypedReader::new(&config, &committed)
             .get_content("subject")
             .unwrap()
             .unwrap();
@@ -458,9 +458,9 @@ card_kinds:
             .get_content("subject")
             .unwrap()
             .unwrap();
-        assert_eq!(from_corpus.text, "Hello world");
-        assert_eq!(from_corpus.text, from_string.text);
-        assert_eq!(from_corpus.marks, from_string.marks);
+        assert_eq!(from_content.text, "Hello world");
+        assert_eq!(from_content.text, from_string.text);
+        assert_eq!(from_content.marks, from_string.marks);
     }
 
     // The codec follows the declared type, so the same stored bytes decode two

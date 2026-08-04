@@ -48,18 +48,23 @@ use super::{Card, Document};
 use crate::value::QuillValue;
 use crate::version::QuillReference;
 
-/// Schema version for the V0_93_0 wire format. Newly serialized documents carry
+/// Storage version for the V0_93_0 wire format. Newly serialized documents carry
 /// this tag. Stores the card `body` as the canonical content embedded
 /// structurally (byte-identical to `to_canonical_json`) rather than a markdown string;
 /// the payload shape is unchanged from V0_92_0.
+///
+/// **Storage**, not a field schema. The wire key stays spelled `schema`: it is
+/// the serde tag [`StoredDocument`] dispatches on, so renaming it would break
+/// the versioning mechanism the tag exists to serve. The two senses part at the
+/// API, where a quill's field declarations are the only `schema`.
 pub const STORAGE_V0_93_0: &str = "quillmark/document@0.93.0";
 
-/// Read the `schema` field from a raw storage DTO payload without
+/// Read the storage version off a raw storage DTO payload without
 /// performing full deserialization.
 ///
 /// Returns `None` if `json` is not valid JSON, is not an object, or has no
-/// `schema` field. The returned string is **not** validated against the
-/// set of supported schema versions: callers use this to distinguish
+/// version tag. The returned string is **not** validated against the
+/// set of supported storage versions: callers use this to distinguish
 /// "unknown future version" from "corrupt payload" when [`Document`]
 /// deserialization fails.
 pub fn peek_storage_version(json: &str) -> Option<String> {

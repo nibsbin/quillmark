@@ -114,13 +114,13 @@ The interpreted read front door and the read twin of `Writer`. `get` reads each
 field by its declared type: a richtext field to its markdown projection, a
 plaintext field to its literal text, every other type its canonical value
 verbatim. `get_content` is the same read at the other end of the codec, handing
-back the field's `Content` corpus as a dict whichever lane stored it.
+back the field's `Content` as a dict whichever lane stored it.
 
 ```python
 v = quill.reader(doc)
 v.get("bio")                              # richtext → markdown str; scalar → its value; absent → None
                                           # undeclared name raises UnknownField; undecodable content raises FieldDecode
-v.get_content("bio")                      # the corpus dict {text, lines, marks, islands}; absent → None
+v.get_content("bio")                      # the `Content` dict {text, lines, marks, islands}; absent → None
                                           # a type that is not a content leaf raises FieldNotContent
 v.body_markdown()                              # the main body markdown (quill-free body read)
 v.card(0).kind                            # the composable card's $kind

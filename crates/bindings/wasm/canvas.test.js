@@ -358,7 +358,7 @@ describe('LiveSession.apply', () => {
     const session = engine.open(quill, Document.fromMarkdown(TEST_MARKDOWN))
     const before = session.pageCount
 
-    const cs = session.apply(
+    const cs = session.update(
       Document.fromMarkdown(TEST_MARKDOWN.replace('Canvas Test', 'Edited Title'))
     )
     expect(cs.pageCount).toBe(before)
@@ -366,7 +366,7 @@ describe('LiveSession.apply', () => {
     expect(cs.dirtyPages).toContain(0)
 
     // Identical re-apply → nothing dirty.
-    const cs2 = session.apply(
+    const cs2 = session.update(
       Document.fromMarkdown(TEST_MARKDOWN.replace('Canvas Test', 'Edited Title'))
     )
     expect(cs2.dirtyPages).toEqual([])
@@ -384,7 +384,7 @@ describe('LiveSession.apply', () => {
     const wrong = Document.fromMarkdown(
       TEST_MARKDOWN.replace('$quill: test_quill', '$quill: other_quill')
     )
-    expect(() => session.apply(wrong)).toThrow()
+    expect(() => session.update(wrong)).toThrow()
 
     // Every read still serves the last-good compile.
     expect(session.pageCount).toBe(before)
@@ -394,7 +394,7 @@ describe('LiveSession.apply', () => {
     expect(ctx.calls.length).toBe(1)
 
     // The session recovers on the next good apply.
-    const cs = session.apply(
+    const cs = session.update(
       Document.fromMarkdown(TEST_MARKDOWN.replace('Canvas Test', 'Recovered'))
     )
     expect(cs.pageCount).toBe(session.pageCount)

@@ -424,7 +424,7 @@ fn a_0_92_0_row_migrates_then_converges() {
     assert!(diags.is_empty(), "{diags:?}");
     assert!(
         doc.main().payload().get("subject").unwrap().as_json().is_object(),
-        "the authored richtext string converges to the corpus"
+        "the authored richtext string converges to the canonical content object"
     );
     assert_eq!(
         doc.main().payload().get("note").unwrap().as_json(),

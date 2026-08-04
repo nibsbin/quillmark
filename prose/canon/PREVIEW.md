@@ -8,7 +8,7 @@ The preview surface is two verbs: `render(quill, doc, opts)`, stateless
 one-shot bytes for CLI / server / export, and `open(quill, doc)` →
 **`LiveSession`**, a persistent, incremental compiler that owns preview. Reads
 (`render`, `paint`, `pageSize`, `regions`, `fieldAt`, `positionAt`, `locate`)
-serve the session's current compile; `apply(doc)` recompiles in place and
+serve the session's current compile; `update(doc)` recompiles in place and
 returns a `ChangeSet` naming the dirty pages. `paint` writes a rasterized page directly into a
 `CanvasRenderingContext2d`; each paint is a **complete** raster: every piece
 of page content already visible, so the consumer never composites. It is
@@ -41,8 +41,8 @@ pub trait SessionHandle: Send + Sync + 'static {
     fn render(&self, opts: &RenderOptions) -> Result<RenderResult, RenderError>;
     fn page_count(&self) -> usize;
 
-    // Edit seam: default Err = "apply unsupported".
-    fn apply(&mut self, json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> { ... }
+    // Edit seam: default Err = "update unsupported".
+    fn update(&mut self, json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> { ... }
 
     // Canvas seam: default None = "no painter".
     fn page_size_pt(&self, page: usize) -> Option<(f32, f32)> { None }
@@ -64,19 +64,19 @@ whether to mount a canvas UI before opening a session), the engine's
 (`quillmark_core::formats_support_canvas`: a backend that emits a visual-page
 format, PNG or SVG, can paint); the session-level answer is authoritative.
 
-## Live edits: `apply` and `ChangeSet`
+## Live edits: `update` and `ChangeSet`
 
-`apply(doc)` recompiles the session against a new document, checking its
+`update(doc)` recompiles the session against a new document, checking its
 `$quill` and compiling it through the config the session was opened against.
 **Transactional**: on `Err` the previous compile stays live, every read keeps
 serving the last-good document and its `warnings`, and the session recovers on
-the next successful apply. On `Ok` reads serve the new compile: `warnings`
+the next successful update. On `Ok` reads serve the new compile: `warnings`
 included, and the returned `ChangeSet { page_count, dirty_pages }` names the
 pages whose rendered content changed (including added pages; removed pages are
 implied by `page_count`). A preview repaints `dirty ∩ visible` and nothing
 else: that repaint bound, not compile speed, is the throughput lever.
 
-Per-backend, apply is an implementation choice, not a flag:
+Per-backend, update is an implementation choice, not a flag:
 
 - **Typst** recompiles incrementally. The session persists its `QuillWorld`
   (fonts, packages, assets parsed once at `open`); an edit swaps the helper
@@ -97,7 +97,7 @@ Typst backend evicts entries older than 10 compiles after *every* compile
 otherwise too, so eviction is unconditional, not a session feature.
 
 **One session type.** Immutability is an invariant, not a type: reads between
-edits see a stable document because apply swaps the compile only on success,
+edits see a stable document because update swaps the compile only on success,
 and the preview consumer (ours: preview is WASM-only by non-goal) executes
 serially. There is no separate
 frozen snapshot type and no change-generation counter: with a single owned
@@ -105,13 +105,15 @@ consumer there is no cross-edit reader to protect. If a long-lived read-only
 viewer ever needs to shed the retained world, a `freeze()` that drops it and
 keeps the pageable document is a *mode* to add, not a second type.
 
-`apply` is the only edit verb: a whole-document recompile. Anchoring a caret
+`update` is the only edit verb: a whole-document recompile, and it is named apart
+from the content lane's `applyChange`, which splices ops into a document rather
+than recompiling one. Anchoring a caret
 or selection across edits is the **editor's** job: its own transaction mapping
 (a ProseMirror / CodeMirror `StepMap`) carries positions through local edits, so
 the session holds no change log, no revision stamp, and no per-field delta
 path: `FieldRegion` / `ContentHit` carry no `revision`. Geometry
 (`regions`, `positionAt`, `locate`) is read against the current compile and
-re-read after each committed `apply`. `positionAt` (point → content position) and
+re-read after each committed `update`. `positionAt` (point → content position) and
 `locate` (content position → caret rect) are exact inverses over that compile:
 that pair *is* the bidirectional preview↔editor cursor bridge, and it needs no
 forward-mapping because the editor owns the live position it feeds in.
@@ -125,7 +127,7 @@ compositing of its own. Backends satisfy it differently:
 - **Typst** rasterizes its laid-out page natively (`typst-render` →
   `tiny_skia::Pixmap` → unpremultiply → RGBA8).
 - **pdfform** pre-flattens the bound field values into the page content
-  streams at session-open (and again at each `apply`), then rasterizes that
+  streams at session-open (and again at each `update`), then rasterizes that
   flat PDF via hayro, so field values appear in the raster on their own, with
   no regions-compositing by the caller.
 
@@ -149,7 +151,7 @@ paying re-rasterization on every scroll reversal.
 Field geometry is primarily a **session-level query**, `LiveSession::regions()`
 (see the region type in `crates/core/src/region.rs`): the interactive-preview
 path holds a session and reads geometry off the current compile with no
-render: re-read it after each committed `apply`. A one-shot byte render
+render: re-read it after each committed `update`. A one-shot byte render
 carries the same sidecar only on request (`RenderOptions::regions` → `RenderResult::regions`),
 for consumers without a live session: static overlays over an exported SVG,
 PDF post-processing, CI coverage probes. The sidecar always describes the
@@ -277,7 +279,7 @@ class LiveSession {
   readonly supportsCanvas: boolean;
   readonly warnings: Diagnostic[];
 
-  apply(doc: Document): ChangeSet;      // in-place recompile; transactional
+  update(doc: Document): ChangeSet;     // in-place recompile; transactional
   render(opts?: RenderOptions): RenderResult;
   regions(): FieldRegion[];             // field → rects (one per segment); session query, no render
   fieldBoxes(field: string): FieldRegion[];  // derived whole-field box: one union rect per page (content only)
@@ -406,7 +408,7 @@ by `runtime.test.js`.
 - **Two verbs, one session type.** `render` is the stateless one-shot;
   `open` → `LiveSession` owns preview. The frozen single-compile snapshot is
   not a separate type: its immutability survives as the swap-on-commit
-  invariant of a transactional `apply`, and its "hold last-good while
+  invariant of a transactional `update`, and its "hold last-good while
   computing next" behavior falls out of the same invariant with no
   special-casing. Third-party preview controllers are out of scope, so no
   defensive snapshot type and no change-generation counter guards a consumer
@@ -417,7 +419,7 @@ by `runtime.test.js`.
   canvas backend is overriding the two seam methods (`page_size_pt` /
   `render_rgba`): capability is then derived from the seam, with no separate
   flag to flip and no binding to touch.
-- **`apply` reports dirty pages, not new handles.** Page identity is the index;
+- **`update` reports dirty pages, not new handles.** Page identity is the index;
   a `ChangeSet` is data. Nothing borrowed from a previous compile outlives an
   edit because reads resolve against the current compile at call time.
 - **Complete raster, never compose-from-regions.** Both backends hand back a
@@ -458,7 +460,7 @@ by `runtime.test.js`.
   cadence.
 - **`warnings` accessor on `LiveSession`.** The current compile's non-fatal
   diagnostics (e.g. Typst font fallback): set at open, refreshed by each
-  committed `apply`, swapped transactionally with the compile. Without the
+  committed `update`, swapped transactionally with the compile. Without the
   accessor they are invisible to canvas consumers (only surfaced via
   `render()`'s `RenderResult`).
 - **`regions()` render-free on the session; opt-in on one-shot renders.** The
@@ -475,7 +477,7 @@ by `runtime.test.js`.
 
 ## Lifecycle and consumer flow
 
-`supportsCanvas` → `open` → `paint` per visible page → `apply` on edit →
+`supportsCanvas` → `open` → `paint` per visible page → `update` on edit →
 repaint `dirtyPages ∩ visible`. The [quickstart's canvas
 section](../../docs/getting-started/quickstart.md#live-preview-canvas) is the
 worked loop.

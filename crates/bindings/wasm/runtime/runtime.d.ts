@@ -752,7 +752,7 @@ export declare class CardWriter {
  * is a format fact) and never throws.
  *
  * `getContent` is the same read at the other end of the codec, returning the
- * corpus rather than the projection. It binds the quill for the same reason
+ * `Content` rather than the projection. It binds the quill for the same reason
  * `get` does: a `richtext` string is markdown and a `plaintext` string is
  * literal text, so the same stored bytes decode two ways and only the declared
  * type says which.
@@ -771,12 +771,12 @@ export declare class DocumentReader {
 	 */
 	get(addr: Addr | string): unknown;
 	/**
-	 * Read the content field at `addr` as its canonical `Content` corpus: the
-	 * corpus twin of {@link get}, which projects. Decodes through the codec the
+	 * Read the content field at `addr` as its canonical `Content`: the
+	 * `Content` twin of {@link get}, which projects. Decodes through the codec the
 	 * declared type names (`richtext` as markdown, `plaintext` as literal text),
-	 * so a committed field and a parsed one read back the same corpus and the
+	 * so a committed field and a parsed one read back the same `Content` and the
 	 * storage form stops being the caller's business. An absent `addr.field`
-	 * reads the body corpus. `undefined` for an absent field; throws
+	 * reads the body `Content`. `undefined` for an absent field; throws
 	 * `UnknownField`, `FieldNotContent` for a declared type that is not a content
 	 * leaf, `FieldDecode` for an undecodable value, and `IndexOutOfRange`.
 	 */
@@ -815,7 +815,7 @@ export declare class CardReader {
 	get(name: string): unknown;
 	/**
 	 * Read the content field `name` on this card as its canonical `Content`
-	 * corpus: the card twin of {@link DocumentReader.getContent}.
+	 * `Content`: the card twin of {@link DocumentReader.getContent}.
 	 */
 	getContent(name: string): Content | undefined;
 	/** This card's body markdown: the card twin of {@link DocumentReader.bodyMarkdown}. */

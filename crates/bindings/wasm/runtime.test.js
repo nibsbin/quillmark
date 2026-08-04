@@ -354,12 +354,12 @@ card_kinds:
     expectEditCode(() => cardReader.get('body'), 'edit::index_out_of_range')
   })
 
-  // getContent is the same read at the other end of the codec: the corpus, not
+  // getContent is the same read at the other end of the codec: the `Content`, not
   // the projection. Rest is per-codec now, so what it spans is a document at
   // rest versus one the transport door left as authored.
-  it('getContent returns the corpus for a conformed field and an authored one', () => {
+  it('getContent returns the Content for a conformed field and an authored one', () => {
     const quill = buildQuill()
-    // At rest: the writer (like the bound door) stores the canonical corpus.
+    // At rest: the writer (like the bound door) stores the canonical Content.
     const committed = seededDoc(quill)
     expect(typeof committed.getStored('subject')).toBe('object')
     // Transport door: a markdown-authored field rests as authored until it is
@@ -383,7 +383,7 @@ card_kinds:
     const md =
       "~~~card-yaml\n$quill: view_test\nsubject: Q3 **results**\nnote: 'a *literal* line'\n~~~\n\nBody."
     const bound = quill.parse(md)
-    expect(typeof bound.getStored('subject')).toBe('object') // richtext: the corpus
+    expect(typeof bound.getStored('subject')).toBe('object') // richtext: the Content object
     expect(bound.getStored('note')).toBe('a *literal* line') // plaintext: the literal
     expect(bound.warnings).toEqual([])
 
@@ -441,7 +441,7 @@ card_kinds:
     const v = quill.reader(doc)
     expectEditCode(() => v.getContent('nope'), 'edit::unknown_field')
     expectEditCode(() => v.getContent('qty'), 'edit::field_not_content')
-    expect(v.getContent({}).text).toBe('Main body.') // absent field = body corpus
+    expect(v.getContent({}).text).toBe('Main body.') // absent field = body Content
     expect(v.card(0).getContent('body').text).toBe('A card field.')
     expectEditCode(() => v.card(9).getContent('body'), 'edit::index_out_of_range')
 
@@ -836,9 +836,9 @@ A single line of body ink.`
       const paintResult = session.paint(ctx, body.page)
       expect(paintResult.pixelWidth).toBeGreaterThan(0)
 
-      // apply: recompile in place.
-      expect(typeof session.apply).toBe('function')
-      const cs = session.apply(Document.fromMarkdown(SMOKE_MARKDOWN))
+      // update: recompile in place.
+      expect(typeof session.update).toBe('function')
+      const cs = session.update(Document.fromMarkdown(SMOKE_MARKDOWN))
       expect(Array.isArray(cs.dirtyPages)).toBe(true)
     } finally {
       session.free()
@@ -1157,15 +1157,15 @@ describe('@quillmark/wasm/runtime: handles from another copy (duplicate install)
     )
   })
 
-  it('refuses a foreign Document on session.apply', async () => {
+  it('refuses a foreign Document on session.update', async () => {
     const engine = new Engine()
     const quill = makeRuntimeQuill()
     const session = await engine.open(quill, Document.fromMarkdown(TEST_MARKDOWN))
     try {
       const next = Document.fromMarkdown(TEST_MARKDOWN.replace('Hello World', 'Next'))
-      expectForeign(() => session.apply(foreignDoc(next)), 'session.apply(doc)')
+      expectForeign(() => session.update(foreignDoc(next)), 'session.update(doc)')
       // The session is untouched by the refusal and still applies a local doc.
-      expect(session.apply(next).pageCount).toBe(session.pageCount)
+      expect(session.update(next).pageCount).toBe(session.pageCount)
     } finally {
       session.free()
     }

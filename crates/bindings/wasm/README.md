@@ -107,7 +107,7 @@ The **bound door**, and the primary ingestion path. `quill.parse` is
 `Document.fromMarkdown` followed by `conform`: the returned document's declared
 content fields rest at one form per codec (a `richtext` field as the canonical
 content object, a `plaintext` field as its literal string), so `getStored`
-answers "corpus or string?" by the field's declared codec rather than by how the
+answers "content object or string?" by the field's declared codec rather than by how the
 document was built. Parse warnings and the `conform::*` warnings both ride
 `doc.warnings`.
 
@@ -289,7 +289,7 @@ address. `getStored` is the verbatim transport read, distinct from the interpret
 markdown is read through `quill.reader(doc).get(field)`). A content field's stored
 form follows how the document was built (a canonical content object when the
 typed writer committed it, the authored string when a markdown parse produced
-it), so for the corpus either way read `quill.reader(doc).getContent(addr)`, which
+it), so for the `Content` either way read `quill.reader(doc).getContent(addr)`, which
 decodes through the codec the field's declared type names. Card-scoped verbs take a
 `CardAddr` (`{ card? }`) first: `doc.getExt({ card: 2 })`, and the batch below.
 
@@ -362,12 +362,12 @@ write.
 ```ts
 const v = quill.reader(doc);
 v.get("subject");                                   // by declared type: richtext → markdown, plaintext → literal text
-v.getContent("subject");                            // the same read as a Content corpus, whichever lane stored it
+v.getContent("subject");                            // the same read as a `Content`, whichever lane stored it
 v.bodyMarkdown();                                        // the main body markdown (quill-free)
 v.card(0).get("body");                              // a card field, resolved by its $kind
 ```
 
-`get` projects and `getContent` returns the corpus; both decode through the codec
+`get` projects and `getContent` returns the `Content`; both decode through the codec
 the field's **declared type** names, which is why they bind the quill and the
 verbatim `doc.getStored` does not. An undeclared name throws `UnknownField`, a
 type that is not a content leaf throws `FieldNotContent`, and an undecodable
