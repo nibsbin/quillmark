@@ -353,10 +353,11 @@ export type MarkOp =
 
 /**
  * A line/block edit. `split`/`join` splice `\n` in post-`delta`, post-`islandOps`
- * coordinates; `setKind`/`setContainers`/`setContinues` touch metadata. `setContinues` sets/clears a line's within-block
- * hard-break flag (`ContentLine.continues`): the op-grained way to lower a
- * Shift+Enter hard break or a new code-fence interior line; `continues: true` on
- * line 0 is rejected (nothing precedes it to continue).
+ * coordinates; `setKind`/`setContainers`/`setContinues` touch metadata.
+ * `setContinues` sets/clears a line's within-block hard-break flag
+ * (`ContentLine.continues`): the op-grained way to lower a Shift+Enter hard
+ * break or a new code-fence interior line; `continues: true` on line 0 is
+ * rejected (nothing precedes it to continue).
  */
 export type LineOp =
     | { op: "split"; at: number }

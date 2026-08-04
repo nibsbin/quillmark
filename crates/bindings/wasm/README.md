@@ -413,7 +413,7 @@ write.
 const v = quill.reader(doc);
 v.get("subject");                                   // by declared type: richtext → markdown, plaintext → literal text
 v.getContent("subject");                            // the same read as a `Content`, whichever lane stored it
-v.bodyMarkdown();                                        // the main body markdown (quill-free)
+v.bodyMarkdown();                                   // the main body markdown (quill-free)
 v.card(0).get("body");                              // a card field, resolved by its $kind
 ```
 

@@ -194,10 +194,11 @@ card_kinds:
     expect(fieldOf(ed.document.main, 'stray')).toBeUndefined()
   })
 
-  it('reviseBody writes the main body from markdown, receipt-free', () => {
+  it('reviseBody writes the main body from markdown and returns a Delta', () => {
     const ed = buildQuill().writer(blankDoc())
-    ed.reviseBody('New **body**.')
+    const delta = ed.reviseBody('New **body**.')
     expect(ed.document.bodyMarkdown()).toBe('New **body**.')
+    expect(Array.isArray(delta.ops)).toBe(true)
   })
 
   it('reviseField writes a richtext field typed, and returns a Delta', () => {
@@ -234,7 +235,7 @@ card_kinds:
     const ed = buildQuill().writer(doc)
     ed.card(0).set('body', 'Card **body**.')
     expect(exportMarkdown(fieldOf(doc.cards[0], 'body'))).toBe('Card **body**.')
-    ed.card(0).reviseBody('Card body md.')
+    expect(Array.isArray(ed.card(0).reviseBody('Card body md.').ops)).toBe(true)
     expect(exportMarkdown(doc.cards[0].body)).toBe('Card body md.')
     // card(i).reviseField is the typed, anchor-preserving field write.
     const delta = ed.card(0).reviseField('body', 'Revised **field**.')

@@ -775,7 +775,7 @@ This body and the metadata above are an indorsement card.
     }
 
     #[test]
-    fn peek_schema_version_reads_field_without_full_parse() {
+    fn peek_storage_version_reads_field_without_full_parse() {
         let doc = sample();
         let json = serde_json::to_string(&doc).unwrap();
         assert_eq!(peek_storage_version(&json).as_deref(), Some(STORAGE_V0_93_0));

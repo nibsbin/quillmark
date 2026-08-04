@@ -104,7 +104,7 @@ pub enum EditError {
     /// object that is not a canonical content, a markdown string that failed to
     /// import, a shape that is neither object nor string, or formatting under
     /// the plain-only `plaintext` codec. `message` names which, as engine prose
-    /// riding no arg. Returned by [`Card::commit_field`](Card::commit_field) on
+    /// riding no arg. Returned by `Card::commit_field` on
     /// a content field, by [`Card::revise_field`](Card::revise_field) on a
     /// present non-content field, and by the reads on
     /// [`TypedReader`](crate::TypedReader).
@@ -140,7 +140,7 @@ pub enum EditError {
     /// A content field written under an `inline: true` schema decoded to a
     /// multi-line content: the write-time counterpart of the
     /// coercion/validation `inline` check, raised by
-    /// [`Card::commit_field`](Card::commit_field). Both prose codecs declare
+    /// `Card::commit_field`. Both prose codecs declare
     /// `inline`, so one code covers both and `codec` says which lane it came
     /// from.
     #[error("{codec} field '{field}' is not inline: {codec}(inline) requires a single line with no container or island")]
@@ -151,7 +151,7 @@ pub enum EditError {
         codec: String,
     },
 
-    /// A typed write ([`Card::commit_field`](Card::commit_field)) could not
+    /// A typed write (`Card::commit_field`) could not
     /// coerce the value to the field's schema type: the general write-commit
     /// failure for scalar/array/object types (a `"x"` for an `integer`, a
     /// non-object for an `object`, …). The mutator-plane twin of
@@ -743,7 +743,7 @@ impl Card {
     /// semantics: stores the canonical content JSON verbatim (identity marks and
     /// content-only marks such as `underline` intact), no diff, no schema check
     /// (schema-blind, like [`apply_field_change`](Self::apply_field_change);
-    /// [`commit_field`](Self::commit_field) is the typed door). The previous
+    /// `commit_field` is the typed door). The previous
     /// value's anchors are gone; the incoming content's ride along exactly.
     /// Returns [`EditError::InvalidFieldName`] for a malformed name.
     ///
@@ -882,7 +882,7 @@ impl Card {
     /// Revise a richtext field from an authored markdown string: the
     /// field-level twin of [`revise_body`](Self::revise_body), and the
     /// field-level `diff_import`. The other field-content writers are the cold
-    /// [`commit_field`](Self::commit_field) and the splice
+    /// `commit_field` and the splice
     /// [`apply_field_change`](Self::apply_field_change), so this
     /// is the anchor-preserving path for rewriting a richtext field's markdown
     /// wholesale. Decodes the field's current content as the diff base (an **absent**
@@ -891,7 +891,7 @@ impl Card {
     ///
     /// Schema-blind by design: the content-writer stratum splices without the
     /// quill (like [`apply_field_change`](Self::apply_field_change));
-    /// [`commit_field`](Self::commit_field) is the typed door that enforces
+    /// `commit_field` is the typed door that enforces
     /// `richtext(inline)`, and a violation otherwise surfaces at validate/render.
     ///
     /// **Richtext only**, and the exclusion bites: this decodes the current value

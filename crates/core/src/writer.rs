@@ -1,6 +1,6 @@
 //! Schema-bound typed writer: the front door for typed field writes.
 //!
-//! [`Card::commit_field`](crate::Card::commit_field) asks the caller to fetch a
+//! `Card::commit_field` asks the caller to fetch a
 //! [`FieldSchema`] per write. Every consumer that wants typed writes (a
 //! form editor, an MCP server) already holds the resolved [`QuillConfig`]: it
 //! renders with it. [`Quill::writer`](crate::Quill::writer) binds the schema
@@ -56,7 +56,7 @@ impl<'a> TypedWriter<'a> {
     /// [`EditError::UnknownField`] rather than falling to the opaque store: on
     /// the typed path it is a typo. For deliberate opaque storage use the raw
     /// [`Card::store_field`](crate::Card::store_field). Other errors are those of
-    /// [`Card::commit_field`](crate::Card::commit_field).
+    /// `Card::commit_field`.
     pub fn set(&mut self, name: &str, value: impl Into<QuillValue>) -> Result<(), EditError> {
         let config = self.config;
         match config.main.fields.get(name) {
@@ -95,7 +95,7 @@ impl<'a> TypedWriter<'a> {
 
     /// Revise a content field on the main card from authored text: typed *and*
     /// anchor-preserving. Resolves the field's schema and defers to
-    /// [`Card::revise_field_checked`](crate::Card::revise_field_checked), so
+    /// `Card::revise_field_checked`, so
     /// surviving anchors rebase and the diffed result is schema-conformed
     /// (`richtext(inline)` rejects a multi-block result). Returns the text
     /// [`Delta`]. A name the schema does not declare fails with
@@ -378,7 +378,7 @@ card_kinds:
     }
 
     #[test]
-    fn set_body_revises_main_body() {
+    fn revise_body_revises_main_body() {
         let config = config();
         let mut doc = blank_doc();
         let mut ed = TypedWriter::new(&config, &mut doc);
