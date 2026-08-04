@@ -37,10 +37,16 @@ import type { InitInput } from '../core/wasm.js';
  * site is the same line. Reaching a class before this resolves throws
  * `runtime::not_initialized` naming the fix.
  *
- * Idempotent and concurrency-safe: every call returns the same promise, so
- * `await init()` at several entry points costs one instantiation. A failed init
+ * Idempotent and concurrency-safe: every non-conflicting call returns the same
+ * promise, so `await init()` at several entry points costs one instantiation.
+ * Call it at the top of EVERY entry point (route loader, hydration path,
+ * worker) rather than trusting one startup site to run first. A failed init
  * clears the memo, so a retry is possible. Per realm: a Worker loads and
  * initializes its own copy.
+ *
+ * Both failure codes REJECT, so one `catch` covers the gate. Delivery follows
+ * the function kind across this surface: a sync verb throws, a
+ * promise-returning verb rejects, and nothing does both.
  *
  * Backends are NOT initialized here. `Engine` instantiates a backend inside its
  * lazy load, on first render against it.
@@ -48,7 +54,7 @@ import type { InitInput } from '../core/wasm.js';
  * @param source override the binary's source (bytes, a `Response`, a
  *   `WebAssembly.Module`, a URL) for hosts that route assets themselves or
  *   embed the binary. Pass it on the FIRST call; a later call passing a
- *   different source throws `runtime::init_conflict` rather than silently
+ *   different source rejects with `runtime::init_conflict` rather than silently
  *   ignoring it. Passing the same value again is fine.
  */
 export declare function init(source?: InitInput): Promise<void>;
