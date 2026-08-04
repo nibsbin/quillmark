@@ -11,6 +11,12 @@
 import { describe, it, expect } from 'vitest'
 import * as core from '@quillmark-wasm/core'
 import { Quill, Document } from '@quillmark-wasm/core'
+import { initBuildSync } from './test-helpers.js'
+
+// `--target web`: the classes export synchronously, the instance behind them
+// arrives here. The public root does this in `init`; this suite drives the
+// private build directly.
+initBuildSync(core, 'core')
 
 const enc = new TextEncoder()
 

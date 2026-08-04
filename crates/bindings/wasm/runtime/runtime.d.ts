@@ -18,7 +18,40 @@
 // and two `Quill`/`Document` classes. Every method taking a handle refuses one
 // belonging to another copy, with a `QuillmarkError` naming `npm ls
 // @quillmark/wasm`. Errors are the exception: `isQuillmarkError` is structural.
-export { Quill, Document, init } from '../core/wasm.js';
+export { Quill, Document } from '../core/wasm.js';
+
+import type { InitInput } from '../core/wasm.js';
+
+/**
+ * Instantiate the core WASM build. Call once at startup, before any other
+ * export is used; extra calls are free.
+ *
+ * ```js
+ * import { init, Quill, Engine } from '@quillmark/wasm';
+ * await init();
+ * ```
+ *
+ * The builds are `--target web`: classes export synchronously, the instance
+ * behind them arrives here. Identical in every environment — the binary is
+ * fetched and streamed in a browser, read off disk under Node, and the call
+ * site is the same line. Reaching a class before this resolves throws
+ * `runtime::not_initialized` naming the fix.
+ *
+ * Idempotent and concurrency-safe: every call returns the same promise, so
+ * `await init()` at several entry points costs one instantiation. A failed init
+ * clears the memo, so a retry is possible. Per realm: a Worker loads and
+ * initializes its own copy.
+ *
+ * Backends are NOT initialized here. `Engine` instantiates a backend inside its
+ * lazy load, on first render against it.
+ *
+ * @param source override the binary's source (bytes, a `Response`, a
+ *   `WebAssembly.Module`, a URL) for hosts that route assets themselves or
+ *   embed the binary. Pass it on the FIRST call; a later call passing a
+ *   different source throws `runtime::init_conflict` rather than silently
+ *   ignoring it. Passing the same value again is fine.
+ */
+export declare function init(source?: InitInput): Promise<void>;
 // The document-free content codec, re-exported from the core build.
 export { importMarkdown, exportMarkdown, rebase, mapPos } from '../core/wasm.js';
 // The document-model path parser/serializer: route on `Diagnostic.path`

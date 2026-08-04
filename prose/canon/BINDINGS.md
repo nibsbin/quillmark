@@ -117,7 +117,13 @@ Every Python verb is identical to its core/WASM twin or names its one difference
 
 ## WebAssembly: `bindings/quillmark-wasm`
 
-wasm-bindgen bindings published as `@quillmark/wasm`. Builds with `--target bundler` and `--weak-refs` so wasm-bindgen handles are reclaimed by `FinalizationRegistry`; `.free()` remains as the eager teardown hook. Requires Node 22+ / current evergreen browsers.
+wasm-bindgen bindings published as `@quillmark/wasm`. Builds with `--target web` and `--weak-refs` so wasm-bindgen handles are reclaimed by `FinalizationRegistry`; `.free()` remains as the eager teardown hook. Requires Node 22+ / current evergreen browsers.
+
+**The runtime owns instantiation.** `--target web` emits no `.wasm` ESM import and no top-level await, so nothing in the package graph forces a bundler plugin and a static import of `@quillmark/wasm` is safe anywhere, SSR included. The cost is that instantiation becomes explicit: `await init()` once, before the sync surface is touched. `Engine` instantiates each backend itself, inside the lazy load, so a consumer initializes core and nothing else. `init` is memoized on the promise, so several entry points may each await it for one instantiation, and identical in every environment — the binary streams from a URL in a browser and is read off disk under Node, resolved through the `#quillmark-env` subpath import rather than a runtime `typeof process` branch.
+
+The `--target bundler` alternative emits `import * as wasm from "./wasm_bg.wasm"`, which no browser and no bundler resolves natively; the plugin that fixes it rewrites the import to a top-level await, and because the runtime statically re-exports core, that await lands on every consumer's static module graph. `build-wasm.sh` asserts the built artifacts carry neither form.
+
+**A pre-init call names itself.** Nothing may stand between a consumer and `Quill`/`Document` (the verbatim re-export below), and a public constructor cannot be guarded without wrapping the class, so the guard sits one level down: `build-wasm.sh` patches each generated build so the binding every generated path reads through starts as a sentinel that throws `runtime::not_initialized`. The patch asserts its anchors before applying, so a wasm-bindgen bump that reshapes the glue fails the build instead of shipping a guard that stopped biting.
 
 Ships **multiple artifacts from one crate** behind a single public root export. The root `@quillmark/wasm` is a hand-written **canonical runtime layer** that re-exports the internal Typst-less **core** build's `Document` + `Quill` (load / validate / schema / seed / blueprint) verbatim and adds an `Engine` render dispatcher.
 

@@ -27,10 +27,13 @@
       "default": "./runtime/runtime.js"
     }
   },
+  "imports": {
+    "#quillmark-env": {
+      "node": "./runtime/env-node.js",
+      "default": "./runtime/env-web.js"
+    }
+  },
   "sideEffects": [
-    "./core/wasm.js",
-    "./backends/typst/wasm.js",
-    "./backends/pdfform/wasm.js",
     "./runtime/runtime.js"
   ]
 }
