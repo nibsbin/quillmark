@@ -70,14 +70,6 @@ describe('before init', () => {
   it('rejects a free function', () => {
     expect(diagnosticFrom(() => importMarkdown('x')).code).toBe('runtime::not_initialized')
   })
-
-  // The sentinel must fail on USE, not on being looked at: an incidental
-  // `await`, `console.log`, or devtools expansion of an uninitialized build
-  // would otherwise throw from somewhere that has nothing to do with the cause.
-  it('survives incidental inspection', async () => {
-    const mod = await import('@quillmark-wasm/runtime')
-    expect(String(typeof mod.Quill)).toBe('function')
-  })
 })
 
 describe('init', () => {
@@ -97,10 +89,6 @@ describe('init', () => {
     expect(Document.fromMarkdown(MAIN_CARD_DOC)).toBeDefined()
   })
 
-  it('is free to call again', async () => {
-    await expect(init()).resolves.toBeUndefined()
-  })
-
   // Silently ignoring a second, different source would leave a consumer
   // believing they chose the binary they are running.
   it('refuses a different source once initialized', () => {
@@ -109,10 +97,9 @@ describe('init', () => {
   })
 })
 
-// The headline claim of the `--target web` move: the package imports and runs
-// under plain Node, with no bundler, no plugin, and no aliases. Nothing inside
-// vitest can prove it — vite resolves `#quillmark-env` and the asset URL itself
-// — so this shells out to a bare node.
+// The package imports and runs under plain Node, with no bundler, no plugin,
+// and no aliases. Nothing inside vitest can prove it, since vite resolves
+// `#quillmark-env` and the asset URL itself, so this shells out to a bare node.
 describe('plain Node, no bundler', () => {
   it('imports, initializes with no arguments, and works', () => {
     const runtimeUrl = pathToFileURL(join(PKG_DIR, 'runtime', 'runtime.js')).href

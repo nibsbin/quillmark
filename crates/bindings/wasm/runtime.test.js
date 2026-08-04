@@ -42,10 +42,10 @@ import {
   expectEditCode,
 } from './test-helpers.js'
 
-// The consumer contract, exercised exactly as a consumer writes it: one awaited
-// gate before the sync surface. This also instantiates the core build that the
-// `CoreQuill` identity pin below imports directly — same resolved file, same
-// module instance.
+// The consumer contract, exercised as a consumer writes it: one awaited gate
+// before the sync surface. This also instantiates the core build the `CoreQuill`
+// identity pin below imports directly (same resolved file, same module
+// instance).
 await init()
 
 const TEST_PLATE = `#import "@local/quillmark-helper:0.1.0": data

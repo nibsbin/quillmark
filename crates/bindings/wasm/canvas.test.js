@@ -87,7 +87,7 @@ const { makeQuill, makeSampleFormQuill, SAMPLE_FORM_MARKDOWN, initBuildSync } = 
   './test-helpers.js'
 )
 
-// `--target web`: each build carries its own memory and instantiates separately.
+// Each build carries its own memory, so each instantiates separately.
 initBuildSync(typstBuild, 'backends/typst')
 initBuildSync(pdfformBuild, 'backends/pdfform')
 

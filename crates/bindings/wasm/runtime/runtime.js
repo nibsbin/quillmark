@@ -52,10 +52,8 @@
 // verbatim" case (`Quill === CoreQuill`) is the executable guard for this
 // invariant.
 //
-// It is also why the pre-init guard is not here. Nothing may stand between a
-// consumer and these classes, and prototype patching cannot reach a public
-// constructor (`new Document(...)`) without wrapping it, so the guard goes one
-// level down, into the binding every generated path reads through
+// It is also why the pre-init guard sits inside the generated builds instead
+// of here: nothing may stand between a consumer and these classes
 // (runtime/uninit.js).
 //
 // The identity is what makes `instanceof` the whole membership test: a handle
@@ -97,8 +95,8 @@ export { parseDocPath, formatDocPath } from '../core/wasm.js';
 // are sync and static, so there is nowhere to hide an await except in front.
 //
 // Reaching core before the gate resolves is not a silent wrong answer: the
-// build is patched at build time to throw `runtime::not_initialized` naming the
-// fix (runtime/uninit.js, scripts/build-wasm.sh `guard_wasm_js`).
+// build is patched to throw `runtime::not_initialized` naming the fix
+// (runtime/uninit.js).
 
 /** The in-flight or settled core instantiation. The memo is the PROMISE, not a
  * boolean, so concurrent callers share one instantiation instead of racing. */
@@ -502,9 +500,9 @@ export function isUnknownIsland(island) {
 /**
  * Build a `load` thunk: dynamic-import a backend build, then instantiate it.
  *
- * Under `--target web` a freshly imported build is inert — the import resolves
- * before there is a wasm instance behind the classes — so instantiation is part
- * of loading, and the consumer never sees it. Memoized at MODULE scope, not per
+ * Under `--target web` a freshly imported build is inert (the import resolves
+ * before there is a wasm instance behind the classes), so instantiation is part
+ * of loading and the consumer never sees it. Memoized at MODULE scope, not per
  * `Engine`: two engines issuing their first render concurrently must share one
  * instantiation, and the generated entry's own `wasm !== undefined` guard only
  * catches a call that arrives after one finished, not one already in flight.

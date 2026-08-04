@@ -22,7 +22,6 @@ import {
 import * as typstBuild from '@quillmark-wasm'
 import { makeQuill, expectEditCode, initBuildSync } from './test-helpers.js'
 
-// `--target web`: instantiate the build this suite drives directly.
 initBuildSync(typstBuild, 'backends/typst')
 
 /** Read a field value from a card's payloadItems list by key. */

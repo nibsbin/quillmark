@@ -32,7 +32,7 @@ import type { InitInput } from '../core/wasm.js';
  * ```
  *
  * The builds are `--target web`: classes export synchronously, the instance
- * behind them arrives here. Identical in every environment — the binary is
+ * behind them arrives here. Identical in every environment: the binary is
  * fetched and streamed in a browser, read off disk under Node, and the call
  * site is the same line. Reaching a class before this resolves throws
  * `runtime::not_initialized` naming the fix.

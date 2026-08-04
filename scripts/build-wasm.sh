@@ -90,14 +90,14 @@ fi
 # (Runtime floor is the package.json `engines` field, not set here.)
 #
 # `--target web`, NOT `bundler`. The bundler target emits `import * as wasm from
-# "./wasm_bg.wasm"` — the ESM-integration form no browser and no bundler
-# resolves natively, so every consumer must add a wasm plugin, and the plugin's
-# rewrite puts a top-level await on the module. Core is statically imported by
-# the runtime layer, so that await lands on the static module graph of everyone
-# importing @quillmark/wasm: a permanent constraint on consumer architecture and
-# a blank page in Safari dev under SvelteKit. The web target emits no wasm
-# import and no top-level await; the runtime layer owns instantiation instead
-# (`runtime/runtime.js`, `init`). assert_no_tla below is the regression guard.
+# "./wasm_bg.wasm"`, the ESM-integration form no browser and no bundler resolves
+# natively, so every consumer must add a wasm plugin whose rewrite puts a
+# top-level await on the module. Core is statically imported by the runtime
+# layer, so that await lands on the static module graph of everyone importing
+# @quillmark/wasm: a permanent constraint on consumer architecture, and a blank
+# page in Safari dev under SvelteKit. The web target emits neither; the runtime
+# layer owns instantiation (`runtime/runtime.js`, `init`), and assert_no_tla
+# below is the regression guard.
 build_variant() {
     local subdir="$1"; shift
     local cargo_feature_args=("$@")

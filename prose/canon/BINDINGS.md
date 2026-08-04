@@ -119,7 +119,11 @@ Every Python verb is identical to its core/WASM twin or names its one difference
 
 wasm-bindgen bindings published as `@quillmark/wasm`. Builds with `--target web` and `--weak-refs` so wasm-bindgen handles are reclaimed by `FinalizationRegistry`; `.free()` remains as the eager teardown hook. Requires Node 22+ / current evergreen browsers.
 
-**The runtime owns instantiation.** `--target web` emits no `.wasm` ESM import and no top-level await, so nothing in the package graph forces a bundler plugin and a static import of `@quillmark/wasm` is safe anywhere, SSR included. The cost is that instantiation becomes explicit: `await init()` once, before the sync surface is touched. `Engine` instantiates each backend itself, inside the lazy load, so a consumer initializes core and nothing else. `init` is memoized on the promise, so several entry points may each await it for one instantiation, and identical in every environment — the binary streams from a URL in a browser and is read off disk under Node, resolved through the `#quillmark-env` subpath import rather than a runtime `typeof process` branch.
+**The runtime owns instantiation.** `--target web` emits no `.wasm` ESM import and no top-level await, so nothing in the package graph forces a bundler plugin and a static import of `@quillmark/wasm` is safe anywhere, SSR included. The cost is that instantiation becomes explicit: `await init()` once, before the sync surface is touched.
+
+- **Core only.** `Engine` instantiates each backend itself, inside the lazy load, so a consumer initializes core and nothing else.
+- **Memoized on the promise**, so several entry points may each await it for one instantiation.
+- **One contract everywhere.** The binary streams from a URL in a browser and is read off disk under Node, resolved through the `#quillmark-env` subpath import rather than a runtime `typeof process` branch.
 
 The `--target bundler` alternative emits `import * as wasm from "./wasm_bg.wasm"`, which no browser and no bundler resolves natively; the plugin that fixes it rewrites the import to a top-level await, and because the runtime statically re-exports core, that await lands on every consumer's static module graph. `build-wasm.sh` asserts the built artifacts carry neither form.
 

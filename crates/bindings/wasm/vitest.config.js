@@ -21,11 +21,10 @@ export const WASM_CORE_BUNDLE_PATH = path.join(WORKSPACE_ROOT, 'pkg', 'core', 'w
 export const WASM_RUNTIME_BUNDLE_PATH = path.join(WORKSPACE_ROOT, 'pkg', 'runtime', 'runtime.js')
 
 export default defineConfig({
-  // No wasm plugin. The builds are `--target web`, so nothing imports a `.wasm`
-  // module and nothing emits top-level await; the suites instantiate through
+  // No wasm plugin: the builds are `--target web`, so nothing imports a `.wasm`
+  // module and nothing emits top-level await. The suites instantiate through
   // the runtime's `init` (or `initSync` on the generated builds they drive
-  // directly) exactly as a consumer does. A plugin here would hide the very
-  // property the package now promises.
+  // directly), as a consumer does. A plugin here would mask that.
   resolve: {
     // `pkg/runtime/runtime.js` resolves the wasm byte source through the
     // `#quillmark-env` subpath import; pin the Node half, since these suites

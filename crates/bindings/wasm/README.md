@@ -78,14 +78,14 @@ await init();
 
 The same line works everywhere: the binary streams from a URL in a browser and
 is read off disk under Node, chosen by the package's `#quillmark-env` subpath
-import rather than a runtime environment check. No bundler plugin is required —
+import rather than a runtime environment check. No bundler plugin is required:
 the builds are `--target web`, so nothing in the package graph imports a `.wasm`
 module or carries a top-level await, and a static `import` of this package is
 safe anywhere, SSR included.
 
 `init` is idempotent and concurrency-safe: every call returns the same promise,
 so several entry points may each `await init()` for one instantiation. A failed
-init clears the memo, so a retry works. Each realm initializes its own copy — a
+init clears the memo, so a retry works. Each realm initializes its own copy; a
 Worker calls `init()` too.
 
 **Backends need nothing.** `Engine` instantiates a backend inside its lazy load,
