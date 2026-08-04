@@ -144,7 +144,7 @@ def test_seed_main_and_card(tmp_path):
     assert quill.seed_card("missing") is None, "unknown kind must be None"
 
 
-def test_document_seed_and_store_seed_namespace_round_trip(tmp_path):
+def test_document_seed_and_store_seed_overlay_round_trip(tmp_path):
     """main['seed'][kind] reads what store_seed_overlay wrote; the overlay
     feeds straight back into seed_card as a plain dict; remove_seed_overlay
     clears it."""

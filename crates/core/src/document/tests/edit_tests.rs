@@ -482,7 +482,7 @@ fn test_replace_body_reports_import_error() {
 /// `overwrite_body` installs a pre-built content verbatim: value semantics, no
 /// markdown import, lossless for content-only marks a markdown projection drops.
 #[test]
-fn test_install_body_sets_directly() {
+fn test_overwrite_body_sets_directly() {
     use quillmark_content::model::{Mark, MarkKind};
 
     let mut content = quillmark_content::import::from_markdown("underlined body").unwrap();
@@ -504,7 +504,7 @@ fn test_install_body_sets_directly() {
 /// the field-level twin of `overwrite_body`, lossless for content-only marks, and
 /// reads back through `field_richtext`. A malformed name is rejected.
 #[test]
-fn test_install_field_sets_directly() {
+fn test_overwrite_field_sets_directly() {
     use quillmark_content::model::{Mark, MarkKind};
 
     let mut content = quillmark_content::import::from_markdown("underlined intro").unwrap();
@@ -1005,7 +1005,7 @@ fn test_apply_body_change_reports_out_of_range() {
 /// Identity marks (a strong span applied post-delta) survive on the re-stored
 /// content, which is what makes anchors persist on field content across edits.
 #[test]
-fn test_apply_field_richtext_change_splices_and_persists() {
+fn test_apply_field_change_splices_and_persists() {
     use crate::{ChangeBundle, MarkOp};
     use quillmark_content::delta::diff;
     use quillmark_content::model::MarkKind;
