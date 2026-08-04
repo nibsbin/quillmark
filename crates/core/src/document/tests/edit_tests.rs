@@ -520,8 +520,8 @@ fn test_overwrite_field_sets_directly() {
     assert_eq!(
         card.overwrite_field("$bad", quillmark_content::Content::empty())
             .unwrap_err()
-            .variant_name(),
-        "InvalidFieldName"
+            .code(),
+        "edit::invalid_field_name"
     );
 }
 
@@ -555,8 +555,8 @@ fn test_revise_field_diff_imports_and_returns_delta() {
     card.store_field("count", crate::QuillValue::from_json(serde_json::json!(3)))
         .unwrap();
     assert_eq!(
-        card.revise_field("count", "x").unwrap_err().variant_name(),
-        "FieldDecode"
+        card.revise_field("count", "x").unwrap_err().code(),
+        "edit::field_decode"
     );
 }
 
@@ -607,7 +607,7 @@ fn test_revise_field_checked_preserves_anchors_and_enforces_inline() {
     let err = card
         .revise_field_checked("subject", "line one\n\nline two", &inline)
         .unwrap_err();
-    assert_eq!(err.variant_name(), "FieldNotInline");
+    assert_eq!(err.code(), "edit::field_not_inline");
     assert_eq!(card.field_markdown("subject").unwrap().unwrap(), before);
 
     // A block (non-inline) richtext schema accepts multi-block content.
@@ -663,14 +663,14 @@ fn test_commit_field_richtext_markdown_null_and_rejects_bad() {
     assert_eq!(
         commit_richtext(&mut card, "intro", &serde_json::json!({ "not": "a content" }), false)
             .unwrap_err()
-            .variant_name(),
-        "FieldDecode"
+            .code(),
+        "edit::field_decode"
     );
     assert_eq!(
         commit_richtext(&mut card, "intro", &serde_json::json!(42), false)
             .unwrap_err()
-            .variant_name(),
-        "FieldDecode"
+            .code(),
+        "edit::field_decode"
     );
 }
 
@@ -694,7 +694,7 @@ fn test_commit_field_richtext_inline_enforced_at_write() {
         true,
     )
     .unwrap_err();
-    assert_eq!(err.variant_name(), "FieldNotInline");
+    assert_eq!(err.code(), "edit::field_not_inline");
     assert_eq!(card.field_markdown("title").unwrap().unwrap(), "A single line");
 }
 
@@ -731,7 +731,7 @@ fn test_commit_field_array_of_inline_richtext_reports_not_inline() {
             &schema,
         )
         .unwrap_err();
-    assert_eq!(err.variant_name(), "FieldNotInline");
+    assert_eq!(err.code(), "edit::field_not_inline");
 }
 
 // ── commit_field (typed write) ───────────────────────────────────────────────
@@ -758,14 +758,14 @@ fn test_commit_field_scalar_strict() {
     let err = card
         .commit_field("qty", QuillValue::from_json(serde_json::json!(true)), &int_schema)
         .unwrap_err();
-    assert_eq!(err.variant_name(), "FieldCoercionFailed");
+    assert_eq!(err.code(), "edit::field_coercion_failed");
 
     // A non-numeric string is a mismatch and fails now, not at render.
     assert_eq!(
         card.commit_field("qty", QuillValue::from_json(serde_json::json!("x")), &int_schema)
             .unwrap_err()
-            .variant_name(),
-        "FieldCoercionFailed"
+            .code(),
+        "edit::field_coercion_failed"
     );
     // The good value is untouched by the failed writes.
     assert_eq!(
@@ -785,8 +785,8 @@ fn test_commit_field_object_rejects_non_object() {
     assert_eq!(
         card.commit_field("meta", QuillValue::from_json(serde_json::json!(42)), &schema)
             .unwrap_err()
-            .variant_name(),
-        "FieldCoercionFailed"
+            .code(),
+        "edit::field_coercion_failed"
     );
 }
 
@@ -800,8 +800,8 @@ fn test_commit_field_rejects_bad_name() {
     assert_eq!(
         card.commit_field("$bad", QuillValue::from_json(serde_json::json!(1)), &schema)
             .unwrap_err()
-            .variant_name(),
-        "InvalidFieldName"
+            .code(),
+        "edit::invalid_field_name"
     );
 }
 
@@ -1042,8 +1042,8 @@ fn test_apply_field_change_rejects_non_content() {
     assert_eq!(
         card.apply_field_change("count", &crate::ChangeBundle::default())
             .unwrap_err()
-            .variant_name(),
-        "FieldDecode"
+            .code(),
+        "edit::field_decode"
     );
 }
 
@@ -1069,8 +1069,8 @@ fn test_apply_field_change_treats_an_absent_field_as_empty() {
     assert_eq!(
         card.apply_field_change("missing", &stale)
             .unwrap_err()
-            .variant_name(),
-        "ContentApply"
+            .code(),
+        "edit::content_apply"
     );
     assert!(card.payload().get("missing").is_none());
 }

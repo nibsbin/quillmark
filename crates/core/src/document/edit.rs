@@ -176,31 +176,13 @@ pub enum EditError {
 }
 
 impl EditError {
-    /// The bare variant name (e.g. `"InvalidFieldName"`), for assertions and
-    /// debug output. Not the routable identity: consumers and both binding
-    /// error mappers key on [`code`](Self::code).
-    pub fn variant_name(&self) -> &'static str {
-        match self {
-            EditError::InvalidFieldName(_) => "InvalidFieldName",
-            EditError::UnknownField(_) => "UnknownField",
-            EditError::InvalidKindName(_) => "InvalidKindName",
-            EditError::ReservedKind => "ReservedKind",
-            EditError::IndexOutOfRange { .. } => "IndexOutOfRange",
-            EditError::ValueTooDeep { .. } => "ValueTooDeep",
-            EditError::Import(_) => "Import",
-            EditError::FieldDecode { .. } => "FieldDecode",
-            EditError::FieldNotContent { .. } => "FieldNotContent",
-            EditError::FieldNotInline { .. } => "FieldNotInline",
-            EditError::FieldCoercionFailed { .. } => "FieldCoercionFailed",
-            EditError::ContentApply(_) => "ContentApply",
-        }
-    }
-
     /// The namespaced diagnostic `code` (e.g. `"edit::invalid_field_name"`),
-    /// one per variant. This is the machine-routable identity both bindings
-    /// stamp onto the `Diagnostic` they raise: the `edit::*` peer of
-    /// `parse::*`, `validation::*`, and the rest of the taxonomy in
-    /// `prose/canon/ERROR.md`. Consumers route on this, not on message text.
+    /// one per variant, and the variant's only stable discriminator. This is
+    /// the machine-routable identity both bindings stamp onto the `Diagnostic`
+    /// they raise: the `edit::*` peer of `parse::*`, `validation::*`, and the
+    /// rest of the taxonomy in `prose/canon/ERROR.md`. Consumers route on this,
+    /// not on message text; a Rust caller matching the enum has
+    /// `#[non_exhaustive]` to answer to and a `_` arm regardless.
     pub fn code(&self) -> &'static str {
         match self {
             EditError::InvalidFieldName(_) => "edit::invalid_field_name",

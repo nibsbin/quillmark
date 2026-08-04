@@ -336,7 +336,7 @@ card_kinds:
         // Unknown field on the typed path is a typo, not a fallback: it fails
         // here and nothing is written. Opaque storage is the raw `store_field`.
         let err = ed.set("notafield", "x").unwrap_err();
-        assert_eq!(err.variant_name(), "UnknownField");
+        assert_eq!(err.code(), "edit::unknown_field");
         assert!(doc.main().payload().get("notafield").is_none());
     }
 
@@ -373,7 +373,7 @@ card_kinds:
         let errs = ed.set_all([("qty", "3"), ("titel", "oops")]).unwrap_err();
         assert_eq!(errs.len(), 1);
         assert_eq!(errs[0].0, "titel");
-        assert_eq!(errs[0].1.variant_name(), "UnknownField");
+        assert_eq!(errs[0].1.code(), "edit::unknown_field");
         assert!(doc.main().payload().get("qty").is_none());
     }
 
@@ -447,7 +447,7 @@ card_kinds:
             .add_card("note", [("stray", "x")], None, None)
             .unwrap_err();
         assert_eq!(errs[0].0, "stray");
-        assert_eq!(errs[0].1.variant_name(), "UnknownField");
+        assert_eq!(errs[0].1.code(), "edit::unknown_field");
         assert_eq!(doc.cards().len(), 0);
     }
 
@@ -475,7 +475,7 @@ card_kinds:
         card_ed.set("body", "**hi**").unwrap();
         // Unknown field on a known card → rejected as a typo.
         let err = card_ed.set("stray", "v").unwrap_err();
-        assert_eq!(err.variant_name(), "UnknownField");
+        assert_eq!(err.code(), "edit::unknown_field");
 
         assert_eq!(doc.cards()[0].field_markdown("body").unwrap().unwrap(), "**hi**");
 
@@ -499,12 +499,12 @@ card_kinds:
         // Unknown name is a typo, not a fallback.
         let mut ed = TypedWriter::new(&config, &mut doc);
         assert_eq!(
-            ed.revise_field("nope", "x").unwrap_err().variant_name(),
-            "UnknownField"
+            ed.revise_field("nope", "x").unwrap_err().code(),
+            "edit::unknown_field"
         );
         // richtext(inline) rejects a multi-block result; the field is unchanged.
         let err = ed.revise_field("subject", "a\n\nb").unwrap_err();
-        assert_eq!(err.variant_name(), "FieldNotInline");
+        assert_eq!(err.code(), "edit::field_not_inline");
         assert_eq!(doc.main().field_markdown("subject").unwrap().unwrap(), "Hello");
     }
 
@@ -524,8 +524,8 @@ card_kinds:
                 .unwrap()
                 .revise_field("stray", "x")
                 .unwrap_err()
-                .variant_name(),
-            "UnknownField"
+                .code(),
+            "edit::unknown_field"
         );
     }
 }
