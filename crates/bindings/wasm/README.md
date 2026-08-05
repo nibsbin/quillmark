@@ -83,10 +83,12 @@ the builds are `--target web`, so nothing in the package graph imports a `.wasm`
 module or carries a top-level await, and a static `import` of this package is
 safe anywhere, SSR included.
 
-`init` is idempotent and concurrency-safe: every call returns the same promise,
-so several entry points may each `await init()` for one instantiation. A failed
-init clears the memo, so a retry works. Each realm initializes its own copy; a
-Worker calls `init()` too.
+`init` is idempotent and concurrency-safe: every non-conflicting call returns
+the same promise, so several entry points may each `await init()` for one
+instantiation. Call it at the top of **every** entry point (route loader,
+hydration path, worker) rather than trusting one startup site to run first. A
+failed init clears the memo, so a retry works. Each realm initializes its own
+copy; a Worker calls `init()` too.
 
 **Backends need nothing.** `Engine` instantiates a backend inside its lazy load,
 on the first render against it.
@@ -94,9 +96,13 @@ on the first render against it.
 **Overriding the source.** `init(source)` accepts bytes, a `Response`, a
 `WebAssembly.Module`, or a URL, for hosts that route assets themselves or embed
 the binary. Pass it on the first call; a later call passing a *different* source
-throws `runtime::init_conflict` rather than silently ignoring it. Passing the
-same value again is fine, so several entry points may each `await init(BYTES)`
-against one constant.
+rejects with `runtime::init_conflict` rather than silently ignoring it. Passing
+the same value again is fine, so several entry points may each
+`await init(BYTES)` against one constant.
+
+**Both failures reject.** `runtime::init_conflict` and `runtime::init_failed`
+alike ride the returned promise, so one `catch` around `await init(...)` covers
+the gate. See [Errors](#errors) for the rule this follows.
 
 **If you forget.** Reaching the surface early throws a `QuillmarkError` coded
 `runtime::not_initialized` that names the fix, rather than a `TypeError` from
@@ -546,6 +552,14 @@ try {
   }
 }
 ```
+
+**Delivery follows the function, not the failure.** A synchronous method throws;
+a promise-returning one rejects. The promise-returning surface is `init` and the
+four `Engine` verbs (`render`, `open`, `supportedFormats`, `supportsCanvas`), so
+a programming error reached through one of them (a foreign handle, an
+unregistered backend) rejects like any other failure. Nothing here both returns
+a promise and throws, so a `.catch` on a promise-returning call is a whole
+guard.
 
 `QuillmarkError` is a **structural interface, not a class**: the WASM layer
 throws a real `Error` and attaches the property, so there is no constructor to

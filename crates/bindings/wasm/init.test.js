@@ -49,6 +49,19 @@ const diagnosticFrom = (fn) => {
   return thrown.diagnostics[0]
 }
 
+/** Await `promise`, expect a rejection, and return its primary diagnostic. */
+const rejectionFrom = async (promise) => {
+  let thrown
+  try {
+    await promise
+  } catch (err) {
+    thrown = err
+  }
+  expect(thrown, 'expected a rejection, got none').toBeDefined()
+  expect(isQuillmarkError(thrown)).toBe(true)
+  return thrown.diagnostics[0]
+}
+
 // Reaching a build before `init` resolves is the one mistake the contract
 // invites, so it is the one that must not surface as a generated-code
 // `TypeError`. Every generated path reads the same module-level binding, so
@@ -73,6 +86,8 @@ describe('before init', () => {
 })
 
 describe('init', () => {
+  // Identity, not just equivalence: the memo is RETURNED, which is why `init`
+  // is not declared `async` (an `async` body wraps a fresh promise per call).
   it('memoizes the promise, so concurrent callers share one instantiation', async () => {
     const a = init()
     const b = init()
@@ -91,9 +106,22 @@ describe('init', () => {
 
   // Silently ignoring a second, different source would leave a consumer
   // believing they chose the binary they are running.
-  it('refuses a different source once initialized', () => {
-    const d = diagnosticFrom(() => init(new Uint8Array(8)))
+  it('refuses a different source once initialized', async () => {
+    const d = await rejectionFrom(init(new Uint8Array(8)))
     expect(d.code).toBe('runtime::init_conflict')
+  })
+
+  // The rule (delivery follows the function kind) at the one export that could
+  // break it: `Promise<void>` cannot declare a synchronous throw, so a throw
+  // here would escape the `init(BYTES).catch(…)` the declaration invites.
+  it('delivers the conflict as a rejection, not a synchronous throw', () => {
+    /** @type {Promise<void> | undefined} */
+    let returned
+    expect(() => {
+      returned = init(new Uint8Array(8))
+    }).not.toThrow()
+    expect(returned).toBeInstanceOf(Promise)
+    returned.catch(() => {})
   })
 })
 

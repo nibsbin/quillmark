@@ -97,6 +97,14 @@ export { parseDocPath, formatDocPath } from '../core/wasm.js';
 // Reaching core before the gate resolves is not a silent wrong answer: the
 // build is patched to throw `runtime::not_initialized` naming the fix
 // (runtime/uninit.js).
+//
+// FAILURE DELIVERY follows the FUNCTION kind, not the failure kind: a sync verb
+// throws, a promise-returning verb rejects, and nothing does both. A
+// programming error reached through a promise-returning verb
+// (`runtime::foreign_handle` inside `Engine.render`) rejects like any other.
+// `init` is the one promise-returning export not declared `async`, because the
+// memo is returned by identity; its conflict guard rejects explicitly to hold
+// the rule, which `Promise<void>` cannot declare and a `.catch` would not see.
 
 /** The in-flight or settled core instantiation. The memo is the PROMISE, not a
  * boolean, so concurrent callers share one instantiation instead of racing. */
@@ -116,25 +124,37 @@ let coreInitSource;
  * Identical in every environment: in a browser the binary is fetched and
  * streamed, under Node it is read off disk, and the call site is the same line.
  *
- * Idempotent and concurrency-safe: every call returns the same promise, so
- * `await init()` at each of several entry points costs one instantiation. A
+ * Idempotent and concurrency-safe: every non-conflicting call returns the same
+ * promise, so `await init()` at each of several entry points costs one
+ * instantiation. Call it at the top of EVERY entry point (route loader,
+ * hydration path, worker) rather than trusting one startup site to run first. A
  * failed init clears the memo, so a retry is possible.
+ *
+ * Both failures reject (§ "Initialization", FAILURE DELIVERY): one `catch`
+ * around `await init(...)` covers `runtime::init_conflict` and
+ * `runtime::init_failed` alike.
  *
  * @param {import('../core/wasm.js').InitInput} [source] override the binary's
  *   source (bytes, a `Response`, a `WebAssembly.Module`, a URL) for hosts that
  *   route assets themselves or embed the binary. Pass it on the FIRST call; a
- *   later call passing a *different* source throws `runtime::init_conflict`
- *   rather than silently ignoring it. Passing the same value again is fine, so
- *   several entry points may each `await init(BYTES)` against one constant.
+ *   later call passing a *different* source rejects with
+ *   `runtime::init_conflict` rather than silently ignoring it. Passing the same
+ *   value again is fine, so several entry points may each `await init(BYTES)`
+ *   against one constant.
  * @returns {Promise<void>} resolves when the sync surface is usable
  */
 export function init(source) {
 	if (coreInit) {
 		if (source !== undefined && source !== coreInitSource) {
-			throw quillmarkError(
-				'runtime::init_conflict',
-				'init(source): core is already initializing or initialized from a different source.',
-				'Pass a source on the first call only, or pass the same value every time.'
+			// A rejection, not a throw: this is the one failure on the
+			// promise-returning surface that could land on the caller's stack, where
+			// `init(BYTES).catch(…)` would not see it.
+			return Promise.reject(
+				quillmarkError(
+					'runtime::init_conflict',
+					'init(source): core is already initializing or initialized from a different source.',
+					'Pass a source on the first call only, or pass the same value every time.'
+				)
 			);
 		}
 		return coreInit;
