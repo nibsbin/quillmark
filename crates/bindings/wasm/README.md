@@ -85,8 +85,8 @@ safe anywhere, SSR included.
 
 `init` is idempotent and concurrency-safe: every non-conflicting call returns
 the same promise, so several entry points may each `await init()` for one
-instantiation. Call it at the top of **every** entry point — route loader,
-hydration path, worker — rather than trusting one startup site to run first. A
+instantiation. Call it at the top of **every** entry point (route loader,
+hydration path, worker) rather than trusting one startup site to run first. A
 failed init clears the memo, so a retry works. Each realm initializes its own
 copy; a Worker calls `init()` too.
 
@@ -101,9 +101,8 @@ the same value again is fine, so several entry points may each
 `await init(BYTES)` against one constant.
 
 **Both failures reject.** `runtime::init_conflict` and `runtime::init_failed`
-alike ride the returned promise, so one `catch` around `await init(...)` — or
-one `.catch` on it — covers the gate. See [Errors](#errors) for the rule this
-follows.
+alike ride the returned promise, so one `catch` around `await init(...)` covers
+the gate. See [Errors](#errors) for the rule this follows.
 
 **If you forget.** Reaching the surface early throws a `QuillmarkError` coded
 `runtime::not_initialized` that names the fix, rather than a `TypeError` from
@@ -556,11 +555,11 @@ try {
 
 **Delivery follows the function, not the failure.** A synchronous method throws;
 a promise-returning one rejects. The promise-returning surface is `init` and the
-four `Engine` verbs (`render`, `open`, `supportedFormats`, `supportsCanvas`),
-and a programming error reached through one of them — a foreign handle, an
-unregistered backend — rejects like any other failure. Nothing on this surface
-both returns a promise and throws, so a `.catch` on a promise-returning call is
-never half a guard.
+four `Engine` verbs (`render`, `open`, `supportedFormats`, `supportsCanvas`), so
+a programming error reached through one of them (a foreign handle, an
+unregistered backend) rejects like any other failure. Nothing here both returns
+a promise and throws, so a `.catch` on a promise-returning call is a whole
+guard.
 
 `QuillmarkError` is a **structural interface, not a class**: the WASM layer
 throws a real `Error` and attaches the property, so there is no constructor to

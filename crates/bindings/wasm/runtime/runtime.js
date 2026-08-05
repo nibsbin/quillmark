@@ -98,16 +98,13 @@ export { parseDocPath, formatDocPath } from '../core/wasm.js';
 // build is patched to throw `runtime::not_initialized` naming the fix
 // (runtime/uninit.js).
 //
-// FAILURE DELIVERY: both of `init`'s codes arrive as rejections, so one `catch`
-// covers the gate. `init` is the only promise-returning export not declared
-// `async` (the memo must be returned by identity, not re-wrapped per call), so
-// its conflict guard rejects explicitly where an `async` body would have
-// converted a throw. The surface-wide rule this keeps: delivery follows the
-// FUNCTION kind, not the failure kind. A sync verb throws, a promise-returning
-// verb rejects, and a programming error reached through a promise-returning
-// verb (`runtime::foreign_handle` inside `Engine.render`) rejects like any
-// other. Nothing both returns a promise and throws: `Promise<void>` cannot
-// declare a synchronous throw, so a type-directed `.catch` would miss it.
+// FAILURE DELIVERY follows the FUNCTION kind, not the failure kind: a sync verb
+// throws, a promise-returning verb rejects, and nothing does both. A
+// programming error reached through a promise-returning verb
+// (`runtime::foreign_handle` inside `Engine.render`) rejects like any other.
+// `init` is the one promise-returning export not declared `async`, because the
+// memo is returned by identity; its conflict guard rejects explicitly to hold
+// the rule, which `Promise<void>` cannot declare and a `.catch` would not see.
 
 /** The in-flight or settled core instantiation. The memo is the PROMISE, not a
  * boolean, so concurrent callers share one instantiation instead of racing. */
@@ -149,9 +146,9 @@ let coreInitSource;
 export function init(source) {
 	if (coreInit) {
 		if (source !== undefined && source !== coreInitSource) {
-			// A rejection, not a throw: this function returns a promise, so a throw
-			// here would be the one failure on the promise-returning surface that
-			// lands on the caller's stack and escapes `init(BYTES).catch(...)`.
+			// A rejection, not a throw: this is the one failure on the
+			// promise-returning surface that could land on the caller's stack, where
+			// `init(BYTES).catch(…)` would not see it.
 			return Promise.reject(
 				quillmarkError(
 					'runtime::init_conflict',

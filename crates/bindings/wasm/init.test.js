@@ -111,11 +111,9 @@ describe('init', () => {
     expect(d.code).toBe('runtime::init_conflict')
   })
 
-  // The conflict rides the promise, never the caller's stack: `init` returns a
-  // `Promise<void>`, a type that cannot declare a synchronous throw, so a throw
-  // would escape the `init(BYTES).catch(...)` the declaration invites. This is
-  // the surface-wide rule (delivery follows the function kind) at the one
-  // export that could break it.
+  // The rule (delivery follows the function kind) at the one export that could
+  // break it: `Promise<void>` cannot declare a synchronous throw, so a throw
+  // here would escape the `init(BYTES).catch(…)` the declaration invites.
   it('delivers the conflict as a rejection, not a synchronous throw', () => {
     /** @type {Promise<void> | undefined} */
     let returned
