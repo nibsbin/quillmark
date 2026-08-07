@@ -115,6 +115,43 @@ closed/formatted**: `enum` (closed data), `string` (open data), `plaintext`
 value is computed with, `plaintext`/`richtext` when it is prose the author
 navigates.
 
+### Date and Datetime Grammars
+
+The two grammars are **disjoint**: `date` rejects any time component and
+`datetime` rejects a bare date, so no string satisfies both and neither
+truncates. A field holding a mix of `2026-06-01` and `2026-06-01T09:30` has no
+correct declaration: whichever type it takes strands the other half. Normalize
+the values first, or split the field in two.
+
+Coercion runs when the document lowers into the backend's data, **upstream of
+the plate**. A value outside its declared grammar fails the render before any
+template code executes, so a plate that never mentions the field fails
+identically and no plate-side coercion can repair it. The diagnostic that names
+the field and its path comes from `quill.validate(doc)`; a `date` or `datetime`
+field is a scalar, so `quill.conform(doc)` passes it in silence by design (it
+walks content fields only).
+
+**Changing a declared date type on a deployed corpus is a corpus operation, not
+a schema edit.** The stored string is never rewritten: neither the transport
+door nor `conform` touches it, so nothing is lost, but every document holding a
+value the new grammar rejects strands at render. Audit before publishing the
+change: load each stored row through the transport door (`Document.fromJson`),
+read the field (`reader.get(field)` returns the stored string verbatim for both
+date types), and test it against the target grammar.
+
+```js
+const doc = Document.fromJson(row);
+const value = quill.reader(doc).get('issued');
+if (value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+  // Strands under `type: date`. Repair before the schema change ships.
+  quill.writer(doc).set('issued', value.slice(0, 10));
+}
+```
+
+The repair must reach the document: a value the strict write refuses is refused
+by `writer.set` too (`edit::field_coercion_failed`), so write the corrected
+value rather than the original.
+
 ### Enum Constraints
 
 Declare a closed string domain with `type: enum` and a required `values:` list:

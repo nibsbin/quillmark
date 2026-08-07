@@ -32,7 +32,11 @@ The **interpreting** reads (reading a field by its type) are schema-shaped quest
 
 **The bound door is the primary ingestion path.** `quill.parse(md)` is parse-then-conform, and `quill.conform(doc)` is the same walk on a document that arrived any other way; both live on the quill because both need the schema. A document that came through either rests at its canonical form, one per codec ([SCHEMAS.md](SCHEMAS.md) § "Content fields rest per codec"): a `richtext` field as the `Content` object, a `plaintext` field as its literal string, so `getStored` answers "content object or string?" by the field's declared codec rather than by how the document was built.
 
-The schema-free `Document.fromMarkdown` remains the transport/repair door (migrations, `$ext` stamping, a quill that will not load, opening a document to fix its `$quill`); the resting form of what it returns is unspecified, and the next bound load converges it. The exception states are named, never silent: no quill means as-authored rest, the wrong quill throws before any mutation, a value the strict write refuses stays authored under a `conform::*` warning, and a `!must_fill` marker anywhere in a field's value skips that field, the marker being the state.
+The schema-free `Document.fromMarkdown` remains the transport/repair door (migrations, `$ext` stamping, a quill that will not load, opening a document to fix its `$quill`); the resting form of what it returns is unspecified, and the next bound load converges it.
+
+Across the content fields the walk covers, the exception states are named, never silent: no quill means as-authored rest, the wrong quill throws before any mutation, a content-field value the strict write refuses stays authored under a `conform::*` warning, and a `!must_fill` marker anywhere in a field's value skips that field, the marker being the state.
+
+A field whose type tree bears no content leaf is outside the walk, so conform is silent about it by construction: a scalar's shorthands are the typed write's to canonicalize, and a stored value its grammar refuses (a wall clock in a `date`) is `quill.validate`'s to report. A clean conform says the content fields are at rest, not that every field would commit.
 
 Decoding needs the schema and not the payload: a `richtext` string is markdown and a `plaintext` string is literal text, so the same stored bytes decode two ways and only the declared type says which. That is why the `Content` read binds the quill instead of sitting beside `getStored`: a quill-free version would guess a codec, and would guess markdown.
 

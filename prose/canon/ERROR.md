@@ -78,7 +78,9 @@ families:
   demoted to `Severity::Warning` with its `args` and `path` intact: the value
   rests as authored rather than being refused or silently retyped, so the state
   is repairable. The walk is stateless, so a repeat conform re-emits the
-  identical set.
+  identical set. Its scope is the content fields: a field whose type tree bears
+  no content leaf never enters the walk, so a scalar the strict write would
+  refuse raises no `conform::*` warning and reaches `validation::*` instead.
 - **Validation warnings**: `Quill::validate(doc)` returns every
   `validation::*` diagnostic, mixing severities; `validation::must_fill` and
   the `$seed` checks are the non-fatal ones. This is the editor-facing
@@ -297,6 +299,8 @@ Three outcomes, and the wire tells them apart only with this table in hand, sinc
 | `parse::body_import` | — | fallback |
 
 `parse::missing_quill` looks code-determined and is not: it picks one of three sentences by re-reading the source, and no field records which.
+
+Every `conform::*` row is reachable only through the content-field walk, which is narrower than its `edit::*` twin. `conform::field_coercion_failed` fires for a scalar nested inside a content-bearing field (an `array` of `richtext`, an `object` with a `richtext` property) and never for a top-level scalar, whose refusal reaches `validation::format_violation` or `validation::type_mismatch` instead.
 
 ### Scope
 
