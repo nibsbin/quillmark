@@ -300,7 +300,7 @@ Three outcomes, and the wire tells them apart only with this table in hand, sinc
 
 `parse::missing_quill` looks code-determined and is not: it picks one of three sentences by re-reading the source, and no field records which.
 
-Every `conform::*` row is reachable only through the content-field walk, which is narrower than its `edit::*` twin. `conform::field_coercion_failed` fires for a scalar nested inside a content-bearing field (an `array` of `richtext`, an `object` with a `richtext` property) and never for a top-level scalar, whose refusal reaches `validation::format_violation` or `validation::type_mismatch` instead.
+Every `conform::*` row is reachable only through the content-field walk, so the family is narrower than its `edit::*` twin. `conform::field_coercion_failed` fires for a scalar nested inside a content-bearing field: an `array` of `richtext`, an `object` with a `richtext` property. A top-level scalar never reaches it, and its refusal surfaces as `validation::format_violation` or `validation::type_mismatch`.
 
 ### Scope
 
