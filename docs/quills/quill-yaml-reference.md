@@ -115,6 +115,25 @@ closed/formatted**: `enum` (closed data), `string` (open data), `plaintext`
 value is computed with, `plaintext`/`richtext` when it is prose the author
 navigates.
 
+### Date and Datetime Grammars
+
+The two grammars are **disjoint**: `date` rejects any time component, `datetime` rejects a bare date, and neither truncates. A field holding a mix of `2026-06-01` and `2026-06-01T09:30` has no correct declaration, since whichever type it takes strands the other half. Normalize the values, or split the field in two.
+
+Coercion runs when the document lowers into the backend's data, **upstream of the plate**. A value outside its declared grammar fails the render before any template code executes, so a plate that never mentions the field fails identically and no plate-side coercion repairs it. `quill.validate(doc)` is what names the field and its path. A `date` or `datetime` field is a scalar, so `quill.conform(doc)` passes it in silence: the conform walk covers content fields only.
+
+**Changing a declared date type on a deployed corpus is a corpus operation, not a schema edit.** The stored string is never rewritten: neither the transport door nor `conform` touches a scalar. Nothing is lost, and every document holding a value the new grammar rejects strands at render. Audit before publishing the change: load each stored row through the transport door, read the field, and test it against the target grammar. `reader.get` returns the stored string verbatim for both date types.
+
+```js
+const doc = Document.fromJson(row);
+const value = quill.reader(doc).get('issued');
+if (value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+  // Strands under `type: date`. Repair before the schema change ships.
+  quill.writer(doc).set('issued', value.slice(0, 10));
+}
+```
+
+`writer.set` refuses the same values the render does (`edit::field_coercion_failed`), so the repair writes the corrected string rather than the original.
+
 ### Enum Constraints
 
 Declare a closed string domain with `type: enum` and a required `values:` list:
