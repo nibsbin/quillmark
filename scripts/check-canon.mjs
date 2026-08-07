@@ -33,7 +33,7 @@ const mdFiles = (dir) =>
   existsSync(dir) ? readdirSync(dir).filter((n) => n.endsWith('.md')).sort() : [];
 
 // Every .md under `dir`, minus `docs/migrations/`: released guides are
-// era-accurate and immutable, so no rule applies to them.
+// era-stamped, so no rule applies to them.
 const walkDocs = (dir) =>
   !existsSync(dir)
     ? []

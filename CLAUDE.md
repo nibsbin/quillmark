@@ -6,7 +6,7 @@ Crates: `core` · `quillmark` · `content` · `backends/{typst,pdfform}` · `qui
 
 Design docs: [`prose/canon/INDEX.md`](prose/canon/INDEX.md). Comments and docs follow the `dense-prose` skill.
 
-- Released guides in [`docs/migrations/`](docs/migrations/) are immutable; edit only the unreleased one.
+- Released guides in [`docs/migrations/`](docs/migrations/) are era-stamped: repair a false statement in place, never restate a true one in a later version's vocabulary.
 - The `Cargo.toml` version is the last *released* one; CI bumps it on release.
 - Commit early and often; CI gates every push.
 - Don't run `cargo fmt`.
