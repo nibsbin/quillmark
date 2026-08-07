@@ -6,7 +6,7 @@ Comments and docs are dense, present-tense, and unsold:
 
 - Say what the code can't say faster. Delete comments that restate the code; prefer a clearer name over a comment.
 - No marketing words (powerful, seamless, robust, first-class, simply…). State the capability plainly.
-- Describe what *is*, not how it got here: except `docs/migrations/` (immutable) and load-bearing legacy.
+- Describe what *is*, not how it got here: except `docs/migrations/` (era-stamped) and load-bearing legacy.
 - Minimal examples on public APIs; err toward brevity.
 
 Where things live:
