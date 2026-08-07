@@ -73,7 +73,7 @@ A paragraph is one line: never hard-wrap prose at a column. A line break in mark
 | Surface | Rule |
 |---|---|
 | Code and test comments, `prose/canon/`, `docs/` (non-migration) | Apply in full. |
-| `docs/migrations/**`, `CHANGELOG.md`, and era-stamped records generally | **Never touch.** Accurate to their moment, immutable. |
+| `docs/migrations/**`, `CHANGELOG.md`, and era-stamped records generally | **Repair only.** Accurate to their moment: fix what was wrong when written, leave what was right in its era's vocabulary. |
 | An em-dash that is the subject, not punctuation (an encoding table, a Unicode fixture, rendered sample output) | Keep: it is data. `crates/quillmark-pdf/src/writer.rs` maps the character to its WinAnsi byte; `prescan.rs` parses it. |
 | `prose/references/`, `prose/proposals/`, `prose/plans/` | Strip marketing only; discussing other or future states is their job. |
 | Load-bearing legacy (`crates/core/src/document/dto.rs` versioned wire schemas) | Keep: the old-format description *is* current reader behavior. Tighten wording, keep the fact. |
