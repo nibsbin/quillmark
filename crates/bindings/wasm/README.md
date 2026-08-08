@@ -69,9 +69,8 @@ const result = await engine.render(quill, parsed, { format: "pdf" });
 ## Initialization
 
 `init` resolves to the core surface: `Quill`, `Document`, and the free
-functions. They are exported nowhere else, so there is no way to hold one
-without having awaited, and everything after the await is the synchronous
-surface the rest of this README describes.
+functions. Everything after the await is the synchronous surface the rest of
+this README describes.
 
 ```js
 import { init, Engine } from "@quillmark/wasm";
@@ -89,8 +88,7 @@ safe anywhere, SSR included.
 the same promise, so several entry points may each `await init()` for one
 instantiation. Destructure at **every** entry point (route loader, hydration
 path, worker) rather than threading one result around. A failed init clears the
-memo, so a retry works. Each realm initializes its own copy; a Worker calls
-`init()` too.
+memo, so a retry works. Each realm initializes its own copy, a Worker included.
 
 **Backends need nothing.** `Engine` instantiates a backend inside its lazy load,
 on the first render against it.

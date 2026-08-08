@@ -1,27 +1,25 @@
 // @quillmark/wasm/runtime: canonical consumer API.
 //
-// `Quill`/`Document` are the core build's own classes, handed out verbatim
-// (their full surface, no drift). Render-side types (`RenderResult`,
-// `RenderOptions`, `Artifact`, `OutputFormat`, `PageSize`, `PaintOptions`,
-// `PaintResult`) are defined HERE as the canonical, backend-neutral render
-// contract: NOT sourced from any one private backend build. A type-level drift
-// guard (`runtime.types.test-d.ts`, via `npm run typecheck`) asserts they stay
-// mutually assignable with the Typst backend's generated declarations. `Engine`
-// is the render dispatcher that hides the cross-WASM-memory seam.
+// Render-side types (`RenderResult`, `RenderOptions`, `Artifact`,
+// `OutputFormat`, `PageSize`, `PaintOptions`, `PaintResult`) are defined HERE as
+// the canonical, backend-neutral render contract: NOT sourced from any one
+// private backend build. A type-level drift guard (`runtime.types.test-d.ts`,
+// via `npm run typecheck`) asserts they stay mutually assignable with the Typst
+// backend's generated declarations. `Engine` is the render dispatcher that hides
+// the cross-WASM-memory seam.
 
 // CANONICAL INVARIANT: the `Quill`/`Document` `init` resolves to ARE the core
-// build's classes, never wrappers. There is exactly one public entry point, so
-// this is a structural fact. Handing out a wrapper is a breaking design change,
-// not a refactor. See runtime.js.
+// build's classes, their full surface, never wrappers. There is exactly one
+// public entry point, so this is a structural fact. Handing out a wrapper is a
+// breaking design change, not a refactor. See runtime.js.
 //
 // ONE COPY PER PROCESS: two copies of this package are two WASM linear memories
 // and two `Quill`/`Document` classes. Every method taking a handle refuses one
 // belonging to another copy, with a `QuillmarkError` naming `npm ls
 // @quillmark/wasm`. Errors are the exception: `isQuillmarkError` is structural.
-//
-// The classes are exported as TYPES only. Their values live behind `init`, so
-// an annotation (`let q: Quill`) needs no await and obtaining one cannot skip
-// it.
+
+// The instance types, so an annotation (`let q: Quill`) needs no await. Their
+// values are `CoreSurface`'s.
 export type { Quill, Document } from '../core/wasm.js';
 
 import type {
@@ -38,24 +36,20 @@ import type {
 
 /**
  * The core build's surface: what its WASM instance stands behind, and therefore
- * what `init` resolves to. Nothing here is exported statically, so awaiting is
- * the only way to hold one.
+ * what `init` resolves to. Exported nowhere statically, so awaiting is the only
+ * way to hold one.
  *
- * `Quill` and `Document` are the classes themselves (statics included:
- * `Quill.fromTree`, `Document.fromMarkdown`), not instance types. The instance
- * types are exported separately, above.
+ * `Quill` and `Document` here are the classes, statics included
+ * (`Quill.fromTree`, `Document.fromMarkdown`), not the instance types above.
+ * Each member carries the core build's own declaration, docs and all.
  */
 export interface CoreSurface {
 	Quill: typeof CoreQuill;
 	Document: typeof CoreDocument;
-	/** Markdown → `Content`. */
 	importMarkdown: typeof importMarkdown;
-	/** `Content` → markdown: the on-demand projection. */
 	exportMarkdown: typeof exportMarkdown;
 	rebase: typeof rebase;
 	mapPos: typeof mapPos;
-	/** `DocPath` string → segments, so a consumer routes on `Diagnostic.path`
-	 * instead of regexing the string. */
 	parseDocPath: typeof parseDocPath;
 	formatDocPath: typeof formatDocPath;
 }

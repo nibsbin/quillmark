@@ -85,10 +85,9 @@ import { parseDocPath, formatDocPath } from '../core/wasm.js';
 //
 // THE GATE IS THE ONLY DOOR. `init` resolves to the core surface, and this
 // module exports none of it statically, so a handle is unobtainable without
-// having awaited. The precondition stops being a convention the caller has to
-// know and becomes the only shape a call site can take: `const { Quill } =
-// await init()` is the whole API for reaching one. package.json's `exports` map
-// carries exactly one entry, so there is no subpath around the gate either.
+// having awaited: the precondition is structural rather than a convention the
+// caller has to know. package.json's `exports` map carries exactly one entry,
+// so there is no subpath around the gate either.
 //
 // The gate is the shape the lazy-backend idiom (§ DEFAULT_BACKENDS) takes when
 // the surface it guards cannot be async: `Quill.fromTree` and `seedDocument`
