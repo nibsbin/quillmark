@@ -17,7 +17,7 @@ The bar cuts both ways. A cut that drops a fact, or shifts a claim unverified ag
 
 ## 1. No marketing or persuasion
 
-A sell spends words on the reader's opinion instead of their knowledge. Cut *powerful, seamless, elegant, robust, flexible, blazing(-fast), cutting-edge, state-of-the-art, first-class (citizen), rich (set of), comprehensive, battle-tested, out of the box, leverage* (meaning "use"), and *simply / just / easily* when they only imply ease. State the capability plainly: "Partial documents are first-class citizens" → "A document need not be complete."
+A sell spends words on the reader's opinion instead of their knowledge. Cut praise (*powerful, seamless, battle-tested*) and ease (*simply, easily*) when they only sell. State the capability plainly: "Partial documents are first-class citizens" → "A document need not be complete."
 
 Keep *just / simply / only* when load-bearing ("just sugar for the `raw` element", "three or more tildes"). The word is not the violation; the sell is.
 
@@ -26,7 +26,7 @@ Keep *just / simply / only* when load-bearing ("just sugar for the `raw` element
 The code is the primary documentation; a comment restating it is noise.
 
 - Delete echoes (`// increment i`; `/// The name` on a field named `name`); a clearer name beats the comment.
-- Collapse padded rustdoc scaffolding: "## Key Functions / ## Quick Example / ## Detailed Documentation / For comprehensive details including: …" becomes one tight paragraph and at most one runnable example.
+- Collapse padded rustdoc scaffolding to one tight paragraph and at most one runnable example.
 - Never enumerate a module's public items in its header; rustdoc lists them and the hand-list rots. Describe the module's job.
 - One good example beats three; "see X for comprehensive coverage" is filler.
 - One fact, one home. Cross-reference rather than restate; a fact copied twice drifts.
@@ -57,16 +57,15 @@ Cut spike/deferred/rejected narration; keep the resulting fact, plus the rationa
 Deleting whole sentences is half the work; the other half is more fact per word.
 
 - **Losable test**: cut any sentence whose removal costs no fact. Length tracks surprise: the unobvious invariant gets the words, the obvious call gets none.
-- **No throat-clearing**: "Note that", "It is worth noting", "Basically", "In general", and a section's first line restating its own heading.
-- **No empty hedges**: *typically, essentially, somewhat, arguably, various*, unless the uncertainty is real and calibrated.
-- **Shrink phrases**: *in order to* → to; *is able to / has the ability to* → can; *due to the fact that* → because; *a number of* → the count; *performs validation of* → validates.
+- **No throat-clearing**: no "Note that", and no first line restating the section's own heading.
+- **No empty hedges**: hedge only when the uncertainty is real and calibrated.
 - **Fold, don't append**: a second sentence qualifying the first becomes a clause of it.
 - **Name the thing**: the specific noun beats a category plus an example; the measured number beats a vague *several*.
 - **Compression is not density**: one claim per sentence. A sentence carrying seven clauses and three parentheticals is maximally compressed and unreadable, because the reader has to decompress it to reach the one fact they came for. A bullet needing three clauses is three bullets, a nested list, or a table; a set of per-case rules (per type, per format, per backend) is a table, and a table row is a record, not a sentence.
 
 ## Voice
 
-Present tense. Lead with the invariant or contract, then the mechanism. Reuse the codebase's terms-of-art (*card-yaml block, plate, quill, backend, seam*). One colon per sentence. Match the density of the exemplars: the comments in `crates/core/src/document/` and the "Decisions and rationale" section of `prose/canon/PREVIEW.md`.
+Present tense. Lead with the invariant or contract, then the mechanism. Reuse the codebase's terms-of-art (*card-yaml block, plate, quill, backend, seam*). Match the density of the exemplars: the comments in `crates/core/src/document/` and the "Decisions and rationale" section of `prose/canon/PREVIEW.md`.
 
 A paragraph is one line: never hard-wrap prose at a column. A line break in markdown means a new paragraph, list item, or table row; nothing else. Comments wrap to the code's line budget.
 
@@ -82,7 +81,7 @@ A paragraph is one line: never hard-wrap prose at a column. A line break in mark
 
 ## Workflow
 
-1. **Sweep**: grep for the marketing list above; history markers (`used to`, `no longer`, `previously`, `formerly`, `as of`, `removed in`, `renamed`, `we switched`, `legacy`, `deprecated`); deliberation markers (`spike`, `deferred`, `considered`, `for now`, `eventually`, `we tried`); status markers (`#\d+`, issue and PR links); and filler (`Note that`, `in order to`, `is able to`).
+1. **Sweep**: grep for sells; history markers (`used to`, `no longer`, `previously`, `formerly`, `as of`, `removed in`, `renamed`, `we switched`, `legacy`, `deprecated`); deliberation markers (`spike`, `deferred`, `considered`, `for now`, `eventually`, `we tried`); and status markers (`#\d+`, issue and PR links).
 2. **Triage**: each hit is a violation or a load-bearing fact in costume.
 3. **Rewrite in place**: present tense, minimal, fact preserved. A comment contradicting the code gets fixed, not deleted. Identifiers stay.
 4. **Verify**: build and tests pass; no doctest broken; no test asserted the old wording; `node scripts/check-canon.mjs` passes.

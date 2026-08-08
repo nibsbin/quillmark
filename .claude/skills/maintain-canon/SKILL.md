@@ -12,23 +12,11 @@ re-document implementation detail that the code already carries.
 
 For comment and doc *content* (density, tense, voice) use **`dense-prose`**.
 
-## The spine
+## Structure
 
-Every canon doc except `INDEX.md` opens:
-
-1. `# Title` on line 1.
-2. A blockquote anchor on line 3, carrying `> **Implementation**:`: the
-   navigational hook from concept to code. It points at a folder or module,
-   never a file and never a line number; files rot. `**Related**` and
-   `**Package**` lines are optional.
-3. `## TL;DR` as the first section: two or three sentences.
-
-Other sections (When to use, How, Gotchas, Links) are optional. No `Status`
-line, and no issue number: membership in canon means settled and implemented.
-
-`prose/README.md` is normative for all of this: the four tiers, the spine, the
-canon↔`docs/` division, and the link invariants. Read it before a structural
-edit. `scripts/check-canon.mjs` enforces what is mechanical, in CI.
+`prose/README.md` is normative for structure: the four tiers, the canon doc
+spine, the canon↔`docs/` division, and the link invariants. Read it before a
+structural edit. `scripts/check-canon.mjs` enforces what is mechanical, in CI.
 
 ## Principles
 
