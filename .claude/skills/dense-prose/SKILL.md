@@ -9,13 +9,15 @@ Density is facts per word. Cut words that carry no fact: the sell, the echo, the
 
 This skill is the house voice (dense, present-tense, declarative, unsold) and owns comment and doc *content*. Canon *structure* (Title → Implementation anchor → TL;DR, one concept per page) belongs to **`maintain-canon`**.
 
-## Prime directive: correctness over brevity
+## Prime directive: wrong is worse than missing
 
-Density has a numerator. A cut that drops a fact, or shifts a claim unverified against the code, is dilution, not compression. Unsure a statement still holds? Leave it. Edits are surgical: touch a line only when it breaks a rule. Prose already dense and correct is done; over-editing is the main failure mode.
+Density has a numerator, and only true facts count toward it. Something left unsaid is better than something said wrong: an unsaid fact costs the reader a lookup; a wrong one is believed. Bloat and rot are both made of claims that outran verification: the sentence nobody checked, the hand-kept list, the copied number. A claim is verified against the code or left unsaid.
+
+The bar cuts both ways. A cut that drops a fact, or shifts a claim unverified against the code, is dilution, not compression. Unsure a statement still holds? Verify, or leave it: uncertainty licenses a cut no more than it licenses a claim. Edits are surgical: touch a line only when it breaks a rule. Prose already dense and correct is done; over-editing is the main failure mode.
 
 ## 1. No marketing or persuasion
 
-A sell spends words on the reader's opinion instead of their knowledge. Cut *powerful, seamless, elegant, robust, flexible, blazing(-fast), cutting-edge, state-of-the-art, first-class (citizen), rich (set of), comprehensive, battle-tested, out of the box, leverage* (meaning "use"), and *simply / just / easily* when they only imply ease. State the capability plainly: "Partial documents are first-class citizens" → "A document need not be complete."
+A sell spends words on the reader's opinion instead of their knowledge. Cut praise (*powerful, seamless, battle-tested*) and ease (*simply, easily*) when they only sell. State the capability plainly: "Partial documents are first-class citizens" → "A document need not be complete."
 
 Keep *just / simply / only* when load-bearing ("just sugar for the `raw` element", "three or more tildes"). The word is not the violation; the sell is.
 
@@ -24,7 +26,7 @@ Keep *just / simply / only* when load-bearing ("just sugar for the `raw` element
 The code is the primary documentation; a comment restating it is noise.
 
 - Delete echoes (`// increment i`; `/// The name` on a field named `name`); a clearer name beats the comment.
-- Collapse padded rustdoc scaffolding: "## Key Functions / ## Quick Example / ## Detailed Documentation / For comprehensive details including: …" becomes one tight paragraph and at most one runnable example.
+- Collapse padded rustdoc scaffolding to one tight paragraph and at most one runnable example.
 - Never enumerate a module's public items in its header; rustdoc lists them and the hand-list rots. Describe the module's job.
 - One good example beats three; "see X for comprehensive coverage" is filler.
 - One fact, one home. Cross-reference rather than restate; a fact copied twice drifts.
@@ -55,18 +57,17 @@ Cut spike/deferred/rejected narration; keep the resulting fact, plus the rationa
 Deleting whole sentences is half the work; the other half is more fact per word.
 
 - **Losable test**: cut any sentence whose removal costs no fact. Length tracks surprise: the unobvious invariant gets the words, the obvious call gets none.
-- **No throat-clearing**: "Note that", "It is worth noting", "Basically", "In general", and a section's first line restating its own heading.
-- **No empty hedges**: *typically, essentially, somewhat, arguably, various*, unless the uncertainty is real and calibrated.
-- **Shrink phrases**: *in order to* → to; *is able to / has the ability to* → can; *due to the fact that* → because; *a number of* → the count; *performs validation of* → validates.
+- **No throat-clearing**: no "Note that", and no first line restating the section's own heading.
+- **No empty hedges**: hedge only when the uncertainty is real and calibrated.
 - **Fold, don't append**: a second sentence qualifying the first becomes a clause of it.
 - **Name the thing**: the specific noun beats a category plus an example; the measured number beats a vague *several*.
 - **Compression is not density**: one claim per sentence. A sentence carrying seven clauses and three parentheticals is maximally compressed and unreadable, because the reader has to decompress it to reach the one fact they came for. A bullet needing three clauses is three bullets, a nested list, or a table; a set of per-case rules (per type, per format, per backend) is a table, and a table row is a record, not a sentence.
 
 ## Voice
 
-Present tense. Lead with the invariant or contract, then the mechanism. Reuse the codebase's terms-of-art (*card-yaml block, plate, quill, backend, seam*). No em-dashes: fold to a colon when what follows names or explains what precedes it, a comma before a conjunction, a semicolon before an independent clause, and parentheses for a matched pair. One colon per sentence. Match the density of the exemplars: the comments in `crates/core/src/document/` and the "Decisions and rationale" section of `prose/canon/PREVIEW.md`.
+Present tense. Lead with the invariant or contract, then the mechanism. Reuse the codebase's terms-of-art (*card-yaml block, plate, quill, backend, seam*). Match the density of the exemplars: the comments in `crates/core/src/document/` and the "Decisions and rationale" section of `prose/canon/PREVIEW.md`.
 
-A paragraph is one line: never hard-wrap prose at a column. A line break in markdown means a new paragraph, list item, or table row; nothing else. Comments wrap to the code's line budget. `prose/README.md` sets the numeric bound on a prose line: 700 characters, gated by `scripts/check-canon.mjs` over `prose/canon/` and `docs/`, with 300 as the target you write to. Split a long line when you are editing near it; below the gate, nothing mechanical reminds you.
+A paragraph is one line: never hard-wrap prose at a column. A line break in markdown means a new paragraph, list item, or table row; nothing else. Comments wrap to the code's line budget.
 
 ## Scope
 
@@ -74,18 +75,17 @@ A paragraph is one line: never hard-wrap prose at a column. A line break in mark
 |---|---|
 | Code and test comments, `prose/canon/`, `docs/` (non-migration) | Apply in full. |
 | `docs/migrations/**`, `CHANGELOG.md`, and era-stamped records generally | **Repair only.** Accurate to their moment: fix what was wrong when written, leave what was right in its era's vocabulary. |
-| An em-dash that is the subject, not punctuation (an encoding table, a Unicode fixture, rendered sample output) | Keep: it is data. `crates/quillmark-pdf/src/writer.rs` maps the character to its WinAnsi byte; `prescan.rs` parses it. |
 | `prose/references/`, `prose/proposals/`, `prose/plans/` | Strip marketing only; discussing other or future states is their job. |
 | Load-bearing legacy (`crates/core/src/document/dto.rs` versioned wire schemas) | Keep: the old-format description *is* current reader behavior. Tighten wording, keep the fact. |
 | Identifiers (fn / test / var names) | Never rename; out of scope, churn. |
 
 ## Workflow
 
-1. **Sweep**: grep for the marketing list above; history markers (`used to`, `no longer`, `previously`, `formerly`, `as of`, `removed in`, `renamed`, `we switched`, `legacy`, `deprecated`); deliberation markers (`spike`, `deferred`, `considered`, `for now`, `eventually`, `we tried`); status markers (`#\d+`, issue and PR links); and filler (`Note that`, `in order to`, `is able to`).
+1. **Sweep**: grep for sells; history markers (`used to`, `no longer`, `previously`, `formerly`, `as of`, `removed in`, `renamed`, `we switched`, `legacy`, `deprecated`); deliberation markers (`spike`, `deferred`, `considered`, `for now`, `eventually`, `we tried`); and status markers (`#\d+`, issue and PR links).
 2. **Triage**: each hit is a violation or a load-bearing fact in costume.
 3. **Rewrite in place**: present tense, minimal, fact preserved. A comment contradicting the code gets fixed, not deleted. Identifiers stay.
 4. **Verify**: build and tests pass; no doctest broken; no test asserted the old wording; `node scripts/check-canon.mjs` passes.
 
 ## Done when
 
-Comments and docs state what is, in the house voice: dense, present-tense, unsold. Nothing restates code, no header carries a rotting list, no prose narrates history or deliberation, and no surviving sentence sheds a word without shedding a fact. Backward-compat facts survive as current-state statements.
+Comments and docs state what is, in the house voice: dense, present-tense, unsold. Nothing restates code, nothing outruns what was verified, no header carries a rotting list, no prose narrates history or deliberation, and no surviving sentence sheds a word without shedding a fact. Backward-compat facts survive as current-state statements.
