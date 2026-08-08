@@ -66,7 +66,7 @@ Deleting whole sentences is half the work; the other half is more fact per word.
 
 ## Voice
 
-Present tense. Lead with the invariant or contract, then the mechanism. Reuse the codebase's terms-of-art (*card-yaml block, plate, quill, backend, seam*). In new prose, prefer the joint that names the relation over an em-dash: a colon when what follows names or explains what precedes it, a comma before a conjunction, a semicolon before an independent clause, parentheses for an aside. An em-dash already on the page is not a violation; removing one is never worth a pass. One colon per sentence. Match the density of the exemplars: the comments in `crates/core/src/document/` and the "Decisions and rationale" section of `prose/canon/PREVIEW.md`.
+Present tense. Lead with the invariant or contract, then the mechanism. Reuse the codebase's terms-of-art (*card-yaml block, plate, quill, backend, seam*). One colon per sentence. Match the density of the exemplars: the comments in `crates/core/src/document/` and the "Decisions and rationale" section of `prose/canon/PREVIEW.md`.
 
 A paragraph is one line: never hard-wrap prose at a column. A line break in markdown means a new paragraph, list item, or table row; nothing else. Comments wrap to the code's line budget.
 
