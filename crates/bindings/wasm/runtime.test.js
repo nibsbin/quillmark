@@ -1,7 +1,7 @@
 /**
  * Canonical-API (`@quillmark/wasm/runtime`) integration tests.
  *
- * The runtime layer re-exports the core build's `Quill`/`Document` and adds an
+ * The runtime layer hands out the core build's `Quill`/`Document` and adds an
  * `Engine` that hides the core→backend WASM-memory crossing. These tests prove,
  * end to end, that a CORE quill + document handed to `Engine` render correctly;
  * i.e. the engine clones them into the Typst backend's memory on demand
@@ -14,8 +14,6 @@ import { describe, it, expect, beforeAll } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import {
-  Quill,
-  Document,
   Engine,
   DocumentWriter,
   CardWriter,
@@ -23,17 +21,16 @@ import {
   CardReader,
   MAIN_CARD_ADDR,
   isQuillmarkError,
-  exportMarkdown,
   isUnknownLine,
   isUnknownContainer,
   isUnknownMark,
   isUnknownIsland,
   init,
 } from '@quillmark-wasm/runtime'
-// Pin that the runtime's Quill IS the internal core build's class (re-export,
+// Pin that the runtime's Quill IS the internal core build's class (handed out,
 // not a parallel wrapper). This imports the internal core artifact directly:
-// `pkg/core` is NOT a public package subpath, it is the build the root
-// re-exports.
+// `pkg/core` is NOT a public package subpath, it is the build the gate draws
+// from.
 import { Quill as CoreQuill, Document as CoreDocument } from '../../../pkg/core/wasm.js'
 import {
   makeQuill,
@@ -42,11 +39,11 @@ import {
   expectEditCode,
 } from './test-helpers.js'
 
-// The consumer contract, exercised as a consumer writes it: one awaited gate
-// before the sync surface. This also instantiates the core build the `CoreQuill`
+// The consumer contract, exercised as a consumer writes it: the gate is the only
+// door to the core surface. This also instantiates the core build the `CoreQuill`
 // identity pin below imports directly (same resolved file, same module
 // instance).
-await init()
+const { Quill, Document, exportMarkdown } = await init()
 
 const TEST_PLATE = `#import "@local/quillmark-helper:0.1.0": data
 #let title = data.title
@@ -78,12 +75,12 @@ const fieldOf = (card, key) =>
   card.payloadItems.find((i) => i.type === 'field' && i.key === key)?.value
 
 describe('@quillmark/wasm/runtime: surface', () => {
-  // IMPLEMENTATION PIN: the root re-exports the internal core build's classes
+  // IMPLEMENTATION PIN: the gate hands out the internal core build's classes
   // verbatim (never wraps). There is exactly one public entry point, so this is
   // an internal structural fact rather than a cross-entry-point contract. If it
-  // fails, the re-export was replaced by a wrapper: a breaking change, not a
+  // fails, a wrapper was put in front of the classes: a breaking change, not a
   // refactor. See runtime.js.
-  it('re-exports the internal core build classes verbatim (no parallel wrappers)', () => {
+  it('hands out the internal core build classes verbatim (no parallel wrappers)', () => {
     expect(Quill).toBe(CoreQuill)
     expect(Document).toBe(CoreDocument)
   })
@@ -1193,8 +1190,7 @@ describe('@quillmark/wasm/runtime: handles from another copy (duplicate install)
       fs.cpSync(src, dst, { recursive: true })
       copyB = await import(/* @vite-ignore */ path.join(dst, 'wasm.js'))
       // A second copy is a second instantiation: its own memory, its own
-      // classes, and its own init. `dup-core` sits beside `core`, so the
-      // build's `../runtime/uninit.js` import still resolves.
+      // classes, and its own init.
       copyB.initSync({ module: fs.readFileSync(path.join(dst, 'wasm_bg.wasm')) })
     })
 
@@ -1259,7 +1255,10 @@ describe('@quillmark/wasm/runtime: handles from another copy (duplicate install)
       fs.rmSync(twin, { force: true })
     }
 
-    expect(reevaluated.Document).toBe(Document)
+    // The twin's gate has its own memo but draws from the same cached core
+    // module, so it hands out that module's classes: instantiating is a no-op
+    // and the identity holds across the re-evaluation.
+    expect((await reevaluated.init()).Document).toBe(Document)
     expect(Document.prototype.equals).toBe(before)
     expect(Quill.prototype.validate[Symbol.for('@quillmark/wasm:handle-checked')]).toBe(true)
   })

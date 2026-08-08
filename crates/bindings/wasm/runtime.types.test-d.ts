@@ -282,3 +282,46 @@ function kindPart(line: ContentLine): ContentLineKind {
 declare const liftLine: ContentLine;
 const liftedOp: LineOp = { op: 'setKind', line: 0, ...kindPart(liftLine) };
 void liftedOp;
+
+// ── The gate is the only door ───────────────────────────────────────
+// The guarantee `init` exists to hold: a value needing the WASM instance is
+// reachable through the gate and nowhere else. A static export of one would
+// type-check at every call site that forgot to await, and a floating promise is
+// an ESLint rule rather than a `tsc` diagnostic, so a signature alone is no
+// guard. The level the guarantee lives on is this one, so it is asserted here.
+//
+// Both assertions derive their names from `CoreSurface`, so a member added
+// there is covered without touching this file.
+
+import type * as runtimeModule from '../../../pkg/runtime/runtime.d.ts';
+import type {
+	CoreSurface,
+	init as initFn,
+	Quill as RuntimeQuill,
+	Document as RuntimeDocument
+} from '../../../pkg/runtime/runtime.d.ts';
+
+// No gated name is among the module's VALUE exports. `Extract` collapses to
+// `never` only while every one of them is absent.
+type StaticallyReachable = Extract<keyof CoreSurface, keyof typeof runtimeModule>;
+const gateIsTheOnlyDoor: StaticallyReachable extends never ? true : false = true;
+void gateIsTheOnlyDoor;
+
+// And the gate resolves to exactly that surface, in both directions.
+const gateResolvesToSurface: CoreSurface = {} as Awaited<ReturnType<typeof initFn>>;
+const surfaceIsWhatTheGateGives: Awaited<ReturnType<typeof initFn>> = {} as CoreSurface;
+void gateResolvesToSurface;
+void surfaceIsWhatTheGateGives;
+
+// The classes arrive with their statics, so the whole construction surface is
+// reachable off the destructure.
+declare const gated: CoreSurface;
+const fromTree: RuntimeQuill = gated.Quill.fromTree(new Map<string, Uint8Array>());
+const fromMarkdown: RuntimeDocument = gated.Document.fromMarkdown('# Hi');
+void fromTree;
+void fromMarkdown;
+
+// The instance types stay exported as TYPES, so an annotation needs no await:
+// only obtaining a value does.
+declare const annotated: RuntimeQuill;
+void annotated;

@@ -1,48 +1,84 @@
 // @quillmark/wasm/runtime: canonical consumer API.
 //
-// `Quill`/`Document` are re-exported verbatim from the core build (their full
-// surface, no drift). Render-side types (`RenderResult`, `RenderOptions`,
-// `Artifact`, `OutputFormat`, `PageSize`, `PaintOptions`, `PaintResult`) are
-// defined HERE as the canonical, backend-neutral render contract: NOT sourced
-// from any one private backend build. A type-level drift guard
-// (`runtime.types.test-d.ts`, via `npm run typecheck`) asserts they stay
+// `Quill`/`Document` are the core build's own classes, handed out verbatim
+// (their full surface, no drift). Render-side types (`RenderResult`,
+// `RenderOptions`, `Artifact`, `OutputFormat`, `PageSize`, `PaintOptions`,
+// `PaintResult`) are defined HERE as the canonical, backend-neutral render
+// contract: NOT sourced from any one private backend build. A type-level drift
+// guard (`runtime.types.test-d.ts`, via `npm run typecheck`) asserts they stay
 // mutually assignable with the Typst backend's generated declarations. `Engine`
 // is the render dispatcher that hides the cross-WASM-memory seam.
 
-// CANONICAL INVARIANT: the root re-exports the core build's `Quill`/`Document`
-// verbatim; they are the SAME classes, never wrappers. There is exactly one
-// public entry point, so this is a structural fact. Replacing the re-export
-// with a wrapper is a breaking design change, not a refactor. See runtime.js.
+// CANONICAL INVARIANT: the `Quill`/`Document` `init` resolves to ARE the core
+// build's classes, never wrappers. There is exactly one public entry point, so
+// this is a structural fact. Handing out a wrapper is a breaking design change,
+// not a refactor. See runtime.js.
 //
 // ONE COPY PER PROCESS: two copies of this package are two WASM linear memories
 // and two `Quill`/`Document` classes. Every method taking a handle refuses one
 // belonging to another copy, with a `QuillmarkError` naming `npm ls
 // @quillmark/wasm`. Errors are the exception: `isQuillmarkError` is structural.
-export { Quill, Document } from '../core/wasm.js';
+//
+// The classes are exported as TYPES only. Their values live behind `init`, so
+// an annotation (`let q: Quill`) needs no await and obtaining one cannot skip
+// it.
+export type { Quill, Document } from '../core/wasm.js';
 
-import type { InitInput } from '../core/wasm.js';
+import type {
+	InitInput,
+	Quill as CoreQuill,
+	Document as CoreDocument,
+	importMarkdown,
+	exportMarkdown,
+	rebase,
+	mapPos,
+	parseDocPath,
+	formatDocPath
+} from '../core/wasm.js';
 
 /**
- * Instantiate the core WASM build. Call once at startup, before any other
- * export is used; extra calls are free.
+ * The core build's surface: what its WASM instance stands behind, and therefore
+ * what `init` resolves to. Nothing here is exported statically, so awaiting is
+ * the only way to hold one.
  *
- * ```js
- * import { init, Quill, Engine } from '@quillmark/wasm';
- * await init();
+ * `Quill` and `Document` are the classes themselves (statics included:
+ * `Quill.fromTree`, `Document.fromMarkdown`), not instance types. The instance
+ * types are exported separately, above.
+ */
+export interface CoreSurface {
+	Quill: typeof CoreQuill;
+	Document: typeof CoreDocument;
+	/** Markdown → `Content`. */
+	importMarkdown: typeof importMarkdown;
+	/** `Content` → markdown: the on-demand projection. */
+	exportMarkdown: typeof exportMarkdown;
+	rebase: typeof rebase;
+	mapPos: typeof mapPos;
+	/** `DocPath` string → segments, so a consumer routes on `Diagnostic.path`
+	 * instead of regexing the string. */
+	parseDocPath: typeof parseDocPath;
+	formatDocPath: typeof formatDocPath;
+}
+
+/**
+ * Instantiate the core WASM build and resolve to its surface.
+ *
+ * ```ts
+ * import { init } from '@quillmark/wasm';
+ * const { Quill, Document } = await init();
  * ```
  *
  * The builds are `--target web`: classes export synchronously, the instance
  * behind them arrives here. Identical in every environment: the binary is
  * fetched and streamed in a browser, read off disk under Node, and the call
- * site is the same line. Reaching a class before this resolves throws
- * `runtime::not_initialized` naming the fix.
+ * site is the same line.
  *
- * Idempotent and concurrency-safe: every non-conflicting call returns the same
- * promise, so `await init()` at several entry points costs one instantiation.
- * Call it at the top of EVERY entry point (route loader, hydration path,
- * worker) rather than trusting one startup site to run first. A failed init
- * clears the memo, so a retry is possible. Per realm: a Worker loads and
- * initializes its own copy.
+ * THE ONLY DOOR to `Quill`, `Document` and the free functions, so the pre-init
+ * mistake is not expressible. Destructure at each entry point (route loader,
+ * hydration path, worker) rather than threading one result around: the gate is
+ * memoized and concurrency-safe, so every await after the first is free. A
+ * failed init clears the memo, so a retry is possible. Per realm: a Worker
+ * loads and initializes its own copy.
  *
  * Both failure codes REJECT, so one `catch` covers the gate. Delivery follows
  * the function kind across this surface: a sync verb throws, a
@@ -57,12 +93,7 @@ import type { InitInput } from '../core/wasm.js';
  *   different source rejects with `runtime::init_conflict` rather than silently
  *   ignoring it. Passing the same value again is fine.
  */
-export declare function init(source?: InitInput): Promise<void>;
-// The document-free content codec, re-exported from the core build.
-export { importMarkdown, exportMarkdown, rebase, mapPos } from '../core/wasm.js';
-// The document-model path parser/serializer: route on `Diagnostic.path`
-// segments instead of regexing the string.
-export { parseDocPath, formatDocPath } from '../core/wasm.js';
+export declare function init(source?: InitInput): Promise<CoreSurface>;
 
 import type { CardAddr } from '../core/wasm.js';
 

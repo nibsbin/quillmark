@@ -2,15 +2,17 @@
 //
 // @quillmark/wasm/runtime: the canonical consumer API.
 //
-// Consumers import `Quill`, `Document`, and `Engine` from here and never touch
-// the build-specific subpaths. The package ships multiple WASM binaries with
-// SEPARATE linear memories: a Typst-less `core` build (small, eager) that is
-// the canonical home of `Quill`/`Document`, and one private backend binary per
-// backend (`backends/typst/` today; more later) that carries an engine. A
-// handle from one memory cannot be used by another. This module hides that seam
-// and is exposed at the package root (`@quillmark/wasm`):
+// Consumers reach `Quill` and `Document` through `await init()` and `Engine`
+// as a static export, and never touch the build-specific subpaths. The package
+// ships multiple WASM binaries with SEPARATE linear memories: a Typst-less
+// `core` build (small, eager) that is the canonical home of `Quill`/`Document`,
+// and one private backend binary per backend (`backends/typst/` today; more
+// later) that carries an engine. A handle from one memory cannot be used by
+// another. This module hides that seam and is exposed at the package root
+// (`@quillmark/wasm`):
 //
-//   - `Quill` and `Document` ARE the core build's classes, re-exported. They
+//   - `Quill` and `Document` ARE the core build's classes, handed out by the
+//     gate (§ "Initialization"). They
 //     hold the canonical data and the full sync surface (schema / validate /
 //     seed / mutate / toJson / toTree). No backend is loaded to use them, so
 //     the editor/validation path never pays for a multi-MB backend binary.
@@ -38,51 +40,42 @@
 // The cross-memory crossing is therefore invisible: a consumer hands canonical
 // `Quill`/`Document` to `engine.render(...)` and gets a `RenderResult` back.
 
-// ── CANONICAL INVARIANT: re-export the core build, never wrap ───────────────
-// The root re-exports the core build's `Quill`/`Document` classes verbatim,
-// NOT subclasses or wrappers. There is exactly ONE public entry point (this
-// module), so this identity is a structural fact: `Quill`/`Document` ARE the
-// core classes, and the only boundary that needs crossing is core→backend (a
-// separate WASM memory), which `Engine` does internally as data
-// (`toTree`/`toJson`).
+// ── CANONICAL INVARIANT: hand out the core build's classes, never wrap ──────
+// The `Quill`/`Document` a consumer holds ARE the core build's classes, NOT
+// subclasses or wrappers. `init` resolves to them (§ "Initialization"); which
+// door they come through changes nothing about the identity. The only boundary
+// that needs crossing is core→backend (a separate WASM memory), which `Engine`
+// does internally as data (`toTree`/`toJson`).
 //
-// Do NOT replace this with a wrapper class: that breaks the identity and turns
-// a structural fact into a converted type (a breaking design change, not a
-// refactor). The `runtime.test.js` "re-exports the internal core build classes
-// verbatim" case (`Quill === CoreQuill`) is the executable guard for this
-// invariant.
-//
-// It is also why the pre-init guard sits inside the generated builds instead
-// of here: nothing may stand between a consumer and these classes
-// (runtime/uninit.js).
+// Do NOT hand out a wrapper: that breaks the identity and turns a structural
+// fact into a converted type (a breaking design change, not a refactor). The
+// `runtime.test.js` "hands out the internal core build classes verbatim" case
+// (`Quill === CoreQuill`) is the executable guard for this invariant.
 //
 // The identity is what makes `instanceof` the whole membership test: a handle
 // either belongs to this copy's classes or it belongs to another copy, and the
 // second is always a consumer bug. `Engine` is NOT duck-typed on its inputs; it
 // checks them. See § "Handles from another copy" below.
 //
-// Imported (not bare re-exported) so `Quill` is a local binding this module can
-// augment: `quill.writer(doc)` is patched onto its prototype below. The
-// re-export keeps the identity: the exported `Quill` IS the core class.
+// Local bindings, so this module can augment them: `quill.writer(doc)` is
+// patched onto the prototype below, and `instanceof` reads them directly.
 //
 // The default import is the core build's generated instantiation entry
 // (`--target web`); `init` below is the only thing that calls it.
 import initCore, { Quill, Document } from '../core/wasm.js';
-export { Quill, Document };
 // The wasm byte source, resolved per environment by package.json's `imports`
 // map: a pass-through in a browser (the glue fetches and streams the URL
 // itself), a `node:fs` read under Node, whose `fetch` rejects `file:` URLs.
 // Resolution-time, so `node:fs` never enters a browser graph.
 import { toModuleSource } from '#quillmark-env';
-// The document-free content codec: re-exported verbatim from the core build so
-// the runtime subpath exposes `exportMarkdown(body)` (the on-demand markdown
-// projection), `importMarkdown`, and the position-mapping pair (`rebase`,
-// `mapPos`).
-export { importMarkdown, exportMarkdown, rebase, mapPos } from '../core/wasm.js';
+// The document-free content codec: `exportMarkdown(body)` (the on-demand
+// markdown projection), `importMarkdown`, and the position-mapping pair
+// (`rebase`, `mapPos`).
+import { importMarkdown, exportMarkdown, rebase, mapPos } from '../core/wasm.js';
 // The document-model path parser/serializer: `parseDocPath(str) => DocPathSeg[]`
 // and its inverse `formatDocPath`, so a consumer routes on `Diagnostic.path`
 // segments instead of reverse-engineering the grammar.
-export { parseDocPath, formatDocPath } from '../core/wasm.js';
+import { parseDocPath, formatDocPath } from '../core/wasm.js';
 
 // ── Initialization ──────────────────────────────────────────────────────────
 // The builds are `--target web`: they export their classes synchronously but
@@ -90,13 +83,27 @@ export { parseDocPath, formatDocPath } from '../core/wasm.js';
 // that for core, behind one awaited gate; `Engine` owns it for the backends,
 // inside their lazy load, so a consumer never initializes a backend by hand.
 //
+// THE GATE IS THE ONLY DOOR. `init` resolves to the core surface, and this
+// module exports none of it statically, so a handle is unobtainable without
+// having awaited. The precondition stops being a convention the caller has to
+// know and becomes the only shape a call site can take: `const { Quill } =
+// await init()` is the whole API for reaching one. package.json's `exports` map
+// carries exactly one entry, so there is no subpath around the gate either.
+//
 // The gate is the shape the lazy-backend idiom (§ DEFAULT_BACKENDS) takes when
 // the surface it guards cannot be async: `Quill.fromTree` and `seedDocument`
 // are sync and static, so there is nowhere to hide an await except in front.
 //
-// Reaching core before the gate resolves is not a silent wrong answer: the
-// build is patched to throw `runtime::not_initialized` naming the fix
-// (runtime/uninit.js).
+// WHAT STAYS STATIC is what needs no instance. `MAIN_CARD_ADDR`, the open-set
+// guards and `isQuillmarkError` are pure JS over plain objects; gating them
+// would cost a consumer of one an await it has no use for.
+//
+// The classes stay static too, and are gated by their ARGUMENTS. Every `Engine`
+// verb takes a `Quill` first (`#backendOf` is the single reader), and the
+// writer/reader constructors take both handles, so a caller who has not awaited
+// cannot produce an argument to call them with. `new Engine()` alone touches no
+// wasm: it validates a descriptor map. Holding them out of the gate keeps them
+// tree-shakable, so the editor path drops the dispatcher it never calls.
 //
 // FAILURE DELIVERY follows the FUNCTION kind, not the failure kind: a sync verb
 // throws, a promise-returning verb rejects, and nothing does both. A
@@ -104,31 +111,58 @@ export { parseDocPath, formatDocPath } from '../core/wasm.js';
 // (`runtime::foreign_handle` inside `Engine.render`) rejects like any other.
 // `init` is the one promise-returning export not declared `async`, because the
 // memo is returned by identity; its conflict guard rejects explicitly to hold
-// the rule, which `Promise<void>` cannot declare and a `.catch` would not see.
+// the rule, which the return type cannot declare and a `.catch` would not see.
 
-/** The in-flight or settled core instantiation. The memo is the PROMISE, not a
- * boolean, so concurrent callers share one instantiation instead of racing. */
+/**
+ * The gated surface: the core build's values, which are exactly the ones its
+ * instance stands behind. Frozen and built at module scope, because the classes
+ * and functions themselves resolve synchronously (only the instance behind them
+ * is late), so there is nothing to defer and no per-call allocation.
+ *
+ * Membership is derived, not chosen: it is the core build's exports minus its
+ * two instantiation entries (`default`, `initSync`), which `init` owns.
+ * `init.test.js` § "the gated surface" computes that set and pins it, so a new
+ * core export that never reaches here fails there rather than going missing.
+ * @type {import('./runtime.js').CoreSurface}
+ */
+const CORE_SURFACE = Object.freeze({
+	Quill,
+	Document,
+	importMarkdown,
+	exportMarkdown,
+	rebase,
+	mapPos,
+	parseDocPath,
+	formatDocPath
+});
+
+/** The in-flight or settled core instantiation, resolving to `CORE_SURFACE`.
+ * The memo is the PROMISE, not a boolean, so concurrent callers share one
+ * instantiation instead of racing.
+ * @type {Promise<import('./runtime.js').CoreSurface> | undefined} */
 let coreInit;
 /** The source `init` was first called with; the conflict check reads it. */
 let coreInitSource;
 
 /**
- * Instantiate the core WASM build. Call once at startup, before any other
- * export is used; extra calls are free.
+ * Instantiate the core WASM build and resolve to its surface.
  *
  * ```js
- * import { init, Quill, Engine } from '@quillmark/wasm';
- * await init();
+ * import { init } from '@quillmark/wasm';
+ * const { Quill, Document } = await init();
  * ```
+ *
+ * The classes and the free functions come from here and nowhere else, so the
+ * pre-init mistake is not expressible. Destructure at each entry point (route
+ * loader, hydration path, worker) rather than threading one result around: the
+ * gate is memoized, so every await after the first is free.
  *
  * Identical in every environment: in a browser the binary is fetched and
  * streamed, under Node it is read off disk, and the call site is the same line.
  *
  * Idempotent and concurrency-safe: every non-conflicting call returns the same
- * promise, so `await init()` at each of several entry points costs one
- * instantiation. Call it at the top of EVERY entry point (route loader,
- * hydration path, worker) rather than trusting one startup site to run first. A
- * failed init clears the memo, so a retry is possible.
+ * promise, so several entry points cost one instantiation. A failed init clears
+ * the memo, so a retry is possible.
  *
  * Both failures reject (§ "Initialization", FAILURE DELIVERY): one `catch`
  * around `await init(...)` covers `runtime::init_conflict` and
@@ -141,7 +175,8 @@ let coreInitSource;
  *   `runtime::init_conflict` rather than silently ignoring it. Passing the same
  *   value again is fine, so several entry points may each `await init(BYTES)`
  *   against one constant.
- * @returns {Promise<void>} resolves when the sync surface is usable
+ * @returns {Promise<import('./runtime.js').CoreSurface>} the core surface, once
+ *   its instance is live
  */
 export function init(source) {
 	if (coreInit) {
@@ -161,13 +196,16 @@ export function init(source) {
 	}
 	coreInitSource = source;
 	// Assign before the first await so a synchronous second call sees the memo.
-	coreInit = instantiateCore(source).catch((err) => {
-		// Self-heal, as `#resolveBackend` does: one transient failure (a 404, an
-		// offline fetch) must not poison every later attempt.
-		coreInit = undefined;
-		coreInitSource = undefined;
-		throw err;
-	});
+	coreInit = instantiateCore(source).then(
+		() => CORE_SURFACE,
+		(err) => {
+			// Self-heal, as `#resolveBackend` does: one transient failure (a 404, an
+			// offline fetch) must not poison every later attempt.
+			coreInit = undefined;
+			coreInitSource = undefined;
+			throw err;
+		}
+	);
 	return coreInit;
 }
 
