@@ -31,9 +31,8 @@ bash scripts/build-wasm.sh
 The script builds three variants: the core (no backend), the Typst backend
 (default features), and the Typst-free pdfform backend (`pdfform` feature):
 each with `--target web` and `--weak-refs` enabled (see
-[Initialization](#initialization) and [Lifecycle](#lifecycle)). It then patches
-each generated build with the pre-init sentinel (`runtime/uninit.js`) and
-asserts none of them carries a `.wasm` ESM import or a top-level await.
+[Initialization](#initialization) and [Lifecycle](#lifecycle)). It then asserts
+none of them carries a `.wasm` ESM import or a top-level await.
 
 ## Test
 
