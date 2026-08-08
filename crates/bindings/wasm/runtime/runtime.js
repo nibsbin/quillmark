@@ -120,9 +120,10 @@ import { parseDocPath, formatDocPath } from '../core/wasm.js';
  * is late), so there is nothing to defer and no per-call allocation.
  *
  * Membership is derived, not chosen: it is the core build's exports minus its
- * two instantiation entries (`default`, `initSync`), which `init` owns.
- * `init.test.js` § "the gated surface" computes that set and pins it, so a new
- * core export that never reaches here fails there rather than going missing.
+ * instantiation machinery (`default`, `initSync`, and the start-section
+ * `start`), which `init` owns and no consumer calls. `init.test.js` § "the
+ * gated surface" computes that set and pins it, so a new core export that never
+ * reaches here fails there rather than going missing.
  * @type {import('./runtime.js').CoreSurface}
  */
 const CORE_SURFACE = Object.freeze({
