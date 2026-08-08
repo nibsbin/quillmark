@@ -9,9 +9,11 @@ Density is facts per word. Cut words that carry no fact: the sell, the echo, the
 
 This skill is the house voice (dense, present-tense, declarative, unsold) and owns comment and doc *content*. Canon *structure* (Title → Implementation anchor → TL;DR, one concept per page) belongs to **`maintain-canon`**.
 
-## Prime directive: correctness over brevity
+## Prime directive: wrong is worse than missing
 
-Density has a numerator. A cut that drops a fact, or shifts a claim unverified against the code, is dilution, not compression. Unsure a statement still holds? Leave it. Edits are surgical: touch a line only when it breaks a rule. Prose already dense and correct is done; over-editing is the main failure mode.
+Density has a numerator, and only true facts count toward it. Something left unsaid is better than something said wrong: an unsaid fact costs the reader a lookup; a wrong one is believed. Bloat and rot are both made of claims that outran verification: the sentence nobody checked, the hand-kept list, the copied number. A claim is verified against the code or left unsaid.
+
+The bar cuts both ways. A cut that drops a fact, or shifts a claim unverified against the code, is dilution, not compression. Unsure a statement still holds? Verify, or leave it: uncertainty licenses a cut no more than it licenses a claim. Edits are surgical: touch a line only when it breaks a rule. Prose already dense and correct is done; over-editing is the main failure mode.
 
 ## 1. No marketing or persuasion
 
@@ -64,9 +66,9 @@ Deleting whole sentences is half the work; the other half is more fact per word.
 
 ## Voice
 
-Present tense. Lead with the invariant or contract, then the mechanism. Reuse the codebase's terms-of-art (*card-yaml block, plate, quill, backend, seam*). No em-dashes: fold to a colon when what follows names or explains what precedes it, a comma before a conjunction, a semicolon before an independent clause, and parentheses for a matched pair. One colon per sentence. Match the density of the exemplars: the comments in `crates/core/src/document/` and the "Decisions and rationale" section of `prose/canon/PREVIEW.md`.
+Present tense. Lead with the invariant or contract, then the mechanism. Reuse the codebase's terms-of-art (*card-yaml block, plate, quill, backend, seam*). In new prose, prefer the joint that names the relation over an em-dash: a colon when what follows names or explains what precedes it, a comma before a conjunction, a semicolon before an independent clause, parentheses for an aside. An em-dash already on the page is not a violation; removing one is never worth a pass. One colon per sentence. Match the density of the exemplars: the comments in `crates/core/src/document/` and the "Decisions and rationale" section of `prose/canon/PREVIEW.md`.
 
-A paragraph is one line: never hard-wrap prose at a column. A line break in markdown means a new paragraph, list item, or table row; nothing else. Comments wrap to the code's line budget. `prose/README.md` sets the numeric bound on a prose line: 700 characters, gated by `scripts/check-canon.mjs` over `prose/canon/` and `docs/`, with 300 as the target you write to. Split a long line when you are editing near it; below the gate, nothing mechanical reminds you.
+A paragraph is one line: never hard-wrap prose at a column. A line break in markdown means a new paragraph, list item, or table row; nothing else. Comments wrap to the code's line budget. The numeric bounds on a prose line live in `prose/README.md` §"Line budget"; `scripts/check-canon.mjs` gates the cap. Split a long line when you are editing near it; below the gate, nothing mechanical reminds you.
 
 ## Scope
 
@@ -74,7 +76,6 @@ A paragraph is one line: never hard-wrap prose at a column. A line break in mark
 |---|---|
 | Code and test comments, `prose/canon/`, `docs/` (non-migration) | Apply in full. |
 | `docs/migrations/**`, `CHANGELOG.md`, and era-stamped records generally | **Repair only.** Accurate to their moment: fix what was wrong when written, leave what was right in its era's vocabulary. |
-| An em-dash that is the subject, not punctuation (an encoding table, a Unicode fixture, rendered sample output) | Keep: it is data. `crates/quillmark-pdf/src/writer.rs` maps the character to its WinAnsi byte; `prescan.rs` parses it. |
 | `prose/references/`, `prose/proposals/`, `prose/plans/` | Strip marketing only; discussing other or future states is their job. |
 | Load-bearing legacy (`crates/core/src/document/dto.rs` versioned wire schemas) | Keep: the old-format description *is* current reader behavior. Tighten wording, keep the fact. |
 | Identifiers (fn / test / var names) | Never rename; out of scope, churn. |
@@ -88,4 +89,4 @@ A paragraph is one line: never hard-wrap prose at a column. A line break in mark
 
 ## Done when
 
-Comments and docs state what is, in the house voice: dense, present-tense, unsold. Nothing restates code, no header carries a rotting list, no prose narrates history or deliberation, and no surviving sentence sheds a word without shedding a fact. Backward-compat facts survive as current-state statements.
+Comments and docs state what is, in the house voice: dense, present-tense, unsold. Nothing restates code, nothing outruns what was verified, no header carries a rotting list, no prose narrates history or deliberation, and no surviving sentence sheds a word without shedding a fact. Backward-compat facts survive as current-state statements.

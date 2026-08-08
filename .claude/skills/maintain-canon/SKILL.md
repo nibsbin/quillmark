@@ -25,7 +25,6 @@ Every canon doc except `INDEX.md` opens:
 
 Other sections (When to use, How, Gotchas, Links) are optional. No `Status`
 line, and no issue number: membership in canon means settled and implemented.
-A prose line caps at 700 characters and should stay under 300.
 
 `prose/README.md` is normative for all of this: the four tiers, the spine, the
 canon↔`docs/` division, and the link invariants. Read it before a structural
