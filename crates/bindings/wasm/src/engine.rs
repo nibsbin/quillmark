@@ -495,7 +495,7 @@ pub struct LiveSession {
 }
 
 /// The ordered card kinds of `doc`: the geometry-translation lookup a
-/// [`LiveSession`] retains, so it is gated with the session.
+/// [`LiveSession`] retains.
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 fn card_kinds_of(doc: &quillmark_core::Document) -> Vec<Option<String>> {
     doc.cards()
@@ -1322,11 +1322,11 @@ impl Document {
         }
     }
 
-    /// `addr`'s canonical `DocPath` string: the address currency minted as the
-    /// anchor currency, so a consumer holding an `Addr` never restates the
-    /// kind lookup, the `Addr` defaults or the range guard to build one.
-    /// `pathFor()` is `main.body`, `pathFor("intro")` `main.intro`,
-    /// `pathFor({card: 2})` `cards.<kind>[2].body`.
+    /// `addr`'s canonical `DocPath` string, the anchor `Diagnostic.path`
+    /// carries: `pathFor()` is `main.body`, `pathFor("intro")` `main.intro`,
+    /// `pathFor({card: 2})` `cards.<kind>[2].body`. A consumer holding an
+    /// `Addr` mints one without restating the kind lookup, the `Addr` defaults
+    /// or the range guard.
     ///
     /// The kind is the card's stored `$kind` verbatim, the quill-free rule
     /// [`addr_base`](Self::addr_base) and the geometry translation use, not
@@ -1335,13 +1335,13 @@ impl Document {
     /// `validate` diagnostic path differ for the same card.
     ///
     /// **Total on the index axis**, unlike the `Addr` reads (`getStored`,
-    /// `isFill`, `bodyMarkdown`), which throw there. A path is an anchor, not
-    /// a read: an out-of-range `{card: 7, field: "from"}` renders `cards[7]
-    /// .from`, extending the same unknown-kind root `edit::index_out_of_range`
-    /// anchors at, so it names the address asked for, parses back, and
-    /// resolves to nothing rather than mis-targeting. A per-keystroke call
-    /// needs no `try`; a caller wanting a drop-it guard has
-    /// [`cardCount`](Self::card_count). Only a malformed address throws.
+    /// `isFill`, `bodyMarkdown`), which throw there: a path is an anchor, not
+    /// a read. An out-of-range `{card: 7, field: "from"}` extends the
+    /// unknown-kind root `edit::index_out_of_range` anchors at, rendering
+    /// `cards[7].from`, which parses back and resolves to nothing rather than
+    /// mis-targeting. So a per-keystroke call needs no `try`; a caller wanting
+    /// a drop-it guard has [`cardCount`](Self::card_count). Only a malformed
+    /// address throws.
     #[wasm_bindgen(js_name = pathFor)]
     pub fn path_for(
         &self,

@@ -743,17 +743,16 @@ Kindless card.
     ]
     for (const [minted, expected] of rows) {
       expect(minted).toBe(expected)
-      // A minted path is a path: it routes through the exported parser.
+      // A minted path parses back.
       expect(() => parseDocPath(minted)).not.toThrow()
     }
   })
 
   it('is total on the index axis, unlike the Addr reads', () => {
     const doc = Document.fromMarkdown(MD)
-    // A path is an anchor, not a read: an out-of-range card mints the
-    // unknown-kind root `edit::index_out_of_range` anchors at, so a
-    // per-keystroke call needs no `try`. It parses back and resolves to
-    // nothing rather than mis-targeting.
+    // An out-of-range card mints the unknown-kind root
+    // `edit::index_out_of_range` anchors at, so a per-keystroke call needs no
+    // `try`.
     expect(doc.pathFor({ card: 7, field: 'from' })).toBe('cards[7].from')
     expect(doc.cardPath(7)).toBe('cards[7]')
     expect(() => parseDocPath(doc.pathFor({ card: 7, field: 'from' }))).not.toThrow()
@@ -984,8 +983,8 @@ card_kinds:
     // …and a structural out-of-range op anchors at the array slot.
     expect(pathOf(() => doc.setCardKind(9, 'note'))).toBe('cards[9]')
     expect(pathOf(() => doc.moveCard(9, 0))).toBe('cards[9]')
-    // `pathFor` mints what the anchor carries: the point of the verb is that a
-    // consumer's path and the engine's agree without a kind table of its own.
+    // `pathFor` mints what the anchor carries, so a consumer's path and the
+    // engine's agree without a kind table of its own.
     expect(doc.pathFor({ card: 0, field: 'stray' })).toBe(
       pathOf(() => doc._commitField(quill, { card: 0, field: 'stray' }, 'x')),
     )
