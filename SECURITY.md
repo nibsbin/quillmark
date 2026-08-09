@@ -37,4 +37,4 @@ Neither is a vulnerability:
 
 ## Dependency advisories
 
-`cargo audit` runs on every dependency change and weekly against an unchanged tree (`.github/workflows/audit.yml`). Accepted advisories live in [`.cargo/audit.toml`](.cargo/audit.toml), each with the reachability argument that justifies it and the condition that would revoke it.
+Dependabot watches `Cargo.lock`. No CI job runs `cargo audit`: most of the tree is Typst's, whose versions this workspace does not choose, so a gate there would report far more than it could act on. Report a dependency advisory only when you can name the path that reaches Quillmark code.

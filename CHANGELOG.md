@@ -17,14 +17,6 @@
   **quill is trusted and equivalent to code**, so a hostile quill is out of
   scope the way a hostile crate is under `cargo run`. States the two properties
   that hold even inside the trusted half (no network, no ambient filesystem).
-- ci: `cargo audit` gates every dependency change and runs weekly against an
-  unchanged tree (`.github/workflows/audit.yml`), replacing the prose note in
-  `ci.yml` that recorded the two accepted advisories. `.cargo/audit.toml` holds
-  them with the reachability argument for each: `quick-xml <0.41` enters by
-  exactly one path (`citationberg → hayagriva → typst-library`), parses CSL
-  style files a quill vendors, and is pinned by the typst 0.15 tree rather than
-  by this workspace. `unmaintained` / `unsound` / `yanked` print and pass, so an
-  upstream's maintenance status holds no veto over a merge.
 - test(cli): `quillmark-cli` gets its first tests. The bin carries
   `test = false`, so twelve cases drive the built executable instead — every
   subcommand, `-o` and `--stdout`, PDF and SVG output, and the error paths,
