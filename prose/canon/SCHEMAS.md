@@ -19,7 +19,7 @@ Supported field types:
 | Quill.yaml Type | Meaning |
 |---|---|
 | `string` | Open scalar UTF-8 text: a value the template computes with (URL, path, identifier, reference key), not prose it lays out |
-| `enum` | Closed string domain; requires a `values:` list. Projects to JSON-Schema `{type: string, enum: […]}`. The `enum:` modifier on `string` is a deprecated one-release alias; `enum:`/`values:` on any other type is a load error |
+| `enum` | Closed string domain; requires a `values:` list. Projects to JSON-Schema `{type: string, enum: […]}`. The `enum:` modifier on `string` is a deprecated alias; `enum:`/`values:` on any other type is a load error |
 | `number` | Numeric value (integers and decimals) |
 | `integer` | Integer-only numeric value |
 | `boolean` | `true` / `false` |
@@ -64,6 +64,16 @@ Rest is enforced only for a **declared content field**: one whose type tree
 bears a content leaf (`field_contains_content`), and its whole subtree conforms
 with it. Non-content-typed fields keep their authored shorthands; the typed
 write remains their canonicalizer.
+
+### A declared type change rewrites stored values
+
+Changing a field's declared type reinterprets every stored value in that field at the next bound load: `Quill::conform` derives rest from the current schema and value, holding no record of the type a value was written under, so the reinterpretation is unconditional and carries no diagnostic.
+
+The mechanism is deliberate. A type change migrates a deployed corpus with no migration script, and read-repair is the documented convergence path ([DOCUMENT_STORAGE.md](DOCUMENT_STORAGE.md) § "Byte-stability").
+
+Scalar → content is the lossy direction: the stored string enters the codec's import, markup delimiters are consumed as structure, and the authored text is not recoverable. A `subject` holding `Cost * Benefit Analysis *DRAFT*` rests verbatim under `string`; under `richtext` it rests as content whose text is `Cost * Benefit Analysis DRAFT` carrying an emph mark, the literal asterisks gone.
+
+**A declared type change is therefore a new quill version**, the rule [VERSIONING.md](VERSIONING.md) § "Ref Immutability" states for any content behind a canonical ref. Nothing enforces it: `check_quill_reference` compares the document's `$quill` name and selector against the loaded quill, and an in-place schema edit at the same version leaves both matching, so a document pinned to `name@0.2.0` conforms against a schema it was never authored under and the mismatch is unrepresentable.
 
 ## Type coercion
 
@@ -387,7 +397,7 @@ The type-gated keys:
 
 - `inline`: valid only on the prose types (`richtext`, `plaintext`).
 - `values`: declares an `enum` field's domain, required there.
-- `enum`: a deprecated one-release alias for `values` on `string`.
+- `enum`: a deprecated alias for `values` on `string`.
 - `items`: the element schema, itself a `FieldSchema`; required on `array`
   fields and rejected elsewhere.
 - `properties`: used by `object` fields, and by an array's `object`-typed
