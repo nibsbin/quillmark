@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+- refactor(wasm)!: `init()` resolves to the core surface, and it is the only way
+  to reach one. `Quill`, `Document`, `importMarkdown`, `exportMarkdown`,
+  `rebase`, `mapPos`, `parseDocPath` and `formatDocPath` leave the static
+  exports of `@quillmark/wasm`: `const { Quill, Document } = await init()`
+  replaces the value import. The precondition was carried entirely by
+  `init`'s signature, and a floating promise is an ESLint rule rather than a
+  `tsc` diagnostic, so a call site that skipped the await type-checked and then
+  passed or failed by load order. It now has no name to call. `Engine`,
+  `MAIN_CARD_ADDR`, `isQuillmarkError`, the open-set guards and the
+  writer/reader classes are unchanged, needing no instance or gated by their
+  arguments; the `Quill` / `Document` **type** exports are unchanged, so
+  annotations and `import type` compile as before. Class identity is untouched:
+  the gate hands out the core build's classes verbatim, and `instanceof` stays
+  the whole membership test. `runtime::not_initialized` and the build-time
+  sentinel that raised it retire with the door they guarded. Rust, Python,
+  documents and stored blobs are unaffected. See
+  `docs/migrations/0.102-to-0.103.md`
+
 ## v0.102.0 - 2026-08-04
 
 The pre-1.0 vocabulary reset. Verbs, diagnostic codes, and two words that meant

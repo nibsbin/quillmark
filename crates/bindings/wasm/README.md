@@ -10,11 +10,11 @@ Use Quillmark in browsers/Node.js with explicit in-memory trees (`Map<string, Ui
 
 The package exposes **one import surface**:
 
-- `@quillmark/wasm` (the root), the **canonical API**: `Quill`, `Document`, and
-  an `Engine` that renders them.
+- `@quillmark/wasm` (the root), the **canonical API**: `init`, resolving to
+  `Quill` and `Document`, and an `Engine` that renders them.
 
-`Quill` and `Document` are re-exported verbatim from the internal Typst-less
-core build, so editor/validation code (`Quill.fromTree`,
+`Quill` and `Document` are the internal Typst-less core build's own classes,
+handed out verbatim by `init`, so editor/validation code (`Quill.fromTree`,
 `Document.fromMarkdown`) loads only that small core binary: no backend is
 loaded until you render. The `Engine` hides everything else: each backend
 (`typst`, `pdfform`) is a separate, private WASM binary with its own linear
@@ -31,9 +31,8 @@ bash scripts/build-wasm.sh
 The script builds three variants: the core (no backend), the Typst backend
 (default features), and the Typst-free pdfform backend (`pdfform` feature):
 each with `--target web` and `--weak-refs` enabled (see
-[Initialization](#initialization) and [Lifecycle](#lifecycle)). It then patches
-each generated build with the pre-init sentinel (`runtime/uninit.js`) and
-asserts none of them carries a `.wasm` ESM import or a top-level await.
+[Initialization](#initialization) and [Lifecycle](#lifecycle)). It then asserts
+none of them carries a `.wasm` ESM import or a top-level await.
 
 ## Test
 
@@ -47,9 +46,9 @@ npm test
 ## Usage
 
 ```ts
-import { init, Document, Quill, Engine } from "@quillmark/wasm";
+import { init, Engine } from "@quillmark/wasm";
 
-await init();                         // once at startup; see Initialization
+const { Quill, Document } = await init(); // see Initialization
 
 const quill = Quill.fromTree(tree);   // no engine needed: build + validate
 const engine = new Engine();          // loads a backend lazily on first render
@@ -68,12 +67,13 @@ const result = await engine.render(quill, parsed, { format: "pdf" });
 
 ## Initialization
 
-`await init()` once, at startup, before any other export is used. Everything
-after it is the synchronous surface the rest of this README describes.
+`init` resolves to the core surface: `Quill`, `Document`, and the free
+functions. Everything after the await is the synchronous surface the rest of
+this README describes.
 
 ```js
-import { init, Quill, Engine } from "@quillmark/wasm";
-await init();
+import { init, Engine } from "@quillmark/wasm";
+const { Quill, Document } = await init();
 ```
 
 The same line works everywhere: the binary streams from a URL in a browser and
@@ -85,10 +85,9 @@ safe anywhere, SSR included.
 
 `init` is idempotent and concurrency-safe: every non-conflicting call returns
 the same promise, so several entry points may each `await init()` for one
-instantiation. Call it at the top of **every** entry point (route loader,
-hydration path, worker) rather than trusting one startup site to run first. A
-failed init clears the memo, so a retry works. Each realm initializes its own
-copy; a Worker calls `init()` too.
+instantiation. Destructure at **every** entry point (route loader, hydration
+path, worker) rather than threading one result around. A failed init clears the
+memo, so a retry works. Each realm initializes its own copy, a Worker included.
 
 **Backends need nothing.** `Engine` instantiates a backend inside its lazy load,
 on the first render against it.
@@ -104,9 +103,9 @@ the same value again is fine, so several entry points may each
 alike ride the returned promise, so one `catch` around `await init(...)` covers
 the gate. See [Errors](#errors) for the rule this follows.
 
-**If you forget.** Reaching the surface early throws a `QuillmarkError` coded
-`runtime::not_initialized` that names the fix, rather than a `TypeError` from
-inside generated code.
+**You cannot forget.** The core surface has no static export, so a call site
+that skips the await has no name to call. The precondition is structural rather
+than a convention: no load order can make one entry point pass and another fail.
 
 **Vite's dev server** pre-bundles dependencies, which moves the package away
 from its binary. Exclude it:

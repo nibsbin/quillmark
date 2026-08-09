@@ -3,13 +3,12 @@
  *
  * The builds are `--target web` (scripts/build-wasm.sh), so the classes export
  * synchronously and the instance behind them arrives via `init`. This suite
- * pins both halves of that: reaching the surface early fails loudly and
- * legibly, and the gate itself is idempotent, concurrency-safe, and identical
- * in every environment.
+ * pins both halves of that: the gate is the only door to the core surface, and
+ * it is idempotent, concurrency-safe, and identical in every environment.
  *
- * Its own file because the assertions are init-order-sensitive: the "before
- * init" cases need a module registry where nothing has initialized yet, which
- * vitest's per-file isolation provides and a shared suite would not.
+ * Its own file because the assertions are init-order-sensitive: the memo and
+ * source-conflict cases need a module registry where nothing has initialized
+ * yet, which vitest's per-file isolation provides and a shared suite would not.
  *
  * Aliased to pkg/runtime/runtime.js in vitest.config.js.
  */
@@ -17,13 +16,9 @@ import { describe, it, expect } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { dirname, join } from 'node:path'
-import {
-  init,
-  Quill,
-  Document,
-  importMarkdown,
-  isQuillmarkError,
-} from '@quillmark-wasm/runtime'
+import { init, isQuillmarkError } from '@quillmark-wasm/runtime'
+import * as runtime from '@quillmark-wasm/runtime'
+import * as core from '@quillmark-wasm/core'
 
 const PKG_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'pkg')
 
@@ -35,19 +30,6 @@ title: Init
 ~~~
 
 # Hello`
-
-/** Invoke `fn`, expect a throw, and return its primary diagnostic. */
-const diagnosticFrom = (fn) => {
-  let thrown
-  try {
-    fn()
-  } catch (err) {
-    thrown = err
-  }
-  expect(thrown, 'expected a throw, got none').toBeDefined()
-  expect(isQuillmarkError(thrown)).toBe(true)
-  return thrown.diagnostics[0]
-}
 
 /** Await `promise`, expect a rejection, and return its primary diagnostic. */
 const rejectionFrom = async (promise) => {
@@ -62,26 +44,33 @@ const rejectionFrom = async (promise) => {
   return thrown.diagnostics[0]
 }
 
-// Reaching a build before `init` resolves is the one mistake the contract
-// invites, so it is the one that must not surface as a generated-code
-// `TypeError`. Every generated path reads the same module-level binding, so
-// every generated path is covered: the constructor case is the reason the guard
-// lives there rather than on the prototypes (a public constructor cannot be
-// guarded without wrapping the class, which the canonical invariant forbids).
-describe('before init', () => {
-  it('rejects a static with a named diagnostic', () => {
-    const d = diagnosticFrom(() => Quill.fromTree(new Map()))
-    expect(d.code).toBe('runtime::not_initialized')
-    expect(d.message).toMatch(/await init\(\)/)
-    expect(d.hint).toMatch(/@quillmark\/wasm/)
+// The precondition is carried by the shape of the surface, not by a note: a
+// value that needs the instance is reachable only through the gate, so a call
+// site cannot express the pre-init mistake and no load order can make one pass
+// in dev and fail in production. These two cases are what hold that.
+describe('the gated surface', () => {
+  // Membership is DERIVED, so this is a gate and not a copied list: the core
+  // build's exports minus its instantiation machinery, which `init` owns and no
+  // consumer calls (`default` is wasm-bindgen's entry, `initSync` its sync twin,
+  // `start` the start-section panic-hook install). A new core export that never
+  // reaches CORE_SURFACE fails here rather than going missing from the public
+  // API.
+  const INSTANTIATION = ['default', 'initSync', 'start']
+  const expected = Object.keys(core)
+    .filter((name) => !INSTANTIATION.includes(name))
+    .sort()
+
+  it('is exactly the core build, minus what init owns', async () => {
+    const surface = await init()
+    expect(Object.keys(surface).sort()).toEqual(expected)
+    // Verbatim: the same objects the core build exports, never wrappers.
+    for (const name of expected) expect(surface[name]).toBe(core[name])
   })
 
-  it('rejects a constructor', () => {
-    expect(diagnosticFrom(() => new Document('x')).code).toBe('runtime::not_initialized')
-  })
-
-  it('rejects a free function', () => {
-    expect(diagnosticFrom(() => importMarkdown('x')).code).toBe('runtime::not_initialized')
+  it('is reachable no other way', () => {
+    // A static export of any of these would reopen the door the type system
+    // cannot otherwise close, which is the whole point of the gate.
+    for (const name of expected) expect(runtime[name]).toBeUndefined()
   })
 })
 
@@ -92,14 +81,18 @@ describe('init', () => {
     const a = init()
     const b = init()
     expect(a).toBe(b)
-    await expect(Promise.all([a, b, init()])).resolves.toEqual([
-      undefined,
-      undefined,
-      undefined,
-    ])
+    const [x, y, z] = await Promise.all([a, b, init()])
+    expect(y).toBe(x)
+    expect(z).toBe(x)
   })
 
-  it('unlocks the sync surface', () => {
+  it('resolves to a frozen surface: one consumer cannot reshape it for another', async () => {
+    const surface = await init()
+    expect(Object.isFrozen(surface)).toBe(true)
+  })
+
+  it('unlocks the sync surface', async () => {
+    const { importMarkdown, Document } = await init()
     expect(importMarkdown('# Hi')).toBeDefined()
     expect(Document.fromMarkdown(MAIN_CARD_DOC)).toBeDefined()
   })
@@ -112,10 +105,10 @@ describe('init', () => {
   })
 
   // The rule (delivery follows the function kind) at the one export that could
-  // break it: `Promise<void>` cannot declare a synchronous throw, so a throw
-  // here would escape the `init(BYTES).catch(…)` the declaration invites.
+  // break it: a promise return type cannot declare a synchronous throw, so a
+  // throw here would escape the `init(BYTES).catch(…)` the declaration invites.
   it('delivers the conflict as a rejection, not a synchronous throw', () => {
-    /** @type {Promise<void> | undefined} */
+    /** @type {Promise<unknown> | undefined} */
     let returned
     expect(() => {
       returned = init(new Uint8Array(8))
@@ -132,8 +125,8 @@ describe('plain Node, no bundler', () => {
   it('imports, initializes with no arguments, and works', () => {
     const runtimeUrl = pathToFileURL(join(PKG_DIR, 'runtime', 'runtime.js')).href
     const script = `
-      const { init, importMarkdown } = await import(${JSON.stringify(runtimeUrl)});
-      await init();
+      const { init } = await import(${JSON.stringify(runtimeUrl)});
+      const { importMarkdown } = await init();
       if (!importMarkdown('# Hello')) throw new Error('no content');
       console.log('OK');
     `
@@ -147,13 +140,13 @@ describe('plain Node, no bundler', () => {
   it('reports a bad source as init_failed, and recovers on retry', () => {
     const runtimeUrl = pathToFileURL(join(PKG_DIR, 'runtime', 'runtime.js')).href
     const script = `
-      const { init, importMarkdown } = await import(${JSON.stringify(runtimeUrl)});
+      const { init } = await import(${JSON.stringify(runtimeUrl)});
       let code;
       try { await init(new Uint8Array([0, 1, 2, 3])); }
       catch (e) { code = e.diagnostics?.[0]?.code; }
       if (code !== 'runtime::init_failed') throw new Error('got ' + code);
       // Self-heal: the failed attempt must not poison the retry.
-      await init();
+      const { importMarkdown } = await init();
       if (!importMarkdown('# Hello')) throw new Error('no content');
       console.log('OK');
     `
