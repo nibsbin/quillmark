@@ -30,9 +30,15 @@ The file must open with a `~~~` block containing a `$quill:` key identifying the
 - `-o <PATH>` / `--output <PATH>`: Output file path (default: input filename with format extension, e.g. `input.pdf`; `example.<format>` when no markdown file is given)
 - `-f <FORMAT>` / `--format <FORMAT>`: Output format: `pdf`, `svg`, `png` (default: `pdf`)
 - `--output-data <DATA_FILE>`: Write compiled JSON data to a file
-- `-v` / `--verbose`: Show detailed processing information
-- `--quiet`: Suppress all non-error output
-- `--stdout`: Write output to stdout instead of file
+- `-v` / `--verbose`: Show detailed processing information on stderr
+- `--quiet`: Suppress warnings and the output-destination line
+- `--stdout`: Write the artifact to stdout instead of a file (and ignore `-o`)
+
+**Streams:** under `--stdout` the artifact owns stdout, and progress, warnings,
+and errors all go to stderr, so
+`quillmark render ./my-quill input.md --stdout --verbose > out.pdf` writes a
+valid PDF with the chatter still on the terminal. Writing to a file instead, the
+one stdout line is `Output written to: <path>`, which `--quiet` suppresses.
 
 **Examples:**
 

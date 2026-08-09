@@ -217,7 +217,7 @@ pub struct RenderResult {
     pub regions: Vec<FieldRegion>,
 }
 
-/// What a committed `LiveSession.apply` changed. `dirtyPages` lists the pages
+/// What a committed `LiveSession.update` changed. `dirtyPages` lists the pages
 /// whose rendered content differs from the previous compile, including pages
 /// the edit added; removed pages are implied by `pageCount`. A preview
 /// repaints `dirty ∩ visible` and nothing else.
