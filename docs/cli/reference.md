@@ -34,11 +34,7 @@ The file must open with a `~~~` block containing a `$quill:` key identifying the
 - `--quiet`: Suppress warnings and the output-destination line
 - `--stdout`: Write the artifact to stdout instead of a file (and ignore `-o`)
 
-**Streams:** under `--stdout` the artifact owns stdout, and progress, warnings,
-and errors all go to stderr, so
-`quillmark render ./my-quill input.md --stdout --verbose > out.pdf` writes a
-valid PDF with the chatter still on the terminal. Writing to a file instead, the
-one stdout line is `Output written to: <path>`, which `--quiet` suppresses.
+**Streams:** under `--stdout` the artifact owns stdout, and progress, warnings, and errors all go to stderr, so `quillmark render ./my-quill input.md --stdout --verbose > out.pdf` writes a valid PDF. Without `--stdout`, the one stdout line is `Output written to: <path>`, which `--quiet` suppresses.
 
 **Examples:**
 

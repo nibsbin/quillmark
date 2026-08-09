@@ -78,11 +78,9 @@
     const pdfBytes = result.artifacts[0].bytes;
     ```
 
-    `init` is idempotent and concurrency-safe, so destructure it at each entry
-    point (route loader, hydration path, worker) rather than threading one
-    result around: every await after the first resolves from the same memo. An
-    annotation needs no await, since `Quill` and `Document` are also exported as
-    types (`import type { Quill } from "@quillmark/wasm"`).
+    `init` is idempotent and concurrency-safe, so destructure it at each entry point (route loader, hydration path, worker) rather than threading one result around: every await after the first resolves from the same memo.
+
+    An annotation needs no await: `Quill` and `Document` are also exported as types (`import type { Quill } from "@quillmark/wasm"`).
 
     ## Live Preview (Canvas)
 
