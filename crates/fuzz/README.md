@@ -27,6 +27,7 @@ cargo test --package quillmark-fuzz convert_fuzz
 cargo test --package quillmark-fuzz decode_fuzz
 cargo test --package quillmark-fuzz emit_roundtrip_fuzz
 cargo test --package quillmark-fuzz parse_fuzz
+cargo test --package quillmark-fuzz pdf_fuzz
 ```
 
 **Note:** This crate is excluded from `default-members` so expensive fuzzing does not run on every `cargo test`. Use `cargo test --workspace` to include it.
@@ -40,6 +41,7 @@ cargo test --package quillmark-fuzz parse_fuzz
 | `decode_fuzz.rs` | The four JSON decode lanes (storage DTO, card wire, canonical content, op wire) where arbitrary JSON yields `Err`, never a panic |
 | `emit_roundtrip_fuzz.rs` | `parse → emit → re-parse` stability, and idempotence on the canonical form |
 | `parse_fuzz.rs` | card-yaml payloads: malformed YAML, composable card kinds, nested structures, Unicode and special characters |
+| `pdf_fuzz.rs` | `quillmark-pdf`'s byte-level PDF reads (`page_media_boxes`, `PdfUpdate::begin`, `stamp`): arbitrary bytes, and a real AcroForm truncated, single-byte-corrupted, or spliced, yield `Err`, never a panic |
 
 ## Security properties
 
@@ -49,6 +51,7 @@ cargo test --package quillmark-fuzz parse_fuzz
 4. **Backslash handling**: backslashes escape first, so nothing double-escapes.
 5. **DoS resistance**: deeply nested input (blockquotes and lists to 20 levels) and large input (to 10,000 characters) parse without panicking.
 6. **Unicode safety**: arbitrary Unicode input does not crash.
+7. **Binary-input safety**: the hand-rolled PDF reader refuses corrupt, truncated, and non-PDF bytes rather than panicking.
 
 ## Contributing
 

@@ -2264,7 +2264,9 @@ dependencies = [
  "indexmap",
  "quillmark",
  "quillmark-core",
+ "quillmark-fixtures",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -2309,6 +2311,8 @@ dependencies = [
  "proptest",
  "quillmark-content",
  "quillmark-core",
+ "quillmark-fixtures",
+ "quillmark-pdf",
  "quillmark-typst",
  "serde_json",
 ]

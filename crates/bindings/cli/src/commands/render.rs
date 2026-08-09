@@ -42,15 +42,18 @@ pub struct RenderArgs {
     output_data: Option<PathBuf>,
 }
 
+// Progress chatter goes to stderr throughout, as `print_warnings` already does:
+// under `--stdout` the artifact owns stdout, and a `--verbose` line there lands
+// inside the emitted PDF.
 pub fn execute(args: RenderArgs) -> Result<()> {
     if args.verbose {
-        println!("Loading quill from: {}", args.quill.display());
+        eprintln!("Loading quill from: {}", args.quill.display());
     }
 
     let quill = load_quill(&args.quill)?;
 
     if args.verbose {
-        println!("Quill loaded: {}", quill.name());
+        eprintln!("Quill loaded: {}", quill.name());
     }
 
     // Determine if we have a markdown file or need to seed a starter document.
@@ -64,14 +67,14 @@ pub fn execute(args: RenderArgs) -> Result<()> {
             }
 
             if args.verbose {
-                println!("Reading markdown from: {}", markdown_path.display());
+                eprintln!("Reading markdown from: {}", markdown_path.display());
             }
 
             let markdown = fs::read_to_string(markdown_path)?;
             let output = Document::parse(&markdown)?;
 
             if args.verbose {
-                println!("Markdown parsed successfully");
+                eprintln!("Markdown parsed successfully");
             }
             (
                 output.document,
@@ -84,13 +87,13 @@ pub fn execute(args: RenderArgs) -> Result<()> {
             // interpolated at the render floor), so the quill renders without
             // the caller supplying any field values.
             if args.verbose {
-                println!("Using seeded document from quill");
+                eprintln!("Using seeded document from quill");
             }
             (quill.seed_document(), Vec::new(), None)
         };
 
     if args.verbose {
-        println!("Render-ready quill for backend: {}", quill.backend_id());
+        eprintln!("Render-ready quill for backend: {}", quill.backend_id());
     }
 
     // Parse output format (format ↔ string mapping lives in quillmark_core).
@@ -100,7 +103,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         .map_err(|e| CliError::InvalidArgument(e.to_string()))?;
 
     if args.verbose {
-        println!("Rendering to format: {:?}", output_format);
+        eprintln!("Rendering to format: {:?}", output_format);
     }
 
     // Handle output-data
@@ -123,7 +126,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
             )))
         })?;
         if args.verbose && !args.quiet {
-            println!("JSON data written to: {}", data_path.display());
+            eprintln!("JSON data written to: {}", data_path.display());
         }
     }
 
@@ -168,7 +171,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     )?;
 
     if args.verbose && !args.quiet {
-        println!("Rendering completed successfully");
+        eprintln!("Rendering completed successfully");
     }
 
     Ok(())

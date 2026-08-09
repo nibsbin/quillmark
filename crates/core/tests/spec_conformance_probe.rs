@@ -95,3 +95,22 @@ fn card_count_cap_is_per_card() {
     let err = Document::parse(&s).unwrap_err().to_string();
     assert!(err.contains("Input too large"), "got: {}", err);
 }
+
+/// The §8 caps are public, and `docs/integration/operations.md` tells an
+/// integrator to read them rather than copy the numbers. Out-of-crate, so these
+/// are the paths a consumer writes; a re-export that moves breaks this before it
+/// breaks the instruction.
+#[test]
+fn spec_caps_are_reachable_at_their_documented_paths() {
+    use quillmark_core::document::limits::MAX_YAML_DEPTH;
+    use quillmark_core::error::{
+        MAX_CARD_COUNT, MAX_FIELD_COUNT, MAX_INPUT_SIZE, MAX_YAML_SIZE,
+    };
+
+    // The values markdown-spec §8 states.
+    assert_eq!(MAX_INPUT_SIZE, 10 * 1024 * 1024);
+    assert_eq!(MAX_YAML_SIZE, 1024 * 1024);
+    assert_eq!(MAX_CARD_COUNT, 1000);
+    assert_eq!(MAX_FIELD_COUNT, 1000);
+    assert_eq!(MAX_YAML_DEPTH, 100);
+}
