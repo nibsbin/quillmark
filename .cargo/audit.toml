@@ -27,8 +27,3 @@ ignore = [
     "RUSTSEC-2026-0195", # unbounded namespace-declaration allocation in NsReader
 ]
 
-# Warn-only, and printed in the log: neither is a defect on its own, and failing
-# on them hands an unrelated upstream's maintenance status a veto over merges
-# here. The outstanding ones are all transitive through typst's font and
-# serialization stack.
-informational_warnings = ["unmaintained", "unsound", "notice"]

@@ -64,33 +64,28 @@ fn exercise(pdf: &[u8]) {
 }
 
 proptest! {
-    // Above proptest's default 256: a case is one parse over a few tens of
+    // Above proptest's default 256: a case is one parse over at most a few
     // kilobytes with no oracle to evaluate and no I/O, so mutants are cheap
     // enough that the wider net costs less than the coverage is worth.
     #![proptest_config(ProptestConfig::with_cases(1024))]
 
-    /// Arbitrary bytes: the trailer scan, the xref read, and the `/Root` lookup
-    /// all meet input that was never a PDF.
+    /// Arbitrary bytes. Nothing checks for a `%PDF-` header — `PdfUpdate::begin`
+    /// scans backwards for `startxref` — so a buffer that opens like a PDF takes
+    /// the same path as one that does not, and this covers both.
     #[test]
     fn fuzz_arbitrary_bytes(bytes in proptest::collection::vec(any::<u8>(), 0..4096)) {
         exercise(&bytes);
     }
 
-    /// Bytes that open like a PDF but are otherwise noise, so the header check
-    /// passes and the scan continues into the buffer.
-    #[test]
-    fn fuzz_pdf_header_then_noise(tail in proptest::collection::vec(any::<u8>(), 0..4096)) {
-        let mut bytes = b"%PDF-1.7\n".to_vec();
-        bytes.extend_from_slice(&tail);
-        exercise(&bytes);
-    }
-
     /// A real form truncated at an arbitrary point: every length and offset the
     /// file declares now points past the end.
+    ///
+    /// The range is the fixture's own length. A fixed upper bound would sample
+    /// mostly past it and re-run the intact file.
     #[test]
-    fn fuzz_truncated_form(cut in 0usize..100_000) {
+    fn fuzz_truncated_form(cut in any::<prop::sample::Index>()) {
         let pdf = base_pdf();
-        let cut = cut.min(pdf.len());
+        let cut = cut.index(pdf.len() + 1);
         exercise(&pdf[..cut]);
     }
 
@@ -119,9 +114,11 @@ proptest! {
         exercise(&pdf);
     }
 
-    /// Field geometry the caller controls, including non-finite and inverted
-    /// rects and a page index past the document's page count. `stamp` resolves
-    /// pages by index, so an out-of-range one must refuse rather than index.
+    /// Field geometry the caller controls. `quillmark-pdf`'s unit tests pin the
+    /// individual refusals (non-finite rect, corner ordering, missing page);
+    /// what this adds is the combinations, and a page index drawn past the
+    /// fixture's single page, since `stamp` resolves pages by index into a
+    /// `Vec` and must refuse rather than index.
     #[test]
     fn fuzz_field_geometry(
         page in 0usize..8,

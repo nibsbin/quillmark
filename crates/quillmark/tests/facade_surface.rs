@@ -166,9 +166,7 @@ fn preview_regions_spell_through_the_facade() {
 }
 
 /// The engine, a loaded quill, and a document cross threads, so a server can
-/// hold one `Quillmark` and render on many. `LiveSession` is `Send` but is left
-/// out: `SessionHandle` requires both, but a session is a per-document handle
-/// with no reason to be shared and no test that shares one.
+/// hold one `Quillmark` and render on many.
 ///
 /// `docs/integration/operations.md` § "Concurrency" states this; the assertions
 /// are what stop a private field quietly taking it away.

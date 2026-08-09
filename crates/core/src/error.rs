@@ -52,7 +52,8 @@ pub use crate::document::limits::MAX_YAML_DEPTH;
 /// Maximum number of card blocks allowed per document
 pub const MAX_CARD_COUNT: usize = 1000;
 
-/// Maximum number of fields allowed per document
+/// Maximum number of user fields allowed per card-yaml block. Counted after
+/// `$`-key extraction, so system metadata is not charged against it.
 pub const MAX_FIELD_COUNT: usize = 1000;
 
 /// A YAML parse or emit failure, owned by this crate.

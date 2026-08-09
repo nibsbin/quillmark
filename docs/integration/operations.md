@@ -4,21 +4,20 @@ Quillmark bounds what it ingests and not what it renders. That asymmetry, plus w
 
 ## Input limits
 
-Enforced at parse, on every surface, before a backend sees anything. Each raises a `parse::*` diagnostic rather than a panic, so all of them are recoverable and routable by `code` (see [Error Handling](error-handling.md)).
+The values are the spec's: [Markdown Specification §8](../reference/markdown-spec.md#8-limits) lists all five and is the one place they are written down. They are enforced at parse, on every surface, before a backend sees anything, and each raises a diagnostic rather than a panic, so all of them are recoverable and routable by `code` (see [Error Handling](error-handling.md)).
 
-| Limit | Value | Constant | Raised as |
-|---|---|---|---|
-| Markdown input | 10 MiB | `MAX_INPUT_SIZE` | `parse::input_too_large` |
-| One card-yaml block | 1 MiB | `MAX_YAML_SIZE` | `parse::input_too_large` |
-| Cards per document | 1 000 | `MAX_CARD_COUNT` | `parse::input_too_large` |
-| Fields per card-yaml block | 1 000 | `MAX_FIELD_COUNT` | `parse::input_too_large` |
-| YAML nesting | 100 container levels | `MAX_YAML_DEPTH` | `parse::yaml_error_with_location` |
+What the spec does not say is which code you get, and the mapping is lopsided:
 
-**All four size and count limits raise the same code**, differing only in the `max` arg, so naming which ceiling was hit means comparing `max` against the constants.
+| Exceeded | Raised as |
+|---|---|
+| Document size, YAML payload size, card count, field count | `parse::input_too_large` |
+| YAML nesting depth | `parse::yaml_error_with_location` |
 
-The depth budget is one shape at every ingestion boundary, reported in each lane's own vocabulary: parse hits `serde_saphyr::Budget` and surfaces a YAML error (`budget breached: Depth`), programmatic writes raise `edit::value_too_deep`, the bound door raises `conform::value_too_deep`, and each binding's converter enforces the same 100.
+**The four size and count ceilings share one code**, differing only in the `max` arg, so naming which one was hit means comparing `max` against the constants.
 
-The constants are public (`quillmark_core::MAX_INPUT_SIZE` and siblings). Read them rather than copying the numbers, so a consumer that rejects early rejects on what the engine will.
+Depth is one budget at every ingestion boundary, reported in each lane's own vocabulary: parse surfaces it as a YAML error, programmatic writes raise `edit::value_too_deep`, the bound door raises `conform::value_too_deep`, and each binding's converter enforces the same limit.
+
+The constants are public — `quillmark_core::error::{MAX_INPUT_SIZE, MAX_YAML_SIZE, MAX_CARD_COUNT, MAX_FIELD_COUNT}` and `quillmark_core::document::limits::MAX_YAML_DEPTH`. Read them rather than copying the numbers, so a consumer that rejects early rejects on what the engine will.
 
 ## Render is not bounded
 
@@ -26,14 +25,12 @@ The constants are public (`quillmark_core::MAX_INPUT_SIZE` and siblings). Read t
 
 This is where the parse limits stop carrying: they bound the input, and nothing translates them into a bound on the work, so a document inside every ceiling above can hold a core indefinitely.
 
-- **Body size is linear.** A document near the 10 MiB ceiling is tens of seconds of compile.
-- **Plates are not.** A plate is a Typst program, and layout has superlinear shapes — a long run of forced breaks in one paragraph among them. Cost is a property of the quill at least as much as of the document.
-- **Typst bounds iteration, not work.** An infinite loop is refused (`loop seems to be infinite`), as is unbounded recursion. A loop that terminates after enough expensive iterations is neither.
+Cost is a property of the quill at least as much as of the document: a plate is a Typst program, and layout has superlinear shapes. Typst refuses an infinite loop and unbounded recursion, which bounds iteration rather than work — a loop that terminates after enough expensive iterations is refused by neither.
 
 So the bound comes from the host:
 
 - **Server.** Render on a thread or subprocess you can abandon, under your own timeout. `Quillmark` is `Sync`, so one engine backs the whole pool.
-- **Browser.** `engine.render` and `session.render` are **synchronous** — they return a `RenderResult`, not a `Promise` — so a render on the main thread freezes the tab for its duration. Run the module in a Web Worker and `worker.terminate()` to abort: there is no in-band cancel, and terminate discards the module, so plan on re-instantiating it.
+- **Browser.** `Engine.render` and `Engine.open` return promises, but the compile inside them is synchronous: awaiting does not yield while it runs, and `LiveSession.render` does not even return a promise. Either way the thread is blocked for the render's full duration, so a render on the main thread freezes the tab. Run the module in a Web Worker and `worker.terminate()` to abort — there is no in-band cancel, and terminate discards the module, so plan on re-instantiating it.
 
 `RenderResult.renderTimeMs` reports one render's cost after the fact. It arrives too late to act on and is the only measurement of which quills are the expensive ones.
 
@@ -50,7 +47,7 @@ So the bound comes from the host:
 - The cache is **shared across every session in the process**, so under concurrent renders one session's compiles age out another's entries and reuse degrades as concurrency rises. This costs time, never correctness: comemo entries are pure functions of their input.
 - Steady-state memory is a function of concurrency and document size, not of uptime. A process that has served a million renders holds no more than one that has served ten of the same shape.
 
-**Quills are cached by canonical ref and never invalidated**, because a canonical ref is immutable content (see [Versioning](../quills/versioning.md)). A process that already loaded a quill will not see it edited in place at the same version: bump the version, or restart.
+The engine caches no quills: `Quillmark::render` takes a `&Quill` the caller owns. Where a cache exists it is the caller's, and a canonical ref is immutable content ([Versioning](../quills/versioning.md)), so keying on the ref and never invalidating is sound — with the corollary that editing a quill in place at the same version is invisible to anything holding it. Bump the version.
 
 ## Isolation
 

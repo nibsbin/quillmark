@@ -30,12 +30,20 @@
   subcommand, `-o` and `--stdout`, PDF and SVG output, and the error paths,
   which must exit 1 rather than panic. The crate had no `[dev-dependencies]`
   and no workflow invoked it (#1068).
+- fix(cli)!: `render --verbose` writes its progress lines to stderr, as the
+  warning printer already did. Under `--stdout` they went to stdout ahead of and
+  after the artifact, so `quillmark render q --stdout --verbose > out.pdf`
+  produced a PDF with `Loading quill from: …` before its header and
+  `Rendering completed successfully` past its trailer. A script that parses
+  `--verbose` output from stdout reads it from stderr now.
 - test(fuzz): `pdf_fuzz` covers the AcroForm stamp spine's byte-level reads,
-  the one hand-rolled parser with no fuzz target. Arbitrary bytes, a PDF header
-  over noise, and a real form truncated, single-byte-corrupted, or spliced, all
-  through `page_media_boxes` / `PdfUpdate::begin` / `stamp`. The oracle is no
-  panic: nothing in the workspace catches unwind, so a panic there kills the
-  CLI and the Python extension and poisons the WASM module. No failures found.
+  the one hand-rolled parser with no fuzz target. Arbitrary bytes, and a real
+  form truncated, single-byte-corrupted, or spliced, all through
+  `page_media_boxes` / `PdfUpdate::begin` / `stamp`. The oracle is no panic:
+  nothing in the workspace catches unwind, so a panic there kills the CLI and
+  the Python extension and poisons the WASM module. No failures found.
+- fix(core): `MAX_FIELD_COUNT`'s rustdoc said "per document"; the check is per
+  card-yaml block, counted after `$`-key extraction.
 - refactor(wasm)!: `init()` resolves to the core surface, and it is the only way
   to reach one. `Quill`, `Document`, `importMarkdown`, `exportMarkdown`,
   `rebase`, `mapPos`, `parseDocPath` and `formatDocPath` leave the static

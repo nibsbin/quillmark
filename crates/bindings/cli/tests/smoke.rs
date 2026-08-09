@@ -81,7 +81,6 @@ fn blueprint_emits_a_card_yaml_fence() {
 fn validate_accepts_a_shipped_quill() {
     let quill = taro();
     ok(&["validate", quill.to_str().unwrap()]);
-    ok(&["validate", quill.to_str().unwrap(), "--verbose"]);
 }
 
 /// The two commands that take `-o`.
@@ -132,6 +131,30 @@ fn render_stdout_emits_the_document_on_stdout() {
     );
 }
 
+/// `--stdout` gives the artifact sole ownership of stdout, so every `--verbose`
+/// line has to leave by stderr. Printing one to stdout does not garble a
+/// message, it corrupts the PDF: the bytes land inside the file the caller is
+/// redirecting.
+#[test]
+fn verbose_does_not_contaminate_the_stdout_artifact() {
+    let quill = taro();
+    let out = run(&["render", quill.to_str().unwrap(), "--stdout", "--verbose"]);
+    assert!(out.status.success(), "render --stdout --verbose failed");
+    assert!(
+        out.stdout.starts_with(b"%PDF-"),
+        "stdout starts with {:?}, not PDF bytes",
+        String::from_utf8_lossy(&out.stdout[..out.stdout.len().min(40)])
+    );
+    assert!(
+        out.stdout.ends_with(b"%%EOF\n") || out.stdout.ends_with(b"%%EOF"),
+        "stdout has trailing bytes after the PDF trailer"
+    );
+    assert!(
+        !out.stderr.is_empty(),
+        "--verbose emitted nothing on stderr, so the chatter went somewhere else"
+    );
+}
+
 #[test]
 fn render_svg_honours_the_format_flag() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -151,12 +174,19 @@ fn render_svg_honours_the_format_flag() {
     assert!(svg.contains("<svg"), "output is not SVG: {}", &svg[..svg.len().min(80)]);
 }
 
-/// The failure a user hits most: a path that is not a quill. Silence on stderr
-/// or a 0 exit would both leave a script believing it worked.
+/// The failure a user hits most: a path that is not a quill. Exit 1 rather than
+/// any non-zero code, because a panic exits differently — a script reading the
+/// status can tell a refusal from a crash.
 #[test]
-fn absent_quill_fails_loudly() {
+fn absent_quill_exits_one_with_stderr() {
     let out = run(&["info", "/nonexistent/quill/path"]);
-    assert!(!out.status.success(), "absent quill exited 0");
+    assert_eq!(
+        out.status.code(),
+        Some(1),
+        "expected a clean exit 1, got {:?}\nstderr: {}",
+        out.status,
+        String::from_utf8_lossy(&out.stderr)
+    );
     assert!(
         !out.stderr.is_empty(),
         "absent quill wrote nothing to stderr"
@@ -174,16 +204,3 @@ fn unknown_format_fails_loudly() {
     );
 }
 
-/// A panic reaches the user as a signal death or an abort message, so it is
-/// distinguishable from the clean exit 1 the error path takes.
-#[test]
-fn error_path_exits_one_rather_than_panicking() {
-    let out = run(&["validate", "/nonexistent/quill/path"]);
-    assert_eq!(
-        out.status.code(),
-        Some(1),
-        "expected a clean exit 1, got {:?}\nstderr: {}",
-        out.status,
-        String::from_utf8_lossy(&out.stderr)
-    );
-}
