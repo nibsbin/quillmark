@@ -116,6 +116,48 @@ function openSession() {
   return engine.open(quill, Document.fromMarkdown(TEST_MARKDOWN))
 }
 
+// An `array<richtext(inline)>` field: the backend regions each element on its
+// own plate-space address (`references.<i>`), the shape whose translation the
+// `arrayElementSession` test below pins.
+const ARRAY_QUILL_YAML = `quill:
+  name: array_quill
+  version: "1.0.0"
+  backend: typst
+  description: Array-element addressing
+
+typst:
+  plate_file: plate.typ
+
+main:
+  fields:
+    references:
+      type: array
+      items:
+        type: richtext
+        inline: true
+`
+
+const ARRAY_PLATE = `#import "@local/quillmark-helper:0.1.0": data
+#for r in data.references [ #r \\ ]
+`
+
+const ARRAY_MARKDOWN = `~~~card-yaml
+$quill: array_quill
+$kind: main
+references:
+  - First reference line.
+  - Second reference line.
+~~~
+`
+
+function arrayElementSession() {
+  const engine = new Quillmark()
+  const quill = Quill.fromTree(
+    makeQuill({ name: 'array_quill', plate: ARRAY_PLATE, quillYaml: ARRAY_QUILL_YAML }),
+  )
+  return engine.open(quill, Document.fromMarkdown(ARRAY_MARKDOWN))
+}
+
 /** Asserts a captured `putImageData` call's RGBA buffer carries both visible
  * ink (non-white, opaque pixels) and opaque background: catches a rasterizer
  * regression that wrote zeros, swapped channels, or skipped demultiply.
@@ -183,6 +225,37 @@ describe('LiveSession canvas preview', () => {
 
     // A click far off any ink resolves to nothing.
     expect(session.positionAt(bodyRegion.page, 2, 2)).toBeFalsy()
+  })
+
+  it('addresses an array element as a bracketed DocPath index, both directions', () => {
+    // The backend keys each `array<richtext>` element `references.<i>` in plate
+    // space. The boundary translates that segment-wise, so a consumer sees the
+    // one spelling `Diagnostic.path` also uses, and the `field`-taking verbs
+    // accept it back.
+    const session = arrayElementSession()
+
+    const region = session.regions().find((r) => r.field === 'main.references[0]')
+    expect(region, 'the first `references` element regions on a bracketed index').toBeTruthy()
+
+    // The reverse leg: `fieldBoxes` and `locate` take that same string.
+    const boxes = session.fieldBoxes('main.references[0]')
+    expect(boxes.length, 'fieldBoxes answers on the element address').toBeGreaterThan(0)
+    expect(boxes[0].field).toBe('main.references[0]')
+
+    const caret = session.locate('main.references[0]', 0)
+    expect(caret, 'locate answers on the element address').toBeTruthy()
+    expect(caret.field).toBe('main.references[0]')
+
+    // And the forward direction agrees: a point on the element's ink resolves
+    // to the same string, so positionAt → locate composes.
+    const [x0, y0, x1, y1] = region.rect
+    const cy = (y0 + y1) / 2
+    let hit = null
+    for (let f = 0.1; f <= 0.9 && !hit; f += 0.1) {
+      hit = session.positionAt(region.page, x0 + (x1 - x0) * f, cy)
+    }
+    expect(hit, 'positionAt resolves a point on the element ink').toBeTruthy()
+    expect(hit.field).toBe('main.references[0]')
   })
 
   it('paint sizes the canvas backing store and returns layout + pixel dimensions', () => {

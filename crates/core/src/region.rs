@@ -95,13 +95,14 @@
 #[non_exhaustive]
 pub struct RenderedRegion {
     /// The field's plate-space schema address as the backend keys it:
-    /// `"signature_block"` or `"$cards.<kind>.<ordinal>.<field>"` (a per-kind
-    /// ordinal). This is the backend-native form; a binding that owns the
-    /// document's card kinds translates it to a canonical
+    /// `"signature_block"`, `"references.0"` (an array element, `.`-separated
+    /// with a numeric segment per index) or `"$cards.<kind>.<ordinal>.<tail>"`
+    /// (a per-kind ordinal). This is the backend-native form; a binding that
+    /// owns the document's card kinds translates it to a canonical
     /// [`DocPath`] at its boundary
     /// ([`plate_addr_to_doc_path`]), so its consumers see one absolute-index
-    /// grammar. A core consumer reading `RenderedRegion` directly sees the
-    /// plate-space form.
+    /// grammar and one index spelling (`main.references[0]`). A core consumer
+    /// reading `RenderedRegion` directly sees the plate-space form.
     pub field: String,
     /// 0-based page index.
     pub page: usize,
@@ -208,6 +209,25 @@ pub fn field_boxes(regions: &[RenderedRegion], field: &str) -> Vec<RenderedRegio
 // to the document-array absolute index (and back) against the ordered card
 // kinds of the current compile, so `regions` / `fieldAt` / `positionAt` /
 // `locate` speak `DocPath`, never `$cards.` ordinals.
+//
+// **The plate-space tail** is a `.`-separated segment run, parsed and rendered
+// segment-wise by [`plate_tail_to_segs`] / [`plate_tail`]. A segment of all
+// ASCII digits is an array index, `$body` is the body terminal, anything else
+// is a field or map key. A tail's first segment is never an index (neither
+// `main` nor a card is an array), `$body` is never non-final, and no other
+// `$`-token appears. Segment-wise is what keeps the minted `DocPath` stable
+// across `Display` → `FromStr`, the leg a binding crosses: a tail carried whole
+// into one `Field` renders `main.references.0`, which reparses as a field named
+// `"0"`.
+//
+// `.N` reads as an index **here and not in [`DocPath::from_str`]**: plate
+// addresses are schema-derived, so no plate address carries a digit map key (a
+// field name and a card kind open with a lowercase ASCII letter, pdfform's
+// `descend` reads any numeric segment as an array index, and the Typst helper's
+// `_qm-known-path` accepts a dotted suffix only under an array-typed parent).
+// `DocPath` space is different: a nested YAML map key is unconstrained, and
+// `collect_fill_diags` mints `main.m.0` as `Field{"0"}`. Teaching the parser
+// `.N` would cost that reading, so the two spellings meet here instead.
 
 use crate::path::{DocPath, DocSeg};
 
@@ -254,29 +274,60 @@ pub fn regions_to_doc_path(
     regions
 }
 
+/// Extend `base` by a plate-space tail's segments, per the tail grammar in the
+/// translation banner. `None` for a tail outside it: an empty piece, a leading
+/// index, a non-final `$body`, or any other `$`-token.
+fn plate_tail_to_segs(base: DocPath, tail: &str) -> Option<DocPath> {
+    let mut path = base;
+    let mut it = tail.split('.').enumerate().peekable();
+    while let Some((i, piece)) = it.next() {
+        let last = it.peek().is_none();
+        if piece.is_empty() {
+            return None;
+        }
+        path = if piece.bytes().all(|b| b.is_ascii_digit()) {
+            // Neither `main` nor a card is an array, so a tail never opens on
+            // an index.
+            if i == 0 {
+                return None;
+            }
+            path.index(piece.parse().ok()?)
+        } else if piece == "$body" {
+            if !last {
+                return None;
+            }
+            path.body()
+        } else if piece.starts_with('$') {
+            return None;
+        } else {
+            path.field(piece)
+        };
+    }
+    Some(path)
+}
+
 /// Translate a backend plate-space geometry address into a canonical
 /// [`DocPath`], resolving the per-kind ordinal to the absolute card index via
 /// `card_kinds`. The grammar handled is exactly what geometry emits: `$body`
-/// (main body), a bare `<field>` (main field), `$cards.<kind>.<ord>.<field>`
-/// (card field), and `$cards.<kind>.<ord>.$body` (card body). `None` for an
-/// address outside that grammar or one naming a card the kind list cannot
-/// place: the caller keeps the original string.
+/// (main body), `<tail>` (main), and `$cards.<kind>.<ord>.<tail>` (card), where
+/// a tail is the segment run the translation banner states — so an array
+/// element (`references.0`) and a nested key (`address.city`) each become their
+/// own segments, not one field. `None` for an address outside that grammar or
+/// one naming a card the kind list cannot place: the caller keeps the original
+/// string.
 pub fn plate_addr_to_doc_path(addr: &str, card_kinds: &[Option<&str>]) -> Option<DocPath> {
     if addr == "$body" {
         return Some(DocPath::main_body());
     }
     if let Some(rest) = addr.strip_prefix("$cards.") {
+        // The whole tail reaches the tail parser: only kind and ordinal are
+        // split off here.
         let mut it = rest.splitn(3, '.');
         let kind = it.next()?;
         let ord: usize = it.next()?.parse().ok()?;
         let tail = it.next()?;
         let abs = abs_card_index(card_kinds, kind, ord)?;
-        let card = DocPath::card(Some(kind), abs);
-        return Some(if tail == "$body" {
-            card.body()
-        } else {
-            card.field(tail)
-        });
+        return plate_tail_to_segs(DocPath::card(Some(kind), abs), tail);
     }
     // A plate-space bare main field (`subject`) roots at `main` in `DocPath`
     // space (`main.subject`), so a consumer always receives a parsed, rooted
@@ -284,34 +335,81 @@ pub fn plate_addr_to_doc_path(addr: &str, card_kinds: &[Option<&str>]) -> Option
     if addr.starts_with('$') {
         return None;
     }
-    Some(DocPath::main().field(addr))
+    plate_tail_to_segs(DocPath::main(), addr)
+}
+
+/// Render a [`DocPath`] tail in plate space, joining segments with `.`. `None`
+/// for a tail plate space cannot spell: a leading [`Index`], a non-final
+/// [`Body`], a [`Card`] mid-path, or a field name that is empty, all ASCII
+/// digits, `$`-leading, or carries `.` / `[` / `]` — the first two because they
+/// would read back as an index or a body terminal, the rest because they would
+/// reparse as different segments. `None` is the honest answer there: geometry
+/// placed no such thing.
+///
+/// [`Index`]: DocSeg::Index
+/// [`Body`]: DocSeg::Body
+/// [`Card`]: DocSeg::Card
+fn plate_tail(tail: &[DocSeg]) -> Option<String> {
+    let mut out = String::new();
+    for (i, seg) in tail.iter().enumerate() {
+        if i > 0 {
+            out.push('.');
+        }
+        match seg {
+            DocSeg::Index { index } => {
+                if i == 0 {
+                    return None;
+                }
+                out.push_str(&index.to_string());
+            }
+            DocSeg::Body => {
+                if i + 1 != tail.len() {
+                    return None;
+                }
+                out.push_str("$body");
+            }
+            DocSeg::Field { name } => {
+                if name.is_empty()
+                    || name.bytes().all(|b| b.is_ascii_digit())
+                    || name.starts_with('$')
+                    || name.contains(['.', '[', ']'])
+                {
+                    return None;
+                }
+                out.push_str(name);
+            }
+            DocSeg::Main | DocSeg::Card { .. } => return None,
+        }
+    }
+    Some(out)
 }
 
 /// Translate a canonical [`DocPath`] geometry address back to the backend
-/// plate-space form (`main.body` → `$body`, `cards.<kind>[<abs>].<field>` →
-/// `$cards.<kind>.<ord>.<field>`), resolving the absolute card index to its
-/// per-kind ordinal via `card_kinds`. `None` when the path is not a geometry
-/// address (a document-model shape geometry never keys) or names a card the
-/// kind list cannot place. The inverse of [`plate_addr_to_doc_path`], for the
-/// `field`-taking queries (`locate`, `fieldBoxes`).
+/// plate-space form (`main.body` → `$body`, `main.references[0]` →
+/// `references.0`, `cards.<kind>[<abs>].<tail>` → `$cards.<kind>.<ord>.<tail>`),
+/// resolving the absolute card index to its per-kind ordinal via `card_kinds`.
+/// `None` when the path is not a geometry address: a document-model shape
+/// geometry never keys, one naming a card the kind list cannot place, or one
+/// plate space cannot spell — a leading index, a non-final body, or a field
+/// name that is empty, all ASCII digits, `$`-leading, or carries `.` / `[` /
+/// `]`. The inverse of [`plate_addr_to_doc_path`], for the `field`-taking
+/// queries (`locate`, `fieldBoxes`).
 pub fn doc_path_to_plate_addr(path: &DocPath, card_kinds: &[Option<&str>]) -> Option<String> {
     match path.segs() {
         [DocSeg::Main, DocSeg::Body] => Some("$body".to_string()),
-        [DocSeg::Main, DocSeg::Field { name }] => Some(name.clone()),
+        [DocSeg::Main, tail @ ..] if !tail.is_empty() => plate_tail(tail),
         [DocSeg::Card {
             kind: Some(kind),
             index,
-        }, rest @ ..] => {
+        }, tail @ ..]
+            if !tail.is_empty() =>
+        {
             // The path must actually name the card that sits at `index`.
             if card_kinds.get(*index).copied().flatten() != Some(kind.as_str()) {
                 return None;
             }
             let ord = per_kind_ordinal(card_kinds, *index)?;
-            match rest {
-                [DocSeg::Field { name }] => Some(format!("$cards.{kind}.{ord}.{name}")),
-                [DocSeg::Body] => Some(format!("$cards.{kind}.{ord}.$body")),
-                _ => None,
-            }
+            Some(format!("$cards.{kind}.{ord}.{}", plate_tail(tail)?))
         }
         _ => None,
     }
@@ -545,18 +643,52 @@ mod tests {
         assert_eq!(to_doc("signature_block").as_deref(), Some("main.signature_block"));
     }
 
+    /// A plate tail is parsed segment-wise: a numeric segment is an array
+    /// index, a key segment a field. A tail carried whole into one `Field`
+    /// would mint a path that reparses to different segments.
+    #[test]
+    fn plate_to_docpath_parses_the_tail_segment_wise() {
+        // An `array<richtext>` element: the backend keys `<field>.<i>`.
+        assert_eq!(to_doc("references.0").as_deref(), Some("main.references[0]"));
+        // A nested key (pdfform binds these) is not an index.
+        assert_eq!(to_doc("address.city").as_deref(), Some("main.address.city"));
+        // Both at once, on a card: ordinal 1 of `note` is absolute 2.
+        assert_eq!(
+            to_doc("$cards.note.1.refs.0").as_deref(),
+            Some("cards.note[2].refs[0]")
+        );
+        assert_eq!(
+            to_doc("$cards.note.0.addr.city").as_deref(),
+            Some("cards.note[0].addr.city")
+        );
+    }
+
+    /// The inverse guarantee over the whole geometry grammar, including the
+    /// **string leg**: a round-trip comparing `DocPath` values alone holds even
+    /// when the rendered form reparses to different segments, and the rendered
+    /// form is what a binding hands `docpath_to_plate`.
     #[test]
     fn docpath_to_plate_is_the_inverse() {
         for plate in [
             "$body",
             "signature_block",
+            "references.0",
+            "address.city",
+            "a.b.c.0.d",
             "$cards.note.0.on",
             "$cards.note.1.on",
             "$cards.annotation.0.text",
             "$cards.note.1.$body",
+            "$cards.note.1.refs.0",
+            "$cards.note.0.addr.city",
         ] {
-            let doc = to_doc(plate).unwrap();
-            assert_eq!(to_plate(&doc).as_deref(), Some(plate), "round-trip {plate}");
+            let doc = plate_addr_to_doc_path(plate, KINDS).unwrap();
+            // The string leg: the minted path survives Display → FromStr.
+            let rendered = doc.to_string();
+            assert_eq!(rendered.parse::<DocPath>().ok(), Some(doc), "string leg {plate}");
+            // Plate → DocPath → plate, from the rendered string a consumer
+            // sends: `to_plate` parses it exactly as a binding does.
+            assert_eq!(to_plate(&rendered).as_deref(), Some(plate), "round-trip {plate}");
         }
     }
 
@@ -572,6 +704,45 @@ mod tests {
         // A document-model shape geometry never keys (nested main field).
         assert_eq!(
             doc_path_to_plate_addr(&"recipients[0].name".parse().unwrap(), KINDS),
+            None
+        );
+        // A bare card head, and an empty or `$`-token tail piece.
+        assert_eq!(to_doc("$cards.note.1"), None);
+        assert_eq!(to_doc("references."), None);
+        assert_eq!(to_doc("refs.$seed"), None);
+        // `$body` is terminal.
+        assert_eq!(to_doc("a.$body.b"), None);
+        // A tail never opens on an index: neither `main` nor a card is an array.
+        assert_eq!(to_doc("0.x"), None);
+    }
+
+    /// `DocPath` values plate space cannot spell. `None`, not a guess: geometry
+    /// placed no such thing, and the caller keeps its original string.
+    #[test]
+    fn docpath_to_plate_rejects_unspellable_paths() {
+        for doc in [
+            // A digit map key (`collect_fill_diags` mints these) is a `Field`,
+            // not an index: spelling it `m.0` would read back as an index.
+            "main.m.0",
+            // A tail opening on an index.
+            "main[0].x",
+            // An unknown-kind card root.
+            "cards[0].x",
+            // A bare root, no tail.
+            "main",
+            "cards.note[0]",
+        ] {
+            assert_eq!(
+                doc_path_to_plate_addr(&doc.parse().unwrap(), KINDS),
+                None,
+                "unspellable {doc}"
+            );
+        }
+        // A non-final `Body`. Not reachable through the parser (a non-terminal
+        // `.body` reads as a field literally named `body`), so it is built
+        // segment-wise.
+        assert_eq!(
+            doc_path_to_plate_addr(&DocPath::main().body().field("x"), KINDS),
             None
         );
     }
