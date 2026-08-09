@@ -12,7 +12,6 @@
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
-/// The `quillmark` executable cargo just built.
 fn cli() -> Command {
     Command::new(env!("CARGO_BIN_EXE_quillmark"))
 }
@@ -85,7 +84,7 @@ fn validate_accepts_a_shipped_quill() {
     ok(&["validate", quill.to_str().unwrap(), "--verbose"]);
 }
 
-/// `-o` writes where it is told, for the two commands that take it.
+/// The two commands that take `-o`.
 #[test]
 fn output_flag_writes_the_named_file() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -152,8 +151,8 @@ fn render_svg_honours_the_format_flag() {
     assert!(svg.contains("<svg"), "output is not SVG: {}", &svg[..svg.len().min(80)]);
 }
 
-/// A missing quill exits non-zero and says so on stderr, rather than panicking
-/// or exiting 0 quietly.
+/// The failure a user hits most: a path that is not a quill. Silence on stderr
+/// or a 0 exit would both leave a script believing it worked.
 #[test]
 fn absent_quill_fails_loudly() {
     let out = run(&["info", "/nonexistent/quill/path"]);

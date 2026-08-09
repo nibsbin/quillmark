@@ -7,7 +7,7 @@
 //! the workspace has: the CLI and the Python extension die on it, and the WASM
 //! module is left poisoned, since nothing anywhere catches unwind.
 //!
-//! The oracle is uniform and deliberately weak: **no panic, and a refusal is an
+//! The oracle is deliberately weak: **no panic, and a refusal is an
 //! acceptable answer.** The reader's input contract (traditional-xref,
 //! unencrypted, inline-annots, flat-tree) means most well-formed PDFs are
 //! refused too, so "returns `Ok`" is not a property any of this can assert.
@@ -16,14 +16,23 @@
 //! never reach past the trailer scan; a real form with one byte changed gets
 //! deep into object parsing carrying a length, offset, or delimiter that lies.
 
+use std::sync::LazyLock;
+
 use proptest::prelude::*;
 use quillmark_pdf::{page_media_boxes, stamp, FieldSpec, FieldType, PdfUpdate, StampOptions};
 
 /// `sample_form`'s `form.pdf`: a real AcroForm the spine accepts, so a mutant of
 /// it exercises the parse paths a random buffer never reaches.
-fn base_pdf() -> Vec<u8> {
+///
+/// Read once for the module, not once per case: every case below mutates its
+/// own copy, and thousands of cases run against it.
+static BASE_PDF: LazyLock<Vec<u8>> = LazyLock::new(|| {
     let path = quillmark_fixtures::quills_path("sample_form").join("form.pdf");
     std::fs::read(&path).expect("the sample_form fixture ships a form.pdf")
+});
+
+fn base_pdf() -> Vec<u8> {
+    BASE_PDF.clone()
 }
 
 /// One field of each `FieldType`, so `stamp` walks every widget writer.
@@ -55,9 +64,9 @@ fn exercise(pdf: &[u8]) {
 }
 
 proptest! {
-    // Above proptest's default 256. Every case here is a parse over a few tens
-    // of kilobytes with no oracle to evaluate, so the whole module runs in well
-    // under a second and the extra mutants are close to free.
+    // Above proptest's default 256: a case is one parse over a few tens of
+    // kilobytes with no oracle to evaluate and no I/O, so mutants are cheap
+    // enough that the wider net costs less than the coverage is worth.
     #![proptest_config(ProptestConfig::with_cases(1024))]
 
     /// Arbitrary bytes: the trailer scan, the xref read, and the `/Root` lookup

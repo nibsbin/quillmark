@@ -1,8 +1,7 @@
 # `cargo audit` configuration. The gate is `.github/workflows/audit.yml`.
 #
-# An entry here is a decision with an owner and a reason, not a mute. Every
-# ignore states what makes it unreachable and what would make it reachable
-# again, so a reviewer can falsify it rather than trust it.
+# Every ignore states what makes the advisory unreachable and what would make it
+# reachable again, so a reviewer can falsify the entry rather than trust it.
 
 [advisories]
 ignore = [
@@ -11,15 +10,15 @@ ignore = [
     #
     #   citationberg -> hayagriva -> typst-library -> typst -> quillmark-typst
     #
-    # That is Typst's CSL bibliography stack. quick-xml parses CSL *style*
-    # files, which reach it only when a plate calls `#bibliography` with a
-    # `.csl` vendored in the quill tree. Quillmark never downloads packages
-    # (`QuillWorld` loads only `{quill}/packages/`), and no document content
-    # reaches an XML parser, so the attacker for both advisories is the quill
-    # author, who already supplies the Typst code that runs.
+    # Typst's CSL bibliography stack. quick-xml parses CSL *style* files, which
+    # reach it only when a plate calls `#bibliography` with a `.csl` vendored in
+    # the quill tree. No document content reaches an XML parser and Quillmark
+    # downloads no packages (`QuillWorld` loads only `{quill}/packages/`), so the
+    # attacker for both is the quill author, who already supplies the Typst code
+    # that runs.
     #
-    # Not actionable here: the version is pinned by the typst 0.15 tree, not by
-    # this workspace's Cargo.toml. Drop these when typst bumps hayagriva past
+    # The version is pinned by the typst 0.15 tree rather than by this
+    # workspace's Cargo.toml. Drop these once typst bumps hayagriva past
     # quick-xml 0.41.
     #
     # Reachable again if: a backend parses XML from document input, or quills
@@ -28,9 +27,8 @@ ignore = [
     "RUSTSEC-2026-0195", # unbounded namespace-declaration allocation in NsReader
 ]
 
-# `unmaintained` and `unsound` stay warn-only. They are real signals and worth
-# reading in the log, but neither is a defect on its own, and failing on them
-# hands an unrelated upstream's maintenance status a veto over this repo's
-# merges. Six are outstanding today, all transitive through typst's font and
+# Warn-only, and printed in the log: neither is a defect on its own, and failing
+# on them hands an unrelated upstream's maintenance status a veto over merges
+# here. The outstanding ones are all transitive through typst's font and
 # serialization stack.
 informational_warnings = ["unmaintained", "unsound", "notice"]

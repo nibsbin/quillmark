@@ -51,7 +51,7 @@ cargo test --package quillmark-fuzz pdf_fuzz
 4. **Backslash handling**: backslashes escape first, so nothing double-escapes.
 5. **DoS resistance**: deeply nested input (blockquotes and lists to 20 levels) and large input (to 10,000 characters) parse without panicking.
 6. **Unicode safety**: arbitrary Unicode input does not crash.
-7. **Binary-input safety**: the hand-rolled PDF reader refuses corrupt, truncated, and non-PDF bytes rather than panicking. Nothing in the workspace catches unwind, so a panic there kills the CLI and the Python extension and poisons the WASM module.
+7. **Binary-input safety**: the hand-rolled PDF reader refuses corrupt, truncated, and non-PDF bytes rather than panicking.
 
 ## Contributing
 
