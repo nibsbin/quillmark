@@ -433,7 +433,7 @@ describe('LiveSession canvas preview (pdfform backend)', () => {
   })
 })
 
-describe('LiveSession.apply', () => {
+describe('LiveSession.update', () => {
   it('recompiles in place and reports the dirty page set', () => {
     const { engine, quill } = openQuill()
     const session = engine.open(quill, Document.fromMarkdown(TEST_MARKDOWN))
