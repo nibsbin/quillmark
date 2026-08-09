@@ -306,6 +306,11 @@ export type ContentIsland = {
  * (`doc.storeField("qty", 3)`, `doc.revise("intro", md)`) the one coercion
  * rule. A bare number is *not* an addr (`{ card: 2 }` is the self-documenting
  * spelling), so no third navigation idiom re-fragments the surface.
+ *
+ * `doc.pathFor(addr)` mints the address as its canonical `DocPath` string, the
+ * anchor `Diagnostic.path` carries and `session.locate` / `session.fieldBoxes`
+ * take: a card path is kind-qualified, so building one by hand needs the card's
+ * `$kind`, and a wrong-kind path matches nothing silently.
  */
 export interface Addr {
     card?: number;
@@ -1315,6 +1320,53 @@ impl Document {
             Some(overlay) => serialize_or_throw(overlay, "seedOverlay"),
             None => Ok(JsValue::UNDEFINED),
         }
+    }
+
+    /// `addr`'s canonical `DocPath` string, the anchor `Diagnostic.path`
+    /// carries: `pathFor()` is `main.body`, `pathFor("intro")` `main.intro`,
+    /// `pathFor({card: 2})` `cards.<kind>[2].body`. A consumer holding an
+    /// `Addr` mints one without restating the kind lookup, the `Addr` defaults
+    /// or the range guard.
+    ///
+    /// The kind is the card's stored `$kind` verbatim, the quill-free rule the
+    /// addressed mutators anchor with and the geometry translation uses, not
+    /// `validate`'s declared-kind filter: a `Document` holds a `$quill`
+    /// reference and no schema. That is the one edge where this path and a
+    /// `validate` diagnostic path differ for the same card.
+    ///
+    /// **Total on the index axis**, unlike the `Addr` reads (`getStored`,
+    /// `isFill`, `bodyMarkdown`), which throw there: a path is an anchor, not
+    /// a read. An out-of-range `{card: 7, field: "from"}` extends the
+    /// unknown-kind root `edit::index_out_of_range` anchors at, rendering
+    /// `cards[7].from`, which parses back and resolves to nothing rather than
+    /// mis-targeting. So a per-keystroke call needs no `try`; a caller wanting
+    /// a drop-it guard has [`cardCount`](Self::card_count). Only a malformed
+    /// address throws.
+    #[wasm_bindgen(js_name = pathFor)]
+    pub fn path_for(
+        &self,
+        #[wasm_bindgen(unchecked_param_type = "Addr | string")] addr: JsValue,
+    ) -> Result<String, JsValue> {
+        let addr = Addr::from_js_or_string(&addr)?;
+        let base = self.addr_base(&addr);
+        Ok(match &addr.field {
+            Some(field) => base.field(field),
+            None => base.body(),
+        }
+        .to_string())
+    }
+
+    /// The composable card's own path, `cards.<kind>[index]`: the whole-card
+    /// root [`pathFor`](Self::path_for) extends, for a consumer anchoring the
+    /// card rather than one of its fields. Total on the index axis for the same
+    /// reason, out of range renders `cards[index]`.
+    #[wasm_bindgen(js_name = cardPath)]
+    pub fn card_path(&self, index: usize) -> String {
+        self.addr_base(&Addr {
+            card: Some(index),
+            field: None,
+        })
+        .to_string()
     }
 
     /// Structural equality (parse-time `warnings` excluded). Use to debounce
