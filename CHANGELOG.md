@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+- docs: `docs/integration/operations.md`, carrying what the other integration
+  pages leave unsaid: that **render is not bounded** — no deadline, no
+  cancellation, and the parse limits do not carry through — with the
+  worker-termination recipe that is the only abort a browser has; that
+  `Quillmark`, `Quill` and `Document` are `Send + Sync`, pinned by a test rather
+  than asserted; `comemo` eviction as what a long-lived process's memory tracks;
+  the no-network, no-ambient-filesystem isolation properties; and that a panic
+  is terminal on every surface.
+- docs: `parse::input_too_large` carries four of the five §8 caps, separable
+  only by its `max` arg, which `error-handling.md` now says where it names the
+  code.
+- test(cli): `quillmark-cli` gets its first tests. The bin carries
+  `test = false`, so twelve cases drive the built executable instead — every
+  subcommand, `-o` and `--stdout`, PDF and SVG output, and the error paths,
+  which must exit 1 rather than panic. The crate had no `[dev-dependencies]`
+  and no workflow invoked it (#1068).
+- fix(cli)!: `render --verbose` writes its progress lines to stderr, as the
+  warning printer already did. Under `--stdout` they went to stdout ahead of and
+  after the artifact, so `quillmark render q --stdout --verbose > out.pdf`
+  produced a PDF with `Loading quill from: …` before its header and
+  `Rendering completed successfully` past its trailer. A script that parses
+  `--verbose` output from stdout reads it from stderr now.
+- test(fuzz): `pdf_fuzz` covers the AcroForm stamp spine's byte-level reads,
+  the one hand-rolled parser with no fuzz target. Arbitrary bytes, and a real
+  form truncated, single-byte-corrupted, or spliced, all through
+  `page_media_boxes` / `PdfUpdate::begin` / `stamp`. The oracle is no panic:
+  nothing in the workspace catches unwind, so a panic there kills the CLI and
+  the Python extension and poisons the WASM module. No failures found.
+- fix(core): `MAX_FIELD_COUNT`'s rustdoc said "per document"; the check is per
+  card-yaml block, counted after `$`-key extraction.
 - refactor(wasm)!: `init()` resolves to the core surface, and it is the only way
   to reach one. `Quill`, `Document`, `importMarkdown`, `exportMarkdown`,
   `rebase`, `mapPos`, `parseDocPath` and `formatDocPath` leave the static

@@ -34,8 +34,9 @@ env:
 #
 # A gate reading a file the diff rarely touches earns its runner elsewhere.
 # Dependabot alerts watch Cargo.lock continuously, quiet weeks included. A local
-# `cargo audit` reports RUSTSEC-2026-0194 and -0195, both reachable only through
-# typst's `<0.41` quick-xml pin and neither actionable here. No `rust-version`
+# `cargo audit` reports RUSTSEC-2026-0194 and -0195, both quick-xml <0.41,
+# reached only through citationberg -> hayagriva -> typst-library, and pinned by
+# that tree rather than by this workspace: not actionable here. No `rust-version`
 # exists to verify.
 
 jobs:
@@ -170,7 +171,7 @@ jobs:
             wasm-ci-${{ runner.os }}-
 
       - name: Install wasm-bindgen-cli
-        uses: taiki-e/install-action@v2.85.4
+        uses: taiki-e/install-action@v2.85.9
         with:
           tool: wasm-bindgen-cli@0.2.118
 

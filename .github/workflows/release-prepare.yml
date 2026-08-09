@@ -1,3 +1,11 @@
+# Cut a release: bump the workspace version, seed the changelog section, push the
+# release branch, and open the PR. Merging that PR is what tags and publishes
+# (release.yml).
+#
+# Opening it needs Settings → Actions → "Allow GitHub Actions to create and approve
+# pull requests", which no `permissions:` block grants. A PR opened by `GITHUB_TOKEN`
+# gets no `pull_request` run, so the same step dispatches ci.yml at the branch: the
+# release PR is the one change that must not merge unchecked.
 name: Prepare Release
 
 on:
@@ -27,26 +35,18 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      # The ci.yml dispatch.
+      actions: write
     steps:
-      # App token is required so CI runs on the bot-opened PR.
-      # PRs opened with the default GITHUB_TOKEN do not trigger workflow events.
-      - name: Generate token
-        id: app
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: ${{ secrets.TAGGER_APP_ID }}
-          private-key: ${{ secrets.TAGGER_PRIVATE_KEY }}
-
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          token: ${{ steps.app.outputs.token }}
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo-release
-        uses: taiki-e/install-action@v2.85.4
+        uses: taiki-e/install-action@v2.85.9
         with:
           tool: cargo-release
 
@@ -152,7 +152,7 @@ jobs:
 
       - name: Push branch and open PR
         env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${{ steps.version.outputs.next }}"
           BRANCH="release/v${VERSION}"
@@ -170,6 +170,13 @@ jobs:
 
           **Before merging:** review and edit the \`v${VERSION}\` section at the top of \`CHANGELOG.md\` on this branch, seeded from the curated \`## Unreleased\` section when one exists (raw commits ride in an HTML comment as a coverage check), else from the raw commit list. The final section becomes the GitHub Release notes.
 
-          Merging this PR will tag and publish the release." \
+          Merging this PR will tag and publish the release.
+
+          The checks here come from a dispatched \`CI\` run at the branch head: a PR opened by \`GITHUB_TOKEN\` gets no \`pull_request\` run." \
             --base main \
             --head "$BRANCH"
+
+          # The checks, dispatched rather than triggered. Only this first commit
+          # needs it; a later push to the branch is a human's and fires
+          # `synchronize`.
+          gh workflow run ci.yml --ref "$BRANCH"
