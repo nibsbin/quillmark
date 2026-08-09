@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.103.0 - 2026-08-09
 
 - docs: `docs/integration/operations.md`, carrying what the other integration
   pages leave unsaid: that **render is not bounded** — no deadline, no
@@ -49,6 +49,32 @@
   sentinel that raised it retire with the door they guarded. Rust, Python,
   documents and stored blobs are unaffected. See
   `docs/migrations/0.102-to-0.103.md`
+
+<!-- seed: commits since v0.102.0, confirm the entries above cover them, then delete this comment
+- ci: tag the merge commit, and serialize a release against itself
+- ci: drop the tagger GitHub App from the release workflows
+- Cut SECURITY.md, and operations.md down to what only it can say
+- Drop the audit gate; keep the reachability finding in ci.yml's note
+- Fix two wrong claims, a dead property, and the stdout bug the review found
+- dense-prose pass over the added prose, and read the fixture once
+- Close four production-readiness gaps: audit gate, ops docs, CLI tests, PDF fuzzing
+- Drop the README's claim about the deleted sentinel patch
+- dense-prose pass: cut the restatement the change introduced
+- docs: the 0.102 → 0.103 step, and correct the surface it describes
+- The gate is the only door to the core surface
+- docs(migration): a span guide for 0.92 → 0.102
+- Cut over-specified style rules; author preference wins
+- dense-prose: remove the em-dash ban
+- dense-prose: drop the line-budget clause
+- dense-prose: wrong is worse than missing; relax em-dash ban
+- docs: dense-prose pass over the conform-scope and date-grammar prose
+- docs: migration guides are era-stamped, not immutable
+- docs(migrations): give the datetime split its corpus audit step
+- docs: scope conform to content fields, state the date corpus precondition
+- Tighten the failure-delivery prose
+- Deliver init's conflict as a rejection, not a synchronous throw
+-->
+
 
 ## v0.102.0 - 2026-08-04
 
