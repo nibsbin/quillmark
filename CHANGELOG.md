@@ -2,21 +2,17 @@
 
 ## Unreleased
 
-- docs: `docs/integration/operations.md`, the page a service or an editor needs
-  before it takes traffic. The input limits with the codes they actually raise
-  (all four size and count ceilings share `parse::input_too_large` and differ
-  only in the `max` arg); that **render is not bounded** — no deadline, no
+- docs: `docs/integration/operations.md`, carrying what the other integration
+  pages leave unsaid: that **render is not bounded** — no deadline, no
   cancellation, and the parse limits do not carry through — with the
-  worker-termination recipe that is the only abort a browser has today (#1213);
-  that `Quillmark`, `Quill` and `Document` are `Send + Sync`, now pinned by a
-  test rather than asserted; `comemo` eviction and quill-cache immutability as
-  the two things a long-lived process's memory depends on; and the no-network,
-  no-ambient-filesystem isolation properties.
-- docs: `SECURITY.md`. Private reporting through GitHub advisories, and the
-  trust boundary reports are graded against: a **document is untrusted**, a
-  **quill is trusted and equivalent to code**, so a hostile quill is out of
-  scope the way a hostile crate is under `cargo run`. States the two properties
-  that hold even inside the trusted half (no network, no ambient filesystem).
+  worker-termination recipe that is the only abort a browser has; that
+  `Quillmark`, `Quill` and `Document` are `Send + Sync`, pinned by a test rather
+  than asserted; `comemo` eviction as what a long-lived process's memory tracks;
+  the no-network, no-ambient-filesystem isolation properties; and that a panic
+  is terminal on every surface.
+- docs: `parse::input_too_large` carries four of the five §8 caps, separable
+  only by its `max` arg, which `error-handling.md` now says where it names the
+  code.
 - test(cli): `quillmark-cli` gets its first tests. The bin carries
   `test = false`, so twelve cases drive the built executable instead — every
   subcommand, `-o` and `--stdout`, PDF and SVG output, and the error paths,
