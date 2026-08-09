@@ -398,7 +398,10 @@ export interface FieldRegion {
 	 * The field's canonical `DocPath` address (`parseDocPath`-routable), not a
 	 * backend widget name: `main.signature_block` for a main field,
 	 * `cards.<kind>[<i>].signature_block` for a card field (`cards[<i>].…` when the
-	 * card's kind is unknown).
+	 * card's kind is unknown). Nested addresses spell out in full, an array
+	 * element bracketed and a key dotted — `main.references[0]`,
+	 * `cards.<kind>[<i>].addr.city` — the same spelling `Diagnostic.path` uses,
+	 * so the two join on string equality.
 	 */
 	field: string;
 	/** 0-based page index. */

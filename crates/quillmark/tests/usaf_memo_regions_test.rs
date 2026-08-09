@@ -52,6 +52,24 @@ fn usaf_memo_regions_cover_body_signature_and_cards() {
         "an empty card body draws nothing and surfaces no region: {fields:?}"
     );
 
+    // An `array<richtext(inline)>` element regions per element, keyed
+    // `<field>.<i>` in plate space, and translates to the bracketed `DocPath`
+    // index a binding hands out — the same string schema validation spells.
+    assert!(
+        fields.contains("references.0"),
+        "each `references` element regions on its own address: {fields:?}"
+    );
+    let kinds: Vec<Option<&str>> = parsed.cards().iter().map(|c| c.kind()).collect();
+    let translated: HashSet<String> =
+        quillmark_core::regions_to_doc_path(regions.clone(), &kinds)
+            .into_iter()
+            .map(|r| r.field)
+            .collect();
+    assert!(
+        translated.contains("main.references[0]"),
+        "the element address crosses as a bracketed DocPath index: {translated:?}"
+    );
+
     // The forward direction survives the rebuild too: a point inside the
     // surfaced `$body` region resolves back to `$body`.
     let body = regions

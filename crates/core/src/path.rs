@@ -17,16 +17,25 @@
 //!         | "cards" "[" index "]"            // unknown-kind card (the only bare-index root)
 //! segment:= "." field | "[" index "]" | ".body"
 //! kind   := [a-z_][a-z0-9_]*
-//! field  := [A-Za-z_][A-Za-z0-9_]*
+//! field  := any run excluding "." "[" "]"
 //! ```
+//!
+//! A field name is what the document carries, not an identifier: a nested YAML
+//! map key is unconstrained, so `!must_fill` collection mints `main.m.0` and
+//! `main.m.a-b`. The property the grammar rests on is narrower and is what
+//! `Display` → `FromStr` needs — a name excludes `.`, `[`, `]`, the three
+//! characters the serializer spends. One consequence is load-bearing
+//! elsewhere: **an all-digit name reads back as a name, never an index**
+//! (`main.m.0` is `Field{"0"}`), which is why the plate-space `.N` index
+//! spelling is translated at the geometry boundary (`region.rs`) rather than
+//! taught to this parser.
 //!
 //! Every document-model path is **rooted**: a main field is `main.<field>`
 //! (`main.title`, `main.recipients[0].name`), the main body `main.body`. A card
 //! field is kind-qualified (`cards.<kind>[<i>].<field>`) so a consumer
 //! receives kind and array index without a second lookup; a card whose `$kind`
 //! has no schema (absent, or present but not a declared card kind) stays
-//! `cards[<i>]`. Field names and card kinds exclude `.`, `[`, `]`, so the
-//! rendered form round-trips.
+//! `cards[<i>]`.
 //!
 //! Rooting makes the grammar total against a field named for a root: a main
 //! field literally named `cards` or `main` is `main.cards` / `main.main`, which
@@ -360,6 +369,22 @@ mod tests {
     #[test]
     fn main_body() {
         round_trip(DocPath::main_body(), "main.body");
+    }
+
+    /// A digit map key is a field, not an index. `!must_fill` collection mints
+    /// this shape by folding a nested value-tree path onto its field path
+    /// (`compose::collect_fill_diags`), so the reading is live on the wire; the
+    /// plate-space `.N` index spelling is translated at the geometry boundary
+    /// (`region.rs`) precisely so it never reaches this parser.
+    #[test]
+    fn digit_field_name_is_a_key_not_an_index() {
+        round_trip(DocPath::main().field("m").field("0"), "main.m.0");
+        assert_eq!(
+            "main.m.0".parse::<DocPath>().unwrap().segs()[2],
+            DocSeg::Field {
+                name: "0".to_string()
+            }
+        );
     }
 
     #[test]
