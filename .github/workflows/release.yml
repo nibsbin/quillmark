@@ -5,6 +5,19 @@ on:
     types: [closed]
     branches: [main]
 
+# One release at a time per HEAD BRANCH, which is every closed PR's own branch:
+# this workflow starts a run for each of them and the `if:` below is what sorts
+# them out, so a group any wider than the branch puts ordinary merges in the
+# release's queue. A group holds one pending run, and the arrival of a third
+# cancels the second before its first step, so a shared group would let an
+# unrelated merge evict a queued release, which then publishes nothing and
+# notifies nobody. Per branch, a re-run of one release supersedes its own
+# predecessor and nothing else reaches it. `cancel-in-progress: false` because a
+# release cancelled partway through has published some crates and not others.
+concurrency:
+  group: release-${{ github.event.pull_request.head.ref }}
+  cancel-in-progress: false
+
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
@@ -20,23 +33,20 @@ jobs:
     if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/v')
     runs-on: ubuntu-latest
     permissions:
+      # The tag and the GitHub Release, and the whole of what either needs. A tag
+      # ruleset that restricts creations has to admit github-actions[bot], or the
+      # tag push below is rejected.
       contents: write
     outputs:
       version: ${{ steps.version.outputs.next }}
     steps:
-      # App token is required because the tag-creation ruleset blocks GITHUB_TOKEN.
-      - name: Generate token
-        id: app
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: ${{ secrets.TAGGER_APP_ID }}
-          private-key: ${{ secrets.TAGGER_PRIVATE_KEY }}
-
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          ref: main
-          token: ${{ steps.app.outputs.token }}
+          # The merge commit this event names rather than `main`, which is whatever
+          # landed while this run queued. One commit gates, is tagged, is built and
+          # is published, so the tag names the bytes.
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
 
       - name: Read workspace version
         id: version
@@ -76,7 +86,7 @@ jobs:
 
       - name: Create GitHub Release
         env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${{ steps.version.outputs.next }}"
           if [[ "$VERSION" == *-* ]]; then
