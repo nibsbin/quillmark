@@ -1328,8 +1328,8 @@ impl Document {
     /// `Addr` mints one without restating the kind lookup, the `Addr` defaults
     /// or the range guard.
     ///
-    /// The kind is the card's stored `$kind` verbatim, the quill-free rule
-    /// [`addr_base`](Self::addr_base) and the geometry translation use, not
+    /// The kind is the card's stored `$kind` verbatim, the quill-free rule the
+    /// addressed mutators anchor with and the geometry translation uses, not
     /// `validate`'s declared-kind filter: a `Document` holds a `$quill`
     /// reference and no schema. That is the one edge where this path and a
     /// `validate` diagnostic path differ for the same card.
