@@ -700,6 +700,73 @@ describe('Document-model path: parseDocPath / formatDocPath', () => {
   })
 })
 
+describe('Document-model path: pathFor / cardPath', () => {
+  // Card 0 carries a `$kind`, card 1 does not: the two card roots.
+  const MD = `~~~card-yaml
+$quill: test_quill
+$kind: main
+~~~
+
+Main body.
+
+~~~card-yaml
+$kind: note
+from: x
+~~~
+
+Kinded card.
+
+~~~card-yaml
+from: y
+~~~
+
+Kindless card.
+`
+
+  it('mints every address the Addr surface can name', () => {
+    const doc = Document.fromMarkdown(MD)
+    const rows = [
+      // An absent field is the body, an absent card the main card; a bare
+      // string is the `{ field }` shorthand the Addr verbs take.
+      [doc.pathFor(), 'main.body'],
+      [doc.pathFor({}), 'main.body'],
+      [doc.pathFor('intro'), 'main.intro'],
+      [doc.pathFor({ field: 'intro' }), 'main.intro'],
+      // A card root is kind-qualified off the live card's stored `$kind`…
+      [doc.pathFor({ card: 0 }), 'cards.note[0].body'],
+      [doc.pathFor({ card: 0, field: 'from' }), 'cards.note[0].from'],
+      [doc.cardPath(0), 'cards.note[0]'],
+      // …and unknown-kind when the card carries none.
+      [doc.pathFor({ card: 1 }), 'cards[1].body'],
+      [doc.pathFor({ card: 1, field: 'from' }), 'cards[1].from'],
+      [doc.cardPath(1), 'cards[1]'],
+    ]
+    for (const [minted, expected] of rows) {
+      expect(minted).toBe(expected)
+      // A minted path is a path: it routes through the exported parser.
+      expect(() => parseDocPath(minted)).not.toThrow()
+    }
+  })
+
+  it('is total on the index axis, unlike the Addr reads', () => {
+    const doc = Document.fromMarkdown(MD)
+    // A path is an anchor, not a read: an out-of-range card mints the
+    // unknown-kind root `edit::index_out_of_range` anchors at, so a
+    // per-keystroke call needs no `try`. It parses back and resolves to
+    // nothing rather than mis-targeting.
+    expect(doc.pathFor({ card: 7, field: 'from' })).toBe('cards[7].from')
+    expect(doc.cardPath(7)).toBe('cards[7]')
+    expect(() => parseDocPath(doc.pathFor({ card: 7, field: 'from' }))).not.toThrow()
+    // The reads at that same address throw.
+    expectEditCode(() => doc.getStored({ card: 7, field: 'from' }), 'edit::index_out_of_range')
+  })
+
+  it('throws on a malformed address, as every Addr verb does', () => {
+    const doc = Document.fromMarkdown(MD)
+    expect(() => doc.pathFor({ crad: 0 })).toThrow()
+  })
+})
+
 // The typed-commit ABI is `_commitField` / `_commitFields` (hidden from the
 // `.d.ts`); `quill.writer(doc)` delegates here. These exercise the ABI directly.
 describe('Document typed-commit ABI: _commitField / _commitFields', () => {
@@ -917,6 +984,11 @@ card_kinds:
     // …and a structural out-of-range op anchors at the array slot.
     expect(pathOf(() => doc.setCardKind(9, 'note'))).toBe('cards[9]')
     expect(pathOf(() => doc.moveCard(9, 0))).toBe('cards[9]')
+    // `pathFor` mints what the anchor carries: the point of the verb is that a
+    // consumer's path and the engine's agree without a kind table of its own.
+    expect(doc.pathFor({ card: 0, field: 'stray' })).toBe(
+      pathOf(() => doc._commitField(quill, { card: 0, field: 'stray' }, 'x')),
+    )
   })
 
   it('commitFields typed-commits a batch', () => {

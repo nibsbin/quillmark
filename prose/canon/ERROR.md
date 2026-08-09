@@ -209,6 +209,14 @@ the WASM build exports `parseDocPath` / `formatDocPath` (structured
 `DocPathSeg[]` ↔ string) so a consumer routes on segments instead of regexing
 the string.
 
+The boundary **mints** as well as parses: `doc.pathFor(addr)` / `doc.cardPath(i)`
+render a write address as its path, so a consumer holding an `Addr` never
+restates the kind lookup a card root needs (a wrong-kind path is compared as a
+string and matches nothing, silently). The mint is quill-free, reading the
+card's stored `$kind` verbatim: the rule the mutator anchors and the geometry
+translation use, not `validate`'s declared-kind filter, which is the one edge
+where a minted path and a validation diagnostic differ for the same card.
+
 `DocPath` is the anchor on **every** address that crosses to a consumer, not
 only `Diagnostic.path`. Mutator (`edit::*`) diagnostics carry it (a field error
 at `main.<field>` or `cards.<kind>[<i>].<field>`, a structural out-of-range op at
