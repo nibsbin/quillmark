@@ -22,13 +22,12 @@
 //!
 //! A field name is what the document carries, not an identifier: a nested YAML
 //! map key is unconstrained, so `!must_fill` collection mints `main.m.0` and
-//! `main.m.a-b`. The property the grammar rests on is narrower and is what
-//! `Display` → `FromStr` needs — a name excludes `.`, `[`, `]`, the three
-//! characters the serializer spends. One consequence is load-bearing
-//! elsewhere: **an all-digit name reads back as a name, never an index**
-//! (`main.m.0` is `Field{"0"}`), which is why the plate-space `.N` index
-//! spelling is translated at the geometry boundary (`region.rs`) rather than
-//! taught to this parser.
+//! `main.m.a-b`. All `Display` → `FromStr` needs is the narrower property that
+//! a name excludes `.`, `[`, `]`, the three characters the serializer spends.
+//! One consequence is load-bearing elsewhere: **an all-digit name reads back as
+//! a name, never an index** (`main.m.0` is `Field{"0"}`), so the plate-space
+//! `.N` index spelling is translated at the geometry boundary (`region.rs`)
+//! rather than here.
 //!
 //! Every document-model path is **rooted**: a main field is `main.<field>`
 //! (`main.title`, `main.recipients[0].name`), the main body `main.body`. A card
@@ -371,11 +370,10 @@ mod tests {
         round_trip(DocPath::main_body(), "main.body");
     }
 
-    /// A digit map key is a field, not an index. `!must_fill` collection mints
-    /// this shape by folding a nested value-tree path onto its field path
-    /// (`compose::collect_fill_diags`), so the reading is live on the wire; the
-    /// plate-space `.N` index spelling is translated at the geometry boundary
-    /// (`region.rs`) precisely so it never reaches this parser.
+    /// A digit map key is a field, not an index. `collect_fill_diags` mints
+    /// this shape by folding a nested value-tree path onto its field path, so
+    /// the reading is live on the wire, and `region.rs` translates the
+    /// plate-space `.N` index spelling rather than let it reach this parser.
     #[test]
     fn digit_field_name_is_a_key_not_an_index() {
         round_trip(DocPath::main().field("m").field("0"), "main.m.0");

@@ -230,8 +230,8 @@ describe('LiveSession canvas preview', () => {
   it('addresses an array element as a bracketed DocPath index, both directions', () => {
     // The backend keys each `array<richtext>` element `references.<i>` in plate
     // space. The boundary translates that segment-wise, so a consumer sees the
-    // one spelling `Diagnostic.path` also uses — and the `field`-taking verbs
-    // accept it back. Whole-tail-as-one-field left both dead for every element.
+    // one spelling `Diagnostic.path` also uses, and the `field`-taking verbs
+    // accept it back.
     const session = arrayElementSession()
 
     const region = session.regions().find((r) => r.field === 'main.references[0]')

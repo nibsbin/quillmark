@@ -215,10 +215,10 @@ pub fn field_boxes(regions: &[RenderedRegion], field: &str) -> Vec<RenderedRegio
 // ASCII digits is an array index, `$body` is the body terminal, anything else
 // is a field or map key. A tail's first segment is never an index (neither
 // `main` nor a card is an array), `$body` is never non-final, and no other
-// `$`-token appears. Whole-tail-as-one-field would mint a `DocPath` whose
-// rendered form reparses to different segments (`references.0` →
-// `main.references.0` → `[Main, Field{"references"}, Field{"0"}]`), and the
-// string leg is the one a binding crosses.
+// `$`-token appears. Segment-wise is what keeps the minted `DocPath` stable
+// across `Display` → `FromStr`, the leg a binding crosses: a tail carried whole
+// into one `Field` renders `main.references.0`, which reparses as a field named
+// `"0"`.
 //
 // `.N` reads as an index **here and not in [`DocPath::from_str`]**: plate
 // addresses are schema-derived, so no plate address carries a digit map key (a
@@ -226,8 +226,8 @@ pub fn field_boxes(regions: &[RenderedRegion], field: &str) -> Vec<RenderedRegio
 // `descend` reads any numeric segment as an array index, and the Typst helper's
 // `_qm-known-path` accepts a dotted suffix only under an array-typed parent).
 // `DocPath` space is different: a nested YAML map key is unconstrained, and
-// `collect_fill_diags` mints `main.m.0` as `Field{"0"}`. That reading is why
-// the fix lives at this boundary rather than in the parser.
+// `collect_fill_diags` mints `main.m.0` as `Field{"0"}`. Teaching the parser
+// `.N` would cost that reading, so the two spellings meet here instead.
 
 use crate::path::{DocPath, DocSeg};
 
@@ -279,9 +279,8 @@ pub fn regions_to_doc_path(
 /// index, a non-final `$body`, or any other `$`-token.
 fn plate_tail_to_segs(base: DocPath, tail: &str) -> Option<DocPath> {
     let mut path = base;
-    let mut it = tail.split('.').peekable();
-    let mut first = true;
-    while let Some(piece) = it.next() {
+    let mut it = tail.split('.').enumerate().peekable();
+    while let Some((i, piece)) = it.next() {
         let last = it.peek().is_none();
         if piece.is_empty() {
             return None;
@@ -289,7 +288,7 @@ fn plate_tail_to_segs(base: DocPath, tail: &str) -> Option<DocPath> {
         path = if piece.bytes().all(|b| b.is_ascii_digit()) {
             // Neither `main` nor a card is an array, so a tail never opens on
             // an index.
-            if first {
+            if i == 0 {
                 return None;
             }
             path.index(piece.parse().ok()?)
@@ -303,7 +302,6 @@ fn plate_tail_to_segs(base: DocPath, tail: &str) -> Option<DocPath> {
         } else {
             path.field(piece)
         };
-        first = false;
     }
     Some(path)
 }
@@ -645,9 +643,8 @@ mod tests {
     }
 
     /// A plate tail is parsed segment-wise: a numeric segment is an array
-    /// index, a key segment a field. The defect this pins folded the whole tail
-    /// into one `Field`, minting a path whose rendered form reparsed to
-    /// different segments.
+    /// index, a key segment a field. A tail carried whole into one `Field`
+    /// would mint a path that reparses to different segments.
     #[test]
     fn plate_to_docpath_parses_the_tail_segment_wise() {
         // An `array<richtext>` element: the backend keys `<field>.<i>`.
@@ -665,11 +662,10 @@ mod tests {
         );
     }
 
-    /// The three legs of the inverse guarantee over the whole geometry grammar.
-    /// The **string leg** is the one a binding crosses (`docpath_to_plate`
-    /// parses a consumer's string) and the one the defect broke, so a
-    /// round-trip that compares `DocPath` values alone would have passed while
-    /// `locate` answered nothing.
+    /// The inverse guarantee over the whole geometry grammar, including the
+    /// **string leg**: a round-trip comparing `DocPath` values alone holds even
+    /// when the rendered form reparses to different segments, and the rendered
+    /// form is what a binding hands `docpath_to_plate`.
     #[test]
     fn docpath_to_plate_is_the_inverse() {
         for plate in [
@@ -688,24 +684,10 @@ mod tests {
             let doc = plate_addr_to_doc_path(plate, KINDS).unwrap();
             // The string leg: the minted path survives Display → FromStr.
             let rendered = doc.to_string();
-            assert_eq!(
-                rendered.parse::<DocPath>().ok(),
-                Some(doc.clone()),
-                "string leg {plate}"
-            );
-            // Plate → DocPath → plate.
-            assert_eq!(
-                doc_path_to_plate_addr(&doc, KINDS).as_deref(),
-                Some(plate),
-                "plate round-trip {plate}"
-            );
-            // DocPath → plate → DocPath, from the rendered string a consumer sends.
-            assert_eq!(to_plate(&rendered).as_deref(), Some(plate), "via string {plate}");
-            assert_eq!(
-                plate_addr_to_doc_path(&doc_path_to_plate_addr(&doc, KINDS).unwrap(), KINDS),
-                Some(doc),
-                "docpath round-trip {plate}"
-            );
+            assert_eq!(rendered.parse::<DocPath>().ok(), Some(doc), "string leg {plate}");
+            // Plate → DocPath → plate, from the rendered string a consumer
+            // sends: `to_plate` parses it exactly as a binding does.
+            assert_eq!(to_plate(&rendered).as_deref(), Some(plate), "round-trip {plate}");
         }
     }
 
