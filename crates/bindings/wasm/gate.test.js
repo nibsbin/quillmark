@@ -4,10 +4,9 @@
  * `init` gates every value needing the core instance (init.test.js § "the gated
  * surface" derives that set and pins it). What stays a static export is held out
  * on the grounds that it reaches wasm only through an argument a caller cannot
- * produce without having awaited — see runtime.js § "Initialization". This file
- * executes that grounds: it drives the WHOLE static surface before anything
- * initializes, so "the pre-init mistake is not expressible" is a property under
- * test rather than a classification.
+ * produce without having awaited — see runtime.js § "Initialization". These
+ * cases drive the WHOLE static surface before anything initializes, so "the
+ * pre-init mistake is not expressible" is a property under test.
  *
  * Its own file for init.test.js's reason: the cases need a module registry where
  * nothing has initialized, which vitest's per-file isolation provides. Sharing a
@@ -47,7 +46,7 @@ describe('@quillmark/wasm/runtime: the static surface, before init', () => {
   )
 
   it('covers every static export', () => {
-    // Both derived sets feed loops below, which pass trivially over nothing.
+    // The loops below pass vacuously over an empty set.
     expect(EXEMPT.length).toBeGreaterThan(0)
     expect(CLASSES.length).toBeGreaterThan(0)
   })
@@ -68,7 +67,7 @@ describe('@quillmark/wasm/runtime: the static surface, before init', () => {
       const C = runtime[name]
       // A static is the one member shape an argument cannot gate, so it is
       // forbidden outright rather than held to the handle rule: a future one
-      // has to confront the exemption instead of quietly widening it.
+      // has to confront the exemption.
       expect(staticsOf(C), `${name} carries a static member`).toEqual([])
       // Both chains, or a base class hides members from the enumeration above.
       expect(Object.getPrototypeOf(C), `${name} extends a base`).toBe(Function.prototype)
@@ -83,9 +82,8 @@ describe('@quillmark/wasm/runtime: the static surface, before init', () => {
       const caught = caughtFrom(() => new runtime[name]())
       // Pre-init a class's only reachable member is its constructor, so this is
       // the whole pre-init contract for a class. The writer/reader binds refuse
-      // for want of a Quill; `Engine` and `LiveSession` are the two taking no
-      // handle, and their success here is what makes the exemption executed
-      // rather than declared.
+      // for want of a Quill; `Engine` and `LiveSession` take no handle and
+      // succeed, which is the exemption executed rather than declared.
       if (caught !== undefined) {
         expect(runtime.isQuillmarkError(caught), `${name} threw outside the model`).toBe(true)
       }

@@ -1126,8 +1126,8 @@ describe('@quillmark/wasm/runtime: handles from another copy (duplicate install)
     }
   })
 
-  // The `Quill` methods that reach the same two binds, which the derived loop
-  // above enters by construction instead.
+  // The `Quill` factories in front of two of those binds; the loop above
+  // constructs directly.
   it('refuses a foreign Document at the writer and reader entry points', () => {
     const quill = makeRuntimeQuill()
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
@@ -1141,9 +1141,9 @@ describe('@quillmark/wasm/runtime: handles from another copy (duplicate install)
   // check is structural (`#backendOf` is the only route to `backendId`, and
   // `#withClones` checks the doc); these guard the boundary.
   //
-  // The quill half is DERIVED, so a fifth verb is held to the rule rather than
-  // classified: there is no label to get wrong, and a verb naming a `Quill`
-  // without reading it fails the same line a verb that forgot the check does.
+  // The quill half is DERIVED: a fifth verb is held to the rule with no label to
+  // get wrong, and a verb naming a `Quill` without reading it fails the same
+  // line as one that forgot the check.
   it('holds every Engine verb to the quill-first rule (derived)', async () => {
     const engine = new Engine()
     const quill = makeRuntimeQuill()
@@ -1153,7 +1153,7 @@ describe('@quillmark/wasm/runtime: handles from another copy (duplicate install)
     for (const verb of verbs) {
       // A getter takes no argument, so nothing gates it.
       expect(typeof Object.getOwnPropertyDescriptor(Engine.prototype, verb).value).toBe('function')
-      // `await` normalizes the sync and promise-returning verbs alike.
+      // `await` normalizes the sync and promise-returning verbs.
       let caught
       try {
         await engine[verb](foreignQuill(quill), doc)

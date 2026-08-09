@@ -491,6 +491,7 @@ pub struct LiveSession {
 
 /// The ordered card kinds of `doc`: the geometry-translation lookup a
 /// [`LiveSession`] retains.
+#[cfg(any(feature = "typst", feature = "pdfform"))]
 fn card_kinds_of(doc: &quillmark_core::Document) -> Vec<Option<String>> {
     doc.cards()
         .iter()
