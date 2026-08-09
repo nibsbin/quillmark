@@ -388,11 +388,12 @@ fn plate_tail(tail: &[DocSeg]) -> Option<String> {
 /// plate-space form (`main.body` → `$body`, `main.references[0]` →
 /// `references.0`, `cards.<kind>[<abs>].<tail>` → `$cards.<kind>.<ord>.<tail>`),
 /// resolving the absolute card index to its per-kind ordinal via `card_kinds`.
-/// `None` when the path is not a geometry address (a document-model shape
-/// geometry never keys, or one plate space cannot spell — see [`plate_tail`]) or
-/// names a card the kind list cannot place. The inverse of
-/// [`plate_addr_to_doc_path`], for the `field`-taking queries (`locate`,
-/// `fieldBoxes`).
+/// `None` when the path is not a geometry address: a document-model shape
+/// geometry never keys, one naming a card the kind list cannot place, or one
+/// plate space cannot spell — a leading index, a non-final body, or a field
+/// name that is empty, all ASCII digits, `$`-leading, or carries `.` / `[` /
+/// `]`. The inverse of [`plate_addr_to_doc_path`], for the `field`-taking
+/// queries (`locate`, `fieldBoxes`).
 pub fn doc_path_to_plate_addr(path: &DocPath, card_kinds: &[Option<&str>]) -> Option<String> {
     match path.segs() {
         [DocSeg::Main, DocSeg::Body] => Some("$body".to_string()),
