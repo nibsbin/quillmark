@@ -20,6 +20,18 @@ export function initBuildSync(mod, variant) {
   mod.initSync({ module: readFileSync(join(PKG_DIR, variant, 'wasm_bg.wasm')) })
 }
 
+/** An ES class, not a plain function. */
+export const isClass = (v) => typeof v === 'function' && /^class[\s{]/.test(String(v))
+
+/** The value `call` threw, `undefined` if it returned. */
+export const caughtFrom = (call) => {
+  try {
+    call()
+  } catch (e) {
+    return e
+  }
+}
+
 /**
  * Invoke `fn`, expect it to throw, and assert the thrown error's primary
  * diagnostic carries the namespaced `edit::*` `code`. Mutator identity rides on
