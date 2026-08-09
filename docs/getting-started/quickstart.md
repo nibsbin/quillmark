@@ -43,11 +43,14 @@
     ## Basic Usage
 
     ```javascript
-    // The single root import is the canonical API: Quill/Document (re-exported
-    // from the internal Typst-less core build) plus the Engine render
-    // dispatcher. An editor that only validates uses Quill/Document and loads
-    // no backend: Typst loads lazily on the first render.
-    import { Document, Quill, Engine } from "@quillmark/wasm";
+    // The single root import is the canonical API: the Engine render
+    // dispatcher, plus `init`, which resolves to the internal Typst-less core
+    // build's own Quill/Document classes and is the only way to obtain them. An
+    // editor that only validates uses Quill/Document and loads no backend:
+    // Typst loads lazily on the first render.
+    import { init, Engine } from "@quillmark/wasm";
+
+    const { Quill, Document } = await init();
 
     const enc = new TextEncoder();
 
@@ -74,6 +77,10 @@
     const result = await engine.render(quill, doc, { format: "pdf" });
     const pdfBytes = result.artifacts[0].bytes;
     ```
+
+    `init` is idempotent and concurrency-safe, so destructure it at each entry point (route loader, hydration path, worker) rather than threading one result around: every await after the first resolves from the same memo.
+
+    An annotation needs no await: `Quill` and `Document` are also exported as types (`import type { Quill } from "@quillmark/wasm"`).
 
     ## Live Preview (Canvas)
 

@@ -81,6 +81,7 @@ not_in_nav: |
   /migrations/0.99-to-0.100.md
   /migrations/0.100-to-0.101.md
   /migrations/0.101-to-0.102.md
+  /migrations/0.102-to-0.103.md
   /migrations/0.92-to-0.102.md
 
 markdown_extensions:
