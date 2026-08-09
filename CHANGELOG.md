@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+- docs: `docs/integration/operations.md`, the page a service or an editor needs
+  before it takes traffic. The input limits with the codes they actually raise
+  (all four size and count ceilings share `parse::input_too_large` and differ
+  only in the `max` arg); that **render is not bounded** — no deadline, no
+  cancellation, and the parse limits do not carry through — with the
+  worker-termination recipe that is the only abort a browser has today (#1213);
+  that `Quillmark`, `Quill` and `Document` are `Send + Sync`, now pinned by a
+  test rather than asserted; `comemo` eviction and quill-cache immutability as
+  the two things a long-lived process's memory depends on; and the no-network,
+  no-ambient-filesystem isolation properties.
+- docs: `SECURITY.md`. Private reporting through GitHub advisories, and the
+  trust boundary reports are graded against: a **document is untrusted**, a
+  **quill is trusted and equivalent to code**, so a hostile quill is out of
+  scope the way a hostile crate is under `cargo run`. States the two properties
+  that hold even inside the trusted half (no network, no ambient filesystem).
+- ci: `cargo audit` gates every dependency change and runs weekly against an
+  unchanged tree (`.github/workflows/audit.yml`), replacing the prose note in
+  `ci.yml` that recorded the two accepted advisories. `.cargo/audit.toml` holds
+  them with the reachability argument for each: `quick-xml <0.41` enters by
+  exactly one path (`citationberg → hayagriva → typst-library`), parses CSL
+  style files a quill vendors, and is pinned by the typst 0.15 tree rather than
+  by this workspace. `unmaintained` / `unsound` / `yanked` print and pass, so an
+  upstream's maintenance status holds no veto over a merge.
+- test(cli): `quillmark-cli` gets its first tests. The bin carries
+  `test = false`, so twelve cases drive the built executable instead — every
+  subcommand, `-o` and `--stdout`, PDF and SVG output, and the error paths,
+  which must exit 1 rather than panic. The crate had no `[dev-dependencies]`
+  and no workflow invoked it (#1068).
+- test(fuzz): `pdf_fuzz` covers the AcroForm stamp spine's byte-level reads,
+  the one hand-rolled parser with no fuzz target. Arbitrary bytes, a PDF header
+  over noise, and a real form truncated, single-byte-corrupted, or spliced, all
+  through `page_media_boxes` / `PdfUpdate::begin` / `stamp`. The oracle is no
+  panic: nothing in the workspace catches unwind, so a panic there kills the
+  CLI and the Python extension and poisons the WASM module. No failures found.
 - refactor(wasm)!: `init()` resolves to the core surface, and it is the only way
   to reach one. `Quill`, `Document`, `importMarkdown`, `exportMarkdown`,
   `rebase`, `mapPos`, `parseDocPath` and `formatDocPath` leave the static

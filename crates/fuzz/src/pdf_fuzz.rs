@@ -1,0 +1,128 @@
+//! The AcroForm stamp spine's byte-level reads: arbitrary and corrupted PDF
+//! bytes yield `Err`, never a panic.
+//!
+//! `quillmark-pdf` parses PDF by hand — object lookup by scanning, dictionary
+//! splicing, xref and trailer reads — over `&[u8]` the caller supplies. Safe
+//! Rust bounds the damage to a panic, and a panic is still the worst outcome
+//! the workspace has: the CLI and the Python extension die on it, and the WASM
+//! module is left poisoned, since nothing anywhere catches unwind.
+//!
+//! The oracle is uniform and deliberately weak: **no panic, and a refusal is an
+//! acceptable answer.** The reader's input contract (traditional-xref,
+//! unencrypted, inline-annots, flat-tree) means most well-formed PDFs are
+//! refused too, so "returns `Ok`" is not a property any of this can assert.
+//!
+//! Two input populations, because they fail differently. Arbitrary bytes almost
+//! never reach past the trailer scan; a real form with one byte changed gets
+//! deep into object parsing carrying a length, offset, or delimiter that lies.
+
+use proptest::prelude::*;
+use quillmark_pdf::{page_media_boxes, stamp, FieldSpec, FieldType, PdfUpdate, StampOptions};
+
+/// `sample_form`'s `form.pdf`: a real AcroForm the spine accepts, so a mutant of
+/// it exercises the parse paths a random buffer never reaches.
+fn base_pdf() -> Vec<u8> {
+    let path = quillmark_fixtures::quills_path("sample_form").join("form.pdf");
+    std::fs::read(&path).expect("the sample_form fixture ships a form.pdf")
+}
+
+/// One field of each `FieldType`, so `stamp` walks every widget writer.
+fn every_field_kind() -> Vec<FieldSpec> {
+    vec![
+        FieldSpec::new("t".into(), 0, [10.0, 10.0, 90.0, 30.0], FieldType::Text {
+            multiline: false,
+        }),
+        FieldSpec::new("c".into(), 0, [10.0, 40.0, 30.0, 60.0], FieldType::Checkbox),
+        FieldSpec::new("s".into(), 0, [10.0, 70.0, 90.0, 90.0], FieldType::Signature),
+        FieldSpec::new("h".into(), 0, [10.0, 100.0, 90.0, 120.0], FieldType::Choice {
+            options: vec!["a".into(), "b".into()],
+        }),
+    ]
+}
+
+/// Drive every byte-taking entry point once. Each returns a `Result`; the call
+/// completing at all is the property.
+fn exercise(pdf: &[u8]) {
+    let _ = page_media_boxes(pdf);
+    let _ = PdfUpdate::begin(pdf, None);
+    let _ = PdfUpdate::begin(pdf, Some("quillmark-fuzz"));
+    let _ = stamp(pdf.to_vec(), &[], &StampOptions::default());
+    let _ = stamp(
+        pdf.to_vec(),
+        &every_field_kind(),
+        &StampOptions::default().with_producer("quillmark-fuzz".into()),
+    );
+}
+
+proptest! {
+    // Above proptest's default 256. Every case here is a parse over a few tens
+    // of kilobytes with no oracle to evaluate, so the whole module runs in well
+    // under a second and the extra mutants are close to free.
+    #![proptest_config(ProptestConfig::with_cases(1024))]
+
+    /// Arbitrary bytes: the trailer scan, the xref read, and the `/Root` lookup
+    /// all meet input that was never a PDF.
+    #[test]
+    fn fuzz_arbitrary_bytes(bytes in proptest::collection::vec(any::<u8>(), 0..4096)) {
+        exercise(&bytes);
+    }
+
+    /// Bytes that open like a PDF but are otherwise noise, so the header check
+    /// passes and the scan continues into the buffer.
+    #[test]
+    fn fuzz_pdf_header_then_noise(tail in proptest::collection::vec(any::<u8>(), 0..4096)) {
+        let mut bytes = b"%PDF-1.7\n".to_vec();
+        bytes.extend_from_slice(&tail);
+        exercise(&bytes);
+    }
+
+    /// A real form truncated at an arbitrary point: every length and offset the
+    /// file declares now points past the end.
+    #[test]
+    fn fuzz_truncated_form(cut in 0usize..100_000) {
+        let pdf = base_pdf();
+        let cut = cut.min(pdf.len());
+        exercise(&pdf[..cut]);
+    }
+
+    /// A real form with one byte overwritten. Hits the cases a truncation
+    /// cannot: a corrupted xref offset, a `/Length` that overshoots, an
+    /// unbalanced dictionary delimiter, a broken object header.
+    #[test]
+    fn fuzz_single_byte_corruption(at in any::<prop::sample::Index>(), to in any::<u8>()) {
+        let mut pdf = base_pdf();
+        let i = at.index(pdf.len());
+        pdf[i] = to;
+        exercise(&pdf);
+    }
+
+    /// A real form with a run of bytes overwritten, which can take out a whole
+    /// keyword (`trailer`, `startxref`, `endobj`) rather than one character.
+    #[test]
+    fn fuzz_spliced_run(
+        at in any::<prop::sample::Index>(),
+        run in proptest::collection::vec(any::<u8>(), 1..64),
+    ) {
+        let mut pdf = base_pdf();
+        let start = at.index(pdf.len());
+        let end = (start + run.len()).min(pdf.len());
+        pdf[start..end].copy_from_slice(&run[..end - start]);
+        exercise(&pdf);
+    }
+
+    /// Field geometry the caller controls, including non-finite and inverted
+    /// rects and a page index past the document's page count. `stamp` resolves
+    /// pages by index, so an out-of-range one must refuse rather than index.
+    #[test]
+    fn fuzz_field_geometry(
+        page in 0usize..8,
+        x0 in prop::num::f32::ANY,
+        y0 in prop::num::f32::ANY,
+        x1 in prop::num::f32::ANY,
+        y1 in prop::num::f32::ANY,
+        name in "\\PC{0,32}",
+    ) {
+        let field = FieldSpec::new(name, page, [x0, y0, x1, y1], FieldType::Checkbox);
+        let _ = stamp(base_pdf(), &[field], &StampOptions::default());
+    }
+}

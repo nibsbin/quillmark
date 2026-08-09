@@ -32,11 +32,10 @@ env:
 # each crate from its own archive and the license-text assert run in
 # `publish-crates`, the last point a failure still costs nothing.
 #
-# A gate reading a file the diff rarely touches earns its runner elsewhere.
-# Dependabot alerts watch Cargo.lock continuously, quiet weeks included. A local
-# `cargo audit` reports RUSTSEC-2026-0194 and -0195, both reachable only through
-# typst's `<0.41` quick-xml pin and neither actionable here. No `rust-version`
-# exists to verify.
+# A gate reading a file the diff rarely touches earns its runner elsewhere:
+# `cargo audit` is path-filtered and weekly in audit.yml, with the accepted
+# advisories and their reachability arguments in `.cargo/audit.toml`. No
+# `rust-version` exists to verify.
 
 jobs:
   lint:

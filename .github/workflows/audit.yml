@@ -1,0 +1,56 @@
+name: Audit
+
+# Two triggers, because the two failure modes arrive differently. A dependency
+# change is a diff, so it gates on the PR that makes it. A *new advisory against
+# an unchanged tree* is not a diff at all and would never fire on push, which is
+# what the weekly run is for.
+#
+# Path-filtered rather than folded into ci.yml: the manifests are the only input,
+# so a runner on every prose commit buys nothing.
+#
+# The two path lists are duplicated rather than shared: the Actions workflow
+# parser does not resolve YAML anchors.
+on:
+  pull_request:
+    paths:
+      - "**/Cargo.toml"
+      - "Cargo.lock"
+      - ".cargo/audit.toml"
+      - ".github/workflows/audit.yml"
+  push:
+    branches: [main]
+    paths:
+      - "**/Cargo.toml"
+      - "Cargo.lock"
+      - ".cargo/audit.toml"
+      - ".github/workflows/audit.yml"
+  schedule:
+    # Mondays, 07:00 UTC.
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Prebuilt, so no Rust toolchain and no build cache: the whole job is a
+      # checkout, a download, and a Cargo.lock scan.
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@v2.85.4
+        with:
+          tool: cargo-audit
+
+      # Fails on vulnerabilities; `unmaintained` / `unsound` / `yanked` print and
+      # pass. Accepted advisories and the reasoning behind each live in
+      # `.cargo/audit.toml`, which is read from the checkout automatically.
+      - name: cargo audit
+        run: cargo audit

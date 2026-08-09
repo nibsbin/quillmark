@@ -17,6 +17,7 @@ Both bindings share the core model, diagnostics, and storage format; they differ
 - **[Programmatic Construction](programmatic.md)**: build and mutate a `Document` in memory (database row → PDF).
 - **[Error Handling](error-handling.md)**: the diagnostic model every binding raises.
 - **[Persistence](persistence.md)**: store a `Document` as versioned JSON.
+- **[Operations](operations.md)**: input limits, what render does and does not bound, concurrency, and what a long-lived process accumulates.
 - **[Blueprint & Seeding](../quills/blueprint.md)**: the LLM/MCP authoring surface and its filled-out twin.
 
 !!! note "Advanced: live preview"

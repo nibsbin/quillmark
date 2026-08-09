@@ -164,3 +164,19 @@ fn preview_regions_spell_through_the_facade() {
     let located: Option<RenderedRegion> = session.locate(&region.field, 0);
     assert!(located.is_some(), "a field with a region locates position 0");
 }
+
+/// The engine, a loaded quill, and a document cross threads, so a server can
+/// hold one `Quillmark` and render on many. `LiveSession` is `Send` but is left
+/// out: `SessionHandle` requires both, but a session is a per-document handle
+/// with no reason to be shared and no test that shares one.
+///
+/// `docs/integration/operations.md` § "Concurrency" states this; the assertions
+/// are what stop a private field quietly taking it away.
+#[test]
+fn engine_and_inputs_are_send_and_sync() {
+    fn assert_send_sync<T: Send + Sync>() {}
+
+    assert_send_sync::<quillmark::Quillmark>();
+    assert_send_sync::<Quill>();
+    assert_send_sync::<Document>();
+}
