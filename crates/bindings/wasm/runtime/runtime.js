@@ -90,19 +90,25 @@ import { parseDocPath, formatDocPath } from '../core/wasm.js';
 // so there is no subpath around the gate either.
 //
 // The gate is the shape the lazy-backend idiom (§ DEFAULT_BACKENDS) takes when
-// the surface it guards cannot be async: `Quill.fromTree` and `seedDocument`
-// are sync and static, so there is nowhere to hide an await except in front.
+// the surface it guards cannot be async: `Quill.fromTree` and
+// `quill.seedDocument` return synchronously, so there is nowhere to hide an
+// await except in front.
 //
-// WHAT STAYS STATIC is what needs no instance. `MAIN_CARD_ADDR`, the open-set
-// guards and `isQuillmarkError` are pure JS over plain objects; gating them
-// would cost a consumer of one an await it has no use for.
+// WHAT STAYS A STATIC EXPORT is what needs no instance. `MAIN_CARD_ADDR`, the
+// open-set guards and `isQuillmarkError` are pure JS over plain objects; gating
+// them would cost a consumer of one an await it has no use for.
 //
-// The classes stay static too, and are gated by their ARGUMENTS. Every `Engine`
-// verb takes a `Quill` first (`#backendOf` is the single reader), and the
-// writer/reader constructors take both handles, so a caller who has not awaited
-// cannot produce an argument to call them with. `new Engine()` alone touches no
-// wasm: it validates a descriptor map. Holding them out of the gate keeps them
-// tree-shakable, so the editor path drops the dispatcher it never calls.
+// `Engine`, `LiveSession` and the four writer/reader classes stay static too,
+// gated by their ARGUMENTS rather than by the door. Every `Engine` verb takes a
+// `Quill` first (`#backendOf` is the single reader) and the writer/reader
+// constructors take both handles, so a caller who has not awaited cannot
+// produce an argument to call them with. The two constructors taking no handle
+// reach no wasm: `new Engine()` validates a descriptor map, and a `LiveSession`
+// forwards to the backend session `engine.open` is the sole source of. None of
+// the six carries a static method, the one member shape an argument cannot
+// gate. `gate.test.js` is the executable guard, driving the whole static
+// surface before `init`. Holding them out of the gate keeps them tree-shakable,
+// so the editor path drops the dispatcher it never calls.
 //
 // FAILURE DELIVERY follows the FUNCTION kind, not the failure kind: a sync verb
 // throws, a promise-returning verb rejects, and nothing does both. A
@@ -510,9 +516,10 @@ export function isListItemContainer(container) {
 // A predicate rather than an exported name list, because the known tables below
 // are upstream's business. They are pinned against the Rust source
 // (`Content::RESERVED_*` and `KnownIslandType`) by the
-// `known_open_set_names_are_pinned` drift-guard test in
-// `crates/content/src/model.rs`: adding a built-in means editing there, here, and
-// the TS unions in `crates/bindings/wasm/src/engine.rs` in one commit.
+// `js_known_name_tables_match_the_rust_open_sets` drift-guard test in
+// `crates/bindings/wasm/tests/known_names_drift.rs`: adding a built-in means
+// editing there, here, and the TS unions in `crates/bindings/wasm/src/engine.rs`
+// in one commit.
 //
 // These classify unknown *tags*, not unknown *payloads on known tags*. A future
 // `kind: "footnote"` with a sibling `ref` loses `ref` at a consumer that predates

@@ -27,6 +27,9 @@ import {
   isUnknownIsland,
   init,
 } from '@quillmark-wasm/runtime'
+// The namespace too: the bind set below is derived from the exports rather than
+// listed, so a fifth writer/reader class joins it by existing.
+import * as runtime from '@quillmark-wasm/runtime'
 // Pin that the runtime's Quill IS the internal core build's class (handed out,
 // not a parallel wrapper). This imports the internal core artifact directly:
 // `pkg/core` is NOT a public package subpath, it is the build the gate draws
@@ -37,6 +40,8 @@ import {
   makeSampleFormQuill,
   SAMPLE_FORM_MARKDOWN,
   expectEditCode,
+  isClass,
+  caughtFrom,
 } from './test-helpers.js'
 
 // The consumer contract, exercised as a consumer writes it: the gate is the only
@@ -1028,7 +1033,7 @@ main:
 // naming the duplicate install and `npm ls`. See runtime.js § "Handles from
 // another copy". These pin that the rule is UNIFORM: the by-reference core
 // methods (which wasm-bindgen would reject anyway, as a bare `Error`), the
-// writer and reader binds, `Engine`, and `LiveSession.apply`. The last two are
+// writer and reader binds, `Engine`, and `LiveSession.update`. The last two are
 // the seams that cross as data and would otherwise silently work.
 //
 // A foreign handle is modelled two ways: a stand-in carrying the serializer a
@@ -1051,14 +1056,6 @@ describe('@quillmark/wasm/runtime: handles from another copy (duplicate install)
     expect(caught.message).toContain(method)
     expect(caught.diagnostics[0].hint).toMatch(/npm ls @quillmark\/wasm/)
     return caught
-  }
-  /** The thrown value, `undefined` if `call` returned. */
-  const caughtFrom = (call) => {
-    try {
-      call()
-    } catch (e) {
-      return e
-    }
   }
   const expectForeign = (call, method) => assertForeign(caughtFrom(call), method)
   // Kept separate from the sync form rather than folded into one async helper:
@@ -1101,65 +1098,86 @@ describe('@quillmark/wasm/runtime: handles from another copy (duplicate install)
     expect(() => new DocumentWriter(null, doc)).toThrow(/expected a Quill/)
   })
 
-  it('refuses a foreign Document at the writer and reader binds', () => {
+  // Both handle positions on every bind, derived: an exported class whose bare
+  // construction refuses for want of a `Quill` takes handles, so it is a bind.
+  // `Engine` and `LiveSession` construct bare, so the filter drops them without
+  // naming them. Cross-checked against the method name each bind reports, so a
+  // fifth bind fails here until it is named.
+  const BIND_METHOD = new Map([
+    [DocumentWriter, 'quill.writer(doc)'],
+    [CardWriter, 'writer.card(index)'],
+    [DocumentReader, 'quill.reader(doc)'],
+    [CardReader, 'reader.card(index)'],
+  ])
+
+  it('refuses a foreign handle in either position at every writer and reader bind', () => {
+    const quill = makeRuntimeQuill()
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    const binds = Object.values(runtime).filter(
+      (v) => isClass(v) && caughtFrom(() => new v())?.diagnostics?.[0]?.code === 'runtime::not_a_quill'
+    )
+    expect(new Set(binds)).toEqual(new Set(BIND_METHOD.keys()))
+    for (const bind of binds) {
+      const method = BIND_METHOD.get(bind)
+      // The third argument is the card index, ignored by the two binds that
+      // take only two.
+      expectForeign(() => new bind(foreignQuill(quill), doc, 0), method)
+      expectForeign(() => new bind(quill, foreignDoc(doc), 0), method)
+    }
+  })
+
+  // The `Quill` factories in front of two of those binds; the loop above
+  // constructs directly.
+  it('refuses a foreign Document at the writer and reader entry points', () => {
     const quill = makeRuntimeQuill()
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     expectForeign(() => quill.writer(foreignDoc(doc)), 'quill.writer(doc)')
     expectForeign(() => quill.reader(foreignDoc(doc)), 'quill.reader(doc)')
-    // The card cursors are their own bind, and construct directly.
-    expectForeign(
-      () => new CardWriter(quill, foreignDoc(doc), 0),
-      'writer.card(index)'
-    )
-    expectForeign(
-      () => new CardReader(quill, foreignDoc(doc), 0),
-      'reader.card(index)'
-    )
-  })
-
-  it('refuses a foreign Quill at the writer and reader binds', () => {
-    const quill = makeRuntimeQuill()
-    const doc = Document.fromMarkdown(TEST_MARKDOWN)
-    expectForeign(() => new DocumentWriter(foreignQuill(quill), doc), 'quill.writer(doc)')
-    expectForeign(() => new DocumentReader(foreignQuill(quill), doc), 'quill.reader(doc)')
   })
 
   // Engine is the seam with no `_assertClass` to front-run: it crosses into
   // backend memory as data, so a foreign handle would render correctly and pay
-  // a per-copy quill clone cache for it. It checks instead.
-  it('refuses a foreign handle at every Engine entry point', async () => {
+  // a per-copy quill clone cache for it. It checks instead. Inside the class the
+  // check is structural (`#backendOf` is the only route to `backendId`, and
+  // `#withClones` checks the doc); these guard the boundary.
+  //
+  // The quill half is DERIVED: a fifth verb is held to the rule with no label to
+  // get wrong, and a verb naming a `Quill` without reading it fails the same
+  // line as one that forgot the check.
+  it('holds every Engine verb to the quill-first rule (derived)', async () => {
     const engine = new Engine()
     const quill = makeRuntimeQuill()
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
-
-    const m = 'engine.render(quill, doc)'
-    await expectForeignAsync(engine.render(foreignQuill(quill), doc), m)
-    await expectForeignAsync(engine.render(quill, foreignDoc(doc)), m)
-    await expectForeignAsync(engine.open(foreignQuill(quill), doc), 'engine.open(quill, doc)')
-    await expectForeignAsync(engine.open(quill, foreignDoc(doc)), 'engine.open(quill, doc)')
-    // The free probes check too, though they never touch the handle's memory:
-    // the rule is about the handle, not about what a given verb happens to read.
-    await expectForeignAsync(
-      engine.supportedFormats(foreignQuill(quill)),
-      'engine.supportedFormats(quill)'
-    )
-    await expectForeignAsync(
-      engine.supportsCanvas(foreignQuill(quill)),
-      'engine.supportsCanvas(quill)'
-    )
+    const verbs = Object.getOwnPropertyNames(Engine.prototype).filter((n) => n !== 'constructor')
+    expect(verbs.length).toBeGreaterThan(0)
+    for (const verb of verbs) {
+      // A getter takes no argument, so nothing gates it.
+      expect(typeof Object.getOwnPropertyDescriptor(Engine.prototype, verb).value).toBe('function')
+      // `await` normalizes the sync and promise-returning verbs.
+      let caught
+      try {
+        await engine[verb](foreignQuill(quill), doc)
+      } catch (e) {
+        caught = e
+      }
+      expect(caught, `engine.${verb} accepted a foreign Quill`).toBeDefined()
+      assertForeign(caught, `engine.${verb}`)
+    }
   })
 
-  // "Every seam checks" is enforced by hand-placed calls, so the set of seams
-  // is pinned like the backend manifest above: a fifth Engine verb fails here
-  // until it is classified, rather than silently accepting a foreign handle.
-  // Inside the class the check is structural (`#backendOf` is the only route to
-  // `backendId`, and `#withClones` checks the doc); this guards the boundary.
-  it('has no Engine verb outside the checked set (drift guard)', () => {
-    const TAKES_A_QUILL = ['render', 'open', 'supportedFormats', 'supportsCanvas']
-    const TAKES_NO_HANDLE = ['constructor']
-    expect(Object.getOwnPropertyNames(Engine.prototype).sort()).toEqual(
-      [...TAKES_A_QUILL, ...TAKES_NO_HANDLE].sort()
+  // The document half stays hand-placed. Deriving it is unsound: the stand-in
+  // doc carries `toJson`, so a verb skipping `requireLocalDoc` would succeed and
+  // pass a derived assertion. Which verbs take a `Document` is guarded
+  // structurally inside `#withClones` and named here at the boundary.
+  it('refuses a foreign Document at every Engine entry point taking one', async () => {
+    const engine = new Engine()
+    const quill = makeRuntimeQuill()
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    await expectForeignAsync(
+      engine.render(quill, foreignDoc(doc)),
+      'engine.render(quill, doc)'
     )
+    await expectForeignAsync(engine.open(quill, foreignDoc(doc)), 'engine.open(quill, doc)')
   })
 
   it('refuses a foreign Document on session.update', async () => {

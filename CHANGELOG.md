@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+- fix(core)!: geometry addresses parse segment-wise, so `locate` and
+  `fieldBoxes` answer for an address deeper than one segment. The translation
+  boundary folded a plate address's whole tail into one `Field`, so
+  `references.0` minted `main.references.0` — a string that reparses as a field
+  literally named `0`, and that the reverse direction refused outright. Both
+  spellings returned `None`, leaving caret placement and whole-field highlight
+  dead for **every** `array<richtext>` element (the flagship memo's
+  `references` among them) and for every nested key a pdfform widget binds
+  (`address.city`). `region.rs` now reads and renders a plate tail one segment
+  at a time: an all-digit segment is an array index, `$body` the body terminal,
+  anything else a field or map key.
+- change(wasm, python)!: `RenderedRegion.field`, `FieldRegion.field` and
+  `ContentHit.field` spell an array element bracketed — `main.references.0`
+  becomes `main.references[0]` — on `regions()`, `fieldAt`, `positionAt` and
+  `RenderResult.regions`. This is the spelling schema validation already emits,
+  so a `Diagnostic.path` and the geometry address for one place are now the same
+  string. A consumer finding an address's children by prefix (`startsWith(`${field}.`)`)
+  needs the `[` opener too, and any heuristic reading a trailing all-digit field
+  name as a lost index is dead.
+
 ## v0.103.0 - 2026-08-09
 
 - docs: `docs/integration/operations.md`, carrying what the other integration

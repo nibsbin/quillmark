@@ -216,19 +216,24 @@ only `Diagnostic.path`. Mutator (`edit::*`) diagnostics carry it (a field error
 at `main.<field>` or `cards.<kind>[<i>].<field>`, a structural out-of-range op at
 `cards[<i>]`);
 and `LiveSession` geometry (`regions` / `fieldAt` / `positionAt` / `locate`)
-keys on it: the session translates the backend's plate-space
-`$cards.<kind>.<ordinal>` form to the `DocPath` absolute index at the boundary,
-so one parser routes diagnostics and geometry alike.
+keys on it: the session translates the backend's plate-space form to `DocPath`
+at the boundary, segment by segment — the `$cards.<kind>.<ordinal>` head to the
+absolute index, a numeric tail segment to a bracketed array index
+(`references.0` → `main.references[0]`) — so one parser routes diagnostics and
+geometry alike, and a geometry address and the validation diagnostic on the
+same place are the same string.
 
 **Three grammars, one that crosses.** Only `DocPath` reaches a consumer. The
 other two stay backend/template-internal and are named here so they are not
 confused with it:
 
 - **Plate JSON**: the sigiled `data.$cards` a template author composes
-  ([CARDS.md](CARDS.md)), and the plate-space `$cards.<kind>.<ordinal>.<field>`
-  geometry address a plate's `$path` mints. A template-author contract, so it
-  keeps its own spelling (renaming it is a blast radius) and translates to
-  `DocPath` before it crosses.
+  ([CARDS.md](CARDS.md)), and the plate-space geometry address a plate's `$path`
+  mints: a `.`-separated run under an optional `$cards.<kind>.<ordinal>` head,
+  where an all-digit segment is an array index (`references.0`) and `$body` the
+  body terminal. A template-author contract (`form-field(field: "refs.2")`,
+  `plaintext(..)`, every published `form.json`), so it keeps its own spelling
+  (renaming it is a blast radius) and translates to `DocPath` before it crosses.
 - **Schema-space coercion anchors**: `CoercionError` keeps its own
   `card_kinds.<kind>.<field>` / bare-field anchors, a schema-declaration
   namespace, not a document path. Where a coercion becomes an

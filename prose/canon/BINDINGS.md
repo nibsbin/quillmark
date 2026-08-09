@@ -135,7 +135,9 @@ The `--target bundler` alternative emits `import * as wasm from "./wasm_bg.wasm"
 
 **The gate is the only door, so a pre-init call is unwritable.** `init` resolves to the core surface — the core build's values, which are exactly what its instance stands behind — and the runtime layer exports none of them statically, so a handle cannot be obtained without having awaited. With one entry in the `exports` map there is no subpath around it either. This is what makes the precondition structural instead of a convention a consumer has to know. A floating `init()` is an ESLint rule rather than a `tsc` diagnostic, so a signature is no guard, and a load order that reaches an initialized runtime by luck passes in dev and in the test that covers it.
 
-Everything needing no instance stays static and unawaited: `MAIN_CARD_ADDR`, the open-set guards, `isQuillmarkError`. So do the classes, which their **arguments** gate — every `Engine` verb takes a `Quill` first, and the writer/reader constructors take both handles, so a caller who has not awaited cannot produce an argument to call them with. Holding them out of the gate keeps them tree-shakable, so the editor path drops the dispatcher it never calls.
+Everything needing no instance stays a static export, unawaited: `MAIN_CARD_ADDR`, the open-set guards, `isQuillmarkError`. So do `Engine`, `LiveSession` and the four writer/reader classes, which their **arguments** gate rather than the door — every `Engine` verb takes a `Quill` first, and the writer/reader constructors take both handles, so a caller who has not awaited cannot produce an argument to call them with. Holding them out of the gate keeps them tree-shakable, so the editor path drops the dispatcher it never calls.
+
+The two constructors taking no handle reach no wasm: `new Engine()` validates a descriptor map, and a `LiveSession` forwards to the backend session `engine.open` is the sole source of. None of the six carries a static method, the one member shape an argument cannot gate. `gate.test.js` is the executable guard, driving the whole static surface before `init`.
 
 Ships **multiple artifacts from one crate** behind a single public root export. The root `@quillmark/wasm` is a hand-written **canonical runtime layer** that hands out the internal Typst-less **core** build's `Document` + `Quill` (load / validate / schema / seed / blueprint) verbatim and adds an `Engine` render dispatcher.
 
@@ -143,9 +145,9 @@ Each backend (Typst and pdfform) is a **private** build with its own linear memo
 
 Backend handles never escape the `Engine`: it clones the quill tree + `doc.toJson()` into the backend's memory as serialized data and frees the clones.
 
-**Exactly one copy of the package per process.** Two copies are two core builds (two linear memories, two `Quill`/`Document` classes), and no topology legitimately loads a multi-megabyte binary twice and needs handles to cross between the copies. Every seam taking a core handle checks it and throws a `QuillmarkError` naming the duplicate install, including the ones that could cross as data (`Engine`, `LiveSession.apply`). Errors are the exception: `isQuillmarkError` stays structural, an error being data rather than a handle.
+**Exactly one copy of the package per process.** Two copies are two core builds (two linear memories, two `Quill`/`Document` classes), and no topology legitimately loads a multi-megabyte binary twice and needs handles to cross between the copies. Every seam taking a core handle checks it and throws a `QuillmarkError` naming the duplicate install, including the ones that could cross as data (`Engine`, `LiveSession.update`). Errors are the exception: `isQuillmarkError` stays structural, an error being data rather than a handle.
 
-Beyond the byte-output verbs (`engine.render`, `LiveSession.render`), the canvas-capable backend builds (Typst, and pdfform under its preview seam) expose a **live preview** path on `LiveSession` (`apply`, `pageCount`, `pageSize`, `paint`, …). See [PREVIEW.md](PREVIEW.md).
+Beyond the byte-output verbs (`engine.render`, `LiveSession.render`), the canvas-capable backend builds (Typst, and pdfform under its preview seam) expose a **live preview** path on `LiveSession` (`update`, `pageCount`, `pageSize`, `paint`, …). See [PREVIEW.md](PREVIEW.md).
 
 ## CLI: `bindings/quillmark-cli`
 
