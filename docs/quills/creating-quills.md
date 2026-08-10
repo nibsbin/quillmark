@@ -43,6 +43,22 @@ main:
 
 Use `default` for the value most authors will accept as-is (the field becomes optional, filled in when omitted). Use `example` to document the expected shape without supplying a default. Fields with neither are flagged in the blueprint with a `!must_fill` marker. See the [Quill.yaml Reference](quill-yaml-reference.md) for details.
 
+### Picking a text type
+
+Four types hold text, and two questions pick one:
+
+1. **Does the author write prose here, or does the plate compute with the value?** A name, URL, path, or reference key is data. A bio, an abstract, or a cover letter is content.
+2. Then, for data: **is the set of allowed values closed?** For content: **should `*text*` render as emphasis, or stay literal?**
+
+| | data — the plate computes with it | content — the author writes prose |
+|---|---|---|
+| **open / literal** | `string` | `plaintext`: `*text*` stays literal |
+| **closed / formatted** | `enum`: a `values:` domain | `richtext`: `*text*` becomes emphasis |
+
+The letter above needs no content field: its prose is the document body, which is already rich text. `plaintext` and `richtext` are for prose in a *named* field — an abstract, a summary. Such a field carries navigation, regions, and click-to-edit in editor consumers; `string` and `enum` carry none of that.
+
+Pick before a corpus exists. Changing a declared type reinterprets every value already stored in that field, and data → content is lossy: see [Choosing among `string`, `enum`, `plaintext`, and `richtext`](quill-yaml-reference.md#choosing-among-string-enum-plaintext-and-richtext).
+
 ## 3. Write `plate.typ`
 
 Your first plate template:
