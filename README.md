@@ -29,7 +29,7 @@ cargo add quillmark
 ```rust
 use quillmark::{quill_from_path, OutputFormat, Quillmark, RenderOptions};
 
-// A `Quill` is portable, declarative data.
+// A `Quill` is declarative data: no engine needed to load it.
 let quill = quill_from_path("path/to/quill")?;
 let engine = Quillmark::new();
 
