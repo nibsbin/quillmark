@@ -55,9 +55,9 @@ Four types hold text, and two questions pick one:
 | **open / literal** | `string` | `plaintext`: `*text*` stays literal |
 | **closed / formatted** | `enum`: a `values:` domain | `richtext`: `*text*` becomes emphasis |
 
-The letter above needs no content field: its prose is the document body, which is already rich text. Reach for `plaintext` or `richtext` when prose belongs in a *named field* — an abstract, a summary, a signature block note. Content fields carry navigation, regions, and click-to-edit in editor consumers; `string` and `enum` do not.
+The letter above needs no content field: its prose is the document body, which is already rich text. `plaintext` and `richtext` are for prose in a *named* field — an abstract, a summary. Such a field carries navigation, regions, and click-to-edit in editor consumers; `string` and `enum` carry none of that.
 
-Changing a declared type reinterprets every value already stored in that field, and data → content is lossy: markdown delimiters in the stored string are consumed as structure and the literal characters are gone. Pick before a corpus exists, or ship the change as a new quill version.
+Pick before a corpus exists. Changing a declared type reinterprets every value already stored in that field, and data → content is lossy: see [Choosing among `string`, `enum`, `plaintext`, and `richtext`](quill-yaml-reference.md#choosing-among-string-enum-plaintext-and-richtext).
 
 ## 3. Write `plate.typ`
 

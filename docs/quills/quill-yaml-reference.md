@@ -111,7 +111,7 @@ main:
 
 #### Choosing among `string`, `enum`, `plaintext`, and `richtext`
 
-The four text-ish types form a 2×2 of **data vs content** and **open/plain vs closed/formatted**. Two questions resolve it:
+The four text-ish types form a 2×2 of **data vs content** × **open/plain vs closed/formatted**, and two questions resolve it:
 
 1. Does the author write prose here, or does the plate compute with the value? Prose is content; a name, URL, path, identifier, or reference key is data.
 2. Then: is the domain closed (`enum` over `string`), or should markdown delimiters format the text rather than stay literal (`richtext` over `plaintext`)?
@@ -121,7 +121,7 @@ The four text-ish types form a 2×2 of **data vs content** and **open/plain vs c
 | **open / literal** | `string` | `plaintext`: `*text*` stays literal |
 | **closed / formatted** | `enum`: a `values:` domain | `richtext`: `*text*` becomes emphasis |
 
-The halves differ in what the field carries, not just how it renders. A content field rides the canonical content model, so it carries navigation, regions, and click-to-edit in editor consumers; `string` and `enum` carry none of that. `plaintext` and `richtext` share that entire stack and the same backend lowering, so they are indistinguishable in an editor and diverge only at emit, where the codec decides whether a delimiter is markup or a character.
+A content field rides the canonical content model, so it carries navigation, regions, and click-to-edit in editor consumers; `string` and `enum` carry none of that. `plaintext` and `richtext` share that entire stack and the same backend lowering, so they are indistinguishable in an editor and diverge only at emit, where the codec decides whether a delimiter is markup or a character.
 
 Changing a declared type reinterprets every stored value in that field at the next bound load, with no diagnostic, and data → content is the lossy direction: the stored string enters the codec's import and its delimiters are consumed as structure, leaving the literal characters unrecoverable. A declared type change is a new quill version ([Quill Versioning](versioning.md)); audit the corpus before publishing one, as under [Date and Datetime Grammars](#date-and-datetime-grammars).
 
