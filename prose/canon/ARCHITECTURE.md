@@ -5,11 +5,12 @@
 ## TL;DR
 
 Quillmark is a schema-driven document engine: it turns Markdown with card-yaml
-blocks into a fully typeset document (PDF, SVG, PNG). A `Quill` is portable,
-declarative data whose schema drives validation and scaffolding (parse /
-validate / schema / seed / blueprint / compile). The `Quillmark` engine is the
-thin-but-mandatory core every render routes through: a backend registry +
-render dispatcher. Backends do the heavy compilation.
+blocks into a fully typeset document (PDF, SVG, PNG). A `Quill` is declarative
+data: no backend, engine, or filesystem needed to construct or read it. Its
+schema drives validation and scaffolding (parse / validate / schema / seed /
+blueprint / compile). The `Quillmark` engine is the thin-but-mandatory core
+every render routes through: a backend registry + render dispatcher. Backends
+do the heavy compilation.
 
 ## Data Flow
 
@@ -91,7 +92,7 @@ coercion.
 ## Core Interfaces
 
 - **`Quillmark`**, Engine: a backend registry + render dispatcher. Auto-registers one backend per enabled feature (`TypstBackend` under `typst`, `PdfformBackend` under `pdfform`; both are default). Resolves a quill's declared backend at render time (erroring `engine::backend_not_found` on no match) and owns the backend-dependent surface: `render`, `open`, `supported_formats(&quill)`, `supports_canvas(&quill)`. It does not construct quills.
-- **`Quill`**, The single quill type in `quillmark-core`: portable, declarative data (file bundle + config + metadata, tagged with a declared backend id), held by value and carrying the pure config-read operations (`validate`, `schema`, `blueprint`, `seed_*`, `compile_data`, `dry_run`). Construct with `Quill::from_tree` or `quillmark::quill_from_path`; see [QUILL.md](QUILL.md)
+- **`Quill`**, The single quill type in `quillmark-core`: declarative data (file bundle + config + metadata, tagged with a declared backend id), held by value and carrying the pure config-read operations (`validate`, `schema`, `blueprint`, `seed_*`, `compile_data`, `dry_run`). Construct with `Quill::from_tree` or `quillmark::quill_from_path`; see [QUILL.md](QUILL.md)
 - **`Backend`**, Trait for output formats (`Send + Sync`): `id()`, `supported_formats()`, `open(&Quill, json)`. There is no universal template input: a backend reads whatever static inputs it needs (a Typst plate, a `form.pdf`) from the quill's own files. No canvas-capability method: capability is derived (`LiveSession::supports_canvas()` from the session seam; `formats_support_canvas()` as a pre-session hint)
 - **`LiveSession`**, Opaque live session returned by `Backend::open()`: a persistent compiler whose reads serve its current compile and whose `update(&Document)` recompiles in place, transactionally, returning a `ChangeSet` of dirty pages. Born bound to the `QuillConfig` it was opened against, so the edit verb checks the `$quill` pairing and compiles through the same door as the first compile (`QuillConfig::compile_checked`) rather than trusting a caller to have done both. The canvas seam lives on `SessionHandle` (`page_size_pt`/`render_rgba`), so a canvas backend overrides two methods and the WASM painter dispatches generically; see [PREVIEW.md](PREVIEW.md)
 - **`Document`**: Typed in-memory representation of a Quillmark Markdown file (root block, body, cards). Serializes via `serde` to a versioned JSON envelope (`StoredDocument`) for database persistence, decoupled from the evolving Markdown syntax; see [DOCUMENT_STORAGE.md](DOCUMENT_STORAGE.md)
@@ -107,6 +108,18 @@ coercion.
 See [PLATE_DATA.md](PLATE_DATA.md) for the Typst helper package.
 
 ## Backend Implementation
+
+Backends are an in-workspace seam, not an extension point. `Backend` and
+`SessionHandle` are sealed and `#[doc(hidden)]`, outside the crate
+compatibility promise ([COMPATIBILITY.md](COMPATIBILITY.md)), so a new trait
+method lands in a minor release. What the seal withholds is the promise, not
+the ability: a crate willing to name the hidden module implements both and
+registers through `Quillmark::register_backend`, against items no release holds
+stable.
+
+A quill declares one backend and renders through that one, so rendering a schema
+two ways is two quills, with no mechanism keeping their field definitions in
+agreement.
 
 Implement the `Backend` trait and return a `LiveSession` wrapping a
 `SessionHandle` that does the format-specific rendering; to paint to a canvas,

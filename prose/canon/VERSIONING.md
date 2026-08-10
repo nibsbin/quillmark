@@ -39,6 +39,8 @@ No registry consumes the selector: there is no collection of installed versions 
 
 A quill mismatch is distinct from a validation failure (a malformed document): here the document is well-formed but paired with the wrong Quill, so the remedy is to render with the referenced Quill or amend `$quill`. A bare name or `@latest` matches any version, so correctly-targeted documents never trip either check.
 
+`$quill` is a **pairing assertion**, not a render target and not a schema declaration: the caller chooses which Quill renders, and the reference only confirms the document was authored against it.
+
 ## Error Handling
 
 Three distinct failure paths, and the parser owns one of them outright:

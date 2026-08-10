@@ -13,9 +13,9 @@ engine's job.
 
 ## The `Quill` type
 
-One type models a loaded quill: **`Quill`** (in `quillmark-core`), portable,
-declarative data. It is the authored input (file bundle, parsed config, metadata)
-tagged with its *declared* backend id, and it carries the pure config-read
+One type models a loaded quill: **`Quill`** (in `quillmark-core`), declarative
+data. It is the authored input (file bundle, parsed config, metadata) tagged
+with its *declared* backend id, and it carries the pure config-read
 operations (`validate`, `schema`, `metadata`, `blueprint`, `seed_*`,
 `compile_data`, `dry_run`). It holds **no backend** and needs **no engine** to
 construct or use; rendering is the engine's job (see
@@ -75,7 +75,10 @@ missing or malformed template surfaces as a render-time error, not a load error.
 
 One required top-level section, `quill` (bundle metadata); optional `main`
 (document fields), `card_kinds` (card kind definitions), and a backend-named
-section (`typst`). Every key, type, and UI property is documented in the
+section (`typst`). Top-level keys naming a backend are a reserved namespace, and
+the engine reads exactly one of them: the section named by `quill.backend`. A
+section named for any other backend is `quill::unknown_section`, the same
+refusal a typo gets. Every key, type, and UI property is documented in the
 [Quill.yaml reference](../../docs/quills/quill-yaml-reference.md); what follows
 is what the engine enforces.
 
