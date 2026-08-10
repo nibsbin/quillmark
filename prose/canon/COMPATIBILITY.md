@@ -27,6 +27,10 @@ own rustdoc:
 | `Backend` + `SessionHandle` | Sealed and `#[doc(hidden)]`; an out-of-workspace backend writes against items this crate does not hold stable. |
 | `quillmark_typst::emit` | `pub` only so `quillmark-fuzz` can drive the escapers directly. |
 
+Deleting a row promises the seam. Publishing a contract later is additive and
+retracting a published one is a major, so a row stays until a release
+deliberately publishes that seam.
+
 ## `#[non_exhaustive]`
 
 The attribute is narrower than it reads, and the two halves cost different
