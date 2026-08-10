@@ -75,10 +75,10 @@ missing or malformed template surfaces as a render-time error, not a load error.
 
 One required top-level section, `quill` (bundle metadata); optional `main`
 (document fields), `card_kinds` (card kind definitions), and a backend-named
-section (`typst`). Top-level keys naming a backend are a reserved namespace, and
-the engine reads exactly one of them: the section named by `quill.backend`. A
-section named for any other backend is `quill::unknown_section`, the same
-refusal a typo gets. Every key, type, and UI property is documented in the
+section (`typst`). Top-level keys naming a backend are reserved, and the engine
+reads exactly one: the section named by `quill.backend`. A section named for any
+other backend is `quill::unknown_section`, the same refusal a typo gets. Every
+key, type, and UI property is documented in the
 [Quill.yaml reference](../../docs/quills/quill-yaml-reference.md); what follows
 is what the engine enforces.
 
