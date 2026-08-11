@@ -604,11 +604,11 @@ call returns: `try { return engine.render(quill, doc); } finally
 { doc.free(); }`: is safe even on the first render, while the backend
 binary is still loading.
 
-The package floor is Node 22+ (`engines: { node: ">=22" }`) and current
+The package floor is Node 24+ (`engines: { node: ">=24" }`) and current
 evergreen browsers; `--weak-refs` itself only needs Node 14.6+. The `using`
-sugar ([explicit resource management][erm]) needs Node 24 and is optional.
-Where it hasn't landed, an explicit `try` / `finally` runs on the Node 22
-floor:
+sugar ([explicit resource management][erm]) is on that floor and optional;
+an explicit `try` / `finally` is the equivalent, and the form that also runs
+in a browser that hasn't shipped it:
 
 ```ts
 const session = await engine.open(quill, doc);

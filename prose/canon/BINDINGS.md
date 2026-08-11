@@ -122,7 +122,7 @@ Every Python verb is identical to its core/WASM twin or names its one difference
 
 ## WebAssembly: `bindings/quillmark-wasm`
 
-wasm-bindgen bindings published as `@quillmark/wasm`. Builds with `--target web` and `--weak-refs` so wasm-bindgen handles are reclaimed by `FinalizationRegistry`; `.free()` remains as the eager teardown hook. Requires Node 22+ / current evergreen browsers.
+wasm-bindgen bindings published as `@quillmark/wasm`. Builds with `--target web` and `--weak-refs` so wasm-bindgen handles are reclaimed by `FinalizationRegistry`; `.free()` remains as the eager teardown hook. Requires Node 24+ / current evergreen browsers.
 
 **The runtime owns instantiation.** `--target web` emits no `.wasm` ESM import and no top-level await, so nothing in the package graph forces a bundler plugin and a static import of `@quillmark/wasm` is safe anywhere, SSR included. The cost is that instantiation becomes explicit: `const { Quill, Document } = await init()` before the sync surface is touched.
 
