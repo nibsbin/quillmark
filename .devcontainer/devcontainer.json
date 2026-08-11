@@ -8,7 +8,7 @@
     },
     "ghcr.io/astral-sh/uv:1": {},
     "ghcr.io/devcontainers/features/node:1": {
-      "version": "lts"
+      "version": "24"
     }
   },
   "customizations": {
