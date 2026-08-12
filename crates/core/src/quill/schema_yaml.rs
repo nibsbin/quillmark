@@ -24,8 +24,8 @@ quill:
 main:
   fields:
     status:
-      type: string
-      enum: [draft, final]
+      type: enum
+      values: [draft, final]
       default: draft
       ui:
         group: Meta
@@ -42,7 +42,7 @@ card_kinds:
     fn schema_includes_ui() {
         let config = cfg(FULL);
         let yaml = config.schema_yaml().unwrap();
-        assert!(yaml.contains("enum:") && yaml.contains("type: integer"));
+        assert!(yaml.contains("values:") && yaml.contains("type: integer"));
         assert!(yaml.contains("card_kinds:") && yaml.contains("indorsement:"));
         assert!(yaml.contains("ui:") && yaml.contains("group: Meta"));
     }

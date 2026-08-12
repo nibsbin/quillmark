@@ -40,6 +40,27 @@ pub const QUILLMARK_PLAIN_KEY: &str = "quillmark:plain";
 pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
     fn field_to_schema(field: &FieldSchema) -> serde_json::Value {
         let mut schema = serde_json::Map::new();
+        // A finite domain projects to the idiomatic JSON-Schema spelling
+        // `{type: string, enum: [...]}`: exactly what a backend dispatches on
+        // today (a plain string), plus the domain. Keyed on the domain, as the
+        // render floor, the pdfform widget and the blueprint annotation all are,
+        // so a `FieldSchema` built outside the loader projects its domain too.
+        if let Some(values) = &field.enum_values {
+            schema.insert(
+                "type".to_string(),
+                serde_json::Value::String("string".to_string()),
+            );
+            schema.insert(
+                "enum".to_string(),
+                serde_json::Value::Array(
+                    values
+                        .iter()
+                        .map(|v| serde_json::Value::String(v.clone()))
+                        .collect(),
+                ),
+            );
+            return serde_json::Value::Object(schema);
+        }
         match field.r#type {
             FieldType::String => {
                 schema.insert(
@@ -87,25 +108,13 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
                     );
                 }
             }
+            // A loaded `enum` always carries `values:`, so the domain branch
+            // above claims it; this arm is the domain-less residue.
             FieldType::Enum => {
-                // The promoted token projects to the idiomatic JSON-Schema
-                // spelling `{type: string, enum: [...]}`: exactly what a backend
-                // dispatches on today (a plain string), plus the finite domain.
                 schema.insert(
                     "type".to_string(),
                     serde_json::Value::String("string".to_string()),
                 );
-                if let Some(values) = &field.enum_values {
-                    schema.insert(
-                        "enum".to_string(),
-                        serde_json::Value::Array(
-                            values
-                                .iter()
-                                .map(|v| serde_json::Value::String(v.clone()))
-                                .collect(),
-                        ),
-                    );
-                }
             }
             FieldType::Number => {
                 schema.insert(
@@ -225,6 +234,40 @@ mod tests {
     fn build_from_yaml(yaml: &str) -> QuillValue {
         let config = QuillConfig::from_yaml(yaml).expect("yaml parses");
         build_transform_schema(&config)
+    }
+
+    #[test]
+    fn enum_carries_its_domain_at_every_depth() {
+        let yaml = r#"
+quill:
+  name: x
+  version: 1.0.0
+  backend: typst
+  description: x
+main:
+  fields:
+    classification:
+      type: enum
+      values: [UNCLASSIFIED, CUI]
+    endorsements:
+      type: array
+      items:
+        type: object
+        properties:
+          action:
+            type: enum
+            values: [approve, disapprove]
+"#;
+        let schema = build_from_yaml(yaml);
+        let json = schema.as_json();
+        let domain = serde_json::json!({ "type": "string", "enum": ["UNCLASSIFIED", "CUI"] });
+        assert_eq!(json["properties"]["classification"], domain);
+        // The domain survives the recursion into an array's element object: a
+        // consumer building a validator sees it at the leaf too.
+        assert_eq!(
+            json["properties"]["endorsements"]["items"]["properties"]["action"],
+            serde_json::json!({ "type": "string", "enum": ["approve", "disapprove"] })
+        );
     }
 
     #[test]

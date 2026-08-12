@@ -66,7 +66,7 @@ main:
       items:
         type: string
     letterhead_seal:
-      type: string
+      type: enum
       description: >-
         Department of War (DoW) or Department of Defense (DoD) seal shown in the
         letterhead.
@@ -74,7 +74,7 @@ main:
       ui:
         group: letterhead
         compact: true
-      enum:
+      values:
       - dow
       - dod
     letterhead_seal_subtitle:
@@ -95,7 +95,7 @@ main:
         compact: true
       inline: true
     classification:
-      type: string
+      type: enum
       description: >-
         Select the classification marking shown in the header and footer banner.
         Unclassified documents typically omit this banner entirely, leave blank unless the
@@ -105,7 +105,7 @@ main:
       ui:
         group: classification
         compact: true
-      enum:
+      values:
       - ""
       - UNCLASSIFIED
       - CUI
@@ -208,7 +208,7 @@ main:
       items:
         type: string
     memo_style:
-      type: string
+      type: enum
       description: >-
         USAF memorandum or DAF headquarters memorandum; DAF changes date format and
         body paragraph layout per AFH 33-337.
@@ -216,7 +216,7 @@ main:
       ui:
         group: additional
         compact: true
-      enum:
+      values:
       - usaf
       - daf
     font_size:
@@ -273,18 +273,18 @@ card_kinds:
         items:
           type: string
       format:
-        type: string
+        type: enum
         description: "'standard' (formal, same page), 'informal' (less formal routing), or 'separate_page' (begins on a new page)."
         default: standard
         ui:
           group: additional
           compact: true
-        enum:
+        values:
         - standard
         - informal
         - separate_page
       action:
-        type: string
+        type: enum
         description: >-
           Action taken by the endorser. Leave blank to hide the Approve/Disapprove line
           entirely, 'undecided' to display the line with neither option circled, 'approve'
@@ -293,7 +293,7 @@ card_kinds:
         ui:
           group: additional
           compact: true
-        enum:
+        values:
         - ""
         - undecided
         - approve

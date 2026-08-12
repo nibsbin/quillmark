@@ -87,7 +87,6 @@ main:
 | `default`     | matches `type`    | no       | The value the **majority of authors want**. When the field is omitted, the default is filled in. **Declaring `default` makes the field Endorsed**: the blueprint renders the concrete default value with a type-only annotation (no marker), shippable as-is. Omitting `default` makes the field **Unendorsed**: the blueprint stamps the `!must_fill` marker (carrying the field's `example` as a suggested value when present, else bare). A surviving marker raises the non-fatal `validation::must_fill` warning: it never gates render, since an absent or present-null field zero-fills. |
 | `example`     | matches `type`    | no       | A value matching the **type and shape** of what the author wants, but **not** the value desired most of the time. Documents shape only: surfaced in the [blueprint](https://github.com/borb-sh/quillmark/blob/main/prose/canon/BLUEPRINT.md)'s `# e.g.` line for documentation and LLM authoring, never rendered as the value. |
 | `values`      | array of strings  | for `enum` | The closed set of allowed string values. Required on every `enum` field. |
-| `enum`        | array of strings  | no       | **Deprecated** alias of `values`, accepted on `type: string` for one release. Prefer `type: enum` with `values:`. |
 | `ui`          | object            | no       | UI rendering hints (see [UI Properties](#ui-properties)) |
 | `items`       | object            | for `array` | Element schema for an `array` field (a nested field schema). Required on every array. |
 | `properties`  | object            | for `object` | Nested field schemas for an `object` typed dictionary (or an array's `object`-typed `items`). Required on every `object` field. |
@@ -161,8 +160,8 @@ main:
       description: "Format style for the endorsement."
 ```
 
-The `enum:` modifier on `type: string` is a deprecated alias, accepted for one
-release. `enum:`/`values:` on any other type is a load error.
+`values:` on any other type is a load error, as is the retired `enum:`
+modifier on any type.
 
 ### Primitive Arrays, Typed Tables, and Typed Dictionaries
 
@@ -349,8 +348,8 @@ card_kinds:
         ui:
           group: Addressing
       format:
-        type: string
-        enum: [standard, informal, separate_page]
+        type: enum
+        values: [standard, informal, separate_page]
         default: standard
 ```
 
@@ -514,8 +513,8 @@ main:
         group: Header
 
     status:
-      type: string
-      enum: [on_track, at_risk, blocked]
+      type: enum
+      values: [on_track, at_risk, blocked]
       ui:
         group: Header
 

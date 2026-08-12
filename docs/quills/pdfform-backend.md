@@ -59,8 +59,8 @@ main:
       description: Whether the applicant agrees to the terms. Binds the Agree checkbox.
 
     favorite_color:
-      type: string
-      enum:
+      type: enum
+      values:
         - red
         - green
         - blue
@@ -161,11 +161,11 @@ An unbound widget has no `schema_field`, so it cannot inherit a kind: it declare
 
 ### Widget-kind projection
 
-A bound field's kind is derived from the **capability of the resolved schema field**, not its `type` token, so both `type: enum` and the deprecated `string` + `enum:` modifier project to a dropdown. The projection is total, or the quill fails to load:
+A bound field's kind is derived from the **capability of the resolved schema field**, not its `type` token. The projection is total, or the quill fails to load:
 
 | Resolved schema field | Widget kind |
 |---|---|
-| has `enum` values (any spelling) | **choice**, options = the enum values |
+| has `enum` values | **choice**, options = the enum values |
 | `boolean` | **checkbox** |
 | `string`, `number`, `integer`, `date`, `datetime`, `richtext`, `plaintext` | **text** |
 | array of the above (scalar or prose) | **text**: elements joined with newlines |

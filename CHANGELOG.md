@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- refactor(core,pdfform,cli,wasm)!: the `enum:` modifier on `type: string`
+  retires. `type: enum` with a `values:` list is the one spelling of a finite
+  string domain; `enum:` on any type is now `quill::field_parse_error`, whose
+  message names the replacement — it is the only diagnostic a quill written
+  against the modifier ever received, since the deprecation shipped in 0.94
+  with no warning code behind it. `QuillConfig::schema()` re-emits every
+  domain as `values:`, so a consumer reading `enum:` off the schema echo (the
+  wasm `QuillFieldSchema.enum`, dropped here) reads `values:` instead. The
+  `usaf_memo` and `sample_form` fixtures migrate; wire data and rendered
+  output are unchanged, the projections being domain-keyed already.
+- fix(core): `build_transform_schema` keys a field's finite domain on the
+  domain itself rather than the `Enum` token, joining the render floor, the
+  pdfform widget kind and the blueprint annotation. Under the retired
+  spelling every `usaf_memo` enum — `classification`, `format`, `action` —
+  projected as a bare `{"type":"string"}`, so a consumer building a
+  JSON-Schema validator from the transform schema accepted
+  `classification: "banana"` while pdfform drew the six-option dropdown for
+  the same field and `QuillConfig` rejected the value at coercion (#1237)
 - fix(core)!: geometry addresses parse segment-wise, so `locate` and
   `fieldBoxes` answer for an address deeper than one segment. The translation
   boundary folded a plate address's whole tail into one `Field`, so

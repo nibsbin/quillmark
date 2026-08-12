@@ -19,7 +19,7 @@ Supported field types:
 | Quill.yaml Type | Meaning |
 |---|---|
 | `string` | Open scalar UTF-8 text: a value the template computes with (URL, path, identifier, reference key), not prose it lays out |
-| `enum` | Closed string domain; requires a `values:` list. Projects to JSON-Schema `{type: string, enum: […]}`. The `enum:` modifier on `string` is a deprecated alias; `enum:`/`values:` on any other type is a load error |
+| `enum` | Closed string domain; requires a `values:` list. Projects to JSON-Schema `{type: string, enum: […]}`. `values:` on any other type, and `enum:` on any type at all, is a load error |
 | `number` | Numeric value (integers and decimals) |
 | `integer` | Integer-only numeric value |
 | `boolean` | `true` / `false` |
@@ -118,7 +118,7 @@ Coercion rules per type:
   caches (`default_content`/`example_content`) and the render-floor zero (the
   empty content) cover `plaintext` exactly as `richtext`: both are content
   leaves (`field_contains_content`)
-- **`enum` domain validation.** An `enum` field (or the deprecated `enum:` modifier on `string`) coerces as a string; domain membership is a *value* check (`validation::enum_violation`), not a type check, so an out-of-domain string is well-typed but invalid. `type: enum` requires a non-empty `values:` list; `enum:`/`values:` on any type other than `string`/`enum` is a load error (`quill::field_parse_error`). Both spellings populate one carrier (`FieldSchema::enum_values`) and project identically to `{type: string, enum: […]}`
+- **`enum` domain validation.** An `enum` field coerces as a string; domain membership is a *value* check (`validation::enum_violation`), not a type check, so an out-of-domain string is well-typed but invalid. `type: enum` requires a non-empty `values:` list; `values:` on any other type is a load error (`quill::field_parse_error`), as is `enum:` on any type. The domain rides one carrier (`FieldSchema::enum_values`), and every consumer keys on that carrier rather than on the `Enum` token: the render floor, the pdfform widget kind, the blueprint annotation, and the transform-schema projection to `{type: string, enum: […]}`
 - **Null short-circuits coercion.** A null value (`field:`, `field: null`,
   `field: ~`) passes coercion unchanged for *every* type: null ≡ absent, so
   it carries no data to coerce. The value reaches the render floor and
@@ -397,7 +397,6 @@ The type-gated keys:
 
 - `inline`: valid only on the prose types (`richtext`, `plaintext`).
 - `values`: declares an `enum` field's domain, required there.
-- `enum`: a deprecated alias for `values` on `string`.
 - `items`: the element schema, itself a `FieldSchema`; required on `array`
   fields and rejected elsewhere.
 - `properties`: used by `object` fields, and by an array's `object`-typed

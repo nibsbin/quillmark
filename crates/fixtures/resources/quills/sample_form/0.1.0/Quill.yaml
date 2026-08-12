@@ -32,8 +32,8 @@ main:
       description: Whether the applicant agrees to the terms. Binds the Agree checkbox.
 
     favorite_color:
-      type: string
-      enum:
+      type: enum
+      values:
         - red
         - green
         - blue

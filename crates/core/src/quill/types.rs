@@ -326,12 +326,11 @@ pub enum FieldType {
     },
     /// A closed finite domain of string values: the "branch on this" data type.
     /// Surfaced as `type: enum` with a required `values:` list (carried in
-    /// [`FieldSchema::enum_values`], the single storage shared with the
-    /// deprecated `enum:` modifier on `string`). Projects to the idiomatic
-    /// JSON-Schema `{type: string, enum: [...]}`: exactly the shape backends
-    /// already consume, so promoting the token costs zero backend edits. Scoped
-    /// to string-valued members: an enum is a branching key, and numeric
-    /// domains are range constraints on `number`, not enums.
+    /// [`FieldSchema::enum_values`]), the sole spelling of a finite domain.
+    /// Projects to the idiomatic JSON-Schema `{type: string, enum: [...]}`:
+    /// exactly the shape backends already consume, so the token costs zero
+    /// backend edits. Scoped to string-valued members: an enum is a branching
+    /// key, and numeric domains are range constraints on `number`, not enums.
     Enum,
 }
 
@@ -469,13 +468,13 @@ struct FieldSchemaDef {
     pub default: Option<QuillValue>,
     pub example: Option<QuillValue>,
     pub ui: Option<UiFieldSchema>,
-    /// The deprecated `enum:` modifier on `type: string`, accepted alongside
-    /// the promoted `type: enum` + `values:` spelling; both land in
-    /// [`FieldSchema::enum_values`].
+    /// The retired `enum:` modifier, parsed only to reject it by name: under
+    /// `deny_unknown_fields` an absent binding reports "unknown field `enum`"
+    /// with no route to `values:`.
     #[serde(rename = "enum")]
-    pub enum_values: Option<Vec<String>>,
-    /// The `values:` list required by the promoted `type: enum`. Merged with
-    /// `enum_values` into the one carrier at load.
+    pub enum_key: Option<Vec<String>>,
+    /// The domain of a `type: enum` field, and the only spelling of one.
+    /// Lands in [`FieldSchema::enum_values`].
     pub values: Option<Vec<String>>,
     // Nested schema support
     pub properties: Option<serde_json::Map<String, serde_json::Value>>,
@@ -508,11 +507,9 @@ impl FieldSchema {
         // here, so `FieldType::RichText { inline }` (and its `PlainText` sibling)
         // is the one carrier thereafter.
         let r#type = Self::resolve_prose_inline(def.r#type, def.inline)?;
-        // Fold the two enum spellings into the one carrier: the promoted
-        // `type: enum` requires `values:`; the deprecated `enum:` modifier is
-        // accepted only on `string`. On any other type an `enum:`/`values:` key
-        // is a hard error.
-        let enum_values = Self::resolve_enum_values(&r#type, def.enum_values, def.values)?;
+        // `type: enum` requires `values:`; `values:` on any other type, and
+        // `enum:` on any type at all, is a hard error.
+        let enum_values = Self::resolve_enum_values(&r#type, def.enum_key, def.values)?;
         Ok(Self {
             name: key.clone(),
             r#type,
@@ -575,43 +572,32 @@ impl FieldSchema {
         }
     }
 
-    /// Reconcile the two enum spellings into [`FieldSchema::enum_values`]:
-    /// the promoted `type: enum` requires a non-empty `values:` list; `type:
-    /// string` accepts the deprecated `enum:` modifier; any other type carrying
-    /// either key is an error.
+    /// Resolve the domain into [`FieldSchema::enum_values`]. `type: enum`
+    /// requires a non-empty `values:` list and is the one spelling of a finite
+    /// domain; `values:` elsewhere, and `enum:` anywhere, is an error. The
+    /// `enum:` message is a migration instruction: it is the only diagnostic a
+    /// quill written against the modifier ever receives.
     fn resolve_enum_values(
         r#type: &FieldType,
         enum_key: Option<Vec<String>>,
         values_key: Option<Vec<String>>,
     ) -> Result<Option<Vec<String>>, String> {
+        if enum_key.is_some() {
+            return Err(
+                "enum: is retired; declare a finite string domain as type: enum with a \
+                 values: list"
+                    .to_string(),
+            );
+        }
         match r#type {
-            FieldType::Enum => {
-                if enum_key.is_some() {
-                    return Err(
-                        "type: enum declares its domain with values:, not enum:; rename the key"
-                            .to_string(),
-                    );
-                }
-                match values_key {
-                    Some(v) if !v.is_empty() => Ok(Some(v)),
-                    _ => Err("type: enum requires a non-empty values: list".to_string()),
-                }
-            }
-            FieldType::String => {
-                if values_key.is_some() {
-                    return Err(
-                        "values: is only valid on type: enum; on a string use the enum: modifier \
-                         (deprecated) or declare type: enum"
-                            .to_string(),
-                    );
-                }
-                Ok(enum_key)
-            }
+            FieldType::Enum => match values_key {
+                Some(v) if !v.is_empty() => Ok(Some(v)),
+                _ => Err("type: enum requires a non-empty values: list".to_string()),
+            },
             other => {
-                if enum_key.is_some() || values_key.is_some() {
+                if values_key.is_some() {
                     return Err(format!(
-                        "enum:/values: is only valid on type: enum (or the deprecated enum: on \
-                         type: string), not on type: {}",
+                        "values: is only valid on type: enum, not on type: {}",
                         other.as_str()
                     ));
                 }
@@ -655,14 +641,7 @@ impl Serialize for FieldSchema {
             map.serialize_entry("ui", v)?;
         }
         if let Some(v) = &self.enum_values {
-            // The promoted type re-emits its domain as `values:`; the deprecated
-            // modifier on `string` re-emits as `enum:`, so each spelling round-trips.
-            let key = if matches!(self.r#type, FieldType::Enum) {
-                "values"
-            } else {
-                "enum"
-            };
-            map.serialize_entry(key, v)?;
+            map.serialize_entry("values", v)?;
         }
         if let Some(v) = &self.properties {
             map.serialize_entry("properties", v)?;

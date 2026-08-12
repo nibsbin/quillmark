@@ -266,17 +266,15 @@ fn descend<'a>(cur: &'a FieldSchema, seg: &str) -> Option<&'a FieldSchema> {
 }
 
 /// Project a resolved [`FieldSchema`] to its widget kind. Keyed on the field's
-/// *capability*, not its `type` token: crucially, choice keys on
-/// `enum_values.is_some()`, so both `type: enum` and the deprecated `string` +
-/// `enum:` modifier project to a dropdown (keying on the `Enum` variant would
-/// silently demote the latter to a text box). Total or a load error: an
-/// `object`, or an array of objects/arrays, has no widget shape.
+/// *capability*, not its `type` token: choice keys on `enum_values.is_some()`,
+/// so any field carrying a finite domain is a dropdown. Total or a load error:
+/// an `object`, or an array of objects/arrays, has no widget shape.
 pub fn project_kind(
     field: &FieldSchema,
     name: &str,
     path: &str,
 ) -> Result<WidgetType, BindError> {
-    // A finite string domain, however spelled, is a dropdown.
+    // A finite string domain is a dropdown.
     if let Some(values) = &field.enum_values {
         return Ok(WidgetType::Choice {
             options: values.clone(),
@@ -387,11 +385,8 @@ main:
     agree:
       type: boolean
     favorite_color:
-      type: string
-      enum: [red, green, blue]
-    promoted_color:
       type: enum
-      values: [cyan, magenta]
+      values: [red, green, blue]
     count:
       type: integer
     when:
@@ -442,19 +437,11 @@ card_kinds:
     }
 
     #[test]
-    fn both_enum_spellings_project_to_choice() {
-        // Deprecated `string` + `enum:` and promoted `type: enum` both key on
-        // `enum_values.is_some()`.
+    fn enum_projects_to_choice() {
         assert_eq!(
             kind("favorite_color").unwrap(),
             WidgetType::Choice {
                 options: vec!["red".into(), "green".into(), "blue".into()]
-            }
-        );
-        assert_eq!(
-            kind("promoted_color").unwrap(),
-            WidgetType::Choice {
-                options: vec!["cyan".into(), "magenta".into()]
             }
         );
     }
