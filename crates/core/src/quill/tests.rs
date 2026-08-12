@@ -2864,7 +2864,7 @@ fn example_string_type_accepts_quoted_decimal_example() {
 #[test]
 fn example_not_in_enum_is_rejected() {
     let yaml = example_default_yaml(
-        "    color:\n      type: string\n      enum: [a, b]\n      example: c\n",
+        "    color:\n      type: enum\n      values: [a, b]\n      example: c\n",
     );
     let errors = QuillConfig::from_yaml_with_warnings(&yaml).unwrap_err();
     let diag = errors
@@ -2879,7 +2879,7 @@ fn example_not_in_enum_is_rejected() {
 #[test]
 fn example_in_enum_loads_successfully() {
     let yaml = example_default_yaml(
-        "    color:\n      type: string\n      enum: [a, b]\n      example: a\n",
+        "    color:\n      type: enum\n      values: [a, b]\n      example: a\n",
     );
     QuillConfig::from_yaml(&yaml).expect("enum-member example should load");
 }
@@ -3250,7 +3250,7 @@ fn plaintext_transform_schema_carries_media_type_and_plain_annotation() {
 }
 
 // ---------------------------------------------------------------------------
-// enum: the promoted `type: enum` token
+// enum: `type: enum` + `values:`, the one spelling of a finite string domain
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -3307,27 +3307,27 @@ fn enum_membership_is_validated_on_a_document_value() {
 }
 
 #[test]
-fn legacy_enum_modifier_on_string_is_still_accepted() {
-    // The deprecated spelling loads and populates the same store.
-    let config = quill_with_field("    color:\n      type: string\n      enum: [a, b]\n")
-        .expect("legacy enum: on string still loads");
-    let field = config.main.fields.get("color").unwrap();
-    assert_eq!(field.r#type, FieldType::String);
-    assert_eq!(
-        field.enum_values.as_deref(),
-        Some(["a".to_string(), "b".to_string()].as_slice())
-    );
+fn the_enum_modifier_is_a_load_error_on_every_type() {
+    // The modifier is retired on the type that used to accept it, and the
+    // message routes to `type: enum` rather than reporting an unknown key.
+    for field in [
+        "    color:\n      type: string\n      enum: [a, b]\n",
+        "    color:\n      type: enum\n      enum: [a, b]\n",
+        "    n:\n      type: integer\n      enum: [a, b]\n",
+    ] {
+        let err = quill_with_field(field).unwrap_err();
+        assert!(
+            err.iter()
+                .any(|d| d.code.as_deref() == Some("quill::field_parse_error")
+                    && d.message.contains("enum: is retired")
+                    && d.message.contains("values:")),
+            "enum: should fail load with a migration message, got: {err:?}"
+        );
+    }
 }
 
 #[test]
-fn enum_or_values_on_a_non_enum_type_is_a_load_error() {
-    // enum:/values: on a non-string, non-enum type fails to load.
-    let err = quill_with_field("    n:\n      type: integer\n      enum: [1, 2]\n").unwrap_err();
-    assert!(
-        err.iter()
-            .any(|d| d.code.as_deref() == Some("quill::field_parse_error")),
-        "enum: on an integer field should fail to load, got: {err:?}"
-    );
+fn values_on_a_non_enum_type_is_a_load_error() {
     let err = quill_with_field("    s:\n      type: string\n      values: [a, b]\n").unwrap_err();
     assert!(
         err.iter()

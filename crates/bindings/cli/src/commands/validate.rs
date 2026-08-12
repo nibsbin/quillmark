@@ -173,22 +173,14 @@ fn validate_file_references(
 /// Type/enum/format errors on `example:` and `default:` literals are caught
 /// authoritatively at parse time (`QuillConfig::from_yaml_with_warnings`, Step 1)
 /// via the shared `validate_schema_literal` core and reported there with full
-/// diagnostics. This pass only adds the advisory checks the parser does not:
-/// empty enum constraints and missing field descriptions.
+/// diagnostics. This pass only adds the advisory check the parser does not: a
+/// missing field description.
 fn validate_field_schemas(
     fields: &IndexMap<String, FieldSchema>,
     result: &mut ValidationResult,
     context: &str,
 ) {
     for (field_name, field_schema) in fields {
-        if let Some(ref enum_values) = field_schema.enum_values {
-            if enum_values.is_empty() {
-                result.add_warning(
-                    format!("{context} '{field_name}': enum constraint is empty"),
-                    "cli::empty_enum",
-                );
-            }
-        }
         if field_schema
             .description
             .as_deref()

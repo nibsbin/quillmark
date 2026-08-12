@@ -556,7 +556,7 @@ main:
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
   fields:
-    format: { type: string, enum: [standard, informal], default: standard }
+    format: { type: enum, values: [standard, informal], default: standard }
 "#)
         .blueprint();
         assert!(t.contains("format: standard # enum<standard | informal>\n"));
@@ -571,7 +571,7 @@ main:
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
   fields:
-    severity: { type: string, enum: [low, medium, high] }
+    severity: { type: enum, values: [low, medium, high] }
 "#)
         .blueprint();
         assert!(t.contains("severity: !must_fill # enum<low | medium | high>\n"));
@@ -1018,8 +1018,8 @@ main:
     date:
       type: datetime
     priority:
-      type: string
-      enum: [normal, urgent]
+      type: enum
+      values: [normal, urgent]
       default: normal
     attachments:
       type: array

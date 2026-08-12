@@ -66,11 +66,8 @@ export interface QuillFieldSchema {
     description?: string;
     default?: unknown;
     example?: unknown;
-    /** Closed value domain. On `type: "enum"` declared as `values`; the
-     *  deprecated `enum` modifier on `type: "string"` is accepted for one
-     *  release. Both round-trip through this field. */
-    enum?: string[];
-    /** Required on `type: "enum"`: the closed set of allowed string values. */
+    /** Required on `type: "enum"`, and valid nowhere else: the closed set of
+     *  allowed string values. */
     values?: string[];
     ui?: QuillFieldUi;
     properties?: Record<string, QuillFieldSchema>;
