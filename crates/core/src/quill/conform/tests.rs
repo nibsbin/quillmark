@@ -300,6 +300,59 @@ fn conform_is_a_no_op_on_seeds() {
     assert_eq!(bytes(&doc2), before2, "seed_card is already at rest");
 }
 
+/// A `!must_fill` tag on a seeded `example` cell rides the payload *item*, not
+/// the value, so it crosses the storage seam without touching either byte
+/// discipline: seed → store → load → conform is a byte no-op with the tag
+/// present, and the cell keeps its resting form (a `plaintext` literal string, a
+/// `richtext` canonical content object). The shape a seeder that stamped its
+/// must-fill cells would persist (issue 1234, open question 2).
+///
+/// The resting form here is the *seeder's* doing, not conform's: a tagged field
+/// is skipped outright (`fill_marked_fields_are_skipped`), so it never reaches
+/// the strict write. Seed-commits-rest is what makes the two agree, which a
+/// stamping seeder would promote from a nicety to a prerequisite — a tag on a
+/// cell written off-rest would pin it there.
+#[test]
+fn a_fill_tag_on_a_seeded_cell_survives_store_load_conform() {
+    let quill = quill();
+    let mut doc = quill.seed_document();
+
+    // Tag in place, keeping each seeded value: `insert_item` preserves an
+    // existing key's position, so the payload order is still declaration order.
+    for key in ["subject", "note"] {
+        let seeded = doc.main().payload().get(key).expect("seeded").clone();
+        doc.main_mut().store_fill(key, seeded).unwrap();
+    }
+    let tagged = bytes(&doc);
+
+    let mut loaded = Document::try_from(
+        serde_json::from_str::<StoredDocument>(&tagged).expect("the tagged seed loads"),
+    )
+    .expect("and converts to a document");
+    let diags = quill.conform(&mut loaded).expect("the quill matches");
+
+    assert!(diags.is_empty(), "{diags:?}");
+    assert_eq!(bytes(&loaded), tagged, "the cycle moves no bytes");
+    assert!(
+        loaded.main().payload().is_fill("subject") && loaded.main().payload().is_fill("note"),
+        "both tags survive the round trip"
+    );
+    assert_eq!(
+        loaded.main().payload().get("note").unwrap().as_json(),
+        &json!("a *literal* line"),
+        "the tagged plaintext cell keeps its resting form"
+    );
+    assert!(
+        loaded.main().payload().get("subject").unwrap().as_json().is_object(),
+        "and the tagged richtext cell keeps its canonical content object"
+    );
+
+    // The tag is the only difference from the untagged seed: same values, same
+    // order, so a consumer's cache key moves once when the tag lands and holds.
+    let untagged = bytes(&quill.seed_document());
+    assert_ne!(tagged, untagged, "the tag is stored, not inferred");
+}
+
 /// The plate is the render floor's shape and does not move: `plaintext` reaches
 /// the backend as a content object whichever form was committed.
 #[test]

@@ -825,4 +825,90 @@ card_kinds:
             "a body-enabled kind keeps its $body content object"
         );
     }
+
+    // ── The render floor's two type-domain edges. Every shipped quill declares
+    //    a `default:` on every enum and never authors an empty `date`, so the
+    //    fixture suite reaches neither path; these pin the behavior a plate
+    //    actually receives (issue 1234, breaking changes 1 and 2).
+
+    /// A defaultless `enum` floors to the first declared variant: `zero_value`
+    /// returns an in-domain value, and `values.first()` is the only one
+    /// available. The plate cannot distinguish it from an authored choice.
+    #[test]
+    fn absent_defaultless_enum_floors_to_the_first_variant() {
+        let plate = plate_of(
+            r#"
+quill: { name: ev, version: 1.0.0, backend: typst, description: x }
+main:
+  fields:
+    title: { type: string }
+    classification:
+      type: enum
+      values: [UNCLASSIFIED, CUI, SECRET]
+"#,
+            "~~~card-yaml\n$quill: ev@1.0.0\n$kind: main\ntitle: T\n~~~\n",
+        );
+        assert_eq!(
+            plate["classification"], "UNCLASSIFIED",
+            "declaration order picks the value; got {plate}"
+        );
+    }
+
+    /// The same floor inside a typed dictionary: `zero_value` recurses per
+    /// property, so a nested defaultless enum takes the first variant even when
+    /// the dictionary itself is absent.
+    #[test]
+    fn nested_defaultless_enum_floors_to_the_first_variant() {
+        let plate = plate_of(
+            r#"
+quill: { name: env, version: 1.0.0, backend: typst, description: x }
+main:
+  fields:
+    title: { type: string }
+    marking:
+      type: object
+      properties:
+        level:
+          type: enum
+          values: [UNCLASSIFIED, CUI]
+        note: { type: string }
+"#,
+            "~~~card-yaml\n$quill: env@1.0.0\n$kind: main\ntitle: T\n~~~\n",
+        );
+        assert_eq!(
+            plate["marking"],
+            json!({ "level": "UNCLASSIFIED", "note": "" }),
+            "the recursive floor fills each property; got {plate}"
+        );
+    }
+
+    /// An authored empty `date` coerces to null before the ladder runs
+    /// (`config::conform_value`), so it reads as absent and the `default:`
+    /// fills. The same literal on a `string` outranks the default: presence,
+    /// not truthiness, is what the ladder keys on.
+    #[test]
+    fn authored_empty_date_coerces_to_absent_and_takes_the_default() {
+        let plate = plate_of(
+            r#"
+quill: { name: dz, version: 1.0.0, backend: typst, description: x }
+main:
+  fields:
+    signed_on:
+      type: date
+      default: "2026-01-01"
+    subtitle:
+      type: string
+      default: "a default"
+"#,
+            "~~~card-yaml\n$quill: dz@1.0.0\n$kind: main\nsigned_on: \"\"\nsubtitle: \"\"\n~~~\n",
+        );
+        assert_eq!(
+            plate["signed_on"], "2026-01-01",
+            "the empty date nulls in coercion, so the default fills; got {plate}"
+        );
+        assert_eq!(
+            plate["subtitle"], "",
+            "the empty string survives coercion and outranks the default"
+        );
+    }
 }
