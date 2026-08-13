@@ -1,18 +1,10 @@
-//! # quillmark-pdfform: the PDF-form backend
-//!
-//! A Typst-free Quillmark backend dedicated to filling existing PDF forms:
-//! something the Typst backend fundamentally cannot do. A `pdfform` quill ships
-//! two assets the (out-of-scope) qualification layer produced upstream:
-//!
-//! - **`form.pdf`**, the *stripped background*: the normalized form with
-//!   its `/AcroForm`, widget annotations, and page `/Annots` removed.
-//! - **`form.json`**: the complete, value-free field reconstruction spec.
-//!
-//! The backend reads both, binds document values against `compile_data`, and
-//! writes a fresh AcroForm onto the background via the shared `quillmark-pdf`
-//! stamping spine. It never reads or reconciles a foreign AcroForm. Both
-//! backends collapse to the same `&[FieldSpec]` seam; they differ only in where
-//! geometry and values come from.
+//! A Typst-free Quillmark backend that fills existing PDF forms. A `pdfform`
+//! quill ships two assets: `form.pdf`, the stripped background (the normalized
+//! form with its `/AcroForm`, widget annotations, and page `/Annots` removed),
+//! and `form.json`, the value-free field spec. The backend binds document
+//! values against `compile_data` and writes a fresh AcroForm onto the
+//! background via the `quillmark-pdf` stamping spine; it never reads or
+//! reconciles a foreign AcroForm.
 
 mod bind;
 mod flatten;
@@ -39,12 +31,10 @@ use {
     std::sync::Arc,
 };
 
-/// Conventional filenames a `pdfform` quill ships at its root.
 const FORM_PDF: &str = "form.pdf";
 const FORM_JSON: &str = "form.json";
 
-/// Default raster resolution for PNG output (2× at 72 pt/in), matching the
-/// core `RenderOptions::ppi` default and the Typst backend.
+/// 2× at 72 pt/in, matching the core `RenderOptions::ppi` default.
 const DEFAULT_PPI: f32 = 144.0;
 
 const SUPPORTED_FORMATS: &[OutputFormat] =
@@ -91,24 +81,15 @@ impl Backend for PdfformBackend {
             FormSpec::parse(form_json).map_err(|e| engine_err(e.code(), e.to_string()))?;
 
         // Page boxes drive the top-left → bottom-left flip (honouring a
-        // non-zero page origin); reading them from the background also surfaces
-        // a malformed/out-of-contract base early. Read before binding so
-        // geometry is placed once, at load.
+        // non-zero page origin), and reading them surfaces a malformed base early.
         let page_boxes = quillmark_pdf::page_media_boxes(&base_pdf)?;
 
-        // Bind at load: resolve every field against the two static inputs, the
-        // quill schema (kind, options, multiline, tooltip) and the page geometry
-        // (final rect, page-range check). A dangling/unbindable `schema_field` or
-        // an out-of-range page is a load error here, not a silent blank or a
-        // per-render recomputation.
         let bound = bind::bind_widgets(&spec, source.config(), &page_boxes)
             .map_err(|e| engine_err(e.code(), e.to_string()))?;
 
         let field_specs = resolve_field_specs(&bound, json_data);
 
-        // Pre-flatten once so render_rgba / SVG / PNG renders have a
-        // ready-to-rasterize flat PDF without re-running flatten on every
-        // paint call.
+        // Pre-flatten once so the raster paths need not re-flatten per paint.
         let flat_pdf = flatten_to_pdf(base_pdf.clone(), &field_specs)?;
 
         Ok(LiveSession::new(
@@ -124,10 +105,6 @@ impl Backend for PdfformBackend {
     }
 }
 
-/// Resolve the bound widgets' values against document data: the per-document
-/// half of `open`, re-run by each `apply`. Intrinsics and geometry were already
-/// resolved at bind time, so this pass only fills in values; nothing here can
-/// fail.
 fn resolve_field_specs(bound: &[BoundWidget], json_data: &serde_json::Value) -> Vec<FieldSpec> {
     bound
         .iter()
@@ -135,21 +112,14 @@ fn resolve_field_specs(bound: &[BoundWidget], json_data: &serde_json::Value) -> 
         .collect()
 }
 
-/// A `pdfform` render session: the stripped background plus the resolved field
-/// specs, ready to stamp on each `render`.
 #[derive(Debug)]
 struct PdfformSession {
     base_pdf: Vec<u8>,
-    /// The value-free widget layer, bound against the quill schema at open;
-    /// re-resolved against new document data by each `apply`.
     bound: Vec<BoundWidget>,
     field_specs: Vec<FieldSpec>,
-    /// Page media-boxes from the background; used by `page_size_pt` without
-    /// reparsing the PDF on every canvas-paint call. Its length is the page
-    /// count (the background is fixed for the session).
+    /// Cached so `page_size_pt` need not reparse.
     page_boxes: Vec<[f32; 4]>,
-    /// Pre-flattened PDF (values baked as content-stream operators) ready for
-    /// hayro rasterisation. Produced once at session-open time.
+    /// Values baked as content-stream operators, ready for hayro rasterisation.
     flat_pdf: Vec<u8>,
 }
 
@@ -164,9 +134,6 @@ impl SessionHandle for PdfformSession {
             ));
         }
 
-        // Raster/vector output: rasterise the pre-flattened PDF via hayro.
-        // SVG is vector (hayro-svg); PNG is raster at `opts.ppi`. Both bake the
-        // values in, so they render in any viewer (no appearance synthesis).
         if format == OutputFormat::Svg {
             return self.render_svg();
         }
@@ -175,10 +142,8 @@ impl SessionHandle for PdfformSession {
             return self.render_png(scale);
         }
 
-        // The producer threads from the product layer, else the backend default.
-        // PDF output is always an interactive AcroForm (Technique A / `stamp`);
-        // value-flattening is internal raster machinery (SVG/PNG/canvas),
-        // never a PDF deliverable.
+        // PDF output is always an interactive AcroForm; value-flattening backs
+        // only the raster paths, never a PDF deliverable.
         let producer = opts.producer.clone().unwrap_or_else(default_producer);
         let stamp_opts = StampOptions::default().with_producer(producer);
         let stamped = stamp(self.base_pdf.clone(), &self.field_specs, &stamp_opts)?;
@@ -193,15 +158,11 @@ impl SessionHandle for PdfformSession {
         self.page_boxes.len()
     }
 
-    /// Page dimensions in PDF points derived from the background's `/MediaBox`.
     fn page_size_pt(&self, page: usize) -> Option<(f32, f32)> {
         let [x0, y0, x1, y1] = *self.page_boxes.get(page)?;
         Some((x1 - x0, y1 - y0))
     }
 
-    /// Rasterise `page` of the pre-flattened PDF via hayro. Field values are
-    /// baked into the flat PDF as content-stream operators, so they appear in
-    /// the raster without any regions-compositing by the caller.
     fn render_rgba(&self, page: usize, scale: f32) -> Option<(u32, u32, Vec<u8>)> {
         let pdf = HayroPdf::new(self.flat_pdf.clone()).ok()?;
         let p = pdf.pages().get(page)?;
@@ -219,18 +180,12 @@ impl SessionHandle for PdfformSession {
         Some((w, h, bytes))
     }
 
-    /// Schema-field geometry from the resolved specs: keyed on the schema path,
-    /// skipping unbound widgets. Computed from cached state, no rasterization.
     fn regions(&self) -> Vec<RenderedRegion> {
         regions_of(&self.field_specs)
     }
 
-    /// Full re-resolve + re-flatten against new document data: this backend's
-    /// compile is cheap, so `apply` recomputes rather than incrementally
-    /// recompiling. Transactional: specs and flat PDF swap together only after
-    /// both succeed. Dirty pages are those carrying a field whose resolved spec
-    /// changed; the background never changes, so field deltas are the only
-    /// visible delta.
+    /// Specs and flat PDF swap together only after both succeed. The background
+    /// never changes, so field deltas are the only visible delta.
     fn update(&mut self, json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> {
         let field_specs = resolve_field_specs(&self.bound, json_data);
         let flat_pdf = flatten_to_pdf(self.base_pdf.clone(), &field_specs)?;
@@ -253,7 +208,6 @@ impl SessionHandle for PdfformSession {
 }
 
 impl PdfformSession {
-    /// Render all pages as SVG via hayro-svg, using the pre-flattened PDF.
     fn render_svg(&self) -> Result<RenderResult, RenderError> {
         let pdf = HayroPdf::new(self.flat_pdf.clone()).map_err(|_| {
             engine_err(
@@ -278,9 +232,7 @@ impl PdfformSession {
         Ok(RenderResult::new(artifacts, OutputFormat::Svg))
     }
 
-    /// Render all pages as PNG via hayro, using the pre-flattened PDF. `scale`
-    /// is device pixels per PDF point (`ppi / 72`), so the values baked into
-    /// the flat PDF rasterise at the requested resolution.
+    /// `scale` is device pixels per PDF point (`ppi / 72`).
     fn render_png(&self, scale: f32) -> Result<RenderResult, RenderError> {
         let pdf = HayroPdf::new(self.flat_pdf.clone()).map_err(|_| {
             engine_err(
@@ -308,8 +260,7 @@ impl PdfformSession {
     }
 }
 
-/// Uniform scale on both axes over an opaque white page: the raster settings
-/// behind both the RGBA canvas path and the PNG artifact path, which must agree
+/// Shared by the RGBA canvas path and the PNG artifact path, which must agree
 /// or a preview and its export drift apart.
 fn scaled_render_settings(scale: f32) -> RenderSettings {
     use hayro::vello_cpu::color::palette::css::WHITE;
@@ -321,9 +272,8 @@ fn scaled_render_settings(scale: f32) -> RenderSettings {
     }
 }
 
-/// Build an `InterpreterSettings` that satisfies standard Type1 font queries
-/// (Helvetica, ZapfDingbats, etc.) using hayro's embedded font data.
-/// Required for rendering the flat PDF's Helv and ZaDb content streams.
+/// Satisfies standard Type1 font queries from hayro's embedded font data:
+/// required for the flat PDF's `Helv` and `ZaDb` content streams.
 fn standard_font_settings() -> InterpreterSettings {
     InterpreterSettings {
         font_resolver: Arc::new(|query| match query {
@@ -334,13 +284,11 @@ fn standard_font_settings() -> InterpreterSettings {
     }
 }
 
-/// Default `/Producer`: `Quillmark <crate-version>`, owned by the backend (the
-/// product layer), never defaulted from the leaf spine's version.
+/// Owned by the backend, never defaulted from the leaf spine's version.
 fn default_producer() -> String {
     format!("Quillmark {}", env!("CARGO_PKG_VERSION"))
 }
 
-/// A single-diagnostic `RenderError` with `code`.
 fn engine_err(code: &str, message: impl Into<String>) -> RenderError {
     RenderError::from_diag(
         Diagnostic::new(Severity::Error, message.into()).with_code(code.to_string()),

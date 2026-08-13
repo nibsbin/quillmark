@@ -1,34 +1,15 @@
-//! The **bind** step: at quill load, resolve every `form.json` field against the
-//! two static inputs (the quill schema and the background geometry) into the
-//! session's value-free widget layer. Everything here is a pure function of the
-//! quill (not the document), so it runs once at open, never per render:
-//! `form.json` never restates what the schema carries, and a widget bound to a
+//! Resolve every `form.json` field against the two static inputs (the quill
+//! schema and the background geometry) into the session's value-free widget
+//! layer. Pure in the quill, so it runs once at open: a widget bound to a
 //! nonexistent field or an out-of-range page is a load error, not a silent blank.
-//!
-//! Two products, one per field population ([`crate::form`]):
-//! - A **bound** field names a `schema_field`. [`bind`] walks that path against
-//!   the [`QuillConfig`] to the leaf [`FieldSchema`], and [`project_kind`]
-//!   projects that resolved field to a widget kind (choice/checkbox/text). The
-//!   projection is **total or it is a load error**: a field that resolves to an
-//!   `object` or an array of objects/arrays has no widget shape
-//!   ([`BindError::Unbindable`]).
-//! - An **unbound** widget carries its own declared `type`, copied straight
-//!   through (no schema to consult).
-//!
-//! Both collapse to a [`BoundWidget`]: the value-free intrinsic layer the
-//! session holds for its lifetime, its `rect` already flipped to final PDF
-//! geometry. Per-document value resolution ([`crate::resolve`]) runs against it
-//! and touches nothing but the value.
 
 use quillmark_core::quill::{FieldSchema, FieldType as SchemaType, QuillConfig};
 use quillmark_pdf::FieldType as WidgetType;
 
 use crate::form::{BoundField, FormSpec, Rect, UnboundWidget, WidgetKind};
 
-/// A `form.json` field with everything static about it resolved: **final**
-/// geometry (bottom-left `[x0, y0, x1, y1]`, page-range validated) plus a
-/// value-free [`WidgetType`]. A bound field carries `Some(schema_field)` (its
-/// value is resolved per document); an unbound widget carries `None`.
+/// A `form.json` field with its static parts resolved: `rect` is final
+/// bottom-left PDF geometry, and the widget type is value-free.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct BoundWidget {
@@ -40,28 +21,22 @@ pub struct BoundWidget {
     pub tooltip: Option<String>,
 }
 
-/// Why binding a `form.json` field failed. Every variant is a load error: the
-/// point of binding at load is to turn what was a silently-blank (or misplaced)
-/// widget into a diagnostic.
+/// Why binding a `form.json` field failed. Every variant is a load error.
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum BindError {
-    /// A `schema_field` path does not resolve: a missing root, or a `.segment`
-    /// that descends into the wrong shape or a nonexistent key. Names the failing
-    /// segment.
+    /// A `schema_field` path does not resolve; names the failing segment.
     Dangling {
         name: String,
         path: String,
         segment: String,
     },
-    /// A `schema_field` resolves, but to a schema type with no widget shape (an
-    /// `object`, or an array of objects/arrays).
+    /// A `schema_field` resolves to a schema type with no widget shape.
     Unbindable {
         name: String,
         path: String,
         ty: String,
     },
-    /// A widget targets a page the background PDF does not have.
     PageOutOfRange {
         name: String,
         page: usize,
@@ -70,7 +45,7 @@ pub enum BindError {
 }
 
 impl BindError {
-    /// The stable error code a caller stamps on the surfaced diagnostic.
+    /// The stable diagnostic code for this error.
     pub fn code(&self) -> &'static str {
         match self {
             BindError::Dangling { .. } => "pdfform::dangling_binding",
@@ -111,11 +86,7 @@ impl std::fmt::Display for BindError {
 }
 
 /// Resolve and place every field in `spec` against the schema and the page
-/// geometry, yielding the session's value-free widget layer. Bound fields
-/// inherit their kind, choice options, multiline, and tooltip from the schema;
-/// unbound widgets pass their declared kind through unchanged; every widget's
-/// rect is flipped to final geometry and its page validated: all of it once,
-/// here, so nothing downstream repeats it per document.
+/// geometry, yielding the session's value-free widget layer.
 pub fn bind_widgets(
     spec: &FormSpec,
     config: &QuillConfig,
@@ -131,9 +102,7 @@ pub fn bind_widgets(
     Ok(bound)
 }
 
-/// Bind one schema-bound field: resolve its path, project the widget kind, place
-/// its geometry, and inherit the tooltip (an explicit `tooltip` overrides the
-/// schema `description`).
+/// An explicit `tooltip` overrides the schema `description`.
 fn bind_field(
     field: &BoundField,
     config: &QuillConfig,
@@ -155,8 +124,6 @@ fn bind_field(
     })
 }
 
-/// Lift one unbound widget: its declared kind maps straight to a [`WidgetType`]
-/// (no schema consulted) and its geometry is placed.
 fn bind_unbound(
     widget: &UnboundWidget,
     page_boxes: &[[f32; 4]],
@@ -171,9 +138,6 @@ fn bind_unbound(
     })
 }
 
-/// Flip a widget's top-left, page-relative rect to final bottom-left PDF
-/// geometry against its page's media box, validating the page exists. Runs once
-/// per widget at load: the geometry is fixed for the session's lifetime.
 fn place(
     name: &str,
     page: usize,
@@ -188,12 +152,9 @@ fn place(
     Ok(flip_rect(rect, *media_box))
 }
 
-/// Page-relative top-left `{x,y,w,h}` → spine bottom-left `[x0, y0, x1, y1]` in
-/// PDF user space. Honours a non-zero page origin: the left edge is the MediaBox
-/// `x0` and `y` is measured down from the top edge (MediaBox `y1`), so a
-/// translated MediaBox (e.g. `[10 20 622 812]`) places widgets correctly rather
-/// than shifting them by the origin. This is the single biggest hand-authoring
-/// footgun, defused structurally in one place.
+/// Page-relative top-left `{x,y,w,h}` → bottom-left `[x0, y0, x1, y1]` in PDF
+/// user space. Origins come from the MediaBox, not `(0,0)`, so a translated
+/// MediaBox (e.g. `[10 20 622 812]`) does not shift widgets by its origin.
 fn flip_rect(r: Rect, media_box: [f32; 4]) -> [f32; 4] {
     let left = media_box[0];
     let top = media_box[3];
@@ -202,17 +163,11 @@ fn flip_rect(r: Rect, media_box: [f32; 4]) -> [f32; 4] {
 
 /// Resolve a `schema_field` path to the leaf [`FieldSchema`] it addresses.
 ///
-/// The root segment resolves in `main.fields`, or is the reserved `$cards`
-/// (below). Thereafter a `.N` segment requires the current schema be `array`
-/// (descend into `items`) and a `.key` segment requires `object` (descend into
-/// `properties[key]`). Any miss (a bad root, a wrong-shape descent, a missing
-/// key, or segments left dangling past a leaf) is a [`BindError::Dangling`].
-///
-/// `$cards.<kind>.<i>.<field>…` addresses a card field: `<kind>` names a card
-/// kind, `<i>` is the (numeric) instance index selected at value time, and
-/// `<field>…` descends into that kind's schema. **Absolute-index addressing
-/// (`$cards.<i>.<field>`) is not accepted in `form@0.2.0`**: a widget kind must
-/// be statically derivable, and only kind+index tells the schema which field it is.
+/// The root segment resolves in `main.fields`, or is the reserved `$cards`.
+/// `$cards.<kind>.<i>.<field>…` addresses a card field: `<i>` is the instance
+/// index, selected at value time. Absolute-index addressing (`$cards.<i>.…`) is
+/// rejected — the widget kind must be statically derivable, and only kind+index
+/// identifies the schema field.
 pub fn bind<'a>(
     config: &'a QuillConfig,
     name: &str,
@@ -225,15 +180,14 @@ pub fn bind<'a>(
     };
 
     let mut parts = path.split('.');
-    // `split` on a non-empty string always yields at least one segment.
     let root = parts.next().unwrap_or("");
 
     let mut cur: &FieldSchema = if root == "$cards" {
         let kind = parts.next().ok_or_else(|| dangling(root))?;
         let card = config.card_kind(kind).ok_or_else(|| dangling(kind))?;
         let idx = parts.next().ok_or_else(|| dangling(kind))?;
-        // The instance index selects a card at value time; it must be numeric,
-        // but does not descend the schema (all instances of a kind share it).
+        // All instances of a kind share one schema, so the index is validated
+        // but does not descend.
         idx.parse::<usize>().map_err(|_| dangling(idx))?;
         let card_field = parts.next().ok_or_else(|| dangling(idx))?;
         card.fields
@@ -249,9 +203,6 @@ pub fn bind<'a>(
     Ok(cur)
 }
 
-/// Descend one path segment into `cur`: a numeric segment indexes an `array`
-/// (into its `items` element schema); a key segment reads an `object` property.
-/// A shape mismatch or missing key returns `None`.
 fn descend<'a>(cur: &'a FieldSchema, seg: &str) -> Option<&'a FieldSchema> {
     match seg.parse::<usize>() {
         Ok(_) => match cur.r#type {
@@ -265,16 +216,13 @@ fn descend<'a>(cur: &'a FieldSchema, seg: &str) -> Option<&'a FieldSchema> {
     }
 }
 
-/// Project a resolved [`FieldSchema`] to its widget kind. Keyed on the field's
-/// *capability*, not its `type` token: choice keys on `enum_values.is_some()`,
-/// so any field carrying a finite domain is a dropdown. Total or a load error:
-/// an `object`, or an array of objects/arrays, has no widget shape.
+/// Project a resolved [`FieldSchema`] to its widget kind, keyed on capability
+/// rather than the `type` token: any field carrying `enum_values` is a dropdown.
 pub fn project_kind(
     field: &FieldSchema,
     name: &str,
     path: &str,
 ) -> Result<WidgetType, BindError> {
-    // A finite string domain is a dropdown.
     if let Some(values) = &field.enum_values {
         return Ok(WidgetType::Choice {
             options: values.clone(),
@@ -296,30 +244,25 @@ pub fn project_kind(
         | SchemaType::PlainText { .. } => WidgetType::Text {
             multiline: is_multiline(field),
         },
-        // `Enum` without `enum_values` is unreachable (the loader requires
-        // `values:`); handled above. This arm keeps the match total.
+        // The loader requires `values:` on an enum, so this arm is unreachable;
+        // it keeps the match total.
         SchemaType::Enum => WidgetType::Choice {
             options: field.enum_values.clone().unwrap_or_default(),
         },
-        // An array binds as text (element texts joined with newlines, matching
-        // `resolve::coerce_text`) only when its element is a scalar or prose;
-        // an array of objects/arrays, or an itemless array, has no widget shape.
+        // An array of scalars binds as text, its elements joined with newlines
+        // by `resolve::coerce_text`.
         SchemaType::Array => match field.items.as_deref() {
             Some(items) if is_scalar_or_prose(items) => WidgetType::Text {
                 multiline: is_multiline(field),
             },
             _ => return Err(unbindable()),
         },
-        // `Object`, plus (`SchemaType` being `#[non_exhaustive]`) any type
-        // this build has no widget shape for. A quill author does not control
-        // which pdfform build reads their quill, so reporting `unbindable`
-        // beats failing to compile in a crate they never touch.
+        // `Object`, plus any type added to the `#[non_exhaustive]` `SchemaType`
+        // that this build has no widget shape for.
         _ => return Err(unbindable()),
     })
 }
 
-/// Whether `field`'s widget is multi-line: inherited from the schema's
-/// `ui.multiline` hint.
 fn is_multiline(field: &FieldSchema) -> bool {
     field
         .ui
@@ -328,13 +271,10 @@ fn is_multiline(field: &FieldSchema) -> bool {
         .unwrap_or(false)
 }
 
-/// A scalar or prose type binds to text; only `array`/`object` do not.
 fn is_scalar_or_prose(field: &FieldSchema) -> bool {
     !matches!(field.r#type, SchemaType::Array | SchemaType::Object)
 }
 
-/// A human-readable type name for the unbindable diagnostic, spelling an array's
-/// element type (`array<object>`).
 fn type_desc(field: &FieldSchema) -> String {
     match &field.r#type {
         SchemaType::Array => format!(
@@ -363,7 +303,6 @@ fn widget_type(kind: &WidgetKind) -> WidgetType {
 mod tests {
     use super::*;
 
-    /// A quill schema exercising every projection arm and both card kinds.
     const YAML: &str = r#"
 quill:
   name: binder
@@ -463,9 +402,8 @@ card_kinds:
 
     #[test]
     fn object_and_object_array_are_unbindable() {
-        // `array<array>` is rejected by the schema loader itself
-        // (`quill::nested_array_not_supported`), so it can never reach `bind`;
-        // the two shapes that can are a bare `object` and an `array<object>`.
+        // `array<array>` never reaches `bind`: the schema loader rejects it
+        // (`quill::nested_array_not_supported`).
         for (path, ty) in [("address", "object"), ("refs", "array<object>")] {
             match kind(path) {
                 Err(e @ BindError::Unbindable { .. }) => {
@@ -481,9 +419,9 @@ card_kinds:
     fn dangling_root_and_segment_error() {
         for (path, seg) in [
             ("nonesuch", "nonesuch"),
-            ("full_name.0", "0"),        // scalar has no array index
-            ("address.zip", "zip"),      // no such property
-            ("comments.oops", "oops"),   // array wants a numeric index
+            ("full_name.0", "0"),
+            ("address.zip", "zip"),
+            ("comments.oops", "oops"),
         ] {
             let c = config();
             match bind(&c, "W", path) {
@@ -511,23 +449,18 @@ card_kinds:
     #[test]
     fn card_absolute_index_and_bad_kind_are_dangling() {
         let c = config();
-        // `$cards.0.from`, absolute index: `0` is not a card kind, so it dangles
-        // at that segment. Absolute addressing is not part of `form@0.2.0`.
         assert!(matches!(
             bind(&c, "W", "$cards.0.from"),
             Err(BindError::Dangling { .. })
         ));
-        // Unknown kind.
         assert!(matches!(
             bind(&c, "W", "$cards.memo.0.author"),
             Err(BindError::Dangling { .. })
         ));
-        // Missing field after the index.
         assert!(matches!(
             bind(&c, "W", "$cards.indorsement.0"),
             Err(BindError::Dangling { .. })
         ));
-        // Non-numeric index.
         assert!(matches!(
             bind(&c, "W", "$cards.indorsement.x.from"),
             Err(BindError::Dangling { .. })
@@ -574,10 +507,6 @@ main:
 
     #[test]
     fn unbound_widgets_pass_their_declared_kind_through() {
-        // A bound field's kind is projected from the schema (the `kind` cases
-        // above); an unbound widget's comes from its own `type` token with no
-        // schema consulted. `schema_field: None` is what the resolve and region
-        // steps read to skip it: a widget the signer fills, not the document.
         let spec = FormSpec::parse(
             br#"{
               "schema": "quillmark/form@0.2.0",
@@ -612,7 +541,6 @@ main:
             ]
         );
         assert!(bound.iter().all(|w| w.schema_field.is_none()));
-        // Geometry is placed exactly as a bound field's is.
         assert_eq!(bound[0].rect, [0.0, 791.0, 1.0, 792.0]);
     }
 
@@ -624,12 +552,11 @@ main:
             w: 14.0,
             h: 14.0,
         };
-        // Zero-origin page.
         assert_eq!(
             place("W", 0, r, &[[0.0, 0.0, 600.0, 800.0]]).unwrap(),
             [180.0, 800.0 - 104.0, 194.0, 800.0 - 90.0]
         );
-        // Translated MediaBox [10 20 622 812]: widgets land offset by the origin.
+        // Translated MediaBox: widgets land offset by the origin.
         assert_eq!(
             place("W", 0, r, &[[10.0, 20.0, 622.0, 812.0]]).unwrap(),
             [10.0 + 180.0, 812.0 - 104.0, 10.0 + 194.0, 812.0 - 90.0]

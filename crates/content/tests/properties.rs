@@ -1,15 +1,7 @@
-//! The content property suite.
-//!
-//! The four properties the freeze rests on:
-//!
-//! 1. **Round-trip modulo loss class**: for a content from import,
-//!    `import(export(rt)) == rt`. Markdown source is not canonical; the content
-//!    is, so round-trip is defined at the content. Our generator emits only
-//!    lossless islands, so equality is exact.
-//! 2. **Canonical serialization**: byte-deterministic and a fixed point;
-//!    insensitive to mark/island discovery order.
-//! 3. **Diff-import preserves identity marks**: an anchor over text that
-//!    survives a rewrite is carried forward.
+//! The content property suite: round-trip modulo loss class
+//! (`import(export(rt)) == rt`, exact here since the generator emits only
+//! lossless islands), canonical serialization, and diff-import preserving
+//! identity marks.
 
 use proptest::prelude::*;
 use quillmark_content::delta::diff_import;
@@ -19,12 +11,9 @@ use quillmark_content::model::{Line, Mark, MarkKind};
 use quillmark_content::{Content, Delta, Island, IslandOp, LineKind, LineOp, MarkOp, Op};
 use serde_json::{json, Value};
 
-// ---------------------------------------------------------------------------
-// A constrained markdown generator: combinations of the model's constructs,
-// with inline tokens space-separated so the property exercises structure and
-// marks without depending on CommonMark's delimiter-adjacency corners (those
-// are pinned by explicit unit tests, not fuzzed here).
-// ---------------------------------------------------------------------------
+// A constrained markdown generator: inline tokens are space-separated so the
+// properties exercise structure and marks without depending on CommonMark's
+// delimiter-adjacency corners, which explicit unit tests pin instead.
 
 // `clean_word` is safe content for inside a formatted span / url / code / cell.
 fn clean_word() -> impl Strategy<Value = String> {
@@ -33,23 +22,17 @@ fn clean_word() -> impl Strategy<Value = String> {
 
 // `plain_word` carries inline-special and astral chars as *literal text*, so
 // escaping and USV bounds are exercised by the round-trip. The first char stays
-// alphanumeric, so a block marker never *leads* this token: `- >` and `- #`
-// make pulldown build a nested block rather than the literal text the arm is
-// generating. That bounds the token, not the suite — a block *as* a list item's
-// block is its own `block()` arm. The tail carries `&` and the block-marker
-// chars (`# > - . +`), exercising `&`-entity escaping and a trailing-`#`
-// heading run through the round-trip, not just the pinned
-// `export::tests::*` unit tests.
+// alphanumeric so a block marker never *leads* the token (`- >` would make
+// pulldown build a nested block); the tail carries `&` and the block-marker
+// chars.
 fn plain_word() -> impl Strategy<Value = String> {
     r"[a-z0-9][a-z0-9*_~\\&#>.+😀你-]{0,5}"
 }
 
-// `special_alt`/`special_url` carry the destination- and markup-terminating
-// chars, in *markdown source* form: a raw `]`/`[`/`\` would break
-// the markup at the source level (those live only in the direct-content
-// `image_and_link_specials_round_trip` property), so alt carries `&` and inline
-// delimiters as literal text, and the url is angle-wrapped in source so a space,
-// paren, or `&` reaches the content intact, the escape paths `clean_word` missed.
+// `special_alt`/`special_url` carry destination- and markup-terminating chars in
+// *markdown source* form. A raw `]`/`[`/`\` would break the markup at the source
+// level, so those live only in `image_and_link_specials_round_trip`; here the url
+// is angle-wrapped so a space, paren, or `&` reaches the content intact.
 fn special_alt() -> impl Strategy<Value = String> {
     (clean_word(), r"[a-z0-9&*_~#.+]{0,4}").prop_map(|(a, b)| format!("{a}{b}"))
 }
@@ -67,15 +50,9 @@ fn inline_token() -> impl Strategy<Value = String> {
         clean_word().prop_map(|w| format!("`{w}`")),
         clean_word().prop_map(|w| format!("<u>{w}</u>")),
         (clean_word(), clean_word()).prop_map(|(t, u)| format!("[{t}](https://ex.com/{u})")),
-        // A link/image whose url and alt carry specials the escaper must
-        // neutralize (space/paren/`&` in the angle-wrapped url; `&`/delimiters
-        // in the alt), exercised in prose context (marks, lists, hard breaks).
         (clean_word(), special_url()).prop_map(|(t, u)| format!("[{t}](<{u}>)")),
         (special_alt(), special_url()).prop_map(|(a, u)| format!("![{a}](<{u}>)")),
-        // A link *over* an image: a linked logo, plain CommonMark. The
-        // generator never nested the two, so no generated document carried a
-        // mark over an island slot, and the link arm emitting its display text
-        // raw (slot char and all) went unseen.
+        // A link over an image: a mark over an island slot.
         (special_alt(), special_url(), clean_word())
             .prop_map(|(a, u, l)| format!("[![{a}](<{u}>)](https://ex.com/{l})")),
     ]
@@ -87,11 +64,9 @@ fn prose() -> impl Strategy<Value = String> {
     prop::collection::vec(inline_token(), 1..5).prop_map(|toks| toks.join(" "))
 }
 
-// Hard breaks join clean, non-empty *text* lines (the realistic case: an
-// address block, a signature). A mark that *spans* a hard break, or an empty
-// line adjacent to one, is a degenerate content markdown cannot represent (no
-// blank-then-forced-break syntax); those are recorded as documented codec
-// limits (see `export::tests::known_hard_break_limits`), not fuzzed here.
+// Hard breaks join clean, non-empty *text* lines. A mark spanning a hard break,
+// or an empty line adjacent to one, is a documented codec limit (see
+// `export::tests::known_hard_break_limits`), not fuzzed here.
 fn hard_break_line() -> impl Strategy<Value = String> {
     prop::collection::vec(clean_word(), 1..4).prop_map(|w| w.join(" "))
 }
@@ -120,16 +95,11 @@ fn block() -> impl Strategy<Value = String> {
         // Nested bullet list (two container levels).
         (prose(), prose(), prose()).prop_map(|(a, b, c)| format!("- {a}\n  - {b}\n  - {c}")),
         Just("***".to_string()),
-        // A block construct as a list item's own block, the shape the editor
-        // tier mints (`- ` then a rule or a heading) and no other arm reaches:
-        // every list arm above builds its items from `prose()` alone. Both
-        // marker families and both positions within the item, because only one
-        // combination collides — a rule as a *bullet* item's *first* block.
-        //
-        // The rule's source spelling here is `***`, not `---`: `- ---` is four
-        // dashes separated by spaces, which imports as a top-level break, so an
-        // arm written that way would generate the post-collision shape and
-        // assert the fixed point on it vacuously.
+        // A block construct as a list item's own block, which no arm above
+        // reaches. Both marker families and both positions, since only one
+        // combination collides: a rule as a *bullet* item's *first* block.
+        // Spelled `***`, not `---`: `- ---` is four spaced dashes, which imports
+        // as a top-level break and would assert the fixed point vacuously.
         (1u8..=6, prose(), prose()).prop_map(|(lvl, h, p)| format!(
             "- {} {h}\n\n  {p}",
             "#".repeat(lvl as usize)
@@ -148,12 +118,6 @@ fn block() -> impl Strategy<Value = String> {
 fn document() -> impl Strategy<Value = String> {
     prop::collection::vec(block(), 1..6).prop_map(|blocks| blocks.join("\n\n"))
 }
-
-// ---------------------------------------------------------------------------
-// Overlapping-mark helpers: the four formatting kinds an
-// editor can freely overlap, and the predicates for the one unrepresentable
-// shape (two asterisk-family marks partially overlapping).
-// ---------------------------------------------------------------------------
 
 fn ov_kind(i: u8) -> MarkKind {
     match i % 4 {
@@ -194,21 +158,13 @@ proptest! {
         prop_assert_eq!(&rt, &rt2, "not a fixed point.\n in:  {:?}\n out: {:?}", md, md2);
     }
 
-    /// Property 1b: overlapping formatting marks, the free
-    /// (Peritext-style) overlap `apply_mark_ops` produces but markdown import
-    /// never does, export to *balanced* markdown that preserves the text.
-    ///
-    /// The shape is the issue's canonical overlap: two marks over contiguous
-    /// word-char text in a staircase (`s1 < s2 < e1 < e2 == n`), the
-    /// representable family markdown can carry. (Arbitrary editor marks that end
-    /// mid-word before another word char, or reopen before a space, hit
-    /// CommonMark flanking rules and are *not* generally representable, an
-    /// editor-only degenerate shape outside the `from_markdown` fixed-point
-    /// contract, like the hard-break limits.) The export must:
-    ///   - preserve the text exactly (the corruption the issue reported);
-    ///   - round-trip exactly for marks with *distinct* delimiters;
-    ///   - stay text-safe for the `strong`+`emph` asterisk clash, whose overlap
-    ///     is unrepresentable and degrades to its nested subset (documented).
+    /// Property 1b: free (Peritext-style) overlap, which `apply_mark_ops`
+    /// produces but markdown import never does, exports to *balanced* markdown.
+    /// The shape is a staircase (`s1 < s2 < e1 < e2 == n`) over contiguous
+    /// word-char text, the family markdown can carry. The export must preserve
+    /// the text exactly, round-trip exactly for distinct delimiters, and stay
+    /// text-safe for the `strong`+`emph` asterisk clash, whose overlap is
+    /// unrepresentable and degrades to its nested subset.
     #[test]
     fn overlapping_marks_export_is_text_safe(
         raw in "[a-z]{4,8}",
@@ -217,8 +173,8 @@ proptest! {
     ) {
         let text = raw;
         let n = text.chars().count();
-        // Three distinct interior cut points → the staircase s1<s2<e1<e2==n,
-        // built by construction (no rejection) so the whole family is covered.
+        // Three interior cut points → the staircase, by construction rather
+        // than rejection so the whole family is covered.
         let s1 = x % (n - 2);
         let s2 = s1 + 1 + y % (n - s1 - 2);
         let e1 = s2 + 1 + z % (n - s2 - 1);
@@ -235,8 +191,7 @@ proptest! {
         let md = to_markdown(&rt);
         let rt2 = from_markdown(&md).unwrap();
         prop_assert_eq!(rt2.validate(), Ok(()), "re-import invalid for {:?}", md);
-        // The critical invariant: overlap never corrupts the text (no
-        // unbalanced/unclosed delimiter leaks a literal `**`/`*` into the content).
+        // Overlap never corrupts the text: no unbalanced delimiter leaks in.
         prop_assert_eq!(&rt2.text, &rt.text, "overlap corrupted text: {:?}", md);
 
         // Distinct delimiters → an exact fixed point via close-and-reopen. Two
@@ -247,21 +202,16 @@ proptest! {
         if !asterisk_clash {
             prop_assert_eq!(&rt, &rt2, "distinct-delim overlap not a fixed point: {:?}", md);
         }
-        // Whatever the shape, the re-imported content is itself a genuine fixed
-        // point (it lives in the `from_markdown` domain the contract covers).
+        // Whatever the shape, the re-imported content is itself a fixed point.
         prop_assert_eq!(&rt2, &from_markdown(&to_markdown(&rt2)).unwrap(),
             "re-imported overlap content not a fixed point: {:?}", md);
     }
 
     /// Editor marks over *mixed* text stay text-safe: the punctuation, symbol,
-    /// emoji, and whitespace coverage the overlap staircase above deliberately
-    /// excludes (its content is `[a-z]` only). An `apply_mark_ops` mark whose
-    /// edge falls between a word char and a punctuation/symbol/whitespace char is
-    /// not representable as a `*`/`**`/`~~` run under CommonMark flanking, so the
-    /// export's verify-and-drop net drops it rather than leak a literal delimiter
-    /// into the text. Formatting may be lost; the text never is. Guards the
-    /// corruption the net catches: bolding `a.` renders `**a.**b`, which
-    /// re-imports as the literal string `**a.**b`.
+    /// emoji, and whitespace the staircase above excludes. A mark whose edge
+    /// falls between a word char and a punctuation/symbol/whitespace char is not
+    /// representable under CommonMark flanking, so the verify-and-drop net drops
+    /// it rather than leak a delimiter. Formatting may be lost; the text is not.
     #[test]
     fn editor_marks_over_mixed_text_are_text_safe(
         mid in prop::collection::vec(
@@ -272,11 +222,9 @@ proptest! {
         ),
         specs in prop::collection::vec((0usize..64, 0usize..64, 0u8..4), 0..4),
     ) {
-        // Word-char edges keep the mark-free baseline a round-trip fixed point
-        // (markdown strips leading/trailing paragraph whitespace and reads a
-        // leading `#`/`-`/`*` as a block marker); the punctuation/symbol/emoji/
-        // space coverage lives in the interior, which is where marks clash with
-        // CommonMark flanking anyway.
+        // Word-char edges keep the mark-free baseline a round-trip fixed point;
+        // the mixed chars live in the interior, where marks clash with flanking
+        // anyway.
         let text: String = std::iter::once('a')
             .chain(mid)
             .chain(std::iter::once('a'))
@@ -284,14 +232,10 @@ proptest! {
         let n = text.chars().count();
         let mut rt = Content::new(text.clone(), vec![Line::new(LineKind::Para)]);
         rt.normalize();
-        // Stay in the valid domain and only mark when the text length is intact
-        // (normalization can reshape whitespace-only content).
         prop_assume!(rt.validate().is_ok());
         prop_assume!(rt.len_usv() == n);
-        // Isolate the mark effect: require the *mark-free* text to already be a
-        // round-trip fixed point, so a later mismatch is mark-induced, not the
-        // orthogonal markdown limits (leading/trailing paragraph whitespace is
-        // stripped on import, etc.).
+        // Require the mark-free text to be a fixed point already, so a later
+        // mismatch is mark-induced rather than an orthogonal markdown limit.
         prop_assume!(from_markdown(&to_markdown(&rt)).unwrap().text == rt.text);
 
         let ops: Vec<MarkOp> = specs
@@ -307,34 +251,26 @@ proptest! {
 
         let md = to_markdown(&rt);
         let rt2 = from_markdown(&md).unwrap();
-        // The guarantee: no clipped/dropped mark leaks a delimiter into the text.
-        // (Mark *fidelity* is not promised (an unrepresentable editor mark is
-        // degraded away) only that the text survives. The import-domain
-        // fixed-point contract is covered by `content_round_trip_and_invariants`.)
+        // No clipped or dropped mark leaks a delimiter into the text. Mark
+        // fidelity is not promised, only that the text survives.
         prop_assert_eq!(&rt2.text, &rt.text,
             "editor mark corrupted text.\n text: {:?}\n md:   {:?}\n out:  {:?}",
             rt.text, md, rt2.text);
-        // Text stays safe across a second export cycle too: a degraded content
-        // never drifts the text further on re-save.
         prop_assert_eq!(&from_markdown(&to_markdown(&rt2)).unwrap().text, &rt.text,
             "text drifted on the second cycle: {:?}", md);
     }
 
     /// Image alt and image/link URLs carry the markup- and
-    /// destination-terminating specials (`]`/`[`/`\` in alt, spaces, unbalanced
-    /// parens, `&`, `<`/`>`/`\` in a url) that the codec must escape so the
-    /// island/link survives export∘import. The `clean_word` alt/url generator
-    /// never emitted them (the gap the issue found); the content is built directly
-    /// in the shape import produces (alt trimmed, no newline) to hit the escaper
-    /// without fighting source-level markdown quirks.
+    /// destination-terminating specials the codec must escape for the
+    /// island/link to survive export∘import. Built directly in the shape import
+    /// produces, so the escaper is hit without fighting source-level quirks.
     #[test]
     fn image_and_link_specials_round_trip(
         alt in r"[a-z0-9\]\[\\&<>*_~#().+ -]{0,10}",
         img_url in r"[a-z0-9 ()&<>\\]{0,10}",
         link_url in r"[a-z0-9 ()&<>\\]{0,10}",
     ) {
-        // Import trims alt and never yields a leading/trailing-space alt; match
-        // that so the hand-built content stays inside the fixed-point domain.
+        // Import trims alt, so match that to stay in the fixed-point domain.
         let alt = alt.trim().to_string();
         let text = "lnk\u{FFFC}".to_string(); // link over "lnk", image slot after
         let mut rt = Content::new(text, vec![Line::new(LineKind::Para)])
@@ -358,9 +294,8 @@ proptest! {
         prop_assert_eq!(back.to_canonical_json(), json);
     }
 
-    /// Property 2b: canonical bytes are insensitive to mark *discovery* order
-    /// (normalization sorts them). Islands are inherently ordered by slot
-    /// position, so only mark order is a free variable.
+    /// Property 2b: canonical bytes are insensitive to mark *discovery* order.
+    /// Islands are ordered by slot position, so only mark order is free.
     #[test]
     fn canonical_json_order_insensitive(md in document()) {
         let rt = from_markdown(&md).unwrap();
@@ -370,20 +305,17 @@ proptest! {
     }
 
     /// Property 3: an anchor over text that survives a rewrite is carried
-    /// forward by diff-import. We prepend context (edit elsewhere), so the
-    /// anchored span is untouched and must survive.
+    /// forward by diff-import.
     #[test]
     fn diff_import_preserves_surviving_anchor(a in "[a-z]{3,8}", b in "[a-z]{3,8}") {
         let base_md = format!("keep {a} here");
         let mut base = from_markdown(&base_md).unwrap();
-        // Anchor exactly over the `a` word.
         let start = 5;
         let end = 5 + a.chars().count();
         prop_assert_eq!(&base.text[start..end], a.as_str());
         base.marks.push(Mark::new(start, end, MarkKind::Anchor { id: "c1".into() }));
         base.normalize();
 
-        // Rewrite prepends `b` (edit before the anchor); anchored text unchanged.
         let new_md = format!("{b} keep {a} here");
         let (new_rt, _delta) = diff_import(&base, &new_md).unwrap();
         let anchor = new_rt.marks.iter()
@@ -395,13 +327,8 @@ proptest! {
 
 }
 
-// ---------------------------------------------------------------------------
-// Edit-channel invariant properties: the three apply channels
-// preserve `validate()`. The content arriving at a channel is valid; a
-// successful apply must leave it valid. For `apply_text_delta` this includes
-// cascading island removal when a slot char is deleted (islands.len() stays in
-// sync with the slot count) and rejecting a raw slot insert.
-// ---------------------------------------------------------------------------
+// Edit-channel invariant properties: a successful apply on a valid content
+// leaves it valid.
 
 /// `Op::Retain(n)`, or nothing when `n == 0` (no empty retains in the script).
 fn retain(n: usize) -> Vec<Op> {
@@ -415,14 +342,11 @@ fn retain(n: usize) -> Vec<Op> {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(400))]
 
-    /// `apply_text_delta` preserves `validate()` for a text-channel edit
-    /// (insert clean text (including `\n`) or delete a range). A deletion can
-    /// span an island slot; the cascade must drop the backing island so the
-    /// slot/island counts stay in sync: the corruption this property catches.
-    /// The insert charset includes `\r` and bidi controls (U+202E, U+2069):
-    /// `apply_text_delta` strips them, so the apply still leaves a valid content
-    /// (an apply must not return Ok over a broken invariant).
-    /// U+FFFC (a raw slot) is excluded: that insert is rejected outright.
+    /// `apply_text_delta` preserves `validate()`. A deletion can span an island
+    /// slot, and the cascade must drop the backing island so the slot/island
+    /// counts stay in sync. The insert charset includes `\r` and bidi controls,
+    /// which are stripped rather than left to break an invariant; U+FFFC is
+    /// excluded, that insert being rejected outright.
     #[test]
     fn apply_text_delta_preserves_validate(
         md in document(),
@@ -456,12 +380,10 @@ proptest! {
         }
     }
 
-    /// Property: an anchor's `id` is bit-invariant under a random
-    /// splice + rebase. The mark may drop (its anchored text deleted) or move
-    /// (its range rebases through `map_pos`), but any *surviving* anchor carries
-    /// the exact id it started with: the runtime never rewrites an id. Import
-    /// mints no anchor, so the one id seeded here is the only one that can appear;
-    /// an astral char in it would expose any byte-level munging.
+    /// An anchor's `id` is bit-invariant under a random splice + rebase: the
+    /// mark may drop or move, but a surviving anchor carries the exact id it
+    /// started with. The astral char in the seeded id would expose byte-level
+    /// munging.
     #[test]
     fn anchor_id_bit_invariant_under_splice(
         md in document(),
@@ -510,9 +432,8 @@ proptest! {
     }
 
     /// `apply_island_ops` preserves `validate()`: an accepted insert lands a
-    /// slot and its entry together, so the slot count still matches the island
-    /// list wherever the position falls (including inside a code fence, whose
-    /// line normalization then demotes).
+    /// slot and its entry together wherever the position falls, including inside
+    /// a code fence, whose line normalization then demotes.
     #[test]
     fn apply_island_ops_preserves_validate(
         md in document(),
@@ -550,12 +471,8 @@ proptest! {
     }
 
     /// `apply_line_ops` preserves `validate()` across an accepted
-    /// split/join/set-kind: line/segment sync, island/slot sync, and (marks
-    /// left in place) mark ranges. Split/join splice a `\n` and rebase marks
-    /// through that one-char change (`Delta::map_pos` semantics), so the
-    /// rebased marks must still normalize to a valid set; keeping the imported
-    /// marks exercises that remap in the fuzzer. Splicing `\n` never adds or
-    /// removes a slot, so island sync is a genuine post-condition too.
+    /// split/join/set-kind. Split/join splice a `\n` and rebase marks through
+    /// that one-char change, so keeping the imported marks exercises the remap.
     #[test]
     fn apply_line_ops_preserves_validate(
         md in document(),
@@ -577,25 +494,16 @@ proptest! {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Fixture content: the codecs run against real fixture markdown bodies.
-// ---------------------------------------------------------------------------
-
 fn fixture_body(name: &str) -> String {
     let path = quillmark_fixtures::resource_path(name);
     std::fs::read_to_string(path).unwrap()
 }
 
-// ---------------------------------------------------------------------------
-// Structured-table property: an editor-built table island, one
-// whose shape markdown import never produces (ragged rows, an empty/short
-// header, an `aligns` array out of sync with the columns), is a fixed point of
-// export∘import *after normalization*, and normalization always yields a content
-// that `validate()` accepts. Cell content is drawn from import-produced cells
-// (so representability and canonical marks are guaranteed by construction);
-// the generator's entropy is the table *shape* plus in-cell literal specials
-// (`|`, backtick, backslash) and unicode, which the codec must escape.
-// ---------------------------------------------------------------------------
+// Structured-table property: an editor-built table island whose shape markdown
+// import never produces (ragged rows, a short header, `aligns` out of sync) is a
+// fixed point of export∘import after normalization. Cell content comes from
+// import-produced cells, so representability and canonical marks are guaranteed;
+// the entropy is the table *shape* plus in-cell literal specials.
 
 /// A cell's markdown content: clean words, formatted spans, and words carrying
 /// literal specials that must escape to survive a pipe cell and round-trip.
@@ -662,10 +570,8 @@ proptest! {
             .map(|r| if r.is_empty() { vec![] } else { import_row(r) })
             .collect();
 
-        // The widest column count drives normalization. A fully empty table (all
-        // widths zero) has no markdown projection: export drops it, so it cannot
-        // round-trip; skip it (a contentless table is out of the fixed-point
-        // contract, like the documented hard-break limits).
+        // The widest column count drives normalization. A fully empty table has
+        // no markdown projection, so it is outside the fixed-point contract.
         let cols = header_cells.len()
             .max(aligns.len())
             .max(row_cells.iter().map(Vec::len).max().unwrap_or(0));
@@ -675,7 +581,6 @@ proptest! {
         rt.normalize();
         prop_assert_eq!(rt.validate(), Ok(()), "normalized table invalid");
 
-        // Post-normalize shape: one column count across header, aligns, rows.
         let props = &rt.islands[0].props;
         prop_assert_eq!(props["header"].as_array().unwrap().len(), cols);
         prop_assert_eq!(props["aligns"].as_array().unwrap().len(), cols);
@@ -691,7 +596,6 @@ proptest! {
 
 #[test]
 fn fixture_bodies_import_and_are_valid() {
-    // Every prose resource imports to a valid content and is a fixed point.
     for name in [
         "sample.md",
         "card_yaml_demo.md",

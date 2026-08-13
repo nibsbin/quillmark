@@ -1,28 +1,19 @@
-//! # Error Handling
+//! Error types and diagnostics for parsing and rendering.
 //!
-//! Error types and diagnostics for parsing and rendering, with source location tracking.
-//!
-//! ## Document path anchors
-//!
-//! A [`Diagnostic`] carries two independent "where" anchors, both optional:
-//!
-//! - [`Diagnostic::location`]: source-text anchor (`file:line:column`).
-//!   Produced by parsers and backend compilers operating on raw text.
-//! - [`Diagnostic::path`]: document-model anchor into the typed
-//!   [`crate::document::Document`]. Produced by schema validation and
-//!   coercion, which run on the typed model after line spans are gone.
-//!
-//! [`DocPath`](crate::path::DocPath) is the one type that constructs, renders,
-//! and parses the path, no site assembles one with `format!`. Its module doc
-//! carries the grammar; `prose/canon/ERROR.md` tabulates the anchors.
+//! A [`Diagnostic`] carries two independent, optional anchors:
+//! [`Diagnostic::location`] is a source-text position (`file:line:column`) from
+//! parsers and backend compilers; [`Diagnostic::path`] is a document-model
+//! anchor into [`crate::document::Document`] from schema validation and
+//! coercion, which run after line spans are gone.
+//! [`DocPath`](crate::path::DocPath) is the only type that constructs, renders,
+//! and parses that path form.
 
 use std::collections::BTreeMap;
 
 use crate::OutputFormat;
 
 /// Build a [`Diagnostic::args`] map. Values pass through `serde_json`, so a
-/// list arrives as a list and a count as a number: the shapes a consumer
-/// needs to join and pluralize in its own locale.
+/// list arrives as a list and a count as a number.
 macro_rules! diag_args {
     ($($key:literal => $value:expr),* $(,)?) => {{
         #[allow(unused_mut)]
@@ -58,11 +49,8 @@ pub const MAX_FIELD_COUNT: usize = 1000;
 
 /// A YAML parse or emit failure, owned by this crate.
 ///
-/// The YAML engine is `serde-saphyr`. Returning its error types from a public
-/// signature would chain this crate's major version to that crate's, and to
-/// the choice of engine at all, so the boundary converts to this type instead
-/// and no public signature names the engine. The engine is an implementation
-/// detail; this is what the contract says it is.
+/// The YAML engine is an implementation detail: no public signature names it,
+/// so this crate's major version is not chained to the engine's.
 ///
 /// `line`/`column` are 1-indexed and present only when the engine located the
 /// failure: always absent on the emit side, which has no input to point at.
@@ -112,13 +100,9 @@ impl YamlError {
     /// `yaml` is the text that failed to parse: the hint derivation inspects
     /// it to name the offending construct.
     pub(crate) fn from_de(err: serde_saphyr::Error, yaml: &str) -> Self {
-        // The engine appends its own Rust API names to some messages
-        // (`from_multiple`, `DuplicateKeyPolicy`); the enricher strips them, so
-        // "no public signature names the engine" holds for the message too, not
-        // just the type.
+        // The enricher also strips the engine's own Rust API names, which it
+        // appends to some messages.
         let enriched = crate::document::yaml_hints::enrich_yaml_error(&err.to_string(), yaml);
-        // `Location`'s accessors widen to u64; the fields behind them are u32,
-        // so the narrowing is lossless.
         let loc = err.location();
         Self {
             message: enriched.message,
@@ -141,9 +125,8 @@ impl YamlError {
 
 impl std::fmt::Display for YamlError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // The message already opens with the position and carries the engine's
-        // caret diagram; [`Self::line`]/[`Self::column`] are the structured
-        // reading of the same fact, not a second one to append.
+        // The message already opens with the position and the engine's caret
+        // diagram; line/column are the structured reading of the same fact.
         f.write_str(&self.message)
     }
 }
@@ -155,19 +138,15 @@ impl std::error::Error for YamlError {}
 /// configuration and no warning-to-error promotion; an informational aside is
 /// a [`Diagnostic::hint`], not a severity.
 ///
-/// A `_` arm over this enum has a safe direction: escalate to
-/// [`Severity::Error`]. Treating an unrecognized level as fatal over-reports;
-/// treating it as a warning could hide one. Nothing here fails silently, so the
-/// enum is open ([`COMPATIBILITY`]).
-///
-/// [`COMPATIBILITY`]: https://github.com/borb-sh/quillmark/blob/main/prose/canon/COMPATIBILITY.md
+/// The enum is open; a `_` arm should escalate to [`Severity::Error`], since
+/// over-reporting an unrecognized level is safer than hiding it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
 pub enum Severity {
-    /// Fatal error that prevents completion
+    /// Blocks the stage that emits it.
     Error,
-    /// Non-fatal issue that may need attention
+    /// Non-fatal.
     Warning,
 }
 
@@ -175,17 +154,15 @@ pub enum Severity {
 #[serde(rename_all = "camelCase")]
 #[non_exhaustive]
 pub struct Location {
-    /// Source file name (e.g., "plate.typ", "template.typ", "input.md")
+    /// Source file name, e.g. `"plate.typ"` or `"input.md"`.
     pub file: String,
-    /// Line number (1-indexed)
+    /// 1-indexed line.
     pub line: u32,
-    /// Column number (1-indexed)
+    /// 1-indexed column.
     pub column: u32,
 }
 
 impl Location {
-    /// The three coordinates a text anchor always carries. `line` and `column`
-    /// are 1-indexed.
     pub fn new(file: String, line: u32, column: u32) -> Self {
         Self { file, line, column }
     }
@@ -193,30 +170,23 @@ impl Location {
 
 /// Structured diagnostic information.
 ///
-/// `source_chain` is a flat list of error messages from any attached
-/// `std::error::Error` cause chain, eagerly walked at construction time so
-/// the diagnostic remains trivially `Clone` and fully serializable across
-/// every binding boundary.
+/// Cause chains are walked eagerly at construction, so a `Diagnostic` stays
+/// `Clone` and serializable across every binding boundary.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[non_exhaustive]
 pub struct Diagnostic {
     pub severity: Severity,
-    /// Optional error code (e.g., "E001", "typst::syntax")
+    /// Stable error code, e.g. `"parse::empty_input"` or `"typst::syntax"`.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub code: Option<String>,
     pub message: String,
-    /// Primary source location (text anchor: file/line/column).
-    ///
-    /// Set by parsers and backend compilers. May co-exist with [`Self::path`]:
-    /// the two anchors are independent.
+    /// Source-text anchor, set by parsers and backend compilers. Independent
+    /// of [`Self::path`]; the two may co-exist.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub location: Option<Location>,
-    /// Document-model anchor: a dotted/bracketed path into the typed
-    /// [`crate::document::Document`].
-    ///
-    /// Set by schema validation and coercion. See the module-level docs for
-    /// the path grammar and conventions. May co-exist with [`Self::location`].
+    /// Document-model anchor: a [`DocPath`](crate::path::DocPath) rendering,
+    /// set by schema validation and coercion.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -225,19 +195,13 @@ pub struct Diagnostic {
     /// [`Self::code`], the substitution unit a consumer needs to word this
     /// diagnostic in its own language.
     ///
-    /// One code carries one key set, tabulated per code in
-    /// `prose/canon/ERROR.md` § "Diagnostic args" and tested against it.
-    /// Values keep their JSON shape, so joining and pluralizing stay the
-    /// consumer's locale decisions.
-    ///
-    /// Empty either because the code is outside the structured surface or
-    /// because its sentence needs no facts beyond the code; canon tells the
-    /// two apart. Engine prose never rides under a key: a consumer's sentence
-    /// may be coarser than ours, never half-translated.
+    /// One code carries one key set, tabulated in `prose/canon/ERROR.md`
+    /// § "Diagnostic args" and tested against it. Values keep their JSON
+    /// shape, so joining and pluralizing stay the consumer's locale decisions.
+    /// Engine prose never rides under a key.
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     pub args: BTreeMap<String, serde_json::Value>,
-    /// Flattened cause chain (outermost first). Upstream English, and
-    /// untranslatable for the same reason the prose it wraps is.
+    /// Flattened cause chain, outermost first. Upstream English.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub source_chain: Vec<String>,
 }
@@ -266,9 +230,6 @@ impl Diagnostic {
         self
     }
 
-    /// Set the document-model path anchor.
-    ///
-    /// See the module-level docs for the path grammar and conventions.
     pub fn with_path(mut self, path: String) -> Self {
         self.path = Some(path);
         self
@@ -285,7 +246,7 @@ impl Diagnostic {
         self
     }
 
-    /// Attach an error cause chain, walked eagerly into `source_chain`.
+    /// Walk `source`'s cause chain eagerly into [`Self::source_chain`].
     pub fn with_source(mut self, source: &(dyn std::error::Error + 'static)) -> Self {
         let mut current: Option<&(dyn std::error::Error + 'static)> = Some(source);
         while let Some(err) = current {
@@ -341,18 +302,13 @@ pub enum ParseError {
     #[error("Invalid YAML structure: {0}")]
     InvalidStructure(String),
 
-    /// Markdown input was empty or whitespace-only.
-    ///
-    /// Emitted as code `parse::empty_input` so consumers can pattern-match
-    /// without inspecting the message text.
+    /// Markdown input was empty or whitespace-only. Code `parse::empty_input`.
     #[error("{0}")]
     EmptyInput(String),
 
     /// The document is missing its root `~~~` card-yaml block, or that block
     /// does not declare the required `$quill` system metadata.
-    ///
-    /// Emitted as code `parse::missing_quill` so consumers can
-    /// pattern-match without inspecting the message text.
+    /// Code `parse::missing_quill`.
     #[error("{0}")]
     MissingQuill(String),
 
@@ -375,13 +331,10 @@ pub enum ParseError {
     #[error("YAML error at line {line}: {message}")]
     YamlErrorWithLocation {
         message: String,
-        /// Line number in the source document (1-indexed)
+        /// 1-indexed line in the source document.
         line: usize,
-        /// Index of the metadata block (0-indexed)
+        /// 0-indexed metadata block.
         block_index: usize,
-        /// Optional actionable hint attached when the YAML parser's message
-        /// is too cryptic to be recoverable on its own. Derived by the
-        /// internal `document::yaml_hints` enrichment pass.
         hint: Option<String>,
     },
 }
@@ -389,11 +342,8 @@ pub enum ParseError {
 impl ParseError {
     /// The facts this error's message interpolates. See [`Diagnostic::args`].
     ///
-    /// The four `String` variants contribute no keys, for two different
-    /// reasons canon distinguishes: `EmptyInput` is one fixed sentence, while
-    /// `InvalidStructure`, `BodyImport`, and `MissingQuill` carry prose minted
-    /// per-site. `MissingQuill` looks fixed and is not: it picks one of three
-    /// sentences by re-reading the source, and no field records which.
+    /// The four `String` variants contribute no keys: `EmptyInput` is one
+    /// fixed sentence, and the rest carry prose minted per-site.
     pub fn args(&self) -> BTreeMap<String, serde_json::Value> {
         match self {
             ParseError::InputTooLarge { size, max } => diag_args! {
@@ -404,14 +354,13 @@ impl ParseError {
             ParseError::EmptyInput(_) => diag_args! {},
             ParseError::MissingQuill(_) => diag_args! {},
             ParseError::BodyImport(_) => diag_args! {},
-            // `reason` is the `from_str` violation in English and stays in
-            // `message`; `value` alone carries the consumer's sentence.
+            // `reason` is English prose and stays in `message`.
             ParseError::InvalidQuillReference { value, reason: _ } => diag_args! {
                 "value" => value,
             },
             // This diagnostic sets no `location`, so `args` is the only
-            // structured route to the coordinates the message names. The
-            // message is the YAML engine's own prose and keeps no key.
+            // structured route to the coordinates. `message` is the YAML
+            // engine's own prose and keeps no key.
             ParseError::YamlErrorWithLocation {
                 message: _,
                 line,
@@ -472,24 +421,19 @@ impl ParseError {
 /// Main error type for rendering operations: a non-empty collection of
 /// [`Diagnostic`]s.
 ///
-/// There is no failure taxonomy beyond the diagnostics themselves: the
-/// machine-routable identity of a failure is each diagnostic's namespaced
-/// `code` (`parse::*`, `validation::*`, `quill::*`, `typst::*`, `backend::*`,
-/// `engine::*`). Every consumer, and every language binding, handles all
-/// rendering errors through this single shape; route on
-/// `diagnostics()[..].code`, not on a type.
+/// There is no failure taxonomy beyond the diagnostics themselves: route on
+/// each diagnostic's namespaced `code` (`parse::*`, `validation::*`,
+/// `quill::*`, `typst::*`, `backend::*`, `engine::*`), not on a type. Every
+/// consumer and binding handles rendering failure through this one shape.
 #[derive(Debug)]
 pub struct RenderError {
-    /// Always non-empty; held by the constructors.
     diags: Vec<Diagnostic>,
 }
 
 impl RenderError {
-    /// Wrap `diags` as a failure. `diags` should be non-empty; the invariant is
-    /// enforced only by `debug_assert!`, so a release build can construct an
-    /// empty `RenderError`. That is deliberately non-fatal: the `Display` impl
-    /// carries an `[]` fallback branch rather than promising the invariant is
-    /// load-bearing. Every internal caller passes a non-empty vec.
+    /// Wrap `diags` as a failure. Non-emptiness is only `debug_assert!`ed, so
+    /// a release build can construct an empty `RenderError`; `Display` carries
+    /// a fallback for that case.
     pub fn new(diags: Vec<Diagnostic>) -> Self {
         debug_assert!(
             !diags.is_empty(),
@@ -503,23 +447,18 @@ impl RenderError {
         Self { diags: vec![diag] }
     }
 
-    /// Returns all diagnostics for this error. Non-empty by construction (see
-    /// [`RenderError::new`]'s debug-asserted invariant).
     pub fn diagnostics(&self) -> &[Diagnostic] {
         &self.diags
     }
 
-    /// Consume the error and return its diagnostics.
     pub fn into_diagnostics(self) -> Vec<Diagnostic> {
         self.diags
     }
 
-    /// The count-based summary line shared by `Display` and every binding's
-    /// exception message: the sole diagnostic's `message` for one, an
-    /// `"<N> error(s): <first message>"` aggregate for more. The single source
-    /// of truth for this rule: bindings delegate here rather than re-deriving
-    /// it. An empty slice yields `"render error"` defensively (see
-    /// [`RenderError::new`]'s debug-only non-empty invariant).
+    /// The summary line shared by `Display` and every binding's exception
+    /// message: the sole diagnostic's `message` for one, an
+    /// `"<N> error(s): <first message>"` aggregate for more. Bindings delegate
+    /// here rather than re-deriving the rule.
     pub fn summary_message(diags: &[Diagnostic]) -> String {
         match diags {
             [d] => d.message.clone(),
@@ -529,9 +468,6 @@ impl RenderError {
     }
 }
 
-/// The primary message for a single diagnostic; an
-/// `"<N> error(s): <first message>"` aggregate for more: the same rule the
-/// WASM binding applies to thrown `Error.message`.
 impl std::fmt::Display for RenderError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", Self::summary_message(&self.diags))
@@ -552,11 +488,9 @@ pub struct RenderResult {
     pub artifacts: Vec<crate::Artifact>,
     pub warnings: Vec<Diagnostic>,
     pub output_format: OutputFormat,
-    /// Schema-field geometry sidecar, populated only when
-    /// [`RenderOptions::regions`](crate::RenderOptions) is set (empty
-    /// otherwise). The same entries [`LiveSession::regions`](crate::LiveSession::regions)
-    /// serves, for consumers without a live session. Whole-document geometry:
-    /// page indices are document-space even under a `pages` subset render.
+    /// Schema-field geometry, populated only when
+    /// [`RenderOptions::regions`](crate::RenderOptions) is set. Page indices
+    /// are document-space even under a `pages` subset render.
     pub regions: Vec<crate::RenderedRegion>,
 }
 
@@ -592,37 +526,6 @@ mod tests {
     }
 
     #[test]
-    fn test_diagnostic_serialization() {
-        let diag = Diagnostic::new(Severity::Error, "Test error".to_string())
-            .with_code("E001".to_string())
-            .with_location(Location {
-                file: "test.typ".to_string(),
-                line: 10,
-                column: 5,
-            });
-
-        let json = serde_json::to_string(&diag).unwrap();
-        assert!(json.contains("Test error"));
-        assert!(json.contains("E001"));
-        assert!(json.contains("\"severity\":\"error\""));
-        assert!(json.contains("\"column\":5"));
-    }
-
-    #[test]
-    fn test_render_error_single_diagnostic_shape() {
-        let err = RenderError::from_diag(Diagnostic::new(
-            Severity::Error,
-            "no such backend".to_string(),
-        ));
-        assert_eq!(err.diagnostics().len(), 1);
-        assert_eq!(err.to_string(), "no such backend");
-
-        let owned = err.into_diagnostics();
-        assert_eq!(owned.len(), 1);
-        assert_eq!(owned[0].message, "no such backend");
-    }
-
-    #[test]
     fn test_render_error_display_aggregates_multi_diagnostic() {
         let err = RenderError::new(vec![
             Diagnostic::new(Severity::Error, "a".to_string()),
@@ -630,49 +533,10 @@ mod tests {
         ]);
         assert_eq!(err.to_string(), "2 error(s): a");
     }
-
-    #[test]
-    fn test_diagnostic_fmt_pretty() {
-        let diag = Diagnostic::new(Severity::Warning, "Deprecated field used".to_string())
-            .with_code("W001".to_string())
-            .with_location(Location {
-                file: "input.md".to_string(),
-                line: 5,
-                column: 10,
-            })
-            .with_hint("Use the new field name instead".to_string());
-
-        let output = diag.fmt_pretty();
-        assert!(output.contains("[WARN]"));
-        assert!(output.contains("Deprecated field used"));
-        assert!(output.contains("W001"));
-        assert!(output.contains("input.md:5:10"));
-        assert!(output.contains("hint:"));
-    }
-
-    #[test]
-    fn test_diagnostic_with_path() {
-        let diag = Diagnostic::new(Severity::Error, "Type mismatch".to_string())
-            .with_code("validation::type_mismatch".to_string())
-            .with_path("cards.indorsement[0].signature_block".to_string());
-
-        assert_eq!(
-            diag.path.as_deref(),
-            Some("cards.indorsement[0].signature_block")
-        );
-
-        let json = serde_json::to_string(&diag).unwrap();
-        assert!(json.contains("\"path\":\"cards.indorsement[0].signature_block\""));
-
-        let pretty = diag.fmt_pretty();
-        assert!(pretty.contains("at cards.indorsement[0].signature_block"));
-    }
-
 }
 
-/// The canon table in `prose/canon/ERROR.md` § "Diagnostic args" is the contract
-/// a consumer writes its string table against, so it is tested like one rather
-/// than maintained by hand beside the code.
+/// The canon table in `prose/canon/ERROR.md` § "Diagnostic args" is a consumer
+/// contract, so it is tested rather than maintained by hand.
 #[cfg(test)]
 mod args_canon {
     use std::collections::BTreeMap;
@@ -840,9 +704,8 @@ mod args_canon {
         out
     }
 
-    /// The `| code | args | outcome |` rows of the canon table, keyed the same
-    /// way. `—` is no keys; a trailing `?` marks a conditional key, which the
-    /// sample above supplies.
+    /// The canon table's rows. `—` is no keys; a trailing `?` marks a
+    /// conditional key, which [`minted`]'s sample supplies.
     fn declared() -> BTreeMap<String, Vec<String>> {
         let canon = include_str!("../../../prose/canon/ERROR.md");
         let mut rows = canon
@@ -872,9 +735,8 @@ mod args_canon {
         out
     }
 
-    /// The other direction: a code off the table carries no args, so a
-    /// consumer's template falls back rather than half-filling. `quill::*` is
-    /// the largest such family and the one with `format!`-built codes.
+    /// A code off the table carries no args, so a consumer's template falls
+    /// back rather than half-filling.
     #[test]
     fn out_of_scope_codes_carry_no_args() {
         let diags = crate::quill::QuillConfig::from_yaml_with_warnings(

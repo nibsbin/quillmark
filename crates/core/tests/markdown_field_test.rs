@@ -2,8 +2,7 @@ use quillmark_core::quill::QuillConfig;
 
 #[test]
 fn test_markdown_type_is_a_load_error() {
-    // `markdown` is not a field type: no silent alias for block `richtext`, no
-    // parallel accepted spelling. A Quill.yaml that declares it fails to load.
+    // `markdown` is not a field type: no silent alias for block `richtext`.
     let diags = QuillConfig::from_yaml_with_warnings(
         r#"
 quill:

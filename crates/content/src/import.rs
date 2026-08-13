@@ -1,43 +1,28 @@
 //! Markdown import (cold): `normalize → pulldown → content`.
 //!
-//! The one place the `<u>` allowlist runs: once, at the
-//! boundary (§ Codecs). Input is normalized by
-//! [`crate::normalize::normalize_markdown`] (CRLF→LF, bidi strip, HTML
-//! comment-fence repair) so the content invariants hold by construction, then
-//! parsed with `pulldown_cmark` (CommonMark + strikethrough + pipe tables) and
-//! walked into a [`Content`].
+//! Input is normalized by [`crate::normalize::normalize_markdown`] (CRLF→LF,
+//! bidi strip, HTML comment-fence repair) so the content invariants hold by
+//! construction, then parsed with `pulldown_cmark` (CommonMark + strikethrough
+//! + pipe tables) and walked into a [`Content`]. This is the one place the
+//! `<u>` allowlist runs.
 //!
 //! ## Canonicalizations (documented, not bugs)
 //!
-//! Import maps some distinct markdown to one canonical content. All of them, in
-//! one place:
-//!
-//! - **Soft breaks → space; hard breaks → a `continues` line.** A soft break is
-//!   a space (CommonMark rendering); a hard break (two trailing spaces or `\`)
-//!   is a within-block continuation line ([`crate::model::Line::continues`]),
-//!   kept distinct from a paragraph boundary. A hard break inside a heading is a
-//!   space (ATX headings can't carry one).
-//! - **Adjacent sibling lists of the same shape merge.** Two consecutive lists
-//!   of the same kind whose items share an `ordinal` (`* a` then `+ b`, or two
-//!   ordered lists both starting at 1) are indistinguishable from one list /
-//!   one multi-paragraph item: item identity is positional `ordinal`, not a
-//!   minted list instance. Adjacent block quotes likewise merge into one.
-//! - **Empty blocks and containers keep their line.** An empty heading (`#`),
-//!   empty paragraph, empty `- ` item, or empty `>` quote each yields one empty
-//!   line so the structure survives, rather than vanishing.
-//! - **Island ids are minted sequentially** (`isl-0`, `isl-1`, …) so import is a
-//!   pure, deterministic function of its markdown. This positional scheme is
-//!   normative: ids are hash input, so a producer must derive them
-//!   deterministically and never from an ambient source (`DOCUMENT_STORAGE.md`
-//!   § Island-id determinism). Sequential ids round-trip: export drops them,
-//!   re-import re-mints the same sequence.
-//! - **Tables and images are islands.** Tables are block islands (their own
-//!   `Island` line); images are inline island slots. Both `Lossless`: pipe
-//!   tables and `![alt](url)` carry them faithfully.
-//! - **Thematic breaks are `Rule` lines.** `---`/`***`/`___` in prose (never
-//!   the root-block frontmatter alias, resolved before this layer runs) map
-//!   to a `LineKind::Rule` line carrying no text: the break is the line
-//!   itself.
+//! - **Soft breaks → space; hard breaks → a `continues` line**, kept distinct
+//!   from a paragraph boundary. A hard break inside a heading is a space, ATX
+//!   headings being unable to carry one.
+//! - **Adjacent sibling lists of the same shape merge.** Item identity is
+//!   positional `ordinal`, not a minted list instance, so two consecutive lists
+//!   whose items share an `ordinal` are indistinguishable from one list.
+//!   Adjacent block quotes likewise merge.
+//! - **Empty blocks and containers keep their line**, so the structure survives
+//!   rather than vanishing.
+//! - **Island ids are minted sequentially** (`isl-0`, `isl-1`, …), so import is
+//!   a deterministic function of its markdown and never reads an ambient source.
+//!   Export drops the ids and re-import re-mints the same sequence.
+//! - **Tables and images are islands**, block and inline respectively, both
+//!   `Lossless`.
+//! - **Thematic breaks are `Rule` lines** carrying no text.
 
 use crate::model::{
     Container, Island, Line, LineKind, Loss, Mark, MarkKind, Content, ISLAND_SLOT,
@@ -47,10 +32,8 @@ use crate::normalize::normalize_markdown;
 use crate::MAX_NESTING_DEPTH;
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
-/// What `event` contributes to the alt text of an image being collected, or
-/// `None` when it contributes nothing. One rule, two accumulators: a `String`
-/// at top level and the table cell inside a table (which additionally flags the
-/// cell `degraded` and drops the URL).
+/// What `event` contributes to the alt text of an image being collected: one
+/// rule shared by the top-level `String` accumulator and the table-cell one.
 fn image_alt_text<'e>(event: &'e Event<'e>) -> Option<&'e str> {
     match event {
         Event::Text(t) | Event::Code(t) => Some(t),
@@ -60,8 +43,7 @@ fn image_alt_text<'e>(event: &'e Event<'e>) -> Option<&'e str> {
 }
 use serde_json::json;
 
-/// Import errors: just the nesting guard (mirrors the typst backend's
-/// `ConversionError::NestingTooDeep`).
+/// Import errors: just the nesting guard.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ImportError {
@@ -95,34 +77,26 @@ pub fn from_markdown(markdown: &str) -> Result<Content, ImportError> {
     Ok(rt)
 }
 
-/// Import plain text (literal) into a [`Content`] content: the literal-codec
-/// sibling of [`from_markdown`]. Every character is content, never syntax:
-/// `*hi*` is four literal chars, not emphasis, and nothing is escaped. Paired
-/// with [`crate::export::to_plaintext`] as its exporter, it pins the literal
+/// Import plain text (literal) into a [`Content`]: the literal-codec sibling of
+/// [`from_markdown`]. Every character is content, never syntax: `*hi*` is four
+/// literal chars, not emphasis. With [`crate::export::to_plaintext`] it pins the
 /// fixed point `to_plaintext(from_plaintext(s)) == s` for any `s` free of `\r`,
-/// bidi controls, and the reserved island slot ([`ISLAND_SLOT`]): the same
-/// boundary cleanup [`from_markdown`] performs, so the fixed point holds for
-/// clean plaintext and the content invariants hold by construction.
+/// bidi controls, and [`ISLAND_SLOT`].
 ///
 /// Line structure is **derived, not stored**: a lone `\n` between two non-empty
-/// segments is a within-paragraph break ([`Line::continues`] `true`, lowered as
-/// a backend hard break); a blank line (`\n\n`) is a paragraph boundary (its own
-/// empty line resets `continues`). The text is stored verbatim, so the round
-/// trip is byte-exact and idempotent regardless of how structure is later
-/// re-derived.
+/// segments is a within-paragraph break ([`Line::continues`] `true`); a blank
+/// line is a paragraph boundary. The text is stored verbatim, so the round trip
+/// is byte-exact however structure is later re-derived.
 pub fn from_plaintext(s: &str) -> Content {
-    // Boundary cleanup so the content invariants hold: CRLF→LF (drop `\r`), strip
-    // bidi controls, drop the reserved island slot. Clean plaintext passes
-    // through untouched, so the literal fixed point holds for it.
+    // Boundary cleanup so the content invariants hold; clean plaintext passes
+    // through untouched.
     let text: String = s
         .chars()
         .filter(|&c| c != '\r' && c != ISLAND_SLOT && !crate::normalize::is_bidi_char(c))
         .collect();
-    // One line per `\n`-separated segment. `continues` marks a within-paragraph
-    // break: a lone `\n` joining two non-empty segments; any empty segment is a
-    // paragraph boundary and resets it. A single streaming pass carries the prior
-    // segment's non-emptiness, so line 0 is `false` (the flag starts `false`) and
-    // no intermediate segment vector is allocated.
+    // One line per `\n`-separated segment. A single streaming pass carries the
+    // prior segment's non-emptiness, so line 0 is `false` and no intermediate
+    // segment vector is allocated.
     let mut prev_nonempty = false;
     let lines = text
         .split('\n')
@@ -144,19 +118,11 @@ pub fn from_plaintext(s: &str) -> Content {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Content builder
-// ---------------------------------------------------------------------------
-
 /// A flat inline accumulator: `text` plus `marks` over local USV offsets, with
-/// the content char-filtering baked in. One implementation serves both a prose
-/// line's inline content (embedded in the [`Builder`], which layers the
-/// line/block scaffolding on top) and a table cell's isolated content (offsets
-/// `0..cell_len`): the mark-building logic is written once, not copied per site.
+/// the content char-filtering baked in. Serves both a prose line's inline
+/// content (embedded in the [`Builder`]) and a table cell's isolated content.
 #[derive(Default)]
 struct Inline {
-    /// The accumulated text (a whole content for the [`Builder`]; one cell's text
-    /// for a table cell). USV length is tracked in [`Self::pos`].
     text: String,
     /// USV position = char count of [`Self::text`].
     pos: usize,
@@ -167,14 +133,9 @@ struct Inline {
 
 impl Inline {
     /// Append inline text, stripping characters the content forbids: `\r` and a
-    /// stray [`ISLAND_SLOT`] are dropped; a stray `\n` becomes a space (inline
-    /// text carries no line boundary, real ones go through [`Self::push_raw`]).
-    ///
-    /// A literal [`ISLAND_SLOT`] (U+FFFC) in source markdown is dropped
-    /// *silently and by design*: the slot char is the reserved island sentinel,
-    /// so admitting a bare one would break the slot-count invariant. Such a char
-    /// in prose is a paste/render artifact, never authored content, so its loss
-    /// carries no signal: this is a fixed point, not lossy round-tripping.
+    /// stray [`ISLAND_SLOT`] are dropped; a stray `\n` becomes a space, real
+    /// line boundaries going through [`Self::push_raw`]. Admitting a bare slot
+    /// char would break the slot-count invariant.
     fn push_text(&mut self, s: &str) {
         for c in s.chars() {
             let c = match c {
@@ -195,7 +156,6 @@ impl Inline {
         self.pos += 1;
     }
 
-    /// Open a mark at the current position.
     fn open_mark(&mut self, kind: MarkKind) {
         self.open.push((kind, self.pos));
     }
@@ -276,13 +236,11 @@ struct TableAcc {
     /// inline text + marks with the same [`Inline`] machinery prose uses.
     cell: Option<Inline>,
     /// Open-image nesting inside the current cell. GFM permits inline images in
-    /// cells, but a cell has no island slot to carry one; while `> 0` the image's
-    /// alt flows into the cell as plain text (the degraded projection) and its
-    /// url is dropped. Mirrors the top-level `image_depth` interception.
+    /// cells, but a cell has no island slot to carry one; while `> 0` the
+    /// image's alt flows into the cell as plain text and its url is dropped.
     img_depth: usize,
-    /// Whether any cell dropped an image's url, the island is then minted
-    /// [`Loss::DEGRADED`], not `LOSSLESS`: the markdown/Typst projection carries
-    /// the alt text but not the image.
+    /// Whether any cell dropped an image's url, minting the island
+    /// [`Loss::DEGRADED`] rather than `LOSSLESS`.
     degraded: bool,
 }
 
@@ -338,7 +296,7 @@ impl Builder {
     /// Open a fresh line for a `pending_kind` set at the last block start, or
     /// (defensively) a `default` line if inline content arrives with none
     /// pending and no line open. A no-op when a line is already open and no new
-    /// one is pending: inline content flows onto the current line.
+    /// one is pending.
     fn ensure_open(&mut self, default: LineKind) {
         if let Some((k, cont)) = self.pending.take() {
             self.open_line(k, cont);
@@ -347,9 +305,6 @@ impl Builder {
         }
     }
 
-    /// Append inline text to the current line, stripping any characters the
-    /// content invariants forbid (stray `\r`, stray island slots; stray `\n`
-    /// becomes a space: inline text should carry none).
     fn push_inline(&mut self, s: &str) {
         self.ensure_open(LineKind::Para);
         self.inline.push_text(s);
@@ -383,23 +338,20 @@ impl Builder {
 
     fn open_mark(&mut self, kind: MarkKind) {
         // Resolve any armed line first, so a mark that begins a block records
-        // the position *after* the block's line boundary: not the `\n` before
-        // it. Without this the mark swallows the separator and equal content
-        // from an editor vs from import serializes to different canonical bytes.
+        // the position *after* the block's line boundary. Otherwise the mark
+        // swallows the separator and equal content from an editor vs from
+        // import serializes to different canonical bytes.
         self.ensure_open(LineKind::Para);
         self.inline.open_mark(kind);
     }
 
     fn close_mark(&mut self) {
-        // Well-nested by pulldown: close the innermost open mark.
         self.inline.close_mark();
     }
 
     /// Mint an island of a *known* type: the importer can only produce the
-    /// closed set, so an unknown type can enter the system through storage
-    /// deserialization but never through import. The `isl-{seq}` id is the
-    /// normative deterministic scheme (`DOCUMENT_STORAGE.md` § Island-id
-    /// determinism); minting by position keeps import a pure function.
+    /// closed set, so an unknown type enters only through storage decode.
+    /// Minting `isl-{seq}` by position keeps import a pure function.
     fn mint_island(&mut self, kind: KnownIslandType, props: serde_json::Value, loss: Loss) {
         let id = format!("isl-{}", self.island_seq);
         self.island_seq += 1;
@@ -448,10 +400,9 @@ impl Builder {
                 continue;
             }
 
-            // Table collection routes both structural events (head/row/cell) and
-            // a cell's inline content (text/marks) to the accumulator, so each
-            // cell is stored as canonical `{text, marks}`: no markdown re-parse
-            // downstream.
+            // Table collection routes structural events and cell inline content
+            // to the accumulator, so each cell is stored as canonical
+            // `{text, marks}` with no markdown re-parse downstream.
             if self.table.is_some() {
                 self.table_event(&event, underline);
                 if matches!(event, Event::End(TagEnd::Table)) {
@@ -479,13 +430,10 @@ impl Builder {
                 Event::HardBreak => {
                     match self.cur.as_ref().map(|l| &l.kind) {
                         // ATX headings can't carry a hard break in markdown, so
-                        // one inside a heading canonicalizes to a space (a
-                        // documented, representable choice).
+                        // one inside a heading canonicalizes to a space.
                         Some(LineKind::Heading { .. }) => self.push_inline(" "),
-                        // Elsewhere: a within-block line break: arm a pending
-                        // continuation line (same kind, continues = true) so it
-                        // stays one block and export re-emits a hard break, not a
-                        // paragraph split.
+                        // Elsewhere, arm a continuation line so the block stays
+                        // one block and export re-emits a hard break.
                         _ => {
                             let kind = self
                                 .cur
@@ -531,9 +479,8 @@ impl Builder {
                     }
                     pulldown_cmark::CodeBlockKind::Indented => None,
                 };
-                // First code line opens on the first content chunk; nothing to
-                // open yet (a code block with no content still yields one line,
-                // handled in push_code_content / end).
+                // The first code line opens on the first content chunk; an empty
+                // block gets its line at `TagEnd::CodeBlock`.
                 self.code_opened = false;
             }
             Tag::List(start) => {
@@ -686,15 +633,13 @@ impl Builder {
         self.table.as_mut()?.cell.as_mut()
     }
 
-    /// Route one table event: structural events (head/row/cell boundaries) shape
-    /// the accumulator; inline events (text/code/marks) build the open cell with
-    /// the SAME [`Inline`] machinery prose uses, a cell is flat inline (no lines,
-    /// no nested islands), so its marks are USV offsets into its own text.
+    /// Route one table event: structural events shape the accumulator, inline
+    /// events build the open cell with the same [`Inline`] machinery prose uses.
+    /// A cell is flat inline, so its marks are USV offsets into its own text.
     fn table_event(&mut self, event: &Event, underline: bool) {
         // An image open inside the current cell intercepts everything until it
-        // closes: the alt text lands in the cell as plain text (marks flattened,
-        // like the top-level image path), the url is dropped, and the island is
-        // flagged degraded. A cell has no island slot to carry a real image.
+        // closes: the alt lands as plain text, the url is dropped, and the
+        // island is flagged degraded, a cell having no slot to carry an image.
         if self.table.as_ref().is_some_and(|a| a.img_depth > 0) {
             match event {
                 Event::Start(Tag::Image { .. }) => {
@@ -765,9 +710,8 @@ impl Builder {
                     }
                 }
             }
-            // Inline content of the open cell (pulldown already trimmed the cell's
-            // surrounding whitespace; the fixer already stripped non-`<u>` HTML).
-            // A soft/hard break in a single-line cell is a space.
+            // Inline content of the open cell. A soft/hard break in a
+            // single-line cell is a space.
             Event::Text(t) => {
                 if let Some(c) = self.cell_mut() {
                     c.push_text(t);
@@ -825,10 +769,7 @@ impl Builder {
                 "rows": acc.rows,
             });
             // Degraded when a cell dropped an inline image's url: the projection
-            // then carries the alt text but not the image (not a fixed point);
-            // otherwise the type's ceiling. Recorded, not acted on: `Loss`
-            // describes fidelity for a consumer to surface; no
-            // projection branches on it.
+            // then carries the alt text but not the image.
             let loss = if acc.degraded {
                 Loss::DEGRADED
             } else {
@@ -853,7 +794,6 @@ impl Builder {
             self.lines.push(last);
         }
         if self.lines.is_empty() {
-            // Empty document: one empty Para line.
             self.lines.push(Line {
                 kind: LineKind::Para,
                 containers: Vec::new(),
@@ -885,24 +825,20 @@ fn heading_level(level: pulldown_cmark::HeadingLevel) -> u8 {
     }
 }
 
-/// Sanitize a code-block info string to a language identifier (parity with the
-/// typst backend's `sanitize_lang_tag`).
+/// Sanitize a code-block info string to a language identifier, matching the
+/// typst backend's `sanitize_lang_tag`.
 fn sanitize_lang(lang: &str) -> String {
     lang.chars()
         .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '+'))
         .collect()
 }
 
-// ---------------------------------------------------------------------------
-// MarkdownFixer: the raw-HTML filter between pulldown and the builder.
-//
-// One job: allowlist `<u>…</u>` as underline (rewritten to Strong start/end,
-// the classification riding the rewritten event) and drop every other raw HTML
-// event. Delimiter arithmetic is pulldown's: a fixer that
-// re-segments `***` runs can only disagree with CommonMark, and disagreeing
-// means deleting an asterisk the author typed (`***a**` is a literal `*` then
-// strong `a`; `***bold italic***` parses natively).
-// ---------------------------------------------------------------------------
+// `MarkdownFixer` is the raw-HTML filter between pulldown and the builder: it
+// allowlists `<u>…</u>` as underline (rewritten to Strong start/end, the
+// classification riding the event) and drops every other raw HTML event.
+// Delimiter arithmetic stays pulldown's, since a fixer that re-segments `***`
+// runs can only disagree with CommonMark, and disagreeing means deleting an
+// asterisk the author typed.
 
 fn is_u_open_tag(html: &str) -> bool {
     let s = html.trim();
@@ -991,8 +927,6 @@ mod tests {
         rt
     }
 
-    /// Plaintext is literal: markdown delimiters are content, not syntax, and
-    /// nothing is escaped or marked. The content is mark- and island-free.
     #[test]
     fn plaintext_is_literal_and_plain() {
         let rt = imp_plain("a *star* and _under_ #hash");
@@ -1003,8 +937,6 @@ mod tests {
         assert!(rt.is_inline(), "one line with no formatting is also inline");
     }
 
-    /// The literal fixed point: `to_plaintext(from_plaintext(s)) == s` for clean
-    /// text, and re-import is idempotent.
     #[test]
     fn plaintext_round_trip_is_verbatim_and_idempotent() {
         for s in ["", "one line", "a\nb", "a\n\nb", "trailing\n", "*not bold*"] {
@@ -1016,8 +948,6 @@ mod tests {
         }
     }
 
-    /// Lone `\n` between non-empty segments is a within-paragraph break
-    /// (`continues: true`); a blank line resets it to a paragraph boundary.
     #[test]
     fn plaintext_derives_continues_from_line_structure() {
         let rt = imp_plain("a\nb");
@@ -1032,9 +962,6 @@ mod tests {
         assert!(!rt.lines[2].continues, "text after a blank line starts a new block");
     }
 
-    /// Boundary cleanup keeps the content invariants: CRLF collapses to LF, bidi
-    /// controls and the reserved island slot are dropped. Clean text is
-    /// unaffected, so the fixed point still holds for it.
     #[test]
     fn plaintext_strips_invariant_breakers() {
         let rt = imp_plain("a\r\nb");
@@ -1086,10 +1013,9 @@ mod tests {
         assert_eq!(rt.text, "a b c");
     }
 
-    /// An asterisk run the author typed reaches the content.
     /// `***a**` is a literal `*` followed by strong `a` (CommonMark's rule of
-    /// three: the closing run matches two of the three), and every shape here
-    /// keeps its stars, a fixer re-segmenting the run deleted one.
+    /// three), and every shape here keeps its stars: a fixer re-segmenting the
+    /// run would delete one.
     #[test]
     fn odd_asterisk_runs_keep_their_literal_star() {
         for (src, text) in [
@@ -1100,19 +1026,14 @@ mod tests {
         ] {
             assert_eq!(imp(src).text, text, "literal star dropped from {src:?}");
         }
-        // The shape the fixup read as its reason for existing: pulldown nests
-        // strong+emph natively, with no star left over.
         let rt = imp("***bold italic***");
         assert_eq!(rt.text, "bold italic");
         assert!(rt.marks.iter().any(|m| m.kind == MarkKind::Strong));
         assert!(rt.marks.iter().any(|m| m.kind == MarkKind::Emph));
     }
 
-    /// A `<u>`-lookalike must not be read as underline. The fixer's single
-    /// `is_u_open_tag` classifier rejects `<ul>` (inner != "u"), so it is
-    /// stripped like any other HTML: no underline, no strong. Regression for
-    /// the old split where a separate 2-byte `<u` prefix peek would have
-    /// mis-classified it had the fixer ever converted it.
+    /// `is_u_open_tag` rejects `<ul>`, so it is stripped like any other HTML:
+    /// no underline, no strong.
     #[test]
     fn ul_lookalike_is_not_underline() {
         let rt = imp("x <ul>y</ul> z");
@@ -1164,7 +1085,6 @@ mod tests {
         let rt = imp("- a\n- b");
         assert_eq!(rt.text, "a\nb");
         assert_eq!(rt.lines.len(), 2);
-        // Two items: same list (ordered=false, start=1), distinct ordinals.
         assert_eq!(
             rt.lines[0].containers,
             vec![Container::ListItem {
@@ -1206,7 +1126,6 @@ mod tests {
 
     #[test]
     fn multi_paragraph_list_item_shares_container() {
-        // One item with two paragraphs -> two Para lines sharing one ListItem.
         let rt = imp("- first\n\n  second");
         assert_eq!(rt.lines.len(), 2);
         assert_eq!(rt.lines[0].containers, rt.lines[1].containers);
@@ -1251,10 +1170,8 @@ mod tests {
         assert_eq!(rt.islands[0].loss, Loss::LOSSLESS);
     }
 
-    /// The cell lane's own `<u>` classification. A cell reuses the prose mark
-    /// machinery through a second `Tag::Strong` site, so the two must agree:
-    /// `<u>` opens [`MarkKind::Underline`], `**` opens [`MarkKind::Strong`],
-    /// in the same cell.
+    /// A cell reuses the prose mark machinery through a second `Tag::Strong`
+    /// site, so the two must agree on `<u>` vs `**`.
     #[test]
     fn underline_from_u_tag_in_table_cell() {
         let rt = imp("| h |\n|---|\n| <u>a</u> **b** |");
@@ -1267,32 +1184,23 @@ mod tests {
 
     #[test]
     fn island_ids_are_deterministic_and_positional() {
-        // Island-id determinism (DOCUMENT_STORAGE.md § Island-id determinism):
-        // ids derive from mint position, so the same markdown imports to
-        // byte-identical canonical JSON (ids included) and the ids are exactly
-        // the `isl-{n}` sequence. This is the contract that keeps content-hashes
-        // stable across producers; a random/ambient id would break it.
         let md = "![a](x)\n\n| h |\n|---|\n| c |";
         let a = imp(md);
         let b = imp(md);
         assert_eq!(a.to_canonical_json(), b.to_canonical_json());
-        // Image slot then table island, minted in slot order.
         let ids: Vec<&str> = a.islands.iter().map(|i| i.id.as_str()).collect();
         assert_eq!(ids, ["isl-0", "isl-1"]);
     }
 
     #[test]
     fn table_with_cell_image_degrades() {
-        // GFM permits an inline image in a cell; the cell has no island slot to
-        // carry it, so the alt text lands as plain cell text, the url is dropped,
-        // and the island is Degraded (not the silent-Lossless lie).
+        // A cell has no island slot, so the alt lands as plain text, the url is
+        // dropped, and the island is Degraded rather than a silent Lossless.
         let rt = imp("| a | b |\n|---|---|\n| ![a cat](cat.png) | 2 |");
         assert_eq!(rt.islands.len(), 1);
         assert_eq!(rt.islands[0].island_type, "table");
         assert_eq!(rt.islands[0].loss, Loss::DEGRADED);
-        // The dropped image left no nested island; alt survived as cell text.
         assert_eq!(rt.islands[0].props["rows"][0][0]["text"], "a cat");
-        // A table with no cell image stays Lossless (regression guard).
         let plain = imp("| a | b |\n|---|---|\n| 1 | 2 |");
         assert_eq!(plain.islands[0].loss, Loss::LOSSLESS);
     }
@@ -1309,8 +1217,6 @@ mod tests {
 
     #[test]
     fn empty_list_item_keeps_its_line() {
-        // An empty `- ` item (here an empty bullet nested in an ordered item)
-        // must not vanish (regression for the container-flush fix).
         let rt = imp("- a\n-\n- b");
         assert_eq!(rt.lines.len(), 3, "empty middle item preserved");
     }
@@ -1324,8 +1230,8 @@ mod tests {
 
     #[test]
     fn adjacent_sibling_lists_merge_is_stable() {
-        // Documented canonicalization: two sibling bullet lists collapse to one.
-        // Distinct markdown, one content, but the content is a fixed point.
+        // Two sibling bullet lists collapse to one: distinct markdown, one
+        // content, and the content is still a fixed point.
         let rt = imp("* a\n\n+ b");
         let rt2 = from_markdown(&crate::export::to_markdown(&rt)).unwrap();
         assert_eq!(rt, rt2, "merged sibling lists still round-trip");
@@ -1340,8 +1246,6 @@ mod tests {
 
     #[test]
     fn mark_does_not_swallow_leading_newline() {
-        // Regression (review finding 1): a mark starting a block must begin at
-        // the content, not on the preceding line boundary.
         let rt = imp("a\n\n**b**");
         assert_eq!(rt.text, "a\nb");
         let m = &rt.marks[0];
@@ -1351,9 +1255,7 @@ mod tests {
 
     #[test]
     fn import_and_editor_content_same_canonical_bytes() {
-        // The freeze's central promise: equal content → equal bytes, whatever
-        // the producer. Import of "a\n\n**b**" must byte-match a hand-built
-        // editor content of the same content.
+        // Equal content → equal bytes, whatever the producer.
         let imported = imp("a\n\n**b**");
         let editor = Content {
             text: "a\nb".into(),
@@ -1390,10 +1292,8 @@ mod tests {
 
     #[test]
     fn heading_cannot_carry_hard_break() {
-        // ATX headings are single-line: `## a  \nb` is a heading plus a separate
-        // paragraph, never a heading with a continuation. (The heading→space
-        // canonicalization in HardBreak handling is defensive for editor-built
-        // content, unreachable via markdown import.)
+        // ATX headings are single-line, so the heading→space canonicalization
+        // in HardBreak handling is defensive: markdown import cannot reach it.
         let rt = imp("## a  \nb");
         assert_eq!(rt.text, "a\nb");
         assert_eq!(rt.lines.len(), 2);

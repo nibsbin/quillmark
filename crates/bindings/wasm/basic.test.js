@@ -1,10 +1,7 @@
 /**
- * Smoke tests for quillmark-wasm: Document API
- *
- * These tests cover the canonical flow:
- *   Quill.fromTree(tree) → Document.fromMarkdown(markdown) → engine.render(quill, doc, opts)
- *
- * Setup: Tests use the bundler build via @quillmark-wasm alias (see vitest.config.js)
+ * The Document API over the canonical flow:
+ * `Quill.fromTree(tree)` → `Document.fromMarkdown(markdown)` →
+ * `engine.render(quill, doc, opts)`, against the bundler build.
  */
 
 import { describe, it, expect } from 'vitest'

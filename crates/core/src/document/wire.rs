@@ -1,26 +1,17 @@
 //! Canonical **live** wire form of a [`Card`] for language-binding APIs.
 //!
-//! [`CardWire`] is the single, core-owned translation between a [`Card`] and
-//! the flat `{ kind, payloadItems, … }` shape that the WASM and Python bindings
-//! exchange with JS/Python. Bindings serialize/deserialize this type instead of
-//! hand-rolling their own per-card conversion, so the field/comment/`$`-entry
-//! mapping lives in exactly one place.
+//! [`CardWire`] is the single, core-owned translation between a [`Card`] and the
+//! flat `{ kind, payloadItems, … }` shape the WASM and Python bindings exchange,
+//! so the field/comment/`$`-entry mapping lives in one place.
 //!
-//! ## Why this is separate from the storage DTO
+//! Separate from the versioned storage DTO (`document::dto`), which is frozen per
+//! schema version: `CardWire` is the current API shape and evolves with the
+//! bindings, and coupling the two would chain their change cadences.
 //!
-//! The versioned storage DTO (`document::dto`, e.g. `CardV0_92_0`) is **frozen**
-//! per schema version so persisted documents keep loading forever. `CardWire`
-//! is the **current** API shape and is free to evolve with the bindings. They
-//! are structurally similar today, but coupling the live API to a frozen
-//! storage schema would chain one to the other's change cadence, so they are
-//! deliberately distinct, both built on the live [`Card`]/[`Payload`] model.
-//!
-//! ## Shape
-//!
-//! The `$` system entries are hoisted to named fields (`kind`, `quill`,
-//! `ext`, `seed`); `payload_items` carries only user fields and comments, in order.
-//! Field/`$ext` *nested* comments are not represented here: they survive the
-//! Markdown and storage round-trips, not this editable projection.
+//! The `$` system entries are hoisted to named fields (`kind`, `quill`, `ext`,
+//! `seed`); `payload_items` carries only user fields and comments, in order.
+//! Nested comments are not represented here: they survive the Markdown and
+//! storage round-trips, not this editable projection.
 
 use std::str::FromStr;
 
@@ -46,10 +37,8 @@ pub enum PayloadItemWire {
         /// `true` when the field itself is `key: !must_fill <value>` in source.
         #[serde(default)]
         fill: bool,
-        /// Paths to `!must_fill` markers nested *inside* `value` (e.g. a leaf
-        /// property of an object, or a key within an array element). The JSON
-        /// `value` projection is fill-free, so these carry the nested markers
-        /// across the wire. Empty for a top-level-only or no-fill field.
+        /// Paths to `!must_fill` markers nested *inside* `value`, whose JSON
+        /// projection is fill-free. Empty for a top-level-only or no-fill field.
         #[serde(
             default,
             rename = "nestedFills",
@@ -129,10 +118,9 @@ pub struct CardWire {
     /// when absent. A markdown string is also accepted on input (imported), so an
     /// LLM/markdown writer can hand a string here.
     ///
-    /// No `body_markdown` projection rides this wire. Delimiter safety makes
-    /// `to_markdown` re-parse every rendered line, so an eager `export ∘ body`
-    /// precompute is not cheap; the `exportMarkdown(body)` codec at the binding
-    /// boundary does it on demand instead.
+    /// No `body_markdown` projection rides this wire: delimiter safety makes
+    /// `to_markdown` re-parse every rendered line, so the `exportMarkdown(body)`
+    /// codec at the binding boundary does it on demand instead.
     #[serde(default)]
     pub body: JsonValue,
 }
@@ -263,26 +251,19 @@ impl TryFrom<CardWire> for Card {
             })
             .collect::<Result<Vec<_>, WireError>>()?;
 
-        // Build the user fields/comments, then apply each `$` entry through its
-        // setter so the canonical `$quill < $kind < $ext < $seed` ordering
-        // holds regardless of input order.
+        // Applying each `$` entry through its setter keeps the canonical
+        // `$quill < $kind < $ext < $seed` ordering regardless of input order.
         let mut payload = Payload::from_items(items);
         if let Some(value) = wire.quill {
             let reference = QuillReference::from_str(&value)
                 .map_err(|reason| WireError::InvalidQuillReference { value, reason })?;
             payload.set_quill(reference);
         }
-        // No `$kind` check here. This decoder validates only what a detached
-        // card can decide alone: field-name grammar, value depth, the `$quill`
-        // reference above. `$kind` validity is positional (`main` is right for
-        // the root and reserved for a composable card) and a `CardWire` carries
-        // no signal of which it is. So it belongs to `push_card`/`insert_card`,
-        // which know the position, and which report `edit::invalid_kind_name` /
-        // `edit::reserved_kind`.
-        //
-        // Checking the context-free half (the `[a-z_][a-z0-9_]*` grammar) here
-        // would split one user-facing concept across two error types, and the
-        // earlier `WireError` would shadow the routable `EditError` code.
+        // No `$kind` check: its validity is positional (`main` is right for the
+        // root, reserved for a composable card) and a `CardWire` carries no
+        // signal of which it is, so it belongs to `push_card`/`insert_card`.
+        // Checking only the grammar here would split one user-facing concept
+        // across two error types and shadow the routable `EditError` code.
         if !wire.kind.is_empty() {
             payload.set_kind(wire.kind);
         }
@@ -316,8 +297,6 @@ fn body_from_wire(body: &JsonValue) -> Result<Content, WireError> {
     };
     match super::decode_richtext_value(body) {
         Some(result) => result.map_err(|e| invalid(e.into_message())),
-        // `null`/absent is the empty content; every other non-decodable shape is
-        // an invalid `$body`.
         None => match body {
             JsonValue::Null => Ok(Content::empty()),
             other => Err(invalid(format!(
@@ -386,11 +365,8 @@ mod tests {
         assert_eq!(back, card, "nested fill must survive Card → wire → Card");
     }
 
-    /// A richtext field stored as a canonical content object rides the wire
-    /// **structurally and losslessly**: the same opaque-JSON `Field` carrier as
-    /// any object value, so identity marks (an `underline` with no markdown
-    /// projection) survive Card → wire → Card. This is the lossless carrier the
-    /// card-yaml markdown projection (emit) deliberately is not.
+    /// A content object rides the wire structurally and losslessly, so an
+    /// `underline` with no markdown projection survives Card → wire → Card.
     #[test]
     fn card_wire_round_trips_content_field_losslessly() {
         use quillmark_content::model::{Mark, MarkKind};
@@ -409,13 +385,11 @@ mod tests {
             .unwrap();
 
         let wire = CardWire::from(&card);
-        // Carried as the content object, verbatim: not a markdown projection.
         let as_json = serde_json::to_value(&wire).unwrap();
         assert!(as_json["payloadItems"][0]["value"].is_object());
 
         let back = Card::try_from(wire).expect("wire → card");
         assert_eq!(back, card, "content field must survive Card → wire → Card");
-        // Underline (content-only, no markdown form) is intact after the round-trip.
         let read = back.field_richtext("intro").unwrap().unwrap();
         assert!(read.marks.iter().any(|m| matches!(m.kind, MarkKind::Underline)));
     }

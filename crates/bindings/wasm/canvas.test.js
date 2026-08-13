@@ -1,18 +1,9 @@
 /**
- * Canvas-preview smoke tests for quillmark-wasm.
- *
- * Vitest runs in a Node environment with no DOM, so we polyfill the bare
- * minimum needed for wasm-bindgen's `instanceof` checks to pass:
- *
- *   - `globalThis.CanvasRenderingContext2D`
- *   - `globalThis.OffscreenCanvasRenderingContext2D`
- *   - `globalThis.ImageData`
- *
- * The polyfill captures `putImageData` calls into a buffer so the test can
- * assert that `paint` actually invoked the context with sensibly-sized
- * pixels and non-empty pixel content. Pixel-perfect correctness needs a
- * real browser test; this catches regressions like broken downcast,
- * mis-sized buffer, swapped channels, missing demultiply, or panics.
+ * Canvas preview. Vitest runs in Node with no DOM, so the canvas globals are
+ * polyfilled far enough for wasm-bindgen's `instanceof` checks, capturing
+ * `putImageData` into a buffer. Pixel-perfect correctness needs a real browser;
+ * this catches a broken downcast, mis-sized buffer, swapped channels, a missing
+ * demultiply, or a panic.
  */
 
 import { describe, it, expect, beforeAll } from 'vitest'

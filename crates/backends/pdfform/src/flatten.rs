@@ -1,25 +1,13 @@
-//! Value-flatten path for the pdfform backend.
+//! Draw field values as PDF content stream operators instead of AcroForm
+//! widgets, so they are visible in non-interactive rasterizers (pdfium,
+//! Ghostscript) that never synthesize `/NeedAppearances` appearances.
 //!
-//! Draws field values as PDF content stream operators instead of AcroForm
-//! widgets. The result is visible in ALL viewers including non-interactive
-//! rasterizers such as headless Chromium / pdfium or Ghostscript: unlike
-//! Technique A (AcroForm with `/NeedAppearances`), which requires an
-//! interactive viewer to synthesize appearances.
-//!
-//! Because the values are drawn directly (no viewer appearance synthesis), this
-//! path commits to a byte encoding: text is transcoded to WinAnsi
-//! ([`winansi_encode`](quillmark_pdf::writer::winansi_encode)) and shown with a
-//! `WinAnsiEncoding` Helvetica, and each value is clipped to its field box.
-//!
-//! The drawing stream is appended last to the page `/Contents` and positions
-//! text with absolute `Td` coordinates, i.e. it assumes the **identity CTM** of
-//! the page default user space. A well-formed background restores its graphics
-//! state (balanced `q`/`Q`, no dangling `cm`), which the qualifier-produced
-//! background this consumes always does; a base that left a non-identity CTM
-//! in effect would shift the flattened values. This path backs the SVG/PNG
-//! raster outputs only: never the AcroForm PDF deliverable, which is stamped.
-//!
-//! Entry point: [`flatten`].
+//! Drawing directly commits to a byte encoding: text is transcoded to WinAnsi
+//! and shown with a `WinAnsiEncoding` Helvetica, clipped to its field box. The
+//! stream is appended last to the page `/Contents` and positions text with
+//! absolute `Td`, so it assumes the identity CTM of page default user space —
+//! true of any background with balanced `q`/`Q` and no dangling `cm`. Backs the
+//! SVG/PNG raster outputs only; the AcroForm PDF deliverable is stamped.
 
 use quillmark_pdf::{
     reader::{
@@ -33,30 +21,21 @@ use crate::typography;
 
 const CODE_PARSE: &str = "pdf::flatten_parse";
 
-/// Flatten `fields` onto `base` PDF by drawing values as PDF content stream
-/// operators. Unlike the stamp/Technique-A path, the result is visible in all
-/// rasterizers. Returns the flat PDF bytes.
-///
-/// Backs raster/vector output only (SVG/PNG/canvas), never a PDF deliverable,
-/// so it never stamps an `/Info /Producer`: that rides the interactive `stamp`
-/// path.
+/// Flatten `fields` onto `base` by drawing values as content stream operators.
+/// Backs raster output only, so it stamps no `/Info /Producer`.
 pub fn flatten(base: Vec<u8>, fields: &[FieldSpec]) -> Result<Vec<u8>, PdfError> {
     if fields.is_empty() {
         return Ok(base);
     }
 
     let pdf = base;
-    // Shared envelope: validate the input contract, read the trailer, seed the
-    // id counter. No producer stamp on the flatten path. Non-empty `fields` is
-    // guaranteed by the early return above.
     let mut up = PdfUpdate::begin(&pdf, None)?;
 
     let page_ids = up.resolve_pages(&pdf, fields)?;
     let page_count = page_ids.len();
 
-    // Standard Type1 fonts: Helvetica for text/choice, ZapfDingbats for
-    // checkboxes. Both are among the 14 standard PDF fonts every conforming
-    // reader provides.
+    // Helvetica and ZapfDingbats are among the 14 standard PDF fonts every
+    // conforming reader provides, so neither is embedded.
     let helv_id = alloc_id(&mut up.next_id)?;
     let zadb_id = alloc_id(&mut up.next_id)?;
     up.objects.push(type1_font_object(
@@ -67,13 +46,11 @@ pub fn flatten(base: Vec<u8>, fields: &[FieldSpec]) -> Result<Vec<u8>, PdfError>
     up.objects
         .push(type1_font_object(zadb_id, typography::CHECK_FONT, None));
 
-    // Group fields by page.
     let mut fields_by_page: Vec<Vec<&FieldSpec>> = vec![Vec::new(); page_count];
     for spec in fields {
         fields_by_page[spec.page].push(spec);
     }
 
-    // For each page with drawable fields: emit a content stream and rewrite the page dict.
     for (page_idx, page_fields) in fields_by_page.iter().enumerate() {
         let drawable: Vec<&FieldSpec> = page_fields
             .iter()
@@ -103,9 +80,6 @@ pub fn flatten(base: Vec<u8>, fields: &[FieldSpec]) -> Result<Vec<u8>, PdfError>
     up.finish(pdf)
 }
 
-// ── Drawing helpers ───────────────────────────────────────────────────────────
-
-/// Whether a field has a value we render visually on the flat path.
 fn has_drawable_value(spec: &FieldSpec) -> bool {
     match &spec.field_type {
         FieldType::Signature => false,
@@ -114,7 +88,6 @@ fn has_drawable_value(spec: &FieldSpec) -> bool {
     }
 }
 
-/// Build a PDF content stream drawing all `fields` for one page.
 fn build_content_stream(fields: &[&FieldSpec]) -> Vec<u8> {
     let mut out = Vec::new();
     for spec in fields {
@@ -124,8 +97,6 @@ fn build_content_stream(fields: &[&FieldSpec]) -> Vec<u8> {
         match &spec.field_type {
             FieldType::Signature => {}
             FieldType::Checkbox => {
-                // Glyph 0x34 ("4") in ZapfDingbats is the filled check mark: the
-                // same glyph the AcroForm stamp path declares via /MK /CA (4).
                 let size = typography::check_size(h);
                 // ZapfDingbats check glyphs are roughly square; centre in the box.
                 let x_pos = x0 + (w - size * typography::CHECK_GLYPH_WIDTH_FACTOR) * 0.5;
@@ -136,7 +107,6 @@ fn build_content_stream(fields: &[&FieldSpec]) -> Vec<u8> {
                 if let Some(value) = &spec.value {
                     let size = typography::value_size(h);
                     let x_pos = x0 + typography::TEXT_INSET;
-                    // First baseline just inside the top edge.
                     let y_top = y1 - size - typography::TEXT_TOP_INSET;
                     let lines: Vec<&str> = value.lines().collect();
                     write_text_block(&mut out, &lines, x_pos, y_top, size, spec.rect);
@@ -155,11 +125,9 @@ fn build_content_stream(fields: &[&FieldSpec]) -> Vec<u8> {
     out
 }
 
-/// Write a `q/Q`-wrapped `BT/ET` block for one or more lines of text using
-/// `/Helv`. The block is clipped to `clip` (`[x0, y0, x1, y1]`, the field box)
-/// so an over-long or multiline value can't paint outside its box and over
-/// neighbouring content. Line bytes are transcoded to WinAnsi to match the
-/// `/Helv` font's `/Encoding /WinAnsiEncoding`.
+/// Draw `lines` in `/Helv`, clipped to `clip` so an over-long value cannot paint
+/// over neighbouring content. Bytes are transcoded to WinAnsi to match the
+/// font's `/Encoding /WinAnsiEncoding`.
 fn write_text_block(out: &mut Vec<u8>, lines: &[&str], x: f32, y: f32, size: f32, clip: [f32; 4]) {
     if lines.is_empty() {
         return;
@@ -167,7 +135,7 @@ fn write_text_block(out: &mut Vec<u8>, lines: &[&str], x: f32, y: f32, size: f32
     let line_h = size * typography::LINE_SPACING;
     let [cx0, cy0, cx1, cy1] = clip;
     out.extend_from_slice(b"q\n");
-    // Clip to the field box: `x y w h re W n`.
+    // `x y w h re W n`
     push_f32(out, cx0);
     out.push(b' ');
     push_f32(out, cy0);
@@ -196,10 +164,8 @@ fn write_text_block(out: &mut Vec<u8>, lines: &[&str], x: f32, y: f32, size: f32
     out.extend_from_slice(b"ET\nQ\n");
 }
 
-/// Write the ZapfDingbats checkmark in a `BT/ET` block. Glyph 0x34 (`'4'`) is
-/// the filled check mark: identical to the `/MK /CA (4)` glyph the AcroForm
-/// stamp path declares for checked checkboxes. It is the only glyph the flatten
-/// path draws, so it is written literally (no escape needed).
+/// Draw ZapfDingbats glyph 0x34 (`'4'`), the filled check mark — the same glyph
+/// the AcroForm stamp path declares via `/MK /CA (4)`.
 fn write_zadb_char(out: &mut Vec<u8>, x: f32, y: f32, size: f32) {
     out.extend_from_slice(b"q\nBT\n/ZaDb ");
     push_f32(out, size);
@@ -210,10 +176,6 @@ fn write_zadb_char(out: &mut Vec<u8>, x: f32, y: f32, size: f32) {
     out.extend_from_slice(b" Td\n(4) Tj\nET\nQ\n");
 }
 
-// ── Page dict rewriting ───────────────────────────────────────────────────────
-
-/// Rewrite the page's inner dict bytes to (a) add `/Helv` and `/ZaDb` to
-/// `/Resources /Font` and (b) append `stream_id` to `/Contents`.
 fn rewrite_page_for_flatten(
     pg_dict: &[u8],
     helv_id: u32,
@@ -225,8 +187,6 @@ fn rewrite_page_for_flatten(
     add_font_resource(&with_helv, "ZaDb", zadb_id)
 }
 
-/// Append `stream_id` to the page's `/Contents` (wrapping a bare ref in an array
-/// as needed, or creating `/Contents` when absent).
 fn add_content_stream(pg_dict: &[u8], stream_id: u32) -> Result<Vec<u8>, PdfError> {
     let ref_str = format!("{stream_id} 0 R");
     match find_dict_value(pg_dict, "Contents") {
@@ -245,7 +205,6 @@ fn add_content_stream(pg_dict: &[u8], stream_id: u32) -> Result<Vec<u8>, PdfErro
                 let inner = String::from_utf8_lossy(&trimmed[1..end]);
                 format!("[{} {ref_str}]", inner.trim())
             } else {
-                // Single indirect ref: wrap in array.
                 format!("[{} {ref_str}]", String::from_utf8_lossy(trimmed).trim())
             };
             Ok(splice_dict_value(
@@ -259,15 +218,9 @@ fn add_content_stream(pg_dict: &[u8], stream_id: u32) -> Result<Vec<u8>, PdfErro
 }
 
 /// Inject `/<name> <font_id> 0 R` into the page's `/Resources /Font` dict,
-/// creating intermediate dicts as needed.
-///
-/// An indirect `/Resources` (or `/Font`) reference is a clean error: the flatten
-/// content stream selects `/Helv` and `/ZaDb` by *resource name*, and a `Tf`
-/// name must resolve through the page's `/Font` subdictionary, even the
-/// standard-14 fonts need a `/Font` entry mapping the name, so skipping
-/// injection would leave the value text unresolvable (blank). The reader's input
-/// contract produces inline resources, so this only rejects out-of-contract
-/// input rather than silently dropping it.
+/// creating intermediate dicts as needed. An indirect `/Resources` or `/Font`
+/// is an error rather than a skip: a `Tf` name resolves only through the page's
+/// `/Font` subdictionary, so an uninjected name draws nothing.
 fn add_font_resource(pg_dict: &[u8], name: &str, font_id: u32) -> Result<Vec<u8>, PdfError> {
     let helv_entry = format!("/{name} {font_id} 0 R");
 
@@ -289,7 +242,6 @@ fn add_font_resource(pg_dict: &[u8], name: &str, font_id: u32) -> Result<Vec<u8>
             let res_inner = extract_outer_dict(res_val)
                 .ok_or_else(|| PdfError::new(CODE_PARSE, "page /Resources dict not parseable"))?;
 
-            // Build new_res_inner with /Helv injected into /Font.
             let new_res_inner: Vec<u8> = match find_dict_value(res_inner, "Font") {
                 None => {
                     let mut out = res_inner.to_vec();
@@ -298,7 +250,6 @@ fn add_font_resource(pg_dict: &[u8], name: &str, font_id: u32) -> Result<Vec<u8>
                 }
                 Some(font_val) => {
                     if !font_val.trim_ascii().starts_with(b"<<") {
-                        // Indirect /Font ref: same unresolvable-name problem.
                         return Err(PdfError::new(
                             CODE_PARSE,
                             "page /Resources /Font is an indirect reference; flatten requires \
@@ -308,17 +259,14 @@ fn add_font_resource(pg_dict: &[u8], name: &str, font_id: u32) -> Result<Vec<u8>
                     let font_inner = extract_outer_dict(font_val).ok_or_else(|| {
                         PdfError::new(CODE_PARSE, "page /Resources /Font dict not parseable")
                     })?;
-                    // Build new font dict value.
                     let mut new_font_val = b"<< ".to_vec();
                     new_font_val.extend_from_slice(font_inner);
                     new_font_val.extend_from_slice(format!(" {helv_entry} >>").as_bytes());
 
-                    // Splice new_font_val into res_inner replacing /Font <font_val>.
                     splice_dict_value(res_inner, b"/Font", font_val, &new_font_val)
                 }
             };
 
-            // Build new_res_val and splice it into pg_dict replacing /Resources <res_val>.
             let mut new_res_val = b"<< ".to_vec();
             new_res_val.extend_from_slice(&new_res_inner);
             new_res_val.extend_from_slice(b" >>");
@@ -333,12 +281,8 @@ fn add_font_resource(pg_dict: &[u8], name: &str, font_id: u32) -> Result<Vec<u8>
     }
 }
 
-// ── PDF object builders ───────────────────────────────────────────────────────
-
-/// Build a base-14 Type1 font object. `encoding`, when given, is emitted as
-/// `/Encoding /<name>`: text fonts use `WinAnsiEncoding` so the content stream's
-/// WinAnsi bytes render correctly; symbol fonts (ZapfDingbats) pass `None` and
-/// keep their built-in encoding.
+/// Build a base-14 Type1 font object. Symbol fonts pass `encoding: None` to keep
+/// their built-in encoding; text fonts name `WinAnsiEncoding`.
 fn type1_font_object(id: u32, base_font: &str, encoding: Option<&str>) -> UpdatedObject {
     let enc = match encoding {
         Some(name) => format!(" /Encoding /{name}"),
@@ -360,8 +304,6 @@ fn content_stream_object(id: u32, content: &[u8]) -> UpdatedObject {
     UpdatedObject::new(id, bytes)
 }
 
-// ── PDF text helpers ──────────────────────────────────────────────────────────
-
 /// Append `v` as a compact `%.2f` float, stripping trailing zeros and dot.
 fn push_f32(out: &mut Vec<u8>, v: f32) {
     let s = format!("{v:.2}");
@@ -369,19 +311,13 @@ fn push_f32(out: &mut Vec<u8>, v: f32) {
     out.extend_from_slice(s.as_bytes());
 }
 
-// ── Tests ───────────────────────────────────────────────────────────────────
-//
-// Byte-level coverage of the flatten output, exercised at the `flatten()` unit
-// level (plus the internal `build_content_stream` for the focused
-// transcoding/clipping byte windows): no public render-option knob involved.
 #[cfg(test)]
 mod tests {
     use super::*;
     use lopdf::Document as PdfDoc;
     use quillmark_pdf::CHECKBOX_ON_STATE;
 
-    /// A stripped single-page US-Letter background PDF ([0 0 612 792], no
-    /// AcroForm, no annots): the perfect flatten base.
+    /// Single-page US-Letter background, no AcroForm and no annots.
     const BASE: &[u8] =
         include_bytes!("../../../fixtures/resources/quills/sample_form/0.1.0/form.pdf");
 
@@ -416,8 +352,6 @@ mod tests {
         haystack.windows(needle.len()).any(|w| w == needle)
     }
 
-    /// 1. The flat output reparses cleanly and its catalog carries NO
-    ///    `/AcroForm`: values live in content streams, not widgets.
     #[test]
     fn flatten_produces_no_acroform() {
         let pdf = flatten_ok(&[text_field("FullName", "Ada Lovelace")]);
@@ -430,10 +364,6 @@ mod tests {
         );
     }
 
-    /// 2. The flat output's text font declares `WinAnsiEncoding`, so its WinAnsi
-    ///    content-stream bytes render correctly. The `BT`/`Tj` operators and the
-    ///    field-value literal are already pinned by the byte-window transcode
-    ///    test below and the lopdf reparse above.
     #[test]
     fn flatten_text_font_declares_winansi_encoding() {
         let pdf = flatten_ok(&[text_field("FullName", "Ada Lovelace")]);
@@ -443,8 +373,6 @@ mod tests {
         );
     }
 
-    /// 3. Each text value clips to its field rect (`re W n`) so it can't
-    ///    overflow over neighbouring content.
     #[test]
     fn flatten_clips_to_field_box() {
         let pdf = flatten_ok(&[text_field("FullName", "Ada Lovelace")]);
@@ -455,19 +383,13 @@ mod tests {
         );
     }
 
-    /// 4. Non-ASCII CP1252 chars are transcoded to their WinAnsi bytes in the
-    ///    content stream (not drawn as raw UTF-8). Asserted directly on
-    ///    `build_content_stream` (the closest seam to the original byte-window
-    ///    test) and also that the value reaches the full `flatten()` output.
     #[test]
     fn build_content_stream_transcodes_non_ascii_to_winansi() {
-        // é(U+00E9) — (U+2014) ñ(U+00F1) ’(U+2019)
         let value = "Caf\u{e9} \u{2014} Se\u{f1}or \u{2019}A\u{2019}";
         let spec = text_field("FullName", value);
         let stream = build_content_stream(&[&spec]);
 
-        // WinAnsi bytes: é→0xE9, —→0x97, ñ→0xF1, ’→0x92. Drawn literal:
-        // `Caf<E9> <97> Se<F1>or <92>A<92>`.
+        // WinAnsi: é→0xE9, —→0x97, ñ→0xF1, ’→0x92.
         let want: &[u8] = &[
             b'C', b'a', b'f', 0xE9, b' ', 0x97, b' ', b'S', b'e', 0xF1, b'o', b'r', b' ', 0x92,
             b'A', 0x92,
@@ -476,14 +398,11 @@ mod tests {
             contains_window(&stream, want),
             "content stream must carry the WinAnsi-encoded value bytes"
         );
-        // The raw UTF-8 sequence for é (0xC3 0xA9) must NOT appear as a drawn
-        // literal: that would be the pre-fix corruption.
         assert!(
             !contains_window(&stream, &[b'f', 0xC3, 0xA9, b' ']),
             "value must not be drawn as raw UTF-8"
         );
 
-        // And the same bytes survive the full flatten() envelope.
         let pdf = flatten_ok(&[spec]);
         assert!(
             contains_window(&pdf, want),
@@ -491,8 +410,6 @@ mod tests {
         );
     }
 
-    /// 5. A checked checkbox wires the ZapfDingbats font and draws the check
-    ///    glyph via the `write_zadb_char` path (`/ZaDb` + the `'4'` glyph).
     #[test]
     fn flatten_checked_checkbox_emits_zapfdingbats_glyph() {
         let spec = checkbox_field("Agree", true);
@@ -503,22 +420,17 @@ mod tests {
             text.contains("/ZaDb"),
             "checked checkbox must select the ZapfDingbats font (/ZaDb)"
         );
-        // The check glyph is ZapfDingbats byte 0x34 ('4'), drawn as `(4) Tj`.
         assert!(
             contains_window(&stream, b"(4) Tj"),
             "checked checkbox must draw the check glyph"
         );
 
-        // The font object is wired in the full flatten() output.
         let pdf = flatten_ok(&[spec]);
         assert!(
             String::from_utf8_lossy(&pdf).contains("/ZapfDingbats"),
             "flat PDF must declare the ZapfDingbats font"
         );
 
-        // Value-gating lives in flatten() (via `has_drawable_value`), not in
-        // `build_content_stream`: an unchecked checkbox is filtered out before
-        // it reaches the stream, so the check glyph is never drawn.
         assert!(has_drawable_value(&checkbox_field("Agree", true)));
         assert!(!has_drawable_value(&checkbox_field("Agree", false)));
         let unchecked = flatten_ok(&[checkbox_field("Agree", false)]);

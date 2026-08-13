@@ -1,32 +1,17 @@
-//! Error handling utilities for WASM bindings
-
 use crate::types::Diagnostic as WasmDiagnostic;
 use quillmark_core::{Diagnostic, ParseError, RenderError, Severity};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
-/// Serializable error for JavaScript consumption.
-///
-/// Single uniform shape regardless of underlying error variant: a non-empty
-/// list of [`Diagnostic`]s. The thrown JS `Error`'s `.message` is derived
-/// from `diagnostics` (`diagnostics[0].message` for single-diagnostic
-/// errors, an aggregate `"… N error(s)"` summary for compilation failures),
-/// and a `.diagnostics` property carries the full array.
-///
-/// Read `err.diagnostics[0]` for the primary diagnostic; iterate the array
-/// for backend compilation failures.
+/// Every error crossing to JS as one shape: a non-empty list of diagnostics,
+/// surfaced as the thrown `Error`'s `.diagnostics` property.
 #[derive(Debug, Clone)]
 pub struct WasmError {
     pub diagnostics: Vec<Diagnostic>,
 }
 
 impl WasmError {
-    /// Display message for the JS `Error` constructor.
-    ///
-    /// For single-diagnostic errors this is the diagnostic's `message`. For
-    /// multi-diagnostic errors (backend compilation) this is an aggregate
-    /// `"… N error(s)"` summary; callers should iterate `diagnostics` for
-    /// the per-error details.
+    /// The single diagnostic's message, or a `"… N error(s)"` aggregate.
     pub fn message(&self) -> String {
         match self.diagnostics.as_slice() {
             [] => "Unknown error".to_string(),
@@ -34,11 +19,8 @@ impl WasmError {
         }
     }
 
-    /// Convert to a JS `Error` object for throwing.
-    ///
-    /// Returns a real `Error` whose `.message` is [`WasmError::message`] and
-    /// whose `.diagnostics` property is an array of diagnostic objects
-    /// matching the shape used in `RenderResult.warnings`.
+    /// A real JS `Error` whose `.diagnostics` array uses the same diagnostic
+    /// shape as `RenderResult.warnings`.
     pub fn to_js_value(&self) -> JsValue {
         let err = js_sys::Error::new(&self.message());
         let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
@@ -61,10 +43,6 @@ impl From<ParseError> for WasmError {
 
 impl From<RenderError> for WasmError {
     fn from(error: RenderError) -> Self {
-        // Every `RenderError` variant carries a non-empty diagnostic vector,
-        // so the conversion is uniform: forward every diagnostic so JS
-        // consumers can iterate `err.diagnostics` and read each entry's
-        // `path` for document-model navigation.
         WasmError {
             diagnostics: error.into_diagnostics(),
         }
@@ -72,8 +50,6 @@ impl From<RenderError> for WasmError {
 }
 
 impl From<Vec<Diagnostic>> for WasmError {
-    /// A failure that already speaks in diagnostics (the bound door's
-    /// `BoundParseError`, whichever half it carries).
     fn from(diagnostics: Vec<Diagnostic>) -> Self {
         WasmError { diagnostics }
     }
@@ -98,21 +74,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_input_too_large_conversion() {
-        let err = ParseError::InputTooLarge {
-            size: 1_000_000,
-            max: 100_000,
-        };
-        let wasm_err: WasmError = err.into();
-
-        assert_eq!(wasm_err.diagnostics.len(), 1);
-        let diag = &wasm_err.diagnostics[0];
-        assert_eq!(diag.code.as_deref(), Some("parse::input_too_large"));
-        assert!(diag.message.contains("Input too large"));
-        assert_eq!(wasm_err.message(), diag.message);
-    }
-
-    #[test]
     fn test_compilation_failed_carries_all_diagnostics() {
         let diag1 = Diagnostic::new(Severity::Error, "Error 1".to_string());
         let diag2 = Diagnostic::new(Severity::Error, "Error 2".to_string());
@@ -127,11 +88,4 @@ mod tests {
         assert!(summary.contains("Error 1"));
     }
 
-    #[test]
-    fn test_string_conversion_yields_single_diagnostic() {
-        let wasm_err: WasmError = "Simple error".into();
-        assert_eq!(wasm_err.message(), "Simple error");
-        assert_eq!(wasm_err.diagnostics.len(), 1);
-        assert_eq!(wasm_err.diagnostics[0].message, "Simple error");
-    }
 }

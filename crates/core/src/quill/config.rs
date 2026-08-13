@@ -1215,9 +1215,8 @@ impl QuillConfig {
         }
     }
 
-    /// Render a short, quoted preview of a value for an error message. Strings
-    /// are quoted; everything else uses its JSON form. Long renderings are
-    /// truncated (see [`Self::truncate_preview`]).
+    /// A short preview of a value for an error message: strings quoted,
+    /// everything else in its JSON form, truncated past 60 characters.
     fn literal_preview(value: &serde_json::Value) -> String {
         let raw = match value {
             serde_json::Value::String(s) => format!("\"{}\"", s),
@@ -1226,8 +1225,6 @@ impl QuillConfig {
         Self::truncate_preview(&raw)
     }
 
-    /// Truncate an already-rendered preview token to at most 60 characters,
-    /// appending an ellipsis when it overflows.
     fn truncate_preview(raw: &str) -> String {
         const MAX: usize = 60;
         if raw.chars().count() > MAX {
@@ -1305,7 +1302,6 @@ impl QuillConfig {
         fields
     }
 
-    /// Produce an actionable hint for common field schema mistakes based on the raw value.
     fn field_parse_hint(field_value: &serde_json::Value) -> Option<String> {
         if let Some(obj) = field_value.as_object() {
             if obj.contains_key("title") {

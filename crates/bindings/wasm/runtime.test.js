@@ -1,14 +1,8 @@
 /**
- * Canonical-API (`@quillmark/wasm/runtime`) integration tests.
- *
- * The runtime layer hands out the core build's `Quill`/`Document` and adds an
- * `Engine` that hides the core→backend WASM-memory crossing. These tests prove,
- * end to end, that a CORE quill + document handed to `Engine` render correctly;
- * i.e. the engine clones them into the Typst backend's memory on demand
- * (`toTree`→`fromTree`, `toJson`→`fromJson`) without the caller ever seeing a
- * backend handle.
- *
- * Aliased to pkg/runtime/runtime.js in vitest.config.js.
+ * The canonical `@quillmark/wasm/runtime` API end to end: a CORE quill and
+ * document handed to `Engine` render correctly, the engine cloning them into the
+ * Typst backend's memory on demand without the caller ever seeing a backend
+ * handle.
  */
 import { describe, it, expect, beforeAll } from 'vitest'
 import fs from 'node:fs'

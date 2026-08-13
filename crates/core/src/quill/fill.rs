@@ -1,15 +1,5 @@
-//! The per-field **zero value**: the type-minimal valid value for a field.
-//!
-//! This is the single source of truth for "the zero value for this field,"
-//! shared by two callers (see `prose/canon/SCHEMAS.md` and `BLUEPRINT.md`):
-//!
-//! - **blueprint/example emission** ([`super::blueprint`]): the `example`
-//!   document's fallback, when a field carries neither an `example:` nor a
-//!   `default:`.
-//! - **zero-filled render** ([`QuillConfig::compile_data`](super::QuillConfig::compile_data),
-//!   invoked from `quillmark::orchestration`), each absent field is filled
-//!   with its zero value in the plate-JSON projection only, never in the
-//!   persisted document.
+//! The per-field zero value: the type-minimal valid value for a field,
+//! shared by blueprint emission and the zero-filled render.
 
 use serde_json::json;
 

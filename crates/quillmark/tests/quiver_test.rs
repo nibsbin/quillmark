@@ -1,17 +1,6 @@
-//! Enforces the quill authoring contract from `prose/canon/BLUEPRINT.md`:
-//! every quill in the fixtures quiver loads, and its `plate.typ` renders an
-//! **empty document** (just `$quill` / `$kind: main`, no fields) to a
-//! successful (non-error) output.
-//!
-//! Under zero-filled render (see `prose/canon/SCHEMAS.md`),
-//! every absent field is filled with its type-empty (zero) value in the plate
-//! projection. An empty document is therefore the type-minimal valid input
-//! (the worst-case-but-renderable shape) so a plate that renders it has shown
-//! it degrades gracefully on every type-valid input.
-//!
-//! A second test (`every_quill_blueprint_round_trips_and_renders`) additionally
-//! generates each quill's `blueprint()`, round-trips it, and renders it: the
-//! BLUEPRINT.md §Guarantees contract.
+//! The quill authoring contract: every quill in the fixtures quiver loads and
+//! renders. An empty document is the type-minimal valid input under zero-filled
+//! render, so a plate that renders it degrades gracefully on any valid input.
 
 #![cfg(feature = "typst")]
 
@@ -39,8 +28,6 @@ fn every_quill_in_quiver_renders() {
         let quill = quillmark::quill_from_path(quills_path(&name))
             .unwrap_or_else(|e| panic!("quill '{name}' failed to load: {e:?}"));
 
-        // An empty document: zero-filled render fills every absent field with
-        // its type-empty value in the plate projection.
         let config = quill.config();
         let markdown = format!(
             "~~~\n$quill: {}@{}\n$kind: main\n~~~\n",
@@ -67,9 +54,8 @@ fn every_quill_in_quiver_renders() {
     }
 }
 
-/// The `blueprint()` guarantee (BLUEPRINT.md §Guarantees): every bundled quill's
-/// generated blueprint **parses**, **round-trips** idempotently, and **renders**
-/// (its `!must_fill` markers zero-fill), including the typed-table synthetic row.
+/// Every bundled quill's generated blueprint parses, round-trips idempotently,
+/// and renders with its `!must_fill` markers zero-filled.
 #[test]
 fn every_quill_blueprint_round_trips_and_renders() {
     let engine = Quillmark::new();

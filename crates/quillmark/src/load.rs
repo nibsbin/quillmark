@@ -1,7 +1,5 @@
-//! Filesystem loading for quills, kept in `quillmark` so that fs access stays
-//! out of the fs-agnostic core. [`quill_from_path`] walks a directory into a
-//! [`FileTreeNode`] and hands it to core's [`Quill::from_tree`], surfacing
-//! config errors as a [`RenderError`].
+//! Filesystem loading for quills, kept here so fs access stays out of the
+//! fs-agnostic core.
 
 use std::collections::HashMap;
 use std::error::Error as StdError;
@@ -10,17 +8,16 @@ use std::path::{Path, PathBuf};
 use quillmark_core::{Diagnostic, FileTreeNode, Quill, QuillIgnore, RenderError, Severity};
 
 /// Load a quill from a filesystem directory. Honours a root `.quillignore`,
-/// else a default ignore set. (The fs walk lives here; core stays fs-agnostic.)
+/// else a default ignore set.
 ///
-/// Pure config load: no backend, no engine; the declared backend is resolved
-/// later, at render time. For an in-memory tree, call [`Quill::from_tree`].
+/// A pure config load: the declared backend is resolved later, at render time.
+/// For an in-memory tree, call [`Quill::from_tree`].
 pub fn quill_from_path<P: AsRef<Path>>(path: P) -> Result<Quill, RenderError> {
     quill_from_path_with_warnings(path).map(|(quill, _)| quill)
 }
 
 /// [`quill_from_path`], keeping the config's advisory diagnostics rather than
-/// dropping them: the door for a caller that reports them (`quillmark
-/// validate -v`).
+/// dropping them.
 pub fn quill_from_path_with_warnings<P: AsRef<Path>>(
     path: P,
 ) -> Result<(Quill, Vec<Diagnostic>), RenderError> {
@@ -33,12 +30,9 @@ pub fn quill_from_path_with_warnings<P: AsRef<Path>>(
     Quill::from_tree_with_warnings(tree).map_err(RenderError::new)
 }
 
-/// Walk a filesystem path into an in-memory [`FileTreeNode`]: the tree half of
-/// [`quill_from_path`], for a caller that wants to edit the tree before
-/// [`Quill::from_tree`] reads it.
-///
-/// Honours a `.quillignore` file at the root; otherwise applies a default
-/// ignore set (`.git/`, `target/`, `node_modules/`, etc.).
+/// Walk a filesystem path into an in-memory [`FileTreeNode`], for a caller that
+/// wants to edit the tree before [`Quill::from_tree`] reads it. Honours a root
+/// `.quillignore`, else a default ignore set (`.git/`, `target/`, …).
 pub fn tree_from_path<P: AsRef<Path>>(
     path: P,
 ) -> Result<FileTreeNode, Box<dyn StdError + Send + Sync>> {
@@ -60,10 +54,8 @@ fn load_tree_from_path(path: &Path) -> Result<FileTreeNode, Box<dyn StdError + S
     load_dir(path, path, &ignore)
 }
 
-/// Maximum size of a single file loaded from a quill directory. Bounds one
-/// oversize file from an untrusted bundle, not the tree's total footprint:
-/// neither file count nor aggregate bytes is capped. Core's `MAX_INPUT_SIZE`
-/// is the analogous, lower cap on whole-document markdown.
+/// Bounds one oversize file from an untrusted bundle; neither file count nor
+/// aggregate bytes is capped.
 const MAX_QUILL_FILE_SIZE: u64 = 50 * 1024 * 1024;
 
 fn load_dir(
@@ -98,10 +90,8 @@ fn load_dir(
             .ok_or_else(|| format!("Invalid filename: {}", path.display()))?
             .to_string();
 
-        // Use symlink_metadata so symlinks are neither dereferenced nor
-        // followed: a crafted quill bundle could otherwise point a symlink at a
-        // sensitive host file (e.g. `assets/x -> /etc/shadow`) and pull its
-        // contents into the in-memory tree the backend reads as assets.
+        // symlink_metadata, so a crafted bundle cannot point a symlink at a
+        // sensitive host file and pull it into the tree the backend reads.
         let meta = std::fs::symlink_metadata(&path)
             .map_err(|e| format!("Failed to stat '{}': {}", path.display(), e))?;
         let file_type = meta.file_type();
@@ -141,19 +131,15 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
 
-        // A real file inside the quill.
         let mut f = std::fs::File::create(root.join("real.txt")).unwrap();
         f.write_all(b"ok").unwrap();
 
-        // A secret outside the quill, plus a symlink pointing at it.
         let secret = dir.path().join("secret.txt");
         std::fs::write(&secret, b"TOPSECRET").unwrap();
         std::os::unix::fs::symlink(&secret, root.join("leak.txt")).unwrap();
 
         let tree = load_tree_from_path(root).unwrap();
-        // The symlink is not followed into the tree.
         assert!(tree.get_file("leak.txt").is_none());
-        // The genuine file still loads.
         assert_eq!(tree.get_file("real.txt"), Some(&b"ok"[..]));
     }
 }

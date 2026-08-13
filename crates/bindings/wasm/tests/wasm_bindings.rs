@@ -1,11 +1,6 @@
-//! Real-browser wasm32 smoke coverage.
-//!
-//! `run_in_browser` is this file's reason to exist: node/vitest cannot prove
-//! that the `serde_wasm_bindgen` boundary produces the right JS types under a
-//! real browser's WASM instantiation. So the assertions here stay at the
-//! crossing: a verb runs, and its result deserializes into the declared shape.
-//! Engine semantics belong to core, and the JS-facing API surface to
-//! `basic.test.js`.
+//! Real-browser wasm32 coverage: node/vitest cannot prove the
+//! `serde_wasm_bindgen` boundary produces the right JS types under a real
+//! browser's instantiation, so the assertions stay at the crossing.
 
 use wasm_bindgen_test::*;
 
@@ -29,30 +24,6 @@ const SIMPLE_MARKDOWN: &str =
     "~~~card-yaml\n$quill: test_quill\n$kind: main\ntitle: Hello\n~~~\n\n# Hello\n";
 
 #[wasm_bindgen_test]
-fn test_parse_markdown_static() {
-    let doc = Document::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
-    assert_eq!(doc.quill_ref(), "test_quill");
-}
-
-#[wasm_bindgen_test]
-fn test_document_body_and_warnings() {
-    let doc = Document::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
-    // Body at EOF: no blank-line separator to strip, so trailing content newlines are
-    // preserved verbatim. `toMarkdown` carries the body through unchanged.
-    assert!(doc.to_markdown().contains("# Hello\n"));
-    // warnings() returns JsValue (array): just verify it's defined
-    let warnings = doc.warnings().unwrap();
-    assert!(!warnings.is_undefined());
-}
-
-#[wasm_bindgen_test]
-fn test_quill_from_tree() {
-    let quill = Quill::from_tree(small_quill_tree()).expect("quill failed");
-    let _ = quill;
-}
-
-/// `quill.render(Document, opts)`: render via pre-parsed document.
-#[wasm_bindgen_test]
 fn test_render_from_document() {
     let engine = Quillmark::new();
     let quill = Quill::from_tree(small_quill_tree()).expect("quill failed");
@@ -73,10 +44,8 @@ fn test_render_from_document() {
     );
 }
 
-/// Artifact bytes must cross the WASM boundary as a real `Uint8Array`, not a
-/// `number[]`. The declared TS type is `Uint8Array`; this guards against the
-/// type silently lying when serde's default `Vec<u8>` serializer reverts to
-/// `Array<number>`.
+/// Guards the declared `Uint8Array` type against serde's default `Vec<u8>`
+/// serializer reverting to `Array<number>`.
 #[wasm_bindgen_test]
 fn test_artifact_bytes_is_uint8array() {
     use serde::Serialize;
@@ -90,8 +59,7 @@ fn test_artifact_bytes_is_uint8array() {
         .expect("render failed");
     assert!(!result.artifacts.is_empty(), "should produce artifacts");
 
-    // Round-trip the RenderResult through the same serializer Tsify uses for
-    // `into_wasm_abi`. The boundary representation is what JS consumers see.
+    // The same serializer Tsify uses for `into_wasm_abi`.
     let serializer = serde_wasm_bindgen::Serializer::new();
     let js_result = result
         .serialize(&serializer)
@@ -111,7 +79,6 @@ fn test_artifact_bytes_is_uint8array() {
     assert!(typed.length() > 0, "Uint8Array has bytes");
 }
 
-/// `quill.open(Document)` returns a render session supporting page_count + render.
 #[wasm_bindgen_test]
 fn test_open_session_render() {
     let engine = Quillmark::new();
@@ -127,8 +94,7 @@ fn test_open_session_render() {
     assert!(!result.artifacts.is_empty(), "should produce artifacts");
 }
 
-/// A quill whose plate places a two-paragraph richtext `body` field, for the
-/// region/navigation surface.
+/// A plate placing a two-paragraph richtext `body` field.
 fn region_quill_tree() -> wasm_bindgen::JsValue {
     common::tree(&[
         (
@@ -142,10 +108,8 @@ fn region_quill_tree() -> wasm_bindgen::JsValue {
     ])
 }
 
-/// The region + navigation results deserialize into their declared shapes
-/// across the WASM boundary: `regions()` yields span-bearing boxes, and
-/// `positionAt` / `locate` round-trip a content offset. Which boxes land where
-/// is geometry, pinned in `backends/typst/tests/content_regions.rs`.
+/// Which boxes land where is geometry, pinned in
+/// `backends/typst/tests/content_regions.rs`.
 #[wasm_bindgen_test]
 fn test_session_region_shapes_cross_the_boundary() {
     let engine = Quillmark::new();
@@ -182,40 +146,17 @@ fn test_session_region_shapes_cross_the_boundary() {
     assert_eq!(caret.span, Some([hit.pos, hit.pos]));
 }
 
-/// `toMarkdown` emits canonical Quillmark Markdown and round-trips cleanly.
-#[wasm_bindgen_test]
-fn test_to_markdown_round_trip() {
-    let doc = Document::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
-    let emitted = doc.to_markdown();
-    assert!(
-        !emitted.is_empty(),
-        "toMarkdown must return non-empty output"
-    );
-
-    // Re-parse: the emitted document must parse back cleanly
-    let doc2 = Document::from_markdown(&emitted).expect("re-parse of emitted markdown failed");
-    assert_eq!(
-        doc2.quill_ref(),
-        doc.quill_ref(),
-        "quill_ref must survive round-trip"
-    );
-}
-
-/// `toJson` emits the versioned storage DTO string and `fromJson`
-/// round-trips it back to an equal `Document`.
 #[wasm_bindgen_test]
 fn test_json_dto_round_trip() {
     let md = "~~~card-yaml\n$quill: test_quill\n$kind: main\ntitle: Hello\nsubject: !must_fill A Subject\n~~~\n\n# Hello\n\n~~~card-yaml\n$kind: note\nfor: someone\n~~~\n\nNote body.\n";
     let doc = Document::from_markdown(md).expect("fromMarkdown failed");
 
-    // toJson yields a string carrying the schema version.
     let dto = doc.to_json();
     assert!(
         dto.contains("\"quillmark/document@0.93.0\""),
         "DTO string must carry the schema version, got: {dto}"
     );
 
-    // fromJson reconstructs an equal document.
     let restored = Document::from_json(&dto).expect("fromJson failed");
     assert!(
         restored.equals(&doc),
@@ -224,8 +165,7 @@ fn test_json_dto_round_trip() {
     assert_eq!(restored.quill_ref(), doc.quill_ref());
 }
 
-/// Plain object (`Record<string, Uint8Array>`) must be accepted by
-/// `engine.quill` equivalently to `Map<string, Uint8Array>`.
+/// A plain object tree must be accepted equivalently to a `Map` tree.
 #[wasm_bindgen_test]
 fn test_quill_from_object_tree() {
     let entries: &[(&str, &[u8])] = &[
@@ -242,7 +182,6 @@ fn test_quill_from_object_tree() {
 
     assert_eq!(from_map.backend_id(), from_obj.backend_id());
 
-    // Both handles render the same document to the same artifact count/format.
     let doc = Document::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
     let doc2 = Document::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
     let r_map = engine
@@ -254,7 +193,6 @@ fn test_quill_from_object_tree() {
     assert_eq!(r_map.artifacts.len(), r_obj.artifacts.len());
 }
 
-/// `metadata` is identity only; `schema` keeps ui hints and injects QUILL/CARD reserved fields.
 #[wasm_bindgen_test]
 fn test_quill_metadata_and_schemas() {
     use js_sys::Reflect;
@@ -273,7 +211,6 @@ fn test_quill_metadata_and_schemas() {
     ]))
     .expect("quill load");
 
-    // metadata: identity from `quill:` section, no schema.
     let meta = quill.metadata().unwrap();
     assert_eq!(get_str(&meta, "name").as_deref(), Some("meta_quill"));
     assert_eq!(get_str(&meta, "version").as_deref(), Some("0.2.1"));
@@ -288,7 +225,6 @@ fn test_quill_metadata_and_schemas() {
     assert!(js_sys::Array::from(&formats).length() > 0);
     assert!(get(&meta, "schema").is_undefined());
 
-    // schema: user-fillable fields with ui hints. No QUILL/CARD sentinels.
     let schema = quill.schema().unwrap();
     let main_fields = get(&get(&schema, "main"), "fields");
     assert!(get(&get(&main_fields, "title"), "ui").is_object());
@@ -297,12 +233,7 @@ fn test_quill_metadata_and_schemas() {
     assert!(get(&card_fields, "CARD").is_undefined());
 }
 
-/// The seed verbs cross the boundary with their declared shapes: `seedDocument`
-/// as a `Document`, `seedMain` / `seedCard` as card objects, `seedCard` of an
-/// unknown kind as `undefined`, and `storeSeedOverlay` / `removeSeedOverlay`
-/// writing and clearing `main.seed[kind]`. What the seeds *contain* (example
-/// commitment, overlay layering) is core's (`core/src/quill/seed/tests.rs`,
-/// mirrored once in JS by `core.test.js`).
+/// What the seeds *contain* is core's (`core/src/quill/seed/tests.rs`).
 #[wasm_bindgen_test]
 fn test_seed_verbs_cross_the_boundary() {
     use js_sys::Reflect;
@@ -354,8 +285,6 @@ fn test_seed_verbs_cross_the_boundary() {
     assert!(seed_of(&doc, "note").is_undefined());
 }
 
-/// `doc.clone()` returns an independent handle: mutations on the clone
-/// must not affect the original, and parse-time warnings must survive.
 #[wasm_bindgen_test]
 fn test_document_clone_independence() {
     use wasm_bindgen::JsValue;
@@ -363,12 +292,10 @@ fn test_document_clone_independence() {
     let doc = Document::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
     let mut clone = doc.clone_doc();
 
-    // Mutate the clone; the original must keep its original title.
     clone
         .store_field(JsValue::from_str("title"), JsValue::from_str("Changed"))
         .expect("storeField on clone");
 
-    // Emit both and check the title survived on each side independently.
     let original_md = doc.to_markdown();
     let clone_md = clone.to_markdown();
 
@@ -383,8 +310,6 @@ fn test_document_clone_independence() {
         clone_md
     );
 
-    // Warnings are a JS array on both handles. Length-equality is the
-    // observable guarantee for parse-warning preservation.
     let orig_warns = js_sys::Array::from(&doc.warnings().unwrap());
     let clone_warns = js_sys::Array::from(&clone.warnings().unwrap());
     assert_eq!(

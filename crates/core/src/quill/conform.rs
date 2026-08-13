@@ -1,35 +1,10 @@
-//! Conform-on-load: the bound door that lands a document at its **canonical
-//! rest**.
+//! Conform-on-load: the bound door that lands a document at its canonical
+//! rest (`prose/canon/SCHEMAS.md` § "Content fields rest per codec").
 //!
-//! A content field rests in its codec's lossless written form whenever the
-//! quill resolved, the value commits under the strict write, and no
-//! `!must_fill` marker rides anywhere in it: `richtext` as the canonical
-//! content object, `plaintext` as its literal string
-//! (`prose/canon/SCHEMAS.md` § "Content fields rest per codec"). Every
-//! departure is a named state carrying a marker or a diagnostic, never a silent
-//! second resting form.
-//!
-//! [`Quill::conform`] is the primitive and [`Quill::parse`] (parse, then
-//! conform) the convenience: the documented primary ingestion path. The
-//! schema-free [`Document::parse`] stays the transport/repair door (migrations,
-//! `$ext` stamping, quill-unavailable fallback, opening-to-fix); its resting
-//! form is unspecified.
-//!
-//! The walk is the typed write, driven by the schema instead of by a caller:
-//! every declared content-bearing field goes through the same
-//! [`resolve_field_write`] the typed writer commits through, so parse-then-conform
-//! equals typed-write by construction rather than by parallel policy. What
-//! differs is the failure posture: the writer refuses, conform leaves the value
-//! authored and reports a `conform::*` warning.
-//!
-//! Four states are representable and none is silent:
-//!
-//! 1. **Quill unavailable**: the document loads through the transport door,
-//!    fully readable and round-trippable, resting as authored.
-//! 2. **Wrong quill**: [`Quill::conform`] errors before any mutation.
-//! 3. **Non-conforming value**: rests as authored plus a `conform::*`
-//!    diagnostic; the walk is stateless, so a repeat conform re-emits it.
-//! 4. **Fill-marked**: rests as authored; the marker is the state.
+//! The walk is the typed write driven by the schema instead of by a caller:
+//! every content-bearing field goes through the same [`resolve_field_write`]
+//! the typed writer commits through. What differs is the failure posture:
+//! the writer refuses, conform leaves the value authored and warns.
 
 use crate::document::edit::resolve_field_write;
 use crate::document::{Card, Document, EditError, Parsed, PayloadItem};

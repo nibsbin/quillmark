@@ -1,18 +1,6 @@
 //! Island, line and mark op channels: structural edits separate from text
-//! splices.
-//!
-//! [`IslandOp`], [`LineOp`] and [`MarkOp`] apply after
-//! [`Content::apply_text_delta`] in one [`ChangeBundle`], in that order. Each
-//! channel reaches a part of the model no splice can: an island's payload, a
-//! line's block role, a mark's range. Mark ranges are in **final-text
-//! coordinates**: mark ops run last and validate against the length every
-//! earlier stage left, so a producer
-//! computes them in the only frame it can, the text as it stands once the
-//! delta and line ops have landed. Line split/join splice a `\n` in `text` and
-//! rebase marks through that one-char change with
-//! [`Delta::map_pos`](crate::delta::Delta::map_pos), the same mapping the
-//! text-delta channel uses, so a mark's coordinates track the splice rather
-//! than drifting.
+//! splices. All three apply after [`Content::apply_text_delta`] in one
+//! [`ChangeBundle`], in that order; mark ranges are in final-text coordinates.
 
 use crate::delta::{Assoc, Delta, Op};
 use crate::model::{
@@ -28,10 +16,8 @@ use std::borrow::Cow;
 #[non_exhaustive]
 pub enum MarkOp {
     /// Add a mark over `[start, end)`. An anchor `kind` must carry a non-empty
-    /// `id` not already live in the field: ids are caller-supplied and unique
-    /// per `Content` (`DOCUMENT_STORAGE.md` § Anchor-id identity); a collision or
-    /// the empty id is rejected ([`ApplyError::AnchorIdCollision`] /
-    /// [`ApplyError::EmptyAnchorId`]), never replaced or coexisted.
+    /// `id` not already live in the field ([`ApplyError::AnchorIdCollision`] /
+    /// [`ApplyError::EmptyAnchorId`]).
     Add {
         start: Usv,
         end: Usv,
@@ -39,10 +25,9 @@ pub enum MarkOp {
     },
     /// Un-format `kind` over `[start, end)`: subtract the range from each
     /// overlapping same-kind *formatting* mark, keeping the non-overlapping
-    /// fragments (a mid-run removal punches a hole; `normalize` drops any
-    /// zero-width fragment an edge-aligned removal leaves). Non-formatting
-    /// (identity/unknown) handles can't be range-fragmented, so an overlapping
-    /// one is dropped whole: anchors normally go through [`MarkOp::RemoveAnchor`].
+    /// fragments. Non-formatting (identity/unknown) handles cannot be
+    /// range-fragmented, so an overlapping one is dropped whole; anchors
+    /// normally go through [`MarkOp::RemoveAnchor`].
     Remove {
         start: Usv,
         end: Usv,
@@ -71,68 +56,43 @@ pub enum LineOp {
     /// Set (or clear) a line's `continues` flag: whether it continues the
     /// previous line's block across a within-block hard break (a markdown hard
     /// break, a code fence's interior line) rather than starting a new block.
-    /// The op-grained twin of the value that `install` already round-trips:
-    /// `split`/`join`/text-delta `\n` insertion all mint `continues: false`
-    /// lines, so without this a hard break or a new code-fence interior line is
-    /// unreachable op-wise and falls back to a whole-`install` (losing that
-    /// edit's identity anchors). Setting `continues: true` on line 0 is
-    /// [`ApplyError::FirstLineContinues`] (nothing precedes it to continue).
+    /// Split, join and text-delta `\n` insertion all mint `continues: false`
+    /// lines, so this is the only op that reaches the flag. Setting it on line 0
+    /// is [`ApplyError::FirstLineContinues`].
     SetContinues { line: usize, continues: bool },
 }
 
 /// An island edit: the channel that reaches [`Island`] payloads, which no other
-/// channel carries (`text` holds one [`ISLAND_SLOT`] per island and nothing
-/// more, `lines` the [`LineKind::Island`] tag, `marks` neither).
-///
-/// Both ops are **value semantics over one island entry**, not over the field:
-/// the slot stays put, so every identity anchor in the field's text survives an
-/// island edit. Without them a table edit lowers to a whole-field `install`,
-/// which drops every anchor in the field: [`LineOp::SetContinues`]'s argument at
-/// the scale of a table.
+/// channel carries. Both ops act on one island entry, leaving the slot in place,
+/// so identity anchors elsewhere in the field survive an island edit.
 ///
 /// Removal needs no op: a text delta that deletes a slot drops the backing
-/// entry ([`Content::apply_text_delta`]'s cascade). The drop is whole, so
-/// re-landing that island is an [`IslandOp::Insert`] carrying the [`Island`]
-/// itself, which only the producer that deleted it still holds. A *block*
-/// island's line demotes to `Para` when its slot goes, so re-landing one
-/// re-tags the line too.
+/// entry ([`Content::apply_text_delta`]'s cascade). That drop is whole, so
+/// re-landing the island is an [`IslandOp::Insert`] carrying the [`Island`]
+/// itself. A *block* island's line demotes to `Para` when its slot goes, so
+/// re-landing one re-tags the line too.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum IslandOp {
     /// Replace the entry `island.id` names, in place. The id is the target *and*
-    /// the stored value, so an island cannot be renamed through this op: ids are
-    /// hash input and stable across edits by contract
-    /// (`DOCUMENT_STORAGE.md` § Island-id determinism). An id no island carries
-    /// is [`ApplyError::UnknownIslandId`], never a silent no-op: swallowing it
-    /// leaves the store on the old value with the caller believing it committed.
+    /// the stored value, so an island cannot be renamed through this op. An id no
+    /// island carries is [`ApplyError::UnknownIslandId`], never a silent no-op.
     ///
-    /// `props`, `island_type` and `loss` all come from the op. Nothing derives
-    /// `loss` from the props: like `install`, the op stores what the caller hands
-    /// it, so a write that changes what markdown can carry restates the class or
-    /// carries the stale one forward.
+    /// `props`, `island_type` and `loss` all come from the op; nothing derives
+    /// `loss` from the props.
     Set { island: Island },
     /// Insert an island: the [`ISLAND_SLOT`] at `at` and its backing entry in
-    /// one op, so a slot never exists without the [`Island`] behind it (the
-    /// orphan [`ApplyError::IslandSlotInInsert`] guards against on the text
-    /// channel is unrepresentable here rather than rejected after the fact).
+    /// one op, so a slot never exists without the [`Island`] behind it.
     ///
     /// `at` is a USV position in the text the delta and this bundle's earlier
     /// island ops left: each insert splices its slot before the next op reads
-    /// the text. Slots after `a` and `b` of `abc` therefore go in at 1 and 3,
-    /// and of two inserts at one position the later one lands first. The entry
-    /// files at its slot-order index in that same frame, so text and island
-    /// list agree whatever the emission order; a stale frame misplaces slots
-    /// and never errors.
+    /// the text, so of two inserts at one position the later one lands first.
+    /// The entry files at its slot-order index in that same frame. A stale frame
+    /// misplaces slots and never errors.
     ///
-    /// The id is caller-supplied, non-empty, and unique in the field, on an
-    /// anchor id's terms ([`ApplyError::EmptyIslandId`],
-    /// [`ApplyError::IslandIdCollision`]). `Set` addresses by id, so a
-    /// degenerate or shared id is an island that cannot be edited, or cannot be
-    /// told from another. Minting follows `DOCUMENT_STORAGE.md` § Island-id
-    /// determinism: a new island continues the field's positional sequence,
-    /// while re-landing a dropped one carries its original id back. A delete
-    /// earlier in the same bundle frees its id here, which is how a
-    /// replace-in-place lands as one bundle.
+    /// The id must be non-empty and unique in the field
+    /// ([`ApplyError::EmptyIslandId`], [`ApplyError::IslandIdCollision`]); a
+    /// delete earlier in the same bundle frees its id for reuse here.
     ///
     /// **Block islands.** The slot alone is an *inline* island (a slot in a
     /// `Para`). A block island is that slot alone on its own line under
@@ -140,8 +100,8 @@ pub enum IslandOp {
     /// delta inserts the `\n`, this op inserts the slot, and
     /// [`LineOp::SetKind`] tags the line. That order is why island ops run
     /// *before* line ops: `SetKind` validates the kind against the text already
-    /// on the line, so the slot has to be there first. `LineOp::Split` cannot
-    /// stand in for the delta's `\n`: it runs in the later stage.
+    /// on the line. `LineOp::Split` cannot stand in for the delta's `\n`: it
+    /// runs in the later stage.
     ///
     /// A slot inserted onto a line whose kind names its content (`Code`, `Rule`)
     /// contradicts that kind; `normalize` demotes the line to `Para` at the end
@@ -151,29 +111,24 @@ pub enum IslandOp {
 
 /// One committed field edit: a text delta and the three op channels, applied in
 /// field order (delta → islands → lines → marks) by
-/// [`Content::apply_field_change`].
-///
-/// A struct rather than four positional arguments so a fifth channel is an
-/// additive change at every call site. [`Default`] is the identity bundle (no
-/// text change, no ops), so a caller names only the channels it uses:
+/// [`Content::apply_field_change`]. [`Default`] is the identity bundle, so a
+/// caller names only the channels it uses:
 /// `ChangeBundle { delta, ..Default::default() }`.
 ///
 /// Within a channel ops apply in sequence: op *n*'s coordinates read the state
 /// ops `0..n` left, not the frame the channel opens in. That is USV positions
-/// for an island insert (its `at` counts the slots earlier inserts spliced) and
-/// line indices for [`LineOp::Split`] / [`LineOp::Join`], which renumber every
-/// later line. A stale frame stays in range, so the bundle applies cleanly and
-/// lands the wrong document.
+/// for an island insert and line indices for [`LineOp::Split`] /
+/// [`LineOp::Join`], which renumber every later line. A stale frame stays in
+/// range, so the bundle applies cleanly and lands the wrong document.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChangeBundle {
     /// The text splice; the identity delta (no ops) is no text change.
     pub delta: Delta,
-    /// Island edits, opening in post-delta coordinates and sequenced.
+    /// Island edits, in post-delta coordinates.
     pub island_ops: Vec<IslandOp>,
-    /// Line edits, opening in post-delta, post-island-op coordinates and
-    /// sequenced.
+    /// Line edits, in post-delta, post-island-op coordinates.
     pub line_ops: Vec<LineOp>,
-    /// Mark edits, in final-text coordinates (every earlier stage applied).
+    /// Mark edits, in final-text coordinates.
     pub mark_ops: Vec<MarkOp>,
 }
 
@@ -202,15 +157,10 @@ impl ChangeBundle {
     }
 }
 
-// ── Change-bundle wire (mark / line op ⇄ JSON) ──────────────────────────────
-//
-// [`Delta`] serializes through serde derive; [`MarkOp`] and [`LineOp`] carry
-// [`MarkKind`] / [`LineKind`] / [`Container`], whose canonical JSON is the
-// hand-written `serial` encoding (the `{type, …}` / `{kind, …}` discriminants a
-// `ContentMark` / `ContentLine` already uses). These converters reuse that
-// exact vocabulary so the `applyChange` bundle speaks the same shapes the
-// content read surface does, rather than a second serde-derived dialect. The
-// language bindings call them to lower a JS/Python bundle to core ops.
+// The op converters below reuse `serial`'s hand-written encoding for
+// `MarkKind` / `LineKind` / `Container`, so an `applyChange` bundle speaks the
+// same shapes the content read surface does rather than a second serde-derived
+// dialect.
 
 use crate::serial::{
     container_from_authored_value, container_to_value, island_from_value, island_to_value,
@@ -240,8 +190,6 @@ pub fn mark_op_to_value(op: &MarkOp) -> Value {
     Value::Object(m)
 }
 
-/// Merge a mark's `{start, end, type, …}` fields into an op object, reusing the
-/// canonical `serial` mark encoding.
 fn merge_mark(m: &mut Map<String, Value>, start: Usv, end: Usv, kind: &MarkKind) {
     let mark = Mark {
         start,
@@ -253,9 +201,9 @@ fn merge_mark(m: &mut Map<String, Value>, start: Usv, end: Usv, kind: &MarkKind)
     }
 }
 
-/// Decode a [`MarkOp`] from its wire object. Dispatches on `op`; `add`/`remove`
-/// read the mark vocabulary on the authored lane, which refuses `attrs` beside a
-/// built-in `type` rather than resolving to the built-in and dropping them.
+/// Decode a [`MarkOp`] from its wire object. `add`/`remove` read the mark
+/// vocabulary on the authored lane, which refuses `attrs` beside a built-in
+/// `type` rather than resolving to the built-in and dropping them.
 pub fn mark_op_from_value(v: &Value) -> Result<MarkOp, ParseError> {
     let o = v.as_object().ok_or(ParseError::Shape("mark op"))?;
     match o.get("op").and_then(Value::as_str) {
@@ -323,7 +271,7 @@ pub fn line_op_to_value(op: &LineOp) -> Value {
     Value::Object(m)
 }
 
-/// Decode a [`LineOp`] from its wire object. Dispatches on `op`.
+/// Decode a [`LineOp`] from its wire object.
 pub fn line_op_from_value(v: &Value) -> Result<LineOp, ParseError> {
     let o = v.as_object().ok_or(ParseError::Shape("line op"))?;
     let line = || usv_from(o.get("line"), "line op line");
@@ -358,8 +306,7 @@ pub fn line_op_from_value(v: &Value) -> Result<LineOp, ParseError> {
 }
 
 /// Encode an [`IslandOp`] to its wire object. Both arms flatten the island
-/// vocabulary (`{id, type, props, loss}`) alongside `op`, as [`LineOp::SetKind`]
-/// flattens the line-kind discriminant.
+/// vocabulary (`{id, type, props, loss}`) alongside `op`.
 pub fn island_op_to_value(op: &IslandOp) -> Value {
     let (verb, at, island) = match op {
         IslandOp::Set { island } => ("set", None, island),
@@ -376,9 +323,7 @@ pub fn island_op_to_value(op: &IslandOp) -> Value {
     Value::Object(m)
 }
 
-/// Decode an [`IslandOp`] from its wire object. Dispatches on `op`; both arms
-/// read the island vocabulary, so an op carries the same `{id, type, props,
-/// loss}` shape a `ContentIsland` does.
+/// Decode an [`IslandOp`] from its wire object.
 pub fn island_op_from_value(v: &Value) -> Result<IslandOp, ParseError> {
     let o = v.as_object().ok_or(ParseError::Shape("island op"))?;
     let island = || island_from_value(v);
@@ -392,14 +337,11 @@ pub fn island_op_from_value(v: &Value) -> Result<IslandOp, ParseError> {
     }
 }
 
-/// Lower a committed change **bundle** object (`{delta?, islandOps?, lineOps?,
-/// markOps?}`) to core ops: the whole-bundle reader the `applyChange` verb needs,
-/// so each binding lowers a JS/Python bundle in one call instead of re-deriving
-/// the delta/op extraction. A missing `delta` is the identity (no text change); a
-/// missing/`null` op array is empty. Both camelCase (`lineOps`) and snake_case
-/// (`line_ops`) keys are accepted, so the one reader serves the wasm (camelCase)
-/// and Python (either) surfaces. The error is a message string the binding wraps
-/// in its own error type.
+/// Lower a committed change bundle object (`{delta?, islandOps?, lineOps?,
+/// markOps?}`) to core ops. A missing `delta` is the identity (no text change);
+/// a missing/`null` op array is empty. Both camelCase and snake_case keys are
+/// accepted, so the one reader serves the wasm and Python surfaces. The error is
+/// a message string the binding wraps in its own error type.
 pub fn change_bundle_from_value(v: &Value) -> Result<ChangeBundle, String> {
     let obj = v
         .as_object()
@@ -421,9 +363,6 @@ pub fn change_bundle_from_value(v: &Value) -> Result<ChangeBundle, String> {
     })
 }
 
-/// Lower an optional JSON array of op objects through `convert` (missing/`null`
-/// → empty), naming `what` in any shape-error message. The list twin shared by
-/// [`change_bundle_from_value`]'s line- and mark-op channels.
 fn op_array<T>(
     value: Option<&Value>,
     convert: impl Fn(&Value) -> Result<T, ParseError>,
@@ -468,10 +407,9 @@ pub enum ApplyError {
         lines: usize,
         segments: usize,
     },
-    /// A [`LineOp::SetContinues`] tried to set `continues: true` on line 0, which
-    /// has nothing before it to continue, the apply-time twin of the
-    /// [`Invariant::FirstLineContinues`](crate::model::Invariant::FirstLineContinues)
-    /// validation error, refused here because `normalize` does not repair it.
+    /// A [`LineOp::SetContinues`] set `continues: true` on line 0, which has
+    /// nothing before it to continue. Refused because `normalize` does not
+    /// repair it.
     FirstLineContinues,
     /// The text delta's expected base length disagreed with the content:
     /// it was built against a different revision.
@@ -479,55 +417,38 @@ pub enum ApplyError {
         expected: usize,
         actual: usize,
     },
-    /// An `Op::Insert` carried a raw [`ISLAND_SLOT`]. Islands are structurally
-    /// uneditable through the text channel: a slot inserted here would have no
-    /// backing [`Island`], an orphaned-slot invariant violation. Islands are
-    /// created through [`IslandOp::Insert`], which carries the slot and its
-    /// entry in one op, never a text splice.
-    ///
-    /// A producer that computes one splice over the whole field text carries
-    /// slots in it whenever the user pastes an island or undoes a deletion that
-    /// removed one. Such a splice splits: the delta with its slots stripped,
-    /// plus one [`IslandOp::Insert`] per slot at the frame that delta leaves.
+    /// An `Op::Insert` carried a raw [`ISLAND_SLOT`], which would leave a slot
+    /// with no backing [`Island`]. Islands are created through
+    /// [`IslandOp::Insert`], never a text splice, so a whole-field splice
+    /// carrying slots must be split into a slot-stripped delta plus one
+    /// [`IslandOp::Insert`] per slot.
     IslandSlotInInsert,
     /// A [`MarkOp::Add`] of an anchor whose `id` is already live in the field.
-    /// An anchor id is a caller-supplied handle, unique per `Content`
-    /// (`DOCUMENT_STORAGE.md` § Anchor-id identity); `add` rejects a collision
-    /// rather than replace (which would silently retarget a live thread) or
-    /// coexist (which `RemoveAnchor` cannot disambiguate). The op-time twin of
-    /// [`Invariant::AnchorIdCollision`](crate::model::Invariant::AnchorIdCollision).
+    /// Rejected rather than replaced (which would retarget a live thread) or
+    /// coexisting (which `RemoveAnchor` cannot disambiguate).
     AnchorIdCollision { id: String },
-    /// A [`MarkOp::Add`] of an anchor with the empty `id`: a degenerate handle,
-    /// refused so every anchor carries a usable referent.
+    /// A [`MarkOp::Add`] of an anchor with the empty `id`.
     EmptyAnchorId,
-    /// An [`IslandOp::Set`] naming an `id` no island in the field carries,
-    /// refused rather than ignored ([`IslandOp::Set`] states why).
+    /// An [`IslandOp::Set`] naming an `id` no island in the field carries.
     UnknownIslandId { id: String },
-    /// An [`IslandOp::Insert`] whose `id` is already live in the field. Island
-    /// ids are unique per `Content` (the
-    /// [`Invariant::IslandIdCollision`](crate::model::Invariant::IslandIdCollision)
-    /// this is the op-time twin of); `Set` addresses by id, so a duplicate is an
-    /// island neither op can name unambiguously.
+    /// An [`IslandOp::Insert`] whose `id` is already live in the field. `Set`
+    /// addresses by id, so a duplicate is an island neither op can name.
     IslandIdCollision { id: String },
-    /// An [`IslandOp::Insert`] carrying the empty `id`: an island `Set` could
-    /// never address, refused on the same terms as [`Self::EmptyAnchorId`].
+    /// An [`IslandOp::Insert`] carrying the empty `id`.
     EmptyIslandId,
     /// An [`IslandOp::Insert`] whose `at` is past the end of the text the delta
     /// and this bundle's earlier island ops left.
     IslandInsertOutOfRange { at: Usv, len: Usv },
     /// A [`LineOp::SetKind`] whose kind contradicts the line's text: tagging
-    /// prose `Island` or `Rule`, or a slot-bearing line `Code`. Export trusts the
-    /// kind over the text, so the write would silently drop the line's content;
-    /// the op-time twin of
-    /// [`Invariant::LineKindMismatch`](crate::model::Invariant::LineKindMismatch),
-    /// refused here because `normalize` does not repair it.
+    /// prose `Island` or `Rule`, or a slot-bearing line `Code`. Export trusts
+    /// the kind over the text, so the write would silently drop the line's
+    /// content.
     LineKindMismatch {
         line: usize,
         mismatch: LineKindMismatch,
     },
     /// A [`LineOp::SetContainers`] nested a line deeper than
-    /// [`MAX_NESTING_DEPTH`](crate::MAX_NESTING_DEPTH), the op-time twin of
-    /// [`Invariant::NestingTooDeep`](crate::model::Invariant::NestingTooDeep).
+    /// [`MAX_NESTING_DEPTH`](crate::MAX_NESTING_DEPTH).
     NestingTooDeep {
         line: usize,
         depth: usize,
@@ -540,32 +461,20 @@ impl Content {
     /// cascade island removal for any deleted slot, then normalize.
     ///
     /// Islands stay in lockstep with their [`ISLAND_SLOT`] chars: a delta that
-    /// *deletes* a slot drops the corresponding [`Island`] (the content goes
-    /// away with its slot); a delta that *inserts* a raw slot is rejected
-    /// ([`ApplyError::IslandSlotInInsert`]), islands are created through
-    /// [`IslandOp::Insert`], never a text splice, so a slot arriving here would
-    /// orphan.
+    /// *deletes* a slot drops the corresponding [`Island`]; a delta that
+    /// *inserts* a raw slot is rejected ([`ApplyError::IslandSlotInInsert`]).
     ///
     /// Inserted text is sanitized first: `\r` and Unicode bidi controls (the
-    /// chars [`Content::validate`] forbids) are stripped, mirroring the
-    /// normalization `import` applies at the string boundary. The text-delta
-    /// channel is the *other* way text enters the content, so without this an
-    /// insert of `\r` or a bidi control returned `Ok` while leaving a content
-    /// that fails `validate()`.
+    /// chars [`Content::validate`] forbids) are stripped, mirroring what
+    /// `import` applies at the string boundary.
     pub fn apply_text_delta(&mut self, delta: &Delta) -> Result<(), ApplyError> {
         self.apply_text_delta_inner(delta)?;
         self.normalize();
         Ok(())
     }
 
-    /// [`apply_text_delta`](Self::apply_text_delta) without the terminal
-    /// normalize: the stage [`apply_field_change`](Self::apply_field_change)
-    /// runs so a committed bundle canonicalizes once at the end, not after each
-    /// op.
     fn apply_text_delta_inner(&mut self, delta: &Delta) -> Result<(), ApplyError> {
-        // Reject before mutating: a raw slot in an insert would create a slot
-        // with no backing island. Checked up front so the content is untouched
-        // on this error.
+        // Checked up front so the content is untouched on this error.
         for op in &delta.ops {
             if let Op::Insert(s) = op {
                 if s.contains(ISLAND_SLOT) {
@@ -574,22 +483,15 @@ impl Content {
             }
         }
 
-        // Strip the chars `validate()` forbids (`\r`, bidi controls) from every
-        // insert before they reach the content. Stripping (not rejecting)
-        // mirrors `import`: these are content to normalize away, unlike a raw
-        // slot, which has no backing island and must be refused. Sanitizing the
-        // whole delta up front keeps `try_apply` / `map_pos` / line+island sync
-        // in agreement on one cleaned op stream; a clean delta (every keystroke)
-        // is borrowed through untouched, so the hot path skips the clone.
+        // Sanitizing the whole delta up front keeps `try_apply` / `map_pos` /
+        // line+island sync in agreement on one cleaned op stream.
         let sanitized = sanitize_inserts(delta);
         let delta = sanitized.as_ref();
 
         let old_chars: Vec<char> = self.text.chars().collect();
         let old_lines = self.lines.clone();
-        // A splice may name only the region it changes: `try_apply` retains the
-        // untouched remainder implicitly, so a bare prepend applies against the
-        // whole content. An over-long delta (consuming more base than exists)
-        // still fails the base-length check.
+        // `try_apply` retains the untouched remainder implicitly, so a splice
+        // may name only the region it changes.
         let new_text = delta
             .try_apply(&self.text)
             .map_err(|e| ApplyError::DeltaBaseMismatch {
@@ -618,11 +520,9 @@ impl Content {
         Ok(())
     }
 
-    /// Rebase every mark's range through `delta`'s
-    /// [`map_pos`](crate::delta::Delta::map_pos): a range mark's start biases
-    /// `After` and its end `Before` (an insertion at either edge grows text
-    /// *outside* the span), a point (zero-width) mark biases `Before`. The one
-    /// mapping the text-delta channel and line split/join both rebase marks by.
+    /// A range mark's start biases `After` and its end `Before` (an insertion at
+    /// either edge grows text *outside* the span); a zero-width mark biases
+    /// `Before`.
     fn rebase_marks(&mut self, delta: &Delta) {
         for m in &mut self.marks {
             if m.start == m.end {
@@ -643,9 +543,6 @@ impl Content {
         Ok(())
     }
 
-    /// [`apply_mark_ops`](Self::apply_mark_ops) without the terminal normalize:
-    /// the bundle's final stage, canonicalized once by
-    /// [`apply_field_change`](Self::apply_field_change).
     fn apply_mark_ops_inner(&mut self, ops: &[MarkOp]) -> Result<(), ApplyError> {
         let len = self.len_usv();
         for op in ops {
@@ -665,12 +562,6 @@ impl Content {
                             len,
                         });
                     }
-                    // Anchor id: caller-supplied, unique per `Content`, non-empty
-                    // (`DOCUMENT_STORAGE.md` § Anchor-id identity). Reject a live
-                    // collision (`RemoveAnchor` cannot tell two same-id anchors
-                    // apart) and the empty degenerate handle. Ops apply in
-                    // sequence, so a `RemoveAnchor` earlier in the bundle frees
-                    // the id for re-add here.
                     if let MarkKind::Anchor { id } = kind {
                         if id.is_empty() {
                             return Err(ApplyError::EmptyAnchorId);
@@ -699,8 +590,6 @@ impl Content {
                     }
                     let mut next = Vec::with_capacity(self.marks.len());
                     for m in self.marks.drain(..) {
-                        // Untouched: a different kind, or no overlap with the
-                        // removed range.
                         if m.kind != *kind || !ranges_overlap(m.start, m.end, *start, *end) {
                             next.push(m);
                             continue;
@@ -710,9 +599,8 @@ impl Content {
                         if !kind.is_formatting() {
                             continue;
                         }
-                        // Formatting: subtract [start, end), re-emitting the
-                        // surviving fragments. An edge-aligned removal yields a
-                        // zero-width fragment here; `normalize` drops it.
+                        // An edge-aligned removal yields a zero-width fragment
+                        // here; `normalize` drops it.
                         if m.start < *start {
                             next.push(Mark {
                                 start: m.start,
@@ -747,9 +635,6 @@ impl Content {
         Ok(())
     }
 
-    /// [`apply_island_ops`](Self::apply_island_ops) without the terminal
-    /// normalize: a bundle stage canonicalized once by
-    /// [`apply_field_change`](Self::apply_field_change).
     fn apply_island_ops_inner(&mut self, ops: &[IslandOp]) -> Result<(), ApplyError> {
         for op in ops {
             match op {
@@ -761,16 +646,10 @@ impl Content {
                         .ok_or_else(|| ApplyError::UnknownIslandId {
                             id: island.id.clone(),
                         })?;
-                    // In place: the entry's slot-order index is its slot's, and
-                    // the slot does not move. Nothing here touches `text` or
-                    // `marks`: an island edit costs no anchors.
+                    // In place: the slot does not move, so no anchor pays.
                     self.islands[idx] = island.clone();
                 }
                 IslandOp::Insert { at, island } => {
-                    // Refuse before the write, as the mark channel does for an
-                    // anchor id: an empty or colliding id is an island `Set`
-                    // cannot address. Ops apply in sequence, so an earlier
-                    // delete in the same bundle frees the id for reuse here.
                     if island.id.is_empty() {
                         return Err(ApplyError::EmptyIslandId);
                     }
@@ -786,20 +665,14 @@ impl Content {
                             len: chars.len(),
                         });
                     }
-                    // Islands are stored in slot order, so the entry's index is
-                    // the count of slots before `at`.
+                    // Islands are stored in slot order.
                     let slot_idx = chars[..*at].iter().filter(|&&c| c == ISLAND_SLOT).count();
                     let byte = char_to_byte(&self.text, *at);
                     self.text.insert(byte, ISLAND_SLOT);
-                    // Rebase marks through the one-char insertion, as the text
-                    // channel and line split both do: an anchor after the new
-                    // island tracks the splice instead of drifting.
                     self.rebase_marks(&Delta {
                         ops: vec![Op::Retain(*at), Op::Insert(ISLAND_SLOT.to_string())],
                     });
                     self.islands.insert(slot_idx, island.clone());
-                    // A slot is not a `\n`: the segment count, and so the line
-                    // list, is unchanged.
                 }
             }
         }
@@ -813,20 +686,14 @@ impl Content {
         Ok(())
     }
 
-    /// [`apply_line_ops`](Self::apply_line_ops) without the terminal normalize:
-    /// a bundle stage canonicalized once by
-    /// [`apply_field_change`](Self::apply_field_change).
     fn apply_line_ops_inner(&mut self, ops: &[LineOp]) -> Result<(), ApplyError> {
         for op in ops {
             match op {
                 LineOp::Split { at } => self.split_line(*at)?,
                 LineOp::Join { line } => self.join_line(*line)?,
                 LineOp::SetKind { line, kind } => {
-                    // The kind must agree with the text already on the line:
-                    // export reads the kind and never the segment, so an
+                    // Export reads the kind and never the segment, so an
                     // `Island`/`Rule` tag over prose projects the text away.
-                    // Checked before the write (line ops stage on a scratch copy,
-                    // so an error leaves the content untouched).
                     let seg = self
                         .text
                         .split('\n')
@@ -847,7 +714,7 @@ impl Content {
                 LineOp::SetContainers { line, containers } => {
                     // Both emitters recurse one frame per container, so an
                     // over-deep path is a stack overflow at render, not a render
-                    // error. Same cap as import, refused before the write.
+                    // error. Same cap as import.
                     if containers.len() > crate::MAX_NESTING_DEPTH {
                         return Err(ApplyError::NestingTooDeep {
                             line: *line,
@@ -859,11 +726,6 @@ impl Content {
                     line.containers = containers.clone();
                 }
                 LineOp::SetContinues { line, continues } => {
-                    // Line 0 has nothing before it to continue: setting the flag
-                    // there would forge the `FirstLineContinues` invariant that
-                    // `normalize` does not repair. Reject before the write so the
-                    // content stays valid (`apply_field_change` stages line ops on
-                    // a scratch copy, so this leaves `self` untouched).
                     if *line == 0 && *continues {
                         return Err(ApplyError::FirstLineContinues);
                     }
@@ -879,31 +741,22 @@ impl Content {
     /// ops, then marks, canonicalized by a single terminal
     /// [`normalize`](Self::normalize).
     ///
-    /// All-or-nothing: on any op's error `self` is left exactly as it was, so a
-    /// caller need not snapshot-and-restore around a failed bundle. A bundle
-    /// carrying ops has several fallible stages that would otherwise partially
-    /// commit, so it is staged on a scratch copy and swapped in only once every
-    /// stage succeeds. The pure-text-delta path (the per-keystroke hot path)
-    /// skips the clone: `apply_text_delta` validates the delta before mutating,
-    /// so it is already atomic on the errors a caller can provoke.
+    /// All-or-nothing: on any op's error `self` is left exactly as it was. A
+    /// bundle carrying ops stages on a scratch copy and swaps in only once every
+    /// stage succeeds; the pure-text-delta path skips that clone, since
+    /// `apply_text_delta` validates before mutating.
     ///
-    /// **Stage order is a coordinate contract**, not a convenience: each stage
-    /// reads the text the earlier ones left. Island ops sit between the delta
-    /// and the line ops because both neighbors need them there. An island insert
-    /// splices a slot, so a `LineOp::SetKind { kind: Island }` in the same bundle
-    /// can only validate against a line that already carries it; `Split`/`Join`
-    /// and every mark range are then measured in a frame that includes the new
-    /// slots. The one-bundle block island ([`IslandOp::Insert`]) follows from
-    /// that.
+    /// **Stage order is a coordinate contract**: each stage reads the text the
+    /// earlier ones left. An island insert splices a slot, so a
+    /// `LineOp::SetKind { kind: Island }` in the same bundle can only validate
+    /// against a line that already carries it, and `Split`/`Join` and every mark
+    /// range are then measured in a frame that includes the new slots.
     ///
-    /// The stages run on their non-normalizing inner forms and `normalize` runs
-    /// once at the end. One terminal normalize suffices because split/join
-    /// rebase marks through their `\n` splice
-    /// ([`map_pos`](crate::delta::Delta::map_pos) semantics): the
-    /// formatting-edge `\n`-trim then commutes with the line ops (trim-per-stage
-    /// and trim-once converge), and `MarkOp::Remove` is coverage-set
-    /// subtraction, which commutes with `normalize`'s same-kind union
-    /// (`(A ∪ B) \ R = (A\R) ∪ (B\R)`). One canonicalization point, one pass.
+    /// One terminal normalize suffices because split/join rebase marks through
+    /// their `\n` splice, so the formatting-edge `\n`-trim commutes with the
+    /// line ops, and `MarkOp::Remove` is coverage-set subtraction, which
+    /// commutes with `normalize`'s same-kind union (`(A ∪ B) \ R = (A\R) ∪
+    /// (B\R)`).
     pub fn apply_field_change(&mut self, bundle: &ChangeBundle) -> Result<(), ApplyError> {
         if bundle.is_delta_only() {
             return self.apply_text_delta(&bundle.delta);
@@ -938,18 +791,12 @@ impl Content {
             return Err(ApplyError::SplitAtNewline { at });
         }
 
-        // `at`'s newline-adjacency neighbors, `at`'s byte offset, and the
-        // newline count before `at` (== the post-insert line index, since the
-        // insertion lands at index `at`, not before it) all come from this
-        // one pass over `char_indices`, instead of four separate text scans.
+        // The newline count before `at` is the post-insert line index, since the
+        // insertion lands at index `at`, not before it.
         let byte = char_indices.get(at).map_or(self.text.len(), |&(b, _)| b);
         let line_idx = char_indices[..at].iter().filter(|&(_, c)| *c == '\n').count();
         self.text.insert(byte, '\n');
 
-        // Rebase marks through the one-char `\n` insertion: the same map_pos
-        // rule the text-delta channel uses, so a split does not drift a mark's
-        // coordinates (a mark spanning `at` grows by the inserted char; the
-        // terminal normalize trims any `\n` edge it lands on).
         self.rebase_marks(&Delta {
             ops: vec![Op::Retain(at), Op::Insert("\n".to_string())],
         });
@@ -983,10 +830,6 @@ impl Content {
         let byte = char_to_byte(&self.text, nl);
         self.text.remove(byte);
 
-        // Rebase marks through the one-char `\n` deletion, as the text-delta
-        // channel would: a mark spanning the boundary shrinks by one; one that
-        // covered only the `\n` collapses to zero-width and the terminal
-        // normalize drops it.
         self.rebase_marks(&Delta {
             ops: vec![Op::Retain(nl), Op::Delete(1)],
         });
@@ -1015,18 +858,13 @@ fn ranges_overlap(a0: Usv, a1: Usv, b0: Usv, b1: Usv) -> bool {
     a0 < b1 && b0 < a1
 }
 
-/// A char the content text may not carry (`validate()` rejects it): a bare `\r`
-/// or a Unicode bidi formatting control. `\n` is a real line boundary and a raw
-/// [`ISLAND_SLOT`] is refused separately, so neither belongs here.
+/// A char `validate()` rejects. A raw [`ISLAND_SLOT`] is refused separately.
 fn insert_forbidden(c: char) -> bool {
     c == '\r' || is_bidi_char(c)
 }
 
-/// Drop [`insert_forbidden`] chars from every `Op::Insert`, returning the delta
-/// borrowed untouched when no insert carries one (the common keystroke). Mirrors
-/// the forbidden-char stripping `import` applies (`push_text`, `strip_bidi_
-/// formatting`); a raw `\r`/bidi arriving through the text-delta channel would
-/// otherwise persist a content that fails `validate()`.
+/// Drop [`insert_forbidden`] chars from every `Op::Insert`, borrowing the delta
+/// through untouched when none carries one.
 fn sanitize_inserts(delta: &Delta) -> Cow<'_, Delta> {
     let needs_cleaning = delta
         .ops
@@ -1046,18 +884,13 @@ fn sanitize_inserts(delta: &Delta) -> Cow<'_, Delta> {
     Cow::Owned(Delta { ops })
 }
 
-/// Walk `delta` over `old_chars` and mirror `\n` insert/delete in `lines`,
-/// building the result in one forward pass: O(old_chars walked + inserts),
-/// no per-`\n` mid-`Vec` `remove`/`insert`.
+/// Walk `delta` over `old_chars` and mirror `\n` insert/delete in `lines`, in
+/// one forward pass rather than per-`\n` mid-`Vec` `remove`/`insert`.
 ///
 /// The cursor sits *in* a line, `cur`; downstream of it is always the untouched
-/// original suffix (`rest`), because a split lands its clone right at the cursor
-/// and a delete drops the next original. So the three `\n` events reduce to:
-/// a retained `\n` finalizes `cur` and pulls the next original into it; a
-/// deleted `\n` drops the next original (merging it in), when one exists; an
-/// inserted `\n` finalizes `cur` and makes a clone (its `continues` cleared) the
-/// new `cur`. `cur == None` is the past-the-end state on a malformed content
-/// (more `\n` than lines), where a split clones a default line.
+/// original suffix (`rest`). `cur == None` is the past-the-end state on a
+/// malformed content (more `\n` than lines), where a split clones a default
+/// line.
 fn sync_lines_for_delta(old_chars: &[char], old_lines: Vec<Line>, delta: &Delta) -> Vec<Line> {
     let cap = old_lines.len();
     let mut rest = old_lines.into_iter();
@@ -1084,8 +917,7 @@ fn sync_lines_for_delta(old_chars: &[char], old_lines: Vec<Line>, delta: &Delta)
                     if old >= old_chars.len() {
                         break;
                     }
-                    // A deleted '\n' merges the next original into `cur`: drop
-                    // it. With no next original there is nothing to drop.
+                    // A deleted '\n' merges the next original into `cur`.
                     if old_chars[old] == '\n' {
                         rest.next();
                     }
@@ -1116,11 +948,8 @@ fn sync_lines_for_delta(old_chars: &[char], old_lines: Vec<Line>, delta: &Delta)
     out
 }
 
-/// Walk `delta` over `old_chars` and drop any island whose [`ISLAND_SLOT`] char
-/// was deleted (cascade removal: the island's content goes away with its slot).
-/// Islands are stored in slot order, so the Nth slot backs the Nth island; a
-/// deleted slot drops its island and the survivors renumber implicitly. Raw
-/// slot *inserts* are rejected upstream, so an insert never mints a new slot.
+/// Drop any island whose [`ISLAND_SLOT`] char `delta` deletes. Islands are
+/// stored in slot order, so the Nth slot backs the Nth island.
 fn sync_islands_for_delta(
     old_chars: &[char],
     old_islands: Vec<Island>,
@@ -1157,8 +986,7 @@ fn sync_islands_for_delta(
                     old += 1;
                 }
             }
-            // Inserts add no slots (a raw ISLAND_SLOT insert is rejected before
-            // this walk), so they never touch the island list.
+            // A raw ISLAND_SLOT insert is rejected before this walk.
             Op::Insert(_) => {}
         }
     }
@@ -1233,8 +1061,6 @@ mod tests {
                 line: 2,
                 containers: vec![Container::Quote],
             },
-            // The open block vocabulary rides the same op wire:
-            // a host can set a role or a container this build does not know.
             LineOp::SetKind {
                 line: 0,
                 kind: LineKind::Unknown {
@@ -1264,10 +1090,8 @@ mod tests {
         }
     }
 
-    /// On the op lane, `attrs` beside a built-in discriminator is a
-    /// shape error. A host that emits one classified a built-in as unknown
-    /// (stale copy of the built-in list) and the lenient reader would resolve the
-    /// name and drop the payload unread, corrupting the line with no diagnostic.
+    /// The lenient reader would resolve the built-in name and drop the payload
+    /// unread, corrupting the line with no diagnostic.
     #[test]
     fn op_wire_rejects_attrs_beside_a_built_in_name() {
         let bad = serde_json::json!({
@@ -1329,9 +1153,8 @@ mod tests {
 
     #[test]
     fn apply_text_delta_pads_short_prepend() {
-        // A bare prepend names only its inserted text (no trailing retain); it
-        // still splices against the whole content rather than failing the base
-        // check (regression for the per-field delta path).
+        // A prepend naming only its inserted text (no trailing retain) still
+        // splices against the whole content.
         let mut rt = from_markdown("hello").unwrap();
         rt.apply_text_delta(&Delta {
             ops: vec![Op::Insert("NEW ".into())],
@@ -1343,7 +1166,7 @@ mod tests {
     #[test]
     fn apply_text_delta_rejects_over_long_delta() {
         // Consuming more base than exists is a wrong-revision delta, not an
-        // abbreviated one: it still fails closed.
+        // abbreviated one.
         let mut rt = from_markdown("hi").unwrap();
         assert!(matches!(
             rt.apply_text_delta(&Delta {
@@ -1355,29 +1178,7 @@ mod tests {
     }
 
     #[test]
-    fn apply_mark_ops_add_and_remove() {
-        let mut rt = from_markdown("abcd").unwrap();
-        rt.apply_mark_ops(&[MarkOp::Add {
-            start: 0,
-            end: 2,
-            kind: MarkKind::Emph,
-        }])
-        .unwrap();
-        assert!(rt.marks.iter().any(|m| matches!(m.kind, MarkKind::Emph)));
-        rt.apply_mark_ops(&[MarkOp::Remove {
-            start: 0,
-            end: 4,
-            kind: MarkKind::Emph,
-        }])
-        .unwrap();
-        assert!(!rt.marks.iter().any(|m| matches!(m.kind, MarkKind::Emph)));
-    }
-
-    #[test]
     fn apply_mark_ops_remove_punches_hole() {
-        // Un-formatting the middle of a run leaves the two non-overlapping
-        // fragments, not an empty mark set. Strong[0,6) over
-        // "abcdef", Remove[2,4) -> Strong[0,2) + Strong[4,6).
         let mut rt = from_markdown("abcdef").unwrap();
         rt.apply_mark_ops(&[MarkOp::Add {
             start: 0,
@@ -1402,8 +1203,6 @@ mod tests {
 
     #[test]
     fn apply_mark_ops_remove_at_edge_leaves_no_zero_width() {
-        // A removal flush against the mark's start yields a zero-width left
-        // fragment [0,0); normalize drops it, leaving only the right fragment.
         let mut rt = from_markdown("abcdef").unwrap();
         rt.apply_mark_ops(&[MarkOp::Add {
             start: 0,
@@ -1428,8 +1227,6 @@ mod tests {
 
     #[test]
     fn apply_mark_ops_remove_covering_range_drops_mark() {
-        // A removal that fully covers the mark leaves nothing (both fragments
-        // zero-width or inverted): the whole-drop case still holds.
         let mut rt = from_markdown("abcdef").unwrap();
         rt.apply_mark_ops(&[MarkOp::Add {
             start: 2,
@@ -1448,8 +1245,6 @@ mod tests {
 
     #[test]
     fn apply_mark_ops_remove_non_formatting_drops_whole() {
-        // Identity/unknown handles can't be range-fragmented: an overlapping
-        // one is dropped whole, never split into fragments.
         let mut rt = from_markdown("abcdef").unwrap();
         rt.marks.push(Mark {
             start: 0,
@@ -1476,16 +1271,6 @@ mod tests {
     }
 
     #[test]
-    fn apply_text_delta_splits_lines_on_newline_insert() {
-        let mut rt = from_markdown("one two").unwrap();
-        let d = diff("one two", "one\ntwo");
-        rt.apply_text_delta(&d).unwrap();
-        assert_eq!(rt.lines.len(), 2);
-        assert_eq!(rt.segment_count(), 2);
-        assert_eq!(rt.validate(), Ok(()));
-    }
-
-    #[test]
     fn line_op_split_and_join() {
         let mut rt = from_markdown("onetwo").unwrap();
         rt.apply_line_ops(&[LineOp::Split { at: 3 }]).unwrap();
@@ -1509,10 +1294,6 @@ mod tests {
         assert!(matches!(rt.lines[0].kind, LineKind::Heading { level: 2 }));
     }
 
-    /// `SetKind` may not tag a line with a kind its text
-    /// contradicts: export reads the kind and not the segment, so the write
-    /// would project the line's content away. Refused before the write, so the
-    /// content is untouched.
     #[test]
     fn line_op_set_kind_refuses_a_kind_the_text_contradicts() {
         let mut rt = from_markdown("hello world").unwrap();
@@ -1540,7 +1321,7 @@ mod tests {
         assert_eq!(rt.lines[0].kind, LineKind::Para);
         assert_eq!(rt.validate(), Ok(()));
 
-        // A table island's line tagged `Code` would fence the slot, which
+        // Tagging a table island's line `Code` would fence the slot, which
         // re-imports as nothing.
         let mut tbl = from_markdown("| a | b |\n|---|---|\n| 1 | 2 |").unwrap();
         assert_eq!(
@@ -1556,8 +1337,6 @@ mod tests {
         assert_eq!(tbl.lines[0].kind, LineKind::Island);
     }
 
-    /// `SetContainers` is capped at the depth both emitters can
-    /// recurse: the op-time twin of the `validate` invariant.
     #[test]
     fn line_op_set_containers_is_depth_capped() {
         let mut rt = from_markdown("hi").unwrap();
@@ -1578,9 +1357,6 @@ mod tests {
 
     #[test]
     fn line_op_set_continues_sets_and_clears() {
-        // Two paragraph lines (delta-split → both `continues: false`, i.e. two
-        // blocks). `setContinues` on line 1 turns the boundary into a within-block
-        // hard break, and export then emits one block, not two paragraphs.
         let mut rt = from_markdown("one two").unwrap();
         rt.apply_text_delta(&diff("one two", "one\ntwo")).unwrap();
         assert!(!rt.lines[1].continues, "delta-split newline is a new block");
@@ -1598,7 +1374,6 @@ mod tests {
             "a within-block hard break is not a paragraph boundary"
         );
 
-        // Clearing restores the block boundary.
         rt.apply_line_ops(&[LineOp::SetContinues {
             line: 1,
             continues: false,
@@ -1613,8 +1388,6 @@ mod tests {
         let mut rt = from_markdown("one two").unwrap();
         rt.apply_text_delta(&diff("one two", "one\ntwo")).unwrap();
         let before = rt.clone();
-        // `continues: true` on line 0 forges `FirstLineContinues`; refused, and
-        // the content is left untouched.
         assert_eq!(
             rt.apply_line_ops(&[LineOp::SetContinues {
                 line: 0,
@@ -1623,7 +1396,7 @@ mod tests {
             Err(ApplyError::FirstLineContinues)
         );
         assert_eq!(rt, before, "rejected op leaves the content untouched");
-        // Clearing line 0 (already `false`) is a no-op, not an error.
+        // Clearing line 0 is a no-op, not an error.
         rt.apply_line_ops(&[LineOp::SetContinues {
             line: 0,
             continues: false,
@@ -1639,34 +1412,6 @@ mod tests {
             props: serde_json::json!({}),
             loss: crate::model::Loss::LOSSLESS,
         }
-    }
-
-    /// A single-line content `a￼b` (one inline island slot, one backing island).
-    fn content_with_island() -> Content {
-        let mut rt = Content::empty();
-        rt.text = format!("a{ISLAND_SLOT}b");
-        rt.lines = vec![Line {
-            kind: LineKind::Para,
-            containers: vec![],
-            continues: false,
-        }];
-        rt.islands = vec![island("i1")];
-        assert_eq!(rt.validate(), Ok(()));
-        rt
-    }
-
-    #[test]
-    fn delete_slot_cascades_island_removal() {
-        let mut rt = content_with_island();
-        // Delete the slot char at index 1 (`a￼b` -> `ab`).
-        let d = Delta {
-            ops: vec![Op::Retain(1), Op::Delete(1), Op::Retain(1)],
-        };
-        rt.apply_text_delta(&d).unwrap();
-        assert_eq!(rt.text, "ab");
-        assert!(rt.islands.is_empty(), "island cascaded away with its slot");
-        // slot count now equals islands.len(): validate confirms the sync.
-        assert_eq!(rt.validate(), Ok(()));
     }
 
     #[test]
@@ -1687,49 +1432,14 @@ mod tests {
         };
         rt.apply_text_delta(&d).unwrap();
         assert_eq!(rt.text, format!("x{ISLAND_SLOT}"));
-        // The surviving island is the second one: the cascade removed the
-        // island whose slot was deleted, not merely the last entry.
         assert_eq!(rt.islands.len(), 1);
         assert_eq!(rt.islands[0].id, "second");
         assert_eq!(rt.validate(), Ok(()));
     }
 
     #[test]
-    fn insert_raw_slot_is_rejected() {
-        let mut rt = from_markdown("ab").unwrap();
-        // An Op::Insert carrying a raw U+FFFC would orphan a slot: reject it.
-        let d = Delta {
-            ops: vec![
-                Op::Retain(1),
-                Op::Insert(ISLAND_SLOT.to_string()),
-                Op::Retain(1),
-            ],
-        };
-        assert_eq!(rt.apply_text_delta(&d), Err(ApplyError::IslandSlotInInsert));
-        // Content untouched on the rejected insert (checked before any mutation).
-        assert_eq!(rt.text, "ab");
-        assert!(rt.islands.is_empty());
-        assert_eq!(rt.validate(), Ok(()));
-    }
-
-    #[test]
-    fn insert_carriage_return_is_stripped() {
-        // A `\r` in an insert is dropped, not persisted: the content stays
-        // valid instead of the op returning Ok over a `CarriageReturn`
-        // violation. `\r\n` still yields the line-boundary `\n`.
-        let mut rt = from_markdown("ab").unwrap();
-        let d = Delta {
-            ops: vec![Op::Retain(1), Op::Insert("\r".into()), Op::Retain(1)],
-        };
-        rt.apply_text_delta(&d).unwrap();
-        assert_eq!(rt.text, "ab");
-        assert_eq!(rt.validate(), Ok(()));
-    }
-
-    #[test]
     fn insert_bidi_control_is_stripped() {
-        // A bidi override (U+202E) in an insert is dropped: the content stays
-        // valid and import's Trojan-source defense is not bypassed.
+        // Import's Trojan-source defense is not bypassed by the delta channel.
         let mut rt = from_markdown("ab").unwrap();
         let d = Delta {
             ops: vec![
@@ -1745,8 +1455,6 @@ mod tests {
 
     #[test]
     fn insert_crlf_keeps_the_newline_and_splits() {
-        // Stripping only the `\r` of a `\r\n` leaves a real line boundary: the
-        // insert still splits the line, and slot/line sync stays intact.
         let mut rt = from_markdown("ab").unwrap();
         let d = Delta {
             ops: vec![Op::Retain(1), Op::Insert("\r\n".into()), Op::Retain(1)],
@@ -1759,15 +1467,12 @@ mod tests {
 
     #[test]
     fn insert_of_clean_text_is_not_reallocated() {
-        // The hot path: a delta whose inserts carry no forbidden char borrows
-        // through `sanitize_inserts` unchanged.
         let d = Delta {
             ops: vec![Op::Retain(1), Op::Insert("clean\n".into()), Op::Retain(1)],
         };
         assert!(matches!(sanitize_inserts(&d), Cow::Borrowed(_)));
     }
 
-    /// A bundle carrying a text delta and mark ops alone.
     fn mark_bundle(delta: Delta, mark_ops: Vec<MarkOp>) -> ChangeBundle {
         ChangeBundle {
             delta,
@@ -1776,7 +1481,6 @@ mod tests {
         }
     }
 
-    /// A bundle carrying island ops alone.
     fn island_bundle(island_ops: Vec<IslandOp>) -> ChangeBundle {
         ChangeBundle {
             island_ops,
@@ -1784,8 +1488,7 @@ mod tests {
         }
     }
 
-    /// A one-cell table island's props, so a `Set` lands a shape `normalize`
-    /// leaves alone and `validate` accepts.
+    /// A one-cell table island's props, a shape `normalize` and `validate` accept.
     fn table_props(header: &str, cell: &str) -> serde_json::Value {
         serde_json::json!({
             "header": [{ "text": header, "marks": [] }],
@@ -1794,7 +1497,6 @@ mod tests {
         })
     }
 
-    /// A minimal image island: the cheapest well-formed `Insert` payload.
     fn image(id: &str) -> Island {
         Island::new(id.into(), "image".into())
             .with_props(serde_json::json!({ "url": "u", "alt": "a" }))
@@ -1817,9 +1519,8 @@ mod tests {
         }
     }
 
-    /// The motivating case: an island payload edit moves the island entry alone,
-    /// so an anchor elsewhere in the field survives an edit that a whole-value
-    /// `install` would have cleared.
+    /// An island payload edit moves the entry alone, so an anchor elsewhere in
+    /// the field survives an edit a whole-value `install` would have cleared.
     #[test]
     fn island_set_edits_props_and_keeps_the_field_anchors() {
         let mut rt = from_markdown("intro\n\n| H |\n| --- |\n| a |").unwrap();
@@ -1849,8 +1550,6 @@ mod tests {
         assert_eq!(rt.validate(), Ok(()));
     }
 
-    /// A `Set` whose id names no island is refused, never a silent no-op: the
-    /// store must not keep the old island while the caller believes it committed.
     #[test]
     fn island_set_rejects_an_unknown_id() {
         let mut rt = from_markdown("| H |\n| --- |\n| a |").unwrap();
@@ -1867,8 +1566,6 @@ mod tests {
         assert_eq!(rt, before);
     }
 
-    /// `Insert` mints the slot and its entry together, so the slot count and the
-    /// island list stay in lockstep with no orphan window.
     #[test]
     fn island_insert_adds_the_slot_and_its_entry() {
         let mut rt = from_markdown("ab").unwrap();
@@ -1890,8 +1587,6 @@ mod tests {
         assert_eq!(rt.islands.len(), 1);
         assert_eq!(rt.islands[0].id, "isl-new");
         assert_eq!(rt.validate(), Ok(()), "slot count matches the island list");
-        // The anchor before the slot is untouched; one after would have moved
-        // with the splice.
         let anchor = rt
             .marks
             .iter()
@@ -1900,12 +1595,9 @@ mod tests {
         assert_eq!((anchor.start, anchor.end), (0, 1));
     }
 
-    /// Island ops sequence: op *n*'s `at` counts the slots ops `0..n` already
-    /// spliced, not the shared post-delta frame, and its entry files at the
-    /// slot-order index that frame gives rather than at emission order. Slots
-    /// after `a` and `b` of `abc` go in at 1 and 3, and an op at an earlier
-    /// position emitted last still files first. Both assertions land
-    /// differently under the post-delta-only reading, which errors neither way.
+    /// Op *n*'s `at` counts the slots ops `0..n` already spliced, not the shared
+    /// post-delta frame; both assertions land differently under the
+    /// post-delta-only reading, which errors neither way.
     #[test]
     fn island_inserts_apply_in_sequence() {
         let mut rt = from_markdown("xabc").unwrap();
@@ -1941,8 +1633,6 @@ mod tests {
         assert_eq!(rt.validate(), Ok(()));
     }
 
-    /// A computed splice carrying a slot is refused whole; the same edit lands
-    /// as its split form, the slot-free delta plus one `Insert` per slot.
     #[test]
     fn slot_bearing_splice_splits_into_delta_and_insert() {
         let mut rt = from_markdown("ab").unwrap();
@@ -1974,35 +1664,8 @@ mod tests {
         assert_eq!(rt.validate(), Ok(()));
     }
 
-    /// The delete cascade is whole: the payload leaves the store with its slot,
-    /// so re-landing the island re-inserts the value the producer held, under
-    /// the original id the drop freed.
-    #[test]
-    fn island_delete_then_restore_round_trips() {
-        let mut rt = from_markdown("ab").unwrap();
-        rt.apply_field_change(&island_bundle(vec![IslandOp::Insert {
-            at: 1,
-            island: image("isl-a"),
-        }]))
-        .unwrap();
-        let before = rt.clone();
-        let held = rt.islands[0].clone();
-
-        rt.apply_field_change(&ChangeBundle::from_delta(diff(&before.text, "ab")))
-            .unwrap();
-        assert!(rt.islands.is_empty(), "the payload goes with its slot");
-
-        rt.apply_field_change(&island_bundle(vec![IslandOp::Insert {
-            at: 1,
-            island: held,
-        }]))
-        .unwrap();
-        assert_eq!(rt, before, "same content, original id included");
-    }
-
     /// A block island's line demotes to `Para` when its slot goes: the kind
     /// stops matching the text and `normalize` repairs rather than fails.
-    /// Re-landing one therefore carries the re-tag, not the island op alone.
     #[test]
     fn block_island_restore_retags_its_line() {
         let mut rt = from_markdown("intro").unwrap();
@@ -2027,8 +1690,7 @@ mod tests {
         assert!(rt.islands.is_empty());
         assert_eq!(rt.lines[1].kind, LineKind::Para, "demoted, not failed");
 
-        // The line stayed open, so the restore is the island op and the re-tag;
-        // only a delete that took the `\n` too would need a delta.
+        // The line stayed open, so the restore needs no delta.
         rt.apply_field_change(&ChangeBundle {
             island_ops: vec![IslandOp::Insert { at: 6, island: held }],
             line_ops: vec![LineOp::SetKind {
@@ -2075,9 +1737,8 @@ mod tests {
         );
     }
 
-    /// A block island in one bundle, which is what the stage order buys: the
-    /// delta opens the line, the island op fills it, `SetKind` tags it. Nothing
-    /// here falls back to a whole-value install, so the field's anchors stay.
+    /// What the stage order buys: the delta opens the line, the island op fills
+    /// it, `SetKind` tags it, and the field's anchors stay.
     #[test]
     fn block_island_lands_in_one_bundle() {
         let mut rt = from_markdown("intro").unwrap();
@@ -2116,22 +1777,6 @@ mod tests {
         );
     }
 
-    /// A bundle whose island op fails commits none of its earlier stages.
-    #[test]
-    fn island_op_failure_leaves_the_content_untouched() {
-        let mut rt = from_markdown("ab").unwrap();
-        let before = rt.clone();
-        let err = rt.apply_field_change(&ChangeBundle {
-            delta: diff("ab", "aXb"),
-            island_ops: vec![IslandOp::Set {
-                island: Island::new("isl-nope".into(), "image".into()),
-            }],
-            ..Default::default()
-        });
-        assert!(matches!(err, Err(ApplyError::UnknownIslandId { .. })));
-        assert_eq!(rt, before, "failed bundle must not mutate the content");
-    }
-
     #[test]
     fn apply_field_change_bundle_order() {
         let mut rt = from_markdown("abc").unwrap();
@@ -2156,9 +1801,6 @@ mod tests {
 
     #[test]
     fn apply_field_change_is_all_or_nothing() {
-        // A bundle whose text delta and first mark op succeed but whose second
-        // mark op is out of range must leave the content exactly as it was: the
-        // successful earlier stages do not partially commit.
         let mut rt = from_markdown("abc").unwrap();
         let before = rt.clone();
         let d = diff("abc", "abXc");
@@ -2181,8 +1823,6 @@ mod tests {
         assert_eq!(rt, before, "failed bundle must not mutate the content");
     }
 
-    /// `add` of an anchor rejects a live id collision and the empty id, but
-    /// re-adds an id freed by an earlier `RemoveAnchor` in the same bundle.
     #[test]
     fn add_anchor_id_uniqueness() {
         let anchor = |id: &str| MarkKind::Anchor { id: id.into() };
@@ -2194,7 +1834,6 @@ mod tests {
 
         let noop = || diff("abcd", "abcd");
 
-        // First anchor lands; a second `add` of the same id is a collision.
         let mut rt = from_markdown("abcd").unwrap();
         rt.apply_field_change(&mark_bundle(noop(), vec![add(0, 2, "x")]))
             .unwrap();
@@ -2203,15 +1842,14 @@ mod tests {
             Err(ApplyError::AnchorIdCollision { id: "x".into() })
         );
 
-        // The empty id is refused.
         let mut rt = from_markdown("abcd").unwrap();
         assert_eq!(
             rt.apply_field_change(&mark_bundle(noop(), vec![add(0, 2, "")])),
             Err(ApplyError::EmptyAnchorId)
         );
 
-        // Remove-then-add of the same id in one bundle is allowed: ops apply in
-        // sequence, so the id is free by the time the `add` runs.
+        // Remove-then-add of the same id in one bundle: ops apply in sequence,
+        // so the id is free by the time the `add` runs.
         let mut rt = from_markdown("abcd").unwrap();
         rt.apply_field_change(&mark_bundle(noop(), vec![add(0, 2, "x")]))
             .unwrap();
@@ -2229,14 +1867,8 @@ mod tests {
         assert_eq!((anchors[0].start, anchors[0].end), (2, 4));
     }
 
-    // ── sync_lines_for_delta characterization ───────────────────────────────
-    //
-    // Pin the observable behavior of the line-sync walk: retain/insert/delete
-    // interleavings, the split template-clone rule, and the malformed-content
-    // guards: against a silent change to its internals.
-
     /// A `Heading{level}` line, its level a visible tag so a test can trace
-    /// which original line landed where; `continues` distinguishes a clone.
+    /// which original line landed where.
     fn tag_line(level: u8, continues: bool) -> Line {
         Line {
             kind: LineKind::Heading { level },
@@ -2245,8 +1877,8 @@ mod tests {
         }
     }
 
-    /// `(tag, continues)` per line: `Heading{level}` reads its level, `Para` is
-    /// tag 0 (the default line), any other kind is 255.
+    /// `(tag, continues)` per line: a heading's level, 0 for `Para` (the default
+    /// line), 255 for anything else.
     fn tags(lines: &[Line]) -> Vec<(u8, bool)> {
         lines
             .iter()
@@ -2259,20 +1891,7 @@ mod tests {
     }
 
     #[test]
-    fn sync_lines_retain_only_is_identity() {
-        let old_chars: Vec<char> = "a\nb\nc".chars().collect();
-        let lines = vec![tag_line(1, false), tag_line(2, false), tag_line(3, false)];
-        let d = Delta {
-            ops: vec![Op::Retain(5)],
-        };
-        assert_eq!(sync_lines_for_delta(&old_chars, lines.clone(), &d), lines);
-    }
-
-    #[test]
     fn sync_lines_insert_newline_clones_split_line_and_clears_continues() {
-        // Split line 1 ("bc") mid-line: the first half stays the original line
-        // (keeps kind, containers, and its `continues: true`); the second half
-        // is a clone of it with `continues` forced false.
         let old_chars: Vec<char> = "a\nbc".chars().collect();
         let l1 = Line {
             kind: LineKind::Heading { level: 5 },
@@ -2294,8 +1913,6 @@ mod tests {
 
     #[test]
     fn sync_lines_delete_newline_drops_following_line() {
-        // Delete the first '\n' of "a\nb\nc": lines 0 and 1 merge, dropping line
-        // 1; the current line (0) and line 2 survive.
         let old_chars: Vec<char> = "a\nb\nc".chars().collect();
         let lines = vec![tag_line(1, false), tag_line(2, false), tag_line(3, false)];
         let d = Delta {
@@ -2307,9 +1924,7 @@ mod tests {
 
     #[test]
     fn sync_lines_delete_trailing_newline_without_following_line_is_guarded() {
-        // Malformed content: text "a\n" is two segments but `lines` has one
-        // entry. Deleting the '\n' when `line_idx + 1` is out of bounds removes
-        // nothing (the guard), leaving the single line intact.
+        // Malformed content: "a\n" is two segments but `lines` has one entry.
         let old_chars: Vec<char> = "a\n".chars().collect();
         let lines = vec![tag_line(1, false)];
         let d = Delta {
@@ -2321,8 +1936,6 @@ mod tests {
 
     #[test]
     fn sync_lines_stops_at_end_of_old_chars() {
-        // A retain running past the end of old_chars stops at the end rather
-        // than indexing out of bounds (the `old >= old_chars.len()` guard).
         let old_chars: Vec<char> = "a\nb".chars().collect();
         let lines = vec![tag_line(1, false), tag_line(2, false)];
         let d = Delta {
@@ -2332,35 +1945,7 @@ mod tests {
     }
 
     #[test]
-    fn sync_lines_insert_two_newlines_adds_two_clones() {
-        // Inserting "\n\n" mid-line adds two lines, each carrying the split
-        // line's kind and containers with `continues: false`.
-        let old_chars: Vec<char> = "abc".chars().collect();
-        let src = Line {
-            kind: LineKind::Heading { level: 7 },
-            containers: vec![Container::Quote],
-            continues: false,
-        };
-        let d = Delta {
-            ops: vec![Op::Retain(1), Op::Insert("\n\n".into()), Op::Retain(2)],
-        };
-        let out = sync_lines_for_delta(&old_chars, vec![src], &d);
-        assert_eq!(out.len(), 3);
-        for l in &out {
-            assert_eq!(l.kind, LineKind::Heading { level: 7 });
-            assert_eq!(l.containers, vec![Container::Quote]);
-            assert!(!l.continues);
-        }
-    }
-
-    // ── line-op mark remap + terminal-normalize collapse ────────────────────
-
-    #[test]
     fn split_line_rebases_mark_across_the_split_point() {
-        // A strong mark spanning the split point grows by the inserted `\n`
-        // rather than staying at its old coordinates. "abcd", strong[1..3)
-        // ("bc"); split at 2 → "ab\ncd"; the mark must still cover "b"+"c",
-        // i.e. [1..4) over "ab\ncd".
         let mut rt = from_markdown("abcd").unwrap();
         rt.apply_mark_ops(&[MarkOp::Add {
             start: 1,
@@ -2376,18 +1961,14 @@ mod tests {
             .filter(|m| matches!(m.kind, MarkKind::Strong))
             .map(|m| (m.start, m.end))
             .collect();
-        // [1..4) spans "b\nc"; normalize keeps the interior `\n` (a mark may
-        // legitimately span lines), trimming only leading/trailing boundaries.
+        // [1..4) spans "b\nc": normalize keeps an interior `\n`, trimming only
+        // leading/trailing boundaries.
         assert_eq!(strong, vec![(1, 4)]);
         assert_eq!(rt.validate(), Ok(()));
     }
 
     #[test]
     fn join_line_rebases_marks_to_final_text_coordinates() {
-        // The issue's concrete drift case: "ab\ncd", strong[2..4) (over "\nc").
-        // Joining line 0 removes the `\n`; the remap + terminal normalize must
-        // land strong on "c" (coordinate [2..3) over "abcd") not on "d"
-        // (the un-remapped-mark bug) nor on "cd".
         let mut rt = from_markdown("ab").unwrap();
         rt.apply_text_delta(&diff("ab", "ab\ncd")).unwrap();
         rt.marks.push(Mark {
@@ -2396,8 +1977,6 @@ mod tests {
             kind: MarkKind::Strong,
         });
         rt.normalize();
-        // Post-normalize the `\n` edge trims to [3..4) ("c"); either way the
-        // join must converge to strong on "c".
         rt.apply_line_ops(&[LineOp::Join { line: 0 }]).unwrap();
         assert_eq!(rt.text, "abcd");
         let strong: Vec<_> = rt
@@ -2412,10 +1991,6 @@ mod tests {
 
     #[test]
     fn field_change_terminal_normalize_matches_per_stage_normalize() {
-        // The collapse proof obligation: a bundle applied through
-        // `apply_field_change` (one terminal normalize) must equal applying the
-        // same stages each with its own normalize (the public wrappers). The
-        // remap through split/join is what makes the two converge.
         let start = from_markdown("hello world").unwrap();
         let text_delta = diff("hello world", "hello brave world");
         let line_ops = vec![LineOp::Split { at: 5 }]; // after "hello"
@@ -2446,9 +2021,6 @@ mod tests {
 
     #[test]
     fn sync_lines_select_all_delete_collapses_to_first_line() {
-        // The motivating case: deleting a whole
-        // multi-line body drops every line but the first (each deleted '\n'
-        // merges the next line away).
         let text: String = (0..50).map(|i| format!("line{i}\n")).collect();
         let old_chars: Vec<char> = text.chars().collect();
         let lines: Vec<Line> = (0..=50).map(|i| tag_line((i % 200) as u8, false)).collect();
@@ -2462,12 +2034,10 @@ mod tests {
 
     #[test]
     fn sync_lines_insert_newline_past_end_appends_default() {
-        // Malformed content: after a retain walks past the sole line (line_idx ==
-        // lines.len()), an inserted '\n' has no line to clone and appends a
-        // default Para.
+        // Malformed content: after the retain walks past the sole line, an
+        // inserted '\n' has no line to clone and appends a default Para.
         let old_chars: Vec<char> = "a\n".chars().collect();
         let lines = vec![tag_line(1, false)];
-        // Retain(2)[a\n] moves line_idx to 1 (== lines.len()); Insert("\n").
         let d = Delta {
             ops: vec![Op::Retain(2), Op::Insert("\n".into())],
         };

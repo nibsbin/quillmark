@@ -63,6 +63,7 @@ cargo run --example taro
 ## Project Structure
 
 - **crates/core** - Core parsing, schema, and backend traits
+- **crates/content** - Document content model
 - **crates/quillmark** - Rust orchestration API
 - **crates/backends/typst** - Typst backend
 - **crates/quillmark-pdf** - Typst-free AcroForm PDF-stamping spine

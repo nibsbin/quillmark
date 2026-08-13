@@ -1,13 +1,7 @@
-//! Region coverage on the flagship `usaf_memo` quill.
-//!
-//! The memo package's `render-body` rebuilds body paragraphs through a state
-//! buffer (AFH 33-337 auto-numbering): the hardest placement context a
-//! shipped quill exercises. Span tracking rides the rebuilt glyphs' own
-//! origins, so the main `$body` and each indorsement card's body stay
-//! addressable with no recovery step in the plate; the signature widgets bind
-//! schema paths explicitly. This renders the real plate end-to-end and pins
-//! that coverage, plus the one-shot regions sidecar and the forward
-//! `field_at` direction through the rebuild.
+//! Region coverage on the flagship `usaf_memo` quill, whose package rebuilds
+//! body paragraphs through a state buffer (AFH 33-337 auto-numbering): span
+//! tracking rides the rebuilt glyphs' own origins, so bodies stay addressable
+//! with no recovery step in the plate.
 
 #![cfg(feature = "typst")]
 
@@ -22,8 +16,7 @@ fn usaf_memo_regions_cover_body_signature_and_cards() {
     let quill =
         quillmark::quill_from_path(quills_path("usaf_memo")).expect("usaf_memo should load");
 
-    // The seeded document exercises the main memo and one card per declared
-    // kind, so the indorsement addresses are present.
+    // One card per declared kind, so the indorsement addresses are present.
     let parsed = quill.seed_document();
 
     let mut session = engine
@@ -33,10 +26,6 @@ fn usaf_memo_regions_cover_body_signature_and_cards() {
     let regions = session.regions();
     let fields: HashSet<&str> = regions.iter().map(|r| r.field.as_str()).collect();
 
-    // The main body regions *through* the package's paragraph rebuild, and the
-    // widgets key on their bound schema paths. The seeded indorsement body is
-    // empty (`""`), and a blank field has no inked extent to bound, so its
-    // `$body` must be absent here, not present-and-empty.
     for expected in [
         "$body",
         "signature_block",
@@ -52,9 +41,8 @@ fn usaf_memo_regions_cover_body_signature_and_cards() {
         "an empty card body draws nothing and surfaces no region: {fields:?}"
     );
 
-    // An `array<richtext(inline)>` element regions per element, keyed
-    // `<field>.<i>` in plate space, and translates to the bracketed `DocPath`
-    // index a binding hands out — the same string schema validation spells.
+    // Plate space keys an array element `<field>.<i>`; a binding hands out the
+    // bracketed `DocPath` index instead.
     assert!(
         fields.contains("references.0"),
         "each `references` element regions on its own address: {fields:?}"
@@ -70,8 +58,6 @@ fn usaf_memo_regions_cover_body_signature_and_cards() {
         "the element address crosses as a bracketed DocPath index: {translated:?}"
     );
 
-    // The forward direction survives the rebuild too: a point inside the
-    // surfaced `$body` region resolves back to `$body`.
     let body = regions
         .iter()
         .find(|r| r.field == "$body")
@@ -84,11 +70,6 @@ fn usaf_memo_regions_cover_body_signature_and_cards() {
         "a click inside the rebuilt body routes to $body"
     );
 
-    // Give the indorsement a real body via apply (the per-field eval windows
-    // regenerate with the helper on every committed edit) and its card
-    // address surfaces through the same package rebuild.
-    // An editor writes the card body through the typed seam, which lands it as
-    // canonical content.
     let mut edited = parsed.clone();
     quillmark::TypedWriter::new(quill.config(), &mut edited)
         .card(0)
@@ -102,8 +83,6 @@ fn usaf_memo_regions_cover_body_signature_and_cards() {
         "a non-empty card body regions through the rebuild: {fields:?}"
     );
 
-    // The one-shot sidecar serves the same geometry without a session in the
-    // consumer's hands, and stays empty unless requested.
     let with_regions = engine
         .render(
             &quill,
@@ -129,14 +108,10 @@ fn usaf_memo_regions_cover_body_signature_and_cards() {
     );
 }
 
-/// End-to-end on the flagship quill: a real memo date surfaces a clickable
-/// region even though the **vendored package** places it. The plate hands
-/// `data.date` to `frontmatter`, which formats it deep inside `utils.typ`'s
-/// `display-date`: the laundered shape, where package code and not the plate
-/// inks the value. The date value-object's `display` closure is born in the
-/// generated helper, so its glyphs carry a helper span that resolves to the
-/// recorded window regardless of where the package calls it, and the region
-/// keys on the schema path `date`.
+/// The laundered shape: the vendored package, not the plate, inks the date
+/// deep inside `utils.typ`'s `display-date`. The value-object's `display`
+/// closure is born in the generated helper, so its glyphs carry a helper span
+/// that resolves to the recorded window wherever the package calls it.
 #[test]
 fn usaf_memo_date_region_rides_the_vendored_display() {
     let engine = Quillmark::new();
@@ -145,8 +120,8 @@ fn usaf_memo_date_region_rides_the_vendored_display() {
     let parsed = quill.seed_document();
     let mut session = engine.open(&quill, &parsed).expect("open a session");
 
-    // The seed leaves the date blank (→ a native `today()` fallback, no field
-    // region). Commit a real date and it renders through the same vendored path.
+    // The seed leaves the date blank: a native `today()` fallback inks no field
+    // region, so commit a real date first.
     let mut edited = parsed.clone();
     quillmark::TypedWriter::new(quill.config(), &mut edited)
         .set("date", "2026-01-02")

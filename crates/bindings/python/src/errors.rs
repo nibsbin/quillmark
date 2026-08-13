@@ -1,8 +1,6 @@
-//! Single-exception, uniform-diagnostic error contract.
-//!
-//! Mirrors the WASM binding's `WasmError`: every raised exception is
-//! `QuillmarkError` and carries a non-empty `.diagnostics` list. The
-//! `EditError::<Variant>` prefix lives in the exception message, not the type.
+//! Every raised exception is `QuillmarkError` and carries a non-empty
+//! `.diagnostics` list; the `EditError::<Variant>` prefix lives in the message,
+//! not the type.
 
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
@@ -20,10 +18,8 @@ pub fn convert_edit_error(err: EditError) -> PyErr {
     raise_with_diagnostics(vec![diagnostic], message)
 }
 
-/// Batched-mutator twin of [`convert_edit_error`]: one diagnostic per
-/// offending field, each carrying the `edit::` code and `path` set to the
-/// field name. The exception message follows the shared count-based rule
-/// (same shape as WASM's `WasmError::message`).
+/// Batched twin of [`convert_edit_error`]: one diagnostic per offending field,
+/// its `path` the field name.
 pub fn convert_edit_errors(errors: Vec<(String, EditError)>) -> PyErr {
     let diags: Vec<Diagnostic> = errors
         .into_iter()
@@ -38,9 +34,8 @@ pub fn convert_edit_errors(errors: Vec<(String, EditError)>) -> PyErr {
     raise_with_diagnostics(diags, message)
 }
 
-/// The exception message follows the count-based rule shared with the WASM
-/// binding and `RenderError`'s own `Display`: the primary diagnostic's message
-/// for a single diagnostic, an `"<N> error(s): <first>"` aggregate for more.
+/// The message is the primary diagnostic's for a single diagnostic, an
+/// `"<N> error(s): <first>"` aggregate for more.
 pub fn convert_render_error(err: RenderError) -> PyErr {
     debug_assert!(
         !err.diagnostics().is_empty(),
@@ -50,8 +45,6 @@ pub fn convert_render_error(err: RenderError) -> PyErr {
     raise_with_diagnostics(err.into_diagnostics(), message)
 }
 
-/// Construct a `QuillmarkError` whose `.diagnostics` attribute lists every
-/// diagnostic the underlying error carried.
 pub fn raise_with_diagnostics(diags: Vec<Diagnostic>, message: String) -> PyErr {
     Python::attach(|py| {
         let py_err = QuillmarkError::new_err(message);

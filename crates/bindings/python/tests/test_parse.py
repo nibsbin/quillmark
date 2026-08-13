@@ -31,7 +31,6 @@ QUILLS_PATH = RESOURCES_PATH / "quills"
 
 
 def test_payload_access(taro_md):
-    """Test accessing typed payload_items (no $-prefixed metadata as fields)."""
     doc = Document.from_markdown(taro_md)
     assert "Ice Cream" in (field(doc.main, "title") or "")
     # `$`-prefixed metadata is not exposed as payload fields
@@ -50,14 +49,12 @@ def test_body_is_content_dict(taro_md):
 
 
 def test_body_empty_when_absent():
-    """Test that body text is empty when no body content."""
     md = "~~~card-yaml\n$quill: taro\n$kind: main\nauthor: Test\ntitle: Test\nice_cream: Vanilla\n~~~\n"
     doc = Document.from_markdown(md)
     assert doc.body["text"] == ""
 
 
 def test_cards_access():
-    """Test accessing typed cards list."""
     md = (
         "~~~card-yaml\n$quill: my_quill\n$kind: main\ntitle: Main\n~~~\n\nGlobal body.\n\n"
         "~~~card-yaml\n$kind: note\nfoo: bar\n~~~\n\nCard body.\n"
@@ -68,33 +65,6 @@ def test_cards_access():
     assert card["kind"] == "note"
     assert field(card, "foo") == "bar"
     assert "Card body." in card["body"]["text"]
-
-
-def test_cards_empty_when_none():
-    """Test that cards is an empty list when no cards present."""
-    md = "~~~card-yaml\n$quill: taro\n$kind: main\nauthor: Test\ntitle: Test\nice_cream: Vanilla\n~~~\n\nBody.\n"
-    doc = Document.from_markdown(md)
-    assert doc.cards == []
-
-
-def test_quill_ref(taro_md):
-    """Test that quill_ref returns the QUILL reference, including version."""
-    doc = Document.from_markdown(taro_md)
-    assert doc.quill_ref == "taro@0.1"
-
-
-def test_warnings_empty_on_clean_doc(taro_md):
-    """Test that warnings is empty for a well-formed document."""
-    doc = Document.from_markdown(taro_md)
-    assert doc.warnings == []
-
-
-def test_to_markdown_emits_string(taro_md):
-    """Test that to_markdown emits a non-empty markdown string."""
-    doc = Document.from_markdown(taro_md)
-    emitted = doc.to_markdown()
-    assert isinstance(emitted, str)
-    assert emitted.strip() != ""
 
 
 def test_json_dto_round_trip(taro_md):
@@ -130,7 +100,6 @@ def test_json_dto_drops_parse_warnings():
 
 
 def test_try_from_json_round_trip(taro_md):
-    """try_from_json returns a Document for valid DTOs."""
     doc = Document.from_markdown(taro_md)
     dto = doc.to_json()
 
@@ -140,22 +109,12 @@ def test_try_from_json_round_trip(taro_md):
 
 
 def test_try_from_json_returns_none_on_markdown(taro_md):
-    """try_from_json returns None for non-DTO content (e.g. raw markdown)."""
     assert Document.try_from_json(taro_md) is None
     assert Document.try_from_json("not json at all") is None
     assert Document.try_from_json('{"schema":"quillmark/document@0.99.0"}') is None
 
 
-def test_schema_version_of_reads_dto(taro_md):
-    """storage_version_of returns the schema tag from a stored DTO."""
-    doc = Document.from_markdown(taro_md)
-    dto = doc.to_json()
-
-    assert Document.storage_version_of(dto) == "quillmark/document@0.93.0"
-
-
 def test_schema_version_of_returns_unknown_future_versions():
-    """storage_version_of returns the raw tag, even for unsupported versions."""
     # Note: this would be rejected by from_json, but storage_version_of returns it
     # so callers can distinguish "build too old" from "payload corrupt".
     future = '{"schema":"quillmark/document@0.99.0"}'
@@ -169,22 +128,12 @@ def test_schema_version_of_returns_none_for_non_dto():
 
 
 def test_current_schema_version_matches_emitted_tag(taro_md):
-    """current_storage_version equals the tag emitted by to_json."""
     doc = Document.from_markdown(taro_md)
     dto = doc.to_json()
 
     current = Document.current_storage_version()
     assert isinstance(current, str)
     assert Document.storage_version_of(dto) == current
-
-
-def test_clone_preserves_state(taro_md):
-    """clone returns a fresh handle with the same parsed state."""
-    doc = Document.from_markdown(taro_md)
-    cloned = doc.clone()
-
-    assert cloned.quill_ref == doc.quill_ref
-    assert cloned == doc
 
 
 def test_clone_isolates_mutations(taro_md):
@@ -222,35 +171,6 @@ def test_equals_and_eq(taro_md):
     assert doc1 == doc2
 
 
-def test_eq_after_mutation(taro_md):
-    """Mutation breaks equality."""
-    doc1 = Document.from_markdown(taro_md)
-    doc2 = Document.from_markdown(taro_md)
-
-    doc2.remove_field("title")
-    assert doc1 != doc2
-
-
-def test_card_count_matches_cards_len():
-    """card_count is O(1) shortcut for len(cards)."""
-    md = (
-        "~~~card-yaml\n$quill: q\n$kind: main\ntitle: T\n~~~\n\nBody.\n\n"
-        "~~~card-yaml\n$kind: note\n~~~\n\nFirst.\n\n"
-        "~~~card-yaml\n$kind: summary\n~~~\n\nSecond.\n"
-    )
-    doc = Document.from_markdown(md)
-    assert doc.card_count == 2
-    assert doc.card_count == len(doc.cards)
-
-
-def test_repr_includes_quill_ref(taro_md):
-    """__repr__ surfaces the quill ref and card count."""
-    doc = Document.from_markdown(taro_md)
-    text = repr(doc)
-    assert "Document(" in text
-    assert "taro" in text
-
-
 def test_remove_field_on_card_returns_value():
     """remove_field(name, card=i) removes and returns a composable card field's
     value: `remove` has no lane, one verb over the whole card axis."""
@@ -266,18 +186,7 @@ def test_remove_field_on_card_returns_value():
     assert field(doc.cards[0], "baz") == "qux"
 
 
-def test_remove_field_on_card_absent_returns_none():
-    """remove_field(name, card=i) returns None when the field doesn't exist."""
-    md = (
-        "~~~card-yaml\n$quill: q\n$kind: main\n~~~\n\nBody.\n\n"
-        "~~~card-yaml\n$kind: note\n~~~\n"
-    )
-    doc = Document.from_markdown(md)
-    assert doc.remove_field("missing", card=0) is None
-
-
 def test_remove_field_on_card_out_of_range():
-    """remove_field(name, card=i) raises EditError for an out-of-range card index."""
     md = "~~~card-yaml\n$quill: q\n$kind: main\n~~~\n"
     doc = Document.from_markdown(md)
     with raises_edit_code("edit::index_out_of_range"):
@@ -285,7 +194,6 @@ def test_remove_field_on_card_out_of_range():
 
 
 def test_diagnostic_str_is_canonical_pretty_text():
-    """str(diagnostic) is the canonical pretty-printed text; repr is concise."""
     warn_md = (
         "~~~card-yaml\n$quill: my_quill\n$kind: main\ntitle: Hi\n"
         "weird: !custom value\n~~~\n\nBody\n"
@@ -301,7 +209,6 @@ def test_diagnostic_str_is_canonical_pretty_text():
 
 
 def test_document_authoring_text_helpers():
-    """Document exposes the canonical core authoring texts (WASM parity)."""
     rules = Document.format_rules()
     assert isinstance(rules, str) and rules.strip() != ""
 

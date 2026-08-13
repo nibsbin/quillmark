@@ -1,22 +1,11 @@
-//! Headless proof that the pdfform canvas raster is COMPLETE.
+//! Headless proof that the pdfform canvas raster is complete: the canvas
+//! contract (`prose/canon/PREVIEW.md`) requires a session returning `Some` from
+//! `render_rgba` to bake every piece of page content, field values included,
+//! into the pixels with no caller-side compositing.
 //!
-//! The canvas contract (`prose/canon/PREVIEW.md`) says a backend whose session
-//! returns `Some` from `render_rgba` produces a *complete* page raster: every
-//! piece of page content (including bound field values) is already visible in
-//! the pixels, with no caller-side compositing. pdfform satisfies this by
-//! pre-flattening the field values into the page content streams at
-//! session-open, then rasterizing that flat PDF via hayro.
-//!
-//! This test renders the `sample_form` fixture's session and asserts:
-//!   1. `render_rgba(0, scale)` returns a raster whose dimensions match
-//!      `page_size_pt × scale` (within rounding), and
-//!   2. that raster contains NON-WHITE, opaque pixels inside at least one
-//!      field's region rect; i.e. the pre-flatten values are baked into the
-//!      raster, not left for the caller to draw.
-//!
-//! The region geometry is in PDF points (bottom-left origin); the raster is
-//! top-left origin in device pixels, so the test applies the canonical
-//! `y_canvas = (pageHeightPt - y_pdf) × scale` flip to locate a field box.
+//! Region geometry is in PDF points (bottom-left origin) and the raster is
+//! top-left device pixels, so locating a field box needs the canonical
+//! `y_canvas = (pageHeightPt - y_pdf) × scale` flip.
 
 use quillmark::{Document, Quillmark};
 
@@ -40,13 +29,11 @@ fn pdfform_canvas_raster_is_complete() {
 
     let session = engine.open(&quill, &doc).expect("open session");
 
-    // The pdfform backend reports canvas support (it rasterizes via hayro).
     assert!(
         session.page_size_pt(0).is_some(),
         "pdfform session must expose page geometry"
     );
 
-    // 1. Dimensions: render_rgba(0, scale) matches page_size_pt × scale.
     let scale: f32 = 2.0;
     let (width_pt, height_pt) = session.page_size_pt(0).expect("page 0 size");
     let (px_w, px_h, rgba) = session
@@ -70,20 +57,12 @@ fn pdfform_canvas_raster_is_complete() {
         "RGBA buffer must be w*h*4 bytes"
     );
 
-    // 2. Field-value ink: locate a bound text field via the session's region
-    //    geometry and prove the flat raster has non-white opaque pixels inside
-    //    its rect. Geometry is a session-level query: no second byte render.
     let regions = session.regions();
-
-    // Pick the bound text field (schema path `full_name` = "Ada Lovelace") on
-    // page 0, keyed on the schema path.
     let region = regions
         .iter()
         .find(|r| r.page == 0 && r.field == "full_name")
         .expect("a region for the bound text field on page 0");
 
-    // PDF points (bottom-left origin) → canvas pixels (top-left origin), the
-    // canonical transform from PREVIEW.md: y_canvas = (pageHeightPt - y_pdf) × scale.
     let [x0, y0, x1, y1] = region.rect;
     let left = (x0 * scale).floor().max(0.0) as u32;
     let right = ((x1 * scale).ceil() as u32).min(px_w);
@@ -97,7 +76,7 @@ fn pdfform_canvas_raster_is_complete() {
     );
 
     let mut ink = 0u64; // non-white, opaque
-    let mut opaque = 0u64; // any opaque pixel (page background)
+    let mut opaque = 0u64;
     for y in top..bottom {
         for x in left..right {
             let i = ((y as usize) * (px_w as usize) + (x as usize)) * 4;
@@ -117,7 +96,6 @@ fn pdfform_canvas_raster_is_complete() {
     );
     assert!(
         ink > 0,
-        "field region box must contain NON-WHITE opaque pixels: \
-         proof the pre-flattened value is baked into the raster"
+        "field region box must contain non-white opaque pixels"
     );
 }

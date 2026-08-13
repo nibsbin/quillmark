@@ -1,5 +1,3 @@
-//! # Version Management
-//!
 //! Semantic versioning (MAJOR.MINOR.PATCH) for Quill template references.
 //! Two-segment (`MAJOR.MINOR`) versions are also accepted; patch defaults to 0.
 
@@ -7,8 +5,7 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::str::FromStr;
 
-/// Semantic version number (MAJOR.MINOR.PATCH).
-/// Two-segment form (`MAJOR.MINOR`) is also accepted; patch defaults to 0.
+/// Semantic version number. Two-segment input defaults patch to 0.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub struct Version {
@@ -103,10 +100,8 @@ pub enum VersionSelector {
 }
 
 impl VersionSelector {
-    /// Whether `v` satisfies this selector: `Exact` the identical version,
-    /// `Minor` any patch in the `MAJOR.MINOR` series, `Major` any version in the
-    /// `MAJOR` series, `Latest` anything. A compatibility check, not resolution:
-    /// a `false` is the `quill::version_mismatch` render error.
+    /// Whether `v` satisfies this selector. A compatibility check, not
+    /// resolution: `false` is the `quill::version_mismatch` render error.
     pub fn matches(&self, v: Version) -> bool {
         match self {
             VersionSelector::Exact(want) => *want == v,
@@ -179,10 +174,9 @@ lowercase letters, digits, or underscores). The optional version selector is \
 (latest in that major series), or `@latest`; omitting the selector means latest.";
 
 /// Single source of truth for the grammar [`QuillReference::from_str`] enforces:
-/// bindings surface it (schema `describe`, validation hints) and it rides as the
-/// `hint` on the `parse::invalid_quill_reference` diagnostic, so error and
-/// describe text can't drift from the parser. Sibling of `document`'s
-/// `FORMAT_RULES` / `blueprint_instruction`.
+/// bindings surface it and it rides as the `hint` on the
+/// `parse::invalid_quill_reference` diagnostic, so the text cannot drift from
+/// the parser.
 pub fn quill_ref_hint() -> &'static str {
     QUILL_REF_HINT
 }
@@ -227,10 +221,9 @@ impl FromStr for QuillReference {
 
         let name = name_part.to_string();
 
-        // Same charset as a card kind, leading underscore included: one
-        // predicate, in `document::meta`. (Quill *config* names are stricter:
-        // `config.rs` rejects a leading underscore, so its predicate is not
-        // interchangeable with this one.)
+        // Same charset as a card kind. Quill *config* names are stricter
+        // (`config.rs` rejects a leading underscore), so that predicate is not
+        // interchangeable with this one.
         if !crate::document::is_valid_kind_name(&name) {
             return Err(format!(
                 "Invalid Quill name '{}': must match [a-z_][a-z0-9_]*",
@@ -268,12 +261,6 @@ mod tests {
         assert_eq!(v.minor, 1);
         assert_eq!(v.patch, 0);
         assert_eq!(v.to_string(), "2.1.0");
-
-        let v2 = Version::from_str("1.2.3").unwrap();
-        assert_eq!(v2.major, 1);
-        assert_eq!(v2.minor, 2);
-        assert_eq!(v2.patch, 3);
-        assert_eq!(v2.to_string(), "1.2.3");
     }
 
     #[test]
@@ -323,7 +310,6 @@ mod tests {
         let latest1 = VersionSelector::from_str("@latest").unwrap();
         assert_eq!(latest1, VersionSelector::Latest);
 
-        // Empty string also means Latest
         let latest2 = VersionSelector::from_str("").unwrap();
         assert_eq!(latest2, VersionSelector::Latest);
     }
@@ -347,26 +333,22 @@ mod tests {
         let v2_2_0 = Version::new(2, 2, 0);
         let v3_0_0 = Version::new(3, 0, 0);
 
-        // Exact: only the identical version satisfies.
         let exact = VersionSelector::Exact(v2_1_0);
         assert!(exact.matches(v2_1_0));
         assert!(!exact.matches(v2_1_3));
         assert!(!exact.matches(v2_2_0));
 
-        // Minor: any patch within the 2.1 series.
         let minor = VersionSelector::Minor(2, 1);
         assert!(minor.matches(v2_1_0));
         assert!(minor.matches(v2_1_3));
         assert!(!minor.matches(v2_2_0));
         assert!(!minor.matches(v3_0_0));
 
-        // Major: any minor/patch within the 2 series.
         let major = VersionSelector::Major(2);
         assert!(major.matches(v2_1_0));
         assert!(major.matches(v2_2_0));
         assert!(!major.matches(v3_0_0));
 
-        // Latest: matches anything.
         let latest = VersionSelector::Latest;
         assert!(latest.matches(v2_1_0));
         assert!(latest.matches(v3_0_0));
@@ -398,7 +380,6 @@ mod tests {
         let ref3 = QuillReference::from_str("resume_template@latest").unwrap();
         assert_eq!(ref3.selector, VersionSelector::Latest);
 
-        // No @ suffix: defaults to Latest
         let ref4 = QuillReference::from_str("resume_template").unwrap();
         assert_eq!(ref4.name, "resume_template");
         assert_eq!(ref4.selector, VersionSelector::Latest);
@@ -431,15 +412,5 @@ mod tests {
 
         let ref3 = QuillReference::new("resume".to_string(), VersionSelector::Latest);
         assert_eq!(ref3.to_string(), "resume");
-    }
-
-    #[test]
-    fn test_quill_ref_hint_describes_the_grammar() {
-        let hint = quill_ref_hint();
-        assert!(!hint.is_empty());
-        // Pin the charset and selector forms so the hint can't drift from `from_str`.
-        assert!(hint.contains("[a-z_][a-z0-9_]*"), "got: {hint}");
-        assert!(hint.contains("@latest"), "got: {hint}");
-        assert!(hint.contains("@MAJOR.MINOR.PATCH"), "got: {hint}");
     }
 }

@@ -1,5 +1,3 @@
-//! Tests for quill types and loading.
-
 mod support_tests;
 
 use super::*;
@@ -10,7 +8,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
-/// Test helper: recursively load a directory as a FileTreeNode.
 fn load_tree(path: &Path) -> Result<FileTreeNode, Box<dyn StdError + Send + Sync>> {
     let default_ignore = QuillIgnore::new(vec![
         ".git/".to_string(),
@@ -66,9 +63,7 @@ fn load_dir(
     Ok(FileTreeNode::Directory { files })
 }
 
-/// Test helper: loads a `Quill` from a filesystem path via `Quill::from_tree`,
-/// core is filesystem-agnostic, so production filesystem loading lives in
-/// `quillmark::quill_from_path` instead.
+/// Core is filesystem-agnostic; production path loading lives in `quillmark::quill_from_path`.
 fn load_from_path<P: AsRef<Path>>(path: P) -> Result<Quill, Box<dyn StdError + Send + Sync>> {
     let tree = load_tree(path.as_ref())?;
     Quill::from_tree(tree).map_err(|diags| {
@@ -105,12 +100,10 @@ fn test_quillignore_matching() {
         ".git/".to_string(),
     ]);
 
-    // Test file patterns
     assert!(ignore.is_ignored("test.tmp"));
     assert!(ignore.is_ignored("path/to/file.tmp"));
     assert!(!ignore.is_ignored("test.txt"));
 
-    // Test directory patterns
     assert!(ignore.is_ignored("target"));
     assert!(ignore.is_ignored("target/debug"));
     assert!(ignore.is_ignored("target/debug/deps"));
@@ -122,49 +115,12 @@ fn test_quillignore_matching() {
 }
 
 #[test]
-fn test_in_memory_file_system() {
-    let temp_dir = TempDir::new().unwrap();
-    let quill_dir = temp_dir.path();
-
-    // Create test files
-    fs::write(
-            quill_dir.join("Quill.yaml"),
-            "quill:\n  name: \"test\"\n  version: \"1.0\"\n  backend: \"typst\"\n  description: \"Test quill\"",
-        )
-        .unwrap();
-    fs::write(quill_dir.join("plate.typ"), "test plate").unwrap();
-
-    let assets_dir = quill_dir.join("assets");
-    fs::create_dir_all(&assets_dir).unwrap();
-    fs::write(assets_dir.join("test.txt"), "asset content").unwrap();
-
-    let packages_dir = quill_dir.join("packages");
-    fs::create_dir_all(&packages_dir).unwrap();
-    fs::write(packages_dir.join("package.typ"), "package content").unwrap();
-
-    // Load quill
-    let quill = load_from_path(quill_dir).unwrap();
-
-    // Test file access
-    assert!(quill.files().file_exists("plate.typ"));
-    assert!(quill.files().file_exists("assets/test.txt"));
-    assert!(quill.files().file_exists("packages/package.typ"));
-    assert!(!quill.files().file_exists("nonexistent.txt"));
-
-    // Test file content
-    let asset_content = quill.files().get_file("assets/test.txt").unwrap();
-    assert_eq!(asset_content, b"asset content");
-}
-
-#[test]
 fn test_quillignore_integration() {
     let temp_dir = TempDir::new().unwrap();
     let quill_dir = temp_dir.path();
 
-    // Create .quillignore
     fs::write(quill_dir.join(".quillignore"), "*.tmp\ntarget/\n").unwrap();
 
-    // Create test files
     fs::write(
             quill_dir.join("Quill.yaml"),
             "quill:\n  name: \"test\"\n  version: \"1.0\"\n  backend: \"typst\"\n  description: \"Test quill\"",
@@ -177,10 +133,8 @@ fn test_quillignore_integration() {
     fs::create_dir_all(&target_dir).unwrap();
     fs::write(target_dir.join("debug.txt"), "also ignored").unwrap();
 
-    // Load quill
     let quill = load_from_path(quill_dir).unwrap();
 
-    // Test that ignored files are not loaded
     assert!(quill.files().file_exists("plate.typ"));
     assert!(!quill.files().file_exists("should_ignore.tmp"));
     assert!(!quill.files().file_exists("target/debug.txt"));
@@ -191,7 +145,6 @@ fn test_find_files_pattern() {
     let temp_dir = TempDir::new().unwrap();
     let quill_dir = temp_dir.path();
 
-    // Create test directory structure
     fs::write(
             quill_dir.join("Quill.yaml"),
             "quill:\n  name: \"test\"\n  version: \"1.0\"\n  backend: \"typst\"\n  description: \"Test quill\"",
@@ -208,10 +161,8 @@ fn test_find_files_pattern() {
     fs::create_dir_all(&fonts_dir).unwrap();
     fs::write(fonts_dir.join("font.ttf"), "font data").unwrap();
 
-    // Load quill
     let quill = load_from_path(quill_dir).unwrap();
 
-    // Test pattern matching
     let all_assets = quill.files().find_files("assets/*");
     assert!(all_assets.len() >= 3); // At least image.png, data.json, fonts/font.ttf
 
@@ -221,59 +172,9 @@ fn test_find_files_pattern() {
 }
 
 #[test]
-fn test_new_standardized_yaml_format() {
-    let temp_dir = TempDir::new().unwrap();
-    let quill_dir = temp_dir.path();
-
-    // Create test files using new standardized format
-    let yaml_content = r#"
-quill:
-  name: my_custom_quill
-  version: "1.0"
-  backend: typst
-  description: Test quill with new format
-  author: Test Author
-"#;
-    fs::write(quill_dir.join("Quill.yaml"), yaml_content).unwrap();
-    fs::write(
-        quill_dir.join("custom_plate.typ"),
-        "= Custom Template\n\nThis is a custom template.",
-    )
-    .unwrap();
-
-    // Load quill
-    let quill = load_from_path(quill_dir).unwrap();
-
-    // Test that name comes from YAML, not directory
-    assert_eq!(quill.name(), "my_custom_quill");
-
-    // Test that backend is in metadata
-    assert!(quill.metadata.contains_key("backend"));
-    if let Some(backend_val) = quill.metadata.get("backend") {
-        if let Some(backend_str) = backend_val.as_str() {
-            assert_eq!(backend_str, "typst");
-        } else {
-            panic!("Backend value is not a string");
-        }
-    }
-
-    // Test that other fields are in metadata including version
-    assert!(quill.metadata.contains_key("description"));
-    assert!(quill.metadata.contains_key("author"));
-    assert!(quill.metadata.contains_key("version"));
-    if let Some(version_val) = quill.metadata.get("version") {
-        if let Some(version_str) = version_val.as_str() {
-            assert_eq!(version_str, "1.0");
-        }
-    }
-}
-
-#[test]
 fn test_from_tree() {
-    // Create a simple in-memory file tree
     let mut root_files = HashMap::new();
 
-    // Add Quill.yaml
     let quill_yaml = r#"quill:
   name: "test_from_tree"
   version: "1.0"
@@ -287,7 +188,6 @@ fn test_from_tree() {
         },
     );
 
-    // Add plate file
     let plate_content = "= Test Template\n\nThis is a test.";
     root_files.insert(
         "plate.typ".to_string(),
@@ -298,13 +198,9 @@ fn test_from_tree() {
 
     let root = FileTreeNode::Directory { files: root_files };
 
-    // Create Quill from tree
     let quill = Quill::from_tree(root).unwrap();
 
-    // Validate the quill
     assert_eq!(quill.name(), "test_from_tree");
-    // Non-manifest files (e.g. a backend's template) round-trip into the file
-    // tree verbatim; core does not read any of them at load time.
     assert_eq!(
         quill.files().get_file("plate.typ"),
         Some(plate_content.as_bytes())
@@ -315,7 +211,6 @@ fn test_from_tree() {
 
 #[test]
 fn test_to_tree_round_trips_from_tree() {
-    // Build a tree with a nested directory to exercise the recursive flatten.
     let quill_yaml = b"quill:\n  name: roundtrip\n  version: \"1.0\"\n  backend: typst\n  description: Round-trip test\n".to_vec();
     let plate = b"= Plate".to_vec();
     let asset = b"\x00\x01\x02 binary asset".to_vec();
@@ -344,8 +239,6 @@ fn test_to_tree_round_trips_from_tree() {
         "assets".to_string(),
         FileTreeNode::Directory { files: assets },
     );
-    // An empty directory: documented to be dropped by flatten (file-addressed
-    // round trip), so it must NOT appear in to_tree() output.
     root_files.insert(
         "empty".to_string(),
         FileTreeNode::Directory {
@@ -356,8 +249,6 @@ fn test_to_tree_round_trips_from_tree() {
 
     let quill = Quill::from_tree(root).unwrap();
 
-    // to_tree yields every file by its "/"-joined relative path, sorted, and
-    // the empty `empty/` directory is absent (only files are emitted).
     let flat = quill.to_tree();
     assert_eq!(
         flat,
@@ -369,7 +260,6 @@ fn test_to_tree_round_trips_from_tree() {
     );
     assert!(!flat.iter().any(|(p, _)| p.starts_with("empty")));
 
-    // Re-feeding the flattened tree reproduces an equivalent quill.
     let mut rebuilt_root = FileTreeNode::Directory {
         files: HashMap::new(),
     };
@@ -387,7 +277,6 @@ fn test_to_tree_round_trips_from_tree() {
 fn test_dir_exists_and_list_apis() {
     let mut root_files = HashMap::new();
 
-    // Add Quill.yaml
     root_files.insert(
             "Quill.yaml".to_string(),
             FileTreeNode::File {
@@ -396,7 +285,6 @@ fn test_dir_exists_and_list_apis() {
             },
         );
 
-    // Add plate file
     root_files.insert(
         "plate.typ".to_string(),
         FileTreeNode::File {
@@ -404,7 +292,6 @@ fn test_dir_exists_and_list_apis() {
         },
     );
 
-    // Add assets directory with files
     let mut assets_files = HashMap::new();
     assets_files.insert(
         "logo.png".to_string(),
@@ -419,7 +306,6 @@ fn test_dir_exists_and_list_apis() {
         },
     );
 
-    // Add subdirectory in assets
     let mut fonts_files = HashMap::new();
     fonts_files.insert(
         "font.ttf".to_string(),
@@ -439,7 +325,6 @@ fn test_dir_exists_and_list_apis() {
         },
     );
 
-    // Add empty directory
     root_files.insert(
         "empty".to_string(),
         FileTreeNode::Directory {
@@ -451,21 +336,17 @@ fn test_dir_exists_and_list_apis() {
     let tree = root.clone();
     let quill = Quill::from_tree(root).unwrap();
 
-    // Test dir_exists
     assert!(quill.files().dir_exists("assets"));
     assert!(quill.files().dir_exists("assets/fonts"));
     assert!(quill.files().dir_exists("empty"));
     assert!(!quill.files().dir_exists("nonexistent"));
     assert!(!quill.files().dir_exists("plate.typ")); // file, not directory
 
-    // Test file_exists
     assert!(quill.files().file_exists("plate.typ"));
     assert!(quill.files().file_exists("assets/logo.png"));
     assert!(quill.files().file_exists("assets/fonts/font.ttf"));
     assert!(!quill.files().file_exists("assets")); // directory, not file
 
-    // The listing pair is read off the tree: `Quill` exposes only
-    // `list_directories`, which is built on `FileTreeNode::list_subdirectories`.
     let root_files_list = tree.list_files("");
     assert_eq!(root_files_list.len(), 2); // Quill.yaml and plate.typ
     assert!(root_files_list.contains(&"Quill.yaml".to_string()));
@@ -488,85 +369,11 @@ fn test_dir_exists_and_list_apis() {
     let empty_subdirs = tree.list_subdirectories("empty");
     assert_eq!(empty_subdirs.len(), 0);
 
-    // The live wrapper over the same walk.
     assert_eq!(quill.files().list_directories("").len(), 2);
 }
 
 #[test]
-fn test_field_schemas_parsing() {
-    let mut root_files = HashMap::new();
-
-    // Add Quill.yaml with field schemas
-    let quill_yaml = r#"quill:
-  name: "taro"
-  version: "1.0"
-  backend: "typst"
-  description: "Test template for field schemas"
-
-main:
-  fields:
-    author:
-      type: "string"
-      description: "Author of document"
-    ice_cream:
-      type: "string"
-      description: "favorite ice cream flavor"
-    title:
-      type: "string"
-      description: "title of document"
-"#;
-    root_files.insert(
-        "Quill.yaml".to_string(),
-        FileTreeNode::File {
-            contents: quill_yaml.as_bytes().to_vec(),
-        },
-    );
-
-    // Add plate file
-    let plate_content = "= Test Template\n\nThis is a test.";
-    root_files.insert(
-        "plate.typ".to_string(),
-        FileTreeNode::File {
-            contents: plate_content.as_bytes().to_vec(),
-        },
-    );
-
-    let root = FileTreeNode::Directory { files: root_files };
-
-    // Create Quill from tree
-    let quill = Quill::from_tree(root).unwrap();
-
-    // Validate field schemas were parsed from QuillConfig
-    assert_eq!(quill.config.main.fields.len(), 3);
-    assert!(quill.config.main.fields.contains_key("author"));
-    assert!(quill.config.main.fields.contains_key("ice_cream"));
-    assert!(quill.config.main.fields.contains_key("title"));
-
-    // Verify author field schema
-    let author_schema = quill.config.main.fields.get("author").unwrap();
-    assert_eq!(
-        author_schema.description.as_deref(),
-        Some("Author of document")
-    );
-
-    // Verify ice_cream field schema (no required field, should default to false)
-    let ice_cream_schema = quill.config.main.fields.get("ice_cream").unwrap();
-    assert_eq!(
-        ice_cream_schema.description.as_deref(),
-        Some("favorite ice cream flavor")
-    );
-
-    // Verify title field schema
-    let title_schema = quill.config.main.fields.get("title").unwrap();
-    assert_eq!(
-        title_schema.description.as_deref(),
-        Some("title of document")
-    );
-}
-
-#[test]
 fn test_field_schema_struct() {
-    // Parse a FieldSchema from YAML with every field set.
     let yaml_str = r#"
 description: "Full field schema"
 type: "string"
@@ -589,25 +396,9 @@ default: "Default value"
 }
 
 #[test]
-fn test_field_schema_ui_compact() {
-    let yaml_str = r#"
-type: "string"
-description: "A compact field"
-ui:
-  compact: true
-"#;
-    let quill_value = QuillValue::from_yaml_str(yaml_str).unwrap();
-    let schema = FieldSchema::from_quill_value("compact_field".to_string(), &quill_value).unwrap();
-    assert_eq!(schema.ui.as_ref().unwrap().compact, Some(true));
-}
-
-#[test]
 fn test_quill_without_plate_file() {
-    // A quill that declares no backend template loads fine: plate selection is
-    // a backend's private concern, not a load-time requirement of core.
     let mut root_files = HashMap::new();
 
-    // Add Quill.yaml with no backend section at all
     let quill_yaml = r#"quill:
   name: "test_no_plate"
   version: "1.0"
@@ -623,17 +414,14 @@ fn test_quill_without_plate_file() {
 
     let root = FileTreeNode::Directory { files: root_files };
 
-    // Create Quill from tree
     let quill = Quill::from_tree(root).unwrap();
 
-    // No `typst:` section means no `typst_plate_file` metadata surfaces.
     assert!(!quill.metadata.contains_key("typst_plate_file"));
     assert_eq!(quill.name(), "test_no_plate");
 }
 
 #[test]
 fn test_quill_config_from_yaml() {
-    // Test parsing QuillConfig from YAML content
     let yaml_content = r#"
 quill:
   name: test_config
@@ -659,21 +447,15 @@ main:
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
-    // Verify required fields
     assert_eq!(config.name, "test_config");
     assert_eq!(config.main.name, "main");
     assert_eq!(config.backend, "typst");
     assert_eq!(config.description, "Test configuration parsing");
-    // `main.description` is independent of `quill.description`; this fixture
-    // does not declare one under `main:`, so it stays absent.
     assert_eq!(config.main.description, None);
 
-    // Verify optional fields
     assert_eq!(config.version, "1.0");
     assert_eq!(config.author, "Test Author");
 
-    // Verify backend-specific config (parsed from the [typst] section). The
-    // Typst plate lives here alongside `packages`, not as a top-level key.
     assert_eq!(
         config
             .backend_config
@@ -683,7 +465,6 @@ main:
     );
     assert!(config.backend_config.contains_key("packages"));
 
-    // Verify field schemas
     assert_eq!(config.main.fields.len(), 2);
     assert!(config.main.fields.contains_key("title"));
     assert!(config.main.fields.contains_key("author"));
@@ -695,7 +476,6 @@ main:
 
 #[test]
 fn test_quill_config_missing_required_fields() {
-    // Test that missing required fields result in error
     let yaml_missing_name = r#"
 quill:
   backend: typst
@@ -736,7 +516,6 @@ quill:
 
 #[test]
 fn test_quill_config_empty_description() {
-    // Test that empty description results in error
     let yaml_empty_description = r#"
 quill:
   name: test
@@ -754,7 +533,6 @@ quill:
 
 #[test]
 fn test_quill_config_missing_quill_section() {
-    // Test that missing [quill] section results in error
     let yaml_no_section = r#"
 fields:
   title:
@@ -770,9 +548,6 @@ fields:
 
 #[test]
 fn test_quill_config_rejects_non_snake_case_identifiers() {
-    // Each slot where a bare identifier appears (quill name, card-kind name,
-    // main field key, card field key) must reject non-snake_case input and
-    // name the offending identifier in the error.
     struct Case {
         yaml: &'static str,
         bad_identifier: &'static str,
@@ -884,7 +659,6 @@ card_kinds:
 
 #[test]
 fn test_quill_from_config_metadata() {
-    // Test that QuillConfig metadata flows through to Quill
     let mut root_files = HashMap::new();
 
     let quill_yaml = r#"
@@ -909,12 +683,10 @@ typst:
     let root = FileTreeNode::Directory { files: root_files };
     let quill = Quill::from_tree(root).unwrap();
 
-    // Verify metadata includes backend and description
     assert!(quill.metadata.contains_key("backend"));
     assert!(quill.metadata.contains_key("description"));
     assert!(quill.metadata.contains_key("author"));
 
-    // Verify typst config with typst_ prefix
     assert!(quill.metadata.contains_key("typst_packages"));
 }
 
@@ -948,45 +720,8 @@ main:
     assert_eq!(defaults.get("status").unwrap().as_str(), Some("draft"));
     assert!(!defaults.contains_key("title"));
 
-    // example takes precedence over default in template
     let author_example = config.main.fields.get("author").unwrap().example.as_ref();
     assert_eq!(author_example.and_then(|v| v.as_str()), Some("Alice"));
-}
-
-#[test]
-fn test_card_defaults_method() {
-    let yaml_content = r#"
-quill:
-  name: card_defaults_test
-  version: "1.0"
-  backend: typst
-  description: Card defaults test
-
-card_kinds:
-  indorsement:
-    fields:
-      signature_block:
-        type: string
-        default: Commander
-        example: Col Smith
-      office:
-        type: string
-"#;
-
-    let config = QuillConfig::from_yaml(yaml_content).unwrap();
-
-    let card = config.card_kind("indorsement").unwrap();
-    let card_defaults = card.defaults();
-    assert_eq!(card_defaults.len(), 1);
-    assert_eq!(
-        card_defaults.get("signature_block").unwrap().as_str(),
-        Some("Commander")
-    );
-
-    let sig_example = card.fields.get("signature_block").unwrap().example.as_ref();
-    assert_eq!(sig_example.and_then(|v| v.as_str()), Some("Col Smith"));
-
-    assert!(config.card_kind("unknown").is_none());
 }
 
 #[test]
@@ -1018,9 +753,6 @@ main:
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
-    // Declaration order is display order, carried structurally by the field
-    // map: no stamped `ui.order` integer. Iterating the map yields the
-    // authored order.
     let names: Vec<&str> = config.main.fields.keys().map(|k| k.as_str()).collect();
     assert_eq!(names, ["first", "second", "third", "fourth"]);
 
@@ -1032,61 +764,7 @@ main:
 }
 
 #[test]
-fn test_quill_with_all_ui_properties() {
-    let yaml_content = r#"
-quill:
-  name: full_ui_test
-  version: "1.0"
-  backend: typst
-  description: Test all UI properties
-
-main:
-  fields:
-    author:
-      description: The full name of the document author
-      type: string
-      ui:
-        group: Author Info
-"#;
-
-    let config = QuillConfig::from_yaml(yaml_content).unwrap();
-
-    let author_field = &config.main.fields["author"];
-    let ui = author_field.ui.as_ref().unwrap();
-    assert_eq!(ui.group, Some("Author Info".to_string()));
-    // Order is not a field-level knob; `author` leads because it is declared
-    // first in the field map.
-    assert_eq!(config.main.fields.get_index_of("author"), Some(0));
-}
-#[test]
-fn test_field_schema_with_description() {
-    let yaml = r#"
-description: "Detailed field description"
-type: "string"
-example: "Example value"
-ui:
-  group: "Test Group"
-"#;
-    let quill_value = QuillValue::from_yaml_str(yaml).unwrap();
-    let schema = FieldSchema::from_quill_value("test_field".to_string(), &quill_value).unwrap();
-
-    assert_eq!(
-        schema.description,
-        Some("Detailed field description".to_string())
-    );
-
-    assert_eq!(
-        schema.example.as_ref().and_then(|v| v.as_str()),
-        Some("Example value")
-    );
-
-    let ui = schema.ui.as_ref().unwrap();
-    assert_eq!(ui.group, Some("Test Group".to_string()));
-}
-
-#[test]
 fn test_parse_card_with_fields_in_yaml() {
-    // Test parsing [cards] section with [cards.X.fields.Y] syntax
     let yaml_content = r#"
 quill:
   name: cards_fields_test
@@ -1109,19 +787,16 @@ card_kinds:
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
-    // Verify the card-kind was parsed into config.card_kinds
     assert!(config.card_kind("endorsements").is_some());
     let card = config.card_kind("endorsements").unwrap();
 
     assert_eq!(card.name, "endorsements");
     assert_eq!(card.description, Some("Chain of endorsements".to_string()));
 
-    // Verify card fields
     assert_eq!(card.fields.len(), 2);
 
     let name_field = card.fields.get("name").unwrap();
     assert_eq!(name_field.r#type, FieldType::String);
-    // Unendorsed: no default declared.
     assert!(name_field.default.is_none());
 
     let org_field = card.fields.get("org").unwrap();
@@ -1135,7 +810,6 @@ card_kinds:
 
 #[test]
 fn test_field_schema_rejects_unknown_keys() {
-    // Test that unknown keys like "invalid_key" are rejected (strict mode)
     let yaml = r#"
 type: "string"
 description: "A string field"
@@ -1148,7 +822,6 @@ invalid_key:
 
     let result = FieldSchema::from_quill_value("author".to_string(), &quill_value);
 
-    // The parsing should fail due to deny_unknown_fields
     assert!(result.is_err());
     let err = result.unwrap_err();
     assert!(
@@ -1159,46 +832,7 @@ invalid_key:
 }
 
 #[test]
-fn test_quill_config_with_cards_section() {
-    let yaml_content = r#"
-quill:
-  name: cards_test
-  version: "1.0"
-  backend: typst
-  description: Test [cards] section
-
-main:
-  fields:
-    regular:
-      description: Regular field
-      type: string
-
-card_kinds:
-  indorsements:
-    description: Chain of endorsements
-    fields:
-      name:
-        type: string
-        description: Name field
-"#;
-
-    let config = QuillConfig::from_yaml(yaml_content).unwrap();
-
-    // Check regular field
-    assert!(config.main.fields.contains_key("regular"));
-    let regular = config.main.fields.get("regular").unwrap();
-    assert_eq!(regular.r#type, FieldType::String);
-
-    // Check card-kind is in config.card_kinds (not config.main.fields)
-    assert!(config.card_kind("indorsements").is_some());
-    let card = config.card_kind("indorsements").unwrap();
-    assert_eq!(card.description, Some("Chain of endorsements".to_string()));
-    assert!(card.fields.contains_key("name"));
-}
-
-#[test]
 fn test_quill_config_cards_empty_fields() {
-    // Test that cards with no fields section are valid
     let yaml_content = r#"
 quill:
   name: cards_empty_fields_test
@@ -1220,7 +854,6 @@ card_kinds:
 
 #[test]
 fn test_quill_config_allows_card_collision() {
-    // Test that scope name colliding with field name is ALLOWED
     let yaml_content = r#"
 quill:
   name: collision_test
@@ -1253,37 +886,6 @@ card_kinds:
     assert!(config.card_kind("conflict").is_some());
 }
 
-#[test]
-fn test_card_field_order_preservation() {
-    // Test that card fields preserve definition order (not alphabetical)
-    // defined: z_first, then a_second
-    // alphabetical: a_second, then z_first
-    let yaml_content = r#"
-quill:
-  name: card_order_test
-  version: "1.0"
-  backend: typst
-  description: Test card field order
-
-card_kinds:
-  mycard:
-    description: Test card
-    fields:
-      z_first:
-        type: string
-        description: Defined first
-      a_second:
-        type: string
-        description: Defined second
-"#;
-
-    let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    let card = config.card_kind("mycard").unwrap();
-
-    // Declaration order (z_first, then a_second) is preserved, not alphabetized.
-    let names: Vec<&str> = card.fields.keys().map(|k| k.as_str()).collect();
-    assert_eq!(names, ["z_first", "a_second"]);
-}
 #[test]
 fn test_nested_schema_parsing() {
     let yaml_content = r#"
@@ -1468,9 +1070,6 @@ main:
 
 #[test]
 fn nested_object_properties_preserve_declaration_order() {
-    // Properties render in declaration order, not the alphabetical order a
-    // `BTreeMap` would impose: `zulu` is declared first, so it leads `alpha`
-    // despite the reversed alphabet. The `IndexMap` carries the order.
     let yaml = r#"
 quill: { name: x, version: "1.0", backend: typst, description: x }
 main:
@@ -1488,54 +1087,7 @@ main:
 }
 
 #[test]
-fn typed_table_row_properties_preserve_declaration_order() {
-    // The synthetic row of a typed table is an object built by the same
-    // `from_quill_value` recursion, so its properties keep declaration order too.
-    let yaml = r#"
-quill: { name: x, version: "1.0", backend: typst, description: x }
-main:
-  fields:
-    rows:
-      type: array
-      items:
-        type: object
-        properties:
-          org: { type: string }
-          year: { type: integer }
-"#;
-    let config = QuillConfig::from_yaml(yaml).unwrap();
-    let props = config.main.fields["rows"].items.as_ref().unwrap();
-    let props = props.properties.as_ref().unwrap();
-    let names: Vec<&str> = props.keys().map(|k| k.as_str()).collect();
-    assert_eq!(names, ["org", "year"]);
-}
-
-#[test]
-fn authored_ui_order_on_nested_property_is_rejected() {
-    // `ui.order` is retired: display order is declaration order. An authored
-    // `order` on any field (nested or top-level) is a hard load error with
-    // the migration message.
-    let yaml = r#"
-quill: { name: x, version: "1.0", backend: typst, description: x }
-main:
-  fields:
-    address:
-      type: object
-      properties:
-        street: { type: string, ui: { order: 5 } }
-        city: { type: string }
-"#;
-    let err = QuillConfig::from_yaml_with_warnings(yaml).unwrap_err();
-    assert!(
-        err.iter()
-            .any(|d| d.message.contains("ui.order is no longer accepted")),
-        "expected ui.order rejection, got: {err:?}"
-    );
-}
-
-#[test]
 fn authored_ui_order_on_card_field_is_rejected() {
-    // Same rejection at card level, with an actionable hint.
     let yaml = r#"
 quill: { name: x, version: "1.0", backend: typst, description: x }
 main:
@@ -1558,8 +1110,6 @@ main:
 
 #[test]
 fn ui_group_on_object_property_is_rejected() {
-    // `ui.group` clusters card-level fields only; on a typed-dictionary
-    // property it is a hard load error rather than an inert knob.
     let yaml = r#"
 quill: { name: x, version: "1.0", backend: typst, description: x }
 main:
@@ -1576,28 +1126,7 @@ main:
 }
 
 #[test]
-fn ui_group_on_typed_table_property_is_rejected() {
-    let yaml = r#"
-quill: { name: x, version: "1.0", backend: typst, description: x }
-main:
-  fields:
-    rows:
-      type: array
-      items:
-        type: object
-        properties:
-          score: { type: number, ui: { group: Metrics } }
-"#;
-    let err = QuillConfig::from_yaml_with_warnings(yaml).unwrap_err();
-    assert!(err
-        .iter()
-        .any(|d| d.code.as_deref() == Some("quill::nested_group_not_supported")));
-}
-
-#[test]
 fn ui_group_on_card_level_field_is_still_accepted() {
-    // Regression guard: the nested-position rejection must not touch card-level
-    // fields, where grouping is the whole point.
     let yaml = r#"
 quill: { name: x, version: "1.0", backend: typst, description: x }
 main:
@@ -1616,9 +1145,6 @@ main:
 
 #[test]
 fn group_registry_list_form_orders_blueprint_by_declaration() {
-    // The registry declares `beta` before `alpha`, but a field references
-    // `alpha` first (earlier in declaration order). Clustering must follow
-    // registry order (beta, then alpha), not first-appearance order.
     let yaml = r#"
 quill: { name: x, version: "1.0", backend: typst, description: x }
 main:
@@ -1674,7 +1200,6 @@ main:
 
 #[test]
 fn implicit_group_without_registry_warns() {
-    // No registry + a field group is the deprecated implicit-group form.
     let yaml = r#"
 quill: { name: x, version: "1.0", backend: typst, description: x }
 main:
@@ -1721,8 +1246,6 @@ main:
 
 #[test]
 fn group_registry_round_trips_through_serde_and_schema() {
-    // List-form input normalizes to the canonical map form on emit, preserving
-    // declaration order, and re-parses to the identical registry.
     let yaml = r#"
 quill: { name: x, version: "1.0", backend: typst, description: x }
 main:
@@ -1738,37 +1261,11 @@ main:
     let back: UiCardSchema = serde_json::from_value(json).unwrap();
     assert_eq!(ui, back, "registry must survive emit → parse");
 
-    // Emission carries order (preserve_order) and titles are omitted when derived.
     let schema = config.schema();
     let groups = schema["main"]["ui"]["groups"].as_object().unwrap();
     let keys: Vec<&str> = groups.keys().map(String::as_str).collect();
     assert_eq!(keys, ["addressing", "letterhead"]);
     assert!(groups["addressing"].as_object().unwrap().is_empty());
-}
-
-#[test]
-fn migrated_group_fixtures_declare_registries_and_do_not_warn() {
-    for name in ["usaf_memo/0.2.0", "cmu_letter/0.1.0", "classic_resume/0.1.0"] {
-        let path = quillmark_fixtures::resource_path(&format!("quills/{name}/Quill.yaml"));
-        let yaml = fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {name}: {e}"));
-        let (config, warnings) = QuillConfig::from_yaml_with_warnings(&yaml)
-            .unwrap_or_else(|e| panic!("{name} must load: {e:?}"));
-        assert!(
-            !warnings
-                .iter()
-                .any(|d| d.code.as_deref() == Some("quill::implicit_group")),
-            "{name} still emits implicit_group: {warnings:?}"
-        );
-        assert!(
-            config
-                .main
-                .ui
-                .as_ref()
-                .and_then(|u| u.groups.as_ref())
-                .is_some(),
-            "{name} main should declare a group registry"
-        );
-    }
 }
 
 #[test]
@@ -1855,7 +1352,6 @@ main:
         "signed_on".to_string(),
         QuillValue::from_json(serde_json::json!("2026-04-13")),
     );
-    // A `datetime` carries wall-clock time-of-day verbatim (no offset).
     payload.insert(
         "created_at".to_string(),
         QuillValue::from_json(serde_json::json!("2026-04-13T20:00:00")),
@@ -1876,9 +1372,6 @@ main:
 
 #[test]
 fn test_config_coerce_bare_scalar_into_string_uses_canonical_token() {
-    // Gracious scalar→string: a bare boolean/integer/number written into a
-    // `string` field is adopted as its canonical scalar text, losslessly.
-    // (verified: true → "true", build_number: 47 → "47", ratio: 1.5 → "1.5").
     let yaml_content = r#"
 quill:
   name: coerce_string_test
@@ -1918,32 +1411,6 @@ main:
 }
 
 #[test]
-fn test_config_coerce_integer_success() {
-    let yaml_content = r#"
-quill:
-  name: coerce_integer_success_test
-  version: "1.0"
-  backend: typst
-  description: Coerce integer success
-
-main:
-  fields:
-    count:
-      type: integer
-"#;
-
-    let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    let mut payload = indexmap::IndexMap::new();
-    payload.insert(
-        "count".to_string(),
-        QuillValue::from_json(serde_json::json!("42")),
-    );
-
-    let coerced = config.coerce_payload(&payload).unwrap();
-    assert_eq!(coerced.get("count").unwrap().as_i64(), Some(42));
-}
-
-#[test]
 fn test_config_coerce_integer_rejects_decimal() {
     let yaml_content = r#"
 quill:
@@ -1975,8 +1442,6 @@ main:
 
 #[test]
 fn test_coerce_scalar_array_elements() {
-    // A primitive `integer[]` coerces each element (string → integer), the
-    // same coercion scalar fields get.
     let yaml_content = r#"
 quill:
   name: scalar_array_coerce
@@ -2006,8 +1471,6 @@ main:
 
 #[test]
 fn test_coerce_scalar_array_reports_bad_element_path() {
-    // An uncoercible element fails with the element's indexed path, just like
-    // a typed-table leaf does.
     let yaml_content = r#"
 quill:
   name: scalar_array_bad
@@ -2038,7 +1501,6 @@ main:
 
 #[test]
 fn test_array_missing_items_rejected() {
-    // Every array must declare its element type via `items`.
     let yaml_content = r#"
 quill:
   name: array_no_items
@@ -2060,8 +1522,6 @@ main:
 
 #[test]
 fn test_array_bare_properties_rejected() {
-    // A bare `properties` map on an array is rejected: element typing goes
-    // under `items`.
     let yaml_content = r#"
 quill:
   name: array_bare_props
@@ -2086,7 +1546,6 @@ main:
 
 #[test]
 fn test_nested_array_rejected() {
-    // Array elements may be scalars or objects, but not arrays.
     let yaml_content = r#"
 quill:
   name: nested_array
@@ -2111,39 +1570,7 @@ main:
 }
 
 #[test]
-fn test_array_of_objects_with_array_property_rejected() {
-    // The one-level rule: a typed-table row may carry scalar columns only, so
-    // an array nested inside a table row is rejected.
-    let yaml_content = r#"
-quill:
-  name: table_with_array
-  version: "1.0"
-  backend: typst
-  description: Typed table row with an array column
-
-main:
-  fields:
-    rows:
-      type: array
-      items:
-        type: object
-        properties:
-          tags:
-            type: array
-            items:
-              type: string
-"#;
-    let err = QuillConfig::from_yaml_with_warnings(yaml_content).unwrap_err();
-    assert!(err.iter().any(
-        |d| d.code.as_deref() == Some("quill::nested_array_not_supported")
-            && d.message.contains("rows")
-    ));
-}
-
-#[test]
 fn test_object_with_array_property_rejected() {
-    // Symmetric rule for typed dictionaries: an object property may only be a
-    // scalar, so an array-valued property is rejected.
     let yaml_content = r#"
 quill:
   name: object_with_array
@@ -2233,36 +1660,6 @@ main:
 }
 
 #[test]
-fn test_config_coerce_error_unparseable_number() {
-    let yaml_content = r#"
-quill:
-  name: coerce_number_error_test
-  version: "1.0"
-  backend: typst
-  description: Coerce number errors
-
-main:
-  fields:
-    count:
-      type: number
-"#;
-
-    let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    let mut payload = indexmap::IndexMap::new();
-    payload.insert(
-        "count".to_string(),
-        QuillValue::from_json(serde_json::json!("forty-two")),
-    );
-
-    let error = config.coerce_payload(&payload).unwrap_err();
-    assert!(matches!(
-        error,
-        super::CoercionError::Uncoercible { ref path, ref target, .. }
-        if path == "count" && target == "number"
-    ));
-}
-
-#[test]
 fn test_multiline_ui_field_parses() {
     let yaml_content = r#"
 quill:
@@ -2285,13 +1682,10 @@ main:
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
-    // `richtext` (block) carries the `multiline` ui hint like `string` does.
     let summary = config.main.fields.get("summary").unwrap();
     assert_eq!(summary.r#type, FieldType::RichText { inline: false });
     assert_eq!(summary.ui.as_ref().unwrap().multiline, Some(true));
 
-    // A field with no authored `ui:` block carries `ui: None`: nothing
-    // fabricates a `ui` block.
     let notes = config.main.fields.get("notes").unwrap();
     assert_eq!(notes.r#type, FieldType::RichText { inline: false });
     assert!(notes.ui.is_none());
@@ -2347,25 +1741,6 @@ card_kinds:
 }
 
 #[test]
-fn test_card_ui_title_omitted_when_absent() {
-    let yaml_content = r#"
-quill:
-  name: no_title_test
-  version: "1.0"
-  backend: typst
-  description: ui.title omitted when not declared
-
-main:
-  fields:
-    subject:
-      type: string
-"#;
-
-    let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    assert!(config.main.ui.as_ref().is_none_or(|ui| ui.title.is_none()));
-}
-
-#[test]
 fn test_quill_config_from_yaml_errors_on_invalid_field() {
     let yaml_content = r#"
 quill:
@@ -2393,7 +1768,6 @@ main:
 
 #[test]
 fn test_unknown_key_in_quill_section_errors() {
-    // Typos like 'auther' should fail loudly, not silently land in metadata.
     let yaml_content = r#"
 quill:
   name: unk_key
@@ -2412,34 +1786,7 @@ quill:
 }
 
 #[test]
-fn test_unknown_top_level_section_errors() {
-    // 'card_kind' is a common typo for 'card_kinds'. Must not be silently ignored.
-    let yaml_content = r#"
-quill:
-  name: unk_section
-  version: "1.0"
-  backend: typst
-  description: Unknown section test
-
-card_kind:
-  foo:
-    description: Should not silently disappear
-    fields:
-      bar:
-        type: string
-"#;
-
-    let err = QuillConfig::from_yaml_with_warnings(yaml_content).unwrap_err();
-
-    assert!(err.iter().any(|d| {
-        d.code.as_deref() == Some("quill::unknown_section") && d.message.contains("card_kind")
-    }));
-}
-
-#[test]
 fn test_root_level_fields_gets_targeted_hint() {
-    // Root-level `fields:` (instead of `main.fields:`) should produce a single
-    // unknown_section error with a targeted hint, not a duplicate error.
     let yaml_content = r#"
 quill:
   name: root_fields
@@ -2478,8 +1825,6 @@ fields:
 
 #[test]
 fn test_multiple_errors_collected_in_one_pass() {
-    // The headline DX behavior: an author with several mistakes should see
-    // them all in one shot, not fix-rerun-fix-rerun.
     let yaml_content = r#"
 quill:
   name: BadName
@@ -2498,7 +1843,6 @@ main:
 
     let err = QuillConfig::from_yaml_with_warnings(yaml_content).unwrap_err();
 
-    // We expect at least: invalid_name + unknown_key + invalid_field_name + field_parse_error
     assert!(
         err.len() >= 4,
         "expected >=4 errors collected at once, got {}: {:?}",
@@ -2530,7 +1874,6 @@ main:
 
 #[test]
 fn test_main_ui_malformed_errors_with_hint() {
-    // main.ui should fail loudly when malformed, not be silently dropped.
     let yaml_content = r#"
 quill:
   name: bad_ui
@@ -2548,34 +1891,6 @@ main:
     assert!(err
         .iter()
         .any(|d| d.code.as_deref() == Some("quill::invalid_ui")));
-}
-
-#[test]
-fn test_field_with_title_key_errors_with_hint() {
-    // 'title' is a common mistake: authors expect it to work like 'description'.
-    // We must fail loudly with an actionable hint rather than silently dropping the field.
-    let yaml_content = r#"
-quill:
-  name: hint_test
-  version: "1.0"
-  backend: typst
-  description: Hint test
-
-main:
-  fields:
-    author:
-      type: string
-      title: The document author
-"#;
-
-    let err = QuillConfig::from_yaml_with_warnings(yaml_content).unwrap_err();
-
-    assert_eq!(err.len(), 1);
-    assert_eq!(err[0].code.as_deref(), Some("quill::field_parse_error"));
-    assert_eq!(
-        err[0].hint.as_deref(),
-        Some("'title' is not a valid field key; use 'description' instead.")
-    );
 }
 
 #[test]
@@ -2671,13 +1986,6 @@ card_kinds:
     );
 }
 
-// The fence guard delegates to the parser's own opener predicate
-// (`document::fences::is_card_yaml_opener_line`), whose grammar (bare `~~~`,
-// longer runs, indented, four-space, backtick, bare `---`) is exhaustively
-// covered in `document/tests/card_fence_tests.rs`. What is config's own is the
-// wiring: the guard runs over `main.body.example` and every card kind's, and it
-// stays quiet when there is no opener.
-
 #[test]
 fn body_example_fence_line_is_an_error_on_main_and_card_kinds() {
     let yaml = r#"
@@ -2716,8 +2024,6 @@ card_kinds:
 
 #[test]
 fn body_example_without_a_card_opener_is_accepted() {
-    // A backtick fence is the escape hatch for a literal code block: it never
-    // opens a card-yaml block, so the guard stays quiet.
     let yaml = "
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
@@ -2735,10 +2041,6 @@ main:
 
 #[test]
 fn quill_yaml_deep_nesting_is_rejected() {
-    // Mirrors the card-yaml payload depth-budget regression in
-    // crates/quillmark/tests/security_tests.rs::test_yaml_depth_limit_attack.
-    // Deeply nested YAML under any `quill` subtree must be refused by the
-    // shared depth budget (`MAX_YAML_DEPTH`).
     let mut deep = String::from(
         "quill:\n  name: bomb\n  version: 1.0.0\n  backend: typst\n  description: bomb\n  payload:\n",
     );
@@ -2754,8 +2056,6 @@ fn quill_yaml_deep_nesting_is_rejected() {
         "error should reference the depth/YAML limit, got: {msg}"
     );
 }
-
-// ---------- example/default type-compatibility validation ----------
 
 fn example_default_yaml(field_yaml: &str) -> String {
     format!(
@@ -2776,10 +2076,6 @@ main:
 
 #[test]
 fn example_default_type_mismatch_cases() {
-    // A field whose declared `type` doesn't match its `example`/`default`
-    // value fails with a targeted diagnostic naming the field, the declared
-    // type, and the value's actual type: across every scalar/compound type
-    // and both the `example` and `default` slots.
     struct Case {
         field_yaml: &'static str,
         code: &'static str,
@@ -2789,36 +2085,30 @@ fn example_default_type_mismatch_cases() {
 
     let cases = [
         Case {
-            // type: integer with example: 20.04 fails, float is not an integer.
             field_yaml: "    year:\n      type: integer\n      example: 20.04\n",
             code: "quill::example_type_mismatch",
             message_contains: &["year", "integer", "float"],
             hint_contains: &[],
         },
         Case {
-            // The canonical bug: type: string with example: 20.04, YAML parses
-            // the bare token as a float, and the LLM would copy it back unquoted.
             field_yaml: "    min_os_version:\n      type: string\n      example: 20.04\n",
             code: "quill::example_type_mismatch",
             message_contains: &["min_os_version", "string", "float"],
             hint_contains: &["Quote", "\"20.04\""],
         },
         Case {
-            // type: boolean with example: "true", the LLM would emit it as a string.
             field_yaml: "    flag:\n      type: boolean\n      example: \"true\"\n",
             code: "quill::example_type_mismatch",
             message_contains: &["flag", "boolean", "string"],
             hint_contains: &[],
         },
         Case {
-            // type: array with example: foo, a sequence is required.
             field_yaml: "    tags:\n      type: array\n      items:\n        type: string\n      example: foo\n",
             code: "quill::example_type_mismatch",
             message_contains: &["tags", "array", "string"],
             hint_contains: &[],
         },
         Case {
-            // Defaults are validated the same way as examples.
             field_yaml: "    version:\n      type: string\n      default: 20.04\n",
             code: "quill::default_type_mismatch",
             message_contains: &["version", "string", "float"],
@@ -2857,7 +2147,6 @@ fn example_default_type_mismatch_cases() {
 
 #[test]
 fn example_string_type_accepts_quoted_decimal_example() {
-    // The fix: quoting forces the YAML parser to keep it as a string.
     let yaml =
         example_default_yaml("    min_os_version:\n      type: string\n      example: \"20.04\"\n");
     QuillConfig::from_yaml(&yaml).expect("quoted string example should load");
@@ -2887,18 +2176,7 @@ fn example_in_enum_loads_successfully() {
 }
 
 #[test]
-fn field_with_no_example_or_default_loads_successfully() {
-    let yaml = example_default_yaml(
-        "    bare:\n      type: string\n      description: nothing to check\n",
-    );
-    QuillConfig::from_yaml(&yaml).expect("field with no example/default should load");
-}
-
-#[test]
 fn datetime_type_mismatch_reports_datetime_not_string() {
-    // The mismatch message must name the field's declared type verbatim
-    // (`datetime`), not the internal string-family collapse: otherwise the
-    // author is told they declared `string` when they wrote `datetime`.
     let yaml = example_default_yaml("    signed_on:\n      type: datetime\n      example: 42\n");
     let errors = QuillConfig::from_yaml_with_warnings(&yaml).unwrap_err();
     let diag = errors
@@ -2914,27 +2192,7 @@ fn datetime_type_mismatch_reports_datetime_not_string() {
 }
 
 #[test]
-fn richtext_type_mismatch_reports_richtext_not_string() {
-    // The mismatch names the declared type verbatim (`richtext`), not the
-    // internal string-family collapse: a non-string, non-content default fails.
-    let yaml = example_default_yaml("    body:\n      type: richtext\n      default: 42\n");
-    let errors = QuillConfig::from_yaml_with_warnings(&yaml).unwrap_err();
-    let diag = errors
-        .iter()
-        .find(|d| d.code.as_deref() == Some("quill::default_type_mismatch"))
-        .expect("expected default_type_mismatch error");
-    assert!(
-        diag.message.contains("declares type 'richtext'"),
-        "message should name the richtext type, got: {}",
-        diag.message
-    );
-}
-
-#[test]
 fn type_date_accepts_bare_dates_and_rejects_time_components() {
-    // `type: date` is a valid field type: a strict calendar date. It loads,
-    // coerces a bare `YYYY-MM-DD` verbatim, and rejects any time-bearing string
-    // (that is a `type: datetime`) rather than truncating it.
     let yaml = r#"
 quill:
   name: date_field
@@ -2973,8 +2231,6 @@ main:
 
 #[test]
 fn type_mismatch_preview_shows_array_contents() {
-    // A compound value's preview should show its contents, not a `[…]`
-    // placeholder, so the author can see what they wrote.
     let yaml = example_default_yaml(
         "    title:\n      type: string\n      example:\n        - one\n        - two\n",
     );
@@ -2990,9 +2246,6 @@ fn type_mismatch_preview_shows_array_contents() {
     );
 }
 
-// ── Richtext inline field: load-time example import + cache ───────────────────
-
-/// A minimal quill declaring one field, for the richtext field-type tests.
 fn quill_with_field(field_yaml: &str) -> Result<QuillConfig, Vec<Diagnostic>> {
     let yaml = format!(
         "quill:\n  name: rt\n  version: \"1.0\"\n  backend: typst\n  description: rt\nmain:\n  fields:\n{field_yaml}"
@@ -3063,8 +2316,6 @@ fn inline_richtext_single_line_example_loads_and_caches_content() {
     .expect("single-line inline example loads");
     let field = config.main.fields.get("tag").unwrap();
     assert_eq!(field.r#type, FieldType::RichText { inline: true });
-    // The load pass imports the markdown example into its content companion; the
-    // authored `example` string is retained untouched (Alternative A).
     let content = field
         .example_content
         .as_ref()
@@ -3158,14 +2409,8 @@ fn richtext_zero_value_is_empty_content() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// plaintext: the literal-codec content sibling of richtext
-// ---------------------------------------------------------------------------
-
 #[test]
 fn plaintext_field_caches_literal_content() {
-    // A plaintext example is imported verbatim: markdown delimiters stay literal
-    // (no marks), and the cached companion is a mark-free content object.
     let config = quill_with_field(
         "    subject:\n      type: plaintext\n      example: \"a *literal* subject\"\n",
     )
@@ -3216,8 +2461,6 @@ fn inline_plaintext_rejects_multiline_document_value() {
 
 #[test]
 fn plaintext_wire_content_with_marks_is_rejected_not_stripped() {
-    // A content object carrying a mark is not silently downgraded to plain: it
-    // is rejected, mirroring the inline precedent and keeping coercion lossless.
     let config = quill_with_field("    subject:\n      type: plaintext\n").expect("loads");
     let mut rt = quillmark_content::from_markdown("a **bold** word").unwrap();
     rt.normalize();
@@ -3240,20 +2483,14 @@ fn plaintext_transform_schema_carries_media_type_and_plain_annotation() {
     let schema = super::schema::build_transform_schema(&config);
     let json = schema.as_json();
     let subject = &json["properties"]["subject"];
-    // Same media type as richtext → backends lower it identically, zero edits.
     assert_eq!(subject["type"], "object");
     assert_eq!(
         subject["contentMediaType"],
         super::schema::CONTENT_MEDIA_TYPE
     );
-    // Plus the editor-only annotations.
     assert_eq!(subject[super::schema::QUILLMARK_PLAIN_KEY], true);
     assert_eq!(subject[super::schema::QUILLMARK_INLINE_KEY], true);
 }
-
-// ---------------------------------------------------------------------------
-// enum: `type: enum` + `values:`, the one spelling of a finite string domain
-// ---------------------------------------------------------------------------
 
 #[test]
 fn enum_type_projects_to_json_schema_string_enum() {
@@ -3269,7 +2506,6 @@ fn enum_type_projects_to_json_schema_string_enum() {
     );
     let schema = super::schema::build_transform_schema(&config);
     let color = &schema.as_json()["properties"]["color"];
-    // Exactly the shape backends already dispatch on: a string plus its domain.
     assert_eq!(color["type"], "string");
     assert_eq!(color["enum"], serde_json::json!(["red", "green", "blue"]));
 }
@@ -3299,7 +2535,6 @@ fn enum_membership_is_validated_on_a_document_value() {
         errs.iter().any(|e| e.code() == "validation::enum_violation"),
         "an out-of-domain enum value should raise enum_violation, got: {errs:?}"
     );
-    // An in-domain value is accepted.
     let ok = super::validation::validate_field(
         field,
         &QuillValue::from_json(serde_json::json!("red")),
@@ -3310,8 +2545,6 @@ fn enum_membership_is_validated_on_a_document_value() {
 
 #[test]
 fn the_enum_modifier_is_a_load_error_on_every_type() {
-    // The modifier is retired on the type that used to accept it, and the
-    // message routes to `type: enum` rather than reporting an unknown key.
     for field in [
         "    color:\n      type: string\n      enum: [a, b]\n",
         "    color:\n      type: enum\n      enum: [a, b]\n",

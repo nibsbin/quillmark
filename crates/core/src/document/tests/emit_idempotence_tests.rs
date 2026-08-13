@@ -1,16 +1,5 @@
-//! Canonical-form convergence content tests
-//!
-//! For every fixture, the markdown and JSON persistence paths must
-//! canonicalise to the same in-memory document. This is the non-trivial
-//! consequence of byte-stable, lossless round-trips through both formats.
-
 use crate::document::tests::collect_md_files;
 
-// ── Markdown↔JSON canonical convergence (markdown-spec.md §9.1) ──────────────
-
-/// `to_markdown(from_json(to_json(from_markdown(x)))) == to_markdown(from_markdown(x))`
-/// for every fixture: the markdown and JSON persistence paths canonicalise
-/// to the same in-memory document.
 #[test]
 fn markdown_and_json_converge_on_canonical_form() {
     use crate::document::Document;
@@ -47,7 +36,6 @@ fn markdown_and_json_converge_on_canonical_form() {
 
         let md_canonical = doc.to_markdown();
 
-        // Round through the versioned JSON DTO.
         let json = serde_json::to_string(&doc).expect("to_json should succeed");
         let restored: Document = serde_json::from_str(&json).expect("from_json should round-trip");
         let md_after_json_round = restored.to_markdown();

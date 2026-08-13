@@ -1,45 +1,29 @@
-//! Pre-scan of a card-yaml block's YAML payload to recover features that
-//! serde_saphyr discards.
+//! Pre-scan of a card-yaml block's YAML payload to recover what serde_saphyr
+//! discards: comments and `!must_fill` tags.
 //!
-//! Three features are recovered here:
+//! Top-level comments become [`super::PayloadItem::Comment`]. Comments inside
+//! block mappings/sequences are captured with their structural path and an
+//! ordinal, which the emitter re-injects at (see [`NestedComment`]). A
+//! `!must_fill` tag is stripped from the cleaned YAML, so serde_saphyr sees a
+//! plain scalar, and recorded as a `fill` marker.
 //!
-//! 1. **Top-level comments.** YAML comments are dropped by the YAML parser.
-//!    To round-trip them as [`super::PayloadItem::Comment`], we extract them
-//!    before parsing.
-//!
-//! 2. **Nested comments.** Comments inside block mappings/sequences are
-//!    captured with their structural path (sequence of keys/indices) and an
-//!    ordinal indicating where in the container they sit. The emitter
-//!    re-injects them at the matching position. See [`NestedComment`].
-//!
-//! 3. **`!must_fill` tags.** Custom YAML tags are accepted and dropped by
-//!    serde_saphyr; the value survives but the tag annotation is lost. We
-//!    detect `!must_fill` on top-level scalar fields, strip the tag from the
-//!    cleaned YAML (so serde_saphyr sees a plain scalar), and record a
-//!    `fill: true` marker on the resulting `Field` item.
-//!
-//! `!must_fill` is the only recognized fill tag. Every other custom tag
-//! (`!include`, `!env`, …) is treated alike: dropped with a
-//! `parse::unsupported_yaml_tag` warning, the scalar value kept.
+//! `!must_fill` is the only recognized fill tag; every other custom tag is
+//! dropped with a `parse::unsupported_yaml_tag` warning, value kept.
 
 use crate::Diagnostic;
 use crate::Severity;
 
-/// One ordered hint extracted from the fence body.
-///
-/// `Field` captures only the `fill` flag; the value comes from serde_saphyr.
-/// `Comment.inline` distinguishes own-line from trailing inline comments;
-/// inline comments immediately follow their host `Field` in the item stream.
+/// One ordered hint extracted from the fence body. `Field` captures only the
+/// `fill` flag; the value comes from serde_saphyr. An inline `Comment`
+/// immediately follows its host `Field` in the item stream.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum PreItem {
     Field { key: String, fill: bool },
     Comment { text: String, inline: bool },
 }
 
-/// One segment of a path into the parsed YAML structure.
-///
-/// Aliased to the crate-wide [`crate::value::PathSegment`] so prescan,
-/// emit, and the value tree all speak one path type.
+/// One segment of a path into the parsed YAML structure, aliased to the
+/// crate-wide [`crate::value::PathSegment`].
 pub use crate::value::PathSegment as CommentPathSegment;
 
 /// A comment inside a nested mapping or sequence.
@@ -102,9 +86,7 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
         child_count: 0,
     }];
 
-    // Indent of the `key:` line that opened the current YAML block scalar
-    // (`|`/`>`), if any. While set, deeper-indented lines are literal scalar
-    // content and bypass structural prescanning.
+    // Indent of the `key:` line that opened the current block scalar, if any.
     let mut block_scalar_indent: Option<usize> = None;
 
     for raw_line in &lines {
@@ -117,11 +99,9 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
             continue;
         }
 
-        // Inside a block scalar: lines indented deeper than the opening key
-        // are literal text, a markdown heading (`## …`), a `- ` bullet, or a
-        // `key: value` line in the content must pass through verbatim, never
-        // parsed as a comment, sequence item, or nested key. A line at or
-        // below the key's indent ends the scalar and is reprocessed normally.
+        // Inside a block scalar, deeper-indented lines are literal text: a
+        // heading, a bullet, or a `key: value` line must pass through verbatim.
+        // A line at or below the key's indent ends the scalar.
         if let Some(key_indent) = block_scalar_indent {
             if indent > key_indent {
                 cleaned_lines.push(line.to_string());
@@ -176,19 +156,16 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
                 stack.pop();
             }
 
-            // `trimmed` is either `"-"` or starts with `"- "` (case 2 guard).
-            // `strip_prefix` keeps this categorically free of byte-range
-            // slicing on user content even though `"- "` is two ASCII bytes.
+            // `strip_prefix` rather than a byte range: user content follows,
+            // and a byte index could land inside a multi-byte codepoint.
             let after_dash_full = trimmed.strip_prefix("- ").unwrap_or("");
             let (after_dash, trailing_comment) = split_trailing_comment(after_dash_full);
             let after_dash_trimmed = after_dash.trim_start();
             let inline_indent_offset = indent + 2 + (after_dash.len() - after_dash_trimmed.len());
 
-            // The first key of a sequence-item mapping (`- key: value`) sits on
-            // the dash line, so Case 4 never sees it. Inspect it here for a fill
-            // marker / unsupported tag, mirroring Case 4. `dash_body_clean`, when
-            // set, is the tag-stripped `key:value` rewritten onto the dash line
-            // so serde_saphyr parses the bare value.
+            // The first key of a sequence-item mapping sits on the dash line, so
+            // case 4 never sees it. `dash_body_clean`, when set, is the
+            // tag-stripped `key:value` rewritten onto the dash line.
             let mut dash_body_clean: Option<String> = None;
             if after_dash_trimmed.is_empty() {
                 stack.push(Frame {
@@ -239,8 +216,6 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
                     inline: true,
                 });
             }
-            // Rewrite the dash line when a tag was stripped and/or a trailing
-            // comment was lifted off; otherwise pass the original through.
             if dash_body_clean.is_some() || trailing_comment.is_some() {
                 let head = format!("{:width$}", "", width = indent);
                 let body = match dash_body_clean {
@@ -253,10 +228,8 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
                 cleaned_lines.push(line.to_string());
             }
 
-            // A sequence item whose value is itself a block scalar (`- |-`):
-            // content lines are indented past the dash, so the dash line's
-            // indent is the boundary. Without this, headings / bullets / `key:`
-            // lines inside a `richtext[]` item would be mis-parsed as structure.
+            // For a `- |-` item the content is indented past the dash, so the
+            // dash line's indent is the block-scalar boundary.
             if is_block_scalar_header(after_dash_trimmed) {
                 block_scalar_indent = Some(indent);
             }
@@ -400,12 +373,9 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
         cleaned_lines.push(line.to_string());
     }
 
-    // Catch-all: prescan lifts every `!must_fill` it can preserve (block-style
-    // `key: !must_fill` and `- key: !must_fill`), stripping the tag from the
-    // cleaned text. Any tag that survives here sits in a position we cannot
-    // round-trip (inside a flow collection (`{…}` / `[…]`) or on a bare
-    // sequence element) where serde_saphyr would silently drop it. Warn rather
-    // than lose the marker quietly.
+    // A tag surviving here sits in a position prescan cannot lift (inside a flow
+    // collection, or on a bare sequence element) where serde_saphyr would drop it
+    // silently.
     if cleaned_lines
         .iter()
         .any(|l| line_has_unsupported_fill_tag(l))
@@ -462,9 +432,8 @@ fn line_has_unsupported_fill_tag(line: &str) -> bool {
     false
 }
 
-/// Return the index of the deepest frame matching `indent` and `kind`,
-/// pushing a new frame if the current top is shallower (safety net for
-/// unusual layouts; the placeholder frame from case 3 usually covers this).
+/// The deepest frame matching `indent` and `kind`, pushing a new one if the
+/// current top is shallower.
 fn ensure_frame_at_indent(stack: &mut Vec<Frame>, indent: usize, kind: FrameKind) -> usize {
     let top_idx = stack.len() - 1;
     let top = &mut stack[top_idx];
@@ -763,8 +732,6 @@ mod tests {
 
     #[test]
     fn fill_alias_is_rejected_as_noncanonical_tag() {
-        // `!fill` is an unrecognized custom tag, not a fill marker. It is dropped
-        // with an unsupported-tag warning; the value is kept.
         let input = "dept: !fill Department\n";
         let out = prescan_fence_content(input);
         assert_eq!(
@@ -814,9 +781,6 @@ mod tests {
 
     #[test]
     fn fillet_is_not_a_fill_tag() {
-        // A tag that merely starts with the fill-tag prefix must not be treated
-        // as fill (`!must_filler` shares the `!must_fill` prefix; `!fillet` is
-        // unrelated). Both are ordinary noncanonical tags.
         let input = "x: !must_filler value\n";
         let out = prescan_fence_content(input);
         assert_eq!(
@@ -977,39 +941,27 @@ mod tests {
 
     #[test]
     fn sequence_with_multibyte_after_dash_does_not_panic() {
-        // En-dash (3 bytes), em-dash (3 bytes), smart quote (3 bytes), and emoji
-        // (4 bytes) appearing immediately after `- ` or as a sibling bullet
-        // marker. Earlier versions sliced `&trimmed[2..]` here; if that ever
-        // regresses to indexing inside a multi-byte codepoint, this test will
-        // panic with `"byte index 2 is not a char boundary"`.
+        // Multi-byte characters immediately after `- `. A byte-range slice here
+        // panics with "byte index 2 is not a char boundary".
         let inputs = [
             "arr:\n  - – en-dash\n  - — em-dash\n",
             "arr:\n  - \u{2013}line\n  - \u{2014}line\n",
             "arr:\n  - \u{201C}smart-quoted\u{201D}\n",
             "arr:\n  - \u{1F600} emoji\n",
-            // A literal block scalar holding mixed dashes: mirrors the eval
-            // payload (`bullets: |` with `–` substituted for `-`).
             "bullets: |\n  - (U) **A:** text\n  – (U) **B:** text\n",
         ];
         for input in inputs {
             let out = prescan_fence_content(input);
-            // We don't care about the exact items; just that no panic occurred
-            // and that the cleaned YAML round-trips line count.
             assert_eq!(out.cleaned_yaml.lines().count(), input.lines().count());
         }
     }
 
     #[test]
     fn block_scalar_content_is_not_parsed_as_structure() {
-        // A markdown block scalar whose content contains a `#` heading, a
-        // `- ` bullet, and a `key:` line. None of these are YAML structure:
-        // they must survive verbatim in the cleaned YAML, and the field after
-        // the block must still parse as a top-level field.
         let input =
             "bio: |-\n  ## About me\n\n  - point one\n  role: engineer\n  Done.\nname: jane\n";
         let out = prescan_fence_content(input);
 
-        // The heading is content, not a stripped comment.
         assert!(
             out.cleaned_yaml.contains("## About me"),
             "block-scalar heading must survive: {:?}",
@@ -1018,7 +970,6 @@ mod tests {
         assert!(out.cleaned_yaml.contains("- point one"));
         assert!(out.cleaned_yaml.contains("role: engineer"));
 
-        // Nothing from inside the block leaked into items as a comment/field.
         assert!(
             !out.items.iter().any(|i| matches!(
                 i,
@@ -1033,7 +984,6 @@ mod tests {
             "block-scalar `key:` line must not become a field"
         );
 
-        // The two real top-level fields are `bio` then `name`, in order.
         let fields: Vec<&str> = out
             .items
             .iter()
@@ -1047,9 +997,6 @@ mod tests {
 
     #[test]
     fn sequence_item_block_scalar_content_is_not_parsed_as_structure() {
-        // A `richtext[]` array authored as `- |-` block-scalar items. Content
-        // lines (heading, bullet, `key:`) must survive verbatim, and the next
-        // item at the dash indent must still parse as a sequence item.
         let input = "items:\n  - |-\n    ## Heading\n    - inner bullet\n    role: x\n  - second\n";
         let out = prescan_fence_content(input);
 
@@ -1060,14 +1007,12 @@ mod tests {
         );
         assert!(out.cleaned_yaml.contains("- inner bullet"));
         assert!(out.cleaned_yaml.contains("role: x"));
-        // The heading must not have been captured as a comment.
         assert!(
             !out.nested_comments
                 .iter()
                 .any(|c| c.text.contains("Heading")),
             "block-scalar `#` line must not become a nested comment"
         );
-        // `second` is preserved (the block ended at the next dash).
         assert!(out.cleaned_yaml.contains("- second"));
     }
 
@@ -1080,8 +1025,6 @@ mod tests {
             "expected error; !must_fill on mappings is rejected"
         );
     }
-    // ── split_trailing_comment: YAML 1.2 conformance ─────────────────────────
-
     #[test]
     fn comment_after_plain_scalar_with_apostrophe() {
         // YAML: in a plain scalar, `'` is an ordinary character; the

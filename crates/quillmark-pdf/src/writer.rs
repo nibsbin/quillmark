@@ -1,9 +1,6 @@
-//! Low-level PDF byte-serialization shared by the stamp and flatten paths.
-//!
-//! This is the single home for "how we serialize a PDF object, a text string,
-//! and the `/Info` `/Producer` stamp." Both the AcroForm stamp path (this crate)
-//! and the value-flatten path (`quillmark-pdfform`) emit identical bytes here,
-//! so the two can never drift.
+//! Low-level PDF byte-serialization shared by the stamp and flatten paths, so
+//! the two emit identical bytes for an object, a text string, and the `/Info`
+//! `/Producer` stamp.
 
 use crate::error::PdfError;
 use crate::reader::{
@@ -22,9 +19,8 @@ pub fn dict_object(id: u32, inner: &[u8]) -> UpdatedObject {
     UpdatedObject { id, bytes }
 }
 
-/// Hand out the next object id from `next`, checked so a malformed near-`u32::MAX`
-/// `/Size` yields a clean error rather than an overflow panic (debug) or a
-/// silently-wrapped, colliding id (release).
+/// Hand out the next object id from `next`, checked so a malformed
+/// near-`u32::MAX` `/Size` errors instead of wrapping into a colliding id.
 pub fn alloc_id(next: &mut u32) -> Result<u32, PdfError> {
     let id = *next;
     *next = id.checked_add(1).ok_or_else(|| {
@@ -81,12 +77,9 @@ pub(crate) fn upsert_producer(info_dict: &[u8], literal: &[u8]) -> Vec<u8> {
     }
 }
 
-/// Stamp `/Info` `/Producer = producer`, pushing the updated (or freshly
-/// created) `/Info` object onto `objects`.
-///
-/// `info_ref` is the trailer's `/Info` reference, if any. Returns `Some(info_id)`
-/// when a *new* `/Info` object was allocated (the caller threads it into the
-/// trailer), or `None` when the existing `/Info` was updated in place.
+/// Stamp `/Info` `/Producer = producer`, pushing the updated or freshly created
+/// `/Info` onto `objects`. Returns `Some(info_id)` when a new `/Info` was
+/// allocated, which the caller threads into the trailer.
 pub(crate) fn apply_producer_stamp(
     pdf: &[u8],
     info_ref: Option<(u32, u16)>,
@@ -97,8 +90,8 @@ pub(crate) fn apply_producer_stamp(
     let literal = pdf_text_string(producer);
     match info_ref {
         Some((info_id, _)) => {
-            // The existing `/Info` object is overwritten in place at generation 0; a
-            // non-zero-generation `/Info` would be silently corrupted.
+            // Overwritten in place at generation 0; a non-zero-generation
+            // `/Info` would be silently corrupted.
             assert_overwrite_gen_zero(pdf, info_id, "/Info")?;
             let (s, e) = find_object_bytes(pdf, info_id)
                 .ok_or_else(|| err(CODE_PARSE, format!("/Info object {info_id} not found")))?;
@@ -118,12 +111,9 @@ pub(crate) fn apply_producer_stamp(
 }
 
 /// Map one `char` to its WinAnsi (CP1252) byte, or `None` when WinAnsi cannot
-/// represent it (anything outside Latin-1 plus the CP1252 `0x80..=0x9F` block).
-///
-/// Pairs with a base-14 font that declares `/Encoding /WinAnsiEncoding`: the
-/// flatten path draws text directly into a content stream, so it must commit to
-/// a byte encoding the font agrees with (unlike the stamp path, where the viewer
-/// synthesizes appearances from a UTF-16 `/V`).
+/// represent it. Pairs with a base-14 font declaring `/Encoding
+/// /WinAnsiEncoding`, which the flatten path needs because it draws text into a
+/// content stream instead of leaving a UTF-16 `/V` for the viewer.
 pub(crate) fn winansi_byte(c: char) -> Option<u8> {
     let cp = c as u32;
     match cp {
@@ -165,7 +155,7 @@ pub(crate) fn winansi_byte(c: char) -> Option<u8> {
 }
 
 /// Transcode `s` to WinAnsi (CP1252) bytes, substituting `?` for any code point
-/// WinAnsi cannot represent. Per-char via the crate-private `winansi_byte`.
+/// WinAnsi cannot represent.
 pub fn winansi_encode(s: &str) -> Vec<u8> {
     s.chars().map(|c| winansi_byte(c).unwrap_or(b'?')).collect()
 }
@@ -175,13 +165,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn winansi_ascii_is_identity() {
-        assert_eq!(winansi_encode("Hello, world!"), b"Hello, world!");
-    }
-
-    #[test]
     fn winansi_latin1_and_cp1252_punctuation() {
-        // é (U+00E9) → 0xE9; em-dash (U+2014) → 0x97; curly quote (U+2019) → 0x92.
         assert_eq!(
             winansi_encode("café—it’s"),
             &[b'c', b'a', b'f', 0xE9, 0x97, b'i', b't', 0x92, b's']
@@ -190,7 +174,6 @@ mod tests {
 
     #[test]
     fn winansi_unmappable_becomes_question_mark() {
-        // CJK and emoji have no WinAnsi byte → '?'.
         assert_eq!(winansi_encode("日本語"), b"???");
         assert_eq!(winansi_encode("a😀b"), b"a?b");
     }
@@ -202,18 +185,13 @@ mod tests {
 
     #[test]
     fn pdf_text_string_non_ascii_uses_utf16be_hex_with_bom() {
-        // Any non-ASCII char tips the whole string into the UTF-16BE hex form:
-        // `<FEFF` BOM then one 4-hex-digit code unit per UTF-16 unit.
-        // "é" = U+00E9 → 00E9.
+        // One non-ASCII char tips the whole string into the UTF-16BE hex form.
         assert_eq!(pdf_text_string("é"), b"<FEFF00E9>");
-        // ASCII before/after a non-ASCII char are still emitted as their
-        // UTF-16BE units (not as a literal string).
         assert_eq!(pdf_text_string("A€"), b"<FEFF004120AC>");
     }
 
     #[test]
     fn pdf_text_string_non_bmp_uses_surrogate_pair() {
-        // U+1F600 (😀) is outside the BMP → a UTF-16 surrogate pair D83D DE00.
         assert_eq!(pdf_text_string("😀"), b"<FEFFD83DDE00>");
     }
 
@@ -233,13 +211,9 @@ mod tests {
 
     #[test]
     fn upsert_producer_ignores_producer_name_in_value_position() {
-        // A `/Producer` Name in *value* position (here as the value of
-        // `/Marker`) must not be overwritten as if it were the key: doing so
-        // would clobber the wrong token and drop a trailing entry.
+        // A `/Producer` Name in value position is not the key.
         let info = b"/Title (Hi) /Marker /Producer /Creator (X)";
         let out = upsert_producer(info, b"(New)");
-        // No real /Producer key exists, so the entry is appended; the /Marker
-        // value and /Creator entry are left intact.
         assert_eq!(
             &out,
             b"/Title (Hi) /Marker /Producer /Creator (X) /Producer (New)"

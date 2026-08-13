@@ -37,21 +37,19 @@ use std::collections::HashMap;
 
 use crate::value::QuillValue;
 
-/// The quill-config keys every binding surfaces as typed, top-level fields
-/// (`name` via [`Quill::name`]; the rest via [`Quill::metadata`]). Bindings
-/// exclude these from the "additional/unstructured metadata" passthrough so a
-/// typed field is never emitted twice. Single source of truth for that set.
+/// The quill-config keys every binding surfaces as typed, top-level fields.
+/// Bindings exclude these from the unstructured-metadata passthrough, so a
+/// typed field is never emitted twice.
 pub const STANDARD_METADATA_KEYS: &[&str] =
     &["name", "backend", "description", "version", "author"];
 
 /// Portable, validated quill data: the file bundle, parsed config, and
 /// metadata of an authored quill, tagged with its *declared* backend id.
 ///
-/// A `Quill` holds no backend and needs no engine to construct or use. Every
-/// method here is a pure read of its parsed config: parse / load / validate /
-/// schema / seed / blueprint / compile. Rendering is the engine's job; see
-/// `quillmark::Quillmark`. Construct with [`Quill::from_tree`] (pure) or
-/// `quillmark::quill_from_path` (filesystem; fs stays out of core).
+/// A `Quill` holds no backend and needs no engine to construct or use: every
+/// method here is a pure read of its parsed config. Rendering is the engine's
+/// job. Construct with [`Quill::from_tree`] (pure) or
+/// `quillmark::quill_from_path` (filesystem stays out of core).
 #[derive(Clone)]
 pub struct Quill {
     pub(crate) metadata: HashMap<String, QuillValue>,
@@ -80,19 +78,16 @@ impl Quill {
         &self.config
     }
 
-    /// A schema-bound [`TypedWriter`](crate::TypedWriter) over `doc`. The front
-    /// door for typed field writes: it resolves each field's type from this
-    /// quill's schema, so callers issue one verb (`set`) with no type token or
-    /// `inline` flag. See the [`writer`](crate::writer) module.
+    /// A schema-bound [`TypedWriter`](crate::TypedWriter) over `doc`: the front
+    /// door for typed field writes.
     pub fn writer<'a>(&'a self, doc: &'a mut crate::document::Document) -> crate::TypedWriter<'a> {
         crate::TypedWriter::new(&self.config, doc)
     }
 
     /// A schema-bound [`TypedReader`](crate::TypedReader) over `doc`: the read
     /// twin of [`writer`](Self::writer). Interprets each field by its declared
-    /// type (a `richtext` field to markdown, every other type verbatim) with
-    /// schema authority: a name the schema does not declare reads as the typo it
-    /// is rather than as absent. See the [`reader`](crate::reader) module.
+    /// type, and reads an undeclared name as the typo it is rather than as
+    /// absent.
     pub fn reader<'a>(&'a self, doc: &'a crate::document::Document) -> crate::TypedReader<'a> {
         crate::TypedReader::new(&self.config, doc)
     }
@@ -102,11 +97,10 @@ impl Quill {
         &self.files
     }
 
-    /// Flatten this quill's file bundle into `(path, contents)` pairs: the
-    /// inverse of [`Quill::from_tree`]'s input. `Quill::from_tree` of the
-    /// result reproduces an equivalent quill (every file is preserved; empty
-    /// directories are not; see [`FileTreeNode::flatten`]), so this is how a
-    /// quill crosses a process or WASM linear-memory boundary as plain data.
+    /// Flatten this quill's file bundle into `(path, contents)` pairs, the
+    /// inverse of [`Quill::from_tree`]'s input: how a quill crosses a process
+    /// or WASM boundary as plain data. Every file is preserved, empty
+    /// directories are not.
     pub fn to_tree(&self) -> Vec<(String, Vec<u8>)> {
         self.files.flatten()
     }

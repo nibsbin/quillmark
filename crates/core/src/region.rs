@@ -3,122 +3,74 @@
 //! [`regions`](crate::LiveSession::regions) and
 //! [`field_at`](crate::LiveSession::field_at).
 //!
-//! A region ties a rectangle on the rendered page to the **quill schema field**
-//! that produced it: the address the document author already uses to refer to
-//! that field (the same address the Typst plate reads as `data.*` and the
-//! pdfform binder resolves against `compile_data`). The two directions a
-//! consumer navigates get two queries: `regions` answers *field → rectangle*
-//! (scroll to / highlight the focused field), `field_at` answers *point →
-//! field* (click a rendered field → focus it in the editor).
+//! A region ties a rectangle on the rendered page to the quill schema field
+//! that produced it. `regions` answers *field → rectangle*, `field_at` answers
+//! *point → field*.
 //!
 //! Three producers feed regions, all keyed on the schema path:
 //!
-//! - **Content fields** (a richtext body, a `richtext[]` element, a card's
-//!   content field) are tracked by the **spans** their glyphs carry: the
-//!   backend evaluates each one's value at its own generated call site and
-//!   records the site's byte window, so every glyph of that content resolves
-//!   back to its field, through *any* placement context, including a package
-//!   that rebuilds the content (a `show`-rule pass that captures paragraphs
-//!   into a state buffer and re-emits them), because the origin rides the
-//!   glyph, not a sibling marker a rebuild could drop. A field that is blank
-//!   or draws nothing (an empty or whitespace-only body) has no inked extent
-//!   to bound and surfaces no region: present-but-empty is not the same as
-//!   placed.
-//! - **Direct scalar references**, every `data.<field>` / `data.at("field")`
-//!   expression in the plate is its own tracked site: the interpolated
-//!   value's glyphs carry a span at or around that reference expression. A
-//!   scalar shown in both a header and a footer surfaces both sites, because
-//!   two source expressions are two origins; a reference wrapped in an
-//!   expression (`#upper(data.subject)`) attributes the whole expression's
-//!   ink to the field as long as it is the expression's only reference. Not
-//!   tracked: an expression mixing several fields (`data.from + ", " + rank`
-//!   has no single owner), a value laundered through an intermediate binding
-//!   (`#let s = data.x` … `#s`), and card scalars read from the per-card
-//!   loop variable (`card.from` is *one* expression site shared by every card
-//!   instance, span data holds no per-instance identity; bind a widget for
-//!   those).
-//! - **Form-field widgets** carry a schema path explicitly: pdfform binds it
-//!   from the form mapping; a Typst `form-field` binds it from its `field:`
-//!   argument. A widget that binds none produces **no** region: its backend
-//!   identifier (the `/T` widget name) is not a schema address, so there is
-//!   nothing for a consumer to route to. Only schema-addressable fields surface
-//!   a region.
+//! - **Content fields** are tracked by the spans their glyphs carry, so the
+//!   origin survives a package that rebuilds the content. A field that draws
+//!   nothing surfaces no region: present-but-empty is not placed.
+//! - **Direct scalar references** — each `data.<field>` expression in the
+//!   plate is its own site, so a scalar in both header and footer surfaces
+//!   twice. `#upper(data.subject)` attributes the whole expression as long as
+//!   it holds one reference. Not tracked: an expression mixing several fields,
+//!   a value laundered through an intermediate binding, and card scalars read
+//!   from the per-card loop variable (one site shared by every instance —
+//!   bind a widget for those).
+//! - **Form-field widgets** carry a schema path explicitly. A widget that
+//!   binds none produces no region: only schema-addressable fields surface.
 //!
-//! **First placement only.** A content value placed at two sites surfaces one
-//! region set (its first placement's) because span data cannot distinguish
-//! "package chrome interrupting one placement" from "a second placement of
-//! the same value", and a spanning union would claim the ink between them.
-//! The first placement is one region per page it touches, in page order, so
-//! highlighting covers continuation pages, page marginals (headers, footers,
-//! page numbers) between one page's body and the next's do not end it, only a
-//! same-page interruption does: foreign ink within a page (a rebuild's
-//! numbering chrome) shrinks the region to the placement's true start rather
-//! than lying about extent. `field` is still not unique in the
-//! result: page fragments, several scalar reference sites, or tracked content
-//! plus a bound widget each surface independently.
-//! [`LiveSession::regions`](crate::LiveSession::regions) passes the backend's
-//! entries through; consumers group by `field`. Later placements stay
-//! reachable point-wise: [`field_at`](crate::LiveSession::field_at) resolves
-//! a click on *any* placement, since one concrete point identifies one drawn
-//! item whose origin is unambiguous.
+//! **First placement only.** A content value placed twice surfaces one region
+//! set, because span data cannot distinguish "package chrome interrupting one
+//! placement" from "a second placement", and a union would claim the ink
+//! between them. That placement is one region per page it touches, in page
+//! order: page marginals between one page's body and the next's do not end it,
+//! but foreign ink within a page shrinks the region to the placement's true
+//! start. Later placements stay reachable point-wise through
+//! [`field_at`](crate::LiveSession::field_at), since a concrete point
+//! identifies one drawn item.
 //!
-//! Regions are primarily a session-level query: the geometry is a property of
-//! the current compile, re-read from the session per edit without producing
-//! any byte artifact, the interactive-preview path (overlays over a
-//! `paint`-ed canvas) reads it that way. A one-shot byte render carries the
-//! same sidecar only on request ([`RenderOptions::regions`](crate::RenderOptions))
-//! for consumers without a live session (static SVG overlays, PDF
-//! post-processing, CI coverage probes). Either way regions are an overlay
-//! sidecar, never a compositing input: every canvas backend hands back a
-//! complete page raster, so nothing about the picture depends on reading a
-//! region. Empty for backends that place no schema fields.
+//! Regions are an overlay sidecar, never a compositing input: every canvas
+//! backend hands back a complete page raster. A one-shot byte render carries
+//! the same sidecar on request ([`RenderOptions::regions`](crate::RenderOptions)).
+//! Empty for backends that place no schema fields.
 
 /// One schema field placement's extent on a rendered page.
 ///
 /// `rect` is `[x0, y0, x1, y1]` in PDF points with a **bottom-left** origin:
-/// the same final geometry the stamp spine writes to the widget `/Rect`, so the
-/// region and the rendered field describe the identical box.
+/// the same geometry the stamp spine writes to the widget `/Rect`.
 ///
-/// `field` is **not** unique within the `Vec` that
-/// [`LiveSession::regions`](crate::LiveSession::regions) returns: a content
-/// field breaks into one entry **per segment** (paragraph, heading, whole code
-/// fence) and per page each segment touches, a scalar referenced at several
-/// plate sites yields one per site, and tracked content plus a bound widget
-/// yields both. Consumers group by `field`; every entry routes to that field.
-/// The whole-field box is **derived**, the union of a page's `span`-bearing
-/// segment rects, so inter-paragraph whitespace stays uncovered; the
-/// [`field_boxes`] helper (and
-/// [`LiveSession::field_boxes`](crate::LiveSession::field_boxes)) owns that
-/// union so consumers need not reimplement it.
+/// `field` is **not** unique within a region set: a content field breaks into
+/// one entry per segment and per page, a scalar referenced at several plate
+/// sites yields one per site, and tracked content plus a bound widget yields
+/// both. Consumers group by `field`, or take the derived per-page union from
+/// [`field_boxes`].
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[non_exhaustive]
 pub struct RenderedRegion {
     /// The field's plate-space schema address as the backend keys it:
-    /// `"signature_block"`, `"references.0"` (an array element, `.`-separated
-    /// with a numeric segment per index) or `"$cards.<kind>.<ordinal>.<tail>"`
-    /// (a per-kind ordinal). This is the backend-native form; a binding that
-    /// owns the document's card kinds translates it to a canonical
-    /// [`DocPath`] at its boundary
-    /// ([`plate_addr_to_doc_path`]), so its consumers see one absolute-index
-    /// grammar and one index spelling (`main.references[0]`). A core consumer
-    /// reading `RenderedRegion` directly sees the plate-space form.
+    /// `"signature_block"`, `"references.0"` (a numeric segment per array
+    /// index) or `"$cards.<kind>.<ordinal>.<tail>"` (a per-kind ordinal).
+    /// [`plate_addr_to_doc_path`] translates it to a canonical [`DocPath`];
+    /// a core consumer reading `RenderedRegion` directly sees this form.
     pub field: String,
     /// 0-based page index.
     pub page: usize,
     /// `[x0, y0, x1, y1]`, PDF points, bottom-left origin.
     pub rect: [f32; 4],
     /// The content slice this box covers: USV `[start, end)` into the field's
-    /// `Content` for content ink (one segment's range), `None` for a scalar
-    /// reference site or a widget, geometry with no content address. Additive
-    /// and optional: omitted from the wire when `None`.
+    /// `Content`, `None` for a scalar reference site or a widget. Omitted from
+    /// the wire when `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub span: Option<[usize; 2]>,
 }
 
 impl RenderedRegion {
-    /// A geometry entry with no content address: a scalar reference site or a
-    /// widget. Content ink adds its slice with [`with_span`](Self::with_span).
+    /// A geometry entry with no content address. Content ink adds its slice
+    /// with [`with_span`](Self::with_span).
     pub fn new(field: String, page: usize, rect: [f32; 4]) -> Self {
         Self {
             field,
@@ -135,9 +87,8 @@ impl RenderedRegion {
     }
 
     /// Whether the point (`x`, `y`, PDF points, bottom-left origin) on `page`
-    /// falls inside this region, edges inclusive. The one point-in-region
-    /// predicate every `field_at` hit-test shares, so a click at a region
-    /// border resolves identically everywhere.
+    /// falls inside this region, edges inclusive. Every `field_at` hit-test
+    /// shares this predicate.
     pub fn contains(&self, page: usize, x: f32, y: f32) -> bool {
         self.page == page
             && self.rect[0] <= x
@@ -150,26 +101,16 @@ impl RenderedRegion {
 /// The whole-field highlight boxes for `field`, derived from a region set: one
 /// union rect per page, over that field's **`span`-bearing** (content) regions.
 ///
-/// This owns the subtle part [`regions`](crate::LiveSession::regions) leaves to
-/// consumers, filter by field, keep only the segment rects that carry a `span`,
-/// union per page, inherit first-placement-only from the input, so a
-/// "highlight the focused field" consumer never reimplements it and cannot
-/// reintroduce the field-level union the disjointness invariant exists to
-/// prevent (the input is already striped; this unions the *bounding* box per
-/// page, so inter-paragraph whitespace still is not a separate box but the
-/// derived rect does bound it). Pass the output of
-/// [`LiveSession::regions`](crate::LiveSession::regions) (or a one-shot
-/// [`RenderOptions::regions`](crate::RenderOptions) sidecar); the convenience
+/// Pass the output of [`LiveSession::regions`](crate::LiveSession::regions) or
+/// a one-shot [`RenderOptions::regions`](crate::RenderOptions) sidecar;
 /// [`LiveSession::field_boxes`](crate::LiveSession::field_boxes) reads the
-/// session's own.
+/// session's own. The union is a per-page *bounding* box, so it does cover
+/// inter-paragraph whitespace the input regions leave out.
 ///
-/// **Content only.** A scalar-reference site or a widget carries no `span`
-/// ([`RenderedRegion::span`] is `None`), so a field placed *only* as a scalar
-/// reference or a bound widget yields an empty result here: its highlight box
-/// is a single region's `rect`, read straight from the region set with no
-/// derivation. Each returned region carries the union `span`
-/// (`[min start, max end)` over the page's contributing segments);
-/// `page`-ascending.
+/// **Content only.** A scalar-reference site or a widget carries no `span`, so
+/// a field placed only that way yields an empty result here: its highlight box
+/// is a single region's `rect`, read straight from the set. Each returned
+/// region carries the union `span` and the result is `page`-ascending.
 pub fn field_boxes(regions: &[RenderedRegion], field: &str) -> Vec<RenderedRegion> {
     let mut by_page: Vec<RenderedRegion> = Vec::new();
     for r in regions
@@ -198,43 +139,29 @@ pub fn field_boxes(regions: &[RenderedRegion], field: &str) -> Vec<RenderedRegio
     by_page
 }
 
-// ── Address translation: plate-space geometry ⇄ DocPath ─────────────────────
+// Address translation: plate-space geometry ⇄ DocPath.
 //
-// A backend keys a region on the **plate-space** address its compiled plate
-// composes (`$path` = `$cards.<kind>.<ordinal>.`, `crates/backends/typst`), a
-// grammar with a `$cards` sigil, dot separators, and **per-kind ordinals**.
-// That grammar is the template-author contract inside the plate and stays
-// there; it must not cross to a consumer, which speaks one canonical
-// [`DocPath`]. The session owns the translation, resolving the per-kind ordinal
-// to the document-array absolute index (and back) against the ordered card
-// kinds of the current compile, so `regions` / `fieldAt` / `positionAt` /
-// `locate` speak `DocPath`, never `$cards.` ordinals.
+// A backend keys a region on the plate-space address its compiled plate
+// composes: a `$cards` sigil, dot separators, and per-kind ordinals. That
+// grammar is the template-author contract inside the plate and must not cross
+// to a consumer, so the session resolves the per-kind ordinal to the
+// document-array absolute index (and back) against the current compile's
+// ordered card kinds.
 //
-// **The plate-space tail** is a `.`-separated segment run, parsed and rendered
-// segment-wise by [`plate_tail_to_segs`] / [`plate_tail`]. A segment of all
-// ASCII digits is an array index, `$body` is the body terminal, anything else
-// is a field or map key. A tail's first segment is never an index (neither
-// `main` nor a card is an array), `$body` is never non-final, and no other
-// `$`-token appears. Segment-wise is what keeps the minted `DocPath` stable
-// across `Display` → `FromStr`, the leg a binding crosses: a tail carried whole
-// into one `Field` renders `main.references.0`, which reparses as a field named
-// `"0"`.
+// The tail is parsed and rendered segment-wise, which is what keeps the minted
+// `DocPath` stable across `Display` → `FromStr`: a tail carried whole into one
+// `Field` renders `main.references.0`, which reparses as a field named `"0"`.
 //
-// `.N` reads as an index **here and not in [`DocPath::from_str`]**: plate
-// addresses are schema-derived, so no plate address carries a digit map key (a
-// field name and a card kind open with a lowercase ASCII letter, pdfform's
-// `descend` reads any numeric segment as an array index, and the Typst helper's
-// `_qm-known-path` accepts a dotted suffix only under an array-typed parent).
-// `DocPath` space is different: a nested YAML map key is unconstrained, and
-// `collect_fill_diags` mints `main.m.0` as `Field{"0"}`. Teaching the parser
-// `.N` would cost that reading, so the two spellings meet here instead.
+// `.N` reads as an index here and not in `DocPath::from_str`, because plate
+// addresses are schema-derived and carry no digit map key, while a nested YAML
+// map key is unconstrained (`collect_fill_diags` mints `main.m.0` as
+// `Field{"0"}`). Teaching the parser `.N` would cost that reading.
 
 use crate::path::{DocPath, DocSeg};
 
-/// The absolute document-array index of the `ord`-th (0-based) card of `kind`,
-/// scanning `card_kinds` (the current compile's ordered card kinds; `None` is a
-/// kindless card) in order. `None` when fewer than `ord + 1` cards of that kind
-/// exist.
+/// The absolute document-array index of the `ord`-th (0-based) card of `kind`.
+/// `card_kinds` is the current compile's ordered card kinds, `None` per
+/// kindless card.
 fn abs_card_index(card_kinds: &[Option<&str>], kind: &str, ord: usize) -> Option<usize> {
     card_kinds
         .iter()
@@ -244,9 +171,8 @@ fn abs_card_index(card_kinds: &[Option<&str>], kind: &str, ord: usize) -> Option
         .map(|(i, _)| i)
 }
 
-/// The per-kind ordinal of the card at absolute index `abs`: how many cards of
-/// the same kind precede it, matching the plate's `emit_cards` counter. `None`
-/// when `abs` is out of range or the card is kindless.
+/// How many cards of the same kind precede absolute index `abs`, matching the
+/// plate's `emit_cards` counter.
 fn per_kind_ordinal(card_kinds: &[Option<&str>], abs: usize) -> Option<usize> {
     let kind = (*card_kinds.get(abs)?)?;
     Some(
@@ -257,11 +183,10 @@ fn per_kind_ordinal(card_kinds: &[Option<&str>], abs: usize) -> Option<usize> {
     )
 }
 
-/// Rewrite each region's plate-space `field` to its [`DocPath`] string: the
-/// translation [`RenderedRegion`] puts at a binding boundary. One funnel for
-/// every region a binding hands out, render sidecar and session query alike, so
-/// a consumer never sees the two address spaces mixed. An address outside the
-/// geometry grammar keeps its original string.
+/// Rewrite each region's plate-space `field` to its [`DocPath`] string. The one
+/// funnel every binding hands regions through, so a consumer never sees the two
+/// address spaces mixed. An address outside the geometry grammar keeps its
+/// original string.
 pub fn regions_to_doc_path(
     mut regions: Vec<RenderedRegion>,
     card_kinds: &[Option<&str>],
@@ -274,9 +199,8 @@ pub fn regions_to_doc_path(
     regions
 }
 
-/// Extend `base` by a plate-space tail's segments, per the tail grammar in the
-/// translation banner. `None` for a tail outside it: an empty piece, a leading
-/// index, a non-final `$body`, or any other `$`-token.
+/// Extend `base` by a plate-space tail's segments. `None` for an empty piece, a
+/// leading index, a non-final `$body`, or any other `$`-token.
 fn plate_tail_to_segs(base: DocPath, tail: &str) -> Option<DocPath> {
     let mut path = base;
     let mut it = tail.split('.').enumerate().peekable();
@@ -308,20 +232,14 @@ fn plate_tail_to_segs(base: DocPath, tail: &str) -> Option<DocPath> {
 
 /// Translate a backend plate-space geometry address into a canonical
 /// [`DocPath`], resolving the per-kind ordinal to the absolute card index via
-/// `card_kinds`. The grammar handled is exactly what geometry emits: `$body`
-/// (main body), `<tail>` (main), and `$cards.<kind>.<ord>.<tail>` (card), where
-/// a tail is the segment run the translation banner states — so an array
-/// element (`references.0`) and a nested key (`address.city`) each become their
-/// own segments, not one field. `None` for an address outside that grammar or
-/// one naming a card the kind list cannot place: the caller keeps the original
-/// string.
+/// `card_kinds`. The grammar is what geometry emits: `$body`, `<tail>` (main),
+/// and `$cards.<kind>.<ord>.<tail>`. `None` for an address outside it, or one
+/// naming a card the kind list cannot place.
 pub fn plate_addr_to_doc_path(addr: &str, card_kinds: &[Option<&str>]) -> Option<DocPath> {
     if addr == "$body" {
         return Some(DocPath::main_body());
     }
     if let Some(rest) = addr.strip_prefix("$cards.") {
-        // The whole tail reaches the tail parser: only kind and ordinal are
-        // split off here.
         let mut it = rest.splitn(3, '.');
         let kind = it.next()?;
         let ord: usize = it.next()?.parse().ok()?;
@@ -329,9 +247,8 @@ pub fn plate_addr_to_doc_path(addr: &str, card_kinds: &[Option<&str>]) -> Option
         let abs = abs_card_index(card_kinds, kind, ord)?;
         return plate_tail_to_segs(DocPath::card(Some(kind), abs), tail);
     }
-    // A plate-space bare main field (`subject`) roots at `main` in `DocPath`
-    // space (`main.subject`), so a consumer always receives a parsed, rooted
-    // path. An unrecognized `$`-token (never a main field) does not translate.
+    // A bare plate-space main field (`subject`) roots at `main` in `DocPath`
+    // space; an unrecognized `$`-token is never a main field.
     if addr.starts_with('$') {
         return None;
     }
@@ -339,16 +256,9 @@ pub fn plate_addr_to_doc_path(addr: &str, card_kinds: &[Option<&str>]) -> Option
 }
 
 /// Render a [`DocPath`] tail in plate space, joining segments with `.`. `None`
-/// for a tail plate space cannot spell: a leading [`Index`], a non-final
-/// [`Body`], a [`Card`] mid-path, or a field name that is empty, all ASCII
-/// digits, `$`-leading, or carries `.` / `[` / `]` — the first two because they
-/// would read back as an index or a body terminal, the rest because they would
-/// reparse as different segments. `None` is the honest answer there: geometry
-/// placed no such thing.
-///
-/// [`Index`]: DocSeg::Index
-/// [`Body`]: DocSeg::Body
-/// [`Card`]: DocSeg::Card
+/// for a tail plate space cannot spell: a leading index, a non-final body, a
+/// card mid-path, or a field name that is empty, all ASCII digits, `$`-leading,
+/// or carries `.` / `[` / `]` — each would reparse as a different segment.
 fn plate_tail(tail: &[DocSeg]) -> Option<String> {
     let mut out = String::new();
     for (i, seg) in tail.iter().enumerate() {
@@ -388,12 +298,9 @@ fn plate_tail(tail: &[DocSeg]) -> Option<String> {
 /// plate-space form (`main.body` → `$body`, `main.references[0]` →
 /// `references.0`, `cards.<kind>[<abs>].<tail>` → `$cards.<kind>.<ord>.<tail>`),
 /// resolving the absolute card index to its per-kind ordinal via `card_kinds`.
-/// `None` when the path is not a geometry address: a document-model shape
-/// geometry never keys, one naming a card the kind list cannot place, or one
-/// plate space cannot spell — a leading index, a non-final body, or a field
-/// name that is empty, all ASCII digits, `$`-leading, or carries `.` / `[` /
-/// `]`. The inverse of [`plate_addr_to_doc_path`], for the `field`-taking
-/// queries (`locate`, `fieldBoxes`).
+/// The inverse of [`plate_addr_to_doc_path`], for the `field`-taking queries.
+/// `None` when the path is not a geometry address, names a card the kind list
+/// cannot place, or is one plate space cannot spell.
 pub fn doc_path_to_plate_addr(path: &DocPath, card_kinds: &[Option<&str>]) -> Option<String> {
     match path.segs() {
         [DocSeg::Main, DocSeg::Body] => Some("$body".to_string()),
@@ -415,25 +322,17 @@ pub fn doc_path_to_plate_addr(path: &DocPath, card_kinds: &[Option<&str>]) -> Op
     }
 }
 
-/// How precisely a [`ContentHit::pos`] resolved: the marker a caret UI reads to
-/// decide whether to trust the offset. The value is never sub-cluster; the two
-/// variants distinguish the finest this API offers from the segment floor it
-/// degrades to.
+/// How precisely a [`ContentHit::pos`] resolved. Never sub-cluster.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[non_exhaustive]
 pub enum HitGranularity {
-    /// Cluster-exact: `pos` is the first content char of the grapheme cluster
-    /// under the point. The finest resolution: a char that escaped to several
-    /// generated bytes (`*`→`\*`, `你`→3, the `//`→`\/\/` coupling) still floors
-    /// to its cluster's first char, so this is *not* sub-character. A caret UI
-    /// can place the caret at `pos` directly.
+    /// `pos` is the first content char of the grapheme cluster under the point.
+    /// A caret UI can place the caret there directly.
     Cluster,
-    /// Segment-floored: the point landed on origin-less ink (list markers,
-    /// numbering, a multi-line code fence's interior: spans that resolve to no
-    /// single run), so `pos` degraded to the containing segment's content start
-    /// rather than a wrong finer position. A caret UI should treat `pos` as the
-    /// segment it selected, not a within-segment caret.
+    /// The point landed on origin-less ink (list markers, numbering, a code
+    /// fence's interior), so `pos` degraded to the containing segment's content
+    /// start. A caret UI should read it as a segment selection.
     Segment,
 }
 
@@ -443,13 +342,10 @@ pub enum HitGranularity {
 /// [`locate`](crate::LiveSession::locate) (content position → caret rect).
 ///
 /// `pos` is **cluster-exact, not sub-character**: a hit inside a char that
-/// escaped to several generated bytes (`*`→`\*`, `你`→3, the `//`→`\/\/`
-/// coupling) floors to that cluster's first content char. A click on
-/// origin-less ink (list markers, numbering, a multi-line code fence's interior:
-/// spans that resolve to no single run) degrades to the containing segment's
-/// content start rather than a wrong finer position, and a click off all content
-/// ink resolves to nothing. [`granularity`](Self::granularity) reports which of
-/// those two happened, so a caret UI need not guess.
+/// escaped to several generated bytes (`*`→`\*`, `你`→3) floors to that
+/// cluster's first content char. A click on origin-less ink degrades to the
+/// containing segment's content start, and a click off all content ink resolves
+/// to nothing. [`granularity`](Self::granularity) reports which happened.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[non_exhaustive]
@@ -459,10 +355,8 @@ pub struct ContentHit {
     pub field: String,
     /// USV offset into the field's `Content`.
     pub pos: usize,
-    /// Whether [`pos`](Self::pos) is cluster-exact or floored to the segment
-    /// start ([`HitGranularity`]). `None` when the backend does not report it (a
-    /// hit straight from a backend with no source map, or an older wire payload).
-    /// Additive-optional: omitted from the wire when `None`.
+    /// `None` when the backend does not report it (no source map, or an older
+    /// wire payload). Omitted from the wire when `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub granularity: Option<HitGranularity>,
 }
@@ -478,7 +372,6 @@ impl ContentHit {
         }
     }
 
-    /// Set [`granularity`](Self::granularity).
     pub fn with_granularity(mut self, granularity: HitGranularity) -> Self {
         self.granularity = Some(granularity);
         self
@@ -489,24 +382,6 @@ impl ContentHit {
 mod tests {
     use super::*;
 
-    #[test]
-    fn region_round_trips_through_json() {
-        let region = RenderedRegion {
-            field: "full_name".to_string(),
-            page: 0,
-            rect: [180.0, 715.0, 520.0, 735.0],
-            span: Some([12, 34]),
-        };
-        let json = serde_json::to_string(&region).unwrap();
-        assert!(json.contains("\"field\":\"full_name\""), "{json}");
-        assert!(json.contains("\"span\":[12,34]"), "{json}");
-        let back: RenderedRegion = serde_json::from_str(&json).unwrap();
-        assert_eq!(back, region);
-    }
-
-    /// `span` is omitted when `None` and defaults back on read: the
-    /// additive-optional discipline that lets a scalar/widget region (no content
-    /// address) parse the same as a content region carrying a span.
     #[test]
     fn optional_span_omitted_when_none() {
         let region = RenderedRegion {
@@ -534,8 +409,6 @@ mod tests {
         let back: ContentHit = serde_json::from_str(&json).unwrap();
         assert_eq!(back, hit);
 
-        // The segment-floored variant serializes to its own tag, so a caret UI
-        // can tell a trusted cluster offset from a floored one.
         let seg = ContentHit {
             field: "body".to_string(),
             pos: 7,
@@ -544,25 +417,6 @@ mod tests {
         let json = serde_json::to_string(&seg).unwrap();
         assert!(json.contains("\"granularity\":\"segment\""), "{json}");
         assert_eq!(serde_json::from_str::<ContentHit>(&json).unwrap(), seg);
-    }
-
-    /// `granularity` omits when `None` and defaults back on read: the
-    /// additive-optional discipline, so a hit straight from a backend (no source
-    /// map) parses the same as one that reports it.
-    #[test]
-    fn content_hit_omits_optionals_when_none() {
-        let hit = ContentHit {
-            field: "body".to_string(),
-            pos: 42,
-            granularity: None,
-        };
-        let json = serde_json::to_string(&hit).unwrap();
-        assert!(
-            !json.contains("granularity"),
-            "unreported granularity omitted: {json}"
-        );
-        let back: ContentHit = serde_json::from_str(&json).unwrap();
-        assert_eq!(back, hit);
     }
 
     fn content(field: &str, page: usize, rect: [f32; 4], span: [usize; 2]) -> RenderedRegion {
@@ -574,10 +428,6 @@ mod tests {
         }
     }
 
-    /// `field_boxes` unions a page's span-bearing segment rects into one box and
-    /// ignores other fields: the whole-field highlight a consumer would
-    /// otherwise derive by hand. The union `span` bounds `[min start, max end)`,
-    /// and each page gets its own box, page-ascending.
     #[test]
     fn field_boxes_unions_span_bearing_segments_per_page() {
         let regions = vec![
@@ -595,9 +445,6 @@ mod tests {
         assert_eq!(boxes[1].rect, [10.0, 700.0, 150.0, 720.0]);
     }
 
-    /// A field placed only as a scalar reference or widget (no `span`) yields no
-    /// derived content box: its highlight is a single region's `rect`, read
-    /// straight from the set.
     #[test]
     fn field_boxes_empty_for_span_less_field() {
         let regions = vec![RenderedRegion {
@@ -609,11 +456,7 @@ mod tests {
         assert!(field_boxes(&regions, "subject").is_empty());
     }
 
-    // ── Plate-space ⇄ DocPath translation ────────────────────────────────────
-
-    /// Two `note` cards interleaved with one `annotation`: the per-kind ordinal
-    /// is not the absolute index once kinds interleave, so the two grammars
-    /// genuinely differ and the kind list is load-bearing.
+    /// Interleaved kinds, so the per-kind ordinal is not the absolute index.
     const KINDS: &[Option<&str>] = &[Some("note"), Some("annotation"), Some("note")];
 
     fn to_doc(addr: &str) -> Option<String> {
@@ -625,34 +468,24 @@ mod tests {
 
     #[test]
     fn plate_to_docpath_resolves_the_absolute_index() {
-        // The 2nd `note` (ordinal 1) sits at absolute index 2.
         assert_eq!(to_doc("$cards.note.1.on").as_deref(), Some("cards.note[2].on"));
-        // The 1st `note` (ordinal 0) is absolute 0; the `annotation` is absolute 1.
         assert_eq!(to_doc("$cards.note.0.on").as_deref(), Some("cards.note[0].on"));
         assert_eq!(
             to_doc("$cards.annotation.0.text").as_deref(),
             Some("cards.annotation[1].text")
         );
-        // Bodies and main.
         assert_eq!(to_doc("$body").as_deref(), Some("main.body"));
         assert_eq!(
             to_doc("$cards.note.1.$body").as_deref(),
             Some("cards.note[2].body")
         );
-        // A plate-space bare main field roots at `main` in DocPath space.
         assert_eq!(to_doc("signature_block").as_deref(), Some("main.signature_block"));
     }
 
-    /// A plate tail is parsed segment-wise: a numeric segment is an array
-    /// index, a key segment a field. A tail carried whole into one `Field`
-    /// would mint a path that reparses to different segments.
     #[test]
     fn plate_to_docpath_parses_the_tail_segment_wise() {
-        // An `array<richtext>` element: the backend keys `<field>.<i>`.
         assert_eq!(to_doc("references.0").as_deref(), Some("main.references[0]"));
-        // A nested key (pdfform binds these) is not an index.
         assert_eq!(to_doc("address.city").as_deref(), Some("main.address.city"));
-        // Both at once, on a card: ordinal 1 of `note` is absolute 2.
         assert_eq!(
             to_doc("$cards.note.1.refs.0").as_deref(),
             Some("cards.note[2].refs[0]")
@@ -663,10 +496,9 @@ mod tests {
         );
     }
 
-    /// The inverse guarantee over the whole geometry grammar, including the
-    /// **string leg**: a round-trip comparing `DocPath` values alone holds even
-    /// when the rendered form reparses to different segments, and the rendered
-    /// form is what a binding hands `docpath_to_plate`.
+    /// Covers the string leg too: a binding hands `docpath_to_plate` the
+    /// *rendered* path, so a `DocPath`-only round-trip would not catch a
+    /// spelling that reparses to different segments.
     #[test]
     fn docpath_to_plate_is_the_inverse() {
         for plate in [
@@ -683,52 +515,41 @@ mod tests {
             "$cards.note.0.addr.city",
         ] {
             let doc = plate_addr_to_doc_path(plate, KINDS).unwrap();
-            // The string leg: the minted path survives Display → FromStr.
             let rendered = doc.to_string();
             assert_eq!(rendered.parse::<DocPath>().ok(), Some(doc), "string leg {plate}");
-            // Plate → DocPath → plate, from the rendered string a consumer
-            // sends: `to_plate` parses it exactly as a binding does.
             assert_eq!(to_plate(&rendered).as_deref(), Some(plate), "round-trip {plate}");
         }
     }
 
     #[test]
     fn translation_rejects_unplaceable_and_foreign_shapes() {
-        // A 3rd `note` (ordinal 2) does not exist: only two notes.
+        // Only two `note`s exist.
         assert_eq!(to_doc("$cards.note.2.on"), None);
-        // A DocPath whose kind disagrees with the slot does not translate back.
+        // The kind disagrees with the slot.
         assert_eq!(
             doc_path_to_plate_addr(&"cards.annotation[0].x".parse().unwrap(), KINDS),
             None
         );
-        // A document-model shape geometry never keys (nested main field).
+        // A document-model shape geometry never keys.
         assert_eq!(
             doc_path_to_plate_addr(&"recipients[0].name".parse().unwrap(), KINDS),
             None
         );
-        // A bare card head, and an empty or `$`-token tail piece.
         assert_eq!(to_doc("$cards.note.1"), None);
         assert_eq!(to_doc("references."), None);
         assert_eq!(to_doc("refs.$seed"), None);
-        // `$body` is terminal.
         assert_eq!(to_doc("a.$body.b"), None);
-        // A tail never opens on an index: neither `main` nor a card is an array.
         assert_eq!(to_doc("0.x"), None);
     }
 
-    /// `DocPath` values plate space cannot spell. `None`, not a guess: geometry
-    /// placed no such thing, and the caller keeps its original string.
     #[test]
     fn docpath_to_plate_rejects_unspellable_paths() {
         for doc in [
-            // A digit map key (`collect_fill_diags` mints these) is a `Field`,
-            // not an index: spelling it `m.0` would read back as an index.
+            // A digit map key is a `Field`; spelling it `m.0` reads back as an
+            // index.
             "main.m.0",
-            // A tail opening on an index.
             "main[0].x",
-            // An unknown-kind card root.
             "cards[0].x",
-            // A bare root, no tail.
             "main",
             "cards.note[0]",
         ] {
@@ -738,8 +559,7 @@ mod tests {
                 "unspellable {doc}"
             );
         }
-        // A non-final `Body`. Not reachable through the parser (a non-terminal
-        // `.body` reads as a field literally named `body`), so it is built
+        // A non-final `Body`, unreachable through the parser, so built
         // segment-wise.
         assert_eq!(
             doc_path_to_plate_addr(&DocPath::main().body().field("x"), KINDS),

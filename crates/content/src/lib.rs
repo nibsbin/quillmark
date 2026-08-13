@@ -2,36 +2,11 @@
 //!
 //! One [`Content`] per content field: a single text sequence carrying line
 //! attributes, anchored marks, and embedded islands, over one coordinate space
-//! of Unicode scalar values. Markdown is demoted to a *projection* (import
-//! ([`import::from_markdown`]) and export ([`export::to_markdown`]) codecs) so
-//! every edit is a splice and all structure moves with it.
-//!
-//! `core`, `quillmark`, and both backends (`typst`, `pdfform`) consume this
-//! crate: the seam carries content JSON, storage embeds it structurally (see
-//! `prose/canon/DOCUMENT_STORAGE.md`), and the content edit surface
-//! (`delta`, `ops`) drives per-field splices.
-//!
-//! ## Layout
-//!
-//! - [`model`]: the [`Content`] type, the mark set, normalization (the three
-//!   Spike-A rules), and invariants. The freeze.
-//! - [`serial`]: canonical, byte-deterministic JSON. One encoding for the seam
-//!   and for storage.
-//! - [`island`]: [`KnownIslandType`], the closed dispatch authority for island
-//!   types; adding a type is one variant and the compiler enforces every arm.
-//! - [`import`]: markdown → content (normalize → pulldown → content).
-//! - [`export`]: content → markdown, per island loss class.
-//! - [`delta`], the per-field edit surface: a text-splice change set
-//!   (`retain`/`insert`/`delete`, CodeMirror `ChangeSet` semantics) plus the
-//!   cold-parse + content-diff stale-text writer with a block-move detector. The
-//!   text-splice channel is the positional core; mark and line-attribute edits
-//!   are separate op channels, not op attributes; see [`delta`].
-//! - [`ops`], mark and line op channels:
-//!   [`Content::apply_text_delta`], [`apply_mark_ops`](Content::apply_mark_ops),
-//!   [`apply_line_ops`](Content::apply_line_ops).
-//! - [`normalize`]: the markdown-string input primitive (line endings, bidi
-//!   strip, HTML-comment fence repair), applied at the import boundary.
-//! - [`usv`]: USV → UTF-8 byte-offset conversion for slicing the content.
+//! of Unicode scalar values. Markdown is a *projection*
+//! ([`import::from_markdown`], [`export::to_markdown`]), so every edit is a
+//! splice and all structure moves with it. [`serial`] is the canonical,
+//! byte-deterministic JSON both the seam and storage carry; [`delta`] and
+//! [`ops`] are the per-field edit surface.
 
 pub mod delta;
 pub mod export;
@@ -61,25 +36,14 @@ pub use serial::ParseError;
 
 /// Maximum container nesting depth the markdown codecs accept before erroring.
 /// The import guard ([`import::from_markdown`]) and the typst backend's markup
-/// converter share this one limit (the backend re-exports it via
-/// `quillmark_core::error::MAX_NESTING_DEPTH`), so a document that imports also
-/// renders.
+/// converter share this one limit, so a document that imports also renders.
 pub const MAX_NESTING_DEPTH: usize = 100;
 
 /// Maximum nesting depth of an opaque JSON payload (an island's `props`, an
-/// unknown line/container/mark's `attrs`) measured in container levels from the
-/// bag itself.
+/// unknown line/container/mark's `attrs`), in container levels from the bag.
 ///
-/// The payload axis of [`MAX_NESTING_DEPTH`]: `is_value_key_sorted`,
-/// `sort_keys_owned`, and `serde_json::Value`'s own `Drop` each recurse one
-/// frame per level, so an unbounded bag overflows the stack, on wasm32, an
-/// unrecoverable trap rather than a catchable error. The bag is refused at the
-/// decode boundary, before it is cloned out of the wire, and
-/// [`Content::validate`](model::Content::validate) restates it as an invariant
-/// for the hand-built content that never went through a decoder.
-///
-/// 128 is what `serde_json::from_str` already enforces, so nothing a stored blob
-/// can carry is refused. The string lane counts from the document root rather
-/// than the bag, so it admits ~3 levels fewer; both bound the recursion, and the
-/// per-bag reading is the one the recursive consumers actually walk.
+/// The recursive consumers (key sorting, `serde_json::Value`'s own `Drop`) spend
+/// a frame per level, so an unbounded bag overflows the stack: on wasm32 an
+/// unrecoverable trap, not a catchable error. Matches `serde_json::from_str`'s
+/// own limit, so nothing a stored blob can carry is refused.
 pub const MAX_JSON_DEPTH: usize = 128;

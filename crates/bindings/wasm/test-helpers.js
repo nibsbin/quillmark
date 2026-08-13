@@ -8,10 +8,9 @@ const enc = new TextEncoder()
 const PKG_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'pkg')
 
 /**
- * Instantiate a generated build the suites drive directly (the private `core`
- * and backend binaries, reached through the vitest aliases). The public root
- * has `init` for this; these are internal artifacts, so they instantiate
- * through wasm-bindgen's own `initSync` off the bytes on disk.
+ * Instantiate a generated build the suites drive directly. The public root has
+ * `init` for this; these are internal artifacts, so they instantiate through
+ * wasm-bindgen's own `initSync` off the bytes on disk.
  *
  * @param {{ initSync: (arg: { module: BufferSource }) => unknown }} mod the build's module namespace
  * @param {string} variant its directory under `pkg/`, e.g. `core`, `backends/typst`

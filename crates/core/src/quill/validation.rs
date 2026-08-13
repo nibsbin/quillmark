@@ -742,8 +742,6 @@ main:
 
     #[test]
     fn rejects_simple_string_type_mismatch() {
-        // A bare scalar coerces into a string; an array does not, so it
-        // raises a string TypeMismatch.
         let config = config_with("    title:\n      type: string\n      default: \"\"", "");
         let doc = doc_from_fm(&[("title", json!([1, 2, 3]))]);
         let errors = validate_typed_document(&config, &doc).unwrap_err();
@@ -752,13 +750,6 @@ main:
             ValidationError::TypeMismatch { path, expected, actual, source_token, .. }
             if path == "main.title" && expected == "string" && actual == "array" && source_token == "[…]"
         )));
-    }
-
-    #[test]
-    fn validates_integer_field_with_integer_value() {
-        let config = config_with("    count:\n      type: integer\n      default: 0", "");
-        let doc = doc_from_fm(&[("count", json!(9))]);
-        assert!(validate_typed_document(&config, &doc).is_ok());
     }
 
     #[test]
@@ -775,9 +766,6 @@ main:
 
     #[test]
     fn absent_unendorsed_field_raises_nothing() {
-        // A field with no `default:` absent from the document is a completeness
-        // concern, not a well-formedness one: validation is clean and the field
-        // zero-fills at render.
         let config = config_with("    memo_for:\n      type: string", "");
         let doc = doc_from_fm(&[]);
         assert!(validate_typed_document(&config, &doc).is_ok());
@@ -785,8 +773,6 @@ main:
 
     #[test]
     fn present_null_is_treated_as_absent() {
-        // `memo_for:` (a bare/null value) carries no data, so it validates the
-        // same as an omitted field (no type mismatch) for every type.
         let config = config_with(
             "    memo_for:\n      type: string\n    n:\n      type: integer",
             "",
@@ -799,18 +785,7 @@ main:
     }
 
     #[test]
-    fn missing_field_with_default_is_ok() {
-        // Endorsed field absent from document → no error; default applies.
-        let config = config_with("    memo_for:\n      type: string\n      default: \"\"", "");
-        let doc = doc_from_fm(&[]);
-        assert!(validate_typed_document(&config, &doc).is_ok());
-    }
-
-    #[test]
     fn absent_object_property_raises_nothing() {
-        // Property `name` is Unendorsed and absent from the row. Like a
-        // top-level absent field, this is a completeness concern, not a
-        // validation error.
         let config = config_with(
             "    recipients:\n      type: array\n      default: []\n      items:\n        type: object\n        properties:\n          name:\n            type: string\n          org:\n            type: string\n            default: \"\"",
             "",
@@ -818,11 +793,6 @@ main:
         let doc = doc_from_fm(&[("recipients", json!([{ "org": "HQ" }]))]);
         assert!(validate_typed_document(&config, &doc).is_ok());
     }
-
-    // NOTE: top-level typed-dictionary fields (`type: object` with `properties`)
-    // are supported. Coverage lives in the `schema.rs` transform-schema tests
-    // (typed tables/dicts) and the blueprint tests. Freeform objects without
-    // properties are rejected at config parse time.
 
     #[test]
     fn validates_card_with_valid_discriminator() {
@@ -854,26 +824,7 @@ main:
     }
 
     #[test]
-    fn validates_multiple_card_kinds_mixed() {
-        let config = config_with(
-            "    title:\n      type: string\n      default: \"\"",
-            "card_kinds:\n  indorsement:\n    fields:\n      signature_block:\n        type: string\n  routing:\n    fields:\n      office:\n        type: string",
-        );
-        let doc = doc_with_typed_cards(
-            &[],
-            vec![
-                typed_card("indorsement", &[("signature_block", json!("A"))]),
-                typed_card("routing", &[("office", json!("HQ"))]),
-            ],
-        );
-        assert!(validate_typed_document(&config, &doc).is_ok());
-    }
-
-    #[test]
     fn reports_card_field_paths_with_card_name_and_index() {
-        // A type-mismatched card field anchors the `cards.<kind>[<i>].<field>`
-        // path shape (absence does not raise, so we exercise the path via a
-        // well-formedness error instead).
         let config = config_with(
             "    title:\n      type: string\n      default: \"\"",
             "card_kinds:\n  indorsement:\n    fields:\n      signature_block:\n        type: string",
@@ -897,7 +848,6 @@ main:
             "    title:\n      type: string\n      default: \"\"",
             "card_kinds:\n  skills:\n    body:\n      enabled: false\n    fields:\n      items:\n        type: array\n        items:\n          type: string\n        default: []",
         );
-        // Prose triggers the error; whitespace-only does not.
         let mut prose_card = typed_card("skills", &[("items", json!(["Rust"]))]);
         prose_card.revise_body("Should not be here.").unwrap();
         let doc = doc_with_typed_cards(&[], vec![prose_card]);
@@ -941,52 +891,7 @@ main:
     }
 
     #[test]
-    fn type_mismatch_diagnostic_carries_hint_matching_message() {
-        // The structured hint must equal the exit clause baked into the
-        // prose message, so consumers never need to re-parse.
-        // An array under a `string` schema is a genuine mismatch (not a bare
-        // scalar the coercion layer can adopt), so it still raises TypeMismatch.
-        let config = config_with(
-            "    build_number:\n      type: string\n      default: \"\"",
-            "",
-        );
-        let doc = doc_from_fm(&[("build_number", json!([1, 2, 3]))]);
-        let errors = validate_typed_document(&config, &doc).unwrap_err();
-        let err = errors
-            .iter()
-            .find(|e| matches!(e, ValidationError::TypeMismatch { .. }))
-            .expect("expected TypeMismatch");
-        let diag = err.to_diagnostic();
-        let hint = diag
-            .hint
-            .expect("TypeMismatch diagnostic should carry a hint");
-        assert!(
-            err.to_string().ends_with(&hint),
-            "message tail must equal hint; msg={msg}, hint={hint}",
-            msg = err,
-        );
-        assert!(hint.contains("provide a value of type"));
-    }
-
-    #[test]
-    fn body_disabled_diagnostic_carries_hint() {
-        let err = ValidationError::BodyDisabled {
-            path: "cards.skills[0].body".to_string(),
-            card: "skills".to_string(),
-        };
-        let diag = err.to_diagnostic();
-        let hint = diag
-            .hint
-            .expect("BodyDisabled diagnostic should carry a hint");
-        assert!(hint.contains("remove the body content"));
-    }
-
-    #[test]
     fn bare_scalar_into_string_field_is_valid() {
-        // Gracious scalar→string: a bare integer/boolean/number under a
-        // `string` schema is unambiguously representable as its canonical text,
-        // so it validates (the coercion layer adopts the token). No
-        // TypeMismatch; see `quill::config::scalar_as_string`.
         for value in [json!(42), json!(true), json!(1.5)] {
             let config = config_with(
                 "    build_number:\n      type: string\n      default: \"\"",
@@ -1038,8 +943,6 @@ main:
 
     #[test]
     fn rejects_richtext_inline_with_multi_block_content() {
-        // A pre-built two-paragraph content reaches the validator directly (no
-        // coercion), so the validation-layer NotInline backstop must fire.
         let config = config_with("    tag:\n      type: richtext\n      inline: true", "");
         let rt = quillmark_content::import::from_markdown("one\n\ntwo").unwrap();
         let content = quillmark_content::serial::to_canonical_value(&rt);

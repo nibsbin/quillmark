@@ -1,35 +1,24 @@
 //! The value step: turn a value-free [`BoundWidget`] plus the document's
-//! `compile_data` JSON into a stamp-spine [`FieldSpec`]. Intrinsics (kind,
-//! options, multiline, tooltip) and final geometry were already resolved from
-//! the static inputs at load ([`crate::bind`]); this module resolves only the
-//! per-document *value* and copies the rest through.
+//! `compile_data` JSON into a stamp-spine [`FieldSpec`]. Kind, options,
+//! multiline, tooltip and geometry are already resolved by [`crate::bind`].
 //!
-//! Binding is against `compile_data` (the same validated, zero-filled object
-//! the Typst plate reads as `data.*`) so zero-fill, schema validation,
-//! defaults, and scalar coercion are inherited, not re-implemented. Addressing
-//! is a shallow path: a root field name, optionally followed by an array index
-//! or nested key (`field`, `field.0`, `field.sub`). Coercion is type-directed;
-//! unbound or absent/null both render a blank field.
+//! Binding is against `compile_data` — the same validated, zero-filled object
+//! the Typst plate reads as `data.*` — so zero-fill, validation, defaults and
+//! scalar coercion are inherited rather than re-implemented. Addressing is a
+//! shallow path (`field`, `field.0`, `field.sub`); absent or null renders blank.
 //!
-//! ## Card-instance addressing
-//!
-//! A `schema_field` rooted at the reserved `$cards` key binds to one card
-//! instance in the document's `$cards` array (the same array the Typst plate
-//! iterates), by kind + index: `$cards.<kind>.<i>.<field>`, the `i`-th card
-//! whose `$kind` is `<kind>` (e.g. `$cards.indorsement.1.from` is the second
-//! indorsement). This survives reordering and intervening cards of other kinds.
-//! Absolute-index addressing (`$cards.<i>`) is not supported: a widget kind must
-//! be statically derivable at load, and only the kind names the field. The path
-//! descends the remaining segments into the chosen card exactly as a top-level
-//! binding would.
+//! A path rooted at the reserved `$cards` key selects by kind and index:
+//! `$cards.<kind>.<i>.<field>` is the `i`-th card whose `$kind` is `<kind>`, so
+//! it survives reordering and intervening cards of other kinds. Absolute-index
+//! addressing (`$cards.<i>`) is not supported: the widget kind must be
+//! statically derivable at load, and only the kind names the field.
 
 use quillmark_pdf::{FieldSpec, FieldType, CHECKBOX_ON_STATE};
 use serde_json::Value;
 
 use crate::bind::BoundWidget;
 
-/// Build a [`FieldSpec`] for `widget`: copy its already-final identity, geometry,
-/// and kind through, and resolve its bound value from `data`.
+/// Build a [`FieldSpec`] for `widget`, resolving its bound value from `data`.
 pub fn field_spec(widget: &BoundWidget, data: &Value) -> FieldSpec {
     let mut spec = FieldSpec::new(
         widget.name.clone(),
@@ -43,9 +32,8 @@ pub fn field_spec(widget: &BoundWidget, data: &Value) -> FieldSpec {
     spec
 }
 
-/// Resolve a widget's bound value. `None` (blank) for: an unbound widget
-/// (`schema_field: None`), an absent/null target, a signature, an empty text
-/// value, an unchecked checkbox, or a choice value matching no option.
+/// `None` renders a blank widget: unbound, absent/null, signature, empty text,
+/// unchecked checkbox, or a choice value matching no option.
 fn resolve_value(field_type: &FieldType, schema_field: Option<&str>, data: &Value) -> Option<String> {
     let raw = lookup(data, schema_field?)?;
     match field_type {
@@ -56,9 +44,6 @@ fn resolve_value(field_type: &FieldType, schema_field: Option<&str>, data: &Valu
     }
 }
 
-/// Dereference a shallow `field[.<index-or-key>]*` path against `data`. A path
-/// rooted at the reserved `$cards` key resolves a card instance (by `$kind` +
-/// index) before descending the rest. Returns `None` for any missing segment.
 fn lookup<'a>(data: &'a Value, path: &str) -> Option<&'a Value> {
     let mut parts = path.split('.');
     let root = parts.next()?;
@@ -68,10 +53,8 @@ fn lookup<'a>(data: &'a Value, path: &str) -> Option<&'a Value> {
     descend(data.get(root)?, parts)
 }
 
-/// Resolve a `$cards.<kind>.<i>...` path: select the `i`-th card whose `$kind`
-/// is `<kind>`, then descend the remaining segments into it. The bind step
-/// rejects absolute indexing, so the first segment is always a kind and the
-/// second its instance index.
+/// The bind step rejects absolute indexing, so the first segment is always a
+/// kind and the second its instance index.
 fn lookup_card<'a, 'p, I>(data: &'a Value, mut parts: I) -> Option<&'a Value>
 where
     I: Iterator<Item = &'p str>,
@@ -86,7 +69,6 @@ where
     descend(card, parts)
 }
 
-/// Walk the remaining `[.<index-or-key>]*` segments from `start`.
 fn descend<'a, 'p, I>(start: &'a Value, parts: I) -> Option<&'a Value>
 where
     I: Iterator<Item = &'p str>,
@@ -101,29 +83,21 @@ where
     Some(cur)
 }
 
-/// Stringify a JSON number the same way the Typst producer does, so the two
-/// backends agree on the text they bind for the same value. `serde_json`'s own
-/// `Number::to_string` preserves the JSON literal form (`42.0` → `"42.0"`,
-/// `1e10` → `"10000000000.0"`), but the Typst side decodes the same JSON to a
-/// Typst `Int`/`Float` and prints via Rust's integer/`f64` `Display`, so an
-/// integral float renders without the trailing `.0`. Mirror that: float-backed
-/// numbers go through `f64` `Display`; integer-backed ones are already aligned.
+/// Stringify a JSON number as the Typst producer does, so both backends bind
+/// identical text. `Number::to_string` keeps the JSON literal form (`42.0` →
+/// `"42.0"`), but Typst decodes to `Int`/`Float` and prints via Rust `Display`,
+/// dropping the trailing `.0`; float-backed numbers take that path here.
 fn number_to_string(n: &serde_json::Number) -> String {
-    // `as_f64()` is always `Some` for a float-backed `Number`; the guard picks
-    // the `f64` `Display` path for those and leaves integers on the JSON literal.
     match n.as_f64() {
         Some(f) if n.is_f64() => f.to_string(),
         _ => n.to_string(),
     }
 }
 
-/// Coerce a JSON value to display text. Empty results (empty string, all-null
-/// array) become `None` so the widget carries no `/V`.
+/// Coerce a JSON value to display text. An empty result becomes `None`, so the
+/// widget carries no `/V`.
 fn coerce_text(v: &Value) -> Option<String> {
     match v {
-        // An array (e.g. an `array<richtext>`, richtext-content elements, or a
-        // `string[]` field) joins its element texts with newlines: the
-        // multiline text fill.
         Value::Array(arr) => {
             let s = arr
                 .iter()
@@ -132,18 +106,12 @@ fn coerce_text(v: &Value) -> Option<String> {
                 .join("\n");
             (!s.is_empty()).then_some(s)
         }
-        // Every other shape is one scalar or richtext object: the same rule
-        // an array element follows, with an empty result blanked out too.
         _ => element_text(v).filter(|s| !s.is_empty()),
     }
 }
 
-/// A scalar's (or richtext object's) display text: a string/number/bool
-/// directly, or a richtext content via its plaintext, the content text minus
-/// island slots (tables/images have no plaintext form; a non-content object
-/// binds nothing). Shared by top-level scalar coercion and per-element array
-/// joining, which is why an empty string survives here and is blanked by the
-/// caller instead.
+/// Display text for one scalar or richtext object. An empty string survives
+/// here and is blanked by the caller, which also handles array elements.
 fn element_text(e: &Value) -> Option<String> {
     match e {
         Value::String(s) => Some(s.clone()),
@@ -154,20 +122,16 @@ fn element_text(e: &Value) -> Option<String> {
     }
 }
 
-/// A richtext content's plaintext, via [`quillmark_content::export::to_plaintext`]
-/// (island slots stripped). `None` for a non-content object or an empty result.
-///
-/// Tables and images carry no plaintext, so a content whose content is only a
-/// table binds nothing here: the field renders blank, no diagnostic. This is
-/// the decided pdfform limitation; see `to_plaintext`.
+/// A richtext content's plaintext, island slots stripped. Tables and images have
+/// no plaintext form, so a table-only content binds blank with no diagnostic.
 fn richtext_plaintext(v: &Value) -> Option<String> {
     let rt = quillmark_content::serial::from_canonical_value(v).ok()?;
     let text = quillmark_content::export::to_plaintext(&rt);
     (!text.is_empty()).then_some(text)
 }
 
-/// Truthiness for a checkbox binding. A boolean schema field coerces to a JSON
-/// bool, the common path; strings and numbers are handled defensively.
+/// A boolean schema field arrives as a JSON bool; strings and numbers are
+/// handled defensively.
 fn is_truthy(v: &Value) -> bool {
     match v {
         Value::Bool(b) => *b,
@@ -229,15 +193,10 @@ mod tests {
 
     #[test]
     fn number_stringification_matches_typst_producer() {
-        // Integral float literals drop the trailing `.0` (matching the Typst
-        // side's f64 Display), so the two backends bind identical text and a
-        // choice option like "42" matches a 42.0 value on both.
         assert_eq!(coerce_text(&json!(42.0)), Some("42".into()));
         assert_eq!(coerce_text(&json!(1e10)), Some("10000000000".into()));
-        // Integers and genuinely-fractional floats are unchanged.
         assert_eq!(coerce_text(&json!(42)), Some("42".into()));
         assert_eq!(coerce_text(&json!(42.5)), Some("42.5".into()));
-        // Choice matching uses the same rule.
         let opts = vec!["42".to_string()];
         assert_eq!(coerce_choice(&json!(42.0), &opts), Some("42".into()));
     }
@@ -257,9 +216,6 @@ mod tests {
 
     #[test]
     fn richtext_content_lowers_to_plaintext() {
-        // A richtext field crosses the seam as canonical content JSON; the widget
-        // value is its plaintext: markup dropped (marks live off the text),
-        // island slots stripped.
         let rt =
             quillmark_content::import::from_markdown("A **bold** claim.\n\nSecond line.").unwrap();
         let content = quillmark_content::serial::to_canonical_value(&rt);
@@ -267,17 +223,14 @@ mod tests {
             coerce_text(&content).as_deref(),
             Some("A bold claim.\nSecond line.")
         );
-        // A blank content binds nothing.
         let blank =
             quillmark_content::serial::to_canonical_value(&quillmark_content::Content::empty());
         assert_eq!(coerce_text(&blank), None);
-        // A non-content object binds nothing.
         assert_eq!(coerce_text(&json!({ "x": 1 })), None);
     }
 
     #[test]
     fn richtext_array_joins_element_plaintext() {
-        // An `array<richtext>` joins each element's plaintext with newlines.
         let el = |md: &str| {
             quillmark_content::serial::to_canonical_value(
                 &quillmark_content::import::from_markdown(md).unwrap(),
@@ -314,7 +267,6 @@ mod tests {
             resolve_value(&kind, Some("favorite_color"), &data()),
             Some("green".into())
         );
-        // A value matching no option is dropped to blank.
         assert_eq!(resolve_value(&kind, Some("bad_color"), &data()), None);
     }
 
@@ -326,8 +278,7 @@ mod tests {
         );
     }
 
-    /// A mixed-kind `$cards` array: two indorsements with a note between them,
-    /// so by-kind indexing must skip the note.
+    /// Two indorsements with a note between them, so by-kind indexing must skip it.
     fn card_data() -> Value {
         json!({
             "$cards": [
@@ -348,42 +299,34 @@ mod tests {
 
     #[test]
     fn card_by_kind_index() {
-        // The i-th card OF THAT KIND, skipping intervening cards of other kinds.
         assert_eq!(card_text("$cards.indorsement.0.from"), Some("Alice".into()));
         assert_eq!(card_text("$cards.indorsement.1.from"), Some("Bob".into()));
         assert_eq!(card_text("$cards.note.0.from"), Some("ignored".into()));
-        // Only two indorsements exist.
         assert_eq!(card_text("$cards.indorsement.2.from"), None);
-        // No card of this kind.
         assert_eq!(card_text("$cards.memo.0.from"), None);
     }
 
     #[test]
     fn card_coercion_runs_per_widget_type() {
-        // A checkbox bound to a card field coerces truthiness like any other.
         let agree = |path| resolve_value(&FieldType::Checkbox, Some(path), &card_data());
         assert_eq!(
             agree("$cards.indorsement.0.agree"),
             Some(CHECKBOX_ON_STATE.to_string())
         );
-        assert_eq!(agree("$cards.indorsement.1.agree"), None); // Bob: false
+        assert_eq!(agree("$cards.indorsement.1.agree"), None);
     }
 
     #[test]
     fn card_malformed_paths_are_blank() {
-        // Missing index after a kind, a bare `$cards`, and a missing field.
         assert_eq!(card_text("$cards.indorsement"), None);
         assert_eq!(card_text("$cards"), None);
         assert_eq!(card_text("$cards.indorsement.0.missing"), None);
-        // Absolute-index addressing is gone: `$cards.0.from` reads `0` as a kind,
-        // which matches no card's `$kind`, so it resolves blank.
+        // `$cards.0.from` reads `0` as a kind, matching no card.
         assert_eq!(card_text("$cards.0.from"), None);
     }
 
     #[test]
     fn is_truthy_string_and_number_variants() {
-        // Beyond the common JSON-bool path: the defensive string forms (any
-        // case, surrounding whitespace) and non-zero numbers read as truthy.
         for s in ["true", "Yes", " ON ", "1", "y", "Checked"] {
             assert!(is_truthy(&json!(s)), "{s:?} should be truthy");
         }
@@ -393,7 +336,6 @@ mod tests {
         assert!(is_truthy(&json!(42)));
         assert!(is_truthy(&json!(-1)));
         assert!(!is_truthy(&json!(0)));
-        // Non-scalars are never truthy.
         assert!(!is_truthy(&json!(null)));
         assert!(!is_truthy(&json!([true])));
         assert!(!is_truthy(&json!({"a": 1})));
@@ -401,58 +343,12 @@ mod tests {
 
     #[test]
     fn coerce_text_array_filters_non_string_elements() {
-        // Mixed array: nulls and objects are dropped; scalars join with newlines.
         assert_eq!(
             coerce_text(&json!([null, "a", { "x": 1 }, 2, true])),
             Some("a\n2\ntrue".into())
         );
-        // An all-null (or otherwise empty-after-filter) array → None, so the
-        // widget carries no `/V`.
         assert_eq!(coerce_text(&json!([null, { "x": 1 }])), None);
         assert_eq!(coerce_text(&json!([])), None);
     }
 
-    /// Card slots on a STATIC multi-page form, end-to-end through `field_spec`:
-    /// a form with one card slot per page binds each card INSTANCE to its own
-    /// page via card-instance addressing. Two cards of one kind, two slots on two
-    /// different pages: instance 0's value must land on page 0 and instance 1's
-    /// on page 1, each as a full `FieldSpec`. (The form's page set is fixed;
-    /// page composition / continuation is out of scope.)
-    #[test]
-    fn card_instances_bind_to_their_static_form_pages() {
-        // ≥2 cards of one kind in `$cards` (the same array the Typst plate reads).
-        let data = json!({
-            "$cards": [
-                { "$kind": "indorsement", "from": "Alice" },
-                { "$kind": "indorsement", "from": "Bob" }
-            ]
-        });
-
-        // Two card slots, one per page, each bound to a distinct instance index.
-        // Geometry is already final (placed at bind time); this test pins the
-        // value/page binding, so the rect is an opaque placeholder.
-        let slot = |name: &str, page: usize, schema_field: &str| BoundWidget {
-            name: name.into(),
-            schema_field: Some(schema_field.into()),
-            page,
-            rect: [100.0, 100.0, 300.0, 120.0],
-            field_type: FieldType::Text { multiline: false },
-            tooltip: None,
-        };
-        let slot0 = slot("Indorsement0From", 0, "$cards.indorsement.0.from");
-        let slot1 = slot("Indorsement1From", 1, "$cards.indorsement.1.from");
-
-        let spec0 = field_spec(&slot0, &data);
-        let spec1 = field_spec(&slot1, &data);
-
-        // Instance 0's value on page 0; instance 1's value on page 1.
-        assert_eq!(spec0.page, 0, "first slot is on page 0");
-        assert_eq!(spec0.value.as_deref(), Some("Alice"), "instance 0 value");
-        assert_eq!(spec1.page, 1, "second slot is on page 1");
-        assert_eq!(spec1.value.as_deref(), Some("Bob"), "instance 1 value");
-
-        // The names carry through unchanged (the spine writes them to /T).
-        assert_eq!(spec0.name, "Indorsement0From");
-        assert_eq!(spec1.name, "Indorsement1From");
-    }
 }

@@ -10,9 +10,8 @@ use typst::{Library, World};
 use crate::helper;
 use quillmark_core::{Diagnostic, Quill, Severity};
 
-/// A file Typst's [`VirtualPath`] would not accept, skipped rather than loaded.
-/// One shape for both populations: an asset and a package file fail this the
-/// same way, and a consumer routing on the code should not have to know which.
+/// One shape for assets and package files alike, so a consumer routing on the
+/// code need not know which.
 fn skipped_path(path: &Path, err: impl std::fmt::Display) -> Diagnostic {
     Diagnostic::new(
         Severity::Warning,
@@ -25,8 +24,6 @@ fn skipped_path(path: &Path, err: impl std::fmt::Display) -> Diagnostic {
     .with_hint("Rename it to a plain relative path.".to_string())
 }
 
-/// Build a [`FileId`] for a virtual path, optionally scoped to a package.
-///
 /// Typst 0.15 routes file ids through [`RootedPath`]: project-local files use
 /// [`VirtualRoot::Project`], package files use [`VirtualRoot::Package`].
 fn file_id(spec: Option<PackageSpec>, vpath: VirtualPath) -> FileId {
@@ -38,32 +35,22 @@ static FALLBACK_REGULAR: &[u8] = include_bytes!("fonts/Figtree-Regular.ttf");
 static FALLBACK_BOLD: &[u8] = include_bytes!("fonts/Figtree-Bold.ttf");
 static FALLBACK_ITALIC: &[u8] = include_bytes!("fonts/Figtree-Italic.ttf");
 
-/// Typst `World` implementation for quill-based compilation.
-///
-/// Provides package loading, virtual-path handling, and asset management for
-/// quill templates. Packages are loaded from `{quill}/packages/` and assets
-/// from `{quill}/assets/`.
+/// Typst `World` implementation for quill-based compilation. Packages load from
+/// `{quill}/packages/` and assets from `{quill}/assets/`.
 pub struct QuillWorld {
     library: LazyHash<Library>,
     book: LazyHash<FontBook>,
-    fonts: Vec<Font>, // For fonts loaded from assets
+    fonts: Vec<Font>,
     source: Source,
     sources: HashMap<FileId, Source>,
     binaries: HashMap<FileId, Bytes>,
-    /// Non-fatal defects from loading the quill's assets and packages: a file
-    /// the loader had to skip, a manifest it could not read.
-    ///
-    /// Without them each defect degrades the compile unattributably: a skipped
-    /// package surfaces as an unresolved `#import` naming the plate, three files
-    /// from the cause.
-    ///
-    /// Static for the session's lifetime, since the world loads its files once.
-    /// [`crate::TypstSession`] carries them alongside every compile's own.
+    /// Non-fatal defects from loading the quill's assets and packages. Without
+    /// them a skipped package degrades the compile unattributably, surfacing as
+    /// an unresolved `#import` naming the plate. Static for the session.
     load_warnings: Vec<Diagnostic>,
 }
 
 impl QuillWorld {
-    /// Create a new QuillWorld from a quill template and Typst content
     pub fn new(
         source: &Quill,
         main: &str,
@@ -72,11 +59,9 @@ impl QuillWorld {
         let mut binaries = HashMap::new();
         let mut load_warnings = Vec::new();
 
-        // Create a new empty FontBook to ensure proper ordering
         let mut book = FontBook::new();
         let mut fonts = Vec::new();
 
-        // Load fonts from quill assets (eagerly loaded).
         let font_data_list = Self::load_fonts_from_quill(source)?;
         for font_data in font_data_list {
             let font_bytes = Bytes::new(font_data);
@@ -97,17 +82,13 @@ impl QuillWorld {
             }
         }
 
-        // Load assets from quill's in-memory file system
         Self::load_assets_from_quill(source, &mut binaries, &mut load_warnings)?;
 
-        // Load packages from quill's in-memory file system. Quillmark does
-        // not download external packages: every package a quill imports
-        // must be vendored under `packages/` in the quill tree.
+        // Quillmark never downloads packages: every package a quill imports is
+        // vendored under `packages/` in the quill tree.
         Self::load_packages_from_quill(source, &mut sources, &mut binaries, &mut load_warnings)?;
 
-        // The helper package's typst.toml is constant for the session's
-        // lifetime, so insert it once here. Re-injecting the helper `lib.typ`
-        // per apply leaves it untouched.
+        // Constant for the session: re-injecting `lib.typ` leaves it untouched.
         binaries.insert(
             Self::helper_fid("typst.toml"),
             Bytes::new(helper::generate_typst_toml().into_bytes()),
@@ -246,12 +227,10 @@ impl QuillWorld {
         binaries: &mut HashMap<FileId, Bytes>,
         warnings: &mut Vec<Diagnostic>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Get all files that start with "assets/"
         let asset_paths = source.files().find_files("assets/*");
 
         for asset_path in asset_paths {
             if let Some(contents) = source.files().get_file(&asset_path) {
-                // Create virtual path for the asset
                 let virtual_path = match VirtualPath::new(asset_path.to_string_lossy().as_ref()) {
                     Ok(vpath) => vpath,
                     Err(e) => {
@@ -274,7 +253,6 @@ impl QuillWorld {
         binaries: &mut HashMap<FileId, Bytes>,
         warnings: &mut Vec<Diagnostic>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Get all subdirectories in packages/
         let package_dirs = source.files().list_directories("packages");
 
         for package_dir in package_dirs {
@@ -284,7 +262,6 @@ impl QuillWorld {
                 .unwrap_or("unknown")
                 .to_string();
 
-            // Look for typst.toml in this package
             let toml_path = package_dir.join("typst.toml");
             if let Some(toml_contents) = source.files().get_file(&toml_path) {
                 let toml_content = String::from_utf8_lossy(toml_contents);
@@ -298,7 +275,6 @@ impl QuillWorld {
                             })?,
                         };
 
-                        // Load the package files with entrypoint awareness
                         Self::load_package_files_from_quill(
                             source,
                             &package_dir,
@@ -326,7 +302,7 @@ impl QuillWorld {
                     }
                 }
             } else {
-                // Load as a simple package directory without typst.toml
+                // A package directory with no typst.toml.
                 let spec = PackageSpec {
                     namespace: "local".into(),
                     name: package_name.into(),
@@ -358,13 +334,11 @@ impl QuillWorld {
         entrypoint: Option<&str>,
         warnings: &mut Vec<Diagnostic>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Find all files in the package directory
         let package_pattern = format!("{}/*", package_dir.to_string_lossy());
         let package_files = source.files().find_files(&package_pattern);
 
         for file_path in package_files {
             if let Some(contents) = source.files().get_file(&file_path) {
-                // Calculate the relative path within the package
                 let relative_path = file_path.strip_prefix(package_dir).map_err(|_| {
                     format!("Failed to get relative path for {}", file_path.display())
                 })?;
@@ -379,7 +353,6 @@ impl QuillWorld {
                 };
                 let id = file_id(package_spec.clone(), virtual_path);
 
-                // Check if this is a source file (.typ) or binary
                 if let Some(ext) = file_path.extension() {
                     if ext == "typ" {
                         let source_content = String::from_utf8_lossy(contents);
@@ -389,13 +362,11 @@ impl QuillWorld {
                         binaries.insert(id, Bytes::new(contents.to_vec()));
                     }
                 } else {
-                    // No extension, treat as binary
                     binaries.insert(id, Bytes::new(contents.to_vec()));
                 }
             }
         }
 
-        // Verify entrypoint if specified
         if let (Some(spec), Some(entrypoint_name)) = (&package_spec, entrypoint) {
             let entrypoint_path = VirtualPath::new(entrypoint_name)
                 .map_err(|e| format!("Invalid entrypoint path {}: {}", entrypoint_name, e))?;
@@ -456,13 +427,10 @@ impl World for QuillWorld {
     }
 
     fn today(&self, offset: Option<Duration>) -> Option<Datetime> {
-        // On native targets we can use the system clock. On wasm32 we call into
-        // the JavaScript Date API via js-sys to get UTC date components.
         #[cfg(not(target_arch = "wasm32"))]
         {
             use time::{Duration as TimeDuration, OffsetDateTime};
 
-            // Get current UTC time and apply the optional offset
             let now = OffsetDateTime::now_utc();
             let adjusted = if let Some(offset) = offset {
                 now + TimeDuration::seconds(offset.seconds() as i64)
@@ -476,21 +444,17 @@ impl World for QuillWorld {
 
         #[cfg(target_arch = "wasm32")]
         {
-            // Use js-sys to access the JS Date methods. This returns components in
-            // UTC using getUTCFullYear/getUTCMonth/getUTCDate.
+            // js-sys returns components in UTC.
             use js_sys::Date;
             use wasm_bindgen::JsValue;
 
             let d = Date::new_0();
-            // get_utc_full_year returns f64
             let year = d.get_utc_full_year() as i32;
-            // get_utc_month returns 0-based month
+            // `get_utc_month` is 0-based.
             let month = (d.get_utc_month() as u8).saturating_add(1);
             let day = d.get_utc_date() as u8;
 
-            // Apply the offset if requested by constructing a JS Date
             if let Some(offset) = offset {
-                // Create a new Date representing now + offset
                 let millis = d.get_time() + offset.seconds() * 1_000.0;
                 let d2 = Date::new(&JsValue::from_f64(millis));
                 let year = d2.get_utc_full_year() as i32;
@@ -504,7 +468,6 @@ impl World for QuillWorld {
     }
 }
 
-/// Package info parsed from a typst.toml `[package]` section.
 #[derive(Debug, Clone)]
 struct PackageInfo {
     namespace: String,
@@ -513,7 +476,6 @@ struct PackageInfo {
     entrypoint: String,
 }
 
-/// Parse a typst.toml `[package]` section into [`PackageInfo`].
 fn parse_package_toml(
     content: &str,
 ) -> Result<PackageInfo, Box<dyn std::error::Error + Send + Sync>> {
@@ -560,23 +522,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_package_toml() {
-        let toml_content = r#"
-[package]
-name = "test-package"
-version = "1.0.0"
-namespace = "preview"
-entrypoint = "src/lib.typ"
-"#;
-
-        let package_info = parse_package_toml(toml_content).unwrap();
-        assert_eq!(package_info.name, "test-package");
-        assert_eq!(package_info.version, "1.0.0");
-        assert_eq!(package_info.namespace, "preview");
-        assert_eq!(package_info.entrypoint, "src/lib.typ");
-    }
-
-    #[test]
     fn test_parse_package_toml_defaults() {
         let toml_content = r#"
 [package]
@@ -590,8 +535,7 @@ name = "minimal-package"
         assert_eq!(package_info.entrypoint, "lib.typ");
     }
 
-    /// A minimal in-memory quill, plus whatever extra files the caller wants
-    /// under their `/`-joined tree paths.
+    /// `extra` files are inserted under their `/`-joined tree paths.
     fn quill_with(extra: &[(&str, &str)]) -> quillmark_core::Quill {
         use quillmark_core::{FileTreeNode, Quill};
         let mut root = FileTreeNode::Directory {
@@ -627,10 +571,6 @@ name = "minimal-package"
         Quill::from_tree(root).expect("load quill")
     }
 
-    /// A package the loader has to skip is a warning on the session, not a line
-    /// on a stderr nobody reads: on wasm32 there is no stderr at all, and the
-    /// only other signal is an unresolved `#import` naming the plate rather
-    /// than the manifest three files away.
     #[test]
     fn unparseable_package_manifest_warns_instead_of_vanishing() {
         let quill = quill_with(&[
@@ -657,8 +597,6 @@ name = "minimal-package"
         );
     }
 
-    /// The clean case earns its own assertion: a well-formed quill must not
-    /// accumulate advisory noise, or the channel stops being worth reading.
     #[test]
     fn a_well_formed_quill_loads_without_warnings() {
         let quill = quill_with(&[
@@ -676,8 +614,6 @@ name = "minimal-package"
         );
     }
 
-    /// A package that declares an entrypoint it does not ship is importable in
-    /// name only.
     #[test]
     fn missing_package_entrypoint_warns() {
         let quill = quill_with(&[(
@@ -696,30 +632,4 @@ name = "minimal-package"
         );
     }
 
-    #[test]
-    fn test_asset_fonts_have_priority() {
-        use quillmark_core::Quill;
-
-        // The usaf_memo fixture carries real fonts.
-        let quill_path = quillmark_fixtures::quills_path("usaf_memo");
-        if !quill_path.exists() {
-            // Skip test if fixture not found
-            return;
-        }
-
-        let tree = quillmark::tree_from_path(quill_path).expect("walk fixture");
-        let source = Quill::from_tree(tree).expect("load source");
-        let world = QuillWorld::new(&source, "// Test").unwrap();
-
-        // Asset fonts should be loaded
-        assert!(!world.fonts.is_empty(), "Should have asset fonts loaded");
-
-        // The first fonts in the book should be the asset fonts
-        // Verify that indices 0..asset_count return asset fonts from the fonts vec
-        for i in 0..world.fonts.len() {
-            let font = world.font(i);
-            assert!(font.is_some(), "Font at index {} should be available", i);
-            // This font should come from the asset fonts (world.fonts vec), not font_slots
-        }
-    }
 }

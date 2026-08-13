@@ -1,11 +1,9 @@
-//! Tests for [`quillmark::Quill::validate`]: the editor-facing validation
-//! surface.
+//! [`quillmark::Quill::validate`], the editor-facing validation surface.
 
 use std::collections::HashMap;
 
 use quillmark::{Document, FileTreeNode, Quill};
 
-/// Build a minimal quill from inline `Quill.yaml` with no filesystem deps.
 fn quill_from_yaml(yaml: &str) -> Quill {
     let mut files = HashMap::new();
     files.insert(
@@ -45,7 +43,7 @@ card_kinds:
 #[test]
 fn validate_clean_document_has_no_diagnostics() {
     let quill = quill_from_yaml(SIMPLE);
-    // All Unendorsed fields supplied; `status` falls back to its default.
+    // `status` is absent and falls back to its default.
     let md = "~~~card-yaml\n$quill: validate_test\n$kind: main\n\
               title: \"T\"\ncount: 1\n~~~\n";
     let doc = Document::parse(md).unwrap().document;
@@ -59,7 +57,6 @@ fn validate_clean_document_has_no_diagnostics() {
 #[test]
 fn validate_forwards_type_mismatch_with_path_and_hint() {
     let quill = quill_from_yaml(SIMPLE);
-    // `count` is a string, not an integer.
     let md = "~~~card-yaml\n$quill: validate_test\n$kind: main\n\
               title: \"T\"\ncount: \"not-a-number\"\n~~~\n";
     let doc = Document::parse(md).unwrap().document;
@@ -76,8 +73,6 @@ fn validate_forwards_type_mismatch_with_path_and_hint() {
 #[test]
 fn validate_reports_unknown_card_kind() {
     let quill = quill_from_yaml(SIMPLE);
-    // A card whose `$kind` is not declared in the schema emits
-    // `validation::unknown_card`.
     let md = "~~~card-yaml\n$quill: validate_test\n$kind: main\ntitle: \"T\"\ncount: 1\n~~~\n\n\
               ~~~card-yaml\n$kind: ghost\nbody: \"B\"\n~~~\n";
     let doc = Document::parse(md).unwrap().document;
@@ -95,9 +90,7 @@ fn validate_reports_unknown_card_kind() {
 #[test]
 fn validate_warns_on_must_fill_marker() {
     let quill = quill_from_yaml(SIMPLE);
-    // The `!must_fill` placeholder surfaces as a non-fatal warning, regardless
-    // of whether it carries a suggested value, and across the main card and
-    // every composable card (the contract is "root and nested, main and cards").
+    // With and without a suggested value, on the main card and a composable one.
     let md = "~~~card-yaml\n$quill: validate_test\n$kind: main\n\
               title: !must_fill Draft\ncount: !must_fill\n~~~\n\n\
               ~~~card-yaml\n$kind: note\nlabel: !must_fill\n~~~\n";

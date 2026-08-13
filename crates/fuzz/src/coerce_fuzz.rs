@@ -1,44 +1,14 @@
-//! Property-based fuzz tests for `QuillConfig::coerce_payload`.
-//!
-//! Targets the typed-coercion pipeline (`conform_value` under
-//! `Leniency::Render`, and `coerce_object_props` beneath it). Exercised
-//! entirely through the public
-//! [`QuillConfig::coerce_payload`] entry point so the tests don't depend
-//! on internal helpers.
-//!
-//! ## Properties under test
-//!
-//! - **T1 (no-panic):** `coerce_payload` returns `Ok | Err(_)` for any
-//!   `(FieldSchema, serde_json::Value)` pair within the generator's bounded
-//!   depth. No panics, no overflows.
-//! - **T2 (well-formed path):** when coercion fails, the
-//!   `CoercionError::Uncoercible.path` matches a small grammar
-//!   `root_field ( '.' ident | '[' digits ']' )*`, where `ident` and
-//!   `root_field` are drawn from the generator's character set.
-//! - **T3 (idempotence):** for any input where `coerce_payload` returns
-//!   `Ok(x)`, `coerce_payload(x) == Ok(x)`.
-//!
-//! The strict *write* side of the same dispatch (`conform_value` under
-//! `Leniency::Write`, reached through the public `Card::commit_field`) carries
-//! the parallel guarantees:
-//!
-//! - **W1 (no-panic):** `commit_field` returns `Ok | Err(_)` for any pair.
-//! - **W2 (typed error):** a failure is one of the typed-write `EditError`
-//!   variants (`FieldCoercionFailed`, `FieldRichtext*`, `ValueTooDeep`,
-//!   `InvalidFieldName`), never a panic or an unrelated variant.
-//! - **W3 (commit ∘ commit = commit):** a committed value is a fixed point,
-//!   re-committing it yields the same stored value.
-
+//! The lenient read side of the typed-coercion pipeline through
+//! `QuillConfig::coerce_payload`, and its strict write side through
+//! `Card::commit_field`. Both go through public entry points, so the generators
+//! are free to build schemas the YAML loader would reject.
 
 use indexmap::IndexMap;
 use proptest::prelude::*;
 use quillmark_core::quill::{CardSchema, CoercionError, FieldSchema, FieldType, QuillConfig};
 use quillmark_core::{Card, EditError, QuillValue};
 
-// -- Generators ---------------------------------------------------------------
-
-// Root field name and property-name alphabet used in every generator. Keep
-// these aligned with `validate_path_grammar` below so T2's check is precise.
+// Keep aligned with `validate_path_grammar` below, which checks against them.
 const ROOT_FIELD: &str = "f";
 const PROP_NAME_RE: &str = "[a-z]{1,4}";
 
@@ -54,9 +24,6 @@ fn arb_leaf_field_type() -> impl Strategy<Value = FieldType> {
     ]
 }
 
-/// `FieldSchema` of bounded depth. `Object` carries a `properties` map; an
-/// `Array` carries an `items` element schema (here, an object sharing that
-/// same property map): the same way `conform_value` consumes them.
 fn arb_field_schema(max_depth: u32) -> impl Strategy<Value = FieldSchema> {
     let leaf = arb_leaf_field_type().prop_map(|ty| FieldSchema::new(String::new(), ty, None));
     leaf.prop_recursive(max_depth, 24, 3, |inner| {
@@ -69,13 +36,12 @@ fn arb_field_schema(max_depth: u32) -> impl Strategy<Value = FieldSchema> {
             props
         });
         prop_oneof![
-            // Object with 1-3 properties
             props_map.clone().prop_map(|props| {
                 let mut schema = FieldSchema::new(String::new(), FieldType::Object, None);
                 schema.properties = Some(props);
                 schema
             }),
-            // Array whose object-shaped elements share a 1-3 property schema
+            // An array whose object elements share one property schema.
             props_map.prop_map(|props| {
                 let mut item = FieldSchema::new(String::new(), FieldType::Object, None);
                 item.properties = Some(props);
@@ -87,8 +53,8 @@ fn arb_field_schema(max_depth: u32) -> impl Strategy<Value = FieldSchema> {
     })
 }
 
-/// Arbitrary JSON value of bounded depth, with finite numbers only
-/// (non-finite `f64` can't round-trip through `serde_json::Number` anyway).
+/// Finite numbers only: non-finite `f64` cannot round-trip through
+/// `serde_json::Number` anyway.
 fn arb_json_value(max_depth: u32) -> impl Strategy<Value = serde_json::Value> {
     let leaf = prop_oneof![
         Just(serde_json::Value::Null),
@@ -115,13 +81,6 @@ fn arb_json_value(max_depth: u32) -> impl Strategy<Value = serde_json::Value> {
     })
 }
 
-// -- Harness helpers ----------------------------------------------------------
-
-/// Build a minimal `QuillConfig` whose `main.fields` declares a single field
-/// named [`ROOT_FIELD`] with the given schema. Bypasses the YAML loader so the
-/// generator is free to produce schemas the YAML parser would reject (e.g.
-/// `Object` nested inside `Object`): exactly the adversarial surface we want
-/// `coerce_payload` to survive.
 fn config_with_one_field(schema: FieldSchema) -> QuillConfig {
     let mut schema = schema;
     schema.name = ROOT_FIELD.to_string();
@@ -142,8 +101,8 @@ fn single_field_payload(value: serde_json::Value) -> IndexMap<String, QuillValue
     fm
 }
 
-/// Validate that `path` matches `ROOT_FIELD ( '.' ident | '[' digits ']' )*`,
-/// where `ident` is 1-4 lowercase ASCII letters (matching `PROP_NAME_RE`).
+/// Whether `path` matches `ROOT_FIELD ( '.' ident | '[' digits ']' )*`, where
+/// `ident` is 1-4 lowercase ASCII letters (`PROP_NAME_RE`).
 fn validate_path_grammar(path: &str) -> bool {
     let mut rest = match path.strip_prefix(ROOT_FIELD) {
         Some(r) => r,
@@ -176,10 +135,7 @@ fn validate_path_grammar(path: &str) -> bool {
     true
 }
 
-// -- Properties ---------------------------------------------------------------
-
 proptest! {
-    // T1: never panic, regardless of how adversarial the (schema, value) pair is.
     #[test]
     fn coerce_never_panics(
         schema in arb_field_schema(4),
@@ -190,7 +146,6 @@ proptest! {
         let _ = config.coerce_payload(&fm);
     }
 
-    // T2: when coercion fails, the error path is structurally well-formed.
     #[test]
     fn coerce_error_path_well_formed(
         schema in arb_field_schema(4),
@@ -208,7 +163,6 @@ proptest! {
         }
     }
 
-    // T3, idempotence on Ok: re-coercing the output yields the same output.
     #[test]
     fn coerce_is_idempotent(
         schema in arb_field_schema(4),
@@ -225,10 +179,7 @@ proptest! {
     }
 }
 
-// -- Write-mode (strict commit) properties ------------------------------------
-
-/// Commit `value` to a single field `f` of the given `schema` via the public
-/// `Card::commit_field` (strict `Leniency::Write`) and return the stored form.
+/// The stored form after a strict (`Leniency::Write`) commit.
 fn commit_once(schema: &FieldSchema, value: serde_json::Value) -> Result<QuillValue, EditError> {
     let mut card = Card::new("note").expect("valid card kind");
     card.commit_field("f", QuillValue::from_json(value), schema)?;
@@ -236,7 +187,6 @@ fn commit_once(schema: &FieldSchema, value: serde_json::Value) -> Result<QuillVa
 }
 
 proptest! {
-    // W1: never panic, however adversarial the (schema, value) pair.
     #[test]
     fn commit_never_panics(
         schema in arb_field_schema(4),
@@ -245,7 +195,6 @@ proptest! {
         let _ = commit_once(&schema, value);
     }
 
-    // W2: a commit failure is one of the typed-write EditError variants.
     #[test]
     fn commit_error_is_typed(
         schema in arb_field_schema(4),
@@ -266,7 +215,6 @@ proptest! {
         }
     }
 
-    // W3, commit ∘ commit = commit: re-committing a committed value is stable.
     #[test]
     fn commit_is_idempotent(
         schema in arb_field_schema(4),
@@ -280,14 +228,11 @@ proptest! {
     }
 }
 
-// -- Hand-rolled regression cases --------------------------------------------
-//
-// Anchor cases the generator might rarely hit; documenting the invariants in
-// concrete form makes future regressions easier to spot.
+// Concrete anchors for cases the generator hits only rarely.
 
 #[test]
 fn regression_t2_array_of_object_path() {
-    // Schema: { f: array, items: { x: integer } }
+    // { f: array, items: { x: integer } }
     let mut inner = IndexMap::new();
     inner.insert(
         "x".to_string(),
@@ -299,7 +244,6 @@ fn regression_t2_array_of_object_path() {
     arr.items = Some(Box::new(item));
     let config = config_with_one_field(arr);
 
-    // [ { "x": "not-an-int" } ], should fail at f[0].x
     let val = serde_json::json!([{ "x": "not-an-int" }]);
     let err = config
         .coerce_payload(&single_field_payload(val))
@@ -313,8 +257,6 @@ fn regression_t2_array_of_object_path() {
 
 #[test]
 fn regression_t3_string_array_singleton_collapses_once() {
-    // String schema with ["x"] input should collapse to "x" on the first pass
-    // and stay "x" on the second.
     let schema = FieldSchema::new(ROOT_FIELD.to_string(), FieldType::String, None);
     let config = config_with_one_field(schema);
     let fm = single_field_payload(serde_json::json!(["hello"]));

@@ -1,43 +1,24 @@
 //! Cross-checks the hand-rolled fence scanner (`super::super::fences`) against
-//! a real CommonMark parser (`pulldown-cmark`, a dev-dependency).
+//! pulldown-cmark, the CommonMark parser the typst backend renders bodies with.
+//! The two must agree about where fenced blocks begin and end, or the splitter
+//! could slice through something the renderer treats as one code block.
 //!
-//! ## The invariant
+//! The relation is one-directional (⊆): pulldown legitimately sees more fenced
+//! blocks than we do (code inside prose bodies, `~~~` fences failing our
+//! blank-line-above rule). We require only that no block of ours invents or
+//! misplaces a fence relative to CommonMark.
 //!
-//! Quillmark runs two parsers: the hand-rolled scanner that splits a document
-//! into card-yaml blocks + prose bodies, and pulldown-cmark in the typst
-//! backend that renders each body. They must agree about where fenced blocks
-//! begin and end, or the splitter could slice in the middle of something the
-//! renderer treats as a single code block.
-//!
-//! To pulldown-cmark a card-yaml block is just a fenced code block (or, for
-//! the `---` root alias, a YAML metadata block). So:
-//!
-//! > **Every card-yaml block the scanner recognizes must coincide: same
-//! > opening offset, same fence span: with a fenced code block or YAML
-//! > metadata block that pulldown-cmark delimits on the same source.**
-//!
-//! The relationship is one-directional (⊆): pulldown legitimately sees *more*
-//! fenced blocks than we do (code blocks inside prose bodies, and `~~~`
-//! fences that fail our blank-line-above rule) and those are correctly left
-//! in the body. We only require that none of *our* blocks invent or misplace a
-//! fence relative to CommonMark.
-//!
-//! pulldown reports a fenced/metadata block as `[opener_line_start ..
-//! end_of_closing_fence]` (the trailing newline is excluded); our block range
-//! includes the closer's trailing newline. Comparing the spans with trailing
-//! `\n`/`\r` trimmed makes them convention-independent.
+//! pulldown excludes the closer's trailing newline from its span and we include
+//! it, so spans are compared with trailing `\n`/`\r` trimmed.
 
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 
 use crate::document::fences::find_metadata_blocks;
 
-/// `(start, end)` byte spans of every fenced code block and YAML-style
-/// metadata block pulldown-cmark finds in `md`.
 fn pulldown_fence_spans(md: &str) -> Vec<(usize, usize)> {
     let mut opts = Options::empty();
     opts.insert(Options::ENABLE_YAML_STYLE_METADATA_BLOCKS);
     let mut spans = Vec::new();
-    // Stack of (start_offset) for the currently-open fenced/metadata block.
     let mut open: Vec<usize> = Vec::new();
     for (ev, range) in Parser::new_ext(md, opts).into_offset_iter() {
         match ev {
@@ -58,9 +39,8 @@ fn trim_fence(s: &str) -> &str {
     s.trim_end_matches(['\n', '\r'])
 }
 
-/// Assert the ⊆ invariant for one document. Returns a human-readable failure
-/// description, or `None` if conformant (or if our scanner rejects the input:
-/// error paths are out of scope for this cross-check).
+/// `None` when conformant, and when our scanner rejects the input outright:
+/// error paths are out of scope for this cross-check.
 fn nonconformance(md: &str) -> Option<String> {
     let Ok((blocks, _warnings)) = find_metadata_blocks(md) else {
         return None;
@@ -93,8 +73,6 @@ fn assert_conformant(label: &str, md: &str) {
         panic!("fence non-conformance in {label}:\n{why}\n--- source ---\n{md}");
     }
 }
-
-// ── Synthetic edge-case content ────────────────────────────────────────────────
 
 #[test]
 fn scanner_agrees_with_commonmark_on_synthetic_inputs() {
@@ -186,8 +164,6 @@ fn scanner_agrees_with_commonmark_on_synthetic_inputs() {
         assert_conformant(label, md);
     }
 }
-
-// ── Fixture content ────────────────────────────────────────────────────────────
 
 fn collect_md(root: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
     let Ok(entries) = std::fs::read_dir(root) else {

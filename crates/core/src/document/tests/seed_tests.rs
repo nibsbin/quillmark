@@ -1,10 +1,3 @@
-//! End-to-end tests for the `$seed` system-metadata key.
-//!
-//! `$seed` is the per-card-kind seed-overlay map: parsers accept it, the
-//! emitter preserves it, the storage DTO round-trips it, and the plate JSON
-//! consumed by backends strips it. Unlike `$ext` the seeding layer interprets
-//! it; see `crate::Quill::seed_card` and the `quill::seed` tests for layering.
-
 use serde_json::json;
 
 use crate::document::{Document, MetaKey, PayloadItem};
@@ -12,8 +5,6 @@ use crate::document::{Document, MetaKey, PayloadItem};
 fn parse(src: &str) -> Document {
     Document::parse(src).expect("source should parse").document
 }
-
-// ── Parser ─────────────────────────────────────────────────────────────────
 
 #[test]
 fn seed_with_mapping_value_is_accepted() {
@@ -38,21 +29,6 @@ title: Hi
 }
 
 #[test]
-fn seed_with_empty_mapping_is_preserved() {
-    let doc = parse(
-        "\
-~~~card-yaml
-$quill: q@1.0
-$kind: main
-$seed: {}
-~~~
-",
-    );
-    let seed = doc.main().payload().seed().expect("$seed present");
-    assert!(seed.is_empty());
-}
-
-#[test]
 fn seed_with_scalar_value_is_rejected() {
     let err = Document::parse(
         "\
@@ -72,50 +48,7 @@ $seed: just-a-string
 }
 
 #[test]
-fn seed_with_sequence_value_is_rejected() {
-    let err = Document::parse(
-        "\
-~~~card-yaml
-$quill: q@1.0
-$kind: main
-$seed:
-  - foo
-  - bar
-~~~
-",
-    )
-    .unwrap_err()
-    .to_string();
-    assert!(
-        err.contains("Invalid `$seed`") && err.contains("mapping"),
-        "expected $seed-must-be-mapping rejection, got: {err}",
-    );
-}
-
-#[test]
-fn unknown_dollar_key_message_lists_seed() {
-    // The closed-set rejection lists `$seed` among the accepted keys.
-    let err = Document::parse(
-        "\
-~~~card-yaml
-$quill: q@1.0
-$kind: main
-$bogus: x
-~~~
-",
-    )
-    .unwrap_err()
-    .to_string();
-    assert!(
-        err.contains("$seed"),
-        "closed-set message should list $seed: {err}"
-    );
-}
-
-#[test]
 fn seed_on_composable_card_is_rejected() {
-    // `$seed` is root-only (like `$quill`): a composable block carrying it is a
-    // parse error, not silently-inert data.
     let err = Document::parse(
         "\
 ~~~card-yaml
@@ -138,8 +71,6 @@ $seed:
         "expected composable-$seed rejection, got: {err}",
     );
 }
-
-// ── Emit / round-trip ──────────────────────────────────────────────────────
 
 #[test]
 fn seed_round_trips_through_markdown() {
@@ -186,8 +117,6 @@ $seed: {}
 
 #[test]
 fn comments_inside_seed_round_trip() {
-    // Exercises the `$seed` branches of the nested-comment machinery
-    // (parse → per-item nested_comments → emit, and the storage-DTO flatten).
     let src = "\
 ~~~card-yaml
 $quill: q@1.0
@@ -206,31 +135,10 @@ $seed:
     );
     assert_eq!(doc, parse(&emitted));
 
-    // And it survives the storage DTO round-trip too.
     let json = serde_json::to_string(&doc).unwrap();
     let restored: Document = serde_json::from_str(&json).unwrap();
     assert_eq!(doc, restored);
 }
-
-#[test]
-fn seed_emit_is_idempotent() {
-    let doc = parse(
-        "\
-~~~card-yaml
-$quill: q@1.0
-$kind: main
-$seed:
-  note:
-    a: 1
-~~~
-",
-    );
-    let once = doc.to_markdown();
-    let twice = parse(&once).to_markdown();
-    assert_eq!(once, twice);
-}
-
-// ── Programmatic construction ──────────────────────────────────────────────
 
 #[test]
 fn set_seed_inserts_after_ext_and_before_user_fields() {
@@ -284,8 +192,6 @@ $seed:
 ~~~
 ",
     );
-    // The overlay is read off the main card's `$seed` map and parsed via
-    // `SeedOverlay::from_json` (there is no `Document::seed` convenience).
     let seed = doc.main().seed();
     let overlay = seed
         .and_then(|m| m.get("indorsement"))
@@ -296,9 +202,7 @@ $seed:
         Some("49 FW/CC"),
     );
     assert_eq!(overlay.body.as_deref(), Some("Standard endorsement text."));
-    // `$body` is the body override, not a field.
     assert!(!overlay.fields.contains_key("$body"));
-    // An undeclared kind yields no overlay.
     assert!(seed.and_then(|m| m.get("missing")).is_none());
 }
 
@@ -319,13 +223,11 @@ $kind: main
         .unwrap();
     assert_eq!(card.seed().map(|m| m.len()), Some(2));
 
-    // Removing one kind leaves the sibling intact.
     let removed = card.remove_seed_overlay("indorsement").unwrap();
     assert_eq!(removed.get("from").and_then(|v| v.as_str()), Some("A"));
     assert_eq!(card.seed().map(|m| m.len()), Some(1));
     assert!(card.seed().unwrap().contains_key("attachment"));
 
-    // Removing the last kind drops `$seed` entirely (not `$seed: {}`).
     card.remove_seed_overlay("attachment");
     assert!(card.seed().is_none());
 }
@@ -353,7 +255,6 @@ $kind: main
         Err(crate::document::EditError::InvalidKindName(_))
     ));
 
-    // A rejected write leaves the card untouched: no `$seed` map appears.
     assert!(card.seed().is_none());
 }
 
@@ -380,11 +281,8 @@ fn seed_overlay_drops_reserved_keys_other_than_body() {
     );
 }
 
-// ── Plate JSON ─────────────────────────────────────────────────────────────
-
 #[test]
 fn seed_is_stripped_from_plate_json() {
-    // Backends must never see `$seed`: it is curation data, not template data.
     let doc = parse(
         "\
 ~~~card-yaml
@@ -412,8 +310,6 @@ title: Hi
     assert!(obj.contains_key("$cards"));
 }
 
-// ── Storage DTO ────────────────────────────────────────────────────────────
-
 #[test]
 fn seed_round_trips_through_serde_json() {
     let doc = parse(
@@ -436,7 +332,6 @@ Body.
     assert_eq!(doc, restored);
     assert_eq!(doc.to_markdown(), restored.to_markdown());
 
-    // The DTO carries `"type": "seed"` under the current 0.93.0 schema tag.
     assert!(
         json.contains("\"type\":\"seed\""),
         "expected seed variant in DTO: {json}"

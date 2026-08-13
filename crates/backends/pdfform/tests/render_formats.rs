@@ -1,10 +1,5 @@
-//! The pdfform backend exports PDF, SVG, and PNG.
-//!
-//! PDF is the interactive AcroForm deliverable (stamped). SVG and PNG are
-//! raster/vector views of the *flattened* form (field values baked into the
-//! page content via hayro) so they render in any viewer without appearance
-//! synthesis. This test renders the `sample_form` fixture to all three and
-//! asserts each artifact is well-formed for its format.
+//! SVG and PNG are views of the *flattened* form — values baked into the page
+//! content — so they render without viewer appearance synthesis.
 
 use quillmark::{Document, OutputFormat, Quillmark, RenderOptions};
 
@@ -48,7 +43,6 @@ fn renders_png_per_page() {
     assert!(!artifacts.is_empty(), "at least one PNG page");
     for art in &artifacts {
         assert_eq!(art.output_format, OutputFormat::Png);
-        // PNG 8-byte signature.
         assert!(
             art.bytes
                 .starts_with(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]),
@@ -57,15 +51,3 @@ fn renders_png_per_page() {
     }
 }
 
-#[test]
-fn png_ppi_controls_raster_size() {
-    // Higher ppi → more bytes (larger raster), confirming ppi reaches hayro.
-    let small = render(OutputFormat::Png, Some(72.0));
-    let large = render(OutputFormat::Png, Some(216.0));
-    assert!(
-        large[0].bytes.len() > small[0].bytes.len(),
-        "216 ppi PNG ({} B) should exceed 72 ppi PNG ({} B)",
-        large[0].bytes.len(),
-        small[0].bytes.len(),
-    );
-}

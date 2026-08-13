@@ -1,5 +1,3 @@
-//! Tests for [`Quill::conform`] and [`Quill::parse`]: the resting-form
-//! invariant, lane convergence, and the four exception states.
 
 use serde_json::json;
 
@@ -49,7 +47,6 @@ fn quill() -> Quill {
     quill_from_yaml(QUILL)
 }
 
-/// Storage bytes: the hash a consumer keys a cache on.
 fn bytes(doc: &Document) -> String {
     serde_json::to_string(&StoredDocument::from(doc.clone())).expect("storage DTO serializes")
 }
@@ -84,17 +81,12 @@ caption: raw *text*
 Entry body.
 ";
 
-/// The invariant, stated as an equality: whatever the lane, a content field
-/// rests in the same bytes. The typed writer is the reference; the bound door
-/// has to land there.
 #[test]
 fn parse_then_conform_equals_typed_write() {
     let quill = quill();
     let (conformed, warnings) = parse_bound(&quill, MD);
     assert!(warnings.is_empty(), "clean document: {warnings:?}");
 
-    // The reference lane: the same markdown through the transport door, then
-    // every content field re-committed through the typed writer.
     let mut written = Document::parse(MD).expect("transport parse").document;
     {
         let mut w = quill.writer(&mut written);
@@ -115,8 +107,6 @@ fn parse_then_conform_equals_typed_write() {
     assert_eq!(bytes(&conformed), bytes(&written), "and byte-equal");
 }
 
-/// Per-codec rest: `richtext` as the canonical content object, `plaintext` as
-/// the literal string, at every depth.
 #[test]
 fn rest_is_per_codec_at_every_depth() {
     let quill = quill();
@@ -129,8 +119,6 @@ fn rest_is_per_codec_at_every_depth() {
         &json!("a *literal* line"),
         "plaintext rests as the literal string, escapes and all"
     );
-    // A non-content field keeps its authored shorthand: conform is not its
-    // canonicalizer, the typed write is.
     assert_eq!(payload.get("qty").unwrap().as_json(), &json!(3));
 
     let tags = payload.get("tags").unwrap().as_json();
@@ -147,9 +135,6 @@ fn rest_is_per_codec_at_every_depth() {
     );
 }
 
-/// The no-op guard: an already-canonical document is untouched, comments
-/// included. Without it every conform would clear `nested_comments` document-wide
-/// and move bytes on a document nobody edited.
 #[test]
 fn conform_preserves_comments_and_untouched_bytes() {
     let quill = quill();
@@ -177,7 +162,6 @@ Body.
     assert_eq!(doc.to_markdown(), markdown_before);
 }
 
-/// A marker anywhere in the value is the state; the field stays as authored.
 #[test]
 fn fill_marked_fields_are_skipped() {
     let quill = quill();
@@ -210,7 +194,6 @@ Body.
     assert_eq!(bytes(&doc), before, "and a repeat conform moves nothing");
 }
 
-/// Nothing conforms under the wrong schema: the check runs before any mutation.
 #[test]
 fn wrong_quill_errors_before_any_mutation() {
     let quill = quill();
@@ -226,8 +209,6 @@ fn wrong_quill_errors_before_any_mutation() {
     assert!(quill.parse(md).is_err(), "and the bound parse fails too");
 }
 
-/// A value the strict write refuses rests authored, carries a `conform::*`
-/// warning, and the document still opens, validates, and renders.
 #[test]
 fn non_conforming_value_rests_authored_with_a_diagnostic() {
     let quill = quill();
@@ -244,8 +225,6 @@ fn non_conforming_value_rests_authored_with_a_diagnostic() {
         &json!(42),
         "the value stays authored: no silent retype"
     );
-    // The render floor still coerces it at the plate, so the document renders
-    // exactly as it did before conform existed.
     quill.compile_data(&doc).expect("still renders");
     assert!(
         !quill
@@ -255,8 +234,6 @@ fn non_conforming_value_rests_authored_with_a_diagnostic() {
         "and validates clean: the render floor accepts the scalar"
     );
 
-    // Same state for an object that is not a decodable content, the shape a
-    // pre-content-model row can carry: reported, never rewritten.
     let mut legacy = doc;
     legacy
         .main_mut()
@@ -271,7 +248,6 @@ fn non_conforming_value_rests_authored_with_a_diagnostic() {
     assert_eq!(bytes(&legacy), before, "the value is left exactly as stored");
 }
 
-/// The seeder is a schema-aware writer, so its output is already at rest.
 #[test]
 fn conform_is_a_no_op_on_seeds() {
     let quill = quill();
@@ -286,7 +262,6 @@ fn conform_is_a_no_op_on_seeds() {
     assert!(diags.is_empty(), "{diags:?}");
     assert_eq!(bytes(&doc), before, "seed_document is already at rest");
 
-    // A card seeded with an overlay commits through the same dispatch.
     let overlay = SeedOverlay::from_json(&json!({ "caption": "overlaid *text*" })).unwrap();
     let card = quill.seed_card("entry", Some(&overlay)).expect("kind exists");
     assert_eq!(
@@ -300,25 +275,11 @@ fn conform_is_a_no_op_on_seeds() {
     assert_eq!(bytes(&doc2), before2, "seed_card is already at rest");
 }
 
-/// A `!must_fill` tag on a seeded `example` cell rides the payload *item*, not
-/// the value, so it crosses the storage seam without touching either byte
-/// discipline: seed → store → load → conform is a byte no-op with the tag
-/// present, and the cell keeps its resting form (a `plaintext` literal string, a
-/// `richtext` canonical content object). The shape a seeder that stamped its
-/// must-fill cells would persist (issue 1234, open question 2).
-///
-/// The resting form here is the *seeder's* doing, not conform's: a tagged field
-/// is skipped outright (`fill_marked_fields_are_skipped`), so it never reaches
-/// the strict write. Seed-commits-rest is what makes the two agree, which a
-/// stamping seeder would promote from a nicety to a prerequisite — a tag on a
-/// cell written off-rest would pin it there.
 #[test]
 fn a_fill_tag_on_a_seeded_cell_survives_store_load_conform() {
     let quill = quill();
     let mut doc = quill.seed_document();
 
-    // Tag in place, keeping each seeded value: `insert_item` preserves an
-    // existing key's position, so the payload order is still declaration order.
     for key in ["subject", "note"] {
         let seeded = doc.main().payload().get(key).expect("seeded").clone();
         doc.main_mut().store_fill(key, seeded).unwrap();
@@ -347,14 +308,10 @@ fn a_fill_tag_on_a_seeded_cell_survives_store_load_conform() {
         "and the tagged richtext cell keeps its canonical content object"
     );
 
-    // The tag is the only difference from the untagged seed: same values, same
-    // order, so a consumer's cache key moves once when the tag lands and holds.
     let untagged = bytes(&quill.seed_document());
     assert_ne!(tagged, untagged, "the tag is stored, not inferred");
 }
 
-/// The plate is the render floor's shape and does not move: `plaintext` reaches
-/// the backend as a content object whichever form was committed.
 #[test]
 fn the_plate_shape_for_plaintext_is_unchanged() {
     let quill = quill();
@@ -372,7 +329,6 @@ fn the_plate_shape_for_plaintext_is_unchanged() {
         plate["note"].clone()
     };
 
-    // String input and content-object input alike: the plate carries content.
     let from_string = plate_note(json!("a *literal* line"));
     let from_object = plate_note(json!(quillmark_content::serial::to_canonical_value(
         &quillmark_content::from_plaintext("a *literal* line")
@@ -382,9 +338,6 @@ fn the_plate_shape_for_plaintext_is_unchanged() {
     assert_eq!(from_string["text"], json!("a *literal* line"));
 }
 
-/// The revise lane's plaintext arm diffs literal text: a byte-identical revise
-/// is a byte no-op where the markdown codec would have eaten the escapes, and an
-/// edit lands at the field's rest.
 #[test]
 fn the_plaintext_revise_lane_is_literal() {
     let quill = quill();
@@ -431,11 +384,6 @@ Body.
     );
 }
 
-/// The legacy envelope, end to end: a hand-authored `@0.92.0` blob (markdown
-/// `body`, payload verbatim) migrates forward, conforms, and re-stores fully
-/// canonical under the current tag. The `0.92.0 → 0.93.0` hop cold-imports the
-/// body and carries the payload untouched, so every content field arrives at
-/// the transport door's as-authored rest and conform is what finishes the job.
 #[test]
 fn a_0_92_0_row_migrates_then_converges() {
     let quill = quill();
@@ -446,8 +394,6 @@ fn a_0_92_0_row_migrates_then_converges() {
                 { "type": "quill", "value": "conform_test@1.0.0" },
                 { "type": "kind", "value": "main" },
                 { "type": "field", "key": "subject", "value": "Q3 **results**" },
-                // Written by a typed writer of that era: plaintext rested as a
-                // content object, the form emit would markdown-escape.
                 { "type": "field", "key": "note", "value":
                     quillmark_content::serial::to_canonical_value(
                         &quillmark_content::from_plaintext("a *literal* line")) },
@@ -469,7 +415,6 @@ fn a_0_92_0_row_migrates_then_converges() {
         serde_json::from_str::<StoredDocument>(&legacy).expect("a 0.92.0 blob still loads"),
     )
     .expect("and migrates forward");
-    // The hop cold-imports the body; the payload arrives verbatim.
     assert_eq!(doc.main().body_markdown(), "Main **body**.");
     assert!(doc.main().payload().get("subject").unwrap().as_json().is_string());
 
@@ -486,8 +431,6 @@ fn a_0_92_0_row_migrates_then_converges() {
     );
     assert!(doc.cards()[0].payload().get("body").unwrap().as_json().is_object());
 
-    // Re-stored under the current tag, the row is at rest: byte-equal to the
-    // same document authored as markdown and taken through the bound door.
     let restored = bytes(&doc);
     assert!(restored.contains("quillmark/document@0.93.0"));
     let (authored, _) = parse_bound(

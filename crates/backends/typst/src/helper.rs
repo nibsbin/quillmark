@@ -1,20 +1,11 @@
 //! Generates the virtual `@local/quillmark-helper:0.1.0` package that provides
 //! document data to Typst plates.
 //!
-//! The backend regenerates `lib.typ` per render as pure source text: no
-//! runtime data processing. Richtext fields carry canonical content JSON, lowered
-//! here to markup **block bindings** (`#let _qm_cN = [ .. ]`) via
-//! [`emit_content`]; the document data is a Typst **literal**
-//! (`#let data = ( .. )`) whose content fields reference those blocks, present
-//! date fields reference a `date` value-object block (`#let _qm_dN = { let v =
-//! datetime(..); (value: v, display: (..args) => text(v.display(..args))) }`,
-//! blank ⇒ `none`), `$cards` carry a per-kind-ordinal `$path`, and everything
-//! else is a value literal Typst judges equal to the former `json()` parse
-//! (date cells excepted: their block carries the `datetime`, not the data
-//! literal); the schema address tables are a generated literal
-//! `_qm-meta`, and each content field's plaintext projection a generated literal
-//! `_qm-plaintext` (backing the `plaintext(field)` helper). See
-//! [`generate_lib_typ`].
+//! `lib.typ` is regenerated per render as pure source text: no runtime data
+//! processing. Richtext fields lower to markup block bindings (`#let _qm_cN =
+//! [ .. ]`) via [`emit_content`]; the document data is a Typst literal
+//! (`#let data = ( .. )`) referencing those blocks, with present date fields
+//! referencing a `date` value-object block and everything else a value literal.
 //!
 //! Output is **canonical**: dict keys emit in sorted order at every level (via
 //! [`sorted`]), so equal data produces byte-equal source regardless of the
@@ -35,26 +26,18 @@ pub const HELPER_NAME: &str = "quillmark-helper";
 
 const LIB_TYP_TEMPLATE: &str = include_str!("lib.typ.template");
 
-/// A generated content block's source map in the produced `lib.typ`: the
-/// bracketed `block` range (`[ .. ]`, brackets included) of a `#let _qm_cN = [
-/// .. ]` binding, keyed by the schema address of the content it carries, plus
-/// the emitter's per-segment [`SegmentMap`]s rebased so every `generated` range
-/// indexes the returned `lib.typ` directly. Every glyph the block places carries
-/// a span that resolves into `block`; the world layer pairs it with the helper's
-/// `FileId` for the span scan, and the segments key regions to content ranges.
+/// One generated content block's source map in the produced `lib.typ`: the
+/// bracketed `block` range (brackets included) plus the emitter's
+/// [`SegmentMap`]s, rebased so every `generated` range indexes `lib.typ`
+/// directly. Every glyph the block places carries a span resolving into `block`.
 pub struct ContentMap {
     pub path: String,
     pub block: Range<usize>,
     pub segments: Vec<SegmentMap>,
 }
 
-/// Generate `lib.typ` for the quillmark-helper package from the transformed
-/// document data (richtext fields carry canonical content JSON; no `__meta__`
-/// sentinel) plus the session's [`SchemaMeta`]. Content fields are lowered to
-/// Typst markup here via [`emit_content`]: the codegen tier of the seam, the
-/// one place a source map can be produced. Returns the source and each content
-/// block's [`ContentMap`]; `Err` only when a content exceeds the nesting bound
-/// (import capped it, so this fires only on a hand-built content).
+/// The source plus each content block's [`ContentMap`]. `Err` only when a
+/// content exceeds the nesting bound, which import already caps.
 pub fn generate_lib_typ(
     data: &serde_json::Value,
     meta: &SchemaMeta,
@@ -63,19 +46,16 @@ pub fn generate_lib_typ(
     let empty = serde_json::Map::new();
     let data_obj = data.as_object().unwrap_or(&empty);
     let data_literal = cg.emit_data(data_obj);
-    // Surface any lowering failure the recursive (infallible-returning) walk
-    // recorded, before assembling the output.
+    // The recursive walk returns infallibly and records its failure here.
     if let Some(e) = cg.emit_error.take() {
         return Err(e);
     }
     let meta_literal = meta_literal(meta);
     let plaintext_literal = plaintext_literal(&cg.plaintext);
 
-    // Every placeholder is located in the *raw template* (trusted static text)
-    // never in already-substituted output, so document data containing the
-    // literal placeholder text cannot hijack a splice point. Slots are unique
-    // and ordered; each `find` starts after the previous slot, scanning only the
-    // static template.
+    // Placeholders are located in the *raw template* (trusted static text), never
+    // in already-substituted output, so document data spelling a placeholder
+    // cannot hijack a splice point.
     let mut out = String::with_capacity(
         LIB_TYP_TEMPLATE.len() + cg.blocks.len() + data_literal.len() + plaintext_literal.len(),
     );
@@ -101,8 +81,8 @@ pub fn generate_lib_typ(
     }
     out.push_str(&LIB_TYP_TEMPLATE[cursor..]);
 
-    // Rebase every recorded window (block + its segments' `generated`/run ranges) from
-    // block-section-relative to `lib.typ`-relative by the block section's start.
+    // Rebase every recorded window from block-section-relative to
+    // `lib.typ`-relative.
     let windows = cg
         .windows
         .into_iter()
@@ -118,8 +98,7 @@ pub fn generate_lib_typ(
     Ok((out, windows))
 }
 
-/// Shift a [`SegmentMap`]'s generated byte offsets (the segment window and each
-/// run's `generated` range) by `shift`; content (USV) offsets are unaffected.
+/// Shifts generated byte offsets only; content (USV) offsets are unaffected.
 fn rebase_segment(mut s: SegmentMap, shift: usize) -> SegmentMap {
     s.generated = (s.generated.start + shift)..(s.generated.end + shift);
     for run in &mut s.runs {
@@ -128,28 +107,16 @@ fn rebase_segment(mut s: SegmentMap, shift: usize) -> SegmentMap {
     s
 }
 
-/// Accumulates the generated helper across one render: the content block
-/// bindings, their brackets-included windows + rebased segment maps (relative to
-/// the block section), the `_qm_cN` counter, the first content-lowering error (a
-/// content over the nesting bound; import normally prevents it), and each content
-/// field's plaintext projection (for the `plaintext(field)` helper).
+/// Accumulates the generated helper across one render.
 struct Codegen<'m> {
     meta: &'m SchemaMeta,
     blocks: String,
     windows: Vec<(String, Range<usize>, Vec<SegmentMap>)>,
     counter: usize,
-    /// The `_qm_dN` date value-object counter. Separate from `counter` only to
-    /// number date blocks densely (`_qm_d0`, `_qm_d1`, …) rather than sharing
-    /// the content blocks' sequence; the `_qm_c`/`_qm_d` prefixes keep the ID
-    /// spaces distinct either way, and both counters are a pure function of
-    /// emission order (sorted keys, semantic card order), so the
-    /// byte-identical-source invariant holds regardless.
     date_counter: usize,
     emit_error: Option<EmitError>,
     /// `(schema address, plaintext)` per non-blank content field: the content
-    /// text with island slots stripped and marks dropped, keyed by the same
-    /// address the content-block window uses (`subject`, `refs.2`,
-    /// `$cards.note.0.$body`). Backs the generated `_qm-plaintext` table.
+    /// text with island slots stripped and marks dropped. Backs `_qm-plaintext`.
     plaintext: Vec<(String, String)>,
 }
 
@@ -166,12 +133,10 @@ impl<'m> Codegen<'m> {
         }
     }
 
-    /// Bind an emitted content (`ec`) as a `#let _qm_cN = [\n{markup}\n]` block and
-    /// return the binding's identifier. The `\n` wrap opens the block at a line
-    /// boundary so line-anchored markup (headings, list items) parses. Records
-    /// the bracketed byte window (brackets included) plus the emitter's segment
-    /// maps, both rebased into `self.blocks` coordinates (`generate_lib_typ`
-    /// shifts them once more by the block section's start).
+    /// Binds `ec` as a `#let _qm_cN = [\n{markup}\n]` block. The `\n` wrap opens
+    /// the block at a line boundary so line-anchored markup parses. Windows are
+    /// recorded in `self.blocks` coordinates; `generate_lib_typ` shifts them
+    /// once more by the block section's start.
     fn content_block(&mut self, path: &str, ec: Emission) -> String {
         let id = format!("_qm_c{}", self.counter);
         self.counter += 1;
@@ -180,8 +145,8 @@ impl<'m> Codegen<'m> {
         self.blocks.push_str(" = ");
         let start = self.blocks.len();
         self.blocks.push_str("[\n");
-        // The markup body opens after `[\n`; the emitter's `generated` offsets are
-        // relative to it, so rebase by this position.
+        // The emitter's `generated` offsets are relative to the markup body,
+        // which opens after `[\n`.
         let markup_at = self.blocks.len();
         self.blocks.push_str(&ec.markup);
         self.blocks.push_str("\n]");
@@ -196,30 +161,18 @@ impl<'m> Codegen<'m> {
         id
     }
 
-    /// Bind a present date/datetime as a **value-object** block and return its
-    /// identifier: the date sibling of [`content_block`](Self::content_block).
-    /// The object exposes two projections over the date encoded once in `v`:
+    /// The date sibling of [`content_block`](Self::content_block), binding a
+    /// value object over the date encoded once in `v`: `value` is the native
+    /// `datetime`, `display` a closure `(..args) => text(v.display(..args))`.
+    /// `display` returns *content*, so its glyphs are born at this `text(..)`
+    /// node per emission, pinning the per-instance identity a shared wrapper
+    /// would collapse; wrapping `v.display` rather than a re-literalized date
+    /// inherits `v`'s type, so a date-only `v` throws Typst's native
+    /// `[hour]`-pattern error. The segment-less window it records gives a card
+    /// date the per-instance identity `scalar_windows` cannot chase.
     ///
-    /// - `value`: the native `datetime` (`v`) for math, comparison, and
-    ///   datetime-consuming packages; and
-    /// - `display`: a closure `(..args) => text(v.display(..args))`. It returns
-    ///   *content*, not a string, so its glyphs are born at **this `text(..)`
-    ///   node's** lexical site inside the generated helper, per emission:
-    ///   pinning per-instance identity a shared wrapper would collapse. Wrapping
-    ///   `v.display` (not a re-literalized date) inherits `v`'s type, so a
-    ///   date-only `v` throws Typst's native `[hour]`-pattern error.
-    ///
-    /// Records a **segment-less** window over that `text(..)` node keyed by
-    /// `path`: one whole-placement region per instance when the date renders,
-    /// so a card date defeats the loop-variable blindness `scalar_windows` does
-    /// not chase (its ink resolves to this per-instance node, not the shared
-    /// `card.<field>` reference site). Rebased into `self.blocks` coordinates
-    /// like [`content_block`](Self::content_block); the whole date cell in the
-    /// data literal is just the returned `_qm_dN` reference.
-    ///
-    /// Plates call it as `(data.<field>.display)(..)`: the paren form, since
-    /// Typst reserves dict-key method sugar (`d.display(..)`) for built-in dict
-    /// methods (pinned in `span_scan`'s spike 1).
+    /// Plates call it as `(data.<field>.display)(..)`: Typst reserves dict-key
+    /// method sugar for built-in dict methods.
     fn date_object(&mut self, path: &str, constructor: &str) -> String {
         let id = format!("_qm_d{}", self.date_counter);
         self.date_counter += 1;
@@ -228,9 +181,8 @@ impl<'m> Codegen<'m> {
         self.blocks.push_str(" = { let v = ");
         self.blocks.push_str(constructor);
         self.blocks.push_str("; (value: v, display: (..args) => ");
-        // The window covers exactly the `text(..)` call: the node whose span
-        // the produced glyphs carry (span_scan spike 2). Empty segments make it
-        // a whole-placement region, like a scalar site.
+        // The window covers exactly the `text(..)` call: the node whose span the
+        // produced glyphs carry.
         let text_start = self.blocks.len();
         self.blocks.push_str("text(v.display(..args))");
         let text_end = self.blocks.len();
@@ -240,15 +192,8 @@ impl<'m> Codegen<'m> {
         id
     }
 
-    /// Lower one richtext field's content JSON to a `#let` content block, or an
-    /// empty string literal (`""`, not a block) for a blank content. A value that
-    /// is not a valid content (never produced by the seam) degrades to its value
-    /// literal; no render path re-parses markdown. A nesting-bound violation is
-    /// recorded on `self.emit_error` and surfaced by `generate_lib_typ`.
-    ///
-    /// `inline` selects the lowering: an `inline` field (`richtext(inline)`)
-    /// lowers to pure inline markup (no trailing `parbreak`) via
-    /// [`emit_content_inline`]; every other field keeps the block lowering.
+    /// A blank content lowers to `""`, not a block; a value that is not a valid
+    /// content (never produced by the seam) degrades to its value literal.
     fn content_field(&mut self, path: &str, value: &serde_json::Value, inline: bool) -> String {
         let emit = if inline {
             emit_content_inline
@@ -257,10 +202,7 @@ impl<'m> Codegen<'m> {
         };
         match from_canonical_value(value) {
             Ok(rt) if !rt.is_blank() => {
-                // Record the plaintext projection (content text minus island
-                // slots, marks dropped) for `plaintext(field)`, keyed by the same
-                // address the content block windows on. Blank content values are skipped:
-                // `plaintext` defaults them to `""`.
+                // Blank values are skipped: `plaintext` defaults them to `""`.
                 let plain = quillmark_content::export::to_plaintext(&rt);
                 if !plain.is_empty() {
                     self.plaintext.push((path.to_string(), plain));
@@ -278,9 +220,6 @@ impl<'m> Codegen<'m> {
         }
     }
 
-    /// The top-level `data` dict literal. Content and date fields are emitted
-    /// per their schema classification; `$cards` gets the ordinal/`$path` pass;
-    /// the `__meta__` sentinel (if any survived) is dropped.
     fn emit_data(&mut self, obj: &serde_json::Map<String, serde_json::Value>) -> String {
         let mut items = Vec::with_capacity(obj.len());
         for (key, value) in sorted(obj) {
@@ -302,10 +241,8 @@ impl<'m> Codegen<'m> {
         wrap_dict(items)
     }
 
-    /// The `$cards` array literal. Each card of a string `$kind` gets its
-    /// per-kind ordinal `$path` prefix injected and its content/date fields
-    /// transformed; a card with no string `$kind` passes through untouched as
-    /// a value literal, assigned no ordinal or `$path`.
+    /// A card with no string `$kind` passes through as a value literal, assigned
+    /// no ordinal or `$path`.
     fn emit_cards(&mut self, cards: &[serde_json::Value]) -> String {
         let mut ordinals: HashMap<String, usize> = HashMap::new();
         let mut out = Vec::with_capacity(cards.len());
@@ -330,8 +267,6 @@ impl<'m> Codegen<'m> {
         wrap_array(out)
     }
 
-    /// One card dict literal: the injected `$path` prefix plus each field
-    /// classified against the card kind's content/date tables.
     fn emit_card(
         &mut self,
         obj: &serde_json::Map<String, serde_json::Value>,
@@ -343,10 +278,8 @@ impl<'m> Codegen<'m> {
         let datetimes = card_names(&self.meta.card_datetime_fields, kind);
         let inlines = card_names(&self.meta.card_inline_fields, kind);
         let mut items = Vec::with_capacity(obj.len() + 1);
-        // The card's canonical address prefix, so plates compose schema-field
-        // addresses (`form-field(.., field: card.at("$path") + "from")`)
-        // without reimplementing the kind+ordinal grammar. `$`-prefixed so it
-        // cannot collide with a schema field.
+        // The canonical address prefix, so plates compose schema-field addresses
+        // without reimplementing the kind+ordinal grammar.
         items.push(format!("\"$path\": \"{}\"", escape_string(prefix)));
         for (key, value) in sorted(obj) {
             if key == "$path" {
@@ -362,15 +295,6 @@ impl<'m> Codegen<'m> {
         wrap_dict(items)
     }
 
-    /// A single field's value literal. Content (richtext) fields (a content
-    /// object, or an array of them) lower to `#let` content blocks via
-    /// [`Self::content_field`]; a blank content stays an empty string literal.
-    /// `is_inline` picks pure-inline lowering (no `parbreak`) for a
-    /// `richtext(inline)` field, per element for an `array<richtext(inline)>`.
-    /// A `date_kind` field references a value-object block via
-    /// [`date_object`](Self::date_object) (or `none` when blank): the `datetime`
-    /// is three-component for a `date`, six-component for a `datetime`.
-    /// Everything else is a plain value literal.
     fn emit_field(
         &mut self,
         path: &str,
@@ -381,9 +305,8 @@ impl<'m> Codegen<'m> {
     ) -> String {
         if is_content {
             match value {
-                // A richtext field crosses the seam as canonical content JSON (an
-                // object); an `array<richtext>` as an array of them. Lower each
-                // content to a content block here.
+                // A richtext field crosses the seam as canonical content JSON;
+                // an `array<richtext>` as an array of them.
                 serde_json::Value::Object(_) => self.content_field(path, value, is_inline),
                 serde_json::Value::Array(arr) => {
                     let items = arr
@@ -402,9 +325,8 @@ impl<'m> Codegen<'m> {
             }
         } else if let Some(kind) = date_kind {
             match value {
-                // A present date lowers to a value-object block; blank or
-                // (defensively) unparseable ⇒ `none`, so `!= none` guards are
-                // untouched. Coercion has already rejected malformed values.
+                // Blank or (defensively) unparseable ⇒ `none`, so `!= none`
+                // guards are untouched.
                 serde_json::Value::String(s) => match datetime_constructor(s, kind) {
                     Some(ctor) => self.date_object(path, &ctor),
                     None => "none".to_string(),
@@ -418,9 +340,8 @@ impl<'m> Codegen<'m> {
     }
 }
 
-/// Which date type a field is, if any: selects the `datetime(..)` arity in
-/// [`datetime_literal`]. A field name never appears in both tables (a schema
-/// field has one type), so `date` is checked first and `datetime` second.
+/// A field name never appears in both tables, so the order of the checks is
+/// immaterial.
 fn date_kind_of(dates: &[String], datetimes: &[String], key: &str) -> Option<DateKind> {
     if dates.iter().any(|f| f == key) {
         Some(DateKind::Date)
@@ -434,14 +355,10 @@ fn date_kind_of(dates: &[String], datetimes: &[String], key: &str) -> Option<Dat
 /// The two date field types, distinguished by their Typst `datetime(..)` arity.
 #[derive(Clone, Copy)]
 enum DateKind {
-    /// `type: date`: `datetime(year:, month:, day:)`.
     Date,
-    /// `type: datetime`: `datetime(year:, month:, day:, hour:, minute:, second:)`.
     DateTime,
 }
 
-/// The card kind's field-name list from a `SchemaMeta` card table (content,
-/// date, datetime, …). Shared with `validate_date_fields` in `lib.rs`.
 pub(crate) fn card_names(
     table: &serde_json::Map<String, serde_json::Value>,
     kind: &str,
@@ -457,8 +374,8 @@ pub(crate) fn card_names(
         .unwrap_or_default()
 }
 
-/// The `_qm-meta` literal: the schema address tables `_qm-known-path` validates
-/// `form-field` paths against, emitted as a Typst dict literal.
+/// The schema address tables `_qm-known-path` validates `form-field` paths
+/// against.
 fn meta_literal(meta: &SchemaMeta) -> String {
     let tables = serde_json::json!({
         "fields": meta.fields,
@@ -469,12 +386,9 @@ fn meta_literal(meta: &SchemaMeta) -> String {
     lit(&tables)
 }
 
-/// The `_qm-plaintext` literal: each content field's plaintext projection
-/// (island slots stripped, marks dropped) keyed by schema address, emitted as a
-/// Typst dict literal for the `plaintext(field)` helper. Keys are sorted
-/// so the output is a pure function of the data's values: a reorder-only
-/// `apply` still produces byte-identical source (same invariant as the
-/// content blocks). Content addresses are unique, so no key collides.
+/// Each content field's plaintext projection keyed by schema address, backing
+/// the `plaintext(field)` helper. Keys sort so a reorder-only `apply` still
+/// produces byte-identical source.
 fn plaintext_literal(entries: &[(String, String)]) -> String {
     let mut sorted: Vec<&(String, String)> = entries.iter().collect();
     sorted.sort_by(|a, b| a.0.cmp(&b.0));
@@ -488,14 +402,9 @@ fn plaintext_literal(entries: &[(String, String)]) -> String {
     )
 }
 
-/// The `datetime(..)` constructor for a coerced date/datetime string (the `v`
-/// a [`date_object`](Codegen::date_object) captures) or `None` when the string
-/// does not parse (the empty string included, since both parsers reject it),
-/// which the caller lowers to `none`. Reuses the same parse the coercion layer
-/// validates with, so a value that reached here parses; `None` is the defensive
-/// arm. A `date` lowers to the three-component date-only form; a `datetime` to
-/// the six-component wall-clock form, seconds zero-filled: carrying the
-/// authored time-of-day through rather than truncating it.
+/// `None` for a string that does not parse (the empty string included), which
+/// the caller lowers to `none`. Reuses the coercion layer's own parse, so a
+/// value that reached here parses and `None` is the defensive arm.
 fn datetime_constructor(s: &str, kind: DateKind) -> Option<String> {
     match kind {
         DateKind::Date => quillmark_core::quill::parse_date(s)
@@ -525,10 +434,8 @@ fn lit(v: &serde_json::Value) -> String {
         Number(n) => {
             if let Some(i) = n.as_i64() {
                 // Typst lexes a negative literal as unary `-` over an unsigned
-                // magnitude, and `i64::MIN`'s magnitude (2^63) overflows i64,
-                // so `-9223372036854775808` would not round-trip. Emit it as an
-                // int-typed expression instead (both operands fit i64). Every
-                // other i64 renders as its own literal.
+                // magnitude, and `i64::MIN`'s magnitude overflows i64, so it
+                // would not round-trip as a literal.
                 if i == i64::MIN {
                     "(-9223372036854775807 - 1)".to_string()
                 } else {
@@ -550,24 +457,18 @@ fn lit(v: &serde_json::Value) -> String {
     }
 }
 
-/// A map's entries in canonical (sorted-key) order: every dict the generator
-/// emits goes through this. The workspace builds `serde_json` with
-/// `preserve_order`, so a map's own iteration order is whatever the caller
-/// inserted (and the transform pipeline routes through a `std::collections::
-/// HashMap`, so it is not even that). Emitting in a canonical order instead
-/// makes the generated source a pure function of the data's *values*: a
-/// reorder-only `apply` produces byte-identical `lib.typ`, `Source::replace`
-/// sees an empty diff, comemo reuses the whole compile, and no content block's
-/// spans move.
+/// The workspace builds `serde_json` with `preserve_order`, so a map's own
+/// iteration order is the caller's. Sorting makes the generated source a pure
+/// function of the data's *values*, so a reorder-only `apply` produces
+/// byte-identical `lib.typ` and comemo reuses the whole compile.
 fn sorted(obj: &serde_json::Map<String, serde_json::Value>) -> Vec<(&String, &serde_json::Value)> {
     let mut entries: Vec<_> = obj.iter().collect();
     entries.sort_by(|a, b| a.0.cmp(b.0));
     entries
 }
 
-/// A Typst array literal from pre-rendered element expressions. The trailing
-/// comma keeps a single element an array rather than a parenthesized scalar;
-/// empty is `()`.
+/// The trailing comma keeps a single element an array rather than a
+/// parenthesized scalar.
 fn wrap_array(items: Vec<String>) -> String {
     if items.is_empty() {
         "()".to_string()
@@ -576,8 +477,6 @@ fn wrap_array(items: Vec<String>) -> String {
     }
 }
 
-/// A Typst dict literal from pre-rendered `"key": expr` entries; empty is
-/// `(:)`.
 fn wrap_dict(items: Vec<String>) -> String {
     if items.is_empty() {
         "(:)".to_string()
@@ -611,18 +510,15 @@ mod tests {
         SchemaMeta::from_schema_json(&schema)
     }
 
-    /// The canonical content JSON the seam carries for a richtext field.
     fn content(markdown: &str) -> serde_json::Value {
         let rt = quillmark_content::import::from_markdown(markdown).expect("import");
         quillmark_content::serial::to_canonical_value(&rt)
     }
 
-    /// A schema descriptor for a scalar richtext field.
     fn richtext_field() -> serde_json::Value {
         serde_json::json!({ "type": "object", "contentMediaType": CONTENT_MEDIA_TYPE })
     }
 
-    /// A schema descriptor for a scalar `richtext(inline)` field.
     fn inline_richtext_field() -> serde_json::Value {
         serde_json::json!({
             "type": "object",
@@ -631,9 +527,6 @@ mod tests {
         })
     }
 
-    /// An `inline` richtext field's block carries pure inline markup (no
-    /// `parbreak`), while a plain richtext field keeps its `\n\n` terminator,
-    /// so the inline value composes in `par(..)` without warning.
     #[test]
     fn inline_field_lowers_without_parbreak() {
         let meta = meta_from(serde_json::json!({ "properties": {
@@ -645,20 +538,17 @@ mod tests {
             "intro": content("An intro."),
         });
         let (lib, _) = generate_lib_typ(&data, &meta).unwrap();
-        // Inline: no parbreak inside the block.
         assert!(
             lib.contains("[\nA #strong[bold] subject\n]"),
             "inline block should carry no parbreak: {lib}"
         );
-        // Block: the paragraph still terminates with `\n\n`.
         assert!(
             lib.contains("[\nAn intro.\n\n\n]"),
             "block field keeps its terminator: {lib}"
         );
     }
 
-    /// Each element of an `array<richtext(inline)>` lowers inline (per the
-    /// `quillmark:inline` flag on `items`), so no element carries a parbreak.
+    /// The `quillmark:inline` flag sits on `items` for an array field.
     #[test]
     fn inline_array_lowers_each_element_without_parbreak() {
         let meta = meta_from(serde_json::json!({ "properties": {
@@ -670,17 +560,12 @@ mod tests {
         assert!(lib.contains("[\nSecond #strong[bold]\n]"), "{lib}");
     }
 
-    /// A richtext field's content lowers to a `#let _qm_cN = [ .. ]` block,
-    /// referenced from `data`, with the recorded window covering exactly its
-    /// bracketed range.
     #[test]
     fn content_field_becomes_a_referenced_block_with_a_bracket_window() {
         let meta = meta_from(serde_json::json!({ "properties": { "intro": richtext_field() } }));
         let data = serde_json::json!({ "intro": content("A **bold** intro.") });
         let (lib, windows) = generate_lib_typ(&data, &meta).unwrap();
 
-        // The emitter terminates the paragraph with `\n\n` (as the markdown
-        // lowering always did); the block wraps that in `[\n .. \n]`.
         let block = "[\nA #strong[bold] intro.\n\n\n]";
         assert!(lib.contains(&format!("#let _qm_c0 = {block}")));
         assert!(lib.contains("\"intro\": _qm_c0"));
@@ -695,10 +580,8 @@ mod tests {
         assert_eq!(&lib[windows[0].block.clone()], block);
     }
 
-    /// The segment-map offset check: every recorded `segment.generated` indexes the
-    /// emitted `lib.typ`, and every run's `generated` slices the escape of its
-    /// content substring, the source map is byte-accurate against the emitted
-    /// source, not just the emitter's own markup.
+    /// The source map must be byte-accurate against the emitted `lib.typ`, not
+    /// just against the emitter's own markup.
     #[test]
     fn segment_maps_index_the_generated_lib_typ() {
         let meta = meta_from(serde_json::json!({ "properties": { "intro": richtext_field() } }));
@@ -710,21 +593,18 @@ mod tests {
 
         assert_eq!(windows.len(), 1);
         let cm = &windows[0];
-        // Two paragraphs → two segments.
         assert_eq!(cm.segments.len(), 2);
         let chars: Vec<char> = rt.text.chars().collect();
         let mut saw_bold = false;
         for seg in &cm.segments {
             assert!(seg.generated.start <= seg.generated.end && seg.generated.end <= lib.len());
             for (content_range, generated, ctx) in &seg.runs {
-                // The run's generated bytes equal the escape of its content slice.
                 let src: String = chars[content_range.clone()].iter().collect();
                 let expect = match ctx {
                     EscapeCtx::Markup => escape_markup(&src),
                     EscapeCtx::StringLit => crate::emit::escape_string(&src),
                 };
                 assert_eq!(&lib[generated.clone()], expect, "run inverts to its content slice");
-                // The run sits inside its segment's window.
                 assert!(generated.start >= seg.generated.start && generated.end <= seg.generated.end);
                 if src == "bold" {
                     saw_bold = true;
@@ -734,8 +614,6 @@ mod tests {
         assert!(saw_bold, "the strong-wrapped run maps back to \"bold\"");
     }
 
-    /// An `array<richtext>` field lowers one block per non-blank element,
-    /// windowed as `<field>.<i>`; a blank content stays an empty-string literal.
     #[test]
     fn richtext_array_emits_a_block_per_nonblank_element() {
         let meta = meta_from(serde_json::json!({
@@ -756,10 +634,6 @@ mod tests {
         assert!(lib.contains("\"sections\": (_qm_c0, \"\", _qm_c1,)"));
     }
 
-    /// Every non-blank content field gets a `_qm-plaintext` entry keyed by its
-    /// schema address (the content text with marks dropped and island slots
-    /// stripped) so `plaintext(field)` returns the field's string. A
-    /// blank field is absent (it defaults to `""`).
     #[test]
     fn content_fields_populate_the_plaintext_table() {
         let meta = meta_from(serde_json::json!({ "properties": {
@@ -773,22 +647,15 @@ mod tests {
             "blank": content("   "),
         });
         let (lib, _) = generate_lib_typ(&data, &meta).unwrap();
-        // Scope to the `_qm-plaintext` table: `data` also carries these keys
-        // (bound to content blocks / the empty-string literal), so match the
-        // table, not the whole file.
+        // `data` carries the same keys, so match the table, not the whole file.
         let table = plaintext_table(&lib);
-        // Marks are dropped: the plaintext is the content text, not the markup.
         assert!(table.contains(r#""subject": "A bold subject""#), "{table}");
         assert!(table.contains(r#""refs.0": "first ref""#), "{table}");
         assert!(table.contains(r#""refs.1": "second ref""#), "{table}");
-        // The blank field carries no entry in the table.
         assert!(!table.contains("blank"), "{table}");
         assert!(lib.contains("#let plaintext(field) = _qm-plaintext.at(field"));
     }
 
-    /// An image/table island contributes no plaintext: `to_plaintext` strips the
-    /// island slot, so a field that is only an island yields no entry, the
-    /// table is empty (`(:)`).
     #[test]
     fn island_only_content_has_no_plaintext_entry() {
         let meta = meta_from(serde_json::json!({ "properties": { "fig": richtext_field() } }));
@@ -801,9 +668,6 @@ mod tests {
         );
     }
 
-    /// A card content field's plaintext is keyed by the full card address
-    /// (`$cards.<kind>.<n>.<field>`), so a plate composes it from the card's
-    /// `$path` prefix: `plaintext(card.at("$path") + "$body")`.
     #[test]
     fn card_content_plaintext_keyed_by_card_address() {
         let meta = meta_from(serde_json::json!({
@@ -820,11 +684,8 @@ mod tests {
         );
     }
 
-    /// The `_qm-plaintext = ( .. )` dict literal, sliced out of a generated
-    /// `lib.typ` so plaintext assertions don't collide with the `data` dict
-    /// (which reuses the same keys, bound to content blocks) or the following
-    /// `plaintext` helper's doc comment. The literal is single-line (`\n`s in
-    /// values are escaped), so it ends at the first newline.
+    /// The literal is single-line (`\n`s in values are escaped), so it ends at
+    /// the first newline.
     fn plaintext_table(lib: &str) -> &str {
         let start = lib
             .find("#let _qm-plaintext = ")
@@ -835,10 +696,6 @@ mod tests {
         &rest[..end]
     }
 
-    /// A present `date`/`datetime` field lowers to a value-object block whose
-    /// `v` is the `datetime(..)` (three-component for a `date`, six-component
-    /// wall-clock for a `datetime`, seconds zero-filled), referenced from the
-    /// data literal; a null field stays `none` inline, with no block.
     #[test]
     fn date_and_datetime_fields_become_value_object_blocks() {
         let meta = meta_from(serde_json::json!({
@@ -854,10 +711,7 @@ mod tests {
             "signed": null
         });
         let (lib, windows) = generate_lib_typ(&data, &meta).unwrap();
-        // Keys emit in sorted order (`at` < `issued` < `signed`), so `_qm_d0`
-        // is the six-component `datetime` field and `_qm_d1` the three-component
-        // date. Each captures its `datetime` once, with the region-bearing
-        // `text(v.display(..))` closure.
+        // Keys emit in sorted order, so `_qm_d0` is `at` and `_qm_d1` `issued`.
         assert!(
             lib.contains(
                 "#let _qm_d0 = { let v = datetime(year: 2026, month: 7, day: 3, \
@@ -873,21 +727,15 @@ mod tests {
             ),
             "{lib}"
         );
-        // The data literal references the blocks; the null field stays inline.
         assert!(lib.contains("\"at\": _qm_d0"), "{lib}");
         assert!(lib.contains("\"issued\": _qm_d1"), "{lib}");
         assert!(lib.contains("\"signed\": none"), "{lib}");
-        // Present dates surface a window keyed by their schema path; the null
-        // field contributes none.
         let paths: Vec<&str> = windows.iter().map(|w| w.path.as_str()).collect();
         assert!(paths.contains(&"issued"), "{paths:?}");
         assert!(paths.contains(&"at"), "{paths:?}");
         assert!(!paths.contains(&"signed"), "{paths:?}");
     }
 
-    /// Cards get a per-kind-ordinal `$path`, and content/date fields resolve
-    /// against the card kind's tables. A second card of the same kind gets
-    /// ordinal 1.
     #[test]
     fn cards_carry_path_and_per_kind_ordinals() {
         let meta = meta_from(serde_json::json!({
@@ -908,17 +756,13 @@ mod tests {
             ]
         });
         let (lib, windows) = generate_lib_typ(&data, &meta).unwrap();
-        // Each card instance gets its own per-instance windows: the body block
-        // and (for the first card's present date) a value-object window keyed
-        // by the card's full address, the per-instance identity that defeats the
-        // shared-loop-variable blindness.
+        // Each instance gets its own windows, keyed by the card's full address.
         let paths: Vec<&str> = windows.iter().map(|w| w.path.as_str()).collect();
         assert!(paths.contains(&"$cards.note.0.$body"), "{paths:?}");
         assert!(paths.contains(&"$cards.note.1.$body"), "{paths:?}");
         assert!(paths.contains(&"$cards.note.0.on"), "{paths:?}");
         assert!(lib.contains("\"$path\": \"$cards.note.0.\""));
         assert!(lib.contains("\"$path\": \"$cards.note.1.\""));
-        // The first card's date is a value-object block referenced from its cell.
         assert!(
             lib.contains("let v = datetime(year: 2026, month: 1, day: 2);"),
             "{lib}"
@@ -926,7 +770,6 @@ mod tests {
         assert!(lib.contains("\"on\": _qm_d0"), "{lib}");
     }
 
-    /// The address tables round-trip into the `_qm-meta` literal.
     #[test]
     fn meta_literal_carries_the_address_tables() {
         let meta = meta_from(serde_json::json!({
@@ -942,8 +785,7 @@ mod tests {
         assert!(lib.contains("\"array_fields\": (\"refs\",)"));
     }
 
-    /// Document data containing the literal slot text must not hijack the
-    /// splice: slots are located in the raw template only.
+    /// Slots are located in the raw template only.
     #[test]
     fn data_containing_placeholder_text_cannot_hijack_the_splice() {
         let meta = SchemaMeta::default();
@@ -959,10 +801,7 @@ mod tests {
         );
     }
 
-    /// The caller's field order must not reach the emitted source: the same
-    /// values in any key order (top-level, card, and nested dicts) produce
-    /// byte-identical `lib.typ` and identical windows, so a reorder-only
-    /// `apply` is a `Source::replace` no-op.
+    /// A reorder-only `apply` must be a `Source::replace` no-op.
     #[test]
     fn reordered_input_emits_byte_identical_source() {
         let meta = meta_from(serde_json::json!({
@@ -981,10 +820,6 @@ mod tests {
                 }
             }
         }));
-        // `content` is a pure function, so inlining it in both orderings yields
-        // the same content values: the point is the *key* order differs. The
-        // date value-object path is deterministic too: its `_qm_dN` IDs key on
-        // sorted emission order, so a reorder must not renumber them.
         let a = serde_json::json!({
             "body": content("The body."),
             "note": content("The note."),
@@ -1013,8 +848,6 @@ mod tests {
         assert_eq!(lit(&serde_json::json!(null)), "none");
         assert_eq!(lit(&serde_json::json!(true)), "true");
         assert_eq!(lit(&serde_json::json!(42)), "42");
-        // i64::MIN cannot be a Typst literal (its magnitude overflows i64);
-        // it is emitted as an int-typed expression instead.
         assert_eq!(
             lit(&serde_json::json!(i64::MIN)),
             "(-9223372036854775807 - 1)"

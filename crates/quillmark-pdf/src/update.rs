@@ -1,12 +1,7 @@
-//! The incremental-update envelope shared by the stamp and flatten paths.
-//!
-//! Both [`stamp`](crate::stamp) (this crate) and the `pdfform` value-flatten
-//! path open a base PDF the same way: validate it against the reader's input
-//! contract, read the trailer, seed the object-id counter, optionally stamp
-//! `/Info` `/Producer`, then build their own objects, then close the same way
-//! with one incremental-update append. This module owns that open/close
-//! envelope so the two paths can never drift on it; each path supplies only its
-//! middle (the objects to write).
+//! The incremental-update envelope shared by the stamp and flatten paths: open a
+//! base PDF (validate the reader's input contract, read the trailer, seed the
+//! object-id counter, optionally stamp `/Info` `/Producer`) and close it with one
+//! incremental-update append. Each path supplies only the objects in between.
 
 use crate::error::PdfError;
 use crate::reader::{
@@ -19,9 +14,7 @@ use crate::FieldSpec;
 
 const CODE_PARSE: &str = "pdf::update_parse";
 
-/// One incremental-update revision in progress: the validated entry points read
-/// from the base's trailer, plus the accumulators a caller fills with its own
-/// objects before [`finish`](PdfUpdate::finish).
+/// One incremental-update revision in progress.
 #[non_exhaustive]
 pub struct PdfUpdate {
     xref_offset: usize,
@@ -32,17 +25,14 @@ pub struct PdfUpdate {
     pub next_id: u32,
     /// Objects to write in this revision; callers push their own onto it.
     pub objects: Vec<UpdatedObject>,
-    /// `Some` when a fresh `/Info` was allocated by the producer stamp (threaded
-    /// into the new trailer by [`finish`](PdfUpdate::finish)).
+    /// `Some` when the producer stamp allocated a fresh `/Info`, which
+    /// [`finish`](PdfUpdate::finish) threads into the new trailer.
     extra_info_ref: Option<u32>,
 }
 
 impl PdfUpdate {
-    /// Open `pdf` for an incremental update: assert the input contract
-    /// (traditional-xref, unencrypted), read `/Root`, `/Size`, and `/Info` from
-    /// the trailer, seed the id counter at `/Size`, and apply the optional
-    /// `/Info` `/Producer` stamp. The caller then pushes its objects onto
-    /// [`objects`](Self::objects) and calls [`finish`](Self::finish).
+    /// Open `pdf` for an incremental update. The caller then pushes its objects
+    /// onto [`objects`](Self::objects) and calls [`finish`](Self::finish).
     pub fn begin(pdf: &[u8], producer: Option<&str>) -> Result<Self, PdfError> {
         let xref_offset = find_startxref(pdf)?;
         assert_traditional_xref(pdf, xref_offset)?;
@@ -67,12 +57,9 @@ impl PdfUpdate {
             .ok_or_else(|| err(CODE_PARSE, "/Size missing or malformed in trailer"))?;
         let info_ref = find_dict_value(trailer, "Info").and_then(parse_indirect_ref);
 
-        // Object ids are handed out from a single counter (seeded at the trailer
-        // `/Size`) so created objects never collide with the base's, nor with
-        // each other. Allocation is checked (`alloc_id`): a malformed
-        // near-`u32::MAX` `/Size` yields a clean error rather than an overflow
-        // panic (debug) or a silently-wrapped, colliding id (release),
-        // matching the reader's hard-error contract.
+        // One counter seeded at `/Size`, so created ids never collide with the
+        // base's. `alloc_id` checks it: a malformed near-`u32::MAX` `/Size` errors
+        // instead of wrapping into a colliding id.
         let mut next_id = size;
         let mut objects: Vec<UpdatedObject> = Vec::new();
         let mut extra_info_ref = None;
@@ -90,16 +77,13 @@ impl PdfUpdate {
         })
     }
 
-    /// Resolve the base's page object ids and bounds-check every field's `page`
-    /// against the page count, so a spec targeting a non-existent page is a
-    /// clean error rather than a later panic. Shared by both paths.
+    /// Resolve the base's page object ids, bounds-checking every field's `page`
+    /// so a spec targeting a non-existent page errors rather than panicking later.
     pub fn resolve_pages(&self, pdf: &[u8], fields: &[FieldSpec]) -> Result<Vec<u32>, PdfError> {
         let page_ids = resolve_page_ids(pdf, self.catalog_id)?;
         let page_count = page_ids.len();
-        // Both assertions below re-scan the whole PDF byte buffer per call
-        // (`find_object_bytes` is linear), so a form with N fields on the same
-        // page would otherwise pay O(N × file_size). Validate each distinct page
-        // once; the bounds check still runs per field.
+        // Both assertions below re-scan the whole byte buffer, so validate each
+        // distinct page once rather than pay O(fields × file_size).
         let mut checked = vec![false; page_count];
         for spec in fields {
             if spec.page >= page_count {
@@ -114,12 +98,11 @@ impl PdfUpdate {
             if checked[spec.page] {
                 continue;
             }
-            // A targeted page node is overwritten (its `/Annots`) and referenced
-            // by every widget on it as gen 0, so a non-zero-generation page would
-            // be silently corrupted.
+            // A targeted page is overwritten and referenced as gen 0, so a
+            // non-zero-generation page would be silently corrupted.
             assert_overwrite_gen_zero(pdf, page_ids[spec.page], "page")?;
-            // Widget/content geometry is written in unrotated user space; a
-            // rotated target page would mis-place every field. Reject cleanly.
+            // Geometry is written in unrotated user space, so a rotated target
+            // page would mis-place every field.
             assert_unrotated_page(pdf, self.catalog_id, page_ids[spec.page])?;
             checked[spec.page] = true;
         }
@@ -127,8 +110,7 @@ impl PdfUpdate {
     }
 
     /// Serialize the accumulated objects onto `pdf` via one incremental-update
-    /// append, threading in a freshly-allocated `/Info` when the producer stamp
-    /// created one. Consumes the update.
+    /// append, threading in a freshly-allocated `/Info` when there is one.
     pub fn finish(self, pdf: Vec<u8>) -> Result<Vec<u8>, PdfError> {
         append_incremental_update(
             pdf,

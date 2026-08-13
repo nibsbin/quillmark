@@ -1,21 +1,10 @@
 //! Actionable-hint enrichment for YAML parse errors.
 //!
-//! The underlying YAML parser (`serde_saphyr` / its `saphyr-parser-bw` backend)
-//! surfaces messages in YAML jargon ("alias references unknown anchor",
-//! "mapping values are not allowed in this context", "multiple YAML documents
-//! detected; use from_multiple or from_multiple_with_options") that LLM
-//! callers in a tool-use loop cannot translate into a content edit.
-//!
-//! This module post-processes a parser error string + the offending YAML
-//! content into:
-//!
-//! - a **sanitized** message with Rust API names (`from_multiple`,
-//!   `DuplicateKeyPolicy`, `Options`) stripped, and
-//! - an optional **hint** that names the concrete textual fix.
-//!
-//! The hint is attached to the resulting [`crate::Diagnostic`] in the `hint`
-//! field, so every binding (CLI, Python, MCP) surfaces the same advice: no
-//! per-binding error enrichment.
+//! `serde_saphyr` reports in YAML jargon and leaks its own Rust API names into
+//! advice, neither of which a caller can turn into a content edit. This module
+//! post-processes a parser error string plus the offending YAML into a sanitized
+//! message and an optional hint naming the concrete textual fix, both carried on
+//! the resulting [`crate::Diagnostic`] so every binding surfaces the same advice.
 
 /// Output of [`enrich_yaml_error`]: a cleaned message plus an optional hint.
 #[derive(Debug, Clone)]
@@ -41,16 +30,10 @@ pub(crate) fn enrich_yaml_error(raw: &str, content: &str) -> EnrichedYamlError {
     }
 }
 
-/// Strip Rust-API-name leakage from the parser message.
-///
-/// `serde_saphyr` appends advice like
-/// `"use from_multiple or from_multiple_with_options"` or
-/// `"set DuplicateKeyPolicy in Options if acceptable"` to certain errors.
-/// Those identifiers point at the Rust crate's API surface and mean nothing
-/// to a non-Rust caller (LLM, CLI user, Python consumer).
+/// Strip Rust-API-name leakage (`from_multiple`, `DuplicateKeyPolicy`, …) from
+/// the parser message: those identifiers mean nothing to a non-Rust caller.
 fn sanitize_message(raw: &str) -> String {
-    // Patterns to remove outright, including the leading `;` or `,` separator
-    // when present so we don't leave a trailing comma.
+    // The leading `;` / `,` goes too, so no trailing separator is left.
     const STRIPS: &[&str] = &[
         "; use from_multiple_with_options",
         "; use from_multiple or from_multiple_with_options",
@@ -69,7 +52,6 @@ fn sanitize_message(raw: &str) -> String {
             out.replace_range(idx..idx + p.len(), "");
         }
     }
-    // Tidy any leftover ", ." or "; ." after removal.
     out = out.replace(" ; .", ".").replace(" , .", ".");
     out.trim_end_matches([',', ';', ' ']).to_string()
 }
@@ -78,8 +60,8 @@ fn sanitize_message(raw: &str) -> String {
 fn derive_hint(message: &str, content: &str) -> Option<String> {
     let m = message.to_ascii_lowercase();
 
-    // Gap 2: a plain scalar starting with `*` or `&` is read as a YAML alias
-    // or anchor indicator. LLMs writing `field: **bold**` trip this.
+    // A plain scalar starting with `*` or `&` reads as a YAML alias or anchor.
+    // LLMs writing `field: **bold**` trip this.
     if m.contains("alias references unknown anchor")
         || m.contains("anchor") && m.contains("not found")
     {
@@ -98,7 +80,7 @@ fn derive_hint(message: &str, content: &str) -> Option<String> {
         );
     }
 
-    // Gap 3: an unquoted value containing `:` is read as a nested mapping key.
+    // An unquoted value containing `:` reads as a nested mapping key.
     if m.contains("mapping values are not allowed") {
         if let Some((field, value)) = first_field_with_unquoted_colon(content) {
             return Some(format!(
@@ -113,8 +95,7 @@ fn derive_hint(message: &str, content: &str) -> Option<String> {
         );
     }
 
-    // Gap 4 (the `---` separator case): a stray YAML document separator
-    // inside a card-yaml block.
+    // A stray YAML document separator inside a card-yaml block.
     if m.contains("multiple yaml documents") {
         if content.lines().any(|l| l.trim_end() == "---") {
             return Some(
@@ -132,7 +113,7 @@ fn derive_hint(message: &str, content: &str) -> Option<String> {
         );
     }
 
-    // Gap 4 (duplicate keys): a field declared twice in the same block.
+    // A field declared twice in the same block.
     if m.contains("duplicate mapping key") || m.contains("duplicate key") {
         return Some(
             "Each field may appear at most once inside a card-yaml block. \
@@ -141,8 +122,8 @@ fn derive_hint(message: &str, content: &str) -> Option<String> {
         );
     }
 
-    // S2-1: a `- item` list line where a mapping key was expected. Either the
-    // sequence is mis-indented, or the field was meant to be a scalar.
+    // A `- item` line where a mapping key was expected: mis-indented sequence,
+    // or the field was meant to be a scalar.
     if m.contains("block sequence entries are not allowed") {
         return Some(
             "A `- item` list was found where a mapping key was expected. Either \
@@ -154,9 +135,7 @@ fn derive_hint(message: &str, content: &str) -> Option<String> {
         );
     }
 
-    // S2-2: a continuation line of a plain-scalar value is being read as a new
-    // key. Either quote / block-scalar the multi-line value, or indent the
-    // continuation.
+    // A continuation line of a plain scalar read as a new key.
     if m.contains("simple key expected") || m.contains("simple key expect") {
         return Some(
             "A second line of a value was read as a new mapping key (YAML \
@@ -168,9 +147,8 @@ fn derive_hint(message: &str, content: &str) -> Option<String> {
         );
     }
 
-    // S2-3: anchor-scan failure, same root cause as the alias case above
-    // (unquoted value starts with `&`), matched via different message wording:
-    // "scanning an anchor or alias" rather than "anchor" + "not found".
+    // Anchor-scan failure: the alias case above under different wording
+    // ("scanning an anchor or alias" rather than "anchor" + "not found").
     if m.contains("scanning an anchor") || m.contains("scanning an alias") {
         if let Some(field) = first_field_with_unquoted_prefix(content, &['*', '&']) {
             return Some(format!(
@@ -187,7 +165,7 @@ fn derive_hint(message: &str, content: &str) -> Option<String> {
         );
     }
 
-    // Gap 5: a multi-line double-quoted scalar, block scalars are friendlier.
+    // A multi-line double-quoted scalar; block scalars are friendlier.
     if m.contains("invalid indentation in multiline quoted scalar")
         || (m.contains("indentation") && m.contains("quoted scalar"))
     {
@@ -207,10 +185,9 @@ fn derive_hint(message: &str, content: &str) -> Option<String> {
     None
 }
 
-/// Find the first `key: <scalar>` line whose scalar's first non-whitespace
-/// character matches `prefixes` (e.g. `*` or `&`). Scans only the first line
-/// of each plain mapping entry: multi-line values are not relevant for
-/// alias/anchor diagnostics.
+/// The first `key: <scalar>` line whose scalar starts with one of `prefixes`.
+/// Only the first line of each plain mapping entry is scanned: multi-line values
+/// cannot raise an alias/anchor error.
 fn first_field_with_unquoted_prefix(content: &str, prefixes: &[char]) -> Option<String> {
     for line in content.lines() {
         let trimmed = line.trim_start();
@@ -239,9 +216,8 @@ fn first_field_with_unquoted_prefix(content: &str, prefixes: &[char]) -> Option<
     None
 }
 
-/// Find the first `key: <value>` line whose unquoted value contains an
-/// additional `:` (the second colon: first triggers the parser's
-/// "mapping values are not allowed in this context" error).
+/// The first `key: <value>` line whose unquoted value contains a second `:`,
+/// which is what raises "mapping values are not allowed in this context".
 fn first_field_with_unquoted_colon(content: &str) -> Option<(String, String)> {
     for line in content.lines() {
         let trimmed = line.trim_start();
@@ -272,9 +248,8 @@ fn first_field_with_unquoted_colon(content: &str) -> Option<(String, String)> {
     None
 }
 
-/// Find the first `key: "...` line whose double-quoted scalar does not close
-/// on the same line. A useful proxy for "the model wrote a multi-line
-/// double-quoted scalar": relevant for gap 5.
+/// The first `key: "...` line whose double-quoted scalar does not close on the
+/// same line: a proxy for a multi-line double-quoted scalar.
 fn first_field_with_unterminated_dquote(content: &str) -> Option<String> {
     for line in content.lines() {
         let trimmed = line.trim_start();
@@ -289,8 +264,6 @@ fn first_field_with_unterminated_dquote(content: &str) -> Option<String> {
         if !value.starts_with('"') {
             continue;
         }
-        // Walk the value counting unescaped quotes. A single opening quote
-        // with no closer on the same line is an unterminated double-quote.
         let body = &value[1..];
         let mut closed = false;
         let mut prev_backslash = false;
@@ -428,7 +401,6 @@ mod tests {
 
     #[test]
     fn does_not_panic_on_multibyte_content() {
-        // Em-dash and curly quotes are multibyte in UTF-8: must not panic.
         let content = "briefer: Maj Sarah Chen — INDOPACOM/A2\nbluf: **\u{201c}peer\u{201d}**\n";
         let _ = enrich_yaml_error("alias references unknown anchor", content);
         let _ = enrich_yaml_error("mapping values are not allowed in this context", content);

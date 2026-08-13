@@ -1,10 +1,7 @@
-//! Zero-fill of *nested* nulls in the plate projection.
-//!
-//! The authored/default/zero ladder itself is owned by
-//! `quillmark_core::quill::resolved`: which also proves `resolve()` is
-//! byte-for-byte with `compile_data()`, so drift shows up there first. What
-//! only shows up through a loaded quill is recursion: a null inside an object
-//! property or an array element.
+//! Zero-fill of *nested* nulls in the plate projection. The authored/default/
+//! zero ladder itself is owned by `quillmark_core::quill::resolved`; what only
+//! shows up through a loaded quill is recursion into object properties and
+//! array elements.
 
 use quillmark::Document;
 use std::fs;
@@ -24,9 +21,6 @@ fn create_test_quill(temp_dir: &TempDir, quill_yaml: &str) -> std::path::PathBuf
 
 #[test]
 fn test_nested_null_zero_fills_in_plate() {
-    // null ≡ absent at every level: a null typed-dict property and a null
-    // array element must zero-fill in the plate projection, never leak a bare
-    // null.
     let temp_dir = TempDir::new().unwrap();
     let quill_path = create_test_quill(
         &temp_dir,

@@ -1,17 +1,16 @@
-//! Minimal byte-level PDF reader and incremental-update writer. Not a general
-//! PDF parser: a deliberately small scanner that parses just enough of a base
-//! PDF to splice a single incremental update onto it, and hard-errors on shapes
-//! a modern PDF can carry but this reader does not handle.
+//! Minimal byte-level PDF reader and incremental-update writer: a deliberately
+//! small scanner that parses just enough of a base PDF to splice one incremental
+//! update onto it, and hard-errors on shapes a modern PDF can carry but this
+//! reader does not handle.
 //!
 //! ## Input contract
 //!
-//! The base PDF must be **traditional-xref, unencrypted, inline-annots,
-//! flat-tree**: a classic `xref` table (not an xref *stream*), no `/Encrypt`,
-//! page `/Annots` written inline (not as an indirect reference), and a page
-//! tree shallow enough to walk. This is the precise inverse of the scanner's
-//! error branches; the qualification layer (and the hand-authored fixture)
-//! guarantee it. `hayro-syntax` is read-only and exposes no byte spans, so it
-//! cannot drive a byte-splice append: hence this bespoke scanner.
+//! The base PDF must be traditional-xref, unencrypted, inline-annots,
+//! flat-tree: a classic `xref` table (not an xref *stream*), no `/Encrypt`, page
+//! `/Annots` written inline rather than as an indirect reference, and a page tree
+//! shallow enough to walk. That is the precise inverse of the scanner's error
+//! branches. `hayro-syntax` is read-only and exposes no byte spans, so it cannot
+//! drive a byte-splice append; hence this bespoke scanner.
 
 use std::collections::HashSet;
 
@@ -20,8 +19,6 @@ use crate::error::PdfError;
 const CODE_PARSE: &str = "pdf::parse";
 const CODE_XREF_STREAM: &str = "pdf::xref_stream";
 
-/// Build a `PdfError` with `code`. Every fail site here just needs a code plus
-/// a message, so this is the whole error-construction surface.
 pub(crate) fn err(code: &'static str, msg: impl Into<String>) -> PdfError {
     PdfError::new(code, msg)
 }
@@ -44,9 +41,7 @@ pub(crate) fn find_startxref(pdf: &[u8]) -> Result<usize, PdfError> {
         .ok()
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| err(CODE_PARSE, "startxref offset is not a valid integer"))?;
-    // Bound the offset so every downstream `pdf[offset..]` / `offset + N` slice
-    // is in range: an out-of-range value (e.g. a ~20-digit near-usize::MAX
-    // offset) becomes a clean parse error rather than an overflow/panic.
+    // Bound the offset so every downstream `pdf[offset..]` slice is in range.
     if offset >= pdf.len() {
         return Err(err(CODE_PARSE, "startxref offset is past end of file"));
     }
@@ -64,9 +59,8 @@ pub(crate) fn assert_traditional_xref(pdf: &[u8], xref_offset: usize) -> Result<
     Ok(())
 }
 
-/// Return the trailer dictionary bytes for the xref section at `xref_offset`.
-/// The slice is the inner dict (between `<<` and `>>`) and may be queried with
-/// [`find_dict_value`].
+/// The inner trailer dict (between `<<` and `>>`) for the xref section at
+/// `xref_offset`, queryable with [`find_dict_value`].
 pub(crate) fn find_trailer_dict(pdf: &[u8], xref_offset: usize) -> Result<&[u8], PdfError> {
     let needle = b"trailer";
     let pos = pdf[xref_offset..]
@@ -78,11 +72,10 @@ pub(crate) fn find_trailer_dict(pdf: &[u8], xref_offset: usize) -> Result<&[u8],
         .ok_or_else(|| err(CODE_PARSE, "trailer dict not parseable"))
 }
 
-/// Append the `/Info` and `/ID` entries found in `prior_trailer` to `out`, so
-/// an incremental-update trailer preserves them. Required because many readers
-/// (and lopdf) consult only the last trailer; dropping these keys would lose
-/// the document `/Info` (producer/creator) and file identifier. No-op for keys
-/// that are absent. Callers append `/Size`, `/Root` and `/Prev` themselves.
+/// Carry `/Info` and `/ID` forward into the update's trailer: many readers
+/// (lopdf included) consult only the last trailer, so dropping them would lose
+/// the document `/Info` and file identifier. Callers append `/Size`, `/Root` and
+/// `/Prev` themselves.
 fn write_preserved_trailer_keys(out: &mut Vec<u8>, prior_trailer: &[u8]) {
     for key in ["Info", "ID"] {
         if let Some(value) = find_dict_value(prior_trailer, key) {
@@ -92,8 +85,8 @@ fn write_preserved_trailer_keys(out: &mut Vec<u8>, prior_trailer: &[u8]) {
     }
 }
 
-/// One object emitted into an incremental update: its number and full
-/// serialized form (`<id> 0 obj … endobj`).
+/// One object emitted into an incremental update, in full serialized form
+/// (`<id> 0 obj … endobj`).
 #[non_exhaustive]
 pub struct UpdatedObject {
     pub id: u32,
@@ -101,21 +94,17 @@ pub struct UpdatedObject {
 }
 
 impl UpdatedObject {
-    /// An object's new body, keyed by its PDF object id.
     pub fn new(id: u32, bytes: Vec<u8>) -> Self {
         Self { id, bytes }
     }
 }
 
-/// Append a single incremental update to `pdf`: write each object in
-/// `objects`, then an xref subsection table (contiguous ids grouped) and a
-/// trailer chaining to the prior xref at `prev_xref` via `/Prev`.
+/// Append one incremental update to `pdf`: each object in `objects`, then an
+/// xref subsection table and a trailer chaining to the prior xref via `/Prev`.
 ///
-/// `/Info` and `/ID` are forwarded from the prior trailer so readers that
-/// consult only the last trailer keep them; `extra_info_ref` adds an explicit
-/// `/Info <id> 0 R` for the case where the prior trailer had none (a fresh
-/// `/Info` object was created). `new_size` is the updated `/Size` (highest
-/// object number + 1) and `root_id` the document catalog.
+/// `extra_info_ref` adds an explicit `/Info <id> 0 R` for the case where the
+/// prior trailer had none. `new_size` is the updated `/Size` (highest object
+/// number + 1) and `root_id` the document catalog.
 pub(crate) fn append_incremental_update(
     mut pdf: Vec<u8>,
     prev_xref: usize,
@@ -124,8 +113,7 @@ pub(crate) fn append_incremental_update(
     extra_info_ref: Option<u32>,
     objects: &[UpdatedObject],
 ) -> Result<Vec<u8>, PdfError> {
-    // Built while the prior trailer (still intact at `prev_xref`) is borrowed,
-    // before we append anything.
+    // Built while the prior trailer at `prev_xref` is still intact.
     let mut trailer_tail = Vec::new();
     write_preserved_trailer_keys(&mut trailer_tail, find_trailer_dict(&pdf, prev_xref)?);
     if let Some(id) = extra_info_ref {
@@ -140,9 +128,8 @@ pub(crate) fn append_incremental_update(
         let off = pdf.len();
         entries.push((obj.id, off));
         pdf.extend_from_slice(&obj.bytes);
-        // Keep object bodies newline-separated so each `N 0 obj` header stays a
-        // distinct token for any parser (caller-built bytes already end in `\n`;
-        // pdf_writer chunks may not).
+        // Keep each `N 0 obj` header a distinct token for any parser;
+        // pdf_writer chunks do not always end in a newline.
         if !pdf.ends_with(b"\n") {
             pdf.push(b'\n');
         }
@@ -151,11 +138,10 @@ pub(crate) fn append_incremental_update(
     let new_xref_off = pdf.len();
     entries.sort_by_key(|(id, _)| *id);
     pdf.extend_from_slice(b"xref\n");
-    // A traditional xref table is a series of subsections, each headed by
-    // `<first-id> <count>` and followed by one 20-byte `OOOOOOOOOO GGGGG n `
-    // entry per object. An incremental update lists only the changed objects,
-    // so coalesce them into runs of consecutive ids (the inner loop extends
-    // `j`) to emit the fewest subsections.
+    // A traditional xref table is subsections headed by `<first-id> <count>`,
+    // each followed by one 20-byte `OOOOOOOOOO GGGGG n ` entry. An update lists
+    // only changed objects, so coalesce consecutive ids into the fewest
+    // subsections.
     let mut i = 0;
     while i < entries.len() {
         let mut j = i;
@@ -177,14 +163,12 @@ pub(crate) fn append_incremental_update(
     Ok(pdf)
 }
 
-/// Locate object `id` via linear scan and return `(obj_start, endobj_end)`.
+/// Locate object `id` and return `(obj_start, endobj_end)`.
 ///
-/// Matches the object header `<id> <generation> obj` at a token boundary (so `19 0 obj`
-/// isn't found inside `519 0 obj`) for *any* generation: re-saved PDFs can
-/// carry non-zero generations. When a base PDF carries prior incremental updates
-/// the same id can be serialized more than once; the live copy is the *last* one
-/// (xref liveness), so this returns the last match. For the common
-/// single-revision, generation-0 input there is exactly one match.
+/// Matches `<id> <generation> obj` at a token boundary, so `19 0 obj` is not
+/// found inside `519 0 obj`, at any generation (re-saved PDFs carry non-zero
+/// ones). A base with prior incremental updates can serialize an id more than
+/// once; the live copy is the last, so this returns the last match.
 pub fn find_object_bytes(pdf: &[u8], id: u32) -> Option<(usize, usize)> {
     let prefix = format!("{id} ");
     let p = prefix.as_bytes();
@@ -204,11 +188,9 @@ pub fn find_object_bytes(pdf: &[u8], id: u32) -> Option<(usize, usize)> {
     Some((start, end))
 }
 
-/// Find the `endobj` keyword that closes the object body starting at `from`,
-/// returning the index just past it. Literal `( … )` strings and `%`-comments
-/// are skipped so the bytes `endobj` appearing inside a string value (e.g. an
-/// `/Info` `/Title`) or a comment cannot truncate the object early: the same
-/// string-aware skip [`extract_outer_dict`] already relies on.
+/// The index just past the `endobj` closing the body at `from`. Literal
+/// `( … )` strings and `%`-comments are skipped so those bytes inside a string
+/// value or comment cannot truncate the object early.
 fn find_endobj_end(pdf: &[u8], from: usize) -> Option<usize> {
     let needle = b"endobj";
     let mut i = from;
@@ -226,9 +208,8 @@ fn find_endobj_end(pdf: &[u8], from: usize) -> Option<usize> {
     None
 }
 
-/// The generation number in object `id`'s header (`<id> <generation> obj`), or `None`
-/// when the object is absent or its header is malformed. Reads the *live* copy
-/// (the last serialized revision), matching [`find_object_bytes`].
+/// The generation in object `id`'s header, or `None` when it is absent or
+/// malformed. Reads the live copy, matching [`find_object_bytes`].
 pub(crate) fn object_generation(pdf: &[u8], id: u32) -> Option<u16> {
     let (start, _) = find_object_bytes(pdf, id)?;
     let after_id = start + format!("{id} ").len();
@@ -237,19 +218,15 @@ pub(crate) fn object_generation(pdf: &[u8], id: u32) -> Option<u16> {
     std::str::from_utf8(&rest[..n]).ok()?.parse().ok()
 }
 
-/// Reject overwriting a base object that lives at a **non-zero generation**.
+/// Reject overwriting a base object that lives at a non-zero generation.
 ///
-/// The incremental-update writer always re-emits an overwritten object at
-/// generation 0 ([`dict_object`](crate::writer::dict_object)) and references it
-/// as generation 0 (the trailer's `/Root … 0 R`, page/widget refs). The reader, by
-/// contrast, accepts an object header at *any* generation. So a base whose
-/// catalog / page / `/Info` lives at a non-zero generation parses fine yet would
-/// produce a malformed update: the new xref/`/Root` would point at generation 0 while
-/// the prior xref still resolves the object at its true generation. This guard
-/// closes that one gap in the spine's "reject out-of-contract input cleanly"
-/// posture, consistent with the xref-stream / `/Encrypt` rejections.
+/// The update writer re-emits overwritten objects at generation 0 and references
+/// them as generation 0, while the reader accepts a header at any generation. A
+/// base whose catalog / page / `/Info` sits at a non-zero generation therefore
+/// parses fine yet would produce a malformed update: the new `/Root` points at
+/// generation 0 while the prior xref resolves the true generation.
 ///
-/// `None` (object absent) is left for the caller's own not-found error path.
+/// `None` (object absent) is left for the caller's not-found error path.
 pub(crate) fn assert_overwrite_gen_zero(pdf: &[u8], id: u32, what: &str) -> Result<(), PdfError> {
     match object_generation(pdf, id) {
         Some(0) | None => Ok(()),
@@ -263,8 +240,7 @@ pub(crate) fn assert_overwrite_gen_zero(pdf: &[u8], id: u32, what: &str) -> Resu
     }
 }
 
-/// After the `<id> ` prefix, confirm an object header continues as `<generation> obj`:
-/// one or more digits, whitespace, then the `obj` keyword as a whole token.
+/// Whether the bytes after an `<id> ` prefix continue as `<generation> obj`.
 fn is_obj_header_tail(rest: &[u8]) -> bool {
     let gen_digits = rest.iter().take_while(|b| b.is_ascii_digit()).count();
     if gen_digits == 0 {
@@ -282,17 +258,13 @@ fn is_obj_header_tail(rest: &[u8]) -> bool {
     after_ws.starts_with(b"obj") && after_ws.get(3).is_none_or(|b| !b.is_ascii_alphanumeric())
 }
 
-/// Within a dict's inner bytes, locate `/Key` and return its raw value slice.
+/// Locate `/Key` in a dict's *inner* bytes (between its `<<` / `>>`) and return
+/// its raw value slice, beginning just after the key token.
 ///
-/// `dict_bytes` is the *inner* content of one dict (between its `<<` / `>>`),
-/// where entries strictly alternate `key value key value …` and every key is a
-/// Name. The scan walks that key→value rhythm: at each step it reads the key
-/// Name, then consumes its value wholesale via `read_value_end` (which steps
-/// over nested `<<>>` / `[]` / `()` / `<>` as a unit). Because every value is
-/// consumed as a value, a Name that appears in *value* position (e.g.
-/// `/Subtype /Producer`) is never mistaken for a key: only keys are tested
-/// against `km`. The returned slice begins exactly after the matched key token
-/// (callers such as `upsert_producer` derive the key span by subtraction).
+/// Entries alternate `key value key value …`, so the scan reads a key Name then
+/// consumes its value wholesale via `read_value_end` (stepping over nested
+/// `<<>>` / `[]` / `()` / `<>` as a unit). Only keys are matched, so a Name in
+/// value position (`/Subtype /Producer`) is never mistaken for one.
 pub fn find_dict_value<'a>(dict_bytes: &'a [u8], key: &str) -> Option<&'a [u8]> {
     let key_marker = format!("/{}", key);
     let km = key_marker.as_bytes();
@@ -314,24 +286,19 @@ pub fn find_dict_value<'a>(dict_bytes: &'a [u8], key: &str) -> Option<&'a [u8]> 
         let value_start = skip_ws_and_comments(dict_bytes, after_key);
         let value_end = read_value_end(dict_bytes, value_start)?;
         if matched {
-            // Slice from immediately after the key (not `value_start`) so the
-            // key span is `[after_key - km.len, value_end)` by subtraction.
+            // Slice from after the key, not `value_start`, so the key span is
+            // recoverable by subtraction.
             return Some(&dict_bytes[after_key..value_end]);
         }
         i = value_end;
     }
 }
 
-/// Replace `key`'s value in a flat dict, given the current `value` slice: which
-/// MUST be the subslice [`find_dict_value`] returned for that key. Its start
-/// locates the key span by pointer subtraction (`[value_start - key.len,
-/// value_end)`), not by re-scanning, so a `key` token appearing inside another
-/// value can't be matched by accident. The `key`+value span is rewritten as
-/// `key` + one space + `new_value`; the rest of `dict` is copied verbatim.
-///
-/// `key` is the on-page byte form including the leading slash (`b"/Producer"`).
-/// Callers that build the replacement value from `value`'s own bytes must do so
-/// before calling: `dict` is borrowed immutably here.
+/// Replace `key`'s value in a flat dict. `value` MUST be the subslice
+/// [`find_dict_value`] returned for that key: its start locates the key span by
+/// pointer subtraction rather than a re-scan, so a `key` token inside another
+/// value cannot be matched by accident. `key` is the on-page byte form,
+/// including the leading slash (`b"/Producer"`).
 pub fn splice_dict_value(dict: &[u8], key: &[u8], value: &[u8], new_value: &[u8]) -> Vec<u8> {
     let value_start = value.as_ptr() as usize - dict.as_ptr() as usize;
     let value_end = value_start + value.len();
@@ -346,8 +313,8 @@ pub fn splice_dict_value(dict: &[u8], key: &[u8], value: &[u8], new_value: &[u8]
     out
 }
 
-/// Skip PDF whitespace and `%`-comments (which run to end-of-line) starting at
-/// `start`; returns the index of the first significant byte at or after it.
+/// The index of the first significant byte at or after `start`, skipping
+/// whitespace and `%`-comments (which run to end-of-line).
 fn skip_ws_and_comments(b: &[u8], start: usize) -> usize {
     let mut i = start;
     loop {
@@ -364,12 +331,10 @@ fn skip_ws_and_comments(b: &[u8], start: usize) -> usize {
     }
 }
 
-/// If `b[i]` opens a literal string (`(`) or a `%`-comment, return the index just
-/// past it, so a dict/array scanner steps over content that can carry raw
-/// `<<`/`>>`/`[`/`]`/`endobj` bytes without treating them as structure. Hex
-/// strings (`<…>`) need no handling: a well-formed one holds only hex digits, so
-/// it can't carry a stray `<`/`>` that would derail the byte walk. `None` when
-/// `b[i]` is neither: the caller advances one byte.
+/// If `b[i]` opens a literal string or a `%`-comment, the index just past it, so
+/// a scanner steps over raw `<<`/`>>`/`[`/`]`/`endobj` bytes without reading them
+/// as structure. Hex strings need no handling: a well-formed one holds only hex
+/// digits. `None` when `b[i]` is neither, and the caller advances one byte.
 fn skip_string_or_comment(b: &[u8], i: usize) -> Option<usize> {
     match b.get(i)? {
         b'(' => Some(skip_pdf_string(b, i)),
@@ -384,9 +349,8 @@ fn skip_string_or_comment(b: &[u8], i: usize) -> Option<usize> {
     }
 }
 
-/// Find the byte index where a value beginning at `start` ends. Returns the
-/// index AFTER the value's last byte. Whitespace at `start` is skipped before
-/// classifying the value type.
+/// The index after the last byte of the value beginning at `start`, whose
+/// leading whitespace is skipped before the value type is classified.
 fn read_value_end(b: &[u8], start: usize) -> Option<usize> {
     let mut i = start;
     while i < b.len() && matches!(b[i], b' ' | b'\t' | b'\n' | b'\r' | b'\x0c') {
@@ -446,8 +410,7 @@ fn read_value_end(b: &[u8], start: usize) -> Option<usize> {
             Some(i)
         }
         c if c.is_ascii_digit() || c == b'-' || c == b'+' || c == b'.' => {
-            // Number, possibly followed by `N R` (indirect reference). The
-            // standalone-R check rejects `5 0 Rect`.
+            // Possibly `N N R`; the standalone-R check rejects `5 0 Rect`.
             let num_end = read_number_end(b, i);
             let mut j = num_end;
             while j < b.len() && matches!(b[j], b' ' | b'\t' | b'\n' | b'\r') {
@@ -585,20 +548,17 @@ fn skip_ws(s: &[u8]) -> &[u8] {
     &s[i..]
 }
 
-/// Resolve the catalog's `/Pages` tree into a flat list of page object IDs,
-/// in document order. The recursion is defensive and capped to prevent runaway
-/// on a pathological PDF.
+/// Flatten the catalog's `/Pages` tree into page object ids in document order.
+/// The walk is capped to prevent runaway on a pathological PDF.
 pub(crate) fn resolve_page_ids(pdf: &[u8], catalog_id: u32) -> Result<Vec<u32>, PdfError> {
     let root_pages_id = root_pages_id(pdf, catalog_id)?;
 
     const MAX_NODES: usize = 100_000;
     let mut out = Vec::new();
     let mut stack = vec![root_pages_id];
-    // A node id reached twice means the `/Pages` tree is cyclic or shares a node
-    // across parents, malformed, and an amplification vector without this
-    // guard: every visit re-scans the whole file via `find_object_bytes`, so a
-    // tiny `/Kids` self-cycle would otherwise drive up to MAX_NODES full-file
-    // scans before the count cap trips.
+    // A node reached twice is a cyclic or shared-node `/Pages` tree, and an
+    // amplification vector: every visit re-scans the whole file, so a tiny
+    // `/Kids` self-cycle would drive MAX_NODES full-file scans without this.
     let mut seen: HashSet<u32> = HashSet::new();
     while let Some(node_id) = stack.pop() {
         if !seen.insert(node_id) {
@@ -649,16 +609,10 @@ fn root_pages_id(pdf: &[u8], catalog_id: u32) -> Result<u32, PdfError> {
         .ok_or_else(|| err(CODE_PARSE, "catalog /Pages reference not found"))
 }
 
-/// Reject a page with a non-zero `/Rotate` (its own value, else the inherited
-/// root `/Pages` value).
-///
-/// The stamp/flatten paths write widget and content geometry in *unrotated*
-/// user space and do not compensate for page rotation, so a rotated base page
-/// would display every widget rotated away from its intended box. `/Rotate` is
-/// not part of the Typst producer's output (its pages are always unrotated);
-/// this guard turns a rotated `pdfform` base into a clean rejection rather than
-/// silently mis-placed output, consistent with the reader's other hard
-/// rejections.
+/// Reject a page with a non-zero `/Rotate`, its own value or the one inherited
+/// from the root `/Pages`. The stamp and flatten paths write geometry in
+/// unrotated user space and do not compensate, so a rotated base page would
+/// display every widget away from its intended box.
 pub(crate) fn assert_unrotated_page(
     pdf: &[u8],
     catalog_id: u32,
@@ -707,7 +661,6 @@ pub(crate) fn parse_ref_array(bytes: &[u8]) -> Vec<(u32, u16)> {
         match parse_indirect_ref(cur) {
             Some((id, generation)) => {
                 out.push((id, generation));
-                // Advance past the parsed ref: find " R" and step past it.
                 if let Some(pos) = cur.iter().position(|&b| b == b'R') {
                     cur = &cur[pos + 1..];
                 } else {
@@ -736,9 +689,8 @@ fn parse_rect_array(bytes: &[u8]) -> Option<[f32; 4]> {
     (count == 4).then_some(nums)
 }
 
-/// Normalize a `/MediaBox` to `[x0, y0, x1, y1]` with `x0 <= x1` and
-/// `y0 <= y1`, so `(x0, y0)` is the page's lower-left and `(x1, y1)` its
-/// upper-right regardless of which corners the array listed.
+/// Normalize a `/MediaBox` so `(x0, y0)` is lower-left and `(x1, y1)`
+/// upper-right, whichever corners the array listed.
 fn normalize_rect(mb: [f32; 4]) -> [f32; 4] {
     [
         mb[0].min(mb[2]),
@@ -749,13 +701,9 @@ fn normalize_rect(mb: [f32; 4]) -> [f32; 4] {
 }
 
 /// The `/MediaBox` of every page, normalized to `[x0, y0, x1, y1]`, in document
-/// order.
-///
-/// Reads each page's `/MediaBox`, falling back to the root `/Pages` node's
-/// `/MediaBox` (the common inheritance case) when a page declares none. The
-/// full rect (not just width/height) is returned so a caller that owns
-/// page-relative top-left geometry can honour a non-zero page origin when
-/// flipping to bottom-left PDF user space.
+/// order, falling back to the root `/Pages` node's when a page declares none.
+/// The full rect rather than width/height, so a caller flipping page-relative
+/// top-left geometry can honour a non-zero page origin.
 pub(crate) fn page_media_boxes(pdf: &[u8]) -> Result<Vec<[f32; 4]>, PdfError> {
     let xref_offset = find_startxref(pdf)?;
     assert_traditional_xref(pdf, xref_offset)?;
@@ -810,25 +758,13 @@ mod tests {
 
     #[test]
     fn dict_value_ignores_name_in_value_position() {
-        // A Name that appears as a *value* (`/Subtype /Producer`) must not be
-        // mistaken for the `/Producer` key. The real key wins.
         let dict = b" /Subtype /Producer /Producer (real) /Creator (X) ";
         let v = find_dict_value(dict, "Producer").expect("found the key, not the value");
         assert_eq!(v.trim_ascii(), b"(real)");
     }
 
     #[test]
-    fn dict_value_absent_key_with_matching_name_value_is_none() {
-        // The key is genuinely absent; the only occurrence of the token is a
-        // value Name. The walk must report None, not the spurious value.
-        let dict = b" /Subtype /Producer /Creator (X) ";
-        assert!(find_dict_value(dict, "Producer").is_none());
-    }
-
-    #[test]
     fn dict_value_skips_comments_between_entries() {
-        // A `%`-comment between entries must not derail the key→value walk, and
-        // a `/Producer` token sitting inside that comment must not be matched.
         let dict = b" /A 1 %decoy /Producer (decoy)\n /Producer (real) ";
         let v = find_dict_value(dict, "Producer").expect("found");
         assert_eq!(v.trim_ascii(), b"(real)");
@@ -836,19 +772,14 @@ mod tests {
 
     #[test]
     fn endobj_inside_comment_does_not_truncate_object() {
-        // `endobj` appearing inside a `%`-comment must not close the object at
-        // the in-comment occurrence.
         let pdf = b"%PDF\n3 0 obj\n<< /A 1 >> %endobj in a comment\n/B 2 >>\nendobj\n";
         let (s, e) = find_object_bytes(pdf, 3).expect("found object 3");
         assert_eq!(&pdf[e - 6..e], b"endobj");
-        // The real terminator is the standalone `endobj`, past the comment.
         assert!(&pdf[s..e].ends_with(b"/B 2 >>\nendobj"));
     }
 
     #[test]
     fn outer_dict_skips_comment_bearing_gt_gt() {
-        // A `%`-comment carrying `>>` inside the object body must not close the
-        // outer dict early and drop the keys that follow it.
         let obj = b"5 0 obj\n<< /A 1 %trailing >> in a comment\n /MediaBox [0 0 1 2] >>\nendobj\n";
         let dict = extract_outer_dict(obj).expect("dict parses");
         let mb = find_dict_value(dict, "MediaBox").expect("/MediaBox survives the comment");
@@ -857,9 +788,6 @@ mod tests {
 
     #[test]
     fn value_end_nested_dict_skips_string_and_comment_gt_gt() {
-        // A nested-dict value whose interior carries `>>` inside a `(…)` string or
-        // a `%`-comment must terminate at the real `>>`, so the key→value walk
-        // finds the entry that follows.
         let dict = b" /K << /S (a>>b) %c >> d\n /T 3 >> /After 9 0 R ";
         let after = find_dict_value(dict, "After").expect("/After after the nested dict");
         assert_eq!(after.trim_ascii(), b"9 0 R");
@@ -867,8 +795,6 @@ mod tests {
 
     #[test]
     fn value_end_array_skips_comment_bracket() {
-        // A `%`-comment carrying `]` inside an array value must not end the array
-        // early.
         let dict = b" /Arr [1 2 %x]\n 3] /After (real) ";
         let after = find_dict_value(dict, "After").expect("/After after the array");
         assert_eq!(after.trim_ascii(), b"(real)");
@@ -897,12 +823,10 @@ mod tests {
 
     #[test]
     fn normalize_rect_orders_corners() {
-        // Already lower-left/upper-right: unchanged.
         assert_eq!(
             normalize_rect([10.0, 20.0, 622.0, 812.0]),
             [10.0, 20.0, 622.0, 812.0]
         );
-        // Swapped corners normalize so (x0,y0) is lower-left.
         assert_eq!(
             normalize_rect([622.0, 812.0, 10.0, 20.0]),
             [10.0, 20.0, 622.0, 812.0]
@@ -924,13 +848,6 @@ mod tests {
     }
 
     #[test]
-    fn find_object_matches_nonzero_generation() {
-        let pdf = b"%PDF\n7 2 obj\n<< /C 3 >>\nendobj\n";
-        let (s, e) = find_object_bytes(pdf, 7).expect("found object 7 generation 2");
-        assert_eq!(&pdf[s..e], b"7 2 obj\n<< /C 3 >>\nendobj");
-    }
-
-    #[test]
     fn object_generation_reads_header_gen() {
         let pdf = b"%PDF\n7 2 obj\n<< /C 3 >>\nendobj\n4 0 obj\n<< /D 1 >>\nendobj\n";
         assert_eq!(object_generation(pdf, 7), Some(2));
@@ -941,10 +858,9 @@ mod tests {
     #[test]
     fn assert_overwrite_gen_zero_rejects_nonzero() {
         let pdf = b"%PDF\n7 2 obj\n<< /C 3 >>\nendobj\n4 0 obj\n<< /D 1 >>\nendobj\n";
-        // generation 0 and absent are accepted; the caller owns the not-found path.
         assert!(assert_overwrite_gen_zero(pdf, 4, "x").is_ok());
+        // Absent is accepted: the caller owns the not-found path.
         assert!(assert_overwrite_gen_zero(pdf, 99, "x").is_ok());
-        // generation != 0 is a clean error tagged with the dedicated code.
         let e = assert_overwrite_gen_zero(pdf, 7, "catalog").expect_err("generation 2 rejected");
         assert_eq!(e.code, "pdf::nonzero_generation");
         assert!(e.message.contains("generation 2"), "{}", e.message);
@@ -952,8 +868,7 @@ mod tests {
 
     #[test]
     fn find_object_returns_last_revision() {
-        // Same id serialized twice (an incremental update): the live copy is the
-        // later one.
+        // Same id serialized twice, as an incremental update writes it.
         let pdf = b"%PDF\n4 0 obj\n<< /V (old) >>\nendobj\n4 0 obj\n<< /V (new) >>\nendobj\n";
         let (s, e) = find_object_bytes(pdf, 4).expect("found object 4");
         assert_eq!(&pdf[s..e], b"4 0 obj\n<< /V (new) >>\nendobj");
@@ -961,15 +876,12 @@ mod tests {
 
     #[test]
     fn endobj_inside_string_does_not_truncate_object() {
-        // A literal string value containing the bytes "endobj" (e.g. an /Info
-        // /Title) must not end the object at the in-string occurrence.
         let pdf = b"%PDF\n3 0 obj\n<< /Title (My endobj report) /Author (X) >>\nendobj\n";
         let (s, e) = find_object_bytes(pdf, 3).expect("found object 3");
         assert_eq!(
             &pdf[s..e],
             b"3 0 obj\n<< /Title (My endobj report) /Author (X) >>\nendobj"
-        );
-        // …and the dict still extracts cleanly with the full /Title value.
+);
         let dict = extract_outer_dict(&pdf[s..e]).expect("dict parses");
         let title = find_dict_value(dict, "Title").expect("/Title");
         assert_eq!(title.trim_ascii(), b"(My endobj report)");
@@ -977,8 +889,6 @@ mod tests {
 
     #[test]
     fn page_tree_cycle_is_rejected() {
-        // A /Pages node whose /Kids references itself must error cleanly, not
-        // loop to the node cap re-scanning the whole file each visit.
         let pdf = b"%PDF\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
                     2 0 obj\n<< /Type /Pages /Kids [2 0 R] /Count 1 >>\nendobj\n";
         let e = resolve_page_ids(pdf, 1).expect_err("cycle rejected");
@@ -988,13 +898,12 @@ mod tests {
 
     #[test]
     fn rotated_page_is_rejected() {
-        // /Rotate inherited from the root /Pages node is honoured.
+        // /Rotate inherited from the root /Pages node.
         let pdf = b"%PDF\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
                     2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 /Rotate 90 >>\nendobj\n\
                     3 0 obj\n<< /Type /Page /Parent 2 0 R >>\nendobj\n";
         let e = assert_unrotated_page(pdf, 1, 3).expect_err("rotated page rejected");
         assert_eq!(e.code, "pdf::rotated_page");
-        // A page with no rotation (own or inherited) is accepted.
         let flat = b"%PDF\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
                      2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n\
                      3 0 obj\n<< /Type /Page /Parent 2 0 R >>\nendobj\n";

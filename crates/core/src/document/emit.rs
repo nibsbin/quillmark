@@ -1,25 +1,14 @@
 //! Canonical Markdown emission for [`Document`].
 //!
-//! This module implements [`Document::to_markdown`], which converts a typed
-//! in-memory `Document` back into canonical Quillmark Markdown.
-//!
-//! ## YAML emission strategy
-//!
 //! Scalar emission (quoting, escaping, multi-line handling) is delegated to
-//! `serde-saphyr`: the same library used for parsing. This makes the emit
-//! and parse sides of the wire symmetric by construction: anything saphyr
-//! decides to quote on emit, saphyr will read back as a string on parse.
-//! Delegation also covers the YAML 1.1 edge cases that ad-hoc quoting
-//! heuristics miss (`on`/`yes`/`off`, leading-zero integers, `1.0`-style
-//! numerics): saphyr handles them all.
+//! `serde-saphyr`, the library the parser uses, so emit and parse are symmetric
+//! by construction: what saphyr quotes on emit it reads back as a string, and
+//! the YAML 1.1 edge cases ad-hoc quoting misses (`on`/`yes`/`off`, leading-zero
+//! integers) are handled there. `prefer_block_scalars: false` keeps multi-line
+//! strings inline as double-quoted scalars, so no `|` / `>` forms are emitted.
 //!
-//! `prefer_block_scalars: false` keeps multi-line strings inline as
-//! double-quoted scalars with `\n` escapes, so the emitter never produces
-//! `|` or `>` block forms in v1.
-//!
-//! This module owns the surrounding structure: `~~~` card-yaml fences,
-//! `$`-prefixed system-metadata lines, field ordering, indentation, comment
-//! interleaving, and calls saphyr only for the scalar leaves.
+//! This module owns the surrounding structure: fences, `$` metadata lines, field
+//! ordering, indentation, and comment interleaving.
 
 use serde_json::Value as JsonValue;
 use serde_saphyr::{FlowMap, FlowSeq, SerializerOptions};
@@ -28,8 +17,6 @@ use super::payload::PayloadItem;
 use super::prescan::{CommentPathSegment, NestedComment};
 use super::{Card, Document};
 
-// ── Public entry point ────────────────────────────────────────────────────────
-
 impl Document {
     /// Emit canonical Quillmark Markdown from this document.
     ///
@@ -37,18 +24,14 @@ impl Document {
     ///
     /// 1. **Type-fidelity round-trip.** `Document::parse(&doc.to_markdown())`
     ///    returns a `Document` equal to `doc` by value *and* by type variant.
-    ///    `QuillValue::String("on")` round-trips as a string, never as a bool.
-    ///    `QuillValue::String("01234")` round-trips as a string, never as an
-    ///    integer.  This guarantee is the whole point of owning emission.
+    ///    `QuillValue::String("on")` round-trips as a string, never as a bool;
+    ///    `QuillValue::String("01234")` never as an integer.
     ///
     ///    **Content-field carve-out.** A richtext field committed as a canonical
-    ///    content object (and the card `$body`) is *intentionally* markdown-lossy
-    ///    on markdown emit: it projects to its markdown form (`project_content_field`),
-    ///    so identity marks (anchors, island ids) and content-only marks
-    ///    (`underline`) do not survive a `to_markdown`→`from_markdown` round-trip.
-    ///    On-disk identity is markdown-lossy by design; the storage DTO is the
-    ///    lossless carrier. The value-equality guarantee above holds for every
-    ///    field the writer did not commit as canonical content.
+    ///    content object (and the card `$body`) projects to its markdown form, so
+    ///    identity marks and content-only marks do not survive a
+    ///    `to_markdown`→`from_markdown` round-trip. The storage DTO is the
+    ///    lossless carrier; the guarantee above holds for every other field.
     ///
     /// 2. **Emit-idempotent.** `to_markdown` is a pure function of `doc`; two
     ///    calls on the same `doc` return byte-equal strings.
@@ -65,27 +48,14 @@ impl Document {
     /// - Cards: one blank line before each, then the block, then the card body.
     /// - Body: emitted verbatim after the root block (and after each card).
     /// - Mappings and sequences: **block style** at every nesting level.
-    /// - Scalars (booleans, null, numbers, strings): delegated to
-    ///   `serde-saphyr`, which emits the type-canonical form (`true`/
-    ///   `false`, `null`, bare numeric literal) and quotes strings only
-    ///   when the unquoted form would be misread (`on`/`yes`/`off`,
-    ///   `null`/`~`, numeric-looking strings, leading flow indicators,
-    ///   `: ` runs, …).  Quoting form is not stable: what matters is
-    ///   that the emitted scalar round-trips to the same `QuillValue`
-    ///   variant. This is the type-fidelity guarantee.
+    /// - Scalars: delegated to `serde-saphyr`, which emits the type-canonical
+    ///   form and quotes strings only when the unquoted form would be misread.
+    ///   The quoting *form* is not stable; the round-tripped variant is.
     /// - Multi-line strings: emitted as inline double-quoted scalars with
     ///   `\n` escapes; no `|` / `>` block forms.
     ///
-    /// # Design notes
-    ///
-    /// - **Nested-map order.** `QuillValue` is backed by `serde_json::Value`
-    ///   whose object type (`serde_json::Map`) preserves insertion order when the
-    ///   `serde_json/preserve_order` feature is enabled (it is in this workspace).
-    ///   Insertion order is therefore preserved for nested maps at emit time.
-    ///
-    /// - **Empty containers.**
-    ///   - Empty object (`{}`) → the key is **omitted** from emit entirely.
-    ///   - Empty array (`[]`) → emitted as `key: []\n`.
+    /// - **Empty containers.** An empty object omits its key entirely; an empty
+    ///   array emits as `key: []\n`.
     ///
     /// # What is preserved
     ///
@@ -106,31 +76,22 @@ impl Document {
     pub fn to_markdown(&self) -> String {
         let mut out = String::new();
 
-        // ── Root block (card-yaml fence + global body) ────────────────────────
-        // Bodies are content values; the markdown surface is their export projection,
-        // so a `Document` → markdown → `Document` round-trip canonicalizes the
-        // body markdown (leading and trailing blank lines dropped: the
-        // projection is a value, not a file). A blank line separates the closing
-        // fence from a non-empty body, the conventional card-yaml shape; the
-        // file-final newline is added at the end of this method.
+        // Bodies are content values whose markdown is an export projection, so a
+        // round-trip canonicalizes them (leading and trailing blank lines are
+        // dropped: a value, not a file).
         emit_block(&mut out, self.main());
         append_body(&mut out, &self.main().body_markdown());
 
-        // ── Composable cards ──────────────────────────────────────────────────
-        // `ensure_blank_before_fence` normalises the separator before each
-        // block, so edited bodies (which may lack a trailing blank line) still
-        // round-trip.
+        // The separator is normalised before each block, so edited bodies that
+        // lack a trailing blank line still round-trip.
         for card in self.cards() {
             ensure_blank_before_fence(&mut out);
             emit_block(&mut out, card);
             append_body(&mut out, &card.body_markdown());
         }
 
-        // The body projection (`body_markdown`) emits no trailing newline (it is
-        // a value, not a file) so a document ending in a body ends
-        // without one. The emitted document is a file; own its final newline
-        // here. A fence-terminated document already ends in `\n`, so this is
-        // then a no-op.
+        // The body projection carries no trailing newline; the emitted document
+        // is a file, so it owns its final one.
         if !out.ends_with('\n') {
             out.push('\n');
         }
@@ -149,8 +110,6 @@ fn append_body(out: &mut String, body: &str) {
     }
 }
 
-// ── Block emission ────────────────────────────────────────────────────────────
-
 fn emit_meta_line(out: &mut String, key: &str, value: &str, trailer: Option<&str>) {
     out.push('$');
     out.push_str(key);
@@ -161,11 +120,8 @@ fn emit_meta_line(out: &mut String, key: &str, value: &str, trailer: Option<&str
 }
 
 /// Emit an out-of-band meta block (`$ext` / `$seed`). An empty map emits inline
-/// as `<key>: {}` so the declaration survives the round-trip; a non-empty map
-/// emits as a `<key>:` header followed by indented block-style children.
-/// `nested` carries comments with paths relative to the value tree (the meta
-/// key itself is not in the path): the child mapping walker re-injects them at
-/// the matching positions. Meta maps are out-of-band data and never carry
+/// as `<key>: {}` so the declaration survives the round-trip. `nested` carries
+/// comments at paths relative to the value tree. Meta maps never carry
 /// `!must_fill`.
 fn emit_meta_block(
     out: &mut String,
@@ -189,9 +145,7 @@ fn emit_meta_block(
     emit_mapping_children(out, value, 2, &path, nested, &[]);
 }
 
-/// `true` when `path` (relative to a field value) carries a `!must_fill`
-/// marker. Fill sets are small (one entry per placeholder), so a linear
-/// scan is cheaper than building a hash set per field.
+/// Fill sets are small, so a linear scan beats building a hash set per field.
 fn path_is_fill(fills: &[Vec<CommentPathSegment>], path: &[CommentPathSegment]) -> bool {
     fills.iter().any(|p| p.as_slice() == path)
 }
@@ -204,14 +158,9 @@ fn emit_block(out: &mut String, card: &Card) {
 
 /// Walk the unified item list and emit each entry. An `inline: true` comment
 /// immediately following a non-comment item is consumed as that item's trailer.
-///
-/// Each `Field` / `Ext` item carries its own `nested_comments` slice with
-/// paths relative to the field's value tree, so emission of nested
-/// structures starts with an empty container path.
 fn emit_payload_items(out: &mut String, items: &[PayloadItem]) {
     let mut i = 0;
     while i < items.len() {
-        // Peek for a trailing inline comment to use as the line trailer.
         let trailer = items.get(i + 1).and_then(|next| match next {
             PayloadItem::Comment { text, inline: true } => Some(text.as_str()),
             _ => None,
@@ -238,14 +187,10 @@ fn emit_payload_items(out: &mut String, items: &[PayloadItem]) {
                 fill,
                 nested_comments,
             } => {
-                // A richtext field stores its value as a canonical content
-                // object (via `commit_field`); card-yaml is the
-                // human-authored surface, so it projects back to a markdown
-                // string here: the field-level twin of the `$body` projection,
-                // lossy per the content's island loss class (the DTO stays the
-                // lossless carrier). A content field is never `!must_fill` and
-                // its content carries no user nested-comments/fills, so the
-                // projected scalar routes through the plain string path.
+                // card-yaml is the human-authored surface, so a stored content
+                // object projects back to markdown here. Such a field is never
+                // `!must_fill` and carries no nested comments, so the projected
+                // scalar takes the plain string path.
                 if !*fill {
                     if let Some(markdown) = project_content_field(value.as_json()) {
                         emit_field(
@@ -263,11 +208,8 @@ fn emit_payload_items(out: &mut String, items: &[PayloadItem]) {
                         continue;
                     }
                 }
-                // Paths in `nested_comments` are relative to this field's
-                // value, so the container path starts empty.
                 let path: Vec<CommentPathSegment> = Vec::new();
-                // `!must_fill` markers on nested nodes, as paths relative to
-                // this field's value; the top-level marker rides on `*fill`.
+                // Nested fill markers; the top-level one rides on `*fill`.
                 let fills = value.fill_paths();
                 emit_field(
                     out,
@@ -295,35 +237,22 @@ fn emit_payload_items(out: &mut String, items: &[PayloadItem]) {
 /// The markdown projection of a richtext-valued field, or `None` when `value` is
 /// not a canonical content object.
 ///
-/// A richtext field written via [`Card::commit_field`](super::Card::commit_field)
-/// stores the canonical content object; emit projects it to a markdown string so
-/// card-yaml (the human-authored surface) stays markdown-clean rather than
-/// carrying a nested `{text, lines, marks, islands}` tree. Projection is lossy
-/// per the content's island loss class (the same tradeoff `$body` makes): island
-/// ids and content-only marks do not survive a markdown round-trip, so on-disk
-/// identity is markdown-lossy by design; the storage DTO is the lossless carrier.
+/// Projecting keeps card-yaml markdown-clean rather than carrying a nested
+/// `{text, lines, marks, islands}` tree. It is lossy: island ids and
+/// content-only marks do not survive, and the storage DTO is the lossless
+/// carrier.
 ///
 /// The guard requires the object to serialize back to a **byte-identical**
-/// canonical content, so a user object field that merely resembles one (extra
-/// keys, non-canonical shape, or non-canonical key order) stays structural. The
-/// comparison is on the serialized *strings*, not the `serde_json::Value`s: with
-/// `serde_json/preserve_order` on (it is in this workspace), `Value`'s `PartialEq`
-/// is an order-independent `IndexMap` compare, so a `Value != Value` guard would
-/// also accept a content-canonical object whose keys are in non-canonical order,
-/// projecting (and thus markdown-flattening) it. String equality pins key order.
-///
-/// A content object normally only arises from the programmatic content writer
-/// (`from_markdown` is schema-less and stores a markdown-authored richtext field
-/// as a plain string), so on a parse-originated document this projects only the
-/// fields the writer deliberately committed as content.
+/// canonical content, so a user object that merely resembles one stays
+/// structural. The comparison is on the serialized *strings*: under
+/// `serde_json/preserve_order`, `Value`'s `PartialEq` is order-independent, so a
+/// `Value` guard would also project a content-canonical object whose keys are in
+/// non-canonical order.
 fn project_content_field(value: &JsonValue) -> Option<String> {
     if !value.is_object() {
         return None;
     }
     let rt = quillmark_content::serial::from_canonical_value(value).ok()?;
-    // Byte-exact: canonical-string equality, not `Value` equality (which is
-    // order-independent under `preserve_order`). Only a content in canonical key
-    // order projects; anything else stays a structural field.
     let canonical = quillmark_content::serial::to_canonical_value(&rt);
     if serde_json::to_string(&canonical).ok()? != serde_json::to_string(value).ok()? {
         return None;
@@ -332,8 +261,7 @@ fn project_content_field(value: &JsonValue) -> Option<String> {
 }
 
 /// Ensure `out` ends with `\n\n` so the next fence has a blank line above it.
-/// Appends a line terminator first if `out` doesn't already end with `\n`.
-/// No-op on empty `out` (block at line 1 needs no separator).
+/// No-op on empty `out`: a block at line 1 needs no separator.
 fn ensure_blank_before_fence(out: &mut String) {
     if out.is_empty() {
         return;
@@ -343,8 +271,6 @@ fn ensure_blank_before_fence(out: &mut String) {
     }
     out.push('\n');
 }
-
-// ── YAML value emission ───────────────────────────────────────────────────────
 
 /// Emit own-line nested comments at `position` in `path` (inline comments are
 /// handled by `find_inline_trailer`).
@@ -741,12 +667,10 @@ fn emit_scalar(out: &mut String, value: &JsonValue) {
     out.push_str(&s);
 }
 
-/// Emit a *nested* mapping key, quoting it through the same scalar path as
-/// values. Nested keys are arbitrary user data (never name-validated) and are
-/// re-parsed by serde_saphyr, so a key containing `:`/`#`, a leading YAML
-/// indicator (`*`, `&`, `?`, `-`, …), edge whitespace, or a type-ambiguous form
-/// (`n`, `true`, `123`) must be quoted or the emitted document re-parses to a
-/// different key: breaking the round-trip/idempotence contract.
+/// Emit a *nested* mapping key through the same scalar path as values. Nested
+/// keys are arbitrary user data, never name-validated, so one containing `:`/`#`,
+/// a leading YAML indicator, edge whitespace, or a type-ambiguous form must be
+/// quoted or the document re-parses to a different key.
 fn emit_key(out: &mut String, key: &str) {
     out.push_str(&saphyr_emit_scalar(&JsonValue::String(key.to_string())));
 }
@@ -779,19 +703,13 @@ pub(crate) fn saphyr_emit_scalar(value: &JsonValue) -> String {
         buf.pop();
     }
 
-    // Saphyr 0.0.23's emitter and parser disagree about which plain scalars
-    // are string-safe: it emits some `String`s unquoted that its own parser
-    // reads back as a non-string (`_0` → integer 0) or as a different string.
-    // Edge-whitespace strings are one class: the plain-safety check inspects
-    // only the leading ASCII byte, missing a leading/trailing Unicode-
-    // whitespace char (U+2000…) or a trailing ASCII space, and YAML strips
-    // such whitespace from plain scalars on parse. `_0`-style numeric-looking
-    // strings are another. Both lose the original string on round-trip. When
-    // saphyr emits a `String` unquoted, re-parse the emitted plain scalar with
-    // the same library the parser uses and, unless it round-trips to the exact
-    // same string, emit double-quoted ourselves. Edge whitespace stays an
-    // explicit guard: a trailing Unicode-whitespace char survives the isolated
-    // re-parse yet is still stripped in the real block context.
+    // Saphyr 0.0.23's emitter and parser disagree about which plain scalars are
+    // string-safe: it emits `String`s unquoted that its own parser reads back as
+    // a number (`_0` → 0) or as a different string (edge whitespace, which YAML
+    // strips from plain scalars). So re-parse anything it emitted unquoted and
+    // double-quote it ourselves unless it round-trips exactly. Edge whitespace
+    // needs its own guard: a trailing Unicode-whitespace char survives the
+    // isolated re-parse yet is still stripped in the real block context.
     if let JsonValue::String(s) = value {
         let unquoted = !buf.starts_with('"')
             && !buf.starts_with('\'')
@@ -800,7 +718,6 @@ pub(crate) fn saphyr_emit_scalar(value: &JsonValue) -> String {
         if unquoted {
             let has_edge_whitespace = !s.is_empty()
                 && (s.starts_with(char::is_whitespace) || s.ends_with(char::is_whitespace));
-            // A parse error counts as "must quote", conservatively.
             let reparses_same = matches!(
                 serde_saphyr::from_str::<JsonValue>(&buf),
                 Ok(JsonValue::String(ref s2)) if s2 == s
@@ -872,15 +789,11 @@ pub(crate) fn saphyr_emit_flow(value: &JsonValue) -> String {
     buf
 }
 
-// ── Utilities ─────────────────────────────────────────────────────────────────
-
 fn push_indent(out: &mut String, spaces: usize) {
     for _ in 0..spaces {
         out.push(' ');
     }
 }
-
-// ── Unit tests ────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
@@ -917,12 +830,8 @@ mod tests {
 
     #[test]
     fn saphyr_scalar_round_trips_numeric_looking_strings() {
-        // Saphyr's emitter treats a leading-underscore-then-digits scalar as
-        // plain-safe, but its parser reads the plain form back as an integer
-        // (underscores are digit separators, leading ones ignored): `_0` → 0,
-        // `-_0` → 0, `__0` → 0. `_0` is the minimal fuzz-shrunk case. Each is
-        // emitted unquoted and re-parsed as `Number` before the fix; the
-        // general round-trip check must quote every one.
+        // Saphyr's parser reads a leading-underscore-then-digits plain scalar
+        // back as an integer (underscores are digit separators): `_0` → 0.
         for numericish in &["_0", "_1", "-_0", "__0"] {
             assert_scalar_round_trips(serde_json::json!(*numericish));
         }
@@ -930,8 +839,6 @@ mod tests {
 
     #[test]
     fn string_underscore_zero_round_trips_via_document() {
-        // Full `to_markdown` → `from_markdown` path for the reported bug:
-        // `String("_0")` must return as a `String`, still equal to `"_0"`.
         let src = "~~~card-yaml\n$quill: q\n$kind: main\na: \"_0\"\n~~~\n\nBody.\n";
         let doc = crate::document::Document::parse(src).expect("parse src").document;
         let emitted = doc.to_markdown();

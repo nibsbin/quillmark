@@ -1,19 +1,11 @@
-//! Typed mutators for [`Document`] and [`Card`] with invariant enforcement.
+//! Typed mutators for [`Document`] and [`Card`].
 //!
-//! Every successful mutator leaves the document with every user field name
-//! matching `[A-Za-z_][A-Za-z0-9_]*` and every composable `$kind` passing
-//! `meta::is_valid_kind_name`, so the result is safely serializable via
-//! [`Document::to_plate_json`]. Mutators never modify `warnings`: those
-//! are immutable parse-time observations.
-//!
-//! Payload/body mutators (field store/fill/remove, `$ext` and `$seed`
-//! namespace writers, body replacement) live on [`Card`]; [`Document`] keeps
-//! document-level ops (quill-ref, push/insert/remove/move card).
-//!
-//! The `$ext` mutators carry no field-name invariant ($ext is an opaque
-//! mapping that never reaches the plate JSON backends consume), but they do
-//! enforce the §8 value-depth bound: `$ext` flows through the recursive
-//! emit and DTO paths like any other value.
+//! Every successful mutator leaves user field names matching
+//! `[A-Za-z_][A-Za-z0-9_]*`, composable `$kind`s valid, and values inside the
+//! §8 depth bound, so the result is safely serializable via
+//! [`Document::to_plate_json`]. Mutators never modify `warnings`: those are
+//! parse-time observations. `$ext`/`$seed` are opaque mappings that carry no
+//! field-name invariant, but do carry the depth bound.
 
 use std::collections::BTreeMap;
 
@@ -33,10 +25,8 @@ use crate::version::QuillReference;
 
 /// `true` if `name` matches `[A-Za-z_][A-Za-z0-9_]*` after NFC normalisation.
 ///
-/// Lowercase is the recommended (canonical) convention, but uppercase ASCII
-/// letters are accepted and preserved verbatim. Collision-safety with system
-/// metadata comes entirely from the `$`-prefix exclusion: `$`-prefixed keys
-/// are reserved, so a user field can never shadow one regardless of case.
+/// Case is preserved verbatim; only `$`-prefixed keys are reserved, so a user
+/// field can never shadow system metadata.
 pub fn is_valid_field_name(name: &str) -> bool {
     let normalized: String = name.nfc().collect();
     if normalized.is_empty() {
@@ -55,10 +45,9 @@ pub fn is_valid_field_name(name: &str) -> bool {
     true
 }
 
-/// The `richtext` codec, as [`EditError::FieldDecode`] and
-/// [`EditError::FieldNotInline`] name it on the wire. The spelling is the
-/// `richtext` schema keyword and is frozen with the diagnostic arg, not a
-/// display string.
+/// The `richtext` codec name carried by [`EditError::FieldDecode`] and
+/// [`EditError::FieldNotInline`]. Frozen with the diagnostic arg: it is the
+/// schema keyword, not a display string.
 pub const CODEC_RICHTEXT: &str = "richtext";
 
 /// The `plaintext` codec. See [`CODEC_RICHTEXT`].
@@ -73,11 +62,8 @@ pub enum EditError {
 
     /// A typed write ([`TypedWriter::set`](crate::TypedWriter::set) /
     /// [`CardWriter::set`](crate::CardWriter::set)) addressed a well-formed name
-    /// that the bound schema does not declare (or a card whose `$kind` carries
-    /// no schema). The typed path resolves every name to a schema type, so an
-    /// undeclared name is a typo, not a fallback: it fails here instead of
-    /// landing silently in the opaque store. Reach for the raw
-    /// [`Card::store_field`](Card::store_field) when opaque storage is the intent.
+    /// the bound schema does not declare (or a card whose `$kind` carries no
+    /// schema). Use [`Card::store_field`](Card::store_field) for opaque storage.
     #[error("field '{0}' is not declared in the schema")]
     UnknownField(String),
 
@@ -103,17 +89,10 @@ pub enum EditError {
     /// A value could not become the field's content through `codec`: a JSON
     /// object that is not a canonical content, a markdown string that failed to
     /// import, a shape that is neither object nor string, or formatting under
-    /// the plain-only `plaintext` codec. `message` names which, as engine prose
-    /// riding no arg. Returned by `Card::commit_field` on
-    /// a content field, by [`Card::revise_field`](Card::revise_field) on a
-    /// present non-content field, and by the reads on
-    /// [`TypedReader`](crate::TypedReader).
+    /// the plain-only `plaintext` codec. `message` names which.
     ///
-    /// `codec` is the declared type's, not the stored shape's: the same bytes
-    /// decode two ways and only the schema says which ran.
-    ///
-    /// Absence is not this error. A missing field is `None` everywhere the API
-    /// meets one, and the content lane reads it as the empty content.
+    /// `codec` is the declared type's, not the stored shape's. Absence is not
+    /// this error: a missing field is `None`, and reads as the empty content.
     #[error("{codec} field '{field}': {message}")]
     FieldDecode {
         field: String,
@@ -124,25 +103,17 @@ pub enum EditError {
     },
 
     /// A `Content` read ([`TypedReader::get_content`](crate::TypedReader::get_content))
-    /// addressed a field whose declared type is not a content leaf. Which codec
-    /// decodes a value is a property of the declared type, not of the stored
-    /// shape, so the schema answers this before the payload is consulted: an
-    /// `integer` field has no `Content` to return even when it happens to hold a
-    /// string.
-    ///
-    /// The condition is a *leaf* one, narrower than the subtree test conform
-    /// walks (`field_contains_content`): an `array<richtext>` carries content and
-    /// still has no one `Content`, so it lands here. Read its elements through
+    /// addressed a field whose declared type is not a content *leaf*. The schema
+    /// answers before the payload is consulted, and the test is narrower than
+    /// the subtree walk: an `array<richtext>` carries content yet has no single
+    /// `Content`, so it lands here. Read its elements through
     /// [`get`](crate::TypedReader::get).
     #[error("field '{field}' is declared '{declared}', which is not a content field")]
     FieldNotContent { field: String, declared: String },
 
     /// A content field written under an `inline: true` schema decoded to a
-    /// multi-line content: the write-time counterpart of the
-    /// coercion/validation `inline` check, raised by
-    /// `Card::commit_field`. Both prose codecs declare
-    /// `inline`, so one code covers both and `codec` says which lane it came
-    /// from.
+    /// multi-line content. Both prose codecs declare `inline`, so one code
+    /// covers both and `codec` says which lane raised it.
     #[error("{codec} field '{field}' is not inline: {codec}(inline) requires a single line with no container or island")]
     FieldNotInline {
         field: String,
@@ -151,20 +122,16 @@ pub enum EditError {
         codec: String,
     },
 
-    /// A typed write (`Card::commit_field`) could not
-    /// coerce the value to the field's schema type: the general write-commit
-    /// failure for scalar/array/object types (a `"x"` for an `integer`, a
-    /// non-object for an `object`, …). The mutator-plane twin of
-    /// `validation::coercion_failed`, minted from the same [`CoercionError`].
-    /// Content fields report through the dedicated
+    /// A typed write could not coerce the value to the field's schema type: the
+    /// general failure for scalar/array/object types (a `"x"` for an `integer`,
+    /// a non-object for an `object`, …). Content fields report through
     /// [`FieldDecode`](Self::FieldDecode) / [`FieldNotInline`](Self::FieldNotInline)
-    /// variants instead.
+    /// instead.
     #[error("field '{field}' could not be coerced to its schema type: {message}")]
     FieldCoercionFailed {
         field: String,
-        /// The schema type the write was coerced against, carried across
-        /// from [`CoercionError`] so the failure
-        /// states what the value had to become. `message` alone is English.
+        /// The schema type the write was coerced against; `message` alone is
+        /// English.
         target: String,
         message: String,
     },
@@ -177,12 +144,8 @@ pub enum EditError {
 
 impl EditError {
     /// The namespaced diagnostic `code` (e.g. `"edit::invalid_field_name"`),
-    /// one per variant, and the variant's only stable discriminator. This is
-    /// the machine-routable identity both bindings stamp onto the `Diagnostic`
-    /// they raise: the `edit::*` peer of `parse::*`, `validation::*`, and the
-    /// rest of the taxonomy in `prose/canon/ERROR.md`. Consumers route on this,
-    /// not on message text; a Rust caller matching the enum has
-    /// `#[non_exhaustive]` to answer to and a `_` arm regardless.
+    /// one per variant and the variant's only stable discriminator. Consumers
+    /// route on this, not on message text. Taxonomy: `prose/canon/ERROR.md`.
     pub fn code(&self) -> &'static str {
         match self {
             EditError::InvalidFieldName(_) => "edit::invalid_field_name",
@@ -201,16 +164,12 @@ impl EditError {
     }
 
     /// The facts this error's message interpolates. See
-    /// [`Diagnostic::args`](crate::error::Diagnostic::args); `ERROR.md`
-    /// § "Diagnostic args" says per code whether an empty map means a fixed
-    /// sentence or a fallback to `message`.
+    /// [`Diagnostic::args`](crate::error::Diagnostic::args).
     ///
-    /// `field` and `kind` ride here despite [`doc_path`](Self::doc_path) also
-    /// folding them into the anchor. The rule against duplicating an anchor
-    /// bars the assembled `path` string, and recovering a name from one is
-    /// unsound anyway: [`DocPath`](crate::path::DocPath) renders field
-    /// segments unescaped and parses on `.` and `[`, so exactly the malformed
-    /// names `InvalidFieldName` reports can round-trip into other segments.
+    /// `field` and `kind` ride here even though [`doc_path`](Self::doc_path)
+    /// also folds them into the anchor: [`DocPath`](crate::path::DocPath)
+    /// renders field segments unescaped and parses on `.` and `[`, so a
+    /// malformed name cannot be recovered from the rendered path.
     pub fn args(&self) -> BTreeMap<String, serde_json::Value> {
         match self {
             EditError::InvalidFieldName(field) => diag_args! { "field" => field },
@@ -252,21 +211,14 @@ impl EditError {
     }
 
     /// The [`DocPath`](crate::path::DocPath) this error anchors to, relative to
-    /// `base`, the card root the mutator ran against (`main` for a main-card
-    /// mutator, `cards.<kind>[i]` for a composable card, `cards[i]` for a
-    /// structural op on the array; empty only for a card built before it is
-    /// placed, which has no index yet).
+    /// `base`: the card root the mutator ran against, empty for a card built
+    /// before placement.
     ///
-    /// A field-named variant anchors at its field under `base`
-    /// (`main.<field>`, `cards.<kind>[i].<field>`, or a bare `<field>` when
-    /// `base` is empty: the pre-placement card);
+    /// A field-named variant anchors at its field under `base`;
     /// [`IndexOutOfRange`](Self::IndexOutOfRange) at the document-array slot
-    /// `cards[index]`, base-independent: a structural op names a slot, not a
-    /// field; and the remaining variants (kind errors, depth, content
-    /// apply/import) anchor at `base` itself when it names a card, else carry no
-    /// anchor (a config-space `$seed` error keeps an empty base). Both
-    /// bindings route through this so a mutator diagnostic is addressable the
-    /// same way a validation diagnostic is.
+    /// `cards[index]`, base-independent because a structural op names a slot,
+    /// not a field; the rest anchor at `base` when it names a card, else carry
+    /// no anchor.
     pub fn doc_path(&self, base: &crate::path::DocPath) -> Option<crate::path::DocPath> {
         use crate::path::DocPath;
         match self {
@@ -284,11 +236,8 @@ impl EditError {
 
 /// A field-level invariant violation, shared by every payload ingestion path.
 ///
-/// Each boundary maps it to its own error type (`ParseError`,
-/// `StorageError`, `WireError`, `EditError`), so the invariant: every user
-/// field name matches `[A-Za-z_][A-Za-z0-9_]*` and no value nests past the §8
-/// depth limit: is enforced once, here, and a constructed `Document` can
-/// never violate it.
+/// Each boundary maps it to its own error type (`ParseError`, `StorageError`,
+/// `WireError`, `EditError`), so the invariant is enforced once, here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum FieldViolation {
@@ -299,9 +248,6 @@ pub enum FieldViolation {
     TooDeep,
 }
 
-/// Map a [`FieldViolation`] to the mutator error surface, the single
-/// translation the `Card` mutators and the validating
-/// [`Payload::insert`](crate::document::Payload::insert) both route through.
 pub(crate) fn edit_error_from_violation(name: &str, v: FieldViolation) -> EditError {
     match v {
         FieldViolation::InvalidName => EditError::InvalidFieldName(name.to_string()),
@@ -311,21 +257,16 @@ pub(crate) fn edit_error_from_violation(name: &str, v: FieldViolation) -> EditEr
     }
 }
 
-/// Validate a user field at the mutator boundary, mapping a violation to the
-/// mutator error surface.
 fn check_field(name: &str, value: &serde_json::Value) -> Result<(), EditError> {
     validate_field(name, value).map_err(|v| edit_error_from_violation(name, v))
 }
 
-/// Depth-bound an out-of-band meta map (`$ext` / `$seed`). Both ride the same
-/// recursive emit/DTO paths, so they carry the same §8 depth bound.
 fn check_meta_depth(map: &serde_json::Map<String, serde_json::Value>) -> Result<(), EditError> {
     crate::value::depth_check_meta_map(map.clone(), |max| EditError::ValueTooDeep { max })?;
     Ok(())
 }
 
-/// Validate a user field at the payload boundary: name conformance and
-/// value-depth bound. See [`FieldViolation`] for the invariant.
+/// Validate a user field: name conformance and value-depth bound.
 pub fn validate_field(key: &str, value: &serde_json::Value) -> Result<(), FieldViolation> {
     if !is_valid_field_name(key) {
         return Err(FieldViolation::InvalidName);
@@ -338,15 +279,9 @@ pub fn validate_field(key: &str, value: &serde_json::Value) -> Result<(), FieldV
 
 /// Map a strict-write [`CoercionError`] to the field-write [`EditError`] surface.
 ///
-/// A failed content coercion routes to the dedicated `Field*` variants, the
-/// surface the wasm/Python error mappers (and their tests) key on. This keys on
-/// the coercion `target`, not the top-level field type, because the constraint
-/// can be **nested**: an `array` of `richtext(inline)` items fails with
-/// `target == "richtext(inline)"` while the field's own type is `Array`. The
-/// content coercions emit exactly `"<codec>"` / `"<codec>(inline)"` (see
-/// `QuillConfig::conform_value`); every other target uses the general
-/// [`EditError::FieldCoercionFailed`]. Both codecs route identically, so a
-/// consumer matches one code per condition and reads `codec` for the lane.
+/// Keys on the coercion `target`, not the field's own type, because the
+/// constraint can be nested: an `array` of `richtext(inline)` items fails with
+/// `target == "richtext(inline)"` while the field's type is `Array`.
 fn conform_error_to_edit(name: &str, err: CoercionError) -> EditError {
     let CoercionError::Uncoercible {
         path: _,
@@ -377,14 +312,8 @@ fn conform_error_to_edit(name: &str, err: CoercionError) -> EditError {
     }
 }
 
-/// Compute the canonical stored form of a typed field write **without applying
-/// it**, the dry-run shared by [`Card::commit_field`] and the batched,
-/// all-or-nothing [`TypedWriter::set_all`](crate::TypedWriter::set_all).
-///
-/// Strict `Leniency::Write` conform against `schema`; the name and stored-value
-/// depth are validated too, so a batch can collect every violation before any
-/// mutation. The unknown-name case never reaches here: the editor rejects it
-/// with [`EditError::UnknownField`] before there is a schema to conform against.
+/// The canonical stored form of a typed field write, **without applying it**:
+/// the dry-run that lets a batch collect every violation before mutating.
 pub(crate) fn resolve_field_write(
     name: &str,
     value: QuillValue,
@@ -395,7 +324,6 @@ pub(crate) fn resolve_field_write(
     }
     let stored = QuillConfig::conform_value(&value, schema, name, Leniency::Write)
         .map_err(|e| conform_error_to_edit(name, e))?;
-    // Depth-bound the stored form (name already validated above).
     check_field(name, stored.as_json())?;
     Ok(stored)
 }
@@ -411,8 +339,7 @@ impl Document {
 
     /// Append a composable card. Its `$kind` must be a valid, non-reserved
     /// composable kind ([`EditError::InvalidKindName`] /
-    /// [`EditError::ReservedKind`] otherwise): the invariant for any card in
-    /// the cards list, enforced here so every entry path shares it.
+    /// [`EditError::ReservedKind`] otherwise).
     pub fn push_card(&mut self, card: Card) -> Result<(), EditError> {
         Self::check_composable_kind(&card)?;
         self.cards_vec_mut().push(card);
@@ -432,7 +359,6 @@ impl Document {
         Ok(())
     }
 
-    /// Validate that `card`'s `$kind` is a valid, non-reserved composable kind.
     /// A card with no `$kind` is rejected as an invalid (empty) name.
     fn check_composable_kind(card: &Card) -> Result<(), EditError> {
         let kind = card.kind().unwrap_or("");
@@ -451,10 +377,8 @@ impl Document {
 
     /// Replace the `$kind` of the composable card at `index`.
     ///
-    /// Only the `$kind` metadata changes; the payload and body are untouched
-    /// (field-bag semantics). Old-schema fields linger in the bag; new-schema
-    /// fields are absent until set explicitly. Schema migration is the caller's
-    /// responsibility: this is a structural primitive.
+    /// Only the `$kind` metadata changes; the payload and body are untouched, so
+    /// old-schema fields linger and schema migration is the caller's job.
     ///
     /// Returns [`EditError::IndexOutOfRange`], [`EditError::InvalidKindName`],
     /// or [`EditError::ReservedKind`] on constraint violations.
@@ -512,10 +436,9 @@ impl Card {
     }
 
     /// Store a payload field verbatim, clearing any `!must_fill` marker on that
-    /// key, the opaque store (**store** = verbatim, coercion deferred to render;
-    /// contrast the typed [`TypedWriter::set`](crate::TypedWriter::set)). Scalars
-    /// convert in place (`store_field("qty", 3)`); see the `From` impls on
-    /// [`QuillValue`].
+    /// key. Coercion is deferred to render; contrast the typed
+    /// [`TypedWriter::set`](crate::TypedWriter::set). Scalars convert in place
+    /// (`store_field("qty", 3)`) via the `From` impls on [`QuillValue`].
     ///
     /// Returns [`EditError::InvalidFieldName`] when `name` does not match
     /// `[A-Za-z_][A-Za-z0-9_]*`.
@@ -527,9 +450,8 @@ impl Card {
     }
 
     /// Store a payload field verbatim and mark it as a `!must_fill` placeholder.
-    /// `Null` emits as `key: !must_fill`; scalars/sequences as `key: !must_fill <value>`.
-    /// The opaque store's fill variant (quill-free, verbatim); same validation as
-    /// [`Card::store_field`].
+    /// `Null` emits as `key: !must_fill`; other values as
+    /// `key: !must_fill <value>`. Validation as [`Card::store_field`].
     pub fn store_fill(&mut self, name: &str, value: impl Into<QuillValue>) -> Result<(), EditError> {
         self.payload_mut()
             .insert_fill(name.to_string(), value.into())
@@ -538,15 +460,12 @@ impl Card {
     }
 
     /// Store several payload fields verbatim and atomically, clearing any
-    /// `!must_fill` marker on each key, the opaque store's batch (contrast the
-    /// typed [`TypedWriter::set_all`](crate::TypedWriter::set_all)). The whole
-    /// batch is validated first: on any violation nothing is applied and every
-    /// offending field is reported as a `(name, error)` pair, so a caller feeding
-    /// externally-sourced names (database columns, form keys) sees all violations
-    /// in one pass instead of fix-rerun-repeat. Per-field rules are those of
+    /// `!must_fill` marker on each key. The whole batch is validated first: on
+    /// any violation nothing is applied and every offending field is reported as
+    /// a `(name, error)` pair. Per-field rules are those of
     /// [`Card::store_field`]; insertion order follows the iterator, and a
-    /// repeated name behaves like repeated `store_field` calls (last value
-    /// wins, first position kept).
+    /// repeated name behaves like repeated `store_field` calls (last value wins,
+    /// first position kept).
     pub fn store_fields<K, V, I>(&mut self, fields: I) -> Result<(), Vec<(String, EditError)>>
     where
         K: Into<String>,
@@ -568,16 +487,14 @@ impl Card {
         if !errors.is_empty() {
             return Err(errors);
         }
-        // Batch validated above; apply through the unchecked insert so the
-        // whole-batch check is not re-run per field.
+        // Validated above; the unchecked insert avoids re-checking per field.
         for (name, value) in fields {
             self.payload_mut().insert_unchecked(name, value);
         }
         Ok(())
     }
 
-    /// Remove a payload field; returns `Ok(None)` if the name is absent.
-    /// Removal has no lane: the one verb serves every write path. Same
+    /// Remove a payload field; `Ok(None)` when the name is absent. Same name
     /// validation as [`Card::store_field`].
     pub fn remove_field(&mut self, name: &str) -> Result<Option<QuillValue>, EditError> {
         if !is_valid_field_name(name) {
@@ -592,15 +509,10 @@ impl Card {
     ///
     /// `$ext` carries out-of-band consumer state (editor renames, agent
     /// annotations, …) and is stripped from [`Document::to_plate_json`], so a
-    /// write here can never affect a render. Any nested comments attached to a
-    /// replaced `$ext` are dropped.
-    /// Returns [`EditError::ValueTooDeep`] when the map nests past the §8
-    /// depth limit: `$ext` never reaches the plate JSON, but it does flow
-    /// through the recursive emit and DTO paths, so it carries the same
-    /// depth bound as user fields.
-    ///
-    /// Quill-free and never coerced: an opaque `store_*` verb by the vocabulary
-    /// rule, not a typed `set`.
+    /// write here can never affect a render. Nested comments attached to a
+    /// replaced `$ext` are dropped. Returns [`EditError::ValueTooDeep`] when the
+    /// map nests past the §8 depth limit: `$ext` flows through the recursive
+    /// emit and DTO paths like any other value.
     pub fn store_ext(
         &mut self,
         value: serde_json::Map<String, serde_json::Value>,
@@ -610,11 +522,9 @@ impl Card {
         Ok(())
     }
 
-    /// Remove the card's `$ext` map *entirely*, returning the previous map if
-    /// present. This is a blunt escape hatch: it discards every namespace
-    /// (`$ext.editor`, `$ext.agent`, …) at once. To clear consumer
-    /// state, prefer [`Card::remove_ext_namespace`], which drops only your
-    /// own slot and leaves sibling consumers' state intact.
+    /// Remove the card's `$ext` map *entirely*, returning the previous map. This
+    /// discards every namespace at once; [`Card::remove_ext_namespace`] drops
+    /// only one slot and leaves sibling consumers' state intact.
     pub fn remove_ext(&mut self) -> Option<serde_json::Map<String, serde_json::Value>> {
         self.payload_mut().take_ext()
     }
@@ -622,13 +532,10 @@ impl Card {
     /// Merge `value` into the card's `$ext` map under `namespace`, creating
     /// the map when absent and replacing any existing value at that key.
     ///
-    /// This is the recommended way to write `$ext`: it preserves sibling
-    /// namespaces, so independent consumers keying on their own slot
-    /// (`$ext.editor`, `$ext.agent`, …) don't clobber each other.
-    /// Returns [`EditError::ValueTooDeep`] when the merged map nests past
-    /// the §8 depth limit (see [`Card::store_ext`]); the card's `$ext` is
-    /// unchanged on error. Quill-free and never coerced: an opaque `store_*`
-    /// verb.
+    /// Sibling namespaces are preserved, so independent consumers keying on
+    /// their own slot don't clobber each other. Returns
+    /// [`EditError::ValueTooDeep`] when the merged map nests past the §8 depth
+    /// limit; the card's `$ext` is unchanged on error.
     pub fn store_ext_namespace(
         &mut self,
         namespace: impl Into<String>,
@@ -640,20 +547,15 @@ impl Card {
     /// Remove `namespace` from the card's `$ext` map, returning the value
     /// that was stored there (or `None` when the map or the key was absent).
     ///
-    /// This is the recommended way to clear `$ext` state: it is the
-    /// namespace-scoped inverse of [`Card::store_ext_namespace`] and preserves
-    /// sibling namespaces, where [`Card::remove_ext`] would wipe them all.
-    /// When removing the last namespace empties the map, the `$ext` entry is
-    /// dropped entirely (not left as `$ext: {}`), so
-    /// `store_ext_namespace(ns, v)` followed by `remove_ext_namespace(ns)`
-    /// restores a card that had no `$ext` to its original state.
+    /// The namespace-scoped inverse of [`Card::store_ext_namespace`]: siblings
+    /// are preserved, where [`Card::remove_ext`] wipes them all. Emptying the
+    /// map drops the `$ext` entry entirely rather than leaving `$ext: {}`.
     pub fn remove_ext_namespace(&mut self, namespace: &str) -> Option<serde_json::Value> {
         self.remove_meta_namespace(MetaKey::Ext, namespace)
     }
 
-    /// Merge `value` into the `key` map under `namespace`, preserving siblings.
-    /// The map is written back only after the depth check passes, so the card
-    /// is unchanged on error.
+    /// The map is written back only after the depth check passes, so the card is
+    /// unchanged on error.
     fn merge_meta_namespace(
         &mut self,
         key: MetaKey,
@@ -668,9 +570,7 @@ impl Card {
         Ok(())
     }
 
-    /// Drop `namespace` from the `key` map, returning what was there. Emptying
-    /// the map drops the entry rather than leaving `$<key>: {}`, so a
-    /// merge/remove pair restores a card that carried no such entry.
+    /// Emptying the map drops the entry rather than leaving `$<key>: {}`.
     fn remove_meta_namespace(
         &mut self,
         key: MetaKey,
@@ -693,14 +593,12 @@ impl Card {
 
     /// Merge a card-kind's seed overlay `value` into the card's `$seed` map
     /// under `card_kind`, creating the map when absent and replacing any
-    /// existing overlay for that kind. Sibling kinds are preserved: this is
-    /// the per-kind-safe writer, the seed analogue of
-    /// [`Card::store_ext_namespace`]. `card_kind` must be a valid, non-reserved
-    /// composable kind ([`EditError::InvalidKindName`] / [`EditError::ReservedKind`]
-    /// otherwise): `$seed` is keyed by composable card-kind, unlike the
-    /// free-form namespaces of `$ext`. Returns [`EditError::ValueTooDeep`] when
-    /// the merged map nests past the §8 depth limit; the card is unchanged on
-    /// error. Quill-free and never coerced: an opaque `store_*` verb.
+    /// existing overlay for that kind; sibling kinds are preserved. Unlike the
+    /// free-form namespaces of `$ext`, `card_kind` must be a valid, non-reserved
+    /// composable kind ([`EditError::InvalidKindName`] /
+    /// [`EditError::ReservedKind`] otherwise). Returns
+    /// [`EditError::ValueTooDeep`] when the merged map nests past the §8 depth
+    /// limit; the card is unchanged on error.
     pub fn store_seed_overlay(
         &mut self,
         card_kind: impl Into<String>,
@@ -715,42 +613,28 @@ impl Card {
     }
 
     /// Remove `card_kind` from the card's `$seed` map, returning the overlay
-    /// stored there (or `None`). When removing the last kind empties the map,
-    /// the `$seed` entry is dropped entirely (not left as `$seed: {}`).
-    /// The seed analogue of [`Card::remove_ext_namespace`].
+    /// stored there. Emptying the map drops the `$seed` entry entirely.
     pub fn remove_seed_overlay(&mut self, card_kind: &str) -> Option<serde_json::Value> {
         self.remove_meta_namespace(MetaKey::Seed, card_kind)
     }
 
-    /// Overwrite the body with a pre-built [`Content`]: **value semantics**, the
-    /// native content writer, and the bottom rung of the content lane's ladder
-    /// by anchor fate: **overwrite destroys, [`revise_body`](Self::revise_body)
-    /// rebases, [`apply_body_change`](Self::apply_body_change) preserves.** A
-    /// content is valid by construction, so this is infallible: no markdown
-    /// import, no diff, no schema check; the identity anchors of the previous
-    /// body are *gone* (write-this-exact-value, so a `to_markdown → overwrite`
-    /// round-trip cannot resurrect them). Use it when the caller already holds a
-    /// content (a decoded canonical-JSON body, another field's value, an
-    /// editor's serialized state). Cold-importing markdown is spelled
-    /// `overwrite_body(import_body(md)?)` at the call site, where the anchor
-    /// loss is visible.
+    /// Overwrite the body with a pre-built [`Content`]: value semantics, no
+    /// markdown import, no diff, no schema check, infallible. Anchor fate across
+    /// the content lane: **overwrite destroys, [`revise_body`](Self::revise_body)
+    /// rebases, [`apply_body_change`](Self::apply_body_change) preserves.**
     pub fn overwrite_body(&mut self, content: Content) {
         self.body = content;
     }
 
     /// Overwrite a content field's value with a pre-built [`Content`]: the
-    /// field-level twin of [`overwrite_body`](Self::overwrite_body). Value
-    /// semantics: stores the canonical content JSON verbatim (identity marks and
-    /// content-only marks such as `underline` intact), no diff, no schema check
-    /// (schema-blind, like [`apply_field_change`](Self::apply_field_change);
-    /// `commit_field` is the typed door). The previous
-    /// value's anchors are gone; the incoming content's ride along exactly.
-    /// Returns [`EditError::InvalidFieldName`] for a malformed name.
+    /// field-level twin of [`overwrite_body`](Self::overwrite_body). Stores the
+    /// canonical content JSON verbatim (identity and content-only marks intact),
+    /// no diff, no schema check. The previous value's anchors are gone. Returns
+    /// [`EditError::InvalidFieldName`] for a malformed name.
     ///
-    /// **Richtext codec.** A `plaintext` field rests as its literal string, so an
-    /// object landed here is off that field's resting form: a repairable
-    /// departure the next bound load ([`Quill::conform`](crate::Quill::conform))
-    /// converges. Write one through the typed door.
+    /// Richtext codec: a `plaintext` field rests as its literal string, so an
+    /// object landed here departs that field's resting form until the next bound
+    /// load ([`Quill::conform`](crate::Quill::conform)) converges it.
     pub fn overwrite_field(&mut self, name: &str, content: Content) -> Result<(), EditError> {
         if !is_valid_field_name(name) {
             return Err(EditError::InvalidFieldName(name.to_string()));
@@ -759,12 +643,8 @@ impl Card {
         Ok(())
     }
 
-    /// Store `content` as the canonical content-JSON value of field `name`: the
-    /// one place a richtext field's content is committed to the payload, shared by
-    /// [`overwrite_field`](Self::overwrite_field), [`revise_field`](Self::revise_field),
-    /// and [`apply_field_change`](Self::apply_field_change).
-    /// Assumes `name` is already validated (all three callers check it or resolve
-    /// an existing field first).
+    /// Assumes `name` is already validated: every caller checks it or resolves an
+    /// existing field first.
     fn store_field_content(&mut self, name: &str, content: &Content) {
         let canonical = quillmark_content::serial::to_canonical_value(content);
         self.payload_mut()
@@ -773,14 +653,7 @@ impl Card {
 
     /// Write-time commit: validate and normalize `value` per the field's schema
     /// `type` and store the canonical form. The typed sibling of the opaque
-    /// [`store_field`](Self::store_field): the one write verb for *every* field
-    /// type (richtext today, any future content model tomorrow), dispatching on
-    /// the [`FieldSchema`] rather than growing a per-type method.
-    ///
-    /// The two write disciplines: [`store_field`](Self::store_field) stores the
-    /// value opaquely and defers coercion to render (keystroke-level state,
-    /// data-in-flight); `commit_field` canonicalizes now and fails now (an
-    /// editor blur/save, an agent write). Neither is forced on the other.
+    /// [`store_field`](Self::store_field), which defers coercion to render.
     ///
     /// Behavior by `type`:
     /// - **richtext**: imports a markdown string / adopts a content object and
@@ -788,11 +661,8 @@ impl Card {
     ///   live on the stored value from the write; a `richtext(inline)` schema
     ///   rejects a multi-block value with [`EditError::FieldNotInline`].
     /// - **plaintext**: stores the **literal string**, importing a string
-    ///   verbatim or projecting a content object through `to_plaintext`. The
-    ///   codec is lossless on plain content, so the string is the whole value;
-    ///   the plate still carries the content object (the render floor coerces to
-    ///   it). A value carrying marks, islands, or block formatting is rejected,
-    ///   not stripped.
+    ///   verbatim or projecting a content object through `to_plaintext`. A value
+    ///   carrying marks, islands, or block formatting is rejected, not stripped.
     /// - **scalars** (`string`/`integer`/`number`/`boolean`/`datetime`): stores
     ///   the coerced canonical (`"3"` → `3`), applying only value-parsing
     ///   normalizations; a cross-type value that the render floor would coerce
@@ -803,10 +673,8 @@ impl Card {
     ///   is coerced (a richtext `null` reads back as the empty content via
     ///   [`TypedReader::get_content`](crate::TypedReader::get_content)).
     ///
-    /// The caller supplies the `schema` because a [`Document`] holds only a
-    /// `$quill` *reference*, not the resolved schema; an editor holds it (see
-    /// [`crate::TypedWriter`], which resolves the schema per field and calls
-    /// this).
+    /// The caller supplies `schema` because a [`Document`] holds only a `$quill`
+    /// *reference*; [`crate::TypedWriter`] resolves it per field and calls this.
     ///
     /// Returns [`EditError::InvalidFieldName`] for a malformed name,
     /// [`EditError::FieldDecode`] / [`EditError::FieldNotInline`]
@@ -814,11 +682,8 @@ impl Card {
     /// mismatch, and [`EditError::ValueTooDeep`] when the stored value nests
     /// past the §8 depth limit.
     ///
-    /// **Hidden: the typed primitive, not a typed door.** A verb told apart from
-    /// its neighbor only by taking a schema argument is not a door;
-    /// [`Quill::writer`](crate::Quill::writer) is. Reachable for the fuzz
-    /// harness, which drives the coercion seam without a `QuillConfig` around
-    /// it, and unpromised like every hidden item (`COMPATIBILITY.md`).
+    /// **Hidden**: the typed primitive, whose door is
+    /// [`Quill::writer`](crate::Quill::writer). Unpromised (`COMPATIBILITY.md`).
     #[doc(hidden)]
     pub fn commit_field(
         &mut self,
@@ -827,23 +692,16 @@ impl Card {
         schema: &FieldSchema,
     ) -> Result<(), EditError> {
         let stored = resolve_field_write(name, value.into(), schema)?;
-        // `resolve_field_write` already validated name + stored-value depth.
         self.payload_mut().insert_unchecked(name.to_string(), stored);
         Ok(())
     }
 
-    /// Revise the body from an authored markdown string: **edit semantics**,
-    /// the whole-document (stale-text / LLM / MCP) writer, and the receipt-
-    /// returning default write path. Imports the markdown, diffs it against the
-    /// current body, and rebases surviving identity anchors onto the new text
-    /// (cold import + [`diff_import`]), then returns the text [`Delta`] from the
-    /// old body to the new one: the change an editor bridge maps its own
-    /// positions through across a whole-document replace ([`Delta::map_pos`]).
-    /// Surviving identity anchors rebase; formatting marks are re-derived by the
-    /// fresh import. A pathologically over-nested input (`> MAX_NESTING_DEPTH`)
-    /// returns [`EditError::Import`] rather than silently degrading to the
-    /// empty content. Discard the receipt with `let _ = card.revise_body(md)?;`
-    /// when caret stability is not needed.
+    /// Revise the body from an authored markdown string: edit semantics. Imports
+    /// the markdown, diffs it against the current body so surviving identity
+    /// anchors rebase (formatting marks are re-derived), and returns the text
+    /// [`Delta`] an editor bridge maps its own positions through
+    /// ([`Delta::map_pos`]). An over-nested input returns [`EditError::Import`]
+    /// rather than degrading to the empty content.
     pub fn revise_body(&mut self, body: impl Into<String>) -> Result<Delta, EditError> {
         let (content, delta) =
             diff_import(self.body(), &body.into()).map_err(EditError::Import)?;
@@ -853,10 +711,7 @@ impl Card {
 
     /// Decode the field's current content (an absent field imports from empty),
     /// diff `body` against it so surviving anchors rebase, and return the new
-    /// content with its text [`Delta`]: the shared preamble of
-    /// [`revise_field`](Self::revise_field) and
-    /// [`revise_field_checked`](Self::revise_field_checked). Neither stores; the
-    /// caller lands the diffed content (raw, or schema-checked).
+    /// content with its text [`Delta`]. Stores nothing: the caller lands it.
     fn diff_field(
         &self,
         name: &str,
@@ -879,25 +734,18 @@ impl Card {
         diff_import(&base, &body.into()).map_err(EditError::Import)
     }
 
-    /// Revise a richtext field from an authored markdown string: the
-    /// field-level twin of [`revise_body`](Self::revise_body), and the
-    /// field-level `diff_import`. The other field-content writers are the cold
-    /// `commit_field` and the splice
-    /// [`apply_field_change`](Self::apply_field_change), so this
-    /// is the anchor-preserving path for rewriting a richtext field's markdown
-    /// wholesale. Decodes the field's current content as the diff base (an **absent**
-    /// field cold-imports from empty), rebases surviving anchors onto the new
-    /// text, re-stores the canonical content, and returns the text [`Delta`].
+    /// Revise a richtext field from an authored markdown string: the field-level
+    /// twin of [`revise_body`](Self::revise_body). Decodes the field's current
+    /// content as the diff base (an **absent** field cold-imports from empty),
+    /// rebases surviving anchors, re-stores the canonical content, and returns
+    /// the text [`Delta`].
     ///
-    /// Schema-blind by design: the content-writer stratum splices without the
-    /// quill (like [`apply_field_change`](Self::apply_field_change));
-    /// `commit_field` is the typed door that enforces
-    /// `richtext(inline)`, and a violation otherwise surfaces at validate/render.
+    /// Schema-blind: a `richtext(inline)` violation surfaces at validate/render,
+    /// not here.
     ///
-    /// **Richtext only**, and the exclusion bites: this decodes the current value
-    /// as markdown, which eats a `plaintext` field's escapes (`a \*b\*` commits
-    /// back as `a *b*`) and leaves a content object where that field's rest is a
-    /// string. The typed
+    /// **Richtext only**, and the exclusion bites: decoding a `plaintext` field's
+    /// value as markdown eats its escapes (`a \*b\*` commits back as `a *b*`)
+    /// and leaves a content object where that field rests as a string. The typed
     /// [`TypedWriter::revise_field`](crate::TypedWriter::revise_field) resolves
     /// the codec from the schema and is the plaintext-safe door.
     ///
@@ -911,35 +759,20 @@ impl Card {
         Ok(delta)
     }
 
-    /// Revise a richtext field from markdown **with schema enforcement**: the
-    /// typed *and* anchor-preserving field write that neither
-    /// [`revise_field`](Self::revise_field) nor [`commit_field`](Self::commit_field)
-    /// provides alone. [`revise_field`](Self::revise_field) rebases anchors but is
-    /// schema-blind; [`commit_field`](Self::commit_field) enforces the schema but
-    /// cold-imports (the previous value's anchors are gone). This does both: diff
-    /// the markdown against the field's current content so surviving anchors rebase
-    /// (as [`revise_field`](Self::revise_field)), then enforce `schema` on the
-    /// *diffed result* through the same typed-conform path
-    /// [`commit_field`](Self::commit_field) runs, so a `richtext(inline)` schema
-    /// rejects a multi-block result with [`EditError::FieldNotInline`],
-    /// the error surface unchanged, while the anchors survive. Returns the text
-    /// [`Delta`] receipt.
+    /// Revise a richtext field from markdown **with schema enforcement**: diff
+    /// the markdown against the field's current content so surviving anchors
+    /// rebase (as [`revise_field`](Self::revise_field)), then enforce `schema` on
+    /// the diffed result through the typed-conform path
+    /// [`commit_field`](Self::commit_field) runs. Returns the text [`Delta`].
     ///
-    /// The primitive that [`TypedWriter::revise_field`](crate::TypedWriter::revise_field)
-    /// and [`CardWriter::revise_field`](crate::CardWriter::revise_field) wrap: they
-    /// resolve `schema` from the bound quill and call here. The schema runs on the
-    /// content the diff produced, so a non-richtext `schema` (nothing to preserve)
-    /// fails with the same [`EditError::FieldCoercionFailed`]
-    /// [`commit_field`](Self::commit_field) would raise.
-    ///
-    /// Errors: [`EditError::InvalidFieldName`], [`EditError::FieldDecode`]
-    /// when the field is present but not a content, [`EditError::Import`]
-    /// on an over-nested markdown input, and the conform errors of
-    /// [`commit_field`](Self::commit_field) on the diffed result. On any error the
-    /// field is unchanged.
+    /// Errors: [`EditError::InvalidFieldName`], [`EditError::FieldDecode`] when
+    /// the field is present but not a content, [`EditError::Import`] on an
+    /// over-nested input, and the conform errors of
+    /// [`commit_field`](Self::commit_field) on the diffed result. On any error
+    /// the field is unchanged.
     ///
     /// **Hidden** on the same terms as [`commit_field`](Self::commit_field):
-    /// the typed primitive, whose door is
+    /// its door is
     /// [`TypedWriter::revise_field`](crate::TypedWriter::revise_field).
     #[doc(hidden)]
     pub fn revise_field_checked(
@@ -948,42 +781,33 @@ impl Card {
         body: impl Into<String>,
         schema: &FieldSchema,
     ) -> Result<Delta, EditError> {
-        // A `plaintext` field has no anchors to rebase (`is_plain` forbids every
-        // mark), so the anchor lane is meaningless for it and the markdown codec
-        // is actively wrong: decoding the current value as markdown eats its
-        // escapes, so a byte-identical revise of `a \*b\*` would silently commit
-        // `a *b*`. It takes the literal codec instead: a plain-text diff and the
-        // same strict write, `Delta` receipt unchanged.
+        // Decoding a `plaintext` value as markdown eats its escapes, so a
+        // byte-identical revise of `a \*b\*` would commit `a *b*`. It has no
+        // anchors to rebase either, so it takes the literal codec.
         if matches!(schema.r#type, FieldType::PlainText { .. }) {
             return self.revise_field_plaintext(name, body, schema);
         }
         let (content, delta) = self.diff_field(name, body)?;
-        // Enforce `schema` on the diffed (anchor-rebased) content through the same
-        // typed path `commit_field` uses: re-canonicalizing a content object keeps
-        // its identity marks (`decode_richtext_value`), so the inline check fires
-        // on the value anchors survived onto and the error surface is identical.
+        // Re-canonicalizing a content object keeps its identity marks, so the
+        // schema check fires on the value the anchors survived onto.
         let canonical = quillmark_content::serial::to_canonical_value(&content);
         let stored = resolve_field_write(name, QuillValue::from_json(canonical), schema)?;
         self.payload_mut().insert_unchecked(name.to_string(), stored);
         Ok(delta)
     }
 
-    /// The `plaintext` arm of [`revise_field_checked`](Self::revise_field_checked):
-    /// diff the authored literal text against the field's current literal
-    /// projection and commit it through the same strict write. No markdown
-    /// import in either direction, so escapes, `*`, and `_` are ordinary
-    /// characters on both sides of the diff and a byte-identical revise is a
-    /// byte no-op. The `Delta` is over the literal text: the coordinate space
-    /// [`TypedReader::get`](crate::TypedReader::get) hands a plaintext field back in.
+    /// The `plaintext` arm of [`revise_field_checked`](Self::revise_field_checked).
+    /// No markdown import in either direction, so escapes, `*`, and `_` are
+    /// ordinary characters on both sides of the diff and a byte-identical revise
+    /// is a byte no-op. The `Delta` is over the literal text.
     fn revise_field_plaintext(
         &mut self,
         name: &str,
         text: impl Into<String>,
         schema: &FieldSchema,
     ) -> Result<Delta, EditError> {
-        // Ahead of the read, not folded into `resolve_field_write`'s own check:
-        // a directly-constructed payload can hold an ill-named field, and the
-        // read would then report its value's decode instead of the bad name.
+        // Ahead of the read: a directly-constructed payload can hold an ill-named
+        // field, whose decode error would otherwise mask the bad name.
         if !is_valid_field_name(name) {
             return Err(EditError::InvalidFieldName(name.to_string()));
         }
@@ -998,10 +822,8 @@ impl Card {
             }
             None => String::new(),
         };
-        // The strict write is the codec: it runs the same `from_plaintext`
-        // boundary cleanup (CRLF, bidi, island slot) and enforces
-        // `plaintext(inline)`, so the committed string is what the diff must
-        // measure against. On any refusal the field is unchanged.
+        // The strict write is the codec: it runs the `from_plaintext` boundary
+        // cleanup, so the committed string is what the diff must measure against.
         let stored = resolve_field_write(name, QuillValue::from(text.into()), schema)?;
         let delta = quillmark_content::delta::diff(
             &base,
@@ -1014,14 +836,11 @@ impl Card {
         Ok(delta)
     }
 
-    /// Apply a committed field-change bundle to the body content: the native
-    /// form-editor writer. Order is text delta → island ops → line ops → mark
-    /// ops, then one terminal normalization ([`Content::apply_field_change`]);
-    /// mark ranges are in final-text coordinates. Returns
+    /// Apply a committed field-change bundle to the body content. Order is text
+    /// delta → island ops → line ops → mark ops, then one terminal
+    /// normalization; mark ranges are in final-text coordinates. Returns
     /// [`EditError::ContentApply`] when an op is out of bounds; the apply is
-    /// all-or-nothing ([`Content::apply_field_change`]), so the body is
-    /// unchanged on error: apply the bundle against the body the delta was
-    /// computed from.
+    /// all-or-nothing, so the body is unchanged on error.
     pub fn apply_body_change(&mut self, bundle: &ChangeBundle) -> Result<(), EditError> {
         self.body_mut()
             .apply_field_change(bundle)
@@ -1030,26 +849,21 @@ impl Card {
 
     /// Splice a content field-change bundle into a field's stored content: the
     /// field-path twin of [`apply_body_change`](Self::apply_body_change), and
-    /// what lets identity marks (anchors, island ids) persist on field content
-    /// across incremental edits. Decodes the field's canonical content, applies
-    /// the text delta plus any island/line/mark ops in the same all-or-nothing
+    /// what lets identity marks persist on field content across incremental
+    /// edits. Decodes the field's canonical content, applies the all-or-nothing
     /// bundle, and re-stores the canonical result.
     ///
-    /// An **absent** field splices against the empty content, as
-    /// [`revise_field`](Self::revise_field) diffs against it. A bundle that
+    /// An **absent** field splices against the empty content. A bundle that
     /// expected content still fails: its text delta declares the base length it
-    /// was computed against, so only a zero-base bundle lands, and a zero-base
-    /// bundle is one its producer computed against an empty field.
+    /// was computed against, so only a zero-base bundle lands.
     ///
     /// Returns [`EditError::InvalidFieldName`] for a malformed name,
-    /// [`EditError::FieldDecode`] when the stored value is not a content (the
-    /// caller addresses a field it knows is content-typed, exactly as when
-    /// writing it), and [`EditError::ContentApply`] when the bundle applies out
-    /// of bounds.
+    /// [`EditError::FieldDecode`] when the stored value is not a content, and
+    /// [`EditError::ContentApply`] when the bundle applies out of bounds.
     ///
     /// **Richtext codec**: schema-blind like [`revise_field`](Self::revise_field),
     /// so a `plaintext` field's stored string decodes here as markdown and a
-    /// splice lands it off its resting form. The next bound load converges it.
+    /// splice lands it off its resting form until the next bound load.
     pub fn apply_field_change(
         &mut self,
         name: &str,
@@ -1064,8 +878,7 @@ impl Card {
                     message: e.into_message(),
                 })
             }
-            // Only this arm creates, so only this arm needs the name check the
-            // `Some` arms got by resolving an existing field.
+            // Only this arm creates; the `Some` arms resolved an existing field.
             None => {
                 if !is_valid_field_name(name) {
                     return Err(EditError::InvalidFieldName(name.to_string()));
@@ -1088,7 +901,6 @@ mod tests {
 
     #[test]
     fn field_error_anchors_under_the_card_base() {
-        // A main field write: the `main` base roots the field path.
         let main = DocPath::main();
         assert_eq!(
             EditError::FieldCoercionFailed {
@@ -1101,7 +913,6 @@ mod tests {
             .to_string(),
             "main.font_size"
         );
-        // A card field write: the card root qualifies the field.
         let card = DocPath::card(Some("indorsement"), 1);
         assert_eq!(
             EditError::UnknownField("signature_block".into())
@@ -1114,7 +925,6 @@ mod tests {
 
     #[test]
     fn index_out_of_range_anchors_at_the_array_slot() {
-        // Structural op: names a slot, base-independent.
         for base in [DocPath::main(), DocPath::card(Some("note"), 0)] {
             assert_eq!(
                 EditError::IndexOutOfRange { index: 4, len: 2 }
@@ -1128,7 +938,6 @@ mod tests {
 
     #[test]
     fn kind_and_depth_errors_anchor_at_base_or_nowhere() {
-        // A kind error on a structural op carries the slot base it was given.
         assert_eq!(
             EditError::ReservedKind
                 .doc_path(&DocPath::card(None, 2))
@@ -1136,12 +945,10 @@ mod tests {
                 .to_string(),
             "cards[2]"
         );
-        // A config-space `$seed` depth error keeps an empty base: no anchor.
         assert_eq!(
             EditError::ValueTooDeep { max: 8 }.doc_path(&DocPath::new()),
             None
         );
-        // A main-card depth error roots at `main` (its base names the card).
         assert_eq!(
             EditError::ValueTooDeep { max: 8 }
                 .doc_path(&DocPath::main())

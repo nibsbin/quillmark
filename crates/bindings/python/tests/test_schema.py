@@ -89,7 +89,6 @@ def test_schema_default_marks_endorsed(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_blueprint_must_fill_marker(tmp_path):
-    """Unendorsed cells render the `!must_fill` marker."""
     quill = make_quill(tmp_path)
     bp = quill.blueprint
 
@@ -117,7 +116,6 @@ def test_blueprint_endorsed_value(tmp_path):
 
 
 def test_blueprint_no_legacy_required_optional_tags(tmp_path):
-    """The blueprint grammar has no `; required` / `; optional` role tags."""
     quill = make_quill(tmp_path)
     bp = quill.blueprint
 

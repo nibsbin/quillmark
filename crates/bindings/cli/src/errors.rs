@@ -1,9 +1,8 @@
 use quillmark_core::RenderError;
 use std::fmt;
 
-/// CLI-specific error type wrapping the underlying errors.
-/// [`print_cli_error`] prints each variant, with full diagnostics for the
-/// render and parse ones.
+/// [`print_cli_error`] renders full diagnostics for the render and parse
+/// variants, a plain line for the rest.
 #[derive(Debug)]
 pub enum CliError {
     Io(std::io::Error),
@@ -45,7 +44,6 @@ impl From<quillmark_core::ParseError> for CliError {
 
 pub type Result<T> = std::result::Result<T, CliError>;
 
-/// Print detailed diagnostics for CLI errors
 pub fn print_cli_error(err: &CliError) {
     match err {
         CliError::Render(render_err) => {
@@ -63,7 +61,6 @@ pub fn print_cli_error(err: &CliError) {
     }
 }
 
-/// Print warnings with full diagnostic information
 pub fn print_warnings(warnings: &[quillmark_core::Diagnostic]) {
     if warnings.is_empty() {
         return;

@@ -1,15 +1,6 @@
-//! Tests for `Document::to_markdown`.
-//!
-//! Coverage:
-//! - Type-fidelity round-trip over the full fixture content.
-//! - Stability (emit-twice byte-equal) smoke test.
-//! - Unit tests for targeted value types and edge cases.
 
 use crate::document::Document;
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-/// Parse → emit → re-parse and assert the two Documents are equal.
 fn assert_round_trip(label: &str, src: &str) {
     let a = Document::parse(src)
         .unwrap_or_else(|e| panic!("{}: parse failed on original: {}", label, e))
@@ -30,10 +21,6 @@ fn assert_round_trip(label: &str, src: &str) {
     );
 }
 
-// ── Fixture content round-trip ─────────────────────────────────────────────────
-
-/// Every top-level `.md` file under `crates/fixtures/resources`: files
-/// without a root `~~~card-yaml` block are skipped at parse time.
 #[test]
 fn fixtures_round_trip() {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -45,7 +32,6 @@ fn fixtures_round_trip() {
 
     let mut fixture_paths: Vec<std::path::PathBuf> = Vec::new();
 
-    // Top-level resource .md files that have a root card-yaml block.
     for entry in std::fs::read_dir(&resources_dir).unwrap().flatten() {
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) == Some("md") {
@@ -74,7 +60,6 @@ fn fixtures_round_trip() {
             }
         };
 
-        // Skip files that are not parseable Quillmark documents (no card-yaml block).
         match Document::parse(&src).map(|p| p.document) {
             Err(_) => {
                 skipped += 1;
@@ -126,8 +111,6 @@ fn fixtures_round_trip() {
         passed, skipped
     );
 }
-
-// ── Value type unit tests ─────────────────────────────────────────────────────
 
 #[test]
 fn round_trip_value_types() {
@@ -186,12 +169,10 @@ title: No body
 ~~~
 ",
         ),
-        // String containing backslash and quotes: must survive as a string.
         (
             "string with backslash",
             "~~~card-yaml\n$quill: q\n$kind: main\npath: \"C:\\\\Users\\\\test\"\n~~~\n",
         ),
-        // A string containing a literal newline.
         (
             "multiline string",
             "~~~card-yaml\n$quill: q\n$kind: main\nbio: \"Line one\\nLine two\"\n~~~\n",
@@ -216,8 +197,6 @@ fn round_trip_quill_version_selectors() {
 
 #[test]
 fn empty_map_omitted_from_emit() {
-    // After parsing a document where a field is an empty object,
-    // the emitter should omit that field.
     use crate::value::QuillValue;
     use indexmap::IndexMap;
 
@@ -253,10 +232,6 @@ fn empty_map_omitted_from_emit() {
 
 #[test]
 fn nested_map_keys_with_structural_chars_emit_valid_yaml() {
-    // A nested mapping key that requires YAML quoting (`: `, a leading flow
-    // indicator, edge whitespace, or a type-ambiguous form) must be emitted
-    // quoted so the document re-parses to the same key, rather than producing
-    // YAML that fails to parse or maps to a different key.
     use crate::document::{Card, Payload};
     use crate::value::QuillValue;
     use indexmap::IndexMap;

@@ -1,31 +1,6 @@
-//! Document seeding from a quill schema.
-//!
-//! [`Quill::seed_document`](super::Quill::seed_document),
-//! [`seed_main`](super::Quill::seed_main), and
-//! [`seed_card`](super::Quill::seed_card) build a starter document by committing
-//! each schema field's `example` value and leaving **every other field absent**.
-//! Absent fields are interpolated at render time (schema `default`, else
-//! type-empty zero) by the zero-filled render in
-//! [`Quill::compile_data`](super::Quill::compile_data); they are never written
-//! into the document.
-//!
-//! This is the **filled-out twin of the blueprint**
-//! ([`QuillConfig::blueprint`](crate::quill::QuillConfig::blueprint)): the
-//! blueprint is the annotated authoring surface (`!must_fill` placeholders,
-//! `# e.g.` hints), while the seed is its `example`-first intent materialized as
-//! real [`Document`] content with no `!must_fill` markers and no default/zero
-//! values persisted. Because only `example` values are committed, the seed
-//! never collides with the render layer (no editor/preview drift) and
-//! preserves the absence-based completeness signal for fields that have no
-//! `example` to seed.
-//!
-//! Provenance (distinguishing an untouched seeded `example` from authored
-//! content) is out of scope by design; correctness and renderability do not
-//! depend on it. A field carrying its seeded `example` reads as ordinary
-//! authored content.
-//!
-//! Composable cards (`card_kinds`, multiplicity `0..N`) are seeded as **one**
-//! instance per declared kind.
+//! Document seeding from a quill schema: commit each field's `example` and
+//! leave every other field absent, so the render layer still supplies
+//! `default`/zero and the absence-based completeness signal survives.
 
 use indexmap::IndexMap;
 use quillmark_content::Content;

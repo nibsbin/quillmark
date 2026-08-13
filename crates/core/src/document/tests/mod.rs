@@ -12,12 +12,8 @@ mod multibyte_tests;
 mod number_edge_tests;
 mod seed_tests;
 
-/// Every `.md` file reachable from `root`, walked recursively. Picks up the
-/// `README.md`/`LICENSE.md` inside bundled quill packages too; those carry no
-/// root card-yaml block and are skipped at parse time.
-///
-/// Not what `emit_tests::fixtures_round_trip` wants: that one scans the
-/// top level only, deliberately.
+/// Every `.md` reachable from `root`, recursively. Includes bundled quill
+/// `README.md`s, which carry no root card-yaml block and are skipped at parse.
 pub(super) fn collect_md_files(root: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
     let entries = match std::fs::read_dir(root) {
         Ok(e) => e,

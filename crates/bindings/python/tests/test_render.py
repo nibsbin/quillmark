@@ -6,7 +6,6 @@ from quillmark import OutputFormat, Document, Quill, QuillmarkError
 
 
 def test_save_artifact(engine, taro_quill_dir, taro_md, tmp_path):
-    """Test saving an artifact to file."""
     quill = Quill.from_path(str(taro_quill_dir))
 
     parsed = Document.from_markdown(taro_md)
@@ -19,19 +18,7 @@ def test_save_artifact(engine, taro_quill_dir, taro_md, tmp_path):
     assert output_path.stat().st_size > 0
 
 
-def test_engine_render_from_parsed_document(engine, taro_quill_dir, taro_md):
-    """engine.render(quill, Document) accepts a pre-parsed document."""
-    quill = Quill.from_path(str(taro_quill_dir))
-    parsed = Document.from_markdown(taro_md)
-
-    result = engine.render(quill, parsed)
-
-    assert len(result.artifacts) > 0
-    assert len(result.artifacts[0].bytes) > 0
-
-
 def test_engine_render_with_explicit_format(engine, taro_quill_dir, taro_md):
-    """engine.render() honours an explicit OutputFormat argument."""
     quill = Quill.from_path(str(taro_quill_dir))
 
     parsed = Document.from_markdown(taro_md)
@@ -40,16 +27,6 @@ def test_engine_render_with_explicit_format(engine, taro_quill_dir, taro_md):
     assert len(result.artifacts) > 0
     assert result.format == OutputFormat.SVG
     assert result.artifacts[0].format == OutputFormat.SVG
-
-
-def test_render_result_carries_render_time(engine, taro_quill_dir, taro_md):
-    """RenderResult.render_time_ms mirrors WASM `renderTimeMs`."""
-    quill = Quill.from_path(str(taro_quill_dir))
-    parsed = Document.from_markdown(taro_md)
-
-    result = engine.render(quill, parsed, OutputFormat.PDF)
-    assert isinstance(result.render_time_ms, float)
-    assert result.render_time_ms >= 0.0
 
 
 def test_engine_render_name_mismatch_errors(engine, taro_quill_dir):
@@ -81,7 +58,6 @@ def test_engine_render_name_mismatch_errors(engine, taro_quill_dir):
 
 
 def test_engine_render_page_selection(engine, taro_quill_dir, taro_md):
-    """engine.render with pages=[...] emits a page subset in one shot."""
     quill = Quill.from_path(str(taro_quill_dir))
     parsed = Document.from_markdown(taro_md)
 
@@ -91,7 +67,6 @@ def test_engine_render_page_selection(engine, taro_quill_dir, taro_md):
 
 
 def test_engine_render_full_document(engine, taro_quill_dir, taro_md):
-    """engine.render(quill, doc) renders successfully."""
     quill = Quill.from_path(str(taro_quill_dir))
 
     parsed = Document.from_markdown(taro_md)

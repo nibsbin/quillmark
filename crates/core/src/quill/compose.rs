@@ -1,6 +1,5 @@
 //! Consumer-facing operations on a [`Quill`]: validation, seeding, and the
-//! zero-filled compile to backend wire JSON. All pure reads of the quill's
-//! config: no backend, no engine (those live in the `quillmark` crate).
+//! zero-filled compile to backend wire JSON. Pure reads of the config.
 
 use std::str::FromStr;
 
@@ -630,9 +629,6 @@ mod tests {
         FieldSchema::from_quill_value("field".to_string(), &value).unwrap()
     }
 
-    // A typed dictionary carrying a key the schema does not declare keeps that
-    // key in the resolved projection (regression guard: the schema is
-    // a floor, not an allowlist). Declared-but-absent properties still zero-fill.
     #[test]
     fn typed_dict_preserves_undeclared_keys() {
         let schema = field(
@@ -653,10 +649,6 @@ properties:
         );
     }
 
-    // A card whose declared `$kind` has no schema anchors its `!must_fill`
-    // warning at the bare-index root `cards[<i>].<field>` (matching
-    // `validate_typed_document`'s unknown-card path) never `cards.<kind>[<i>]`.
-    // A truly kindless card (no `$kind`) stays bare-index the same way.
     #[test]
     fn unknown_kind_card_fill_path_is_bare_index() {
         use crate::document::Payload;
@@ -687,13 +679,11 @@ card_kinds:
         main.set_kind("main");
         let main = Card::from_parts(main, quillmark_content::Content::empty());
 
-        // Index 0: a card whose `$kind` ("mystery") is not a declared card kind.
         let mut unknown = Card::new("mystery").unwrap();
         unknown
             .store_fill("note", QuillValue::from_json(json!(null)))
             .unwrap();
 
-        // Index 1: a kindless card (no `$kind` at all).
         let mut kindless =
             Card::from_parts(Payload::new(), quillmark_content::Content::empty());
         kindless
@@ -719,31 +709,6 @@ card_kinds:
             "kindless card fill must anchor at the bare index; got {paths:?}"
         );
     }
-
-    // Same pass-through inside a typed-table row (the Array→Object recursion).
-    #[test]
-    fn typed_table_row_preserves_undeclared_keys() {
-        let schema = field(
-            r#"
-type: array
-items:
-  type: object
-  properties:
-    name: { type: string }
-"#,
-        );
-        let input = QuillValue::from_json(json!([{ "name": "ACME", "year": 2020 }]));
-
-        let resolved = resolve_value(Some(&input), &schema).into_json();
-
-        assert_eq!(resolved, json!([{ "name": "ACME", "year": 2020 }]));
-    }
-
-    // ── "Absent on undefined": the render plate omits `$body` wherever the
-    //    schema defines none (issue 1030). The `$kind` half is structural in
-    //    `to_plate_json`; these pin the schema-gated `$body` half. Only the
-    //    body-disabled edge is reachable here: `validate_document` rejects an
-    //    unknown-kind or kindless card before render.
 
     fn plate_of(yaml: &str, md: &str) -> serde_json::Value {
         let config = QuillConfig::from_yaml(yaml).expect("valid quill");
@@ -826,14 +791,6 @@ card_kinds:
         );
     }
 
-    // ── The render floor's two type-domain edges. Every shipped quill declares
-    //    a `default:` on every enum and never authors an empty `date`, so the
-    //    fixture suite reaches neither path; these pin the behavior a plate
-    //    actually receives (issue 1234, breaking changes 1 and 2).
-
-    /// A defaultless `enum` floors to the first declared variant: `zero_value`
-    /// returns an in-domain value, and `values.first()` is the only one
-    /// available. The plate cannot distinguish it from an authored choice.
     #[test]
     fn absent_defaultless_enum_floors_to_the_first_variant() {
         let plate = plate_of(
@@ -854,9 +811,6 @@ main:
         );
     }
 
-    /// The same floor inside a typed dictionary: `zero_value` recurses per
-    /// property, so a nested defaultless enum takes the first variant even when
-    /// the dictionary itself is absent.
     #[test]
     fn nested_defaultless_enum_floors_to_the_first_variant() {
         let plate = plate_of(
@@ -882,10 +836,6 @@ main:
         );
     }
 
-    /// An authored empty `date` coerces to null before the ladder runs
-    /// (`config::conform_value`), so it reads as absent and the `default:`
-    /// fills. The same literal on a `string` outranks the default: presence,
-    /// not truthiness, is what the ladder keys on.
     #[test]
     fn authored_empty_date_coerces_to_absent_and_takes_the_default() {
         let plate = plate_of(

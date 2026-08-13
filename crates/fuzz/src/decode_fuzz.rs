@@ -1,29 +1,15 @@
-//! Decode-lane fuzz targets: the four boundaries that take caller-supplied
-//! **JSON** rather than markdown or a typed Rust value.
-//!
-//! | Lane | Entry | Binding surface |
-//! |---|---|---|
-//! | Storage DTO | `Document: TryFrom<StoredDocument>` (serde) | `Document.fromJson` |
-//! | Live card wire | `Card: TryFrom<CardWire>` | card reads/writes |
-//! | Canonical content | `serial::from_canonical_value` | `install`, body reads |
-//! | Op wire | `change_bundle_from_value` | `applyChange` |
-//!
-//! These are the lanes a browser consumer feeds a restored blob, a server
-//! response, or an editor's own change stream. A panic in one traps the WASM
-//! module, so the cost is the document, not the operation.
-//!
-//! One property: **arbitrary JSON produces `Err`, never a panic.** Round-trip
-//! preservation is covered per lane by the crate that owns it,
-//! `document::dto`'s `v0_93_0_round_trips_as_fixed_point`, `document::wire`'s
-//! four `card_wire_round_trips_*`, and `quillmark-content`'s
-//! `canonical_json_fixed_point`.
+//! The boundaries that take caller-supplied JSON rather than markdown or a
+//! typed Rust value: a restored blob, a server response, an editor's own change
+//! stream. One property — arbitrary JSON produces `Err`, never a panic, since a
+//! panic traps the WASM module and costs the document rather than the operation.
+//! Round-trip preservation belongs to the crate owning each lane.
 
 use proptest::prelude::*;
 use quillmark_core::{Card, CardWire, Document};
 use serde_json::{json, Value};
 
-/// The keys the decoders dispatch on. Generated objects carry them often enough
-/// to reach past the first branch; the noise arm keeps the rest of the space.
+/// The keys the decoders dispatch on, so generated objects reach past the first
+/// branch; the noise arm keeps the rest of the space.
 const DISCRIMINATORS: &[&str] = &[
     "type", "kind", "key", "value", "field", "schema", "main", "body", "payload", "items",
     "islands", "lines", "marks", "text",
@@ -61,15 +47,13 @@ fn arb_json() -> impl Strategy<Value = Value> {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(400))]
 
-    /// `Document`'s serde entry (the `StoredDocument` envelope) against
-    /// arbitrary JSON.
     #[test]
     fn storage_decode_never_panics(v in arb_json()) {
         let _ = serde_json::from_str::<Document>(&v.to_string());
     }
 
-    /// The same lane fed a *well-formed envelope* whose payload is arbitrary:
-    /// past the `schema` discriminator, where the interesting decoding is.
+    /// A well-formed envelope with an arbitrary payload reaches past the
+    /// `schema` discriminator, where the interesting decoding is.
     #[test]
     fn storage_decode_never_panics_past_the_tag(main in arb_json(), cards in arb_json()) {
         for schema in ["quillmark/document@0.93.0", "quillmark/document@0.92.0"] {
@@ -78,8 +62,6 @@ proptest! {
         }
     }
 
-    /// The live card wire, both halves: deserializing a `CardWire` and
-    /// converting one into a `Card`.
     #[test]
     fn card_wire_decode_never_panics(v in arb_json()) {
         if let Ok(wire) = serde_json::from_value::<CardWire>(v) {
@@ -87,13 +69,13 @@ proptest! {
         }
     }
 
-    /// Canonical content decode: the `install` lane.
+    /// The `install` lane.
     #[test]
     fn canonical_content_decode_never_panics(v in arb_json()) {
         let _ = quillmark_content::serial::from_canonical_value(&v);
     }
 
-    /// The op wire: the `applyChange` lane.
+    /// The `applyChange` lane.
     #[test]
     fn op_wire_decode_never_panics(v in arb_json()) {
         let _ = quillmark_content::change_bundle_from_value(&v);
@@ -102,11 +84,9 @@ proptest! {
     }
 }
 
-/// The sweeps pass whether or not a generated value reaches a decoder, so this
-/// pins the reach itself: how many inputs deserialize all the way to a
-/// `CardWire`, the deepest of the four lanes. The floor sits well under the
-/// observed rate, so generator drift does not fail the build while a collapse
-/// in reach does.
+/// The sweeps pass whether or not a value reaches a decoder, so this pins the
+/// reach itself. The floor sits well under the observed rate: generator drift
+/// does not fail the build, a collapse in reach does.
 #[test]
 fn generator_reaches_the_decoders() {
     use proptest::strategy::ValueTree;

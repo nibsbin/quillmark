@@ -1,14 +1,12 @@
-//! AcroForm readers shared by the backend's acceptance tests, which reparse
-//! rendered output with lopdf and assert on it.
+//! AcroForm readers shared by the backend's acceptance tests.
 
 // Each integration test binary compiles this module and uses part of it.
 #![allow(dead_code)]
 
 use lopdf::Document as PdfDoc;
 
-/// Decode a PDF text string: UTF-16BE when it carries a BOM (pdf-writer picks
-/// this for values with characters outside the literal-safe set, e.g. a
-/// newline in a multiline field), else treat the bytes as Latin-1/ASCII.
+/// UTF-16BE when the string carries a BOM (pdf-writer picks that for characters
+/// outside the literal-safe set), else Latin-1.
 pub fn decode_pdf_text(bytes: &[u8]) -> String {
     if bytes.starts_with(&[0xFE, 0xFF]) {
         let units: Vec<u16> = bytes[2..]

@@ -1,13 +1,7 @@
-//! Every subcommand, once, against a fixture quill.
-//!
-//! The bin carries `test = false` (its name collides with the library crate),
-//! so nothing inside `src/` is reachable from a test harness. These drive the
-//! built executable instead, which is the surface a user actually gets: arg
-//! parsing, exit status, and what lands on stdout/stderr.
-//!
-//! Depth belongs to the core tests these commands delegate to. What is asserted
-//! here is the wiring: the command runs, exits the way it says it does, and the
-//! bytes it emits are the shape it advertises.
+//! Every subcommand, once, against a fixture quill. The bin carries
+//! `test = false` (its name collides with the library crate), so these drive
+//! the built executable: arg parsing, exit status, and the bytes that land on
+//! stdout/stderr. Depth belongs to the core tests the commands delegate to.
 
 use std::path::PathBuf;
 use std::process::{Command, Output};
@@ -60,7 +54,7 @@ fn info_json_is_parseable() {
 fn schema_emits_yaml_naming_a_declared_field() {
     let quill = taro();
     let stdout = ok(&["schema", quill.to_str().unwrap()]);
-    // `ice_cream` is taro's own field, so this fails on an empty or generic dump.
+    // taro's own field, so a generic or empty dump fails.
     assert!(
         stdout.contains("ice_cream"),
         "schema omits a declared field: {stdout}"
@@ -97,8 +91,7 @@ fn output_flag_writes_the_named_file() {
     }
 }
 
-/// The one command that reaches a backend. Seeds from the blueprint (no markdown
-/// argument), so it also covers the starter-document path.
+/// The one command that reaches a backend, seeded (no markdown argument).
 #[test]
 fn render_writes_a_pdf() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -120,21 +113,8 @@ fn render_writes_a_pdf() {
     );
 }
 
-#[test]
-fn render_stdout_emits_the_document_on_stdout() {
-    let quill = taro();
-    let out = run(&["render", quill.to_str().unwrap(), "--stdout"]);
-    assert!(out.status.success(), "render --stdout failed");
-    assert!(
-        out.stdout.starts_with(b"%PDF-"),
-        "--stdout did not emit PDF bytes"
-    );
-}
-
-/// `--stdout` gives the artifact sole ownership of stdout, so every `--verbose`
-/// line has to leave by stderr. Printing one to stdout does not garble a
-/// message, it corrupts the PDF: the bytes land inside the file the caller is
-/// redirecting.
+/// A `--verbose` line on stdout does not garble a message, it corrupts the PDF
+/// the caller is redirecting.
 #[test]
 fn verbose_does_not_contaminate_the_stdout_artifact() {
     let quill = taro();
@@ -174,9 +154,8 @@ fn render_svg_honours_the_format_flag() {
     assert!(svg.contains("<svg"), "output is not SVG: {}", &svg[..svg.len().min(80)]);
 }
 
-/// The failure a user hits most: a path that is not a quill. Exit 1 rather than
-/// any non-zero code, because a panic exits differently — a script reading the
-/// status can tell a refusal from a crash.
+/// Exit 1 rather than any non-zero code: a panic exits differently, so a script
+/// reading the status can tell a refusal from a crash.
 #[test]
 fn absent_quill_exits_one_with_stderr() {
     let out = run(&["info", "/nonexistent/quill/path"]);

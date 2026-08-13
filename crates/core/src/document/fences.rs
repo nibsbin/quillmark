@@ -1,26 +1,18 @@
-//! Line-oriented fence scanner for Quillmark card-yaml blocks.
+//! Line-oriented fence scanner for card-yaml blocks.
 //!
-//! Detects `~~~` metadata blocks (the canonical card-yaml fence) and skips
-//! over ordinary CommonMark fenced code blocks so that a `~~~` opener inside a
-//! code block is treated as literal content, not a card-yaml block. A
-//! column-zero `~~~` fence (three or more tildes, no info string) opens a
-//! card-yaml block; the canonical opener is three tildes (`to_markdown`
-//! always emits `~~~`), with the `~~~card-yaml` info string accepted as a
-//! non-canonical alias. To write a literal fenced *code* block
-//! in prose, use a backtick fence (or a `~~~` fence with a language info
-//! string).
+//! A column-zero `~~~` fence (three or more tildes) with an empty info string,
+//! or the non-canonical `card-yaml` alias, opens a card-yaml block. Openers
+//! inside an ordinary CommonMark fenced code block are literal content, so a
+//! backtick fence (or a `~~~` fence carrying a language) writes one in prose.
 
 use crate::error::ParseError;
 use crate::{Diagnostic, Severity};
 
 use super::assemble::MetadataBlock;
 
-/// The `card-yaml` info string that also opens a card-yaml block. Accepted on
-/// input as a non-canonical alias but never emitted: canonical openers are
-/// bare `~~~` (see [`card_yaml_opener_run`]).
+/// Accepted on input as a non-canonical alias; never emitted.
 const CARD_YAML_INFO: &str = "card-yaml";
 
-/// Line-oriented view of the source, used for fence detection.
 pub(super) struct Lines<'a> {
     pub(super) source: &'a str,
     pub(super) starts: Vec<usize>, // byte offset of each line's first character
@@ -43,8 +35,7 @@ impl<'a> Lines<'a> {
     pub(super) fn line_start(&self, k: usize) -> usize {
         self.starts[k]
     }
-    /// Byte position immediately after line k's trailing `\n` (or end-of-source
-    /// if no newline follows).
+    /// Byte position after line k's trailing `\n`, or end-of-source.
     pub(super) fn line_end_inclusive(&self, k: usize) -> usize {
         if k + 1 < self.starts.len() {
             self.starts[k + 1]
@@ -52,7 +43,6 @@ impl<'a> Lines<'a> {
             self.source.len()
         }
     }
-    /// Line text without its trailing line ending.
     pub(super) fn line_text(&self, k: usize) -> &'a str {
         let start = self.starts[k];
         let mut end = self.line_end_inclusive(k);
@@ -69,9 +59,8 @@ impl<'a> Lines<'a> {
     }
 }
 
-/// Detect a CommonMark fenced code-block marker line. Returns `Some((char,
-/// run_len, is_closing))` if the line opens (or, given `open_fence`, closes) a
-/// fence.
+/// `Some((char, run_len, is_closing))` when `line` opens a CommonMark fenced
+/// code block, or closes the one named by `open_fence`.
 pub(super) fn code_fence_on_line(
     line: &str,
     open_fence: Option<(u8, usize)>,
@@ -107,32 +96,18 @@ pub(super) fn code_fence_on_line(
     }
 }
 
-/// Extract the info string of a CommonMark fenced code-block opener line.
-///
-/// `run_len` is the fence-marker run length reported by [`code_fence_on_line`].
-/// The returned slice is the text after the run, trimmed of surrounding
-/// whitespace; e.g. for `~~~card-yaml` it returns `card-yaml`.
+/// The text after a fence marker run of `run_len`, whitespace-trimmed.
 pub(super) fn code_fence_info(line: &str, run_len: usize) -> &str {
     let indent = line.as_bytes().iter().take_while(|&&b| b == b' ').count();
     line[indent + run_len..].trim()
 }
 
-/// If `line` opens a card-yaml metadata block, returns the tilde-run length of
-/// the opener (`>= 3`); otherwise `None`.
+/// The tilde-run length (`>= 3`) when `line` opens a card-yaml block.
 ///
-/// A card-yaml opener is a tilde fence (three **or more** tildes) at **column
-/// zero** (spec §3.2) whose info string is empty (the canonical form) or
-/// exactly `card-yaml` (the accepted, non-canonical alias). The
-/// canonical opener is three tildes (`to_markdown` always emits `~~~`) but a
-/// longer run is accepted and normalised on emit; its closer must be at least
-/// as long (the run length is threaded into the closer scan to honour
-/// CommonMark's fence-matching rule). To write a literal fenced *code* block in
-/// prose, use a backtick fence: backtick fences and `~~~` fences carrying any
-/// other info string (e.g. a language) are never card-yaml openers.
-///
-/// An indented `~~~` (1–3 leading spaces) is still a valid CommonMark code
-/// fence, but it is *not* a card-yaml opener: recognising it would both
-/// contradict the spec and split at an offset the body renderer disagrees with.
+/// The opener must be at **column zero** (spec §3.2): an indented `~~~` is a
+/// valid CommonMark code fence, and claiming it would split at an offset the
+/// body renderer disagrees with. A longer run is accepted and normalised on
+/// emit; its closer must be at least as long (CommonMark fence matching).
 fn card_yaml_opener_run(line: &str) -> Option<usize> {
     if line.starts_with(' ') {
         return None;
@@ -146,20 +121,17 @@ fn card_yaml_opener_run(line: &str) -> Option<usize> {
     }
 }
 
-/// `true` when `line` has the shape of a card-yaml opener (see
-/// [`card_yaml_opener_run`]). Used by the `Quill.yaml` `body.example` guard so
-/// the blueprint-corruption check stays in lock-step with the parser.
+/// Used by the `Quill.yaml` `body.example` guard, so the blueprint-corruption
+/// check stays in lock-step with the parser.
 pub(crate) fn is_card_yaml_opener_line(line: &str) -> bool {
     card_yaml_opener_run(line).is_some()
 }
 
-/// `true` when `line` is a `---` YAML-frontmatter fence line: exactly three
-/// dashes at column zero, followed only by whitespace.
+/// `true` for exactly three dashes at column zero followed only by whitespace.
 ///
-/// `---` is accepted ONLY as the root-block opener/closer (see
-/// [`find_metadata_blocks`]); it is never a composable-card fence. It must be
-/// at column zero, matching the YAML-metadata-block semantics of CommonMark
-/// renderers (an indented `---` is a thematic break, not frontmatter).
+/// `---` opens/closes the root block only, never a composable card. Column zero
+/// matches CommonMark's YAML-metadata-block semantics: an indented `---` is a
+/// thematic break.
 fn is_dash_fence_line(line: &str) -> bool {
     let bytes = line.as_bytes();
     if bytes.len() < 3 || bytes[0] != b'-' {
@@ -172,9 +144,7 @@ fn is_dash_fence_line(line: &str) -> bool {
     line[run_len..].chars().all(|c| c == ' ' || c == '\t')
 }
 
-/// `true` when `line` looks like a YAML mapping key (e.g. `key: value` or
-/// `$key: value`). Used to disambiguate a stray `---` thematic break from a
-/// would-be composable-card block.
+/// Disambiguates a stray `---` thematic break from a would-be composable card.
 fn looks_like_yaml_key_line(line: &str) -> bool {
     let trimmed = line.trim_start();
     if trimmed.is_empty() || trimmed.starts_with('#') {
@@ -198,11 +168,8 @@ fn looks_like_yaml_key_line(line: &str) -> bool {
     i < bytes.len() && bytes[i] == b':'
 }
 
-/// `true` when a matching `---` line appears further down with at least one
-/// YAML-key-shaped line between the two `---` markers.
-///
-/// Used after the root block has already been parsed: such a paired `---`
-/// block is almost certainly a misplaced composable card.
+/// A paired `---` block with YAML-key content between the markers, seen after
+/// the root block: almost certainly a misplaced composable card.
 fn has_paired_dash_with_yaml_keys(lines: &Lines<'_>, opener_k: usize) -> bool {
     let mut saw_yaml_key = false;
     let mut j = opener_k + 1;
@@ -219,15 +186,10 @@ fn has_paired_dash_with_yaml_keys(lines: &Lines<'_>, opener_k: usize) -> bool {
     false
 }
 
-/// Outcome of the fence-detection pass: the recognised metadata blocks and any
-/// non-fatal diagnostics accumulated along the way.
 pub(super) type FenceScan = (Vec<MetadataBlock>, Vec<Diagnostic>);
 
-/// Find all `~~~` card-yaml metadata blocks in the document.
-///
-/// A card-yaml block opens with `~~~` (or the `~~~card-yaml` alias),
-/// requires a blank line above it (so body round-tripping stays stable), and
-/// closes with `~~~`. Openers inside ordinary fenced code blocks are ignored.
+/// Find all card-yaml metadata blocks. A block requires a blank line above it,
+/// so body round-tripping stays stable.
 pub(super) fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseError> {
     let lines = Lines::new(markdown);
     let mut blocks: Vec<MetadataBlock> = Vec::new();
@@ -239,8 +201,7 @@ pub(super) fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseErr
     while k < lines.len() {
         let text = lines.line_text(k);
 
-        // Inside an ordinary fenced code block: `~~~` openers here
-        // are literal content, ignored until the code fence closes.
+        // Inside an ordinary code block: openers are literal content.
         if let Some((ch, min, _opener)) = open_code_fence {
             if let Some((_, _, true)) = code_fence_on_line(text, Some((ch, min))) {
                 open_code_fence = None;
@@ -249,11 +210,9 @@ pub(super) fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseErr
             continue;
         }
 
-        // A card-yaml opener?
         if let Some(open_run) = card_yaml_opener_run(text) {
-            // Leading-blank rule: a card-yaml block is a block-level construct
-            // and requires a blank line above it. Without one it is delegated
-            // to CommonMark as an ordinary `~~~` code block.
+            // Without a blank line above, the block is delegated to CommonMark
+            // as an ordinary `~~~` code block.
             let blank_above = k == 0 || lines.is_blank(k - 1);
             if !blank_above {
                 warnings.push(
@@ -271,14 +230,10 @@ pub(super) fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseErr
                 continue;
             }
 
-            // Scan for the matching `~~~` closer. A closer must be a tilde run
-            // at least as long as the opener (CommonMark fence matching), so a
-            // shorter `~~~` inside a longer-fenced block stays payload. It must
-            // also be at column zero (spec §3.2 / D2): the payload is YAML,
-            // where indentation is structural, so an indented `~~~` (e.g. a
-            // tilde code fence inside a `|` block-scalar value) is payload,
-            // never a closer. (A column-zero `~~~` can never be block-scalar
-            // content, so the closer is unambiguous.)
+            // The closer must be a tilde run at least as long as the opener
+            // (CommonMark fence matching) and at column zero (spec §3.2 / D2):
+            // the payload is YAML, where indentation is structural, so an
+            // indented `~~~` inside a block scalar is payload, never a closer.
             let mut closer_k: Option<usize> = None;
             let mut j = k + 1;
             while j < lines.len() {
@@ -294,11 +249,9 @@ pub(super) fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseErr
                 j += 1;
             }
             let Some(cj) = closer_k else {
-                // No closer before EOF. Per CommonMark an unclosed `~~~` fence
-                // is an ordinary fenced code block running to end of document,
-                // not a card-yaml block, so delegate it rather than erroring.
-                // Shielding here also lets the end-of-document check below
-                // surface the unclosed-fence warning.
+                // Per CommonMark an unclosed `~~~` fence is an ordinary code
+                // block running to EOF, so delegate rather than erroring. The
+                // end-of-document check below surfaces the warning.
                 open_code_fence = Some((b'~', open_run, k));
                 k += 1;
                 continue;
@@ -317,33 +270,19 @@ pub(super) fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseErr
             continue;
         }
 
-        // `---` YAML-frontmatter style: accepted ONLY for the root block.
-        //
-        // Two cases:
-        //   * `blocks.is_empty()` and this is the first non-blank construct we
-        //     hit: treat as the root opener, scan for a `---` closer, build a
-        //     block. (Mixed openers like `---` … `~~~` are NOT accepted: a
-        //     `---` opener requires a `---` closer.)
-        //   * Otherwise: if it looks like a would-be composable card
-        //     (paired `---` … `---` with YAML-key content between, blank
-        //     line above), reject with the standard "expected `~~~card-yaml`"
-        //     error so LLM authors don't silently get a body-text result.
-        //     Otherwise fall through and let CommonMark treat the line as
-        //     prose (thematic break / setext underline).
+        // `---` is accepted only as the root opener, and only with a `---`
+        // closer. After the root block a paired `---` with YAML keys between is
+        // rejected as a misplaced composable card; anything else falls through
+        // to CommonMark as a thematic break / setext underline.
         if is_dash_fence_line(text) {
             let blank_above = k == 0 || lines.is_blank(k - 1);
 
             if blocks.is_empty() && blank_above {
-                // Only accept `---` as the root opener if we have not yet
-                // seen any prose content (i.e. the `---` is at document
-                // start, modulo leading blank lines). The pre-block prefix
-                // is required to be blank for the root case so we don't
-                // race against setext headings or thematic breaks deep in
-                // a prose preamble. `blocks.is_empty()` plus "every line
-                // above is blank" guarantees this is document-start.
+                // Document-start only: requiring every line above to be blank
+                // keeps this from racing setext headings and thematic breaks
+                // deeper in a prose preamble.
                 let above_all_blank = (0..k).all(|i| lines.is_blank(i));
                 if above_all_blank {
-                    // Scan for the matching `---` closer.
                     let mut closer_k: Option<usize> = None;
                     let mut j = k + 1;
                     while j < lines.len() {
@@ -354,10 +293,9 @@ pub(super) fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseErr
                         j += 1;
                     }
                     let Some(cj) = closer_k else {
-                        // No matching `---` closer: per CommonMark a lone
-                        // leading `---` is a thematic break, not frontmatter.
-                        // Fall through (no root block is built here, so the
-                        // document surfaces MissingQuill downstream).
+                        // Per CommonMark a lone leading `---` is a thematic
+                        // break, not frontmatter: no root block, so the document
+                        // surfaces MissingQuill downstream.
                         k += 1;
                         continue;
                     };
@@ -376,10 +314,6 @@ pub(super) fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseErr
                 }
             }
 
-            // After the root block: a `---` line that pairs with another
-            // `---` further down AND has YAML-key content between is almost
-            // certainly a misplaced composable-card attempt, surface the
-            // standard error rather than silently treating it as body text.
             if !blocks.is_empty() && blank_above && has_paired_dash_with_yaml_keys(&lines, k) {
                 return Err(ParseError::InvalidStructure(
                     "Composable card block opened with `---` but composable cards \
@@ -390,9 +324,7 @@ pub(super) fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseErr
                 ));
             }
 
-            // Fall through: a lone `---` is delegated to CommonMark as a
-            // thematic break / setext underline. Do not treat as a code
-            // fence opener.
+            // A lone `---` is CommonMark's, and never a code-fence opener.
             k += 1;
             continue;
         }
@@ -404,8 +336,7 @@ pub(super) fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseErr
         k += 1;
     }
 
-    // Card-count check counts composable card blocks: every block after the
-    // root (spec §8).
+    // Composable cards are every block after the root (spec §8).
     let card_count = blocks.len().saturating_sub(1);
     if card_count > crate::error::MAX_CARD_COUNT {
         return Err(ParseError::InputTooLarge {
@@ -414,9 +345,8 @@ pub(super) fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseErr
         });
     }
 
-    // Unclosed fenced code block at end-of-document: any card-yaml blocks
-    // below the unclosed opener were silently shielded, which is almost never
-    // what the author intended. Surface it as a non-fatal warning.
+    // Card-yaml blocks below an unclosed opener were silently shielded, which
+    // is almost never intended.
     if let Some((_, _, opener_line)) = open_code_fence {
         warnings.push(
             Diagnostic::new(

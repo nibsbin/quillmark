@@ -1,15 +1,9 @@
-// Type-level DRIFT GUARD for the canonical render types.
+// Type-level DRIFT GUARD: `runtime/runtime.d.ts` declares the render-side types
+// as the backend-neutral contract rather than re-exporting the private Typst
+// build's, so this file asserts the two stay mutually assignable. If either
+// drifts, one of the assignments below stops compiling.
 //
-// `runtime/runtime.d.ts` defines the render-side types (`RenderResult`,
-// `RenderOptions`, `Artifact`, `OutputFormat`, `PageSize`, `PaintOptions`,
-// `PaintResult`) as the backend-NEUTRAL canonical contract, rather than
-// re-exporting them from the private Typst backend build. This file asserts that
-// those canonical declarations and the Typst backend's GENERATED declarations
-// (`pkg/backends/typst/wasm.d.ts`, produced from the `typescript_custom_section`
-// blocks in `crates/bindings/wasm/src/engine.rs`) stay mutually assignable: if
-// either side drifts, one of the assignments below stops compiling.
-//
-// Run via `npm run typecheck` (tsc --noEmit). This file emits no runtime code.
+// Run via `npm run typecheck`. Emits no runtime code.
 
 import type {
 	RenderResult as CanonicalRenderResult,

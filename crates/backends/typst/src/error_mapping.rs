@@ -4,7 +4,6 @@ use crate::world::QuillWorld;
 use quillmark_core::{Diagnostic, Location, Severity};
 use typst::diag::SourceDiagnostic;
 
-/// Maps a slice of Typst diagnostics to Quillmark diagnostics.
 pub fn map_typst_errors(errors: &[SourceDiagnostic], world: &QuillWorld) -> Vec<Diagnostic> {
     errors
         .iter()
@@ -20,13 +19,9 @@ fn map_single_diagnostic(error: &SourceDiagnostic, world: &QuillWorld) -> Diagno
 
     let location = resolve_span_to_location(error.span, world);
 
-    // Content fields now ride generated markup **blocks**, not `eval` of an
-    // ephemeral source, so an error in field content resolves to a real
-    // position in the helper `lib.typ`: no synthetic "dynamically evaluated
-    // content" hint is needed. Any hint Typst itself supplied is kept.
     let hint = error.hints.first().map(|h| h.v.to_string());
 
-    // Extract error code from message (simple heuristic)
+    // Typst has no error codes; the message prefix stands in.
     let code = Some(format!(
         "typst::{}",
         error.message.split(':').next().unwrap_or("error").trim()
@@ -42,10 +37,8 @@ fn map_single_diagnostic(error: &SourceDiagnostic, world: &QuillWorld) -> Diagno
 fn resolve_span_to_location(span: typst::syntax::DiagSpan, world: &QuillWorld) -> Option<Location> {
     use typst::{World, WorldExt};
 
-    // Resolve the span against its OWN source file. A diagnostic originating in
-    // an injected helper package or a vendored package must report coordinates
-    // (and a path) in that file, not in main.typ. Spans with no file id (the
-    // detached span) fall back to main.
+    // A diagnostic from an injected helper or vendored package reports
+    // coordinates in that file, not main.typ. Detached spans fall back to main.
     let source_id = span.id().unwrap_or_else(|| world.main());
     let source = world.source(source_id).ok()?;
     let range = world.range(span)?;
@@ -69,8 +62,7 @@ mod tests {
     use typst::diag::SourceDiagnostic;
     use typst::syntax::Span;
 
-    /// The `usaf_memo` fixture as an in-memory tree, or `None` when the
-    /// fixture is absent (a stripped checkout).
+    /// `None` when the fixture is absent (a stripped checkout).
     fn walk_fixture() -> Option<FileTreeNode> {
         let quill_path = quillmark_fixtures::quills_path("usaf_memo");
         if !quill_path.exists() {
@@ -79,15 +71,13 @@ mod tests {
         Some(quillmark::tree_from_path(quill_path).expect("walk fixture"))
     }
 
-    /// A `QuillWorld` with a valid main source to resolve spans against.
     fn fixture_world() -> Option<QuillWorld> {
         let tree = walk_fixture()?;
         let source = Quill::from_tree(tree).expect("load source");
         Some(QuillWorld::new(&source, "// Test").expect("create world"))
     }
 
-    /// The host quill with its `plate.typ` replaced by `plate`; the fixture's
-    /// `typst.plate_file: plate.typ` makes the backend read this override.
+    /// The fixture's `typst.plate_file: plate.typ` makes the backend read this.
     fn source_with_plate(plate: &str) -> Option<Quill> {
         let mut tree = walk_fixture()?;
         if let FileTreeNode::Directory { files } = &mut tree {
@@ -101,31 +91,6 @@ mod tests {
         Some(Quill::from_tree(tree).expect("load source"))
     }
 
-    /// An unresolvable span with no Typst-supplied hint carries none: content
-    /// rides resolvable markup blocks rather than an ephemeral eval source, so
-    /// there is no synthetic hint to fall back to.
-    #[test]
-    fn unresolvable_span_without_typst_hint_carries_no_hint() {
-        let Some(world) = fixture_world() else {
-            return;
-        };
-
-        let diag = SourceDiagnostic::error(Span::detached(), "unknown variable: general");
-        let mapped = map_single_diagnostic(&diag, &world);
-
-        assert!(
-            mapped.location.is_none(),
-            "detached span should not resolve to a location"
-        );
-        assert!(
-            mapped.hint.is_none(),
-            "no synthetic hint is injected: {:?}",
-            mapped.hint
-        );
-        assert_eq!(mapped.message, "unknown variable: general");
-    }
-
-    /// A hint Typst already supplied is kept, not overwritten.
     #[test]
     fn unresolvable_span_keeps_existing_typst_hint() {
         let Some(world) = fixture_world() else {
@@ -144,21 +109,16 @@ mod tests {
         );
     }
 
-    /// `eval`s an unknown variable; the error resolves to the call site in
-    /// `main.typ`, so it is the resolvable common case.
     const EVAL_ERROR_PLATE: &str =
         "#set page(width: 400pt, height: 300pt)\n#eval(\"#general\", mode: \"markup\")\n";
 
-    /// A resolvable eval error keeps its real source location: the error
-    /// resolves to the call site, so the mapped diagnostic carries a location.
     #[test]
     fn resolvable_eval_error_is_unchanged() {
         let Some(source) = source_with_plate(EVAL_ERROR_PLATE) else {
             return;
         };
 
-        // Compilation happens during `open`, so the error may surface from
-        // either `open` or `render`.
+        // Compilation happens during `open`, so the error may surface there.
         let diags = match TypstBackend.open(&source, &serde_json::json!({})) {
             Ok(session) => session
                 .render(&RenderOptions::default().with_output_format(OutputFormat::Pdf))

@@ -42,9 +42,8 @@ pub struct RenderArgs {
     output_data: Option<PathBuf>,
 }
 
-// Progress chatter goes to stderr throughout, as `print_warnings` already does:
-// under `--stdout` the artifact owns stdout, and a `--verbose` line there lands
-// inside the emitted PDF.
+// Progress chatter goes to stderr: under `--stdout` the artifact owns stdout,
+// and a `--verbose` line there would land inside the emitted PDF.
 pub fn execute(args: RenderArgs) -> Result<()> {
     if args.verbose {
         eprintln!("Loading quill from: {}", args.quill.display());
@@ -56,7 +55,6 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         eprintln!("Quill loaded: {}", quill.name());
     }
 
-    // Determine if we have a markdown file or need to seed a starter document.
     let (parsed, parse_warnings, markdown_path_for_output) =
         if let Some(ref markdown_path) = args.markdown_file {
             if !markdown_path.exists() {
@@ -82,10 +80,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
                 Some(markdown_path.clone()),
             )
         } else {
-            // No input file: render the seeded document, the committed
-            // "filled-out one" (each field's `example:`, with `default:`/zero
-            // interpolated at the render floor), so the quill renders without
-            // the caller supplying any field values.
+            // No input file: the seed renders without any caller-supplied values.
             if args.verbose {
                 eprintln!("Using seeded document from quill");
             }
@@ -96,7 +91,6 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         eprintln!("Render-ready quill for backend: {}", quill.backend_id());
     }
 
-    // Parse output format (format ↔ string mapping lives in quillmark_core).
     let output_format = args
         .format
         .parse::<OutputFormat>()
@@ -106,7 +100,6 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         eprintln!("Rendering to format: {:?}", output_format);
     }
 
-    // Handle output-data
     if let Some(data_path) = args.output_data {
         let json_data = quill.compile_data(&parsed).map_err(CliError::Render)?;
         let f = std::fs::File::create(&data_path).map_err(|e| {
@@ -137,20 +130,17 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         &RenderOptions::default().with_output_format(output_format),
     )?;
 
-    // Merge parse-time warnings into the render result so downstream tooling
-    // sees them in a single channel.
+    // One channel for downstream tooling.
     result.warnings.splice(0..0, parse_warnings);
 
     if !result.warnings.is_empty() && !args.quiet {
         crate::errors::print_warnings(&result.warnings);
     }
 
-    // Get the first artifact (there should only be one for single format render)
     let artifact = result.artifacts.first().ok_or_else(|| {
         CliError::InvalidArgument("No artifacts produced from rendering".to_string())
     })?;
 
-    // Determine output path
     let output_path = if args.stdout {
         None
     } else {

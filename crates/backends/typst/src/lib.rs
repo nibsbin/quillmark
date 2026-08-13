@@ -1,30 +1,17 @@
-//! Typst backend for Quillmark: converts CommonMark markdown + card-YAML data
-//! to PDF, SVG, and PNG via the Typst typesetting system.
-//!
-//! [`TypstBackend`] implements the [`Backend`] trait from `quillmark-core`.
-//! Callers typically reach it through the `quillmark` crate's `Quill` API.
+//! Typst backend for Quillmark: markdown + card-YAML data → PDF, SVG, PNG.
 //!
 //! Richtext fields cross the seam as canonical content JSON and are lowered to
-//! Typst markup by [`emit`] at codegen time: the only markup-producing path,
-//! never a markdown re-parse. The plate accesses fields via the
-//! `@local/quillmark-helper` virtual package. Unsigned AcroForm widgets (text,
-//! checkbox, choice, signature) are embedded via the `form-field` helper in
-//! `lib.typ`; only PDF output carries the interactive widget: SVG and PNG
-//! render an invisible placeholder.
-//!
-//! The `compile` and `error_mapping` modules are internal and not part of the
-//! public API. The public lowering surface is [`emit`].
+//! Typst markup by [`emit`] at codegen time; no code re-parses markdown at
+//! render time. Plates read fields through the `@local/quillmark-helper`
+//! virtual package. Form-field widgets become AcroForm widgets on PDF output
+//! only; SVG and PNG render an invisible placeholder.
 
 mod compile;
-/// The content → Typst-markup lowering + its per-segment source map (the codegen
-/// tier of the richtext seam, Option A). The one place that both lowers a
-/// [`Content`](quillmark_content::Content) and knows the resulting byte
-/// layout, so the only place a source map can be produced. This is the sole
-/// markup-producing path in the render engine: no code parses markdown.
+/// Content → Typst-markup lowering plus its per-segment source map.
 ///
 /// **Workspace-internal; not covered by this crate's semver.** `pub` only so
 /// `quillmark-fuzz` can drive the escapers and the lowering directly. The
-/// supported surface of this crate is [`TypstBackend`].
+/// supported surface is [`TypstBackend`].
 #[doc(hidden)]
 pub mod emit;
 mod error_mapping;
@@ -49,53 +36,39 @@ pub struct TypstBackend;
 const SUPPORTED_FORMATS: &[OutputFormat] =
     &[OutputFormat::Pdf, OutputFormat::Svg, OutputFormat::Png];
 
-/// Typst-specific render session.
-///
-/// Holds the compiled `PagedDocument` *and* the `QuillWorld` it was compiled
-/// through. Persisting the world keeps fonts, packages, and assets parsed once
-/// per session rather than once per compile: the substrate for incremental
-/// recompiles. Typst-only operations (page geometry, raster rendering) are
-/// served generically through the `SessionHandle` trait; callers never name
-/// this type.
+/// Persisting the world keeps fonts, packages, and assets parsed once per
+/// session rather than once per compile: the substrate for incremental
+/// recompiles.
 struct TypstSession {
     world: world::QuillWorld,
     document: typst_layout::PagedDocument,
     page_count: usize,
-    /// Extracted from each committed compile. Converted to spine `FieldSpec`s
-    /// on every render; PDF stamps them as AcroForm widgets, and every format
-    /// carries the resulting regions.
+    /// Extracted from each committed compile; converted to spine `FieldSpec`s
+    /// on every render.
     field_placements: Vec<overlay::FieldPlacement>,
-    /// The transform schema's address/date/content classification tables, built
-    /// once at `open` from `build_transform_schema` and reused on every `apply`
-    /// (the schema never changes for the session's lifetime). The schema itself
-    /// is not retained: codegen and date validation read only these tables.
+    /// Built once at `open`: the schema never changes for a session's lifetime,
+    /// and codegen plus date validation read only these tables.
     schema_meta: SchemaMeta,
-    /// The span scan's full classification table for the live compile:
-    /// generated content-block windows in the helper `lib.typ` (regenerated
-    /// with the helper on every committed `apply`) followed by the plate's
-    /// scalar reference-site windows. Swapped transactionally with the document.
+    /// The span scan's classification table for the live compile: generated
+    /// content-block windows then the plate's scalar reference-site windows.
+    /// Swapped transactionally with the document.
     windows: Vec<overlay::FieldWindow>,
-    /// Byte windows of the plate's direct `data.<field>` scalar reference
-    /// sites. The plate is static for the session's lifetime, so these are
-    /// computed once at `open` and re-appended into `windows` per apply.
+    /// The plate is static for a session's lifetime, so these are computed once
+    /// at `open` and re-appended into `windows` per apply.
     scalar_windows: Vec<overlay::FieldWindow>,
-    /// The helper `lib.typ` source the live compile was built from. Span
-    /// resolution for regions/`field_at` goes through this snapshot, not the
-    /// world: a failed `apply` leaves the *next* injection's text in the
-    /// world while every read keeps serving this compile.
+    /// Span resolution goes through this snapshot, not the world: a failed
+    /// `apply` leaves the *next* injection's text in the world while every read
+    /// keeps serving this compile.
     helper_source: typst::syntax::Source,
-    /// Per-page content fingerprints of the live compile; diffed against the
-    /// next compile's to produce `ChangeSet::dirty_pages`.
+    /// Diffed against the next compile's to produce `ChangeSet::dirty_pages`.
     page_hashes: Vec<u128>,
-    /// What [`session_warnings`] built for the live compile: the quill's load
-    /// warnings, then this compile's. The compile half swaps on each committed
-    /// `apply`; the load half rides along unchanged.
+    /// What [`session_warnings`] built for the live compile. The compile half
+    /// swaps on each committed `apply`; the load half rides along unchanged.
     warnings: Vec<Diagnostic>,
 }
 
-/// The session's warning list: the quill's load warnings, then this compile's
-/// own. One order, built in one place, so an `apply` that swaps only what it
-/// recompiled cannot drop the load half.
+/// The quill's load warnings, then this compile's own. One order, built in one
+/// place, so an `apply` that swaps only what it recompiled keeps the load half.
 fn session_warnings(world: &world::QuillWorld, compile: Vec<Diagnostic>) -> Vec<Diagnostic> {
     let mut all = world.load_warnings().to_vec();
     all.extend(compile);
@@ -103,39 +76,18 @@ fn session_warnings(world: &world::QuillWorld, compile: Vec<Diagnostic>) -> Vec<
 }
 
 /// Per-page fingerprints of *visible* content, diffed across compiles for
-/// `ChangeSet::dirty_pages`. Walks each page frame hashing text, shapes,
-/// images, links, and group geometry: skipping introspection `Tag` items and
-/// group parent locations, which carry element hashes spanning content on
-/// *other* pages (a page-spanning paragraph's tag sits on its first page and
-/// covers the whole text, so hashing it dirties page 0 on an end-of-document
-/// edit the page never shows).
+/// `ChangeSet::dirty_pages`. Introspection `Tag` items and group parent
+/// locations are skipped: they carry element hashes spanning content on *other*
+/// pages, so hashing them dirties page 0 on an end-of-document edit.
 ///
-/// PIXELS, NOT SPANS. Every hashed item drops its source-location `Span`: the
-/// glyph `span` on a `Text` run, the trailing `Span` on `Shape`/`Image`. A
-/// `Span` is a `FileId` plus a parse-numbering index; it locates source, it does
-/// not paint. This fingerprint's whole contract is *visible content*, so folding
-/// in a span is a category error: two compiles whose pages rasterize
-/// pixel-for-pixel identically must hash identically, and only render-affecting
-/// data (font, size, paint, glyph geometry, position) may enter the hash.
-///
-/// This is the dirty-every-reapply bug, and it is real, not theoretical.
-/// The span rework routes content-field glyphs' spans into the helper
-/// `lib.typ`, which is regenerated per `apply` with a `data` literal whose keys
-/// serialize in field order (`serde_json` is built with `preserve_order`). An
-/// editor's mutate path can hand `apply` the SAME content in a different field
-/// order than `open` saw; that shifts the helper's byte layout, hence every
-/// content block's glyph spans below it: with no change to a single rendered
-/// pixel. Folding those spans into the hash reported the content page dirty on
-/// every such reapply (see `reapply_with_reordered_fields_same_content_is_clean`
-/// in `tests/live_apply.rs`). Excluding spans makes the invariant structural: a
-/// page cannot be reported dirty for a source-location shift that moved no ink.
+/// Pixels, not spans: every hashed item drops its source-location `Span`. Only
+/// render-affecting data may enter the hash, or a helper-layout shift that moves
+/// no ink (a reordered `data` literal regenerating `lib.typ`) reports every
+/// content page dirty.
 pub(crate) fn page_hashes(document: &typst_layout::PagedDocument) -> Vec<u128> {
     use std::hash::{Hash, Hasher};
     use typst::layout::FrameItem;
 
-    // A text run's rendered content: font, size, paint, and per-glyph geometry,
-    // but not each glyph's `span` (see the fn doc). Everything that moves a pixel
-    // is retained, so a genuine content change still re-hashes.
     fn hash_text<H: Hasher>(text: &typst::text::TextItem, state: &mut H) {
         text.font.hash(state);
         text.size.hash(state);
@@ -208,20 +160,10 @@ pub(crate) fn page_hashes(document: &typst_layout::PagedDocument) -> Vec<u128> {
         .collect()
 }
 
-/// Prepare raw document data for the helper codegen. The seam already carries
-/// the render shape: richtext fields are canonical content JSON, not markdown
-/// to re-parse (lowered to markup at codegen via [`emit::emit_content`]), dates
-/// are strings (lowered to `datetime(..)` at codegen), so there is no
-/// per-field transform here. `meta` is the session's cached [`SchemaMeta`].
-///
-/// The one check kept is a defensive date validation: the coercion layer already
-/// rejects malformed dates before render, but a direct `apply` can hand the
-/// backend uncoerced data, and a bad date surfaces a real diagnostic here rather
-/// than a silent `none` or a cryptic Typst error deep in the compile.
-///
-/// Borrows `json_data` unchanged for the object case (the render input on the
-/// hot `apply`/`open` path); only a non-object input allocates, normalized to an
-/// empty object.
+/// The seam already carries the render shape, so no per-field transform happens
+/// here; the one check kept is defensive date validation, because a direct
+/// `apply` can hand the backend uncoerced data. Borrows `json_data` unchanged
+/// for the object case: only a non-object input allocates.
 fn transformed_data<'a>(
     meta: &SchemaMeta,
     json_data: &'a serde_json::Value,
@@ -232,17 +174,14 @@ fn transformed_data<'a>(
             Ok(Cow::Borrowed(json_data))
         }
         None => {
-            // An empty object has no date fields to validate: return it directly.
             Ok(Cow::Owned(serde_json::Value::Object(serde_json::Map::new())))
         }
     }
 }
 
-/// Reject any date/datetime field whose value is a non-empty string the shared
+/// Rejects any non-empty date/datetime string the shared
 /// [`parse_date`](quillmark_core::quill::parse_date) /
-/// [`parse_datetime`](quillmark_core::quill::parse_datetime) parsers (the same
-/// ones the coercion layer validates with) cannot parse. Walks the top-level
-/// and per-card date and datetime fields, each against its type's grammar.
+/// [`parse_datetime`](quillmark_core::quill::parse_datetime) parsers reject.
 fn validate_date_fields(
     meta: &SchemaMeta,
     obj: &serde_json::Map<String, serde_json::Value>,
@@ -256,8 +195,8 @@ fn validate_date_fields(
             .with_code("backend::invalid_date".to_string()),
         )
     }
-    // `is_datetime` selects the strict wall-clock parser over the date-only one,
-    // so a `datetime` field's time components are validated (not just its date).
+    // `is_datetime` selects the strict wall-clock parser, so a `datetime`
+    // field's time components are validated too.
     fn check(
         names: &[String],
         dict: &serde_json::Map<String, serde_json::Value>,
@@ -325,14 +264,9 @@ impl SessionHandle for TypstSession {
         self.page_count
     }
 
-    /// Incremental recompile against new document data. The persistent world
-    /// keeps fonts/packages/assets parsed; the helper `lib.typ` is swapped via
-    /// `Source::replace` (incremental reparse), and `comemo` reuses every
-    /// memoized result the edit did not reach. Transactional: the live
-    /// document, placements, hashes, and compile warnings swap together only
-    /// after the compile *and* placement extraction succeed: on `Err` every
-    /// read keeps serving the last-good compile and its warnings (the world
-    /// may hold the failed source; the next `update` overwrites it).
+    /// Transactional: the live document, placements, hashes, and compile
+    /// warnings swap together only after the compile *and* placement extraction
+    /// succeed, so on `Err` every read keeps serving the last-good compile.
     fn update(&mut self, json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> {
         let data = transformed_data(&self.schema_meta, json_data)?;
         let mut windows = self
@@ -361,23 +295,19 @@ impl SessionHandle for TypstSession {
         Ok(ChangeSet::new(self.page_count, dirty_pages))
     }
 
-    /// The quill's load warnings, then this compile's own.
     fn warnings(&self) -> &[Diagnostic] {
         &self.warnings
     }
 
-    /// Page dimensions in Typst points (1 pt = 1/72 inch). `None` if `page` is
-    /// out of range. Overrides the default-`None` canvas seam.
+    /// Typst points: 1 pt = 1/72 inch.
     fn page_size_pt(&self, page: usize) -> Option<(f32, f32)> {
         let frame = &self.document.pages().get(page)?.frame;
         let size = frame.size();
         Some((size.x.to_pt() as f32, size.y.to_pt() as f32))
     }
 
-    /// Render `page` to a non-premultiplied RGBA8 buffer at `scale`× the
-    /// natural 72 ppi (`scale = 1` → 1 device pixel per Typst pt). Returns
-    /// `(width_px, height_px, rgba)` (`w * h * 4` bytes, row-major), or `None`
-    /// if `page` is out of range. Overrides the default-`None` canvas seam.
+    /// Non-premultiplied RGBA8 at `scale`× the natural 72 ppi, returned as
+    /// `(width_px, height_px, rgba)` with `w * h * 4` row-major bytes.
     fn render_rgba(&self, page: usize, scale: f32) -> Option<(u32, u32, Vec<u8>)> {
         let p = self.document.pages().get(page)?;
         let pixmap = typst_render::render(
@@ -400,19 +330,11 @@ impl SessionHandle for TypstSession {
         Some((width, height, rgba))
     }
 
-    /// Schema-field geometry for the compiled document: bottom-left PDF-point
-    /// rects keyed on the schema-field path. Two sources, deterministically
-    /// ordered: form-field widgets (one fixed-size box each) first, then
-    /// span-tracked content in (page, field, site) order, each content
-    /// field's / scalar reference site's **first placement**, one region per
-    /// page it touches, geometry read from the laid-out frames' glyph spans.
-    /// Entries pass through
-    /// [`LiveSession::regions`](quillmark_core::LiveSession::regions) as-is,
-    /// `field` is still not unique (page fragments, several scalar reference
-    /// sites, or tracked content plus a bound widget); consumers group by
-    /// field. Geometry math over the frames, no rasterization. Widget regions
-    /// are empty if the placements fail to resolve (a render would surface
-    /// the same error).
+    /// Widgets first (one fixed-size box each), then span-tracked content in
+    /// (page, field, site) order. `field` is not unique: page fragments, several
+    /// scalar reference sites, or tracked content plus a bound widget all
+    /// repeat it, so consumers group by field. Widget regions are empty if the
+    /// placements fail to resolve; a render surfaces the same error.
     fn regions(&self) -> Vec<quillmark_core::RenderedRegion> {
         let mut regions = self.widget_regions();
         regions.extend(overlay::scan_content_regions(
@@ -424,16 +346,10 @@ impl SessionHandle for TypstSession {
         regions
     }
 
-    /// The schema field under a point on `page` (PDF points, bottom-left
-    /// origin): the forward click→field direction. `field:`-bound widget
-    /// boxes answer first: a widget is a deliberate click target that draws
-    /// no spanned ink of its own, so content ink beneath it must not swallow
-    /// the click. Among two spatially-overlapping widgets the later-painted one
-    /// wins (`rev()` over the paint-ordered placements), matching the
-    /// content-field rule in `span_scan::field_at`. Otherwise the span data
-    /// answers, over every placement, not just the first: one concrete point
-    /// identifies one frame item, whose span is unambiguous however many times
-    /// its field is placed. Overrides the regions-hit-testing default.
+    /// Widget boxes answer first: a widget is a deliberate click target drawing
+    /// no spanned ink of its own, so content ink beneath it must not swallow the
+    /// click. Among overlapping widgets the later-painted one wins, matching
+    /// `span_scan::field_at`.
     fn field_at(&self, page: usize, x: f32, y: f32) -> Option<String> {
         self.widget_regions()
             .into_iter()
@@ -453,12 +369,8 @@ impl SessionHandle for TypstSession {
             })
     }
 
-    /// A point → content position in a content field: the fine-grained twin of
-    /// [`field_at`](Self::field_at). Resolves the content glyph under `(x, y)`
-    /// to a cluster-exact USV offset in its field's `Content`, degrading to
-    /// the containing segment's start on origin-less ink. `None` off all
-    /// content ink or on scalar/widget ink (no content address). Widgets draw no
-    /// spanned content ink, so (unlike `field_at`) they are not consulted.
+    /// The fine-grained twin of [`field_at`](Self::field_at). Widgets draw no
+    /// spanned content ink, so unlike `field_at` they are not consulted.
     fn position_at(&self, page: usize, x: f32, y: f32) -> Option<ContentHit> {
         overlay::position_at(
             &self.document,
@@ -471,9 +383,6 @@ impl SessionHandle for TypstSession {
         )
     }
 
-    /// A content position → caret rect: the reverse of
-    /// [`position_at`](Self::position_at). Maps `pos` in `field`'s `Content`
-    /// to the box of the glyph the caret sits at, page-indexed.
     fn locate(&self, field: &str, pos: usize) -> Option<RenderedRegion> {
         overlay::locate(
             &self.document,
@@ -487,9 +396,7 @@ impl SessionHandle for TypstSession {
 }
 
 impl TypstSession {
-    /// Regions for the `field:`-bound form-field widgets of the live compile.
-    /// The single derivation `regions` and `field_at` both read, so widget
-    /// geometry cannot drift between the two queries.
+    /// The single derivation `regions` and `field_at` both read.
     fn widget_regions(&self) -> Vec<quillmark_core::RenderedRegion> {
         overlay::build_field_specs(&self.document, &self.field_placements)
             .map(|specs| quillmark_pdf::regions_of(&specs))
@@ -497,9 +404,8 @@ impl TypstSession {
     }
 }
 
-/// The world's current helper `lib.typ` [`Source`](typst::syntax::Source),
-/// snapshotted right after a successful compile, the text the served
-/// document's spans resolve against.
+/// Snapshotted right after a successful compile: the text the served document's
+/// spans resolve against.
 fn helper_source(world: &world::QuillWorld) -> Result<typst::syntax::Source, RenderError> {
     use typst::World as _;
     world
@@ -547,8 +453,7 @@ impl Backend for TypstBackend {
                     )
                 },
             )?;
-        // The plate is static for the session, so its direct scalar
-        // reference sites are windowed once here.
+        // The plate is static for the session: window its scalar sites once.
         let scalar_windows: Vec<overlay::FieldWindow> = {
             use typst::World as _;
             let main_id = world.main();
@@ -595,20 +500,14 @@ impl Backend for TypstBackend {
 }
 
 impl Default for TypstBackend {
-    /// Creates a new [`TypstBackend`] instance.
     fn default() -> Self {
         Self
     }
 }
 
-/// Read the Typst plate (template) this quill renders through.
-///
-/// The plate is a Typst-only notion, not a universal backend input: its
-/// filename is declared under the `typst:` backend-config section as
-/// `plate_file`, and the source lives in the quill's file bundle. The backend
-/// resolves it here, the same way `pdfform` resolves its own `form.pdf` /
-/// `form.json`. A quill that declares no `plate_file` renders through an empty
-/// plate (`""`).
+/// The plate is a Typst-only notion: its filename is declared under the
+/// `typst:` backend-config section as `plate_file` and the source lives in the
+/// quill's file bundle. A quill declaring no `plate_file` renders an empty one.
 fn read_plate(source: &Quill) -> Result<String, RenderError> {
     let plate_file = source
         .config()
@@ -642,9 +541,7 @@ fn engine_err(code: &str, message: impl Into<String>) -> RenderError {
     )
 }
 
-/// Check if a field schema indicates richtext content: `contentMediaType =
-/// application/quillmark-content+json` (the value crossing the seam is a
-/// canonical content object, lowered to markup at codegen).
+/// `contentMediaType = application/quillmark-content+json`.
 fn is_richtext_field(field_schema: &serde_json::Value) -> bool {
     field_schema
         .get("contentMediaType")
@@ -653,11 +550,7 @@ fn is_richtext_field(field_schema: &serde_json::Value) -> bool {
         .unwrap_or(false)
 }
 
-/// Check if a field schema indicates an array of richtext elements.
-///
-/// True when the field is `{type: array, items: {contentMediaType:
-/// application/quillmark-content+json}}`; i.e. an `array<richtext>` field. Each
-/// element is a content object lowered to a content block individually.
+/// `{type: array, items: {contentMediaType: …}}`: an `array<richtext>` field.
 fn is_richtext_array_field(field_schema: &serde_json::Value) -> bool {
     field_schema
         .get("type")
@@ -670,11 +563,8 @@ fn is_richtext_array_field(field_schema: &serde_json::Value) -> bool {
             .unwrap_or(false)
 }
 
-/// Check if a field schema is a richtext (or `array<richtext>`) field whose
-/// (element) content is `inline`: carries `quillmark:inline: true`
-/// ([`QUILLMARK_INLINE_KEY`]). An inline field's content lowers to pure inline
-/// Typst markup (no `parbreak`); the flag sits on the richtext schema itself,
-/// and for an array on its `items` (mirroring `build_transform_schema`).
+/// Carries [`QUILLMARK_INLINE_KEY`], on the richtext schema itself or, for an
+/// array, on its `items` (mirroring `build_transform_schema`).
 fn is_inline_richtext_field(field_schema: &serde_json::Value) -> bool {
     fn marked_inline(fs: &serde_json::Value) -> bool {
         fs.get(QUILLMARK_INLINE_KEY).and_then(|v| v.as_bool()) == Some(true)
@@ -687,14 +577,12 @@ fn is_inline_richtext_field(field_schema: &serde_json::Value) -> bool {
                 .unwrap_or(false))
 }
 
-/// Check if a field schema is a `type: date` field (`format = "date"`): the
-/// date-only type, lowered to a three-component `datetime(..)`.
+/// `format = "date"`: the date-only type, lowered to `datetime(y, m, d)`.
 fn is_date_field(field_schema: &serde_json::Value) -> bool {
     has_format(field_schema, "date")
 }
 
-/// Check if a field schema is a `type: datetime` field (`format = "date-time"`):
-/// the wall-clock type, lowered to a six-component `datetime(..)`.
+/// `format = "date-time"`: the wall-clock type, lowered to six components.
 fn is_datetime_field(field_schema: &serde_json::Value) -> bool {
     has_format(field_schema, "date-time")
 }
@@ -703,10 +591,7 @@ fn has_format(field_schema: &serde_json::Value, format: &str) -> bool {
     field_schema.get("format").and_then(|v| v.as_str()) == Some(format)
 }
 
-/// Names of the richtext / `richtext[]` fields in a schema `properties` map:
-/// the fields whose values carry backend markup for the helper to `eval`.
-/// Names of the schema `properties` whose field schema satisfies `predicate`,
-/// in map order. Shared spine of the field-class selectors below.
+/// Names of the schema `properties` satisfying `predicate`, in map order.
 fn field_names_where(
     properties: &serde_json::Map<String, serde_json::Value>,
     predicate: impl Fn(&serde_json::Value) -> bool,
@@ -724,29 +609,22 @@ fn content_field_names(properties: &serde_json::Map<String, serde_json::Value>) 
     })
 }
 
-/// Names of the `inline` richtext / `array<richtext(inline)>` fields: a subset
-/// of [`content_field_names`] whose content lowers to pure inline markup.
+/// A subset of [`content_field_names`] lowering to pure inline markup.
 fn inline_field_names(properties: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
     field_names_where(properties, is_inline_richtext_field)
 }
 
-/// Names of the `type: date` fields in a schema `properties` map.
 fn date_field_names(properties: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
     field_names_where(properties, is_date_field)
 }
 
-/// Names of the `type: datetime` fields in a schema `properties` map.
 fn datetime_field_names(properties: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
     field_names_where(properties, is_datetime_field)
 }
 
-/// Names of the array-typed fields in a schema `properties` map: the fields
-/// whose elements are addressable by index suffix (`field.0`, `field.1`, ...).
-/// `form-field`'s path validator uses this to reject an index suffix on a
-/// scalar field, where no element exists for the address to resolve to. Any
-/// array qualifies, matching the pdfform resolver's shallow-path grammar:
-/// the content codegen only *produces* eval sites for `richtext[]` elements,
-/// but a widget binding of a plain array element is a real, routable address.
+/// The fields addressable by index suffix (`field.0`). `form-field`'s path
+/// validator uses this to reject an index suffix on a scalar field. Any array
+/// qualifies, matching the pdfform resolver's shallow-path grammar.
 fn array_field_names(properties: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
     field_names_where(properties, |fs| {
         fs.get("type").and_then(|v| v.as_str()) == Some("array")
@@ -754,32 +632,22 @@ fn array_field_names(properties: &serde_json::Map<String, serde_json::Value>) ->
 }
 
 /// Schema-derived tables backing `form-field` path validation and the helper's
-/// content/date classification: a pure function of a transform schema.
-/// `TypstSession` builds this once from `transform_schema` at `open` and reuses
-/// it on every `apply`, since the schema never changes for the session's
-/// lifetime; the recursive per-card codegen pass builds each card's field lists
-/// from these tables.
-///
-/// A schema with no top-level `properties` yields the default (all tables
-/// empty): `build_transform_schema` always emits `properties`, so that case
-/// only arises for hand-built schemas in tests.
+/// content/date classification. A schema with no top-level `properties` yields
+/// all-empty tables: `build_transform_schema` always emits `properties`, so
+/// that only arises for hand-built schemas in tests.
 #[derive(Default)]
 pub(crate) struct SchemaMeta {
     pub(crate) content_fields: Vec<String>,
-    /// `type: date` fields: date-only, three-component `datetime(..)` lowering.
     pub(crate) date_fields: Vec<String>,
-    /// `type: datetime` fields: wall-clock, six-component `datetime(..)` lowering.
     pub(crate) datetime_fields: Vec<String>,
     pub(crate) array_fields: Vec<String>,
-    /// Content fields whose (element) richtext is `inline`: a subset of
-    /// `content_fields`, driving the pure-inline lowering.
+    /// A subset of `content_fields`, driving the pure-inline lowering.
     pub(crate) inline_fields: Vec<String>,
     pub(crate) card_content_fields: serde_json::Map<String, serde_json::Value>,
     pub(crate) card_date_fields: serde_json::Map<String, serde_json::Value>,
     pub(crate) card_datetime_fields: serde_json::Map<String, serde_json::Value>,
     pub(crate) card_field_names: serde_json::Map<String, serde_json::Value>,
     pub(crate) card_array_fields: serde_json::Map<String, serde_json::Value>,
-    /// Per-card-kind counterpart of `inline_fields`.
     pub(crate) card_inline_fields: serde_json::Map<String, serde_json::Value>,
     pub(crate) fields: Vec<String>,
 }
@@ -797,9 +665,6 @@ impl SchemaMeta {
         let inline_fields = inline_field_names(properties_obj);
         let fields = properties_obj.keys().cloned().collect();
 
-        // Collect per-card-kind content/date/array field names from schema
-        // $defs, plus the full per-kind property-name lists that back
-        // `form-field` path validation.
         let mut card_content_fields = serde_json::Map::new();
         let mut card_date_fields = serde_json::Map::new();
         let mut card_datetime_fields = serde_json::Map::new();
@@ -878,20 +743,15 @@ mod tests {
     use serde_json::json;
     use std::collections::HashMap;
 
-    /// A field's canonical content JSON, the shape the seam carries for a richtext
-    /// field: `import(markdown)` then the canonical serializer.
+    /// The shape the seam carries for a richtext field.
     fn content(markdown: &str) -> serde_json::Value {
         let rt = quillmark_content::import::from_markdown(markdown).expect("import");
         quillmark_content::serial::to_canonical_value(&rt)
     }
 
-    /// Direct teeth for the pixels-not-spans contract: two compiles
-    /// whose pages ink identically must fingerprint identically even when every
-    /// glyph's `Span` differs. The quills below are identical except one schema
-    /// declares an extra unused field, which lengthens the generated `_qm-meta`
-    /// literal ahead of the content blocks in `lib.typ`: shifting every block's
-    /// byte position, hence every content glyph's span, while the rendered
-    /// pages stay pixel-identical. Folding spans into the hash fails this.
+    /// The two quills differ only by an extra unused schema field, which
+    /// lengthens the generated `_qm-meta` literal ahead of the content blocks
+    /// and so shifts every glyph's span without moving a pixel.
     #[test]
     fn page_hashes_ignore_span_shift_when_ink_is_identical() {
         use quillmark_core::FileTreeNode;
@@ -926,7 +786,6 @@ mod tests {
             Quill::from_tree(FileTreeNode::Directory { files }).expect("quill")
         };
 
-        // The body crosses the seam as canonical content JSON, not markdown.
         let json =
             serde_json::json!({ "body": content("A **markdown** body with real ink to lay out.") });
         let hashes_of = |quill: &Quill| {
@@ -948,13 +807,8 @@ mod tests {
         );
     }
 
-    /// A paragraph whose text opens with a line-anchored Typst token (`= `, `- `,
-    /// `+ `, `N. `, `/ `) must render as literal text, not a heading/list/term.
-    /// The emitter prefixes a `\` at column 0; this compiles the content and asks
-    /// Typst's introspector how many of each block it actually produced: the
-    /// end-to-end teeth behind `emit::opens_line_anchor`, run against the real
-    /// Typst grammar so a future Typst version that changes line-anchoring fails
-    /// loud here.
+    /// Asks Typst's introspector how many blocks the compile really produced,
+    /// so a future Typst that changes line-anchoring fails loud here.
     #[test]
     fn line_anchored_paragraph_text_stays_literal() {
         use quillmark_core::FileTreeNode;
@@ -980,10 +834,8 @@ mod tests {
             );
             Quill::from_tree(FileTreeNode::Directory { files }).expect("quill")
         };
-        // Build the content as `Para` lines directly: an editor can place a
-        // paragraph whose literal text opens with any of these tokens (markdown
-        // import would instead parse `- `/`+ `/`N. ` as real lists, which is not
-        // the bug). Each line is its own paragraph, so each starts at column 0.
+        // `Para` lines directly: markdown import would parse `- `/`+ `/`N. ` as
+        // real lists, which is not the bug.
         use quillmark_content::model::{Line, LineKind, Content};
         let para = |_: usize| Line::new(LineKind::Para);
         let mut rt = Content::new(
@@ -1012,11 +864,6 @@ mod tests {
         assert_eq!(count(<TermsElem as NativeElement>::ELEM), 0, "no term list");
     }
 
-    /// End-to-end teeth for inline lowering: a `richtext(inline)` field composed inside
-    /// `par(..)` compiles with **no** "parbreak may not occur inside of a
-    /// paragraph" warning, whereas the same field lowered as a plain (block)
-    /// richtext DOES warn. Runs against the real Typst grammar, so a future
-    /// version that changes the diagnostic fails loud here.
     #[test]
     fn inline_field_in_par_emits_no_parbreak_warning() {
         use quillmark_core::FileTreeNode;
@@ -1026,8 +873,6 @@ mod tests {
 #set text(size: 11pt)
 #par(data.subject)
 "#;
-        // `inline` toggles the `subject` field between `richtext(inline)` and a
-        // plain block `richtext`; everything else is identical.
         let quill = |inline: bool| {
             let inline_line = if inline { "      inline: true\n" } else { "" };
             let yaml = format!(
@@ -1060,23 +905,19 @@ mod tests {
         let has_parbreak =
             |ws: &[Diagnostic]| ws.iter().any(|d| d.message.contains("parbreak"));
 
-        // Negative control: the block lowering warns, proving the probe has teeth.
+        // Negative control: the block lowering warns, so the probe has teeth.
         assert!(
             has_parbreak(&warnings_for(false)),
             "block richtext in par() should emit the parbreak warning"
         );
-        // The fix: inline lowering emits no parbreak warning.
         assert!(
             !has_parbreak(&warnings_for(true)),
             "inline richtext in par() must emit no parbreak warning"
         );
     }
 
-    /// End-to-end teeth for the plaintext helper: a plate imports `plaintext` and uses a content
-    /// field as a **string** (`type(plaintext("subject")) == str` and a string
-    /// op (`upper`) on it) where `data.subject` is Typst `content` that would
-    /// fail those. Compiles against real Typst, so a helper whose `plaintext`
-    /// returned content (or errored) fails here.
+    /// The plate uses a content field where `data.subject` (Typst `content`)
+    /// would fail, so a `plaintext` returning content fails this compile.
     #[test]
     fn plate_uses_plaintext_projection_as_string() {
         use quillmark_core::FileTreeNode;
@@ -1103,7 +944,6 @@ mod tests {
             Quill::from_tree(FileTreeNode::Directory { files }).expect("quill")
         };
         let q = quill();
-        // A body with a mark and (defensively) no island: plaintext drops the mark.
         let json = serde_json::json!({ "subject": content("Hello **bold** world") });
         let plate_content = read_plate(&q).expect("plate");
         let transform_schema = build_transform_schema(q.config());
@@ -1117,44 +957,7 @@ mod tests {
     }
 
     #[test]
-    fn test_is_richtext_field() {
-        let richtext_schema = json!({
-            "type": "object",
-            "contentMediaType": CONTENT_MEDIA_TYPE
-        });
-        assert!(is_richtext_field(&richtext_schema));
-
-        let string_schema = json!({ "type": "string" });
-        assert!(!is_richtext_field(&string_schema));
-
-        // `text/markdown` is not a richtext content type.
-        let old_media_type = json!({ "type": "string", "contentMediaType": "text/markdown" });
-        assert!(!is_richtext_field(&old_media_type));
-    }
-
-    #[test]
-    fn test_is_richtext_array_field() {
-        let rt_array = json!({
-            "type": "array",
-            "items": { "type": "object", "contentMediaType": CONTENT_MEDIA_TYPE }
-        });
-        assert!(is_richtext_array_field(&rt_array));
-
-        let string_array = json!({
-            "type": "array",
-            "items": { "type": "string" }
-        });
-        assert!(!is_richtext_array_field(&string_array));
-
-        // A plain richtext scalar is not a richtext array.
-        let rt_scalar = json!({ "type": "object", "contentMediaType": CONTENT_MEDIA_TYPE });
-        assert!(!is_richtext_array_field(&rt_scalar));
-    }
-
-    #[test]
     fn schema_meta_classifies_richtext_content_fields() {
-        // The content-field selector keys on the richtext media type: a scalar
-        // richtext field and an `array<richtext>` both count.
         let schema = QuillValue::from_json(json!({
             "type": "object",
             "properties": {
@@ -1174,10 +977,7 @@ mod tests {
 
     #[test]
     fn schema_meta_array_fields_distinguish_scalar_from_array() {
-        // Any array is element-addressable (`field.N`): `array<richtext>` and
-        // plain string arrays alike, matching the pdfform resolver's grammar.
-        // Only scalars are excluded: no element exists for the address to
-        // resolve to.
+        // Any array is element-addressable (`field.N`); only scalars are not.
         let schema = QuillValue::from_json(json!({
             "type": "object",
             "properties": {
@@ -1217,9 +1017,6 @@ mod tests {
 
     #[test]
     fn schema_meta_collects_date_and_datetime_fields() {
-        // `format: date` → date_fields (3-component lowering); `format:
-        // date-time` → datetime_fields (6-component). The two tables are keyed
-        // by the distinct transform-schema markers, top-level and per-card.
         let schema = QuillValue::from_json(json!({
             "type": "object",
             "properties": {
