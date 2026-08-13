@@ -982,6 +982,36 @@ impl PyReader {
         content_to_py(py, read)
     }
 
+    /// Read the Content nested inside a composite field at `path`: `[0]` an
+    /// element of an `array<richtext>`, `["motto"]` an object's content property,
+    /// `[1, "notes"]` a leaf under both. The codec is the leaf's declared type's,
+    /// resolved through the field schema's `items` / `properties`, so an element's
+    /// storage form stops being the caller's business the way a scalar field's
+    /// already had. An empty `path` is `get_content`.
+    ///
+    /// `None` when the field is absent and when `path` names nothing in the stored
+    /// value — an editor's row index goes stale between derive and read, and
+    /// absence there is a read, not a fault. Raises `edit::unknown_field` for an
+    /// undeclared name at any depth, `edit::field_not_content` when `path`
+    /// resolves to no content leaf, and `edit::field_decode`, anchored at the
+    /// addressed path, for a value that decodes under neither encoding.
+    fn get_content_at<'py>(
+        &self,
+        py: Python<'py>,
+        name: &str,
+        path: &Bound<'py, PyAny>,
+    ) -> PyResult<Option<Bound<'py, PyAny>>> {
+        let at = path_from_py(path, "get_content_at")?;
+        let quill = self.quill.borrow(py);
+        let doc = self.doc.borrow(py);
+        let read = quill
+            .inner
+            .reader(&doc.inner)
+            .get_content_at(name, &at)
+            .map_err(convert_edit_error)?;
+        content_to_py(py, read)
+    }
+
     /// The main body's markdown: quill-free, since a body's type is a format fact
     /// rather than a schema fact. Never raises.
     fn body_markdown(&self, py: Python<'_>) -> String {
@@ -1055,6 +1085,26 @@ impl PyCardReader {
             .card(self.index)
             .map_err(convert_edit_error)?
             .get_content(name)
+            .map_err(convert_edit_error)?;
+        content_to_py(py, read)
+    }
+
+    /// The card-indexed twin of `Reader.get_content_at`, with the same outcomes
+    /// plus `edit::index_out_of_range` for a bad index.
+    fn get_content_at<'py>(
+        &self,
+        py: Python<'py>,
+        name: &str,
+        path: &Bound<'py, PyAny>,
+    ) -> PyResult<Option<Bound<'py, PyAny>>> {
+        let at = path_from_py(path, "get_content_at")?;
+        let quill = self.quill.borrow(py);
+        let doc = self.doc.borrow(py);
+        let reader = quill.inner.reader(&doc.inner);
+        let read = reader
+            .card(self.index)
+            .map_err(convert_edit_error)?
+            .get_content_at(name, &at)
             .map_err(convert_edit_error)?;
         content_to_py(py, read)
     }
@@ -1278,6 +1328,32 @@ fn quillvalue_to_py<'py>(
     value: &quillmark_core::QuillValue,
 ) -> PyResult<Bound<'py, PyAny>> {
     json_to_py(py, value.as_json())
+}
+
+/// Read an in-field path: a `str` is an object key, a non-negative `int` an
+/// array index. A malformed step raises rather than being dropped — a skipped
+/// step reads a different address and never says so.
+fn path_from_py(path: &Bound<'_, PyAny>, ctx: &str) -> PyResult<Vec<quillmark::PathSegment>> {
+    path.try_iter()
+        .map_err(|_| {
+            PyValueError::new_err(format!(
+                "{ctx}: `path` must be a sequence of str keys and non-negative int indices"
+            ))
+        })?
+        .enumerate()
+        .map(|(i, step)| {
+            let step = step?;
+            if let Ok(key) = step.extract::<String>() {
+                return Ok(quillmark::PathSegment::Key(key));
+            }
+            match step.extract::<usize>() {
+                Ok(index) => Ok(quillmark::PathSegment::Index(index)),
+                Err(_) => Err(PyValueError::new_err(format!(
+                    "{ctx}: `path[{i}]` must be a str key or a non-negative int index"
+                ))),
+            }
+        })
+        .collect()
 }
 
 fn content_to_py<'py>(
