@@ -1061,8 +1061,6 @@ mod tests {
                 line: 2,
                 containers: vec![Container::Quote],
             },
-            // The open block vocabulary rides the same op wire:
-            // a host can set a role or a container this build does not know.
             LineOp::SetKind {
                 line: 0,
                 kind: LineKind::Unknown {
@@ -1092,10 +1090,8 @@ mod tests {
         }
     }
 
-    /// On the op lane, `attrs` beside a built-in discriminator is a
-    /// shape error. A host that emits one classified a built-in as unknown
-    /// (stale copy of the built-in list) and the lenient reader would resolve the
-    /// name and drop the payload unread, corrupting the line with no diagnostic.
+    /// The lenient reader would resolve the built-in name and drop the payload
+    /// unread, corrupting the line with no diagnostic.
     #[test]
     fn op_wire_rejects_attrs_beside_a_built_in_name() {
         let bad = serde_json::json!({
@@ -1157,9 +1153,8 @@ mod tests {
 
     #[test]
     fn apply_text_delta_pads_short_prepend() {
-        // A bare prepend names only its inserted text (no trailing retain); it
-        // still splices against the whole content rather than failing the base
-        // check (regression for the per-field delta path).
+        // A prepend naming only its inserted text (no trailing retain) still
+        // splices against the whole content.
         let mut rt = from_markdown("hello").unwrap();
         rt.apply_text_delta(&Delta {
             ops: vec![Op::Insert("NEW ".into())],
@@ -1171,7 +1166,7 @@ mod tests {
     #[test]
     fn apply_text_delta_rejects_over_long_delta() {
         // Consuming more base than exists is a wrong-revision delta, not an
-        // abbreviated one: it still fails closed.
+        // abbreviated one.
         let mut rt = from_markdown("hi").unwrap();
         assert!(matches!(
             rt.apply_text_delta(&Delta {
@@ -1183,29 +1178,7 @@ mod tests {
     }
 
     #[test]
-    fn apply_mark_ops_add_and_remove() {
-        let mut rt = from_markdown("abcd").unwrap();
-        rt.apply_mark_ops(&[MarkOp::Add {
-            start: 0,
-            end: 2,
-            kind: MarkKind::Emph,
-        }])
-        .unwrap();
-        assert!(rt.marks.iter().any(|m| matches!(m.kind, MarkKind::Emph)));
-        rt.apply_mark_ops(&[MarkOp::Remove {
-            start: 0,
-            end: 4,
-            kind: MarkKind::Emph,
-        }])
-        .unwrap();
-        assert!(!rt.marks.iter().any(|m| matches!(m.kind, MarkKind::Emph)));
-    }
-
-    #[test]
     fn apply_mark_ops_remove_punches_hole() {
-        // Un-formatting the middle of a run leaves the two non-overlapping
-        // fragments, not an empty mark set. Strong[0,6) over
-        // "abcdef", Remove[2,4) -> Strong[0,2) + Strong[4,6).
         let mut rt = from_markdown("abcdef").unwrap();
         rt.apply_mark_ops(&[MarkOp::Add {
             start: 0,
@@ -1230,8 +1203,6 @@ mod tests {
 
     #[test]
     fn apply_mark_ops_remove_at_edge_leaves_no_zero_width() {
-        // A removal flush against the mark's start yields a zero-width left
-        // fragment [0,0); normalize drops it, leaving only the right fragment.
         let mut rt = from_markdown("abcdef").unwrap();
         rt.apply_mark_ops(&[MarkOp::Add {
             start: 0,
@@ -1256,8 +1227,6 @@ mod tests {
 
     #[test]
     fn apply_mark_ops_remove_covering_range_drops_mark() {
-        // A removal that fully covers the mark leaves nothing (both fragments
-        // zero-width or inverted): the whole-drop case still holds.
         let mut rt = from_markdown("abcdef").unwrap();
         rt.apply_mark_ops(&[MarkOp::Add {
             start: 2,
@@ -1276,8 +1245,6 @@ mod tests {
 
     #[test]
     fn apply_mark_ops_remove_non_formatting_drops_whole() {
-        // Identity/unknown handles can't be range-fragmented: an overlapping
-        // one is dropped whole, never split into fragments.
         let mut rt = from_markdown("abcdef").unwrap();
         rt.marks.push(Mark {
             start: 0,
@@ -1304,16 +1271,6 @@ mod tests {
     }
 
     #[test]
-    fn apply_text_delta_splits_lines_on_newline_insert() {
-        let mut rt = from_markdown("one two").unwrap();
-        let d = diff("one two", "one\ntwo");
-        rt.apply_text_delta(&d).unwrap();
-        assert_eq!(rt.lines.len(), 2);
-        assert_eq!(rt.segment_count(), 2);
-        assert_eq!(rt.validate(), Ok(()));
-    }
-
-    #[test]
     fn line_op_split_and_join() {
         let mut rt = from_markdown("onetwo").unwrap();
         rt.apply_line_ops(&[LineOp::Split { at: 3 }]).unwrap();
@@ -1337,10 +1294,6 @@ mod tests {
         assert!(matches!(rt.lines[0].kind, LineKind::Heading { level: 2 }));
     }
 
-    /// `SetKind` may not tag a line with a kind its text
-    /// contradicts: export reads the kind and not the segment, so the write
-    /// would project the line's content away. Refused before the write, so the
-    /// content is untouched.
     #[test]
     fn line_op_set_kind_refuses_a_kind_the_text_contradicts() {
         let mut rt = from_markdown("hello world").unwrap();
@@ -1368,7 +1321,7 @@ mod tests {
         assert_eq!(rt.lines[0].kind, LineKind::Para);
         assert_eq!(rt.validate(), Ok(()));
 
-        // A table island's line tagged `Code` would fence the slot, which
+        // Tagging a table island's line `Code` would fence the slot, which
         // re-imports as nothing.
         let mut tbl = from_markdown("| a | b |\n|---|---|\n| 1 | 2 |").unwrap();
         assert_eq!(
@@ -1384,8 +1337,6 @@ mod tests {
         assert_eq!(tbl.lines[0].kind, LineKind::Island);
     }
 
-    /// `SetContainers` is capped at the depth both emitters can
-    /// recurse: the op-time twin of the `validate` invariant.
     #[test]
     fn line_op_set_containers_is_depth_capped() {
         let mut rt = from_markdown("hi").unwrap();
@@ -1406,9 +1357,6 @@ mod tests {
 
     #[test]
     fn line_op_set_continues_sets_and_clears() {
-        // Two paragraph lines (delta-split → both `continues: false`, i.e. two
-        // blocks). `setContinues` on line 1 turns the boundary into a within-block
-        // hard break, and export then emits one block, not two paragraphs.
         let mut rt = from_markdown("one two").unwrap();
         rt.apply_text_delta(&diff("one two", "one\ntwo")).unwrap();
         assert!(!rt.lines[1].continues, "delta-split newline is a new block");
@@ -1426,7 +1374,6 @@ mod tests {
             "a within-block hard break is not a paragraph boundary"
         );
 
-        // Clearing restores the block boundary.
         rt.apply_line_ops(&[LineOp::SetContinues {
             line: 1,
             continues: false,
@@ -1441,8 +1388,6 @@ mod tests {
         let mut rt = from_markdown("one two").unwrap();
         rt.apply_text_delta(&diff("one two", "one\ntwo")).unwrap();
         let before = rt.clone();
-        // `continues: true` on line 0 forges `FirstLineContinues`; refused, and
-        // the content is left untouched.
         assert_eq!(
             rt.apply_line_ops(&[LineOp::SetContinues {
                 line: 0,
@@ -1451,7 +1396,7 @@ mod tests {
             Err(ApplyError::FirstLineContinues)
         );
         assert_eq!(rt, before, "rejected op leaves the content untouched");
-        // Clearing line 0 (already `false`) is a no-op, not an error.
+        // Clearing line 0 is a no-op, not an error.
         rt.apply_line_ops(&[LineOp::SetContinues {
             line: 0,
             continues: false,
