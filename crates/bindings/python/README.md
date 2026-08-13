@@ -37,27 +37,19 @@ result.artifacts[0].save("output.pdf")
 
 ## API surface
 
-Python is a **Tier-1 binding**: field I/O flows through `quill.writer(doc)` and
-`quill.reader(doc)`, the schema-bound write/read front doors. `Document` carries
-the quill-free surface: parse, storage, structure, `$ext` / `$seed`, and
-`remove_field`. There is no opaque field store and no anchor-preserving content
-lane (`install` / `revise` / `apply_change` + the `import_markdown` /
-`export_markdown` / `rebase` / `map_pos` codec); those are WASM-only by scope,
-serving live editors that Python does not target. See
-[`prose/canon/BINDINGS.md`](../../../prose/canon/BINDINGS.md).
+Field I/O flows through `quill.writer(doc)` and `quill.reader(doc)`, the
+schema-bound write/read front doors. `Document` carries the quill-free surface:
+parse, storage, structure, `$ext` / `$seed`, and `remove_field`. The opaque field
+store and the anchor-preserving content lane are WASM-only by scope, as are the
+render session and canvas preview; Python renders in one shot via
+`engine.render`. Names follow `snake_case`, and the shared model (the `Document`
+/ `Card` shapes, `Diagnostic`s, the storage DTO) is identical to
+[`@quillmark/wasm`](../wasm)'s.
 
-Names follow `snake_case`; the shared model (the `Document` / `Card` shapes,
-`Diagnostic`s, the storage DTO) is identical to the
-[`@quillmark/wasm`](../wasm) package's. Python renders in one shot via
-`engine.render`; the iterative render-session and canvas-preview surface is
-WASM-only (see `prose/canon/PREVIEW.md`).
-
-**Capability principle:** a `Quill` is portable, declarative config data,
-`quill.metadata` is a pure, infallible snapshot of the `quill:` section.
-The format probe (`supported_formats`) and rendering (`render`) are resolved
-by the engine, against a quill; they raise `QuillmarkError`
-(code `engine::backend_not_found`) only if the declared backend isn't
-registered.
+A `Quill` is portable, declarative config data, and `quill.metadata` a pure,
+infallible snapshot of the `quill:` section. The engine resolves the declared
+backend, so only the format probe (`supported_formats`) and `render` raise
+`engine::backend_not_found`.
 
 ### `Quillmark`
 
@@ -92,10 +84,9 @@ reader  = quill.reader(doc)                 # schema-bound interpreted read fron
 
 ### `Writer`: `quill.writer(doc)`
 
-The typed write front door. Resolves each field's type from the bound quill, so a
-name the schema does not declare is a typo (`UnknownField`), not a fallback. Holds
-both handles by reference and owns neither, ephemeral by convention: bind, write,
-discard.
+Resolves each field's type from the bound quill, so a name the schema does not
+declare is a typo (`UnknownField`), not a fallback. Holds both handles by
+reference and owns neither: bind, write, discard.
 
 ```python
 w = quill.writer(doc)
@@ -110,11 +101,10 @@ w.card(0).set("author", "Issa")           # a CardWriter: .index, .kind, .set, .
 
 ### `Reader`: `quill.reader(doc)`
 
-The interpreted read front door and the read twin of `Writer`. `get` reads each
-field by its declared type: a richtext field to its markdown projection, a
-plaintext field to its literal text, every other type its canonical value
-verbatim. `get_content` is the same read at the other end of the codec, handing
-back the field's `Content` as a dict whichever lane stored it.
+The read twin of `Writer`. `get` reads each field by its declared type: a
+richtext field to its markdown projection, a plaintext field to its literal text,
+every other type verbatim. `get_content` is the same read at the other end of the
+codec, handing back the field's `Content` as a dict whichever lane stored it.
 
 ```python
 v = quill.reader(doc)
@@ -204,9 +194,8 @@ There is no `required:` axis on `FieldSchema`.
 
 ## Error contract
 
-A single exception type (`QuillmarkError`) is raised for every failure
-mode. Every raised exception carries a non-empty `.diagnostics` list of
-`Diagnostic` objects. This matches the WASM binding's contract.
+Every failure raises `QuillmarkError`, carrying a non-empty `.diagnostics` list
+of `Diagnostic` objects.
 
 ```python
 try:
@@ -217,11 +206,10 @@ except QuillmarkError as exc:
         print(str(d))   # canonical pretty-printed text (matches CLI / WASM)
 ```
 
-Mutator failures (invalid field names, kind names, out-of-range indices) carry
-a namespaced `edit::*` `code` on `diagnostics[0]`: `edit::invalid_field_name`,
-`edit::unknown_field`, `edit::index_out_of_range`, `edit::field_coercion_failed`, …:
-the same taxonomy WASM uses. Route on `diagnostics[0].code`, never on message
-text.
+Mutator failures (invalid field names, kind names, out-of-range indices) carry a
+namespaced `edit::*` `code` on `diagnostics[0]`: `edit::invalid_field_name`,
+`edit::unknown_field`, `edit::index_out_of_range`, `edit::field_coercion_failed`,
+…. Route on `diagnostics[0].code`, never on message text.
 
 ## Changelog
 
