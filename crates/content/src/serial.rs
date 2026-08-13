@@ -1048,9 +1048,7 @@ mod tests {
 
     #[test]
     fn golden_bytes_are_feature_independent() {
-        // Pins the exact canonical form. Every object key is sorted, so the
-        // bytes do not depend on serde_json's preserve_order feature. If this
-        // string changes, the freeze changed: bump the schema version.
+        // If this string changes, the freeze changed: bump the schema version.
         let rt = sample();
         assert_eq!(
             rt.to_canonical_json(),
@@ -1060,7 +1058,7 @@ mod tests {
 
     #[test]
     fn from_canonical_json_rejects_invalid() {
-        // lines.len() != segment count: must not silently round-trip.
+        // lines.len() != segment count.
         let bad =
             r#"{"text":"a\nb","lines":[{"kind":"para","containers":[]}],"marks":[],"islands":[]}"#;
         assert!(matches!(
@@ -1071,8 +1069,6 @@ mod tests {
 
     #[test]
     fn reserved_unknown_tag_rejected() {
-        // An Unknown mark may not reuse a built-in type name (would parse back
-        // as the built-in, dropping attrs: non-injective).
         let mut rt = Content::empty();
         rt.text = "abcd".into();
         rt.marks = vec![Mark {
