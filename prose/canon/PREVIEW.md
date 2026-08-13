@@ -174,8 +174,9 @@ four queries, two coarse and two fine:
 - `locate(field, pos)` answers *content position → caret rect*: the reverse of
   `positionAt`, the box to draw a caret at.
 
-Three producers: **content fields** (a richtext body, a `richtext[]` element,
-a card's content field) are tracked by the spans their glyphs carry: the
+Three producers: **content fields** (a `richtext` or `plaintext` value —
+a body, a card's field, a scalar or an `[]` element) are tracked by the
+spans their glyphs carry: the
 backend evaluates each value at its own generated call site and records the
 site's byte window, so the rendered ink resolves back to its field through
 *any* placement context, including a package that rebuilds the content (a
