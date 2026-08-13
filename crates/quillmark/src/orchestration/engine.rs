@@ -5,21 +5,16 @@ use quillmark_core::{
 use std::collections::HashMap;
 use std::sync::Arc;
 
-/// High-level engine: a backend registry and render dispatcher.
-///
-/// The engine resolves a [`Quill`]'s *declared* backend at render time and is
-/// the sole home of backend-dependent surface: capability
-/// ([`supported_formats`](Self::supported_formats) /
-/// [`supports_canvas`](Self::supports_canvas)) and rendering
-/// ([`open`](Self::open) / [`render`](Self::render)). Quill loading lives
-/// elsewhere: construct a [`Quill`] with [`Quill::from_tree`] or
+/// A backend registry and render dispatcher: the sole home of
+/// backend-dependent surface, resolving a [`Quill`]'s *declared* backend at
+/// render time. Quill loading needs no engine — see [`Quill::from_tree`] or
 /// [`quill_from_path`](crate::quill_from_path).
 pub struct Quillmark {
     backends: HashMap<String, Arc<dyn Backend>>,
 }
 
 impl Quillmark {
-    /// Create a new Quillmark with auto-registered backends based on enabled features.
+    /// An engine with a backend registered per enabled cargo feature.
     pub fn new() -> Self {
         // `mut` is unused when no backend features are enabled (e.g. a
         // Typst-less core build), so allow it rather than cfg-juggle.
@@ -41,21 +36,20 @@ impl Quillmark {
         engine
     }
 
-    /// Register a backend with the engine.
+    /// Register a backend, replacing any registered under the same id.
     pub fn register_backend(&mut self, backend: Box<dyn Backend>) {
         let id = backend.id().to_string();
         self.backends.insert(id, Arc::from(backend));
     }
 
-    /// Get a list of registered backend IDs.
+    /// The registered backend ids.
     pub fn registered_backends(&self) -> Vec<&str> {
         self.backends.keys().map(|s| s.as_str()).collect()
     }
 
-    /// Resolve a quill's declared backend, erroring with `engine::backend_not_found`
-    /// when none is registered. The backend-existence check lives here (at
-    /// render time, not load time) so a backend-less core can still load and
-    /// validate quills.
+    /// Errors with `engine::backend_not_found` when none is registered. The
+    /// check lives at render time, not load time, so a backend-less build can
+    /// still load and validate quills.
     fn resolve_backend(&self, quill: &Quill) -> Result<&Arc<dyn Backend>, RenderError> {
         let backend_id = quill.backend_id();
         self.backends.get(backend_id).ok_or_else(|| {
@@ -98,20 +92,16 @@ impl Quillmark {
         session.render(&resolved)
     }
 
-    /// The output formats `quill`'s backend can emit. Static capability:
-    /// resolves the backend but compiles nothing.
+    /// The output formats `quill`'s backend can emit; compiles nothing.
     pub fn supported_formats(&self, quill: &Quill) -> Result<&'static [OutputFormat], RenderError> {
         Ok(self.resolve_backend(quill)?.supported_formats())
     }
 
     /// Pre-session hint for whether `quill`'s backend can paint sessions to a
-    /// canvas, derived from the backend's output formats (see
-    /// [`quillmark_core::formats_support_canvas`]); `false` when the backend is
-    /// unsupported. Resolves the backend but compiles nothing: use it to decide
-    /// whether to offer a canvas preview before opening a session. The
-    /// authoritative answer is
+    /// canvas, derived from its output formats; `false` when the backend is
+    /// unregistered. Compiles nothing. Once a session exists,
     /// [`LiveSession::supports_canvas`](quillmark_core::LiveSession::supports_canvas)
-    /// once a session exists.
+    /// is authoritative.
     pub fn supports_canvas(&self, quill: &Quill) -> bool {
         self.resolve_backend(quill)
             .map(|b| quillmark_core::formats_support_canvas(b.supported_formats()))
