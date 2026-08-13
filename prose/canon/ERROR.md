@@ -64,7 +64,7 @@ routing coercion-vs-undeclared is `edit::field_coercion_failed` vs.
 
 ## Warning flow
 
-Warnings travel the same `Diagnostic` currency as errors, on four producer
+Warnings travel the same `Diagnostic` currency as errors, on five producer
 families:
 
 - **Parse warnings**: the `warnings` on the `Parsed` that `Document::parse`
@@ -86,6 +86,18 @@ families:
   the `$seed` checks are the non-fatal ones. This is the editor-facing
   surface; the render pipeline zero-fills instead of warning on incomplete
   documents.
+- **`plate::unsupported_construct`: declined-construct warnings.** A quill
+  names, per body (`BodyCardSchema.unsupported`), the block constructs its
+  plate does not typeset; `Quill::unsupported_constructs` walks a document's
+  bodies against those declarations and `Quill::parse` appends the result to
+  `Parsed.warnings` beside the `conform::*` set. One diagnostic per (body,
+  construct) carrying `construct` and `count` in `args` and the body's schema
+  address in `path`: the walk sees the whole body, so occurrences collapse
+  rather than scattering. Stateless, so a repeat call re-emits the identical
+  set. Empty for every quill that declares nothing, which is the default.
+  Core cannot *detect* a plate dropping a construct — the absence of ink is
+  not a signal a backend reports — so this family is a declaration, not an
+  observation: nothing verifies it, and an undeclared drop stays silent.
 - **Compile warnings**: the Typst backend maps `typst::compile`'s non-fatal
   diagnostics (font fallback, overfull pages, …) through the same span
   resolution as errors. They are state of the session's current compile:
@@ -96,9 +108,12 @@ families:
   `open` → `render` path.
 
 Ordering in a merged `RenderResult.warnings` is pipeline order: parse
-warnings first, then compile warnings. No dedup: the families cannot
-overlap (parse warnings anchor `location` in the markdown source, compile
-warnings in Typst sources).
+warnings first, then compile warnings. No dedup *across* families: they
+cannot overlap (the pre-render families anchor `path` or a markdown
+`location`, compile warnings a `location` in Typst sources).
+`plate::unsupported_construct` dedups *within* itself, at the walk, for
+the reason the others need not: it is the one family whose producer sees
+every occurrence at once.
 
 ## Bindings Error Delegation
 
@@ -304,6 +319,7 @@ Three outcomes, and the wire tells them apart only with this table in hand, sinc
 | `parse::invalid_structure` | — | fallback |
 | `parse::missing_quill` | — | fallback |
 | `parse::body_import` | — | fallback |
+| `plate::unsupported_construct` | `construct`, `count` | structured |
 
 `parse::missing_quill` looks code-determined and is not: it picks one of three sentences by re-reading the source, and no field records which.
 

@@ -61,6 +61,48 @@ impl<'de> Deserialize<'de> for UiFieldSchema {
     }
 }
 
+/// A block construct a body can hold: the block kinds the content model
+/// distinguishes, minus the paragraph, which is the floor and cannot be
+/// declined.
+///
+/// The vocabulary a quill declines constructs in
+/// ([`BodyCardSchema::unsupported`]). A closed set, so a misspelled construct
+/// is a load error rather than a declaration that matches nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum BlockConstruct {
+    Heading,
+    Rule,
+    Code,
+    List,
+    Quote,
+    Table,
+    Image,
+}
+
+impl BlockConstruct {
+    /// The name this construct declares under, and the value that rides
+    /// `plate::unsupported_construct`'s `construct` arg.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Heading => "heading",
+            Self::Rule => "rule",
+            Self::Code => "code",
+            Self::List => "list",
+            Self::Quote => "quote",
+            Self::Table => "table",
+            Self::Image => "image",
+        }
+    }
+}
+
+impl std::fmt::Display for BlockConstruct {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// Body namespace configuration for a card kind
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -82,6 +124,20 @@ pub struct BodyCardSchema {
     /// consumers fall back to importing `example`.
     #[serde(skip)]
     pub example_content: Option<QuillValue>,
+    /// The block constructs this quill's plate does not typeset in this body.
+    ///
+    /// A plate is free to reinterpret or drop a construct — absorb it into a
+    /// neighbour, move its text, typeset nothing at all — and only the quill
+    /// knows it did. This is where it says so, once, as data: an editor reads
+    /// it off the schema and declines the gesture before the author makes it,
+    /// and content that arrives by another door (an import, a repack, the CLI)
+    /// draws `plate::unsupported_construct` on the pre-render walk.
+    ///
+    /// Empty by default, so a quill that declares nothing keeps saying nothing.
+    /// A declaration is a claim about the plate that nothing verifies: it is
+    /// documentation with a diagnostic attached, not a proof.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unsupported: Vec<BlockConstruct>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

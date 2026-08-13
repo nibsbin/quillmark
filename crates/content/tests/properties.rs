@@ -33,12 +33,13 @@ fn clean_word() -> impl Strategy<Value = String> {
 
 // `plain_word` carries inline-special and astral chars as *literal text*, so
 // escaping and USV bounds are exercised by the round-trip. The first char stays
-// alphanumeric, so a block marker never *leads* an item's content (`- >`, `- #`
-// would make pulldown build an empty nested block, not literal text: a
-// degenerate content no editor emits); but the tail carries `&` and the
-// block-marker chars (`# > - . +`), exercising `&`-entity escaping and a
-// trailing-`#` heading run through the round-trip, not just
-// the pinned `export::tests::*` unit tests.
+// alphanumeric, so a block marker never *leads* this token: `- >` and `- #`
+// make pulldown build a nested block rather than the literal text the arm is
+// generating. That bounds the token, not the suite — a block *as* a list item's
+// block is its own `block()` arm. The tail carries `&` and the block-marker
+// chars (`# > - . +`), exercising `&`-entity escaping and a trailing-`#`
+// heading run through the round-trip, not just the pinned
+// `export::tests::*` unit tests.
 fn plain_word() -> impl Strategy<Value = String> {
     r"[a-z0-9][a-z0-9*_~\\&#>.+😀你-]{0,5}"
 }
@@ -118,6 +119,24 @@ fn block() -> impl Strategy<Value = String> {
             .join("\n")),
         // Nested bullet list (two container levels).
         (prose(), prose(), prose()).prop_map(|(a, b, c)| format!("- {a}\n  - {b}\n  - {c}")),
+        Just("***".to_string()),
+        // A block construct as a list item's own block, the shape the editor
+        // tier mints (`- ` then a rule or a heading) and no other arm reaches:
+        // every list arm above builds its items from `prose()` alone. Both
+        // marker families and both positions within the item, because only one
+        // combination collides — a rule as a *bullet* item's *first* block.
+        //
+        // The rule's source spelling here is `***`, not `---`: `- ---` is four
+        // dashes separated by spaces, which imports as a top-level break, so an
+        // arm written that way would generate the post-collision shape and
+        // assert the fixed point on it vacuously.
+        (1u8..=6, prose(), prose()).prop_map(|(lvl, h, p)| format!(
+            "- {} {h}\n\n  {p}",
+            "#".repeat(lvl as usize)
+        )),
+        prose().prop_map(|p| format!("- ***\n\n  {p}")),
+        prose().prop_map(|p| format!("1. ***\n\n   {p}")),
+        prose().prop_map(|p| format!("- {p}\n\n  ***")),
         prose().prop_map(|p| format!("> {p}")),
         prop::collection::vec(clean_word(), 1..4)
             .prop_map(|ls| format!("```\n{}\n```", ls.join("\n"))),
