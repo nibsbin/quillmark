@@ -100,11 +100,8 @@ the same value again is fine, so several entry points may each
 
 **Both failures reject.** `runtime::init_conflict` and `runtime::init_failed`
 alike ride the returned promise, so one `catch` around `await init(...)` covers
-the gate. See [Errors](#errors) for the rule this follows.
-
-**You cannot forget.** The core surface has no static export, so a call site
-that skips the await has no name to call. The precondition is structural rather
-than a convention: no load order can make one entry point pass and another fail.
+the gate. The core surface has no static export, so a call site that skips the
+await has no name to call.
 
 **Vite's dev server** pre-bundles dependencies, which moves the package away
 from its binary. Exclude it:
@@ -316,7 +313,7 @@ write.
 
 #### `DocumentReader` / `CardReader`: the read twin
 
-`quill.reader(doc)` carries the writer's ephemerality and its schema authority:
+`quill.reader(doc)` carries the writer's ephemerality and schema authority:
 
 ```ts
 const v = quill.reader(doc);
@@ -370,40 +367,25 @@ canvas.style.width  = `${result.layoutWidth}px`;
 canvas.style.height = `${result.layoutHeight}px`;
 ```
 
-- `layoutScale` (default 1) sets the canvas's display-box size:
-  `layoutWidth = widthPt * layoutScale`. For on-screen canvases this is
-  CSS pixels per point. Defaults to 1 (one CSS pixel per pt).
-- `densityScale` (default 1) is the backing-store density multiplier.
-  Fold `window.devicePixelRatio`, in-app zoom, and `visualViewport.scale`
-  (pinch-zoom) into a single value here. Pass `devicePixelRatio` for
-  crisp output on high-DPI displays.
-- The effective rasterization scale is `layoutScale * densityScale`. If
-  that would exceed the safe maximum (16384 px per side), `densityScale`
-  is clamped proportionally; `result.clamped` reports it and
-  `result.effectiveDensityScale` is the density actually applied. A
-  clamped page renders soft at the same `canvas.style` size.
-- `paint` writes the whole backing store with `putImageData`, which
-  ignores the 2D context transform, `globalAlpha`, and clip. Give each
-  visible page its own `<canvas>` element: you cannot composite two pages,
-  a sub-rect, or a context transform through `paint`.
-- `paint` is always a full repaint: setting the backing-store width /
-  height clears it. No `clearRect` required. Each call re-rasterizes from
-  scratch (no per-page raster cache), so keep a page's canvas alive while
-  it stays near the viewport rather than pooling one canvas across pages:
-  an idle canvas retains its pixels for free, whereas reusing a canvas on
-  scroll re-runs a full render.
-- `pageCount` and `pageSize(page)` are stable for the session's
-  lifetime (immutable snapshot): cache them.
-- Worker support: pass an `OffscreenCanvasRenderingContext2D` and the
-  same call signature works. `layoutWidth` / `layoutHeight` are
-  informational in that mode (no CSS layout box); fold everything into
-  `densityScale`. Loading the WASM module inside a Worker is the host's
-  responsibility.
-- Backend support: gated by `supportsCanvas`. Probe upfront with
-  `engine.supportsCanvas(quill)` (or `session.supportsCanvas`) before mounting
-  a canvas-based UI; the throw on `paint` / `pageSize` remains the
-  enforcement contract and includes the resolved `backendId` for
-  debugging.
+- `layoutScale` sets the display-box size (`layoutWidth = widthPt * layoutScale`);
+  fold `devicePixelRatio`, in-app zoom, and `visualViewport.scale` into
+  `densityScale`. Their product is the rasterization scale, clamped at 16384 px
+  per side (`result.clamped`, `result.effectiveDensityScale`).
+- `paint` writes the whole backing store with `putImageData`, which ignores the
+  2D context transform, `globalAlpha`, and clip. Give each visible page its own
+  `<canvas>`: no compositing, sub-rect, or transform reaches through `paint`.
+- `paint` is always a full repaint, and there is no per-page raster cache. Keep
+  a page's canvas alive while it stays near the viewport: an idle canvas retains
+  its pixels for free, whereas pooling one canvas across pages re-renders on
+  every scroll.
+- `pageCount` and `pageSize(page)` are stable for the session's lifetime: cache
+  them.
+- In a Worker, pass an `OffscreenCanvasRenderingContext2D`; the layout
+  dimensions are informational there. Loading the WASM module inside the Worker
+  is the host's responsibility.
+- Backend support is gated by `supportsCanvas`. Probe upfront with
+  `engine.supportsCanvas(quill)`; the throw on `paint` / `pageSize` remains the
+  enforcement contract and names the resolved `backendId`.
 
 ### Schema model
 
@@ -452,16 +434,12 @@ guard.
 
 `QuillmarkError` is a **structural interface, not a class**: the WASM layer
 throws a real `Error` and attaches the property, so there is no constructor to
-`instanceof` against; narrow with `isQuillmarkError` (which also works on
-errors from any build or WASM instance in the page).
+`instanceof` against. Narrow with `isQuillmarkError`, which also works on errors
+from any build or WASM instance in the page.
 
 `diagnostics` is always non-empty: length 1 for most failures, length N for
-backend compilation errors. `message` is derived from `diagnostics`
-(`diagnostics[0].message` for single-diagnostic errors; an aggregate
-`"<N> error(s): <first.message>"` summary for compilation failures).
-
-Read `err.diagnostics[0]` for the primary diagnostic; iterate the array for
-compilation failures. The same shape applies to every throw site:
+backend compilation errors, and `message` is derived from it. The same shape
+applies to every throw site:
 
 - `Document.fromMarkdown`: parse errors (missing root `$quill` metadata, YAML
   errors, `parse::input_too_large` for inputs > 10 MiB).
