@@ -237,9 +237,8 @@ pub fn line_kind_to_value(kind: &LineKind) -> Value {
         LineKind::Rule => {
             m.insert("kind".into(), "rule".into());
         }
-        // Open set, the mark encoding one axis over: the tag *is* the
-        // discriminator and the payload rides one opaque `attrs` bag, so a
-        // reader that lacks the role still carries it whole.
+        // The tag *is* the discriminator and the payload rides one opaque
+        // `attrs` bag, so a reader lacking the role still carries it whole.
         LineKind::Unknown { tag, attrs } => {
             m.insert("kind".into(), Value::String(tag.clone()));
             m.insert("attrs".into(), attrs.clone());
@@ -249,8 +248,6 @@ pub fn line_kind_to_value(kind: &LineKind) -> Value {
 }
 
 /// Decode a [`LineKind`] from an object carrying the canonical `kind` fields.
-/// The inverse of [`line_kind_to_value`]; the shared line-kind reader for the
-/// line decoder and the line-op wire.
 pub fn line_kind_from_value(v: &Value) -> Result<LineKind, ParseError> {
     let o = v.as_object().ok_or(ParseError::Shape("line"))?;
     // A missing/non-string `kind` is the one shape error here: the open set
@@ -277,9 +274,8 @@ pub fn line_kind_from_value(v: &Value) -> Result<LineKind, ParseError> {
         }),
         "island" => Ok(LineKind::Island),
         "rule" => Ok(LineKind::Rule),
-        // Open set: any other name is a block role this build lacks, kept opaque
-        // and projected as `Para`, the *document* still opens when its
-        // vocabulary grows.
+        // Any other name is a block role this build lacks, kept opaque and
+        // projected as `Para`, so the document still opens.
         other => Ok(LineKind::Unknown {
             tag: other.to_string(),
             attrs: bag_from_wire(&o, "attrs", "line attrs")?,
@@ -295,8 +291,8 @@ fn line_to_value(line: &Line) -> Value {
         "containers".into(),
         Value::Array(line.containers.iter().map(container_to_value).collect()),
     );
-    // Omitted when false (the common case): deterministic since presence is a
-    // pure function of the value.
+    // Omitted when false: presence is a pure function of the value, so the
+    // encoding stays deterministic.
     if line.continues {
         m.insert("continues".into(), Value::Bool(true));
     }
@@ -321,9 +317,8 @@ fn line_from_value(v: &Value) -> Result<Line, ParseError> {
     })
 }
 
-/// Encode a [`Container`] into its canonical wire object. Public so the line-op
-/// wire ([`crate::ops`]) reuses the same container shape a `ContentLine`
-/// carries.
+/// Encode a [`Container`] into its canonical wire object. Public so the op wire
+/// ([`crate::ops`]) reuses the same container shape a `ContentLine` carries.
 pub fn container_to_value(c: &Container) -> Value {
     let mut m = Map::new();
     match c {
@@ -348,8 +343,7 @@ pub fn container_to_value(c: &Container) -> Value {
     Value::Object(m)
 }
 
-/// Decode a [`Container`] from its canonical wire object. The inverse of
-/// [`container_to_value`].
+/// Decode a [`Container`] from its canonical wire object.
 pub fn container_from_value(v: &Value) -> Result<Container, ParseError> {
     let o = v.as_object().ok_or(ParseError::Shape("container"))?;
     let tag = o
@@ -364,8 +358,8 @@ pub fn container_from_value(v: &Value) -> Result<Container, ParseError> {
             ordinal: o.get("ordinal").and_then(Value::as_u64).unwrap_or(0),
         }),
         "quote" => Ok(Container::Quote),
-        // Open set, as for line kinds: an unrecognized container round-trips
-        // opaque and projects transparently.
+        // An unrecognized container round-trips opaque and projects
+        // transparently.
         other => Ok(Container::Unknown {
             tag: other.to_string(),
             attrs: bag_from_wire(&o, "attrs", "container attrs")?,
@@ -373,11 +367,9 @@ pub fn container_from_value(v: &Value) -> Result<Container, ParseError> {
     }
 }
 
-// ---- Mark ----
-
 /// Encode a [`Mark`] (`{start, end, type, …}`) into its canonical wire object.
-/// Public so the mark-op wire ([`crate::ops`]) reuses the exact `type`
-/// discriminant a `ContentMark` carries.
+/// Public so the op wire ([`crate::ops`]) reuses the exact `type` discriminant a
+/// `ContentMark` carries.
 pub fn mark_to_value(mark: &Mark) -> Value {
     let mut m = Map::new();
     m.insert("start".into(), Value::from(mark.start));
@@ -414,8 +406,7 @@ pub fn mark_to_value(mark: &Mark) -> Value {
     Value::Object(m)
 }
 
-/// What every mark carries whatever its type: the object, the two positions, the
-/// type name.
+/// What every mark carries whatever its type.
 struct MarkShape<'a> {
     fields: &'a Map<String, Value>,
     start: Usv,
@@ -423,12 +414,10 @@ struct MarkShape<'a> {
     ty: &'a str,
 }
 
-/// A mark's fallible half: the prologue of [`mark_from_value`], and on its own
-/// the *whole* of what a caller wanting only the verdict needs.
-///
-/// Building the [`MarkKind`] cannot fail, and for an unknown tag it deep-clones
-/// the opaque `attrs` bag: cost a validity check has no reason to pay
-/// ([`reject_unreadable_mark`]).
+/// A mark's fallible half: the prologue of [`mark_from_value`], and the whole of
+/// what a caller wanting only the verdict needs. Building the [`MarkKind`]
+/// cannot fail, and for an unknown tag it deep-clones the opaque `attrs` bag,
+/// which a validity check has no reason to pay for.
 fn mark_shape(v: &Value) -> Result<MarkShape<'_>, ParseError> {
     let fields = v.as_object().ok_or(ParseError::Shape("mark"))?;
     let start = usv_from(fields.get("start"), "mark start")?;
@@ -445,9 +434,7 @@ fn mark_shape(v: &Value) -> Result<MarkShape<'_>, ParseError> {
     })
 }
 
-/// Decode a [`Mark`] from its canonical wire object. The inverse of
-/// [`mark_to_value`]; the shared mark reader for the content decoder and the
-/// mark-op wire.
+/// Decode a [`Mark`] from its canonical wire object.
 pub fn mark_from_value(v: &Value) -> Result<Mark, ParseError> {
     let MarkShape {
         fields: o,
