@@ -1,52 +1,29 @@
 //! Markdown export: content → markdown, per island type.
 //!
-//! The projection back to markdown. Marks become syntax; islands are emitted
-//! per their type ([`Loss`](crate::model::Loss) describes fidelity, it does not
-//! gate the emit; see [`to_markdown`]); identity ([`MarkKind::Anchor`]) marks
-//! are **omitted**; they survive across edits via diff-rebase, not the
-//! projection (§ Codecs). Anchors carry no markdown encoding, so
-//! dropping them here is by design, not loss.
-//!
-//! The block vocabulary is open: a [`LineKind::Unknown`] projects
-//! as a paragraph and a [`Container::Unknown`] transparently, the block-axis
-//! twin of an unknown mark contributing no delimiters.
-//!
-//! The contract this crate pins is the **content fixed point**: for a content `rt`
-//! obtained from [`crate::import::from_markdown`],
-//! `from_markdown(to_markdown(rt)) == rt` modulo island loss class, markdown
-//! source is not canonical, but the content is, so round-trip is defined at the
-//! content, not the string.
+//! Marks become syntax; identity ([`MarkKind::Anchor`]) marks are **omitted**,
+//! surviving across edits via diff-rebase rather than the projection. The
+//! contract is the **content fixed point**: for a content `rt` from
+//! [`crate::import::from_markdown`], `from_markdown(to_markdown(rt)) == rt`
+//! modulo island loss class. Markdown source is not canonical; the content is.
 //!
 //! ## Export is defined by import
 //!
-//! The `render_marked_core` safety net settles a line's markdown by re-parsing it
-//! with [`crate::import::from_markdown`] and dropping marks until the text comes
-//! back intact. Export's correctness is therefore *defined* by running import,
-//! by design. CommonMark's emphasis algorithm (delimiter-run matching, the rule
-//! of 3, `\*`-escape adjacency) has corners no local rule captures, and a local
-//! rule that approximates it drops good marks on the cases it gets wrong;
-//! verifying against the parser is the only check exactly as strict as the
-//! format.
+//! The `render_marked_core` safety net settles a line's markdown by re-parsing
+//! it with [`crate::import::from_markdown`] and dropping marks until the text
+//! comes back intact. CommonMark's emphasis algorithm (delimiter-run matching,
+//! the rule of 3, `\*`-escape adjacency) has corners no local rule captures, and
+//! a local approximation drops good marks on the cases it gets wrong; verifying
+//! against the parser is the only check exactly as strict as the format. The
+//! cost is that an importer change moves exporter output, and that every
+//! [`to_markdown`] call depends on `pulldown_cmark`.
 //!
-//! The coupling costs two things. The codecs cannot be tested or changed
-//! independently: an importer change moves exporter output. And every
-//! [`to_markdown`] call transitively depends on `pulldown_cmark`, which is why
-//! this crate is the workspace's only home for a CommonMark parser.
+//! ## Documented codec limits
 //!
-//! ## Documented codec limits (degenerate, non-authorable content values)
-//!
-//! The fixed point holds for the content a well-behaved producer emits. Two
-//! degenerate shapes markdown cannot represent do **not** round-trip, and are
-//! recorded here rather than hidden (see `tests::known_hard_break_limits`):
-//!
-//! - **A mark spanning a hard break**: per-line rendering splits it into two
-//!   per-line marks (they do not re-union across the `\n`).
-//! - **An empty first line in a hard-break block**: markdown has no
-//!   blank-then-forced-break syntax, so the leading empty line is dropped.
-//!
-//! Both arise only from adversarial delimiter/break placement, never from clean
-//! markdown or a form editor. Neither is hardened: no live editor yet defines
-//! what it can produce.
+//! Two degenerate shapes markdown cannot represent do **not** round-trip (see
+//! `tests::known_hard_break_limits`): a mark spanning a hard break splits into
+//! two per-line marks, and an empty first line in a hard-break block is dropped,
+//! markdown having no blank-then-forced-break syntax. Both arise only from
+//! adversarial delimiter/break placement.
 
 use crate::island::KnownIslandType;
 use crate::model::{Container, Island, LineKind, MarkKind, Content, ISLAND_SLOT};
@@ -54,17 +31,11 @@ use crate::model::{Container, Island, LineKind, MarkKind, Content, ISLAND_SLOT};
 /// Render a content to markdown. An island projects by **type**: a type this
 /// build knows emits its markdown, any other a placeholder comment.
 ///
-/// [`Loss`](crate::model::Loss) does not gate the emit and is not read here. It
-/// *describes* the projection's fidelity for a consumer to surface; the type
-/// decides whether a projection exists at all.
-///
-/// Keeping the two apart is what makes a decode-time degrade safe. A known type
-/// a future writer stamped with a loss class this build lacks keeps that class
-/// verbatim (reading as `Fidelity::Unrepresentable` through `Loss::fidelity`)
-/// and still emits its table: the conservative reading describes the value, it
-/// does not suppress it.
+/// [`Loss`](crate::model::Loss) does not gate the emit and is not read here: it
+/// *describes* fidelity for a consumer to surface, while the type decides
+/// whether a projection exists at all. So a known type stamped with a loss class
+/// this build lacks still emits its table.
 pub fn to_markdown(rt: &Content) -> String {
-    // Per-line char ranges, so global marks can be clipped to a line.
     let segments = line_segments(rt);
     let ctx = Ctx {
         rt,
@@ -72,12 +43,10 @@ pub fn to_markdown(rt: &Content) -> String {
     };
     let mut out = String::new();
     emit_block(&ctx, 0..rt.lines.len(), 0, &mut out);
-    // Collapse any trailing blank lines. `to_markdown` projects a *value*, not a
-    // file: it emits no final newline, so `writer.set("subject", "Hello")` reads
-    // back as `"Hello"`, not `"Hello\n"` (the read-back-grows-a-newline
-    // footgun). Document-file writers own the file-final newline
-    // (`Document::to_markdown`); the content fixed point is defined at the content,
-    // and import is newline-insensitive, so dropping it is round-trip-invisible.
+    // `to_markdown` projects a *value*, not a file: it emits no final newline,
+    // so `writer.set("subject", "Hello")` reads back as `"Hello"`. Document-file
+    // writers own the file-final newline, and import is newline-insensitive, so
+    // dropping it is round-trip-invisible.
     while out.ends_with('\n') {
         out.pop();
     }
@@ -86,16 +55,12 @@ pub fn to_markdown(rt: &Content) -> String {
 
 /// Render a content to plaintext: [`Content::text`] with island slots
 /// ([`ISLAND_SLOT`]) removed. The lossy sibling of [`to_markdown`]: it drops
-/// every mark and island (tables, images have no plaintext projection), keeping
-/// only literal text. Callers that want a non-empty result should check for the
-/// empty string themselves.
+/// every mark and island, keeping only literal text.
 ///
-/// Tables (and images) having no plaintext form is a **decided limitation**, not
-/// an oversight: the pdfform backend fills a form field from this
-/// projection, so a field bound to a table-bearing content renders the surrounding
-/// text and silently omits the table. A degraded row/tab dump was rejected (it
-/// would read as a faithful table and mislead) so the projection drops the
-/// island outright. Revisit only if a form field ever needs tabular fill.
+/// Tables and images having no plaintext form is a **decided limitation**: the
+/// pdfform backend fills a form field from this projection, so a field bound to
+/// a table-bearing content renders the surrounding text and silently omits the
+/// table, rather than emitting a row/tab dump that would read as faithful.
 pub fn to_plaintext(rt: &Content) -> String {
     rt.text.chars().filter(|&c| c != ISLAND_SLOT).collect()
 }
@@ -109,12 +74,10 @@ struct Ctx<'a> {
 /// range and the count of island slots before the line, so a caller indexes
 /// the content text and the island list in O(1) without rescanning.
 ///
-/// **Deliberately not `#[non_exhaustive]`**, unlike the model types it indexes.
-/// It is a derived view, not a stored one: [`line_segments`] recomputes the
-/// whole of it from a [`Content`], and the five fields are one line's position
-/// in the two coordinate spaces the model has. A sixth field means a third
-/// space, which moves the model first, so the literal stays and a new field is
-/// a semver-major.
+/// **Deliberately not `#[non_exhaustive]`**, unlike the model types it indexes:
+/// it is a derived view that [`line_segments`] recomputes whole, and its five
+/// fields are one line's position in the two coordinate spaces the model has. A
+/// sixth field means a third space, which moves the model first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Segment {
     /// USV index of the line's first char.
@@ -260,10 +223,8 @@ fn emit_container(
             // one quote on re-import.
             prefix_quote(&inner, out);
         }
-        // Open set: a container this build does not know has no markdown syntax
-        // to prefix with, so it projects transparently, its blocks land at the
-        // enclosing level. The container survives via storage, not the
-        // projection, exactly as an unknown island's props do.
+        // A container this build does not know has no markdown syntax to prefix
+        // with, so it projects transparently and survives via storage.
         Container::Unknown { .. } => out.push_str(&inner),
     }
 }
@@ -328,7 +289,6 @@ fn emit_leaf_block(ctx: &Ctx, range: std::ops::Range<usize>, out: &mut String) {
     match &first.kind {
         LineKind::Code { lang } => emit_code(ctx, range, lang.as_deref(), out),
         LineKind::Island => {
-            // A block island: the segment is a single slot. Resolve and emit.
             if let Some(isl) = slot_island(ctx, range.start) {
                 emit_island(isl, out);
             }
@@ -342,10 +302,8 @@ fn emit_leaf_block(ctx: &Ctx, range: std::ops::Range<usize>, out: &mut String) {
             // heading to a space), so only the first line contributes.
             let mut inline = render_inline(ctx, range.start, false);
             // A trailing `#` run reads as an ATX closing sequence on re-import
-            // (`# a #` → heading text "a", dropping the `#`). Escape the last `#`
-            // so the run does not reach end-of-line as a bare hash sequence:
-            // one escaped hash defeats the whole closer, and `\#` re-imports as a
-            // literal `#`.
+            // (`# a #` → heading text "a"). One escaped hash defeats the whole
+            // closer, and `\#` re-imports as a literal `#`.
             if inline.ends_with('#') {
                 inline.pop();
                 inline.push_str("\\#");
@@ -355,17 +313,14 @@ fn emit_leaf_block(ctx: &Ctx, range: std::ops::Range<usize>, out: &mut String) {
         // An unknown block role projects as a paragraph: the role is lost to
         // markdown (it round-trips through storage), the text is not.
         LineKind::Para | LineKind::Unknown { .. } => {
-            // Join continuation lines with a backslash hard break.
             let parts: Vec<String> = range.map(|i| render_inline(ctx, i, true)).collect();
             out.push_str(&parts.join("\\\n"));
         }
-        // `***`, not `---`. All three break spellings import alike, so the
-        // canonical one is the spelling with the fewest other readings: `---`
-        // is also a setext underline, a front-matter fence, and — with the
-        // spaces a list prefix supplies — a bullet line, so `- ` + `---` is
-        // four dashes and re-imports as a top-level break, losing the item.
-        // A mixed-character line is never a break, so `***` survives every
-        // prefix a container can put in front of it.
+        // `***`, not `---`: all three break spellings import alike, but `---` is
+        // also a setext underline, a front-matter fence, and — with the spaces a
+        // list prefix supplies — a bullet line, so `- ` + `---` re-imports as a
+        // top-level break, losing the item. `***` survives every container
+        // prefix.
         LineKind::Rule => out.push_str("***"),
     }
 }
@@ -385,11 +340,8 @@ fn emit_island(isl: &Island, out: &mut String) {
         Some(KnownIslandType::Table) => emit_table(isl, out),
         Some(KnownIslandType::Image) => emit_image(isl, out),
         None => {
-            // Unknown island (the open set): a comment placeholder that survives
-            // round-trip as no content text (HTML comments are stripped on
-            // re-import). The island is preserved via storage, not the projection.
-            // A known type can't reach here: the match is exhaustive, so a new
-            // type is a compile error, not a silent placeholder.
+            // A comment placeholder re-imports as no content text (HTML comments
+            // are stripped), so the island survives via storage instead.
             out.push_str(&format!("<!-- island:{} -->", isl.island_type));
         }
     }
@@ -403,10 +355,9 @@ fn emit_table(isl: &Island, out: &mut String) {
     if cols == 0 {
         return;
     }
-    // Cells are canonical `{text, marks}`; reconstruct each cell's markdown from
-    // its structure (the prose mark→syntax rendering, plus `|`→`\|`), so nothing
-    // re-parses markdown and `import(export(table))` is a fixed point.
-    // header row
+    // Cells are canonical `{text, marks}`; each cell's markdown is rebuilt from
+    // that structure, so nothing re-parses markdown and `import(export(table))`
+    // is a fixed point.
     out.push_str("| ");
     if let Some(h) = header {
         out.push_str(&h.iter().map(render_cell_md).collect::<Vec<_>>().join(" | "));
@@ -427,9 +378,8 @@ fn emit_table(isl: &Island, out: &mut String) {
     if let Some(rs) = rows {
         for row in rs {
             if let Some(r) = row.as_array() {
-                // Pad/truncate to the header's column count so a ragged island
-                // (one that skipped normalization) still emits a rectangular
-                // table: the same count the Typst projection uses post-normalize.
+                // Pad/truncate so a ragged island (one that skipped
+                // normalization) still emits a rectangular table.
                 let mut cells: Vec<String> = r.iter().map(render_cell_md).collect();
                 cells.resize(cols, String::new());
                 out.push_str("\n| ");
@@ -445,7 +395,6 @@ fn emit_image(isl: &Island, out: &mut String) {
     let alt = isl.props.get("alt").and_then(|v| v.as_str()).unwrap_or("");
     // Alt is inline content of `![…]`: escape it like a link's display text so a
     // `]`/`\`/`&`/delimiter can't terminate the markup or decode on re-import.
-    // Url goes through `emit_url` (bare when safe, else angle-wrapped + escaped).
     out.push_str("![");
     out.push_str(&escape_run(&alt.chars().collect::<Vec<_>>(), false));
     out.push_str("](");
@@ -454,14 +403,11 @@ fn emit_image(isl: &Island, out: &mut String) {
 }
 
 /// Emit a link/image destination that re-imports to `url` verbatim. A bare
-/// (unbracketed) destination round-trips only for a URL with no whitespace,
-/// control char, `<`, `>`, `\`, or `&`, and balanced parentheses: CommonMark's
-/// unbracketed form. Anything else is angle-wrapped, with `<`, `>`, `\`, and `&`
-/// backslash-escaped so the sequence re-parses to the exact URL: unescaped `<`/`>`
-/// are illegal even inside the wrap, and `\`/`&` would otherwise be consumed as an
-/// escape or entity reference on re-import (the same `&`-always-escaped rule
-/// [`escape_char_into`] applies to prose). Spaces and parentheses need no escape
-/// inside the wrap, so a spaced or unbalanced-paren URL wraps without further work.
+/// (unbracketed) destination round-trips only for CommonMark's unbracketed form:
+/// no whitespace, control char, `<`, `>`, `\`, or `&`, and balanced parentheses.
+/// Anything else is angle-wrapped, with `<`, `>`, `\` and `&` backslash-escaped,
+/// since unescaped `<`/`>` are illegal even inside the wrap and `\`/`&` would be
+/// consumed as an escape or entity reference on re-import.
 fn emit_url(url: &str, out: &mut String) {
     if url_is_bare_safe(url) {
         out.push_str(url);
@@ -477,9 +423,6 @@ fn emit_url(url: &str, out: &mut String) {
     out.push('>');
 }
 
-/// Whether `url` re-imports verbatim as a bare (unbracketed) link destination:
-/// no whitespace/control/`<`/`>`/`\`/`&`, and balanced parentheses. A `false`
-/// routes the URL through [`emit_url`]'s angle-wrapped, escaped form.
 fn url_is_bare_safe(url: &str) -> bool {
     let mut depth: i32 = 0;
     for c in url.chars() {
@@ -498,10 +441,6 @@ fn url_is_bare_safe(url: &str) -> bool {
     }
     depth == 0
 }
-
-// ---------------------------------------------------------------------------
-// Inline rendering: marks -> syntax, over one line's char range.
-// ---------------------------------------------------------------------------
 
 fn render_inline(ctx: &Ctx, i: usize, escape_leading_block: bool) -> String {
     let seg = &ctx.segments[i];
