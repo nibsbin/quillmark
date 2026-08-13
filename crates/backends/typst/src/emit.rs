@@ -10,7 +10,8 @@
 //! boundary sweep with close-and-reopen at overlaps: Peritext free overlap →
 //! properly nested Typst.
 //!
-//! **Line-anchored text.** [`escape_markup`] neutralizes inline markup but is
+//! **Line-anchored text.** [`escape_markup`](crate::emit::escape_markup)
+//! neutralizes inline markup but is
 //! position-blind; Typst's heading `= `, list `- `/`+ `/`N. `, and term `/ ` are
 //! only special as the first token of a source line. Text opening with one lands
 //! at column 0 and would render as that block, so the emitter prefixes a single
@@ -20,8 +21,8 @@
 //! **The 2→4 escape coupling.** Each run records only its `(content, generated)`
 //! pair; per-char spans are *recomputed* by a scan treating `//`→`\/\/` as a
 //! 2-char/4-byte cluster and every other char as its own. The `escape_tripwire`
-//! tests pin that scan against [`escape_markup`]/[`escape_string`]
-//! byte-for-byte, so an escape-rule change fails loud.
+//! tests pin that scan against [`escape_markup`](crate::emit::escape_markup) /
+//! [`escape_string`](crate::emit::escape_string) byte-for-byte, so an escape-rule change fails loud.
 
 use quillmark_core::error::MAX_NESTING_DEPTH;
 use quillmark_content::island::KnownIslandType;
