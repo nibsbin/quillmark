@@ -444,23 +444,13 @@ export function isListItemContainer(container) {
 }
 
 // ── Open-set membership guards ──────────────────────────────────────────────
-// The guards above each answer "is this arm X": one pinned arm at a time. These
-// four answer the other question: "is this a value this build knows?" A consumer
-// that must branch known-vs-unknown, any read-modify-write consumer, since
-// lowering an edit restates every line's kind and containers, otherwise
-// enumerates the built-in names in its own source, recreating the closed-set
-// coupling the open set exists to remove. That list is correct until the release
-// that adds a built-in, at which point the new construct is misclassified as
-// unknown and round-trips through the consumer's unknown carrier, losing any
-// sibling-key payload.
-//
-// A predicate rather than an exported name list, because the known tables below
-// are upstream's business. They are pinned against the Rust source
-// (`Content::RESERVED_*` and `KnownIslandType`) by the
-// `js_known_name_tables_match_the_rust_open_sets` drift-guard test in
-// `crates/bindings/wasm/tests/known_names_drift.rs`: adding a built-in means
-// editing there, here, and the TS unions in `crates/bindings/wasm/src/engine.rs`
-// in one commit.
+// The guards above each answer "is this arm X". These four answer "is this a
+// value this build knows?", the question any read-modify-write consumer must
+// ask, since lowering an edit restates every line's kind and containers. A
+// predicate rather than an exported name list, because the tables below are
+// upstream's business: they are pinned against the Rust source by
+// `tests/known_names_drift.rs`, so adding a built-in means editing there, here,
+// and the TS unions in `src/engine.rs` in one commit.
 //
 // These classify unknown *tags*, not unknown *payloads on known tags*. A future
 // `kind: "footnote"` with a sibling `ref` loses `ref` at a consumer that predates
@@ -506,12 +496,11 @@ export function isUnknownIsland(island) {
 /**
  * Build a `load` thunk: dynamic-import a backend build, then instantiate it.
  *
- * Under `--target web` a freshly imported build is inert (the import resolves
- * before there is a wasm instance behind the classes), so instantiation is part
- * of loading and the consumer never sees it. Memoized at MODULE scope, not per
- * `Engine`: two engines issuing their first render concurrently must share one
- * instantiation, and the generated entry's own `wasm !== undefined` guard only
- * catches a call that arrives after one finished, not one already in flight.
+ * Under `--target web` a freshly imported build is inert, so instantiation is
+ * part of loading. Memoized at MODULE scope, not per `Engine`: two engines
+ * issuing their first render concurrently must share one instantiation, and the
+ * generated entry's own `wasm !== undefined` guard only catches a call arriving
+ * after one finished, not one already in flight.
  *
  * @param {string} id backend id, for the failure message
  * @param {() => Promise<any>} importThunk the dynamic `import()`
@@ -542,19 +531,15 @@ function backendLoad(id, importThunk, wasmUrl) {
 		}));
 }
 
-// Backend builds are NEVER statically imported here: that would pull a
-// multi-MB binary into the eager graph and defeat lazy loading. Each entry is a
-// DESCRIPTOR: `load` is a thunk that dynamically imports a backend's chunk and
-// instantiates it, so the binary is fetched only when something actually renders
-// against that backend and is ready to use when the promise resolves;
-// `formats`/`canvas` are the REQUIRED static capability manifest so the
-// cheap probes (`supportedFormats`/`supportsCanvas`) ALWAYS answer without
-// loading the binary or cloning the quill. The manifest values are verified
-// against each backend's Rust source (`crates/backends/<id>/src/lib.rs`
-// `SUPPORTED_FORMATS`) and pinned by the `runtime.test.js` drift-guard test,
-// which renders once and asserts the loaded backend reports the same list.
-// `canvas` mirrors `quillmark_core::formats_support_canvas`: true iff the
-// format list includes a visual-page format (`svg` or `png`).
+// Backend builds are NEVER statically imported here: that would pull a multi-MB
+// binary into the eager graph and defeat lazy loading. Each entry is a
+// DESCRIPTOR: `load` dynamically imports and instantiates a backend's chunk, so
+// the binary is fetched only when something renders against it; `formats` and
+// `canvas` are the required static capability manifest, so the probes
+// (`supportedFormats` / `supportsCanvas`) answer without loading the binary or
+// cloning the quill. The manifest mirrors each backend's Rust `SUPPORTED_FORMATS`
+// (and `formats_support_canvas`: true iff the list includes `svg` or `png`),
+// pinned by a `runtime.test.js` drift guard that renders once and compares.
 const DEFAULT_BACKENDS = {
 	typst: {
 		load: backendLoad(
@@ -578,11 +563,9 @@ const DEFAULT_BACKENDS = {
 };
 
 /**
- * Validate a backend registry descriptor, throwing a clear error naming the
- * backend id on any malformed entry. Descriptors are the ONLY accepted form:
- * `{ load, formats, canvas }` with a callable `load`, a `formats` array, and a
- * boolean `canvas`. Failing at construction (not deep inside a render) keeps the
- * capability probes free; they can answer from the manifest unconditionally.
+ * Validate a backend registry descriptor, naming the backend id on any
+ * malformed entry. Failing at construction rather than deep inside a render is
+ * what lets the capability probes answer from the manifest unconditionally.
  * @param {string} id
  * @param {unknown} entry
  * @returns {{ load: () => Promise<unknown>, formats: string[], canvas: boolean }}
@@ -619,10 +602,9 @@ export class Engine {
 	/** backendId → descriptor `{ load, formats, canvas }`. */
 	#loaders;
 	/**
-	 * backendId → WeakMap<canonical Quill, backend-memory Quill clone>. Caches
-	 * the expensive quill materialization per (engine, backend, canonical quill
-	 * instance). WeakMap so dropping the canonical quill makes its clone
-	 * collectable; the backend handle is then freed by wasm-bindgen weak-refs.
+	 * backendId → WeakMap<canonical Quill, backend-memory clone>, caching the
+	 * expensive materialization. WeakMap so dropping the canonical quill makes
+	 * its clone collectable, and wasm-bindgen weak-refs then free the handle.
 	 * @type {Map<string, WeakMap<object, any>>}
 	 */
 	#quillClones = new Map();
@@ -630,11 +612,9 @@ export class Engine {
 	/**
 	 * @param {{ backends?: Record<string, { load: () => Promise<unknown>, formats: string[], canvas: boolean }> }} [options]
 	 *   Extra or overriding backend descriptors, merged over the built-ins. Each
-	 *   entry is a descriptor (`{ load, formats, canvas }`) with `formats` and
-	 *   `canvas` REQUIRED: that static manifest is what makes
-	 *   `supportedFormats`/`supportsCanvas` always free (no binary load, no quill
-	 *   clone). Malformed entries throw here, at construction. The default
-	 *   registry maps `"typst"` to the bundled Typst build.
+	 *   is `{ load, formats, canvas }` with the manifest REQUIRED, since that is
+	 *   what makes `supportedFormats` / `supportsCanvas` free; malformed entries
+	 *   throw here, at construction.
 	 *
 	 *   `load` resolves to a READY module: a registrant shipping its own
 	 *   `--target web` build instantiates inside the thunk. More than one
@@ -651,8 +631,8 @@ export class Engine {
 	}
 
 	/**
-	 * Look up the registered descriptor for `backendId`, throwing the canonical
-	 * "no backend registered" error if none. Pure, touches no binary.
+	 * The registered descriptor for `backendId`, or the "no backend registered"
+	 * throw. Touches no binary.
 	 * @param {string} backendId
 	 * @returns {{ load: () => Promise<unknown>, formats: string[], canvas: boolean }}
 	 */
@@ -670,8 +650,7 @@ export class Engine {
 	/**
 	 * `quill`'s backend id, after checking the handle. The ONE way an `Engine`
 	 * verb reaches `backendId`, so "no verb touches a foreign quill" is
-	 * structural rather than four remembered calls. See § "Handles from another
-	 * copy".
+	 * structural rather than four remembered calls.
 	 * @param {Quill} quill
 	 * @param {string} method the caller's name, for the rejection message
 	 * @returns {string}
@@ -713,12 +692,9 @@ export class Engine {
 	}
 
 	/**
-	 * Get (or materialize-and-cache) the backend-memory `Quill` clone for
-	 * `quill` under `backendId`. On a cache miss the clone is built from `tree`,
-	 * the caller's pre-await `toTree()` snapshot; the canonical handle may be
-	 * freed by now, and stored in the per-backend `WeakMap` keyed on the
-	 * canonical `Quill` instance, so a later call with the same instance reuses
-	 * it (the hot-path fix: no re-serialize / re-copy / re-validate per call).
+	 * Get (or materialize-and-cache) the backend-memory `Quill` clone for `quill`
+	 * under `backendId`. On a miss the clone is built from `tree`, the caller's
+	 * pre-await snapshot, since the canonical handle may be freed by now.
 	 * @param {any} mod the backend build module
 	 * @param {string} backendId
 	 * @param {object} quill the canonical instance (cache key only)
@@ -746,22 +722,15 @@ export class Engine {
 	 *
 	 * OWNERSHIP WINDOW: both caller handles are snapshotted (`doc.toJson()`, and
 	 * `quill.toTree()` on a clone-cache miss) BEFORE the first await. The backend
-	 * load below is a real suspension point (a multi-MB `import()` on first
-	 * render) so reading the handles after it would race a caller that
-	 * `free()`s them as soon as this call returns its promise ("null pointer
-	 * passed to rust"). The snapshot makes that natural calling pattern correct.
+	 * load below is a real suspension point, so reading the handles after it
+	 * would race a caller that `free()`s them as soon as this call returns its
+	 * promise ("null pointer passed to rust").
 	 *
 	 * Clone lifetimes differ by design: the `doc` clone is TRANSIENT, freed in
-	 * the `finally` of every call. The `quill` clone is CACHED per (engine,
-	 * backend, canonical quill instance) and is NOT freed here; a `Quill`
-	 * instance's contents never change after construction, so it is dropped with
-	 * the canonical quill (WeakMap collection → wasm-bindgen weak-ref free) when
-	 * the consumer replaces the instance. A cache miss materializes it once;
-	 * subsequent calls reuse it.
-	 *
-	 * Both handles are checked here, so the crossing is core→backend (always two
-	 * memories, always as data); core→core is a duplicate install and never gets
-	 * past the first line. See § "Handles from another copy".
+	 * the `finally` of every call, while the `quill` clone is CACHED and is not
+	 * freed here — a `Quill` instance's contents never change after
+	 * construction, so it is dropped with the canonical quill when the consumer
+	 * replaces the instance.
 	 * @param {string} method the caller's name, for the rejection message
 	 * @param {Quill} quill
 	 * @param {Document} doc
