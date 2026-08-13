@@ -1,26 +1,12 @@
-//! Property-based fuzz tests for the bound door (`Quill::conform` /
-//! `Quill::parse`): the resting-form invariant, stated as three properties.
+//! The resting-form invariant at the bound door (`Quill::conform` /
+//! `Quill::parse`). The quill is fixed and the values generated: the resting
+//! form is a property of the codec, so the value space is what needs coverage
+//! (`coerce_fuzz` takes the schema space).
 //!
-//! - **C1 (idempotence):** `conform` is a fixed point. A second call moves no
-//!   bytes and re-emits identical diagnostics.
-//! - **C2 (lane convergence):** parse-then-conform equals typed-write, per
-//!   content field. The authored value the parse lane leaves in the payload
-//!   (here, the opaque `store_field` that models it) conforms to exactly what
-//!   `commit_field` stores; a value the strict write refuses stays authored in
-//!   both lanes. A field whose type carries no content is conform's to leave
-//!   alone: the typed write remains its canonicalizer.
-//! - **C3 (markdown loop):** a document that leaves through the markdown
-//!   surface and comes back through the bound door settles. Exactly, for a
-//!   `plaintext` field: the literal codec is lossless both ways, which is the
-//!   whole reason its rest is a string. For `richtext` the emitted markdown is
-//!   the lossy projection (`project_content_field`: island ids, content-only
-//!   marks, and a container around a non-paragraph line do not survive), so the
-//!   loop is a **fixed point after one pass**, not the identity: the document
-//!   settles rather than drifting.
-//!
-//! The quill is fixed and the values are generated: the resting form is a
-//! property of the codec, so what needs coverage is the value space, not the
-//! schema space (`coerce_fuzz` fuzzes the schema space under both leniencies).
+//! For `richtext` the emitted markdown is a lossy projection (island ids,
+//! content-only marks, and a container around a non-paragraph line do not
+//! survive), so the markdown loop is a fixed point after one pass rather than
+//! the identity. `plaintext`'s literal codec is lossless both ways.
 
 use proptest::prelude::*;
 use quillmark_core::{Document, Quill, QuillValue};
@@ -58,7 +44,7 @@ main:
       type: integer
 "#;
 
-/// The declared content fields, by name: the ones with a resting form to hold.
+/// The declared fields with a resting form to hold.
 const CONTENT_FIELDS: [&str; 6] = [
     "rich",
     "rich_inline",
@@ -131,7 +117,6 @@ fn arb_field_value() -> impl Strategy<Value = (&'static str, serde_json::Value)>
     ]
 }
 
-/// The stored value of every content field, the comparison C2 and C3 make.
 fn rest(doc: &Document) -> Vec<Option<serde_json::Value>> {
     CONTENT_FIELDS
         .iter()
@@ -140,7 +125,7 @@ fn rest(doc: &Document) -> Vec<Option<serde_json::Value>> {
 }
 
 proptest! {
-    // C1: `conform` is a fixed point, on bytes and on diagnostics.
+    // A fixed point on bytes and on diagnostics alike.
     #[test]
     fn conform_is_idempotent((name, value) in arb_field_value()) {
         let quill = quill();
@@ -156,8 +141,6 @@ proptest! {
         prop_assert_eq!(format!("{first:?}"), format!("{second:?}"));
     }
 
-    // C2: the authored value converges to what the typed write commits, and a
-    // refusal leaves the same authored value in both lanes.
     #[test]
     fn conform_converges_on_the_typed_write((name, value) in arb_field_value()) {
         let quill = quill();
@@ -181,8 +164,7 @@ proptest! {
             .commit_field(name, QuillValue::from_json(value.clone()), schema);
 
         if !CONTENT_FIELDS.contains(&name) {
-            // Not conform's business: the value rests exactly as authored, with
-            // nothing to report, whatever the typed write would have made of it.
+            // Not conform's business: the typed write stays its canonicalizer.
             prop_assert!(diags.is_empty(), "{diags:?}");
             prop_assert_eq!(
                 conformed.main().payload().get(name).map(|v| v.as_json().clone()),
@@ -197,7 +179,6 @@ proptest! {
                 prop_assert_eq!(bytes(&conformed), bytes(&written));
             }
             Err(_) => {
-                // Refused: the value rests authored, and conform says so.
                 prop_assert_eq!(
                     conformed.main().payload().get(name).map(|v| v.as_json().clone()),
                     Some(value),
@@ -210,12 +191,11 @@ proptest! {
         }
     }
 
-    // C3: out through markdown and back in through the bound door settles.
     #[test]
     fn the_markdown_loop_settles((name, value) in arb_field_value()) {
         let quill = quill();
-        // A conformed document always re-parses through the bound door; a
-        // failure here is one of the bugs this property exists to catch.
+        // A conformed document always re-parses: a failure here is one of the
+        // bugs this property exists to catch.
         let loop_once = |doc: &Document| -> Document {
             quill
                 .parse(&doc.to_markdown())
@@ -233,8 +213,6 @@ proptest! {
         let twice = loop_once(&once);
         prop_assert_eq!(rest(&twice), rest(&once), "the loop did not settle");
 
-        // The plaintext codec is lossless both ways, so its rest survives the
-        // first pass too: the literal string is the whole value.
         if name.starts_with("plain") {
             prop_assert_eq!(rest(&once), rest(&doc));
         }
