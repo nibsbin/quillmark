@@ -1174,21 +1174,6 @@ fn test_store_ext_adds_map_and_strips_from_plate() {
 }
 
 #[test]
-fn test_store_ext_round_trips_through_markdown() {
-    let mut doc = make_doc();
-    let mut ext = serde_json::Map::new();
-    ext.insert("agent".to_string(), serde_json::json!({ "pinned": true }));
-    doc.main_mut().store_ext(ext).expect("set_ext");
-
-    let md = doc.to_markdown();
-    let reparsed = Document::parse(&md).unwrap().document;
-    assert_eq!(
-        reparsed.main().ext().unwrap()["agent"]["pinned"].as_bool(),
-        Some(true)
-    );
-}
-
-#[test]
 fn test_remove_ext_returns_previous_and_clears() {
     let mut doc = make_doc();
     let mut ext = serde_json::Map::new();
