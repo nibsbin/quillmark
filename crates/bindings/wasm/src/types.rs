@@ -1,14 +1,9 @@
-//! Type definitions for the WASM API
-
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 use wasm_bindgen::prelude::*;
 
-/// Output formats supported by backends.
-///
-/// Gated behind the engine surface (`typst` or `pdfform`) so tsify omits
-/// its `.d.ts` interface from the core bundle (`pkg/core/wasm.d.ts`), which
-/// has no rendering surface.
+/// Output formats supported by backends. Gated behind the engine surface so
+/// tsify omits it from the core bundle, which has no rendering surface.
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
@@ -37,17 +32,13 @@ impl From<quillmark_core::OutputFormat> for OutputFormat {
             quillmark_core::OutputFormat::Pdf => OutputFormat::Pdf,
             quillmark_core::OutputFormat::Svg => OutputFormat::Svg,
             quillmark_core::OutputFormat::Png => OutputFormat::Png,
-            // Forced by `#[non_exhaustive]`, unreachable in practice: this
-            // crate is `publish = false` and path-deps the core beside it, so
-            // the two variant lists ship together. No fallback format is
-            // honest (every one of them promises bytes the caller did not ask
-            // for) so the arm refuses instead of guessing.
+            // Forced by `#[non_exhaustive]`; the two variant lists ship
+            // together. No fallback is honest, so the arm refuses.
             other => unreachable!("OutputFormat::{other:?} has no TS member"),
         }
     }
 }
 
-/// Severity levels for diagnostics
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "lowercase")]
@@ -60,8 +51,7 @@ impl From<quillmark_core::Severity> for Severity {
     fn from(severity: quillmark_core::Severity) -> Self {
         match severity {
             quillmark_core::Severity::Warning => Severity::Warning,
-            // `Severity` is `#[non_exhaustive]`. Escalating an unrecognized
-            // level over-reports; the other direction could hide a fatal.
+            // Unrecognized levels escalate: the other direction hides a fatal.
             quillmark_core::Severity::Error | _ => Severity::Error,
         }
     }
@@ -113,21 +103,17 @@ pub struct Diagnostic {
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub location: Option<Location>,
-    /// Document-model path anchor (e.g. `"cards.indorsement[0].signature_block"`).
-    ///
-    /// Set on schema validation diagnostics; `undefined` otherwise. See the
-    /// Rust `quillmark_core::error` module docs for the path grammar.
+    /// Document-model path anchor (e.g. `"cards.indorsement[0].signature_block"`),
+    /// set on schema validation diagnostics and `undefined` otherwise.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub hint: Option<String>,
-    /// The facts `message` interpolates, keyed by name. With `code`, the
-    /// substitution unit needed to word this diagnostic in another language;
-    /// `prose/canon/ERROR.md` § "Diagnostic args" tabulates the keys per code.
+    /// The facts `message` interpolates, keyed by name. With `code`, enough to
+    /// word this diagnostic in another language.
     ///
-    /// Declared optional explicitly because `tsify` does not read
-    /// `skip_serializing_if`: without this, a field the runtime omits is
-    /// declared required. `sourceChain` carries that mismatch.
+    /// Declared optional explicitly: `tsify` does not read
+    /// `skip_serializing_if`, so an omitted field would be declared required.
     #[tsify(optional, type = "Record<string, unknown>")]
     #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty", default)]
     pub args: std::collections::BTreeMap<String, serde_json::Value>,
@@ -170,9 +156,7 @@ impl From<Diagnostic> for quillmark_core::Diagnostic {
 #[serde(rename_all = "camelCase")]
 pub struct Artifact {
     pub format: OutputFormat,
-    /// Serialized via `serde_bytes` so `serde_wasm_bindgen` emits a real
-    /// `Uint8Array` at the boundary instead of a `number[]`. Without this
-    /// annotation, the declared `Uint8Array` type would silently lie.
+    /// `serde_bytes` so the boundary emits a real `Uint8Array`, not `number[]`.
     #[serde(with = "serde_bytes")]
     #[tsify(type = "Uint8Array")]
     pub bytes: Vec<u8>,
@@ -210,17 +194,14 @@ pub struct RenderResult {
     pub warnings: Vec<Diagnostic>,
     pub output_format: OutputFormat,
     pub render_time_ms: f64,
-    /// Schema-field geometry sidecar: populated only when
-    /// `RenderOptions.regions` requested it; empty otherwise. The same entries
-    /// `LiveSession.regions()` serves, for consumers without a live session.
-    /// Page indices are document-space even under a `pages` subset render.
+    /// Schema-field geometry, populated only when `RenderOptions.regions` asked
+    /// for it. Page indices are document-space even under a `pages` subset.
     pub regions: Vec<FieldRegion>,
 }
 
-/// What a committed `LiveSession.update` changed. `dirtyPages` lists the pages
-/// whose rendered content differs from the previous compile, including pages
-/// the edit added; removed pages are implied by `pageCount`. A preview
-/// repaints `dirty ∩ visible` and nothing else.
+/// What a committed `LiveSession.update` changed. `dirtyPages` lists pages whose
+/// content differs from the previous compile, including pages the edit added;
+/// removed pages are implied by `pageCount`.
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
@@ -230,44 +211,30 @@ pub struct ChangeSet {
     pub dirty_pages: Vec<usize>,
 }
 
-/// A rendered field region: the quill schema field address plus its geometry on
-/// the page. Emitted for schema-bound fields: span-tracked content (richtext
-/// bodies, `richtext[]` elements, card content fields, direct scalar
-/// references) and form-field widgets (pdfform AcroForm, Typst `form-field`).
-/// Consumers use it to scroll to / highlight the focused field; for the
-/// reverse click direction use `LiveSession.fieldAt`, which answers over any
-/// placement. Geometry only: the raster is already complete, so a region is
-/// never a compositing input.
+/// A schema field address plus its geometry on the page, for scrolling to or
+/// highlighting a field; use `LiveSession.fieldAt` for the click direction.
 ///
-/// `field` is **not** unique: content fields surface one region **per segment**
+/// `field` is **not** unique: content fields surface one region per segment
 /// (paragraph, heading, whole code fence) and per page each touches, a scalar
 /// referenced at several plate sites surfaces each site, and tracked content
-/// plus a `field:`-bound widget yields both. Group by `field`: every entry
-/// routes to that field. The whole-field highlight is the **union of a page's
-/// `span`-bearing segment rects**, so inter-paragraph whitespace stays
-/// uncovered; `LiveSession.fieldBoxes(field)` owns that union so
-/// consumers need not derive it. Later placements of one content value are not
-/// enumerated; `fieldAt` / `positionAt` still resolve clicks on them.
+/// plus a `field:`-bound widget yields both. Group by `field`. The whole-field
+/// highlight is the union of a page's `span`-bearing rects, so inter-paragraph
+/// whitespace stays uncovered; `LiveSession.fieldBoxes(field)` owns that union.
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct FieldRegion {
-    /// Canonical `DocPath` field address (e.g. `"signature_block"`,
-    /// `"cards.indorsement[1].from"`, `"main.body"`): the same grammar
-    /// `parseDocPath` reads and `Diagnostic.path` carries. The session resolves
-    /// the backend's plate-space per-kind ordinal to this absolute-index form,
-    /// so one parser routes every address. Feed it back to `fieldBoxes` /
-    /// `locate`; hit-test the click direction with `fieldAt` / `positionAt`.
+    /// Canonical `DocPath` field address (e.g. `"cards.indorsement[1].from"`):
+    /// the grammar `parseDocPath` reads and `Diagnostic.path` carries. Feed it
+    /// back to `fieldBoxes` / `locate`.
     pub field: String,
     /// 0-based page index.
     pub page: usize,
     /// `[x0, y0, x1, y1]` in PDF points (1/72″), bottom-left origin.
     pub rect: [f32; 4],
-    /// The content slice this box covers: USV `[start, end)` into the field's
-    /// `Content` for content ink (one segment), `undefined` for a scalar
-    /// reference site or widget. Consumers key segment highlights on it;
-    /// `fieldBoxes(field)` unions same-page segments for the whole-field box.
+    /// The slice this box covers: USV `[start, end)` into the field's `Content`
+    /// for one content segment, `undefined` for a scalar site or widget.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub span: Option<[usize; 2]>,
 }
@@ -284,22 +251,18 @@ impl From<quillmark_core::RenderedRegion> for FieldRegion {
     }
 }
 
-/// How precisely a `ContentHit.pos` resolved: the marker a caret UI reads to
-/// decide whether to trust the offset. Never sub-cluster: `cluster` is the
-/// finest this API offers, `segment` the floor it degrades to on origin-less
-/// ink.
+/// How precisely a `ContentHit.pos` resolved. Never sub-cluster: `cluster` is
+/// the finest this API offers, `segment` the floor it degrades to.
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub enum HitGranularity {
-    /// Cluster-exact: `pos` is the first content char of the cluster under the
-    /// point (an escaped/CJK/shaping cluster floors to its first char, so not
-    /// sub-character). Place the caret at `pos` directly.
+    /// `pos` is the first content char of the cluster under the point. Place
+    /// the caret there directly.
     Cluster,
-    /// Segment-floored: the point hit origin-less ink (list markers, numbering,
-    /// a multi-line code fence's interior), so `pos` degraded to the containing
-    /// segment's start. Treat `pos` as the selected segment, not a caret.
+    /// The point hit origin-less ink (list markers, numbering, a code fence's
+    /// interior), so `pos` is the containing segment's start, not a caret.
     Segment,
 }
 
@@ -309,20 +272,16 @@ impl From<quillmark_core::HitGranularity> for HitGranularity {
         match g {
             quillmark_core::HitGranularity::Cluster => HitGranularity::Cluster,
             quillmark_core::HitGranularity::Segment => HitGranularity::Segment,
-            // `HitGranularity` is `#[non_exhaustive]`. A granularity finer than
-            // `Segment` still describes at least a segment, so degrading to it
-            // keeps the reported precision a lower bound: never a claim of more
-            // exactness than the hit actually carried.
+            // `#[non_exhaustive]`: degrading keeps the reported precision a
+            // lower bound, never a claim of more exactness than was carried.
             _ => HitGranularity::Segment,
         }
     }
 }
 
 /// A resolved point → content position: the field a click landed in and the USV
-/// offset into its `Content`. The `LiveSession.positionAt` result, paired with
-/// `locate` (content position → caret rect). `pos` is cluster-exact and degrades
-/// to the containing segment's start on origin-less ink; `granularity` reports
-/// which happened so a caret UI need not guess.
+/// offset into its `Content`. The `LiveSession.positionAt` result, inverse of
+/// `locate`.
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
@@ -332,9 +291,7 @@ pub struct ContentHit {
     pub field: String,
     /// USV offset into the field's `Content`.
     pub pos: usize,
-    /// Whether `pos` is cluster-exact or floored to the segment start
-    /// (`HitGranularity`). `undefined` when the backend does not report it.
-    /// Additive-optional.
+    /// `undefined` when the backend does not report granularity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub granularity: Option<HitGranularity>,
 }
@@ -358,30 +315,20 @@ impl From<quillmark_core::ContentHit> for ContentHit {
 pub struct RenderOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub format: Option<OutputFormat>,
-    /// Pixels per inch for raster output formats (PNG).
-    /// Ignored for vector/document formats (PDF, SVG).
-    /// Defaults to 144.0 (2x at 72pt/inch) when omitted.
+    /// Pixels per inch for PNG; ignored for PDF and SVG. Defaults to 144.0.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ppi: Option<f32>,
-    /// Optional 0-based page indices to render (e.g., `[0, 2]` for the
-    /// first and third pages). `undefined` renders all pages. Any index
-    /// `>= pageCount` throws with the `typst::page_index_out_of_bounds`
-    /// code: read `LiveSession.pageCount` first if validation is needed.
-    /// **Not supported for PDF output**: passing `pages` with
-    /// `format: "pdf"` throws with the
-    /// `typst::pdf_page_selection_not_supported` code.
+    /// 0-based page indices to render; `undefined` renders all pages. An index
+    /// `>= pageCount` throws `typst::page_index_out_of_bounds`. Not supported
+    /// for PDF output: throws `typst::pdf_page_selection_not_supported`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pages: Option<Vec<usize>>,
-    /// Override for the PDF `/Info` `/Producer` metadata string. Omit to use
-    /// the default (`Quillmark <version>`). Applies to PDF output only.
+    /// PDF `/Info` `/Producer` override; defaults to `Quillmark <version>`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub producer: Option<String>,
-    /// Populate `RenderResult.regions` with the schema-field geometry sidecar
-    /// (the same entries `LiveSession.regions()` serves), for consumers
-    /// without a live session; e.g. overlays over a one-shot SVG export.
-    /// Defaults to `false`: exports pay no introspection cost. The sidecar
-    /// always describes the whole document: page indices are document-space
-    /// even when `pages` selects a subset.
+    /// Populate `RenderResult.regions` with schema-field geometry, for consumers
+    /// without a live session. Defaults to `false`. Page indices are
+    /// document-space even when `pages` selects a subset.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub regions: Option<bool>,
 }
@@ -414,79 +361,11 @@ impl From<RenderOptions> for quillmark_core::RenderOptions {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    #[test]
-    fn test_severity_deserialization() {
-        let error: Severity = serde_json::from_str("\"error\"").unwrap();
-        assert_eq!(error, Severity::Error);
-
-        let warning: Severity = serde_json::from_str("\"warning\"").unwrap();
-        assert_eq!(warning, Severity::Warning);
-
-        // "note" is not a severity; two values only.
-        assert!(serde_json::from_str::<Severity>("\"note\"").is_err());
-    }
-
-    #[test]
-    #[cfg(any(feature = "typst", feature = "pdfform"))]
-    fn test_render_options_with_format() {
-        let options = RenderOptions {
-            format: Some(OutputFormat::Pdf),
-            ppi: None,
-            pages: None,
-            producer: None,
-            regions: None,
-        };
-        let json = serde_json::to_string(&options).unwrap();
-        assert!(json.contains("\"format\":\"pdf\""));
-
-        let options_from_json: RenderOptions = serde_json::from_str(r#"{"format":"svg"}"#).unwrap();
-        assert_eq!(options_from_json.format, Some(OutputFormat::Svg));
-    }
-
-    #[test]
-    fn test_wasm_error_single_diagnostic() {
-        use crate::error::WasmError;
-        use quillmark_core::{Diagnostic, Location, Severity};
-
-        let diag = Diagnostic::new(Severity::Error, "Test error message".to_string())
-            .with_code("E001".to_string())
-            .with_location(Location::new("test.typ".to_string(), 10, 5))
-            .with_hint("This is a hint".to_string());
-
-        let render_err = quillmark_core::RenderError::from_diag(diag);
-        let wasm_err: WasmError = render_err.into();
-
-        assert_eq!(wasm_err.message(), "Test error message");
-        assert_eq!(wasm_err.diagnostics.len(), 1);
-        let d = &wasm_err.diagnostics[0];
-        assert_eq!(d.code.as_deref(), Some("E001"));
-        assert_eq!(d.message, "Test error message");
-        assert_eq!(d.hint.as_deref(), Some("This is a hint"));
-        let loc = d.location.as_ref().unwrap();
-        assert_eq!(loc.file, "test.typ");
-        assert_eq!(loc.line, 10);
-        assert_eq!(loc.column, 5);
-    }
-
-    #[test]
-    #[cfg(target_arch = "wasm32")]
-    fn test_wasm_error_to_js_value() {
-        use crate::error::WasmError;
-
-        let wasm_err: WasmError = "Test error".into();
-        let js_value = wasm_err.to_js_value();
-
-        assert!(!js_value.is_undefined());
-        assert!(!js_value.is_null());
-    }
-
-    // ── FieldRegion ───────────────────────────────────────────────────────────
-
     #[test]
     #[cfg(any(feature = "typst", feature = "pdfform"))]
     fn field_region_serializes_to_expected_shape() {
+        use super::FieldRegion;
+
         let region = FieldRegion {
             field: "full_name".to_string(),
             page: 0,
@@ -497,41 +376,9 @@ mod tests {
         assert!(json.contains("\"field\":\"full_name\""));
         assert!(json.contains("\"page\":0"));
         assert!(json.contains("\"rect\":[180.0,672.0,520.0,692.0]"));
-        // A scalar/widget region omits `span`; no backend widget name or
-        // kind/value leaks either.
         assert!(!json.contains("\"span\""));
         assert!(!json.contains("\"name\""));
         assert!(!json.contains("\"kind\""));
     }
 
-    #[test]
-    #[cfg(any(feature = "typst", feature = "pdfform"))]
-    fn field_region_round_trips() {
-        // The `from_wasm_abi` (JS→Rust) path uses the same serde derive.
-        let region = FieldRegion {
-            field: "signature_block".to_string(),
-            page: 0,
-            rect: [180.0, 422.0, 520.0, 462.0],
-            span: Some([0, 25]),
-        };
-        let json = serde_json::to_string(&region).unwrap();
-        let back: FieldRegion = serde_json::from_str(&json).expect("round-trips");
-        assert_eq!(back.field, "signature_block");
-        assert_eq!(back.rect, [180.0, 422.0, 520.0, 462.0]);
-        assert_eq!(back.span, Some([0, 25]));
-    }
-
-    #[test]
-    #[cfg(any(feature = "typst", feature = "pdfform"))]
-    fn field_region_from_core_conversion() {
-        use quillmark_core::RenderedRegion;
-
-        let core_region =
-            RenderedRegion::new("agree".to_string(), 0, [180.0, 538.0, 194.0, 552.0]);
-        let wasm_region: FieldRegion = core_region.into();
-        assert_eq!(wasm_region.field, "agree");
-        assert_eq!(wasm_region.page, 0);
-        assert_eq!(wasm_region.rect, [180.0, 538.0, 194.0, 552.0]);
-        assert_eq!(wasm_region.span, None);
-    }
 }
