@@ -213,10 +213,8 @@ impl<'a> Classifier<'a> {
         c
     }
 
-    /// The window's segment (if any) whose `generated` range contains `range`.
-    /// Segments are `generated`-ordered and disjoint, so a binary search finds the
-    /// sole candidate (the last segment starting at or before `range.start`)
-    /// which is a hit only if it also covers `range.end`.
+    /// Segments are `generated`-ordered and disjoint, so the sole candidate is
+    /// the last one starting at or before `range.start`.
     fn seg_of(&self, window: usize, range: &Range<usize>) -> Option<usize> {
         let segs = &self.windows[window].segments;
         let i = segs.partition_point(|s| s.generated.start <= range.start);
@@ -224,31 +222,19 @@ impl<'a> Classifier<'a> {
     }
 }
 
-/// Walk one page frame in document order, emitting one [`Hit`] per drawn item:
-/// per glyph for text (a text run may mix spans), per item for shapes and
-/// images (each carries a single span). Boxes are computed for classified
-/// ink only.
 fn collect_page_hits(frame: &Frame, page: usize, cls: &mut Classifier, out: &mut Vec<Hit>) {
     walk_items(frame, Transform::identity(), page, &mut |page, span, _offset, aabb| {
         let class = hit_class(cls.classify_seg(span), span.is_detached(), cls.windows);
-        // Boxes are computed for classified ink only; foreign ink still emits a
-        // (rect-less) Hit so the run machine sees the full ink sequence.
+        // Foreign ink still emits a rect-less Hit so the run machine sees the
+        // full ink sequence.
         let rect = class.window().is_some().then(aabb);
         out.push(Hit { page, class, rect });
     });
 }
 
-/// Walk one page frame in document order, invoking `visit` once per drawn item:
-/// per glyph for text (a run may mix spans), per item for shapes and images
-/// (each carries a single span). `visit` receives the `page`, the item's
-/// `span`, the intra-node byte `offset` (`glyph.span.1` for text, `0`
-/// otherwise), and a thunk computing the item's page-space box on demand, so a
-/// consumer that discards foreign ink pays no box arithmetic. This is the frame
-/// geometry (group transform recursion, per-glyph cursor/advance/bbox,
-/// shape/image extents) shared by the region scan ([`collect_page_hits`]) and
-/// the content-position walk ([`walk_glyphs`]).
 /// Per-item callback for [`walk_items`]: `(page, span, intra-node byte offset,
-/// thunk computing the page-space box on demand)`.
+/// thunk computing the page-space box on demand)`. The box is a thunk so a
+/// consumer that discards foreign ink pays no box arithmetic.
 type ItemVisitor<'a> = dyn FnMut(usize, Span, u16, &dyn Fn() -> Aabb) + 'a;
 
 fn walk_items(frame: &Frame, ts: Transform, page: usize, visit: &mut ItemVisitor) {
@@ -290,9 +276,7 @@ fn walk_items(frame: &Frame, ts: Transform, page: usize, visit: &mut ItemVisitor
     }
 }
 
-/// An item box (corners `lo`..`hi` relative to the item anchor `pos`, in local
-/// frame space) mapped to page space via `ts`. All four corners transform:
-/// `ts` may rotate or scale.
+/// All four corners transform: `ts` may rotate or scale.
 fn item_aabb(pos: Point, lo: Point, hi: Point, ts: Transform) -> Aabb {
     Aabb::of(
         [
@@ -305,10 +289,8 @@ fn item_aabb(pos: Point, lo: Point, hi: Point, ts: Transform) -> Aabb {
     )
 }
 
-/// Per-window first-run state. The run currently accruing is not represented
-/// here: at most one window can be in-run at a time (any hit forecloses
-/// every other window's run), so the scan tracks it as a single cursor and
-/// this enum carries only the out-of-run states.
+/// Out-of-run states only: at most one window accrues at a time, tracked by
+/// [`run_scan_machine`] as a single cursor.
 #[derive(Clone, Copy, PartialEq)]
 enum Run {
     NotSeen,
@@ -319,10 +301,8 @@ enum Run {
     Done,
 }
 
-/// Scan the compiled document and return each window's **first placement**:
-/// one [`RenderedRegion`] per page the placement's run touches, PDF
-/// bottom-left rects, sorted (page, field, window order). Best-effort like the
-/// widget path: an unresolvable span matches no window.
+/// Each window's **first placement**: one [`RenderedRegion`] per page the run
+/// touches, PDF bottom-left rects, sorted (page, field, window order).
 pub(crate) fn scan_content_regions(
     doc: &PagedDocument,
     world: &QuillWorld,
@@ -344,8 +324,6 @@ pub(crate) fn scan_content_regions(
     let mut out: Vec<(RenderedRegion, usize)> = Vec::new();
     for (ki, &(wi, seg)) in keys.iter().enumerate() {
         let window = &windows[wi];
-        // A content segment carries its content range; a segment-less window
-        // (scalar/widget site) carries none.
         let span = seg.map(|s| {
             let c = &window.segments[s].content;
             [c.start, c.end]
@@ -365,9 +343,7 @@ pub(crate) fn scan_content_regions(
     out.into_iter().map(|(r, _)| r).collect()
 }
 
-/// The flattened two-tier key space: each content window contributes one key
-/// per segment; a segment-less window (scalar/widget site) contributes one
-/// `(w, None)` key. Window-major, segment-ascending: the order regions sort by.
+/// Window-major, segment-ascending: the order regions sort by.
 fn flatten_keys(windows: &[FieldWindow]) -> Vec<(usize, Option<usize>)> {
     let mut keys = Vec::new();
     for (wi, w) in windows.iter().enumerate() {
@@ -380,16 +356,10 @@ fn flatten_keys(windows: &[FieldWindow]) -> Vec<(usize, Option<usize>)> {
     keys
 }
 
-/// The single-cursor two-tier run machine: same states, single global cursor,
-/// and page-`+1` continuation tolerance as before, now keyed on
-/// `(window, Option<segment>)`. Returns each key's first placement as per-page
-/// boxes, indexed parallel to `keys`. `current` is the one key whose run is
-/// accruing; a boxable hit for a different key (or foreign ink) suspends it, and
-/// a suspended run resumes only on the immediately following page.
-/// [`HitClass::Transparent`] (a field's own inter-segment ink) is a no-op
-/// while that same window's segment is the run, else a suspension like foreign
-/// ink; [`HitClass::Anonymous`] (detached decoration/marker ink) is an
-/// unconditional no-op (see [`HitClass`]).
+/// Each key's first placement as per-page boxes, indexed parallel to `keys`.
+/// `current` is the one key whose run is accruing; a boxable hit for a different
+/// key (or foreign ink) suspends it, and a suspended run resumes only on the
+/// immediately following page.
 fn run_scan_machine(keys: &[(usize, Option<usize>)], hits: &[Hit]) -> Vec<Vec<(usize, Aabb)>> {
     let key_index: HashMap<(usize, Option<usize>), usize> =
         keys.iter().enumerate().map(|(i, k)| (*k, i)).collect();
@@ -423,9 +393,8 @@ fn run_scan_machine(keys: &[(usize, Option<usize>)], hits: &[Hit]) -> Vec<Vec<(u
                 }
             }
             HitClass::Transparent { window } => match current {
-                // Transparent only while this field's own segment is the run;
-                // a different field's run is still suspended (else interleaved
-                // placements merge into one lying box).
+                // Transparent only while this field's own segment is the run,
+                // else interleaved placements merge into one lying box.
                 Some((c, _)) if keys[c].0 == window => {}
                 _ => {
                     if let Some((c, last_page)) = current.take() {
@@ -433,9 +402,6 @@ fn run_scan_machine(keys: &[(usize, Option<usize>)], hits: &[Hit]) -> Vec<Vec<(u
                     }
                 }
             },
-            // Detached decoration/marker ink is anonymous: it breaks no run,
-            // so a `#underline[..]`/`#strike[..]` line drawn mid-run does not
-            // orphan the rest of its line.
             HitClass::Anonymous => {}
             HitClass::Foreign => {
                 if let Some((c, last_page)) = current.take() {
@@ -447,8 +413,7 @@ fn run_scan_machine(keys: &[(usize, Option<usize>)], hits: &[Hit]) -> Vec<Vec<(u
     boxes
 }
 
-/// Union `hit` into the run's box for its page, opening a new per-page box at
-/// a page transition (pages are nondecreasing in walk order).
+/// Pages are nondecreasing in walk order, so a page transition opens a new box.
 fn accrue(boxes: &mut Vec<(usize, Aabb)>, hit: &Hit) {
     let rect = hit.rect.expect("classified hits carry a box");
     match boxes.last_mut() {
@@ -457,13 +422,9 @@ fn accrue(boxes: &mut Vec<(usize, Aabb)>, hit: &Hit) {
     }
 }
 
-/// The schema field under a point: the forward (click → field) direction.
-/// `x`/`y` are PDF points with a **bottom-left** origin, the same convention
-/// as [`RenderedRegion::rect`]. Unlike [`scan_content_regions`], every
-/// placement answers, not just the first: a concrete point identifies one frame
-/// item, whose span is unambiguous however many times its field is placed.
-/// Among tracked ink the later-painted item wins; untracked ink never occludes:
-/// a decorative overlay does not swallow clicks on the field beneath it.
+/// The schema field under a point (`x`/`y` in PDF bottom-left points). Unlike
+/// [`scan_content_regions`] every placement answers, not just the first. Among
+/// tracked ink the later-painted item wins; untracked ink never occludes.
 pub(crate) fn field_at(
     doc: &PagedDocument,
     world: &QuillWorld,
@@ -491,32 +452,22 @@ pub(crate) fn field_at(
         .map(|w| windows[w].path.clone())
 }
 
-/// One drawn glyph (or shape/image) carrying enough to resolve a content
-/// position: its page box, resolved node range and intra-node offset
-/// (`glyph.span.1`), and two-tier classification. The finer counterpart to
-/// [`Hit`], used by [`position_at`]/[`locate`], which need the node/offset a
-/// region scan discards.
+/// The finer counterpart to [`Hit`], carrying the node range and intra-node
+/// offset that [`position_at`]/[`locate`] need and a region scan discards.
 struct GlyphHit {
     page: usize,
     rect: Aabb,
     node: Range<usize>,
-    /// Byte offset within the resolved node, straight from `glyph.span.1`:
-    /// Typst types the intra-node span offset as `u16`, so a single text node
-    /// wider than 64 KiB saturates it. Graceful degrade, not a panic: the offset
-    /// floors to the last representable byte, so a caret in an overlong node
-    /// resolves to the cluster/segment boundary rather than the exact glyph. No
-    /// emitted node approaches this bound (paragraphs split into per-line runs).
+    /// Typst types the intra-node span offset as `u16`, so a text node wider
+    /// than 64 KiB saturates it: the caret floors to the cluster boundary
+    /// instead of the exact glyph. No emitted node approaches that bound.
     offset: u16,
     window: usize,
     seg: Option<usize>,
 }
 
-/// Walk one frame collecting a [`GlyphHit`] per window-classified drawn item.
-/// Walk one page frame emitting a [`GlyphHit`] for each item that classifies to
-/// a content window *and* resolves to a node range: the content-position twin of
-/// [`collect_page_hits`], sharing [`walk_items`]' geometry. Foreign and
-/// unresolvable ink is skipped (no content address), so unlike the region scan
-/// it emits nothing for them.
+/// The content-position twin of [`collect_page_hits`]. Foreign and unresolvable
+/// ink is skipped: it has no content address.
 ///
 /// `only` restricts emission to a single `(window, seg)`: the caret path knows
 /// its target segment up front, so it skips the box arithmetic and the
