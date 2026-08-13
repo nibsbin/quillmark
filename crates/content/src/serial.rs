@@ -811,8 +811,6 @@ pub(crate) fn table_shape_error(props: &Value) -> Option<Invariant> {
     None
 }
 
-// ---- Island ----
-
 pub(crate) fn island_to_value(island: &Island) -> Value {
     let mut m = Map::new();
     m.insert("id".into(), Value::String(island.id.clone()));
@@ -836,10 +834,8 @@ pub(crate) fn island_from_value(v: &Value) -> Result<Island, ParseError> {
             .ok_or(ParseError::Shape("island type"))?
             .to_string(),
         props: bag_from_wire(o, "props", "island props")?,
-        // The class is carried whether or not this build interprets it, and
-        // reads through `Loss::fidelity` at the *safe* end: never claim a class
-        // the reader cannot interpret "carries faithfully". A missing key is the
-        // faithful class, which is what an island with no loss recorded means.
+        // The class is carried whether or not this build interprets it; a
+        // missing key is the faithful class.
         loss: o
             .get("loss")
             .and_then(Value::as_str)
@@ -876,10 +872,8 @@ mod tests {
         }
     }
 
-    /// The decoder is the entry point for stored and
-    /// caller-supplied content, and export recurses one frame per container. A
-    /// 20 000-deep path that decoded clean would abort the process on
-    /// `to_markdown`; the shared `validate` cap rejects it at the door.
+    /// Export recurses one frame per container, so a 20 000-deep path that
+    /// decoded clean would abort the process on `to_markdown`.
     #[test]
     fn deep_container_nesting_is_rejected_at_decode() {
         let containers = vec![r#"{"container":"quote"}"#; 20_000].join(",");
