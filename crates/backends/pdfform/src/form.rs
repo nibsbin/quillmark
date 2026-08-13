@@ -228,18 +228,6 @@ mod tests {
         assert_eq!(spec.widgets[0].kind, WidgetKind::Signature);
     }
 
-        let spec = FormSpec::parse(json).expect("parse ok");
-        assert_eq!(spec.widgets[0].kind, WidgetKind::Text { multiline: true });
-        assert_eq!(spec.widgets[1].kind, WidgetKind::Checkbox);
-        assert_eq!(
-            spec.widgets[2].kind,
-            WidgetKind::Choice {
-                options: vec!["a".into(), "b".into()]
-            }
-        );
-        assert_eq!(spec.widgets[3].kind, WidgetKind::Signature);
-    }
-
     #[test]
     fn retired_v1_with_v1_shaped_fields_still_gets_migration_error() {
         let json = br#"{
