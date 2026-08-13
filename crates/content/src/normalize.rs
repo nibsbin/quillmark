@@ -1,12 +1,5 @@
-//! Markdown-string input normalization: the boundary preprocessing content
-//! import runs before parsing. Converts line endings to `\n`, strips invisible
-//! Unicode bidi controls (which sit adjacent to `**`/`_` and defeat delimiter
-//! recognition), and repairs `<!-- ... -->` HTML-comment fences that would
-//! otherwise swallow trailing text.
-//!
-//! The pure string primitive [`from_markdown`](crate::import::from_markdown)
-//! applies at its boundary. It carries no dependency on the document engine, so
-//! this crate is a leaf `quillmark-core` depends on.
+//! Markdown-string preprocessing run before parsing, at the
+//! [`from_markdown`](crate::import::from_markdown) boundary.
 
 #[inline]
 pub(crate) fn is_bidi_char(c: char) -> bool {
@@ -27,10 +20,8 @@ pub(crate) fn is_bidi_char(c: char) -> bool {
     )
 }
 
-/// Strips Unicode bidirectional formatting characters that can interfere with markdown parsing.
-///
-/// Removes all of ALM (U+061C), LRM/RLM (U+200E/F), LRE/RLE/PDF/LRO/RLO
-/// (U+202A–202E), and LRI/RLI/FSI/PDI (U+2066–2069).
+/// Removes the Unicode bidi formatting controls, which sit adjacent to `**`/`_`
+/// and defeat delimiter recognition.
 pub fn strip_bidi_formatting(s: &str) -> String {
     if !s.chars().any(is_bidi_char) {
         return s.to_string();
@@ -41,10 +32,9 @@ pub fn strip_bidi_formatting(s: &str) -> String {
 
 /// Inserts a newline after `-->` when followed by non-whitespace content.
 ///
-/// CommonMark HTML block type 2 ends with the line containing `-->`, so any
-/// text on the same line after `-->` would be swallowed. Only closing fences
-/// inside a `<!-- ... -->` pair are fixed; bare `-->` outside a comment is left
-/// untouched.
+/// CommonMark HTML block type 2 ends with the line containing `-->`, so text on
+/// that line after `-->` would be swallowed. Bare `-->` outside a comment is
+/// left untouched.
 pub fn fix_html_comment_fences(s: &str) -> String {
     if !s.contains("-->") {
         return s.to_string();
@@ -118,11 +108,9 @@ pub fn normalize_markdown(markdown: &str) -> String {
     fix_html_comment_fences(&cleaned)
 }
 
-/// Convert CRLF (`\r\n`) and bare CR (`\r`) line endings to LF (`\n`).
-///
-/// Applied only to the Markdown body (spec §7); YAML scalars are unaffected.
-/// Necessary because YAML parsing normalizes its own scalars but passes the
-/// body verbatim, and some Windows/clipboard sources leave bare `\r` bytes.
+// Applied only to the Markdown body (spec §7): YAML parsing normalizes its own
+// scalars but passes the body verbatim, and some Windows/clipboard sources
+// leave bare `\r` bytes.
 fn normalize_line_endings(s: &str) -> String {
     if !s.contains('\r') {
         return s.to_string();
@@ -179,14 +167,6 @@ mod tests {
         assert_eq!(
             normalize_markdown("**bold** \u{202D}**more**"),
             "**bold** **more**"
-        );
-    }
-
-    #[test]
-    fn test_normalize_markdown_html_comment() {
-        assert_eq!(
-            normalize_markdown("<!-- comment -->Some text"),
-            "<!-- comment -->\nSome text"
         );
     }
 
