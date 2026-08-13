@@ -705,7 +705,6 @@ fn sweep_marks(
         if pos == hi {
             break;
         }
-        // Open marks starting at `pos`: longer span first, then kind-ord.
         let mut opening: Vec<usize> = (0..wraps.len()).filter(|&wi| wraps[wi].start == pos).collect();
         opening.sort_by(|&a, &b| wraps[b].end.cmp(&wraps[a].end).then(wraps[a].ord.cmp(&wraps[b].ord)));
         for wi in opening {
@@ -714,12 +713,9 @@ fn sweep_marks(
         }
         pos = emit_run(out, pos);
     }
-    // Drain any mark still open when the sweep runs off the end. The codegen
-    // embeds this markup in a `#let _qm = [ .. ]` content block that a single
-    // unclosed `[` would break (failing the whole helper file's parse, not just
-    // this field) so a trailing open must always close. Clipping keeps every
-    // wrap `end` reachable, so this normally drains nothing; it is the final
-    // stack-drain guard, belt to the clip's braces.
+    // The codegen embeds this markup in a `#let _qm = [ .. ]` block that one
+    // unclosed `[` would break, failing the whole helper file's parse. Clipping
+    // keeps every wrap `end` reachable, so this normally drains nothing.
     while stack.pop().is_some() {
         out.push(']');
     }
@@ -751,11 +747,8 @@ fn next_boundary(
     p
 }
 
-/// Build the wrapping/atomic marks overlapping the USV window `[lo, hi)`,
-/// clamped to it. Shared by the prose inline emitter (which passes the content
-/// marks and a segment window) and cell rendering: a flat run, `lo = 0`,
-/// `hi = chars.len()`. A mark entirely outside the window is dropped; one
-/// straddling it is clipped to the window edges.
+/// The wrapping/atomic marks overlapping `[lo, hi)`, clamped to it: a mark
+/// entirely outside is dropped, one straddling is clipped to the window edges.
 fn wraps_and_codes(marks: &[Mark], lo: usize, hi: usize) -> (Vec<Wrap>, Vec<(usize, usize)>) {
     let mut wraps = Vec::new();
     let mut codes = Vec::new();
@@ -784,10 +777,8 @@ fn wraps_and_codes(marks: &[Mark], lo: usize, hi: usize) -> (Vec<Wrap>, Vec<(usi
                 ord: m.kind.ord(),
                 open: format!("#link(\"{}\")[", escape_string(url)),
             }),
-            // `Anchor` is identity, not formatting; `Unknown` has no Typst
-            // spelling; and `MarkKind` being `#[non_exhaustive]`, neither does a
-            // kind added after this build. None contributes a wrap, matching
-            // `wrap_open`'s own fallthrough.
+            // `Anchor` is identity, `Unknown` has no Typst spelling, and
+            // `MarkKind` is `#[non_exhaustive]`: none contributes a wrap.
             _ => {}
         }
     }
@@ -795,10 +786,8 @@ fn wraps_and_codes(marks: &[Mark], lo: usize, hi: usize) -> (Vec<Wrap>, Vec<(usi
     (wraps, codes)
 }
 
-/// Render one table cell's `{text, marks}` to Typst markup via the SAME
-/// [`sweep_marks`] walk prose runs use: wrapping marks nest, `code` marks render
-/// atomically as `#raw("…")`. A cell is flat inline (no islands, no line breaks)
-/// so its markup carries no source-map runs (like other island markup).
+/// A cell is flat inline (no islands, no line breaks), so its markup carries no
+/// source-map runs.
 fn cell_markup(text: &str, marks: &[Mark]) -> String {
     let chars: Vec<char> = text.chars().collect();
     let (mut wraps, codes) = wraps_and_codes(marks, 0, chars.len());
@@ -832,18 +821,14 @@ fn image_markup(props: &serde_json::Value) -> String {
     out
 }
 
-/// `#table(columns:, align:, table.header(…), …)` from a table island's props,
-/// matching the table grammar. Each cell is canonical `{text, marks}`,
-/// rendered through the same mark sweep prose runs use ([`cell_markup`]), so a
-/// formatted cell reaches `#strong[…]`/`#emph[…]`/`#raw(…)`/`#link(…)[…]` byte
-/// parity with the oracle, no markdown re-parse.
+/// Each cell is canonical `{text, marks}` rendered through [`cell_markup`], so a
+/// formatted cell reaches byte parity with the oracle, no markdown re-parse.
 fn table_markup(props: &serde_json::Value) -> String {
     let header = props.get("header").and_then(|v| v.as_array());
     let rows = props.get("rows").and_then(|v| v.as_array());
     let aligns = props.get("aligns").and_then(|v| v.as_array());
-    // Column count is the widest row, not just the header: an editor-built table
-    // island can carry an empty/short header over wider data rows, and a
-    // `columns: 0` would fail to compile.
+    // The widest row, not just the header: an editor-built island can carry a
+    // short header over wider data rows, and `columns: 0` fails to compile.
     let mut cols = header.map(|h| h.len()).unwrap_or(0);
     if let Some(rs) = rows {
         for row in rs {
@@ -852,10 +837,8 @@ fn table_markup(props: &serde_json::Value) -> String {
             }
         }
     }
-    // A zero-column (empty) table has no renderable content and `columns: 0`
-    // would fail to compile; emit nothing, matching the markdown export path
-    // (`export::emit_table` early-returns on `cols == 0`). An empty table island
-    // is well-formed (`Content::validate` accepts it), so this is reachable.
+    // `Content::validate` accepts an empty table island, so this is reachable;
+    // emit nothing, matching `export::emit_table`.
     if cols == 0 {
         return String::new();
     }
