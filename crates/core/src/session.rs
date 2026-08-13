@@ -172,15 +172,9 @@ impl LiveSession {
         self.inner.page_count()
     }
 
-    /// Whether this session can paint pages to a canvas: the authoritative,
-    /// session-level capability. Derived directly from the canvas seam (a
-    /// painter exposes [`page_size_pt`](SessionHandle::page_size_pt) for its
-    /// pages), so there is no separate capability flag to keep in sync: a
-    /// canvas backend pairs [`render_rgba`](Self::render_rgba) with
-    /// `page_size_pt`, so this reflects what `paint` will do. A canvas-capable
-    /// backend with zero pages reports `false` (nothing to paint).
-    ///
-    /// For a pre-session estimate (no open session yet), see
+    /// Whether this session can paint pages to a canvas, derived from the
+    /// canvas seam rather than a separate flag. A canvas-capable backend with
+    /// zero pages reports `false`. For a pre-session estimate see
     /// [`formats_support_canvas`](crate::formats_support_canvas).
     pub fn supports_canvas(&self) -> bool {
         self.inner.page_count() > 0 && self.inner.page_size_pt(0).is_some()
@@ -195,9 +189,8 @@ impl LiveSession {
 
     /// Rasterize `page` to non-premultiplied RGBA8 at `scale`× 72 ppi, or `None`
     /// if `page` is out of range or the backend has no canvas painter. A `Some`
-    /// result is a **complete** raster of the page (all content visible, no
-    /// caller-side compositing) per the per-backend contract on
-    /// [`SessionHandle::render_rgba`].
+    /// result is a **complete** raster: all content visible, no caller-side
+    /// compositing.
     pub fn render_rgba(&self, page: usize, scale: f32) -> Option<(u32, u32, Vec<u8>)> {
         self.inner.render_rgba(page, scale)
     }
@@ -205,64 +198,43 @@ impl LiveSession {
     /// Schema-field geometry for the compiled session: each content field's
     /// **first placement** (one [`RenderedRegion`] per page it touches), plus
     /// one region per `field:`-bound widget and per direct scalar reference
-    /// site, keyed on the quill schema field path. A session-level query
-    /// computed without rendering bytes; an interactive preview reads it to
-    /// scroll to / highlight the focused field over a `paint`-ed canvas.
-    /// Empty for backends that place no schema fields.
+    /// site. Computed without rendering bytes; empty for backends that place no
+    /// schema fields.
     ///
-    /// `field` is still not unique in the result: a placement breaking across
-    /// pages surfaces one fragment per page (a highlight covers continuation
-    /// pages), a scalar referenced at several plate sites surfaces each site,
-    /// and a field arising from both tracked content and a bound widget
-    /// surfaces both (overlapping rects that route to the same field). Group
-    /// by `field`; every entry routes to that field in the editor. Later
-    /// placements of one content value are **not** enumerated: for
-    /// point-driven lookup over any placement, use
-    /// [`field_at`](Self::field_at).
+    /// `field` is not unique in the result, so group by it. Later placements of
+    /// one content value are **not** enumerated; for point-driven lookup over
+    /// any placement use [`field_at`](Self::field_at).
     ///
     /// Reflects the current compile; re-read after each committed
-    /// [`update`](Self::update) to pair a highlight box with the edit it shows.
+    /// [`update`](Self::update).
     pub fn regions(&self) -> Vec<RenderedRegion> {
         self.inner.regions()
     }
 
     /// The whole-field highlight boxes for `field`: one union rect per page,
-    /// over the field's `span`-bearing content segments (the "highlight the
-    /// focused field" quantity). The convenience that owns the union
-    /// [`regions`](Self::regions) leaves derived: it keeps `regions()` as the
-    /// low-level disjoint truth and folds the span-filter + per-page
-    /// union here so no consumer reimplements it. Content only: a field placed
-    /// solely as a scalar reference or a bound widget carries no `span` and
-    /// yields nothing here; its box is a single [`regions`](Self::regions) rect.
-    /// Reflects the current compile, like `regions`. See [`crate::field_boxes`].
+    /// over the field's `span`-bearing content segments. Content only: a field
+    /// placed solely as a scalar reference or a bound widget yields nothing
+    /// here, its box being a single [`regions`](Self::regions) rect.
     pub fn field_boxes(&self, field: &str) -> Vec<RenderedRegion> {
         crate::field_boxes(&self.regions(), field)
     }
 
-    /// The schema field whose content is under a point on `page`, the
-    /// forward (click → field) direction: hit-test a click against the
-    /// compiled document and get back the field address to focus in the
-    /// editor. `x`/`y` are PDF points with a **bottom-left** origin, the same
-    /// convention as [`RenderedRegion::rect`] (a canvas consumer applies the
-    /// inverse of the overlay transform it already uses for regions). Every
-    /// placement answers, not just the first surfaced by
-    /// [`regions`](Self::regions). `None` off any field's ink, out of range,
-    /// or for backends that place no schema fields.
+    /// The schema field whose content is under a point on `page`. `x`/`y` are
+    /// PDF points with a **bottom-left** origin, as [`RenderedRegion::rect`].
+    /// Every placement answers, not just the first surfaced by
+    /// [`regions`](Self::regions). `None` off any field's ink, out of range, or
+    /// for backends that place no schema fields.
     pub fn field_at(&self, page: usize, x: f32, y: f32) -> Option<String> {
         self.inner.field_at(page, x, y)
     }
 
-    /// A point → **content position**, the fine-grained click direction:
-    /// hit-test a point and get back the field *and* a USV offset into its
-    /// `Content`, for placing a caret or mapping a selection into the content
-    /// model. `x`/`y` are PDF points, bottom-left origin, the same convention
-    /// as [`field_at`](Self::field_at). The offset is cluster-exact and
-    /// degrades to the containing segment's start on origin-less ink (list
-    /// markers, a code fence's interior). `None` off all content ink, on a
-    /// scalar/widget, or for backends with no content map. See [`ContentHit`].
+    /// A point → **content position**: the field *and* a USV offset into its
+    /// `Content`. The offset is cluster-exact and degrades to the containing
+    /// segment's start on origin-less ink. `None` off all content ink, on a
+    /// scalar/widget, or for backends with no content map.
     ///
-    /// Resolves against the current compile; the editor owns the caret it
-    /// places and anchors it across later edits itself.
+    /// Resolves against the current compile; the editor anchors the caret it
+    /// places across later edits itself.
     pub fn position_at(&self, page: usize, x: f32, y: f32) -> Option<ContentHit> {
         self.inner.position_at(page, x, y)
     }
@@ -276,12 +248,10 @@ impl LiveSession {
         self.inner.locate(field, pos)
     }
 
-    /// Non-fatal diagnostics of the session's **current compile**: set at
-    /// `Backend::open` and refreshed by each committed [`update`](Self::update);
-    /// a failed update keeps the last-good compile *and* its warnings. Also
-    /// appended to [`RenderResult::warnings`] on each
-    /// [`render`](Self::render) call. Exposed for consumers (e.g. canvas
-    /// previews) that never call `render()`.
+    /// Non-fatal diagnostics of the session's **current compile**, refreshed by
+    /// each committed [`update`](Self::update); a failed update keeps the
+    /// last-good compile *and* its warnings. Also appended to
+    /// [`RenderResult::warnings`], for consumers that never call `render`.
     pub fn warnings(&self) -> &[Diagnostic] {
         self.inner.warnings()
     }
@@ -291,27 +261,21 @@ impl LiveSession {
         result
             .warnings
             .extend(self.inner.warnings().iter().cloned());
-        // The regions sidecar is attached here, at the wrapper, so every
-        // backend's one-shot render carries it without implementing anything
-        // beyond the `regions` accessor it already has.
+        // Attached at the wrapper, so a backend needs nothing beyond the
+        // `regions` accessor it already has.
         if opts.regions {
             result.regions = self.inner.regions();
         }
         Ok(result)
     }
 
-    /// Recompile the session against new document data: the edit verb of a
-    /// live preview. Transactional: on `Err` the previous compile stays live,
-    /// so every read keeps serving the last-good document and its
-    /// [`warnings`](Self::warnings); on `Ok` the session serves the new
-    /// compile (warnings included) and the [`ChangeSet`] reports what
-    /// changed.
+    /// Recompile the session against new document data. Transactional: on
+    /// `Err` the previous compile stays live, so every read keeps serving the
+    /// last-good document and its [`warnings`](Self::warnings).
     ///
     /// `doc` is checked against the session's quill and compiled through the
-    /// same pipeline as the first compile ([`QuillConfig::compile_checked`]),
-    /// so an edit cannot reach the backend under a schema the session was not
-    /// opened against; a mismatch errors before anything is applied and leaves
-    /// the compile live like any other failed update.
+    /// same pipeline as the first compile, so an edit cannot reach the backend
+    /// under a schema the session was not opened against.
     pub fn update(&mut self, doc: &Document) -> Result<ChangeSet, RenderError> {
         let json_data = self.config.compile_checked(doc)?;
         self.inner.update(&json_data)
@@ -321,15 +285,11 @@ impl LiveSession {
     /// straight to the backend, no `$quill` check and no compile.
     ///
     /// For a backend's own acceptance tests, which drive a session against
-    /// synthetic plate data to exercise recompile and dirty-page behavior,
-    /// including data a schema would reject: the only lever that makes a
-    /// backend's compile fail on demand.
+    /// synthetic plate data — including data a schema would reject, the only
+    /// lever that makes a backend's compile fail on demand.
     ///
-    /// Behind the `internal-test-seam` feature rather than `#[doc(hidden)]`
-    /// alone: the attribute hides a method from rustdoc and leaves it one
-    /// identifier away in every consumer build, and this one carries the
-    /// obligation [`update`](Self::update) exists to discharge. Off by default,
-    /// so the seam is absent unless a crate asks for it.
+    /// Feature-gated rather than merely `#[doc(hidden)]`, so the seam is absent
+    /// from a consumer build unless that crate asks for it.
     #[cfg(feature = "internal-test-seam")]
     #[doc(hidden)]
     pub fn update_data(&mut self, json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> {
