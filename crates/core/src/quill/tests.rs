@@ -1,5 +1,7 @@
 //! Tests for quill types and loading.
 
+mod support_tests;
+
 use super::*;
 use crate::{Diagnostic, Severity};
 use std::collections::HashMap;

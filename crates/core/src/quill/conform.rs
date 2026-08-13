@@ -87,6 +87,7 @@ impl Quill {
             mut warnings,
         } = Document::parse(markdown)?;
         warnings.extend(self.conform(&mut document)?);
+        warnings.extend(self.unsupported_constructs(&document));
         Ok(Parsed { document, warnings })
     }
 
