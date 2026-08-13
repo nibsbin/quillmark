@@ -18,7 +18,6 @@ pub struct ChangeSet {
 }
 
 impl ChangeSet {
-    /// Both facts an update always reports.
     pub fn new(page_count: usize, dirty_pages: Vec<usize>) -> Self {
         Self {
             page_count,
@@ -27,11 +26,8 @@ impl ChangeSet {
     }
 }
 
-/// Backend-specific session implementation.
-///
-/// Implementors must be `'static`, `Send`, and `Sync`. The `'static` bound
-/// prevents borrowing source data: own anything you need to keep alive for
-/// the session's lifetime.
+/// Backend-specific session implementation. The `'static` bound prevents
+/// borrowing source data: own anything the session must keep alive.
 #[doc(hidden)]
 pub trait SessionHandle: Send + Sync + 'static {
     fn render(&self, opts: &RenderOptions) -> Result<RenderResult, RenderError>;
@@ -39,12 +35,9 @@ pub trait SessionHandle: Send + Sync + 'static {
 
     /// Recompile the session against new document data.
     ///
-    /// Transactional: on `Err` the previous compile stays live: every read
-    /// (`render`, `render_rgba`, `page_size_pt`, `regions`) keeps serving it.
-    /// A backend with a persistent compilation environment recompiles
-    /// incrementally; one whose compile is cheap recompiles fully. Either way
-    /// the returned [`ChangeSet`] reports the pages the edit visibly changed.
-    /// Default: update is unsupported.
+    /// Transactional: on `Err` the previous compile stays live and every read
+    /// keeps serving it. The returned [`ChangeSet`] reports the pages the edit
+    /// visibly changed. Default: update is unsupported.
     fn update(&mut self, _json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> {
         Err(RenderError::from_diag(
             Diagnostic::new(
@@ -58,9 +51,7 @@ pub trait SessionHandle: Send + Sync + 'static {
     /// Page dimensions in points (1 pt = 1/72"), or `None` if `page` is out of
     /// range. The canvas-preview seam: a backend that can rasterize pages
     /// overrides this and [`render_rgba`](Self::render_rgba). Default `None`
-    /// marks the session as having no canvas painter: the painter dispatches
-    /// generically through these two methods rather than downcasting to a
-    /// backend-specific session type.
+    /// marks the session as having no canvas painter.
     fn page_size_pt(&self, _page: usize) -> Option<(f32, f32)> {
         None
     }
@@ -71,28 +62,15 @@ pub trait SessionHandle: Send + Sync + 'static {
     /// painter. The other half of the seam paired with
     /// [`page_size_pt`](Self::page_size_pt).
     ///
-    /// # Per-backend contract
-    ///
-    /// A backend that returns `Some` here guarantees a **complete** raster of
-    /// the page: every piece of page content is already visible in the returned
-    /// pixels. The caller paints them straight to a canvas with **no
-    /// compositing** of its own. Backends satisfy this differently:
-    ///
-    /// - **Typst** rasterizes its laid-out page natively.
-    /// - **pdfform** pre-flattens the bound field values into the page content
-    ///   streams at session-open, then rasterizes that flat PDF, so field
-    ///   values appear in the raster without the caller drawing them.
-    ///
-    /// The [`regions`](Self::regions) accessor carries per-field geometry keyed
-    /// on the quill schema field path, for *overlay* / cross-navigation UIs
-    /// regardless; it is never required to make the raster complete.
+    /// A backend that returns `Some` here guarantees a **complete** raster:
+    /// every piece of page content is already in the returned pixels and the
+    /// caller composites nothing. [`regions`](Self::regions) is for overlay and
+    /// cross-navigation UIs, never required to complete the raster.
     ///
     /// A backend with no painter overrides neither this nor
-    /// [`page_size_pt`](Self::page_size_pt); the defaults mark the session as
-    /// non-canvas, which is exactly what [`LiveSession::supports_canvas`]
-    /// reports. Capability is derived from the `page_size_pt` half of this seam,
-    /// not declared as a separate flag: a canvas backend is contractually
-    /// expected to pair this method with `page_size_pt` over the same page set.
+    /// [`page_size_pt`](Self::page_size_pt), and
+    /// [`LiveSession::supports_canvas`] derives the capability from that half
+    /// of the seam rather than a separate flag.
     fn render_rgba(&self, _page: usize, _scale: f32) -> Option<(u32, u32, Vec<u8>)> {
         None
     }
@@ -100,22 +78,14 @@ pub trait SessionHandle: Send + Sync + 'static {
     /// Schema-field geometry for the compiled session: [`RenderedRegion`]s
     /// keyed on the quill schema address each field carries.
     ///
-    /// A session-level query, not a render output: the geometry is a property of
-    /// the current compile, computed from already-resolved field placements
-    /// with no rasterization and no byte artifact. An interactive preview reads
-    /// it to lay out overlays / field cross-navigation over a `paint`-ed canvas;
-    /// a one-shot byte render carries it only on request
-    /// ([`RenderOptions::regions`](crate::RenderOptions)). Default empty: a
-    /// backend that places schema fields overrides this.
+    /// A session-level query, not a render output: computed from resolved
+    /// field placements with no rasterization and no byte artifact. Default
+    /// empty; a backend that places schema fields overrides this.
     ///
-    /// Emit each content field's **first placement** (one region per page
-    /// that placement touches) plus one region per widget and per scalar
-    /// reference site. `field` is still not unique in the result: page
-    /// fragments, several scalar sites, or tracked content plus a bound
-    /// widget each surface independently ([`LiveSession::regions`] passes
-    /// them through; consumers group by `field`). Order deterministically:
-    /// widget regions first, then content regions in (page, field, site)
-    /// order.
+    /// Emit each content field's **first placement** (one region per page it
+    /// touches) plus one region per widget and per scalar reference site, so
+    /// `field` is not unique in the result. Order deterministically: widget
+    /// regions first, then content regions in (page, field, site) order.
     fn regions(&self) -> Vec<RenderedRegion> {
         Vec::new()
     }
@@ -123,16 +93,12 @@ pub trait SessionHandle: Send + Sync + 'static {
     /// The schema field whose content is under a point: the forward
     /// (click → field) direction of the region system. `x`/`y` are PDF points
     /// with a **bottom-left** origin on `page`, the same convention as
-    /// [`RenderedRegion::rect`]. Unlike [`regions`](Self::regions), the
-    /// intent is that *every* placement answers, not just the first: one
-    /// concrete point identifies one drawn item, whose origin is unambiguous
-    /// however many times its field is placed.
+    /// [`RenderedRegion::rect`]. Unlike [`regions`](Self::regions), *every*
+    /// placement should answer: one concrete point identifies one drawn item.
     ///
-    /// Default: hit-test [`regions`](Self::regions): complete only for a
-    /// backend whose regions enumerate every placement (widget-only backends
-    /// like pdfform), and empty when `regions` is. A backend whose regions
-    /// under-enumerate relative to its placements (first-placement-only
-    /// content emission, like Typst's) must override this with a real
+    /// The default hit-tests [`regions`](Self::regions), which is complete only
+    /// for a backend whose regions enumerate every placement. A backend that
+    /// emits first-placement-only content must override this with a real
     /// document hit-test, or clicks on unenumerated placements dead-end.
     fn field_at(&self, page: usize, x: f32, y: f32) -> Option<String> {
         self.regions()
@@ -163,12 +129,9 @@ pub trait SessionHandle: Send + Sync + 'static {
         None
     }
 
-    /// Non-fatal diagnostics of the **current compile**. A backend whose
-    /// compile emits warnings (Typst: font fallback, overfull pages, …)
-    /// overrides this to expose them; they swap with the compile on each
-    /// committed [`update`](Self::update), so a failed update keeps the last-good
-    /// compile's warnings alongside its document. Default empty: a backend
-    /// whose compile cannot warn leaves it.
+    /// Non-fatal diagnostics of the **current compile**. They swap with the
+    /// compile on each committed [`update`](Self::update), so a failed update
+    /// keeps the last-good compile's warnings alongside its document.
     fn warnings(&self) -> &[Diagnostic] {
         &[]
     }
@@ -187,11 +150,9 @@ pub trait SessionHandle: Send + Sync + 'static {
 /// [`update`](Self::update).
 pub struct LiveSession {
     inner: Box<dyn SessionHandle>,
-    /// The schema authority the session was opened against: what lets
-    /// [`update`](Self::update) take a [`Document`] and compile it the way the
-    /// first compile was compiled. Held as the config rather than the whole
-    /// [`Quill`](crate::Quill) because the compile is a pure config read; the
-    /// font and package bytes stay with the backend that needed them.
+    /// Held as the config rather than the whole [`Quill`](crate::Quill)
+    /// because the compile is a pure config read; the font and package bytes
+    /// stay with the backend that needed them.
     config: QuillConfig,
 }
 
