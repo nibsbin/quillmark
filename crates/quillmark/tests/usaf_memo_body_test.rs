@@ -24,7 +24,7 @@ fn body_regions(body: &str) -> Vec<([usize; 2], f32)> {
     let engine = Quillmark::new();
     let quill = quillmark::quill_from_path(quills_path("usaf_memo")).expect("usaf_memo loads");
     let parsed = Document::parse(&markdown).expect("parses").document;
-    let mut session = engine.open(&quill, &parsed).expect("opens");
+    let session = engine.open(&quill, &parsed).expect("opens");
     let mut regions: Vec<_> = session
         .regions()
         .iter()
@@ -107,4 +107,33 @@ fn the_seeded_memo_still_renders() {
     engine
         .render(&quill, &parsed, &RenderOptions::default())
         .expect("the seeded memo renders");
+}
+
+/// The memo declares the one construct it genuinely does not typeset. An
+/// AFH 33-337 memo has no dividers, and `render-body` typesets none at any
+/// depth — silently, until the body says so on the pre-render walk.
+#[test]
+fn a_rule_in_the_memo_body_warns() {
+    let quill = quillmark::quill_from_path(quills_path("usaf_memo")).expect("usaf_memo loads");
+    let markdown = "~~~card-yaml\n$quill: usaf_memo\n$kind: main\n~~~\n\none\n\n***\n\ntwo\n";
+    let warnings: Vec<_> = quill
+        .parse(markdown)
+        .expect("parses and conforms")
+        .warnings
+        .iter()
+        .filter(|d| d.code.as_deref() == Some(quillmark_core::quill::UNSUPPORTED_CONSTRUCT))
+        .map(|d| (d.path.clone(), d.args["construct"].as_str().unwrap().to_string()))
+        .collect();
+    assert_eq!(
+        warnings,
+        [(Some("main.body".to_string()), "rule".to_string())]
+    );
+    // Everything else the memo renders, so a body without a rule is silent.
+    let clean = "~~~card-yaml\n$quill: usaf_memo\n$kind: main\n~~~\n\n# H\n\n- a\n- b\n";
+    assert!(quill
+        .parse(clean)
+        .expect("parses")
+        .warnings
+        .iter()
+        .all(|d| d.code.as_deref() != Some(quillmark_core::quill::UNSUPPORTED_CONSTRUCT)));
 }

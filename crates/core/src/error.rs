@@ -828,6 +828,14 @@ mod args_canon {
             .args(),
         );
         add("validation::must_fill", BTreeMap::new());
+        // Built at the pre-render walk rather than from an error type: a quill
+        // declares the construct, so there is nothing to fail.
+        add("plate::unsupported_construct", {
+            let mut args = BTreeMap::new();
+            args.insert("construct".to_string(), "rule".into());
+            args.insert("count".to_string(), 3.into());
+            args
+        });
 
         out
     }

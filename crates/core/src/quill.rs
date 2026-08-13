@@ -11,6 +11,7 @@ mod ignore;
 mod load;
 mod schema;
 mod schema_yaml;
+mod support;
 mod seed;
 mod tree;
 mod types;
@@ -24,11 +25,12 @@ pub use fill::zero_value;
 pub use formats::{parse_date, parse_datetime};
 pub use ignore::QuillIgnore;
 pub use schema::{build_transform_schema, QUILLMARK_INLINE_KEY, CONTENT_MEDIA_TYPE};
+pub use support::UNSUPPORTED_CONSTRUCT;
 pub use tree::FileTreeNode;
 pub use validation::ValidationError;
 pub use types::{
-    BodyCardSchema, CardSchema, FieldSchema, FieldType, GroupRegistry, GroupSchema, UiCardSchema,
-    UiFieldSchema,
+    BlockConstruct, BodyCardSchema, CardSchema, FieldSchema, FieldType, GroupRegistry, GroupSchema,
+    UiCardSchema, UiFieldSchema,
 };
 
 use std::collections::HashMap;

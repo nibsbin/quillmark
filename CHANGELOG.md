@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+- feat(core,wasm): a quill declares, per body, the block constructs its plate
+  does not typeset (`main.body.unsupported`, `card_kinds.<k>.body.unsupported`;
+  names from `heading`, `rule`, `code`, `list`, `quote`, `table`, `image`).
+  A body holding one anyway draws the non-fatal `plate::unsupported_construct`,
+  a fifth warning family, on the pre-render walk `Quill::parse` runs beside
+  `conform`: one diagnostic per (body, construct) carrying the count in `args`
+  and the body's path, so occurrences collapse rather than scatter. The
+  declaration also rides `QuillConfig::schema()` to the editor, which is the
+  half a render-time warning could not serve: it answers before the gesture.
+  Nothing verifies a declaration — a plate that drops an undeclared construct
+  stays as silent as before. `usaf_memo` declares `rule`; empty everywhere
+  else, so no existing quill's schema or warnings change.
+- fix(fixtures): `usaf_memo`'s `render-body` drained its heading buffer in the
+  three shapes that used to discard it. A heading with nothing after it (the
+  buffer died with the loop, taking a list item's bullet with it), a heading
+  whose next element opened a *different* list item (its text was delivered
+  into that item), and a heading following a heading (the assignment overwrote
+  the earlier one) each lost their text with nothing in the render to say so.
+  The run-in style is unchanged where it was right: a heading joins the next
+  block of its own item, or the next paragraph at top level.
+- fix(content)!: `to_markdown` writes `***` for a thematic break, not `---`.
+  `- ` + `---` is four dashes separated by spaces, which re-imports as a
+  top-level break, so a rule as a bullet item's first block lost its item on
+  every markdown round-trip. The canonical spelling is now the one with the
+  fewest other readings (`---` is also a setext underline and the root-block
+  front-matter opener). Exported markdown changes for documents holding a
+  rule; the content model, wire data and rendered output do not.
+
 - refactor(core,pdfform,cli,wasm)!: the `enum:` modifier on `type: string`
   retires. `type: enum` with a `values:` list is the one spelling of a finite
   string domain; `enum:` on any type is now `quill::field_parse_error`, whose
