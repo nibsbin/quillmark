@@ -227,12 +227,10 @@ impl QuillWorld {
         binaries: &mut HashMap<FileId, Bytes>,
         warnings: &mut Vec<Diagnostic>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Get all files that start with "assets/"
         let asset_paths = source.files().find_files("assets/*");
 
         for asset_path in asset_paths {
             if let Some(contents) = source.files().get_file(&asset_path) {
-                // Create virtual path for the asset
                 let virtual_path = match VirtualPath::new(asset_path.to_string_lossy().as_ref()) {
                     Ok(vpath) => vpath,
                     Err(e) => {
@@ -255,7 +253,6 @@ impl QuillWorld {
         binaries: &mut HashMap<FileId, Bytes>,
         warnings: &mut Vec<Diagnostic>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Get all subdirectories in packages/
         let package_dirs = source.files().list_directories("packages");
 
         for package_dir in package_dirs {
@@ -265,7 +262,6 @@ impl QuillWorld {
                 .unwrap_or("unknown")
                 .to_string();
 
-            // Look for typst.toml in this package
             let toml_path = package_dir.join("typst.toml");
             if let Some(toml_contents) = source.files().get_file(&toml_path) {
                 let toml_content = String::from_utf8_lossy(toml_contents);
@@ -279,7 +275,6 @@ impl QuillWorld {
                             })?,
                         };
 
-                        // Load the package files with entrypoint awareness
                         Self::load_package_files_from_quill(
                             source,
                             &package_dir,
@@ -307,7 +302,7 @@ impl QuillWorld {
                     }
                 }
             } else {
-                // Load as a simple package directory without typst.toml
+                // A package directory with no typst.toml.
                 let spec = PackageSpec {
                     namespace: "local".into(),
                     name: package_name.into(),
@@ -339,13 +334,11 @@ impl QuillWorld {
         entrypoint: Option<&str>,
         warnings: &mut Vec<Diagnostic>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Find all files in the package directory
         let package_pattern = format!("{}/*", package_dir.to_string_lossy());
         let package_files = source.files().find_files(&package_pattern);
 
         for file_path in package_files {
             if let Some(contents) = source.files().get_file(&file_path) {
-                // Calculate the relative path within the package
                 let relative_path = file_path.strip_prefix(package_dir).map_err(|_| {
                     format!("Failed to get relative path for {}", file_path.display())
                 })?;
@@ -360,7 +353,6 @@ impl QuillWorld {
                 };
                 let id = file_id(package_spec.clone(), virtual_path);
 
-                // Check if this is a source file (.typ) or binary
                 if let Some(ext) = file_path.extension() {
                     if ext == "typ" {
                         let source_content = String::from_utf8_lossy(contents);
@@ -370,13 +362,11 @@ impl QuillWorld {
                         binaries.insert(id, Bytes::new(contents.to_vec()));
                     }
                 } else {
-                    // No extension, treat as binary
                     binaries.insert(id, Bytes::new(contents.to_vec()));
                 }
             }
         }
 
-        // Verify entrypoint if specified
         if let (Some(spec), Some(entrypoint_name)) = (&package_spec, entrypoint) {
             let entrypoint_path = VirtualPath::new(entrypoint_name)
                 .map_err(|e| format!("Invalid entrypoint path {}: {}", entrypoint_name, e))?;
@@ -485,7 +475,6 @@ impl World for QuillWorld {
     }
 }
 
-/// Package info parsed from a typst.toml `[package]` section.
 #[derive(Debug, Clone)]
 struct PackageInfo {
     namespace: String,
@@ -494,7 +483,6 @@ struct PackageInfo {
     entrypoint: String,
 }
 
-/// Parse a typst.toml `[package]` section into [`PackageInfo`].
 fn parse_package_toml(
     content: &str,
 ) -> Result<PackageInfo, Box<dyn std::error::Error + Send + Sync>> {
