@@ -704,9 +704,8 @@ mod args_canon {
         out
     }
 
-    /// The `| code | args | outcome |` rows of the canon table, keyed the same
-    /// way. `—` is no keys; a trailing `?` marks a conditional key, which the
-    /// sample above supplies.
+    /// The canon table's rows. `—` is no keys; a trailing `?` marks a
+    /// conditional key, which [`minted`]'s sample supplies.
     fn declared() -> BTreeMap<String, Vec<String>> {
         let canon = include_str!("../../../prose/canon/ERROR.md");
         let mut rows = canon
@@ -736,9 +735,8 @@ mod args_canon {
         out
     }
 
-    /// The other direction: a code off the table carries no args, so a
-    /// consumer's template falls back rather than half-filling. `quill::*` is
-    /// the largest such family and the one with `format!`-built codes.
+    /// A code off the table carries no args, so a consumer's template falls
+    /// back rather than half-filling.
     #[test]
     fn out_of_scope_codes_carry_no_args() {
         let diags = crate::quill::QuillConfig::from_yaml_with_warnings(

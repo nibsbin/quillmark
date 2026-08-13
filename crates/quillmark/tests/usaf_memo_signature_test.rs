@@ -1,12 +1,7 @@
-//! Placement of the USAF memo's injected signature field.
-//!
-//! `usaf_memo`'s plate threads an unsigned AcroForm signature widget into the
-//! signature block via the package's `signing_field` parameter. AFH 33-337
-//! places the signature block 4.5 inches (324pt) from the left edge of the
-//! page, and the package overlays the widget there (offset up into the four
-//! blank lines above the typed name) so it consumes no flow. This test renders
-//! the real plate end-to-end and asserts every signature widget sits at the
-//! 4.5in block, not the 1in left margin.
+//! Placement of the USAF memo's injected AcroForm signature widget. AFH 33-337
+//! puts the signature block 4.5 inches from the left page edge, and the package
+//! overlays the widget there (offset up into the blank lines above the typed
+//! name) so it consumes no flow.
 
 #![cfg(feature = "typst")]
 
@@ -16,9 +11,8 @@ use quillmark_fixtures::quills_path;
 const PT_PER_IN: f32 = 72.0;
 const SIG_BLOCK_LEFT_IN: f32 = 4.5;
 
-/// Pull every `/FT /Sig` widget's `/Rect` out of a PDF as `[x0, y0, x1, y1]` in
-/// points. Byte-level scan: good enough for the uncompressed widget dicts the
-/// overlay pass appends.
+/// Every `/FT /Sig` widget's `/Rect` as `[x0, y0, x1, y1]` in points. A
+/// byte-level scan suffices: the overlay pass appends uncompressed widget dicts.
 fn signature_widget_rects(pdf: &[u8]) -> Vec<[f32; 4]> {
     let mut rects = Vec::new();
     let mut cursor = 0;
@@ -32,7 +26,6 @@ fn signature_widget_rects(pdf: &[u8]) -> Vec<[f32; 4]> {
     rects
 }
 
-/// Parse the first `/Rect [..]` array at or after `from`.
 fn rect_after(pdf: &[u8], from: usize) -> Option<[f32; 4]> {
     let rect_at = from + find(&pdf[from..], b"/Rect")?;
     let open = rect_at + find(&pdf[rect_at..], b"[")? + 1;
@@ -58,9 +51,7 @@ fn usaf_memo_signature_widget_aligns_with_signature_block() {
     let quill =
         quillmark::quill_from_path(quills_path("usaf_memo")).expect("usaf_memo should load");
 
-    // The seeded document exercises the main memo *and* a representative
-    // indorsement card (one instance per declared kind), so both the
-    // `Signature` and `Ind_0_Signature` widgets are emitted.
+    // One card per declared kind, so both `Signature` and `Ind_0_Signature` emit.
     let parsed = quill.seed_document();
 
     let result = engine.render(
@@ -85,9 +76,8 @@ fn usaf_memo_signature_widget_aligns_with_signature_block() {
 
     for [x0, _y0, x1, _y1] in &rects {
         let left_in = x0 / PT_PER_IN;
-        // The widget must align with the 4.5in signature block, not the 1in
-        // left margin. Allow a small tolerance for rounding and for the
-        // long-name left-shift the package applies only when a line overflows.
+        // The tolerance covers rounding and the long-name left-shift the
+        // package applies only when a line overflows.
         assert!(
             (left_in - SIG_BLOCK_LEFT_IN).abs() < 0.1,
             "signature widget left edge should sit at the {SIG_BLOCK_LEFT_IN}in \
