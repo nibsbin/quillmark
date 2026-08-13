@@ -17,12 +17,10 @@ pub fn quills_path(name: &str) -> PathBuf {
         .join("quills")
         .join(name);
 
-    // If Quill.yaml lives directly in the directory, return as-is.
     if quill_dir.join("Quill.yaml").exists() {
         return quill_dir;
     }
 
-    // Otherwise look for versioned subdirectories and pick the latest.
     if let Ok(entries) = std::fs::read_dir(&quill_dir) {
         let mut versions: Vec<String> = entries
             .filter_map(|e| e.ok())
