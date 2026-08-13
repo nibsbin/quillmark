@@ -2446,8 +2446,6 @@ impl LiveSession {
             .inner
             .update(&doc.inner)
             .map_err(|e| WasmError::from(e).to_js_value())?;
-        // The update committed, so geometry now reflects `doc`: refresh the
-        // card-kind lookup the address translation reads.
         self.card_kinds = card_kinds_of(&doc.inner);
         Ok(ChangeSet {
             page_count: cs.page_count,
@@ -2470,7 +2468,6 @@ impl LiveSession {
             warnings: result.warnings.into_iter().map(Into::into).collect(),
             output_format: result.output_format.into(),
             render_time_ms: now_ms() - start,
-            // Same `DocPath` grammar as `regions()`: one address grammar per session.
             regions: quillmark_core::regions_to_doc_path(result.regions, &self.kinds())
                 .into_iter()
                 .map(Into::into)
@@ -2480,13 +2477,10 @@ impl LiveSession {
 
     /// Schema-field geometry for this compiled session: each content field's
     /// **first placement** (one region per page it touches) plus widget and
-    /// scalar-reference-site regions, keyed on the canonical `DocPath` address
-    /// (`parseDocPath`-routable; the session resolves the backend's plate-space
-    /// per-kind ordinal to it); a field may still appear more than once (group
-    /// by `field`, see `FieldRegion`). A session-level query: no render, no byte
-    /// artifact. An interactive preview reads it to scroll to / highlight the
-    /// focused field over a `paint`-ed canvas; the click direction is `fieldAt`.
-    /// Empty for backends that place no schema fields.
+    /// scalar-reference-site regions, keyed on the canonical `DocPath` address. A
+    /// field may appear more than once, so group by `field` (see `FieldRegion`).
+    /// A session-level query: no render, no byte artifact. The click direction is
+    /// `fieldAt`. Empty for backends that place no schema fields.
     #[wasm_bindgen(js_name = regions, unchecked_return_type = "FieldRegion[]")]
     pub fn regions(&self) -> Result<JsValue, JsValue> {
         let regions: Vec<FieldRegion> = quillmark_core::regions_to_doc_path(self.inner.regions(), &self.kinds())
@@ -2496,18 +2490,13 @@ impl LiveSession {
         serialize_or_throw(&regions, "regions")
     }
 
-    /// The whole-field highlight boxes for `field`: one union rect per page,
-    /// over the field's `span`-bearing content segments. The convenience that
-    /// owns the union `regions()` leaves derived: it keeps `regions()` the
-    /// low-level disjoint truth and folds the span-filter + per-page
-    /// union here, so a "highlight the focused field" consumer stops
-    /// reimplementing it. **Content only**: a field placed solely as a scalar
-    /// reference or a bound widget carries no `span` and returns `[]`; its box
-    /// is a single `regions()` rect. Reflects the current compile, like
-    /// `regions()`.
+    /// The whole-field highlight boxes for `field`: one union rect per page over
+    /// the field's `span`-bearing content segments, the union `regions()` leaves
+    /// derived. **Content only**: a field placed solely as a scalar reference or
+    /// a bound widget carries no `span` and returns `[]`, its box being a single
+    /// `regions()` rect. Reflects the current compile.
     #[wasm_bindgen(js_name = fieldBoxes, unchecked_return_type = "FieldRegion[]")]
     pub fn field_boxes(&self, field: &str) -> Result<JsValue, JsValue> {
-        // `field` is a DocPath address; the backend filters in plate space.
         let kinds = self.kinds();
         let plate = docpath_to_plate(field, &kinds);
         let boxes: Vec<FieldRegion> = quillmark_core::regions_to_doc_path(self.inner.field_boxes(&plate), &kinds)
@@ -2517,15 +2506,12 @@ impl LiveSession {
         serialize_or_throw(&boxes, "fieldBoxes")
     }
 
-    /// The schema field whose content is under a point on `page`, the
-    /// forward (click → field) direction: hit-test a click against the
-    /// compiled document and get back the `DocPath` field address to focus in
-    /// the editor, or `undefined` off any field's ink. `x`/`y` are PDF points
-    /// with a **bottom-left** origin, the same space as `FieldRegion.rect`,
-    /// from a canvas click, invert the overlay transform documented on
-    /// `FieldRegion`: `x = clickPx.x / renderScale`,
-    /// `y = pageHeightPt - clickPx.y / renderScale`. Unlike `regions()`,
-    /// *every* placement answers, not just the first.
+    /// The schema field whose content is under a point on `page`: the `DocPath`
+    /// address to focus in the editor, or `undefined` off any field's ink.
+    /// `x`/`y` are PDF points with a **bottom-left** origin, the same space as
+    /// `FieldRegion.rect`, so from a canvas click use
+    /// `x = clickPx.x / renderScale`, `y = pageHeightPt - clickPx.y / renderScale`.
+    /// Unlike `regions()`, *every* placement answers, not just the first.
     #[wasm_bindgen(js_name = fieldAt)]
     pub fn field_at(&self, page: usize, x: f32, y: f32) -> Option<String> {
         self.inner
@@ -2533,14 +2519,11 @@ impl LiveSession {
             .map(|f| plate_to_docpath(&f, &self.kinds()))
     }
 
-    /// A point → **content position**, the fine-grained click direction:
-    /// hit-test a point and get back the field *and* a USV offset into its
-    /// `Content` (for placing a caret or mapping a selection into the content
-    /// model), or `undefined` off all content ink. `x`/`y` are PDF points,
-    /// bottom-left origin: the same space as `fieldAt`. The offset is
-    /// cluster-exact and degrades to the containing segment's start on
-    /// origin-less ink (list markers, a code fence's interior). See
-    /// `ContentHit`.
+    /// A point → **content position**: the field *and* a USV offset into its
+    /// `Content`, for placing a caret or mapping a selection into the content
+    /// model, or `undefined` off all content ink. `x`/`y` are PDF points,
+    /// bottom-left origin, as in `fieldAt`. The offset is cluster-exact and
+    /// degrades to the containing segment's start on origin-less ink.
     #[wasm_bindgen(js_name = positionAt)]
     pub fn position_at(&self, page: usize, x: f32, y: f32) -> Option<ContentHit> {
         self.inner.position_at(page, x, y).map(|mut hit| {
@@ -2549,15 +2532,12 @@ impl LiveSession {
         })
     }
 
-    /// A content position → **caret rect**, the reverse of `positionAt`: given
-    /// a field and a USV offset into its `Content`, return the box (in the
-    /// same bottom-left PDF-point space as `FieldRegion.rect`) to draw a caret
-    /// at, its `span` collapsed to `[pos, pos]`; `undefined` when the field
-    /// places no tracked content or the offset maps to no drawn glyph.
+    /// A content position → **caret rect**, the reverse of `positionAt`: the box
+    /// to draw a caret at, in the same bottom-left PDF-point space as
+    /// `FieldRegion.rect`, its `span` collapsed to `[pos, pos]`. `undefined` when
+    /// the field places no tracked content or the offset maps to no drawn glyph.
     #[wasm_bindgen(js_name = locate)]
     pub fn locate(&self, field: &str, pos: usize) -> Option<FieldRegion> {
-        // `field` is a DocPath address; the backend resolves in plate space and
-        // the returned region's field translates back.
         let kinds = self.kinds();
         let plate = docpath_to_plate(field, &kinds);
         self.inner.locate(&plate, pos).map(|mut r| {
@@ -2587,17 +2567,16 @@ impl LiveSession {
     /// Paint `page` into a `CanvasRenderingContext2D` or
     /// `OffscreenCanvasRenderingContext2D`. The painter owns
     /// `canvas.width`/`height` (no `clearRect` needed); consumers own
-    /// `canvas.style.*`. If `layoutScale * densityScale` exceeds 16384 px
-    /// per side, `densityScale` is clamped: `PaintResult.clamped` reports it and
-    /// `PaintResult.effectiveDensityScale` carries the density actually applied.
+    /// `canvas.style.*`. If `layoutScale * densityScale` exceeds 16384 px per
+    /// side, `densityScale` is clamped and `PaintResult` reports it.
     ///
     /// `put_image_data` writes the whole backing store, bypassing the 2D
-    /// context's transform, `globalAlpha`, and clip: the painter owns the entire
-    /// canvas, so each visible page needs its own `<canvas>`; you cannot composite
-    /// two pages, a sub-rect, or a context transform through this call.
+    /// context's transform, `globalAlpha`, and clip, so each visible page needs
+    /// its own `<canvas>`: no compositing, sub-rect, or transform reaches through
+    /// this call.
     ///
-    /// Throws if the backend has no canvas painter, `page` is out of range,
-    /// `ctx` is the wrong type, or either scale is non-finite or `<= 0`.
+    /// Throws if the backend has no canvas painter, `page` is out of range, `ctx`
+    /// is the wrong type, or either scale is non-finite or `<= 0`.
     #[wasm_bindgen(js_name = paint, unchecked_return_type = "PaintResult")]
     pub fn paint(
         &self,
@@ -2655,10 +2634,9 @@ impl LiveSession {
         };
 
         let render_scale = (layout_scale as f64) * effective_density;
-        // `layout_scale` and `density` are each validated finite/positive, but
-        // their product (or the f64->f32 cast) can still overflow to infinity
-        // for extreme inputs; e.g. a zero-dimension page bypasses the
-        // MAX_BACKING_DIMENSION clamp. Guard before handing it to the renderer.
+        // Each factor is validated finite and positive, but the product (or the
+        // f64->f32 cast) can still overflow: a zero-dimension page bypasses the
+        // MAX_BACKING_DIMENSION clamp.
         if !render_scale.is_finite() || render_scale <= 0.0 || render_scale > f32::MAX as f64 {
             return Err(WasmError::from(
                 "paint: computed render scale is non-finite or out of range",
@@ -2666,11 +2644,8 @@ impl LiveSession {
             .to_js_value());
         }
 
-        // `page_size_pt(page)` already succeeded above, so `page` is in range;
-        // a `None` here therefore means the backend reported a canvas
-        // (`ensure_canvas` passed) but produced no raster: a capability/impl
-        // disagreement, not a bad page index. Label it as such instead of
-        // mislabelling it page-out-of-range.
+        // `page_size_pt(page)` succeeded above, so a `None` here is a backend
+        // capability/impl disagreement, not a bad page index.
         let (pixel_w, pixel_h, mut rgba) = self
             .inner
             .render_rgba(page, render_scale as f32)
@@ -2712,10 +2687,6 @@ impl LiveSession {
 
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 impl LiveSession {
-    /// Gate a canvas operation on the session's canvas capability, derived from
-    /// the core `SessionHandle` seam (`page_size_pt` / `render_rgba`): the same
-    /// seam the painter dispatches through, so the gate cannot disagree with the
-    /// paint.
     fn ensure_canvas(&self, op: &str) -> Result<(), JsValue> {
         if self.inner.supports_canvas() {
             Ok(())
