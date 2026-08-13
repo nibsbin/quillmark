@@ -105,7 +105,6 @@ impl Backend for PdfformBackend {
     }
 }
 
-/// Fill in per-document values; intrinsics and geometry are already resolved.
 fn resolve_field_specs(bound: &[BoundWidget], json_data: &serde_json::Value) -> Vec<FieldSpec> {
     bound
         .iter()
@@ -118,7 +117,7 @@ struct PdfformSession {
     base_pdf: Vec<u8>,
     bound: Vec<BoundWidget>,
     field_specs: Vec<FieldSpec>,
-    /// Cached so `page_size_pt` need not reparse; its length is the page count.
+    /// Cached so `page_size_pt` need not reparse.
     page_boxes: Vec<[f32; 4]>,
     /// Values baked as content-stream operators, ready for hayro rasterisation.
     flat_pdf: Vec<u8>,
@@ -164,8 +163,6 @@ impl SessionHandle for PdfformSession {
         Some((x1 - x0, y1 - y0))
     }
 
-    /// Rasterise `page` of the pre-flattened PDF: values are already baked in,
-    /// so the caller composites nothing.
     fn render_rgba(&self, page: usize, scale: f32) -> Option<(u32, u32, Vec<u8>)> {
         let pdf = HayroPdf::new(self.flat_pdf.clone()).ok()?;
         let p = pdf.pages().get(page)?;
@@ -187,10 +184,8 @@ impl SessionHandle for PdfformSession {
         regions_of(&self.field_specs)
     }
 
-    /// Full re-resolve + re-flatten: compile is cheap enough not to bother with
-    /// incremental recompilation. Specs and flat PDF swap together only after
-    /// both succeed. The background never changes, so field deltas are the only
-    /// visible delta.
+    /// Specs and flat PDF swap together only after both succeed. The background
+    /// never changes, so field deltas are the only visible delta.
     fn update(&mut self, json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> {
         let field_specs = resolve_field_specs(&self.bound, json_data);
         let flat_pdf = flatten_to_pdf(self.base_pdf.clone(), &field_specs)?;
