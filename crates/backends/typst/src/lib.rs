@@ -295,23 +295,19 @@ impl SessionHandle for TypstSession {
         Ok(ChangeSet::new(self.page_count, dirty_pages))
     }
 
-    /// The quill's load warnings, then this compile's own.
     fn warnings(&self) -> &[Diagnostic] {
         &self.warnings
     }
 
-    /// Page dimensions in Typst points (1 pt = 1/72 inch). `None` if `page` is
-    /// out of range. Overrides the default-`None` canvas seam.
+    /// Typst points: 1 pt = 1/72 inch.
     fn page_size_pt(&self, page: usize) -> Option<(f32, f32)> {
         let frame = &self.document.pages().get(page)?.frame;
         let size = frame.size();
         Some((size.x.to_pt() as f32, size.y.to_pt() as f32))
     }
 
-    /// Render `page` to a non-premultiplied RGBA8 buffer at `scale`× the
-    /// natural 72 ppi (`scale = 1` → 1 device pixel per Typst pt). Returns
-    /// `(width_px, height_px, rgba)` (`w * h * 4` bytes, row-major), or `None`
-    /// if `page` is out of range. Overrides the default-`None` canvas seam.
+    /// Non-premultiplied RGBA8 at `scale`× the natural 72 ppi, returned as
+    /// `(width_px, height_px, rgba)` with `w * h * 4` row-major bytes.
     fn render_rgba(&self, page: usize, scale: f32) -> Option<(u32, u32, Vec<u8>)> {
         let p = self.document.pages().get(page)?;
         let pixmap = typst_render::render(
@@ -334,19 +330,11 @@ impl SessionHandle for TypstSession {
         Some((width, height, rgba))
     }
 
-    /// Schema-field geometry for the compiled document: bottom-left PDF-point
-    /// rects keyed on the schema-field path. Two sources, deterministically
-    /// ordered: form-field widgets (one fixed-size box each) first, then
-    /// span-tracked content in (page, field, site) order, each content
-    /// field's / scalar reference site's **first placement**, one region per
-    /// page it touches, geometry read from the laid-out frames' glyph spans.
-    /// Entries pass through
-    /// [`LiveSession::regions`](quillmark_core::LiveSession::regions) as-is,
-    /// `field` is still not unique (page fragments, several scalar reference
-    /// sites, or tracked content plus a bound widget); consumers group by
-    /// field. Geometry math over the frames, no rasterization. Widget regions
-    /// are empty if the placements fail to resolve (a render would surface
-    /// the same error).
+    /// Widgets first (one fixed-size box each), then span-tracked content in
+    /// (page, field, site) order. `field` is not unique: page fragments, several
+    /// scalar reference sites, or tracked content plus a bound widget all
+    /// repeat it, so consumers group by field. Widget regions are empty if the
+    /// placements fail to resolve; a render surfaces the same error.
     fn regions(&self) -> Vec<quillmark_core::RenderedRegion> {
         let mut regions = self.widget_regions();
         regions.extend(overlay::scan_content_regions(
@@ -358,16 +346,10 @@ impl SessionHandle for TypstSession {
         regions
     }
 
-    /// The schema field under a point on `page` (PDF points, bottom-left
-    /// origin): the forward click→field direction. `field:`-bound widget
-    /// boxes answer first: a widget is a deliberate click target that draws
-    /// no spanned ink of its own, so content ink beneath it must not swallow
-    /// the click. Among two spatially-overlapping widgets the later-painted one
-    /// wins (`rev()` over the paint-ordered placements), matching the
-    /// content-field rule in `span_scan::field_at`. Otherwise the span data
-    /// answers, over every placement, not just the first: one concrete point
-    /// identifies one frame item, whose span is unambiguous however many times
-    /// its field is placed. Overrides the regions-hit-testing default.
+    /// Widget boxes answer first: a widget is a deliberate click target drawing
+    /// no spanned ink of its own, so content ink beneath it must not swallow the
+    /// click. Among overlapping widgets the later-painted one wins, matching
+    /// `span_scan::field_at`.
     fn field_at(&self, page: usize, x: f32, y: f32) -> Option<String> {
         self.widget_regions()
             .into_iter()
@@ -387,12 +369,8 @@ impl SessionHandle for TypstSession {
             })
     }
 
-    /// A point → content position in a content field: the fine-grained twin of
-    /// [`field_at`](Self::field_at). Resolves the content glyph under `(x, y)`
-    /// to a cluster-exact USV offset in its field's `Content`, degrading to
-    /// the containing segment's start on origin-less ink. `None` off all
-    /// content ink or on scalar/widget ink (no content address). Widgets draw no
-    /// spanned content ink, so (unlike `field_at`) they are not consulted.
+    /// The fine-grained twin of [`field_at`](Self::field_at). Widgets draw no
+    /// spanned content ink, so unlike `field_at` they are not consulted.
     fn position_at(&self, page: usize, x: f32, y: f32) -> Option<ContentHit> {
         overlay::position_at(
             &self.document,
@@ -405,9 +383,6 @@ impl SessionHandle for TypstSession {
         )
     }
 
-    /// A content position → caret rect: the reverse of
-    /// [`position_at`](Self::position_at). Maps `pos` in `field`'s `Content`
-    /// to the box of the glyph the caret sits at, page-indexed.
     fn locate(&self, field: &str, pos: usize) -> Option<RenderedRegion> {
         overlay::locate(
             &self.document,
