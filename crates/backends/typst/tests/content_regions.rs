@@ -1,14 +1,8 @@
 //! Span-tracked content produces schema-path-keyed regions read from the
-//! laid-out frames, each field's **first placement**, one region per page it
-//! touches: a top-level markdown field, per-page fragments when content
-//! breaks across pages, first-placement-only when a field is placed twice,
-//! and the canonical card address `$cards.<kind>.<n>.<field>` (per-kind
-//! 0-based ordinal, surviving interleaved kinds). Scalars need no tagging:
-//! every direct `data.<field>` reference site surfaces its own region. Plus
-//! the `form-field` `field:` schema-path binding, which keys a widget region
-//! on a schema path rather than its `/T` name, and the forward direction:
-//! `field_at` resolves a point to a field on *any* placement, not just the
-//! first.
+//! laid-out frames: each field's first placement, one region per page it
+//! touches, keyed on the canonical schema path (for cards,
+//! `$cards.<kind>.<n>.<field>`). Plus the `form-field` `field:` binding and the
+//! forward `field_at`/`position_at`/`locate` navigation directions.
 
 use quillmark_core::Backend;
 use quillmark_typst::TypstBackend;
@@ -16,10 +10,8 @@ use quillmark_typst::TypstBackend;
 mod common;
 use common::quill_with_plate as quill;
 
-/// The canonical content JSON the render seam carries for a richtext field:
-/// these tests drive `Backend::open` directly, so they build the content the way
-/// `compile_data` would (`import` then the canonical serializer) rather than
-/// passing a raw markdown string.
+/// These tests drive `Backend::open` directly, so they build the content the
+/// way `compile_data` would rather than passing a raw markdown string.
 fn content(markdown: &str) -> serde_json::Value {
     let rt = quillmark_content::import::from_markdown(markdown).expect("import");
     quillmark_content::serial::to_canonical_value(&rt)
@@ -54,8 +46,7 @@ main:
 #data.body
 "#;
 
-    // `body` is long enough to overflow page 0 and continue; the first (only)
-    // placement should surface one region per page it touches.
+    // Long enough to overflow page 0 and continue.
     let long = "This is a markdown paragraph that wraps across several lines. ".repeat(200);
     let data = serde_json::json!({
         "intro": content("A **short** intro paragraph on the first page."),
@@ -65,8 +56,6 @@ main:
     let session = TypstBackend.open(&quill(YAML, PLATE), &data).expect("open");
     let regions = session.regions();
 
-    // intro: one placement, one page: exactly one region, keyed on the schema
-    // path (not a widget name).
     let intro: Vec<_> = regions.iter().filter(|r| r.field == "intro").collect();
     assert_eq!(intro.len(), 1, "intro is one region: {regions:?}");
     let [x0, y0, x1, y1] = intro[0].rect;
@@ -76,8 +65,6 @@ main:
         intro[0].rect
     );
 
-    // body spans several pages: one fragment per page its (first) placement
-    // touches, in page order starting at the page it opens on.
     let body: Vec<_> = regions.iter().filter(|r| r.field == "body").collect();
     assert!(
         body.len() >= 2,
@@ -100,14 +87,9 @@ main:
 
 #[test]
 fn field_placed_twice_surfaces_first_region_but_field_at_resolves_every_placement() {
-    // One content value placed at two sites with unrelated ink between them.
     // Span data cannot distinguish a genuine second placement from package
-    // chrome interrupting one placement, so `regions()` promises the first
-    // placement only: never a spanning union that would claim the middle
-    // content. The forward direction differs: a click identifies one drawn
-    // item, so *both* placements resolve via `field_at` (including the second
-    // one `regions()` deliberately does not enumerate) while a point on
-    // unrelated ink resolves to nothing.
+    // chrome interrupting one, so `regions()` promises the first placement
+    // only. A click identifies one drawn item, so `field_at` answers on both.
     const YAML: &str = r#"
 quill:
   name: two_placements
@@ -142,8 +124,6 @@ main:
         1,
         "a twice-placed content value surfaces its first placement only: {regions:?}"
     );
-    // The surfaced region is the *first* placement: near the top margin, and
-    // not a union stretching down over the lorem filler to the second copy.
     let first = intro[0];
     let [_, y0, _, y1] = first.rect;
     assert!(
@@ -157,7 +137,6 @@ main:
         first.rect
     );
 
-    // A point inside the surfaced first placement resolves to the field.
     let cx = (first.rect[0] + first.rect[2]) / 2.0;
     let cy = (first.rect[1] + first.rect[3]) / 2.0;
     assert_eq!(
@@ -166,8 +145,7 @@ main:
         "a click inside the first placement resolves"
     );
 
-    // The second placement sits below the lorem filler: probe downward from
-    // the first placement until ink resolves again; it must still say `intro`.
+    // Probe downward past the lorem filler until ink resolves again.
     let mut second_hit = None;
     let mut y = first.rect[1] - 12.0;
     while y > 40.0 {
@@ -182,7 +160,6 @@ main:
         "the second, un-surfaced placement still resolves point-wise"
     );
 
-    // Far outside any ink: nothing.
     assert_eq!(
         session.field_at(first.page, 5.0, 5.0),
         None,
@@ -192,11 +169,8 @@ main:
 
 #[test]
 fn scalar_reference_sites_each_surface_a_region() {
-    // A plain scalar needs no tagging: every direct `data.<field>` reference
-    // site in the plate is its own tracked window, so a field shown twice
-    // (e.g. header and body) surfaces both sites, full per-site fidelity,
-    // because two source expressions are two origins, not one value counted
-    // twice.
+    // Two source expressions are two origins, not one value counted twice, so a
+    // field shown in both header and body surfaces both sites.
     const YAML: &str = r#"
 quill:
   name: scalar_sites
@@ -234,7 +208,7 @@ typst:
     for r in &subject {
         assert!(r.rect[2] > r.rect[0], "positive width: {:?}", r.rect);
     }
-    // Disjoint vertically (bottom-left origin: the later site sits lower).
+    // Bottom-left origin: the later site sits lower.
     assert!(
         subject[0].rect[1] > subject[1].rect[3] || subject[1].rect[1] > subject[0].rect[3],
         "sites do not union: {:?} vs {:?}",
@@ -245,9 +219,8 @@ typst:
 
 #[test]
 fn widget_and_tracked_content_both_surface_widget_ordered_first() {
-    // A field bound to both a `field:`-bound widget and a tracked content
-    // placement surfaces both (they route to the same field; a consumer
-    // groups by `field`), deterministically ordered widget-first: the
+    // A field bound to both a widget and a tracked content placement surfaces
+    // both, deterministically ordered widget-first: the
     // contract documented on `SessionHandle::regions` and `TypstSession::regions`.
     const YAML: &str = r#"
 quill:
@@ -296,10 +269,8 @@ typst:
 
 #[test]
 fn content_survives_a_rebuilding_show_rule() {
-    // A `show`-rule pass that captures paragraphs into a state buffer and
-    // re-emits them (the shape of render-body's auto-numbering) must not
-    // lose the field: spans are a property of the glyphs and ride through
-    // the rebuild, so the field surfaces with no plate-author recovery step.
+    // Spans are a property of the glyphs, so they ride through a `show`-rule
+    // pass that captures paragraphs into a state buffer and re-emits them.
     const YAML: &str = r#"
 quill:
   name: rebuild_survival
@@ -391,9 +362,8 @@ typst:
 
 #[test]
 fn card_regions_use_canonical_kind_ordinal_path() {
-    // Two kinds, interleaved alpha/beta/alpha. The card address is kind + 0-based
-    // ordinal *within that kind*, so the second alpha is `.1` even though it is
-    // the third card overall, and beta's ordinal is unaffected by alpha.
+    // Interleaved alpha/beta/alpha: the ordinal is per kind, so the second alpha
+    // is `.1` even though it is the third card overall.
     const YAML: &str = r#"
 quill:
   name: card_regions
@@ -468,12 +438,6 @@ card_kinds:
 
 #[test]
 fn date_field_display_surfaces_a_clickable_region() {
-    // A present date lowers to a value-object whose `display` closure
-    // returns `text(v.display(..))`: content born at a generated `text(..)`
-    // node inside a recorded segment-less window. Rendering it through the
-    // shipping `(data.<field>.display)(..)` call surfaces one whole-placement
-    // region keyed by the schema path, and a click resolves back to it: an
-    // atomic, picker-editable click-to-edit target.
     const YAML: &str = r#"
 quill:
   name: date_region
@@ -511,7 +475,6 @@ main:
         "the date region has positive area: {:?}",
         issued[0].rect
     );
-    // It is segment-less (a scalar/widget-shaped site): no content span.
     assert!(
         issued[0].span.is_none(),
         "a date region is whole-placement, carrying no content span: {:?}",
@@ -527,16 +490,11 @@ main:
 
 #[test]
 fn card_dates_surface_per_instance_regions_through_laundering() {
-    // The driving case: card dates. `scalar_windows` deliberately does not
-    // chase the shared `card.<field>` loop variable, so a card date needs its
-    // own per-instance node to surface a region, which the value-object gives
-    // it: each card instance emits its own `text(..)` node in its own generated
-    // block, so two cards yield two distinct windows keyed by their per-kind
-    // ordinal address. And because a closure's body ink is born at its lexical
-    // definition site, laundering the value through `#let d = card.at("on")`
-    // (or into a package) keeps it attributable: the region rides the value's
-    // closure, not the reference site. A blank card date stays `none`, so its
-    // guard skips and it draws no ink and surfaces no region.
+    // `scalar_windows` does not chase the shared `card.<field>` loop variable,
+    // so a card date surfaces only through its own per-instance `text(..)` node.
+    // A closure's body ink is born at its lexical definition site, so
+    // laundering the value through `#let d = card.at("on")` keeps it
+    // attributable.
     const YAML: &str = r#"
 quill:
   name: card_date_region
@@ -579,8 +537,6 @@ card_kinds:
     let session = TypstBackend.open(&quill(YAML, PLATE), &data).expect("open");
     let fields: std::collections::HashSet<String> =
         session.regions().into_iter().map(|r| r.field).collect();
-    // Each present card date is its own per-instance region: the loop-variable
-    // blindness is defeated.
     assert!(
         fields.contains("$cards.stamp.0.on"),
         "first card's date regions per-instance: {fields:?}"
@@ -589,13 +545,11 @@ card_kinds:
         fields.contains("$cards.stamp.2.on"),
         "third card's date regions per-instance: {fields:?}"
     );
-    // The blank card's date is `none`: its guard skips, it draws no ink, so no
-    // region, present-and-empty is absent, not a zero-area box.
+    // A `none` date draws no ink: absent, not a zero-area box.
     assert!(
         !fields.contains("$cards.stamp.1.on"),
         "a blank card date surfaces no region: {fields:?}"
     );
-    // A click on the first card's date resolves to its canonical address.
     let regions = session.regions();
     let first = regions
         .iter()
@@ -612,8 +566,7 @@ card_kinds:
 
 #[test]
 fn form_field_unknown_path_fails_the_compile() {
-    // `field:` validates against the schema address tables: a typo'd path
-    // is a loud compile error, not a silent no-region widget.
+    // A typo'd path is a loud compile error, not a silent no-region widget.
     const YAML: &str = r#"
 quill:
   name: widget_typo
@@ -648,10 +601,9 @@ main:
 
 #[test]
 fn failed_apply_keeps_serving_last_good_regions() {
-    // apply is transactional for regions too: a failed compile has already
-    // written the next injection's helper source into the world, but the
-    // served document's spans must keep resolving against the compile they
-    // came from, regions and clicks may not shift or vanish.
+    // A failed compile has already written the next injection's helper source
+    // into the world, but the served document's spans must keep resolving
+    // against the compile they came from.
     const YAML: &str = r#"
 quill:
   name: failed_apply_regions
@@ -686,8 +638,8 @@ main:
         "baseline intro region: {before:?}"
     );
 
-    // Shorter content shifts every byte offset in the regenerated helper,
-    // and the unparseable date fails the compile at data-assembly time.
+    // Shorter content shifts every byte offset in the regenerated helper, and
+    // the unparseable date fails the compile at data-assembly time.
     let bad = serde_json::json!({ "intro": content("X"), "when": "not-a-date" });
     session
         .update_data(&bad)
@@ -710,10 +662,8 @@ main:
 
 #[test]
 fn continuation_fragments_survive_page_marginals() {
-    // Headers and footers walk between one page's body and the next's. That
-    // foreign ink suspends a placement's run at the page boundary; the run
-    // resumes on the immediately following page, so a page-spanning body on
-    // a chrome-bearing plate still surfaces its continuation fragments.
+    // Header/footer ink walks between one page's body and the next's, suspending
+    // the run at the page boundary; it must resume on the following page.
     const YAML: &str = r#"
 quill:
   name: marginal_fragments
@@ -761,9 +711,8 @@ main:
 
 #[test]
 fn wrapped_scalar_expression_attributes_to_its_field() {
-    // A reference wrapped in an expression (`#upper(data.subject)`) stamps
-    // its ink with the whole expression's span; the enclosing-expression
-    // window attributes it as long as the field is the expression's only
+    // A wrapped reference stamps its ink with the whole expression's span; the
+    // enclosing-expression window attributes it while the field is its only
     // reference.
     const YAML: &str = r#"
 quill:
@@ -805,66 +754,9 @@ typst:
 }
 
 #[test]
-fn spike_990_text_wrapped_ink_surfaces_a_region() {
-    // Spike 2, shipping-API view. The date value-object's `display:`
-    // closure emits `text(datetime(..).display(..))`: *content* whose glyphs
-    // must carry the constructing node's span, not detached decoration ink, so
-    // a recorded window claims them. This pins the load-bearing half through
-    // the same `regions()` surface: a scalar shown via `#text(data.subject)`
-    // still surfaces its field region. `text()` over a computed string keeps
-    // the span attributable (here the enclosing-expression window, exactly like
-    // `#upper(data.subject)`); were the output detached, no region would form.
-    // The generated-helper mechanism itself is pinned in the backend unit test
-    // `spike_990_text_over_programmatic_string_classifies_into_recorded_window`.
-    const YAML: &str = r#"
-quill:
-  name: text_wrapped_spike
-  version: 0.1.0
-  backend: typst
-  description: text()-wrapped ink attribution spike
-main:
-  fields:
-    subject:
-      type: string
-      description: a scalar shown through a text() wrapper
-typst:
-  plate_file: plate.typ
-"#;
-    const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data
-#set page(width: 612pt, height: 792pt, margin: 72pt)
-
-#text(data.subject)
-"#;
-    let data = serde_json::json!({ "subject": "request for quarters" });
-
-    let session = TypstBackend.open(&quill(YAML, PLATE), &data).expect("open");
-    let regions = session.regions();
-    let subject: Vec<_> = regions.iter().filter(|r| r.field == "subject").collect();
-    assert_eq!(
-        subject.len(),
-        1,
-        "text()-wrapped ink is span-attributable, so the field still surfaces: {regions:?}"
-    );
-    let [x0, y0, x1, y1] = subject[0].rect;
-    assert!(
-        x1 > x0 && y1 > y0,
-        "the text()-wrapped region has positive area: {:?}",
-        subject[0].rect
-    );
-    let (cx, cy) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0);
-    assert_eq!(
-        session.field_at(subject[0].page, cx, cy).as_deref(),
-        Some("subject"),
-        "clicks on the text()-wrapped ink route to the field"
-    );
-}
-
-#[test]
 fn form_field_path_rejected_when_address_tables_are_empty() {
-    // `__meta__` present with empty address tables (a body-disabled main
-    // with no fields and no cards) validates against the empty set: every
-    // address rejects. Only `__meta__` *absent* is permissive.
+    // Empty address tables validate against the empty set: every address
+    // rejects. Only absent tables are permissive.
     const YAML: &str = r#"
 quill:
   name: empty_tables
@@ -914,8 +806,7 @@ main:
       type: richtext
       description: a body that may carry malformed inline markup
 "#;
-    // The plate proves the int round-tripped: a wrong `i64::MIN` literal makes
-    // the assert fail, which fails the compile, which fails `open`.
+    // The plate's assert proves the int round-tripped.
     const PLATE: &str = r#"
 #import "@local/quillmark-helper:0.1.0": data
 #set page(width: 400pt, height: 400pt, margin: 40pt)
@@ -923,24 +814,17 @@ main:
 #data.body
 "#;
     let data = serde_json::json!({
-        // Import balances the unterminated `<u>` into a closed underline mark, so
-        // the emitter's `#underline[ .. ]` is bracket-balanced by construction.
         "body": content("Please <u>sign here"),
         "n": i64::MIN,
     });
-    // Compile success is the assertion: a broken literal or unbalanced block
-    // would make `open` return Err.
+    // Compile success is the assertion.
     TypstBackend
         .open(&quill(YAML, PLATE), &data)
         .expect("adversarial data (unterminated <u>, i64::MIN) must still compile");
 }
 
-/// Two spatially-overlapping widgets resolve `field_at` by paint order (the
-/// later-painted widget wins) not by their alphabetical `/T` names. The widget
-/// hit-test once sorted placements by `(page, name)` and `find`-first, silently
-/// violating the "later-painted wins" rule the content-field path documents
-/// (`span_scan::field_at`). `aaa` is painted first, `zzz` on top of it; a click
-/// in the shared box must resolve to `zzz`'s field, not `aaa`'s.
+/// `aaa` is painted first, `zzz` on top of it; a click in the shared box must
+/// resolve to `zzz`, not to the alphabetically-first `/T` name.
 #[test]
 fn overlapping_widgets_resolve_field_at_by_paint_order_not_name() {
     const YAML: &str = r#"
@@ -992,10 +876,9 @@ main:
 
 #[test]
 fn segment_regions_carry_span_and_field_union_is_striped() {
-    // The visible change: a content field breaks into one region **per
-    // paragraph**, each keyed on its content span. The whole-field highlight is
-    // the consumer's union of a page's segment rects, so the inter-paragraph
-    // whitespace stays uncovered (striped), unlike the old single solid box.
+    // A content field breaks into one region per paragraph, each keyed on its
+    // content span, so the consumer's union leaves the inter-paragraph
+    // whitespace uncovered.
     const YAML: &str = r#"
 quill:
   name: segment_regions
@@ -1033,8 +916,6 @@ main:
     );
     assert!(body.iter().all(|r| r.page == 0), "both on page 0: {body:?}");
 
-    // Each segment carries its own content span; the two spans are disjoint and
-    // ordered (segment order is the region sort key).
     let s0 = body[0].span.expect("segment 0 carries a span");
     let s1 = body[1].span.expect("segment 1 carries a span");
     assert!(
@@ -1043,10 +924,6 @@ main:
     );
     assert!(s0[1] <= s1[0], "spans disjoint and ordered: {s0:?} {s1:?}");
 
-    // The derived field box (the documented consumer formula, union of a
-    // page's segment rects) leaves the inter-paragraph whitespace uncovered:
-    // the union is taller than the two segment boxes stacked, so a solid
-    // highlight would have to invent the gap between them.
     let h0 = body[0].rect[3] - body[0].rect[1];
     let h1 = body[1].rect[3] - body[1].rect[1];
     let union_lo = body[0].rect[1].min(body[1].rect[1]);
@@ -1061,10 +938,6 @@ main:
 
 #[test]
 fn position_at_and_locate_round_trip_a_content_offset() {
-    // The two navigation directions compose: a click resolves to a content
-    // position inside the field, and locating that position returns a caret
-    // rect back on the same page, inside the field's region. A click off all
-    // content ink resolves to nothing.
     const YAML: &str = r#"
 quill:
   name: nav_round_trip
@@ -1097,8 +970,6 @@ main:
     let region = &body[0];
     let span = region.span.expect("content region carries a span");
 
-    // A click near the top-left of the paragraph (its first line) resolves to a
-    // content position within the segment's span.
     let cx = region.rect[0] + 5.0;
     let cy = region.rect[3] - 3.0;
     let hit = session
@@ -1110,16 +981,12 @@ main:
         "pos {} within span {span:?}",
         hit.pos
     );
-    // A hit on prose ink resolves through an owning run: cluster-exact, the
-    // signal a caret UI trusts.
     assert_eq!(
         hit.granularity,
         Some(quillmark_core::HitGranularity::Cluster),
         "a prose hit is cluster-exact: {hit:?}"
     );
 
-    // Locating that position returns a caret rect on the same page, inside the
-    // field's region, with `span` collapsed to the caret point.
     let caret = session
         .locate("body", hit.pos)
         .expect("a content position locates a caret rect");
@@ -1135,7 +1002,6 @@ main:
         region.rect
     );
 
-    // Off all content ink (top-left page corner): nothing.
     assert_eq!(session.position_at(region.page, 5.0, 5.0), None);
 }
 
@@ -1143,10 +1009,7 @@ main:
 fn position_at_on_a_raw_block_degrades_to_the_segment_start() {
     // Every physical line of a multi-line `#raw(block: true, "…")` fence shares
     // one resolved node wider than any per-line run, so per-run inversion cannot
-    // pick a line. position_at degrades to the code **segment's** content start.
-    // Clicks on different fence lines therefore resolve to the *same* content
-    // position (segment-level correctness kept, per-line precision unavailable)
-    // and to a position distinct from the prose paragraph's.
+    // pick a line and `position_at` floors to the code segment's start.
     const YAML: &str = r#"
 quill:
   name: raw_degrade
@@ -1184,8 +1047,7 @@ main:
     );
     let (prose, code) = (&body[0], &body[1]);
 
-    // Probe a few x offsets so a click reliably lands on a glyph on the target
-    // fence line.
+    // Probe a few x offsets so a click lands on a glyph.
     let hit_at = |y: f32| {
         [2.0f32, 6.0, 12.0, 24.0, 48.0]
             .iter()
@@ -1198,15 +1060,12 @@ main:
         top.pos, bottom.pos,
         "different fence lines both degrade to the one code-segment start: {top:?} {bottom:?}"
     );
-    // The degrade is signalled: a caret UI reads `Segment` and treats `pos` as
-    // the selected segment, not a within-segment caret.
     assert_eq!(
         top.granularity,
         Some(quillmark_core::HitGranularity::Segment),
         "a multi-line fence hit floors to the segment: {top:?}"
     );
     assert_eq!(bottom.granularity, Some(quillmark_core::HitGranularity::Segment));
-    // The fence's segment start is distinct from the prose paragraph's content.
     let prose_hit = session
         .position_at(prose.page, prose.rect[0] + 5.0, prose.rect[3] - 3.0)
         .expect("a click in the prose paragraph resolves");
