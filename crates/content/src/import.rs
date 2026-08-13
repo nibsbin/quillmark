@@ -430,13 +430,10 @@ impl Builder {
                 Event::HardBreak => {
                     match self.cur.as_ref().map(|l| &l.kind) {
                         // ATX headings can't carry a hard break in markdown, so
-                        // one inside a heading canonicalizes to a space (a
-                        // documented, representable choice).
+                        // one inside a heading canonicalizes to a space.
                         Some(LineKind::Heading { .. }) => self.push_inline(" "),
-                        // Elsewhere: a within-block line break: arm a pending
-                        // continuation line (same kind, continues = true) so it
-                        // stays one block and export re-emits a hard break, not a
-                        // paragraph split.
+                        // Elsewhere, arm a continuation line so the block stays
+                        // one block and export re-emits a hard break.
                         _ => {
                             let kind = self
                                 .cur
@@ -482,9 +479,8 @@ impl Builder {
                     }
                     pulldown_cmark::CodeBlockKind::Indented => None,
                 };
-                // First code line opens on the first content chunk; nothing to
-                // open yet (a code block with no content still yields one line,
-                // handled in push_code_content / end).
+                // The first code line opens on the first content chunk; an empty
+                // block gets its line at `TagEnd::CodeBlock`.
                 self.code_opened = false;
             }
             Tag::List(start) => {
@@ -637,15 +633,13 @@ impl Builder {
         self.table.as_mut()?.cell.as_mut()
     }
 
-    /// Route one table event: structural events (head/row/cell boundaries) shape
-    /// the accumulator; inline events (text/code/marks) build the open cell with
-    /// the SAME [`Inline`] machinery prose uses, a cell is flat inline (no lines,
-    /// no nested islands), so its marks are USV offsets into its own text.
+    /// Route one table event: structural events shape the accumulator, inline
+    /// events build the open cell with the same [`Inline`] machinery prose uses.
+    /// A cell is flat inline, so its marks are USV offsets into its own text.
     fn table_event(&mut self, event: &Event, underline: bool) {
         // An image open inside the current cell intercepts everything until it
-        // closes: the alt text lands in the cell as plain text (marks flattened,
-        // like the top-level image path), the url is dropped, and the island is
-        // flagged degraded. A cell has no island slot to carry a real image.
+        // closes: the alt lands as plain text, the url is dropped, and the
+        // island is flagged degraded, a cell having no slot to carry an image.
         if self.table.as_ref().is_some_and(|a| a.img_depth > 0) {
             match event {
                 Event::Start(Tag::Image { .. }) => {
