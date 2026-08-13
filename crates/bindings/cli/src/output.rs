@@ -4,8 +4,8 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 /// Write `bytes` to stdout, or to `output_path` (creating parent directories),
-/// announcing the destination unless `quiet`. Exactly one destination: stdout
-/// wins, and neither is an argument error.
+/// announcing the destination unless `quiet`. Stdout wins when both are set;
+/// neither set is an argument error.
 pub fn write_output(
     use_stdout: bool,
     output_path: Option<&Path>,
