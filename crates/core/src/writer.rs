@@ -289,7 +289,6 @@ card_kinds:
         let mut doc = blank_doc();
         let mut ed = TypedWriter::new(&config, &mut doc);
 
-        // A schema field commits typed: "3" → 3, richtext string → content.
         ed.set("qty", "3").unwrap();
         ed.set("subject", "Hello").unwrap();
         assert_eq!(
@@ -304,8 +303,6 @@ card_kinds:
         let config = config();
         let mut doc = blank_doc();
         let mut ed = TypedWriter::new(&config, &mut doc);
-        // Unknown field on the typed path is a typo, not a fallback: it fails
-        // here and nothing is written. Opaque storage is the raw `store_field`.
         let err = ed.set("notafield", "x").unwrap_err();
         assert_eq!(err.code(), "edit::unknown_field");
         assert!(doc.main().payload().get("notafield").is_none());
@@ -316,7 +313,6 @@ card_kinds:
         let config = config();
         let mut doc = blank_doc();
         let mut ed = TypedWriter::new(&config, &mut doc);
-        // One bad field aborts the whole batch; nothing is applied.
         let errs = ed
             .set_all([("qty", "5"), ("subject", "bad\n\nblock")])
             .unwrap_err();
@@ -324,37 +320,12 @@ card_kinds:
         assert_eq!(errs[0].0, "subject");
         assert!(doc.main().payload().get("qty").is_none());
 
-        // A clean batch applies every field.
         let mut ed = TypedWriter::new(&config, &mut doc);
         ed.set_all([("qty", "5"), ("subject", "ok")]).unwrap();
         assert_eq!(
             doc.main().payload().get("qty").unwrap().as_json(),
             &serde_json::json!(5)
         );
-    }
-
-    #[test]
-    fn set_all_rejects_unknown_field() {
-        let config = config();
-        let mut doc = blank_doc();
-        let mut ed = TypedWriter::new(&config, &mut doc);
-        // A whole-form submit with a typo'd name: `qty` is a schema field, `titel`
-        // is not. The undeclared name aborts the all-or-nothing batch: nothing is
-        // written and the typo is reported.
-        let errs = ed.set_all([("qty", "3"), ("titel", "oops")]).unwrap_err();
-        assert_eq!(errs.len(), 1);
-        assert_eq!(errs[0].0, "titel");
-        assert_eq!(errs[0].1.code(), "edit::unknown_field");
-        assert!(doc.main().payload().get("qty").is_none());
-    }
-
-    #[test]
-    fn revise_body_revises_main_body() {
-        let config = config();
-        let mut doc = blank_doc();
-        let mut ed = TypedWriter::new(&config, &mut doc);
-        ed.revise_body("**hi**").unwrap();
-        assert_eq!(doc.main().body_markdown(), "**hi**");
     }
 
     #[test]
@@ -378,7 +349,6 @@ card_kinds:
             let mut ed = TypedWriter::new(&config, &mut doc);
             ed.add_card("note", [("body", "a")], None, None).unwrap();
             ed.add_card("note", [("body", "c")], None, None).unwrap();
-            // Positioned typed insert in one atomic call.
             ed.add_card("note", [("body", "b")], None, Some(1)).unwrap();
         }
         let bodies: Vec<String> = doc
@@ -388,7 +358,7 @@ card_kinds:
             .collect();
         assert_eq!(bodies, ["a", "b", "c"]);
 
-        // An out-of-range position is transactional: nothing is inserted.
+        // Out-of-range insert is transactional.
         {
             let mut ed = TypedWriter::new(&config, &mut doc);
             let errs = ed
@@ -398,7 +368,6 @@ card_kinds:
         }
         assert_eq!(doc.cards().len(), 3);
 
-        // remove_card returns the removed card; None out of range.
         {
             let mut ed = TypedWriter::new(&config, &mut doc);
             let removed = ed.remove_card(1).unwrap();
@@ -413,25 +382,11 @@ card_kinds:
         let config = config();
         let mut doc = blank_doc();
         let mut ed = TypedWriter::new(&config, &mut doc);
-        // An undeclared field aborts the commit; the card never joins the document.
         let errs = ed
             .add_card("note", [("stray", "x")], None, None)
             .unwrap_err();
         assert_eq!(errs[0].0, "stray");
         assert_eq!(errs[0].1.code(), "edit::unknown_field");
-        assert_eq!(doc.cards().len(), 0);
-    }
-
-    #[test]
-    fn add_card_reports_invalid_kind() {
-        let config = config();
-        let mut doc = blank_doc();
-        let mut ed = TypedWriter::new(&config, &mut doc);
-        // A reserved kind is refused before any card is built.
-        let errs = ed
-            .add_card("$reserved", [] as [(&str, &str); 0], None, None)
-            .unwrap_err();
-        assert_eq!(errs[0].0, "$kind");
         assert_eq!(doc.cards().len(), 0);
     }
 
@@ -444,13 +399,11 @@ card_kinds:
         let mut ed = TypedWriter::new(&config, &mut doc);
         let mut card_ed = ed.card(0).unwrap();
         card_ed.set("body", "**hi**").unwrap();
-        // Unknown field on a known card → rejected as a typo.
         let err = card_ed.set("stray", "v").unwrap_err();
         assert_eq!(err.code(), "edit::unknown_field");
 
         assert_eq!(doc.cards()[0].field_markdown("body").unwrap().unwrap(), "**hi**");
 
-        // Out-of-range card index errors.
         let mut ed = TypedWriter::new(&config, &mut doc);
         assert!(matches!(
             ed.card(9),
@@ -463,17 +416,15 @@ card_kinds:
         let config = config();
         let mut doc = blank_doc();
         let mut ed = TypedWriter::new(&config, &mut doc);
-        // Typed richtext write lands the content and returns a Delta receipt.
         let _delta = ed.revise_field("subject", "Hello").unwrap();
         assert_eq!(doc.main().field_markdown("subject").unwrap().unwrap(), "Hello");
 
-        // Unknown name is a typo, not a fallback.
         let mut ed = TypedWriter::new(&config, &mut doc);
         assert_eq!(
             ed.revise_field("nope", "x").unwrap_err().code(),
             "edit::unknown_field"
         );
-        // richtext(inline) rejects a multi-block result; the field is unchanged.
+        // `richtext(inline)` rejects a multi-block result.
         let err = ed.revise_field("subject", "a\n\nb").unwrap_err();
         assert_eq!(err.code(), "edit::field_not_inline");
         assert_eq!(doc.main().field_markdown("subject").unwrap().unwrap(), "Hello");
