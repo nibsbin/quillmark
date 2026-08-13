@@ -349,13 +349,12 @@ impl Fidelity {
 
 impl MarkKind {
     /// Formatting marks are a property of a range and union when coincident;
-    /// identity/unknown marks are handles and never merge (Spike-A rules).
+    /// identity/unknown marks are handles and never merge.
     ///
     /// Class membership is stored meaning, not presentation: promoting an
     /// open-set tag *into* this class starts unioning adjacent runs that
-    /// round-tripped as two marks, so the promotion moves the canonical bytes of
-    /// documents nobody edited (`DOCUMENT_STORAGE.md` § Promoting a vocabulary
-    /// member).
+    /// round-tripped as two marks, moving the canonical bytes of documents
+    /// nobody edited.
     pub fn is_formatting(&self) -> bool {
         matches!(
             self,
@@ -372,12 +371,10 @@ impl MarkKind {
     /// `(start, end)`. Stable across releases: part of the freeze.
     ///
     /// A new variant takes the slot immediately **before** [`MarkKind::Unknown`],
-    /// pushing `Unknown` up by one. That is the only placement where a build that
-    /// knows the type and a build that reads it as `Unknown` order it identically
-    /// against every built-in; anywhere else is two canonical forms for one
-    /// document, one per reader (`DOCUMENT_STORAGE.md` § Promoting a vocabulary
-    /// member). The block axes sort by nothing, so the rule is the mark axis'
-    /// alone.
+    /// pushing `Unknown` up by one: the only placement where a build that knows
+    /// the type and a build that reads it as `Unknown` order it identically
+    /// against every built-in. Anywhere else is two canonical forms for one
+    /// document, one per reader.
     pub fn ord(&self) -> u8 {
         match self {
             MarkKind::Strong => 0,
@@ -415,10 +412,8 @@ fn canonical_json_string(v: &JsonValue) -> String {
 }
 
 /// Whether every object in `v` already has its keys in ascending order,
-/// recursively: the cheap allocation-free check that lets a re-normalize skip
-/// rebuilding an already-canonical `props`/`attrs` tree.
-/// Once normalized, an untouched tree stays sorted, so a per-keystroke
-/// re-normalize pays a scan instead of a full clone.
+/// recursively: the allocation-free check that lets a re-normalize skip
+/// rebuilding an already-canonical tree.
 pub(crate) fn is_value_key_sorted(v: &JsonValue) -> bool {
     match v {
         JsonValue::Array(items) => items.iter().all(is_value_key_sorted),
@@ -431,16 +426,10 @@ pub(crate) fn is_value_key_sorted(v: &JsonValue) -> bool {
 }
 
 /// `true` when `v` nests deeper than `max` container levels: the guard that
-/// keeps the recursive walkers above ([`is_value_key_sorted`], [`sort_keys_owned`])
-/// and `Value`'s own `Drop` inside a bounded frame count.
-///
-/// The walk is iterative (explicit stack), so the check itself cannot overflow on
+/// keeps the recursive walkers here and `Value`'s own `Drop` inside a bounded
+/// frame count. The walk is iterative, so the check itself cannot overflow on
 /// the adversarially deep input it exists to detect. The unit is **container
-/// levels**, not nodes: only arrays and objects are charged a level and the
-/// scalar leaf at the bottom of a chain is never checked, so `max` nested
-/// containers are accepted whether the deepest holds a scalar, is empty, or holds
-/// another container, and `max + 1` is rejected in every case. Level-charging
-/// matches [`quillmark_core::json_depth_exceeds`], the document-side twin, so the
+/// levels**, not nodes, matching [`quillmark_core::json_depth_exceeds`], so the
 /// two boundaries reject the identical shape.
 pub(crate) fn json_depth_exceeds(v: &JsonValue, max: usize) -> bool {
     // (value, depth) pairs; depth counts container levels entered.
@@ -465,10 +454,8 @@ pub(crate) fn json_depth_exceeds(v: &JsonValue, max: usize) -> bool {
     false
 }
 
-/// [`json_depth_exceeds`] against [`MAX_JSON_DEPTH`](crate::MAX_JSON_DEPTH) as an
-/// [`Invariant`] result, `what` naming the bag. The one spelling shared by
-/// [`Content::validate`] and the decoders in [`crate::serial`], so the wire and
-/// in-process readings of the limit cannot drift.
+/// [`json_depth_exceeds`] against [`MAX_JSON_DEPTH`](crate::MAX_JSON_DEPTH) as
+/// an [`Invariant`] result, `what` naming the bag.
 pub(crate) fn check_json_depth(v: &JsonValue, what: &'static str) -> Result<(), Invariant> {
     if json_depth_exceeds(v, crate::MAX_JSON_DEPTH) {
         return Err(Invariant::JsonTooDeep {
@@ -479,28 +466,19 @@ pub(crate) fn check_json_depth(v: &JsonValue, what: &'static str) -> Result<(), 
     Ok(())
 }
 
-/// Put `v` in canonical key order, rebuilding it only when a key is actually out
-/// of order: an untouched tree (a pure text splice) stays sorted, so the
-/// per-keystroke path pays the scan and skips the deep clone.
+/// Put `v` in canonical key order, rebuilding it only when a key is out of
+/// order, so an untouched tree pays the scan and skips the deep clone.
 pub(crate) fn canonicalize_keys(v: &mut JsonValue) {
     if !is_value_key_sorted(v) {
         *v = sort_keys_owned(std::mem::take(v));
     }
 }
 
-/// The crate's one key sorter: reorder every object's keys by **moving** each
-/// entry into a freshly key-sorted map, recursively. Pins island `props` (and
-/// unknown line/container/mark `attrs`) against `preserve_order` leaking
-/// insertion order into the canonical bytes / content hash. Re-sorting into a
-/// new `serde_json::Map` (not sorting in place) keeps that independent of
-/// whether `serde_json`'s `preserve_order` feature is on in the crate graph.
-///
-/// The fixed struct keys land alphabetically and an already-sorted
-/// `props`/`attrs` re-sorts to itself. The leaves (the `text` string, mark
-/// attrs, arrays) move rather than deep-clone, so a tree built once by
-/// `to_value` is canonicalized without a second full clone, and the encoders
-/// emit their payload bags verbatim, one pass over the finished tree rather
-/// than one per bag.
+/// Reorder every object's keys by **moving** each entry into a freshly
+/// key-sorted map, recursively. Pins the canonical bytes against
+/// `serde_json`'s `preserve_order` leaking insertion order; rebuilding the map
+/// (rather than sorting in place) keeps that independent of whether the feature
+/// is on in the crate graph.
 pub(crate) fn sort_keys_owned(v: JsonValue) -> JsonValue {
     match v {
         JsonValue::Array(items) => {
@@ -561,19 +539,14 @@ pub enum Invariant {
     /// would break the exported table). `cell` is the flat header-then-rows
     /// index; `normalize` rewrites the newline to a space.
     TableCellNewline { cell: usize },
-    /// Two islands share an `id`. Ids are deterministic, session-stable
-    /// identities (hash input, so never ambient); import mints them by index so
-    /// they never collide, but a hand-built or round-tripped content can.
-    /// Downstream code that keys islands by id would otherwise silently pick the
-    /// wrong one. Uniqueness is the id invariant `validate` enforces: positional
-    /// equality is not, since edits keep an island's id stable across renumbers.
+    /// Two islands share an `id`. Uniqueness is the id invariant `validate`
+    /// enforces; positional equality is not, since edits keep an island's id
+    /// stable across renumbers.
     IslandIdCollision { id: String },
-    /// Two prose anchors share an `id`, or one carries the empty id. An anchor
-    /// id is a caller-supplied, opaque handle, unique per `Content` (hash input,
-    /// never ambient in the twin's sense; `DOCUMENT_STORAGE.md` § Anchor-id
-    /// identity). `RemoveAnchor { id }` retains-out *every* match, so a shared id
-    /// makes removing one destroy both; the empty id is a degenerate handle.
-    /// Scope is prose marks: cell anchors are outside the op surface.
+    /// Two prose anchors share an `id`, or one carries the empty id.
+    /// `RemoveAnchor { id }` retains-out *every* match, so a shared id makes
+    /// removing one destroy both. Scope is prose marks: cell anchors are outside
+    /// the op surface.
     AnchorIdCollision { id: String },
     /// A table island's `header` prop is present but not a JSON array: it
     /// cannot carry column cells. `normalize` rewrites a non-array header to an
@@ -584,20 +557,18 @@ pub enum Invariant {
     /// (an `Island`-tagged prose line projects to its resolved island alone).
     LineKindMismatch { line: usize, mismatch: LineKindMismatch },
     /// A line's container path is nested deeper than
-    /// [`MAX_NESTING_DEPTH`](crate::MAX_NESTING_DEPTH). Both
-    /// emitters recurse one frame per container, so an unbounded path overflows
-    /// the stack; import caps it, and this is the same cap for the content that
-    /// never went through import (a decoded blob, a hand-built value).
+    /// [`MAX_NESTING_DEPTH`](crate::MAX_NESTING_DEPTH). Both emitters recurse
+    /// one frame per container, so an unbounded path overflows the stack.
     NestingTooDeep {
         line: usize,
         depth: usize,
         max: usize,
     },
     /// An opaque JSON payload (an island's `props`, an unknown line/container/
-    /// mark's `attrs`) nests deeper than [`MAX_JSON_DEPTH`](crate::MAX_JSON_DEPTH):
-    /// [`Invariant::NestingTooDeep`] on the payload axis. `what` names the bag.
-    /// No true depth: the check bails at the first over-deep container rather
-    /// than measuring past the limit.
+    /// mark's `attrs`) nests deeper than
+    /// [`MAX_JSON_DEPTH`](crate::MAX_JSON_DEPTH). `what` names the bag; no true
+    /// depth is reported, since the check bails at the first over-deep
+    /// container.
     JsonTooDeep { what: &'static str, max: usize },
 }
 
@@ -617,10 +588,8 @@ pub enum LineKindMismatch {
     CodeHasSlot,
 }
 
-/// How a line's text contradicts `kind`, if it does, the single reading behind
-/// the [`Invariant::LineKindMismatch`] and
-/// [`ApplyError::LineKindMismatch`](crate::ops::ApplyError::LineKindMismatch)
-/// twins, so the validate-time and op-time checks cannot drift.
+/// How a line's text contradicts `kind`, if it does: the single reading behind
+/// the validate-time and op-time checks, so the two cannot drift.
 pub fn line_kind_mismatch(kind: &LineKind, seg: &str) -> Option<LineKindMismatch> {
     match kind {
         LineKind::Island => {
@@ -637,14 +606,11 @@ pub fn line_kind_mismatch(kind: &LineKind, seg: &str) -> Option<LineKindMismatch
 }
 
 impl Content {
-    /// The text and its per-line attributes: what a content always carries.
-    /// Marks and islands start empty and have [`with_marks`](Self::with_marks) /
-    /// [`with_islands`](Self::with_islands) beside them.
+    /// The text and its per-line attributes; marks and islands start empty.
     ///
     /// Constructing does not normalize or check: the invariants in this type's
     /// docs are the caller's until [`validate`](Self::validate) runs. The codecs
-    /// ([`crate::import`], [`Content::from_canonical_json`]) establish them, and
-    /// are what a consumer normally builds through.
+    /// ([`crate::import`], [`Content::from_canonical_json`]) establish them.
     pub fn new(text: String, lines: Vec<Line>) -> Self {
         Content {
             text,
@@ -654,13 +620,12 @@ impl Content {
         }
     }
 
-    /// Set [`marks`](Self::marks), the range-anchored marks over the text.
     pub fn with_marks(mut self, marks: Vec<Mark>) -> Self {
         self.marks = marks;
         self
     }
 
-    /// Set [`islands`](Self::islands), one per [`ISLAND_SLOT`] in slot order.
+    /// Set the islands, one per [`ISLAND_SLOT`] in slot order.
     pub fn with_islands(mut self, islands: Vec<Island>) -> Self {
         self.islands = islands;
         self
@@ -677,10 +642,8 @@ impl Content {
     }
 
     /// Whether this content satisfies the `richtext(inline)` constraint: exactly
-    /// one `Para` line, sitting in no container, with no islands. A single line
-    /// can never `continues` (line 0 is always `false`), so that dimension is
-    /// implied. [`Content::empty`] is inline (one empty `Para`), so a blank or
-    /// zero-filled inline field passes.
+    /// one `Para` line, sitting in no container, with no islands.
+    /// [`Content::empty`] is inline, so a blank inline field passes.
     pub fn is_inline(&self) -> bool {
         self.islands.is_empty()
             && self.lines.len() == 1
@@ -689,17 +652,12 @@ impl Content {
     }
 
     /// Whether this content satisfies the `plaintext` constraint: no marks, no
-    /// islands, and every line is a plain `Para` sitting in no container. It is
-    /// the multi-line generalization of [`is_inline`](Self::is_inline) (which
-    /// additionally pins the content to one line) with the mark/island exclusion
-    /// made explicit: a plaintext value carries prose the author navigates but
-    /// no formatting. `continues` is unconstrained: a lone `\n` may be a
-    /// within-paragraph break. [`Content::empty`] is plain.
+    /// islands, and every line a plain `Para` sitting in no container.
+    /// `continues` is unconstrained. [`Content::empty`] is plain.
     ///
-    /// This is the plaintext analogue of `is_inline`, enforced at coercion and
-    /// validation with the `NotPlain` error; the distinguishing property of
-    /// plaintext over `richtext { marks: [] }` is the *literal* codec
-    /// ([`crate::import::from_plaintext`]), not this predicate.
+    /// The distinguishing property of plaintext over `richtext { marks: [] }` is
+    /// the *literal* codec ([`crate::import::from_plaintext`]), not this
+    /// predicate.
     pub fn is_plain(&self) -> bool {
         self.marks.is_empty()
             && self.islands.is_empty()
@@ -709,10 +667,8 @@ impl Content {
                 .all(|l| l.kind == LineKind::Para && l.containers.is_empty())
     }
 
-    /// Whether the content carries no renderable content: the text is empty or
-    /// whitespace-only. An island slot ([`ISLAND_SLOT`], U+FFFC) is not
-    /// whitespace, so an island-bearing content is never blank. Body-disabled
-    /// validation and round-trip emit key on it.
+    /// Whether the text is empty or whitespace-only. An [`ISLAND_SLOT`] is not
+    /// whitespace, so an island-bearing content is never blank.
     pub fn is_blank(&self) -> bool {
         self.text.trim().is_empty()
     }
@@ -727,22 +683,12 @@ impl Content {
     /// props and unknown-mark attrs, then sort marks canonically. Idempotent:
     /// the fixed point the canonical serialization commits to.
     pub fn normalize(&mut self) {
-        // Line kinds whose contract names their content, against the content
-        // they now hold. A splice writes text, never kinds: typing into a table
-        // line leaves it `Island` over prose, joining a fence to an image line
-        // leaves it `Code` over a slot, and export reads the kind and not the
-        // text, so the un-repaired line projects its content away. Demote to
-        // `Para`, the kind that carries anything (an inline island is a slot in a
-        // `Para`), which is what re-importing the line's own markdown yields.
-        // The repair-side twin of the [`Invariant::LineKindMismatch`] check; the
-        // deliberate mis-tag is refused up front instead
-        // ([`ApplyError::LineKindMismatch`](crate::ops::ApplyError::LineKindMismatch)),
-        // since silently undoing an op the caller asked for is worse than an error.
-        // The same pass canonicalizes the open block vocabulary's opaque `attrs`:
-        // it is hash input like every other field, so two equal contents whose
-        // unknown lines were built key-reversed must not serialize to different
-        // bytes. A demoted line is `Para`, never `Unknown`, so the two are
-        // independent.
+        // A splice writes text, never kinds: typing into a table line leaves it
+        // `Island` over prose, joining a fence to an image line leaves it `Code`
+        // over a slot, and export reads the kind and not the text, so the
+        // un-repaired line projects its content away. Demote to `Para`, which is
+        // what re-importing the line's own markdown yields. A *deliberate*
+        // mis-tag is refused up front by the op channel instead.
         for (line, seg) in self.lines.iter_mut().zip(self.text.split('\n')) {
             if line_kind_mismatch(&line.kind, seg).is_some() {
                 line.kind = LineKind::Para;
@@ -756,12 +702,9 @@ impl Content {
                 }
             }
         }
-        // Islands: canonicalize props key order. A table island's cells carry
-        // inline `{text, marks}`; repair its shape (pad the header/rows/aligns to
-        // one column count, rewrite any cell `\n` to a space) and canonicalize
-        // each cell's marks (sort, union, drop zero-width) first so equal cells
-        // serialize to equal bytes and `validate` holds: the props are
-        // otherwise opaque here.
+        // A table island's props are repaired (padded to one column count, cell
+        // `\n` rewritten to a space, cell marks canonicalized) before the key
+        // sort, so equal cells serialize to equal bytes and `validate` holds.
         for island in &mut self.islands {
             crate::island::normalize_island_structure(island);
             canonicalize_keys(&mut island.props);
