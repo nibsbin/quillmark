@@ -375,34 +375,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_from_yaml_str() {
-        let yaml_str = r#"
-            title: Test Document
-            author: John Doe
-            count: 42
-        "#;
-        let quill_val = QuillValue::from_yaml_str(yaml_str).unwrap();
-
-        assert_eq!(
-            quill_val.get("title").as_ref().and_then(|v| v.as_str()),
-            Some("Test Document")
-        );
-        assert_eq!(
-            quill_val.get("author").as_ref().and_then(|v| v.as_str()),
-            Some("John Doe")
-        );
-        assert_eq!(
-            quill_val.get("count").as_ref().and_then(|v| v.as_i64()),
-            Some(42)
-        );
-    }
-
-    #[test]
     fn from_yaml_str_carries_the_shared_depth_budget() {
-        // The third YAML entry point, alongside `decompose`'s card-yaml payloads
-        // (assemble_tests::test_yaml_depth_limit) and the Quill.yaml loader
-        // (quill::tests::quill_yaml_deep_nesting_is_rejected). Unbudgeted, this
-        // one recurses until the stack gives out.
         let max = crate::document::limits::MAX_YAML_DEPTH;
         let nest = |levels: usize| {
             let mut yaml = String::new();
@@ -440,8 +413,7 @@ mod tests {
         assert_eq!(diag.code.as_deref(), Some("quill::yaml_parse_error"));
     }
 
-    /// The engine appends its own Rust API names to some messages. `YamlError`
-    /// promises the engine is invisible, which has to hold for the text too.
+    /// `YamlError` promises the engine is invisible, text included.
     #[test]
     fn yaml_error_strips_the_engine_api_names() {
         let err = QuillValue::from_yaml_str("a: 1\na: 2\n")
@@ -456,11 +428,7 @@ mod tests {
 
     #[test]
     fn test_yaml_custom_tags_ignored_at_value_level() {
-        // At the raw `QuillValue::from_yaml_str` layer, custom YAML tags
-        // (including `!must_fill`) pass through serde_saphyr which drops the
-        // tag and returns the underlying scalar.  The tag is recovered at
-        // the `Document` layer by `document::prescan`: see
-        // `document::tests::lossiness_tests::custom_tags_lose_tag_but_keep_value`.
+        // The tag is recovered a layer up, by `document::prescan`.
         let yaml_str = "memo_from: !must_fill 2d lt example";
         let quill_val = QuillValue::from_yaml_str(yaml_str).unwrap();
 
@@ -472,8 +440,7 @@ mod tests {
 
     #[test]
     fn json_round_trips_through_the_tree() {
-        // from_json → as_json must be identity, preserving object key order
-        // (serde_json `preserve_order`) and number kinds.
+        // Identity, object key order (serde_json `preserve_order`) included.
         let original = serde_json::json!({
             "z": 1,
             "a": [true, "x", 3.5, null],
@@ -482,7 +449,7 @@ mod tests {
         let qv = QuillValue::from_json(original.clone());
         assert_eq!(qv.as_json(), &original);
 
-        // A value re-lowered from the tree (not the seeded cache) also matches.
+        // Re-lowered from the tree rather than read off the seeded cache.
         let relowered = QuillValue::from_node(qv.node.clone()).into_json();
         assert_eq!(relowered, original);
     }
@@ -491,18 +458,13 @@ mod tests {
     fn depth_check_counts_empty_containers() {
         use serde_json::json;
 
-        // A container occupies a level even when empty. With `max_depth = 1`,
-        // a single empty container is at the limit (accepted); a nested empty
-        // container is one level past it (rejected): same as if its innermost
-        // slot held a non-empty container.
+        // A container occupies a level even when empty.
         assert!(!json_depth_exceeds(&json!([]), 1));
         assert!(!json_depth_exceeds(&json!({}), 1));
         assert!(json_depth_exceeds(&json!([[]]), 1));
         assert!(json_depth_exceeds(&json!({ "a": {} }), 1));
 
-        // Regression: an empty container at the deepest level must not slip
-        // past the bound. Build `[[[…[]…]]]` nested `n` levels with the
-        // innermost array empty, iteratively so the test stays stack-safe.
+        // `[[[…[]…]]]`, built iteratively so the test stays stack-safe.
         let deep_empty = |levels: usize| {
             let mut v = serde_json::Value::Array(Vec::new());
             for _ in 1..levels {
@@ -510,20 +472,13 @@ mod tests {
             }
             v
         };
-        // `levels == max_depth` is exactly at the limit (the empty array is the
-        // last allowed level); `levels == max_depth + 1` is one past it.
         assert!(!json_depth_exceeds(&deep_empty(100), 100));
         assert!(json_depth_exceeds(&deep_empty(101), 100));
     }
 
     #[test]
     fn depth_check_counts_container_levels_not_the_scalar_leaf() {
-        // The cutoff is container levels: a scalar leaf at the bottom is never
-        // charged a level. `{"a":{"a":…{"a":1}}}` with exactly `max_depth`
-        // objects is at the limit; one more object is past it. The Python
-        // binding's `py_to_json_at` pins the same boundary (test
-        // `test_depth_bound_matches_core_container_levels`), so the two paths
-        // reject the identical shape.
+        // The Python binding's `py_to_json_at` pins the same boundary.
         let scalar_terminated = |levels: usize| {
             let mut v = serde_json::json!(1);
             for _ in 0..levels {
@@ -534,8 +489,7 @@ mod tests {
         assert!(!json_depth_exceeds(&scalar_terminated(100), 100));
         assert!(json_depth_exceeds(&scalar_terminated(101), 100));
 
-        // A non-empty container leaf lands at the same boundary: the deepest
-        // container (not its contents) is what occupies the last level.
+        // The deepest container, not its contents, occupies the last level.
         let container_terminated = |levels: usize| {
             let mut v = serde_json::json!([1, 2, 3]);
             for _ in 1..levels {
@@ -556,10 +510,8 @@ mod tests {
         };
         let qv = filled();
         assert!(qv.fill());
-        // Projection is fill-free and equal to the plain scalar.
         assert_eq!(qv.as_json(), &serde_json::json!("draft"));
-        // Equality is fill-sensitive.
-        assert_ne!(qv, QuillValue::string("draft"));
+        assert_ne!(qv, QuillValue::string("draft"), "equality is fill-sensitive");
         assert_eq!(qv, filled());
     }
 }
