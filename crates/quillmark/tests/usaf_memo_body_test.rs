@@ -1,15 +1,15 @@
 //! Heading survival through `usaf_memo`'s paragraph rebuild.
 //!
 //! The memo's `render-body` buffers a heading and prepends it to the next
-//! element as `strong[…]`: the AFH run-in style, deliberate. The buffer is one
-//! variable, so three shapes used to lose their heading with no trace in the
-//! render — a heading with nothing after it (the buffer died with the loop), a
-//! heading whose next element began a *different* list item (its text was
-//! delivered into that item), and a heading following a heading (the assignment
-//! overwrote the earlier one).
+//! element as `strong[…]`: the AFH run-in style, deliberate. The invariant the
+//! buffer must hold is that every heading reaches the page exactly once, in its
+//! own place. Three shapes press on it — a heading with nothing after it, a
+//! heading whose next element opens a *different* list item, and a heading
+//! following a heading — because each is a heading the next iteration does not
+//! consume.
 //!
 //! The oracle is `regions()`, not output size: a region's `span` is the content
-//! range its glyphs came from, so text that never reached the page has no span
+//! range its glyphs came from, so text that does not reach the page has no span
 //! covering it. Byte-length only says "something changed".
 
 #![cfg(feature = "typst")]
@@ -39,9 +39,9 @@ fn spans(body: &str) -> Vec<[usize; 2]> {
     body_regions(body).into_iter().map(|(s, _)| s).collect()
 }
 
-/// A heading with nothing after it to run into. Both shapes ended the buffer
-/// holding content no later iteration consumed; the drop was total, taking the
-/// list item's bullet with it.
+/// A heading with nothing after it to run into: the buffer holds content no
+/// later iteration consumes, so it must be drained after the loop rather than
+/// dying with it. Undrained, the loss is total, the list item's bullet included.
 #[test]
 fn a_trailing_heading_reaches_the_page() {
     // "one" then "Trailing", the second on its own line.
@@ -51,8 +51,8 @@ fn a_trailing_heading_reaches_the_page() {
     assert_eq!(spans("# Only"), [[0, 4]]);
 }
 
-/// Two headings in a row. The buffer was assigned, not appended, so the first
-/// heading was destroyed by the second; only the second's run-in survived.
+/// Two headings in a row. The buffer holds one heading, so the second must
+/// flush the first rather than overwrite it.
 #[test]
 fn consecutive_headings_both_reach_the_page() {
     assert_eq!(spans("# First\n\n# Second\n\ntext"), [[0, 5], [6, 12], [13, 17]]);
@@ -71,9 +71,9 @@ fn on_one_line(body: &str) -> bool {
 }
 
 /// A heading whose next element opens a *different* list item. Coverage cannot
-/// see this one — the text inked either way — but its place could not be more
-/// wrong: the heading's text was prepended to the *next* item's own content, so
-/// the two shared a line.
+/// see this one: the text inks whether or not it lands in the right item. Place
+/// is the tell — prepended to the next item's own content, a heading shares that
+/// item's line.
 #[test]
 fn a_heading_does_not_cross_into_the_next_item() {
     let regions = body_regions("- # Absorbed\n- second");
@@ -97,8 +97,8 @@ fn the_run_in_style_still_runs_in() {
     assert!(on_one_line("# Absorbed\n\nitem text"));
 }
 
-/// The seeded document still renders: the repair reuses the standalone-emit
-/// branch a heading before a table already took, so the common path is untouched.
+/// The common path is untouched: standalone emission is the branch a heading
+/// before a table already takes, and the seeded document renders through it.
 #[test]
 fn the_seeded_memo_still_renders() {
     let engine = Quillmark::new();
@@ -109,9 +109,9 @@ fn the_seeded_memo_still_renders() {
         .expect("the seeded memo renders");
 }
 
-/// The memo declares the one construct it genuinely does not typeset. An
-/// AFH 33-337 memo has no dividers, and `render-body` typesets none at any
-/// depth — silently, until the body says so on the pre-render walk.
+/// The memo declares the one construct it does not typeset. An AFH 33-337 memo
+/// has no dividers, and `render-body` draws none at any depth, so a rule leaves
+/// the page unmarked and the walk is the only place that says so.
 #[test]
 fn a_rule_in_the_memo_body_warns() {
     let quill = quillmark::quill_from_path(quills_path("usaf_memo")).expect("usaf_memo loads");

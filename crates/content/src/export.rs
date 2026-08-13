@@ -1255,22 +1255,21 @@ mod tests {
         }
     }
 
-    /// A rule as a **bullet** item's first block. `- ` + `---` is four dashes
-    /// separated by spaces: a thematic break, and a break outranks a list item
-    /// wherever both readings fit, so the item was lost on re-import. The
-    /// ordered marker never collided (digits are not break characters) and a
-    /// rule as a *later* block is disambiguated by its indentation; both are
-    /// here so a regression localizes to the colliding shape.
+    /// A rule as a **bullet** item's first block, the one shape where the
+    /// marker and the rule can spell one token: `- ` + `---` is four dashes
+    /// separated by spaces, a thematic break, and a break outranks a list item
+    /// wherever both readings fit. An ordered marker cannot collide (digits are
+    /// not break characters) and a rule as a *later* block is disambiguated by
+    /// its indentation; both sit here so a regression localizes.
     #[test]
     fn rule_opening_a_list_item_keeps_its_item() {
         for md in ["* ---", "+ ---", "- ***", "- ___", "- - ***", "- > ***"] {
             round_trips(md);
         }
         assert_eq!(to_markdown(&from_markdown("* ---").unwrap()), "- ***");
-        // The shapes that always survived, pinned against a fix that trades
-        // one collision for another: a bullet marker swapped to `*`/`+` would
-        // start a *new* list, resetting `ordinal` on this item and every one
-        // after it.
+        // The shapes that never collide, pinned against a fix that trades one
+        // collision for another: swapping the bullet marker to `*`/`+` starts a
+        // *new* list, resetting `ordinal` on this item and every one after it.
         round_trips("1. ---");
         round_trips("- one\n\n  ---");
         round_trips("- a\n- ***\n- c");

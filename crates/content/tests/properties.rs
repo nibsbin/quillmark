@@ -33,14 +33,13 @@ fn clean_word() -> impl Strategy<Value = String> {
 
 // `plain_word` carries inline-special and astral chars as *literal text*, so
 // escaping and USV bounds are exercised by the round-trip. The first char stays
-// alphanumeric, so a block marker never *leads* an item's content (`- >`, `- #`
-// would make pulldown build a nested block, not literal text, so the generated
-// source would not carry the prose this arm is generating); a block *as* an
-// item's block is a shape the editor does mint, and `block()` generates it
-// structurally. The tail carries `&` and the
-// block-marker chars (`# > - . +`), exercising `&`-entity escaping and a
-// trailing-`#` heading run through the round-trip, not just
-// the pinned `export::tests::*` unit tests.
+// alphanumeric, so a block marker never *leads* this token: `- >` and `- #`
+// make pulldown build a nested block rather than the literal text the arm is
+// generating. That bounds the token, not the suite — a block *as* a list item's
+// block is its own `block()` arm. The tail carries `&` and the block-marker
+// chars (`# > - . +`), exercising `&`-entity escaping and a trailing-`#`
+// heading run through the round-trip, not just the pinned
+// `export::tests::*` unit tests.
 fn plain_word() -> impl Strategy<Value = String> {
     r"[a-z0-9][a-z0-9*_~\\&#>.+😀你-]{0,5}"
 }

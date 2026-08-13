@@ -3,31 +3,27 @@
 //!
 //! A quill's plate is free to reinterpret a construct the content holds —
 //! absorb it into a neighbour, move its text elsewhere, typeset nothing at all
-//! — and the render says nothing, because only the quill knows it did. Core
-//! cannot detect it: the plate's output is ink, and the absence of ink where a
-//! construct used to be is not a signal any backend reports.
+//! — and only the quill knows it did. Core cannot detect it: the plate's output
+//! is ink, and a construct that drew none is indistinguishable from one the
+//! content never held.
 //!
-//! So the quill declares it instead, per body, as data
-//! ([`BodyCardSchema::unsupported`]). That buys two things one diagnostic
-//! producer could not:
+//! So the quill declares it, per body, as data
+//! ([`BodyCardSchema::unsupported`]). Declaring rather than observing is what
+//! buys the two properties:
 //!
 //! - **An answer before the render.** An editor reads the declaration off the
-//!   schema and declines the gesture at the moment the author makes it. A
-//!   warning that arrives with the rendered page is too late to be the input
-//!   rule's answer, which is the question that raised this.
-//! - **A walk, not a scatter.** One traversal of the content sees every
-//!   occurrence at once, so a body holding forty rules draws one diagnostic
-//!   carrying `count: 40` rather than forty identical ones.
+//!   schema and declines the gesture as the author makes it. A warning arriving
+//!   with the rendered page is too late to be an input rule's answer.
+//! - **A walk, not a scatter.** One traversal sees every occurrence at once, so
+//!   a body holding forty rules draws one diagnostic carrying `count: 40`.
 //!
 //! What it does not buy is verification. A declaration is a claim about the
-//! plate that nothing checks, and a plate that drops a construct it never
-//! declared stays as silent as before. This is documentation with a diagnostic
-//! attached.
+//! plate that nothing checks: a construct absent from the list is not a promise
+//! the plate typesets it, and an undeclared drop stays silent. This is
+//! documentation with a diagnostic attached.
 //!
-//! The vocabulary is flat — one name per block kind, no `list_item > heading`
-//! contextual forms. Nothing in the bundled quills needs a contextual
-//! declaration, and the shape to reach for when one does is an open question
-//! better answered by the case that raises it.
+//! The vocabulary is flat: one name per block kind, no context-qualified forms.
+//! A heading is declined everywhere or nowhere.
 
 use std::collections::BTreeMap;
 

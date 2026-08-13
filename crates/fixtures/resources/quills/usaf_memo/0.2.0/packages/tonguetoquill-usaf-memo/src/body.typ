@@ -233,7 +233,7 @@
       // a table (nest_level −1, so the level test alone excludes it), and
       // another heading all fail the test, and each would otherwise carry the
       // heading's text somewhere it was not authored. Those emit the heading
-      // on its own line, the treatment a heading before a table already got.
+      // on its own line, the treatment a heading before a table takes.
       if heading_buffer != none {
         let runs_in = (
           kind != "heading"
