@@ -1,15 +1,9 @@
-//! Shared driver for the per-quill demo examples.
-
 use quillmark_fixtures::{example_output_dir, quills_path, write_example_output};
 use std::error::Error;
 
-/// Load a quill, render its generated `example` document to PDF, and write the
-/// result to the demo output directory.
-///
-/// Uses the `example` reference document (example › default › zero) so cells
-/// carry illustrative values and the document renders without field-filling; the
-/// plain `blueprint()` carries `!must_fill` placeholders (which render via the
-/// zero-fill floor but warn until replaced).
+/// Render a quill's seed document to PDF in the demo output directory. The seed
+/// (example › default › zero) carries illustrative values, where a plain
+/// `blueprint()` would carry warning `!must_fill` placeholders.
 pub fn demo(quill_dir: &str, render_output: &str) -> Result<(), Box<dyn Error>> {
     let quill_path = quills_path(quill_dir);
     let engine = quillmark::Quillmark::new();

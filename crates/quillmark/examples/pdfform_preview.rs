@@ -1,11 +1,8 @@
-//! Visual preview harness for the `pdfform` backend.
+//! Visual preview harness for the `pdfform` backend: renders `sample_form` to
+//! the fixtures output directory and prints its field regions, so geometry can
+//! be cross-checked against a PDF viewer.
 //!
-//! Renders `sample_form` → `sample_form_filled.pdf`, writes it to the fixtures
-//! output directory, and prints the regions sidecar for the filled form so
-//! field geometry can be cross-checked against a viewer.
-//!
-//! Run with:
-//!   cargo run --example pdfform_preview -p quillmark
+//! `cargo run --example pdfform_preview -p quillmark`
 
 use quillmark::{Document, OutputFormat, Quillmark, RenderOptions};
 use quillmark_fixtures::{example_output_dir, quills_path, write_example_output};
@@ -27,7 +24,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let engine = Quillmark::new();
     let out_dir = example_output_dir();
 
-    // --- pdfform: sample_form → PDF ---
     println!("=== pdfform backend: sample_form → PDF ===");
     let gf_quill =
         quillmark::quill_from_path(quills_path("sample_form")).expect("load sample_form quill");
@@ -46,16 +42,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         out_dir.join("sample_form_filled.pdf").display()
     );
 
-    // Region geometry is a session-level query, not on the render result: open
-    // a session and read it without producing another byte artifact.
+    // Region geometry is a session-level query, not on the render result.
     let gf_session = engine
         .open(&gf_quill, &gf_doc)
         .expect("open sample_form session");
     let regions = gf_session.regions();
     println!("\nField regions ({} fields):", regions.len());
     for region in &regions {
-        // A region carries the schema field address + geometry, for mapping a
-        // page rectangle to the editor field (cross-navigation).
         println!(
             "  {:20}  page={:<2}  rect=[{:.1},{:.1},{:.1},{:.1}]",
             region.field,
