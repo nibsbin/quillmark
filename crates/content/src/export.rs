@@ -726,8 +726,7 @@ fn render_marked_core(
     // A chunk `(lo, hi)` and the `kept` length at which its trial is *already
     // known to fail*: a right half popped with every mark of its left sibling
     // accepted re-renders exactly the chunk their parent failed on, so it splits
-    // without spending a probe. The whole set is the render that already failed,
-    // so the search starts one level down.
+    // without spending a probe.
     let mid = cands.len() / 2;
     let mut work: Vec<(usize, usize, usize)> = vec![(mid, cands.len(), mid), (0, mid, usize::MAX)];
     let mut budget = PROBE_BUDGET;
@@ -763,11 +762,9 @@ fn render_marked_core(
 
 /// Probes the verify-and-drop net will spend on one line before giving up and
 /// dropping the flanking marks it hasn't cleared. Resolving `m` of them exactly
-/// costs at most `2m-2` probes, so at 64 no line carrying 32 or fewer ever loses
-/// a mark to the budget; past that the line is one an editor filled with
-/// unrepresentable marks, and dropping those is the net's own remedy anyway.
-/// The ceiling is the point: export cost stays linear in document size whatever
-/// marks are thrown at it.
+/// costs at most `2m-2` probes, so at 64 no line carrying 32 or fewer loses a
+/// mark to the budget. The ceiling keeps export cost linear in document size
+/// whatever marks are thrown at it.
 const PROBE_BUDGET: usize = 64;
 
 /// [`clip_range_to_atomic`] over every wrapping mark, dropping the ones an
@@ -782,14 +779,11 @@ fn clip_fmt_to_atomic(fmt: &mut Vec<(usize, usize, &MarkKind)>, atomics: &[(usiz
 /// The atomic-balance rule for a single `[*start, *end)` range against a set of
 /// atomic spans. A range edge landing strictly inside an atomic `[cs, ce)` span
 /// is pulled to that span's boundary (`start`→`ce`, `end`→`cs`); an edge outside
-/// every span is untouched. An atomic span can't carry partial styling, and a
-/// mark-sweep cursor jumps a span's interior start→end, so an edge left hiding
-/// inside would be missed and render unbalanced. A range that strictly *contains*
-/// a span keeps both edges, so the span still nests inside it. Applying the spans
-/// in sequence is order-independent across ranges, so a caller may loop ranges
-/// or spans on the outside: a range whose edges cross after clipping (swallowed
-/// whole) is left empty for the caller to drop. Shared by this crate's export
-/// and the Typst backend's inline emitter, the two sites that enforce it.
+/// every span is untouched, and a range that strictly *contains* a span keeps
+/// both edges. Applying the spans in sequence is order-independent across
+/// ranges, so a caller may loop ranges or spans on the outside; a range whose
+/// edges cross after clipping was swallowed whole and is left empty for the
+/// caller to drop. Shared with the Typst backend's inline emitter.
 pub fn clip_range_to_atomic(start: &mut usize, end: &mut usize, atomics: &[(usize, usize)]) {
     for &(cs, ce) in atomics {
         if cs < *start && *start < ce {
@@ -830,12 +824,10 @@ fn split_around_slots(chars: &[char], start: usize, end: usize) -> Vec<(usize, u
 
 /// Nest `strong`/`emph` marks that partially overlap, by truncating the
 /// later-opening one to its enclosing sibling's end. Both render as runs of the
-/// same character (`**`/`*`), so a reopened `*` abutting a `**` would merge into
-/// an ambiguous `***`: this overlap is unrepresentable in CommonMark. Truncation
-/// keeps the text and the nested portion of both marks, dropping only the
-/// crossing tail (a documented codec limit). Marks with distinct delimiters
-/// (`strike`, `underline`, `link`) are left to the sweep's close-and-reopen,
-/// which round-trips them exactly. No-op when the marks already nest.
+/// same character, so a reopened `*` abutting a `**` would merge into an
+/// ambiguous `***`. Truncation keeps the nested portion of both marks, dropping
+/// only the crossing tail. Marks with distinct delimiters are left to the
+/// sweep's close-and-reopen, which round-trips them exactly.
 fn clip_asterisk_overlap(fmt: &mut [(usize, usize, &MarkKind)]) {
     let is_ast = |k: &MarkKind| matches!(k, MarkKind::Strong | MarkKind::Emph);
     // Asterisk-family marks, outermost first (start asc, then longer span first).
@@ -858,11 +850,10 @@ fn clip_asterisk_overlap(fmt: &mut [(usize, usize, &MarkKind)]) {
     }
 }
 
-/// Reconstruct a table cell's markdown from its `{text, marks}`: the same mark
-/// sweep as prose (`render_marked_core`) with `|`→`\|` escaping so the cell
-/// survives re-import through `pulldown`'s pipe splitting. A cell is flat inline
-/// (no islands, no leading-block escape) so `import(export(table))` is a fixed
-/// point.
+/// Reconstruct a table cell's markdown from its `{text, marks}`: the prose mark
+/// sweep with `|`→`\|` escaping so the cell survives re-import through
+/// `pulldown`'s pipe splitting. A cell is flat inline: no islands, no
+/// leading-block escape.
 fn render_cell_md(v: &serde_json::Value) -> String {
     let (text, marks) = crate::serial::parse_cell(v);
     let chars: Vec<char> = text.chars().collect();
@@ -906,7 +897,7 @@ fn delim_open(kind: &MarkKind) -> String {
         MarkKind::Emph => "*".into(),
         MarkKind::Underline => "<u>".into(),
         MarkKind::Strike => "~~".into(),
-        // Code/Link/Anchor handled elsewhere.
+        // Code/Link/Anchor are handled elsewhere.
         _ => String::new(),
     }
 }
@@ -943,11 +934,9 @@ fn escape_char_into(c: char, leading: bool, escape_pipe: bool, out: &mut String)
         ']' => "\\]",
         '<' => "\\<",
         '~' => "\\~",
-        // `&` starts a CommonMark entity/numeric reference (`&amp;`, `&#38;`),
-        // decoded on re-import: an unescaped `&` in `&word;`-shaped text would
-        // silently collapse to the entity's character. Always escaped (a bare `&`
-        // is harmless, but detecting "would form an entity" is not worth the
-        // fragility); `\&` re-imports as a literal `&`.
+        // `&` starts a CommonMark entity reference, decoded on re-import, so
+        // `&word;`-shaped text would collapse to the entity's character. Always
+        // escaped: detecting "would form an entity" is not worth the fragility.
         '&' => "\\&",
         '|' if escape_pipe => "\\|",
         '#' if leading => "\\#",
