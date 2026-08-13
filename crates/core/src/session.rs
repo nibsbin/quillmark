@@ -315,17 +315,15 @@ main:
       type: plaintext
 ";
 
-    /// The schema every session in these tests is born bound to.
     fn config() -> QuillConfig {
         QuillConfig::from_yaml(QUILL_YAML).expect("valid quill")
     }
 
-    /// A document that pairs with [`config`], so `update` reaches the handle.
     fn doc() -> Document {
         Document::new(QuillReference::from_str("memo@1.0.0").unwrap())
     }
 
-    /// A canvas-capable session: overrides the seam for `pages` pages.
+    /// Canvas-capable: overrides the seam for `pages` pages.
     struct CanvasHandle {
         pages: usize,
     }
@@ -341,7 +339,7 @@ main:
         }
     }
 
-    /// A non-canvas session: leaves the seam at its `None` defaults.
+    /// Non-canvas: leaves the seam at its `None` defaults.
     struct PlainHandle;
     impl SessionHandle for PlainHandle {
         fn render(&self, _: &RenderOptions) -> Result<RenderResult, RenderError> {
@@ -352,8 +350,7 @@ main:
         }
     }
 
-    /// A warning-emitting session: `warnings` reflects the current compile
-    /// (one warning per committed update), and `render` succeeds empty.
+    /// One warning per committed update.
     struct WarningHandle {
         current: Vec<Diagnostic>,
         applies: usize,
@@ -381,9 +378,6 @@ main:
         }
     }
 
-    /// `LiveSession::warnings` reflects the handle's current compile
-    /// (refreshed by a committed update) and `render` appends the same set to
-    /// `RenderResult::warnings`.
     #[test]
     fn warnings_track_current_compile() {
         let open_warning = vec![Diagnostic::new(Severity::Warning, "open-time".to_string())];
@@ -403,8 +397,6 @@ main:
         assert_eq!(result.warnings[0].message, "warning of compile 1");
     }
 
-    /// A handle that surfaces one content region, one hit, and one caret rect:
-    /// the geometry the wrapper passes straight through.
     struct RegionHandle;
     impl SessionHandle for RegionHandle {
         fn render(&self, _: &RenderOptions) -> Result<RenderResult, RenderError> {
@@ -438,27 +430,22 @@ main:
         }
     }
 
-    /// `field_boxes` derives the whole-field box off the session's own
-    /// `regions()`.
     #[test]
     fn field_boxes_derives_off_regions() {
         let session = LiveSession::new(Box::new(RegionHandle), config());
         let boxes = session.field_boxes("subject");
         assert_eq!(boxes.len(), 1, "one span-bearing region → one box");
         assert_eq!(boxes[0].field, "subject");
-        // A field with no span-bearing region has no derived content box.
         assert!(session.field_boxes("nope").is_empty());
     }
 
     #[test]
     fn supports_canvas_derives_from_seam() {
-        // A session that exposes page geometry is canvas-capable…
         let canvas = LiveSession::new(Box::new(CanvasHandle { pages: 2 }), config());
         assert!(canvas.supports_canvas());
-        // …one that leaves the seam at its defaults is not…
         let plain = LiveSession::new(Box::new(PlainHandle), config());
         assert!(!plain.supports_canvas());
-        // …and a canvas backend with no pages has nothing to paint.
+        // A canvas backend with no pages has nothing to paint.
         let empty = LiveSession::new(Box::new(CanvasHandle { pages: 0 }), config());
         assert!(!empty.supports_canvas());
     }
