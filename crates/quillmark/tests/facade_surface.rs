@@ -1,20 +1,6 @@
-//! The facade spells every documented flow on its own. This file names only
-//! `quillmark::`, so a type dropping out of the re-export list in
-//! `crates/quillmark/src/lib.rs` stops it compiling.
-//!
-//! Authoring (`PROGRAMMATIC.md`) and bound-door ingestion (`Quill::parse`,
-//! `prose/canon/` via `quill/conform.rs`) are the flows a render-only re-export
-//! set leaves unspellable: `Document::new` takes a `QuillReference`,
-//! `Quill::writer` returns a `TypedWriter`, the writer verbs fail as
-//! `EditError`, `Quill::parse` fails as `BoundParseError`, and a field reads
-//! back as a `QuillValue`.
-//!
-//! The typed read (`BINDINGS.md` § "Typed reader front door") and the preview
-//! queries (`PREVIEW.md`) are the same claim on the other two flows:
-//! `Quill::reader` returns a `TypedReader`, whose verbs yield `ReadValue` and
-//! `CardReader`, and a `LiveSession` answers in `RenderedRegion` and
-//! `ContentHit`. Each test annotates the return types explicitly — an inferred
-//! binding would compile with the name absent and gate nothing.
+//! Compile gate on the `quillmark` re-export list: this file names only
+//! `quillmark::`, and annotates every binding explicitly, so a type dropping
+//! out of `crates/quillmark/src/lib.rs` stops it compiling.
 
 use std::collections::HashMap;
 
@@ -89,10 +75,7 @@ fn bound_parse_spells_through_the_facade() {
 
     let elsewhere = md.replace("facade_surface", "other_quill");
     let mismatch: Result<Parsed, BoundParseError> = quill.parse(&elsewhere);
-    assert!(
-        mismatch.is_err(),
-        "a $quill naming another quill fails at the bound door"
-    );
+    assert!(mismatch.is_err(), "a $quill naming another quill fails");
 }
 
 #[test]
@@ -113,11 +96,9 @@ fn typed_read_spells_through_the_facade() {
     let subject: Option<ReadValue> = reader.get("subject").expect("subject is declared");
     assert!(
         matches!(subject, Some(ReadValue::Markdown(ref md)) if md == "Hello **world**"),
-        "a richtext field projects to markdown: {subject:?}"
+        "{subject:?}"
     );
 
-    // The authority the quill-free projection lacked: an undeclared name is a
-    // typo, not an absence.
     let typo: Result<Option<ReadValue>, EditError> = reader.get("nope");
     assert!(matches!(typo, Err(EditError::UnknownField(_))), "{typo:?}");
 
@@ -127,9 +108,6 @@ fn typed_read_spells_through_the_facade() {
     assert!(matches!(body, Some(ReadValue::Markdown(ref md)) if md == "a *card*"), "{body:?}");
 }
 
-/// The preview flow needs a real backend session, so it rides the typst
-/// feature. `RenderedRegion` and `ContentHit` are what every query here
-/// answers in; `HitGranularity` rides inside the hit.
 #[cfg(feature = "typst")]
 #[test]
 fn preview_regions_spell_through_the_facade() {
@@ -142,8 +120,8 @@ fn preview_regions_spell_through_the_facade() {
     let session: LiveSession = engine.open(&quill, &parsed).expect("open a session");
 
     let regions: Vec<RenderedRegion> = session.regions();
-    // Span-bearing: `field_boxes` and `position_at` are content-only, so a
-    // scalar-reference or widget region would answer nothing through them.
+    // `field_boxes` and `position_at` are content-only, so the query needs a
+    // span-bearing region rather than a scalar-reference or widget one.
     let region: &RenderedRegion = regions
         .iter()
         .find(|r| r.span.is_some())
@@ -165,11 +143,7 @@ fn preview_regions_spell_through_the_facade() {
     assert!(located.is_some(), "a field with a region locates position 0");
 }
 
-/// The engine, a loaded quill, and a document cross threads, so a server can
-/// hold one `Quillmark` and render on many.
-///
-/// `docs/integration/operations.md` § "Concurrency" states this; the assertions
-/// are what stop a private field quietly taking it away.
+/// A server holds one `Quillmark` and renders on many threads.
 #[test]
 fn engine_and_inputs_are_send_and_sync() {
     fn assert_send_sync<T: Send + Sync>() {}
