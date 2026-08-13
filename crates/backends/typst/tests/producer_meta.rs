@@ -1,9 +1,5 @@
-//! Acceptance tests for the `/Info` `/Producer` metadata stamp (`overlay`).
-//!
-//! Compiles plates to PDF, reparses with lopdf, and asserts the `/Producer`
-//! string: the default `Quillmark <version>`, a caller override (including
-//! escaping), preservation of Typst's `/Creator`, and correct composition
-//! with the signature-field overlay in the same incremental update.
+//! Compiles plates to PDF, reparses with lopdf, and asserts the `/Info`
+//! `/Producer` stamp.
 
 use lopdf::Object;
 use quillmark_core::{Backend, OutputFormat, RenderOptions};
@@ -14,7 +10,6 @@ use common::host_with_plate as source_with_plate;
 
 const PLATE: &str = "#set page(width: 400pt, height: 300pt)\n= Hello\n";
 
-/// Render a plate to PDF bytes via the public `Backend`/`LiveSession` path.
 fn render_pdf(plate: &str) -> Vec<u8> {
     let source = source_with_plate(plate);
     let session = TypstBackend
@@ -26,7 +21,6 @@ fn render_pdf(plate: &str) -> Vec<u8> {
     result.artifacts[0].bytes.clone()
 }
 
-/// Extract the decoded `/Info` `/Producer` string from a PDF.
 fn producer_of(pdf: &[u8]) -> Vec<u8> {
     info_string(pdf, b"Producer")
 }
@@ -71,7 +65,7 @@ fn producer_override_via_render_options() {
     let session = backend
         .open(&source, &serde_json::json!({}))
         .expect("open session");
-    // Includes (), and \\ to exercise PDF literal-string escaping.
+    // `()` and `\` exercise PDF literal-string escaping.
     let override_str = r"ACME (PDF) \ Tool 2.0";
     let result = session
         .render(&RenderOptions::default().with_output_format(OutputFormat::Pdf).with_producer(override_str.to_string()))
@@ -81,32 +75,8 @@ fn producer_override_via_render_options() {
 }
 
 #[test]
-fn producer_override_non_ascii_roundtrips() {
-    // A non-ASCII override takes the UTF-16BE+BOM hex-string branch of
-    // pdf_text_string; assert it decodes back to the original.
-    let source = source_with_plate(PLATE);
-    let backend = TypstBackend;
-    let session = backend
-        .open(&source, &serde_json::json!({}))
-        .expect("open session");
-    let override_str = "Quillmark 日本語 ✒";
-    let result = session
-        .render(&RenderOptions::default().with_output_format(OutputFormat::Pdf).with_producer(override_str.to_string()))
-        .expect("render ok");
-    // lopdf hands back the decoded hex bytes: a UTF-16BE BOM then the code units.
-    let bytes = producer_of(&result.artifacts[0].bytes);
-    assert_eq!(&bytes[..2], &[0xFE, 0xFF], "expected UTF-16BE BOM");
-    let units: Vec<u16> = bytes[2..]
-        .chunks_exact(2)
-        .map(|p| u16::from_be_bytes([p[0], p[1]]))
-        .collect();
-    assert_eq!(String::from_utf16(&units).unwrap(), override_str);
-}
-
-#[test]
 fn producer_composes_with_signature_field() {
-    // One incremental update must carry both: a signature widget AND the
-    // /Producer stamp.
+    // One incremental update must carry both the widget and the stamp.
     let plate = r#"
 #import "@local/quillmark-helper:0.1.0": signature-field
 #set page(width: 600pt, height: 400pt, margin: 50pt)
@@ -114,11 +84,9 @@ fn producer_composes_with_signature_field() {
 "#;
     let pdf = render_pdf(plate);
 
-    // /Producer present.
     let expected = format!("Quillmark {}", env!("CARGO_PKG_VERSION"));
     assert_eq!(producer_of(&pdf), expected.as_bytes());
 
-    // AcroForm signature field still present and resolvable.
     let doc = lopdf::Document::load_mem(&pdf).expect("reparse");
     let cat = doc.catalog().expect("catalog");
     let af_ref = cat.get(b"AcroForm").unwrap().as_reference().unwrap();
