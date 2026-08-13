@@ -1,19 +1,9 @@
 //! The resolved-value view: [`Quill::resolve`].
 //!
-//! A projection that makes field resolution observable *data* rather than an
-//! inferred behavior chain: for every declared field, the value the render
-//! projection would use and the [`FieldSource`] rung it came from. It cuts the
-//! one commitment ladder (`prose/canon/SCHEMAS.md` § "Value sources and
-//! projections") through the shared producer
-//! `resolve_card_sourced` (in `super::compose`), whose sourced ladder
-//! (`ladder_sourced`) the render plate cuts too: never a parallel precedence
-//! policy.
-//!
-//! Values only: diagnostics stay [`Quill::validate`]'s job (the editor merges
-//! `validate()` with its own producers regardless, so bucketing here would
-//! delete no consumer code), and schema guidance (`example:`, labels, groups)
-//! reads from [`Quill::schema`]. The view answers one question: what value
-//! renders, and from which rung.
+//! For every declared field, the value the render projection would use and
+//! the [`FieldSource`] rung it came from, cut through the same producer
+//! (`super::compose::resolve_card_sourced`) the render plate cuts: never a
+//! parallel precedence policy.
 
 use indexmap::IndexMap;
 use serde::Serialize;

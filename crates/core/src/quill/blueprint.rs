@@ -1,47 +1,9 @@
-//! Auto-generated Markdown blueprint for a Quill.
+//! Auto-generated Markdown blueprint for a Quill: an annotated reference
+//! document dense enough to replace the schema for LLM consumers.
 //!
-//! Produces an annotated reference document dense enough to replace the schema
-//! for LLM consumers. The blueprint shows the document's shape (fields,
-//! constraints, examples) so a consumer can write a fresh document from it.
-//!
-//! ## One emitter
-//!
-//! `blueprint()` does not format YAML itself. It builds a [`Document`] (the
-//! same typed model a parsed `.md` produces) and emits it through the
-//! canonical [`Document::to_markdown`]. The annotation grammar maps cleanly
-//! onto the document model:
-//!
-//! - **Leading `# …` prose** (`# <description>`, `# e.g. <value>`) becomes
-//!   own-line [`PayloadItem::Comment`]s before the field (top-level) or
-//!   [`NestedComment`]s at the leaf's slot (typed-container properties).
-//! - **Inline `# <type>[<format>]` annotation** becomes the field's *trailing
-//!   inline* comment: a one-space ` # …` trailer on the value line.
-//! - **`!must_fill`** becomes the field's `fill` flag (top-level) or a nested
-//!   fill path on the value tree (per-property leaves).
-//! - The `$quill` / `$kind` lines are the document's typed `$` metadata; the
-//!   `# keep verbatim` reminder rides `$quill` as an inline comment.
-//!
-//! Because emission is shared with the parse/round-trip path, the blueprint
-//! round-trips through `Document::parse` and back *by construction*:
-//! there is no second formatter to keep in sync.
-//!
-//! ## Rendering choices that follow from sharing `to_markdown`
-//!
-//! - **Richtext fields** carry no block scalar. An Unendorsed richtext field
-//!   is a bare `field: !must_fill # richtext<markdown>`; an Endorsed one renders
-//!   its default as an inline (double-quoted, `\n`-escaped) string. `to_markdown`
-//!   emits no `|`/`>` block forms, so neither does the blueprint.
-//! - **Arrays** render in block style at every level; including an
-//!   Unendorsed array's `example`, which rides the `!must_fill` marker as
-//!   block items rather than an inline flow sequence.
-//! - **Typed dictionaries** with `default: {}` expand to the field's
-//!   zero-filled shape (every key present, type-empty value, all unmarked),
-//!   so an empty endorsed object shows its structure instead of a bare `{}`.
-//!   A *non-empty* partial default is rendered verbatim (a deliberate
-//!   "already handled" signal); only `{}` expands.
-//!
-//! Declaration order controls field ordering. `ui.group` clusters fields
-//! together within the document but emits no banner.
+//! `blueprint()` builds a [`Document`] and emits it through
+//! [`Document::to_markdown`], so the blueprint round-trips through
+//! `Document::parse` by construction: there is no second formatter.
 
 use indexmap::IndexMap;
 

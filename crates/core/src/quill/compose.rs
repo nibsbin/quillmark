@@ -1,6 +1,5 @@
 //! Consumer-facing operations on a [`Quill`]: validation, seeding, and the
-//! zero-filled compile to backend wire JSON. All pure reads of the quill's
-//! config: no backend, no engine (those live in the `quillmark` crate).
+//! zero-filled compile to backend wire JSON. Pure reads of the config.
 
 use std::str::FromStr;
 

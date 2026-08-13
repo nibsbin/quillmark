@@ -1,9 +1,6 @@
-//! Schema construction for Quill bundles.
-//!
-//! Maps the abstract [`FieldSchema`] / [`FieldType`] model to a
-//! JSON-Schema-shaped [`QuillValue`]. The schema is backend-agnostic (no Typst
-//! specifics); backends consume it to drive per-field transforms such as
-//! markdown → backend-markup conversion.
+//! Maps the [`FieldSchema`] / [`FieldType`] model to a JSON-Schema-shaped
+//! [`QuillValue`]. Backend-agnostic: backends consume it to drive per-field
+//! transforms such as markdown to backend markup.
 
 use super::{FieldSchema, FieldType, QuillConfig};
 use crate::value::QuillValue;

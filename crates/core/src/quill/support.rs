@@ -1,29 +1,10 @@
-//! What a plate declines to typeset, and the warning a body draws for holding
-//! it anyway.
+//! What a plate declines to typeset, and the warning a body draws for
+//! holding it anyway.
 //!
-//! A quill's plate is free to reinterpret a construct the content holds —
-//! absorb it into a neighbour, move its text elsewhere, typeset nothing at all
-//! — and only the quill knows it did. Core cannot detect it: the plate's output
-//! is ink, and a construct that drew none is indistinguishable from one the
-//! content never held.
-//!
-//! So the quill declares it, per body, as data
-//! ([`BodyCardSchema::unsupported`]). Declaring rather than observing is what
-//! buys the two properties:
-//!
-//! - **An answer before the render.** An editor reads the declaration off the
-//!   schema and declines the gesture as the author makes it. A warning arriving
-//!   with the rendered page is too late to be an input rule's answer.
-//! - **A walk, not a scatter.** One traversal sees every occurrence at once, so
-//!   a body holding forty rules draws one diagnostic carrying `count: 40`.
-//!
-//! What it does not buy is verification. A declaration is a claim about the
-//! plate that nothing checks: a construct absent from the list is not a promise
-//! the plate typesets it, and an undeclared drop stays silent. This is
-//! documentation with a diagnostic attached.
-//!
-//! The vocabulary is flat: one name per block kind, no context-qualified forms.
-//! A heading is declined everywhere or nowhere.
+//! The quill declares it per body ([`BodyCardSchema::unsupported`]) because
+//! core cannot observe it: the plate's output is ink, and a construct that
+//! drew none is indistinguishable from one the content never held. Nothing
+//! checks the claim — an undeclared drop stays silent.
 
 use std::collections::BTreeMap;
 
