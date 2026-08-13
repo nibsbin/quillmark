@@ -1691,9 +1691,8 @@ impl Document {
             serde_json::Value::String(body.unwrap_or_default()),
         );
         string_wire.payload_items = payload_items;
-        // Round-trip through `Card` so the emitted card carries the content body
-        // (the source-of-truth shape `cards()` returns), not the raw authored
-        // string.
+        // Round-trip through `Card` so the emitted card carries the content body,
+        // not the raw authored string.
         let card = quillmark_core::Card::try_from(string_wire)
             .map_err(|e| WasmError::from(format!("makeCard: {e}")).to_js_value())?;
         let wire = quillmark_core::CardWire::from(&card);
@@ -1703,12 +1702,10 @@ impl Document {
         })
     }
 
-    /// Insert a card, the single insertion verb: `at` absent appends, a number
-    /// inserts at that index (must be in `0..=cards.length`). Accepts a
-    /// `CardInput`: a card read back (`cards` / `removeCard` / `quill.seedCard`),
-    /// a [`makeCard`](Document::make_card) result, or a bare `{ kind, body }`
-    /// (every returned `Card` is a valid `CardInput`). Throws if `card.kind` is
-    /// not a valid kind name, or if `at` is out of range.
+    /// Insert a card: `at` absent appends, a number inserts at that index (in
+    /// `0..=cards.length`). Accepts any `CardInput`, including a card read back
+    /// out of a document. Throws if `card.kind` is not a valid kind name, or if
+    /// `at` is out of range.
     #[wasm_bindgen(js_name = insertCard)]
     pub fn insert_card(
         &mut self,
@@ -1716,9 +1713,8 @@ impl Document {
         #[wasm_bindgen(unchecked_optional_param_type = "number")] at: Option<usize>,
     ) -> Result<(), JsValue> {
         let core_card = js_to_card(&card)?;
-        // A kind error anchors at the target slot; an out-of-range `at` at
-        // `cards[at]` via the error itself. `push` (append) has no slot yet, so
-        // its kind error carries no anchor (empty base).
+        // A kind error anchors at the target slot; an append has no slot yet, so
+        // its kind error carries no anchor.
         let base = at.map_or_else(quillmark_core::DocPath::new, |i| {
             quillmark_core::DocPath::card(None, i)
         });
@@ -1740,7 +1736,6 @@ impl Document {
     /// Move the card at `from` to position `to`. `from == to` is a no-op.
     #[wasm_bindgen(js_name = moveCard)]
     pub fn move_card(&mut self, from: usize, to: usize) -> Result<(), JsValue> {
-        // An out-of-range `from`/`to` anchors at `cards[index]` via the error.
         self.inner
             .move_card(from, to)
             .map_err(|e| edit_error_to_js(&e, &quillmark_core::DocPath::new()))
@@ -1751,8 +1746,6 @@ impl Document {
     /// Throws if `index` is out of range or `newKind` is invalid.
     #[wasm_bindgen(js_name = setCardKind)]
     pub fn set_card_kind(&mut self, index: usize, new_kind: &str) -> Result<(), JsValue> {
-        // Both an out-of-range index and an invalid `newKind` anchor at the
-        // target slot `cards[index]`.
         self.inner
             .set_card_kind(index, new_kind)
             .map_err(|e| edit_error_to_js(&e, &quillmark_core::DocPath::card(None, index)))
@@ -1761,9 +1754,6 @@ impl Document {
 }
 
 impl Document {
-    /// Resolve a mutable composable card by index, mapping out-of-range to the
-    /// same `IndexOutOfRange` JS error the other card mutators throw. The
-    /// index-taking half of [`addr_card_mut`](Self::addr_card_mut).
     fn card_mut_or_throw(&mut self, index: usize) -> Result<&mut quillmark_core::Card, JsValue> {
         let len = self.inner.cards().len();
         self.inner.card_mut(index).ok_or_else(|| {
@@ -1774,10 +1764,6 @@ impl Document {
         })
     }
 
-    /// Resolve a composable card by index for a read, mapping out-of-range to the
-    /// same `IndexOutOfRange` JS error the card mutators throw. The immutable twin
-    /// of [`card_mut_or_throw`](Self::card_mut_or_throw), shared by the
-    /// card-indexed reads.
     fn card_or_throw(&self, index: usize) -> Result<&quillmark_core::Card, JsValue> {
         let len = self.inner.cards().len();
         self.inner.cards().get(index).ok_or_else(|| {
@@ -1788,9 +1774,6 @@ impl Document {
         })
     }
 
-    /// Resolve the card an [`Addr`] targets: the main card when `addr.card` is
-    /// absent, else the composable card at that index (out-of-range throws). The
-    /// static address axis the addressed content verbs share.
     fn addr_card_mut(&mut self, addr: &Addr) -> Result<&mut quillmark_core::Card, JsValue> {
         match addr.card {
             None => Ok(self.inner.main_mut()),
@@ -1798,9 +1781,6 @@ impl Document {
         }
     }
 
-    /// Immutable twin of [`addr_card_mut`](Self::addr_card_mut): the main card
-    /// when `addr.card` is absent, else the composable card at that index
-    /// (out-of-range throws). Shared by the addressed reads.
     fn addr_card_ref(&self, addr: &Addr) -> Result<&quillmark_core::Card, JsValue> {
         match addr.card {
             None => Ok(self.inner.main()),
@@ -1808,11 +1788,8 @@ impl Document {
         }
     }
 
-    /// The `DocPath` card root an [`Addr`] targets: `main` for the main card,
-    /// `cards.<kind>[i]` for a composable one (kind read off the live card,
-    /// `None` when the index is out of range, where the error self-anchors at
-    /// `cards[i]` anyway). The base every addressed mutator passes to
-    /// [`edit_error_to_js`], computed before the mutable borrow.
+    /// The `DocPath` card root an [`Addr`] targets, computed before the mutable
+    /// borrow so every addressed mutator can pass it to [`edit_error_to_js`].
     fn addr_base(&self, addr: &Addr) -> quillmark_core::DocPath {
         match addr.card {
             None => quillmark_core::DocPath::main(),
@@ -1824,10 +1801,7 @@ impl Document {
     }
 }
 
-// ── Addressed write surface ────────────────────────────────────────────────────
-
-/// A richtext write address (`{ card?, field? }`). Absent `field` = body, absent
-/// `card` = main. Mirrors the `Addr` TS interface. Unknown keys are rejected in
+/// Mirrors the `Addr` TS interface. Unknown keys are rejected in
 /// [`from_js`](Addr::from_js), not via `deny_unknown_fields`: `serde_wasm_bindgen`
 /// looks up known fields rather than visiting every key, so it never enforces it.
 #[derive(serde::Deserialize, Default)]
@@ -1839,12 +1813,9 @@ struct Addr {
 }
 
 impl Addr {
-    /// Deserialize an `Addr` from its JS object (`undefined`/`null`/`{}` all mean
-    /// the main-card body). Rejects a stray key first (as [`js_to_card`] does,
-    /// since `serde_wasm_bindgen` does not enforce `deny_unknown_fields`) so a
-    /// swapped-arg call (`storeFields(fields, {})`, the fields object read as an
-    /// address) throws instead of silently parsing as the empty main-card
-    /// address and writing an empty batch.
+    /// `undefined`/`null`/`{}` all mean the main-card body. Rejects a stray key
+    /// first so a swapped-arg call (`storeFields(fields, {})`) throws instead of
+    /// parsing as the empty main-card address and writing an empty batch.
     fn from_js(value: &JsValue) -> Result<Addr, JsValue> {
         if value.is_undefined() || value.is_null() {
             return Ok(Addr::default());
@@ -1866,10 +1837,8 @@ impl Addr {
             .map_err(|e| WasmError::from(format!("addr must be an Addr object: {e}")).to_js_value())
     }
 
-    /// Accept a bare string (`Addr` shorthand for `{ field: name }`, the terse
-    /// common case) or an `Addr` object. The one coercion rule: only a string
-    /// collapses to `{ field }` (a bare number is not an addr), so a third
-    /// navigation idiom never re-fragments the surface.
+    /// A bare string is shorthand for `{ field: name }`; a bare number is not an
+    /// addr.
     fn from_js_or_string(value: &JsValue) -> Result<Addr, JsValue> {
         match value.as_string() {
             Some(field) => Ok(Addr {
@@ -1880,9 +1849,6 @@ impl Addr {
         }
     }
 
-    /// The field an opaque/typed field write targets. A body address (absent
-    /// `field`) is not a field write, so it throws naming the body verbs: reads
-    /// are total over the field axis, but a body has no field lane to write.
     fn require_field(&self, ctx: &str) -> Result<&str, JsValue> {
         self.field.as_deref().ok_or_else(|| {
             WasmError::from(format!(
@@ -1893,11 +1859,8 @@ impl Addr {
         })
     }
 
-    /// Enforce that a card-scoped verb's address carries no `field`. A present
-    /// `field` is a caller who believes they are doing a nested write; the error
-    /// says so rather than silently ignoring it. TS types can't police this (an
-    /// `Addr` variable flows into a `CardAddr` slot), so the runtime check is the
-    /// contract.
+    /// TS types cannot police this — an `Addr` variable flows into a `CardAddr`
+    /// slot — so the runtime check is the contract.
     fn require_card_only(&self, ctx: &str) -> Result<(), JsValue> {
         if self.field.is_some() {
             return Err(WasmError::from(format!(
@@ -1909,22 +1872,17 @@ impl Addr {
     }
 }
 
-/// Decode a JS value as a canonical `Content` content object (value semantics,
-/// content only). Rejects a markdown string: the cold path is spelled
-/// `overwrite(addr, importMarkdown(md))`.
-///
-/// The **storage** lane: `exportMarkdown(card.body)` and `rebase(base, md)` are
-/// handed content read back out of a document, which must keep opening whatever
-/// it was written as. A host authoring content goes through
+/// Decode a JS value as a canonical `Content` object, rejecting a markdown
+/// string. The **storage** lane: content read back out of a document must keep
+/// opening whatever it was written as. Host-authored content goes through
 /// [`js_to_authored_content`].
 fn js_to_content(value: JsValue, ctx: &str) -> Result<quillmark_core::Content, JsValue> {
     js_to_content_with(value, ctx, quillmark_content::serial::from_canonical_value)
 }
 
-/// [`js_to_content`] on the **authored** lane: the `overwrite` input. The host is
-/// writing this content now, so `attrs` beside a built-in discriminator is a
-/// stale copy of the built-in list rather than a document predating that
-/// built-in, and is reported instead of silently dropped.
+/// [`js_to_content`] on the **authored** lane. The host is writing this content
+/// now, so `attrs` beside a built-in discriminator is a stale copy of the
+/// built-in list, and is reported instead of silently dropped.
 fn js_to_authored_content(value: JsValue, ctx: &str) -> Result<quillmark_core::Content, JsValue> {
     js_to_content_with(value, ctx, quillmark_content::serial::from_authored_value)
 }
@@ -1948,20 +1906,15 @@ fn js_to_content_with(
     })
 }
 
-/// Lower a `ChangeBundle` (`{ delta?, islandOps?, lineOps?, markOps? }`) to core
-/// ops via the shared richtext reader, mapping its message to a `WasmError`.
 fn parse_change_bundle(value: &JsValue) -> Result<quillmark_content::ChangeBundle, JsValue> {
     let json = js_value_to_json(value.clone(), "applyChange")?;
     quillmark_content::change_bundle_from_value(&json)
         .map_err(|e| WasmError::from(format!("applyChange: {e}")).to_js_value())
 }
 
-// ── Content codec (document-free) ────────────────────────────────────────────────
-
-/// Import a markdown string to a canonical `Content` content: the pure,
-/// document-free codec. Pair with `overwrite(addr, importMarkdown(md))` to spell
-/// the cold (anchor-losing) write at the call site; prefer `revise` for edit
-/// semantics. Throws on an over-nested input.
+/// Import a markdown string to canonical `Content`: the pure, document-free
+/// codec. `overwrite(addr, importMarkdown(md))` spells the cold, anchor-losing
+/// write; prefer `revise` for edit semantics. Throws on an over-nested input.
 #[wasm_bindgen(js_name = importMarkdown, unchecked_return_type = "Content")]
 pub fn import_markdown(markdown: &str) -> Result<JsValue, JsValue> {
     let content = quillmark_content::from_markdown(markdown)
@@ -1972,8 +1925,7 @@ pub fn import_markdown(markdown: &str) -> Result<JsValue, JsValue> {
     )
 }
 
-/// Export a canonical `Content` content to its markdown projection: the pure
-/// on-demand codec behind `exportMarkdown(card.body)`. Throws if `rt` is not a
+/// Export canonical `Content` to its markdown projection. Throws if `rt` is not
 /// canonical content.
 #[wasm_bindgen(js_name = exportMarkdown)]
 pub fn export_markdown(
@@ -1983,12 +1935,10 @@ pub fn export_markdown(
     Ok(quillmark_content::to_markdown(&content))
 }
 
-/// Rebase `markdown` onto a `base` content, the pure, document-free twin of
-/// `revise`: cold-import + `diff_import`, returning the new `content` and the
-/// text `delta` (its offsets USV indices into `Content.text`, surviving anchors
-/// rebased). Use it to compute a revise without a document in hand; `revise(addr,
-/// md)` fuses this with the store for atomicity. Throws on an over-nested
-/// markdown input or a non-content `base`.
+/// Rebase `markdown` onto a `base` content: the document-free twin of `revise`,
+/// returning the new `content` and the text `delta` (offsets are USV indices into
+/// `Content.text`, surviving anchors rebased). Throws on an over-nested markdown
+/// input or a non-content `base`.
 #[wasm_bindgen(js_name = rebase, unchecked_return_type = "{ content: Content; delta: Delta }")]
 pub fn rebase(
     #[wasm_bindgen(unchecked_param_type = "Content")] base: JsValue,
@@ -2004,9 +1954,6 @@ pub fn rebase(
     serialize_or_throw(&out, "rebase")
 }
 
-/// The structured form of a `Diagnostic.path`: one tagged segment per
-/// `DocPathSeg`. Emitted here as the single source of truth for the parser
-/// boundary so a consumer routes on segments instead of splitting the string.
 #[wasm_bindgen(typescript_custom_section)]
 const DOCPATH_TS: &'static str = r#"
 /**
