@@ -541,8 +541,11 @@ fn engine_err(code: &str, message: impl Into<String>) -> RenderError {
     )
 }
 
-/// `contentMediaType = application/quillmark-content+json`.
-fn is_richtext_field(field_schema: &serde_json::Value) -> bool {
+/// `contentMediaType = application/quillmark-content+json`: `richtext` or
+/// `plaintext`. The codecs differ only in how a value is imported and emitted,
+/// so everything downstream of this classification — lowering, span tracking,
+/// regions, navigation — is shared.
+fn is_content_field(field_schema: &serde_json::Value) -> bool {
     field_schema
         .get("contentMediaType")
         .and_then(|v| v.as_str())
@@ -550,8 +553,9 @@ fn is_richtext_field(field_schema: &serde_json::Value) -> bool {
         .unwrap_or(false)
 }
 
-/// `{type: array, items: {contentMediaType: …}}`: an `array<richtext>` field.
-fn is_richtext_array_field(field_schema: &serde_json::Value) -> bool {
+/// `{type: array, items: {contentMediaType: …}}`: a content-typed array, whose
+/// elements each carry their own eval site and geometry.
+fn is_content_array_field(field_schema: &serde_json::Value) -> bool {
     field_schema
         .get("type")
         .and_then(|v| v.as_str())
@@ -559,18 +563,18 @@ fn is_richtext_array_field(field_schema: &serde_json::Value) -> bool {
         .unwrap_or(false)
         && field_schema
             .get("items")
-            .map(is_richtext_field)
+            .map(is_content_field)
             .unwrap_or(false)
 }
 
-/// Carries [`QUILLMARK_INLINE_KEY`], on the richtext schema itself or, for an
+/// Carries [`QUILLMARK_INLINE_KEY`], on the content schema itself or, for an
 /// array, on its `items` (mirroring `build_transform_schema`).
-fn is_inline_richtext_field(field_schema: &serde_json::Value) -> bool {
+fn is_inline_content_field(field_schema: &serde_json::Value) -> bool {
     fn marked_inline(fs: &serde_json::Value) -> bool {
         fs.get(QUILLMARK_INLINE_KEY).and_then(|v| v.as_bool()) == Some(true)
     }
-    (is_richtext_field(field_schema) && marked_inline(field_schema))
-        || (is_richtext_array_field(field_schema)
+    (is_content_field(field_schema) && marked_inline(field_schema))
+        || (is_content_array_field(field_schema)
             && field_schema
                 .get("items")
                 .map(marked_inline)
@@ -605,13 +609,13 @@ fn field_names_where(
 
 fn content_field_names(properties: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
     field_names_where(properties, |fs| {
-        is_richtext_field(fs) || is_richtext_array_field(fs)
+        is_content_field(fs) || is_content_array_field(fs)
     })
 }
 
 /// A subset of [`content_field_names`] lowering to pure inline markup.
 fn inline_field_names(properties: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
-    field_names_where(properties, is_inline_richtext_field)
+    field_names_where(properties, is_inline_content_field)
 }
 
 fn date_field_names(properties: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
