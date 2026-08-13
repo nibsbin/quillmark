@@ -742,12 +742,9 @@ export class Engine {
 		const docJson = doc.toJson();
 		const quillTree = this.#quillClones.get(backendId)?.has(quill) ? null : quill.toTree();
 		const { mod, engine } = await this.#resolveBackend(backendId);
-		// The quill clone is cached (see #cachedQuillClone); only the per-call doc
-		// clone is transient. Bring the doc clone + `fn` under one try so the doc
-		// clone is freed even if a later step throws. The cached quill clone is
-		// intentionally NOT freed here. `fn` MUST be synchronous: the doc clone is
-		// freed as soon as it returns, so an async `fn` would have it freed
-		// mid-flight.
+		// The doc clone and `fn` share one try so the clone is freed even if a
+		// later step throws; the cached quill clone is intentionally not freed.
+		// `fn` MUST be synchronous: an async one would run against a freed clone.
 		const backendQuill = this.#cachedQuillClone(mod, backendId, quill, quillTree);
 		let backendDoc = null;
 		try {
@@ -759,9 +756,8 @@ export class Engine {
 	}
 
 	/**
-	 * Render `doc` against `quill` in one shot, returning a `RenderResult`.
-	 * Both handles are read synchronously before the first await, so the caller
-	 * may `free()` them as soon as this call returns.
+	 * Render `doc` against `quill` in one shot. Both handles are read
+	 * synchronously before the first await.
 	 * @param {Quill} quill
 	 * @param {Document} doc
 	 * @param {object} [options] render options (`{ format, ppi, pages, producer }`)
@@ -774,12 +770,9 @@ export class Engine {
 	}
 
 	/**
-	 * Open a live render session (canvas preview / per-page paint / `update`).
-	 * The session is self-contained (it retains what it needs for `update`), so
-	 * the transient quill and document clones are freed before this returns;
-	 * the caller owns the returned session and must `.free()` it. The `quill`
-	 * and `doc` handles are read synchronously before the first await, so the
-	 * caller may `free()` them as soon as this call returns.
+	 * Open a live render session. It retains what `update` needs, so the
+	 * transient clones are freed before this returns; the caller owns the session
+	 * and must `.free()` it.
 	 * @param {Quill} quill
 	 * @param {Document} doc
 	 * @returns {Promise<LiveSession>}
@@ -794,10 +787,8 @@ export class Engine {
 	}
 
 	/**
-	 * The output formats `quill`'s backend can emit. A cheap, non-failing,
-	 * ALWAYS-free pre-render probe: it answers from the descriptor's required
-	 * `formats` manifest (NO binary load and NO quill clone) depending only on
-	 * `quill.backendId`. Stays `async` for API stability (it never awaits a load).
+	 * The output formats `quill`'s backend can emit: an always-free probe over
+	 * the descriptor's manifest. `async` for API stability; it awaits nothing.
 	 * @param {Quill} quill
 	 * @returns {Promise<import('./runtime.js').OutputFormat[]>}
 	 */
@@ -808,13 +799,9 @@ export class Engine {
 	}
 
 	/**
-	 * Whether `quill`'s BACKEND can paint sessions to a canvas: a pre-session
-	 * ESTIMATE, not a fact about any particular compile. Same ALWAYS-free probe
-	 * as `supportedFormats`: answered from the descriptor's required `canvas`
-	 * manifest, no load and no clone. A specific compile can still refuse to
-	 * paint (e.g. a 0-page document), so this can answer `true` while the
-	 * resulting `LiveSession.supportsCanvas` answers `false`: gate mounting a
-	 * canvas UI on this, gate the actual `paint` call on the session's getter.
+	 * Whether `quill`'s backend can paint to a canvas: a pre-session estimate over
+	 * the descriptor's manifest, so it can answer `true` where the resulting
+	 * `LiveSession.supportsCanvas` answers `false`.
 	 * @param {Quill} quill
 	 * @returns {Promise<boolean>}
 	 */
@@ -825,20 +812,9 @@ export class Engine {
 }
 
 /**
- * Thin wrapper over a backend's live render session. Reads serve the current
- * compile; `update(doc)` recompiles in place (transactional: on throw, reads
- * keep serving the last-good compile). The quill/document clones it was
- * opened from have already been freed: the session retains what `update`
- * needs.
- *
- * Geometry reads (`regions`, `positionAt`, `locate`) resolve against the
- * current compile; anchoring a caret or selection across edits is the editor's
- * job (its own transaction mapping): re-read geometry after each committed
- * `update`.
- *
- * `paint` writes a COMPLETE page raster (all content visible, no caller-side
- * compositing) for every backend that supports canvas (Typst rasterizes
- * natively; pdfform rasterizes its pre-flattened page). See `runtime.d.ts`.
+ * Thin wrapper over a backend's live render session; see `runtime.d.ts` for the
+ * contract. The quill/document clones it was opened from have already been
+ * freed: the session retains what `update` needs.
  */
 export class LiveSession {
 	/**
@@ -853,9 +829,6 @@ export class LiveSession {
 	#mod;
 
 	/**
-	 * Recompile the session against `doc`: the edit verb of a live preview.
-	 * Transactional: on throw every read keeps serving the last-good compile.
-	 * On success reads serve the new compile; repaint `dirtyPages ∩ visible`.
 	 * @param {Document} doc
 	 * @returns {import('./runtime.d.ts').ChangeSet}
 	 */
@@ -878,12 +851,8 @@ export class LiveSession {
 	}
 	/**
 	 * `true` iff `paint`/`pageSize` will succeed for THIS compile: the
-	 * authoritative answer, derived from the session's canvas seam, so it can
-	 * never disagree with what `paint` actually does. This can be `false` even
-	 * when `Engine.supportsCanvas` answered `true` for the same `quill` (that
-	 * probe is a pre-session backend estimate; e.g. a canvas-capable backend
-	 * compiled to a 0-page document has nothing to paint). Re-check this getter
-	 * after `open()` rather than relying on the engine hint alone.
+	 * authoritative answer, which can be `false` where `Engine.supportsCanvas`
+	 * answered `true` for the same quill.
 	 * @returns {boolean}
 	 */
 	get supportsCanvas() {
@@ -899,10 +868,6 @@ export class LiveSession {
 	}
 
 	/**
-	 * Schema-field geometry for this compiled session: one region per
-	 * schema-bound field, keyed on its quill schema field path. A session-level
-	 * query (no render); read it to place field overlays / cross-navigation over
-	 * a `paint`-ed canvas.
 	 * @returns {import('./runtime.d.ts').FieldRegion[]}
 	 */
 	regions() {
@@ -910,12 +875,6 @@ export class LiveSession {
 	}
 
 	/**
-	 * The whole-field highlight boxes for `field`: one union rect per page,
-	 * over the field's `span`-bearing content segments. Owns the union
-	 * `regions()` leaves derived (span-filter + per-page union), so a "highlight
-	 * the focused field" consumer stops reimplementing it. Content only: a field
-	 * placed solely as a scalar reference or a bound widget returns `[]`, its
-	 * box is a single `regions()` rect.
 	 * @param {string} field
 	 * @returns {import('./runtime.d.ts').FieldRegion[]}
 	 */
@@ -924,11 +883,6 @@ export class LiveSession {
 	}
 
 	/**
-	 * The schema field whose content is under a point on `page`: the forward
-	 * (click → field) direction, resolving *every* placement, not just the first
-	 * that `regions` enumerates. `x`/`y` are PDF points with a bottom-left origin
-	 * (the `FieldRegion.rect` space). See `runtime.d.ts` for the click-to-point
-	 * inverse transform.
 	 * @param {number} page
 	 * @param {number} x
 	 * @param {number} y
@@ -963,10 +917,6 @@ export class LiveSession {
 	}
 
 	/**
-	 * Paint `page` into a 2D canvas context. The painted raster is COMPLETE
-	 * (all page content visible, no caller-side compositing) for both the Typst
-	 * and pdfform backends. See `runtime.d.ts` for the DPR/clamp math and the
-	 * region-overlay coordinate transform.
 	 * @param {CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D} ctx
 	 * @param {number} page
 	 * @param {object} [options]
