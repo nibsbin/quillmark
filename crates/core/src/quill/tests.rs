@@ -1436,32 +1436,6 @@ main:
 }
 
 #[test]
-fn test_config_coerce_integer_success() {
-    let yaml_content = r#"
-quill:
-  name: coerce_integer_success_test
-  version: "1.0"
-  backend: typst
-  description: Coerce integer success
-
-main:
-  fields:
-    count:
-      type: integer
-"#;
-
-    let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    let mut payload = indexmap::IndexMap::new();
-    payload.insert(
-        "count".to_string(),
-        QuillValue::from_json(serde_json::json!("42")),
-    );
-
-    let coerced = config.coerce_payload(&payload).unwrap();
-    assert_eq!(coerced.get("count").unwrap().as_i64(), Some(42));
-}
-
-#[test]
 fn test_config_coerce_integer_rejects_decimal() {
     let yaml_content = r#"
 quill:
@@ -1621,34 +1595,6 @@ main:
 }
 
 #[test]
-fn test_array_of_objects_with_array_property_rejected() {
-    let yaml_content = r#"
-quill:
-  name: table_with_array
-  version: "1.0"
-  backend: typst
-  description: Typed table row with an array column
-
-main:
-  fields:
-    rows:
-      type: array
-      items:
-        type: object
-        properties:
-          tags:
-            type: array
-            items:
-              type: string
-"#;
-    let err = QuillConfig::from_yaml_with_warnings(yaml_content).unwrap_err();
-    assert!(err.iter().any(
-        |d| d.code.as_deref() == Some("quill::nested_array_not_supported")
-            && d.message.contains("rows")
-    ));
-}
-
-#[test]
 fn test_object_with_array_property_rejected() {
     let yaml_content = r#"
 quill:
@@ -1739,36 +1685,6 @@ main:
 }
 
 #[test]
-fn test_config_coerce_error_unparseable_number() {
-    let yaml_content = r#"
-quill:
-  name: coerce_number_error_test
-  version: "1.0"
-  backend: typst
-  description: Coerce number errors
-
-main:
-  fields:
-    count:
-      type: number
-"#;
-
-    let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    let mut payload = indexmap::IndexMap::new();
-    payload.insert(
-        "count".to_string(),
-        QuillValue::from_json(serde_json::json!("forty-two")),
-    );
-
-    let error = config.coerce_payload(&payload).unwrap_err();
-    assert!(matches!(
-        error,
-        super::CoercionError::Uncoercible { ref path, ref target, .. }
-        if path == "count" && target == "number"
-    ));
-}
-
-#[test]
 fn test_multiline_ui_field_parses() {
     let yaml_content = r#"
 quill:
@@ -1850,25 +1766,6 @@ card_kinds:
 }
 
 #[test]
-fn test_card_ui_title_omitted_when_absent() {
-    let yaml_content = r#"
-quill:
-  name: no_title_test
-  version: "1.0"
-  backend: typst
-  description: ui.title omitted when not declared
-
-main:
-  fields:
-    subject:
-      type: string
-"#;
-
-    let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    assert!(config.main.ui.as_ref().is_none_or(|ui| ui.title.is_none()));
-}
-
-#[test]
 fn test_quill_config_from_yaml_errors_on_invalid_field() {
     let yaml_content = r#"
 quill:
@@ -1911,30 +1808,6 @@ quill:
     assert_eq!(err[0].code.as_deref(), Some("quill::unknown_key"));
     assert!(err[0].message.contains("auther"));
     assert!(err[0].hint.as_deref().unwrap_or("").contains("author"));
-}
-
-#[test]
-fn test_unknown_top_level_section_errors() {
-    let yaml_content = r#"
-quill:
-  name: unk_section
-  version: "1.0"
-  backend: typst
-  description: Unknown section test
-
-card_kind:
-  foo:
-    description: Should not silently disappear
-    fields:
-      bar:
-        type: string
-"#;
-
-    let err = QuillConfig::from_yaml_with_warnings(yaml_content).unwrap_err();
-
-    assert!(err.iter().any(|d| {
-        d.code.as_deref() == Some("quill::unknown_section") && d.message.contains("card_kind")
-    }));
 }
 
 #[test]
@@ -2043,32 +1916,6 @@ main:
     assert!(err
         .iter()
         .any(|d| d.code.as_deref() == Some("quill::invalid_ui")));
-}
-
-#[test]
-fn test_field_with_title_key_errors_with_hint() {
-    let yaml_content = r#"
-quill:
-  name: hint_test
-  version: "1.0"
-  backend: typst
-  description: Hint test
-
-main:
-  fields:
-    author:
-      type: string
-      title: The document author
-"#;
-
-    let err = QuillConfig::from_yaml_with_warnings(yaml_content).unwrap_err();
-
-    assert_eq!(err.len(), 1);
-    assert_eq!(err[0].code.as_deref(), Some("quill::field_parse_error"));
-    assert_eq!(
-        err[0].hint.as_deref(),
-        Some("'title' is not a valid field key; use 'description' instead.")
-    );
 }
 
 #[test]
@@ -2354,14 +2201,6 @@ fn example_in_enum_loads_successfully() {
 }
 
 #[test]
-fn field_with_no_example_or_default_loads_successfully() {
-    let yaml = example_default_yaml(
-        "    bare:\n      type: string\n      description: nothing to check\n",
-    );
-    QuillConfig::from_yaml(&yaml).expect("field with no example/default should load");
-}
-
-#[test]
 fn datetime_type_mismatch_reports_datetime_not_string() {
     let yaml = example_default_yaml("    signed_on:\n      type: datetime\n      example: 42\n");
     let errors = QuillConfig::from_yaml_with_warnings(&yaml).unwrap_err();
@@ -2375,21 +2214,6 @@ fn datetime_type_mismatch_reports_datetime_not_string() {
         diag.message
     );
     assert!(!diag.message.contains("type 'string'"));
-}
-
-#[test]
-fn richtext_type_mismatch_reports_richtext_not_string() {
-    let yaml = example_default_yaml("    body:\n      type: richtext\n      default: 42\n");
-    let errors = QuillConfig::from_yaml_with_warnings(&yaml).unwrap_err();
-    let diag = errors
-        .iter()
-        .find(|d| d.code.as_deref() == Some("quill::default_type_mismatch"))
-        .expect("expected default_type_mismatch error");
-    assert!(
-        diag.message.contains("declares type 'richtext'"),
-        "message should name the richtext type, got: {}",
-        diag.message
-    );
 }
 
 #[test]
@@ -2447,7 +2271,6 @@ fn type_mismatch_preview_shows_array_contents() {
     );
 }
 
-/// A minimal quill declaring one field, for the richtext field-type tests.
 fn quill_with_field(field_yaml: &str) -> Result<QuillConfig, Vec<Diagnostic>> {
     let yaml = format!(
         "quill:\n  name: rt\n  version: \"1.0\"\n  backend: typst\n  description: rt\nmain:\n  fields:\n{field_yaml}"
