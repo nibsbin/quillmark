@@ -275,14 +275,14 @@ export declare function isUnknownIsland(
 import type { Quill, Document, Card } from '../core/wasm.js';
 import type { Diagnostic } from '../core/wasm.js';
 
-/** Canonical contract every backend build must satisfy. One emitted output. */
+/** One emitted output. */
 export interface Artifact {
 	format: OutputFormat;
 	bytes: Uint8Array;
 	mimeType: string;
 }
 
-/** Canonical contract every backend build must satisfy. Options for one render. */
+/** Options for one render. */
 export interface RenderOptions {
 	format?: OutputFormat;
 	ppi?: number;
@@ -300,12 +300,10 @@ export interface RenderOptions {
  * to decide whether to trust the offset. Never sub-cluster: `'cluster'` is the
  * finest, `'segment'` the floor it degrades to on origin-less ink.
  *
- * - `'cluster'`: `pos` is the first content char of the cluster under the point
- *   (an escaped/CJK/shaping cluster floors to its first char). Place the caret
- *   at `pos` directly.
- * - `'segment'`: the point hit origin-less ink (list markers, numbering, a
- *   multi-line code fence's interior), so `pos` degraded to the containing
- *   segment's start. Treat `pos` as the selected segment, not a caret.
+ * - `'cluster'`: `pos` is the first content char of the cluster under the point.
+ *   Place the caret there directly.
+ * - `'segment'`: the point hit origin-less ink (list markers, numbering, a code
+ *   fence's interior), so `pos` is the containing segment's start, not a caret.
  */
 export type HitGranularity = 'cluster' | 'segment';
 
@@ -326,24 +324,19 @@ export interface ContentHit {
 
 /**
  * A rendered field region: the canonical `DocPath` field address (`field`) plus
- * its geometry (`rect`) on the page. Emitted by backends that place schema fields
- * (`pdfform` AcroForm widgets; Typst form-fields and span-tracked content:
- * richtext bodies, `richtext[]` elements, card content fields, direct scalar
- * references). Only fields with a schema address produce a region: a
- * backend-only widget produces none, and the backend widget name never
+ * its geometry (`rect`) on the page. Only fields with a schema address produce
+ * one: a backend-only widget produces none, and the backend widget name never
  * appears.
  *
- * Use it to scroll to / highlight the focused field's rect; for the click
+ * Use it to scroll to or highlight the focused field's rect; for the click
  * direction use {@link LiveSession.fieldAt}, which resolves a point on *any*
- * placement, not just the first one surfaced here. Geometry only:
- * `LiveSession.paint` already bakes every value into the raster (see
- * {@link LiveSession}), so a region is never a compositing input.
+ * placement, not just the first one surfaced here.
  *
  * COORDINATE TRANSFORM. `rect` is in PDF points with a **bottom-left** origin.
  *
  * For an **HTML/CSS overlay** on a `width:100%` canvas, position hotspots as
- * percentages of the page; they track the displayed size across DPI and pane
- * resize for free, and only the Y axis flips:
+ * percentages of the page, so they track the displayed size across DPI and pane
+ * resize for free; only the Y axis flips:
  *
  * ```js
  * const [x0, y0, x1, y1] = region.rect;            // PDF pt, bottom-left origin
@@ -364,12 +357,10 @@ export interface ContentHit {
 export interface FieldRegion {
 	/**
 	 * The field's canonical `DocPath` address (`parseDocPath`-routable), not a
-	 * backend widget name: `main.signature_block` for a main field,
-	 * `cards.<kind>[<i>].signature_block` for a card field (`cards[<i>].…` when the
-	 * card's kind is unknown). Nested addresses spell out in full, an array
-	 * element bracketed and a key dotted — `main.references[0]`,
-	 * `cards.<kind>[<i>].addr.city` — the same spelling `Diagnostic.path` uses,
-	 * so the two join on string equality.
+	 * backend widget name: `main.signature_block`,
+	 * `cards.<kind>[<i>].signature_block` (`cards[<i>].…` when the card's kind is
+	 * unknown), an array element bracketed and a key dotted. The same spelling
+	 * `Diagnostic.path` uses, so the two join on string equality.
 	 */
 	field: string;
 	/** 0-based page index. */
@@ -386,67 +377,54 @@ export interface FieldRegion {
 	span?: [number, number];
 }
 
-/** Canonical contract every backend build must satisfy. Result of one render. */
+/** Result of one render. */
 export interface RenderResult {
 	artifacts: Artifact[];
 	warnings: Diagnostic[];
 	outputFormat: OutputFormat;
 	renderTimeMs: number;
 	/**
-	 * Schema-field geometry sidecar: populated only when
-	 * {@link RenderOptions.regions} requested it; empty otherwise. The same
-	 * entries {@link LiveSession.regions} serves, for consumers without a live
-	 * session. Page indices are document-space even under a `pages` subset
-	 * render.
+	 * Schema-field geometry, populated only when {@link RenderOptions.regions}
+	 * asked for it. Page indices are document-space even under a `pages` subset.
 	 */
 	regions: FieldRegion[];
 }
 
-/** Canonical contract every backend build must satisfy. The emittable formats. */
+/** The emittable formats. */
 export type OutputFormat = 'pdf' | 'svg' | 'png';
 
-/**
- * Canonical contract every backend build must satisfy. Page geometry in pt.
- */
+/** Page geometry, in points. */
 export interface PageSize {
 	widthPt: number;
 	heightPt: number;
 }
 
-/**
- * Canonical contract every backend build must satisfy. Inputs to `paint`.
- */
+/** Inputs to `paint`. */
 export interface PaintOptions {
 	layoutScale?: number;
 	densityScale?: number;
 }
 
-/**
- * Canonical contract every backend build must satisfy. Output of `paint`.
- */
+/** Output of `paint`. */
 export interface PaintResult {
 	layoutWidth: number;      // canvas.style.width target; independent of densityScale
 	layoutHeight: number;
 	pixelWidth: number;       // canvas.width the painter wrote (clamped at 16384)
 	pixelHeight: number;
 	/**
-	 * True when `MAX_BACKING_DIMENSION` forced `densityScale` down: the page is
-	 * painted at fewer device pixels than requested and renders soft at the same
-	 * `canvas.style` size. Reads the clamp off the return value instead of the
-	 * `pixelWidth < round(layoutWidth × densityScale)` derivation.
+	 * True when the backing-store clamp forced `densityScale` down: the page
+	 * renders soft at the same `canvas.style` size.
 	 */
 	clamped: boolean;
 	/**
-	 * The `densityScale` actually applied: equal to the requested value unless
-	 * `clamped`, then reduced proportionally. `layoutScale × effectiveDensityScale`
-	 * is the scale the backing store was rasterized at.
+	 * The `densityScale` actually applied, reduced proportionally when
+	 * `clamped`. `layoutScale × effectiveDensityScale` is the rasterized scale.
 	 */
 	effectiveDensityScale: number;
 }
 
 /**
- * Canonical contract every backend build must satisfy. Output of
- * {@link LiveSession.update}: `dirtyPages` lists the pages whose rendered
+ * Output of {@link LiveSession.update}: `dirtyPages` lists the pages whose
  * content differs from the previous compile, including added pages; removed
  * pages are implied by `pageCount`. Repaint `dirty ∩ visible`.
  */
@@ -456,12 +434,11 @@ export interface ChangeSet {
 }
 
 /**
- * A backend registry entry. `load` is the lazy thunk returning the dynamically-
- * imported backend build module; `formats`/`canvas` are the REQUIRED static
- * capability manifest. That manifest is what makes
- * `Engine.supportedFormats`/`Engine.supportsCanvas` always FREE: they answer
- * from it directly, no backend binary is loaded and no quill is cloned into
- * backend memory. A malformed descriptor throws at `new Engine(...)`.
+ * A backend registry entry. `load` is the lazy thunk returning the
+ * dynamically-imported backend build module; `formats`/`canvas` are the required
+ * static capability manifest, which is what makes `Engine.supportedFormats` and
+ * `Engine.supportsCanvas` free: they answer from it without loading a backend
+ * binary or cloning a quill. A malformed descriptor throws at `new Engine(...)`.
  */
 export interface BackendDescriptor {
 	load: () => Promise<unknown>;
