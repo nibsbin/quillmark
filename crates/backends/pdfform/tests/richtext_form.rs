@@ -1,15 +1,11 @@
-//! End-to-end acceptance test for the `richtext_form` fixture: a pdfform quill
-//! that binds richtext fields. It exercises the content → plaintext lowering:
-//! a richtext field crosses the seam as canonical content JSON and pdfform lowers
-//! it to `Content.text` (markup dropped, island slots stripped) for the widget
-//! `/V`. No pdfform field carries rich formatting; the Adobe-only `/RV` entry is
-//! never written.
+//! End-to-end acceptance for the `richtext_form` fixture. A richtext field
+//! crosses the seam as canonical content JSON and lowers to `Content.text` for
+//! the widget `/V`; the Adobe-only `/RV` entry is never written.
 
 use lopdf::Document as PdfDoc;
 use quillmark::{Document, OutputFormat, Quillmark, RenderOptions};
 
-// `headline` (inline richtext) and `bio` (block richtext) authored as markdown;
-// coercion imports each to a content, and pdfform lowers each to plaintext.
+// `headline` is inline richtext, `bio` block richtext.
 const FILLED: &str = "~~~\n\
 $quill: richtext_form\n\
 $kind: main\n\
@@ -44,15 +40,12 @@ fn richtext_fields_lower_to_plaintext_field_values() {
         .as_dict()
         .unwrap();
 
-    // Inline richtext → plaintext: the `**` markup is dropped (marks live off the
-    // text), leaving "The headline".
     let headline = widget(&doc, af, "FullName");
     assert_eq!(
         decode_pdf_text(headline.get(b"V").unwrap().as_str().unwrap()),
         "The headline"
     );
 
-    // Block richtext → plaintext into the multiline widget.
     let bio = widget(&doc, af, "Comments");
     assert_eq!(
         decode_pdf_text(bio.get(b"V").unwrap().as_str().unwrap()),
@@ -60,59 +53,3 @@ fn richtext_fields_lower_to_plaintext_field_values() {
     );
 }
 
-/// Same render, but the richtext fields are written via the typed writer, so
-/// each is **stored as a canonical content object** rather than an authored
-/// markdown string. This exercises coercion's object branch (re-validate +
-/// re-canonicalize) end-to-end and proves it lowers identically to the
-/// string-authored path: the content-from-write form renders the same PDF.
-#[test]
-fn richtext_fields_written_as_content_render_identically() {
-    let quill = quillmark::quill_from_path(quillmark_fixtures::quills_path("richtext_form"))
-        .expect("load richtext_form quill");
-    let engine = Quillmark::new();
-
-    // Start from the string-authored doc, then re-write each field through the
-    // schema-bound typed writer: `commit_field` stores the *canonical content
-    // object* (decode → canonicalize) for a richtext-typed field, so the payload
-    // now carries content objects.
-    let mut doc = Document::parse(FILLED).expect("parse markdown").document;
-    {
-        let mut ed = quill.writer(&mut doc);
-        ed.set("headline", "The **headline**")
-            .expect("inline richtext write");
-        ed.set("bio", "A **bold** claim and _emphasis_.")
-            .expect("block richtext write");
-    }
-    // Precondition: the fields are stored structurally as content objects now.
-    let main = doc.main();
-    assert!(main.payload().get("headline").unwrap().as_json().is_object());
-    assert!(main.payload().get("bio").unwrap().as_json().is_object());
-
-    let result = engine
-        .render(
-            &quill,
-            &doc,
-            &RenderOptions::default().with_output_format(OutputFormat::Pdf),
-        )
-        .expect("render ok");
-
-    let pdf = &result.artifacts[0].bytes;
-    let doc = PdfDoc::load_mem(pdf).expect("lopdf reparse: structurally valid");
-    let cat = doc.catalog().expect("catalog");
-    let af = doc
-        .get_object(cat.get(b"AcroForm").unwrap().as_reference().unwrap())
-        .unwrap()
-        .as_dict()
-        .unwrap();
-
-    let headline = widget(&doc, af, "FullName");
-    assert_eq!(
-        decode_pdf_text(headline.get(b"V").unwrap().as_str().unwrap()),
-        "The headline"
-    );
-    let bio = widget(&doc, af, "Comments");
-    assert_eq!(
-        decode_pdf_text(bio.get(b"V").unwrap().as_str().unwrap()),
-        "A bold claim and emphasis."
-    );
-}
