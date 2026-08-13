@@ -740,24 +740,16 @@ impl Content {
     /// not reuse one (its serialization would parse back as the built-in,
     /// silently dropping its attrs: non-injective).
     ///
-    /// Two enforcement points, on two lanes. [`Content::validate`] catches an
-    /// in-process Rust construction. The wire never reaches it: a decoder resolves
-    /// the built-in name before the `Unknown` fallthrough, so a reserved tag
-    /// *becomes* the built-in rather than arriving as an `Unknown`. The authored
-    /// lane therefore rejects the shape up front
-    /// ([`serial::from_authored_value`](crate::serial::from_authored_value) for
-    /// whole content; [`ops::mark_op_from_value`](crate::ops::mark_op_from_value)
-    /// and [`ops::line_op_from_value`](crate::ops::line_op_from_value) for the op
-    /// wire), while storage decode stays lenient by design; see there.
+    /// Two enforcement points. [`Content::validate`] catches an in-process Rust
+    /// construction. The wire never reaches it, since a decoder resolves the
+    /// built-in name before the `Unknown` fallthrough, so the authored lane
+    /// ([`serial::from_authored_value`](crate::serial::from_authored_value), the
+    /// op-wire readers) rejects the shape up front while storage decode stays
+    /// lenient.
     ///
     /// This list and its two siblings are re-spelled by hand on the TypeScript
-    /// surface: the unions in `crates/bindings/wasm/src/engine.rs` and the
-    /// `isUnknown*` guards' tables in
-    /// `crates/bindings/wasm/runtime/runtime.js`. Both are pinned to these
-    /// constants by `crates/bindings/wasm/tests/known_names_drift.rs`.
-    /// Slices, not arrays, on all three: an array's length is part of its type,
-    /// and promoting a name into the projection is the motion these lists exist
-    /// to absorb.
+    /// surface and pinned to these constants by
+    /// `crates/bindings/wasm/tests/known_names_drift.rs`.
     pub const RESERVED_MARK_TYPES: &'static [&'static str] = &[
         "strong",
         "emph",
@@ -811,10 +803,7 @@ impl Content {
         }
         let len = self.len_usv();
         let chars: Vec<char> = self.text.chars().collect();
-        // Prose anchor ids: unique, non-empty, caller-supplied opaque handles
-        // (`DOCUMENT_STORAGE.md` § Anchor-id identity). Uniqueness (the same
-        // invariant the island loop enforces below) is what `RemoveAnchor`
-        // presumes; scope is prose marks, cell anchors excluded by construction.
+        // Anchor-id uniqueness is what `RemoveAnchor` presumes.
         let mut seen_anchor_ids = std::collections::HashSet::new();
         for m in &self.marks {
             if m.start > m.end || m.end > len {
@@ -850,16 +839,12 @@ impl Content {
                 _ => {}
             }
         }
-        // One pass over the lines against their own text segment. `lines.len()`
-        // already equals the segment count, so the zip is total.
+        // `lines.len()` already equals the segment count, so the zip is total.
         for (i, (line, seg)) in self.lines.iter().zip(self.text.split('\n')).enumerate() {
             match &line.kind {
                 LineKind::Heading { level } if !(1..=6).contains(level) => {
                     return Err(Invariant::BadHeadingLevel(*level));
                 }
-                // An unknown role may not reuse a built-in `kind` name: it would
-                // serialize as the built-in and parse back as one, dropping its
-                // attrs, the mark-side rule, one axis over.
                 LineKind::Unknown { tag, attrs } => {
                     if Self::RESERVED_LINE_KINDS.contains(&tag.as_str()) {
                         return Err(Invariant::ReservedUnknownLineKind(tag.clone()));
@@ -892,21 +877,14 @@ impl Content {
         // hold no `\n`, so the edge-on-newline rule does not apply.
         let mut seen_ids = std::collections::HashSet::with_capacity(self.islands.len());
         for island in &self.islands {
-            // Ids are deterministic, session-stable identities (hash input), so
-            // two islands may not share one. Uniqueness (not `id == isl-{i}`)
-            // is the invariant: edits keep an island's id across renumbers.
             if !seen_ids.insert(island.id.as_str()) {
                 return Err(Invariant::IslandIdCollision {
                     id: island.id.clone(),
                 });
             }
-            // Payload depth before any pass that walks `props`. A cell's own
-            // `attrs` is a subtree of `props`, so one check bounds the cell marks
-            // the loop below reads as well.
+            // Depth before any pass that walks `props`; a cell's own `attrs` is
+            // a subtree, so this bounds the cell marks read below as well.
             check_json_depth(&island.props, "island props")?;
-            // Structural shape (table column/row/aligns consistency, `\n`-free
-            // cells) before the per-cell mark ranges: a ragged island is
-            // ill-formed regardless of its marks.
             if let Some(e) = crate::island::island_shape_error(island) {
                 return Err(e);
             }
@@ -935,18 +913,13 @@ impl Content {
     }
 }
 
-/// Apply the three Spike-A rules and the canonical sort to a flat mark list.
-///
-/// 1. Same-kind formatting marks union when adjacent *or* overlapping.
-/// 2. Different-kind marks overlap freely (never split into runs).
-/// 3. Identity (and unknown) marks never merge.
-///
-/// Zero-width formatting marks are dropped (no-ops); zero-width anchors survive.
+/// Apply the three merge rules and the canonical sort to a flat mark list:
+/// same-kind formatting marks union when adjacent *or* overlapping, different
+/// kinds overlap freely (never split into runs), and identity/unknown marks
+/// never merge. Zero-width formatting is dropped; zero-width anchors survive.
 pub(crate) fn normalize_marks(marks: Vec<Mark>) -> Vec<Mark> {
     use std::collections::BTreeMap;
 
-    // Partition: formatting marks group by (ord, attrs_key) for union; identity
-    // and unknown pass through untouched (but zero-width formatting is dropped).
     let mut groups: BTreeMap<(u8, String), Vec<(Usv, Usv)>> = BTreeMap::new();
     let mut kind_of: BTreeMap<(u8, String), MarkKind> = BTreeMap::new();
     let mut passthrough: Vec<Mark> = Vec::new();
@@ -990,14 +963,11 @@ pub(crate) fn normalize_marks(marks: Vec<Mark>) -> Vec<Mark> {
     }
     out.extend(passthrough);
 
-    // Canonical sort: (start, end, kind-ord, attrs). Key cached per mark so
-    // `attrs_key`'s allocation runs once each, not once per comparison.
+    // Key cached per mark so `attrs_key`'s allocation runs once each, not once
+    // per comparison.
     out.sort_by_cached_key(|m| (m.start, m.end, m.kind.ord(), m.kind.attrs_key()));
-    // Drop byte-identical duplicates. Identity/unknown handles never *merge*
-    // (Spike-A rule 3), but two marks equal in range, kind, and attrs are the
-    // same handle recorded twice: redundant bytes, not two handles. The sort
-    // above makes any such pair adjacent, so `dedup` (structural `PartialEq`,
-    // order-independent for `Unknown` attrs under `preserve_order`) removes it.
+    // Two marks equal in range, kind and attrs are one handle recorded twice:
+    // redundant bytes, not two handles. The sort makes any such pair adjacent.
     out.dedup();
     out
 }
