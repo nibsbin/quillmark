@@ -2,11 +2,9 @@
 //!
 //! [`DocPath`] is the workspace's one serializer and parser for
 //! [`Diagnostic::path`](crate::error::Diagnostic::path), the anchor into a
-//! typed [`Document`](crate::document::Document). Every emit site (schema
-//! validation, `!must_fill` collection, coercion) constructs a `DocPath` and
-//! renders it once through [`Display`](std::fmt::Display); no site assembles a path with
-//! `format!`, and no consumer regexes one back apart, the exported
-//! [`FromStr`] parser is the inverse.
+//! typed [`Document`](crate::document::Document). No site assembles a path with
+//! `format!` and no consumer regexes one apart: the exported [`FromStr`] parser
+//! is [`Display`](std::fmt::Display)'s inverse.
 //!
 //! # Grammar
 //!
@@ -22,33 +20,23 @@
 //!
 //! A field name is what the document carries, not an identifier: a nested YAML
 //! map key is unconstrained, so `!must_fill` collection mints `main.m.0` and
-//! `main.m.a-b`. All `Display` → `FromStr` needs is the narrower property that
-//! a name excludes `.`, `[`, `]`, the three characters the serializer spends.
-//! One consequence is load-bearing elsewhere: **an all-digit name reads back as
-//! a name, never an index** (`main.m.0` is `Field{"0"}`), so the plate-space
-//! `.N` index spelling is translated at the geometry boundary (`region.rs`)
-//! rather than here.
+//! `main.m.a-b`. `Display` → `FromStr` needs only that a name exclude `.`, `[`,
+//! `]`. So **an all-digit name reads back as a name, never an index**
+//! (`main.m.0` is `Field{"0"}`), and the plate-space `.N` index spelling is
+//! translated at the geometry boundary (`region.rs`) instead.
 //!
-//! Every document-model path is **rooted**: a main field is `main.<field>`
-//! (`main.title`, `main.recipients[0].name`), the main body `main.body`. A card
-//! field is kind-qualified (`cards.<kind>[<i>].<field>`) so a consumer
-//! receives kind and array index without a second lookup; a card whose `$kind`
-//! has no schema (absent, or present but not a declared card kind) stays
-//! `cards[<i>]`.
+//! Every document-model path is **rooted**, which makes the grammar total
+//! against a field named for a root: a main field literally named `cards` is
+//! `main.cards`. One residual: a field literally named `body` renders
+//! `<root>.body` and collides with the body terminal, accepted, not guarded.
 //!
-//! Rooting makes the grammar total against a field named for a root: a main
-//! field literally named `cards` or `main` is `main.cards` / `main.main`, which
-//! collides with nothing. One residual: a field literally named `body` renders
-//! `<root>.body` and collides with the body terminal, accepted, not guarded (no
-//! fixture field uses the name).
-//!
-//! This is the **document-model** namespace, distinct from the plate-JSON
-//! `data.$cards` array template authors see (`prose/canon/CARDS.md`): sigiled
-//! `$cards` is glue delivered to the backend, unsigiled `cards` is a path into
-//! the document. Config-space anchors (`$seed.<kind>.<field>`, Quill.yaml
-//! schema-literal owner labels) ride the same serializer with their prefix as a
-//! leading [`field`](DocPath::field) segment: the one **unrooted** form,
-//! config-space not document-model, verbatim and never parsed.
+//! This is the document-model namespace, distinct from the plate-JSON
+//! `data.$cards` array template authors see: sigiled `$cards` is glue delivered
+//! to the backend, unsigiled `cards` is a path into the document. Config-space
+//! anchors (`$seed.<kind>.<field>`, Quill.yaml schema-literal owner labels)
+//! ride the same serializer with their prefix as a leading
+//! [`field`](DocPath::field) segment: the one **unrooted** form, verbatim and
+//! never parsed.
 
 use crate::value::PathSegment;
 use std::fmt;
@@ -62,8 +50,7 @@ use std::str::FromStr;
 #[serde(tag = "seg", rename_all = "lowercase")]
 #[non_exhaustive]
 pub enum DocSeg {
-    /// The main-card root: heads every main-card address (`main.title`,
-    /// `main.body`).
+    /// The main-card root.
     Main,
     /// A composable card by document-array index. `kind: None` is the
     /// unknown-kind whole-card form (`cards[<i>]`), the only bare-index root.
@@ -76,9 +63,9 @@ pub enum DocSeg {
     Body,
 }
 
-/// A canonical document-model path, an ordered [`DocSeg`] list with one
-/// [`Display`](std::fmt::Display) serializer and one [`FromStr`] parser. See the [module
-/// docs](self) for the grammar.
+/// A canonical document-model path: an ordered [`DocSeg`] list with one
+/// [`Display`](std::fmt::Display) serializer and one [`FromStr`] parser. The
+/// grammar is in the [module docs](self).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
 pub struct DocPath {
@@ -86,16 +73,14 @@ pub struct DocPath {
 }
 
 impl DocPath {
-    /// The empty base for a config-space / opaque-prefix path (`$seed.<kind>`, a
-    /// Quill.yaml schema-literal owner label): the one unrooted form, not a
-    /// document-model address. A document-model path roots at [`main`](Self::main)
-    /// or [`card`](Self::card).
+    /// The empty base for a config-space path (`$seed.<kind>`): the one
+    /// unrooted form. A document-model path roots at [`main`](Self::main) or
+    /// [`card`](Self::card) instead.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// The main-card root, `main`: the base every main-card address extends
-    /// (`main.title`, `main.recipients[0].name`, `main.body`).
+    /// The main-card root, `main`.
     pub fn main() -> Self {
         Self {
             segs: vec![DocSeg::Main],
@@ -120,9 +105,8 @@ impl DocPath {
         }
     }
 
-    /// This path extended by a field segment. The name is stored verbatim:
-    /// callers pass validated field names, or a config-space prefix
-    /// (`$seed.<kind>`) as an opaque head.
+    /// This path extended by a field segment. The name is stored verbatim, so
+    /// a config-space prefix (`$seed.<kind>`) can ride as an opaque head.
     pub fn field(&self, name: &str) -> Self {
         self.pushing(DocSeg::Field {
             name: name.to_owned(),
@@ -139,12 +123,8 @@ impl DocPath {
         self.pushing(DocSeg::Body)
     }
 
-    /// This path extended by a value-relative [`PathSegment`], the bridge
-    /// from the value-tree walk (`!must_fill` collection): [`Key`] becomes a
-    /// field, [`Index`] an index.
-    ///
-    /// [`Key`]: PathSegment::Key
-    /// [`Index`]: PathSegment::Index
+    /// This path extended by a value-relative [`PathSegment`], the bridge from
+    /// the value-tree walk.
     pub fn segment(&self, seg: &PathSegment) -> Self {
         match seg {
             PathSegment::Key(k) => self.field(k),
@@ -152,7 +132,6 @@ impl DocPath {
         }
     }
 
-    /// The segments, head first.
     pub fn segs(&self) -> &[DocSeg] {
         &self.segs
     }
@@ -165,9 +144,8 @@ impl DocPath {
 }
 
 impl fmt::Display for DocPath {
-    /// The one document-model path serializer. A `Field` takes a leading `.`
-    /// unless it heads the path; `Index` and `Body` never do; the card and
-    /// main roots are self-contained heads.
+    /// A `Field` takes a leading `.` unless it heads the path; `Index` and
+    /// `Body` never do; the roots are self-contained heads.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (i, seg) in self.segs.iter().enumerate() {
             match seg {
@@ -188,8 +166,8 @@ impl fmt::Display for DocPath {
     }
 }
 
-/// A [`DocPath`] parse failure. Carries the offending input for a diagnostic
-/// message; the parser is total over every path [`Display`](std::fmt::Display) emits.
+/// A [`DocPath`] parse failure. The parser is total over every path
+/// [`Display`](std::fmt::Display) emits.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct DocPathParseError {
