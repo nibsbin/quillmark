@@ -909,11 +909,8 @@ impl PyCardWriter {
             .map_err(convert_edit_error)
     }
 
-    /// Revise the content field `name` on this card from authored text: typed
-    /// *and* anchor-preserving; the card twin of `Writer.revise_field`, codec
-    /// included. Raises `edit::unknown_field` for an undeclared name and
-    /// `edit::index_out_of_range` for a bad index. The `Delta` is discarded
-    /// (see `Writer.revise_field`).
+    /// The card twin of `Writer.revise_field`. Raises `edit::unknown_field` for
+    /// an undeclared name and `edit::index_out_of_range` for a bad index.
     fn revise_field(&self, py: Python<'_>, name: &str, text: &str) -> PyResult<()> {
         let quill = self.quill.borrow(py);
         let mut doc = self.doc.borrow_mut(py);
@@ -927,17 +924,14 @@ impl PyCardWriter {
     }
 }
 
-/// A `Document` bound to its `Quill` for interpreted reads: the schema-plane
-/// read surface, from `Quill.reader(doc)` and the read twin of `Writer`. One `get`
-/// reads each field by its declared type: a richtext field to its markdown
-/// projection, a plaintext field to its literal text, every other type its
-/// canonical value verbatim. The schema authority is the point: a name the schema
-/// does not declare raises `edit::unknown_field` (a typo, as on the write
-/// side) rather than reading back `None`, and a content field holding an
-/// undecodable value raises `edit::field_decode`. This is the field
-/// read surface: `Document` carries no quill-free field read. Holds both objects
-/// by reference and re-borrows them per call (pyo3 objects carry no lifetime), so
-/// it is ephemeral by convention: bind, read, discard.
+/// A `Document` bound to its `Quill` for interpreted reads, from
+/// `Quill.reader(doc)`: the read twin of `Writer`, and the only field read
+/// surface, since `Document` carries no quill-free one. One `get` reads each
+/// field by its declared type — a richtext field to its markdown projection, a
+/// plaintext field to its literal text, every other type verbatim — with schema
+/// authority: an undeclared name raises `edit::unknown_field` rather than reading
+/// back `None`. Re-borrows both objects per call, so it is ephemeral by
+/// convention: bind, read, discard.
 #[pyclass(name = "Reader")]
 pub struct PyReader {
     quill: Py<PyQuill>,
@@ -953,11 +947,10 @@ impl PyReader {
     }
 
     /// Read a main-card field, interpreted by its declared type: a richtext field
-    /// to its markdown projection (a `str`), every other type its canonical value
-    /// (scalar/list/dict), or `None` when the field is absent. Raises
-    /// `edit::unknown_field` for a name the schema does not declare (a typo,
-    /// as on the write side) and `edit::field_decode` for a richtext
-    /// field holding a value that does not decode.
+    /// to its markdown projection, every other type its canonical value, or
+    /// `None` when the field is absent. Raises `edit::unknown_field` for an
+    /// undeclared name and `edit::field_decode` for a richtext value that does
+    /// not decode.
     fn get<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
         let quill = self.quill.borrow(py);
         let doc = self.doc.borrow(py);
@@ -969,17 +962,15 @@ impl PyReader {
         read_value_to_py(py, read)
     }
 
-    /// Read a main-card content field as its canonical Content-JSON (a
-    /// dict, `{text, lines, marks, islands}`): the `Content` twin of `get`, which
-    /// projects. Decodes through the codec the declared type names (`richtext` as
-    /// markdown, `plaintext` as literal text), so a field the writer committed as
-    /// a `Content` and one a markdown parse left as an authored string read back the
-    /// same; the storage form stops being the caller's business.
+    /// Read a main-card content field as canonical Content-JSON (`{text, lines,
+    /// marks, islands}`): the `Content` twin of `get`, which projects. Decodes
+    /// through the codec the declared type names, so a field the writer committed
+    /// and one a markdown parse left as an authored string read back the same.
     ///
     /// `None` when the field is absent. Raises `edit::unknown_field` for an
-    /// undeclared name, `edit::field_not_content` for a declared type that is not a
-    /// content leaf, and `edit::field_decode` for a stored value that
-    /// decodes under neither encoding.
+    /// undeclared name, `edit::field_not_content` for a declared type that is not
+    /// a content leaf, and `edit::field_decode` for a value that decodes under
+    /// neither encoding.
     fn get_content<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
         let quill = self.quill.borrow(py);
         let doc = self.doc.borrow(py);
@@ -991,8 +982,8 @@ impl PyReader {
         content_to_py(py, read)
     }
 
-    /// The main body's markdown: the quill-free body read (a body's type is a
-    /// format fact, not a schema fact), never raising.
+    /// The main body's markdown: quill-free, since a body's type is a format fact
+    /// rather than a schema fact. Never raises.
     fn body_markdown(&self, py: Python<'_>) -> String {
         let doc = self.doc.borrow(py);
         doc.inner.main().body_markdown()
@@ -1054,9 +1045,8 @@ impl PyCardReader {
         read_value_to_py(py, read)
     }
 
-    /// Read a content field on this card as its canonical Content-JSON:
-    /// the card-indexed twin of `Reader.get_content`, carrying the same outcomes
-    /// plus `edit::index_out_of_range` for a bad index.
+    /// The card-indexed twin of `Reader.get_content`, with the same outcomes plus
+    /// `edit::index_out_of_range` for a bad index.
     fn get_content<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
         let quill = self.quill.borrow(py);
         let doc = self.doc.borrow(py);
@@ -1069,8 +1059,8 @@ impl PyCardReader {
         content_to_py(py, read)
     }
 
-    /// This card's body markdown: the card twin of `Reader.body_markdown`. Raises
-    /// `edit::index_out_of_range` if the bound index is out of range.
+    /// The card twin of `Reader.body_markdown`. Raises `edit::index_out_of_range`
+    /// for a bad bound index.
     fn body_markdown(&self, py: Python<'_>) -> PyResult<String> {
         let doc = self.doc.borrow(py);
         let card = doc
@@ -1126,17 +1116,14 @@ impl PyRenderResult {
         self.render_time_ms
     }
 
-    /// Schema-field geometry sidecar: populated only when `render(...,
-    /// regions=True)` requested it; empty otherwise. One dict per entry:
-    /// `{"field": str, "page": int, "rect": [x0, y0, x1, y1], "span":
-    /// [start, end] | None}` with rect in PDF points, bottom-left origin, page
-    /// indices document-space. `field` is a `DocPath` address (`main.body`,
-    /// `main.<field>`, `cards.<kind>[<i>].<field>`) so it names the same thing
-    /// the document APIs do. Content fields carry one entry per **segment**
-    /// (paragraph, heading, code fence) and page, each `span` the covered USV
-    /// content range; widgets and scalar reference sites carry `span: None`. A
-    /// field may still appear more than once; group by `field` and union the
-    /// segment rects for the whole-field box.
+    /// Schema-field geometry, populated only when `render(..., regions=True)`
+    /// asked for it. One dict per entry: `{"field": str, "page": int, "rect":
+    /// [x0, y0, x1, y1], "span": [start, end] | None}`, rect in PDF points with a
+    /// bottom-left origin and page indices document-space. `field` is a `DocPath`
+    /// address, as the document APIs use. Content fields carry one entry per
+    /// segment (paragraph, heading, code fence) and page, each `span` the covered
+    /// USV range; widgets and scalar reference sites carry `span: None`. Group by
+    /// `field` and union the segment rects for the whole-field box.
     #[getter]
     fn regions<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyDict>>> {
         self.inner
