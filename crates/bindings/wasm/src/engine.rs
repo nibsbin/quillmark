@@ -2783,13 +2783,6 @@ struct PaintResult {
     layout_height: f64,
     pixel_width: u32,
     pixel_height: u32,
-    /// True when `MAX_BACKING_DIMENSION` forced `densityScale` down: the page is
-    /// painted at fewer device pixels than requested, so it renders soft at the
-    /// same `canvas.style` size. The honest form of the pixel-dim derivation
-    /// consumers would otherwise reinvent.
     clamped: bool,
-    /// The `densityScale` actually applied: equal to the requested value unless
-    /// `clamped`, then reduced proportionally. `layoutScale × effectiveDensityScale`
-    /// is the scale the backing store was rasterized at.
     effective_density_scale: f64,
 }
