@@ -829,60 +829,47 @@ impl Document {
         })
     }
 
-    /// Read the storage version tag from a raw storage DTO string without a
-    /// full parse, or `undefined`. Returns unknown future versions as-is:
-    /// useful to distinguish "build too old" from "payload corrupt" when
-    /// `fromJson` throws.
-    ///
-    /// The storage version, not a field schema ([`schema`](Quill::schema) is the
-    /// quill's field declarations). The JSON key is spelled `"schema"`: it is
-    /// the DTO's serde tag, and retagging it would break the version dispatch
-    /// it drives.
+    /// Read the storage version tag from a raw storage DTO string without a full
+    /// parse, or `undefined`. Unknown future versions come back as-is, which
+    /// distinguishes "build too old" from "payload corrupt" when `fromJson`
+    /// throws. This is the storage version, not a field schema, though the JSON
+    /// key is spelled `"schema"`: that is the DTO's serde tag.
     #[wasm_bindgen(js_name = storageVersionOf)]
     pub fn storage_version_of(json: &str) -> Option<String> {
         quillmark_core::document::peek_storage_version(json)
     }
 
-    /// Storage version this build writes via [`toJson`](Document::to_json).
-    /// Tracks the `Document` model version (not the running crate version):
-    /// the tag advances only when the wire format changes, not on every release.
+    /// Storage version this build writes via [`toJson`](Document::to_json). The
+    /// tag advances only when the wire format changes, not on every release.
     #[wasm_bindgen(js_name = currentStorageVersion)]
     pub fn current_storage_version() -> String {
         quillmark_core::document::STORAGE_V0_93_0.to_string()
     }
 
-    /// Authoring-format rules for the card-yaml markdown surface. The canonical
-    /// text is core's (`quillmark_core::document::FORMAT_RULES`), re-exposed
-    /// here for JS consumers so it matches any other surface that draws from the
-    /// same source. Read once at startup and cache; the value never changes
-    /// between calls.
+    /// Authoring-format rules for the card-yaml markdown surface, re-exposed from
+    /// core. Constant across calls; read once and cache.
     #[wasm_bindgen(js_name = formatRules)]
     pub fn format_rules() -> String {
         quillmark_core::document::FORMAT_RULES.to_string()
     }
 
-    /// Authoring-ergonomics header introducing a blueprint to an LLM/MCP
-    /// consumer for the given `quillName`. Re-exposes core's canonical text for
-    /// JS consumers; any surface that draws from the same core source stays
-    /// uniform.
+    /// Authoring-ergonomics header introducing a blueprint to an LLM/MCP consumer
+    /// for the given `quillName`, re-exposed from core.
     #[wasm_bindgen(js_name = blueprintInstruction)]
     pub fn blueprint_instruction(quill_name: &str) -> String {
         quillmark_core::document::blueprint_instruction(quill_name)
     }
 
-    /// The canonical `$quill` reference grammar as author-facing text. Core is
-    /// the single source of truth: drive schema `describe` and validation
-    /// messages from this instead of re-stating the rule; it matches the
-    /// `hint` on `parse::invalid_quill_reference`. Cache it; the value never
-    /// changes.
+    /// The canonical `$quill` reference grammar as author-facing text: the same
+    /// text the `parse::invalid_quill_reference` hint carries. Drive validation
+    /// messages from this instead of re-stating the rule.
     #[wasm_bindgen(js_name = quillRefHint)]
     pub fn quill_ref_hint() -> String {
         quillmark_core::quill_ref_hint().to_string()
     }
 
-    /// Render a Diagnostic as the canonical pretty-printed text (core's
-    /// `Diagnostic::fmt_pretty`). Single source of truth so a Diagnostic looks
-    /// identical no matter which consumer surfaces it.
+    /// Render a Diagnostic as the canonical pretty-printed text, so it looks
+    /// identical whichever consumer surfaces it.
     #[wasm_bindgen(js_name = formatDiagnostic)]
     pub fn format_diagnostic(diag: Diagnostic) -> String {
         let core: quillmark_core::Diagnostic = diag.into();
@@ -896,19 +883,13 @@ impl Document {
         self.inner.to_markdown()
     }
 
-    /// Serialize this document to a versioned storage DTO string.
-    ///
-    /// Prefer this over `toMarkdown` for persistence across restarts or crate
-    /// upgrades: the wire format is frozen per `schema` version. Parse-time
-    /// `warnings` are excluded from the DTO.
-    ///
-    /// Output is **byte-deterministic** within a `schema` version: equal
-    /// documents produce byte-equal output, safe for content-hash use cases.
+    /// Serialize this document to a versioned storage DTO string. Prefer it over
+    /// `toMarkdown` for persistence: the wire format is frozen per `schema`
+    /// version and the output is byte-deterministic within one, so equal
+    /// documents hash equal. Parse-time `warnings` are excluded.
     #[wasm_bindgen(js_name = toJson)]
     pub fn to_json(&self) -> String {
-        // Infallible: every field of `Document` and its DTO serializes via
-        // standard derives into a `String` buffer: there is no `io::Write`
-        // and no custom `Serialize` that can return an error.
+        // Infallible: derived `Serialize` into a `String` buffer, no `io::Write`.
         serde_json::to_string(&self.inner).expect("Document serialization is infallible")
     }
 
@@ -920,15 +901,14 @@ impl Document {
         }
     }
 
-    /// Replace this document's contents **in place** from a versioned storage
-    /// DTO string: the mutating twin of the static
-    /// [`fromJson`](Document::from_json) constructor. Parse-time `warnings` are
-    /// cleared. Throws (leaving the document unchanged) on an invalid DTO.
+    /// Replace this document's contents **in place** from a versioned storage DTO
+    /// string: the mutating twin of [`fromJson`](Document::from_json). Parse-time
+    /// `warnings` are cleared. Throws on an invalid DTO, leaving the document
+    /// unchanged.
     ///
     /// The cross-WASM-memory `Document` bridge: mutate a document on a
-    /// backend-memory clone, then write the mutated state back into the caller's
-    /// canonical document with this, the one way to update a live handle across
-    /// the linear-memory seam without the caller re-binding its variable.
+    /// backend-memory clone, then write the state back into the caller's
+    /// canonical document, without the caller re-binding its variable.
     #[wasm_bindgen(js_name = loadJson)]
     pub fn load_json(&mut self, json: &str) -> Result<(), JsValue> {
         let inner: quillmark_core::Document = serde_json::from_str(json).map_err(|e| {
@@ -944,8 +924,7 @@ impl Document {
         self.inner.quill_reference().to_string()
     }
 
-    /// The document's main (entry) card. Allocates and serializes on each
-    /// call: cache locally if read in a hot loop.
+    /// The document's main (entry) card. Allocates and serializes on each call.
     #[wasm_bindgen(getter, js_name = main, unchecked_return_type = "Card")]
     pub fn main(&self) -> Result<JsValue, JsValue> {
         card_to_js(self.inner.main())
@@ -958,25 +937,20 @@ impl Document {
         serialize_or_throw(&cards, "cards")
     }
 
-    /// Read the **verbatim stored value** at `addr`: the raw payload value of a
-    /// field, or the **body content** when `addr.field` is absent. A bare
-    /// string is `Addr` shorthand for `{ field }`. Reads are total over the field
-    /// axis: an absent field is `undefined`; only an out-of-range `addr.card`
-    /// throws `edit::index_out_of_range`. Needs no schema, so it lives on
-    /// `Document`: the read echo of the verbatim `store*` write, distinct from
-    /// the interpreted schema-plane [`reader.get`](Self::reader_get). For the
-    /// markdown projection use [`bodyMarkdown`](Self::get_markdown) (body) or
-    /// `reader.get` (a field's declared type).
+    /// Read the **verbatim stored value** at `addr`: a field's raw payload value,
+    /// or the body content when `addr.field` is absent. A bare string is `Addr`
+    /// shorthand for `{ field }`. Needs no schema: the read echo of the verbatim
+    /// `store*` write, distinct from the interpreted
+    /// [`reader.get`](Self::reader_get). Reads are total over the field axis — an
+    /// absent field is `undefined` — and only an out-of-range `addr.card` throws
+    /// `edit::index_out_of_range`.
     ///
-    /// **A content field at rest has one stored form per codec**: a `richtext`
-    /// field holds the canonical content object, a `plaintext` field its literal
-    /// string. A document that came through the bound door (`quill.parse` /
-    /// `quill.conform`) is at rest, so this read no longer depends on which lane
-    /// built it. A document that came through the transport door
-    /// (`Document.fromMarkdown`, a legacy stored row) may rest as authored until
-    /// it is conformed, and this read reports what is there. For the `Content`
-    /// either way, use the schema-plane `reader.getContent`, which decodes
-    /// through the codec the field's declared type names.
+    /// A content field at rest has one stored form per codec: a `richtext` field
+    /// holds the canonical content object, a `plaintext` field its literal
+    /// string. A document from the bound door (`quill.parse` / `quill.conform`)
+    /// is at rest; one from the transport door may rest as authored until it is
+    /// conformed, and this read reports what is there. For the `Content` either
+    /// way use `reader.getContent`.
     #[wasm_bindgen(js_name = getStored, unchecked_return_type = "unknown")]
     pub fn get_stored(
         &self,
@@ -996,15 +970,13 @@ impl Document {
         }
     }
 
-    /// The **body** markdown projection (the main body, or a composable card's
-    /// body (`{ card }`)) the on-demand, lossy export (content-only marks do not
-    /// survive markdown). A body's type is a format fact, not a schema fact, so
-    /// this read stays quill-free; a body is never absent.
+    /// The **body** markdown projection: an on-demand, lossy export (content-only
+    /// marks do not survive markdown). A body's type is a format fact, not a
+    /// schema fact, so this read stays quill-free, and a body is never absent.
     ///
-    /// `addr` is an optional **card address** (`{ card }`, absent = main). A
-    /// present `field` throws: a field's markdown is read through the
-    /// schema-plane `quill.reader(doc).get(field)`, which interprets by declared
-    /// type. An out-of-range `addr.card` throws.
+    /// `addr` is an optional card address (absent = main). A present `field`
+    /// throws: read a field's markdown through `quill.reader(doc).get(field)`,
+    /// which interprets by declared type. An out-of-range `addr.card` throws.
     #[wasm_bindgen(js_name = bodyMarkdown, unchecked_return_type = "string")]
     pub fn get_markdown(
         &self,
@@ -1022,21 +994,17 @@ impl Document {
     }
 
     /// Interpreted read at `addr`, resolving the field's declared `type` from
-    /// `quill`: the stable ABI under the runtime `reader.get` / `reader.card(i).get`.
-    /// The schema-plane twin of the quill-free [`getStored`](Self::get_stored): a `richtext`
-    /// field returns its markdown projection, every other declared type its
-    /// canonical value verbatim, so a consumer holding the quill reads by field
-    /// meaning rather than by wire shape.
+    /// `quill`: the stable ABI under the runtime `reader.get`. The schema-plane
+    /// twin of [`getStored`](Self::get_stored) — a `richtext` field returns its
+    /// markdown projection, every other declared type its canonical value
+    /// verbatim.
     ///
     /// A bare string is `Addr` shorthand for `{ field }`; `{ card, field }`
-    /// targets a composable card (its `$kind` resolves the schema). Returns
-    /// `undefined` for an **absent** field. An absent `addr.field` reads the body
-    /// markdown: quill-free, mirroring [`bodyMarkdown`](Self::get_markdown), since
-    /// a body's type is a format fact, not a schema fact. A name the schema does
-    /// not declare throws `edit::unknown_field` (the authority `bodyMarkdown`
-    /// lacks: there an unknown name reads back `undefined`); a `richtext` field
-    /// holding a value that does not decode throws `edit::field_decode`;
-    /// an out-of-range `addr.card` throws.
+    /// targets a composable card. An **absent** field returns `undefined`, and an
+    /// absent `addr.field` reads the body markdown. An undeclared name throws
+    /// `edit::unknown_field` (the authority `bodyMarkdown` lacks), a `richtext`
+    /// value that does not decode throws `edit::field_decode`, and an
+    /// out-of-range `addr.card` throws.
     ///
     /// The `quill` handle is passed per call because a `Document` carries only a
     /// `$quill` reference, not the resolved schema.
@@ -1050,7 +1018,6 @@ impl Document {
         let base = self.addr_base(&addr);
         let reader = quill.inner.reader(&self.inner);
         match &addr.field {
-            // Absent field = body: quill-free markdown, the bodyMarkdown body read.
             None => Ok(JsValue::from_str(&match addr.card {
                 None => reader.body_markdown(),
                 Some(index) => reader
@@ -1069,15 +1036,13 @@ impl Document {
                 .map_err(|e| edit_error_to_js(&e, &base))?;
                 match read {
                     None => Ok(JsValue::UNDEFINED),
-                    // Both content projections flatten to a JS string at the boundary.
                     Some(quillmark_core::ReadValue::Markdown(s))
                     | Some(quillmark_core::ReadValue::Plaintext(s)) => Ok(JsValue::from_str(&s)),
                     Some(quillmark_core::ReadValue::Value(v)) => {
                         serialize_or_throw(v.as_json(), "reader.get")
                     }
-                    // `ReadValue` is `#[non_exhaustive]`, so this arm is
-                    // forced. Throwing beats returning `undefined`, which reads
-                    // as "absent field".
+                    // `#[non_exhaustive]`: throwing beats `undefined`, which
+                    // reads as "absent field".
                     Some(_) => Err(crate::error::WasmError::from(
                         "reader.get: this build cannot project that field's value",
                     )
@@ -1088,25 +1053,19 @@ impl Document {
     }
 
     /// Interpreted **`Content`** read at `addr`: the stable ABI under the runtime
-    /// `reader.getContent` / `reader.card(i).getContent`. The `Content` twin of
-    /// [`reader.get`](Self::reader_get), which projects; this decodes the stored
-    /// value through the codec the field's declared type names (`richtext` as
-    /// markdown, `plaintext` as literal text) and returns the canonical `Content`.
+    /// `reader.getContent`. Where [`reader.get`](Self::reader_get) projects, this
+    /// decodes the stored value through the codec the field's declared type names
+    /// and returns canonical `Content`. Total over the storage form: a committed
+    /// field and a parsed one both read back as a `Content`, so a content editor
+    /// stops branching on how the document was built.
     ///
-    /// Total over the storage form: a committed field holds a content object and
-    /// a parsed one holds the authored string, and both read back as a `Content`
-    /// here, so a consumer mounting a content editor stops branching on how the
-    /// document was built.
-    ///
-    /// A bare string is `Addr` shorthand for `{ field }`; `{ card, field }`
-    /// targets a composable card. Returns `undefined` for an **absent** field. An
-    /// absent `addr.field` reads the **body** `Content`, quill-free, mirroring
-    /// [`getStored`](Self::get_stored). Throws `edit::unknown_field` for a name
-    /// the schema does not declare, `edit::field_not_content` for a declared type
-    /// that is not a content leaf (`array<richtext>` carries content and still has
-    /// no one `Content`), `edit::field_decode` for a stored value
-    /// that decodes under neither encoding, and `edit::index_out_of_range` for a
-    /// bad `addr.card`.
+    /// A bare string is `Addr` shorthand for `{ field }`. An **absent** field
+    /// returns `undefined`, and an absent `addr.field` reads the body `Content`.
+    /// Throws `edit::unknown_field` for an undeclared name,
+    /// `edit::field_not_content` for a declared type that is not a content leaf
+    /// (`array<richtext>` carries content and still has no one `Content`),
+    /// `edit::field_decode` for a value that decodes under neither encoding, and
+    /// `edit::index_out_of_range` for a bad `addr.card`.
     #[wasm_bindgen(js_name = _readerGetContent, skip_typescript, unchecked_return_type = "Content | undefined")]
     pub fn reader_get_content(
         &self,
@@ -1116,8 +1075,6 @@ impl Document {
         let addr = Addr::from_js_or_string(&addr)?;
         let base = self.addr_base(&addr);
         match &addr.field {
-            // Absent field = body: the body is a `Content` by construction, so this
-            // is the quill-free `getStored` body read.
             None => serialize_or_throw(
                 &quillmark_content::serial::to_canonical_value(self.addr_card_ref(&addr)?.body()),
                 "reader.getContent",
@@ -1144,9 +1101,8 @@ impl Document {
     }
 
     /// Whether the field at `addr` is marked `!must_fill`. A bare string is `Addr`
-    /// shorthand for `{ field }`. `false` for an absent field (truthful: it isn't
-    /// marked) and for a body address (a body is never a fill). Only an
-    /// out-of-range `addr.card` throws.
+    /// shorthand for `{ field }`. `false` for an absent field and for a body
+    /// address; only an out-of-range `addr.card` throws.
     #[wasm_bindgen(js_name = isFill)]
     pub fn is_fill(
         &self,
