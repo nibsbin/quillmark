@@ -9,21 +9,16 @@
 //! [`Delta`] is `retain` / `insert` / `delete` over the character sequence:
 //! CodeMirror `ChangeSet` / OT text semantics, **not** Quill-Delta. It carries
 //! no formatting attributes: marks and islands are separate `(range, kind)` data
-//! that *rebase through* a delta ([`Delta::map_pos`]), they do not ride it as op
-//! attributes. This is deliberate: an attribute map is a per-character property
-//! map and cannot represent overlapping same-kind marks or two distinct
-//! identity anchors over one range, the exact algebra the content model keeps
-//! (Peritext free overlap + identity handles). Editing marks and line/block
-//! attributes are their own op channels, not attributes on this delta. The
-//! positional channel stays isomorphic to a text CRDT's op stream: the shape
-//! real-time collaborative editing would need.
+//! that *rebase through* a delta ([`Delta::map_pos`]). An attribute map is a
+//! per-character property map and cannot represent overlapping same-kind marks
+//! or two distinct identity anchors over one range, the algebra the content
+//! model keeps.
 //!
 //! [`diff`] computes a Myers/LCS minimal edit script and pairs it with a
 //! **move detector** that re-homes an anchor across a verbatim block move.
-//! Position mapping ([`Delta::map_pos`]) follows CodeMirror's
-//! `ChangeDesc.mapPos` / ProseMirror mapping semantics. Anchoring a captured
-//! position across edits is the editor's job (its own transaction mapping); the
-//! content carries no session-side change log.
+//! Position mapping follows CodeMirror's `ChangeDesc.mapPos` semantics.
+//! Anchoring a captured position across edits is the editor's job; the content
+//! carries no session-side change log.
 //!
 //! ## The move weak spot (documented limit)
 //!
@@ -43,15 +38,12 @@ use similar::{ChangeTag, TextDiff};
 /// text. USV throughout.
 ///
 /// Serializes as `{ "ops": [ {"retain": n} | {"insert": s} | {"delete": n} ] }`:
-/// plain, structured-clone-able data an editor bridge stores in a change
-/// record and maps its own positions through ([`map_pos`](Self::map_pos)). The
-/// serde shape is the wire the `rebase` codec and `applyChange` bundle carry
-/// across the language bindings.
+/// the wire the `rebase` codec and `applyChange` bundle carry across the
+/// language bindings.
 ///
-/// **Deliberately not `#[non_exhaustive]`**, unlike the model types. The
-/// attribute buys exactly one freedom, adding a field, and this type cannot
-/// spend it: `{ops}` *is* the wire, so a second field is a wire change every
-/// binding's codec has to learn either way.
+/// **Deliberately not `#[non_exhaustive]`**, unlike the model types: `{ops}`
+/// *is* the wire, so a second field is a wire change every binding's codec has
+/// to learn either way.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Delta {
     pub ops: Vec<Op>,
@@ -86,10 +78,8 @@ pub enum Assoc {
 /// A delta's expected base length disagreed with the text it was applied to:
 /// the delta was built against a different revision of the base.
 ///
-/// **Deliberately not `#[non_exhaustive]`**, unlike the model types. The two
-/// lengths are the whole of the disagreement, and a caller that reports it
-/// destructures both; there is no third thing this comparison can grow. A new
-/// field is a semver-major.
+/// **Deliberately not `#[non_exhaustive]`**, unlike the model types: the two
+/// lengths are the whole of the disagreement.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BaseLengthMismatch {
     pub expected: usize,
@@ -110,14 +100,11 @@ impl Delta {
     }
 
     /// Apply to `base`, producing the new text. Base beyond what the ops
-    /// consume is retained implicitly: a *short* delta names only the region
-    /// it changes (a bare prepend, an edit near the start) and the untouched
-    /// remainder carries through. **Panics** if the ops consume *more* base than
-    /// exists (`expected_base_len() > base.chars().count()`): a delta built
-    /// against a longer revision. This is the trusted-provenance path; clamping
-    /// an over-long delta silently is corruption, so where the base's provenance
-    /// isn't already trusted use [`Self::try_apply`], which returns the mismatch
-    /// as an error instead.
+    /// consume is retained implicitly, so a *short* delta may name only the
+    /// region it changes. **Panics** if the ops consume *more* base than exists:
+    /// a delta built against a longer revision. This is the trusted-provenance
+    /// path; where the base's provenance isn't trusted use [`Self::try_apply`],
+    /// which returns the mismatch as an error.
     pub fn apply(&self, base: &str) -> String {
         let chars: Vec<char> = base.chars().collect();
         let mut out = String::new();
@@ -139,17 +126,13 @@ impl Delta {
     }
 
     /// [`Self::apply`], but returns [`BaseLengthMismatch`] instead of panicking
-    /// when the ops consume *more* base than `base` has: a delta built against
-    /// a longer revision. Implicit trailing retain is the contract: a *short*
-    /// delta (ops consuming less than `base`) is accepted and the untouched
-    /// remainder is retained, matching [`map_pos`](Self::map_pos)'s implicit
-    /// trailing retain so a producer that names only the changed region need not
-    /// pad a bare trailing [`Op::Retain`].
+    /// when the ops consume *more* base than `base` has. Implicit trailing
+    /// retain is the contract, matching [`map_pos`](Self::map_pos), so a
+    /// producer naming only the changed region need not pad a trailing
+    /// [`Op::Retain`].
     ///
     /// Cost of the leniency: a short delta carries no full-base-length check, so
-    /// one replayed against a wrong but *longer* base applies silently instead
-    /// of failing. An abbreviated delta forfeits that tripwire by construction;
-    /// over-consumption still fails.
+    /// one replayed against a wrong but *longer* base applies silently.
     pub fn try_apply(&self, base: &str) -> Result<String, BaseLengthMismatch> {
         let expected = self.expected_base_len();
         let actual = base.chars().count();
@@ -250,15 +233,11 @@ const MIN_MOVE: usize = 4;
 /// Above this many USV chars, the single-line path skips `similar`'s
 /// char-level Myers diff and falls back to [`coarse_replace`].
 /// `TextDiff::from_chars` is O(N·D) with no deadline; on two long, unrelated
-/// single-line strings (no newlines to fall back to line granularity: the
-/// realistic shape of an LLM full-document rewrite) D grows with N, so cost
-/// is effectively quadratic. Two unrelated 30,000-char lines measured 86s in
-/// a debug build. This threshold sits comfortably below that (6x headroom)
-/// while still covering a real single-paragraph field, which plausibly runs
-/// to a few thousand chars. A fixed cutoff was chosen over
-/// `TextDiffConfig::timeout`: nothing in this crate uses `TextDiffConfig`
-/// today, and a char budget is deterministic (no wall-clock flakiness in
-/// CI, no partial-diff result to reason about).
+/// single-line strings D grows with N, so cost is effectively quadratic (two
+/// unrelated 30,000-char lines measured 86s in a debug build). This threshold
+/// keeps 6x headroom under that while still covering a real single-paragraph
+/// field. A fixed char budget rather than `TextDiffConfig::timeout`, so the
+/// cutoff is deterministic in CI.
 const CHAR_DIFF_LIMIT: usize = 5_000;
 
 /// Char-level Myers/LCS diff over USV: a minimal `Retain` / `Delete` / `Insert`
@@ -295,11 +274,9 @@ pub fn diff(base: &str, new: &str) -> Delta {
 }
 
 /// Linear-time fallback for [`diff`] above [`CHAR_DIFF_LIMIT`]: trims the
-/// longest common prefix and suffix (plain char comparison, no Myers) and
-/// replaces only the middle. Not a minimal edit script, but still useful for
-/// anchor rebasing: an anchor sitting in the untouched prefix or suffix maps
-/// through a real `Retain` exactly as it would from a full diff; only an
-/// anchor inside the replaced middle depends on the move detector.
+/// longest common prefix and suffix and replaces only the middle. Not minimal,
+/// but an anchor in the untouched prefix or suffix still maps through a real
+/// `Retain`; only one inside the replaced middle depends on the move detector.
 fn coarse_replace(base: &str, new: &str) -> Delta {
     let base_chars: Vec<char> = base.chars().collect();
     let new_chars: Vec<char> = new.chars().collect();
@@ -376,8 +353,8 @@ pub fn diff_import(
     let new_chars: Vec<char> = new_rt.text.chars().collect();
     let inserted = delta.inserted_spans();
     for m in &base.marks {
-        // Only identity marks live in the content but not in markdown; formatting
-        // marks are re-derived by the fresh import, so we do not carry them.
+        // Only identity marks live in the content but not in markdown;
+        // formatting marks are re-derived by the fresh import.
         let MarkKind::Anchor { .. } = &m.kind else {
             continue;
         };
@@ -465,14 +442,11 @@ fn relocate_point(
 }
 
 /// First index where `needle` occurs in `hay` while *overlapping* an inserted
-/// span; i.e. the match touches text the rewrite actually inserted, not purely
-/// surviving text. Overlap (not full containment) is required because a diff
-/// can split a moved block across an inserted region and the retained
-/// suffix; demanding containment would miss real moves, while demanding overlap
-/// still rejects an unrelated occurrence sitting entirely in retained text.
-/// Enforces [`MIN_MOVE`]. O(hay × needle) naive scan: fine at memo/document
-/// scale; a large-document target would want a substring-search algorithm
-/// (e.g. KMP) here.
+/// span, so the match touches text the rewrite actually inserted. Overlap
+/// rather than containment, because a diff can split a moved block across an
+/// inserted region and the retained suffix; overlap still rejects an unrelated
+/// occurrence sitting entirely in retained text. Enforces [`MIN_MOVE`].
+/// O(hay × needle) naive scan.
 fn find_in_spans(hay: &[char], needle: &[char], spans: &[(usize, usize)]) -> Option<usize> {
     if needle.len() < MIN_MOVE || needle.len() > hay.len() {
         return None;
@@ -497,26 +471,20 @@ mod tests {
 
     #[test]
     fn map_pos_insertion() {
-        // Insert "XY" at position 3 of "abcdef".
         let d = diff("abcdef", "abcXYdef");
         assert_eq!(d.apply("abcdef"), "abcXYdef");
-        // A point before the insert is unmoved; after it shifts by 2.
         assert_eq!(d.map_pos(2, Assoc::After), 2);
         assert_eq!(d.map_pos(4, Assoc::Before), 6);
     }
 
     #[test]
     fn try_apply_accepts_short_delta_with_implicit_trailing_retain() {
-        // A bare prepend consumes no base; the untouched remainder is retained
-        // implicitly rather than tripping the base-length check.
         let short = Delta {
             ops: vec![Op::Insert("NEW ".into())],
         };
         assert_eq!(short.expected_base_len(), 0);
         assert_eq!(short.try_apply("hello").unwrap(), "NEW hello");
 
-        // An edit near the start, naming only its region, applies against the
-        // whole base: same result whether or not a trailing retain is written.
         let partial = Delta {
             ops: vec![Op::Retain(1), Op::Insert("X".into())],
         };
@@ -525,8 +493,6 @@ mod tests {
 
     #[test]
     fn try_apply_rejects_over_long_delta() {
-        // Consuming more base than exists is a wrong-revision delta, not an
-        // abbreviated one: it errors, it does not clamp.
         let over = Delta {
             ops: vec![Op::Retain(9)],
         };
@@ -548,8 +514,6 @@ mod tests {
     #[test]
     #[should_panic]
     fn apply_panics_on_over_long_delta() {
-        // The trusted-provenance path panics rather than clamping an over-long
-        // delta to silent garbage.
         let over = Delta {
             ops: vec![Op::Retain(9)],
         };
@@ -602,8 +566,6 @@ mod tests {
 
     #[test]
     fn anchor_not_rehomed_onto_unrelated_survivor() {
-        // Regression (review finding 5): an anchor on deleted text must NOT
-        // capture an unrelated *surviving* occurrence of the same words.
         let mut base = from_markdown("target one to drop\n\nkeep the target two").unwrap();
         base.marks.push(Mark {
             start: 0,
@@ -625,8 +587,6 @@ mod tests {
 
     #[test]
     fn map_pos_after_moves_past_boundary_insertion() {
-        // Regression (finding 7): a point at a retain|insert boundary with
-        // Assoc::After lands after the inserted text.
         let d = diff("abcdef", "abcXYdef");
         assert_eq!(d.map_pos(3, Assoc::After), 5);
         assert_eq!(d.map_pos(3, Assoc::Before), 3);
@@ -634,7 +594,6 @@ mod tests {
 
     #[test]
     fn point_anchor_at_deletion_left_edge_survives() {
-        // Regression (finding 13): the deletion's left edge is not "deleted".
         let d = diff("abcdef", "abef"); // delete "cd" (span [2,4))
         assert!(!d.is_deleted(2), "left edge of deletion survives");
         assert!(d.is_deleted(3), "interior of deletion is deleted");
@@ -642,7 +601,6 @@ mod tests {
 
     #[test]
     fn disjoint_edits_are_separate_ops() {
-        // Myers/LCS (char): prefix and suffix edits must not collapse the middle.
         let d = diff("aaaMIDDLEbbb", "AAAMIDDLEZZZ");
         assert_eq!(d.apply("aaaMIDDLEbbb"), "AAAMIDDLEZZZ");
         let retained: usize = d
@@ -701,11 +659,7 @@ mod tests {
 
     #[test]
     fn large_single_line_diff_stays_fast() {
-        // Two long, unrelated single-line strings: exactly the shape
-        // `similar::TextDiff::from_chars` chokes on with no cutoff
-        // (30,000 unrelated chars measured 86s in a debug build). Above
-        // CHAR_DIFF_LIMIT, `diff` must skip Myers and stay far under budget
-        // regardless of input size.
+        // The shape `similar::TextDiff::from_chars` chokes on with no cutoff.
         let base = format!("PREFIX-{}-BASE-SUFFIX", filler(25_000, 0));
         let new = format!("PREFIX-{}-NEW-SUFFIX", filler(25_000, 13));
 
@@ -717,17 +671,13 @@ mod tests {
             "large single-line diff took {elapsed:?}, expected well under the 2s budget"
         );
 
-        // Sensible, not just fast: still round-trips exactly.
         assert_eq!(d.apply(&base), new);
     }
 
     #[test]
     fn large_single_line_diff_retains_common_prefix_and_suffix() {
-        // The coarse fallback must still be *usable* for anchor rebasing,
-        // not merely fast: a shared prefix/suffix around a large rewritten
-        // middle should come back as real Retain ops, not a single
-        // whole-field Delete+Insert that would force every anchor through
-        // the move detector.
+        // A shared prefix/suffix around a large rewritten middle must come back
+        // as real Retain ops, not one whole-field Delete+Insert.
         let base = format!("shared-prefix-{}-shared-suffix", filler(20_000, 0));
         let new = format!("shared-prefix-{}-shared-suffix", filler(20_000, 5));
         let d = diff(&base, &new);
@@ -751,10 +701,8 @@ mod tests {
 
     #[test]
     fn diff_import_large_single_line_rewrite_keeps_prefix_anchor() {
-        // End-to-end through the real DoS-exposed path: `diff_import` is
-        // what a full-document LLM rewrite hits. A large, single-line,
-        // unrelated-middle rewrite must complete quickly *and* still rebase
-        // an anchor sitting in unchanged (shared) text.
+        // `diff_import` is what a full-document LLM rewrite hits: it must stay
+        // fast and still rebase an anchor sitting in shared text.
         let base_text = format!("hello target world-{}-end", filler(30_000, 0));
         let mut base = from_markdown(&base_text).unwrap();
         base.marks.push(Mark {
