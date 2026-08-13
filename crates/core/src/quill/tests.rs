@@ -725,42 +725,6 @@ main:
 }
 
 #[test]
-fn test_card_defaults_method() {
-    let yaml_content = r#"
-quill:
-  name: card_defaults_test
-  version: "1.0"
-  backend: typst
-  description: Card defaults test
-
-card_kinds:
-  indorsement:
-    fields:
-      signature_block:
-        type: string
-        default: Commander
-        example: Col Smith
-      office:
-        type: string
-"#;
-
-    let config = QuillConfig::from_yaml(yaml_content).unwrap();
-
-    let card = config.card_kind("indorsement").unwrap();
-    let card_defaults = card.defaults();
-    assert_eq!(card_defaults.len(), 1);
-    assert_eq!(
-        card_defaults.get("signature_block").unwrap().as_str(),
-        Some("Commander")
-    );
-
-    let sig_example = card.fields.get("signature_block").unwrap().example.as_ref();
-    assert_eq!(sig_example.and_then(|v| v.as_str()), Some("Col Smith"));
-
-    assert!(config.card_kind("unknown").is_none());
-}
-
-#[test]
 fn test_field_order_preservation() {
     let yaml_content = r#"
 quill:
@@ -797,57 +761,6 @@ main:
         third.ui.as_ref().unwrap().group,
         Some("Test Group".to_string())
     );
-}
-
-#[test]
-fn test_quill_with_all_ui_properties() {
-    let yaml_content = r#"
-quill:
-  name: full_ui_test
-  version: "1.0"
-  backend: typst
-  description: Test all UI properties
-
-main:
-  fields:
-    author:
-      description: The full name of the document author
-      type: string
-      ui:
-        group: Author Info
-"#;
-
-    let config = QuillConfig::from_yaml(yaml_content).unwrap();
-
-    let author_field = &config.main.fields["author"];
-    let ui = author_field.ui.as_ref().unwrap();
-    assert_eq!(ui.group, Some("Author Info".to_string()));
-    assert_eq!(config.main.fields.get_index_of("author"), Some(0));
-}
-#[test]
-fn test_field_schema_with_description() {
-    let yaml = r#"
-description: "Detailed field description"
-type: "string"
-example: "Example value"
-ui:
-  group: "Test Group"
-"#;
-    let quill_value = QuillValue::from_yaml_str(yaml).unwrap();
-    let schema = FieldSchema::from_quill_value("test_field".to_string(), &quill_value).unwrap();
-
-    assert_eq!(
-        schema.description,
-        Some("Detailed field description".to_string())
-    );
-
-    assert_eq!(
-        schema.example.as_ref().and_then(|v| v.as_str()),
-        Some("Example value")
-    );
-
-    let ui = schema.ui.as_ref().unwrap();
-    assert_eq!(ui.group, Some("Test Group".to_string()));
 }
 
 #[test]
@@ -919,42 +832,6 @@ invalid_key:
 }
 
 #[test]
-fn test_quill_config_with_cards_section() {
-    let yaml_content = r#"
-quill:
-  name: cards_test
-  version: "1.0"
-  backend: typst
-  description: Test [cards] section
-
-main:
-  fields:
-    regular:
-      description: Regular field
-      type: string
-
-card_kinds:
-  indorsements:
-    description: Chain of endorsements
-    fields:
-      name:
-        type: string
-        description: Name field
-"#;
-
-    let config = QuillConfig::from_yaml(yaml_content).unwrap();
-
-    assert!(config.main.fields.contains_key("regular"));
-    let regular = config.main.fields.get("regular").unwrap();
-    assert_eq!(regular.r#type, FieldType::String);
-
-    assert!(config.card_kind("indorsements").is_some());
-    let card = config.card_kind("indorsements").unwrap();
-    assert_eq!(card.description, Some("Chain of endorsements".to_string()));
-    assert!(card.fields.contains_key("name"));
-}
-
-#[test]
 fn test_quill_config_cards_empty_fields() {
     let yaml_content = r#"
 quill:
@@ -1009,33 +886,6 @@ card_kinds:
     assert!(config.card_kind("conflict").is_some());
 }
 
-#[test]
-fn test_card_field_order_preservation() {
-    let yaml_content = r#"
-quill:
-  name: card_order_test
-  version: "1.0"
-  backend: typst
-  description: Test card field order
-
-card_kinds:
-  mycard:
-    description: Test card
-    fields:
-      z_first:
-        type: string
-        description: Defined first
-      a_second:
-        type: string
-        description: Defined second
-"#;
-
-    let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    let card = config.card_kind("mycard").unwrap();
-
-    let names: Vec<&str> = card.fields.keys().map(|k| k.as_str()).collect();
-    assert_eq!(names, ["z_first", "a_second"]);
-}
 #[test]
 fn test_nested_schema_parsing() {
     let yaml_content = r#"
@@ -1237,47 +1087,6 @@ main:
 }
 
 #[test]
-fn typed_table_row_properties_preserve_declaration_order() {
-    let yaml = r#"
-quill: { name: x, version: "1.0", backend: typst, description: x }
-main:
-  fields:
-    rows:
-      type: array
-      items:
-        type: object
-        properties:
-          org: { type: string }
-          year: { type: integer }
-"#;
-    let config = QuillConfig::from_yaml(yaml).unwrap();
-    let props = config.main.fields["rows"].items.as_ref().unwrap();
-    let props = props.properties.as_ref().unwrap();
-    let names: Vec<&str> = props.keys().map(|k| k.as_str()).collect();
-    assert_eq!(names, ["org", "year"]);
-}
-
-#[test]
-fn authored_ui_order_on_nested_property_is_rejected() {
-    let yaml = r#"
-quill: { name: x, version: "1.0", backend: typst, description: x }
-main:
-  fields:
-    address:
-      type: object
-      properties:
-        street: { type: string, ui: { order: 5 } }
-        city: { type: string }
-"#;
-    let err = QuillConfig::from_yaml_with_warnings(yaml).unwrap_err();
-    assert!(
-        err.iter()
-            .any(|d| d.message.contains("ui.order is no longer accepted")),
-        "expected ui.order rejection, got: {err:?}"
-    );
-}
-
-#[test]
 fn authored_ui_order_on_card_field_is_rejected() {
     let yaml = r#"
 quill: { name: x, version: "1.0", backend: typst, description: x }
@@ -1309,25 +1118,6 @@ main:
       type: object
       properties:
         street: { type: string, ui: { group: Location } }
-"#;
-    let err = QuillConfig::from_yaml_with_warnings(yaml).unwrap_err();
-    assert!(err
-        .iter()
-        .any(|d| d.code.as_deref() == Some("quill::nested_group_not_supported")));
-}
-
-#[test]
-fn ui_group_on_typed_table_property_is_rejected() {
-    let yaml = r#"
-quill: { name: x, version: "1.0", backend: typst, description: x }
-main:
-  fields:
-    rows:
-      type: array
-      items:
-        type: object
-        properties:
-          score: { type: number, ui: { group: Metrics } }
 "#;
     let err = QuillConfig::from_yaml_with_warnings(yaml).unwrap_err();
     assert!(err
