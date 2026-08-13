@@ -159,10 +159,9 @@ pub fn field_boxes(regions: &[RenderedRegion], field: &str) -> Vec<RenderedRegio
 
 use crate::path::{DocPath, DocSeg};
 
-/// The absolute document-array index of the `ord`-th (0-based) card of `kind`,
-/// scanning `card_kinds` (the current compile's ordered card kinds; `None` is a
-/// kindless card) in order. `None` when fewer than `ord + 1` cards of that kind
-/// exist.
+/// The absolute document-array index of the `ord`-th (0-based) card of `kind`.
+/// `card_kinds` is the current compile's ordered card kinds, `None` per
+/// kindless card.
 fn abs_card_index(card_kinds: &[Option<&str>], kind: &str, ord: usize) -> Option<usize> {
     card_kinds
         .iter()
@@ -172,9 +171,8 @@ fn abs_card_index(card_kinds: &[Option<&str>], kind: &str, ord: usize) -> Option
         .map(|(i, _)| i)
 }
 
-/// The per-kind ordinal of the card at absolute index `abs`: how many cards of
-/// the same kind precede it, matching the plate's `emit_cards` counter. `None`
-/// when `abs` is out of range or the card is kindless.
+/// How many cards of the same kind precede absolute index `abs`, matching the
+/// plate's `emit_cards` counter.
 fn per_kind_ordinal(card_kinds: &[Option<&str>], abs: usize) -> Option<usize> {
     let kind = (*card_kinds.get(abs)?)?;
     Some(
@@ -185,11 +183,10 @@ fn per_kind_ordinal(card_kinds: &[Option<&str>], abs: usize) -> Option<usize> {
     )
 }
 
-/// Rewrite each region's plate-space `field` to its [`DocPath`] string: the
-/// translation [`RenderedRegion`] puts at a binding boundary. One funnel for
-/// every region a binding hands out, render sidecar and session query alike, so
-/// a consumer never sees the two address spaces mixed. An address outside the
-/// geometry grammar keeps its original string.
+/// Rewrite each region's plate-space `field` to its [`DocPath`] string. The one
+/// funnel every binding hands regions through, so a consumer never sees the two
+/// address spaces mixed. An address outside the geometry grammar keeps its
+/// original string.
 pub fn regions_to_doc_path(
     mut regions: Vec<RenderedRegion>,
     card_kinds: &[Option<&str>],
@@ -202,9 +199,8 @@ pub fn regions_to_doc_path(
     regions
 }
 
-/// Extend `base` by a plate-space tail's segments, per the tail grammar in the
-/// translation banner. `None` for a tail outside it: an empty piece, a leading
-/// index, a non-final `$body`, or any other `$`-token.
+/// Extend `base` by a plate-space tail's segments. `None` for an empty piece, a
+/// leading index, a non-final `$body`, or any other `$`-token.
 fn plate_tail_to_segs(base: DocPath, tail: &str) -> Option<DocPath> {
     let mut path = base;
     let mut it = tail.split('.').enumerate().peekable();
@@ -236,20 +232,14 @@ fn plate_tail_to_segs(base: DocPath, tail: &str) -> Option<DocPath> {
 
 /// Translate a backend plate-space geometry address into a canonical
 /// [`DocPath`], resolving the per-kind ordinal to the absolute card index via
-/// `card_kinds`. The grammar handled is exactly what geometry emits: `$body`
-/// (main body), `<tail>` (main), and `$cards.<kind>.<ord>.<tail>` (card), where
-/// a tail is the segment run the translation banner states — so an array
-/// element (`references.0`) and a nested key (`address.city`) each become their
-/// own segments, not one field. `None` for an address outside that grammar or
-/// one naming a card the kind list cannot place: the caller keeps the original
-/// string.
+/// `card_kinds`. The grammar is what geometry emits: `$body`, `<tail>` (main),
+/// and `$cards.<kind>.<ord>.<tail>`. `None` for an address outside it, or one
+/// naming a card the kind list cannot place.
 pub fn plate_addr_to_doc_path(addr: &str, card_kinds: &[Option<&str>]) -> Option<DocPath> {
     if addr == "$body" {
         return Some(DocPath::main_body());
     }
     if let Some(rest) = addr.strip_prefix("$cards.") {
-        // The whole tail reaches the tail parser: only kind and ordinal are
-        // split off here.
         let mut it = rest.splitn(3, '.');
         let kind = it.next()?;
         let ord: usize = it.next()?.parse().ok()?;
@@ -257,9 +247,8 @@ pub fn plate_addr_to_doc_path(addr: &str, card_kinds: &[Option<&str>]) -> Option
         let abs = abs_card_index(card_kinds, kind, ord)?;
         return plate_tail_to_segs(DocPath::card(Some(kind), abs), tail);
     }
-    // A plate-space bare main field (`subject`) roots at `main` in `DocPath`
-    // space (`main.subject`), so a consumer always receives a parsed, rooted
-    // path. An unrecognized `$`-token (never a main field) does not translate.
+    // A bare plate-space main field (`subject`) roots at `main` in `DocPath`
+    // space; an unrecognized `$`-token is never a main field.
     if addr.starts_with('$') {
         return None;
     }
@@ -267,16 +256,9 @@ pub fn plate_addr_to_doc_path(addr: &str, card_kinds: &[Option<&str>]) -> Option
 }
 
 /// Render a [`DocPath`] tail in plate space, joining segments with `.`. `None`
-/// for a tail plate space cannot spell: a leading [`Index`], a non-final
-/// [`Body`], a [`Card`] mid-path, or a field name that is empty, all ASCII
-/// digits, `$`-leading, or carries `.` / `[` / `]` — the first two because they
-/// would read back as an index or a body terminal, the rest because they would
-/// reparse as different segments. `None` is the honest answer there: geometry
-/// placed no such thing.
-///
-/// [`Index`]: DocSeg::Index
-/// [`Body`]: DocSeg::Body
-/// [`Card`]: DocSeg::Card
+/// for a tail plate space cannot spell: a leading index, a non-final body, a
+/// card mid-path, or a field name that is empty, all ASCII digits, `$`-leading,
+/// or carries `.` / `[` / `]` — each would reparse as a different segment.
 fn plate_tail(tail: &[DocSeg]) -> Option<String> {
     let mut out = String::new();
     for (i, seg) in tail.iter().enumerate() {
@@ -316,12 +298,9 @@ fn plate_tail(tail: &[DocSeg]) -> Option<String> {
 /// plate-space form (`main.body` → `$body`, `main.references[0]` →
 /// `references.0`, `cards.<kind>[<abs>].<tail>` → `$cards.<kind>.<ord>.<tail>`),
 /// resolving the absolute card index to its per-kind ordinal via `card_kinds`.
-/// `None` when the path is not a geometry address: a document-model shape
-/// geometry never keys, one naming a card the kind list cannot place, or one
-/// plate space cannot spell — a leading index, a non-final body, or a field
-/// name that is empty, all ASCII digits, `$`-leading, or carries `.` / `[` /
-/// `]`. The inverse of [`plate_addr_to_doc_path`], for the `field`-taking
-/// queries (`locate`, `fieldBoxes`).
+/// The inverse of [`plate_addr_to_doc_path`], for the `field`-taking queries.
+/// `None` when the path is not a geometry address, names a card the kind list
+/// cannot place, or is one plate space cannot spell.
 pub fn doc_path_to_plate_addr(path: &DocPath, card_kinds: &[Option<&str>]) -> Option<String> {
     match path.segs() {
         [DocSeg::Main, DocSeg::Body] => Some("$body".to_string()),
@@ -343,25 +322,17 @@ pub fn doc_path_to_plate_addr(path: &DocPath, card_kinds: &[Option<&str>]) -> Op
     }
 }
 
-/// How precisely a [`ContentHit::pos`] resolved: the marker a caret UI reads to
-/// decide whether to trust the offset. The value is never sub-cluster; the two
-/// variants distinguish the finest this API offers from the segment floor it
-/// degrades to.
+/// How precisely a [`ContentHit::pos`] resolved. Never sub-cluster.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[non_exhaustive]
 pub enum HitGranularity {
-    /// Cluster-exact: `pos` is the first content char of the grapheme cluster
-    /// under the point. The finest resolution: a char that escaped to several
-    /// generated bytes (`*`→`\*`, `你`→3, the `//`→`\/\/` coupling) still floors
-    /// to its cluster's first char, so this is *not* sub-character. A caret UI
-    /// can place the caret at `pos` directly.
+    /// `pos` is the first content char of the grapheme cluster under the point.
+    /// A caret UI can place the caret there directly.
     Cluster,
-    /// Segment-floored: the point landed on origin-less ink (list markers,
-    /// numbering, a multi-line code fence's interior: spans that resolve to no
-    /// single run), so `pos` degraded to the containing segment's content start
-    /// rather than a wrong finer position. A caret UI should treat `pos` as the
-    /// segment it selected, not a within-segment caret.
+    /// The point landed on origin-less ink (list markers, numbering, a code
+    /// fence's interior), so `pos` degraded to the containing segment's content
+    /// start. A caret UI should read it as a segment selection.
     Segment,
 }
 
@@ -371,13 +342,10 @@ pub enum HitGranularity {
 /// [`locate`](crate::LiveSession::locate) (content position → caret rect).
 ///
 /// `pos` is **cluster-exact, not sub-character**: a hit inside a char that
-/// escaped to several generated bytes (`*`→`\*`, `你`→3, the `//`→`\/\/`
-/// coupling) floors to that cluster's first content char. A click on
-/// origin-less ink (list markers, numbering, a multi-line code fence's interior:
-/// spans that resolve to no single run) degrades to the containing segment's
-/// content start rather than a wrong finer position, and a click off all content
-/// ink resolves to nothing. [`granularity`](Self::granularity) reports which of
-/// those two happened, so a caret UI need not guess.
+/// escaped to several generated bytes (`*`→`\*`, `你`→3) floors to that
+/// cluster's first content char. A click on origin-less ink degrades to the
+/// containing segment's content start, and a click off all content ink resolves
+/// to nothing. [`granularity`](Self::granularity) reports which happened.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[non_exhaustive]
@@ -387,10 +355,8 @@ pub struct ContentHit {
     pub field: String,
     /// USV offset into the field's `Content`.
     pub pos: usize,
-    /// Whether [`pos`](Self::pos) is cluster-exact or floored to the segment
-    /// start ([`HitGranularity`]). `None` when the backend does not report it (a
-    /// hit straight from a backend with no source map, or an older wire payload).
-    /// Additive-optional: omitted from the wire when `None`.
+    /// `None` when the backend does not report it (no source map, or an older
+    /// wire payload). Omitted from the wire when `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub granularity: Option<HitGranularity>,
 }
@@ -406,7 +372,6 @@ impl ContentHit {
         }
     }
 
-    /// Set [`granularity`](Self::granularity).
     pub fn with_granularity(mut self, granularity: HitGranularity) -> Self {
         self.granularity = Some(granularity);
         self
