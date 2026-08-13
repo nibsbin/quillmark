@@ -2,121 +2,73 @@
 //
 // @quillmark/wasm/runtime: the canonical consumer API.
 //
-// Consumers reach `Quill` and `Document` through `await init()` and `Engine`
-// as a static export, and never touch the build-specific subpaths. The package
-// ships multiple WASM binaries with SEPARATE linear memories: a Typst-less
-// `core` build (small, eager) that is the canonical home of `Quill`/`Document`,
-// and one private backend binary per backend (`backends/typst/` today; more
-// later) that carries an engine. A handle from one memory cannot be used by
-// another. This module hides that seam and is exposed at the package root
-// (`@quillmark/wasm`):
+// The package ships multiple WASM binaries with SEPARATE linear memories: a
+// Typst-less `core` build (small, eager) that is the canonical home of
+// `Quill`/`Document`, and one private binary per backend that carries an engine.
+// A handle from one memory cannot be used by another; this module hides that
+// seam behind `await init()` and a static `Engine`.
 //
 //   - `Quill` and `Document` ARE the core build's classes, handed out by the
-//     gate (§ "Initialization"). They
-//     hold the canonical data and the full sync surface (schema / validate /
-//     seed / mutate / toJson / toTree). No backend is loaded to use them, so
-//     the editor/validation path never pays for a multi-MB backend binary.
+//     gate below, never subclasses or wrappers: that identity is what makes
+//     `instanceof` the whole membership test, so a handle either belongs to this
+//     copy or to another copy, and the second is always a consumer bug.
+//     `runtime.test.js` guards it (`Quill === CoreQuill`). No backend is loaded
+//     to use them, so the editor path never pays for a multi-MB binary.
 //
 //   - `Engine` is the render dispatcher. It routes on `quill.backendId`, lazily
-//     imports that backend's build (so a consumer that never renders never
-//     loads it), clones the canonical `Quill`/`Document` into the backend's
-//     memory ON DEMAND as data (`toTree`→`fromTree`, `toJson`→`fromJson`),
-//     renders, and the backend handles never escape.
+//     imports that backend's build, clones the canonical `Quill`/`Document` into
+//     the backend's memory as data (`toTree`→`fromTree`, `toJson`→`fromJson`),
+//     renders, and never lets the backend handles escape.
 //
-//     CLONE LIFETIMES (not all transient): the per-call `Document` clone IS
-//     transient, built and freed inside each call, because documents are small
-//     and mutate freely. The `Quill` clone is CACHED instead: re-cloning a quill
-//     per call means re-serializing its whole file tree Rust→JS, copying it into
-//     backend memory, and re-parsing + re-validating the bundle every time, and
-//     quills are validated, effectively-immutable bundles. So each `Engine`
-//     memoizes the backend-memory quill per (engine, backendId, canonical quill
-//     instance) in a `WeakMap` keyed on the canonical `Quill`: when the consumer
-//     drops the core quill the cache entry becomes collectable and wasm-bindgen
-//     weak-refs (`--weak-refs`) free the backend handle. The CONTRACT this buys:
-//     a `Quill` instance's contents never change after construction, mutate by
-//     replacing the instance (the clone is dropped with it via WeakMap +
-//     weak-refs).
-//
-// The cross-memory crossing is therefore invisible: a consumer hands canonical
-// `Quill`/`Document` to `engine.render(...)` and gets a `RenderResult` back.
+//     CLONE LIFETIMES: the per-call `Document` clone is transient, since
+//     documents are small and mutate freely. The `Quill` clone is CACHED,
+//     because re-cloning re-serializes its whole file tree, copies it into
+//     backend memory, and re-parses + re-validates the bundle every call. Each
+//     `Engine` memoizes it in a `WeakMap` keyed on the canonical `Quill`, so
+//     dropping the core quill makes the entry collectable and `--weak-refs`
+//     frees the backend handle. The contract this buys: a `Quill` instance's
+//     contents never change after construction — mutate by replacing the
+//     instance.
 
-// ── CANONICAL INVARIANT: hand out the core build's classes, never wrap ──────
-// The `Quill`/`Document` a consumer holds ARE the core build's classes, NOT
-// subclasses or wrappers. `init` resolves to them (§ "Initialization"); which
-// door they come through changes nothing about the identity. The only boundary
-// that needs crossing is core→backend (a separate WASM memory), which `Engine`
-// does internally as data (`toTree`/`toJson`).
-//
-// Do NOT hand out a wrapper: that breaks the identity and turns a structural
-// fact into a converted type (a breaking design change, not a refactor). The
-// `runtime.test.js` "hands out the internal core build classes verbatim" case
-// (`Quill === CoreQuill`) is the executable guard for this invariant.
-//
-// The identity is what makes `instanceof` the whole membership test: a handle
-// either belongs to this copy's classes or it belongs to another copy, and the
-// second is always a consumer bug. `Engine` is NOT duck-typed on its inputs; it
-// checks them. See § "Handles from another copy" below.
-//
 // Local bindings, so this module can augment them: `quill.writer(doc)` is
-// patched onto the prototype below, and `instanceof` reads them directly.
-//
-// The default import is the core build's generated instantiation entry
-// (`--target web`); `init` below is the only thing that calls it.
+// patched onto the prototype below, and `instanceof` reads them directly. The
+// default import is the core build's generated instantiation entry; `init` is
+// the only thing that calls it.
 import initCore, { Quill, Document } from '../core/wasm.js';
 // The wasm byte source, resolved per environment by package.json's `imports`
 // map: a pass-through in a browser (the glue fetches and streams the URL
 // itself), a `node:fs` read under Node, whose `fetch` rejects `file:` URLs.
 // Resolution-time, so `node:fs` never enters a browser graph.
 import { toModuleSource } from '#quillmark-env';
-// The document-free content codec: `exportMarkdown(body)` (the on-demand
-// markdown projection), `importMarkdown`, and the position-mapping pair
-// (`rebase`, `mapPos`).
 import { importMarkdown, exportMarkdown, rebase, mapPos } from '../core/wasm.js';
-// The document-model path parser/serializer: `parseDocPath(str) => DocPathSeg[]`
-// and its inverse `formatDocPath`, so a consumer routes on `Diagnostic.path`
-// segments instead of reverse-engineering the grammar.
 import { parseDocPath, formatDocPath } from '../core/wasm.js';
 
 // ── Initialization ──────────────────────────────────────────────────────────
 // The builds are `--target web`: they export their classes synchronously but
 // carry no wasm instance until something instantiates them. This module owns
 // that for core, behind one awaited gate; `Engine` owns it for the backends,
-// inside their lazy load, so a consumer never initializes a backend by hand.
+// inside their lazy load.
 //
-// THE GATE IS THE ONLY DOOR. `init` resolves to the core surface, and this
-// module exports none of it statically, so a handle is unobtainable without
-// having awaited: the precondition is structural rather than a convention the
-// caller has to know. package.json's `exports` map carries exactly one entry,
-// so there is no subpath around the gate either.
+// THE GATE IS THE ONLY DOOR: `init` resolves to the core surface and nothing
+// here exports it statically, so a handle is unobtainable without having
+// awaited, and package.json's `exports` map carries exactly one entry. The
+// guarded surface cannot be async (`Quill.fromTree` and `quill.seedDocument`
+// return synchronously), so there is nowhere to hide an await except in front.
 //
-// The gate is the shape the lazy-backend idiom (§ DEFAULT_BACKENDS) takes when
-// the surface it guards cannot be async: `Quill.fromTree` and
-// `quill.seedDocument` return synchronously, so there is nowhere to hide an
-// await except in front.
-//
-// WHAT STAYS A STATIC EXPORT is what needs no instance. `MAIN_CARD_ADDR`, the
-// open-set guards and `isQuillmarkError` are pure JS over plain objects; gating
-// them would cost a consumer of one an await it has no use for.
-//
+// WHAT STAYS A STATIC EXPORT is what needs no instance: `MAIN_CARD_ADDR`, the
+// open-set guards, and `isQuillmarkError` are pure JS over plain objects.
 // `Engine`, `LiveSession` and the four writer/reader classes stay static too,
-// gated by their ARGUMENTS rather than by the door. Every `Engine` verb takes a
-// `Quill` first (`#backendOf` is the single reader) and the writer/reader
-// constructors take both handles, so a caller who has not awaited cannot
-// produce an argument to call them with. The two constructors taking no handle
-// reach no wasm: `new Engine()` validates a descriptor map, and a `LiveSession`
-// forwards to the backend session `engine.open` is the sole source of. None of
-// the six carries a static method, the one member shape an argument cannot
-// gate. `gate.test.js` is the executable guard, driving the whole static
-// surface before `init`. Holding them out of the gate keeps them tree-shakable,
-// so the editor path drops the dispatcher it never calls.
+// gated by their ARGUMENTS instead — every verb takes a `Quill` or both
+// handles, so a caller who has not awaited cannot produce an argument, and the
+// two constructors taking no handle reach no wasm. None carries a static
+// method, the one member shape an argument cannot gate. `gate.test.js` drives
+// the whole static surface before `init`. Holding them out of the gate also
+// keeps them tree-shakable.
 //
 // FAILURE DELIVERY follows the FUNCTION kind, not the failure kind: a sync verb
-// throws, a promise-returning verb rejects, and nothing does both. A
-// programming error reached through a promise-returning verb
-// (`runtime::foreign_handle` inside `Engine.render`) rejects like any other.
-// `init` is the one promise-returning export not declared `async`, because the
-// memo is returned by identity; its conflict guard rejects explicitly to hold
-// the rule, which the return type cannot declare and a `.catch` would not see.
+// throws, a promise-returning verb rejects, and nothing does both. `init` is the
+// one promise-returning export not declared `async`, because the memo is
+// returned by identity; its conflict guard rejects explicitly to hold the rule.
 
 /**
  * The gated surface: the core build's values, which are exactly the ones its
@@ -289,38 +241,29 @@ function quillmarkError(code, message, hint) {
 }
 
 // ── Handles from another copy: always a bug ─────────────────────────────────
-// A duplicate install (two copies of this package in one `node_modules` tree)
-// is two `core` builds: two linear memories and two distinct `Quill`/`Document`
-// classes. No topology legitimately loads a multi-megabyte WASM package twice
-// AND needs handles to cross between the copies, so a crossing is a consumer
-// bug. Every seam taking a core handle says so, uniformly, at the crossing.
+// A duplicate install is two `core` builds: two linear memories and two distinct
+// `Quill`/`Document` classes. No topology legitimately loads a multi-megabyte
+// WASM package twice AND needs handles to cross between the copies, so a
+// crossing is a consumer bug, and every seam taking a core handle says so.
 //
 // Crossing read-only handles as data is mechanically possible (`toJson` and
-// `toTree` serialize either way) and is not done. It leaves a package where
-// some verbs work and some throw, and it hides a cliff: a crossed read is a
-// whole-document `toJson` + `fromJson`, so a form reading fifty fields pays
-// fifty round trips and the symptom is "the editor got slow". A duplicate
-// install that limps is a duplicate install nobody removes.
+// `toTree` serialize either way) and is not done: it leaves a package where some
+// verbs work and some throw, and it hides a cliff, since a crossed read is a
+// whole-document `toJson` + `fromJson` and a form reading fifty fields pays
+// fifty round trips.
 //
-// What the checks deliver is the ERROR, not the rejection. wasm-bindgen's
-// generated glue already rejects a foreign class on every method declaring a
-// reference parameter (`Document.equals`, `Quill.validate`, `Quill.resolve`,
-// the `&Quill`-taking `Document._commitField` and friends): its `_assertClass`
-// is emitted unconditionally and runs before any of our code. It throws a bare
-// `Error` reading `expected instance of Document` at a value that IS a
-// `Document`, so `isQuillmarkError` returns false and the failure leaves this
-// package's error contract, naming neither the cause nor the cure. The checks
-// front-run it with a `QuillmarkError` that names both.
-//
-// They also cover the seams with NO `_assertClass` to front-run: `Engine` and
-// `LiveSession.update` cross into backend memory as data (`toTree`/`toJson`), so
-// a foreign handle there would silently work, at the price of the round-trip
-// above and a quill clone cache split per copy.
-//
-// Not an API widening in either direction: the declared parameter types stay
-// `Quill`/`Document`, and the accepted set is exactly this copy's instances.
+// What the checks deliver is the ERROR, not the rejection. wasm-bindgen's glue
+// already rejects a foreign class wherever a method declares a reference
+// parameter, but its `_assertClass` throws a bare `Error` reading
+// `expected instance of Document` at a value that IS a `Document`, so
+// `isQuillmarkError` returns false and the failure leaves this package's error
+// contract. The checks front-run it with a `QuillmarkError` naming both cause
+// and cure, and cover the seams with no `_assertClass` to front-run: `Engine`
+// and `LiveSession.update` cross into backend memory as data, where a foreign
+// handle would silently work at the price of that round trip and a per-copy
+// split of the quill clone cache.
 
-/** Per class: the code and hint for "not one at all", and the probe for "from another copy". */
+/** Per class: the code and hint for "not one at all", and the from-another-copy probe. */
 const HANDLE_KINDS = {
 	Quill: {
 		code: 'runtime::not_a_quill',
@@ -404,10 +347,8 @@ function patchHandleChecked(proto, name, wrap) {
 	/** @type {any} */ (proto)[name] = patched;
 }
 
-// The three core methods declaring a `&Document` parameter. Each already refuses
-// a foreign handle inside `_assertClass`; the patch is what makes the refusal
-// legible. Only the argument can be foreign, the receiver being whichever copy
-// the caller reached for.
+// The core methods declaring a `&Document` parameter. Each already refuses a
+// foreign handle inside `_assertClass`; the patch makes the refusal legible.
 patchHandleChecked(Document.prototype, 'equals', (original) =>
 	function equals(/** @type {any} */ other) {
 		requireLocalDoc(other, 'Document.equals');
