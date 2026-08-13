@@ -29,7 +29,6 @@
   fewest other readings (`---` is also a setext underline and the root-block
   front-matter opener). Exported markdown changes for documents holding a
   rule; the content model, wire data and rendered output do not.
-
 - refactor(core,pdfform,cli,wasm)!: the `enum:` modifier on `type: string`
   retires. `type: enum` with a `values:` list is the one spelling of a finite
   string domain; `enum:` on any type is now `quill::field_parse_error`, whose
@@ -67,6 +66,32 @@
   string. A consumer finding an address's children by prefix (`startsWith(`${field}.`)`)
   needs the `[` opener too, and any heuristic reading a trailing all-digit field
   name as a lost index is dead.
+- feat(wasm): `doc.pathFor(addr)` mints an `Addr` as the canonical `DocPath`
+  string `Diagnostic.path` carries and `session.locate` / `session.fieldBoxes`
+  take; `doc.cardPath(i)` is the card's own root. `Document` computed the
+  kind-qualified root for every addressed write and did not hand it out, so a
+  consumer building a path restated the kind lookup, the `Addr` defaults and the
+  range guard — and a wrong-kind path is compared as a string, matching nothing
+  and drawing no highlight without throwing. Both are quill-free (the stored
+  `$kind` verbatim) and total on the index axis: a path is an anchor, not a
+  read, so a per-keystroke call needs no `try` (#1225)
+- change(wasm)!: `@quillmark/wasm` declares `engines: { node: ">=24" }`, the
+  tier CI builds and tests the bindings on and the one both devcontainers hand a
+  contributor. Nothing in the package requires it at runtime, so a Node 22
+  install fails `engines` checking without failing at import.
+- docs: `docs/migrations/0.103-to-0.104.md` carries the four breaks — the
+  retired `enum:` modifier, the bracketed index spelling, the `***` thematic
+  break and the Node floor — with the prefix-match, trailing-digit and stored
+  -markdown shapes a consumer has to fix, and the two additive surfaces
+  (`pathFor` / `cardPath`, and the `plate::unsupported_construct` family a
+  code-routing consumer gains an arm for).
+- test(core): three characterization tests pin the render floor's two
+  type-domain edges (a defaultless enum, top-level and nested in a typed
+  dictionary) and an authored empty `date` beside an empty `string`, so the
+  coercion difference between the two is one test's diff. Every shipped quill
+  declares a `default:` on every enum and none authors an empty `date`, so the
+  fixture suite reached neither path. A fourth carries a `!must_fill` tag on two
+  example-seeded cells through seed → store → load → conform. Refs #1234
 
 ## v0.103.0 - 2026-08-09
 
