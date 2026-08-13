@@ -282,13 +282,11 @@ export type ContentIsland = {
  * field: "intro" }` a card field.
  *
  * On the `Addr`-taking verbs a **bare string** is shorthand for `{ field: name }`
- * (`doc.storeField("qty", 3)`, `doc.revise("intro", md)`) the one coercion
- * rule. A bare number is *not* an addr (`{ card: 2 }` is the self-documenting
- * spelling), so no third navigation idiom re-fragments the surface.
+ * (`doc.storeField("qty", 3)`); a bare number is *not* an addr.
  *
  * `doc.pathFor(addr)` mints the address as its canonical `DocPath` string, the
  * anchor `Diagnostic.path` carries and `session.locate` / `session.fieldBoxes`
- * take: a card path is kind-qualified, so building one by hand needs the card's
+ * take. A card path is kind-qualified, so a hand-built one needs the card's
  * `$kind`, and a wrong-kind path matches nothing silently.
  */
 export interface Addr {
@@ -297,10 +295,9 @@ export interface Addr {
 }
 
 /**
- * A card-only address: the axis the card-scoped verbs (`storeFields`,
- * `storeExt`, `getExt`, `commitFields`, …) take. An absent `card` targets the
- * main card. A present `field` throws: a card address takes only `card`, and a
- * would-be nested write is a bug the error names rather than silently ignores.
+ * A card-only address, taken by the card-scoped verbs (`storeFields`,
+ * `storeExt`, `getExt`, `commitFields`, …). An absent `card` targets the main
+ * card; a present `field` throws.
  */
 export interface CardAddr {
     card?: number;
@@ -308,8 +305,8 @@ export interface CardAddr {
 
 /**
  * A text-splice change set over the USV content (CodeMirror `ChangeSet`
- * semantics): plain, structured-clone-able data. Returned by `revise` and by
- * the `rebase` codec; map a stored position through it with `mapPos`.
+ * semantics), returned by `revise` and by the `rebase` codec. Map a stored
+ * position through it with `mapPos`.
  */
 export interface Delta {
     ops: ({ retain: number } | { insert: string } | { delete: number })[];
@@ -320,11 +317,9 @@ export type Assoc = "before" | "after";
 
 /**
  * A mark edit in final-text coordinates (post-delta, post-line-op). `add` /
- * `remove` carry the `ContentMark` vocabulary (`{ type, … }`); `removeAnchor`
- * drops one identity anchor by id. An `add` of an `anchor` requires a non-empty
- * `id` not already live in the field: a collision or the empty id throws
- * (ids are caller-supplied and unique per `Content`; DOCUMENT_STORAGE
- * § Anchor-id identity).
+ * `remove` carry the `ContentMark` vocabulary; `removeAnchor` drops one identity
+ * anchor by id. An `add` of an `anchor` requires a non-empty `id` not already
+ * live in the field; a collision or the empty id throws.
  */
 export type MarkOp =
     | ({ op: "add" | "remove"; start: number; end: number } & (
@@ -336,12 +331,10 @@ export type MarkOp =
     | { op: "removeAnchor"; id: string };
 
 /**
- * A line/block edit. `split`/`join` splice `\n` in post-`delta`, post-`islandOps`
- * coordinates; `setKind`/`setContainers`/`setContinues` touch metadata.
- * `setContinues` sets/clears a line's within-block hard-break flag
- * (`ContentLine.continues`): the op-grained way to lower a Shift+Enter hard
- * break or a new code-fence interior line; `continues: true` on line 0 is
- * rejected (nothing precedes it to continue).
+ * A line/block edit. `split`/`join` splice `\n` in post-`delta`,
+ * post-`islandOps` coordinates; `setKind`/`setContainers`/`setContinues` touch
+ * metadata. `setContinues` sets or clears a line's within-block hard-break flag
+ * (`ContentLine.continues`); `continues: true` on line 0 is rejected.
  */
 export type LineOp =
     | { op: "split"; at: number }
@@ -352,34 +345,25 @@ export type LineOp =
 
 /**
  * An island edit: the only channel that reaches an island's payload, a table's
- * cells or an image's url.
+ * cells or an image's url. Both ops leave the field's text and marks alone, so
+ * an island edit keeps every identity anchor in the field.
  *
- * Both ops move one island entry and leave the field's text and marks alone, so
- * an island edit keeps every identity anchor in the field. That is why a table
- * edit lowers to `applyChange` rather than `overwrite`, which drops them all.
+ * `set` addresses an existing island by `id`; an unknown `id` throws. `insert`
+ * places a new island's slot at `at` together with its entry, so a slot never
+ * exists without an island behind it; its `id` must be non-empty and unused.
+ * `at` is a position in the text the `delta` and this bundle's earlier island
+ * ops left, so slots after `a` and `b` of `abc` go in at 1 and 3. A stale frame
+ * misplaces slots and never throws. A `delta` insert string may not carry a
+ * slot, which would orphan: split such a splice into the slot-free `delta` plus
+ * one `insert` per slot.
  *
- * `set` addresses an existing island by `id`; an `id` no island carries throws
- * rather than passing silently. `insert` places a new island's slot at `at`
- * together with its entry, so a slot never exists without an island behind it;
- * its `id` must be non-empty and unused. `at` is a position in the text the
- * `delta` and this bundle's earlier island ops left: each insert splices its
- * slot before the next op reads the text, so slots after `a` and `b` of `abc`
- * go in at 1 and 3. A stale frame misplaces slots and never throws.
+ * Deleting an island needs no op: a `delta` that removes its slot drops the
+ * island whole, and a block island's line demotes to `para`. Re-landing it is an
+ * `insert` of the full island under its original id; a pasted copy of a live
+ * island mints a fresh one.
  *
- * A `delta` insert string may not carry a slot, which would orphan. A producer
- * that computes one splice over the whole field text carries slots in it on any
- * paste of an island or undo of a deletion; that splice splits into the
- * slot-free `delta` plus one `insert` per slot.
- *
- * Deleting an island needs no op, and the drop is whole: a `delta` that removes
- * its slot drops the island from the store. Re-landing it is an `insert` of the
- * full island under its original id, and only the producer that deleted it
- * still holds that value. A pasted copy of a live island is new and mints fresh
- * (DOCUMENT_STORAGE § Island-id determinism). A block island's line demotes to
- * `para` when its slot goes, so re-landing one re-tags the line too.
- *
- * A `set` stores the `loss` it is given: nothing re-derives the class from the
- * new `props`, so a write that changes what markdown can carry must say so.
+ * A `set` stores the `loss` it is given; nothing re-derives the class from the
+ * new `props`.
  *
  * An island is *inline* (a slot inside a paragraph) unless its line says
  * otherwise. A **block** island is one bundle of all three channels, in the
@@ -392,13 +376,12 @@ export type IslandOp =
     | ({ op: "insert"; at: number } & ContentIsland);
 
 /**
- * A committed content edit bundle for `applyChange`: a text `delta` (default no
- * text change), then `islandOps`, then `lineOps`, then `markOps` (mark ranges
- * are in final-text coordinates: every earlier channel applied). Every field is
- * optional.
+ * A committed content edit bundle for `applyChange`, applied in order: a text
+ * `delta`, then `islandOps`, then `lineOps`, then `markOps` (mark ranges are in
+ * final-text coordinates). Every field is optional.
  *
- * Within each channel ops apply in sequence, each against the state the earlier
- * ones left: an island `insert`'s `at` counts earlier ops' slots, and `lineOps`
+ * Within each channel ops apply in sequence against the state the earlier ones
+ * left: an island `insert`'s `at` counts earlier ops' slots, and `lineOps`
  * positions and indices renumber through earlier `split`/`join`.
  */
 export interface ChangeBundle {
@@ -409,14 +392,9 @@ export interface ChangeBundle {
 }
 "#;
 
-/// Maximum backing-store dimension the painter will produce, in device
-/// pixels per side. Real browser limits vary (~32k on Chrome/Firefox,
-/// 16k on Safari, lower on memory-constrained devices); 16384 is the
-/// floor that works everywhere we ship to. When a requested
-/// `layoutScale * densityScale` would exceed this, the painter clamps
-/// `densityScale` proportionally and reports it on the returned
-/// `PaintResult` (`clamped` / `effectiveDensityScale`, plus the actual
-/// backing dimensions).
+/// Device pixels per side: the floor across browser canvas limits (~32k on
+/// Chrome/Firefox, 16k on Safari). A request past it clamps `densityScale`
+/// proportionally, reported on `PaintResult`.
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 const MAX_BACKING_DIMENSION: u32 = 16384;
 
@@ -450,31 +428,24 @@ pub struct Quill {
     inner: quillmark::Quill,
 }
 
-/// Live render session: reads (`render`, `paint`, `pageSize`, `regions`,
-/// `fieldAt`, `positionAt`, `locate`) serve the current compile. `apply(doc)`
-/// recompiles a whole document in place, transactionally (on throw every read
-/// keeps serving the last-good compile). Geometry reads reflect the current
-/// compile; anchoring a caret across edits is the editor's job: re-read
-/// geometry after each committed `apply`.
+/// Live render session: every read serves the current compile. `apply(doc)`
+/// recompiles a whole document in place, transactionally — on throw the reads
+/// keep serving the last-good compile. Geometry is per-compile, so re-read it
+/// after each committed `apply`.
 ///
-/// **Empty documents.** A zero-page document yields a valid session
-/// (`pageCount === 0`); `paint(ctx, 0)` or `pageSize(0)` throws with
-/// `"page index 0 out of range (pageCount=0)"`. Branch on `pageCount === 0`
-/// rather than catching the error.
+/// A zero-page document yields a valid session (`pageCount === 0`) whose
+/// `paint(ctx, 0)` and `pageSize(0)` throw; branch on `pageCount === 0` rather
+/// than catching.
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 #[wasm_bindgen]
 pub struct LiveSession {
     inner: quillmark_core::LiveSession,
     backend_id: String,
-    /// The current compile's ordered card kinds (`None` = a kindless card), the
-    /// lookup that resolves a geometry region's plate-space per-kind ordinal to
-    /// its `DocPath` absolute index. Refreshed on every committed `apply`, so it
-    /// tracks the document the geometry reflects.
+    /// Resolves a geometry region's plate-space per-kind ordinal to its
+    /// `DocPath` absolute index. Refreshed on every committed `apply`.
     card_kinds: Vec<Option<String>>,
 }
 
-/// The ordered card kinds of `doc`: the geometry-translation lookup a
-/// [`LiveSession`] retains.
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 fn card_kinds_of(doc: &quillmark_core::Document) -> Vec<Option<String>> {
     doc.cards()
@@ -487,7 +458,6 @@ fn card_kinds_of(doc: &quillmark_core::Document) -> Vec<Option<String>> {
 #[wasm_bindgen]
 pub struct Document {
     inner: quillmark_core::Document,
-    /// Parse-time warnings (e.g. a `~~~` opener missing its blank line).
     parse_warnings: Vec<quillmark_core::Diagnostic>,
 }
 
@@ -541,8 +511,6 @@ impl Quillmark {
         let mut warnings: Vec<Diagnostic> =
             doc.parse_warnings.iter().cloned().map(Into::into).collect();
         warnings.extend(result.warnings.into_iter().map(Into::into));
-        // The regions sidecar keys on `DocPath` like `session.regions()`, so a
-        // consumer sees one address grammar however it reads geometry.
         let kinds: Vec<Option<&str>> = doc.inner.cards().iter().map(|c| c.kind()).collect();
         Ok(RenderResult {
             artifacts: result.artifacts.into_iter().map(Into::into).collect(),
@@ -556,9 +524,9 @@ impl Quillmark {
         })
     }
 
-    /// The output formats `quill`'s backend can emit. Static capability:
-    /// resolves the backend but compiles nothing. Throws `engine::backend_not_found`
-    /// if no registered backend matches the quill's declared backend.
+    /// The output formats `quill`'s backend can emit; resolves the backend but
+    /// compiles nothing. Throws `engine::backend_not_found` when no registered
+    /// backend matches the quill's declared one.
     #[wasm_bindgen(js_name = supportedFormats, unchecked_return_type = "OutputFormat[]")]
     pub fn supported_formats(&self, quill: &Quill) -> Result<JsValue, JsValue> {
         let formats = self
@@ -572,11 +540,9 @@ impl Quillmark {
         })
     }
 
-    /// Pre-session hint: `true` iff `quill`'s backend can paint sessions to a
-    /// canvas, derived from the backend's output formats; `false` when the
-    /// backend is unsupported. Use as a cheap precondition probe before mounting
-    /// a canvas-based preview UI; the authoritative answer is the session's
-    /// `supportsCanvas` getter once `open()` has been called.
+    /// Whether `quill`'s backend can paint sessions to a canvas; `false` when the
+    /// backend is unsupported. A cheap probe before mounting a preview UI. The
+    /// authoritative answer is the session's `supportsCanvas` getter.
     #[wasm_bindgen(js_name = supportsCanvas)]
     pub fn supports_canvas(&self, quill: &Quill) -> bool {
         self.inner.supports_canvas(&quill.inner)
@@ -585,13 +551,9 @@ impl Quillmark {
 
 #[wasm_bindgen]
 impl Quill {
-    /// Build a quill from a file tree. Pure: no backend, no engine; the
-    /// declared backend is resolved later, at render time.
-    ///
-    /// Accepts either a `Map<string, Uint8Array>` or a plain object
-    /// (`Record<string, Uint8Array>`). Plain objects are walked via
-    /// `Object.entries` at the boundary; the Rust side sees a single
-    /// canonical shape.
+    /// Build a quill from a file tree. Pure: the declared backend is resolved
+    /// later, at render time. Accepts a `Map<string, Uint8Array>` or a plain
+    /// object.
     #[wasm_bindgen(js_name = fromTree)]
     pub fn from_tree(
         #[wasm_bindgen(unchecked_param_type = "Map<string, Uint8Array>")] tree: JsValue,
