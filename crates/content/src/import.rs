@@ -710,9 +710,8 @@ impl Builder {
                     }
                 }
             }
-            // Inline content of the open cell (pulldown already trimmed the cell's
-            // surrounding whitespace; the fixer already stripped non-`<u>` HTML).
-            // A soft/hard break in a single-line cell is a space.
+            // Inline content of the open cell. A soft/hard break in a
+            // single-line cell is a space.
             Event::Text(t) => {
                 if let Some(c) = self.cell_mut() {
                     c.push_text(t);
@@ -770,10 +769,7 @@ impl Builder {
                 "rows": acc.rows,
             });
             // Degraded when a cell dropped an inline image's url: the projection
-            // then carries the alt text but not the image (not a fixed point);
-            // otherwise the type's ceiling. Recorded, not acted on: `Loss`
-            // describes fidelity for a consumer to surface; no
-            // projection branches on it.
+            // then carries the alt text but not the image.
             let loss = if acc.degraded {
                 Loss::DEGRADED
             } else {
@@ -798,7 +794,6 @@ impl Builder {
             self.lines.push(last);
         }
         if self.lines.is_empty() {
-            // Empty document: one empty Para line.
             self.lines.push(Line {
                 kind: LineKind::Para,
                 containers: Vec::new(),
@@ -830,24 +825,20 @@ fn heading_level(level: pulldown_cmark::HeadingLevel) -> u8 {
     }
 }
 
-/// Sanitize a code-block info string to a language identifier (parity with the
-/// typst backend's `sanitize_lang_tag`).
+/// Sanitize a code-block info string to a language identifier, matching the
+/// typst backend's `sanitize_lang_tag`.
 fn sanitize_lang(lang: &str) -> String {
     lang.chars()
         .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '+'))
         .collect()
 }
 
-// ---------------------------------------------------------------------------
-// MarkdownFixer: the raw-HTML filter between pulldown and the builder.
-//
-// One job: allowlist `<u>…</u>` as underline (rewritten to Strong start/end,
-// the classification riding the rewritten event) and drop every other raw HTML
-// event. Delimiter arithmetic is pulldown's: a fixer that
-// re-segments `***` runs can only disagree with CommonMark, and disagreeing
-// means deleting an asterisk the author typed (`***a**` is a literal `*` then
-// strong `a`; `***bold italic***` parses natively).
-// ---------------------------------------------------------------------------
+// `MarkdownFixer` is the raw-HTML filter between pulldown and the builder: it
+// allowlists `<u>…</u>` as underline (rewritten to Strong start/end, the
+// classification riding the event) and drops every other raw HTML event.
+// Delimiter arithmetic stays pulldown's, since a fixer that re-segments `***`
+// runs can only disagree with CommonMark, and disagreeing means deleting an
+// asterisk the author typed.
 
 fn is_u_open_tag(html: &str) -> bool {
     let s = html.trim();
