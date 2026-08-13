@@ -743,20 +743,15 @@ mod tests {
     use serde_json::json;
     use std::collections::HashMap;
 
-    /// A field's canonical content JSON, the shape the seam carries for a richtext
-    /// field: `import(markdown)` then the canonical serializer.
+    /// The shape the seam carries for a richtext field.
     fn content(markdown: &str) -> serde_json::Value {
         let rt = quillmark_content::import::from_markdown(markdown).expect("import");
         quillmark_content::serial::to_canonical_value(&rt)
     }
 
-    /// Direct teeth for the pixels-not-spans contract: two compiles
-    /// whose pages ink identically must fingerprint identically even when every
-    /// glyph's `Span` differs. The quills below are identical except one schema
-    /// declares an extra unused field, which lengthens the generated `_qm-meta`
-    /// literal ahead of the content blocks in `lib.typ`: shifting every block's
-    /// byte position, hence every content glyph's span, while the rendered
-    /// pages stay pixel-identical. Folding spans into the hash fails this.
+    /// The two quills differ only by an extra unused schema field, which
+    /// lengthens the generated `_qm-meta` literal ahead of the content blocks
+    /// and so shifts every glyph's span without moving a pixel.
     #[test]
     fn page_hashes_ignore_span_shift_when_ink_is_identical() {
         use quillmark_core::FileTreeNode;
@@ -791,7 +786,6 @@ mod tests {
             Quill::from_tree(FileTreeNode::Directory { files }).expect("quill")
         };
 
-        // The body crosses the seam as canonical content JSON, not markdown.
         let json =
             serde_json::json!({ "body": content("A **markdown** body with real ink to lay out.") });
         let hashes_of = |quill: &Quill| {
@@ -813,13 +807,8 @@ mod tests {
         );
     }
 
-    /// A paragraph whose text opens with a line-anchored Typst token (`= `, `- `,
-    /// `+ `, `N. `, `/ `) must render as literal text, not a heading/list/term.
-    /// The emitter prefixes a `\` at column 0; this compiles the content and asks
-    /// Typst's introspector how many of each block it actually produced: the
-    /// end-to-end teeth behind `emit::opens_line_anchor`, run against the real
-    /// Typst grammar so a future Typst version that changes line-anchoring fails
-    /// loud here.
+    /// Asks Typst's introspector how many blocks the compile really produced,
+    /// so a future Typst that changes line-anchoring fails loud here.
     #[test]
     fn line_anchored_paragraph_text_stays_literal() {
         use quillmark_core::FileTreeNode;
@@ -845,10 +834,8 @@ mod tests {
             );
             Quill::from_tree(FileTreeNode::Directory { files }).expect("quill")
         };
-        // Build the content as `Para` lines directly: an editor can place a
-        // paragraph whose literal text opens with any of these tokens (markdown
-        // import would instead parse `- `/`+ `/`N. ` as real lists, which is not
-        // the bug). Each line is its own paragraph, so each starts at column 0.
+        // `Para` lines directly: markdown import would parse `- `/`+ `/`N. ` as
+        // real lists, which is not the bug.
         use quillmark_content::model::{Line, LineKind, Content};
         let para = |_: usize| Line::new(LineKind::Para);
         let mut rt = Content::new(
@@ -877,11 +864,6 @@ mod tests {
         assert_eq!(count(<TermsElem as NativeElement>::ELEM), 0, "no term list");
     }
 
-    /// End-to-end teeth for inline lowering: a `richtext(inline)` field composed inside
-    /// `par(..)` compiles with **no** "parbreak may not occur inside of a
-    /// paragraph" warning, whereas the same field lowered as a plain (block)
-    /// richtext DOES warn. Runs against the real Typst grammar, so a future
-    /// version that changes the diagnostic fails loud here.
     #[test]
     fn inline_field_in_par_emits_no_parbreak_warning() {
         use quillmark_core::FileTreeNode;
@@ -891,8 +873,6 @@ mod tests {
 #set text(size: 11pt)
 #par(data.subject)
 "#;
-        // `inline` toggles the `subject` field between `richtext(inline)` and a
-        // plain block `richtext`; everything else is identical.
         let quill = |inline: bool| {
             let inline_line = if inline { "      inline: true\n" } else { "" };
             let yaml = format!(
@@ -925,23 +905,19 @@ mod tests {
         let has_parbreak =
             |ws: &[Diagnostic]| ws.iter().any(|d| d.message.contains("parbreak"));
 
-        // Negative control: the block lowering warns, proving the probe has teeth.
+        // Negative control: the block lowering warns, so the probe has teeth.
         assert!(
             has_parbreak(&warnings_for(false)),
             "block richtext in par() should emit the parbreak warning"
         );
-        // The fix: inline lowering emits no parbreak warning.
         assert!(
             !has_parbreak(&warnings_for(true)),
             "inline richtext in par() must emit no parbreak warning"
         );
     }
 
-    /// End-to-end teeth for the plaintext helper: a plate imports `plaintext` and uses a content
-    /// field as a **string** (`type(plaintext("subject")) == str` and a string
-    /// op (`upper`) on it) where `data.subject` is Typst `content` that would
-    /// fail those. Compiles against real Typst, so a helper whose `plaintext`
-    /// returned content (or errored) fails here.
+    /// The plate uses a content field where `data.subject` (Typst `content`)
+    /// would fail, so a `plaintext` returning content fails this compile.
     #[test]
     fn plate_uses_plaintext_projection_as_string() {
         use quillmark_core::FileTreeNode;
@@ -968,7 +944,6 @@ mod tests {
             Quill::from_tree(FileTreeNode::Directory { files }).expect("quill")
         };
         let q = quill();
-        // A body with a mark and (defensively) no island: plaintext drops the mark.
         let json = serde_json::json!({ "subject": content("Hello **bold** world") });
         let plate_content = read_plate(&q).expect("plate");
         let transform_schema = build_transform_schema(q.config());
@@ -982,44 +957,7 @@ mod tests {
     }
 
     #[test]
-    fn test_is_richtext_field() {
-        let richtext_schema = json!({
-            "type": "object",
-            "contentMediaType": CONTENT_MEDIA_TYPE
-        });
-        assert!(is_richtext_field(&richtext_schema));
-
-        let string_schema = json!({ "type": "string" });
-        assert!(!is_richtext_field(&string_schema));
-
-        // `text/markdown` is not a richtext content type.
-        let old_media_type = json!({ "type": "string", "contentMediaType": "text/markdown" });
-        assert!(!is_richtext_field(&old_media_type));
-    }
-
-    #[test]
-    fn test_is_richtext_array_field() {
-        let rt_array = json!({
-            "type": "array",
-            "items": { "type": "object", "contentMediaType": CONTENT_MEDIA_TYPE }
-        });
-        assert!(is_richtext_array_field(&rt_array));
-
-        let string_array = json!({
-            "type": "array",
-            "items": { "type": "string" }
-        });
-        assert!(!is_richtext_array_field(&string_array));
-
-        // A plain richtext scalar is not a richtext array.
-        let rt_scalar = json!({ "type": "object", "contentMediaType": CONTENT_MEDIA_TYPE });
-        assert!(!is_richtext_array_field(&rt_scalar));
-    }
-
-    #[test]
     fn schema_meta_classifies_richtext_content_fields() {
-        // The content-field selector keys on the richtext media type: a scalar
-        // richtext field and an `array<richtext>` both count.
         let schema = QuillValue::from_json(json!({
             "type": "object",
             "properties": {
@@ -1039,10 +977,7 @@ mod tests {
 
     #[test]
     fn schema_meta_array_fields_distinguish_scalar_from_array() {
-        // Any array is element-addressable (`field.N`): `array<richtext>` and
-        // plain string arrays alike, matching the pdfform resolver's grammar.
-        // Only scalars are excluded: no element exists for the address to
-        // resolve to.
+        // Any array is element-addressable (`field.N`); only scalars are not.
         let schema = QuillValue::from_json(json!({
             "type": "object",
             "properties": {
@@ -1082,9 +1017,6 @@ mod tests {
 
     #[test]
     fn schema_meta_collects_date_and_datetime_fields() {
-        // `format: date` → date_fields (3-component lowering); `format:
-        // date-time` → datetime_fields (6-component). The two tables are keyed
-        // by the distinct transform-schema markers, top-level and per-card.
         let schema = QuillValue::from_json(json!({
             "type": "object",
             "properties": {
