@@ -1239,9 +1239,8 @@ impl PyDiagnostic {
         self.inner.source_chain.clone()
     }
 
-    /// The facts `message` interpolates, keyed by name. With `code`, the
-    /// substitution unit needed to word this diagnostic in another language;
-    /// `prose/canon/ERROR.md` § "Diagnostic args" tabulates the keys per code.
+    /// The facts `message` interpolates, keyed by name. With `code`, enough to
+    /// word this diagnostic in another language.
     #[getter]
     fn args<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let map: serde_json::Map<String, serde_json::Value> =
@@ -1281,9 +1280,6 @@ fn quillvalue_to_py<'py>(
     json_to_py(py, value.as_json())
 }
 
-/// Serialize a decoded `Content` into canonical Content-JSON for the
-/// `Reader.get_content` surfaces, an absent field staying `None`. The `Content` twin
-/// of `read_value_to_py`, which flattens to a projection.
 fn content_to_py<'py>(
     py: Python<'py>,
     content: Option<quillmark_content::Content>,
@@ -1297,22 +1293,16 @@ fn content_to_py<'py>(
     }
 }
 
-/// Flatten a [`ReadValue`](quillmark_core::ReadValue) into a Python object for
-/// the `Reader.get` surfaces: a richtext projection becomes a `str`, a canonical
-/// value its scalar/list/dict shape, and an absent field `None`. The schema-plane
-/// twin of `quillvalue_to_py`, which knows only the transport shape.
 fn read_value_to_py<'py>(
     py: Python<'py>,
     read: Option<quillmark_core::ReadValue>,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
     match read {
         None => Ok(None),
-        // Both content projections flatten to a Python str at the boundary.
         Some(quillmark_core::ReadValue::Markdown(s))
         | Some(quillmark_core::ReadValue::Plaintext(s)) => Ok(Some(s.into_bound_py_any(py)?)),
         Some(quillmark_core::ReadValue::Value(v)) => Ok(Some(quillvalue_to_py(py, &v)?)),
-        // `ReadValue` is `#[non_exhaustive]`, so this arm is forced. Raising
-        // beats returning `None`, which reads as "absent field".
+        // `#[non_exhaustive]`: raising beats `None`, which reads as "absent".
         Some(_) => Err(crate::errors::raise_with_diagnostics(
             vec![quillmark_core::Diagnostic::new(
                 quillmark_core::Severity::Error,
@@ -1324,11 +1314,8 @@ fn read_value_to_py<'py>(
     }
 }
 
-/// Project a core [`Card`](quillmark_core::Card) to its Python dict shape via
-/// the canonical [`CardWire`](quillmark_core::CardWire) (core owns the
-/// field/comment/`$`-entry mapping). The dict keeps Python's snake_case
-/// `payload_items`; item entries (`type`/`key`/`value`/`fill`/`text`/`inline`)
-/// match the WASM `Card` shape verbatim.
+/// The dict keeps Python's snake_case `payload_items`; the item entries
+/// themselves match the WASM `Card` shape verbatim.
 fn card_to_pydict<'py>(
     py: Python<'py>,
     card: &quillmark_core::Card,
@@ -1352,10 +1339,9 @@ fn card_to_pydict<'py>(
                 entry.set_item("key", key)?;
                 entry.set_item("value", json_to_py(py, value)?)?;
                 entry.set_item("fill", *fill)?;
-                // Paths to `!must_fill` markers nested inside `value` (the JSON
-                // projection is fill-free). Mirrors the WASM `nestedFills` field;
-                // omitted when empty so simple cards stay clean. The serde-based
-                // reverse path (`py_dict_to_card`) reads it back.
+                // Paths to `!must_fill` markers nested inside `value`, which is
+                // itself fill-free. Omitted when empty; `py_dict_to_card` reads
+                // it back.
                 if !nested_fills.is_empty() {
                     let nf = serde_json::to_value(nested_fills)
                         .map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -1367,8 +1353,8 @@ fn card_to_pydict<'py>(
                 entry.set_item("text", text)?;
                 entry.set_item("inline", *inline)?;
             }
-            // `PayloadItemWire` is `#[non_exhaustive]`, so this arm is forced.
-            // Raising beats appending an untyped entry the caller cannot read.
+            // `#[non_exhaustive]`: raising beats appending an untyped entry the
+            // caller cannot read.
             _ => {
                 let msg = "this build cannot project one of the card's payload items";
                 return Err(crate::errors::raise_with_diagnostics(
@@ -1405,9 +1391,6 @@ fn card_to_pydict<'py>(
         None => d.set_item("seed", py.None())?,
     }
 
-    // `body` is the canonical content (source of truth); the markdown projection
-    // is the schema-plane `quill.reader(doc).body_markdown()` read. The reverse path
-    // (`py_dict_to_card`) reads `body`.
     d.set_item("body", json_to_py(py, &wire.body)?)?;
     Ok(d)
 }
