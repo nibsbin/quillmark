@@ -1,8 +1,6 @@
-//! Quill builders shared by the backend's acceptance tests.
-//!
-//! Two shapes: a self-contained quill assembled from literals, and the
-//! `usaf_memo` fixture used as a host when a test needs real fonts and
-//! packages but nothing quill-specific.
+//! Quill builders shared by the backend's acceptance tests: a self-contained
+//! quill from literals, and the `usaf_memo` fixture as a host when a test needs
+//! real fonts and packages but nothing quill-specific.
 
 // Each integration test binary compiles this module and uses part of it.
 #![allow(dead_code)]
@@ -10,9 +8,8 @@
 use quillmark_core::{FileTreeNode, Quill};
 use std::collections::HashMap;
 
-/// A self-contained quill from a `Quill.yaml` plus the named files. No fonts
-/// dir is needed (Typst's embedded defaults render text) and the helper
-/// package (`@local/quillmark-helper`) is injected by the backend.
+/// No fonts dir is needed (Typst's embedded defaults render text) and the
+/// backend injects the helper package.
 pub fn quill(yaml: &str, files: &[(&str, &[u8])]) -> Quill {
     let mut map = HashMap::new();
     map.insert(
@@ -37,15 +34,11 @@ pub fn quill_with_plate(yaml: &str, plate: &str) -> Quill {
     quill(yaml, &[("plate.typ", plate.as_bytes())])
 }
 
-/// The `usaf_memo` fixture as an in-memory tree. Reused as a host because the
-/// features under test don't depend on any quill-specific config: any valid
-/// quill skeleton (fonts, packages) works.
 pub fn host_tree() -> FileTreeNode {
     quillmark::tree_from_path(quillmark_fixtures::quills_path("usaf_memo")).expect("walk fixture")
 }
 
-/// The host quill with its `plate.typ` replaced by `plate`; the fixture's
-/// `typst.plate_file: plate.typ` makes the backend read this override.
+/// The fixture's `typst.plate_file: plate.typ` makes the backend read this.
 pub fn host_with_plate(plate: &str) -> Quill {
     let mut tree = host_tree();
     if let FileTreeNode::Directory { files } = &mut tree {

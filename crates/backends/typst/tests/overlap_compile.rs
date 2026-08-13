@@ -1,10 +1,8 @@
-//! End-to-end guard for the overlapping wrap+code emit fix: a content
-//! that an editor can build but markdown import never produces (`strong[0,4)`
-//! partially overlapping `code[2,6)`) must lower to Typst that actually
-//! *compiles*, not merely markup that "looks balanced". The emitter's output is
-//! embedded in a `#let _qm_cN = [ .. ]` content block, so a single unclosed `[`
-//! breaks the whole generated helper file's parse and fails the render. This
-//! drives `Backend::open`, which builds the world and compiles.
+//! A content an editor can build but markdown import never produces
+//! (`strong[0,4)` partially overlapping `code[2,6)`) must lower to Typst that
+//! *compiles*, not merely markup that looks balanced: the emitter's output is
+//! embedded in a `#let _qm_cN = [ .. ]` block, so one unclosed `[` breaks the
+//! whole generated helper file's parse.
 
 use quillmark_content::model::{Content, Line, LineKind, MarkKind};
 use quillmark_core::Backend;
@@ -13,17 +11,13 @@ use quillmark_typst::TypstBackend;
 mod common;
 use common::quill_with_plate as quill;
 
-/// The canonical content JSON the render seam carries for a richtext field, built
-/// from a hand-placed free-overlap content (normalize + validate happen inside
-/// `to_canonical_value`).
 fn overlap_content() -> serde_json::Value {
     use quillmark_content::model::Mark;
     let rt = Content::new("abcdef".to_string(), vec![Line::new(LineKind::Para)]).with_marks(vec![
         Mark::new(0, 4, MarkKind::Strong),
         Mark::new(2, 6, MarkKind::Code),
     ]);
-    // The overlap survives normalize/validate (there is no cross-kind overlap
-    // invariant) so the seam carries it straight to the emitter.
+    // No cross-kind overlap invariant exists, so normalize/validate keep it.
     quillmark_content::serial::to_canonical_value(&rt)
 }
 

@@ -1,7 +1,5 @@
-//! The Typst backend resolves its own plate from the `typst.plate_file`
-//! setting in the quill's config, reading the file from the quill's bundle.
-//! Core reads no template at load time, so a missing plate is a render-time
-//! (`open`) error rather than a load-time one.
+//! The Typst backend resolves its own plate from `typst.plate_file`. Core reads
+//! no template at load time, so a missing plate fails at `open`, not at load.
 
 use quillmark_core::Backend;
 use quillmark_typst::TypstBackend;
@@ -29,9 +27,7 @@ fn plate_file_is_resolved_from_the_typst_section() {
 
 #[test]
 fn missing_plate_file_errors_at_open_not_load() {
-    // Loads fine: core reads no backend template at load time.
     let q = quill(YAML, &[]);
-    // Opening resolves the plate and fails because the declared file is absent.
     let err = match TypstBackend.open(&q, &serde_json::json!({})) {
         Ok(_) => panic!("a missing plate file must fail at open"),
         Err(e) => e,
