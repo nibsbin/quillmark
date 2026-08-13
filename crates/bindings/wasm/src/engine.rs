@@ -1970,8 +1970,6 @@ export type DocPathSeg =
     | { seg: "body" };
 "#;
 
-/// TypeScript declarations for the resolved-value view (`Quill.resolve`).
-/// Emitted here as the single source of truth.
 #[wasm_bindgen(typescript_custom_section)]
 const RESOLVED_TS: &'static str = r#"
 /** The commitment-ladder rung that produced a `ResolvedField.value`. */
@@ -1979,10 +1977,8 @@ export type FieldSource = "authored" | "default" | "zero";
 
 /**
  * One resolved row: its `name`, the value the render projection would use, and
- * the `FieldSource` rung it came from. Rows are an ordered array: declaration
- * order is structural, not object-key order. The card body is a `body` sibling
- * on its card, never a row in `fields`. Diagnostics stay `Quill.validate`'s;
- * schema guidance (`example:`, labels) reads from `Quill.schema`.
+ * the `FieldSource` rung it came from. Rows are an ordered array, so declaration
+ * order is structural rather than object-key order.
  */
 export interface ResolvedField {
     name: string;
@@ -2012,9 +2008,8 @@ export interface ResolvedCard {
 }
 
 /**
- * The resolved-value view (`Quill.resolve`): the main card and every
- * composable card. Value and provenance only: completeness and errors stay
- * `Quill.validate`.
+ * The resolved-value view (`Quill.resolve`): the main card and every composable
+ * card. Value and provenance only; completeness stays `Quill.validate`'s.
  */
 export interface Resolved {
     main: ResolvedMain;
@@ -2022,11 +2017,10 @@ export interface Resolved {
 }
 "#;
 
-/// Parse a canonical document-model `Diagnostic.path`
-/// (`cards.<kind>[<i>].<field>`, `main.body`, `recipients[0].name`) into its
-/// structured [`DocPathSeg`] segments: the exported inverse of the engine's
-/// one path serializer, so a consumer routes on segments instead of regexing
-/// the string. Throws on a malformed path.
+/// Parse a canonical document-model `Diagnostic.path` (`cards.<kind>[<i>].<field>`,
+/// `main.body`, `recipients[0].name`) into structured [`DocPathSeg`] segments, so
+/// a consumer routes on segments instead of regexing the string. Throws on a
+/// malformed path.
 #[wasm_bindgen(js_name = parseDocPath, unchecked_return_type = "DocPathSeg[]")]
 pub fn parse_doc_path(path: &str) -> Result<JsValue, JsValue> {
     let doc_path = path
@@ -2034,8 +2028,7 @@ pub fn parse_doc_path(path: &str) -> Result<JsValue, JsValue> {
         .map_err(|e| WasmError::from(e.to_string()).to_js_value())?;
     // Via `serde_json::Value` so the tagged segments cross as plain objects,
     // sidestepping serde-wasm-bindgen's tagged-enum handling; `missing_as_null`
-    // so an unknown-kind card's `kind` is JS `null`, not `undefined`: the
-    // `DocPathSeg` contract is `kind: string | null`.
+    // because the `DocPathSeg` contract is `kind: string | null`.
     let json = serde_json::to_value(&doc_path)
         .map_err(|e| WasmError::from(format!("parseDocPath: {e}")).to_js_value())?;
     let serializer = serde_wasm_bindgen::Serializer::new()
@@ -2046,10 +2039,8 @@ pub fn parse_doc_path(path: &str) -> Result<JsValue, JsValue> {
 }
 
 /// Serialize structured [`DocPathSeg`] segments back to the canonical path
-/// string: the inverse of `parseDocPath`, for a consumer that builds a path
-/// rather than reads one. Throws on a segment array the deserializer rejects,
-/// and on an empty segment array (symmetric with `parseDocPath("")`, which
-/// throws "empty path").
+/// string: the inverse of `parseDocPath`. Throws on a segment array the
+/// deserializer rejects, and on an empty one.
 #[wasm_bindgen(js_name = formatDocPath)]
 pub fn format_doc_path(
     #[wasm_bindgen(unchecked_param_type = "DocPathSeg[]")] segs: JsValue,
@@ -2064,10 +2055,9 @@ pub fn format_doc_path(
 }
 
 /// Map a base content position (a USV index into `Content.text`, not a UTF-16
-/// offset) through a `delta` to its new USV position: the pure position-mapping
-/// codec an editor bridge composes to hold a caret stable across a `revise`.
-/// `assoc` decides the side of a same-position insertion (`"after"` moves past
-/// it). Throws on a malformed `delta`.
+/// offset) through a `delta` to its new position, holding a caret stable across
+/// a `revise`. `assoc` decides the side of a same-position insertion (`"after"`
+/// moves past it). Throws on a malformed `delta`.
 #[wasm_bindgen(js_name = mapPos)]
 pub fn map_pos(
     #[wasm_bindgen(unchecked_param_type = "Delta")] delta: JsValue,
@@ -2088,13 +2078,8 @@ pub fn map_pos(
     Ok(delta.map_pos(pos, assoc))
 }
 
-// ── Edit helpers ──────────────────────────────────────────────────────────────
-
-/// Maps `EditError` to a JS `Error` carrying one diagnostic with the mutator's
-/// namespaced `edit::` code, its `Display` text as the message, and the
-/// `DocPath` it anchors to relative to `base`: the card root the mutator ran
-/// against (empty for main, `cards.<kind>[i]` for a card). One envelope shape
-/// for every producer: `{ severity, code, message, path? }`.
+/// Maps `EditError` to a JS `Error` carrying one diagnostic, its `DocPath`
+/// anchored relative to `base` (the card root the mutator ran against).
 fn edit_error_to_js(err: &quillmark_core::EditError, base: &quillmark_core::DocPath) -> JsValue {
     let mut diagnostic =
         quillmark_core::Diagnostic::new(quillmark_core::Severity::Error, err.to_string())
@@ -2109,10 +2094,7 @@ fn edit_error_to_js(err: &quillmark_core::EditError, base: &quillmark_core::DocP
     .to_js_value()
 }
 
-/// Batched-mutator twin of [`edit_error_to_js`]: one diagnostic per offending
-/// field, each carrying the `edit::` code and its `DocPath`, the field keyed
-/// under `base` (a `$kind` / `$body` structural batch key rides the same
-/// serializer as an opaque head).
+/// Batched twin of [`edit_error_to_js`]: one diagnostic per offending field.
 fn edit_errors_to_js(
     errors: Vec<(String, quillmark_core::EditError)>,
     base: &quillmark_core::DocPath,
@@ -2129,9 +2111,8 @@ fn edit_errors_to_js(
     WasmError { diagnostics }.to_js_value()
 }
 
-/// Deserialize a plain JS object into the `(name, value)` batch
-/// `Card::store_fields` consumes. Key order is preserved (`preserve_order`
-/// is on workspace-wide) so field insertion order follows the object.
+/// Key order is preserved (`preserve_order` is on workspace-wide), so field
+/// insertion order follows the object's.
 fn js_value_to_field_batch(
     value: &JsValue,
     ctx: &str,
@@ -2145,9 +2126,6 @@ fn js_value_to_field_batch(
     }
 }
 
-/// Deserialize a JS value into an arbitrary JSON value. The namespaced `$ext`
-/// mutators take any shape (the consumer's slot may hold an array, scalar, or
-/// map); `js_value_to_object` adds the object constraint on top.
 fn js_value_to_json(value: JsValue, ctx: &str) -> Result<serde_json::Value, JsValue> {
     reject_deep_js_value(&value, ctx)?;
     serde_wasm_bindgen::from_value(value)
@@ -2155,21 +2133,12 @@ fn js_value_to_json(value: JsValue, ctx: &str) -> Result<serde_json::Value, JsVa
 }
 
 /// Refuse a JS value nesting past [`MAX_JSON_DEPTH`] **before**
-/// `serde_wasm_bindgen` builds it.
-///
-/// The Rust-side depth guards in `quillmark_content` cannot cover this frame:
-/// `serde_wasm_bindgen::from_value` recurses one frame per level while
-/// constructing the `serde_json::Value`, so a deep enough input overflows during
-/// conversion, before any decoder sees a tree to check. On wasm32 the stack is
-/// 1 MB and an overflow is a trap that takes the module down: not a `WasmError`
-/// the host can catch. `let v = []; for (…) v = [v]` builds such a value in one
-/// loop, so the check belongs on the JS side of the boundary or nowhere.
-///
-/// Iterative, and early-exits at the first over-deep container, so it neither
-/// overflows on the input it detects nor walks past the limit. Arrays, plain
-/// objects, and `Map`s are the three containers `serde_wasm_bindgen` descends
-/// into, and each is charged one level: the reading in
-/// [`quillmark_content::MAX_JSON_DEPTH`].
+/// `serde_wasm_bindgen` builds it: `from_value` recurses one frame per level, so
+/// a deep enough input overflows the 1 MB wasm32 stack during conversion, and
+/// that trap takes the module down rather than surfacing as a catchable error.
+/// Iterative and early-exiting, so it neither overflows on the input it detects
+/// nor walks past the limit. Arrays, plain objects, and `Map`s are the three
+/// containers `serde_wasm_bindgen` descends into; each is charged one level.
 fn reject_deep_js_value(value: &JsValue, ctx: &str) -> Result<(), JsValue> {
     const MAX: usize = quillmark_content::MAX_JSON_DEPTH;
     let mut stack: Vec<(JsValue, usize)> = vec![(value.clone(), 0)];
@@ -2194,8 +2163,6 @@ fn reject_deep_js_value(value: &JsValue, ctx: &str) -> Result<(), JsValue> {
     Ok(())
 }
 
-/// Deserialize a JS value into a JSON object map, rejecting non-objects. Used by
-/// the whole-map `$ext` mutators, whose value must be a plain object.
 fn js_value_to_object(
     value: &JsValue,
     ctx: &str,
@@ -2206,11 +2173,8 @@ fn js_value_to_object(
     }
 }
 
-/// Serialize `value` to its JS shape (maps as objects), throwing a
-/// `WasmError` naming `what` when serialization fails. The throwing
-/// counterpart of a silent `undefined` fallback: `undefined` from a getter
-/// reads as "property absent" and crashes callers far from the cause, where
-/// a thrown error names it.
+/// Throws rather than falling back to `undefined`, which reads as "property
+/// absent" and crashes callers far from the cause.
 fn serialize_or_throw<T: serde::Serialize + ?Sized>(
     value: &T,
     what: &str,
@@ -2221,9 +2185,6 @@ fn serialize_or_throw<T: serde::Serialize + ?Sized>(
         .map_err(|e| WasmError::from(format!("{what}: serialization failed: {e}")).to_js_value())
 }
 
-/// Serialize an optional JSON value to JS, or `undefined` when `None`. Backs
-/// both the namespaced reads (any value) and the whole-map reads (via
-/// `ext_map_to_js`).
 fn json_value_to_js(value: Option<serde_json::Value>) -> Result<JsValue, JsValue> {
     match value {
         Some(v) => serialize_or_throw(&v, "ext value"),
@@ -2231,28 +2192,19 @@ fn json_value_to_js(value: Option<serde_json::Value>) -> Result<JsValue, JsValue
     }
 }
 
-/// Serialize an optional `$ext` map to a JS object, or `undefined` when `None`.
 fn ext_map_to_js(
     map: Option<serde_json::Map<String, serde_json::Value>>,
 ) -> Result<JsValue, JsValue> {
     json_value_to_js(map.map(serde_json::Value::Object))
 }
 
-/// Serialize a core [`Card`](quillmark_core::Card) to its `Card` JS shape via
-/// the canonical [`CardWire`](quillmark_core::CardWire). The single place WASM
-/// turns a core card into JS: used by `Document.main`, `cards`, `removeCard`,
-/// and the seed getters.
 fn card_to_js(card: &quillmark_core::Card) -> Result<JsValue, JsValue> {
     serialize_or_throw(&quillmark_core::CardWire::from(card), "card")
 }
 
-/// Deserialize a `CardInput`-shaped JS value into a core
-/// [`Card`](quillmark_core::Card) via [`CardWire`](quillmark_core::CardWire).
-/// The single place WASM turns JS into a core card: used by `insertCard`.
 fn js_to_card(value: &JsValue) -> Result<quillmark_core::Card, JsValue> {
-    // `serde_wasm_bindgen` does not honor the core type's
-    // `#[serde(deny_unknown_fields)]` (it looks up known fields rather than
-    // visiting every key), so enforce it here to match the Python binding:
+    // `serde_wasm_bindgen` does not honor `#[serde(deny_unknown_fields)]` (it
+    // looks up known fields rather than visiting every key), so enforce it here:
     // a flat `{ kind, fields }` object fails loudly instead of yielding a
     // silently-empty card.
     if let Some(obj) = value.dyn_ref::<js_sys::Object>() {
