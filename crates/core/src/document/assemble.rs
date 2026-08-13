@@ -1,23 +1,9 @@
-//! Assembly of card-yaml blocks into a [`Document`].
+//! Assembly of card-yaml blocks into a [`Document`]: the top-level parsing glue
+//! over the fence scanner, the YAML payload parse, and `$` metadata extraction.
 //!
-//! This module is the top-level parsing glue: it calls the fence scanner,
-//! parses each block's YAML payload, extracts the `$`-prefixed system
-//! metadata into typed values, and assembles a typed [`Document`] from the
-//! pieces.
-//!
-//! ## Unified payload items
-//!
-//! Both `$`-prefixed system metadata and user fields end up as variants of
-//! [`PayloadItem`] in the card's [`Payload`] item list, in source order.
-//! There is no separate "metadata region" or "metadata vs payload" routing:
-//! a comment is a comment, attached to whichever item precedes it. This
-//! is what keeps inline-comment preservation symmetric across the
-//! `$`/non-`$` boundary.
-//!
-//! `extract_meta_items` returns typed system [`PayloadItem`]s in source
-//! order; `build_payload` then walks the prescan items, splicing each `$`
-//! field marker back to the typed item produced from the parsed YAML and
-//! preserving every comment as-authored.
+//! Both `$` system metadata and user fields become [`PayloadItem`] variants in
+//! one source-ordered list, so a comment attaches to whichever item precedes it
+//! regardless of which side of the `$` boundary that is.
 
 use std::collections::HashMap;
 
@@ -30,28 +16,20 @@ use super::meta::{extract_meta_items, meta_key};
 use super::payload::{Payload, PayloadItem};
 use quillmark_content::Content;
 
-/// Import a sliced body string into the content, surfacing an over-nesting
-/// failure as a [`ParseError`]. The parse-time half of the one markdown→content
-/// boundary ([`super::import_body`]).
+/// The parse-time half of the markdown→content boundary
+/// ([`super::import_body`]): an over-nesting failure becomes a [`ParseError`].
 fn import_body_or_parse_error(md: &str) -> Result<Content, ParseError> {
     super::import_body(md).map_err(|e| ParseError::BodyImport(e.to_string()))
 }
 use super::prescan::{prescan_fence_content, CommentPathSegment, NestedComment, PreItem};
 use super::{Card, Document};
 
-/// Build a `MissingQuill` message that names the specific malformation when
-/// the document has none of the recognised root block forms the parser
-/// requires.
-///
-/// LLM authors hit one recurring shape here: a bare YAML mapping with
-/// `$quill: ...` (or `quill: ...`) at the top, no fences at all. Naming the
-/// concrete edit helps the model converge faster than the generic "open a
-/// `~~~` block" advice.
+/// A `MissingQuill` message naming the specific malformation. LLM authors hit
+/// one recurring shape: a bare YAML mapping with `$quill:` at the top and no
+/// fences, where naming the concrete edit converges faster than generic advice.
 fn missing_block_message(markdown: &str) -> String {
     let trimmed = markdown.trim_start();
 
-    // Bare YAML with `$quill:` at the top: the model wrote the metadata but
-    // forgot the fence entirely.
     if trimmed.starts_with("$quill:") || trimmed.starts_with("quill:") {
         return "Missing required root card-yaml block. Your document starts with \
                 YAML metadata but is missing the `~~~` fence. Wrap the \
@@ -69,11 +47,9 @@ fn missing_block_message(markdown: &str) -> String {
 
 /// Strip exactly one structural separator from the tail of a body slice.
 ///
-/// Every card-yaml block requires a blank line immediately above it. When a
-/// body is followed by another block, the raw slice ends with that blank
-/// line's terminator: exactly one `\n` or `\r\n`. This helper strips that
-/// single line ending so stored bodies contain only authored content. The
-/// emitter re-adds the separator on output via `ensure_blank_before_fence`.
+/// A body followed by another block ends with that block's required blank line,
+/// exactly one `\n` or `\r\n`, so stripping it leaves only authored content.
+/// The emitter re-adds it via `ensure_blank_before_fence`.
 fn strip_blank_separator(body: &str) -> &str {
     if let Some(rest) = body.strip_suffix("\r\n") {
         rest
@@ -102,12 +78,11 @@ pub(super) struct MetadataBlock {
     pub(super) pre_warnings: Vec<Diagnostic>,
 }
 
-/// Process one recognised `~~~` card-yaml block and build a [`MetadataBlock`].
+/// Process one recognised card-yaml block into a [`MetadataBlock`].
 ///
-/// `block_start` / `block_end` bound the whole block (used to slice card
-/// bodies). `content_start` / `content_end` bound the block content between
-/// the `~~~` opener and its `~~~` closer. `block_index` is used only
-/// for YAML-error location context.
+/// `block_start` / `block_end` bound the whole block; `content_start` /
+/// `content_end` the content between the fences. `block_index` is used only for
+/// YAML-error location context.
 pub(super) fn build_block(
     markdown: &str,
     block_start: usize,
@@ -118,7 +93,6 @@ pub(super) fn build_block(
 ) -> Result<MetadataBlock, ParseError> {
     let raw_content = &markdown[content_start..content_end];
 
-    // Check YAML size limit (spec §8)
     if raw_content.len() > crate::error::MAX_YAML_SIZE {
         return Err(ParseError::InputTooLarge {
             size: raw_content.len(),
@@ -170,8 +144,8 @@ pub(super) fn build_block(
         (meta, Some(parsed))
     };
 
-    // Per-block field-count check (spec §8): applied after `$`-key
-    // extraction so the user-data field count is what is bounded.
+    // Field-count check (spec §8), after `$`-key extraction so the bound is on
+    // user-data fields.
     if let Some(serde_json::Value::Object(ref map)) = yaml_value {
         if map.len() > crate::error::MAX_FIELD_COUNT {
             return Err(ParseError::InputTooLarge {
@@ -193,9 +167,8 @@ pub(super) fn build_block(
     })
 }
 
-/// Decompose markdown, discarding warnings. Test-only convenience over
-/// [`decompose_with_warnings`]; the public entry [`super::Document::parse`]
-/// keeps the warnings, so nothing in the shipping build discards them here.
+/// Test-only convenience over [`decompose_with_warnings`]; the shipping entry
+/// [`super::Document::parse`] keeps the warnings.
 #[cfg(test)]
 pub(super) fn decompose(markdown: &str) -> Result<Document, crate::error::ParseError> {
     decompose_with_warnings(markdown).map(|(doc, _)| doc)
@@ -206,7 +179,6 @@ pub(super) fn decompose(markdown: &str) -> Result<Document, crate::error::ParseE
 pub(super) fn decompose_with_warnings(
     markdown: &str,
 ) -> Result<(Document, Vec<Diagnostic>), crate::error::ParseError> {
-    // Strip a leading UTF-8 BOM if present.
     let markdown = markdown.strip_prefix('\u{FEFF}').unwrap_or(markdown);
 
     if markdown.trim().is_empty() {
@@ -217,7 +189,6 @@ pub(super) fn decompose_with_warnings(
         ));
     }
 
-    // Check input size limit
     if markdown.len() > crate::error::MAX_INPUT_SIZE {
         return Err(crate::error::ParseError::InputTooLarge {
             size: markdown.len(),
@@ -225,8 +196,7 @@ pub(super) fn decompose_with_warnings(
         });
     }
 
-    // Find all card-yaml blocks. The first is the document root; the rest are
-    // composable cards.
+    // The first block is the document root; the rest are composable cards.
     let (blocks, warnings) = find_metadata_blocks(markdown)?;
 
     if blocks.is_empty() {
@@ -235,7 +205,6 @@ pub(super) fn decompose_with_warnings(
         ));
     }
 
-    // The root block must declare a `$quill` reference.
     let root_block = &blocks[0];
     let has_root_quill = root_block
         .meta_items
@@ -249,10 +218,8 @@ pub(super) fn decompose_with_warnings(
         ));
     }
 
-    // The root block's `$kind` is `main` by position (markdown-spec.md §3.3).
-    // An explicit `$kind: main` is accepted; an omitted `$kind` is accepted
-    // and synthesised below at the canonical position; any other value is a
-    // parse error.
+    // The root's `$kind` is `main` by position (markdown-spec.md §3.3): an
+    // omitted one is synthesised below; any other value is a parse error.
     let root_kind = root_block.meta_items.iter().find_map(|m| match m {
         PayloadItem::Kind { value } => Some(value.as_str()),
         _ => None,
@@ -269,11 +236,9 @@ pub(super) fn decompose_with_warnings(
         }
     }
 
-    // Build the root block's payload, then synthesise `$kind: main` if the
-    // source omitted it. Using `set_kind` here inserts at the canonical
-    // position (after `$quill`, before any `$ext`/user fields), so
-    // canonical input round-trips byte-equal and non-canonical input
-    // converges on first emit (markdown-spec.md §9).
+    // `set_kind` inserts at the canonical position, so canonical input
+    // round-trips byte-equal and non-canonical input converges on first emit
+    // (markdown-spec.md §9).
     let mut main_payload = build_payload(
         &root_block.meta_items,
         &root_block.pre_items,
@@ -289,9 +254,7 @@ pub(super) fn decompose_with_warnings(
         warnings.push(w.clone());
     }
 
-    // Global body: between the end of the root block and the start of the
-    // first composable card block (or EOF). Strip the structural blank-line
-    // separator when a block follows.
+    // Global body: root block end to first card block start, or EOF.
     let body_start = blocks[0].end;
     let (body_end, body_is_followed_by_fence) = match blocks.get(1) {
         Some(b) => (b.start, true),
@@ -306,7 +269,6 @@ pub(super) fn decompose_with_warnings(
 
     let main = Card::from_parts(main_payload, import_body_or_parse_error(&global_body)?);
 
-    // Parse composable card blocks (every block after the root) into Cards.
     let mut cards: Vec<Card> = Vec::new();
     for idx in 1..blocks.len() {
         let block = &blocks[idx];
@@ -367,7 +329,6 @@ pub(super) fn decompose_with_warnings(
             warnings.push(w.clone());
         }
 
-        // Card body: between this block's end and the next block's start (or EOF).
         let card_body_start = block.end;
         let has_next_block = idx + 1 < blocks.len();
         let card_body_end = if has_next_block {
@@ -393,16 +354,8 @@ pub(super) fn decompose_with_warnings(
     Ok((doc, warnings))
 }
 
-/// Build a unified [`Payload`] from the pre-scan items, the typed `$`
-/// system-metadata items, and the parsed YAML mapping.
-///
-/// Walks `pre_items` in source order. Each non-`$` field pulls its typed
-/// value from `yaml_value`; each `$` field is replaced with the matching
-/// typed system [`PayloadItem`] from `meta_items`; comments pass through
-/// verbatim. Any parsed-map keys the pre-scan didn't capture are appended
-/// at the end so we never silently drop values.
-/// Validate a user field entering the payload from the parse path,
-/// mapping a violation to `ParseError::InvalidStructure` (spec §10).
+/// Validate a user field entering the payload from the parse path, mapping a
+/// violation to `ParseError::InvalidStructure` (spec §10).
 fn validate_parsed_field(key: &str, value: &serde_json::Value) -> Result<(), ParseError> {
     use crate::document::edit::{validate_field, FieldViolation};
     validate_field(key, value).map_err(|v| match v {
@@ -435,11 +388,9 @@ fn build_payload(
         }
     };
 
-    // Look up typed `$` items by `$key`. Each entry is consumed at most
-    // once; anything left over at the end is appended in source order.
-    // `extract_meta_items` only ever returns the closed-set system
-    // variants; assert that contract here so a regression upstream is
-    // loud, not a silent drop of user fields/comments.
+    // Typed `$` items, consumed at most once each; leftovers are appended in
+    // source order. The assert pins `extract_meta_items` to the closed set, so a
+    // regression upstream is loud rather than a silent drop.
     let mut typed_by_key: HashMap<&'static str, PayloadItem> =
         HashMap::with_capacity(meta_items.len());
     for m in meta_items {
@@ -491,10 +442,8 @@ fn build_payload(
         }
     }
 
-    // Drain any typed `$` entries the prescan didn't reach (shouldn't
-    // happen in well-formed input but keeps the conversion total). Walk
-    // `meta_items` in source order so the relative `$` ordering is
-    // preserved.
+    // Drain `$` entries the prescan didn't reach, in source order, so the
+    // conversion stays total.
     for meta in meta_items {
         let k = meta_key(meta).expect("see invariant above");
         if typed_by_key.remove(k).is_some() {
@@ -502,7 +451,6 @@ fn build_payload(
         }
     }
 
-    // Append any parsed-map keys that the pre-scan didn't capture.
     for (key, value) in &mapping {
         if consumed_user_keys.contains(key) {
             continue;
@@ -518,8 +466,6 @@ fn build_payload(
         });
     }
 
-    // Partition the prescan's flat `nested_comments` onto the matching
-    // Field / Ext items (paths become relative to the owning value).
     Ok(Payload::from_items_with_flat_nested(
         items,
         pre_nested_comments.to_vec(),
@@ -527,11 +473,8 @@ fn build_payload(
 }
 
 /// Apply the nested `!must_fill` markers rooted at `key` onto `value`'s tree.
-///
-/// Paths in `pre_nested_fills` are rooted at the owning top-level key; the
-/// first segment is stripped and the remainder addresses a node within
-/// `value`. `!must_fill` on a mapping node is rejected, mirroring the
-/// top-level rule.
+/// Paths are rooted at the owning top-level key, so the first segment is
+/// stripped. A marker on a mapping node is rejected, as at the top level.
 fn apply_nested_fills(
     key: &str,
     value: &mut QuillValue,
@@ -550,10 +493,8 @@ fn apply_nested_fills(
                 render_path(path)
             )));
         }
-        // The path came from our own prescan over the same source, so it must
-        // resolve against the parsed tree. A miss means prescan and the YAML
-        // parser disagreed on structure: surface it loudly in dev/test builds
-        // rather than silently dropping the marker.
+        // The path came from prescan over the same source, so a miss means
+        // prescan and the YAML parser disagreed on structure.
         let applied = value.set_fill_at(rest);
         debug_assert!(
             applied,

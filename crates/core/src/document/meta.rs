@@ -1,15 +1,7 @@
-//! Validation helpers for card-yaml `$`-prefixed system metadata.
-//!
-//! The closed set of `$` keys (`$quill`, `$kind`, `$ext`, `$seed`) and
-//! their typed values are stored as variants of [`super::PayloadItem`] inside a
-//! card's unified [`super::Payload`] item list: they sit alongside user
-//! fields and comments in source order, which is what makes inline-comment
-//! preservation symmetric across the `$`/non-`$` boundary.
-//!
-//! This module holds the validation primitives shared between the parser,
-//! the editor surface, and the storage DTO: stripping `$` keys out of a
-//! parsed YAML mapping into typed [`super::PayloadItem`]s, and checking
-//! `$kind` name conformance.
+//! Validation helpers for card-yaml `$`-prefixed system metadata, shared by the
+//! parser, the editor surface, and the storage DTO: stripping the closed set of
+//! `$` keys out of a parsed YAML mapping into typed [`super::PayloadItem`]s, and
+//! checking `$kind` name conformance.
 
 use std::str::FromStr;
 
@@ -31,20 +23,14 @@ pub(super) fn meta_key(item: &PayloadItem) -> Option<&'static str> {
     }
 }
 
-/// Walk the parsed YAML payload, extracting `$`-prefixed reserved keys into
-/// typed system-metadata [`PayloadItem`]s (`Quill` / `Kind` / `Meta`)
-/// in source order. The keys are removed from `payload` so the caller can
-/// build the user-field portion from what remains.
+/// Extract `$`-prefixed reserved keys into typed system-metadata
+/// [`PayloadItem`]s in source order, removing them from `payload` so the caller
+/// builds the user-field portion from what remains.
 ///
-/// The accepted keys are the closed set `{$quill, $kind, $ext, $seed}`.
-/// Any other `$`-prefixed key is a parse error. Duplicate keys cannot arise
-/// here: the YAML parser rejects them as duplicate mapping keys before
-/// this function runs.
-///
-/// `$quill` and `$kind` require string scalars (non-string YAML types are
-/// rejected). `$ext` and `$seed` each require a YAML mapping (object); `$ext`
-/// contents are carried opaquely, while `$seed` is a map keyed by card-kind
-/// interpreted by the seeding layer.
+/// The accepted keys are the closed set `{$quill, $kind, $ext, $seed}`; any
+/// other `$` key is a parse error. `$quill` and `$kind` require string scalars,
+/// `$ext` and `$seed` a mapping. Duplicates cannot arise here: the YAML parser
+/// rejects them first.
 pub(super) fn extract_meta_items(payload: &mut JsonValue) -> Result<Vec<PayloadItem>, ParseError> {
     let map = match payload {
         JsonValue::Object(m) => m,
@@ -160,12 +146,9 @@ pub fn is_valid_kind_name(name: &str) -> bool {
     true
 }
 
-/// Validate a composable card kind: must match `[a-z_][a-z0-9_]*` and must
-/// not be the reserved root kind `"main"`.
-///
-/// Single source of truth for the composable-kind rule, used by
-/// [`crate::Card::new`], [`crate::Document::set_card_kind`], and the storage
-/// DTO conversion so the rule cannot drift between editor and reader paths.
+/// Validate a composable card kind: `[a-z_][a-z0-9_]*`, and not the reserved
+/// root kind `"main"`. The single source of truth for the rule, so it cannot
+/// drift between the editor and reader paths.
 pub fn validate_composable_kind(kind: &str) -> Result<(), CardKindError> {
     if !is_valid_kind_name(kind) {
         return Err(CardKindError::InvalidName);
