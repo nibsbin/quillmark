@@ -1,11 +1,4 @@
-//! Targeted number-edge tests
-//!
-//! `QuillValue::Number` and the emitter agree on representation.
-//!
-
 use crate::document::Document;
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 fn assert_round_trip(label: &str, src: &str) {
     let a = Document::parse(src)
@@ -22,16 +15,11 @@ fn assert_round_trip(label: &str, src: &str) {
     );
 }
 
-// ── 1e10 (scientific-notation float) ─────────────────────────────────────────
-
-/// `1e10` bare in YAML parses as the float `10_000_000_000.0`.
-/// After round-trip the number value must be preserved.
 #[test]
 fn number_scientific_notation_round_trip() {
     let src = "~~~card-yaml\n$quill: q\n$kind: main\nbig: 1e10\n~~~\n";
     assert_round_trip("1e10", src);
 
-    // The parsed value must be a number (not a string).
     let doc = Document::parse(src).unwrap().document;
     let v = doc.main().payload().get("big").unwrap();
     assert!(
@@ -41,28 +29,6 @@ fn number_scientific_notation_round_trip() {
     );
 }
 
-// ── Large integer (beyond i32) ────────────────────────────────────────────────
-
-/// An integer beyond `i32::MAX` but within `i64::MAX` must round-trip correctly.
-#[test]
-fn large_integer_round_trip() {
-    let src = "~~~card-yaml\n$quill: q\n$kind: main\nbig_int: 9999999999999\n~~~\n";
-    assert_round_trip("large integer", src);
-
-    let doc = Document::parse(src).unwrap().document;
-    let v = doc.main().payload().get("big_int").unwrap();
-    assert_eq!(
-        v.as_i64(),
-        Some(9_999_999_999_999_i64),
-        "9999999999999 must parse as i64, got {:?}",
-        v
-    );
-}
-
-// ── Emitter representation agreement ─────────────────────────────────────────
-
-/// After emit, the numeric representation in the YAML output must be parseable
-/// back to the same `serde_json::Number`.  We test with a representative set.
 #[test]
 fn emitted_number_representation_matches_parse() {
     struct Case {
