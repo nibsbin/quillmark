@@ -396,9 +396,7 @@ impl SessionHandle for TypstSession {
 }
 
 impl TypstSession {
-    /// Regions for the `field:`-bound form-field widgets of the live compile.
-    /// The single derivation `regions` and `field_at` both read, so widget
-    /// geometry cannot drift between the two queries.
+    /// The single derivation `regions` and `field_at` both read.
     fn widget_regions(&self) -> Vec<quillmark_core::RenderedRegion> {
         overlay::build_field_specs(&self.document, &self.field_placements)
             .map(|specs| quillmark_pdf::regions_of(&specs))
@@ -406,9 +404,8 @@ impl TypstSession {
     }
 }
 
-/// The world's current helper `lib.typ` [`Source`](typst::syntax::Source),
-/// snapshotted right after a successful compile, the text the served
-/// document's spans resolve against.
+/// Snapshotted right after a successful compile: the text the served document's
+/// spans resolve against.
 fn helper_source(world: &world::QuillWorld) -> Result<typst::syntax::Source, RenderError> {
     use typst::World as _;
     world
@@ -456,8 +453,7 @@ impl Backend for TypstBackend {
                     )
                 },
             )?;
-        // The plate is static for the session, so its direct scalar
-        // reference sites are windowed once here.
+        // The plate is static for the session: window its scalar sites once.
         let scalar_windows: Vec<overlay::FieldWindow> = {
             use typst::World as _;
             let main_id = world.main();
@@ -504,20 +500,14 @@ impl Backend for TypstBackend {
 }
 
 impl Default for TypstBackend {
-    /// Creates a new [`TypstBackend`] instance.
     fn default() -> Self {
         Self
     }
 }
 
-/// Read the Typst plate (template) this quill renders through.
-///
-/// The plate is a Typst-only notion, not a universal backend input: its
-/// filename is declared under the `typst:` backend-config section as
-/// `plate_file`, and the source lives in the quill's file bundle. The backend
-/// resolves it here, the same way `pdfform` resolves its own `form.pdf` /
-/// `form.json`. A quill that declares no `plate_file` renders through an empty
-/// plate (`""`).
+/// The plate is a Typst-only notion: its filename is declared under the
+/// `typst:` backend-config section as `plate_file` and the source lives in the
+/// quill's file bundle. A quill declaring no `plate_file` renders an empty one.
 fn read_plate(source: &Quill) -> Result<String, RenderError> {
     let plate_file = source
         .config()
@@ -551,9 +541,7 @@ fn engine_err(code: &str, message: impl Into<String>) -> RenderError {
     )
 }
 
-/// Check if a field schema indicates richtext content: `contentMediaType =
-/// application/quillmark-content+json` (the value crossing the seam is a
-/// canonical content object, lowered to markup at codegen).
+/// `contentMediaType = application/quillmark-content+json`.
 fn is_richtext_field(field_schema: &serde_json::Value) -> bool {
     field_schema
         .get("contentMediaType")
@@ -562,11 +550,7 @@ fn is_richtext_field(field_schema: &serde_json::Value) -> bool {
         .unwrap_or(false)
 }
 
-/// Check if a field schema indicates an array of richtext elements.
-///
-/// True when the field is `{type: array, items: {contentMediaType:
-/// application/quillmark-content+json}}`; i.e. an `array<richtext>` field. Each
-/// element is a content object lowered to a content block individually.
+/// `{type: array, items: {contentMediaType: …}}`: an `array<richtext>` field.
 fn is_richtext_array_field(field_schema: &serde_json::Value) -> bool {
     field_schema
         .get("type")
@@ -579,11 +563,8 @@ fn is_richtext_array_field(field_schema: &serde_json::Value) -> bool {
             .unwrap_or(false)
 }
 
-/// Check if a field schema is a richtext (or `array<richtext>`) field whose
-/// (element) content is `inline`: carries `quillmark:inline: true`
-/// ([`QUILLMARK_INLINE_KEY`]). An inline field's content lowers to pure inline
-/// Typst markup (no `parbreak`); the flag sits on the richtext schema itself,
-/// and for an array on its `items` (mirroring `build_transform_schema`).
+/// Carries [`QUILLMARK_INLINE_KEY`], on the richtext schema itself or, for an
+/// array, on its `items` (mirroring `build_transform_schema`).
 fn is_inline_richtext_field(field_schema: &serde_json::Value) -> bool {
     fn marked_inline(fs: &serde_json::Value) -> bool {
         fs.get(QUILLMARK_INLINE_KEY).and_then(|v| v.as_bool()) == Some(true)
@@ -596,14 +577,12 @@ fn is_inline_richtext_field(field_schema: &serde_json::Value) -> bool {
                 .unwrap_or(false))
 }
 
-/// Check if a field schema is a `type: date` field (`format = "date"`): the
-/// date-only type, lowered to a three-component `datetime(..)`.
+/// `format = "date"`: the date-only type, lowered to `datetime(y, m, d)`.
 fn is_date_field(field_schema: &serde_json::Value) -> bool {
     has_format(field_schema, "date")
 }
 
-/// Check if a field schema is a `type: datetime` field (`format = "date-time"`):
-/// the wall-clock type, lowered to a six-component `datetime(..)`.
+/// `format = "date-time"`: the wall-clock type, lowered to six components.
 fn is_datetime_field(field_schema: &serde_json::Value) -> bool {
     has_format(field_schema, "date-time")
 }
@@ -612,10 +591,7 @@ fn has_format(field_schema: &serde_json::Value, format: &str) -> bool {
     field_schema.get("format").and_then(|v| v.as_str()) == Some(format)
 }
 
-/// Names of the richtext / `richtext[]` fields in a schema `properties` map:
-/// the fields whose values carry backend markup for the helper to `eval`.
-/// Names of the schema `properties` whose field schema satisfies `predicate`,
-/// in map order. Shared spine of the field-class selectors below.
+/// Names of the schema `properties` satisfying `predicate`, in map order.
 fn field_names_where(
     properties: &serde_json::Map<String, serde_json::Value>,
     predicate: impl Fn(&serde_json::Value) -> bool,
@@ -633,29 +609,22 @@ fn content_field_names(properties: &serde_json::Map<String, serde_json::Value>) 
     })
 }
 
-/// Names of the `inline` richtext / `array<richtext(inline)>` fields: a subset
-/// of [`content_field_names`] whose content lowers to pure inline markup.
+/// A subset of [`content_field_names`] lowering to pure inline markup.
 fn inline_field_names(properties: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
     field_names_where(properties, is_inline_richtext_field)
 }
 
-/// Names of the `type: date` fields in a schema `properties` map.
 fn date_field_names(properties: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
     field_names_where(properties, is_date_field)
 }
 
-/// Names of the `type: datetime` fields in a schema `properties` map.
 fn datetime_field_names(properties: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
     field_names_where(properties, is_datetime_field)
 }
 
-/// Names of the array-typed fields in a schema `properties` map: the fields
-/// whose elements are addressable by index suffix (`field.0`, `field.1`, ...).
-/// `form-field`'s path validator uses this to reject an index suffix on a
-/// scalar field, where no element exists for the address to resolve to. Any
-/// array qualifies, matching the pdfform resolver's shallow-path grammar:
-/// the content codegen only *produces* eval sites for `richtext[]` elements,
-/// but a widget binding of a plain array element is a real, routable address.
+/// The fields addressable by index suffix (`field.0`). `form-field`'s path
+/// validator uses this to reject an index suffix on a scalar field. Any array
+/// qualifies, matching the pdfform resolver's shallow-path grammar.
 fn array_field_names(properties: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
     field_names_where(properties, |fs| {
         fs.get("type").and_then(|v| v.as_str()) == Some("array")
