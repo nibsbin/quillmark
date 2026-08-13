@@ -55,9 +55,8 @@ pub use session::{
     ApplyError, Assoc, ChangeBundle, ChangeSet, Delta, IslandOp, LineOp, LiveSession, MarkOp, Op,
 };
 
-/// The canonical content model: re-exported so consumers of the
-/// document mutators ([`Card::overwrite_body`], [`Card::apply_body_change`])
-/// can name the type without depending on `quillmark-content` directly.
+/// The canonical content model, re-exported so a consumer of the document
+/// mutators need not depend on `quillmark-content` directly.
 pub use quillmark_content::Content;
 
 pub mod quill;
@@ -66,9 +65,7 @@ pub use quill::{
     ResolvedField, ResolvedMain, QuillIgnore, STANDARD_METADATA_KEYS,
 };
 /// The schema model behind [`Quill::config`], and the error
-/// [`QuillConfig::validate_document`] returns. Nameable from the root: reading
-/// a quill's schema, or writing a signature over the validation error, needs no
-/// `quill::` path.
+/// [`QuillConfig::validate_document`] returns.
 pub use quill::{CardSchema, FieldSchema, FieldType, QuillConfig, ValidationError};
 
 pub mod value;
