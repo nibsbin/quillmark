@@ -1,16 +1,10 @@
 /**
- * The initialization contract.
- *
- * The builds are `--target web` (scripts/build-wasm.sh), so the classes export
- * synchronously and the instance behind them arrives via `init`. This suite
- * pins both halves of that: the gate is the only door to the core surface, and
- * it is idempotent, concurrency-safe, and identical in every environment.
+ * The initialization contract: the gate is the only door to the core surface,
+ * and it is idempotent, concurrency-safe, and identical in every environment.
  *
  * Its own file because the assertions are init-order-sensitive: the memo and
- * source-conflict cases need a module registry where nothing has initialized
- * yet, which vitest's per-file isolation provides and a shared suite would not.
- *
- * Aliased to pkg/runtime/runtime.js in vitest.config.js.
+ * source-conflict cases need a module registry where nothing has initialized,
+ * which vitest's per-file isolation provides.
  */
 import { describe, it, expect } from 'vitest'
 import { execFileSync } from 'node:child_process'

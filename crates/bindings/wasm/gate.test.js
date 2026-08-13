@@ -1,19 +1,11 @@
 /**
- * The pre-init contract: what the gate does NOT cover.
+ * The pre-init contract: what the gate does NOT cover. These cases drive the
+ * whole static surface before anything initializes, so "the pre-init mistake is
+ * not expressible" is a property under test.
  *
- * `init` gates every value needing the core instance (init.test.js § "the gated
- * surface" derives that set and pins it). What stays a static export is held out
- * on the grounds that it reaches wasm only through an argument a caller cannot
- * produce without having awaited — see runtime.js § "Initialization". These
- * cases drive the WHOLE static surface before anything initializes, so "the
- * pre-init mistake is not expressible" is a property under test.
- *
- * Its own file for init.test.js's reason: the cases need a module registry where
- * nothing has initialized, which vitest's per-file isolation provides. Sharing a
- * file with a case that awaits `init` would make the coverage positional, since
- * every probe below passes once core is live.
- *
- * Aliased to pkg/runtime/runtime.js in vitest.config.js.
+ * Its own file because the cases need a module registry where nothing has
+ * initialized; sharing a file with a case that awaits `init` would make the
+ * coverage positional, since every probe passes once core is live.
  */
 import { describe, it, expect, beforeEach } from 'vitest'
 import * as runtime from '@quillmark-wasm/runtime'

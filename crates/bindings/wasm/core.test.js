@@ -1,12 +1,7 @@
 /**
- * Core-build smoke tests.
- *
- * Exercises the Typst-less `@quillmark/wasm/core` bundle: a `Quill` loads,
- * validates, seeds, and exposes schema/blueprint/metadata with NO engine and NO
- * render surface. The render suite (basic/canvas) covers the superset.
- *
- * Setup: imports from `@quillmark-wasm/core` (aliased to pkg/core/wasm.js in
- * vitest.config.js): the no-features build with Typst excluded.
+ * The Typst-less `@quillmark/wasm/core` bundle: a `Quill` loads, validates,
+ * seeds, and exposes schema/blueprint/metadata with no engine and no render
+ * surface. The render suites cover the superset.
  */
 import { describe, it, expect } from 'vitest'
 import * as core from '@quillmark-wasm/core'
