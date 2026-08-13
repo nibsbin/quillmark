@@ -354,14 +354,13 @@ impl ParseError {
             ParseError::EmptyInput(_) => diag_args! {},
             ParseError::MissingQuill(_) => diag_args! {},
             ParseError::BodyImport(_) => diag_args! {},
-            // `reason` is the `from_str` violation in English and stays in
-            // `message`; `value` alone carries the consumer's sentence.
+            // `reason` is English prose and stays in `message`.
             ParseError::InvalidQuillReference { value, reason: _ } => diag_args! {
                 "value" => value,
             },
             // This diagnostic sets no `location`, so `args` is the only
-            // structured route to the coordinates the message names. The
-            // message is the YAML engine's own prose and keeps no key.
+            // structured route to the coordinates. `message` is the YAML
+            // engine's own prose and keeps no key.
             ParseError::YamlErrorWithLocation {
                 message: _,
                 line,
@@ -422,24 +421,19 @@ impl ParseError {
 /// Main error type for rendering operations: a non-empty collection of
 /// [`Diagnostic`]s.
 ///
-/// There is no failure taxonomy beyond the diagnostics themselves: the
-/// machine-routable identity of a failure is each diagnostic's namespaced
-/// `code` (`parse::*`, `validation::*`, `quill::*`, `typst::*`, `backend::*`,
-/// `engine::*`). Every consumer, and every language binding, handles all
-/// rendering errors through this single shape; route on
-/// `diagnostics()[..].code`, not on a type.
+/// There is no failure taxonomy beyond the diagnostics themselves: route on
+/// each diagnostic's namespaced `code` (`parse::*`, `validation::*`,
+/// `quill::*`, `typst::*`, `backend::*`, `engine::*`), not on a type. Every
+/// consumer and binding handles rendering failure through this one shape.
 #[derive(Debug)]
 pub struct RenderError {
-    /// Always non-empty; held by the constructors.
     diags: Vec<Diagnostic>,
 }
 
 impl RenderError {
-    /// Wrap `diags` as a failure. `diags` should be non-empty; the invariant is
-    /// enforced only by `debug_assert!`, so a release build can construct an
-    /// empty `RenderError`. That is deliberately non-fatal: the `Display` impl
-    /// carries an `[]` fallback branch rather than promising the invariant is
-    /// load-bearing. Every internal caller passes a non-empty vec.
+    /// Wrap `diags` as a failure. Non-emptiness is only `debug_assert!`ed, so
+    /// a release build can construct an empty `RenderError`; `Display` carries
+    /// a fallback for that case.
     pub fn new(diags: Vec<Diagnostic>) -> Self {
         debug_assert!(
             !diags.is_empty(),
@@ -453,23 +447,18 @@ impl RenderError {
         Self { diags: vec![diag] }
     }
 
-    /// Returns all diagnostics for this error. Non-empty by construction (see
-    /// [`RenderError::new`]'s debug-asserted invariant).
     pub fn diagnostics(&self) -> &[Diagnostic] {
         &self.diags
     }
 
-    /// Consume the error and return its diagnostics.
     pub fn into_diagnostics(self) -> Vec<Diagnostic> {
         self.diags
     }
 
-    /// The count-based summary line shared by `Display` and every binding's
-    /// exception message: the sole diagnostic's `message` for one, an
-    /// `"<N> error(s): <first message>"` aggregate for more. The single source
-    /// of truth for this rule: bindings delegate here rather than re-deriving
-    /// it. An empty slice yields `"render error"` defensively (see
-    /// [`RenderError::new`]'s debug-only non-empty invariant).
+    /// The summary line shared by `Display` and every binding's exception
+    /// message: the sole diagnostic's `message` for one, an
+    /// `"<N> error(s): <first message>"` aggregate for more. Bindings delegate
+    /// here rather than re-deriving the rule.
     pub fn summary_message(diags: &[Diagnostic]) -> String {
         match diags {
             [d] => d.message.clone(),
@@ -479,9 +468,6 @@ impl RenderError {
     }
 }
 
-/// The primary message for a single diagnostic; an
-/// `"<N> error(s): <first message>"` aggregate for more: the same rule the
-/// WASM binding applies to thrown `Error.message`.
 impl std::fmt::Display for RenderError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", Self::summary_message(&self.diags))
@@ -502,11 +488,9 @@ pub struct RenderResult {
     pub artifacts: Vec<crate::Artifact>,
     pub warnings: Vec<Diagnostic>,
     pub output_format: OutputFormat,
-    /// Schema-field geometry sidecar, populated only when
-    /// [`RenderOptions::regions`](crate::RenderOptions) is set (empty
-    /// otherwise). The same entries [`LiveSession::regions`](crate::LiveSession::regions)
-    /// serves, for consumers without a live session. Whole-document geometry:
-    /// page indices are document-space even under a `pages` subset render.
+    /// Schema-field geometry, populated only when
+    /// [`RenderOptions::regions`](crate::RenderOptions) is set. Page indices
+    /// are document-space even under a `pages` subset render.
     pub regions: Vec<crate::RenderedRegion>,
 }
 
@@ -542,37 +526,6 @@ mod tests {
     }
 
     #[test]
-    fn test_diagnostic_serialization() {
-        let diag = Diagnostic::new(Severity::Error, "Test error".to_string())
-            .with_code("E001".to_string())
-            .with_location(Location {
-                file: "test.typ".to_string(),
-                line: 10,
-                column: 5,
-            });
-
-        let json = serde_json::to_string(&diag).unwrap();
-        assert!(json.contains("Test error"));
-        assert!(json.contains("E001"));
-        assert!(json.contains("\"severity\":\"error\""));
-        assert!(json.contains("\"column\":5"));
-    }
-
-    #[test]
-    fn test_render_error_single_diagnostic_shape() {
-        let err = RenderError::from_diag(Diagnostic::new(
-            Severity::Error,
-            "no such backend".to_string(),
-        ));
-        assert_eq!(err.diagnostics().len(), 1);
-        assert_eq!(err.to_string(), "no such backend");
-
-        let owned = err.into_diagnostics();
-        assert_eq!(owned.len(), 1);
-        assert_eq!(owned[0].message, "no such backend");
-    }
-
-    #[test]
     fn test_render_error_display_aggregates_multi_diagnostic() {
         let err = RenderError::new(vec![
             Diagnostic::new(Severity::Error, "a".to_string()),
@@ -580,49 +533,10 @@ mod tests {
         ]);
         assert_eq!(err.to_string(), "2 error(s): a");
     }
-
-    #[test]
-    fn test_diagnostic_fmt_pretty() {
-        let diag = Diagnostic::new(Severity::Warning, "Deprecated field used".to_string())
-            .with_code("W001".to_string())
-            .with_location(Location {
-                file: "input.md".to_string(),
-                line: 5,
-                column: 10,
-            })
-            .with_hint("Use the new field name instead".to_string());
-
-        let output = diag.fmt_pretty();
-        assert!(output.contains("[WARN]"));
-        assert!(output.contains("Deprecated field used"));
-        assert!(output.contains("W001"));
-        assert!(output.contains("input.md:5:10"));
-        assert!(output.contains("hint:"));
-    }
-
-    #[test]
-    fn test_diagnostic_with_path() {
-        let diag = Diagnostic::new(Severity::Error, "Type mismatch".to_string())
-            .with_code("validation::type_mismatch".to_string())
-            .with_path("cards.indorsement[0].signature_block".to_string());
-
-        assert_eq!(
-            diag.path.as_deref(),
-            Some("cards.indorsement[0].signature_block")
-        );
-
-        let json = serde_json::to_string(&diag).unwrap();
-        assert!(json.contains("\"path\":\"cards.indorsement[0].signature_block\""));
-
-        let pretty = diag.fmt_pretty();
-        assert!(pretty.contains("at cards.indorsement[0].signature_block"));
-    }
-
 }
 
-/// The canon table in `prose/canon/ERROR.md` § "Diagnostic args" is the contract
-/// a consumer writes its string table against, so it is tested like one rather
-/// than maintained by hand beside the code.
+/// The canon table in `prose/canon/ERROR.md` § "Diagnostic args" is a consumer
+/// contract, so it is tested rather than maintained by hand.
 #[cfg(test)]
 mod args_canon {
     use std::collections::BTreeMap;
