@@ -581,12 +581,8 @@ impl<'a> Emit<'a> {
         // The scratch buffer's bytes land at `base` once appended, so each run's
         // generated span is `base + buf.len()`, absolute into `self.out`.
         let base = self.out.len();
-        // Whether this segment's markup opens at column 0 of a generated source
-        // line: the only place Typst's line-anchored syntax (heading `= `, list
-        // `- `/`+ `/`N. `, term `/ `) is active. True for a paragraph/island
-        // (preceded by `\n\n`, or the very first block) and a quote/list-item
-        // body's first line (preceded by `[\n`/`\n` + indent); false for heading
-        // content (preceded by its `= ` marker) and any run after inline markup.
+        // Typst's line-anchored syntax is active only at column 0 of a
+        // generated source line.
         let at_col0 = self.out.trim_end_matches([' ', '\t']).ends_with('\n') || self.out.is_empty();
         let mut buf = String::new();
         sweep_marks(lo, hi, &wraps, &mut buf, |buf, pos| {
@@ -610,16 +606,12 @@ impl<'a> Emit<'a> {
                 runs.push((cs..ce, rg0..rg1, EscapeCtx::StringLit));
                 return ce;
             }
-            // Plain text run up to the next boundary.
             let re = next_boundary(pos, hi, &self.chars, &wraps, &codes);
             let content: String = self.chars[pos..re].iter().collect();
-            // A run landing at column 0 whose text opens a line-anchored token
-            // renders as that block, not literal text. Neutralize with one `\`
-            // (a valid escape for every trigger char, verified to render the
-            // exact literal) emitted *outside* the run's `generated` window, so
-            // `generated == escape_markup(content)` (and the escape-scan) stay exact.
-            // `buf.is_empty()` gates to the segment's first content: any wrap
-            // (`#strong[`) already opened here would put the token mid-line.
+            // The neutralizing `\` sits *outside* the run's `generated` window,
+            // so `generated == escape_markup(content)` stays exact.
+            // `buf.is_empty()` gates to the segment's first content: a wrap
+            // already opened here would put the token mid-line.
             if at_col0 && buf.is_empty() && opens_line_anchor(&content) {
                 buf.push('\\');
             }
@@ -633,7 +625,6 @@ impl<'a> Emit<'a> {
         runs
     }
 
-    /// The island backing the slot at USV position `pos`, rendered to Typst.
     fn island_markup(&self, pos: usize) -> String {
         let idx = self.slot_offsets.partition_point(|&p| p < pos);
         let Some(isl) = self.rt.islands.get(idx) else {
@@ -642,15 +633,14 @@ impl<'a> Emit<'a> {
         match KnownIslandType::parse(&isl.island_type) {
             Some(KnownIslandType::Image) => image_markup(&isl.props),
             Some(KnownIslandType::Table) => table_markup(&isl.props),
-            // Unknown island types emit nothing (parallel to the HTML rule). A
-            // new known type is a compile error here, not silence.
+            // Parallel to the HTML rule; a new known type is a compile error
+            // here, not silence.
             None => String::new(),
         }
     }
 }
 
-/// A wrapping mark clipped to a segment: its span, kind-ord tie-break, and open
-/// delimiter (its close is always `]`).
+/// A wrapping mark clipped to a segment; its close is always `]`.
 struct Wrap {
     start: usize,
     end: usize,
@@ -668,12 +658,9 @@ fn wrap_open(kind: &MarkKind) -> String {
     }
 }
 
-/// Clip wrapping marks so none crosses the interior of an atomic `#raw(...)`
-/// code span (`start`→`ce`, `end`→`cs`), then drop any wrap a span swallowed
-/// whole. Enforces the atomic balance via the shared
-/// [`clip_range_to_atomic`](quillmark_content::export::clip_range_to_atomic),
-/// the same rule this crate's inline emitter and richtext's export both apply,
-/// here against code spans only (export also clips against link text).
+/// Clip wrapping marks out of atomic `#raw(...)` interiors and drop any a span
+/// swallowed whole, via the shared
+/// [`clip_range_to_atomic`](quillmark_content::export::clip_range_to_atomic).
 fn clip_wraps_to_codes(wraps: &mut Vec<Wrap>, codes: &[(usize, usize)]) {
     for w in wraps.iter_mut() {
         quillmark_content::export::clip_range_to_atomic(&mut w.start, &mut w.end, codes);
@@ -682,14 +669,11 @@ fn clip_wraps_to_codes(wraps: &mut Vec<Wrap>, codes: &[(usize, usize)]) {
 }
 
 /// The mark boundary sweep, shared by prose inline emission and table-cell
-/// rendering. Walks `[lo, hi)` opening `wraps` (longer span first, then kind-ord)
-/// and closing-and-reopening deeper survivors at overlaps: free overlap →
-/// proper nesting. Wrapping delimiters/`]` go to `out`; `emit_run(out, pos)`
-/// writes the content at `pos` (plain run, atomic code, island slot, line break)
-/// and returns the next position. Records nothing itself: the caller's callback
-/// owns any source-map bookkeeping. `wraps` must already be clipped against the
-/// code spans ([`clip_wraps_to_codes`]) so no wrap `end` hides inside a span the
-/// callback's cursor jumps over.
+/// rendering: opens `wraps` (longer span first, then kind-ord) and
+/// closes-and-reopens deeper survivors at overlaps. `emit_run(out, pos)` writes
+/// the content at `pos` and returns the next position. `wraps` must already be
+/// clipped against the code spans ([`clip_wraps_to_codes`]), so no wrap `end`
+/// hides inside a span the callback's cursor jumps over.
 fn sweep_marks(
     lo: usize,
     hi: usize,
@@ -697,16 +681,13 @@ fn sweep_marks(
     out: &mut String,
     mut emit_run: impl FnMut(&mut String, usize) -> usize,
 ) {
-    // Indices into `wraps` for the marks currently open, outermost first. Storing
-    // the index (not just `(end, ord)`) keeps each open mark's identity, so a
-    // reopened mark re-emits its OWN delimiter: two same-`(ord, end)` links with
-    // distinct URLs must not collapse onto whichever mark a bare `(ord, end)`
-    // lookup would hit first.
+    // Open marks, outermost first. Storing the index (not `(end, ord)`) keeps
+    // each mark's identity, so a reopened mark re-emits its OWN delimiter: two
+    // same-`(ord, end)` links with distinct URLs must not collapse.
     let mut stack: Vec<usize> = Vec::new();
     let mut pos = lo;
     while pos <= hi {
-        // Close every mark ending at `pos`; reopen any deeper survivors that do
-        // not (free overlap → proper nesting).
+        // Free overlap → proper nesting.
         if let Some(idx) = stack.iter().position(|&wi| wraps[wi].end == pos) {
             let mut reopen: Vec<usize> = Vec::new();
             while stack.len() > idx {
