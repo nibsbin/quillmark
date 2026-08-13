@@ -1021,7 +1021,7 @@ mod tests {
             "| Status |\n|--------|\n| ✅ Done |",
             "Before.\n\n| A |\n|---|\n| 1 |\n\nAfter.",
             "# Title\n\n| A |\n|---|\n| 1 |",
-            // formatted cells (Option A: cells carry {text, marks}, no re-parse)
+            // formatted cells (carried as {text, marks}, no re-parse)
             "| Name | Note |\n|------|------|\n| **bold** | _italic_ |",
             "| Func | Desc |\n|------|------|\n| `foo()` | does stuff |",
             "| Site |\n|------|\n| [Example](https://example.com) |",

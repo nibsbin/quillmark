@@ -960,7 +960,7 @@ quill:
   name: two_tier_probe
   version: 0.1.0
   backend: typst
-  description: PR-F Unknown-1 two-tier classification probe
+  description: two-tier classification probe
 typst:
   plate_file: plate.typ
 main:
