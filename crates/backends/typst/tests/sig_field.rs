@@ -435,15 +435,11 @@ main:
             r.rect
         );
     }
-    // The unbound widget (no `field:`) is not schema-addressable: no region, and
-    // its `/T` name never leaks as a region key.
     assert!(
         !fields.contains_key("unbound"),
         "an unbound widget exposes no region: {:?}",
         fields.keys().collect::<Vec<_>>()
     );
-    // A bound widget keys only on its schema path: its `/T` name must not also
-    // leak as a region key.
     for t_name in ["txt", "chk", "cho", "sig"] {
         assert!(
             !fields.contains_key(t_name),
