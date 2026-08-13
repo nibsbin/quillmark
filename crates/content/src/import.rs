@@ -236,13 +236,11 @@ struct TableAcc {
     /// inline text + marks with the same [`Inline`] machinery prose uses.
     cell: Option<Inline>,
     /// Open-image nesting inside the current cell. GFM permits inline images in
-    /// cells, but a cell has no island slot to carry one; while `> 0` the image's
-    /// alt flows into the cell as plain text (the degraded projection) and its
-    /// url is dropped. Mirrors the top-level `image_depth` interception.
+    /// cells, but a cell has no island slot to carry one; while `> 0` the
+    /// image's alt flows into the cell as plain text and its url is dropped.
     img_depth: usize,
-    /// Whether any cell dropped an image's url, the island is then minted
-    /// [`Loss::DEGRADED`], not `LOSSLESS`: the markdown/Typst projection carries
-    /// the alt text but not the image.
+    /// Whether any cell dropped an image's url, minting the island
+    /// [`Loss::DEGRADED`] rather than `LOSSLESS`.
     degraded: bool,
 }
 
@@ -298,7 +296,7 @@ impl Builder {
     /// Open a fresh line for a `pending_kind` set at the last block start, or
     /// (defensively) a `default` line if inline content arrives with none
     /// pending and no line open. A no-op when a line is already open and no new
-    /// one is pending: inline content flows onto the current line.
+    /// one is pending.
     fn ensure_open(&mut self, default: LineKind) {
         if let Some((k, cont)) = self.pending.take() {
             self.open_line(k, cont);
@@ -307,9 +305,6 @@ impl Builder {
         }
     }
 
-    /// Append inline text to the current line, stripping any characters the
-    /// content invariants forbid (stray `\r`, stray island slots; stray `\n`
-    /// becomes a space: inline text should carry none).
     fn push_inline(&mut self, s: &str) {
         self.ensure_open(LineKind::Para);
         self.inline.push_text(s);
@@ -343,23 +338,20 @@ impl Builder {
 
     fn open_mark(&mut self, kind: MarkKind) {
         // Resolve any armed line first, so a mark that begins a block records
-        // the position *after* the block's line boundary: not the `\n` before
-        // it. Without this the mark swallows the separator and equal content
-        // from an editor vs from import serializes to different canonical bytes.
+        // the position *after* the block's line boundary. Otherwise the mark
+        // swallows the separator and equal content from an editor vs from
+        // import serializes to different canonical bytes.
         self.ensure_open(LineKind::Para);
         self.inline.open_mark(kind);
     }
 
     fn close_mark(&mut self) {
-        // Well-nested by pulldown: close the innermost open mark.
         self.inline.close_mark();
     }
 
     /// Mint an island of a *known* type: the importer can only produce the
-    /// closed set, so an unknown type can enter the system through storage
-    /// deserialization but never through import. The `isl-{seq}` id is the
-    /// normative deterministic scheme (`DOCUMENT_STORAGE.md` § Island-id
-    /// determinism); minting by position keeps import a pure function.
+    /// closed set, so an unknown type enters only through storage decode.
+    /// Minting `isl-{seq}` by position keeps import a pure function.
     fn mint_island(&mut self, kind: KnownIslandType, props: serde_json::Value, loss: Loss) {
         let id = format!("isl-{}", self.island_seq);
         self.island_seq += 1;
@@ -408,10 +400,9 @@ impl Builder {
                 continue;
             }
 
-            // Table collection routes both structural events (head/row/cell) and
-            // a cell's inline content (text/marks) to the accumulator, so each
-            // cell is stored as canonical `{text, marks}`: no markdown re-parse
-            // downstream.
+            // Table collection routes structural events and cell inline content
+            // to the accumulator, so each cell is stored as canonical
+            // `{text, marks}` with no markdown re-parse downstream.
             if self.table.is_some() {
                 self.table_event(&event, underline);
                 if matches!(event, Event::End(TagEnd::Table)) {
