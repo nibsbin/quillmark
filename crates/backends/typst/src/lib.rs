@@ -160,20 +160,10 @@ pub(crate) fn page_hashes(document: &typst_layout::PagedDocument) -> Vec<u128> {
         .collect()
 }
 
-/// Prepare raw document data for the helper codegen. The seam already carries
-/// the render shape: richtext fields are canonical content JSON, not markdown
-/// to re-parse (lowered to markup at codegen via [`emit::emit_content`]), dates
-/// are strings (lowered to `datetime(..)` at codegen), so there is no
-/// per-field transform here. `meta` is the session's cached [`SchemaMeta`].
-///
-/// The one check kept is a defensive date validation: the coercion layer already
-/// rejects malformed dates before render, but a direct `apply` can hand the
-/// backend uncoerced data, and a bad date surfaces a real diagnostic here rather
-/// than a silent `none` or a cryptic Typst error deep in the compile.
-///
-/// Borrows `json_data` unchanged for the object case (the render input on the
-/// hot `apply`/`open` path); only a non-object input allocates, normalized to an
-/// empty object.
+/// The seam already carries the render shape, so no per-field transform happens
+/// here; the one check kept is defensive date validation, because a direct
+/// `apply` can hand the backend uncoerced data. Borrows `json_data` unchanged
+/// for the object case: only a non-object input allocates.
 fn transformed_data<'a>(
     meta: &SchemaMeta,
     json_data: &'a serde_json::Value,
@@ -184,17 +174,14 @@ fn transformed_data<'a>(
             Ok(Cow::Borrowed(json_data))
         }
         None => {
-            // An empty object has no date fields to validate: return it directly.
             Ok(Cow::Owned(serde_json::Value::Object(serde_json::Map::new())))
         }
     }
 }
 
-/// Reject any date/datetime field whose value is a non-empty string the shared
+/// Rejects any non-empty date/datetime string the shared
 /// [`parse_date`](quillmark_core::quill::parse_date) /
-/// [`parse_datetime`](quillmark_core::quill::parse_datetime) parsers (the same
-/// ones the coercion layer validates with) cannot parse. Walks the top-level
-/// and per-card date and datetime fields, each against its type's grammar.
+/// [`parse_datetime`](quillmark_core::quill::parse_datetime) parsers reject.
 fn validate_date_fields(
     meta: &SchemaMeta,
     obj: &serde_json::Map<String, serde_json::Value>,
@@ -208,8 +195,8 @@ fn validate_date_fields(
             .with_code("backend::invalid_date".to_string()),
         )
     }
-    // `is_datetime` selects the strict wall-clock parser over the date-only one,
-    // so a `datetime` field's time components are validated (not just its date).
+    // `is_datetime` selects the strict wall-clock parser, so a `datetime`
+    // field's time components are validated too.
     fn check(
         names: &[String],
         dict: &serde_json::Map<String, serde_json::Value>,
@@ -277,14 +264,9 @@ impl SessionHandle for TypstSession {
         self.page_count
     }
 
-    /// Incremental recompile against new document data. The persistent world
-    /// keeps fonts/packages/assets parsed; the helper `lib.typ` is swapped via
-    /// `Source::replace` (incremental reparse), and `comemo` reuses every
-    /// memoized result the edit did not reach. Transactional: the live
-    /// document, placements, hashes, and compile warnings swap together only
-    /// after the compile *and* placement extraction succeed: on `Err` every
-    /// read keeps serving the last-good compile and its warnings (the world
-    /// may hold the failed source; the next `update` overwrites it).
+    /// Transactional: the live document, placements, hashes, and compile
+    /// warnings swap together only after the compile *and* placement extraction
+    /// succeed, so on `Err` every read keeps serving the last-good compile.
     fn update(&mut self, json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> {
         let data = transformed_data(&self.schema_meta, json_data)?;
         let mut windows = self
