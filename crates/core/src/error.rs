@@ -1,28 +1,19 @@
-//! # Error Handling
+//! Error types and diagnostics for parsing and rendering.
 //!
-//! Error types and diagnostics for parsing and rendering, with source location tracking.
-//!
-//! ## Document path anchors
-//!
-//! A [`Diagnostic`] carries two independent "where" anchors, both optional:
-//!
-//! - [`Diagnostic::location`]: source-text anchor (`file:line:column`).
-//!   Produced by parsers and backend compilers operating on raw text.
-//! - [`Diagnostic::path`]: document-model anchor into the typed
-//!   [`crate::document::Document`]. Produced by schema validation and
-//!   coercion, which run on the typed model after line spans are gone.
-//!
-//! [`DocPath`](crate::path::DocPath) is the one type that constructs, renders,
-//! and parses the path, no site assembles one with `format!`. Its module doc
-//! carries the grammar; `prose/canon/ERROR.md` tabulates the anchors.
+//! A [`Diagnostic`] carries two independent, optional anchors:
+//! [`Diagnostic::location`] is a source-text position (`file:line:column`) from
+//! parsers and backend compilers; [`Diagnostic::path`] is a document-model
+//! anchor into [`crate::document::Document`] from schema validation and
+//! coercion, which run after line spans are gone.
+//! [`DocPath`](crate::path::DocPath) is the only type that constructs, renders,
+//! and parses that path form.
 
 use std::collections::BTreeMap;
 
 use crate::OutputFormat;
 
 /// Build a [`Diagnostic::args`] map. Values pass through `serde_json`, so a
-/// list arrives as a list and a count as a number: the shapes a consumer
-/// needs to join and pluralize in its own locale.
+/// list arrives as a list and a count as a number.
 macro_rules! diag_args {
     ($($key:literal => $value:expr),* $(,)?) => {{
         #[allow(unused_mut)]
@@ -58,11 +49,8 @@ pub const MAX_FIELD_COUNT: usize = 1000;
 
 /// A YAML parse or emit failure, owned by this crate.
 ///
-/// The YAML engine is `serde-saphyr`. Returning its error types from a public
-/// signature would chain this crate's major version to that crate's, and to
-/// the choice of engine at all, so the boundary converts to this type instead
-/// and no public signature names the engine. The engine is an implementation
-/// detail; this is what the contract says it is.
+/// The YAML engine is an implementation detail: no public signature names it,
+/// so this crate's major version is not chained to the engine's.
 ///
 /// `line`/`column` are 1-indexed and present only when the engine located the
 /// failure: always absent on the emit side, which has no input to point at.
@@ -112,13 +100,9 @@ impl YamlError {
     /// `yaml` is the text that failed to parse: the hint derivation inspects
     /// it to name the offending construct.
     pub(crate) fn from_de(err: serde_saphyr::Error, yaml: &str) -> Self {
-        // The engine appends its own Rust API names to some messages
-        // (`from_multiple`, `DuplicateKeyPolicy`); the enricher strips them, so
-        // "no public signature names the engine" holds for the message too, not
-        // just the type.
+        // The enricher also strips the engine's own Rust API names, which it
+        // appends to some messages.
         let enriched = crate::document::yaml_hints::enrich_yaml_error(&err.to_string(), yaml);
-        // `Location`'s accessors widen to u64; the fields behind them are u32,
-        // so the narrowing is lossless.
         let loc = err.location();
         Self {
             message: enriched.message,
@@ -141,9 +125,8 @@ impl YamlError {
 
 impl std::fmt::Display for YamlError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // The message already opens with the position and carries the engine's
-        // caret diagram; [`Self::line`]/[`Self::column`] are the structured
-        // reading of the same fact, not a second one to append.
+        // The message already opens with the position and the engine's caret
+        // diagram; line/column are the structured reading of the same fact.
         f.write_str(&self.message)
     }
 }
@@ -155,19 +138,15 @@ impl std::error::Error for YamlError {}
 /// configuration and no warning-to-error promotion; an informational aside is
 /// a [`Diagnostic::hint`], not a severity.
 ///
-/// A `_` arm over this enum has a safe direction: escalate to
-/// [`Severity::Error`]. Treating an unrecognized level as fatal over-reports;
-/// treating it as a warning could hide one. Nothing here fails silently, so the
-/// enum is open ([`COMPATIBILITY`]).
-///
-/// [`COMPATIBILITY`]: https://github.com/borb-sh/quillmark/blob/main/prose/canon/COMPATIBILITY.md
+/// The enum is open; a `_` arm should escalate to [`Severity::Error`], since
+/// over-reporting an unrecognized level is safer than hiding it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
 pub enum Severity {
-    /// Fatal error that prevents completion
+    /// Blocks the stage that emits it.
     Error,
-    /// Non-fatal issue that may need attention
+    /// Non-fatal.
     Warning,
 }
 
@@ -175,17 +154,15 @@ pub enum Severity {
 #[serde(rename_all = "camelCase")]
 #[non_exhaustive]
 pub struct Location {
-    /// Source file name (e.g., "plate.typ", "template.typ", "input.md")
+    /// Source file name, e.g. `"plate.typ"` or `"input.md"`.
     pub file: String,
-    /// Line number (1-indexed)
+    /// 1-indexed line.
     pub line: u32,
-    /// Column number (1-indexed)
+    /// 1-indexed column.
     pub column: u32,
 }
 
 impl Location {
-    /// The three coordinates a text anchor always carries. `line` and `column`
-    /// are 1-indexed.
     pub fn new(file: String, line: u32, column: u32) -> Self {
         Self { file, line, column }
     }
@@ -193,30 +170,23 @@ impl Location {
 
 /// Structured diagnostic information.
 ///
-/// `source_chain` is a flat list of error messages from any attached
-/// `std::error::Error` cause chain, eagerly walked at construction time so
-/// the diagnostic remains trivially `Clone` and fully serializable across
-/// every binding boundary.
+/// Cause chains are walked eagerly at construction, so a `Diagnostic` stays
+/// `Clone` and serializable across every binding boundary.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[non_exhaustive]
 pub struct Diagnostic {
     pub severity: Severity,
-    /// Optional error code (e.g., "E001", "typst::syntax")
+    /// Stable error code, e.g. `"parse::empty_input"` or `"typst::syntax"`.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub code: Option<String>,
     pub message: String,
-    /// Primary source location (text anchor: file/line/column).
-    ///
-    /// Set by parsers and backend compilers. May co-exist with [`Self::path`]:
-    /// the two anchors are independent.
+    /// Source-text anchor, set by parsers and backend compilers. Independent
+    /// of [`Self::path`]; the two may co-exist.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub location: Option<Location>,
-    /// Document-model anchor: a dotted/bracketed path into the typed
-    /// [`crate::document::Document`].
-    ///
-    /// Set by schema validation and coercion. See the module-level docs for
-    /// the path grammar and conventions. May co-exist with [`Self::location`].
+    /// Document-model anchor: a [`DocPath`](crate::path::DocPath) rendering,
+    /// set by schema validation and coercion.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -225,19 +195,13 @@ pub struct Diagnostic {
     /// [`Self::code`], the substitution unit a consumer needs to word this
     /// diagnostic in its own language.
     ///
-    /// One code carries one key set, tabulated per code in
-    /// `prose/canon/ERROR.md` § "Diagnostic args" and tested against it.
-    /// Values keep their JSON shape, so joining and pluralizing stay the
-    /// consumer's locale decisions.
-    ///
-    /// Empty either because the code is outside the structured surface or
-    /// because its sentence needs no facts beyond the code; canon tells the
-    /// two apart. Engine prose never rides under a key: a consumer's sentence
-    /// may be coarser than ours, never half-translated.
+    /// One code carries one key set, tabulated in `prose/canon/ERROR.md`
+    /// § "Diagnostic args" and tested against it. Values keep their JSON
+    /// shape, so joining and pluralizing stay the consumer's locale decisions.
+    /// Engine prose never rides under a key.
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     pub args: BTreeMap<String, serde_json::Value>,
-    /// Flattened cause chain (outermost first). Upstream English, and
-    /// untranslatable for the same reason the prose it wraps is.
+    /// Flattened cause chain, outermost first. Upstream English.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub source_chain: Vec<String>,
 }
@@ -266,9 +230,6 @@ impl Diagnostic {
         self
     }
 
-    /// Set the document-model path anchor.
-    ///
-    /// See the module-level docs for the path grammar and conventions.
     pub fn with_path(mut self, path: String) -> Self {
         self.path = Some(path);
         self
@@ -285,7 +246,7 @@ impl Diagnostic {
         self
     }
 
-    /// Attach an error cause chain, walked eagerly into `source_chain`.
+    /// Walk `source`'s cause chain eagerly into [`Self::source_chain`].
     pub fn with_source(mut self, source: &(dyn std::error::Error + 'static)) -> Self {
         let mut current: Option<&(dyn std::error::Error + 'static)> = Some(source);
         while let Some(err) = current {
@@ -341,18 +302,13 @@ pub enum ParseError {
     #[error("Invalid YAML structure: {0}")]
     InvalidStructure(String),
 
-    /// Markdown input was empty or whitespace-only.
-    ///
-    /// Emitted as code `parse::empty_input` so consumers can pattern-match
-    /// without inspecting the message text.
+    /// Markdown input was empty or whitespace-only. Code `parse::empty_input`.
     #[error("{0}")]
     EmptyInput(String),
 
     /// The document is missing its root `~~~` card-yaml block, or that block
     /// does not declare the required `$quill` system metadata.
-    ///
-    /// Emitted as code `parse::missing_quill` so consumers can
-    /// pattern-match without inspecting the message text.
+    /// Code `parse::missing_quill`.
     #[error("{0}")]
     MissingQuill(String),
 
@@ -375,13 +331,10 @@ pub enum ParseError {
     #[error("YAML error at line {line}: {message}")]
     YamlErrorWithLocation {
         message: String,
-        /// Line number in the source document (1-indexed)
+        /// 1-indexed line in the source document.
         line: usize,
-        /// Index of the metadata block (0-indexed)
+        /// 0-indexed metadata block.
         block_index: usize,
-        /// Optional actionable hint attached when the YAML parser's message
-        /// is too cryptic to be recoverable on its own. Derived by the
-        /// internal `document::yaml_hints` enrichment pass.
         hint: Option<String>,
     },
 }
@@ -389,11 +342,8 @@ pub enum ParseError {
 impl ParseError {
     /// The facts this error's message interpolates. See [`Diagnostic::args`].
     ///
-    /// The four `String` variants contribute no keys, for two different
-    /// reasons canon distinguishes: `EmptyInput` is one fixed sentence, while
-    /// `InvalidStructure`, `BodyImport`, and `MissingQuill` carry prose minted
-    /// per-site. `MissingQuill` looks fixed and is not: it picks one of three
-    /// sentences by re-reading the source, and no field records which.
+    /// The four `String` variants contribute no keys: `EmptyInput` is one
+    /// fixed sentence, and the rest carry prose minted per-site.
     pub fn args(&self) -> BTreeMap<String, serde_json::Value> {
         match self {
             ParseError::InputTooLarge { size, max } => diag_args! {
