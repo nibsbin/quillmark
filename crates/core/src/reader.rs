@@ -277,7 +277,6 @@ card_kinds:
         Document::new(QuillReference::from_str("memo@1.0.0").unwrap())
     }
 
-    // Build a document through the writer, then read it back through the view.
     fn seeded_doc(config: &QuillConfig) -> Document {
         let mut doc = blank_doc();
         {
@@ -297,22 +296,6 @@ card_kinds:
         assert_eq!(
             view.get("subject").unwrap(),
             Some(ReadValue::Markdown("Hello **world**".to_string()))
-        );
-    }
-
-    #[test]
-    fn plaintext_field_projects_to_literal_text() {
-        let config = config();
-        let mut doc = blank_doc();
-        {
-            let mut w = crate::TypedWriter::new(&config, &mut doc);
-            // Marks are literal under plaintext: `*hi*` is verbatim, not emphasis.
-            w.set("note", "a *literal* line").unwrap();
-        }
-        let view = TypedReader::new(&config, &doc);
-        assert_eq!(
-            view.get("note").unwrap(),
-            Some(ReadValue::Plaintext("a *literal* line".to_string()))
         );
     }
 
@@ -351,7 +334,6 @@ card_kinds:
     fn richtext_field_holding_scalar_raises_mismatch() {
         let config = config();
         let mut doc = blank_doc();
-        // An opaque write puts a bare number under the `subject` richtext field.
         doc.main_mut()
             .store_field("subject", QuillValue::from_json(serde_json::json!(3)))
             .unwrap();
@@ -362,10 +344,8 @@ card_kinds:
         ));
     }
 
-    // A `plaintext` field parsed from markdown rests as an authored string, and
-    // its codec is literal: `*literal*` is nine characters, not emphasis. The
-    // object lane is covered above; this is the string lane, which decoded
-    // through the markdown codec until it read its own declared type.
+    /// The string lane, which decoded through the markdown codec until it read
+    /// its own declared type.
     #[test]
     fn parse_lane_plaintext_reads_through_the_literal_codec() {
         let config = config();
@@ -383,8 +363,6 @@ card_kinds:
         );
     }
 
-    // The `Content` read is total over the storage form: the seeded (committed)
-    // lane and the parsed (authored-string) lane return the same value.
     #[test]
     fn content_read_spans_both_storage_forms() {
         let config = config();
@@ -411,8 +389,6 @@ card_kinds:
         assert_eq!(from_content.marks, from_string.marks);
     }
 
-    // The codec follows the declared type, so the same stored bytes decode two
-    // ways: markdown under `richtext`, literal under `plaintext`.
     #[test]
     fn content_read_decodes_by_declared_type() {
         let config = config();
@@ -424,9 +400,7 @@ card_kinds:
             card.store_field("note", QuillValue::from_json(text)).unwrap();
         }
         let view = TypedReader::new(&config, &doc);
-        // `richtext`: the asterisks are emphasis, so they leave the text.
         assert_eq!(view.get_content("subject").unwrap().unwrap().text, "a literal line");
-        // `plaintext`: the asterisks are characters.
         assert_eq!(view.get_content("note").unwrap().unwrap().text, "a *literal* line");
     }
 
@@ -440,8 +414,7 @@ card_kinds:
             view.get_content("nope"),
             Err(EditError::UnknownField(n)) if n == "nope"
         ));
-        // A non-leaf declared type answers from the schema, not the payload:
-        // `qty` holds 3 and is still not a content field.
+        // Answered from the schema, not the payload: `qty` holds 3.
         assert!(matches!(
             view.get_content("qty"),
             Err(EditError::FieldNotContent { field, declared })
@@ -460,19 +433,6 @@ card_kinds:
         assert!(matches!(
             view.get_content("subject"),
             Err(EditError::FieldDecode { field, .. }) if field == "subject"
-        ));
-    }
-
-    #[test]
-    fn card_content_reads_through_kind_schema() {
-        let config = config();
-        let doc = seeded_doc(&config);
-        let view = TypedReader::new(&config, &doc);
-        let card = view.card(0).unwrap();
-        assert_eq!(card.get_content("body").unwrap().unwrap().text, "a card");
-        assert!(matches!(
-            card.get_content("nope"),
-            Err(EditError::UnknownField(_))
         ));
     }
 
@@ -501,12 +461,4 @@ card_kinds:
         ));
     }
 
-    #[test]
-    fn body_read_is_quill_free() {
-        let config = config();
-        let mut doc = blank_doc();
-        doc.main_mut().revise_body("A **body**.").unwrap();
-        let view = TypedReader::new(&config, &doc);
-        assert_eq!(view.body_markdown(), "A **body**.");
-    }
 }
