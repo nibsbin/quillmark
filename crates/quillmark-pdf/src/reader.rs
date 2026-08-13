@@ -609,16 +609,10 @@ fn root_pages_id(pdf: &[u8], catalog_id: u32) -> Result<u32, PdfError> {
         .ok_or_else(|| err(CODE_PARSE, "catalog /Pages reference not found"))
 }
 
-/// Reject a page with a non-zero `/Rotate` (its own value, else the inherited
-/// root `/Pages` value).
-///
-/// The stamp/flatten paths write widget and content geometry in *unrotated*
-/// user space and do not compensate for page rotation, so a rotated base page
-/// would display every widget rotated away from its intended box. `/Rotate` is
-/// not part of the Typst producer's output (its pages are always unrotated);
-/// this guard turns a rotated `pdfform` base into a clean rejection rather than
-/// silently mis-placed output, consistent with the reader's other hard
-/// rejections.
+/// Reject a page with a non-zero `/Rotate`, its own value or the one inherited
+/// from the root `/Pages`. The stamp and flatten paths write geometry in
+/// unrotated user space and do not compensate, so a rotated base page would
+/// display every widget away from its intended box.
 pub(crate) fn assert_unrotated_page(
     pdf: &[u8],
     catalog_id: u32,
@@ -667,7 +661,6 @@ pub(crate) fn parse_ref_array(bytes: &[u8]) -> Vec<(u32, u16)> {
         match parse_indirect_ref(cur) {
             Some((id, generation)) => {
                 out.push((id, generation));
-                // Advance past the parsed ref: find " R" and step past it.
                 if let Some(pos) = cur.iter().position(|&b| b == b'R') {
                     cur = &cur[pos + 1..];
                 } else {
@@ -696,9 +689,8 @@ fn parse_rect_array(bytes: &[u8]) -> Option<[f32; 4]> {
     (count == 4).then_some(nums)
 }
 
-/// Normalize a `/MediaBox` to `[x0, y0, x1, y1]` with `x0 <= x1` and
-/// `y0 <= y1`, so `(x0, y0)` is the page's lower-left and `(x1, y1)` its
-/// upper-right regardless of which corners the array listed.
+/// Normalize a `/MediaBox` so `(x0, y0)` is lower-left and `(x1, y1)`
+/// upper-right, whichever corners the array listed.
 fn normalize_rect(mb: [f32; 4]) -> [f32; 4] {
     [
         mb[0].min(mb[2]),
@@ -709,13 +701,9 @@ fn normalize_rect(mb: [f32; 4]) -> [f32; 4] {
 }
 
 /// The `/MediaBox` of every page, normalized to `[x0, y0, x1, y1]`, in document
-/// order.
-///
-/// Reads each page's `/MediaBox`, falling back to the root `/Pages` node's
-/// `/MediaBox` (the common inheritance case) when a page declares none. The
-/// full rect (not just width/height) is returned so a caller that owns
-/// page-relative top-left geometry can honour a non-zero page origin when
-/// flipping to bottom-left PDF user space.
+/// order, falling back to the root `/Pages` node's when a page declares none.
+/// The full rect rather than width/height, so a caller flipping page-relative
+/// top-left geometry can honour a non-zero page origin.
 pub(crate) fn page_media_boxes(pdf: &[u8]) -> Result<Vec<[f32; 4]>, PdfError> {
     let xref_offset = find_startxref(pdf)?;
     assert_traditional_xref(pdf, xref_offset)?;
@@ -770,8 +758,6 @@ mod tests {
 
     #[test]
     fn dict_value_ignores_name_in_value_position() {
-        // A Name that appears as a *value* (`/Subtype /Producer`) must not be
-        // mistaken for the `/Producer` key. The real key wins.
         let dict = b" /Subtype /Producer /Producer (real) /Creator (X) ";
         let v = find_dict_value(dict, "Producer").expect("found the key, not the value");
         assert_eq!(v.trim_ascii(), b"(real)");
@@ -779,8 +765,6 @@ mod tests {
 
     #[test]
     fn dict_value_absent_key_with_matching_name_value_is_none() {
-        // The key is genuinely absent; the only occurrence of the token is a
-        // value Name. The walk must report None, not the spurious value.
         let dict = b" /Subtype /Producer /Creator (X) ";
         assert!(find_dict_value(dict, "Producer").is_none());
     }
