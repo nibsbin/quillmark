@@ -1117,9 +1117,9 @@ impl Document {
     }
 
     /// The whole `$ext` map at `addr` (a card address, absent `card` = main), or
-    /// `undefined` when the card carries none. The fine-grained `$ext` read:
-    /// your own state without serializing the whole card. Throws on a present
-    /// `field` (a card address takes only `card`) or an out-of-range card.
+    /// `undefined` when the card carries none: the `$ext` read that avoids
+    /// serializing the whole card. Throws on a present `field` or an
+    /// out-of-range card.
     #[wasm_bindgen(js_name = getExt, unchecked_return_type = "Record<string, unknown> | undefined")]
     pub fn get_ext(
         &self,
@@ -1134,9 +1134,8 @@ impl Document {
     }
 
     /// The value stored under `$ext[ns]` at `addr` (a card address, absent `card`
-    /// = main), or `undefined`. The namespace-scoped `$ext` read: your own slot
-    /// without a whole-card serialize, and non-destructive (unlike
-    /// `removeExtNamespace`). Throws on a present `field` or an out-of-range card.
+    /// = main), or `undefined`. Throws on a present `field` or an out-of-range
+    /// card.
     #[wasm_bindgen(js_name = getExtNamespace, unchecked_return_type = "unknown")]
     pub fn get_ext_namespace(
         &self,
@@ -1151,27 +1150,23 @@ impl Document {
         }
     }
 
-    /// Number of composable cards (excludes the main card). O(1).
+    /// Number of composable cards, excluding the main card.
     #[wasm_bindgen(getter, js_name = cardCount)]
     pub fn card_count(&self) -> usize {
         self.inner.cards().len()
     }
 
-    /// A single composable card by index: the whole `Card`, the card-indexed
-    /// twin of the [`main`](Self::main) getter, so reading one card need not
-    /// materialize every card via [`cards`](Self::cards). An out-of-range
-    /// `index` throws `edit::index_out_of_range`, matching the card write
-    /// verbs.
+    /// A single composable card by index, so reading one need not materialize
+    /// every card via [`cards`](Self::cards). An out-of-range `index` throws
+    /// `edit::index_out_of_range`.
     #[wasm_bindgen(js_name = card, unchecked_return_type = "Card")]
     pub fn card(&self, index: usize) -> Result<JsValue, JsValue> {
         card_to_js(self.card_or_throw(index)?)
     }
 
-    /// The main card's `$seed` overlay object for `kind` (the `$seed[kind]`
-    /// entry), or `undefined` when absent. The cheap read that feeds
-    /// `quill.seedCard(kind, overlay)` without serializing the whole main card
-    /// via [`main`](Self::main) to fish out one key, and it keeps `seedCard`
-    /// pure: the quill still never reads the document.
+    /// The main card's `$seed[kind]` overlay object, or `undefined`. Feeds
+    /// `quill.seedCard(kind, overlay)` without serializing the whole main card,
+    /// and keeps `seedCard` pure: the quill never reads the document.
     #[wasm_bindgen(js_name = seedOverlay, unchecked_return_type = "Record<string, unknown> | undefined")]
     pub fn seed_overlay(&self, kind: &str) -> Result<JsValue, JsValue> {
         match self.inner.main().seed().and_then(|seed| seed.get(kind)) {
@@ -1180,26 +1175,19 @@ impl Document {
         }
     }
 
-    /// `addr`'s canonical `DocPath` string, the anchor `Diagnostic.path`
-    /// carries: `pathFor()` is `main.body`, `pathFor("intro")` `main.intro`,
-    /// `pathFor({card: 2})` `cards.<kind>[2].body`. A consumer holding an
-    /// `Addr` mints one without restating the kind lookup, the `Addr` defaults
-    /// or the range guard.
+    /// `addr`'s canonical `DocPath` string, the anchor `Diagnostic.path` carries:
+    /// `pathFor()` is `main.body`, `pathFor("intro")` `main.intro`,
+    /// `pathFor({card: 2})` `cards.<kind>[2].body`.
     ///
-    /// The kind is the card's stored `$kind` verbatim, the quill-free rule the
-    /// addressed mutators anchor with and the geometry translation uses, not
-    /// `validate`'s declared-kind filter: a `Document` holds a `$quill`
-    /// reference and no schema. That is the one edge where this path and a
-    /// `validate` diagnostic path differ for the same card.
+    /// The kind is the card's stored `$kind` verbatim, not `validate`'s
+    /// declared-kind filter, since a `Document` holds a `$quill` reference and no
+    /// schema. That is the one edge where this path and a `validate` diagnostic
+    /// path differ for the same card.
     ///
-    /// **Total on the index axis**, unlike the `Addr` reads (`getStored`,
-    /// `isFill`, `bodyMarkdown`), which throw there: a path is an anchor, not
-    /// a read. An out-of-range `{card: 7, field: "from"}` extends the
-    /// unknown-kind root `edit::index_out_of_range` anchors at, rendering
-    /// `cards[7].from`, which parses back and resolves to nothing rather than
-    /// mis-targeting. So a per-keystroke call needs no `try`; a caller wanting
-    /// a drop-it guard has [`cardCount`](Self::card_count). Only a malformed
-    /// address throws.
+    /// **Total on the index axis**, unlike the `Addr` reads, which throw there:
+    /// an out-of-range `{card: 7, field: "from"}` renders `cards[7].from`, which
+    /// parses back and resolves to nothing rather than mis-targeting. Only a
+    /// malformed address throws.
     #[wasm_bindgen(js_name = pathFor)]
     pub fn path_for(
         &self,
@@ -1214,10 +1202,10 @@ impl Document {
         .to_string())
     }
 
-    /// The composable card's own path, `cards.<kind>[index]`: the whole-card
-    /// root [`pathFor`](Self::path_for) extends, for a consumer anchoring the
-    /// card rather than one of its fields. Total on the index axis for the same
-    /// reason, out of range renders `cards[index]`.
+    /// The composable card's own path, `cards.<kind>[index]`: the root
+    /// [`pathFor`](Self::path_for) extends, for anchoring the card rather than
+    /// one of its fields. Total on the index axis; out of range renders
+    /// `cards[index]`.
     #[wasm_bindgen(js_name = cardPath)]
     pub fn card_path(&self, index: usize) -> String {
         self.addr_base(&Addr {
@@ -1227,17 +1215,16 @@ impl Document {
         .to_string()
     }
 
-    /// Structural equality (parse-time `warnings` excluded). Use to debounce
-    /// upstream prop updates instead of re-parsing on every keystroke.
+    /// Structural equality, excluding parse-time `warnings`.
     #[wasm_bindgen(js_name = equals)]
     pub fn equals(&self, other: &Document) -> bool {
         self.inner == other.inner
     }
 
     /// The non-fatal diagnostics of the load that produced this document: parse
-    /// warnings, plus the `conform::*` warnings when it came through
-    /// `quill.parse`. Session state, not document value: `equals` and the
-    /// storage DTO exclude it, and `fromJson` / `loadJson` clear it.
+    /// warnings, plus `conform::*` warnings when it came through `quill.parse`.
+    /// Session state, not document value: `equals` and the storage DTO exclude
+    /// it, and `fromJson` / `loadJson` clear it.
     #[wasm_bindgen(getter, js_name = warnings, unchecked_return_type = "Diagnostic[]")]
     pub fn warnings(&self) -> Result<JsValue, JsValue> {
         let diags: Vec<Diagnostic> = self
@@ -1249,16 +1236,12 @@ impl Document {
         serialize_or_throw(&diags, "warnings")
     }
 
-    // ── Mutators ──────────────────────────────────────────────────────────────
-
-    /// Store a field verbatim at `addr`: the opaque store (**store** = verbatim,
-    /// coercion deferred to render; the typed write is
-    /// [`commitField`](Document::commit_field)). A bare string is `Addr`
-    /// shorthand for `{ field }`, so `doc.storeField("qty", 3)` reads as written;
-    /// `{ card: 2, field: "qty" }` targets a composable card. Clears any
-    /// `!must_fill` marker. A body address (no `field`) throws: a body is never
-    /// opaque; write it with `revise` / `overwrite` / `writer.reviseBody`. Throws on
-    /// an out-of-range card or a malformed name.
+    /// Store a field verbatim at `addr`, deferring coercion to render; the typed
+    /// write is [`commitField`](Document::commit_field). A bare string is `Addr`
+    /// shorthand for `{ field }`; `{ card: 2, field: "qty" }` targets a
+    /// composable card. Clears any `!must_fill` marker. A body address throws:
+    /// write a body with `revise` / `overwrite`. Throws on an out-of-range card
+    /// or a malformed name.
     #[wasm_bindgen(js_name = storeField)]
     pub fn store_field(
         &mut self,
@@ -1275,10 +1258,8 @@ impl Document {
             .map_err(|e| edit_error_to_js(&e, &base))
     }
 
-    /// Store a field verbatim at `addr` and mark it `!must_fill`: the opaque
-    /// store's fill variant, card-capable (a bare string or `{ field }` for main,
-    /// `{ card, field }` for a composable card). A body address throws. Same
-    /// validation as [`storeField`](Document::store_field).
+    /// Store a field verbatim at `addr` and mark it `!must_fill`. A body address
+    /// throws; same validation as [`storeField`](Document::store_field).
     #[wasm_bindgen(js_name = storeFill)]
     pub fn store_fill(
         &mut self,
@@ -1295,14 +1276,11 @@ impl Document {
             .map_err(|e| edit_error_to_js(&e, &base))
     }
 
-    /// Store several fields verbatim and atomically on the card `addr` targets:
-    /// the opaque store's batch. `addr` is a **card address** (`{ card }`, absent
-    /// = main); a present `field` throws. The batch verb takes the address first
-    /// and is never shape-overloaded, because `card` is a legal field name:
-    /// `storeFields({}, fields)` is the main card, `storeFields({ card: 2 },
-    /// fields)` a composable one, never ambiguous with "set field `card`".
-    /// Nothing is applied on error; the thrown error's `diagnostics` carry one
-    /// entry per offending field. Throws on an out-of-range card.
+    /// Store several fields verbatim and atomically on the card `addr` targets.
+    /// `addr` is a **card address** (`{ card }`, absent = main) and comes first
+    /// because `card` is itself a legal field name; a present `field` throws.
+    /// Nothing is applied on error, and the thrown error's `diagnostics` carry
+    /// one entry per offending field. Throws on an out-of-range card.
     #[wasm_bindgen(js_name = storeFields)]
     pub fn store_fields(
         &mut self,
@@ -1319,9 +1297,8 @@ impl Document {
     }
 
     /// Remove a field at `addr`, returning the removed value or `undefined`. A
-    /// bare string is `Addr` shorthand for `{ field }`. One `remove` verb serves
-    /// every write lane. A body address throws; throws on an out-of-range card or
-    /// a malformed name.
+    /// bare string is `Addr` shorthand for `{ field }`. A body address throws, as
+    /// does an out-of-range card or a malformed name.
     #[wasm_bindgen(js_name = removeField)]
     pub fn remove_field(
         &mut self,
@@ -1340,11 +1317,10 @@ impl Document {
         })
     }
 
-    /// Replace the opaque `$ext` map on the card `addr` targets (a card address,
-    /// absent `card` = main). `value` must be a plain object. `$ext` carries
-    /// out-of-band consumer state and never reaches the rendered output; pass
-    /// `{}` for an explicit empty `$ext`. Quill-free and verbatim: an opaque
-    /// `store` verb. Throws on a present `field` or an out-of-range card.
+    /// Replace the opaque `$ext` map on the card `addr` targets (absent `card` =
+    /// main). `value` must be a plain object. `$ext` carries out-of-band consumer
+    /// state and never reaches the rendered output. Throws on a present `field`
+    /// or an out-of-range card.
     #[wasm_bindgen(js_name = storeExt)]
     pub fn store_ext(
         &mut self,
@@ -1360,10 +1336,9 @@ impl Document {
             .map_err(|e| edit_error_to_js(&e, &base))
     }
 
-    /// Remove the `$ext` map on the card `addr` targets *entirely*, returning the
-    /// previous map or `undefined`: a blunt escape hatch that discards every
-    /// namespace at once (prefer `removeExtNamespace`). `addr` is a card address
-    /// (absent = main). Throws on a present `field` or an out-of-range card.
+    /// Remove the `$ext` map on the card `addr` targets entirely, returning the
+    /// previous map or `undefined`. Discards every namespace at once; prefer
+    /// `removeExtNamespace`. Throws on a present `field` or an out-of-range card.
     #[wasm_bindgen(js_name = removeExt, unchecked_return_type = "Record<string, unknown> | undefined")]
     pub fn remove_ext(
         &mut self,
@@ -1375,9 +1350,8 @@ impl Document {
     }
 
     /// Merge `value` into `$ext[ns]` on the card `addr` targets, preserving
-    /// sibling namespaces: the recommended `$ext` write. `addr` is a card
-    /// address (absent = main). Quill-free and verbatim: an opaque `store` verb.
-    /// Throws on a present `field` or an out-of-range card.
+    /// sibling namespaces: the recommended `$ext` write. Throws on a present
+    /// `field` or an out-of-range card.
     #[wasm_bindgen(js_name = storeExtNamespace)]
     pub fn store_ext_namespace(
         &mut self,
@@ -1410,10 +1384,9 @@ impl Document {
     }
 
     /// Merge a card-kind's seed `overlay` into the **main** card's `$seed` map
-    /// under `cardKind`, preserving sibling kinds: `$seed` lives on the main
-    /// card by model, so this takes no address. Sets the starting values new
-    /// cards of that kind spawn with. Quill-free and verbatim: an opaque `store`
-    /// verb. Throws if `overlay` cannot be serialized or nests too deep.
+    /// under `cardKind`, preserving sibling kinds; `$seed` is main-only, so this
+    /// takes no address. Sets the starting values new cards of that kind spawn
+    /// with. Throws if `overlay` cannot be serialized or nests too deep.
     #[wasm_bindgen(js_name = storeSeedOverlay)]
     pub fn store_seed_overlay(
         &mut self,
@@ -1421,17 +1394,15 @@ impl Document {
         overlay: JsValue,
     ) -> Result<(), JsValue> {
         let json = js_value_to_json(overlay, "storeSeedOverlay")?;
-        // Main-only: `$seed` is config-space, so a kind/depth error here carries
-        // no field anchor (empty base → `doc_path` returns `None`).
+        // `$seed` is config-space, so an error here carries no field anchor.
         self.inner
             .main_mut()
             .store_seed_overlay(card_kind, json)
             .map_err(|e| edit_error_to_js(&e, &quillmark_core::DocPath::new()))
     }
 
-    /// Remove `cardKind` from the main card's `$seed` map, returning its
-    /// overlay or `undefined`; drops `$seed` entirely once empty. Sibling kinds
-    /// survive. `$seed` is main-only, so this takes no address.
+    /// Remove `cardKind` from the main card's `$seed` map, returning its overlay
+    /// or `undefined`; drops `$seed` entirely once empty. Sibling kinds survive.
     #[wasm_bindgen(js_name = removeSeedOverlay)]
     pub fn remove_seed_overlay(&mut self, card_kind: &str) -> Result<JsValue, JsValue> {
         json_value_to_js(self.inner.main_mut().remove_seed_overlay(card_kind))
@@ -1441,7 +1412,6 @@ impl Document {
     #[wasm_bindgen(js_name = setQuillRef)]
     pub fn set_quill_ref(&mut self, ref_str: &str) -> Result<(), JsValue> {
         let qr: quillmark_core::QuillReference = ref_str.parse().map_err(|e| {
-            // Same shape document parsing emits, so mutator and parser don't drift.
             let diag = quillmark_core::Diagnostic::new(
                 quillmark_core::Severity::Error,
                 format!("setQuillRef: invalid reference '{}': {}", ref_str, e),
