@@ -133,12 +133,10 @@ impl<'m> Codegen<'m> {
         }
     }
 
-    /// Bind an emitted content (`ec`) as a `#let _qm_cN = [\n{markup}\n]` block and
-    /// return the binding's identifier. The `\n` wrap opens the block at a line
-    /// boundary so line-anchored markup (headings, list items) parses. Records
-    /// the bracketed byte window (brackets included) plus the emitter's segment
-    /// maps, both rebased into `self.blocks` coordinates (`generate_lib_typ`
-    /// shifts them once more by the block section's start).
+    /// Binds `ec` as a `#let _qm_cN = [\n{markup}\n]` block. The `\n` wrap opens
+    /// the block at a line boundary so line-anchored markup parses. Windows are
+    /// recorded in `self.blocks` coordinates; `generate_lib_typ` shifts them
+    /// once more by the block section's start.
     fn content_block(&mut self, path: &str, ec: Emission) -> String {
         let id = format!("_qm_c{}", self.counter);
         self.counter += 1;
@@ -147,8 +145,8 @@ impl<'m> Codegen<'m> {
         self.blocks.push_str(" = ");
         let start = self.blocks.len();
         self.blocks.push_str("[\n");
-        // The markup body opens after `[\n`; the emitter's `generated` offsets are
-        // relative to it, so rebase by this position.
+        // The emitter's `generated` offsets are relative to the markup body,
+        // which opens after `[\n`.
         let markup_at = self.blocks.len();
         self.blocks.push_str(&ec.markup);
         self.blocks.push_str("\n]");
@@ -163,30 +161,18 @@ impl<'m> Codegen<'m> {
         id
     }
 
-    /// Bind a present date/datetime as a **value-object** block and return its
-    /// identifier: the date sibling of [`content_block`](Self::content_block).
-    /// The object exposes two projections over the date encoded once in `v`:
+    /// The date sibling of [`content_block`](Self::content_block), binding a
+    /// value object over the date encoded once in `v`: `value` is the native
+    /// `datetime`, `display` a closure `(..args) => text(v.display(..args))`.
+    /// `display` returns *content*, so its glyphs are born at this `text(..)`
+    /// node per emission, pinning the per-instance identity a shared wrapper
+    /// would collapse; wrapping `v.display` rather than a re-literalized date
+    /// inherits `v`'s type, so a date-only `v` throws Typst's native
+    /// `[hour]`-pattern error. The segment-less window it records gives a card
+    /// date the per-instance identity `scalar_windows` cannot chase.
     ///
-    /// - `value`: the native `datetime` (`v`) for math, comparison, and
-    ///   datetime-consuming packages; and
-    /// - `display`: a closure `(..args) => text(v.display(..args))`. It returns
-    ///   *content*, not a string, so its glyphs are born at **this `text(..)`
-    ///   node's** lexical site inside the generated helper, per emission:
-    ///   pinning per-instance identity a shared wrapper would collapse. Wrapping
-    ///   `v.display` (not a re-literalized date) inherits `v`'s type, so a
-    ///   date-only `v` throws Typst's native `[hour]`-pattern error.
-    ///
-    /// Records a **segment-less** window over that `text(..)` node keyed by
-    /// `path`: one whole-placement region per instance when the date renders,
-    /// so a card date defeats the loop-variable blindness `scalar_windows` does
-    /// not chase (its ink resolves to this per-instance node, not the shared
-    /// `card.<field>` reference site). Rebased into `self.blocks` coordinates
-    /// like [`content_block`](Self::content_block); the whole date cell in the
-    /// data literal is just the returned `_qm_dN` reference.
-    ///
-    /// Plates call it as `(data.<field>.display)(..)`: the paren form, since
-    /// Typst reserves dict-key method sugar (`d.display(..)`) for built-in dict
-    /// methods (pinned in `span_scan`'s spike 1).
+    /// Plates call it as `(data.<field>.display)(..)`: Typst reserves dict-key
+    /// method sugar for built-in dict methods.
     fn date_object(&mut self, path: &str, constructor: &str) -> String {
         let id = format!("_qm_d{}", self.date_counter);
         self.date_counter += 1;
@@ -195,9 +181,8 @@ impl<'m> Codegen<'m> {
         self.blocks.push_str(" = { let v = ");
         self.blocks.push_str(constructor);
         self.blocks.push_str("; (value: v, display: (..args) => ");
-        // The window covers exactly the `text(..)` call: the node whose span
-        // the produced glyphs carry (span_scan spike 2). Empty segments make it
-        // a whole-placement region, like a scalar site.
+        // The window covers exactly the `text(..)` call: the node whose span the
+        // produced glyphs carry.
         let text_start = self.blocks.len();
         self.blocks.push_str("text(v.display(..args))");
         let text_end = self.blocks.len();
@@ -207,15 +192,8 @@ impl<'m> Codegen<'m> {
         id
     }
 
-    /// Lower one richtext field's content JSON to a `#let` content block, or an
-    /// empty string literal (`""`, not a block) for a blank content. A value that
-    /// is not a valid content (never produced by the seam) degrades to its value
-    /// literal; no render path re-parses markdown. A nesting-bound violation is
-    /// recorded on `self.emit_error` and surfaced by `generate_lib_typ`.
-    ///
-    /// `inline` selects the lowering: an `inline` field (`richtext(inline)`)
-    /// lowers to pure inline markup (no trailing `parbreak`) via
-    /// [`emit_content_inline`]; every other field keeps the block lowering.
+    /// A blank content lowers to `""`, not a block; a value that is not a valid
+    /// content (never produced by the seam) degrades to its value literal.
     fn content_field(&mut self, path: &str, value: &serde_json::Value, inline: bool) -> String {
         let emit = if inline {
             emit_content_inline
@@ -224,10 +202,7 @@ impl<'m> Codegen<'m> {
         };
         match from_canonical_value(value) {
             Ok(rt) if !rt.is_blank() => {
-                // Record the plaintext projection (content text minus island
-                // slots, marks dropped) for `plaintext(field)`, keyed by the same
-                // address the content block windows on. Blank content values are skipped:
-                // `plaintext` defaults them to `""`.
+                // Blank values are skipped: `plaintext` defaults them to `""`.
                 let plain = quillmark_content::export::to_plaintext(&rt);
                 if !plain.is_empty() {
                     self.plaintext.push((path.to_string(), plain));
@@ -245,9 +220,6 @@ impl<'m> Codegen<'m> {
         }
     }
 
-    /// The top-level `data` dict literal. Content and date fields are emitted
-    /// per their schema classification; `$cards` gets the ordinal/`$path` pass;
-    /// the `__meta__` sentinel (if any survived) is dropped.
     fn emit_data(&mut self, obj: &serde_json::Map<String, serde_json::Value>) -> String {
         let mut items = Vec::with_capacity(obj.len());
         for (key, value) in sorted(obj) {
@@ -269,10 +241,8 @@ impl<'m> Codegen<'m> {
         wrap_dict(items)
     }
 
-    /// The `$cards` array literal. Each card of a string `$kind` gets its
-    /// per-kind ordinal `$path` prefix injected and its content/date fields
-    /// transformed; a card with no string `$kind` passes through untouched as
-    /// a value literal, assigned no ordinal or `$path`.
+    /// A card with no string `$kind` passes through as a value literal, assigned
+    /// no ordinal or `$path`.
     fn emit_cards(&mut self, cards: &[serde_json::Value]) -> String {
         let mut ordinals: HashMap<String, usize> = HashMap::new();
         let mut out = Vec::with_capacity(cards.len());
@@ -297,8 +267,6 @@ impl<'m> Codegen<'m> {
         wrap_array(out)
     }
 
-    /// One card dict literal: the injected `$path` prefix plus each field
-    /// classified against the card kind's content/date tables.
     fn emit_card(
         &mut self,
         obj: &serde_json::Map<String, serde_json::Value>,
@@ -310,10 +278,8 @@ impl<'m> Codegen<'m> {
         let datetimes = card_names(&self.meta.card_datetime_fields, kind);
         let inlines = card_names(&self.meta.card_inline_fields, kind);
         let mut items = Vec::with_capacity(obj.len() + 1);
-        // The card's canonical address prefix, so plates compose schema-field
-        // addresses (`form-field(.., field: card.at("$path") + "from")`)
-        // without reimplementing the kind+ordinal grammar. `$`-prefixed so it
-        // cannot collide with a schema field.
+        // The canonical address prefix, so plates compose schema-field addresses
+        // without reimplementing the kind+ordinal grammar.
         items.push(format!("\"$path\": \"{}\"", escape_string(prefix)));
         for (key, value) in sorted(obj) {
             if key == "$path" {
