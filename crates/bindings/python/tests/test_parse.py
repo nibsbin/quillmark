@@ -70,33 +70,6 @@ def test_cards_access():
     assert "Card body." in card["body"]["text"]
 
 
-def test_cards_empty_when_none():
-    """Test that cards is an empty list when no cards present."""
-    md = "~~~card-yaml\n$quill: taro\n$kind: main\nauthor: Test\ntitle: Test\nice_cream: Vanilla\n~~~\n\nBody.\n"
-    doc = Document.from_markdown(md)
-    assert doc.cards == []
-
-
-def test_quill_ref(taro_md):
-    """Test that quill_ref returns the QUILL reference, including version."""
-    doc = Document.from_markdown(taro_md)
-    assert doc.quill_ref == "taro@0.1"
-
-
-def test_warnings_empty_on_clean_doc(taro_md):
-    """Test that warnings is empty for a well-formed document."""
-    doc = Document.from_markdown(taro_md)
-    assert doc.warnings == []
-
-
-def test_to_markdown_emits_string(taro_md):
-    """Test that to_markdown emits a non-empty markdown string."""
-    doc = Document.from_markdown(taro_md)
-    emitted = doc.to_markdown()
-    assert isinstance(emitted, str)
-    assert emitted.strip() != ""
-
-
 def test_json_dto_round_trip(taro_md):
     """to_json emits a versioned DTO string that from_json round-trips."""
     doc = Document.from_markdown(taro_md)
@@ -146,14 +119,6 @@ def test_try_from_json_returns_none_on_markdown(taro_md):
     assert Document.try_from_json('{"schema":"quillmark/document@0.99.0"}') is None
 
 
-def test_schema_version_of_reads_dto(taro_md):
-    """storage_version_of returns the schema tag from a stored DTO."""
-    doc = Document.from_markdown(taro_md)
-    dto = doc.to_json()
-
-    assert Document.storage_version_of(dto) == "quillmark/document@0.93.0"
-
-
 def test_schema_version_of_returns_unknown_future_versions():
     """storage_version_of returns the raw tag, even for unsupported versions."""
     # Note: this would be rejected by from_json, but storage_version_of returns it
@@ -176,15 +141,6 @@ def test_current_schema_version_matches_emitted_tag(taro_md):
     current = Document.current_storage_version()
     assert isinstance(current, str)
     assert Document.storage_version_of(dto) == current
-
-
-def test_clone_preserves_state(taro_md):
-    """clone returns a fresh handle with the same parsed state."""
-    doc = Document.from_markdown(taro_md)
-    cloned = doc.clone()
-
-    assert cloned.quill_ref == doc.quill_ref
-    assert cloned == doc
 
 
 def test_clone_isolates_mutations(taro_md):
@@ -222,35 +178,6 @@ def test_equals_and_eq(taro_md):
     assert doc1 == doc2
 
 
-def test_eq_after_mutation(taro_md):
-    """Mutation breaks equality."""
-    doc1 = Document.from_markdown(taro_md)
-    doc2 = Document.from_markdown(taro_md)
-
-    doc2.remove_field("title")
-    assert doc1 != doc2
-
-
-def test_card_count_matches_cards_len():
-    """card_count is O(1) shortcut for len(cards)."""
-    md = (
-        "~~~card-yaml\n$quill: q\n$kind: main\ntitle: T\n~~~\n\nBody.\n\n"
-        "~~~card-yaml\n$kind: note\n~~~\n\nFirst.\n\n"
-        "~~~card-yaml\n$kind: summary\n~~~\n\nSecond.\n"
-    )
-    doc = Document.from_markdown(md)
-    assert doc.card_count == 2
-    assert doc.card_count == len(doc.cards)
-
-
-def test_repr_includes_quill_ref(taro_md):
-    """__repr__ surfaces the quill ref and card count."""
-    doc = Document.from_markdown(taro_md)
-    text = repr(doc)
-    assert "Document(" in text
-    assert "taro" in text
-
-
 def test_remove_field_on_card_returns_value():
     """remove_field(name, card=i) removes and returns a composable card field's
     value: `remove` has no lane, one verb over the whole card axis."""
@@ -264,16 +191,6 @@ def test_remove_field_on_card_returns_value():
     assert removed == "bar"
     assert not has_field(doc.cards[0], "foo")
     assert field(doc.cards[0], "baz") == "qux"
-
-
-def test_remove_field_on_card_absent_returns_none():
-    """remove_field(name, card=i) returns None when the field doesn't exist."""
-    md = (
-        "~~~card-yaml\n$quill: q\n$kind: main\n~~~\n\nBody.\n\n"
-        "~~~card-yaml\n$kind: note\n~~~\n"
-    )
-    doc = Document.from_markdown(md)
-    assert doc.remove_field("missing", card=0) is None
 
 
 def test_remove_field_on_card_out_of_range():

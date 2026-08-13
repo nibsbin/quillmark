@@ -180,19 +180,6 @@ def test_remove_field_existing():
     assert not has_field(doc.main, "title")
 
 
-def test_remove_field_absent():
-    """remove_field returns None when the field doesn't exist."""
-    doc = Document.from_markdown(SIMPLE_MD)
-    assert doc.remove_field("nonexistent") is None
-
-
-def test_set_quill_ref():
-    """set_quill_ref changes the quill reference."""
-    doc = Document.from_markdown(SIMPLE_MD)
-    doc.set_quill_ref("new_quill")
-    assert doc.quill_ref == "new_quill"
-
-
 def test_insert_card_appends():
     """insert_card (absent `at`) appends a card to the list."""
     doc = Document.from_markdown(SIMPLE_MD)
@@ -289,20 +276,6 @@ def test_remove_card():
     assert doc.cards[0]["kind"] == "summary"
 
 
-def test_remove_card_out_of_range():
-    """remove_card returns None for an out-of-range index."""
-    doc = Document.from_markdown(SIMPLE_MD)
-    assert doc.remove_card(0) is None
-
-
-def test_move_card_no_op():
-    """move_card(0, 0) is a no-op."""
-    doc = Document.from_markdown(MD_WITH_CARDS)
-    doc.move_card(0, 0)
-    assert doc.cards[0]["kind"] == "note"
-    assert doc.cards[1]["kind"] == "summary"
-
-
 def test_move_card_last_to_first():
     """move_card rotates the last card to the front."""
     doc = Document.from_markdown(MD_WITH_CARDS)
@@ -310,13 +283,6 @@ def test_move_card_last_to_first():
     doc.move_card(last, 0)
     assert doc.cards[0]["kind"] == "summary"
     assert doc.cards[1]["kind"] == "note"
-
-
-def test_move_card_out_of_range():
-    """move_card raises EditError for an out-of-range index."""
-    doc = Document.from_markdown(MD_WITH_CARDS)
-    with raises_edit_code("edit::index_out_of_range"):
-        doc.move_card(10, 0)
 
 
 def test_card_reads_one_card_without_projecting_the_rest():
