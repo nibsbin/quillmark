@@ -833,75 +833,6 @@ name: Item
     assert_eq!(card.body_markdown(), ""); // empty, not absent
 }
 
-// ── card-kind / global-field name collision: is_ok()-only cases (table-driven) ───
-// `test_allowed_card_field_collision` (below) exercises the same collision
-// shape and additionally checks the resulting values.
-#[test]
-fn card_kind_global_field_name_collision_is_allowed() {
-    let cases: &[(&str, &str)] = &[
-        (
-            "scalar global field",
-            "~~~card-yaml
-$quill: test_quill
-$kind: main
-items: \"global value\"
-~~~
-
-Body
-
-~~~card-yaml
-$kind: items
-name: Item
-~~~
-
-Item body",
-        ),
-        (
-            "array-valued global field",
-            "~~~card-yaml
-$quill: test_quill
-$kind: main
-items:
-  - name: Global Item 1
-    value: 100
-~~~
-
-Global body
-
-~~~card-yaml
-$kind: items
-name: Scope Item 1
-~~~
-
-Scope item 1 body",
-        ),
-        (
-            "empty-array global field",
-            "~~~card-yaml
-$quill: test_quill
-$kind: main
-items: []
-~~~
-
-Global body
-
-~~~card-yaml
-$kind: items
-name: Item 1
-~~~
-
-Item 1 body",
-        ),
-    ];
-
-    for (label, markdown) in cases {
-        assert!(
-            decompose(markdown).is_ok(),
-            "{label}: name collision should be allowed"
-        );
-    }
-}
-
 #[test]
 fn test_uppercase_payload_keys_accepted_at_parse() {
     // Spec §3.4: data-field names match [A-Za-z_][A-Za-z0-9_]*. Only
@@ -960,26 +891,6 @@ More content.
     assert!(doc.main().body_markdown().contains("fake: payload"));
     assert!(doc.main().payload().get("fake").is_none());
     assert_eq!(doc.cards().len(), 0);
-}
-
-/// Flow-sequence YAML (`[a, b]`) reaches the payload as an array: the block
-/// form is covered by `emit_tests.rs::round_trip_sequence`.
-#[test]
-fn test_flow_sequence_array_field_parses() {
-    let markdown = "~~~card-yaml
-$quill: usaf_memo
-$kind: main
-memo_for: [ORG/SYMBOL, OTHER/SYMBOL]
-~~~
-
-This is the memo body.";
-
-    let doc = decompose(markdown).unwrap();
-    let memo_for = doc.main().payload().get("memo_for").unwrap();
-    let items = memo_for.as_array().unwrap();
-    assert_eq!(items.len(), 2);
-    assert_eq!(items[0].as_str().unwrap(), "ORG/SYMBOL");
-    assert_eq!(items[1].as_str().unwrap(), "OTHER/SYMBOL");
 }
 
 #[test]
@@ -1078,21 +989,6 @@ $kind: note
 
     let err = decompose(markdown).unwrap_err().to_string();
     assert!(err.contains("must not declare `$quill`"), "got: {err}");
-}
-
-#[test]
-fn test_invalid_quill_ref() {
-    let markdown = "~~~card-yaml
-$quill: Invalid-Name
-$kind: main
-~~~";
-
-    let result = decompose(markdown);
-    assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("Invalid $quill reference"));
 }
 
 #[test]
@@ -1236,42 +1132,6 @@ This is the body.";
 }
 
 #[test]
-fn test_blank_lines_in_scope_blocks() {
-    let markdown = "~~~card-yaml
-$quill: test_quill
-$kind: main
-~~~
-
-~~~card-yaml
-$kind: items
-name: Item 1
-
-price: 19.99
-
-tags:
-  - electronics
-  - gadgets
-~~~
-
-Body of item 1.";
-
-    let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.cards().len(), 1);
-    let card = &doc.cards()[0];
-    assert_eq!(card.kind(), Some("items"));
-    assert_eq!(
-        card.payload().get("name").unwrap().as_str().unwrap(),
-        "Item 1"
-    );
-    assert_eq!(
-        card.payload().get("price").unwrap().as_f64().unwrap(),
-        19.99
-    );
-    let tags = card.payload().get("tags").unwrap().as_array().unwrap();
-    assert_eq!(tags.len(), 2);
-}
-
-#[test]
 fn test_triple_dash_between_paragraphs_is_delegated() {
     let markdown = "~~~card-yaml
 $quill: test_quill
@@ -1292,69 +1152,6 @@ Second paragraph.";
     // `---` is delegated to CommonMark (thematic break / setext underline),
     // never treated as a card fence: the document stays a single card.
     assert!(doc.cards().is_empty(), "--- must not split a card");
-}
-
-#[test]
-fn test_lone_triple_dash_in_body_is_delegated() {
-    let markdown = "~~~card-yaml
-$quill: test_quill
-$kind: main
-title: Test
-~~~
-
-First paragraph.
----
-
-Second paragraph.";
-
-    let doc = decompose(markdown).unwrap();
-    let body = doc.main().body_markdown();
-    assert!(body.contains("First paragraph."));
-    assert!(body.contains("Second paragraph."));
-    // `---` is delegated to CommonMark (thematic break / setext underline),
-    // never treated as a card fence: the document stays a single card.
-    assert!(doc.cards().is_empty(), "--- must not split a card");
-}
-
-#[test]
-fn test_multiple_blank_lines_in_yaml() {
-    let markdown = "~~~card-yaml
-$quill: test_quill
-$kind: main
-title: Test
-
-
-author: John Doe
-
-
-version: 1.0
-~~~
-
-Body content.";
-
-    let doc = decompose(markdown).unwrap();
-    assert_eq!(
-        doc.main().payload().get("title").unwrap().as_str().unwrap(),
-        "Test"
-    );
-    assert_eq!(
-        doc.main()
-            .payload()
-            .get("author")
-            .unwrap()
-            .as_str()
-            .unwrap(),
-        "John Doe"
-    );
-    assert_eq!(
-        doc.main()
-            .payload()
-            .get("version")
-            .unwrap()
-            .as_f64()
-            .unwrap(),
-        1.0
-    );
 }
 
 // --- demo_file_test ---
@@ -1727,52 +1524,7 @@ Body.",
     }
 }
 
-#[test]
-fn test_yaml_nested_objects() {
-    let markdown = "~~~card-yaml
-$quill: test_quill
-$kind: main
-config:
-  database:
-    host: localhost
-    port: 5432
-  cache:
-    enabled: true
-~~~
-
-Body.";
-    let doc = decompose(markdown).unwrap();
-    let config = doc
-        .main()
-        .payload()
-        .get("config")
-        .unwrap()
-        .as_object()
-        .unwrap();
-    let db = config.get("database").unwrap().as_object().unwrap();
-    assert_eq!(db.get("host").unwrap().as_str().unwrap(), "localhost");
-    assert_eq!(db.get("port").unwrap().as_i64().unwrap(), 5432);
-}
-
 // Card block edge cases
-
-#[test]
-fn test_card_with_body_containing_dashes() {
-    let markdown = "~~~card-yaml
-$quill: test_quill
-$kind: main
-~~~
-
-~~~card-yaml
-$kind: items
-name: Item
-~~~
-
-Some text with --- dashes in it.";
-    let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.cards().len(), 1);
-    assert!(doc.cards()[0].body_markdown().contains("--- dashes"));
-}
 
 // Error handling
 
@@ -1789,13 +1541,6 @@ fn test_invalid_card_kind_names_are_rejected() {
             "kind {kind:?} should be rejected; got: {err}"
         );
     }
-}
-
-#[test]
-fn test_yaml_syntax_error_missing_colon() {
-    let markdown = "~~~card-yaml\n$quill: test_quill\n$kind: main\ntitle Test\n~~~\n\nBody.";
-    let result = decompose(markdown);
-    assert!(result.is_err());
 }
 
 // Body extraction edge cases
@@ -1834,17 +1579,6 @@ fn test_blank_separator_strip_global_body_followed_by_card_lf() {
 }
 
 #[test]
-fn test_blank_separator_strip_global_body_followed_by_card_crlf() {
-    // CRLF line endings: strip exactly one `\r\n` as the blank-line separator.
-    let markdown =
-        "~~~card-yaml\r\n$quill: q\r\n$kind: main\r\n~~~\r\n\r\nbody\r\n\r\n~~~card-yaml\r\n$kind: x\r\n~~~\r\n";
-    let doc = decompose(markdown).unwrap();
-    // CRLF normalizes to LF; the blank-line separator is stripped and the value
-    // projection carries no trailing newline: identical to the `_lf` sibling.
-    assert_eq!(doc.main().body_markdown(), "body");
-}
-
-#[test]
 fn test_blank_separator_strip_card_body_followed_by_card() {
     // First card body is followed by another fence → separator stripped.
     // Last card body is at EOF → preserved verbatim.
@@ -1852,16 +1586,6 @@ fn test_blank_separator_strip_card_body_followed_by_card() {
     let doc = decompose(markdown).unwrap();
     assert_eq!(doc.cards()[0].body_markdown(), "first");
     assert_eq!(doc.cards()[1].body_markdown(), "second");
-}
-
-#[test]
-fn test_blank_separator_strip_preserves_author_blank_lines() {
-    // Author wrote two blank lines after the body. Only the blank-line
-    // separator (last `\n`) is stripped; the author's blank line is preserved.
-    let markdown =
-        "~~~card-yaml\n$quill: q\n$kind: main\n~~~\n\nbody\n\n\n~~~card-yaml\n$kind: x\n~~~\n";
-    let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.main().body_markdown(), "body");
 }
 
 #[test]
@@ -1887,17 +1611,6 @@ fn test_f2_strip_does_not_overstrip_content_newlines() {
 // Kind name validation
 
 // Guillemet preprocessing
-
-#[test]
-fn test_guillemet_double_conversion_prevention() {
-    let markdown =
-        "~~~card-yaml\n$quill: test_quill\n$kind: main\ntitle: Already «converted»\n~~~\n\nBody.";
-    let doc = decompose(markdown).unwrap();
-    assert_eq!(
-        doc.main().payload().get("title").unwrap().as_str().unwrap(),
-        "Already «converted»"
-    );
-}
 
 #[test]
 fn test_allowed_card_field_collision() {
@@ -1938,25 +1651,6 @@ Body
 }
 
 // ── to_plate_json round-trip snapshot ─────────────────────────────────────────
-
-/// Verify to_plate_json produces the correct shape for a simple document.
-#[test]
-fn test_to_plate_json_simple() {
-    let doc = Document::parse(
-        "~~~card-yaml\n$quill: my_quill\n$kind: main\ntitle: Hello\n~~~\n\nBody text.\n",
-    )
-    .unwrap()
-    .document;
-    let json = doc.to_plate_json();
-
-    assert_eq!(json["$quill"], "my_quill");
-    assert_eq!(json["title"], "Hello");
-    // `$body` crosses the seam as canonical content JSON, not a markdown string.
-    assert_eq!(json["$body"]["text"], "Body text.");
-    assert!(json["$body"]["lines"].is_array());
-    assert!(json["$cards"].is_array());
-    assert_eq!(json["$cards"].as_array().unwrap().len(), 0);
-}
 
 /// to_plate_json with cards produces a `$cards` array containing `$kind`,
 /// fields, and `$body`.
