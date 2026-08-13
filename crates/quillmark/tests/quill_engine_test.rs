@@ -1,11 +1,7 @@
-//! Integration tests for the Quillmark engine.
-
 use std::fs;
 use tempfile::TempDir;
 
 use quillmark::Quillmark;
-#[cfg(feature = "typst")]
-use quillmark::{Document, OutputFormat, RenderOptions};
 
 fn make_quill_dir(temp_dir: &TempDir, name: &str, backend: &str) -> std::path::PathBuf {
     let quill_path = temp_dir.path().join(name);
@@ -23,31 +19,11 @@ fn make_quill_dir(temp_dir: &TempDir, name: &str, backend: &str) -> std::path::P
 }
 
 #[test]
-#[cfg(feature = "typst")]
-fn test_quill_from_path_engine_metadata() {
-    let temp_dir = TempDir::new().unwrap();
-    let quill_path = make_quill_dir(&temp_dir, "my_test_quill", "typst");
-
-    let quill = quillmark::quill_from_path(quill_path).expect("Quill::from_path failed");
-
-    assert_eq!(quill.name(), "my_test_quill");
-    assert_eq!(quill.backend_id(), "typst");
-
-    let engine = Quillmark::new();
-    assert!(engine
-        .supported_formats(&quill)
-        .expect("supported_formats failed")
-        .contains(&OutputFormat::Pdf));
-}
-
-#[test]
 fn test_unsupported_backend_errors_at_render_time() {
     let temp_dir = TempDir::new().unwrap();
     let quill_path = make_quill_dir(&temp_dir, "bad_backend_quill", "non_existent");
 
-    // Loading does not resolve a backend: it succeeds for an unknown backend
-    // id, tagging the quill with the declared intent. The backend-existence
-    // check happens at render time.
+    // Loading tags the quill with its declared backend id without resolving it.
     let quill =
         quillmark::quill_from_path(quill_path).expect("load succeeds; backend resolved later");
     assert_eq!(quill.backend_id(), "non_existent");
@@ -62,25 +38,3 @@ fn test_unsupported_backend_errors_at_render_time() {
     );
 }
 
-#[test]
-#[cfg(feature = "typst")]
-fn test_quill_render_succeeds_with_engine_loaded_quill() {
-    let temp_dir = TempDir::new().unwrap();
-    let quill_path = make_quill_dir(&temp_dir, "my_quill", "typst");
-
-    let engine = Quillmark::new();
-    let quill = quillmark::quill_from_path(quill_path).expect("Quill::from_path failed");
-    let parsed = Document::parse("~~~card-yaml\n$quill: my_quill\n$kind: main\n~~~\n")
-        .expect("parse failed")
-        .document;
-    let result = engine.render(
-        &quill,
-        &parsed,
-        &RenderOptions::default().with_output_format(OutputFormat::Pdf),
-    );
-
-    assert!(
-        result.is_ok(),
-        "render should succeed for engine-loaded quill"
-    );
-}

@@ -1,25 +1,19 @@
-//! # `$quill` Reference Enforcement Tests
-//!
-//! A document's `$quill: name@selector` reference is checked against the loaded
-//! quill at render time (and in `dry_run`). The document may be perfectly valid,
-//! but rendering it against the wrong quill (a different *name*, or a `version`
-//! outside the selector) is a footgun, so it is a hard error
-//! (`quill::name_mismatch` / `quill::version_mismatch`), never a warning.
+//! A document's `$quill: name@selector` is checked against the loaded quill at
+//! render time and in `dry_run`. Rendering a valid document against the wrong
+//! quill is a hard error, never a warning.
 
 use quillmark::{Document, RenderError};
 use std::fs;
 use tempfile::TempDir;
 
-// The reject-path tests drive `engine.render`, which resolves the quill's
-// declared `typst` backend before the reference check runs: without the
-// feature they would fail on `engine::backend_not_found` instead. `dry_run`
-// needs no backend, so the accept-path tests build unconditionally.
+// `engine.render` resolves the declared `typst` backend before the reference
+// check runs, so without the feature the reject paths would fail on
+// `engine::backend_not_found` instead. `dry_run` needs no backend.
 #[cfg(feature = "typst")]
 use quillmark::Quillmark;
 #[cfg(feature = "typst")]
 use quillmark::{OutputFormat, RenderOptions, RenderResult};
 
-/// Write a minimal typst quill named `test_quill` at the given version.
 fn make_quill(temp_dir: &TempDir, version: &str) -> std::path::PathBuf {
     let quill_path = temp_dir.path().join("test_quill");
     fs::create_dir_all(&quill_path).unwrap();
@@ -54,9 +48,7 @@ fn render_ref(
     )
 }
 
-/// `dry_run` a document referencing `quill_ref` against the quill at
-/// `quill_path`. Proves selector acceptance without driving a Typst compile:
-/// the render seam itself is covered by the reject-path tests.
+/// Selector acceptance without driving a Typst compile.
 fn dry_run_ref(quill_path: &std::path::Path, quill_ref: &str) -> Result<(), RenderError> {
     let quill = quillmark::quill_from_path(quill_path).expect("from_path failed");
     let markdown = format!(
@@ -67,7 +59,7 @@ fn dry_run_ref(quill_path: &std::path::Path, quill_ref: &str) -> Result<(), Rend
     quill.dry_run(&doc)
 }
 
-/// The single code carried by a quill-mismatch error (the check emits exactly one).
+/// The check emits exactly one diagnostic.
 #[cfg(feature = "typst")]
 fn mismatch_code(err: &RenderError) -> Option<&str> {
     err.diagnostics().first().and_then(|d| d.code.as_deref())
@@ -79,7 +71,6 @@ fn version_out_of_selector_is_a_hard_error() {
     let temp_dir = TempDir::new().unwrap();
     let quill_path = make_quill(&temp_dir, "3.0.0");
 
-    // Document pins `@2`; loaded quill is 3.0.0 → incompatible → render fails.
     let err = render_ref(&quill_path, "test_quill@2").expect_err("render should fail");
     assert_eq!(mismatch_code(&err), Some("quill::version_mismatch"));
 }
@@ -90,17 +81,13 @@ fn name_mismatch_is_a_hard_error() {
     let temp_dir = TempDir::new().unwrap();
     let quill_path = make_quill(&temp_dir, "3.0.0");
 
-    // Name differs: render fails on the name, and the version is left
-    // unevaluated (a selector against a differently-named quill is moot).
+    // The version is left unevaluated: a selector against another quill is moot.
     let err = render_ref(&quill_path, "other_quill@2").expect_err("render should fail");
     assert_eq!(mismatch_code(&err), Some("quill::name_mismatch"));
 }
 
-/// The check rides `apply`, not just the open door: a session is bound to the
-/// quill it was opened against, so an edit carrying another quill's `$quill`
-/// is refused at the same seam with the same code. A session compiles every
-/// edit through its own config, which is what makes the pairing checkable at
-/// all: compiled plate data does not carry the reference.
+/// The check rides `apply`, not just the open door: a session compiles every
+/// edit through its own config, so the pairing stays checkable.
 #[test]
 #[cfg(feature = "typst")]
 fn apply_rechecks_the_reference_against_the_sessions_quill() {
@@ -123,21 +110,18 @@ fn apply_rechecks_the_reference_against_the_sessions_quill() {
         .expect("open against the matching quill");
     let pages = session.page_count();
 
-    // A well-formed document that belongs to a different quill.
     let err = session
         .update(&doc("other_quill@3"))
         .expect_err("apply must refuse another quill's document");
     assert_eq!(mismatch_code(&err), Some("quill::name_mismatch"));
 
-    // …and one whose version leaves the selector.
     let err = session
         .update(&doc("test_quill@2"))
         .expect_err("apply must refuse an out-of-selector version");
     assert_eq!(mismatch_code(&err), Some("quill::version_mismatch"));
 
-    // A refusal is transactional like any other failed apply: it is raised
-    // before the backend is touched at all, so every read still serves the
-    // compile `open` produced.
+    // A refusal is raised before the backend is touched, so reads still serve
+    // the compile `open` produced.
     assert_eq!(session.page_count(), pages);
     session
         .render(&RenderOptions::default().with_output_format(OutputFormat::Pdf))

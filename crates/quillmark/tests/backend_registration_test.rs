@@ -1,5 +1,3 @@
-//! # Backend Registration Tests
-
 use quillmark::{Document, OutputFormat, Quill, Quillmark, RenderError};
 use quillmark_core::{session::SessionHandle, Artifact, Backend, RenderOptions, RenderResult};
 use std::fs;
@@ -10,8 +8,7 @@ struct MockBackend {
     id: &'static str,
 }
 
-// `Backend` is sealed. Naming the seal is how an implementation declares it
-// tracks an unstable trait.
+// `Backend` is sealed; naming the seal declares this tracks an unstable trait.
 impl quillmark_core::backend::sealed::Sealed for MockBackend {}
 
 impl Backend for MockBackend {
@@ -28,8 +25,7 @@ impl Backend for MockBackend {
         source: &Quill,
         _json_data: &serde_json::Value,
     ) -> Result<quillmark::LiveSession, RenderError> {
-        // Like the real backends, the mock reads its own input from the quill's
-        // files: here a `plate.txt` it echoes back as the rendered bytes.
+        // Like the real backends, the mock reads its input from the quill's files.
         let plated = source
             .files()
             .get_file("plate.txt")
