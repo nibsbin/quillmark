@@ -632,32 +632,22 @@ fn array_field_names(properties: &serde_json::Map<String, serde_json::Value>) ->
 }
 
 /// Schema-derived tables backing `form-field` path validation and the helper's
-/// content/date classification: a pure function of a transform schema.
-/// `TypstSession` builds this once from `transform_schema` at `open` and reuses
-/// it on every `apply`, since the schema never changes for the session's
-/// lifetime; the recursive per-card codegen pass builds each card's field lists
-/// from these tables.
-///
-/// A schema with no top-level `properties` yields the default (all tables
-/// empty): `build_transform_schema` always emits `properties`, so that case
-/// only arises for hand-built schemas in tests.
+/// content/date classification. A schema with no top-level `properties` yields
+/// all-empty tables: `build_transform_schema` always emits `properties`, so
+/// that only arises for hand-built schemas in tests.
 #[derive(Default)]
 pub(crate) struct SchemaMeta {
     pub(crate) content_fields: Vec<String>,
-    /// `type: date` fields: date-only, three-component `datetime(..)` lowering.
     pub(crate) date_fields: Vec<String>,
-    /// `type: datetime` fields: wall-clock, six-component `datetime(..)` lowering.
     pub(crate) datetime_fields: Vec<String>,
     pub(crate) array_fields: Vec<String>,
-    /// Content fields whose (element) richtext is `inline`: a subset of
-    /// `content_fields`, driving the pure-inline lowering.
+    /// A subset of `content_fields`, driving the pure-inline lowering.
     pub(crate) inline_fields: Vec<String>,
     pub(crate) card_content_fields: serde_json::Map<String, serde_json::Value>,
     pub(crate) card_date_fields: serde_json::Map<String, serde_json::Value>,
     pub(crate) card_datetime_fields: serde_json::Map<String, serde_json::Value>,
     pub(crate) card_field_names: serde_json::Map<String, serde_json::Value>,
     pub(crate) card_array_fields: serde_json::Map<String, serde_json::Value>,
-    /// Per-card-kind counterpart of `inline_fields`.
     pub(crate) card_inline_fields: serde_json::Map<String, serde_json::Value>,
     pub(crate) fields: Vec<String>,
 }
@@ -675,9 +665,6 @@ impl SchemaMeta {
         let inline_fields = inline_field_names(properties_obj);
         let fields = properties_obj.keys().cloned().collect();
 
-        // Collect per-card-kind content/date/array field names from schema
-        // $defs, plus the full per-kind property-name lists that back
-        // `form-field` path validation.
         let mut card_content_fields = serde_json::Map::new();
         let mut card_date_fields = serde_json::Map::new();
         let mut card_datetime_fields = serde_json::Map::new();
