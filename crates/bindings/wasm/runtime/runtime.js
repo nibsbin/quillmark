@@ -1186,6 +1186,22 @@ export class DocumentReader {
 		return this.#doc._readerGetContent(this.#quill, addr);
 	}
 	/**
+	 * Read the `Content` nested inside the composite field at `addr`, at `path`:
+	 * `[0]` an element of an `array<richtext>`, `["motto"]` an object's content
+	 * property, `[1, "notes"]` a leaf under both. The codec is the leaf's declared
+	 * type's, so an element's storage form stops being the caller's business.
+	 * `undefined` for an absent field and for a path that names nothing stored (a
+	 * stale row index reads absent, it does not throw); throws `UnknownField`,
+	 * `FieldNotContent` when `path` resolves to no content leaf, `FieldDecode`
+	 * anchored at the addressed path, and `IndexOutOfRange` for a bad `addr.card`.
+	 * @param {import('../core/wasm.js').Addr | string} addr
+	 * @param {import('../core/wasm.js').PathStep[]} path
+	 * @returns {import('../core/wasm.js').Content | undefined}
+	 */
+	getContentAt(addr, path) {
+		return this.#doc._readerGetContentAt(this.#quill, addr, path);
+	}
+	/**
 	 * The main body's markdown: the quill-free body read. Equals `get({})`.
 	 * @returns {string}
 	 */
@@ -1254,6 +1270,15 @@ export class CardReader {
 	 */
 	getContent(name) {
 		return this.#doc._readerGetContent(this.#quill, { card: this.#index, field: name });
+	}
+	/**
+	 * The card twin of {@link DocumentReader.getContentAt}.
+	 * @param {string} name
+	 * @param {import('../core/wasm.js').PathStep[]} path
+	 * @returns {import('../core/wasm.js').Content | undefined}
+	 */
+	getContentAt(name, path) {
+		return this.#doc._readerGetContentAt(this.#quill, { card: this.#index, field: name }, path);
 	}
 	/**
 	 * The card twin of {@link DocumentReader.bodyMarkdown}.
