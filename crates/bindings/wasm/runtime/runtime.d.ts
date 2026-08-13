@@ -176,23 +176,17 @@ export interface QuillmarkError extends Error {
 /**
  * Narrow an unknown caught value to {@link QuillmarkError}. Structural
  * (`Error` carrying a `diagnostics` array), so it narrows errors from any build
- * or WASM instance in the page. Handles are the opposite: a `Quill` or
- * `Document` from a second copy of this package is rejected wherever it is
- * passed, since two copies are two linear memories. An error is data, not a
- * handle, so nothing is gained by refusing one that crossed.
+ * or WASM instance in the page — unlike a handle, which is refused when it
+ * comes from a second copy of this package.
  */
 export declare function isQuillmarkError(e: unknown): e is QuillmarkError;
 
-// ── Open-set discriminant guards ────────────────────────────────────────────
 // `ContentIsland.type`, `ContentMark.type`, `ContentLine.kind`, and
 // `ContentContainer.container` are open sets: each union has a residual
 // `{ …: string; … }` arm, so a bare discriminant check never narrows the payload
 // (TS keeps the residual arm live, since a `string` can equal the literal).
-// These guards are the checked narrowing path for the pinned arms; an
-// unrecognized discriminant fails every guard and keeps its opaque payload. Only
-// the payload-carrying arms get a guard: the bare marks
-// (`strong`/`emph`/`underline`/`strike`/`code`), the payload-free lines
-// (`para`/`island`/`rule`), and `quote` narrow to nothing.
+// These guards are the checked narrowing path for the pinned arms; only the
+// payload-carrying arms get one, since the rest narrow to nothing.
 
 import type {
 	ContentIsland,
@@ -243,14 +237,11 @@ export declare function isListItemContainer(
 	ordinal: number;
 };
 
-// ── Open-set membership guards ──────────────────────────────────────────────
-// The guards above answer "is this arm X", one pinned arm at a time. These four
-// answer "is this a value this build knows?": the question a read-modify-write
-// consumer must ask, since lowering an edit restates every line's kind and
-// containers, and a construct the consumer cannot hold is gone on write-back
-// unless it is carried inertly. Without a predicate a consumer enumerates the
-// built-in names itself and re-couples to a closed set, going wrong at the first
-// release that adds one.
+// The guards above answer "is this arm X". These four answer "is this a value
+// this build knows?", the question a read-modify-write consumer must ask: an
+// edit restates every line's kind and containers, so a construct the consumer
+// cannot hold is gone on write-back unless carried inertly, and enumerating the
+// built-in names by hand re-couples to a closed set.
 //
 // They classify unknown TAGS, not unknown payloads on known tags: a future
 // `kind: "footnote"` carrying a sibling `ref` loses `ref` at any consumer that
@@ -276,14 +267,10 @@ export declare function isUnknownIsland(
 	island: ContentIsland
 ): island is ContentIsland & { type: string; props: unknown };
 
-// ── Canonical render-side types ─────────────────────────────────────────────
-// These are the BACKEND-NEUTRAL render contract of the plural-backend API. They
-// are defined HERE (not re-exported from one private backend) because no single
-// backend build owns the canonical API's types. Every backend build MUST satisfy
-// these shapes; that they match the Typst backend's generated declarations is
-// enforced by the type-level drift guard `crates/bindings/wasm/runtime.types.test-d.ts`
-// (run via `npm run typecheck`), so these and the generated
-// `pkg/backends/typst/wasm.d.ts` cannot silently diverge.
+// The backend-neutral render contract, defined here rather than re-exported from
+// one private backend because no single backend owns the canonical API's types.
+// Every backend build must satisfy these shapes; `runtime.types.test-d.ts` keeps
+// them from diverging from the generated `pkg/backends/typst/wasm.d.ts`.
 
 import type { Quill, Document, Card } from '../core/wasm.js';
 import type { Diagnostic } from '../core/wasm.js';
@@ -302,10 +289,8 @@ export interface RenderOptions {
 	pages?: number[];
 	producer?: string;
 	/**
-	 * Populate {@link RenderResult.regions} with the schema-field geometry
-	 * sidecar (the same entries {@link LiveSession.regions} serves), for
-	 * consumers without a live session; e.g. overlays over a one-shot SVG
-	 * export. Defaults to `false`: exports pay no introspection cost.
+	 * Populate {@link RenderResult.regions} with schema-field geometry, for
+	 * consumers without a live session. Defaults to `false`.
 	 */
 	regions?: boolean;
 }
