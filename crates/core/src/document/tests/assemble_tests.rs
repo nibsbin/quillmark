@@ -3,7 +3,6 @@ use crate::document::Document;
 
 #[test]
 fn test_empty_input_dedicated_error() {
-    // Empty input gets a dedicated message distinct from the missing-root one.
     for input in ["", "   ", "\n\n\t\n"] {
         let err = decompose(input).unwrap_err().to_string();
         assert!(
@@ -15,8 +14,6 @@ fn test_empty_input_dedicated_error() {
 
 #[test]
 fn test_missing_quill_diagnostic_code() {
-    // Documents with no `~~~card-yaml` block at all surface the dedicated
-    // `parse::missing_quill` code.
     let cases = [
         "# Hello World\n\nNo payload here.",
         "Just prose, no card-yaml block.",
@@ -35,7 +32,6 @@ fn test_missing_quill_diagnostic_code() {
 
 #[test]
 fn test_malformed_quill_reference_carries_code_and_grammar_hint() {
-    // Uppercase name → dedicated code plus the canonical grammar as `hint`.
     let err =
         decompose("~~~card-yaml\n$quill: Resume@2.1.0\n$kind: main\n~~~\n\nBody\n").unwrap_err();
     let diag = err.to_diagnostic();
@@ -49,9 +45,6 @@ fn test_malformed_quill_reference_carries_code_and_grammar_hint() {
 
 #[test]
 fn test_root_dash_frontmatter_without_quill_reports_missing_quill() {
-    // `---` is an accepted opener for the root block. A `---` block without
-    // `$quill` surfaces the standard MissingQuill error: not a
-    // "use `~~~card-yaml` instead of `---`" hint, which would be misleading.
     let err = decompose("---\nquill: usaf_memo\ntitle: Memo\n---\n\nBody\n").unwrap_err();
     let msg = err.to_string();
     assert!(msg.contains("must declare `$quill: <name>`"), "got: {msg}");
@@ -69,23 +62,12 @@ fn test_missing_block_with_bare_yaml_calls_out_missing_fence() {
     assert!(msg.contains("missing the `~~~` fence"), "got: {msg}");
 }
 
-// -----------------------------------------------------------------------
-// `---` YAML-frontmatter root-block support (accept-but-don't-emit).
-//
-// LLMs trained on the broader internet overwhelmingly write `---` … `---`
-// YAML frontmatter when generating Markdown. The parser accepts this shape
-// for the document's first (root) block only. Composable cards still
-// require the canonical `~~~card-yaml` / `~~~` fences, and the emitter is
-// unchanged: `to_markdown()` always emits the canonical form.
-// -----------------------------------------------------------------------
-
 #[test]
 fn test_dash_root_block_parses_equivalent_to_card_yaml() {
     let dash_md = "---\n$quill: test_quill\n$kind: main\ntitle: Test\n---\n\nBody.";
     let canonical_md = "~~~card-yaml\n$quill: test_quill\n$kind: main\ntitle: Test\n~~~\n\nBody.";
     let dash_doc = decompose(dash_md).expect("--- root block should parse");
     let canonical_doc = decompose(canonical_md).expect("canonical root block parses");
-    // PartialEq on Document ignores warnings; just compares main + cards.
     assert_eq!(dash_doc, canonical_doc);
     assert_eq!(dash_doc.quill_reference().name, "test_quill");
     assert_eq!(
@@ -103,8 +85,6 @@ fn test_dash_root_block_parses_equivalent_to_card_yaml() {
 
 #[test]
 fn test_dash_root_block_emits_canonical_card_yaml() {
-    // Re-emitting a `---`-parsed document MUST produce the canonical bare
-    // `~~~` fence shape. Normalisation on first emit is intended.
     let dash_md = "---\n$quill: test_quill\n$kind: main\ntitle: Test\n---\n\nBody.";
     let doc = decompose(dash_md).unwrap();
     let emitted = doc.to_markdown();
@@ -120,7 +100,6 @@ fn test_dash_root_block_emits_canonical_card_yaml() {
 
 #[test]
 fn test_dash_root_with_composable_card_yaml_parses() {
-    // `---` root, canonical composable card after: the common LLM shape.
     let markdown = "---\n$quill: test_quill\n$kind: main\ntitle: Test\n---\n\nBody.\n\n\
                     ~~~card-yaml\n$kind: note\nlabel: a\n~~~\n\nNote body.";
     let doc = decompose(markdown).expect("mixed shape should parse");
@@ -132,8 +111,6 @@ fn test_dash_root_with_composable_card_yaml_parses() {
 
 #[test]
 fn test_dash_opener_in_composable_card_position_errors() {
-    // After the root `~~~card-yaml` block, a `---` … `---` block with YAML
-    // keys between is rejected with the "expected `~~~card-yaml`" error.
     let markdown = "~~~card-yaml\n$quill: test_quill\n$kind: main\n~~~\n\nBody.\n\n\
                     ---\n$kind: note\nlabel: a\n---\n\nNote body.";
     let err = decompose(markdown).unwrap_err();
@@ -147,9 +124,6 @@ fn test_dash_opener_in_composable_card_position_errors() {
 
 #[test]
 fn test_dash_opener_with_tilde_closer_falls_through() {
-    // Mixed fences: a `---` opener with no matching `---` closer is not
-    // frontmatter, per CommonMark the lone `---` is a thematic break. No root
-    // block is recognised, so the document surfaces MissingQuill.
     let markdown = "---\n$quill: test_quill\n$kind: main\ntitle: T\n~~~\n\nBody.";
     let err = decompose(markdown).unwrap_err();
     let msg = err.to_string();
@@ -158,9 +132,6 @@ fn test_dash_opener_with_tilde_closer_falls_through() {
 
 #[test]
 fn test_tilde_opener_with_dash_closer_falls_through() {
-    // The mirror: a `~~~` opener with no `~~~` closer (only a `---`) is an
-    // unclosed CommonMark code block to EOF, not a card-yaml block. With no
-    // closed root block the document surfaces MissingQuill.
     let markdown = "~~~card-yaml\n$quill: test_quill\n$kind: main\ntitle: T\n---\n\nBody.";
     let err = decompose(markdown).unwrap_err();
     let msg = err.to_string();
@@ -243,7 +214,6 @@ Content here.";
 
 #[test]
 fn test_invalid_yaml() {
-    // Root card-yaml block with invalid YAML payload.
     let markdown = "~~~card-yaml
 $quill: test_quill
 $kind: main
@@ -255,15 +225,11 @@ Content here.";
 
     let result = decompose(markdown);
     assert!(result.is_err());
-    // Error message includes location context
     assert!(result.unwrap_err().to_string().contains("YAML error"));
 }
 
 #[test]
 fn test_unclosed_payload() {
-    // An unclosed root fence is delegated to CommonMark (a code block running
-    // to EOF), so no root block is recognised and the document fails with
-    // MissingQuill rather than a hard "never closed" error.
     let markdown = "~~~card-yaml
 $quill: test_quill
 $kind: main
@@ -279,8 +245,6 @@ Content without closing fence";
         .to_string()
         .contains("Missing required root"));
 }
-
-// Extended metadata tests
 
 #[test]
 fn test_basic_card_block() {
@@ -301,8 +265,6 @@ Body of item 1.";
 
     let doc = decompose(markdown).unwrap();
 
-    // Global body is followed by a card block: blank-line separator stripped,
-    // so the trailing `\n\n` from the source becomes a single `\n`.
     assert_eq!(doc.main().body_markdown(), "Main body content.");
     assert_eq!(
         doc.main().payload().get("title").unwrap().as_str().unwrap(),
@@ -316,14 +278,9 @@ Body of item 1.";
         card.payload().get("name").unwrap().as_str().unwrap(),
         "Item 1"
     );
-    // Last card body at EOF: no blank-line separator to strip.
     assert_eq!(card.body_markdown(), "Body of item 1.");
 }
 
-// ── "N composable cards parse with correct kind/payload/order" (table-driven) ─
-// Each row parses `markdown` and checks the subset of {quill reference, main
-// payload fields, main body, per-card kind/fields/body in order} it sets. An
-// unset/`None` entry is not checked.
 #[test]
 fn cards_parse_with_correct_kind_payload_and_order() {
     enum Expect {
@@ -675,12 +632,6 @@ id: 2
                 },
             ],
         },
-        // A multi-card document (root + two composable cards, prose thematic
-        // break in the root body) exercising the shapes described in
-        // markdown-spec.md. `***` (thematic break) has no content
-        // representation and is dropped by the projection; the surrounding
-        // paragraphs survive: hence `main_body_contains` rather than
-        // `main_body_eq`.
         Case {
             name: "spec_example",
             markdown: "~~~card-yaml
@@ -835,10 +786,6 @@ name: Item
 
 #[test]
 fn test_uppercase_payload_keys_accepted_at_parse() {
-    // Spec §3.4: data-field names match [A-Za-z_][A-Za-z0-9_]*. Only
-    // `$`-prefixed keys are system metadata, so uppercase user fields parse,
-    // are preserved verbatim (case is significant), and round-trip bare
-    // through emit.
     let markdown = "~~~card-yaml
 $quill: test_quill
 $kind: main
@@ -859,7 +806,6 @@ BODY: Test
             .unwrap(),
         "Test"
     );
-    // Verbatim, no lowercasing: the uppercase key survives emit unquoted.
     assert!(
         doc.to_markdown().contains("BODY: Test"),
         "uppercase field name must round-trip bare and verbatim"
@@ -887,7 +833,6 @@ More content.
 ";
 
     let doc = decompose(markdown).unwrap();
-    // The card-yaml inside the code block should NOT be parsed as metadata.
     assert!(doc.main().body_markdown().contains("fake: payload"));
     assert!(doc.main().payload().get("fake").is_none());
     assert_eq!(doc.cards().len(), 0);
@@ -895,10 +840,6 @@ More content.
 
 #[test]
 fn test_root_without_kind_is_accepted_and_synthesised() {
-    // markdown-spec.md §3.3: the root's `$kind` is `main` by position. An omitted
-    // `$kind` parses successfully; the parser synthesises the entry at the
-    // canonical position so `doc.main().kind()` is always `Some("main")`
-    // and canonical emission writes `$kind: main` back out.
     let markdown = "~~~card-yaml
 $quill: test_quill
 title: Test
@@ -916,8 +857,6 @@ Body content.";
         "canonical emission should synthesise $kind: main; got: {emitted}"
     );
 
-    // The synthesised line lives in canonical position: after $quill, before
-    // any user field.
     let quill_pos = emitted.find("$quill:").expect("emitted lacks $quill");
     let kind_pos = emitted.find("$kind:").expect("emitted lacks $kind");
     let title_pos = emitted.find("title:").expect("emitted lacks title");
@@ -926,14 +865,12 @@ Body content.";
         "canonical order is $quill < $kind < user fields; got: {emitted}"
     );
 
-    // Round-trip the emitted form: it parses again and equals the original.
     let reparsed = decompose(&emitted).expect("emitted form re-parses");
     assert_eq!(doc, reparsed);
 }
 
 #[test]
 fn test_root_with_non_main_kind_is_error() {
-    // Only `$kind: main` is valid on the root. Other values still error.
     let markdown = "~~~card-yaml
 $quill: test_quill
 $kind: other
@@ -948,9 +885,6 @@ title: Test
 
 #[test]
 fn test_over_nested_body_surfaces_body_import_error() {
-    // A body whose container nesting exceeds MAX_NESTING_DEPTH cannot import into
-    // the content; the parse fails with the dedicated `parse::body_import` code
-    // (such a body never rendered: the backend rejected the same depth).
     let deep = ">".repeat(crate::error::MAX_NESTING_DEPTH + 5);
     let markdown =
         format!("~~~card-yaml\n$quill: test_quill\n$kind: main\n~~~\n\n{deep} too deep\n");
@@ -963,11 +897,6 @@ fn test_over_nested_body_surfaces_body_import_error() {
 
 #[test]
 fn test_canonical_root_with_kind_round_trips_byte_equal() {
-    // §9.1: a canonical document is a parse-emit fixed point. Adding the
-    // implicit-kind synthesis must not perturb canonical input: when
-    // `$kind: main` is already written, the emitter produces the same line.
-    // The canonical body carries a single trailing newline (the content
-    // projection's block terminator) so the document is a parse-emit fixed point.
     let canonical = "~~~\n$quill: test_quill\n$kind: main\ntitle: Test\n~~~\n\nBody.\n";
     let doc = decompose(canonical).unwrap();
     assert_eq!(doc.to_markdown(), canonical);
@@ -975,8 +904,6 @@ fn test_canonical_root_with_kind_round_trips_byte_equal() {
 
 #[test]
 fn test_non_root_block_declaring_quill_is_error() {
-    // Only the root block binds the document to a quill. A composable card
-    // declaring `$quill` is a structural parse error.
     let markdown = "~~~card-yaml
 $quill: first
 $kind: main
@@ -1007,8 +934,6 @@ $quill:
 
 #[test]
 fn test_card_with_unknown_meta_key_is_error() {
-    // `$`-prefixed metadata keys are a closed set `{quill, kind, id, ext, seed}`.
-    // Any other `$key` is a parse error.
     let markdown = "~~~card-yaml
 $quill: test_quill
 $kind: main
@@ -1028,9 +953,6 @@ $kind: note
 
 #[test]
 fn dollar_keys_at_any_position_in_payload_work() {
-    // `$`-prefixed reserved keys are ordinary YAML; they may appear at any
-    // position in the block's mapping. Emit preserves source order so that
-    // any comments adjacent to a `$` line round-trip in place.
     let markdown = "~~~card-yaml
 title: First
 $quill: test_quill
@@ -1051,11 +973,9 @@ Body.";
         doc.main().payload().get("author").unwrap().as_str(),
         Some("Bob")
     );
-    // `$` keys do not appear in the user-field accessors.
     assert!(doc.main().payload().get("$quill").is_none());
     assert!(doc.main().payload().get("$kind").is_none());
 
-    // Round-trip stability: emit then re-parse produces an equal Document.
     let emitted = doc.to_markdown();
     let reparsed = decompose(&emitted).expect("round-trip should re-parse");
     assert_eq!(doc, reparsed);
@@ -1063,8 +983,6 @@ Body.";
 
 #[test]
 fn fill_on_dollar_key_is_rejected() {
-    // `!must_fill` is not permitted on `$` metadata keys: they are extracted
-    // into typed metadata and have no placeholder semantics.
     let markdown = "~~~card-yaml
 $quill: !must_fill test_quill
 $kind: main
@@ -1149,12 +1067,8 @@ Second paragraph.";
     let body = doc.main().body_markdown();
     assert!(body.contains("First paragraph."));
     assert!(body.contains("Second paragraph."));
-    // `---` is delegated to CommonMark (thematic break / setext underline),
-    // never treated as a card fence: the document stays a single card.
     assert!(doc.cards().is_empty(), "--- must not split a card");
 }
-
-// --- demo_file_test ---
 
 #[test]
 fn test_extended_metadata_demo_file() {
@@ -1174,7 +1088,6 @@ fn test_extended_metadata_demo_file() {
             .unwrap(),
         "Quillmark Team"
     );
-    // version is parsed as a number by YAML
     assert_eq!(
         doc.main()
             .payload()
@@ -1185,13 +1098,11 @@ fn test_extended_metadata_demo_file() {
         1.0
     );
 
-    // Verify body
     assert!(doc
         .main()
         .body_markdown()
         .contains("card-yaml metadata format"));
 
-    // 5 cards total: 3 features + 2 use_cases
     assert_eq!(doc.cards().len(), 5);
 
     let features_count = doc
@@ -1207,7 +1118,6 @@ fn test_extended_metadata_demo_file() {
     assert_eq!(features_count, 3);
     assert_eq!(use_cases_count, 2);
 
-    // Check first card is a feature
     assert_eq!(doc.cards()[0].kind(), Some("features"));
     assert_eq!(
         doc.cards()[0]
@@ -1268,12 +1178,6 @@ fn test_yaml_depth_limit() {
     );
 }
 
-// Guillemet preservation tests
-
-/// Guillemet/chevron sequences (`<<...>>`) must survive parsing unmodified in
-/// every context: body, YAML string values, YAML arrays, nested maps, code
-/// blocks, inline code, and card bodies/fields. A single integrative document
-/// exercises all of these.
 #[test]
 fn test_chevrons_preserved_in_all_contexts() {
     let markdown = "~~~card-yaml
@@ -1304,7 +1208,6 @@ Use <<card body>> here.";
 
     let doc = decompose(markdown).unwrap();
 
-    // Payload scalar, array, nested map.
     assert_eq!(
         doc.main().payload().get("title").unwrap().as_str().unwrap(),
         "Test <<with chevrons>>"
@@ -1330,16 +1233,14 @@ Use <<card body>> here.";
         "<<nested value>>"
     );
 
-    // Body chevrons in the content projection: code contexts (fenced + inline)
-    // protect them verbatim; plain-text `<<word>>` follows CommonMark HTML rules
-    // (`<word>` reads as an inline tag). This pins the exact projected body.
+    // Code contexts protect chevrons verbatim; plain-text `<<word>>` reads as an
+    // inline HTML tag per CommonMark and projects away.
     let body = doc.main().body_markdown();
     assert_eq!(
         body,
         "\\<> text.\n\n```\n<<in code block>>\n```\n\n`<<inline code>>` and \\<>"
     );
 
-    // Card yaml (a YAML scalar, never markdown) preserves chevrons verbatim.
     let card = &doc.cards()[0];
     assert_eq!(
         card.payload().get("description").unwrap().as_str().unwrap(),
@@ -1351,7 +1252,6 @@ Use <<card body>> here.";
 #[test]
 fn test_multiline_chevrons_projection() {
     // A plain-text `<<text ... >>` spanning a line follows CommonMark HTML rules
-    // in the content projection. Pin the exact projected body.
     let markdown = "~~~card-yaml\n$quill: test_quill\n$kind: main\n~~~\n\n<<text\nacross lines>>";
     let doc = decompose(markdown).unwrap();
     let body = doc.main().body_markdown();
@@ -1365,9 +1265,6 @@ fn test_unmatched_chevrons_preserved() {
     assert_eq!(doc.main().body_markdown(), "\\<\\<unmatched");
 }
 
-// Robustness tests
-
-/// CRLF and mixed line endings must parse identically to LF.
 #[test]
 fn test_line_ending_normalization() {
     for markdown in [
@@ -1393,13 +1290,8 @@ fn test_payload_at_eof_no_trailing_newline() {
     assert_eq!(doc.main().body_markdown(), "");
 }
 
-// Unicode handling
-
 #[test]
 fn test_unicode_in_yaml_keys() {
-    // Unicode is welcome in *values* (next test); field *names* are
-    // restricted to ASCII [A-Za-z_][A-Za-z0-9_]* (spec §3.4), so a non-ASCII
-    // name is rejected at parse.
     let markdown =
         "~~~card-yaml\n$quill: test_quill\n$kind: main\ntitre: Bonjour\nタイトル: こんにちは\n~~~\n\nBody.";
     let err = decompose(markdown).unwrap_err();
@@ -1408,7 +1300,6 @@ fn test_unicode_in_yaml_keys() {
         "non-ASCII field name is a parse error: {err}"
     );
 
-    // A conforming name with a Unicode value parses fine.
     let ok = "~~~card-yaml\n$quill: test_quill\n$kind: main\ntitre: こんにちは\n~~~\n";
     let doc = decompose(ok).unwrap();
     assert_eq!(
@@ -1417,11 +1308,6 @@ fn test_unicode_in_yaml_keys() {
     );
 }
 
-// YAML edge cases
-
-// ── Single-field YAML scalar types (table-driven) ─────────────────────────────
-// `|` (literal) and `>` (folded) block scalars are exercised nowhere else in
-// the workspace: keep them as explicit rows here.
 #[test]
 fn single_field_yaml_scalar_types() {
     enum Check {
@@ -1524,13 +1410,8 @@ Body.",
     }
 }
 
-// Card block edge cases
-
-// Error handling
-
 #[test]
 fn test_invalid_card_kind_names_are_rejected() {
-    // `$kind` is name-validated at parse time against `[a-z_][a-z0-9_]*`.
     for kind in ["ITEMS", "123items", "my-items", "Invalid-Name", ""] {
         let markdown = format!(
             "~~~card-yaml\n$quill: test_quill\n$kind: main\n~~~\n\n~~~card-yaml\n$kind: {kind}\n~~~\n\nBody."
@@ -1543,12 +1424,8 @@ fn test_invalid_card_kind_names_are_rejected() {
     }
 }
 
-// Body extraction edge cases
-
 #[test]
 fn test_body_with_leading_newlines() {
-    // The body is a content; markdown is its projection. Leading blank lines are
-    // canonicalized away at import, so the emitted body does not carry them.
     let markdown =
         "~~~card-yaml\n$quill: test_quill\n$kind: main\ntitle: Test\n~~~\n\n\n\nBody with leading newlines.";
     let doc = decompose(markdown).unwrap();
@@ -1557,21 +1434,13 @@ fn test_body_with_leading_newlines() {
 
 #[test]
 fn test_body_with_trailing_newlines() {
-    // Body at EOF: no blank-line separator to strip, source's trailing
-    // newlines are preserved verbatim as authored content.
     let markdown = "~~~card-yaml\n$quill: test_quill\n$kind: main\ntitle: Test\n~~~\n\nBody.\n\n\n";
     let doc = decompose(markdown).unwrap();
     assert_eq!(doc.main().body_markdown(), "Body.");
 }
 
-// ── Blank-line separator stripping: parse-side normalisation ──────────────────
-// See `assemble.rs::strip_blank_separator` and `markdown-spec.md §4` (rule D1).
-
 #[test]
 fn test_blank_separator_strip_global_body_followed_by_card_lf() {
-    // Global body followed by a card block: the source's tail `\n\n` is
-    // (content line terminator) + (blank-line separator). Strip exactly the
-    // separator `\n`, leaving `\n` as the content terminator.
     let markdown =
         "~~~card-yaml\n$quill: q\n$kind: main\n~~~\n\nbody\n\n~~~card-yaml\n$kind: x\n~~~\n";
     let doc = decompose(markdown).unwrap();
@@ -1580,8 +1449,6 @@ fn test_blank_separator_strip_global_body_followed_by_card_lf() {
 
 #[test]
 fn test_blank_separator_strip_card_body_followed_by_card() {
-    // First card body is followed by another fence → separator stripped.
-    // Last card body is at EOF → preserved verbatim.
     let markdown = "~~~card-yaml\n$quill: q\n$kind: main\n~~~\n\n~~~card-yaml\n$kind: a\n~~~\n\nfirst\n\n~~~card-yaml\n$kind: b\n~~~\n\nsecond\n";
     let doc = decompose(markdown).unwrap();
     assert_eq!(doc.cards()[0].body_markdown(), "first");
@@ -1590,27 +1457,18 @@ fn test_blank_separator_strip_card_body_followed_by_card() {
 
 #[test]
 fn test_f2_strip_does_not_overstrip_content_newlines() {
-    // Content-fidelity: a body whose authored content ends with multiple
-    // newlines (e.g. a code block with trailing blank lines) must survive
-    // round-trip.
     let markdown =
         "~~~card-yaml\n$quill: q\n$kind: main\n~~~\n\n```\ncode\n```\n\n\n~~~card-yaml\n$kind: x\n~~~\n";
     let doc = decompose(markdown).unwrap();
     let emitted = doc.to_markdown();
     let reparsed = Document::parse(&emitted).unwrap().document;
     assert_eq!(doc.main().body_markdown(), reparsed.main().body_markdown());
-    // The code block content survives; trailing blank lines are dropped (the
-    // content projection is a value, not a file, so it carries no final newline).
     assert!(
         doc.main().body_markdown().ends_with("```"),
         "expected code block, got {:?}",
         doc.main().body_markdown()
     );
 }
-
-// Kind name validation
-
-// Guillemet preprocessing
 
 #[test]
 fn test_allowed_card_field_collision() {
@@ -1650,10 +1508,6 @@ Body
     );
 }
 
-// ── to_plate_json round-trip snapshot ─────────────────────────────────────────
-
-/// to_plate_json with cards produces a `$cards` array containing `$kind`,
-/// fields, and `$body`.
 #[test]
 fn test_to_plate_json_with_cards() {
     let markdown = "~~~card-yaml
@@ -1676,8 +1530,6 @@ Card body here.
 
     assert_eq!(json["$quill"], "usaf_memo");
     assert_eq!(json["title"], "Test");
-    // `$body` (global and per-card) crosses as canonical content JSON; its `text`
-    // is the content-only string (blank-line separator stripped on parse).
     assert_eq!(json["$body"]["text"], "Global body.");
 
     let cards = json["$cards"].as_array().unwrap();
@@ -1687,10 +1539,6 @@ Card body here.
     assert_eq!(cards[0]["$body"]["text"], "Card body here.");
 }
 
-/// A kindless composable card (no `$kind`) carries no `$kind` key in the raw
-/// plate: the serializer never fabricates `$kind: ""` (issue 1030, "absent on
-/// undefined"). The schema-free serializer still emits `$body` for every card;
-/// the schema-gated body drop is the render plate's job (`compile_data`).
 #[test]
 fn test_to_plate_json_kindless_card_omits_kind() {
     use crate::{Card, Payload};
@@ -1715,7 +1563,6 @@ fn test_to_plate_json_kindless_card_omits_kind() {
     );
 }
 
-/// to_plate_json parity: the `$quill` key appears first.
 #[test]
 fn test_to_plate_json_quill_first() {
     let doc = Document::parse(
@@ -1729,18 +1576,13 @@ fn test_to_plate_json_quill_first() {
     assert_eq!(keys[0], "$quill");
 }
 
-/// Regression test for the `serde_json::Map::remove` / `shift_remove` bug.
-///
-/// `serde_json::Map::remove` with `preserve_order` uses `swap_remove` under
-/// the hood (O(1), moves last element into removed slot): NOT the order-
-/// preserving `shift_remove` (O(n)).  Payload field order must be
-/// preserved.
+/// `serde_json::Map::remove` under `preserve_order` is `swap_remove`, not the
+/// order-preserving `shift_remove`.
 #[test]
 fn payload_field_order_preserved_after_quill_removal() {
     let md = "~~~card-yaml\n$quill: q\n$kind: main\nsender: Alice\nrecipient: Bob\ndate: March 15\nsubject: hi\n~~~\n";
     let doc = Document::parse(md).unwrap().document;
     let keys: Vec<&str> = doc.main().payload().keys().map(|s| s.as_str()).collect();
-    // Fields must appear in YAML document order, not alphabetical or swap-order.
     assert_eq!(
         keys,
         vec!["sender", "recipient", "date", "subject"],
@@ -1748,12 +1590,8 @@ fn payload_field_order_preserved_after_quill_removal() {
     );
 }
 
-// ── `$id` is not a system key ────────────────────────────────────────────────
-
 #[test]
 fn card_id_is_rejected_as_an_unknown_system_key() {
-    // `$id` is not a system key: it is rejected like any other unknown `$`
-    // key, on a composable card and on the root alike.
     let md = "~~~\n$quill: q@0.1\n~~~\n\n~~~\n$kind: note\n$id: a\n~~~\n";
     let err = Document::parse(md).unwrap_err().to_string();
     assert!(
@@ -1770,7 +1608,6 @@ fn card_id_is_rejected_as_an_unknown_system_key() {
 
 #[test]
 fn a_user_field_named_id_is_untouched() {
-    // The unsigiled `id` is an ordinary user field.
     let md = "~~~\n$quill: q@0.1\n~~~\n\n~~~\n$kind: note\nid: a\n~~~\n";
     let doc = Document::parse(md).unwrap().document;
     assert_eq!(
