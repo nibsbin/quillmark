@@ -1,10 +1,5 @@
 //! Compiles a plate plus injected JSON data into a Typst paged document, then
 //! renders selected pages to output bytes (PDF, SVG, or PNG).
-//!
-//! Crate-internal entry points: [`compile_document`] (world → paged document
-//! plus compile warnings) and [`render_document_pages`] (paged document →
-//! artifacts). The public surface is the [`crate::TypstBackend`] `Backend`
-//! implementation.
 
 use typst::diag::Warned;
 use typst::utils::Scalar;
@@ -19,7 +14,6 @@ use crate::world::QuillWorld;
 use quillmark_core::{Artifact, Diagnostic, OutputFormat, RenderError, RenderResult, Severity};
 use quillmark_pdf::{stamp, StampOptions};
 
-/// Build raster render options for a given pixels-per-point scale factor.
 fn render_options(pixel_per_pt: f32) -> RenderOptions {
     RenderOptions {
         pixel_per_pt: Scalar::new(pixel_per_pt as f64),
@@ -27,28 +21,13 @@ fn render_options(pixel_per_pt: f32) -> RenderOptions {
     }
 }
 
-/// `comemo` memo entries older than this many compiles are evicted after each
-/// compile. The cache is process-global and grows unboundedly without
-/// eviction, an editing loop (one compile per keystroke) leaks otherwise.
-/// 10 matches typst-cli's watch-loop policy: deep enough to keep everything a
-/// live document's recompile reuses, shallow enough to bound a long session.
-///
-/// Caveat: the "age" clock is also process-global, not per-`QuillWorld`. Two
-/// sessions compiling interleaved in one process share it, so a document that
-/// goes quiet for 10 compiles *summed across all sessions* has its entries
-/// evicted even when its own edit history is shorter: reuse degrades under
-/// concurrent-session use (WASM canvas-preview, a long-lived multi-session
-/// Python/CLI process). Never a wrong render (comemo entries are pure functions
-/// of input), only lost reuse. A true per-session bound needs an eviction
-/// counter scoped to the `World`, which comemo doesn't expose today.
+/// `comemo`'s cache is process-global and unbounded without eviction; 10 matches
+/// typst-cli's watch-loop policy. The age clock is process-global too, so
+/// interleaved sessions evict each other's entries early — lost reuse, never a
+/// wrong render.
 const COMEMO_EVICT_MAX_AGE: usize = 10;
 
-/// Compile the world, returning the paged document together with Typst's
-/// non-fatal compile warnings (font fallback, overfull pages, …) mapped into
-/// [`Diagnostic`]s with resolved spans: the boundary carries everything
-/// `typst::compile` hands back. On failure only the errors are returned; the
-/// failed compile's warnings die with it (the session keeps its last-good
-/// compile and that compile's warnings).
+/// On failure the warnings of the failed compile are dropped along with it.
 pub(crate) fn compile_document(
     world: &QuillWorld,
 ) -> Result<(PagedDocument, Vec<Diagnostic>), RenderError> {
@@ -61,17 +40,11 @@ pub(crate) fn compile_document(
     }
 }
 
-/// Default pixels per inch for PNG rendering (2x at 72pt/inch).
+/// 2x at 72pt/inch.
 const DEFAULT_PPI: f32 = 144.0;
 
-/// Render selected pages from an already-compiled Typst document.
-///
-/// `field_placements` become spine `FieldSpec`s; only PDF stamps them as
-/// AcroForm widgets, but every format carries the resulting field regions. Pass
-/// an empty slice for documents with no `form-field` calls.
-///
-/// `producer` overrides the PDF `/Info` `/Producer` string (PDF output only);
-/// `None` uses [`overlay::default_producer`] (`Quillmark <version>`).
+/// `field_placements` are stamped as AcroForm widgets by the PDF path only;
+/// `producer` overrides the PDF `/Info` `/Producer` string.
 pub(crate) fn render_document_pages(
     document: &PagedDocument,
     pages: Option<&[usize]>,
@@ -80,7 +53,6 @@ pub(crate) fn render_document_pages(
     field_placements: &[overlay::FieldPlacement],
     producer: Option<&str>,
 ) -> Result<RenderResult, RenderError> {
-    // PDF does not support selective page rendering
     if format == OutputFormat::Pdf && pages.is_some() {
         return Err(RenderError::from_diag(
             Diagnostic::new(
@@ -150,13 +122,7 @@ pub(crate) fn render_document_pages(
                         .with_code("typst::pdf_generation".to_string()),
                 )
             })?;
-            // Form-field placements → spine field specs (Typst top-left → PDF
-            // bottom-left), stamped as AcroForm widgets. Only the PDF path needs
-            // them; SVG/PNG render the pages directly, and field geometry is a
-            // session-level query (`TypstSession::regions`), not a render output.
             let field_specs = overlay::build_field_specs(document, field_placements)?;
-            // The producer is always stamped (the always-on `/Info` pass); the
-            // override threads from the product layer, else the backend default.
             let producer = producer
                 .map(str::to_string)
                 .unwrap_or_else(overlay::default_producer);
@@ -167,10 +133,8 @@ pub(crate) fn render_document_pages(
                 OutputFormat::Pdf,
             ))
         }
-        // `OutputFormat` is `#[non_exhaustive]`, so this arm is forced even
-        // though `TypstSession::render` rejects anything outside
-        // `SUPPORTED_FORMATS` before reaching here. Same refusal, same
-        // constructor: one wording and one hint however it is reached.
+        // Forced by `#[non_exhaustive]`; `TypstSession::render` already rejects
+        // formats outside `SUPPORTED_FORMATS`.
         other => Err(quillmark_core::unsupported_format(
             other,
             "typst",
