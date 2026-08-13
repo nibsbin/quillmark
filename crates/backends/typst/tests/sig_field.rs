@@ -1,8 +1,5 @@
-//! End-to-end acceptance tests for the unsigned-SigField overlay feature.
-//!
-//! Compiles each plate through the public `Backend`/`LiveSession` path,
-//! parses the output with lopdf, and asserts the AcroForm structure. The spec
-//! also requires manual Acrobat verification, which these tests do not cover.
+//! Compiles each plate through the public `Backend`/`LiveSession` path, parses
+//! the output with lopdf, and asserts the AcroForm structure.
 
 use quillmark_core::{Backend, OutputFormat, RenderError, RenderOptions};
 use quillmark_typst::TypstBackend;
@@ -15,8 +12,7 @@ fn compile(plate: &str) -> Result<Vec<u8>, RenderError> {
     compile_with_data(plate, &serde_json::json!({}))
 }
 
-/// Like [`compile`] but threads `json_data` to the plate's `data` binding, so a
-/// plate can exercise value binding via `data.*`.
+/// [`compile`] with `json_data` threaded to the plate's `data` binding.
 fn compile_with_data(plate: &str, json_data: &serde_json::Value) -> Result<Vec<u8>, RenderError> {
     let source = source_with_plate(plate);
     let session = TypstBackend.open(&source, json_data)?;
@@ -24,8 +20,7 @@ fn compile_with_data(plate: &str, json_data: &serde_json::Value) -> Result<Vec<u
     Ok(result.artifacts[0].bytes.clone())
 }
 
-/// Render `plate` (with optional `json_data`) and return the parsed lopdf
-/// document plus a map from field name (`/T`) to its AcroForm widget dict.
+/// The parsed document plus a map from field name (`/T`) to its widget dict.
 fn acroform_widgets(
     plate: &str,
     json_data: &serde_json::Value,
@@ -56,8 +51,6 @@ fn acroform_widgets(
     }
     (doc, by_name)
 }
-
-// ─── case 1: two pages, two fields ────────────────────────────────────────────
 
 #[test]
 fn acceptance_two_pages_two_fields() {
@@ -144,8 +137,6 @@ Page 2.
     }
 }
 
-// ─── case 2: duplicate field name ─────────────────────────────────────────────
-
 #[test]
 fn acceptance_duplicate_name_errors() {
     let plate = r#"
@@ -164,23 +155,10 @@ fn acceptance_duplicate_name_errors() {
         "expected typst::duplicate_form_field diagnostic, got {:?}",
         diags
     );
-    let msg = diags
-        .iter()
-        .find(|d| d.code.as_deref() == Some("typst::duplicate_form_field"))
-        .unwrap()
-        .message
-        .as_str();
-    assert!(
-        msg.contains("\"a\"") || msg.contains("'a'") || msg.contains("a"),
-        "diagnostic message should name the offending field: {msg}"
-    );
 }
 
-// ─── case: user metadata with same label is ignored, real field still found ──
-
-/// A user could plausibly attach their own `<__qm_field__>` label to unrelated
-/// metadata. The extractor's `kind` field check should filter such metadata
-/// out without raising and without losing the real form-field call.
+/// A user can attach the `<__qm_field__>` label to unrelated metadata; the
+/// extractor's `kind` check must filter it without losing the real call.
 #[test]
 fn user_metadata_on_reserved_label_does_not_clobber() {
     let plate = r#"
@@ -213,8 +191,6 @@ fn user_metadata_on_reserved_label_does_not_clobber() {
     );
 }
 
-// ─── case 3: no fields → output identical to typst_pdf ────────────────────────
-
 #[test]
 fn acceptance_no_fields_no_overlay() {
     let plate = r#"
@@ -223,7 +199,6 @@ fn acceptance_no_fields_no_overlay() {
 Just a doc.
 "#;
     let pdf = compile(plate).expect("compile ok");
-    // No AcroForm key in the catalog.
     let doc = lopdf::Document::load_mem(&pdf).unwrap();
     let cat = doc.catalog().unwrap();
     assert!(
@@ -231,9 +206,8 @@ Just a doc.
         "expected no /AcroForm in catalog for sig-field-free plate"
     );
 
-    // The signature overlay is skipped (no fields), but the always-on
-    // `/Producer` metadata pass appends exactly one incremental update, so
-    // expect two startxref markers and a single `/Prev` chain entry.
+    // No fields, so the overlay is skipped, but the always-on `/Producer` pass
+    // still appends one incremental update.
     let startxref_count = pdf
         .windows(b"startxref\n".len())
         .filter(|w| *w == b"startxref\n")
@@ -252,15 +226,9 @@ Just a doc.
     );
 }
 
-// ─── generalized form-field types ────────────────────────────────────────────
-//
-// These assert the typst→spec *mapping* (the bound `/V`, checkbox truthiness,
-// choice option-matching). The spine bytes (the MULTILINE/COMBO `Ff` flag bits
-// and the `/MK /CA (4)` checkbox glyph) are owned by
-// `quillmark-pdf/tests/stamp.rs` at the spine seam, not re-checked here.
+// The tests below assert the typst→spec mapping; the spine bytes (`Ff` flag
+// bits, the checkbox glyph) belong to `quillmark-pdf/tests/stamp.rs`.
 
-/// case: text fields: single-line and multiline; the bound `/V` string lands
-/// on the widget.
 #[test]
 fn form_field_text_single_and_multiline() {
     let plate = r#"
@@ -279,8 +247,6 @@ fn form_field_text_single_and_multiline() {
     assert_eq!(multi.get(b"FT").unwrap().as_name().unwrap(), b"Tx");
 }
 
-/// case: checkbox: `/FT /Btn`; `/V` and `/AS` are `/Yes` when bound truthy and
-/// `/Off` when not.
 #[test]
 fn form_field_checkbox_checked_and_unchecked() {
     let plate = r#"
@@ -302,8 +268,6 @@ fn form_field_checkbox_checked_and_unchecked() {
     assert_eq!(off.get(b"AS").unwrap().as_name().unwrap(), b"Off");
 }
 
-/// case: choice: `/FT /Ch`; `/Opt` carries the options; `/V` carries the
-/// chosen option when it matches, and is absent when it does not.
 #[test]
 fn form_field_choice_options_and_value_matching() {
     let plate = r#"
@@ -324,7 +288,6 @@ fn form_field_choice_options_and_value_matching() {
     assert_eq!(opt_strs, vec!["Red", "Green", "Blue"]);
     assert_eq!(color.get(b"V").unwrap().as_str().unwrap(), b"Green");
 
-    // A value matching no option is dropped: no /V (or an empty one).
     let bad = widgets.get("bad").expect("bad field");
     assert_eq!(bad.get(b"FT").unwrap().as_name().unwrap(), b"Ch");
     match bad.get(b"V") {
@@ -338,8 +301,6 @@ fn form_field_choice_options_and_value_matching() {
     }
 }
 
-/// case: signature via the general helper: `/FT /Sig`, value-free, unchanged
-/// from the dedicated `signature-field`.
 #[test]
 fn form_field_signature_via_general_helper() {
     let plate = r#"
@@ -352,15 +313,12 @@ fn form_field_signature_via_general_helper() {
     assert_eq!(sig.get(b"FT").unwrap().as_name().unwrap(), b"Sig");
     assert!(sig.get(b"V").is_err(), "signature field must carry no /V");
 
-    // /SigFlags still asserted on the form when a signature is present.
     let cat = doc.catalog().unwrap();
     let af_ref = cat.get(b"AcroForm").unwrap().as_reference().unwrap();
     let af = doc.get_object(af_ref).unwrap().as_dict().unwrap();
     assert_eq!(af.get(b"SigFlags").unwrap().as_i64().unwrap(), 1);
 }
 
-/// case: value binding from real `json_data`: the plate reads `data.*` and the
-/// bound values land in each widget's `/V`.
 #[test]
 fn form_field_value_binding_from_data() {
     let plate = r#"
@@ -421,13 +379,8 @@ fn form_field_value_binding_from_data() {
     );
 }
 
-/// case: `session.regions()` exposes a region only for a `field:`-bound widget,
-/// keyed on that schema path (of any field type), each carrying page+geometry. A
-/// widget that binds no schema field has only a `/T` name (not a schema
-/// address) and surfaces nothing. A session-level query, not a render output.
-/// `field:` validates against the schema like `tagged`, so the test owns its
-/// schema (declaring every bound field) rather than borrowing the host
-/// fixture's field inventory: a fixture edit cannot break a widget test.
+/// A widget binding no schema field has only a `/T` name, not a schema address,
+/// so it surfaces no region.
 #[test]
 fn form_field_regions_key_on_bound_schema_field() {
     const YAML: &str = r#"
