@@ -282,12 +282,8 @@ impl<'a> Emit<'a> {
         }
     }
 
-    // ---- block-tree walk (terminator model) ----
-
-    /// Emit the sibling blocks in `range`, all sharing the container prefix of
-    /// length `depth`. Leaf blocks terminate with `\n\n`; lists and quotes carry
-    /// their own whitespace. This is the top-level / in-quote discipline; list
-    /// *item* bodies use [`Self::emit_item_body`] instead.
+    /// Leaf blocks terminate with `\n\n`; lists and quotes carry their own
+    /// whitespace. List *item* bodies use [`Self::emit_item_body`] instead.
     fn emit_block_level(&mut self, range: Range<usize>, depth: usize) {
         let mut i = range.start;
         while i < range.end {
@@ -301,11 +297,8 @@ impl<'a> Emit<'a> {
         }
     }
 
-    /// If the block at `i` opens a list or quote container at `depth`, emit the
-    /// whole run and return its end index; return `None` for a leaf, leaving the
-    /// caller to emit it under its own discipline (top-level terminated vs list
-    /// item body). The container dispatch shared by [`Self::emit_block_level`]
-    /// and [`Self::emit_item_body`].
+    /// `None` for a leaf, leaving the caller to emit it under its own
+    /// discipline (top-level terminated vs list item body).
     fn try_emit_container(&mut self, range: Range<usize>, depth: usize, i: usize) -> Option<usize> {
         match self.rt.lines[i].containers.get(depth).cloned() {
             Some(Container::ListItem { ordered, start, .. }) => {
@@ -332,10 +325,8 @@ impl<'a> Emit<'a> {
         }
     }
 
-    /// End of the run starting at `i` whose container at `depth` equals `key`.
-    /// Whole-container equality, which is what a container with no shape of its
-    /// own (`Quote`, an unknown) needs; [`Self::list_run_end`] is the sibling for
-    /// a list, where the run is the *shape* and each item differs.
+    /// Whole-container equality, what a container with no shape of its own
+    /// (`Quote`, an unknown) needs; [`Self::list_run_end`] is the list sibling.
     fn container_run_end(
         &self,
         range: Range<usize>,
@@ -350,9 +341,6 @@ impl<'a> Emit<'a> {
         j
     }
 
-    /// End of the leaf segment starting at `i` at `depth`: `i` plus every
-    /// following line at the same depth that continues it (a hard-break run or a
-    /// code fence's lines).
     fn segment_end(&self, range: Range<usize>, depth: usize, i: usize) -> usize {
         let mut j = i + 1;
         while j < range.end
@@ -364,10 +352,8 @@ impl<'a> Emit<'a> {
         j
     }
 
-    /// End of the list run starting at `i`: the maximal span of lines whose
-    /// container at `depth` is a `ListItem` of the same `(ordered, start)` shape.
-    /// Different-shape adjacent lists stay separate (same-shape ones already
-    /// merged at import).
+    /// Different-shape adjacent lists stay separate; same-shape ones already
+    /// merged at import.
     fn list_run_end(
         &self,
         range: Range<usize>,
@@ -390,9 +376,8 @@ impl<'a> Emit<'a> {
         j
     }
 
-    /// A leaf block terminated with `\n\n`. An empty paragraph emits nothing;
-    /// every other block (including an empty heading (`= `) or empty code
-    /// fence) still renders.
+    /// An empty paragraph emits nothing; every other block (an empty heading or
+    /// code fence included) still renders.
     fn emit_leaf_terminated(&mut self, range: Range<usize>) {
         let first = &self.rt.lines[range.start];
         let (lo, _) = self.line_usv[range.start];
@@ -405,8 +390,7 @@ impl<'a> Emit<'a> {
         self.end_newline = true;
     }
 
-    /// A list: the Start(List) fresh-line guard, each item, then a
-    /// trailing `\n` only when this is the outermost list (no ancestor list item).
+    /// The trailing `\n` goes on only when this is the outermost list.
     fn emit_list(&mut self, range: Range<usize>, depth: usize, ordered: bool, start: u64) {
         if !self.end_newline {
             self.out.push('\n');
@@ -435,10 +419,8 @@ impl<'a> Emit<'a> {
         }
     }
 
-    /// One list item: `<indent><marker>` then the item's body, then End(Item)'s
-    /// `\n` fresh-line guard. `indent` is `2×depth`; the marker is `- ` (bullet),
-    /// the explicit `N. ` on the first item of an ordered list starting off-1, or
-    /// `+ ` (Typst auto-numbers `+` from the first item's number).
+    /// The marker is `- `, the explicit `N. ` on the first item of an ordered
+    /// list starting off-1, or `+ ` (Typst auto-numbers `+` from that number).
     fn emit_item(
         &mut self,
         range: Range<usize>,
@@ -466,9 +448,8 @@ impl<'a> Emit<'a> {
         }
     }
 
-    /// A list item's body at `content_depth` (`= depth+1`): the first block flows
-    /// straight off the marker; each later block is preceded by a blank line and
-    /// the continuation indent (`2×content_depth`). Nested lists/quotes recurse.
+    /// The first block flows straight off the marker; each later block is
+    /// preceded by a blank line and the `2×content_depth` continuation indent.
     fn emit_item_body(&mut self, range: Range<usize>, content_depth: usize) {
         let cont_indent = "  ".repeat(content_depth);
         let mut first_block = true;
@@ -481,8 +462,8 @@ impl<'a> Emit<'a> {
             }
             let j = self.segment_end(range.clone(), content_depth, i);
             if !first_block {
-                // Continuation block: the previous block left one `\n`; this adds
-                // a second plus the indent → blank line + indent.
+                // The previous block left one `\n`; a second plus the indent
+                // makes the blank line.
                 self.out.push('\n');
                 self.out.push_str(&cont_indent);
                 self.end_newline = false;
@@ -497,9 +478,7 @@ impl<'a> Emit<'a> {
         }
     }
 
-    /// A block quote: `#quote(block: true)[…]` wrapping the quote's inner
-    /// blocks, lowered under the block-level discipline, rendered
-    /// structurally, not flattened.
+    /// `#quote(block: true)[…]`: quotes render structurally, not flattened.
     fn emit_quote(&mut self, range: Range<usize>, depth: usize) {
         if !self.end_newline {
             self.out.push('\n');
@@ -512,23 +491,18 @@ impl<'a> Emit<'a> {
         self.end_newline = true;
     }
 
-    // ---- segment content (no terminator, no marker) ----
-
-    /// Emit one leaf segment's markup and record its [`SegmentMap`]. Leaves
-    /// `end_newline` false: the caller owns the terminator.
+    /// Leaves `end_newline` false: the caller owns the terminator.
     fn emit_segment(&mut self, range: Range<usize>) {
         let kind = self.rt.lines[range.start].kind.clone();
         let (lo, _) = self.line_usv[range.start];
         let (_, hi) = self.line_usv[range.end - 1];
-        // A code fence buffers all its lines into one `#raw(...)` and records its
-        // own window/runs; the remaining kinds share the record-and-push tail.
+        // A code fence records its own window/runs.
         if let LineKind::Code { lang } = &kind {
             self.emit_code(range, lang.as_deref(), lo, hi);
             self.end_newline = false;
             return;
         }
-        // Each kind emits its prefix (heading marker, rule glyph, or nothing) and
-        // its content runs; `g0` opens the recorded window after any prefix.
+        // `g0` opens the recorded window after any prefix.
         let (g0, runs) = match kind {
             LineKind::Heading { level } => {
                 self.out.push_str(&"=".repeat(level as usize));
@@ -542,10 +516,8 @@ impl<'a> Emit<'a> {
                 (g0, Vec::new())
             }
             LineKind::Code { .. } => unreachable!("code handled by early return"),
-            // `Island`, `Para`, `Unknown`, and (`LineKind` being
-            // `#[non_exhaustive]`) any role added after this build: all lower as
-            // a paragraph. The inline content renders; the role is lost to the
-            // projection and survives in storage.
+            // `LineKind` is `#[non_exhaustive]`: any role added after this
+            // build lowers as a paragraph rather than failing.
             _ => {
                 let g0 = self.out.len();
                 (g0, self.emit_inline(lo, hi))
@@ -560,9 +532,8 @@ impl<'a> Emit<'a> {
         self.end_newline = false;
     }
 
-    /// A code fence: `#raw(block: true[, lang: "…"], "…")`. Every line's text
-    /// rides in the one string literal joined by an escaped `\n`; each line's
-    /// content is one `StringLit` run.
+    /// `#raw(block: true[, lang: "…"], "…")`: every line's text rides in the one
+    /// string literal joined by an escaped `\n`, and is one `StringLit` run.
     fn emit_code(&mut self, range: Range<usize>, lang: Option<&str>, lo: usize, hi: usize) {
         let g0 = self.out.len();
         self.out.push_str("#raw(block: true");
@@ -575,7 +546,7 @@ impl<'a> Emit<'a> {
         let mut runs = Vec::new();
         for (idx, li) in range.clone().enumerate() {
             if idx > 0 {
-                // Line separator: an escaped `\n`, structural (outside any run).
+                // Structural: outside any run.
                 self.out.push_str(&escape_string("\n"));
             }
             let (l0, l1) = self.line_usv[li];
@@ -594,12 +565,8 @@ impl<'a> Emit<'a> {
         });
     }
 
-    // ---- inline: marks + islands + line breaks, with the source map ----
-
-    /// Emit the inline content of a segment's USV range `[lo, hi)`, returning its
-    /// text runs. Wrapping marks nest via a close-and-reopen boundary sweep;
-    /// `code` marks render atomically as `#raw("…")`; island slots render their
-    /// island; interior `\n`s (continuation breaks) render as `#linebreak()`.
+    /// Wrapping marks nest via a close-and-reopen boundary sweep; `code` marks
+    /// render atomically as `#raw("…")`; interior `\n`s become `#linebreak()`.
     fn emit_inline(
         &mut self,
         lo: usize,
@@ -607,19 +574,12 @@ impl<'a> Emit<'a> {
     ) -> Vec<(Range<usize>, Range<usize>, EscapeCtx)> {
         let mut runs = Vec::new();
 
-        // Wrapping marks (nest) and atomic code marks, clipped to [lo, hi): the
-        // same construction cells use, here over the content marks windowed to
-        // this segment.
         let (mut wraps, codes) = wraps_and_codes(&self.rt.marks, lo, hi);
-        // Atomic code spans can't carry partial styling; clip wraps out of their
-        // interiors so overlapping wrap+code lowers to balanced markup.
+        // Atomic code spans can't carry partial styling.
         clip_wraps_to_codes(&mut wraps, &codes);
 
-        // Sweep the marks with the shared boundary walk, filling a scratch buffer
-        // whose bytes land at `base` once appended, so each run's generated span
-        // is `base + buf.len()` (absolute into `self.out`). The content callback
-        // owns the segment-specific bits: `#linebreak()`, island slots, atomic
-        // `#raw(...)` code, and escaped plain runs (recorded).
+        // The scratch buffer's bytes land at `base` once appended, so each run's
+        // generated span is `base + buf.len()`, absolute into `self.out`.
         let base = self.out.len();
         // Whether this segment's markup opens at column 0 of a generated source
         // line: the only place Typst's line-anchored syntax (heading `= `, list
