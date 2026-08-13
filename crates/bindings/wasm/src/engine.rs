@@ -564,16 +564,13 @@ impl Quill {
         Ok(Quill { inner: quill })
     }
 
-    /// Flatten this quill back into its canonical file tree: the inverse of
-    /// [`fromTree`](Self::from_tree). Round-trips: `Quill.fromTree(q.toTree())`
-    /// reproduces an equivalent quill.
+    /// Flatten this quill back into its canonical file tree, the inverse of
+    /// [`fromTree`](Self::from_tree). Keys are `"/"`-joined relative paths.
     ///
     /// This is how a quill crosses a WASM linear-memory boundary as data: a
-    /// `Quill` built in one build (e.g. the Typst-less `@quillmark/wasm/core`)
-    /// cannot be passed to an engine in another (separate linear memories), so
+    /// `Quill` built in one build cannot be passed to an engine in another, so
     /// `@quillmark/wasm/runtime` re-feeds this tree to the backend build's
-    /// `Quill.fromTree` on demand. Keys are `"/"`-joined relative paths,
-    /// matching what `fromTree` accepts.
+    /// `Quill.fromTree` on demand.
     #[wasm_bindgen(js_name = toTree, unchecked_return_type = "Map<string, Uint8Array>")]
     pub fn to_tree(&self) -> JsValue {
         let map = js_sys::Map::new();
@@ -584,9 +581,8 @@ impl Quill {
         map.into()
     }
 
-    /// The *declared* backend identifier (`config.backend`, e.g. `"typst"`).
-    /// Intent, not a resolved capability: capability (`supportedFormats` /
-    /// `supportsCanvas`) is read from the engine.
+    /// The *declared* backend identifier (e.g. `"typst"`): intent, not a
+    /// resolved capability. Capability is read from the engine.
     #[wasm_bindgen(getter, js_name = backendId)]
     pub fn backend_id(&self) -> String {
         self.inner.backend_id().to_string()
@@ -597,11 +593,9 @@ impl Quill {
         self.inner.config().blueprint()
     }
 
-    /// Document schema for the quill: the user-fillable fields plus their
-    /// `ui` hints (title / group / compact / multiline). The single
-    /// field-metadata surface: drives form editors and LLM/MCP consumers
-    /// alike. Key order in `fields`/`properties` is declaration order: the
-    /// ordering contract. Returns the `QuillSchema` shape.
+    /// Document schema for the quill: the user-fillable fields plus their `ui`
+    /// hints. Key order in `fields`/`properties` is declaration order, the
+    /// ordering contract.
     #[wasm_bindgen(getter, js_name = schema, unchecked_return_type = "QuillSchema")]
     pub fn schema(&self) -> Result<JsValue, JsValue> {
         let value = self.inner.config().schema();
@@ -609,9 +603,8 @@ impl Quill {
     }
 
     /// Identity snapshot of the `quill:` section of `Quill.yaml` plus any extra
-    /// `quill:` keys. Pure config: the backend's output formats are a
-    /// resolved-backend capability read from the engine
-    /// (`Quillmark.supportedFormats`), not part of this snapshot.
+    /// `quill:` keys. Pure config: output formats are a resolved-backend
+    /// capability read from `Quillmark.supportedFormats`, not part of this.
     #[wasm_bindgen(getter, js_name = metadata, unchecked_return_type = "QuillMetadata")]
     pub fn metadata(&self) -> Result<JsValue, JsValue> {
         let source = &self.inner;
@@ -639,8 +632,6 @@ impl Quill {
             serde_json::Value::String(config.description.clone()),
         );
 
-        // Unstructured keys declared under `quill:` (excluding fields already
-        // surfaced above or now living under `schema`).
         for (key, value) in source.metadata() {
             if quillmark_core::STANDARD_METADATA_KEYS.contains(&key.as_str()) {
                 continue;
@@ -656,14 +647,9 @@ impl Quill {
     }
 
     /// Validate `doc` against this quill's schema, returning every diagnostic
-    /// (an empty array when the document is valid).
-    ///
-    /// Forwards the canonical `validation::*` diagnostics (same `code`,
-    /// `path`, and `hint` the engine emits) including the non-fatal
-    /// `validation::must_fill` warning for each `!must_fill` marker left in
-    /// the document. Field values, defaults, and order are not part of this
-    /// surface: read them from the `Document` payload and `Quill.schema`
-    /// (schema key order is display order).
+    /// (empty when the document is valid). Forwards the canonical
+    /// `validation::*` diagnostics the engine emits, including the non-fatal
+    /// `validation::must_fill` warning per `!must_fill` marker left behind.
     #[wasm_bindgen(js_name = validate, unchecked_return_type = "Diagnostic[]")]
     pub fn validate(&self, doc: &Document) -> Result<JsValue, JsValue> {
         let diags = self.inner.validate(&doc.inner);
@@ -675,18 +661,16 @@ impl Quill {
         })
     }
 
-    /// Parse `markdown` and conform it against this quill: the **primary
-    /// ingestion path**, and the bound twin of the schema-free
-    /// `Document.fromMarkdown`. The returned document rests at its canonical
-    /// form (a `richtext` field as a content object, a `plaintext` field as its
-    /// literal string), so `getStored` answers "content object or string?" by the
-    /// field's declared codec rather than by how the document was built.
+    /// Parse `markdown` and conform it against this quill: the primary ingestion
+    /// path, and the bound twin of the schema-free `Document.fromMarkdown`. The
+    /// returned document rests at its canonical form (a `richtext` field as a
+    /// content object, a `plaintext` field as its literal string), so `getStored`
+    /// answers by the field's declared codec, not by how the document was built.
     ///
     /// Parse warnings and the `conform::*` diagnostics both land on
     /// `doc.warnings`. Throws on a parse failure, or when `markdown` declares a
-    /// `$quill` this quill does not answer to: nothing conforms under the wrong
-    /// schema. To open a document whose `$quill` is stale, use the transport
-    /// door (`Document.fromMarkdown`, `setQuillRef`, then `quill.conform`).
+    /// `$quill` this quill does not answer to. To open a document whose `$quill`
+    /// is stale, use `Document.fromMarkdown`, `setQuillRef`, then `quill.conform`.
     #[wasm_bindgen(js_name = parse)]
     pub fn parse(&self, markdown: &str) -> Result<Document, JsValue> {
         let parsed = self
@@ -700,19 +684,15 @@ impl Quill {
     }
 
     /// Land `doc`'s declared content fields at their canonical rest **in
-    /// place**, returning the `conform::*` diagnostics for the values that would
-    /// not commit (an empty array when everything rested).
+    /// place**, returning the `conform::*` diagnostics for values that would not
+    /// commit. The read-repair verb for a document that arrived through the
+    /// transport door (`fromMarkdown`, `fromJson`, a stored row).
     ///
-    /// The read-repair verb: a document that arrived through the transport door
-    /// (`fromMarkdown`, `fromJson`, a stored row) converges here, and is then
-    /// eligible for rewrite under its current schema tag. Idempotent, and a
-    /// no-op on an already-canonical document: an equal value is not rewritten,
-    /// so YAML comments and stored bytes survive.
-    ///
-    /// A `!must_fill` marker anywhere in a field's value skips that field (the
-    /// marker is the state), and a value the strict write refuses stays as
-    /// authored with a diagnostic. Throws when `doc` declares a different
-    /// `$quill`, before any mutation.
+    /// Idempotent: an equal value is not rewritten, so YAML comments and stored
+    /// bytes survive. A `!must_fill` marker anywhere in a field's value skips
+    /// that field, and a value the strict write refuses stays as authored with a
+    /// diagnostic. Throws when `doc` declares a different `$quill`, before any
+    /// mutation.
     #[wasm_bindgen(js_name = conform, unchecked_return_type = "Diagnostic[]")]
     pub fn conform(&self, doc: &mut Document) -> Result<JsValue, JsValue> {
         let diags = self
@@ -728,15 +708,11 @@ impl Quill {
         })
     }
 
-    /// The resolved-value view of `doc` against this quill's schema: for every
-    /// declared field the value the render projection would use and the
-    /// `FieldSource` rung it came from (`"authored" | "default" | "zero"`), in
-    /// one call. The card body is a `body` sibling on its card (row `name`
-    /// `"body"`), never a row in `fields`: `null` when the kind enables no body.
-    ///
-    /// Value and provenance only: completeness and errors stay `validate`'s
-    /// (a consumer merges it with its own diagnostic producers regardless), and
-    /// schema guidance reads from `Quill.schema`.
+    /// The resolved-value view of `doc`: for every declared field, the value the
+    /// render projection would use and the `FieldSource` rung it came from
+    /// (`"authored" | "default" | "zero"`). The card body is a `body` sibling on
+    /// its card, never a row in `fields`, and `null` when the kind enables no
+    /// body. Value and provenance only; completeness stays `validate`'s.
     #[wasm_bindgen(js_name = resolve, unchecked_return_type = "Resolved")]
     pub fn resolve(&self, doc: &Document) -> Result<JsValue, JsValue> {
         let states = self.inner.resolve(&doc.inner);
@@ -748,12 +724,10 @@ impl Quill {
         })
     }
 
-    /// Seed a starter `Document` from the schema, the main card plus one
-    /// instance of each composable card kind, each committing its fields'
-    /// `example:` values and leaving every other field absent (interpolated at
-    /// render: `default:`, else type-empty zero). Illustration-first: a field
-    /// with both an `example` and a `default` renders its example. See
-    /// `prose/canon/SCHEMAS.md` § "Document seeding".
+    /// Seed a starter `Document` from the schema: the main card plus one instance
+    /// of each composable card kind, each committing its fields' `example:`
+    /// values and leaving every other field absent (interpolated at render as
+    /// `default:`, else type-empty zero). A field with both renders its example.
     #[wasm_bindgen(js_name = seedDocument)]
     pub fn seed_document(&self) -> Document {
         Document {
@@ -763,24 +737,20 @@ impl Quill {
     }
 
     /// Seed a starter main `Card` (carries `$quill`) from the schema: the
-    /// `$kind: main` card of [`seedDocument`](Self::seed_document) in
-    /// isolation, committing each field's `example:` value. Returns the same
-    /// `Card` shape as the `Document.main` getter.
+    /// `$kind: main` card of [`seedDocument`](Self::seed_document) alone.
     #[wasm_bindgen(js_name = seedMain, unchecked_return_type = "Card")]
     pub fn seed_main(&self) -> Result<JsValue, JsValue> {
         card_to_js(&self.inner.seed_main())
     }
 
     /// Seed a starter composable `Card` of the given kind (carries `$kind`),
-    /// layering an optional per-kind seed `overlay` over the schema-example
-    /// base (`overlay › example › absent`). Returns `undefined` if `cardKind`
-    /// is not declared in this quill's schema, else a `Card` that feeds
-    /// straight into `Document.insertCard`.
+    /// layering an optional per-kind seed `overlay` over the schema-example base
+    /// (`overlay › example › absent`). `undefined` when `cardKind` is not
+    /// declared in this quill's schema.
     ///
     /// Pass `document.seedOverlay(cardKind)` as `overlay` so a card added to a
     /// template-derived document inherits its curated starting values; omit it
-    /// (or pass `undefined` / `null`) for the bare schema seed. `overlay` is a
-    /// plain object: this reads the document, it does not mutate it.
+    /// for the bare schema seed.
     #[wasm_bindgen(js_name = seedCard, unchecked_return_type = "Card | undefined")]
     pub fn seed_card(
         &self,
@@ -803,12 +773,11 @@ impl Quill {
 
 #[wasm_bindgen]
 impl Document {
-    /// `new Document(quillRef)`, a blank document: a main card carrying only
-    /// `$quill`, an empty body, and no composable cards. The programmatic
-    /// blank canvas: absent fields resolve at render time (`default`, else
-    /// type-empty zero), so nothing the caller did not set reaches the
-    /// output. For an example-filled starter use `Quill.seedDocument()`.
-    /// Throws on an invalid quill reference. Mirrors Python `Document(quill_ref)`.
+    /// A blank document: a main card carrying only `$quill`, an empty body, and
+    /// no composable cards. Absent fields resolve at render time (`default`, else
+    /// type-empty zero), so nothing the caller did not set reaches the output.
+    /// For an example-filled starter use `Quill.seedDocument()`. Throws on an
+    /// invalid quill reference.
     #[wasm_bindgen(constructor)]
     pub fn new(quill_ref: &str) -> Result<Document, JsValue> {
         let qr: quillmark_core::QuillReference = quill_ref.parse().map_err(|e| {
@@ -833,10 +802,8 @@ impl Document {
         })
     }
 
-    /// Reconstruct a `Document` from a versioned storage DTO string produced
-    /// by [`toJson`](Document::to_json). Unknown `schema` tags are rejected.
-    /// The result carries no parse-time warnings (`.warnings` is always empty).
-    ///
+    /// Reconstruct a `Document` from a versioned storage DTO string produced by
+    /// [`toJson`](Document::to_json). The result carries no parse-time warnings.
     /// Throws if `json` is not a valid storage DTO (malformed JSON, unknown
     /// `schema`, missing fields, or unparseable quill reference).
     #[wasm_bindgen(js_name = fromJson)]
@@ -850,15 +817,9 @@ impl Document {
         })
     }
 
-    /// Like [`fromJson`](Document::from_json) but returns `undefined` instead
-    /// of throwing when `json` is not a valid storage DTO: use to
-    /// discriminate format without exceptions as control flow.
-    /// `undefined` means "not a storage DTO"; `fromMarkdown` still throws on
-    /// genuinely malformed markdown.
-    //
-    // No `tryFromMarkdown` counterpart: a malformed-markdown failure is a
-    // real input error the caller wants to see, not a format-discriminator
-    // signal.
+    /// Like [`fromJson`](Document::from_json) but returns `undefined` instead of
+    /// throwing when `json` is not a valid storage DTO, to discriminate format
+    /// without exceptions as control flow.
     #[wasm_bindgen(js_name = tryFromJson)]
     pub fn try_from_json(json: &str) -> Option<Document> {
         let inner: quillmark_core::Document = serde_json::from_str(json).ok()?;
