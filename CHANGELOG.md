@@ -29,7 +29,6 @@
   fewest other readings (`---` is also a setext underline and the root-block
   front-matter opener). Exported markdown changes for documents holding a
   rule; the content model, wire data and rendered output do not.
-
 - refactor(core,pdfform,cli,wasm)!: the `enum:` modifier on `type: string`
   retires. `type: enum` with a `values:` list is the one spelling of a finite
   string domain; `enum:` on any type is now `quill::field_parse_error`, whose
@@ -80,9 +79,12 @@
   tier CI builds and tests the bindings on and the one both devcontainers hand a
   contributor. Nothing in the package requires it at runtime, so a Node 22
   install fails `engines` checking without failing at import.
-- docs: `docs/migrations/0.103-to-0.104.md` carries the three breaks — the
-  retired `enum:` modifier, the bracketed index spelling, and the Node floor —
-  with the prefix-match and trailing-digit shapes a consumer has to fix.
+- docs: `docs/migrations/0.103-to-0.104.md` carries the four breaks — the
+  retired `enum:` modifier, the bracketed index spelling, the `***` thematic
+  break and the Node floor — with the prefix-match, trailing-digit and stored
+  -markdown shapes a consumer has to fix, and the two additive surfaces
+  (`pathFor` / `cardPath`, and the `plate::unsupported_construct` family a
+  code-routing consumer gains an arm for).
 - test(core): three characterization tests pin the render floor's two
   type-domain edges (a defaultless enum, top-level and nested in a typed
   dictionary) and an authored empty `date` beside an empty `string`, so the
