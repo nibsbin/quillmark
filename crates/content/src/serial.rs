@@ -8,16 +8,14 @@
 //! unknown-mark `attrs` (recursively sorted).
 //!
 //! Two fixed points, and they are not the same promise. **Bytes**:
-//! `to_canonical_json(from_canonical_json(b)) == b` for canonical `b`, which is
-//! what a consumer hashing stored documents spends (`DOCUMENT_STORAGE.md` §
-//! Byte-stability). **Values**: `from_canonical_json(to_canonical_json(rt)) == rt`
-//! for a normalized `rt`, which is what an in-process producer spends, and which
-//! holds only while every discriminator's encoding is injective. An axis can keep
-//! the first and lose the second: a value that encodes to some *other* value's
-//! bytes moves nothing on disk and still fails to survive its own round trip.
+//! `to_canonical_json(from_canonical_json(b)) == b` for canonical `b`, what a
+//! consumer hashing stored documents spends. **Values**:
+//! `from_canonical_json(to_canonical_json(rt)) == rt` for a normalized `rt`,
+//! which holds only while every discriminator's encoding is injective. An axis
+//! can keep the first and lose the second: a value that encodes to some *other*
+//! value's bytes moves nothing on disk and still fails its own round trip.
 //!
-//! The seam encoding (Option A) and the storage encoding are the *same*
-//! canonical form: one serializer, not two to keep aligned.
+//! The seam encoding and the storage encoding are the *same* canonical form.
 
 use crate::model::{
     sort_keys_owned, Container, Invariant, Island, Line, LineKind, Loss, Mark,
@@ -52,19 +50,16 @@ impl std::error::Error for ParseError {}
 
 impl Content {
     /// Serialize to canonical JSON bytes. Normalizes a copy first, so the output
-    /// is canonical regardless of the caller's mark/island order. Every object
-    /// key is sorted recursively so the bytes do **not** depend on
-    /// `serde_json`'s `preserve_order` feature being enabled in the consumer's
-    /// crate graph: the canonical form is feature-independent.
+    /// is canonical regardless of the caller's mark/island order, and sorts every
+    /// object key recursively, so the bytes do **not** depend on `serde_json`'s
+    /// `preserve_order` feature in the consumer's crate graph.
     pub fn to_canonical_json(&self) -> String {
         to_canonical_value(self).to_string()
     }
 
-    /// Parse canonical JSON, normalize (idempotent), and validate. Returns
+    /// Parse canonical JSON, normalize, and validate. Returns
     /// [`ParseError::Invalid`] for a content that violates its invariants, so
     /// storage cannot silently round-trip a malformed value.
-    /// `from_canonical_json(to_canonical_json(x))` round-trips to a canonical
-    /// value and re-serializes to identical bytes.
     pub fn from_canonical_json(s: &str) -> Result<Content, ParseError> {
         let v: Value = serde_json::from_str(s).map_err(|e| ParseError::Json(e.to_string()))?;
         from_canonical_value(&v)
@@ -118,22 +113,18 @@ impl Content {
 
 /// The canonical content form as a structural [`Value`]: the recursively
 /// key-sorted tree [`Content::to_canonical_json`] renders to bytes. A storage
-/// layer embeds this as a nested object (never an escaped string): serializing
-/// the returned value with `serde_json` is byte-identical to that JSON
-/// (`to_canonical_value(rt).to_string() == rt.to_canonical_json()`), independent
-/// of the consumer's `preserve_order` feature. Normalizes a copy first, so the
-/// value is canonical whatever the caller's mark/island order.
+/// layer embeds this as a nested object rather than an escaped string;
+/// serializing it with `serde_json` is byte-identical to that JSON, independent
+/// of the consumer's `preserve_order` feature.
 pub fn to_canonical_value(rt: &Content) -> Value {
     let mut rt = rt.clone();
     rt.normalize();
     sort_keys_owned(rt.to_value())
 }
 
-/// Parse the canonical content form from a structural [`Value`], normalize
-/// (idempotent), and validate: the [`Value`]-input counterpart to
-/// [`Content::from_canonical_json`]. Returns [`ParseError::Invalid`] for a
-/// content that violates its invariants, so a storage layer parsing the embedded
-/// object rejects a malformed value at load rather than round-tripping it.
+/// Parse the canonical content form from a structural [`Value`], normalize, and
+/// validate: the [`Value`]-input counterpart to
+/// [`Content::from_canonical_json`].
 pub fn from_canonical_value(v: &Value) -> Result<Content, ParseError> {
     let mut rt = Content::from_value(v)?;
     rt.normalize();
@@ -142,14 +133,10 @@ pub fn from_canonical_value(v: &Value) -> Result<Content, ParseError> {
 }
 
 /// Read an opaque payload bag (`attrs`, `props`) off the wire, absent → `Null`.
-/// Every bag any decoder retains comes through here, the wire twin of the
-/// [`Invariant::JsonTooDeep`] check in
-/// [`Content::validate`](crate::model::Content::validate).
 ///
-/// **Depth-checked before the clone.** `Value::clone` spends a frame per level
-/// like every other consumer ([`MAX_JSON_DEPTH`](crate::MAX_JSON_DEPTH)), so an
-/// over-deep bag has to be refused while it is still borrowed from the caller's
-/// `Value`: once it is owned the frames are already spent, and dropping it
+/// **Depth-checked before the clone.** `Value::clone` spends a frame per level,
+/// so an over-deep bag has to be refused while it is still borrowed from the
+/// caller's `Value`: once owned the frames are already spent, and dropping it
 /// spends them again.
 fn bag_from_wire(
     o: &Map<String, Value>,
@@ -165,8 +152,8 @@ fn bag_from_wire(
 
 /// Read a wire position as a [`Usv`] index. **Checked**, not `as usize`: the
 /// deployment target is wasm32, where the truncating cast turns `2^32 + 5` into
-/// an in-range `5`, a mark silently landing at the wrong position instead of a
-/// rejected document. Every position the decoder reads goes through here.
+/// an in-range `5`, landing a mark at the wrong position instead of rejecting
+/// the document.
 pub(crate) fn usv_from(v: Option<&Value>, what: &'static str) -> Result<Usv, ParseError> {
     let n = v.and_then(Value::as_u64).ok_or(ParseError::Shape(what))?;
     Usv::try_from(n).map_err(|_| ParseError::Shape(what))
@@ -178,39 +165,33 @@ fn arr<'a>(obj: &'a Map<String, Value>, key: &'static str) -> Result<&'a Vec<Val
         .ok_or(ParseError::Shape(key))
 }
 
-/// `v` as a slice, empty when it is not an array. The lenient counterpart to
-/// [`arr`], for a reader that only inspects what is there: [`from_canonical_value`]
-/// owns the shape errors.
+/// `v` as a slice, empty when it is not an array: the lenient counterpart to
+/// [`arr`], since [`from_canonical_value`] owns the shape errors.
 fn as_slice(v: &Value) -> &[Value] {
     v.as_array().map(Vec::as_slice).unwrap_or_default()
 }
 
-/// `v[key]` as a slice, empty when the key is absent or not an array.
 fn arr_or_empty<'a>(v: &'a Value, key: &str) -> &'a [Value] {
     v.get(key).map(as_slice).unwrap_or_default()
 }
 
 /// Fold a legacy `attrs` bag into the object when `tag` names a **built-in**:
 /// the storage lane's promotion path. A blob written while `callout` was outside
-/// this build's vocabulary carries `{"kind":"callout","attrs":{…}}`; the release
-/// that promotes `callout` to a built-in reads named siblings that blob never had
-/// and would drop its payload unread. Folding the bag's entries in before the
-/// built-in arms run makes each promotion carry its own legacy form structurally,
-/// rather than as something the promoting author has to remember
-/// (`DOCUMENT_STORAGE.md` § Promoting a vocabulary member).
+/// this build's vocabulary carries `{"kind":"callout","attrs":{…}}`, and the
+/// release that promotes `callout` reads named siblings that blob never had,
+/// dropping its payload unread. Folding the bag in before the built-in arms run
+/// makes each promotion carry its own legacy form structurally.
 ///
-/// Three bounds. A named sibling wins over an `attrs` entry: the built-in
-/// encoding is canonical wherever both spellings are present. Only a reserved
-/// name folds, so an unknown's bag stays its opaque payload. The discriminator is
-/// read from the *original* object, so a bag holding a `kind`/`type`/`container`
-/// key cannot re-target the match.
+/// Three bounds. A named sibling wins over an `attrs` entry. Only a reserved
+/// name folds, so an unknown's bag stays its opaque payload. The discriminator
+/// is read from the *original* object, so a bag holding a
+/// `kind`/`type`/`container` key cannot re-target the match.
 ///
-/// The authored lane never arrives here with this shape: it rejects `attrs`
-/// beside a built-in up front.
+/// The authored lane rejects `attrs` beside a built-in up front, so it never
+/// arrives here with this shape.
 ///
-/// Depth-checked like [`bag_from_wire`], and for the same reason one level up: the
-/// fold deep-clones the object it folds into, so an over-deep bag spends the
-/// frames here even though a built-in never retains it as a bag.
+/// Depth-checked like [`bag_from_wire`]: the fold deep-clones the object it
+/// folds into.
 fn fold_legacy_attrs<'a>(
     o: &'a Map<String, Value>,
     tag: &str,
@@ -231,12 +212,9 @@ fn fold_legacy_attrs<'a>(
     Ok(Cow::Owned(folded))
 }
 
-// ---- Line ----
-
 /// Encode a [`LineKind`] into its canonical `kind` fields (`"para"`,
-/// `{"kind":"heading","level":n}`, …). Public so the mark/line **op** wire
-/// ([`crate::ops`]) reuses the exact discriminant a `ContentLine` carries,
-/// rather than forking the encoding.
+/// `{"kind":"heading","level":n}`, …). Public so the op wire ([`crate::ops`])
+/// reuses the exact discriminant a `ContentLine` carries.
 pub fn line_kind_to_value(kind: &LineKind) -> Value {
     let mut m = Map::new();
     match kind {
