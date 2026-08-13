@@ -20,13 +20,9 @@ pub use engine::{LiveSession, Quillmark};
 pub use error::WasmError;
 pub use types::*;
 
-/// Runs at instantiation (the wasm-bindgen start section): installs the panic
-/// hook, so a Rust panic reaches the console as a stack trace rather than
-/// `unreachable`.
-///
-/// Not the package's `init`. That name belongs to the hand-written runtime,
-/// which owns instantiation itself (`runtime/runtime.js`); this runs as part of
-/// the instantiation it awaits.
+/// Runs at instantiation, so a Rust panic reaches the console as a stack trace
+/// rather than `unreachable`. Not the package's `init` — that name belongs to
+/// the hand-written runtime, which owns instantiation itself.
 #[wasm_bindgen(start)]
 fn start() {
     console_error_panic_hook::set_once();
