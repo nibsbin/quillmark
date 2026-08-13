@@ -1,22 +1,16 @@
 // @quillmark/wasm/runtime: canonical consumer API.
 //
-// Render-side types (`RenderResult`, `RenderOptions`, `Artifact`,
-// `OutputFormat`, `PageSize`, `PaintOptions`, `PaintResult`) are defined HERE as
-// the canonical, backend-neutral render contract: NOT sourced from any one
-// private backend build. A type-level drift guard (`runtime.types.test-d.ts`,
-// via `npm run typecheck`) asserts they stay mutually assignable with the Typst
-// backend's generated declarations. `Engine` is the render dispatcher that hides
-// the cross-WASM-memory seam.
-
-// CANONICAL INVARIANT: the `Quill`/`Document` `init` resolves to ARE the core
-// build's classes, their full surface, never wrappers. There is exactly one
-// public entry point, so this is a structural fact. Handing out a wrapper is a
-// breaking design change, not a refactor. See runtime.js.
+// The render-side types are defined HERE as the backend-neutral render contract,
+// not sourced from any one private backend build; `runtime.types.test-d.ts`
+// asserts they stay mutually assignable with the Typst backend's generated
+// declarations.
 //
-// ONE COPY PER PROCESS: two copies of this package are two WASM linear memories
-// and two `Quill`/`Document` classes. Every method taking a handle refuses one
-// belonging to another copy, with a `QuillmarkError` naming `npm ls
-// @quillmark/wasm`. Errors are the exception: `isQuillmarkError` is structural.
+// The `Quill`/`Document` `init` resolves to ARE the core build's classes, never
+// wrappers. Two copies of this package are two WASM linear memories and two
+// `Quill`/`Document` classes, so every method taking a handle refuses one
+// belonging to another copy, with a `QuillmarkError` naming
+// `npm ls @quillmark/wasm`. Errors are the exception: `isQuillmarkError` is
+// structural.
 
 // The instance types, so an annotation (`let q: Quill`) needs no await. Their
 // values are `CoreSurface`'s.
@@ -35,13 +29,11 @@ import type {
 } from '../core/wasm.js';
 
 /**
- * The core build's surface: what its WASM instance stands behind, and therefore
- * what `init` resolves to. Exported nowhere statically, so awaiting is the only
- * way to hold one.
+ * The core build's surface, and therefore what `init` resolves to. Exported
+ * nowhere statically, so awaiting is the only way to hold one.
  *
- * `Quill` and `Document` here are the classes, statics included
- * (`Quill.fromTree`, `Document.fromMarkdown`), not the instance types above.
- * Each member carries the core build's own declaration, docs and all.
+ * `Quill` and `Document` here are the classes, statics included, not the
+ * instance types above.
  */
 export interface CoreSurface {
 	Quill: typeof CoreQuill;
@@ -62,24 +54,17 @@ export interface CoreSurface {
  * const { Quill, Document } = await init();
  * ```
  *
- * The builds are `--target web`: classes export synchronously, the instance
- * behind them arrives here. Identical in every environment: the binary is
- * fetched and streamed in a browser, read off disk under Node, and the call
- * site is the same line.
+ * The same line works everywhere: the binary streams from a URL in a browser
+ * and is read off disk under Node.
  *
- * THE ONLY DOOR to `Quill`, `Document` and the free functions, so the pre-init
+ * The only door to `Quill`, `Document` and the free functions, so the pre-init
  * mistake is not expressible. Destructure at each entry point (route loader,
  * hydration path, worker) rather than threading one result around: the gate is
- * memoized and concurrency-safe, so every await after the first is free. A
- * failed init clears the memo, so a retry is possible. Per realm: a Worker
- * loads and initializes its own copy.
+ * memoized and concurrency-safe, so every await after the first is free, and a
+ * failed init clears the memo. Each realm initializes its own copy.
  *
- * Both failure codes REJECT, so one `catch` covers the gate. Delivery follows
- * the function kind across this surface: a sync verb throws, a
- * promise-returning verb rejects, and nothing does both.
- *
- * Backends are NOT initialized here. `Engine` instantiates a backend inside its
- * lazy load, on first render against it.
+ * Both failure codes reject, so one `catch` covers the gate. Backends are not
+ * initialized here: `Engine` instantiates one on first render against it.
  *
  * @param source override the binary's source (bytes, a `Response`, a
  *   `WebAssembly.Module`, a URL) for hosts that route assets themselves or
@@ -92,11 +77,9 @@ export declare function init(source?: InitInput): Promise<CoreSurface>;
 import type { CardAddr } from '../core/wasm.js';
 
 /**
- * The main card's address: the default target of the card-scoped verbs
- * (`storeFields` / `storeExt` / `commitFields` / …). A named, {@link CardAddr}-typed
- * alias for the empty address `{}`, so a main-card write names its target:
- * `doc.storeFields(MAIN_CARD_ADDR, fields)`. It IS `{}` (frozen at runtime), a
- * pure alias: `{}` and `undefined` stay equally valid. A card selector only,
+ * The main card's address: a named, {@link CardAddr}-typed alias for the empty
+ * address `{}`, so a main-card write names its target. It *is* `{}` (frozen at
+ * runtime), so `{}` and `undefined` stay equally valid. A card selector only,
  * never a field address.
  */
 export declare const MAIN_CARD_ADDR: CardAddr;
