@@ -1427,15 +1427,11 @@ impl Document {
         Ok(())
     }
 
-    /// **Overwrite** the content value at `addr`: **value semantics**, content
-    /// only. Stores exactly `rt` (a canonical `Content` content object); the
-    /// identity anchors of any previous value are gone. The bottom rung of the
-    /// content lane's ladder by anchor fate: `overwrite` destroys,
-    /// [`revise`](Document::revise) rebases,
-    /// [`applyChange`](Document::apply_change) preserves. An absent `addr.field`
-    /// targets the body, an absent `addr.card` the main card. Cold-importing
-    /// markdown is spelled `overwrite(addr, importMarkdown(md))` at the call
-    /// site, where the anchor loss is visible.
+    /// **Overwrite** the content value at `addr` with exactly `rt`: value
+    /// semantics, so the identity anchors of any previous value are gone. By
+    /// anchor fate `overwrite` destroys, [`revise`](Document::revise) rebases,
+    /// and [`applyChange`](Document::apply_change) preserves. An absent
+    /// `addr.field` targets the body, an absent `addr.card` the main card.
     ///
     /// Throws on an out-of-range card, a malformed field name, or an `rt` that is
     /// not a canonical content object.
@@ -1460,12 +1456,12 @@ impl Document {
         }
     }
 
-    /// **Revise** the richtext value at `addr` from a markdown string: **edit
-    /// semantics**, the default write path, returning the text `Delta`. Imports
-    /// the markdown, diffs it against the current value, rebases surviving
-    /// identity anchors, and returns the change an editor bridge maps its own
-    /// positions through (`mapPos`). An absent `addr.field` targets the body, an
-    /// absent `addr.card` the main card; an absent field cold-imports from empty.
+    /// **Revise** the richtext value at `addr` from a markdown string: the
+    /// default write path. Imports the markdown, diffs it against the current
+    /// value, rebases surviving identity anchors, and returns the text `Delta` an
+    /// editor bridge maps its own positions through (`mapPos`). An absent
+    /// `addr.field` targets the body, an absent `addr.card` the main card; an
+    /// absent field cold-imports from empty.
     ///
     /// Throws on an out-of-range card, a malformed field name, a present
     /// non-content field value, or an over-nested markdown input.
@@ -1487,22 +1483,16 @@ impl Document {
     }
 
     /// Revise the content field at `addr` from authored text, typed *and*
-    /// anchor-preserving: the ABI under `writer.reviseField`. Resolves the
-    /// field's schema from `quill` (main card, or the addressed card's `$kind`)
-    /// and defers to [`TypedWriter::revise_field`](quillmark_core::TypedWriter::revise_field):
-    /// surviving anchors rebase (as [`revise`](Self::revise)), then the diffed
-    /// result is schema-conformed, so a `richtext(inline)` field rejects a
-    /// multi-block result with `edit::field_not_inline`. Returns the
-    /// text `Delta`.
+    /// anchor-preserving: the ABI under `writer.reviseField`. Surviving anchors
+    /// rebase as in [`revise`](Self::revise), then the diffed result is
+    /// schema-conformed, so a `richtext(inline)` field rejects a multi-block
+    /// result with `edit::field_not_inline`. Returns the text `Delta`. The codec
+    /// is the declared type's: `richtext` diffs markdown, `plaintext` literal
+    /// text.
     ///
-    /// The codec is the declared type's: `richtext` diffs markdown, `plaintext`
-    /// the literal text.
-    ///
-    /// `addr` must name a field (a bare string is `{ field }`); a body address
-    /// throws (a body carries no field schema: use [`revise`](Self::revise)). A
-    /// name the schema does not declare throws `edit::unknown_field`. Throws
-    /// on an out-of-range card. Hidden from the `.d.ts`; the visible verb is
-    /// `writer.reviseField` in the runtime layer.
+    /// `addr` must name a field; a body address throws, since a body carries no
+    /// field schema (use [`revise`](Self::revise)). An undeclared name throws
+    /// `edit::unknown_field`, an out-of-range card throws.
     #[wasm_bindgen(js_name = _reviseField, skip_typescript, unchecked_return_type = "Delta")]
     pub fn revise_field_abi(
         &mut self,
@@ -1525,19 +1515,16 @@ impl Document {
         serialize_or_throw(&delta, "reviseField")
     }
 
-    /// **Apply** a committed content edit `bundle`
-    /// (`{ delta?, islandOps?, lineOps?, markOps? }`) at `addr`, the editor
-    /// splice: text delta first, then island ops, then line ops, then mark ops
-    /// (mark ranges in final-text coordinates), each all-or-nothing. An absent
-    /// `addr.field` targets the body, an absent `addr.card` the main card.
-    ///
-    /// The island channel keeps a table or image edit on the op path: it moves
-    /// the island alone, so the anchors elsewhere in the field survive an edit
+    /// **Apply** a committed content edit `bundle` at `addr`, the editor splice:
+    /// text delta first, then island ops, then line ops, then mark ops (mark
+    /// ranges in final-text coordinates), all-or-nothing. An absent `addr.field`
+    /// targets the body, an absent `addr.card` the main card. The island channel
+    /// moves an island alone, so anchors elsewhere in the field survive an edit
     /// `overwrite` would clear.
     ///
     /// Throws on an out-of-range card, a field that is not richtext, a malformed
-    /// bundle, or an op that applies out of bounds (the value is unchanged on a
-    /// failed apply).
+    /// bundle, or an op that applies out of bounds; the value is unchanged on a
+    /// failed apply.
     #[wasm_bindgen(js_name = applyChange)]
     pub fn apply_change(
         &mut self,
@@ -1556,26 +1543,22 @@ impl Document {
     }
 
     /// Typed field write at `addr`, resolving the field's schema `type` from
-    /// `quill`: the stable ABI under the runtime `writer.set` / `writer.card(i).set`.
-    /// The one write verb for **every** field type (richtext, scalar, array,
-    /// object); the schema carries the `inline` constraint, so no type token or
-    /// flag is passed. A richtext-typed field stores the canonical content, so
-    /// identity marks (anchors, island ids) and content-only marks (e.g.
-    /// `underline`) live on it and survive compiles and the storage DTO. Values
-    /// use the encoding the seam already speaks: a content object or markdown
-    /// string for richtext, a scalar/array/object otherwise.
+    /// `quill`: the stable ABI under the runtime `writer.set`. One verb for every
+    /// field type; the schema carries the `inline` constraint, so no type token
+    /// is passed. A richtext-typed field stores canonical content, so identity
+    /// marks (anchors, island ids) and content-only marks survive compiles and
+    /// the storage DTO. Values use the encoding the seam already speaks: content
+    /// object or markdown string for richtext, scalar/array/object otherwise.
     ///
-    /// A bare string is `Addr` shorthand for `{ field }`; `{ card, field }`
-    /// targets a composable card (its `$kind` resolves the schema). A body
-    /// address throws: a body has no field schema; write it with `writer.reviseBody`
-    /// / `revise`. A field declared in the schema is strict-committed (a mismatch
-    /// throws now, not at render); a name the schema does not declare throws
-    /// `edit::unknown_field` rather than falling to the opaque store: on
-    /// the typed path it is a typo. Use [`storeField`](Document::store_field) for
-    /// opaque storage. Also throws `edit::field_coercion_failed` /
-    /// `edit::field_decode` / `edit::field_not_inline`
-    /// on a typed mismatch, `edit::invalid_field_name` on a malformed name,
-    /// and `edit::index_out_of_range` on an out-of-range card.
+    /// A bare string is `Addr` shorthand for `{ field }`. A body address throws,
+    /// having no field schema. A declared field is strict-committed, so a
+    /// mismatch throws now rather than at render, and an undeclared name throws
+    /// `edit::unknown_field` rather than falling to the opaque store — use
+    /// [`storeField`](Document::store_field) for that. Also throws
+    /// `edit::field_coercion_failed` / `edit::field_decode` /
+    /// `edit::field_not_inline` on a typed mismatch,
+    /// `edit::invalid_field_name` on a malformed name, and
+    /// `edit::index_out_of_range` on an out-of-range card.
     ///
     /// The `quill` handle is passed per call because a `Document` carries only a
     /// `$quill` reference, not the resolved schema.
@@ -1603,15 +1586,12 @@ impl Document {
     }
 
     /// Batched twin of [`commitField`](Document::commit_field): typed-commit
-    /// several fields on the card `addr` targets atomically, resolving each
-    /// field's schema `type` from `quill`. `addr` is a **card address**
-    /// (`{ card }`, absent = main; a present `field` throws). All-or-nothing with
-    /// the same per-field-diagnostic error contract as
-    /// [`storeFields`](Document::store_fields): nothing is applied on error and
-    /// the thrown error's `diagnostics` carry one entry per offending field,
-    /// including an `edit::unknown_field` for any name the schema does not
-    /// declare, so a whole-form submit sees every typo in one pass. Throws on an
-    /// out-of-range card.
+    /// several fields on the card `addr` targets atomically. `addr` is a **card
+    /// address** (absent = main; a present `field` throws). Same per-field
+    /// diagnostic contract as [`storeFields`](Document::store_fields) — nothing
+    /// applied on error, one `diagnostics` entry per offending field, including
+    /// `edit::unknown_field` for undeclared names. Throws on an out-of-range
+    /// card.
     #[wasm_bindgen(js_name = _commitFields, skip_typescript)]
     pub fn commit_fields(
         &mut self,
@@ -1638,16 +1618,12 @@ impl Document {
 
     /// Build a composable card of `kind`, typed-commit `fields` onto it, set its
     /// body from optional markdown, and place it: the ABI under `writer.addCard`.
-    /// `at` picks the position: absent appends, a number inserts at that index
-    /// (`0..=cards.length`), so a positioned typed insert is one atomic call
-    /// rather than `addCard` + `moveCard`. Fuses `makeCard` + typed commit +
-    /// insertion transactionally: the card is committed in full before it joins
-    /// the document, so a rejected field (or an invalid kind, body, or
-    /// out-of-range `at`) leaves the document untouched. Field errors throw the
-    /// same per-field diagnostic bundle as [`commitFields`](Self::commit_fields),
-    /// including an `edit::unknown_field` per undeclared name; an invalid
-    /// kind or body, or an out-of-range position, throws a single-entry bundle
-    /// keyed `$kind` / `$body`.
+    /// `at` absent appends, a number inserts at that index (`0..=cards.length`).
+    /// Transactional: the card is committed in full before it joins the document,
+    /// so a rejected field (or an invalid kind, body, or out-of-range `at`)
+    /// leaves the document untouched. Field errors throw the same per-field
+    /// bundle as [`commitFields`](Self::commit_fields); an invalid kind or body,
+    /// or a bad position, throws a single-entry bundle keyed `$kind` / `$body`.
     #[wasm_bindgen(js_name = _addCard, skip_typescript)]
     pub fn add_card(
         &mut self,
@@ -1663,9 +1639,8 @@ impl Document {
             Some(f) => js_value_to_field_batch(&f, "addCard")?,
             None => Vec::new(),
         };
-        // The card is built before it joins the document, so its field errors
-        // anchor at bare names (empty base); `$kind` / `$body` structural keys
-        // ride the same serializer.
+        // The card is built before it joins the document, so field errors anchor
+        // at bare names (empty base).
         quill
             .inner
             .writer(&mut self.inner)
@@ -1674,17 +1649,12 @@ impl Document {
     }
 
     /// Build a fresh `Card` from a kind and a flat field map: the ergonomic
-    /// constructor for `insertCard`. `fields` is an optional
-    /// `Record<string, unknown>` (each entry becomes a card field, in
-    /// insertion order); `body` defaults to `""`.
+    /// constructor for `insertCard`, which also takes any `Card` object
+    /// directly. Each `fields` entry becomes a card field in insertion order;
+    /// `body` defaults to `""`.
     ///
-    /// Sugar, not a required step: `insertCard` takes any `Card` object, and
-    /// `removeCard` returns one, so a card round-trips without passing through
-    /// here.
-    ///
-    /// Checks only what a detached card can decide alone: field-name grammar
-    /// and value depth. Kind validity is positional (`main` is right for the
-    /// root, reserved for a composable card) so `insertCard` is its gate, and
+    /// Checks only what a detached card can decide alone: field-name grammar and
+    /// value depth. Kind validity is positional, so `insertCard` is its gate and
     /// any kind string is accepted here.
     #[wasm_bindgen(js_name = makeCard, unchecked_return_type = "Card")]
     pub fn make_card(
@@ -1696,12 +1666,9 @@ impl Document {
     ) -> Result<JsValue, JsValue> {
         let field_map: serde_json::Map<String, serde_json::Value> = match fields {
             Some(fields) if !fields.is_undefined() && !fields.is_null() => {
-                // A field value is opaque host JSON, so this door is as open
-                // as `overwrite`'s. `reject_deep_js_value` has why the check
-                // precedes `from_value` rather than riding a Rust-side guard.
-                // A backstop under `Card::try_from`'s 100-level field cap, not
-                // a second spelling of it: it catches only what would trap
-                // before that check could run.
+                // A backstop under `Card::try_from`'s field-depth cap, catching
+                // only what would trap before that check runs; see
+                // `reject_deep_js_value` for why it precedes `from_value`.
                 reject_deep_js_value(&fields, "makeCard")?;
                 serde_wasm_bindgen::from_value(fields).map_err(|e| {
                     WasmError::from(format!("makeCard: `fields` must be an object: {e}"))
@@ -1719,8 +1686,6 @@ impl Document {
                 nested_fills: Vec::new(),
             })
             .collect();
-        // The `body` argument is markdown; `Card::try_from` imports it to the
-        // content (and validates the fields).
         let mut string_wire = quillmark_core::CardWire::new(
             kind,
             serde_json::Value::String(body.unwrap_or_default()),
