@@ -8,11 +8,10 @@ use crate::value::QuillValue;
 
 /// UI-specific metadata for field rendering.
 ///
-/// Field display order is not a `ui` knob: declaration order in Quill.yaml
-/// **is** display order, carried structurally by the schema's ordered field
-/// maps ([`CardSchema::fields`], [`FieldSchema::properties`]) and by key order
-/// on the emitted-schema wire. The retired `ui.order` key is rejected with a
-/// pointed message (`UI_ORDER_REMOVED_MSG`).
+/// Display order is not a `ui` knob: declaration order in Quill.yaml **is**
+/// display order, carried structurally by the schema's ordered field maps
+/// ([`CardSchema::fields`], [`FieldSchema::properties`]) and by key order on
+/// the emitted-schema wire.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[non_exhaustive]
 pub struct UiFieldSchema {
@@ -28,9 +27,8 @@ pub struct UiFieldSchema {
     pub multiline: Option<bool>,
 }
 
-/// Migration message for the retired `ui.order` key: shared by the
-/// [`UiFieldSchema`] deserializer's error and `QuillConfig::field_parse_hint`'s
-/// hint text, so the two can't drift.
+/// Shared by the [`UiFieldSchema`] deserializer's error and
+/// `QuillConfig::field_parse_hint`'s hint text, so the two can't drift.
 pub(crate) const UI_ORDER_REMOVED_MSG: &str = "ui.order is no longer accepted; \
      field display order is declaration order: reorder the fields in Quill.yaml instead";
 
@@ -345,9 +343,7 @@ pub enum FieldType {
     /// as `type: richtext`; single-line shape is declared with the sibling `inline:` key.
     /// The transform schema marks it `contentMediaType:
     /// application/quillmark-content+json` and, when inline, `quillmark:inline:
-    /// true`. The pre-richtext `markdown` spelling is not accepted: a
-    /// Quill.yaml must declare `richtext` explicitly (`from_str` returns `None`
-    /// for `markdown`, so the loader raises a schema load error).
+    /// true`.
     ///
     /// [`Content`]: quillmark_content::Content
     RichText {
@@ -363,12 +359,10 @@ pub enum FieldType {
     /// ([`from_plaintext`]/[`to_plaintext`]) rather than markdown: `*hi*` is four
     /// literal characters, verbatim both ways, never emphasis. Surfaced as
     /// `type: plaintext`; single-line shape is declared with the sibling
-    /// `inline:` key, exactly as richtext. The transform schema marks it with the
-    /// same `contentMediaType: application/quillmark-content+json` (so it
-    /// inherits the whole nav/region/preview stack with no backend edits) plus a
-    /// `quillmark:plain: true` annotation (so editors mount a formatting-free
-    /// surface). Enforced at coercion, validation (`NotPlain`), and load-time
-    /// example import via [`Content::is_plain`].
+    /// `inline:` key, as richtext. The transform schema marks it with the same
+    /// `contentMediaType: application/quillmark-content+json` plus a
+    /// `quillmark:plain: true` annotation. Enforced at coercion, validation
+    /// (`NotPlain`), and load-time example import via [`Content::is_plain`].
     ///
     /// [`Content`]: quillmark_content::Content
     /// [`Content::is_plain`]: quillmark_content::Content::is_plain
@@ -380,13 +374,10 @@ pub enum FieldType {
         /// richtext. Enforced at coercion, validation, and load-time import.
         inline: bool,
     },
-    /// A closed finite domain of string values: the "branch on this" data type.
-    /// Surfaced as `type: enum` with a required `values:` list (carried in
-    /// [`FieldSchema::enum_values`]), the sole spelling of a finite domain.
-    /// Projects to the idiomatic JSON-Schema `{type: string, enum: [...]}`:
-    /// exactly the shape backends already consume, so the token costs zero
-    /// backend edits. Scoped to string-valued members: an enum is a branching
-    /// key, and numeric domains are range constraints on `number`, not enums.
+    /// A closed finite domain of string values. Surfaced as `type: enum` with a
+    /// required `values:` list (carried in [`FieldSchema::enum_values`]) and
+    /// projected to JSON-Schema `{type: string, enum: [...]}`. Members are
+    /// string-valued only.
     Enum,
 }
 
@@ -405,9 +396,6 @@ impl FieldType {
             "richtext" => Some(FieldType::RichText { inline: false }),
             "plaintext" => Some(FieldType::PlainText { inline: false }),
             "enum" => Some(FieldType::Enum),
-            // The pre-richtext `markdown` spelling is not a recognized type: it
-            // returns `None` here so the loader reports it as an unknown type
-            // rather than silently aliasing it to block richtext.
             _ => None,
         }
     }
@@ -435,9 +423,8 @@ impl Serialize for FieldType {
     }
 }
 
-/// Migration message for the retired `type: richtext(inline)` token: the
-/// single source of truth shared by this deserializer's error and
-/// `QuillConfig::field_parse_hint`'s hint text, so the two can't drift.
+/// Shared by this deserializer's error and `QuillConfig::field_parse_hint`'s
+/// hint text, so the two can't drift.
 pub(crate) const RICHTEXT_INLINE_TOKEN_MSG: &str =
     "richtext(inline) is no longer accepted as a type token; use type: richtext with inline: true";
 
