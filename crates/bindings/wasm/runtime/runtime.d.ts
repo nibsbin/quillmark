@@ -628,18 +628,16 @@ declare module '../core/wasm.js' {
 }
 
 /**
- * A `Document` bound to its `Quill` for typed writes: the schema-bound writer,
- * constructed via {@link Quill.writer}. Speaks names, values, and markdown. Bare
- * `set` / `setAll` / `reviseBody` / `reviseField` / `addCard` / `card(i).set`
- * instead of threading the `quill` handle through the underscored ABI. Holds both
- * handles by reference and owns neither: nothing to `free()`.
+ * A `Document` bound to its `Quill` for typed writes, from {@link Quill.writer}.
+ * Speaks names, values, and markdown, so bare `set` / `setAll` / `reviseBody` /
+ * `reviseField` / `addCard` / `card(i).set` replace threading the `quill` handle
+ * through the underscored ABI. Holds both handles by reference and owns neither.
  *
  * Typed commit is the default whenever a quill is in hand: it resolves each
- * field's schema type and strict-commits it, throwing `UnknownField` for a name
- * the schema does not declare, on the typed path an undeclared name is a typo,
- * not a fallback. The raw `Document.storeField` / `storeFields` verbs remain the
- * deliberate quill-free primitive (standalone data, storage/migration infra, or
- * holding not-yet-conforming in-progress input).
+ * field's schema type and strict-commits it, throwing `UnknownField` for an
+ * undeclared name rather than falling back. The raw `Document.storeField` /
+ * `storeFields` verbs remain the deliberate quill-free primitive (standalone
+ * data, storage/migration infra, or not-yet-conforming in-progress input).
  */
 export declare class DocumentWriter {
 	constructor(quill: Quill, doc: Document);
@@ -657,10 +655,9 @@ export declare class DocumentWriter {
 	 */
 	setAll(fields: Record<string, unknown>): void;
 	/**
-	 * Revise the main body from markdown (edit semantics: anchors rebase),
-	 * returning the text `Delta`. The content lane's `revise` reached through the
-	 * writer: a body carries no field schema to type against, so the receipt is
-	 * the content lane's.
+	 * Revise the main body from markdown; anchors rebase. Returns the text
+	 * `Delta`: a body carries no field schema to type against, so this is the
+	 * content lane's `revise` reached through the writer.
 	 */
 	reviseBody(markdown: string): Delta;
 	/**
@@ -676,12 +673,10 @@ export declare class DocumentWriter {
 	reviseField(name: string, text: string): Delta;
 	/**
 	 * Build a composable card of `kind`, typed-commit `fields` onto it, set its
-	 * body from optional markdown, and place it: the fused `makeCard` + typed
-	 * commit + insertion. `at` picks the position: omitted appends, a number
-	 * inserts at that index, so a positioned typed insert is one atomic call
-	 * rather than `addCard` + `moveCard`. Transactional: a rejected field (throws
-	 * a per-field diagnostic bundle) or an invalid kind/body/position leaves the
-	 * document untouched.
+	 * body from optional markdown, and place it. `at` omitted appends, a number
+	 * inserts at that index. Transactional: a rejected field (throwing a per-field
+	 * diagnostic bundle) or an invalid kind, body, or position leaves the document
+	 * untouched.
 	 */
 	addCard(kind: string, fields?: Record<string, unknown>, body?: string, at?: number): void;
 	/** Remove the composable card at `index`, returning it (or `undefined`). */
@@ -707,9 +702,8 @@ export declare class CardWriter {
 	/** The bound card index. */
 	readonly index: number;
 	/**
-	 * The bound card's `$kind` (empty string when it carries none), read through
-	 * the document: mirrors core `CardWriter::kind()`. Throws `IndexOutOfRange`
-	 * if the bound index is out of range.
+	 * The bound card's `$kind`, empty string when it carries none. Throws
+	 * `IndexOutOfRange` for a bad bound index.
 	 */
 	readonly kind: string;
 	set(name: string, value: unknown): void;
@@ -717,34 +711,28 @@ export declare class CardWriter {
 	/** Revise this card's body from markdown (edit semantics), returning the text `Delta`. */
 	reviseBody(markdown: string): Delta;
 	/**
-	 * Revise the content field `name` on this card from authored text: typed *and*
-	 * anchor-preserving; the card twin of {@link DocumentWriter.reviseField},
-	 * codec included. Throws `UnknownField` for an undeclared name and
-	 * `IndexOutOfRange` if the bound index is out of range. Returns the `Delta`.
+	 * The card twin of {@link DocumentWriter.reviseField}. Throws `UnknownField`
+	 * for an undeclared name and `IndexOutOfRange` for a bad bound index.
 	 */
 	reviseField(name: string, text: string): Delta;
 }
 
 /**
- * A `Document` bound to its `Quill` for interpreted reads: the schema-plane read
- * surface, constructed via {@link Quill.reader} and the read twin of
- * {@link DocumentWriter}. One `get` reads each field by its declared type: a
- * richtext field to its markdown projection, a plaintext field to its literal
- * text, every other type its canonical value verbatim. Holds both handles by
- * reference and owns neither: nothing to `free()`.
+ * A `Document` bound to its `Quill` for interpreted reads, from
+ * {@link Quill.reader}: the read twin of {@link DocumentWriter}. One `get` reads
+ * each field by its declared type — a richtext field to its markdown projection,
+ * a plaintext field to its literal text, every other type verbatim.
  *
- * The schema authority is the point: unlike the quill-free transport `Document.getStored`,
- * a name the schema does not declare throws `UnknownField` (a typo) rather than
- * reading back `undefined`, and a content field holding a value that does not
- * decode throws `FieldDecode`. A field's markdown lives here, not on the
- * body-only `Document.bodyMarkdown`. The body read stays quill-free (a body's type
- * is a format fact) and never throws.
+ * The schema authority is the point: unlike the quill-free `Document.getStored`,
+ * an undeclared name throws `UnknownField` rather than reading back `undefined`,
+ * and an undecodable content value throws `FieldDecode`. A field's markdown lives
+ * here, not on the body-only `Document.bodyMarkdown`; the body read stays
+ * quill-free and never throws.
  *
  * `getContent` is the same read at the other end of the codec, returning the
  * `Content` rather than the projection. It binds the quill for the same reason
- * `get` does: a `richtext` string is markdown and a `plaintext` string is
- * literal text, so the same stored bytes decode two ways and only the declared
- * type says which.
+ * `get` does: the same stored bytes decode two ways, and only the declared type
+ * says which.
  */
 export declare class DocumentReader {
 	constructor(quill: Quill, doc: Document);
@@ -760,14 +748,13 @@ export declare class DocumentReader {
 	 */
 	get(addr: Addr | string): unknown;
 	/**
-	 * Read the content field at `addr` as its canonical `Content`: the
-	 * `Content` twin of {@link get}, which projects. Decodes through the codec the
-	 * declared type names (`richtext` as markdown, `plaintext` as literal text),
-	 * so a committed field and a parsed one read back the same `Content` and the
-	 * storage form stops being the caller's business. An absent `addr.field`
-	 * reads the body `Content`. `undefined` for an absent field; throws
-	 * `UnknownField`, `FieldNotContent` for a declared type that is not a content
-	 * leaf, `FieldDecode` for an undecodable value, and `IndexOutOfRange`.
+	 * Read the content field at `addr` as canonical `Content`: the twin of
+	 * {@link get}, which projects. Decodes through the codec the declared type
+	 * names, so a committed field and a parsed one read back the same `Content`.
+	 * An absent `addr.field` reads the body `Content`. `undefined` for an absent
+	 * field; throws `UnknownField`, `FieldNotContent` for a declared type that is
+	 * not a content leaf, `FieldDecode` for an undecodable value, and
+	 * `IndexOutOfRange`.
 	 */
 	getContent(addr: Addr | string): Content | undefined;
 	/** The main body's markdown: the quill-free body read. Equals `get({})`. */
@@ -803,8 +790,7 @@ export declare class CardReader {
 	 */
 	get(name: string): unknown;
 	/**
-	 * Read the content field `name` on this card as its canonical `Content`
-	 * `Content`: the card twin of {@link DocumentReader.getContent}.
+	 * The card twin of {@link DocumentReader.getContent}.
 	 */
 	getContent(name: string): Content | undefined;
 	/** This card's body markdown: the card twin of {@link DocumentReader.bodyMarkdown}. */
