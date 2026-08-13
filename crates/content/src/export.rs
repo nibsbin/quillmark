@@ -359,7 +359,14 @@ fn emit_leaf_block(ctx: &Ctx, range: std::ops::Range<usize>, out: &mut String) {
             let parts: Vec<String> = range.map(|i| render_inline(ctx, i, true)).collect();
             out.push_str(&parts.join("\\\n"));
         }
-        LineKind::Rule => out.push_str("---"),
+        // `***`, not `---`. All three break spellings import alike, so the
+        // canonical one is the spelling with the fewest other readings: `---`
+        // is also a setext underline, a front-matter fence, and — with the
+        // spaces a list prefix supplies — a bullet line, so `- ` + `---` is
+        // four dashes and re-imports as a top-level break, losing the item.
+        // A mixed-character line is never a break, so `***` survives every
+        // prefix a container can put in front of it.
+        LineKind::Rule => out.push_str("***"),
     }
 }
 
@@ -1202,7 +1209,7 @@ mod tests {
     /// a `document()` generator arm that `properties.rs` fuzzes; kept as a
     /// labeled table so a break localizes to the exact construct without a
     /// proptest seed. Constructs with NO generator coverage (nested_marks,
-    /// code_block, thematic_break, hard breaks) stay as their own tests below.
+    /// code_block, hard breaks) stay as their own tests below.
     #[test]
     fn single_constructs_round_trip() {
         for (label, md) in [
@@ -1214,6 +1221,9 @@ mod tests {
             ("bullet_list", "- a\n- b\n- c"),
             ("ordered_list", "3. a\n4. b"),
             ("multi_paragraph_item", "- first\n\n  second"),
+            ("heading_item", "- # Title\n\n  body text"),
+            ("rule_item", "* ---"),
+            ("thematic_break", "one\n\n***\n\ntwo"),
             ("blockquote", "> quoted text"),
             ("link", "see [our site](https://example.com) now"),
             ("table", "| a | b |\n| --- | --- |\n| 1 | 2 |"),
@@ -1235,19 +1245,35 @@ mod tests {
     }
 
     #[test]
-    fn thematic_break() {
-        round_trips("one\n\n***\n\ntwo");
-    }
-
-    #[test]
-    fn thematic_break_canonicalizes_to_dashes() {
-        // `***`/`___` and `---` all import to the same `Rule` line, so export
-        // re-emits the canonical `---` whatever the source delimiter was.
-        for src in ["***", "___", "- - -"] {
+    fn thematic_break_canonicalizes_to_stars() {
+        // `---`/`___` and `***` all import to the same `Rule` line, so export
+        // re-emits the canonical `***` whatever the source delimiter was.
+        for src in ["---", "___", "- - -"] {
             let rt = from_markdown(&format!("one\n\n{src}\n\ntwo")).unwrap();
             let md = to_markdown(&rt);
-            assert!(md.contains("\n\n---\n\n"), "source: {src}, got: {md:?}");
+            assert!(md.contains("\n\n***\n\n"), "source: {src}, got: {md:?}");
         }
+    }
+
+    /// A rule as a **bullet** item's first block. `- ` + `---` is four dashes
+    /// separated by spaces: a thematic break, and a break outranks a list item
+    /// wherever both readings fit, so the item was lost on re-import. The
+    /// ordered marker never collided (digits are not break characters) and a
+    /// rule as a *later* block is disambiguated by its indentation; both are
+    /// here so a regression localizes to the colliding shape.
+    #[test]
+    fn rule_opening_a_list_item_keeps_its_item() {
+        for md in ["* ---", "+ ---", "- ***", "- ___", "- - ***", "- > ***"] {
+            round_trips(md);
+        }
+        assert_eq!(to_markdown(&from_markdown("* ---").unwrap()), "- ***");
+        // The shapes that always survived, pinned against a fix that trades
+        // one collision for another: a bullet marker swapped to `*`/`+` would
+        // start a *new* list, resetting `ordinal` on this item and every one
+        // after it.
+        round_trips("1. ---");
+        round_trips("- one\n\n  ---");
+        round_trips("- a\n- ***\n- c");
     }
 
     #[test]
