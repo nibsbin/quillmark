@@ -1248,8 +1248,7 @@ export class CardReader {
 		return this.#doc._readerGet(this.#quill, { card: this.#index, field: name });
 	}
 	/**
-	 * Read the content field `name` on this card as its canonical `Content`
-	 * `Content`: the card twin of {@link DocumentReader.getContent}.
+	 * The card twin of {@link DocumentReader.getContent}.
 	 * @param {string} name
 	 * @returns {import('../core/wasm.js').Content | undefined}
 	 */
@@ -1257,7 +1256,7 @@ export class CardReader {
 		return this.#doc._readerGetContent(this.#quill, { card: this.#index, field: name });
 	}
 	/**
-	 * This card's body markdown: the card twin of {@link DocumentReader.bodyMarkdown}.
+	 * The card twin of {@link DocumentReader.bodyMarkdown}.
 	 * @returns {string}
 	 */
 	bodyMarkdown() {
@@ -1266,14 +1265,10 @@ export class CardReader {
 }
 
 // ── `quill.reader(doc)`: the schema-plane read front door ─────────────────────
-// The read twin of `quill.writer(doc)`, patched onto the same re-exported `Quill`
-// prototype (the `Quill === CoreQuill` identity invariant holds: this only adds
-// a method constructing the pure-JS reader, which owns no WASM handle).
+// Patched onto the same re-exported `Quill` prototype as `writer`.
 /**
- * A {@link DocumentReader} binding this quill's schema to `doc` for interpreted
- * reads: the read front door, mirroring core's `quill.reader(&doc)`. The returned
- * reader holds both handles by reference and owns neither, so there is nothing to
- * `free()`. Ephemeral by convention: bind, read, discard.
+ * A {@link DocumentReader} binding this quill's schema to `doc`. It holds both
+ * handles by reference and owns neither: bind, read, discard.
  * @this {Quill}
  * @param {Document} doc the document to read, held by reference (not owned)
  * @returns {DocumentReader}
