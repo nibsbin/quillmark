@@ -2229,8 +2229,6 @@ fn js_to_card(value: &JsValue) -> Result<quillmark_core::Card, JsValue> {
             }
         }
     }
-    // A payload item's `value` is opaque host JSON, the same axis
-    // `reject_deep_js_value` guards for `overwrite`.
     reject_deep_js_value(value, "insertCard")?;
     let wire: quillmark_core::CardWire = serde_wasm_bindgen::from_value(value.clone())
         .map_err(|e| WasmError::from(format!("card must be a Card object: {e}")).to_js_value())?;
@@ -2282,7 +2280,6 @@ fn js_tree_entries(tree: &JsValue) -> Result<Vec<(String, JsValue)>, JsValue> {
         return Ok(entries);
     }
 
-    // Plain object: walk via `Object.entries`.
     if tree.is_object() && !tree.is_null() {
         let obj = tree.clone().unchecked_into::<js_sys::Object>();
         let pairs = js_sys::Object::entries(&obj);
@@ -2316,18 +2313,13 @@ fn js_bytes_for_tree_entry(path: &str, value: JsValue) -> Result<Vec<u8>, JsValu
     Ok(bytes.to_vec())
 }
 
-/// TypeScript declarations for the canvas-preview surface.
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 #[wasm_bindgen(typescript_custom_section)]
 const CANVAS_PREVIEW_TS: &'static str = r#"
 /**
- * Page dimensions in points (1 pt = 1/72 inch). Typst measures in Typst
- * points; pdfform measures in PDF points: the same unit.
- *
- * Report-only: the painter sizes the canvas itself based on
- * `PaintOptions`. `pageSize` is exposed for callers that need page
- * geometry up-front (e.g. to lay out a scrollable list of canvases
- * before any pixels are rendered).
+ * Page dimensions in points (1 pt = 1/72 inch). Report-only: the painter sizes
+ * the canvas itself from `PaintOptions`. `pageSize` is for callers that need
+ * page geometry up-front, e.g. to lay out a scrollable list of canvases.
  */
 export interface PageSize {
     widthPt: number;
@@ -2335,25 +2327,14 @@ export interface PageSize {
 }
 
 /**
- * Inputs to `LiveSession.paint`. Both fields are optional and default
- * to `1`.
+ * Inputs to `LiveSession.paint`. Both default to `1`, must be finite and `> 0`,
+ * and multiply to the effective rasterization scale.
  *
- * - `layoutScale` (layout-space pixels per point (Typst point / PDF
- *   point) the same 1/72″ unit). For on-screen
- *   canvases this is CSS pixels per pt; the page's layout-pixel size is
- *   `widthPt * layoutScale × heightPt * layoutScale`. The painter
- *   surfaces these dimensions as `layoutWidth` / `layoutHeight` so
- *   consumers can drive `canvas.style.*` (or any layout system).
- * - `densityScale`: backing-store density multiplier. Fold
- *   `window.devicePixelRatio`, in-app zoom, and `visualViewport.scale`
- *   (pinch-zoom) into a single value here. Defaults to `1`, which
- *   produces a non-retina backing store: pass `window.devicePixelRatio`
- *   for crisp output on high-DPI displays.
- *
- * The effective rasterization scale is `layoutScale * densityScale`.
- * Both must be finite and `> 0`. For `OffscreenCanvasRenderingContext2D`
- * the two collapse to a single scalar; folding everything into
- * `densityScale` is the simplest convention.
+ * - `layoutScale`: layout-space pixels per point — CSS pixels per pt for an
+ *   on-screen canvas — surfaced back as `layoutWidth` / `layoutHeight`.
+ * - `densityScale`: backing-store density. Fold `window.devicePixelRatio`,
+ *   in-app zoom, and `visualViewport.scale` into this one value; the default
+ *   `1` produces a non-retina backing store.
  */
 export interface PaintOptions {
     layoutScale?: number;
@@ -2363,36 +2344,21 @@ export interface PaintOptions {
 /**
  * Returned by `LiveSession.paint`.
  *
- * - `layoutWidth` / `layoutHeight`: layout-pixel dimensions of the
- *   canvas's display box. For on-screen canvases this is CSS pixels:
- *   set `canvas.style.width = layoutWidth + "px"` and
- *   `canvas.style.height = layoutHeight + "px"` (or feed these into
- *   your layout system). Independent of `densityScale`.
- * - `pixelWidth` / `pixelHeight`: integer backing-store pixel
- *   dimensions the painter wrote to `canvas.width` / `canvas.height`.
- *   Equal to `round(layoutWidth * densityScale)` ×
- *   `round(layoutHeight * densityScale)` *unless* the requested backing
- *   exceeded the painter's safe maximum (16384 px per side), in which
- *   case `densityScale` was clamped to fit.
- * - `clamped`: `true` when that 16384-px clamp fired, so the page is
- *   painted at fewer device pixels than requested and renders soft at the
- *   same `canvas.style` size. Reads the clamp off the return value instead
- *   of the `pixelWidth < round(layoutWidth * densityScale)` derivation.
- * - `effectiveDensityScale`, the `densityScale` actually applied: the
- *   requested value unless `clamped`, then reduced proportionally.
- *   `layoutScale * effectiveDensityScale` is the scale the backing store
- *   was rasterized at.
+ * - `layoutWidth` / `layoutHeight`: the display box, in CSS pixels for an
+ *   on-screen canvas, to drive `canvas.style.*`. Independent of `densityScale`.
+ * - `pixelWidth` / `pixelHeight`: the backing store the painter wrote to
+ *   `canvas.width` / `canvas.height`, `round(layout * densityScale)` unless the
+ *   request exceeded 16384 px per side and `densityScale` was clamped to fit.
+ * - `clamped`: `true` when that clamp fired, so the page renders soft at the
+ *   same `canvas.style` size.
+ * - `effectiveDensityScale`: the `densityScale` actually applied.
  *
- * The painter owns `canvas.width` / `canvas.height`; consumers must not
- * write to them. The painter does **not** touch `canvas.style.*`;
- * consumers own layout. The write is a whole-backing-store `putImageData`,
- * which bypasses the 2D context transform, `globalAlpha`, and clip: give
- * each visible page its own `<canvas>`; you cannot composite two pages, a
- * sub-rect, or a context transform through `paint`.
- *
- * For `OffscreenCanvasRenderingContext2D` (Worker rasterization, no
- * DOM), `layoutWidth` / `layoutHeight` are informational: there's no
- * CSS layout box to apply them to.
+ * The painter owns `canvas.width` / `canvas.height` and never touches
+ * `canvas.style.*`. The write is a whole-backing-store `putImageData`, which
+ * bypasses the 2D context transform, `globalAlpha`, and clip: give each visible
+ * page its own `<canvas>`, since no compositing, sub-rect, or transform reaches
+ * through `paint`. Under `OffscreenCanvasRenderingContext2D` the layout
+ * dimensions are informational — there is no CSS box to apply them to.
  */
 export interface PaintResult {
     layoutWidth: number;
@@ -2405,9 +2371,7 @@ export interface PaintResult {
 "#;
 
 /// A backend plate-space geometry address → its `DocPath` string, keeping the
-/// original when it does not fit the geometry grammar. `kinds` is the compile's
-/// ordered card kinds: build it once per query and pass the slice, never per
-/// region.
+/// original when it does not fit the geometry grammar.
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 fn plate_to_docpath(addr: &str, kinds: &[Option<&str>]) -> String {
     quillmark_core::plate_addr_to_doc_path(addr, kinds)
@@ -2427,8 +2391,7 @@ fn docpath_to_plate(addr: &str, kinds: &[Option<&str>]) -> String {
 
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 impl LiveSession {
-    /// The card-kind lookup as `&[Option<&str>]` for the core translators:
-    /// built once per query.
+    /// Built once per query, never per region.
     fn kinds(&self) -> Vec<Option<&str>> {
         self.card_kinds.iter().map(|k| k.as_deref()).collect()
     }
@@ -2448,18 +2411,15 @@ impl LiveSession {
         self.backend_id.clone()
     }
 
-    /// `true` iff `paint` and `pageSize` will succeed for this session. Derived
-    /// from the session's canvas seam, so it reflects exactly what `paint` will
-    /// do: no separately captured flag.
+    /// `true` iff `paint` and `pageSize` will succeed for this session.
     #[wasm_bindgen(getter, js_name = supportsCanvas)]
     pub fn supports_canvas(&self) -> bool {
         self.inner.supports_canvas()
     }
 
-    /// Non-fatal diagnostics of the session's **current compile** (e.g. Typst
-    /// font fallback): set at open and refreshed by each committed `apply`;
-    /// a failed apply keeps the last-good compile's warnings. Also appended
-    /// to `RenderResult.warnings` on each `render()` call.
+    /// Non-fatal diagnostics of the session's **current compile**, refreshed by
+    /// each committed `apply`; a failed apply keeps the last-good compile's.
+    /// Also appended to `RenderResult.warnings` on each `render()`.
     #[wasm_bindgen(getter, js_name = warnings, unchecked_return_type = "Diagnostic[]")]
     pub fn warnings(&self) -> Result<JsValue, JsValue> {
         let diags: Vec<Diagnostic> = self
@@ -2472,16 +2432,14 @@ impl LiveSession {
         serialize_or_throw(&diags, "warnings")
     }
 
-    /// Recompile the session against `doc`: the edit verb of a live preview.
-    /// The document is compiled through the same schema pipeline as `open`
-    /// (same quill), then swapped in transactionally: on throw every read
-    /// (`render`, `paint`, `pageSize`, `regions`, `fieldAt`) keeps serving the last-good
-    /// compile, and the session recovers on the next successful `update`. On
-    /// success reads serve the new compile; repaint `dirtyPages ∩ visible`.
+    /// Recompile the session against `doc`: the edit verb of a live preview. The
+    /// document compiles through the same pipeline as `open`, then swaps in
+    /// transactionally — on throw every read keeps serving the last-good compile
+    /// and the session recovers on the next successful `update`. On success,
+    /// repaint `dirtyPages ∩ visible`.
     ///
-    /// Distinct from the content lane's [`applyChange`](Document::apply_change),
-    /// which splices ops into a document: this one recompiles a whole document
-    /// the caller already mutated.
+    /// Distinct from [`applyChange`](Document::apply_change), which splices ops
+    /// into a document; this recompiles a document the caller already mutated.
     #[wasm_bindgen(js_name = update)]
     pub fn update(&mut self, doc: &Document) -> Result<ChangeSet, JsValue> {
         let cs = self
