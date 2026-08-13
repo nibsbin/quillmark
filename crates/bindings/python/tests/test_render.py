@@ -6,7 +6,6 @@ from quillmark import OutputFormat, Document, Quill, QuillmarkError
 
 
 def test_save_artifact(engine, taro_quill_dir, taro_md, tmp_path):
-    """Test saving an artifact to file."""
     quill = Quill.from_path(str(taro_quill_dir))
 
     parsed = Document.from_markdown(taro_md)
@@ -20,7 +19,6 @@ def test_save_artifact(engine, taro_quill_dir, taro_md, tmp_path):
 
 
 def test_engine_render_with_explicit_format(engine, taro_quill_dir, taro_md):
-    """engine.render() honours an explicit OutputFormat argument."""
     quill = Quill.from_path(str(taro_quill_dir))
 
     parsed = Document.from_markdown(taro_md)
@@ -60,7 +58,6 @@ def test_engine_render_name_mismatch_errors(engine, taro_quill_dir):
 
 
 def test_engine_render_page_selection(engine, taro_quill_dir, taro_md):
-    """engine.render with pages=[...] emits a page subset in one shot."""
     quill = Quill.from_path(str(taro_quill_dir))
     parsed = Document.from_markdown(taro_md)
 
@@ -70,7 +67,6 @@ def test_engine_render_page_selection(engine, taro_quill_dir, taro_md):
 
 
 def test_engine_render_full_document(engine, taro_quill_dir, taro_md):
-    """engine.render(quill, doc) renders successfully."""
     quill = Quill.from_path(str(taro_quill_dir))
 
     parsed = Document.from_markdown(taro_md)

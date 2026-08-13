@@ -49,7 +49,6 @@ def _taro_quill():
 
 
 def test_parsed_document_quill_ref():
-    """Test that Document exposes quill_ref method."""
     markdown_with_quill = "~~~card-yaml\n$quill: my_quill\n$kind: main\ntitle: Test\n~~~\n\n# Content\n"
     parsed = Document.from_markdown(markdown_with_quill)
     assert parsed.quill_ref == "my_quill"
@@ -94,7 +93,6 @@ def test_registered_backends(engine):
 
 
 def test_full_workflow(engine):
-    """Test loading a quill engine-free and rendering through the engine."""
     taro_dir = QUILLS_PATH / "taro"
     quill = Quill.from_path(str(_latest_version(taro_dir)))
 
@@ -181,7 +179,6 @@ def test_remove_field_existing():
 
 
 def test_insert_card_appends():
-    """insert_card (absent `at`) appends a card to the list."""
     doc = Document.from_markdown(SIMPLE_MD)
     doc.insert_card({"kind": "note", "body": "Card body."})
     assert len(doc.cards) == 1
@@ -190,7 +187,6 @@ def test_insert_card_appends():
 
 
 def test_insert_card_invalid_kind():
-    """insert_card raises EditError for an invalid kind."""
     doc = Document.from_markdown(SIMPLE_MD)
     with raises_edit_code("edit::invalid_kind_name"):
         doc.insert_card({"kind": "BadKind"})
@@ -252,7 +248,6 @@ def test_stale_flat_input_is_a_loud_error():
 
 
 def test_insert_card_at_front():
-    """insert_card(card, at=0) prepends the card."""
     doc = Document.from_markdown(MD_WITH_CARDS)
     doc.insert_card({"kind": "intro"}, at=0)
     assert doc.cards[0]["kind"] == "intro"
@@ -277,7 +272,6 @@ def test_remove_card():
 
 
 def test_move_card_last_to_first():
-    """move_card rotates the last card to the front."""
     doc = Document.from_markdown(MD_WITH_CARDS)
     last = len(doc.cards) - 1
     doc.move_card(last, 0)
@@ -323,7 +317,6 @@ def test_store_ext_adds_map():
 
 
 def test_store_ext_rejects_non_dict():
-    """store_ext raises for non-dict values."""
     doc = Document.from_markdown(SIMPLE_MD)
     with pytest.raises(ValueError, match="must be a dict"):
         doc.store_ext("nope")
@@ -338,7 +331,6 @@ def test_ext_round_trips_through_markdown():
 
 
 def test_store_ext_namespace_preserves_siblings():
-    """store_ext_namespace merges without clobbering other namespaces."""
     doc = Document.from_markdown(SIMPLE_MD)
     doc.store_ext_namespace("presentation", {"title": "A"})
     doc.store_ext_namespace("agent", {"pinned": True})
@@ -350,7 +342,6 @@ def test_store_ext_namespace_preserves_siblings():
 
 
 def test_remove_ext_namespace_clears_one_slot_and_drops_when_empty():
-    """remove_ext_namespace clears one slot; the last one drops $ext."""
     doc = Document.from_markdown(SIMPLE_MD)
     doc.store_ext_namespace("presentation", {"title": "A"})
     doc.store_ext_namespace("tutorial", ["step-1", "step-2"])
@@ -365,7 +356,6 @@ def test_remove_ext_namespace_clears_one_slot_and_drops_when_empty():
 
 
 def test_remove_ext_returns_previous_and_clears():
-    """remove_ext returns the previous map, then None."""
     doc = Document.from_markdown(SIMPLE_MD)
     doc.store_ext({"agent": {"n": 1}})
     assert doc.remove_ext() == {"agent": {"n": 1}}
@@ -395,7 +385,6 @@ def test_card_ext_namespace_mutators():
 
 
 def test_card_ext_mutators_out_of_range():
-    """Card ext mutators raise IndexOutOfRange for a bad card index."""
     doc = Document.from_markdown(SIMPLE_MD)  # 0 cards
     with raises_edit_code("edit::index_out_of_range"):
         doc.store_ext({}, card=0)
@@ -408,7 +397,6 @@ def test_card_ext_mutators_out_of_range():
 
 
 def test_mutators_do_not_touch_warnings():
-    """Mutators must not modify the warnings list."""
     doc = Document.from_markdown(SIMPLE_MD)
     initial = list(doc.warnings)
     doc.remove_field("title")
@@ -762,7 +750,6 @@ def test_view_body_read_is_quill_free():
 
 
 def test_view_card_cursor_reads_through_kind_schema():
-    """view.card(i) reads a card field through its $kind; a bad index raises at the read."""
     quill = _taro_quill()
     doc = Document("taro@0.1.0")
     ed = quill.writer(doc)

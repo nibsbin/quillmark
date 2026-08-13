@@ -31,7 +31,6 @@ QUILLS_PATH = RESOURCES_PATH / "quills"
 
 
 def test_payload_access(taro_md):
-    """Test accessing typed payload_items (no $-prefixed metadata as fields)."""
     doc = Document.from_markdown(taro_md)
     assert "Ice Cream" in (field(doc.main, "title") or "")
     # `$`-prefixed metadata is not exposed as payload fields
@@ -50,14 +49,12 @@ def test_body_is_content_dict(taro_md):
 
 
 def test_body_empty_when_absent():
-    """Test that body text is empty when no body content."""
     md = "~~~card-yaml\n$quill: taro\n$kind: main\nauthor: Test\ntitle: Test\nice_cream: Vanilla\n~~~\n"
     doc = Document.from_markdown(md)
     assert doc.body["text"] == ""
 
 
 def test_cards_access():
-    """Test accessing typed cards list."""
     md = (
         "~~~card-yaml\n$quill: my_quill\n$kind: main\ntitle: Main\n~~~\n\nGlobal body.\n\n"
         "~~~card-yaml\n$kind: note\nfoo: bar\n~~~\n\nCard body.\n"
@@ -103,7 +100,6 @@ def test_json_dto_drops_parse_warnings():
 
 
 def test_try_from_json_round_trip(taro_md):
-    """try_from_json returns a Document for valid DTOs."""
     doc = Document.from_markdown(taro_md)
     dto = doc.to_json()
 
@@ -113,14 +109,12 @@ def test_try_from_json_round_trip(taro_md):
 
 
 def test_try_from_json_returns_none_on_markdown(taro_md):
-    """try_from_json returns None for non-DTO content (e.g. raw markdown)."""
     assert Document.try_from_json(taro_md) is None
     assert Document.try_from_json("not json at all") is None
     assert Document.try_from_json('{"schema":"quillmark/document@0.99.0"}') is None
 
 
 def test_schema_version_of_returns_unknown_future_versions():
-    """storage_version_of returns the raw tag, even for unsupported versions."""
     # Note: this would be rejected by from_json, but storage_version_of returns it
     # so callers can distinguish "build too old" from "payload corrupt".
     future = '{"schema":"quillmark/document@0.99.0"}'
@@ -134,7 +128,6 @@ def test_schema_version_of_returns_none_for_non_dto():
 
 
 def test_current_schema_version_matches_emitted_tag(taro_md):
-    """current_storage_version equals the tag emitted by to_json."""
     doc = Document.from_markdown(taro_md)
     dto = doc.to_json()
 
@@ -194,7 +187,6 @@ def test_remove_field_on_card_returns_value():
 
 
 def test_remove_field_on_card_out_of_range():
-    """remove_field(name, card=i) raises EditError for an out-of-range card index."""
     md = "~~~card-yaml\n$quill: q\n$kind: main\n~~~\n"
     doc = Document.from_markdown(md)
     with raises_edit_code("edit::index_out_of_range"):
@@ -202,7 +194,6 @@ def test_remove_field_on_card_out_of_range():
 
 
 def test_diagnostic_str_is_canonical_pretty_text():
-    """str(diagnostic) is the canonical pretty-printed text; repr is concise."""
     warn_md = (
         "~~~card-yaml\n$quill: my_quill\n$kind: main\ntitle: Hi\n"
         "weird: !custom value\n~~~\n\nBody\n"
@@ -218,7 +209,6 @@ def test_diagnostic_str_is_canonical_pretty_text():
 
 
 def test_document_authoring_text_helpers():
-    """Document exposes the canonical core authoring texts (WASM parity)."""
     rules = Document.format_rules()
     assert isinstance(rules, str) and rules.strip() != ""
 
