@@ -1,17 +1,15 @@
-//! The stamp operation: write a fresh `/AcroForm` (and an `/Info` `/Producer`
-//! stamp) onto a base PDF via one incremental-update append.
+//! Write a fresh `/AcroForm` (and an `/Info` `/Producer` stamp) onto a base PDF
+//! via one incremental-update append.
 //!
-//! **Technique A** is locked: we style the *real* AcroForm fields and set
-//! `/NeedAppearances`; we never bake `/AP` appearance streams. Appearance
-//! synthesis is the viewer's job (Acrobat, Chrome/pdfium, Preview). Flat
-//! rasterizers therefore render the fields blank: values reach non-interactive
+//! Technique A: style the real AcroForm fields and set `/NeedAppearances`, never
+//! baking `/AP` appearance streams. Appearance synthesis is the viewer's job, so
+//! flat rasterizers render the fields blank and values reach non-interactive
 //! output only via the [`RenderedRegion`] sidecar.
 //!
-//! **Opinionated rendering**: the background owns all visual chrome, so the
-//! widget is a transparent input over it. One house style (Helvetica at `0 Tf`
-//! (auto-size), black) registered once in the form `/DR` and named in every
-//! `/DA`. The form is built fresh from the spec; we never reconcile a foreign
-//! AcroForm.
+//! The background owns all visual chrome, so a widget is a transparent input
+//! over it: one house style (Helvetica at `0 Tf`, black) registered once in the
+//! form `/DR` and named in every `/DA`. The form is built fresh from the spec;
+//! a foreign AcroForm is never reconciled.
 
 use pdf_writer::types::{AnnotationFlags, FieldFlags, FieldType as PwFieldType, SigFlags};
 use pdf_writer::writers::Form;
@@ -30,9 +28,8 @@ use crate::{FieldSpec, FieldType};
 
 const CODE_PARSE: &str = "pdf::stamp_parse";
 
-/// The fixed checkbox on-state export name the engine rebuilds the form with.
-/// A resolver producing a checkbox [`FieldSpec`] sets `value` to this when the
-/// box is checked, and `None` when it is not.
+/// The fixed checkbox on-state export name. A checkbox [`FieldSpec`] carries
+/// this as its `value` when checked, `None` when not.
 pub const CHECKBOX_ON_STATE: &str = "Yes";
 
 /// House-style default appearance: Helvetica, `0 Tf` (auto-size), black fill.
@@ -43,9 +40,8 @@ const DEFAULT_APPEARANCE: &[u8] = b"/Helv 0 Tf 0 g";
 #[derive(Debug, Clone, Default)]
 #[non_exhaustive]
 pub struct StampOptions {
-    /// `/Info` `/Producer` override, passed down from the product layer. `None`
-    /// leaves the base PDF's `/Producer` untouched. The spine never defaults
-    /// this from its own crate version.
+    /// `None` leaves the base PDF's `/Producer` untouched. The spine never
+    /// defaults this from its own crate version.
     pub producer: Option<String>,
 }
 
@@ -58,31 +54,25 @@ impl StampOptions {
 }
 
 /// Stamp `fields` onto `base` as a fresh AcroForm via one incremental update,
-/// optionally stamping `/Info` `/Producer`. Returns the stamped bytes. Field
-/// geometry is not produced here: it is a session-level query (see
-/// [`regions_of`]).
+/// optionally stamping `/Info` `/Producer`. Geometry is not produced here; it is
+/// a session-level query (see [`regions_of`]).
 ///
 /// `base` must satisfy the reader's input contract (traditional-xref,
-/// unencrypted, inline-annots, flat-tree). Each field's `rect` is final
-/// **bottom-left** PDF-point geometry: the spine never reasons about page
-/// height or reflow; the caller converts.
+/// unencrypted, inline-annots, flat-tree), and each `rect` must already be final
+/// bottom-left PDF-point geometry.
 pub fn stamp(
     base: Vec<u8>,
     fields: &[FieldSpec],
     opts: &StampOptions,
 ) -> Result<Vec<u8>, PdfError> {
-    // Nothing to write: no producer stamp and no fields. Return the base as-is
-    // rather than append an empty revision.
+    // Return the base as-is rather than append an empty revision.
     if opts.producer.is_none() && fields.is_empty() {
         return Ok(base);
     }
 
     let pdf = base;
-    // Shared envelope: validate the input contract, read the trailer, seed the
-    // id counter, apply the optional `/Info` `/Producer` stamp.
     let mut up = PdfUpdate::begin(&pdf, opts.producer.as_deref())?;
 
-    // ─── AcroForm + widgets (when there are fields) ──────────────────────────
     if !fields.is_empty() {
         let page_ids = up.resolve_pages(&pdf, fields)?;
         let page_count = page_ids.len();
@@ -94,7 +84,7 @@ pub fn stamp(
             .collect::<Result<_, _>>()?;
         let acroform_id = alloc_id(&mut up.next_id)?;
 
-        // Widgets, grouped by page for the page-side `/Annots`.
+        // Grouped by page for the page-side `/Annots`.
         let mut widgets_by_page: Vec<Vec<u32>> = vec![Vec::new(); page_count];
         for (spec, &wid) in fields.iter().zip(&widget_ids) {
             widgets_by_page[spec.page].push(wid);
@@ -105,7 +95,6 @@ pub fn stamp(
             });
         }
 
-        // The Helvetica /DR font, registered once and named `Helv`.
         let mut fchunk = Chunk::new();
         fchunk
             .type1_font(Ref::new(font_id as i32))
@@ -115,7 +104,6 @@ pub fn stamp(
             bytes: fchunk.as_bytes().to_vec(),
         });
 
-        // The AcroForm dictionary.
         let has_signature = fields
             .iter()
             .any(|f| matches!(f.field_type, FieldType::Signature));
@@ -172,16 +160,14 @@ pub fn stamp(
     up.finish(pdf)
 }
 
-/// Build the [`RenderedRegion`] geometry sidecar: one region per field that
-/// carries a schema address, keyed on that address. A widget with no schema
-/// field (`schema_field: None`) is a backend-only artifact and emits nothing.
-/// Shared by `stamp` and any no-stamp render path so the region geometry always
-/// matches the widget.
+/// One [`RenderedRegion`] per field carrying a schema address, keyed on that
+/// address. A widget with no schema field is a backend-only artifact and emits
+/// nothing. Shared by `stamp` and the no-stamp render paths, so region geometry
+/// always matches the widget.
 pub fn regions_of(fields: &[FieldSpec]) -> Vec<RenderedRegion> {
     fields
         .iter()
         .filter_map(|f| {
-            // A widget is a fixed box with no content address, so no span.
             Some(RenderedRegion::new(
                 f.schema_field.clone()?,
                 f.page,
@@ -191,7 +177,7 @@ pub fn regions_of(fields: &[FieldSpec]) -> Vec<RenderedRegion> {
         .collect()
 }
 
-/// Serialize one field as a merged field+widget indirect object via pdf-writer.
+/// Serialize one field as a merged field+widget indirect object.
 fn write_widget_object(spec: &FieldSpec, wid: Ref, page_ref: Ref) -> Vec<u8> {
     let mut chunk = Chunk::new();
     {
@@ -201,7 +187,7 @@ fn write_widget_object(spec: &FieldSpec, wid: Ref, page_ref: Ref) -> Vec<u8> {
             field.alternate_name(TextStr(tt));
         }
 
-        // Checkbox on-state, captured to also set the annotation `/AS` below.
+        // Captured to also set the annotation `/AS` below.
         let mut checkbox_on: Option<bool> = None;
 
         match &spec.field_type {
@@ -219,9 +205,6 @@ fn write_widget_object(spec: &FieldSpec, wid: Ref, page_ref: Ref) -> Vec<u8> {
                 field.field_type(PwFieldType::Button);
                 let on = spec.value.is_some();
                 checkbox_on = Some(on);
-                // The on-state is the engine's fixed export name; the bound
-                // value only signals checked vs unchecked, so `/V` and the
-                // annotation `/AS` (below) stay consistent by construction.
                 field.pair(
                     Name(b"V"),
                     if on {
@@ -230,7 +213,7 @@ fn write_widget_object(spec: &FieldSpec, wid: Ref, page_ref: Ref) -> Vec<u8> {
                         Name(b"Off")
                     },
                 );
-                // /MK << /CA (4) >>: the ZapfDingbats check glyph the viewer
+                // /MK /CA (4): the ZapfDingbats check glyph the viewer
                 // synthesizes under NeedAppearances.
                 {
                     let mut mk = field.insert(Name(b"MK")).dict();
@@ -239,7 +222,6 @@ fn write_widget_object(spec: &FieldSpec, wid: Ref, page_ref: Ref) -> Vec<u8> {
             }
             FieldType::Choice { options } => {
                 field.field_type(PwFieldType::Choice);
-                // Choice is always a dropdown (combo box).
                 field.field_flags(FieldFlags::COMBO);
                 field.vartext_default_appearance(Str(DEFAULT_APPEARANCE));
                 {
