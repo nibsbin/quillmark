@@ -1162,9 +1162,8 @@ mod tests {
         }
     }
 
-    /// An unknown line kind / container may not reuse a built-in
-    /// name: it would serialize as the built-in and parse back as one, dropping
-    /// its attrs (the `ReservedUnknownTag` rule, one axis over).
+    /// An unknown line kind / container may not reuse a built-in name: it would
+    /// serialize as the built-in and parse back as one, dropping its attrs.
     #[test]
     fn reserved_block_vocabulary_names_rejected() {
         let mut rt = Content::empty();
@@ -1188,15 +1187,11 @@ mod tests {
         );
     }
 
-    /// The authored lane (`install`) applies the reserved-name rule
-    /// the decoders cannot: by the time a lenient reader has resolved `"para"`
-    /// to `Para`, the `attrs` are gone and `validate` has nothing to object to.
-    /// Every axis `validate` checks, including cell marks.
-    ///
-    /// The last case: a cell mark that will not parse at all.
-    /// It is the one axis with no strict decode behind it (`parse_cell` skips
-    /// what it cannot read and `canon_cell` makes the skip permanent) so
-    /// without this the host's mark vanishes with no signal.
+    /// The authored lane applies the reserved-name rule the decoders cannot: by
+    /// the time a lenient reader has resolved `"para"` to `Para`, the `attrs`
+    /// are gone and `validate` has nothing to object to. The last case is a cell
+    /// mark that will not parse at all, the one axis with no strict decode
+    /// behind it.
     #[test]
     fn authored_lane_rejects_attrs_beside_a_built_in_name() {
         let bad = [
@@ -1243,10 +1238,9 @@ mod tests {
             .is_empty());
     }
 
-    /// The authored lane's scan is structural, not a blind walk. An
-    /// unknown's `attrs` is opaque host payload and may contain an object spelled
-    /// like a reserved mark; rejecting that would make the carrier unable to
-    /// carry the thing it exists to carry.
+    /// An unknown's `attrs` is opaque host payload and may contain an object
+    /// spelled like a reserved mark; rejecting that would make the carrier
+    /// unable to carry.
     #[test]
     fn authored_lane_leaves_opaque_attrs_payload_alone() {
         let json = concat!(
@@ -1258,8 +1252,8 @@ mod tests {
         assert_eq!(rt.to_canonical_json(), json);
     }
 
-    /// Opaque block attrs are hash input, so their key order must
-    /// not leak into the canonical bytes: the unknown-mark rule, one axis over.
+    /// Opaque block attrs are hash input, so their key order must not leak into
+    /// the canonical bytes.
     #[test]
     fn unknown_block_attrs_key_order_does_not_leak() {
         let mut one = Content::empty();
@@ -1304,12 +1298,10 @@ mod tests {
         assert_eq!(back.marks[0].kind, rt.marks[0].kind);
     }
 
-    /// Promotion moves a construct's payload from the opaque bag to
-    /// named siblings, and every blob written before it still spells the payload
-    /// the old way. The storage lane folds the bag in, so the promoted decoder
-    /// reads what the unknown wrote instead of dropping it. Pinned on the
-    /// built-ins carrying payload today: the fold keys off `RESERVED_*`, so a
-    /// promoted name joins it by the same edit that promotes it.
+    /// Promotion moves a construct's payload from the opaque bag to named
+    /// siblings, and every blob written before it still spells it the old way.
+    /// The storage lane folds the bag in, so the promoted decoder reads what the
+    /// unknown wrote instead of dropping it.
     #[test]
     fn built_in_decoders_read_the_legacy_attrs_form() {
         let cases: [(Value, LineKind); 2] = [
@@ -1350,9 +1342,8 @@ mod tests {
             line_kind_from_value(&both).unwrap(),
             LineKind::Heading { level: 3 }
         );
-        // An unknown's bag is payload, not a source of named fields; including a
-        // key that would re-target the match if the fold read the discriminator
-        // back out of it.
+        // An unknown's bag is payload, not a source of named fields: the `kind`
+        // inside it would re-target the match if the fold read it back out.
         let unknown = serde_json::json!({"kind": "callout", "attrs": {"kind": "heading", "level": 2}});
         assert_eq!(
             line_kind_from_value(&unknown).unwrap(),
@@ -1362,8 +1353,7 @@ mod tests {
             }
         );
         // Re-encode is the promoted spelling, so opening a legacy blob under the
-        // release that promotes its tag moves the document's canonical bytes:
-        // the read-repair / accepted-movement case § Byte-stability governs.
+        // release that promotes its tag moves the document's canonical bytes.
         let legacy = r#"{"islands":[],"lines":[{"attrs":{"level":2},"containers":[],"kind":"heading"}],"marks":[],"text":"hi"}"#;
         assert_eq!(
             Content::from_canonical_json(legacy)
@@ -1373,10 +1363,9 @@ mod tests {
         );
     }
 
-    /// `ord` is part of the freeze, and a promoted type takes the
-    /// slot `Unknown` held. Anywhere else and a build that knows the type orders
-    /// it against the built-ins differently from a build that reads it as
-    /// `Unknown`: one document, two canonical forms.
+    /// `ord` is part of the freeze, and a promoted type takes the slot `Unknown`
+    /// held. Anywhere else, a build that knows the type orders it differently
+    /// from one that reads it as `Unknown`: one document, two canonical forms.
     #[test]
     fn unknown_holds_the_last_mark_ordinal() {
         let all = [
@@ -1392,9 +1381,8 @@ mod tests {
                 attrs: Value::Null,
             },
         ];
-        // Exhaustive on purpose: a new variant is a compile error here, which is
-        // where the placement rule gets read, rather than a slot silently taken
-        // after `Unknown`.
+        // Exhaustive on purpose: a new variant is a compile error here, where
+        // the placement rule gets read.
         for k in &all {
             match k {
                 MarkKind::Strong
@@ -1412,10 +1400,9 @@ mod tests {
         assert!(matches!(all.last(), Some(MarkKind::Unknown { .. })));
     }
 
-    /// Formatting-class membership is stored meaning. Two adjacent
-    /// unknowns are two marks; two adjacent formatting marks are one. Promoting a
-    /// tag into the class therefore rewrites documents nobody edited, which makes
-    /// it a canonical-byte event rather than a silent widening.
+    /// Formatting-class membership is stored meaning: two adjacent unknowns are
+    /// two marks, two adjacent formatting marks are one. Promoting a tag into
+    /// the class therefore rewrites documents nobody edited.
     #[test]
     fn formatting_class_membership_decides_adjacent_union() {
         let mut rt = Content::empty();
@@ -1447,11 +1434,9 @@ mod tests {
         assert_eq!(rt.marks.len(), 1);
     }
 
-    /// Promotion grows `RESERVED_*`, and the authored lane then
-    /// refuses a shape it accepted the release before. By design: a host still
-    /// authoring the unknown spelling of a name that now means the built-in is
-    /// writing the silent drop the rule exists to catch, but from the host's
-    /// side it reads as a release breaking its writes.
+    /// Promotion grows `RESERVED_*`, and the authored lane then refuses a shape
+    /// it accepted the release before. By design: a host still authoring the
+    /// unknown spelling is writing the silent drop the rule exists to catch.
     #[test]
     fn reserved_growth_flips_authored_acceptance() {
         let doc = |kind: &str| {
