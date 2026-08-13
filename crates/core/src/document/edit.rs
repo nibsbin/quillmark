@@ -20,8 +20,20 @@ use crate::error::diag_args;
 use crate::document::payload::MetaKey;
 use crate::document::{Card, Document, Payload};
 use crate::quill::{CoercionError, FieldSchema, FieldType, Leniency, QuillConfig};
-use crate::value::QuillValue;
+use crate::value::{PathSegment, QuillValue};
 use crate::version::QuillReference;
+
+/// An in-field path rendered as the tail of a [`DocPath`](crate::path::DocPath)
+/// field segment (`[0].name`), so an error message names the same address its
+/// anchor does. Empty for the whole-field case.
+fn render_at(at: &[PathSegment]) -> String {
+    at.iter()
+        .map(|seg| match seg {
+            PathSegment::Key(k) => format!(".{k}"),
+            PathSegment::Index(i) => format!("[{i}]"),
+        })
+        .collect()
+}
 
 /// `true` if `name` matches `[A-Za-z_][A-Za-z0-9_]*` after NFC normalisation.
 ///
@@ -93,9 +105,15 @@ pub enum EditError {
     ///
     /// `codec` is the declared type's, not the stored shape's. Absence is not
     /// this error: a missing field is `None`, and reads as the empty content.
-    #[error("{codec} field '{field}': {message}")]
+    #[error("{codec} field '{field}{}': {message}", render_at(.at))]
     FieldDecode {
         field: String,
+        /// The steps from the field to the value that failed, empty when the
+        /// field itself is the value
+        /// ([`get_content_at`](crate::TypedReader::get_content_at) is the only
+        /// producer of a non-empty one). Rides the [`doc_path`](Self::doc_path)
+        /// anchor as its own segments, so `field` stays the field's name.
+        at: Vec<PathSegment>,
         /// The codec that ran, named by the field's declared type:
         /// [`CODEC_RICHTEXT`] or [`CODEC_PLAINTEXT`].
         codec: String,
@@ -106,10 +124,18 @@ pub enum EditError {
     /// addressed a field whose declared type is not a content *leaf*. The schema
     /// answers before the payload is consulted, and the test is narrower than
     /// the subtree walk: an `array<richtext>` carries content yet has no single
-    /// `Content`, so it lands here. Read its elements through
-    /// [`get`](crate::TypedReader::get).
-    #[error("field '{field}' is declared '{declared}', which is not a content field")]
-    FieldNotContent { field: String, declared: String },
+    /// `Content`, so it lands here. Address one of its elements with
+    /// [`get_content_at`](crate::TypedReader::get_content_at), which raises this
+    /// in turn for a path that resolves to no content leaf.
+    #[error("field '{field}{}' is declared '{declared}', which is not a content field", render_at(.at))]
+    FieldNotContent {
+        field: String,
+        /// The steps from the field to the addressed value, empty when the field
+        /// itself is addressed. `declared` names the type reached, so a
+        /// `string[]` element reports `string` rather than the field's `array`.
+        at: Vec<PathSegment>,
+        declared: String,
+    },
 
     /// A content field written under an `inline: true` schema decoded to a
     /// multi-line content. Both prose codecs declare `inline`, so one code
@@ -169,7 +195,10 @@ impl EditError {
     /// `field` and `kind` ride here even though [`doc_path`](Self::doc_path)
     /// also folds them into the anchor: [`DocPath`](crate::path::DocPath)
     /// renders field segments unescaped and parses on `.` and `[`, so a
-    /// malformed name cannot be recovered from the rendered path.
+    /// malformed name cannot be recovered from the rendered path. An `at` path
+    /// rides the anchor only, where its segments are structural and recoverable;
+    /// keeping it out of `field` is what leaves `field` a bare field name for a
+    /// consumer routing on it.
     pub fn args(&self) -> BTreeMap<String, serde_json::Value> {
         match self {
             EditError::InvalidFieldName(field) => diag_args! { "field" => field },
@@ -184,13 +213,18 @@ impl EditError {
             EditError::Import(_) => diag_args! {},
             EditError::FieldDecode {
                 field,
+                at: _,
                 codec,
                 message: _,
             } => diag_args! {
                 "field" => field,
                 "codec" => codec,
             },
-            EditError::FieldNotContent { field, declared } => diag_args! {
+            EditError::FieldNotContent {
+                field,
+                at: _,
+                declared,
+            } => diag_args! {
                 "field" => field,
                 "declared" => declared,
             },
@@ -214,7 +248,9 @@ impl EditError {
     /// `base`: the card root the mutator ran against, empty for a card built
     /// before placement.
     ///
-    /// A field-named variant anchors at its field under `base`;
+    /// A field-named variant anchors at its field under `base`, extended by the
+    /// variant's `at` path when it carries one, so an element read anchors at
+    /// `main.<field>[<i>]` rather than at the whole field;
     /// [`IndexOutOfRange`](Self::IndexOutOfRange) at the document-array slot
     /// `cards[index]`, base-independent because a structural op names a slot,
     /// not a field; the rest anchor at `base` when it names a card, else carry
@@ -222,12 +258,14 @@ impl EditError {
     pub fn doc_path(&self, base: &crate::path::DocPath) -> Option<crate::path::DocPath> {
         use crate::path::DocPath;
         match self {
+            EditError::FieldNotContent { field: f, at, .. }
+            | EditError::FieldDecode { field: f, at, .. } => {
+                Some(at.iter().fold(base.field(f), |p, seg| p.segment(seg)))
+            }
             EditError::InvalidFieldName(f)
             | EditError::UnknownField(f)
             | EditError::FieldNotInline { field: f, .. }
-            | EditError::FieldCoercionFailed { field: f, .. }
-            | EditError::FieldNotContent { field: f, .. }
-            | EditError::FieldDecode { field: f, .. } => Some(base.field(f)),
+            | EditError::FieldCoercionFailed { field: f, .. } => Some(base.field(f)),
             EditError::IndexOutOfRange { index, .. } => Some(DocPath::card(None, *index)),
             _ => (!base.segs().is_empty()).then(|| base.clone()),
         }
@@ -301,6 +339,7 @@ fn conform_error_to_edit(name: &str, err: CoercionError) -> EditError {
         },
         CODEC_RICHTEXT | CODEC_PLAINTEXT => EditError::FieldDecode {
             field,
+            at: Vec::new(),
             codec: target,
             message: reason,
         },
@@ -725,6 +764,7 @@ impl Card {
             Some(Err(e)) => {
                 return Err(EditError::FieldDecode {
                     field: name.to_string(),
+                    at: Vec::new(),
                     codec: CODEC_RICHTEXT.to_string(),
                     message: e.into_message(),
                 })
@@ -816,6 +856,7 @@ impl Card {
             Some(Err(e)) => {
                 return Err(EditError::FieldDecode {
                     field: name.to_string(),
+                    at: Vec::new(),
                     codec: CODEC_PLAINTEXT.to_string(),
                     message: e.into_message(),
                 })
@@ -874,6 +915,7 @@ impl Card {
             Some(Err(e)) => {
                 return Err(EditError::FieldDecode {
                     field: name.to_string(),
+                    at: Vec::new(),
                     codec: CODEC_RICHTEXT.to_string(),
                     message: e.into_message(),
                 })
