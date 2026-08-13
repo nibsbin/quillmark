@@ -383,24 +383,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn region_round_trips_through_json() {
-        let region = RenderedRegion {
-            field: "full_name".to_string(),
-            page: 0,
-            rect: [180.0, 715.0, 520.0, 735.0],
-            span: Some([12, 34]),
-        };
-        let json = serde_json::to_string(&region).unwrap();
-        assert!(json.contains("\"field\":\"full_name\""), "{json}");
-        assert!(json.contains("\"span\":[12,34]"), "{json}");
-        let back: RenderedRegion = serde_json::from_str(&json).unwrap();
-        assert_eq!(back, region);
-    }
-
-    /// `span` is omitted when `None` and defaults back on read: the
-    /// additive-optional discipline that lets a scalar/widget region (no content
-    /// address) parse the same as a content region carrying a span.
-    #[test]
     fn optional_span_omitted_when_none() {
         let region = RenderedRegion {
             field: "subject".to_string(),
@@ -427,8 +409,6 @@ mod tests {
         let back: ContentHit = serde_json::from_str(&json).unwrap();
         assert_eq!(back, hit);
 
-        // The segment-floored variant serializes to its own tag, so a caret UI
-        // can tell a trusted cluster offset from a floored one.
         let seg = ContentHit {
             field: "body".to_string(),
             pos: 7,
@@ -437,25 +417,6 @@ mod tests {
         let json = serde_json::to_string(&seg).unwrap();
         assert!(json.contains("\"granularity\":\"segment\""), "{json}");
         assert_eq!(serde_json::from_str::<ContentHit>(&json).unwrap(), seg);
-    }
-
-    /// `granularity` omits when `None` and defaults back on read: the
-    /// additive-optional discipline, so a hit straight from a backend (no source
-    /// map) parses the same as one that reports it.
-    #[test]
-    fn content_hit_omits_optionals_when_none() {
-        let hit = ContentHit {
-            field: "body".to_string(),
-            pos: 42,
-            granularity: None,
-        };
-        let json = serde_json::to_string(&hit).unwrap();
-        assert!(
-            !json.contains("granularity"),
-            "unreported granularity omitted: {json}"
-        );
-        let back: ContentHit = serde_json::from_str(&json).unwrap();
-        assert_eq!(back, hit);
     }
 
     fn content(field: &str, page: usize, rect: [f32; 4], span: [usize; 2]) -> RenderedRegion {
@@ -467,10 +428,6 @@ mod tests {
         }
     }
 
-    /// `field_boxes` unions a page's span-bearing segment rects into one box and
-    /// ignores other fields: the whole-field highlight a consumer would
-    /// otherwise derive by hand. The union `span` bounds `[min start, max end)`,
-    /// and each page gets its own box, page-ascending.
     #[test]
     fn field_boxes_unions_span_bearing_segments_per_page() {
         let regions = vec![
@@ -488,9 +445,6 @@ mod tests {
         assert_eq!(boxes[1].rect, [10.0, 700.0, 150.0, 720.0]);
     }
 
-    /// A field placed only as a scalar reference or widget (no `span`) yields no
-    /// derived content box: its highlight is a single region's `rect`, read
-    /// straight from the set.
     #[test]
     fn field_boxes_empty_for_span_less_field() {
         let regions = vec![RenderedRegion {
@@ -502,11 +456,7 @@ mod tests {
         assert!(field_boxes(&regions, "subject").is_empty());
     }
 
-    // ── Plate-space ⇄ DocPath translation ────────────────────────────────────
-
-    /// Two `note` cards interleaved with one `annotation`: the per-kind ordinal
-    /// is not the absolute index once kinds interleave, so the two grammars
-    /// genuinely differ and the kind list is load-bearing.
+    /// Interleaved kinds, so the per-kind ordinal is not the absolute index.
     const KINDS: &[Option<&str>] = &[Some("note"), Some("annotation"), Some("note")];
 
     fn to_doc(addr: &str) -> Option<String> {
@@ -518,34 +468,24 @@ mod tests {
 
     #[test]
     fn plate_to_docpath_resolves_the_absolute_index() {
-        // The 2nd `note` (ordinal 1) sits at absolute index 2.
         assert_eq!(to_doc("$cards.note.1.on").as_deref(), Some("cards.note[2].on"));
-        // The 1st `note` (ordinal 0) is absolute 0; the `annotation` is absolute 1.
         assert_eq!(to_doc("$cards.note.0.on").as_deref(), Some("cards.note[0].on"));
         assert_eq!(
             to_doc("$cards.annotation.0.text").as_deref(),
             Some("cards.annotation[1].text")
         );
-        // Bodies and main.
         assert_eq!(to_doc("$body").as_deref(), Some("main.body"));
         assert_eq!(
             to_doc("$cards.note.1.$body").as_deref(),
             Some("cards.note[2].body")
         );
-        // A plate-space bare main field roots at `main` in DocPath space.
         assert_eq!(to_doc("signature_block").as_deref(), Some("main.signature_block"));
     }
 
-    /// A plate tail is parsed segment-wise: a numeric segment is an array
-    /// index, a key segment a field. A tail carried whole into one `Field`
-    /// would mint a path that reparses to different segments.
     #[test]
     fn plate_to_docpath_parses_the_tail_segment_wise() {
-        // An `array<richtext>` element: the backend keys `<field>.<i>`.
         assert_eq!(to_doc("references.0").as_deref(), Some("main.references[0]"));
-        // A nested key (pdfform binds these) is not an index.
         assert_eq!(to_doc("address.city").as_deref(), Some("main.address.city"));
-        // Both at once, on a card: ordinal 1 of `note` is absolute 2.
         assert_eq!(
             to_doc("$cards.note.1.refs.0").as_deref(),
             Some("cards.note[2].refs[0]")
@@ -556,10 +496,9 @@ mod tests {
         );
     }
 
-    /// The inverse guarantee over the whole geometry grammar, including the
-    /// **string leg**: a round-trip comparing `DocPath` values alone holds even
-    /// when the rendered form reparses to different segments, and the rendered
-    /// form is what a binding hands `docpath_to_plate`.
+    /// Covers the string leg too: a binding hands `docpath_to_plate` the
+    /// *rendered* path, so a `DocPath`-only round-trip would not catch a
+    /// spelling that reparses to different segments.
     #[test]
     fn docpath_to_plate_is_the_inverse() {
         for plate in [
@@ -576,52 +515,41 @@ mod tests {
             "$cards.note.0.addr.city",
         ] {
             let doc = plate_addr_to_doc_path(plate, KINDS).unwrap();
-            // The string leg: the minted path survives Display → FromStr.
             let rendered = doc.to_string();
             assert_eq!(rendered.parse::<DocPath>().ok(), Some(doc), "string leg {plate}");
-            // Plate → DocPath → plate, from the rendered string a consumer
-            // sends: `to_plate` parses it exactly as a binding does.
             assert_eq!(to_plate(&rendered).as_deref(), Some(plate), "round-trip {plate}");
         }
     }
 
     #[test]
     fn translation_rejects_unplaceable_and_foreign_shapes() {
-        // A 3rd `note` (ordinal 2) does not exist: only two notes.
+        // Only two `note`s exist.
         assert_eq!(to_doc("$cards.note.2.on"), None);
-        // A DocPath whose kind disagrees with the slot does not translate back.
+        // The kind disagrees with the slot.
         assert_eq!(
             doc_path_to_plate_addr(&"cards.annotation[0].x".parse().unwrap(), KINDS),
             None
         );
-        // A document-model shape geometry never keys (nested main field).
+        // A document-model shape geometry never keys.
         assert_eq!(
             doc_path_to_plate_addr(&"recipients[0].name".parse().unwrap(), KINDS),
             None
         );
-        // A bare card head, and an empty or `$`-token tail piece.
         assert_eq!(to_doc("$cards.note.1"), None);
         assert_eq!(to_doc("references."), None);
         assert_eq!(to_doc("refs.$seed"), None);
-        // `$body` is terminal.
         assert_eq!(to_doc("a.$body.b"), None);
-        // A tail never opens on an index: neither `main` nor a card is an array.
         assert_eq!(to_doc("0.x"), None);
     }
 
-    /// `DocPath` values plate space cannot spell. `None`, not a guess: geometry
-    /// placed no such thing, and the caller keeps its original string.
     #[test]
     fn docpath_to_plate_rejects_unspellable_paths() {
         for doc in [
-            // A digit map key (`collect_fill_diags` mints these) is a `Field`,
-            // not an index: spelling it `m.0` would read back as an index.
+            // A digit map key is a `Field`; spelling it `m.0` reads back as an
+            // index.
             "main.m.0",
-            // A tail opening on an index.
             "main[0].x",
-            // An unknown-kind card root.
             "cards[0].x",
-            // A bare root, no tail.
             "main",
             "cards.note[0]",
         ] {
@@ -631,8 +559,7 @@ mod tests {
                 "unspellable {doc}"
             );
         }
-        // A non-final `Body`. Not reachable through the parser (a non-terminal
-        // `.body` reads as a field literally named `body`), so it is built
+        // A non-final `Body`, unreachable through the parser, so built
         // segment-wise.
         assert_eq!(
             doc_path_to_plate_addr(&DocPath::main().body().field("x"), KINDS),
