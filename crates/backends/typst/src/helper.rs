@@ -1,20 +1,11 @@
 //! Generates the virtual `@local/quillmark-helper:0.1.0` package that provides
 //! document data to Typst plates.
 //!
-//! The backend regenerates `lib.typ` per render as pure source text: no
-//! runtime data processing. Richtext fields carry canonical content JSON, lowered
-//! here to markup **block bindings** (`#let _qm_cN = [ .. ]`) via
-//! [`emit_content`]; the document data is a Typst **literal**
-//! (`#let data = ( .. )`) whose content fields reference those blocks, present
-//! date fields reference a `date` value-object block (`#let _qm_dN = { let v =
-//! datetime(..); (value: v, display: (..args) => text(v.display(..args))) }`,
-//! blank ⇒ `none`), `$cards` carry a per-kind-ordinal `$path`, and everything
-//! else is a value literal Typst judges equal to the former `json()` parse
-//! (date cells excepted: their block carries the `datetime`, not the data
-//! literal); the schema address tables are a generated literal
-//! `_qm-meta`, and each content field's plaintext projection a generated literal
-//! `_qm-plaintext` (backing the `plaintext(field)` helper). See
-//! [`generate_lib_typ`].
+//! `lib.typ` is regenerated per render as pure source text: no runtime data
+//! processing. Richtext fields lower to markup block bindings (`#let _qm_cN =
+//! [ .. ]`) via [`emit_content`]; the document data is a Typst literal
+//! (`#let data = ( .. )`) referencing those blocks, with present date fields
+//! referencing a `date` value-object block and everything else a value literal.
 //!
 //! Output is **canonical**: dict keys emit in sorted order at every level (via
 //! [`sorted`]), so equal data produces byte-equal source regardless of the
@@ -35,26 +26,18 @@ pub const HELPER_NAME: &str = "quillmark-helper";
 
 const LIB_TYP_TEMPLATE: &str = include_str!("lib.typ.template");
 
-/// A generated content block's source map in the produced `lib.typ`: the
-/// bracketed `block` range (`[ .. ]`, brackets included) of a `#let _qm_cN = [
-/// .. ]` binding, keyed by the schema address of the content it carries, plus
-/// the emitter's per-segment [`SegmentMap`]s rebased so every `generated` range
-/// indexes the returned `lib.typ` directly. Every glyph the block places carries
-/// a span that resolves into `block`; the world layer pairs it with the helper's
-/// `FileId` for the span scan, and the segments key regions to content ranges.
+/// One generated content block's source map in the produced `lib.typ`: the
+/// bracketed `block` range (brackets included) plus the emitter's
+/// [`SegmentMap`]s, rebased so every `generated` range indexes `lib.typ`
+/// directly. Every glyph the block places carries a span resolving into `block`.
 pub struct ContentMap {
     pub path: String,
     pub block: Range<usize>,
     pub segments: Vec<SegmentMap>,
 }
 
-/// Generate `lib.typ` for the quillmark-helper package from the transformed
-/// document data (richtext fields carry canonical content JSON; no `__meta__`
-/// sentinel) plus the session's [`SchemaMeta`]. Content fields are lowered to
-/// Typst markup here via [`emit_content`]: the codegen tier of the seam, the
-/// one place a source map can be produced. Returns the source and each content
-/// block's [`ContentMap`]; `Err` only when a content exceeds the nesting bound
-/// (import capped it, so this fires only on a hand-built content).
+/// The source plus each content block's [`ContentMap`]. `Err` only when a
+/// content exceeds the nesting bound, which import already caps.
 pub fn generate_lib_typ(
     data: &serde_json::Value,
     meta: &SchemaMeta,
@@ -63,19 +46,16 @@ pub fn generate_lib_typ(
     let empty = serde_json::Map::new();
     let data_obj = data.as_object().unwrap_or(&empty);
     let data_literal = cg.emit_data(data_obj);
-    // Surface any lowering failure the recursive (infallible-returning) walk
-    // recorded, before assembling the output.
+    // The recursive walk returns infallibly and records its failure here.
     if let Some(e) = cg.emit_error.take() {
         return Err(e);
     }
     let meta_literal = meta_literal(meta);
     let plaintext_literal = plaintext_literal(&cg.plaintext);
 
-    // Every placeholder is located in the *raw template* (trusted static text)
-    // never in already-substituted output, so document data containing the
-    // literal placeholder text cannot hijack a splice point. Slots are unique
-    // and ordered; each `find` starts after the previous slot, scanning only the
-    // static template.
+    // Placeholders are located in the *raw template* (trusted static text), never
+    // in already-substituted output, so document data spelling a placeholder
+    // cannot hijack a splice point.
     let mut out = String::with_capacity(
         LIB_TYP_TEMPLATE.len() + cg.blocks.len() + data_literal.len() + plaintext_literal.len(),
     );
@@ -101,8 +81,8 @@ pub fn generate_lib_typ(
     }
     out.push_str(&LIB_TYP_TEMPLATE[cursor..]);
 
-    // Rebase every recorded window (block + its segments' `generated`/run ranges) from
-    // block-section-relative to `lib.typ`-relative by the block section's start.
+    // Rebase every recorded window from block-section-relative to
+    // `lib.typ`-relative.
     let windows = cg
         .windows
         .into_iter()
@@ -118,8 +98,7 @@ pub fn generate_lib_typ(
     Ok((out, windows))
 }
 
-/// Shift a [`SegmentMap`]'s generated byte offsets (the segment window and each
-/// run's `generated` range) by `shift`; content (USV) offsets are unaffected.
+/// Shifts generated byte offsets only; content (USV) offsets are unaffected.
 fn rebase_segment(mut s: SegmentMap, shift: usize) -> SegmentMap {
     s.generated = (s.generated.start + shift)..(s.generated.end + shift);
     for run in &mut s.runs {
@@ -128,28 +107,16 @@ fn rebase_segment(mut s: SegmentMap, shift: usize) -> SegmentMap {
     s
 }
 
-/// Accumulates the generated helper across one render: the content block
-/// bindings, their brackets-included windows + rebased segment maps (relative to
-/// the block section), the `_qm_cN` counter, the first content-lowering error (a
-/// content over the nesting bound; import normally prevents it), and each content
-/// field's plaintext projection (for the `plaintext(field)` helper).
+/// Accumulates the generated helper across one render.
 struct Codegen<'m> {
     meta: &'m SchemaMeta,
     blocks: String,
     windows: Vec<(String, Range<usize>, Vec<SegmentMap>)>,
     counter: usize,
-    /// The `_qm_dN` date value-object counter. Separate from `counter` only to
-    /// number date blocks densely (`_qm_d0`, `_qm_d1`, …) rather than sharing
-    /// the content blocks' sequence; the `_qm_c`/`_qm_d` prefixes keep the ID
-    /// spaces distinct either way, and both counters are a pure function of
-    /// emission order (sorted keys, semantic card order), so the
-    /// byte-identical-source invariant holds regardless.
     date_counter: usize,
     emit_error: Option<EmitError>,
     /// `(schema address, plaintext)` per non-blank content field: the content
-    /// text with island slots stripped and marks dropped, keyed by the same
-    /// address the content-block window uses (`subject`, `refs.2`,
-    /// `$cards.note.0.$body`). Backs the generated `_qm-plaintext` table.
+    /// text with island slots stripped and marks dropped. Backs `_qm-plaintext`.
     plaintext: Vec<(String, String)>,
 }
 
