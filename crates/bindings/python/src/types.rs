@@ -611,16 +611,12 @@ impl PyDocument {
     }
 
     /// Build a fresh `Card` dict from a kind and a flat field mapping: the
-    /// ergonomic constructor for `insert_card`. `fields` maps field name → value
-    /// (each becomes a card field, in insertion order); `body` defaults to `""`.
+    /// ergonomic constructor for `insert_card`, which also takes any card dict
+    /// directly. Each `fields` entry becomes a card field in insertion order;
+    /// `body` defaults to `""`.
     ///
-    /// Sugar, not a required step: `insert_card` takes any card dict, and
-    /// `remove_card` returns one, so a card round-trips without passing through
-    /// here.
-    ///
-    /// Checks only what a detached card can decide alone: field-name grammar
-    /// and value depth. Kind validity is positional (`main` is right for the
-    /// root, reserved for a composable card) so `insert_card` is its gate, and
+    /// Checks only what a detached card can decide alone: field-name grammar and
+    /// value depth. Kind validity is positional, so `insert_card` is its gate and
     /// any kind string is accepted here.
     #[staticmethod]
     #[pyo3(signature = (kind, fields=None, body=None))]
@@ -642,8 +638,6 @@ impl PyDocument {
                 });
             }
         }
-        // The `body` argument is markdown; `Card::try_from` imports it to the
-        // content, and `card_to_pydict` re-emits the content body.
         let mut wire = quillmark_core::CardWire::new(
             kind,
             serde_json::Value::String(body.unwrap_or_default()),
@@ -656,9 +650,8 @@ impl PyDocument {
 
     /// Place a composable card. `at` picks the position: `None` appends, `Some(i)`
     /// inserts at index `i` (`0..=card_count`; out of range raises
-    /// `IndexOutOfRange`). `card` is a `Card` dict: from `make_card`, `cards`,
-    /// `remove_card`, or `seed_card`. The one insertion verb per lane, folding
-    /// core's `push_card` + `insert_card`.
+    /// `IndexOutOfRange`). `card` is a `Card` dict, as `make_card`, `cards`,
+    /// `remove_card`, and `seed_card` return.
     #[pyo3(signature = (card, at=None))]
     fn insert_card(&mut self, card: Bound<'_, PyAny>, at: Option<usize>) -> PyResult<()> {
         let core_card = py_dict_to_card(&card)?;
@@ -695,8 +688,6 @@ impl PyDocument {
 }
 
 impl PyDocument {
-    /// Resolve a mutable composable card by index, raising the same
-    /// `IndexOutOfRange` error the other card mutators raise.
     fn card_mut_or_raise(&mut self, index: usize) -> PyResult<&mut quillmark_core::Card> {
         let len = self.inner.cards().len();
         self.inner.card_mut(index).ok_or_else(|| {
@@ -704,9 +695,6 @@ impl PyDocument {
         })
     }
 
-    /// Resolve the card a `card=` selector targets: the main card when `None`,
-    /// else the composable card at that index (out-of-range raises). The shared
-    /// address axis of the `card=`-parametrized `$ext` / `remove_field` verbs.
     fn addr_card_mut(&mut self, card: Option<usize>) -> PyResult<&mut quillmark_core::Card> {
         match card {
             None => Ok(self.inner.main_mut()),
@@ -715,11 +703,10 @@ impl PyDocument {
     }
 }
 
-/// A `Document` bound to its `Quill` for typed writes: the schema-bound writer,
-/// from `Quill.writer(doc)`. Speaks names, values, and markdown; a consumer
-/// here never meets an address, a content dict, or a delta. It holds both objects
-/// by reference and re-borrows them per call (pyo3 objects carry no lifetime, so
-/// unlike core's `TypedWriter` it cannot keep the borrow), so it is ephemeral by
+/// A `Document` bound to its `Quill` for typed writes, from `Quill.writer(doc)`.
+/// Speaks names, values, and markdown: no address, content dict, or delta. It
+/// re-borrows both objects per call (pyo3 objects carry no lifetime, so unlike
+/// core's `TypedWriter` it cannot keep the borrow), so it is ephemeral by
 /// convention: bind, write, discard.
 #[pyclass(name = "Writer")]
 pub struct PyWriter {
@@ -762,9 +749,8 @@ impl PyWriter {
             .map_err(convert_edit_errors)
     }
 
-    /// Revise the main body from markdown (edit semantics: anchors rebase). The
-    /// `Delta` receipt is discarded, as on `revise_field`: the position-mapping
-    /// receipt is an editor concern and that lane is WASM-only.
+    /// Revise the main body from markdown; anchors rebase. The `Delta` receipt is
+    /// discarded, as on `revise_field`.
     fn revise_body(&self, py: Python<'_>, markdown: &str) -> PyResult<()> {
         let quill = self.quill.borrow(py);
         let mut doc = self.doc.borrow_mut(py);
@@ -777,16 +763,13 @@ impl PyWriter {
     }
 
     /// Revise the content main-card field `name` from authored text: typed *and*
-    /// anchor-preserving. The codec comes from the declared type: `richtext` diffs
-    /// markdown, while `plaintext` diffs the literal text and never imports
-    /// markdown. Surviving anchors rebase, then the diffed result is
-    /// schema-conformed (a `richtext(inline)` field rejects a multi-block result
-    /// with `edit::field_not_inline`). Raises
-    /// `edit::unknown_field` for a name the schema does not declare. The
-    /// only field write that preserves a JS editor's anchors on a shared document
-    /// (`set` cold-imports). The text `Delta` is discarded: the position-mapping
-    /// receipt is an editor concern, and that lane is WASM-only; core and WASM
-    /// return it.
+    /// anchor-preserving, the only field write that keeps a JS editor's anchors
+    /// on a shared document (`set` cold-imports). The codec comes from the
+    /// declared type: `richtext` diffs markdown, `plaintext` the literal text.
+    /// Surviving anchors rebase, then the diffed result is schema-conformed, so a
+    /// `richtext(inline)` field rejects a multi-block result with
+    /// `edit::field_not_inline`. Raises `edit::unknown_field` for an undeclared
+    /// name. The text `Delta` is discarded: that lane is WASM-only.
     fn revise_field(&self, py: Python<'_>, name: &str, text: &str) -> PyResult<()> {
         let quill = self.quill.borrow(py);
         let mut doc = self.doc.borrow_mut(py);
@@ -799,12 +782,10 @@ impl PyWriter {
     }
 
     /// Build a composable card of `kind`, typed-commit `fields` onto it, set its
-    /// body from optional markdown, and place it: the fused `make_card` + typed
-    /// commit + insertion. `at` picks the position: `None` appends, `Some(i)`
-    /// inserts at index `i`, so a positioned typed insert is one atomic call
-    /// rather than `add_card` + `move_card`. Transactional: a rejected field
-    /// (raises a per-field diagnostic bundle) or an invalid kind/body/position
-    /// leaves the document untouched.
+    /// body from optional markdown, and place it. `at` picks the position: `None`
+    /// appends, `Some(i)` inserts at index `i`. Transactional: a rejected field
+    /// (raising a per-field diagnostic bundle) or an invalid kind, body, or
+    /// position leaves the document untouched.
     #[pyo3(signature = (kind, fields=None, body=None, at=None))]
     fn add_card(
         &self,
@@ -827,9 +808,8 @@ impl PyWriter {
             .map_err(convert_edit_errors)
     }
 
-    /// Remove the composable card at `index`, returning it as a dict (or `None`
-    /// if the index is out of range): the writer spelling of
-    /// `Document.remove_card`.
+    /// Remove the composable card at `index`, returning it as a dict or `None`
+    /// when the index is out of range.
     fn remove_card<'py>(
         &self,
         py: Python<'py>,
@@ -874,8 +854,7 @@ impl PyCardWriter {
     }
 
     /// The bound card's `$kind`, or `None` when it carries none. Raises
-    /// `edit::index_out_of_range` if the bound index is out of range. Mirrors
-    /// core `CardWriter::kind()` / WASM `writer.card(i).kind`.
+    /// `edit::index_out_of_range` for a bad bound index.
     #[getter]
     fn kind(&self, py: Python<'_>) -> PyResult<Option<String>> {
         let quill = self.quill.borrow(py);
