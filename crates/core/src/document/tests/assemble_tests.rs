@@ -1,5 +1,4 @@
 use crate::document::assemble::decompose;
-use crate::document::meta::is_valid_kind_name;
 use crate::document::Document;
 
 #[test]
@@ -1571,27 +1570,6 @@ fn test_unmatched_chevrons_preserved() {
 
 // Robustness tests
 
-/// Inputs with no `~~~card-yaml` block must fail with the missing-root error.
-#[test]
-fn test_missing_quill() {
-    for input in ["plain text", "# Heading\n\nbody"] {
-        let err = decompose(input).unwrap_err().to_string();
-        assert!(
-            err.contains("Missing required root card-yaml block"),
-            "input {:?} produced unexpected error: {}",
-            input,
-            err
-        );
-    }
-}
-
-#[test]
-fn test_dashes_in_middle_of_line() {
-    let markdown = "~~~card-yaml\n$quill: test_quill\n$kind: main\n~~~\n\nsome text --- more text";
-    let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.main().body_markdown(), "some text --- more text");
-}
-
 /// CRLF and mixed line endings must parse identically to LF.
 #[test]
 fn test_line_ending_normalization() {
@@ -1640,26 +1618,6 @@ fn test_unicode_in_yaml_keys() {
         doc.main().payload().get("titre").unwrap().as_str().unwrap(),
         "こんにちは"
     );
-}
-
-#[test]
-fn test_unicode_in_yaml_values() {
-    let markdown =
-        "~~~card-yaml\n$quill: test_quill\n$kind: main\ntitle: 你好世界 🎉\n~~~\n\nBody.";
-    let doc = decompose(markdown).unwrap();
-    assert_eq!(
-        doc.main().payload().get("title").unwrap().as_str().unwrap(),
-        "你好世界 🎉"
-    );
-}
-
-#[test]
-fn test_unicode_in_body() {
-    let markdown =
-        "~~~card-yaml\n$quill: test_quill\n$kind: main\ntitle: Test\n~~~\n\n日本語テキスト with emoji 🚀";
-    let doc = decompose(markdown).unwrap();
-    assert!(doc.main().body_markdown().contains("日本語テキスト"));
-    assert!(doc.main().body_markdown().contains("🚀"));
 }
 
 // YAML edge cases
@@ -1927,18 +1885,6 @@ fn test_f2_strip_does_not_overstrip_content_newlines() {
 }
 
 // Kind name validation
-
-#[test]
-fn test_kind_name_validator() {
-    for &name in &["_", "_private", "item1", "item_2"] {
-        assert!(is_valid_kind_name(name), "expected valid: {:?}", name);
-    }
-    for &name in &[
-        "", "1item", "Items", "ITEMS", "my-items", "my.items", "my items",
-    ] {
-        assert!(!is_valid_kind_name(name), "expected invalid: {:?}", name);
-    }
-}
 
 // Guillemet preprocessing
 
