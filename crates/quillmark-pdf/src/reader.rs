@@ -286,24 +286,19 @@ pub fn find_dict_value<'a>(dict_bytes: &'a [u8], key: &str) -> Option<&'a [u8]> 
         let value_start = skip_ws_and_comments(dict_bytes, after_key);
         let value_end = read_value_end(dict_bytes, value_start)?;
         if matched {
-            // Slice from immediately after the key (not `value_start`) so the
-            // key span is `[after_key - km.len, value_end)` by subtraction.
+            // Slice from after the key, not `value_start`, so the key span is
+            // recoverable by subtraction.
             return Some(&dict_bytes[after_key..value_end]);
         }
         i = value_end;
     }
 }
 
-/// Replace `key`'s value in a flat dict, given the current `value` slice: which
-/// MUST be the subslice [`find_dict_value`] returned for that key. Its start
-/// locates the key span by pointer subtraction (`[value_start - key.len,
-/// value_end)`), not by re-scanning, so a `key` token appearing inside another
-/// value can't be matched by accident. The `key`+value span is rewritten as
-/// `key` + one space + `new_value`; the rest of `dict` is copied verbatim.
-///
-/// `key` is the on-page byte form including the leading slash (`b"/Producer"`).
-/// Callers that build the replacement value from `value`'s own bytes must do so
-/// before calling: `dict` is borrowed immutably here.
+/// Replace `key`'s value in a flat dict. `value` MUST be the subslice
+/// [`find_dict_value`] returned for that key: its start locates the key span by
+/// pointer subtraction rather than a re-scan, so a `key` token inside another
+/// value cannot be matched by accident. `key` is the on-page byte form,
+/// including the leading slash (`b"/Producer"`).
 pub fn splice_dict_value(dict: &[u8], key: &[u8], value: &[u8], new_value: &[u8]) -> Vec<u8> {
     let value_start = value.as_ptr() as usize - dict.as_ptr() as usize;
     let value_end = value_start + value.len();
@@ -318,8 +313,8 @@ pub fn splice_dict_value(dict: &[u8], key: &[u8], value: &[u8], new_value: &[u8]
     out
 }
 
-/// Skip PDF whitespace and `%`-comments (which run to end-of-line) starting at
-/// `start`; returns the index of the first significant byte at or after it.
+/// The index of the first significant byte at or after `start`, skipping
+/// whitespace and `%`-comments (which run to end-of-line).
 fn skip_ws_and_comments(b: &[u8], start: usize) -> usize {
     let mut i = start;
     loop {
@@ -336,12 +331,10 @@ fn skip_ws_and_comments(b: &[u8], start: usize) -> usize {
     }
 }
 
-/// If `b[i]` opens a literal string (`(`) or a `%`-comment, return the index just
-/// past it, so a dict/array scanner steps over content that can carry raw
-/// `<<`/`>>`/`[`/`]`/`endobj` bytes without treating them as structure. Hex
-/// strings (`<…>`) need no handling: a well-formed one holds only hex digits, so
-/// it can't carry a stray `<`/`>` that would derail the byte walk. `None` when
-/// `b[i]` is neither: the caller advances one byte.
+/// If `b[i]` opens a literal string or a `%`-comment, the index just past it, so
+/// a scanner steps over raw `<<`/`>>`/`[`/`]`/`endobj` bytes without reading them
+/// as structure. Hex strings need no handling: a well-formed one holds only hex
+/// digits. `None` when `b[i]` is neither, and the caller advances one byte.
 fn skip_string_or_comment(b: &[u8], i: usize) -> Option<usize> {
     match b.get(i)? {
         b'(' => Some(skip_pdf_string(b, i)),
@@ -356,9 +349,8 @@ fn skip_string_or_comment(b: &[u8], i: usize) -> Option<usize> {
     }
 }
 
-/// Find the byte index where a value beginning at `start` ends. Returns the
-/// index AFTER the value's last byte. Whitespace at `start` is skipped before
-/// classifying the value type.
+/// The index after the last byte of the value beginning at `start`, whose
+/// leading whitespace is skipped before the value type is classified.
 fn read_value_end(b: &[u8], start: usize) -> Option<usize> {
     let mut i = start;
     while i < b.len() && matches!(b[i], b' ' | b'\t' | b'\n' | b'\r' | b'\x0c') {
@@ -418,8 +410,7 @@ fn read_value_end(b: &[u8], start: usize) -> Option<usize> {
             Some(i)
         }
         c if c.is_ascii_digit() || c == b'-' || c == b'+' || c == b'.' => {
-            // Number, possibly followed by `N R` (indirect reference). The
-            // standalone-R check rejects `5 0 Rect`.
+            // Possibly `N N R`; the standalone-R check rejects `5 0 Rect`.
             let num_end = read_number_end(b, i);
             let mut j = num_end;
             while j < b.len() && matches!(b[j], b' ' | b'\t' | b'\n' | b'\r') {
@@ -557,20 +548,17 @@ fn skip_ws(s: &[u8]) -> &[u8] {
     &s[i..]
 }
 
-/// Resolve the catalog's `/Pages` tree into a flat list of page object IDs,
-/// in document order. The recursion is defensive and capped to prevent runaway
-/// on a pathological PDF.
+/// Flatten the catalog's `/Pages` tree into page object ids in document order.
+/// The walk is capped to prevent runaway on a pathological PDF.
 pub(crate) fn resolve_page_ids(pdf: &[u8], catalog_id: u32) -> Result<Vec<u32>, PdfError> {
     let root_pages_id = root_pages_id(pdf, catalog_id)?;
 
     const MAX_NODES: usize = 100_000;
     let mut out = Vec::new();
     let mut stack = vec![root_pages_id];
-    // A node id reached twice means the `/Pages` tree is cyclic or shares a node
-    // across parents, malformed, and an amplification vector without this
-    // guard: every visit re-scans the whole file via `find_object_bytes`, so a
-    // tiny `/Kids` self-cycle would otherwise drive up to MAX_NODES full-file
-    // scans before the count cap trips.
+    // A node reached twice is a cyclic or shared-node `/Pages` tree, and an
+    // amplification vector: every visit re-scans the whole file, so a tiny
+    // `/Kids` self-cycle would drive MAX_NODES full-file scans without this.
     let mut seen: HashSet<u32> = HashSet::new();
     while let Some(node_id) = stack.pop() {
         if !seen.insert(node_id) {
