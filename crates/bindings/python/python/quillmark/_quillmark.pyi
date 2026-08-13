@@ -1,13 +1,11 @@
 """Type stubs for the compiled `quillmark._quillmark` extension.
 
-Signatures only: pyo3 docstrings are runtime-only, so without this file the
-whole surface resolves to `Any`. Each declaration mirrors its `#[pymethods]`
-twin in `src/types.rs` / `src/enums.rs`, which carries the prose; the two are
-kept in step by hand.
+Signatures only, hand-kept in step with `src/types.rs` / `src/enums.rs`, which
+carry the prose: pyo3 docstrings are runtime-only, so without this file the whole
+surface resolves to `Any`.
 
-A `Card` crosses as a plain dict (`{kind, quill, id, payload_items, ext, seed,
-body}`) and a payload value as whatever JSON maps to, so both are `Any`-shaped:
-their schemas are the quill's, not Python's.
+A `Card` crosses as a plain dict and a payload value as whatever JSON maps to, so
+both are `Any`-shaped: their schemas are the quill's, not Python's.
 """
 
 from pathlib import Path
