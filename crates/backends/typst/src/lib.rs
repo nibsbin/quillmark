@@ -36,53 +36,39 @@ pub struct TypstBackend;
 const SUPPORTED_FORMATS: &[OutputFormat] =
     &[OutputFormat::Pdf, OutputFormat::Svg, OutputFormat::Png];
 
-/// Typst-specific render session.
-///
-/// Holds the compiled `PagedDocument` *and* the `QuillWorld` it was compiled
-/// through. Persisting the world keeps fonts, packages, and assets parsed once
-/// per session rather than once per compile: the substrate for incremental
-/// recompiles. Typst-only operations (page geometry, raster rendering) are
-/// served generically through the `SessionHandle` trait; callers never name
-/// this type.
+/// Persisting the world keeps fonts, packages, and assets parsed once per
+/// session rather than once per compile: the substrate for incremental
+/// recompiles.
 struct TypstSession {
     world: world::QuillWorld,
     document: typst_layout::PagedDocument,
     page_count: usize,
-    /// Extracted from each committed compile. Converted to spine `FieldSpec`s
-    /// on every render; PDF stamps them as AcroForm widgets, and every format
-    /// carries the resulting regions.
+    /// Extracted from each committed compile; converted to spine `FieldSpec`s
+    /// on every render.
     field_placements: Vec<overlay::FieldPlacement>,
-    /// The transform schema's address/date/content classification tables, built
-    /// once at `open` from `build_transform_schema` and reused on every `apply`
-    /// (the schema never changes for the session's lifetime). The schema itself
-    /// is not retained: codegen and date validation read only these tables.
+    /// Built once at `open`: the schema never changes for a session's lifetime,
+    /// and codegen plus date validation read only these tables.
     schema_meta: SchemaMeta,
-    /// The span scan's full classification table for the live compile:
-    /// generated content-block windows in the helper `lib.typ` (regenerated
-    /// with the helper on every committed `apply`) followed by the plate's
-    /// scalar reference-site windows. Swapped transactionally with the document.
+    /// The span scan's classification table for the live compile: generated
+    /// content-block windows then the plate's scalar reference-site windows.
+    /// Swapped transactionally with the document.
     windows: Vec<overlay::FieldWindow>,
-    /// Byte windows of the plate's direct `data.<field>` scalar reference
-    /// sites. The plate is static for the session's lifetime, so these are
-    /// computed once at `open` and re-appended into `windows` per apply.
+    /// The plate is static for a session's lifetime, so these are computed once
+    /// at `open` and re-appended into `windows` per apply.
     scalar_windows: Vec<overlay::FieldWindow>,
-    /// The helper `lib.typ` source the live compile was built from. Span
-    /// resolution for regions/`field_at` goes through this snapshot, not the
-    /// world: a failed `apply` leaves the *next* injection's text in the
-    /// world while every read keeps serving this compile.
+    /// Span resolution goes through this snapshot, not the world: a failed
+    /// `apply` leaves the *next* injection's text in the world while every read
+    /// keeps serving this compile.
     helper_source: typst::syntax::Source,
-    /// Per-page content fingerprints of the live compile; diffed against the
-    /// next compile's to produce `ChangeSet::dirty_pages`.
+    /// Diffed against the next compile's to produce `ChangeSet::dirty_pages`.
     page_hashes: Vec<u128>,
-    /// What [`session_warnings`] built for the live compile: the quill's load
-    /// warnings, then this compile's. The compile half swaps on each committed
-    /// `apply`; the load half rides along unchanged.
+    /// What [`session_warnings`] built for the live compile. The compile half
+    /// swaps on each committed `apply`; the load half rides along unchanged.
     warnings: Vec<Diagnostic>,
 }
 
-/// The session's warning list: the quill's load warnings, then this compile's
-/// own. One order, built in one place, so an `apply` that swaps only what it
-/// recompiled cannot drop the load half.
+/// The quill's load warnings, then this compile's own. One order, built in one
+/// place, so an `apply` that swaps only what it recompiled keeps the load half.
 fn session_warnings(world: &world::QuillWorld, compile: Vec<Diagnostic>) -> Vec<Diagnostic> {
     let mut all = world.load_warnings().to_vec();
     all.extend(compile);
@@ -90,39 +76,18 @@ fn session_warnings(world: &world::QuillWorld, compile: Vec<Diagnostic>) -> Vec<
 }
 
 /// Per-page fingerprints of *visible* content, diffed across compiles for
-/// `ChangeSet::dirty_pages`. Walks each page frame hashing text, shapes,
-/// images, links, and group geometry: skipping introspection `Tag` items and
-/// group parent locations, which carry element hashes spanning content on
-/// *other* pages (a page-spanning paragraph's tag sits on its first page and
-/// covers the whole text, so hashing it dirties page 0 on an end-of-document
-/// edit the page never shows).
+/// `ChangeSet::dirty_pages`. Introspection `Tag` items and group parent
+/// locations are skipped: they carry element hashes spanning content on *other*
+/// pages, so hashing them dirties page 0 on an end-of-document edit.
 ///
-/// PIXELS, NOT SPANS. Every hashed item drops its source-location `Span`: the
-/// glyph `span` on a `Text` run, the trailing `Span` on `Shape`/`Image`. A
-/// `Span` is a `FileId` plus a parse-numbering index; it locates source, it does
-/// not paint. This fingerprint's whole contract is *visible content*, so folding
-/// in a span is a category error: two compiles whose pages rasterize
-/// pixel-for-pixel identically must hash identically, and only render-affecting
-/// data (font, size, paint, glyph geometry, position) may enter the hash.
-///
-/// This is the dirty-every-reapply bug, and it is real, not theoretical.
-/// The span rework routes content-field glyphs' spans into the helper
-/// `lib.typ`, which is regenerated per `apply` with a `data` literal whose keys
-/// serialize in field order (`serde_json` is built with `preserve_order`). An
-/// editor's mutate path can hand `apply` the SAME content in a different field
-/// order than `open` saw; that shifts the helper's byte layout, hence every
-/// content block's glyph spans below it: with no change to a single rendered
-/// pixel. Folding those spans into the hash reported the content page dirty on
-/// every such reapply (see `reapply_with_reordered_fields_same_content_is_clean`
-/// in `tests/live_apply.rs`). Excluding spans makes the invariant structural: a
-/// page cannot be reported dirty for a source-location shift that moved no ink.
+/// Pixels, not spans: every hashed item drops its source-location `Span`. Only
+/// render-affecting data may enter the hash, or a helper-layout shift that moves
+/// no ink (a reordered `data` literal regenerating `lib.typ`) reports every
+/// content page dirty.
 pub(crate) fn page_hashes(document: &typst_layout::PagedDocument) -> Vec<u128> {
     use std::hash::{Hash, Hasher};
     use typst::layout::FrameItem;
 
-    // A text run's rendered content: font, size, paint, and per-glyph geometry,
-    // but not each glyph's `span` (see the fn doc). Everything that moves a pixel
-    // is retained, so a genuine content change still re-hashes.
     fn hash_text<H: Hasher>(text: &typst::text::TextItem, state: &mut H) {
         text.font.hash(state);
         text.size.hash(state);
