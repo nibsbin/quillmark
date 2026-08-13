@@ -465,8 +465,8 @@ pub fn mark_from_value(v: &Value) -> Result<Mark, ParseError> {
                 .unwrap_or_default()
                 .to_string(),
         },
-        // Open set: any other type name is an unknown mark, round-tripped opaque
-        // with whatever `attrs` it carried.
+        // Any other type name is an unknown mark, round-tripped opaque with
+        // whatever `attrs` it carried.
         other => MarkKind::Unknown {
             tag: other.to_string(),
             attrs: bag_from_wire(&o, "attrs", "mark attrs")?,
@@ -475,31 +475,21 @@ pub fn mark_from_value(v: &Value) -> Result<Mark, ParseError> {
     Ok(Mark { start, end, kind })
 }
 
-// ---- Authored-lane readers (strict about reserved-name reuse) ----
+// Authored-lane readers, strict about reserved-name reuse.
 //
 // The readers above resolve a built-in discriminator before the `Unknown`
 // fallthrough, so `{"kind": "para", "attrs": {…}}` decodes to `Para` and the
-// `attrs` are dropped unread. `Content::validate`'s reserved-name rule
-// (`Invariant::ReservedUnknownTag` and its two block-axis siblings) never sees
-// such a value: it guards in-process Rust construction, not the wire.
-//
-// The two wire lanes want opposite answers to that drop, and the seam between
-// them is not op-vs-content but authored-now vs read-back:
+// `attrs` are dropped unread. The two wire lanes want opposite answers to that
+// drop, and the seam is authored-now vs read-back:
 //
 // - **Storage** (`Content::from_canonical_json`) stays lenient. A blob written
 //   when `callout` was unknown carries `{"kind": "callout", "attrs": {…}}`, and
-//   the release that makes `callout` a built-in must still open it. Rejecting
-//   `attrs` beside a built-in here refuses documents at rest precisely when the
-//   vocabulary grows: the failure the open set exists to prevent.
+//   the release that makes `callout` a built-in must still open it.
 // - **Authored** (the `crate::ops` wire, and `install` through
-//   [`from_authored_value`]) rejects it. The host is writing now, so the shape
-//   means a stale copy of the built-in list, never a document from the past, and
-//   the drop is silent corruption.
+//   [`from_authored_value`]) rejects it: the host is writing now, so the shape
+//   means a stale copy of the built-in list and the drop is silent corruption.
 //
 // The rule is narrow on purpose: `attrs` beside a *reserved* name, nothing else.
-// A stray sibling key is evidence of nothing (a line object carries
-// `containers`, an op carries `op`/`line`), and `attrs` is the unknown carrier's
-// own spelling.
 
 /// [`line_kind_from_value`] for the authored lane: `attrs` beside a built-in
 /// `kind` is a shape error rather than a silent drop.
@@ -521,13 +511,9 @@ pub(crate) fn mark_from_authored_value(v: &Value) -> Result<Mark, ParseError> {
     mark_from_value(v)
 }
 
-/// The authored lane's verdict on a mark, without building it: everything
-/// [`mark_from_authored_value`] would reject, for a caller that has no use for
-/// the `Mark` itself.
-///
-/// Table cells are that caller, and the only one: [`parse_cell`] reads their
-/// marks leniently, so unlike a prose mark, a cell mark reaches no strict decode
-/// that would raise the error on its own.
+/// The authored lane's verdict on a mark, without building it. Table cells are
+/// the only caller: [`parse_cell`] reads their marks leniently, so a cell mark
+/// reaches no strict decode that would raise the error on its own.
 pub(crate) fn reject_unreadable_mark(v: &Value) -> Result<(), ParseError> {
     reject_mark_attrs(v)?;
     mark_shape(v)?;
@@ -536,25 +522,17 @@ pub(crate) fn reject_unreadable_mark(v: &Value) -> Result<(), ParseError> {
 
 /// [`from_canonical_value`] for a content the **host authored just now**: the
 /// `install` input, not a blob read back from storage. Same decode, plus the
-/// reserved-name rule across the whole object, on every axis
-/// [`Content::validate`] checks: line kinds, containers, prose marks, and
-/// table-cell marks.
-///
-/// This is where the silent drop does its damage: an editor lowering a
-/// whole-field diff writes through here on every keystroke.
+/// reserved-name rule on every axis [`Content::validate`] checks: line kinds,
+/// containers, prose marks, and table-cell marks.
 pub fn from_authored_value(v: &Value) -> Result<Content, ParseError> {
     reject_reserved_attrs_deep(v)?;
     from_canonical_value(v)
 }
 
-/// The authored-lane scan [`from_authored_value`] runs, over the canonical
-/// content shape: the reserved-name rule on every axis, plus a readability check
-/// on table-cell marks, the one axis whose reader is lenient.
-///
-/// Structural on purpose rather than a blind recursive walk: an unknown's
-/// `attrs` is opaque host payload that may legitimately contain an object
-/// spelled `{"type": "link", "attrs": …}`, and rejecting that would make the
-/// carrier unable to carry.
+/// The authored-lane scan [`from_authored_value`] runs. Structural rather than a
+/// blind recursive walk: an unknown's `attrs` is opaque host payload that may
+/// legitimately contain an object spelled `{"type": "link", "attrs": …}`, and
+/// rejecting that would make the carrier unable to carry.
 fn reject_reserved_attrs_deep(v: &Value) -> Result<(), ParseError> {
     for line in arr_or_empty(v, "lines") {
         reject_line_kind_attrs(line)?;
@@ -567,10 +545,10 @@ fn reject_reserved_attrs_deep(v: &Value) -> Result<(), ParseError> {
     for m in arr_or_empty(v, "marks") {
         reject_mark_attrs(m)?;
     }
-    // Cell marks ride the prose mark shape, so the rule follows them in, and
-    // the readability check with it, since no strict decode reaches them. The
-    // dispatch goes through `KnownIslandType` like every other one, so a new
-    // mark-carrying type is a compile error here rather than a silent skip.
+    // Cell marks ride the prose mark shape, so the rule follows them in, plus
+    // the readability check, since no strict decode reaches them. Dispatch goes
+    // through `KnownIslandType`, so a new mark-carrying type is a compile error
+    // here rather than a silent skip.
     for island in arr_or_empty(v, "islands") {
         let ty = island.get("type").and_then(Value::as_str).unwrap_or_default();
         match crate::island::KnownIslandType::parse(ty) {
@@ -646,19 +624,13 @@ fn reject_reserved_attrs(
     Ok(())
 }
 
-// ---- Table cell {text, marks} ----
-//
 // A pipe-table cell is inline-only: its own plain `text` plus `marks` whose
-// ranges are USV offsets into that text (0..cell_len). The marks ride the SAME
-// wire shape prose marks use (`mark_to_value`/`mark_from_value`), so nothing
-// forks the encoding. Import builds cells, export/emit render them, and
-// `Content::normalize`/`validate` canonicalize/check the marks: all through
-// these helpers.
+// ranges are USV offsets into that text. The marks ride the same wire shape
+// prose marks use, so nothing forks the encoding.
 
 /// Parse a table-cell object `{text, marks}` leniently: its plain text plus the
-/// marks over it. A malformed mark is skipped rather than failing: cells are
-/// flat inline, so this never recurses. Public so the typst emitter renders a
-/// cell through the same parse the codecs use.
+/// marks over it. A malformed mark is skipped rather than failing. Public so the
+/// typst emitter renders a cell through the same parse the codecs use.
 pub fn parse_cell(v: &Value) -> (String, Vec<Mark>) {
     let text = v
         .get("text")
@@ -673,9 +645,8 @@ pub fn parse_cell(v: &Value) -> (String, Vec<Mark>) {
     (text, marks)
 }
 
-/// Build a table-cell object `{text, marks}`: the inverse of [`parse_cell`],
-/// reusing [`mark_to_value`]. Key order is fixed by the recursive key-sort in
-/// [`Content::normalize`], not here.
+/// Build a table-cell object `{text, marks}`. Key order is fixed by the
+/// recursive key-sort in [`Content::normalize`], not here.
 pub(crate) fn cell_to_value(text: &str, marks: &[Mark]) -> Value {
     let mut m = Map::new();
     m.insert("text".into(), Value::String(text.to_string()));
@@ -686,9 +657,8 @@ pub(crate) fn cell_to_value(text: &str, marks: &[Mark]) -> Value {
     Value::Object(m)
 }
 
-/// Every cell object in a table island's props: header then each body row, in
-/// order. The undecoded half of [`table_cells`], so a reader that needs the raw
-/// `Value` walks the same cells in the same order.
+/// Every cell object in a table island's props, header then each body row: the
+/// undecoded half of [`table_cells`], walking the same cells in the same order.
 pub(crate) fn table_cell_values(props: &Value) -> impl Iterator<Item = &Value> {
     let header = arr_or_empty(props, "header").iter();
     let rows = arr_or_empty(props, "rows")
