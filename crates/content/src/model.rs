@@ -2,12 +2,9 @@
 //! attributes, anchored marks, and embedded islands, over a single coordinate
 //! space of Unicode scalar values (Rust `char`).
 //!
-//! This is the freeze: the mark set, the three
-//! normalization rules, and the invariants are what canonical serialization
-//! commits to. Everything an editor disagrees on (edge-expand,
-//! adjacent-merge-at-insertion) is *not* encoded: the model only ever stores
-//! the resulting range, so the stored form is identical whatever the editor
-//! did.
+//! Editor-specific policy (edge-expand, adjacent-merge-at-insertion) is *not*
+//! encoded: the model stores only the resulting range, so the stored form is
+//! identical whatever the editor did.
 
 use crate::normalize::is_bidi_char;
 use serde_json::Value as JsonValue;
@@ -36,9 +33,9 @@ pub struct Content {
     /// The content. `\n` is a line boundary; [`ISLAND_SLOT`] is an island slot.
     pub text: String,
     /// One entry per `\n`-separated segment of `text`, in order. The line tree
-    /// is *derived* from this flat list plus each line's `containers` path: it
-    /// is never stored, so a split/join is a single-char edit with no identity
-    /// crisis (there are no paragraph IDs).
+    /// is *derived* from this flat list plus each line's `containers` path,
+    /// never stored, so a split/join is a single-char edit with no paragraph
+    /// identity to reconcile.
     pub lines: Vec<Line>,
     /// Marks over char ranges, kept normalized: sorted by
     /// `(start, end, kind-ord, attrs)`, same-kind formatting marks unioned.
@@ -57,22 +54,16 @@ pub struct Line {
     /// list item is `[ListItem, Quote]`.
     pub containers: Vec<Container>,
     /// Whether this line continues the previous line's *block* across a hard
-    /// line break (no paragraph break between), rather than starting a new
-    /// block. `false` = a new block (paragraph spacing on either side); `true` =
-    /// a within-block line break (markdown hard break; consecutive lines of one
-    /// code fence). The first line is always `false`. This is what keeps a hard
-    /// break (backend `#linebreak()`) distinct from a paragraph boundary through
-    /// the freeze, and what groups a code fence's lines without an
-    /// adjacency heuristic.
+    /// line break rather than starting a new block. `false` = a new block
+    /// (paragraph spacing on either side); `true` = a within-block line break (a
+    /// markdown hard break; consecutive lines of one code fence). The first line
+    /// is always `false`.
     pub continues: bool,
 }
 
 impl Line {
-    /// A line of `kind` at the top level: no containers, starting a new block.
-    /// Both defaults are what the wire reads off an absent key (`containers`
-    /// empty, `continues` omitted); set either with
-    /// [`with_containers`](Self::with_containers) /
-    /// [`with_continues`](Self::with_continues).
+    /// A line of `kind` at the top level: no containers, starting a new block,
+    /// which is also what the wire reads off the absent keys.
     pub fn new(kind: LineKind) -> Self {
         Line {
             kind,
@@ -81,7 +72,7 @@ impl Line {
         }
     }
 
-    /// Set [`containers`](Self::containers), the ancestor path, outermost first.
+    /// Set the ancestor path, outermost first.
     pub fn with_containers(mut self, containers: Vec<Container>) -> Self {
         self.containers = containers;
         self
@@ -100,11 +91,10 @@ impl Line {
 /// paragraphs), never one.
 ///
 /// **Open**, on the same terms as [`MarkKind`]: an unrecognized role round-trips
-/// as [`LineKind::Unknown`] and *projects* as [`LineKind::Para`], so adding a
-/// block construct (a callout, a footnote, a task item) is not a document schema
-/// event, an older reader renders the future construct as a plain paragraph
-/// instead of refusing the whole document, and the opaque tag+attrs still reach a
-/// reader that understands them (`DOCUMENT_STORAGE.md` § Open vocabularies).
+/// as [`LineKind::Unknown`] and *projects* as [`LineKind::Para`], so an older
+/// reader renders a future construct as a plain paragraph instead of refusing
+/// the document, while the opaque tag+attrs still reach a reader that
+/// understands them.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum LineKind {
@@ -120,14 +110,11 @@ pub enum LineKind {
     },
     /// A block-level island: the line's sole content is one [`ISLAND_SLOT`].
     Island,
-    /// A thematic break (`---`/`***`/`___`). The line carries no text: the
-    /// break is the line itself, parallel to how an island's content is its
-    /// one slot char.
+    /// A thematic break (`---`/`***`/`___`). The line carries no text.
     Rule,
     /// Open-set escape hatch: a block role this build does not know,
     /// round-tripped opaque and projected as [`LineKind::Para`]. Carries
-    /// arbitrary text, like the `Para` it projects as, so no
-    /// [`LineKindMismatch`] constrains it.
+    /// arbitrary text, so no [`LineKindMismatch`] constrains it.
     Unknown {
         tag: String,
         attrs: JsonValue,
@@ -135,18 +122,10 @@ pub enum LineKind {
 }
 
 impl LineKind {
-    /// Whether the line projects as a paragraph: [`LineKind::Para`] itself, or an
-    /// unknown role, which every projection renders as one. For the tests a
-    /// `match` cannot serve: a `matches!(kind, Para)` that special-cases the
-    /// paragraph (suppressing an empty block, say) reads as complete but drops
-    /// the open arm, and the two emitters then drift on the construct neither
-    /// knows.
-    ///
-    /// An exhaustive `match` keeps listing both arms, and in this crate the
-    /// compiler still polices that: `#[non_exhaustive]` does not apply within
-    /// the defining crate. It does apply to the typst backend, whose emitter
-    /// folds both arms into one wildcard; there the ladder, not the compiler,
-    /// is what keeps a new role rendering.
+    /// Whether the line projects as a paragraph: [`LineKind::Para`] itself, or
+    /// an unknown role, which every projection renders as one. Use this rather
+    /// than `matches!(kind, Para)`, which reads as complete while dropping the
+    /// open arm, leaving the two emitters to drift on a construct neither knows.
     pub fn projects_as_para(&self) -> bool {
         matches!(self, LineKind::Para | LineKind::Unknown { .. })
     }
@@ -163,12 +142,10 @@ pub enum Container {
     /// A list item. `ordered` distinguishes `1.` from `-`; `start` is the list's
     /// first number (1 by default); `ordinal` is this item's 0-based index in
     /// its list. Two *adjacent* lines belong to the same item iff their whole
-    /// container path (ordinals included) is equal, so a multi-paragraph item
-    /// is two lines sharing one `ListItem`, while the next item differs by
-    /// `ordinal`. (Identity is path **plus contiguity**: two sibling inner lists
-    /// under one outer item can produce equal first-item paths, distinguished
-    /// only by the non-adjacency of their runs.) Positional and deterministic,
-    /// no minted ids.
+    /// container path (ordinals included) is equal. Identity is path **plus
+    /// contiguity**: two sibling inner lists under one outer item can produce
+    /// equal first-item paths, distinguished only by the non-adjacency of their
+    /// runs.
     ListItem {
         ordered: bool,
         start: u64,
@@ -180,8 +157,7 @@ pub enum Container {
     Quote,
     /// Open-set escape hatch: a container this build does not know, kept in the
     /// path so it round-trips, transparent to both projections. Two adjacent
-    /// lines sit in the same one iff their whole `(tag, attrs)` is equal, the
-    /// path-plus-contiguity rule the known containers use.
+    /// lines sit in the same one iff their whole `(tag, attrs)` is equal.
     Unknown {
         tag: String,
         attrs: JsonValue,
@@ -199,8 +175,6 @@ pub struct Mark {
 }
 
 impl Mark {
-    /// A mark of `kind` over `[start, end)`. The three fields are the whole of a
-    /// mark: nothing optional sits beside them.
     pub fn new(start: Usv, end: Usv, kind: MarkKind) -> Self {
         Mark { start, end, kind }
     }
@@ -225,10 +199,9 @@ pub enum MarkKind {
     // Identity: a handle, not a property. Never merged, may be zero-width.
     /// A comment thread or stable anchor, carried by id and rebased across
     /// edits like any position. The id is caller-supplied, unique per `Content`,
-    /// opaque and invariant while the mark lives; positions rebase, the id never
-    /// does, and moved-and-rewritten text drops the mark whole
-    /// (`DOCUMENT_STORAGE.md` § Anchor-id identity). No markdown projection
-    /// (omitted on export; survives via diff-rebase).
+    /// and invariant while the mark lives; moved-and-rewritten text drops the
+    /// mark whole. No markdown projection: it is omitted on export and survives
+    /// via diff-rebase.
     Anchor {
         id: String,
     },
@@ -245,11 +218,9 @@ pub enum MarkKind {
 #[non_exhaustive]
 pub struct Island {
     /// Deterministically minted, session-stable id: `isl-{n}` by import
-    /// position (`import::mint_island`). Part of the canonical form and thus
-    /// hash input; deterministic by contract, never ambient, so equal content
-    /// hashes equal (`DOCUMENT_STORAGE.md` § Island-id determinism). Edits keep
-    /// it stable rather than re-deriving it, so [`Content::validate`] enforces
-    /// uniqueness, not positional equality.
+    /// position. Part of the canonical form and thus hash input, so it is never
+    /// ambient. Edits keep it stable rather than re-deriving it, so
+    /// [`Content::validate`] enforces uniqueness, not positional equality.
     pub id: String,
     /// Island type discriminator (`"table"`, `"image"`, …). Unknown types
     /// round-trip opaque.
@@ -263,10 +234,8 @@ pub struct Island {
 
 impl Island {
     /// An island of `island_type` under `id`, carrying no payload and claiming
-    /// no projection loss. Both defaults are what the wire reads off an absent
-    /// key: `props` absent is `Null`, and a missing `loss` is the faithful
-    /// class, which is what an island with no loss recorded means. Set either
-    /// with [`with_props`](Self::with_props) / [`with_loss`](Self::with_loss).
+    /// no projection loss, which is also what the wire reads off the absent
+    /// keys.
     pub fn new(id: String, island_type: String) -> Self {
         Island {
             id,
@@ -276,13 +245,11 @@ impl Island {
         }
     }
 
-    /// Set [`props`](Self::props), the typed payload.
     pub fn with_props(mut self, props: JsonValue) -> Self {
         self.props = props;
         self
     }
 
-    /// Set [`loss`](Self::loss), how faithfully markdown carries this island.
     pub fn with_loss(mut self, loss: Loss) -> Self {
         self.loss = loss;
         self
@@ -290,20 +257,14 @@ impl Island {
 }
 
 /// The markdown-projection loss class of an island: a **description** of how
-/// faithfully the projection carries it, for a consumer to surface (a caller
-/// warned that a form field silently dropped a table). It is not a
+/// faithfully the projection carries it, for a consumer to surface. It is not a
 /// switch: [`crate::export::to_markdown`] dispatches on
 /// [`Island::island_type`], never on this.
 ///
 /// Open on [`Island::island_type`]'s terms: the wire string *is* the stored
-/// value, and [`Fidelity`] is the closed view over it. A class this build lacks
-/// is carried verbatim, so a reader that merely opens a document does not move
-/// its content hash (`DOCUMENT_STORAGE.md` § Byte-stability).
-///
-/// One value per wire string, so the encoding is injective: a built-in's name
-/// spells that built-in and nothing else, and the reserved-name rule the
-/// payload-carrying axes need ([`Invariant::ReservedUnknownTag`] and its two
-/// siblings) has nothing to guard here.
+/// value, carried verbatim even when this build lacks the class, so merely
+/// opening a document does not move its content hash. [`Fidelity`] is the closed
+/// view over it.
 ///
 /// Read fidelity through [`Loss::fidelity`], never by comparing against
 /// [`Loss::LOSSLESS`]: an uninterpretable class degrades to
@@ -320,12 +281,11 @@ impl Loss {
     /// No markdown encoding: what an island type with no projection carries.
     pub const UNREPRESENTABLE: Loss = Loss(Cow::Borrowed(Fidelity::Unrepresentable.as_str()));
 
-    /// Wrap a wire class. Every string is a class, uninterpretable ones included;
-    /// [`Loss::fidelity`] is where that is resolved.
-    ///
-    /// An interpretable class borrows its `'static` spelling, so decoding an
-    /// island allocates only for the uninterpretable. Equality is by name either
-    /// way, so `Loss::new("lossless") == Loss::LOSSLESS`.
+    /// Wrap a wire class. Every string is a class, uninterpretable ones
+    /// included; [`Loss::fidelity`] is where that is resolved. An interpretable
+    /// class borrows its `'static` spelling, so decoding allocates only for the
+    /// uninterpretable; equality is by name either way, so
+    /// `Loss::new("lossless") == Loss::LOSSLESS`.
     pub fn new(class: &str) -> Loss {
         match Fidelity::parse(class) {
             Some(f) => Loss(Cow::Borrowed(f.as_str())),
@@ -340,10 +300,6 @@ impl Loss {
 
     /// The fidelity this class describes, with an uninterpretable class degraded
     /// to the safe end.
-    ///
-    /// Carrying the raw class preserves the byte round-trip. Reading it through
-    /// here keeps that carriage from being mistaken for a claim about the
-    /// projection.
     pub fn fidelity(&self) -> Fidelity {
         Fidelity::parse(self.as_str()).unwrap_or(Fidelity::Unrepresentable)
     }
@@ -352,10 +308,9 @@ impl Loss {
 /// How faithfully the markdown projection carries an island: the closed view
 /// over [`Loss`], and what a consumer switches on.
 ///
-/// The [`KnownIslandType`](crate::island::KnownIslandType) twin, one axis over,
-/// and exhaustive for the same reason: a consumer laddering on fidelity has no
-/// safe fallthrough for a rung it does not know, so a new rung is a major bump
-/// rather than a silent gap.
+/// Exhaustive, like [`KnownIslandType`](crate::island::KnownIslandType): a
+/// consumer laddering on fidelity has no safe fallthrough for a rung it does not
+/// know, so a new rung is a major bump rather than a silent gap.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Fidelity {
     /// Round-trips identically.
@@ -367,17 +322,15 @@ pub enum Fidelity {
 }
 
 impl Fidelity {
-    /// Every level, faithful first. The one enumeration point, so a reader that
-    /// needs the closed set whole (the WASM surface's class union, say) asks
-    /// rather than re-spelling it.
+    /// Every level, faithful first: the one enumeration point, so a reader that
+    /// needs the closed set whole asks rather than re-spelling it.
     pub const ALL: &'static [Fidelity] = &[
         Fidelity::Lossless,
         Fidelity::Degraded,
         Fidelity::Unrepresentable,
     ];
 
-    /// The wire class naming this level: the one place a class is spelled, which
-    /// [`Loss`]'s consts and [`Fidelity::parse`] both read.
+    /// The wire class naming this level: the one place a class is spelled.
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Lossless => "lossless",
