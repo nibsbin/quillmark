@@ -199,6 +199,7 @@
   //   item.kind       — "par", "heading", "table", or "continuation"
   context {
     let heading_buffer = none
+    let heading_level = 0
     // Filter out zero-width paragraphs so that an empty body (e.g. empty
     // string from a KIND with no text) emits nothing and collapses to zero
     // vertical space. Tables are always kept regardless of measured width.
@@ -226,24 +227,36 @@
       let kind = item.kind
       let item_content = item.content
 
-      // Buffer headings for prepend to the next rendered element
-      if kind == "heading" {
-        heading_buffer = item_content
-        continue
+      // A buffered heading runs into this element only when the two belong to
+      // the same item: a later block of this list item ("continuation"), or,
+      // at top level, the next paragraph. The first block of the *next* item,
+      // a table (nest_level −1, so the level test alone excludes it), and
+      // another heading all fail the test, and each would otherwise carry the
+      // heading's text somewhere it was not authored. Those emit the heading
+      // on its own line, the treatment a heading before a table already got.
+      if heading_buffer != none {
+        let runs_in = (
+          kind != "heading"
+            and item.nest_level == heading_level
+            and (heading_level == 0 or kind == "continuation")
+        )
+        if runs_in {
+          item_content = [#strong[#heading_buffer.] #item_content]
+        } else {
+          if any_emitted { blank-line() }
+          strong[#heading_buffer.]
+          any_emitted = true
+        }
+        heading_buffer = none
       }
 
-      // Prepend buffered heading to the next non-heading element
-      if heading_buffer != none {
-        if kind == "table" {
-          // Tables cannot have inline text prepended; emit heading as
-          // a standalone bold line above the table
-          blank-line()
-          strong[#heading_buffer.]
-          heading_buffer = none
-        } else {
-          item_content = [#strong[#heading_buffer.] #item_content]
-          heading_buffer = none
-        }
+      // Buffer this heading for the next element to run into. The level it was
+      // captured at rides along: the run-in test needs it, and the buffer is
+      // read one iteration later, by which time `item` is the *next* element.
+      if kind == "heading" {
+        heading_buffer = item_content
+        heading_level = item.nest_level
+        continue
       }
 
       // Format based on element kind
@@ -335,6 +348,15 @@
         // `block.above` entirely and visibly compress the spacing.
         block[#final_par]
       }
+    }
+
+    // A heading with nothing after it never ran into anything, and the buffer
+    // dies with the loop unless it is drained here. Sticky for the same reason
+    // the last item is: a standalone heading is one line, so it keeps with the
+    // signature block rather than opening a page alone.
+    if heading_buffer != none {
+      if any_emitted { blank-line() }
+      block(sticky: true)[#strong[#heading_buffer.]]
     }
   }
 }
