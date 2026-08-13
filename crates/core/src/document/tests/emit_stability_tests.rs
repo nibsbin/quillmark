@@ -1,26 +1,6 @@
-//! Parse ∘ Emit ∘ Parse ∘ Emit stability tests
-//!
-//! Verifies that `emit1 == emit2` where:
-//!
-//! ```text
-//! a     = Document::parse(src)
-//! emit1 = a.to_markdown()
-//! b     = Document::parse(&emit1)
-//! emit2 = b.to_markdown()
-//! assert_eq!(emit1, emit2)
-//! ```
-//!
-//! This catches emitter bugs that are invisible to the round-trip-by-value
-//! test: two distinct inputs could parse to equal `Document` values yet emit
-//! differently if there is hidden state or non-determinism in the emitter.
-//!
-
 use crate::document::Document;
 use crate::document::tests::collect_md_files;
 
-// ── Content stability ──────────────────────────────────────────────────────────
-
-/// For every parseable `.md` in the fixture content: `emit1 == emit2`.
 #[test]
 fn parse_emit_parse_emit_stability_over_fixtures() {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -48,7 +28,6 @@ fn parse_emit_parse_emit_stability_over_fixtures() {
             }
         };
 
-        // First parse.
         let a = match Document::parse(&src) {
             Ok(d) => d.document,
             Err(_) => {
@@ -59,7 +38,6 @@ fn parse_emit_parse_emit_stability_over_fixtures() {
 
         let emit1 = a.to_markdown();
 
-        // Second parse (from the first emission).
         let b = match Document::parse(&emit1) {
             Ok(d) => d.document,
             Err(e) => {
