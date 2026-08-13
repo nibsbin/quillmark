@@ -262,16 +262,16 @@ fn read_content(
     })
 }
 
-/// The one declared-type → codec dispatch: the decoder for a content leaf and
-/// the codec name it answers under, or `None` for a type that is no content
-/// leaf. Every schema-bound [`Content`] read routes through this, so a codec
-/// change reaches the whole-field and the nested read by construction.
-fn content_codec(
-    r#type: &FieldType,
-) -> Option<(
+/// A content leaf's decoder paired with the codec name it answers under.
+type ContentCodec = (
     fn(&serde_json::Value) -> Result<Content, RichtextDecodeError>,
     &'static str,
-)> {
+);
+
+/// The one declared-type → codec dispatch: `None` for a type that is no content
+/// leaf. Every schema-bound [`Content`] read routes through this, so a codec
+/// change reaches the whole-field and the nested read by construction.
+fn content_codec(r#type: &FieldType) -> Option<ContentCodec> {
     match r#type {
         FieldType::RichText { .. } => Some((crate::document::decode_richtext_field, CODEC_RICHTEXT)),
         FieldType::PlainText { .. } => {
