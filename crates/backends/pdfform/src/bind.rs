@@ -1,24 +1,7 @@
-//! The **bind** step: at quill load, resolve every `form.json` field against the
-//! two static inputs (the quill schema and the background geometry) into the
-//! session's value-free widget layer. Everything here is a pure function of the
-//! quill (not the document), so it runs once at open, never per render:
-//! `form.json` never restates what the schema carries, and a widget bound to a
+//! Resolve every `form.json` field against the two static inputs (the quill
+//! schema and the background geometry) into the session's value-free widget
+//! layer. Pure in the quill, so it runs once at open: a widget bound to a
 //! nonexistent field or an out-of-range page is a load error, not a silent blank.
-//!
-//! Two products, one per field population ([`crate::form`]):
-//! - A **bound** field names a `schema_field`. [`bind`] walks that path against
-//!   the [`QuillConfig`] to the leaf [`FieldSchema`], and [`project_kind`]
-//!   projects that resolved field to a widget kind (choice/checkbox/text). The
-//!   projection is **total or it is a load error**: a field that resolves to an
-//!   `object` or an array of objects/arrays has no widget shape
-//!   ([`BindError::Unbindable`]).
-//! - An **unbound** widget carries its own declared `type`, copied straight
-//!   through (no schema to consult).
-//!
-//! Both collapse to a [`BoundWidget`]: the value-free intrinsic layer the
-//! session holds for its lifetime, its `rect` already flipped to final PDF
-//! geometry. Per-document value resolution ([`crate::resolve`]) runs against it
-//! and touches nothing but the value.
 
 use quillmark_core::quill::{FieldSchema, FieldType as SchemaType, QuillConfig};
 use quillmark_pdf::FieldType as WidgetType;

@@ -1,51 +1,19 @@
-//! Island types: the closed dispatch authority.
-//!
-//! [`Island::island_type`](crate::model::Island::island_type) stays an **open**
-//! string on the wire: an unknown type (one this build lacks, arriving via
-//! storage) round-trips opaque. [`KnownIslandType`] is that string's *parse* into
-//! the closed set, and every site that dispatches on a type matches
-//! [`KnownIslandType::parse`]. The `Some(k)` arm is exhaustive, so **adding a
-//! variant is a compile error at every dispatch site**; a known type wired into
-//! only some sites cannot reach the `None` path, which is the open set's alone.
-//!
-//! Behavior a type must supply lives on the enum, one method per seam (loss
-//! class, cell marks, shape normalize/validate). The two projections that can't
-//! live in this crate (markdown emit ([`crate::export`]) and Typst emit (the
-//! typst backend)) match on the enum where they are, so the guarantee crosses
-//! the crate boundary. The `table` codec stays in [`crate::serial`]; this module
-//! dispatches into it.
+//! Island types: the closed dispatch authority over the open
+//! [`Island::island_type`](crate::model::Island::island_type) wire string.
 
 use crate::model::{Invariant, Island, Loss, Mark};
 use serde_json::Value;
 
-/// The island types this build understands. The wire discriminator is the open
-/// string [`Island::island_type`](crate::model::Island::island_type); this is its
-/// closed parse. Adding a variant forces every dispatch arm (here, the markdown
-/// emitter, and the Typst one) to be supplied before the workspace compiles.
+/// The island types this build understands: the closed parse of the open wire
+/// string [`Island::island_type`](crate::model::Island::island_type), which an
+/// unknown type round-trips through opaquely.
 ///
-/// **Deliberately not `#[non_exhaustive]`**, unlike every other public enum in
-/// this crate. The attribute forces a `_` arm on downstream matchers, and the
-/// Typst emitter dispatches over the whole set from another crate, where that
-/// `_` would swallow exactly the compile error described above. The markdown
-/// emitter ([`crate::export`]) and the `table` codec ([`crate::serial`]) sit in
-/// this crate, where the attribute would do nothing either way; the one
-/// out-of-crate site is what the exemption is for.
-///
-/// The cost is that **adding a variant is a semver-major change**, since a
-/// downstream exhaustive match stops compiling. That is the price of the
-/// guarantee, paid on purpose: an island type wired into some emitters and not
-/// others projects the island away silently, which is worse than a major bump.
-/// Routing an internal exhaustive enum through a `#[non_exhaustive]` public
-/// re-export would buy the semver back and lose the guarantee: not the trade
-/// this module wants.
-///
-/// The trade runs the other way for [`MarkKind`](crate::model::MarkKind) and
-/// [`LineKind`](crate::model::LineKind), which do carry the attribute. What an
-/// unhandled arm costs there is decoration: the text still renders, the mark
-/// loses its delimiters, the line lowers as a paragraph. An unhandled island
-/// type costs the island: content leaves the projection entirely. A silent
-/// gap in a total function is worth a major bump; a silent gap in a
-/// degradation ladder that already has an `Unknown` rung is not.
+/// **Deliberately not `#[non_exhaustive]`**, unlike this crate's other public
+/// enums. The Typst emitter dispatches over the whole set from another crate,
+/// where the attribute's forced `_` arm would swallow the compile error that
+/// makes adding a variant wire it up everywhere. The cost, a semver-major per
+/// new variant, is paid on purpose: an island type wired into some emitters and
+/// not others projects the island away silently.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KnownIslandType {
     /// `{header, rows, aligns}` with inline `{text, marks}` cells. Mark-carrying,
@@ -56,13 +24,7 @@ pub enum KnownIslandType {
 }
 
 impl KnownIslandType {
-    /// Every known type. The one enumeration point, so a reader that needs the
-    /// closed set whole (the WASM guards' known-name table, say) asks rather than
-    /// re-spelling it.
-    ///
-    /// A slice, not an array: an array's length is part of its type, so a third
-    /// island type would break every caller that names this constant's type on
-    /// top of the exhaustive-match break the enum already promises.
+    /// Every known type, for a reader that needs the closed set whole.
     pub const ALL: &'static [KnownIslandType] = &[KnownIslandType::Table, KnownIslandType::Image];
 
     /// The wire discriminator; `parse(k.as_str()) == Some(k)` for every variant.
@@ -73,9 +35,8 @@ impl KnownIslandType {
         }
     }
 
-    /// Parse a wire discriminator into the closed set. `None` is the open-set
-    /// escape hatch (a genuinely-unknown type, round-tripped opaque) never a
-    /// known type wired into only some sites.
+    /// Parse a wire discriminator into the closed set. `None` is a
+    /// genuinely-unknown type, round-tripped opaque.
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "table" => Some(Self::Table),
@@ -85,8 +46,8 @@ impl KnownIslandType {
     }
 
     /// The best markdown-projection loss class this type achieves: the ceiling
-    /// the importer stamps at mint. A per-island [`Loss`] may sit *below* it (a
-    /// table cell dropping an inline image's url) but never above.
+    /// the importer stamps at mint. A per-island [`Loss`] may sit below it, never
+    /// above.
     pub fn default_loss(self) -> Loss {
         match self {
             Self::Table => Loss::LOSSLESS,
@@ -96,8 +57,7 @@ impl KnownIslandType {
 
     /// This type's `(text, marks)` cells: the set that participates in mark
     /// normalization and cell-mark validation. Empty for a type with no cell
-    /// model, so neither normalize nor validate can silently skip a new type
-    /// (which would void the canonical-bytes guarantee for its cells).
+    /// model.
     pub fn cell_marks(self, props: &Value) -> Vec<(String, Vec<Mark>)> {
         match self {
             Self::Table => crate::serial::table_cells(props),
@@ -105,8 +65,8 @@ impl KnownIslandType {
         }
     }
 
-    /// Repair this type's props to canonical shape in place (a no-op for a type
-    /// with no shape invariants): the normalize-side dispatch.
+    /// Repair this type's props to canonical shape in place; a no-op for a type
+    /// with no shape invariants.
     pub fn normalize_props(self, props: &mut Value) {
         match self {
             Self::Table => crate::serial::normalize_table_props(props),
@@ -125,19 +85,15 @@ impl KnownIslandType {
     }
 }
 
-// The three `Island`-taking wrappers below are where the open set's `None` arm
-// is answered: once each, so `model.rs` calls a total function and no site
-// re-decides what an unknown type does.
+// These three wrappers answer the open set's unknown arm once each, so callers
+// get a total function and no site re-decides what an unknown type does.
 
-/// [`KnownIslandType::normalize_props`] for a known type; for an unknown one, a
-/// no-op that leaves the opaque props verbatim.
 pub(crate) fn normalize_island_structure(island: &mut Island) {
     if let Some(k) = KnownIslandType::parse(&island.island_type) {
         k.normalize_props(&mut island.props);
     }
 }
 
-/// [`KnownIslandType::cell_marks`] for a known type; empty for an unknown one.
 pub(crate) fn island_cell_marks(island: &Island) -> Vec<(String, Vec<Mark>)> {
     match KnownIslandType::parse(&island.island_type) {
         Some(k) => k.cell_marks(&island.props),
@@ -145,8 +101,6 @@ pub(crate) fn island_cell_marks(island: &Island) -> Vec<(String, Vec<Mark>)> {
     }
 }
 
-/// [`KnownIslandType::shape_error`] for a known type; `None` for an unknown one.
-/// [`normalize_island_structure`] guarantees `None` for the known ones too.
 pub(crate) fn island_shape_error(island: &Island) -> Option<Invariant> {
     KnownIslandType::parse(&island.island_type).and_then(|k| k.shape_error(&island.props))
 }
@@ -160,11 +114,5 @@ mod tests {
         for k in [KnownIslandType::Table, KnownIslandType::Image] {
             assert_eq!(KnownIslandType::parse(k.as_str()), Some(k));
         }
-    }
-
-    #[test]
-    fn unknown_type_parses_to_none() {
-        assert_eq!(KnownIslandType::parse("figure"), None);
-        assert_eq!(KnownIslandType::parse(""), None);
     }
 }

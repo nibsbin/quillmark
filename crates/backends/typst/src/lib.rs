@@ -1,30 +1,17 @@
-//! Typst backend for Quillmark: converts CommonMark markdown + card-YAML data
-//! to PDF, SVG, and PNG via the Typst typesetting system.
-//!
-//! [`TypstBackend`] implements the [`Backend`] trait from `quillmark-core`.
-//! Callers typically reach it through the `quillmark` crate's `Quill` API.
+//! Typst backend for Quillmark: markdown + card-YAML data → PDF, SVG, PNG.
 //!
 //! Richtext fields cross the seam as canonical content JSON and are lowered to
-//! Typst markup by [`emit`] at codegen time: the only markup-producing path,
-//! never a markdown re-parse. The plate accesses fields via the
-//! `@local/quillmark-helper` virtual package. Unsigned AcroForm widgets (text,
-//! checkbox, choice, signature) are embedded via the `form-field` helper in
-//! `lib.typ`; only PDF output carries the interactive widget: SVG and PNG
-//! render an invisible placeholder.
-//!
-//! The `compile` and `error_mapping` modules are internal and not part of the
-//! public API. The public lowering surface is [`emit`].
+//! Typst markup by [`emit`] at codegen time; no code re-parses markdown at
+//! render time. Plates read fields through the `@local/quillmark-helper`
+//! virtual package. Form-field widgets become AcroForm widgets on PDF output
+//! only; SVG and PNG render an invisible placeholder.
 
 mod compile;
-/// The content → Typst-markup lowering + its per-segment source map (the codegen
-/// tier of the richtext seam, Option A). The one place that both lowers a
-/// [`Content`](quillmark_content::Content) and knows the resulting byte
-/// layout, so the only place a source map can be produced. This is the sole
-/// markup-producing path in the render engine: no code parses markdown.
+/// Content → Typst-markup lowering plus its per-segment source map.
 ///
 /// **Workspace-internal; not covered by this crate's semver.** `pub` only so
 /// `quillmark-fuzz` can drive the escapers and the lowering directly. The
-/// supported surface of this crate is [`TypstBackend`].
+/// supported surface is [`TypstBackend`].
 #[doc(hidden)]
 pub mod emit;
 mod error_mapping;

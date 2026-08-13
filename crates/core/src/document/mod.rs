@@ -1,14 +1,8 @@
 //! Parsing and typed in-memory model for Quillmark card-yaml documents.
 //!
-//! A [`Document`] holds a root [`Card`] plus ordered composable cards; each
-//! card carries a [`Payload`], source-ordered items ([`PayloadItem`]:
-//! `$quill`/`$kind`/`$ext` metadata, user fields, and comments, in the order
-//! they appear in the block's YAML content), and a Markdown body.
-//! [`Document::parse`] returns errors for malformed YAML, unclosed
-//! fences, a missing root `$quill`, or unknown `$`-prefixed system keys.
-//!
-//! See [markdown-spec.md](https://github.com/borb-sh/quillmark/blob/main/prose/references/markdown-spec.md)
-//! for the card-yaml format specification.
+//! A [`Document`] holds a root [`Card`] plus ordered composable cards. The
+//! format is specified in
+//! [markdown-spec.md](https://github.com/borb-sh/quillmark/blob/main/prose/references/markdown-spec.md).
 
 use serde::{Deserialize, Serialize};
 
@@ -19,11 +13,8 @@ use crate::error::ParseError;
 use crate::version::QuillReference;
 use crate::Diagnostic;
 
-/// The single markdown→content boundary for card bodies. Every construction path
-/// that starts from an authored markdown string ([`Document::parse`],
-/// wire/storage deserialization, seeding, blueprint) routes through it, so the
-/// markdown parser is reached from exactly one helper. An empty string yields
-/// the empty content without invoking the parser.
+/// The single markdown→content boundary for card bodies: every path that starts
+/// from an authored markdown string routes through here.
 pub(crate) fn import_body(md: &str) -> Result<Content, ImportError> {
     if md.is_empty() {
         Ok(Content::empty())
@@ -33,20 +24,15 @@ pub(crate) fn import_body(md: &str) -> Result<Content, ImportError> {
 }
 
 /// Which encoding a `decode_richtext_value` failure came from, so a call site
-/// can prefix its diagnostic per encoding without re-deriving the dispatch.
-/// Crate-internal: the schema-bound reader converts it into
-/// [`EditError::FieldDecode`] before any caller sees it.
+/// can prefix its diagnostic per encoding.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub(crate) enum RichtextDecodeError {
-    /// A JSON object that is not a valid canonical content.
     NotContent(String),
-    /// A markdown string that failed to import.
     BadMarkdown(String),
 }
 
 impl RichtextDecodeError {
-    /// The inner failure message, without an encoding-specific prefix.
     pub(crate) fn into_message(self) -> String {
         match self {
             RichtextDecodeError::NotContent(m) | RichtextDecodeError::BadMarkdown(m) => m,
@@ -55,16 +41,9 @@ impl RichtextDecodeError {
 }
 
 /// Decode a JSON value in either accepted richtext encoding: a canonical content
-/// **object** ([`from_canonical_value`](quillmark_content::serial::from_canonical_value))
-/// or an authored markdown **string** (via [`import_body`], the single markdown
-/// boundary). The one place the object-vs-string dispatch lives; a call site
-/// handles the shapes that are neither (`null`, array, scalar) and maps the
-/// error into its own type.
-///
-/// - `Some(Ok(rt))`: decoded.
-/// - `Some(Err(e))`: an object that is not a content, or a string that failed
-///   to import; `e` names the encoding so the caller can prefix its message.
-/// - `None`: the value is neither an object nor a string.
+/// object, or an authored markdown string. `None` when the value is neither an
+/// object nor a string; the call site handles those shapes and maps the error
+/// into its own type.
 pub(crate) fn decode_richtext_value(
     value: &serde_json::Value,
 ) -> Option<Result<Content, RichtextDecodeError>> {
@@ -80,19 +59,9 @@ pub(crate) fn decode_richtext_value(
     }
 }
 
-/// Decode a JSON value for a `plaintext` field: a canonical content **object**
-/// (revalidated) or a literal **string** imported verbatim
-/// ([`from_plaintext`](quillmark_content::from_plaintext), never markdown, so
-/// `*hi*` stays four plain characters). The plaintext twin of
-/// [`decode_richtext_value`]: the string branch is infallible (literal import
-/// can't fail), so only the object branch yields `Err` (`String` message). A
-/// call site handles the shapes that are neither: `null`, array, scalar. This
-/// is the single plaintext object-vs-string dispatch, shared by the coercion
-/// literal-import site and the validation shape check.
-///
-/// - `Some(Ok(rt))`: decoded.
-/// - `Some(Err(msg))`: an object that is not a valid content.
-/// - `None`: the value is neither an object nor a string.
+/// The plaintext twin of [`decode_richtext_value`]: a string imports verbatim
+/// (never as markdown, so `*hi*` stays four plain characters), so only the
+/// object branch can fail.
 pub(crate) fn decode_plaintext_value(
     value: &serde_json::Value,
 ) -> Option<Result<Content, String>> {
@@ -125,12 +94,9 @@ pub use payload::{MetaKey, Payload, PayloadItem};
 pub use prescan::{CommentPathSegment, NestedComment};
 pub use wire::{CardWire, PayloadItemWire, WireError};
 
-/// Authoring-format rules for the `~~~` card-yaml markdown surface.
-///
-/// Surfaced verbatim to LLM/MCP consumers (and to CLI / Python bindings via
-/// the same text) so error parity holds: every consumer reads the same
-/// rules. This is the single source of truth; bindings should call into it
-/// rather than re-stating the rules in their own glue.
+/// Authoring-format rules for the `~~~` card-yaml markdown surface, surfaced
+/// verbatim to LLM/MCP consumers and to the CLI / Python bindings. The single
+/// source of truth: bindings call in rather than re-stating the rules.
 pub const FORMAT_RULES: &str = "Document format rules:
 \u{2022} Block opener and closer are EXACTLY `~~~` (three tildes, no info string). The `~~~card-yaml` opener is also accepted as a non-canonical alias.
 \u{2022} A blank line must precede every `~~~` block opener (unless it is line 1), and the opener must be at column zero (no leading spaces). An indented `~~~` is an ordinary code block, not a card.
@@ -142,17 +108,13 @@ pub const FORMAT_RULES: &str = "Document format rules:
 \u{2022} Numbers and booleans MUST be unquoted (`year: 2025`, `pinned: true`); quoting turns them into strings and fails validation.
 \u{2022} Plain-scalar values cannot start with `*` or `&` (YAML alias/anchor markers) and cannot contain `: ` (colon-space). For markdown emphasis, embedded colons, or other special prefixes, quote the value: `field: '**bold**'` or `field: \"Name: subtitle\"`. Multi-line values use `|-`, not multi-line quoted scalars.";
 
-/// Authoring-ergonomics header that introduces a blueprint to an LLM/MCP
-/// consumer. The `{quill}` placeholder is substituted with the quill name.
-/// Designed to be shown above [`FORMAT_RULES`], which covers field-level
-/// semantics like the `!must_fill` marker: keep the wording tight here so the
-/// two strings do not duplicate guidance.
+/// Header shown above [`FORMAT_RULES`], which covers the field-level semantics;
+/// `{quill}` is substituted with the quill name.
 const BLUEPRINT_INSTRUCTION_TEMPLATE: &str =
     "Fill in the `{quill}` blueprint below: replace each `!must_fill` placeholder with a real \
 value and edit the body prose. Submit the filled markdown as `content` to `create_document`.";
 
 /// Render the blueprint-instruction header with `quill_name` substituted in.
-/// Single source of truth for the prose so every binding shows identical text.
 pub fn blueprint_instruction(quill_name: &str) -> String {
     BLUEPRINT_INSTRUCTION_TEMPLATE.replace("{quill}", quill_name)
 }
@@ -161,12 +123,10 @@ pub fn blueprint_instruction(quill_name: &str) -> String {
 mod tests;
 
 /// The record of one load: the [`Document`] and any non-fatal warnings.
-/// Returned by both doors, the quill-free [`Document::parse`] and the bound
-/// [`Quill::parse`](crate::Quill::parse), whose `warnings` carry the parse's
-/// plus the `conform::*` ones. Warnings live here and only here: `Document` is
-/// the value (equality, the storage DTO, and mutators all exclude warnings);
-/// `Parsed` is the load *event*. A caller that wants only the document writes
-/// `Document::parse(md)?.document`.
+/// Returned by both [`Document::parse`] and the bound
+/// [`Quill::parse`](crate::Quill::parse), whose `warnings` also carry the
+/// `conform::*` ones. Warnings live here and only here: `Document` is the
+/// value, `Parsed` the load event.
 #[derive(Debug)]
 #[must_use = "carries parse warnings; read `.document`/`.warnings` or bind it"]
 #[non_exhaustive]
@@ -186,11 +146,7 @@ pub struct Card {
 }
 
 impl Card {
-    /// Create a `Card` from its parts without validation. `body` is the content
-    /// form; to build from an authored markdown string, import it first via the
-    /// crate-internal `import_body` boundary. Crate-internal, with [`Payload`]'s
-    /// mutation half: user-facing construction of composable cards is
-    /// [`Card::new`].
+    /// Create a `Card` from its parts without validation.
     pub(crate) fn from_parts(payload: Payload, body: Content) -> Self {
         Self { payload, body }
     }
@@ -205,15 +161,14 @@ impl Card {
 
     /// Opaque `$ext` map for out-of-band extension data (UI editor state,
     /// agent annotations, …). Carried through Markdown and storage DTO
-    /// round-trips; never emitted into the plate JSON consumed by
-    /// backends.
+    /// round-trips; never emitted into the plate JSON backends consume.
     pub fn ext(&self) -> Option<&serde_json::Map<String, serde_json::Value>> {
         self.payload.ext()
     }
 
     /// The card's card-yaml storage as a read view. Writes go through the
     /// enforcing verbs ([`store_field`](Card::store_field),
-    /// [`TypedWriter`](crate::TypedWriter)), not through here.
+    /// [`TypedWriter`](crate::TypedWriter)).
     pub fn payload(&self) -> &Payload {
         &self.payload
     }
@@ -222,8 +177,8 @@ impl Card {
         &mut self.payload
     }
 
-    /// The card body as a [`Content`] content: the canonical content model.
-    /// For the markdown projection use [`Card::body_markdown`].
+    /// The card body as a [`Content`]: the canonical content model. For the
+    /// markdown projection use [`Card::body_markdown`].
     pub fn body(&self) -> &Content {
         &self.body
     }
@@ -239,21 +194,10 @@ impl Card {
         &mut self.body
     }
 
-    /// Read a richtext-valued user field back as a [`Content`] content: the
-    /// field-level twin of [`Card::body`]. Decodes the stored value through the
-    /// same object-or-markdown dispatch the writer
-    /// ([`commit_field`](Card::commit_field)) commits, so a field
-    /// stored as a canonical content reads back losslessly (identity marks
-    /// intact) and a still-authored markdown string imports.
-    ///
-    /// - `None`: the field is absent.
-    /// - `Some(Ok(rt))`: decoded content.
-    /// - `Some(Err(_))`: the field is present but neither a content object nor
-    ///   an importable markdown string (e.g. a bare number a `store_field` wrote).
-    ///
-    /// A `Document` carries no schema, so this cannot itself tell a richtext
-    /// field from a plain string field; the caller names a field it knows is
-    /// richtext, exactly as it does when writing.
+    /// Read a richtext-valued user field back as a [`Content`]: the field-level
+    /// twin of [`Card::body`]. `None` when absent, `Some(Err(_))` when present
+    /// but neither a content object nor importable markdown. A `Document`
+    /// carries no schema, so the caller names a field it knows is richtext.
     pub(crate) fn field_richtext(&self, name: &str) -> Option<Result<Content, RichtextDecodeError>> {
         let value = self.payload.get(name)?.as_json();
         Some(match crate::document::decode_richtext_value(value) {
@@ -267,19 +211,8 @@ impl Card {
         })
     }
 
-    /// The markdown projection of a richtext-valued field (`export ∘ decode`):
-    /// the field-level twin of [`Card::body_markdown`], and the projection an
-    /// emit or a markdown save writes for a content-valued field. The projection
-    /// twin of [`field_richtext`](Card::field_richtext), carrying its `Ok`/`Err`
-    /// decode outcome:
-    ///
-    /// - `None`: the field is absent.
-    /// - `Some(Ok(md))`: the projected markdown.
-    /// - `Some(Err(_))`: the field is present but does not decode as richtext
-    ///   (a scalar/array/object a `store_field` wrote, or a non-content object).
-    ///
-    /// Absence returns `None`; a present non-richtext value returns `Some(Err)`,
-    /// so the projection surfaces the type mismatch instead of blanking on it.
+    /// The markdown projection of a richtext-valued field (`export ∘ decode`),
+    /// carrying [`field_richtext`](Card::field_richtext)'s `None`/`Ok`/`Err`.
     pub(crate) fn field_markdown(&self, name: &str) -> Option<Result<String, RichtextDecodeError>> {
         Some(self.field_richtext(name)?.map(|rt| quillmark_content::export::to_markdown(&rt)))
     }
