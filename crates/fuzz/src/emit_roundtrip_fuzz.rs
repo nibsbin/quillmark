@@ -1,21 +1,6 @@
-//! Emit round-trip fuzz target.
-//!
-//! Property: for any input that `Document::parse` accepts, the
-//! emission and re-parse chain must be stable:
-//!
-//! ```text
-//! parse(src)      → doc_a
-//! emit(doc_a)     → emit1
-//! parse(emit1)    → doc_b
-//! assert doc_a == doc_b
-//! assert emit(doc_b) == emit1   ← idempotence on the canonical form
-//! ```
-//!
-//! If the first parse fails, the input is discarded (invalid inputs are fine).
-//! Any panic in the emitter or the second parse is a bug.
-//!
-//! The properties below are proptest cases: they run under
-//! `cargo test -p quillmark-fuzz`.
+//! For any input `Document::parse` accepts, parse → emit → re-parse yields an
+//! equal document and an identical emission. An input the first parse rejects
+//! is discarded; a panic anywhere downstream is a bug.
 
 use proptest::prelude::*;
 use quillmark_core::Document;
@@ -23,7 +8,6 @@ use quillmark_core::Document;
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(500))]
 
-    /// Arbitrary printable-Unicode input: parse→emit→re-parse must be stable.
     #[test]
     fn fuzz_emit_roundtrip_arbitrary(s in "\\PC{0,1000}") {
         let doc_a = match Document::parse(&s) {
@@ -57,14 +41,12 @@ proptest! {
         );
     }
 
-    /// Inputs that look like a valid card-yaml block with a `$quill:` metadata key.
     #[test]
     fn fuzz_emit_roundtrip_payload_shaped(
         quill in "[a-z][a-z0-9_]{0,20}",
         key in "[a-z][a-z0-9_]{0,15}",
         value in "\\PC{0,100}"
     ) {
-        // Build a minimal Quillmark document.
         let src = format!("~~~card-yaml\n$quill: {}\n$kind: main\n{}: \"{}\"\n~~~\n\nBody.\n",
             quill, key, value.replace('\\', "\\\\").replace('"', "\\\""));
 
@@ -98,7 +80,6 @@ proptest! {
         );
     }
 
-    /// Documents with card blocks.
     #[test]
     fn fuzz_emit_roundtrip_with_cards(
         quill in "[a-z][a-z0-9_]{0,20}",

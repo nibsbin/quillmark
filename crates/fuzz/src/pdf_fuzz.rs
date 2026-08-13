@@ -1,31 +1,23 @@
 //! The AcroForm stamp spine's byte-level reads: arbitrary and corrupted PDF
-//! bytes yield `Err`, never a panic.
+//! bytes yield `Err`, never a panic. Nothing in the workspace catches unwind,
+//! so a panic kills the CLI and the Python extension and poisons the WASM
+//! module.
 //!
-//! `quillmark-pdf` parses PDF by hand — object lookup by scanning, dictionary
-//! splicing, xref and trailer reads — over `&[u8]` the caller supplies. Safe
-//! Rust bounds the damage to a panic, and a panic is still the worst outcome
-//! the workspace has: the CLI and the Python extension die on it, and the WASM
-//! module is left poisoned, since nothing anywhere catches unwind.
+//! The oracle is deliberately weak — a refusal is an acceptable answer. The
+//! reader's input contract (traditional-xref, unencrypted, inline-annots,
+//! flat-tree) refuses most well-formed PDFs too, so `Ok` is not assertable.
 //!
-//! The oracle is deliberately weak: **no panic, and a refusal is an
-//! acceptable answer.** The reader's input contract (traditional-xref,
-//! unencrypted, inline-annots, flat-tree) means most well-formed PDFs are
-//! refused too, so "returns `Ok`" is not a property any of this can assert.
-//!
-//! Two input populations, because they fail differently. Arbitrary bytes almost
-//! never reach past the trailer scan; a real form with one byte changed gets
-//! deep into object parsing carrying a length, offset, or delimiter that lies.
+//! Two input populations, because they fail differently: arbitrary bytes almost
+//! never reach past the trailer scan, while a real form with one byte changed
+//! gets deep into object parsing carrying a length or delimiter that lies.
 
 use std::sync::LazyLock;
 
 use proptest::prelude::*;
 use quillmark_pdf::{page_media_boxes, stamp, FieldSpec, FieldType, PdfUpdate, StampOptions};
 
-/// `sample_form`'s `form.pdf`: a real AcroForm the spine accepts, so a mutant of
-/// it exercises the parse paths a random buffer never reaches.
-///
-/// Read once for the module, not once per case: every case below mutates its
-/// own copy, and thousands of cases run against it.
+/// A real AcroForm the spine accepts, so a mutant of it exercises parse paths a
+/// random buffer never reaches. Read once: thousands of cases mutate a copy.
 static BASE_PDF: LazyLock<Vec<u8>> = LazyLock::new(|| {
     let path = quillmark_fixtures::quills_path("sample_form").join("form.pdf");
     std::fs::read(&path).expect("the sample_form fixture ships a form.pdf")
@@ -49,8 +41,7 @@ fn every_field_kind() -> Vec<FieldSpec> {
     ]
 }
 
-/// Drive every byte-taking entry point once. Each returns a `Result`; the call
-/// completing at all is the property.
+/// Drive every byte-taking entry point once; completing at all is the property.
 fn exercise(pdf: &[u8]) {
     let _ = page_media_boxes(pdf);
     let _ = PdfUpdate::begin(pdf, None);
@@ -64,24 +55,20 @@ fn exercise(pdf: &[u8]) {
 }
 
 proptest! {
-    // Above proptest's default 256: a case is one parse over at most a few
-    // kilobytes with no oracle to evaluate and no I/O, so mutants are cheap
-    // enough that the wider net costs less than the coverage is worth.
+    // Above proptest's default 256: a case is one parse over a few kilobytes
+    // with no oracle and no I/O, so the wider net is close to free.
     #![proptest_config(ProptestConfig::with_cases(1024))]
 
-    /// Arbitrary bytes. Nothing checks for a `%PDF-` header — `PdfUpdate::begin`
-    /// scans backwards for `startxref` — so a buffer that opens like a PDF takes
-    /// the same path as one that does not, and this covers both.
+    /// Nothing checks for a `%PDF-` header (`PdfUpdate::begin` scans backwards
+    /// for `startxref`), so both buffer shapes take the same path.
     #[test]
     fn fuzz_arbitrary_bytes(bytes in proptest::collection::vec(any::<u8>(), 0..4096)) {
         exercise(&bytes);
     }
 
-    /// A real form truncated at an arbitrary point: every length and offset the
-    /// file declares now points past the end.
-    ///
-    /// The range is the fixture's own length. A fixed upper bound would sample
-    /// mostly past it and re-run the intact file.
+    /// Every length and offset the file declares now points past the end. The
+    /// range is the fixture's own length: a fixed bound would mostly sample
+    /// past it and re-run the intact file.
     #[test]
     fn fuzz_truncated_form(cut in any::<prop::sample::Index>()) {
         let pdf = base_pdf();
@@ -89,9 +76,8 @@ proptest! {
         exercise(&pdf[..cut]);
     }
 
-    /// A real form with one byte overwritten. Hits the cases a truncation
-    /// cannot: a corrupted xref offset, a `/Length` that overshoots, an
-    /// unbalanced dictionary delimiter, a broken object header.
+    /// What truncation cannot hit: a corrupted xref offset, a `/Length` that
+    /// overshoots, an unbalanced delimiter, a broken object header.
     #[test]
     fn fuzz_single_byte_corruption(at in any::<prop::sample::Index>(), to in any::<u8>()) {
         let mut pdf = base_pdf();
@@ -100,8 +86,7 @@ proptest! {
         exercise(&pdf);
     }
 
-    /// A real form with a run of bytes overwritten, which can take out a whole
-    /// keyword (`trailer`, `startxref`, `endobj`) rather than one character.
+    /// A run wide enough to take out a whole keyword (`trailer`, `startxref`).
     #[test]
     fn fuzz_spliced_run(
         at in any::<prop::sample::Index>(),
@@ -114,11 +99,9 @@ proptest! {
         exercise(&pdf);
     }
 
-    /// Field geometry the caller controls. `quillmark-pdf`'s unit tests pin the
-    /// individual refusals (non-finite rect, corner ordering, missing page);
-    /// what this adds is the combinations, and a page index drawn past the
-    /// fixture's single page, since `stamp` resolves pages by index into a
-    /// `Vec` and must refuse rather than index.
+    /// `quillmark-pdf`'s unit tests pin the individual refusals; this adds the
+    /// combinations, and a page index past the fixture's single page, which
+    /// `stamp` must refuse rather than index into its `Vec`.
     #[test]
     fn fuzz_field_geometry(
         page in 0usize..8,
