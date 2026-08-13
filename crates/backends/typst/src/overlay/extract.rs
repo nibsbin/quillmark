@@ -1,9 +1,7 @@
 //! Walk a compiled Typst document and return one `FieldPlacement` per
 //! `form-field` call. The helper emits a `<__qm_field__>`-labelled `metadata`
-//! whose value carries `(kind, name, field-type, value, options, multiline,
-//! width, height, field)`, followed by an invisible same-sized box. Metadata
-//! has zero size, so its `introspector.position()` equals the box's top-left:
-//! no frame walk.
+//! followed by an invisible same-sized box. Metadata has zero size, so its
+//! `introspector.position()` equals the box's top-left: no frame walk.
 
 use std::collections::HashMap;
 
@@ -82,20 +80,12 @@ pub(crate) fn extract(doc: &PagedDocument) -> Result<Vec<FieldPlacement>, Render
         });
     }
 
-    // Group by page but keep the introspector's document order (= paint order)
-    // within a page: a stable sort preserves the query order among equal pages.
-    // `field_at` relies on this to resolve two spatially-overlapping widgets by
-    // "later-painted wins", matching the content-field path's documented rule
-    // (span_scan::field_at): an alphabetical `name` tie-break would silently
-    // violate it.
+    // Stable sort keeps the introspector's document order (= paint order)
+    // within a page; `field_at` resolves overlapping widgets by later-painted-wins.
     placements.sort_by_key(|p| p.page);
     Ok(placements)
 }
 
-/// Resolve the metadata dict into a [`FieldKind`], reading only the keys that
-/// apply to `field_type`. The `value` key is polymorphic (a Typst `Str`,
-/// `Bool`, `Int`/`Float` (stringified), or `None`) read via the per-kind
-/// helpers below so each kind interprets it correctly.
 fn read_field_kind(
     d: &typst::foundations::Dict,
     field_type: &str,
@@ -106,8 +96,6 @@ fn read_field_kind(
             value: read_value_str(d, "value")?,
         }),
         "checkbox" => Ok(FieldKind::Checkbox {
-            // A checkbox binds on a truthy Typst bool; a missing/`none`/`false`
-            // value leaves it unchecked.
             checked: read_value_bool(d, "value")?.unwrap_or(false),
         }),
         "choice" => Ok(FieldKind::Choice {
@@ -145,8 +133,6 @@ fn read_f64(d: &typst::foundations::Dict, key: &str) -> Result<f64, RenderError>
     }
 }
 
-/// Read an optional string key (`None` for a missing or `none` key, an error
-/// for a present-but-wrong-type key). Used for the `field:` schema-path binding.
 fn read_opt_str(d: &typst::foundations::Dict, key: &str) -> Result<Option<String>, RenderError> {
     match d.get(key) {
         Ok(Value::Str(s)) => Ok(Some(s.to_string())),
@@ -162,8 +148,6 @@ fn read_opt_str(d: &typst::foundations::Dict, key: &str) -> Result<Option<String
     }
 }
 
-/// Read an array-of-str key, defaulting to empty for a missing key. Used for
-/// choice `options`.
 fn read_str_array(d: &typst::foundations::Dict, key: &str) -> Result<Vec<String>, RenderError> {
     match d.get(key) {
         Ok(Value::Array(arr)) => arr
@@ -188,11 +172,8 @@ fn read_str_array(d: &typst::foundations::Dict, key: &str) -> Result<Vec<String>
     }
 }
 
-/// Read the polymorphic `value` key as display text (for text/choice fields).
-/// A `Str` passes through; an `Int`/`Float` stringifies to its decimal form; a
-/// `Bool` stringifies; `None` (or a missing key) yields `None`. An empty string
-/// also yields `None` so the widget carries no `/V` (mirrors pdfform's
-/// `coerce_text`).
+/// An empty string yields `None` so the widget carries no `/V` (mirrors
+/// pdfform's `coerce_text`).
 fn read_value_str(d: &typst::foundations::Dict, key: &str) -> Result<Option<String>, RenderError> {
     let s = match d.get(key) {
         Ok(Value::Str(s)) => s.to_string(),
@@ -213,10 +194,6 @@ fn read_value_str(d: &typst::foundations::Dict, key: &str) -> Result<Option<Stri
     Ok((!s.is_empty()).then_some(s))
 }
 
-/// Read an optional boolean key: a `Bool` passes through; `None` or a missing
-/// key yields `None`; any other present type errors. Used for the checkbox
-/// `value` binding and the text `multiline` flag: both treat a `none` as the
-/// unset default rather than an error.
 fn read_value_bool(d: &typst::foundations::Dict, key: &str) -> Result<Option<bool>, RenderError> {
     match d.get(key) {
         Ok(Value::Bool(b)) => Ok(Some(*b)),
