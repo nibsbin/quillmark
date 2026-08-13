@@ -171,7 +171,7 @@ jobs:
             wasm-ci-${{ runner.os }}-
 
       - name: Install wasm-bindgen-cli
-        uses: taiki-e/install-action@v2.85.9
+        uses: taiki-e/install-action@v2.85.11
         with:
           tool: wasm-bindgen-cli@0.2.118
 
