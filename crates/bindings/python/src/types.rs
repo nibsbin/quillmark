@@ -1435,11 +1435,9 @@ fn py_to_quillvalue(value: &Bound<'_, PyAny>) -> PyResult<quillmark_core::QuillV
     Ok(quillmark_core::QuillValue::from_json(json))
 }
 
-/// Convert a Python mapping to the `(name, value)` batch the typed writer's
-/// `set_all` / `add_card` consume. Value-conversion failures (depth bound,
-/// unsupported type) are collected (not fail-fast) into one `QuillmarkError`
-/// with a per-field `path`, matching the batch contract of the writer itself.
-/// Non-string keys are a caller bug and raise `ValueError` directly.
+/// Value-conversion failures are collected rather than fail-fast, into one
+/// `QuillmarkError` with a per-field `path`, matching the writer's own batch
+/// contract. A non-string key raises `ValueError` directly.
 fn pydict_to_field_batch(
     fields: &Bound<'_, PyDict>,
 ) -> PyResult<Vec<(String, quillmark_core::QuillValue)>> {
@@ -1471,26 +1469,18 @@ fn py_to_json(value: &Bound<'_, PyAny>) -> PyResult<serde_json::Value> {
     py_to_json_at(value, 0)
 }
 
-/// Recursive worker for [`py_to_json`], depth-bounded at the core §8 nesting
-/// limit. The bound serves two purposes: this function's own recursion cannot
-/// overflow the native stack on an adversarially deep Python object, and the
-/// produced value is rejected at the *same shape* the core payload boundary
-/// would reject it.
+/// Depth-bounded so this recursion cannot overflow the native stack on an
+/// adversarially deep Python object, and so the value is rejected at the same
+/// shape the core payload boundary would reject it.
 ///
-/// The canonical cutoff is **container levels**, matching core's
+/// The cutoff is **container levels**, matching core's
 /// [`json_depth_exceeds`](quillmark_core::json_depth_exceeds): a scalar leaf is
-/// never charged a level, so `MAX_YAML_DEPTH` nested containers are accepted
-/// whether the deepest one is empty, holds a scalar, or holds another
-/// container, and `MAX_YAML_DEPTH + 1` is rejected in every case. The guard
-/// therefore fires only on the recursing (container) branches, never the scalar
-/// leaves: `depth` is the 0-based depth of the current node, so a container at
-/// `depth` is the `(depth + 1)`-th nesting level and `depth >= MAX_YAML_DEPTH`
-/// rejects exactly the level-`MAX_YAML_DEPTH + 1` container core also rejects.
+/// never charged a level, so the guard fires only on the recursing branches.
+/// `depth` is the 0-based depth of the current node, so a container at `depth`
+/// is the `(depth + 1)`-th nesting level.
 fn py_to_json_at(value: &Bound<'_, PyAny>, depth: usize) -> PyResult<serde_json::Value> {
     use pyo3::types::{PyBool, PyFloat, PyInt, PyList, PyString};
 
-    // Charged only when about to recurse into a container (see doc comment):
-    // scalar leaves below fall through without consuming a level.
     let reject_too_deep = || {
         Err(PyValueError::new_err(format!(
             "value nests deeper than the maximum of {} levels",
@@ -1506,10 +1496,9 @@ fn py_to_json_at(value: &Bound<'_, PyAny>, depth: usize) -> PyResult<serde_json:
         return Ok(serde_json::Value::Bool(b));
     }
     if value.is_instance_of::<PyInt>() {
-        // Python ints are unbounded; map to i64, then u64, before giving up so
-        // large positive values still convert losslessly. Report overflow as a
-        // ValueError rather than letting PyO3's raw OverflowError leak across
-        // the binding boundary.
+        // Python ints are unbounded: try i64, then u64, so large positive values
+        // still convert losslessly, and report overflow as a `ValueError` rather
+        // than leaking PyO3's raw `OverflowError`.
         if let Ok(i) = value.extract::<i64>() {
             return Ok(serde_json::json!(i));
         }
@@ -1561,8 +1550,6 @@ fn py_to_json_at(value: &Bound<'_, PyAny>, depth: usize) -> PyResult<serde_json:
     Ok(serde_json::Value::String(s))
 }
 
-/// Convert a Python value into a JSON object map, rejecting non-objects. Used
-/// by the `$ext` mutators, whose value must be a dict.
 fn py_to_object(
     value: &Bound<'_, PyAny>,
     ctx: &str,
@@ -1576,8 +1563,6 @@ fn py_to_object(
     }
 }
 
-/// Convert an optional JSON value to a Python object, or `None`. Backs both the
-/// namespaced reads (any value) and the whole-map reads (via `ext_map_to_py`).
 fn ext_value_to_py<'py>(
     py: Python<'py>,
     value: Option<serde_json::Value>,
@@ -1588,7 +1573,6 @@ fn ext_value_to_py<'py>(
     }
 }
 
-/// Convert an optional `$ext` map to a Python dict, or `None`.
 fn ext_map_to_py<'py>(
     py: Python<'py>,
     map: Option<serde_json::Map<String, serde_json::Value>>,
@@ -1596,11 +1580,8 @@ fn ext_map_to_py<'py>(
     ext_value_to_py(py, map.map(serde_json::Value::Object))
 }
 
-/// Build a core [`Card`](quillmark_core::Card) from a Python `Card` dict via
-/// the canonical [`CardWire`](quillmark_core::CardWire) (core owns the
-/// construction). Accepts the snake_case `payload_items` key; a flat
-/// `{ kind, fields }` dict fails loudly (`deny_unknown_fields`) rather than
-/// yielding an empty card.
+/// Accepts the snake_case `payload_items` key; a flat `{ kind, fields }` dict
+/// fails loudly (`deny_unknown_fields`) rather than yielding an empty card.
 fn py_dict_to_card(value: &Bound<'_, PyAny>) -> PyResult<quillmark_core::Card> {
     let json = py_to_json(value)?;
     let wire: quillmark_core::CardWire = serde_json::from_value(json).map_err(|e| {
