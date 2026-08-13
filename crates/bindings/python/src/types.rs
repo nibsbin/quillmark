@@ -33,7 +33,7 @@ impl PyQuillmark {
     /// Render `doc` against `quill` in one shot, resolving `quill`'s backend on
     /// this engine. The default `output_format` falls back to the backend's
     /// first supported format. Raises `QuillmarkError` (`engine::backend_not_found`)
-    /// when the backend is not registered. Mirrors WASM `Engine.render`.
+    /// when the backend is not registered.
     #[pyo3(signature = (quill, doc, format=None, ppi=None, pages=None, producer=None, regions=false))]
     #[allow(clippy::too_many_arguments)] // kwargs mirror RenderOptions 1:1; the signature IS the Python API
     fn render(
@@ -71,8 +71,7 @@ impl PyQuillmark {
     }
 
     /// The output formats `quill`'s backend can emit. Raises `QuillmarkError`
-    /// (`engine::backend_not_found`) for an unregistered backend. Mirrors WASM
-    /// `Engine.supportedFormats`.
+    /// (`engine::backend_not_found`) for an unregistered backend.
     fn supported_formats(&self, quill: &PyQuill) -> PyResult<Vec<PyOutputFormat>> {
         Ok(self
             .inner
@@ -108,14 +107,14 @@ pub struct PyQuill {
 impl PyQuill {
     /// Load a quill from a filesystem directory. Pure config load: no backend,
     /// no engine; the declared backend is resolved at render time by a
-    /// `Quillmark` engine. Mirrors WASM `Quill.fromTree`/Rust `quill_from_path`.
+    /// `Quillmark` engine.
     #[staticmethod]
     fn from_path(path: PathBuf) -> PyResult<PyQuill> {
         let quill = quill_from_path(&path).map_err(convert_render_error)?;
         Ok(PyQuill { inner: quill })
     }
 
-    /// The declared backend identifier (e.g. `"typst"`). Mirrors WASM `backendId`.
+    /// The declared backend identifier (e.g. `"typst"`).
     #[getter]
     fn backend_id(&self) -> String {
         self.inner.backend_id().to_string()
@@ -152,7 +151,7 @@ impl PyQuill {
     /// Identity snapshot mirroring the `quill:` section of `Quill.yaml`.
     /// A pure config read: it never resolves a backend and never raises for
     /// an unregistered one. Capability lives on the engine: read
-    /// `Quillmark.supported_formats(quill)`. Mirrors WASM `metadata`.
+    /// `Quillmark.supported_formats(quill)`.
     #[getter]
     fn metadata<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let source = &self.inner;
@@ -193,8 +192,7 @@ impl PyQuill {
     }
 
     /// Validate `doc` against this quill's schema, returning a list of
-    /// diagnostic dicts (empty when the document is valid). Mirrors WASM
-    /// `validate`.
+    /// diagnostic dicts (empty when the document is valid).
     ///
     /// Forwards the canonical `validation::*` diagnostics (same `code`,
     /// `path`, and `hint` the engine emits) including the non-fatal
@@ -227,7 +225,7 @@ impl PyQuill {
     /// Parse warnings and the `conform::*` diagnostics both land on
     /// `doc.warnings`, the same carrier a `from_markdown` parse uses. Raises
     /// `QuillmarkError` on a parse failure, or when `markdown` declares a
-    /// `$quill` this quill does not answer to. Mirrors WASM `parse`.
+    /// `$quill` this quill does not answer to.
     fn parse(&self, markdown: &str) -> PyResult<PyDocument> {
         let parsed = self.inner.parse(markdown).map_err(|e| {
             let diags = e.to_diagnostics();
@@ -251,7 +249,7 @@ impl PyQuill {
     /// included. A `!must_fill` marker anywhere in a field's value skips that
     /// field; a value the strict write refuses stays as authored with a
     /// diagnostic. Raises `QuillmarkError` when `doc` declares a different
-    /// `$quill`, before any mutation. Mirrors WASM `conform`.
+    /// `$quill`, before any mutation.
     fn conform<'py>(
         &self,
         py: Python<'py>,
@@ -275,7 +273,7 @@ impl PyQuill {
     /// instance of each composable card kind, each committing its fields'
     /// `example` values and leaving every other field absent (interpolated at
     /// render). Illustration-first: a field with both an `example` and a
-    /// `default` renders its example. Mirrors WASM `seedDocument`.
+    /// `default` renders its example.
     fn seed_document(&self) -> PyDocument {
         PyDocument {
             inner: self.inner.seed_document(),
@@ -285,7 +283,7 @@ impl PyQuill {
 
     /// Seed a starter main card (carries `$quill`) from the schema: the
     /// `$kind: main` card of `seed_document()` in isolation, as a dict (same
-    /// shape as `Document.main`). Mirrors WASM `seedMain`.
+    /// shape as `Document.main`).
     fn seed_main<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         card_to_pydict(py, &self.inner.seed_main())
     }
@@ -296,7 +294,7 @@ impl PyQuill {
     /// declared. Returns the same dict shape as `Document.cards` /
     /// `remove_card`. Pass `document.main["seed"][card_kind]` as `overlay` so a
     /// card added to a template-derived document inherits its curated starting
-    /// values; omit it for the bare schema seed. Mirrors WASM `seedCard`.
+    /// values; omit it for the bare schema seed.
     #[pyo3(signature = (card_kind, overlay=None))]
     fn seed_card<'py>(
         &self,
@@ -328,8 +326,7 @@ impl PyDocument {
     /// blank canvas: absent fields resolve at render time (`default`, else
     /// type-empty zero), so nothing the caller did not set reaches the
     /// output. For an example-filled starter use `Quill.seed_document()`.
-    /// Raises `ValueError` on an invalid quill reference. Mirrors WASM
-    /// `new Document(quillRef)`.
+    /// Raises `ValueError` on an invalid quill reference.
     #[new]
     fn new(quill_ref: &str) -> PyResult<Self> {
         let qr: quillmark_core::QuillReference = quill_ref.parse().map_err(|e| {
@@ -375,7 +372,7 @@ impl PyDocument {
         })
     }
 
-    /// Like [`from_json`] but returns `None` instead of raising. Mirrors WASM `tryFromJson`.
+    /// Like [`from_json`] but returns `None` instead of raising.
     #[staticmethod]
     fn try_from_json(json: &str) -> Option<Self> {
         let inner: Document = serde_json::from_str(json).ok()?;
@@ -399,23 +396,21 @@ impl PyDocument {
         quillmark_core::document::STORAGE_V0_93_0
     }
 
-    /// Canonical card-yaml authoring rules: the core text every surface shows.
-    /// Mirrors WASM `Document.formatRules`. Cache it; the value never changes.
+    /// Canonical card-yaml authoring rules: the core text every surface shows. Cache it; the value never changes.
     #[staticmethod]
     fn format_rules() -> &'static str {
         quillmark_core::document::FORMAT_RULES
     }
 
     /// Authoring-ergonomics header introducing a blueprint to an LLM/MCP
-    /// consumer for `quill_name`. Mirrors WASM `Document.blueprintInstruction`.
+    /// consumer for `quill_name`.
     #[staticmethod]
     fn blueprint_instruction(quill_name: &str) -> String {
         quillmark_core::document::blueprint_instruction(quill_name)
     }
 
     /// The canonical `$quill` reference grammar as author-facing text: matches
-    /// the `hint` on `parse::invalid_quill_reference`. Mirrors WASM
-    /// `Document.quillRefHint`. Cache it; the value never changes.
+    /// the `hint` on `parse::invalid_quill_reference`. Cache it; the value never changes.
     #[staticmethod]
     fn quill_ref_hint() -> &'static str {
         quillmark_core::quill_ref_hint()
@@ -514,8 +509,7 @@ impl PyDocument {
     /// One composable card by index, same dict shape as `main`: the
     /// card-indexed twin of that getter, so reading one card need not project
     /// every card via `cards`. An out-of-range `index` raises
-    /// `IndexOutOfRange`, matching the card write verbs. Mirrors WASM
-    /// `doc.card(i)`.
+    /// `IndexOutOfRange`, matching the card write verbs.
     fn card<'py>(&self, py: Python<'py>, index: usize) -> PyResult<Bound<'py, PyDict>> {
         let len = self.inner.cards().len();
         let card = self.inner.card(index).ok_or_else(|| {
@@ -528,7 +522,6 @@ impl PyDocument {
     /// cheap read that feeds `quill.seed_card(kind, overlay)` without
     /// projecting the whole main card via `main` to fish out one key, and it
     /// keeps `seed_card` pure: the quill still never reads the document.
-    /// Mirrors WASM `doc.seedOverlay(kind)`.
     fn seed_overlay<'py>(&self, py: Python<'py>, kind: &str) -> PyResult<Bound<'py, PyAny>> {
         match self.inner.main().seed().and_then(|seed| seed.get(kind)) {
             Some(overlay) => json_to_py(py, overlay),
@@ -663,7 +656,7 @@ impl PyDocument {
     /// Checks only what a detached card can decide alone: field-name grammar
     /// and value depth. Kind validity is positional (`main` is right for the
     /// root, reserved for a composable card) so `insert_card` is its gate, and
-    /// any kind string is accepted here. Mirrors WASM `Document.makeCard`.
+    /// any kind string is accepted here.
     #[staticmethod]
     #[pyo3(signature = (kind, fields=None, body=None))]
     fn make_card<'py>(
@@ -700,7 +693,7 @@ impl PyDocument {
     /// inserts at index `i` (`0..=card_count`; out of range raises
     /// `IndexOutOfRange`). `card` is a `Card` dict: from `make_card`, `cards`,
     /// `remove_card`, or `seed_card`. The one insertion verb per lane, folding
-    /// core's `push_card` + `insert_card`. Mirrors WASM `insertCard(card, at?)`.
+    /// core's `push_card` + `insert_card`.
     #[pyo3(signature = (card, at=None))]
     fn insert_card(&mut self, card: Bound<'_, PyAny>, at: Option<usize>) -> PyResult<()> {
         let core_card = py_dict_to_card(&card)?;
@@ -762,7 +755,7 @@ impl PyDocument {
 /// here never meets an address, a content dict, or a delta. It holds both objects
 /// by reference and re-borrows them per call (pyo3 objects carry no lifetime, so
 /// unlike core's `TypedWriter` it cannot keep the borrow), so it is ephemeral by
-/// convention: bind, write, discard. Mirrors WASM `quill.writer(doc)`.
+/// convention: bind, write, discard.
 #[pyclass(name = "Writer")]
 pub struct PyWriter {
     quill: Py<PyQuill>,
@@ -1000,8 +993,7 @@ impl PyCardWriter {
 /// undecodable value raises `edit::field_decode`. This is the field
 /// read surface: `Document` carries no quill-free field read. Holds both objects
 /// by reference and re-borrows them per call (pyo3 objects carry no lifetime), so
-/// it is ephemeral by convention: bind, read, discard. Mirrors WASM
-/// `quill.reader(doc)`.
+/// it is ephemeral by convention: bind, read, discard.
 #[pyclass(name = "Reader")]
 pub struct PyReader {
     quill: Py<PyQuill>,
@@ -1043,7 +1035,7 @@ impl PyReader {
     /// `None` when the field is absent. Raises `edit::unknown_field` for an
     /// undeclared name, `edit::field_not_content` for a declared type that is not a
     /// content leaf, and `edit::field_decode` for a stored value that
-    /// decodes under neither encoding. Mirrors WASM `reader.getContent`.
+    /// decodes under neither encoding.
     fn get_content<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
         let quill = self.quill.borrow(py);
         let doc = self.doc.borrow(py);
@@ -1184,7 +1176,7 @@ impl PyRenderResult {
         self.inner.output_format.into()
     }
 
-    /// Wall-clock time spent inside `render`, in milliseconds. Mirrors WASM `renderTimeMs`.
+    /// Wall-clock time spent inside `render`, in milliseconds.
     #[getter]
     fn render_time_ms(&self) -> f64 {
         self.render_time_ms
