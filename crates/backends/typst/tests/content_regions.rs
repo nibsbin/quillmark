@@ -565,6 +565,100 @@ card_kinds:
 }
 
 #[test]
+fn card_scalars_surface_per_instance_regions_through_laundering() {
+    // The scalar twin of the card-date case: one `text(..)` node per card cell
+    // gives the shared `card.<field>` loop variable the per-instance identity
+    // `scalar_windows` cannot split, and `.value` still hands a package a `str`.
+    const YAML: &str = r#"
+quill:
+  name: card_scalar_region
+  version: 0.1.0
+  backend: typst
+  description: per-instance card scalar region test
+typst:
+  plate_file: plate.typ
+card_kinds:
+  stamp:
+    description: a stamped office symbol
+    fields:
+      from:
+        type: string
+        description: the endorsing office
+      count:
+        type: integer
+        description: how many copies
+"#;
+    const PLATE: &str = r#"
+#import "@local/quillmark-helper:0.1.0": data
+#set page(width: 612pt, height: 792pt, margin: 72pt)
+#set text(size: 11pt)
+
+#for card in data.at("$cards", default: ()) {
+  let f = card.at("from", default: none)
+  if f != none {
+    (f.display)()
+    // `.value` is a plain `str`, so string ops still compose.
+    [ (#upper(f.value))]
+  }
+  let c = card.at("count", default: none)
+  if c != none { [ #(c.display)()] }
+  parbreak()
+}
+"#;
+    let data = serde_json::json!({
+        "$cards": [
+            {"$kind": "stamp", "from": "ORG1/SYMBOL", "count": 3},
+            {"$kind": "stamp", "from": ""},
+            {"$kind": "stamp", "from": "ORG3/SYMBOL"},
+        ],
+    });
+
+    let session = TypstBackend.open(&quill(YAML, PLATE), &data).expect("open");
+    let regions = session.regions();
+    let fields: std::collections::HashSet<String> =
+        regions.iter().map(|r| r.field.clone()).collect();
+    assert!(
+        fields.contains("$cards.stamp.0.from") && fields.contains("$cards.stamp.2.from"),
+        "each card's scalar regions on its own address: {fields:?}"
+    );
+    assert!(
+        fields.contains("$cards.stamp.0.count"),
+        "a number field regions like a string: {fields:?}"
+    );
+    // A blank scalar still lowers to a value object, but draws no ink.
+    assert!(
+        !fields.contains("$cards.stamp.1.from"),
+        "a blank card scalar surfaces no region: {fields:?}"
+    );
+
+    let first = regions
+        .iter()
+        .find(|r| r.field == "$cards.stamp.0.from")
+        .expect("first card scalar region present");
+    assert!(
+        first.span.is_none(),
+        "a scalar region is whole-placement, carrying no content span: {first:?}"
+    );
+    let cx = (first.rect[0] + first.rect[2]) / 2.0;
+    let cy = (first.rect[1] + first.rect[3]) / 2.0;
+    assert_eq!(
+        session.field_at(first.page, cx, cy).as_deref(),
+        Some("$cards.stamp.0.from"),
+        "a click on a laundered card scalar routes to its per-instance path"
+    );
+    // The `.value` ink is the plate's own expression, attributable to no field:
+    // the region covers the `display` placement only.
+    assert_eq!(
+        regions
+            .iter()
+            .filter(|r| r.field == "$cards.stamp.0.from")
+            .count(),
+        1,
+        "one region per cell, not one per read: {regions:?}"
+    );
+}
+
+#[test]
 fn form_field_unknown_path_fails_the_compile() {
     // A typo'd path is a loud compile error, not a silent no-region widget.
     const YAML: &str = r#"

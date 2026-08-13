@@ -13,7 +13,7 @@ Plates are plain Typst code. Document metadata reaches the plate as a JSON dicti
 #data.at("title", default: "Untitled")       // safe with default
 ```
 
-Fields declared `type: richtext` in `Quill.yaml` arrive as Typst content (their content lowered to markup, ready to render). `type: date` and `type: datetime` fields arrive as a **value-object** (see below). Everything else is a plain JSON-shaped value.
+Fields declared `type: richtext` in `Quill.yaml` arrive as Typst content (their content lowered to markup, ready to render). `type: date` and `type: datetime` fields, and a **card's** declared string/number fields, arrive as a **value-object** (see below). Everything else is a plain JSON-shaped value.
 
 ### Dates
 
@@ -32,6 +32,46 @@ A present `type: date` / `type: datetime` field arrives as a small value-object 
 - **`.value` is the native escape hatch.** It is the underlying `datetime` for arithmetic, comparison, `.year()`/`.weekday()`/… components, and any datetime-consuming package. `data.issued.value.display("…")` returns a native `str` (no region).
 
 One rule: **native anything → `.value`; region render → `(…display)(…)`.** A package that formats a date internally still needs `.value` when it does native `datetime` work, but placing `(data.issued.display)(..)` (even deep inside a package) keeps the region, because the closure's ink is born at its generated definition site, not the call site.
+
+### Card scalars
+
+A **card's** declared `string` / `integer` / `number` fields arrive as the same
+two-projection value-object, for the same reason: a plate reads them through one
+shared loop variable (`card.<field>`), so only a per-instance render target can
+tell one card's cell from another's.
+
+```typst
+#for card in data.at("$cards", default: ()) {
+  (card.from.display)()          // rendered, click-to-edit, keyed on this card
+  card.from.value                // native str (packages, string ops, no region)
+  upper(card.from.value)         // string work → .value
+}
+```
+
+The rule is the date rule: **native anything → `.value`; region render →
+`(…display)(…)`.** `display` takes no arguments here (`(card.from.display)()`),
+where a date's takes the format pattern.
+
+Scope, and what stays a plain value:
+
+- **Cards only.** A root field (`data.subject`) is still a plain value: it is
+  placed through its own plate expression, which the backend already tracks by
+  the expression's source span. It is the card loop that erases per-instance
+  identity.
+- **Declared fields only**, so every region keys on a real schema address.
+  `$kind` is not a schema field: `card.at("$kind") == "indorsement"` dispatch is
+  untouched.
+- **Array elements keep their raw values.** `card.signature_block` stays an
+  array of `str`; a per-element target needs a bound widget as before.
+- `none` stays `none` (presence guards are unchanged), and booleans, objects,
+  and undeclared keys stay plain values.
+- A blank field still lowers to a value-object, so `.value` never needs a
+  presence guard — but it draws no ink, so it surfaces no region.
+
+Two consequences worth checking when you migrate a plate: a comparison against
+the bare cell (`card.title != ""`) is now always true and must read
+`card.title.value != ""`, and a widget bound to a card scalar takes the raw
+value (`form-field("Qty", value: card.qty.value)`).
 
 ### Checking for Optional Fields
 
@@ -64,7 +104,7 @@ The document body is exposed under the `$body` key, accessed via `data.at("$body
 
 #for card in data.at("$cards", default: ()) {
   if card.at("$kind") == "product" {
-    [Product: #card.name — #card.at("$body")]
+    [Product: #(card.name.display)() — #card.at("$body")]
   }
 }
 ```

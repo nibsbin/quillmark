@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- feat(typst)!: a card's declared `string`/`number` fields lower to the same
+  value-object a `date` does — `(card.from.display)()` renders ink carrying a
+  region keyed on `$cards.<kind>.<n>.<field>`, `card.from.value` is the raw
+  `str`/`int` for string work and packages. The backend emits one `text(..)`
+  node per card *cell*, which manufactures the per-instance identity a plate
+  cannot express: it reads every card through one shared loop variable, so a
+  scan of the plate has a single expression site for N cards. That was the last
+  hole the geometry sidecar told authors to plug with a bound `form-field`, a
+  real AcroForm widget emitted only to buy a rectangle. Deliberately narrow:
+  root fields keep their literals (their own plate expression is already
+  windowed), only *declared* fields convert (so every region keys on a real
+  schema address, and `card.at("$kind")` dispatch is untouched), array elements
+  stay raw, and booleans, `none`, and undeclared keys are unchanged.
+  **Breaking** for Typst plates that read a card scalar: a package argument or
+  string op takes `.value`, and a comparison against the bare cell
+  (`card.title != ""`) is now always true — the one break that surfaces as a
+  wrong render rather than a Typst error. See
+  [0.104 → 0.105](docs/migrations/0.104-to-0.105.md).
+
 - feat(core,wasm,python)!: a `Content` nested inside a composite field is
   readable at its own codec. `TypedReader::get_content_at(name, path)` (and the
   `CardReader` twin, `reader.getContentAt(addr, path)` in JS,

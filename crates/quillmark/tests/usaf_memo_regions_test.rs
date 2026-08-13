@@ -30,6 +30,11 @@ fn usaf_memo_regions_cover_body_signature_and_cards() {
         "$body",
         "signature_block",
         "$cards.indorsement.0.signature_block",
+        // Card scalars render through their generated `display` closure, so
+        // they region per instance even though the plate hands them to a
+        // vendored package through the shared loop variable.
+        "$cards.indorsement.0.from",
+        "$cards.indorsement.0.for",
     ] {
         assert!(
             fields.contains(expected),
@@ -68,6 +73,18 @@ fn usaf_memo_regions_cover_body_signature_and_cards() {
         session.field_at(body.page, cx, cy).as_deref(),
         Some("$body"),
         "a click inside the rebuilt body routes to $body"
+    );
+
+    let from = regions
+        .iter()
+        .find(|r| r.field == "$cards.indorsement.0.from")
+        .expect("the indorsement's FROM cell regions");
+    let cx = (from.rect[0] + from.rect[2]) / 2.0;
+    let cy = (from.rect[1] + from.rect[3]) / 2.0;
+    assert_eq!(
+        session.field_at(from.page, cx, cy).as_deref(),
+        Some("$cards.indorsement.0.from"),
+        "a click on the indorsement's FROM line routes to that card's own field"
     );
 
     let mut edited = parsed.clone();

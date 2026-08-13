@@ -103,17 +103,24 @@
     // widget-name suffix only. The card body's region rides its own glyph
     // spans through the package rebuild, per-card because each card's body
     // has its own backend-generated eval site.
+    // A card's scalar fields arrive as value objects. `(…display)()` renders
+    // ink whose glyphs carry the field's per-instance region, so a click on an
+    // indorsement's FROM/MEMORANDUM FOR line routes to that card's own address;
+    // `format` and `action` take `.value` because the package does string work
+    // on them (an `in` assert, a `.trim()`).
+    let ink(cell) = if cell == none { none } else { (cell.display)() }
+    let card_format = card.at("format", default: none)
     indorsement(
-      from: card.at("from", default: ""),
-      to: card.at("for", default: ""),
+      from: ink(card.at("from", default: none)),
+      to: ink(card.at("for", default: none)),
       signature_block: card.signature_block,
       signing_field: signature-field(
         "Ind_" + str(i) + "_Signature",
         field: card.at("$path") + "signature_block",
       ),
-      format: card.at("format", default: "standard"),
+      format: if card_format == none { "standard" } else { card_format.value },
       date: resolved_date,
-      ..if "action" in card { (action: card.action) },
+      ..if "action" in card { (action: card.action.value) },
       body_content,
     )
   }

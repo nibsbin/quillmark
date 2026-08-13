@@ -20,7 +20,7 @@
 // Present each sub-document programatically
 #for card in data.at("$cards") {
   if card.at("$kind") == "quotes" [
-    *#card.author*: _#card.at("$body") _
+    *#(card.author.display)()*: _#card.at("$body") _
   ]
 }
 

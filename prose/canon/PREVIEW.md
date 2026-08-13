@@ -174,7 +174,7 @@ four queries, two coarse and two fine:
 - `locate(field, pos)` answers *content position → caret rect*: the reverse of
   `positionAt`, the box to draw a caret at.
 
-Three producers: **content fields** (a `richtext` or `plaintext` value —
+Four producers: **content fields** (a `richtext` or `plaintext` value —
 a body, a card's field, a scalar or an `[]` element) are tracked by the
 spans their glyphs carry: the
 backend evaluates each value at its own generated call site and records the
@@ -187,9 +187,15 @@ tracked site; a scalar shown in header and footer surfaces both sites, and a
 reference wrapped in an expression (`#upper(data.subject)`) attributes the
 whole expression's ink to the field when it is the only reference inside it.
 Not tracked: expressions mixing several fields (`data.from + ", " + rank` has
-no single owner), values laundered through intermediate bindings, and card
-scalars read from the per-card loop variable (one shared expression site
-carries no per-instance identity: bind a widget for those). **Form-field widgets** carry the path explicitly
+no single owner) and values laundered through intermediate bindings.
+**Generated render sites** cover what a plate expression cannot: a date and a
+card's declared string/number field lower to a value-object whose `display`
+closure renders through a backend-generated `text(..)` node, one per cell
+([PLATE_DATA.md](PLATE_DATA.md)). Because a closure's ink is born at its
+definition site, the region survives laundering *and* the shared per-card loop
+variable, which no scan of the plate could split. Placed as `(card.f.display)()`
+they track; read as `card.f.value` they are native values drawing untracked
+ink. **Form-field widgets** carry the path explicitly
 (pdfform from the form mapping, a Typst `form-field` from its `field:`
 argument, validated against schema address tables baked into the generated
 helper: cards carry their canonical prefix as `$path`, so plates compose

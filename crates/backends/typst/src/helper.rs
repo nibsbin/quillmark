@@ -4,8 +4,9 @@
 //! `lib.typ` is regenerated per render as pure source text: no runtime data
 //! processing. Richtext fields lower to markup block bindings (`#let _qm_cN =
 //! [ .. ]`) via [`emit_content`]; the document data is a Typst literal
-//! (`#let data = ( .. )`) referencing those blocks, with present date fields
-//! referencing a `date` value-object block and everything else a value literal.
+//! (`#let data = ( .. )`) referencing those blocks, with date fields and a
+//! card's declared string/number fields referencing a value-object block and
+//! everything else a value literal.
 //!
 //! Output is **canonical**: dict keys emit in sorted order at every level (via
 //! [`sorted`]), so equal data produces byte-equal source regardless of the
@@ -114,6 +115,7 @@ struct Codegen<'m> {
     windows: Vec<(String, Range<usize>, Vec<SegmentMap>)>,
     counter: usize,
     date_counter: usize,
+    scalar_counter: usize,
     emit_error: Option<EmitError>,
     /// `(schema address, plaintext)` per non-blank content field: the content
     /// text with island slots stripped and marks dropped. Backs `_qm-plaintext`.
@@ -128,6 +130,7 @@ impl<'m> Codegen<'m> {
             windows: Vec::new(),
             counter: 0,
             date_counter: 0,
+            scalar_counter: 0,
             emit_error: None,
             plaintext: Vec::new(),
         }
@@ -192,6 +195,35 @@ impl<'m> Codegen<'m> {
         id
     }
 
+    /// The scalar sibling of [`date_object`](Self::date_object), over a card's
+    /// declared string/number field: `value` is the raw `str`/`int`/`float`,
+    /// `display` a closure `() => text(str(v))` whose glyphs are born at this
+    /// `text(..)` node, so each card instance's cell records its own
+    /// segment-less window. That per-instance identity is the whole point: the
+    /// plate reads these through the shared loop variable (`card.<field>`),
+    /// one expression site for every card, which `scalar_windows` cannot split.
+    ///
+    /// `str(v)` rather than `v`: a number is not content, and `str` is a no-op
+    /// on the string case. Unlike a date, a blank value still lowers here, so
+    /// `.value` is total over a declared field and reads need no presence
+    /// guard; a blank one draws no ink and so surfaces no region.
+    fn scalar_object(&mut self, path: &str, value: &serde_json::Value) -> String {
+        let id = format!("_qm_s{}", self.scalar_counter);
+        self.scalar_counter += 1;
+        self.blocks.push_str("#let ");
+        self.blocks.push_str(&id);
+        self.blocks.push_str(" = { let v = ");
+        self.blocks.push_str(&lit(value));
+        self.blocks.push_str("; (value: v, display: () => ");
+        let text_start = self.blocks.len();
+        self.blocks.push_str("text(str(v))");
+        let text_end = self.blocks.len();
+        self.blocks.push_str(") }\n");
+        self.windows
+            .push((path.to_string(), text_start..text_end, Vec::new()));
+        id
+    }
+
     /// A blank content lowers to `""`, not a block; a value that is not a valid
     /// content (never produced by the seam) degrades to its value literal.
     fn content_field(&mut self, path: &str, value: &serde_json::Value, inline: bool) -> String {
@@ -232,10 +264,18 @@ impl<'m> Codegen<'m> {
                     continue;
                 }
             }
-            let is_content = self.meta.content_fields.iter().any(|f| f == key);
-            let date_kind = date_kind_of(&self.meta.date_fields, &self.meta.datetime_fields, key);
-            let is_inline = self.meta.inline_fields.iter().any(|f| f == key);
-            let expr = self.emit_field(key, value, is_content, date_kind, is_inline);
+            let lowering = if self.meta.content_fields.iter().any(|f| f == key) {
+                Lowering::Content {
+                    inline: self.meta.inline_fields.iter().any(|f| f == key),
+                }
+            } else if let Some(kind) =
+                date_kind_of(&self.meta.date_fields, &self.meta.datetime_fields, key)
+            {
+                Lowering::Date(kind)
+            } else {
+                Lowering::Literal
+            };
+            let expr = self.emit_field(key, value, lowering);
             items.push(format!("\"{}\": {}", escape_string(key), expr));
         }
         wrap_dict(items)
@@ -277,6 +317,10 @@ impl<'m> Codegen<'m> {
         let dates = card_names(&self.meta.card_date_fields, kind);
         let datetimes = card_names(&self.meta.card_datetime_fields, kind);
         let inlines = card_names(&self.meta.card_inline_fields, kind);
+        // Declared fields only, so every window this card records keys on a
+        // real schema address. `$kind` is document-defined, not a schema
+        // property, so it stays a literal and plate dispatch is untouched.
+        let declared = card_names(&self.meta.card_field_names, kind);
         let mut items = Vec::with_capacity(obj.len() + 1);
         // The canonical address prefix, so plates compose schema-field addresses
         // without reimplementing the kind+ordinal grammar.
@@ -285,11 +329,19 @@ impl<'m> Codegen<'m> {
             if key == "$path" {
                 continue;
             }
-            let is_content = content.iter().any(|f| f == key);
-            let date_kind = date_kind_of(&dates, &datetimes, key);
-            let is_inline = inlines.iter().any(|f| f == key);
+            let lowering = if content.iter().any(|f| f == key) {
+                Lowering::Content {
+                    inline: inlines.iter().any(|f| f == key),
+                }
+            } else if let Some(date_kind) = date_kind_of(&dates, &datetimes, key) {
+                Lowering::Date(date_kind)
+            } else if declared.iter().any(|f| f == key) {
+                Lowering::Scalar
+            } else {
+                Lowering::Literal
+            };
             let path = format!("{prefix}{key}");
-            let expr = self.emit_field(&path, value, is_content, date_kind, is_inline);
+            let expr = self.emit_field(&path, value, lowering);
             items.push(format!("\"{}\": {}", escape_string(key), expr));
         }
         wrap_dict(items)
@@ -299,22 +351,20 @@ impl<'m> Codegen<'m> {
         &mut self,
         path: &str,
         value: &serde_json::Value,
-        is_content: bool,
-        date_kind: Option<DateKind>,
-        is_inline: bool,
+        lowering: Lowering,
     ) -> String {
-        if is_content {
-            match value {
+        match lowering {
+            Lowering::Content { inline } => match value {
                 // A richtext field crosses the seam as canonical content JSON;
                 // an `array<richtext>` as an array of them.
-                serde_json::Value::Object(_) => self.content_field(path, value, is_inline),
+                serde_json::Value::Object(_) => self.content_field(path, value, inline),
                 serde_json::Value::Array(arr) => {
                     let items = arr
                         .iter()
                         .enumerate()
                         .map(|(i, elem)| match elem {
                             serde_json::Value::Object(_) => {
-                                self.content_field(&format!("{path}.{i}"), elem, is_inline)
+                                self.content_field(&format!("{path}.{i}"), elem, inline)
                             }
                             other => lit(other),
                         })
@@ -322,9 +372,8 @@ impl<'m> Codegen<'m> {
                     wrap_array(items)
                 }
                 other => lit(other),
-            }
-        } else if let Some(kind) = date_kind {
-            match value {
+            },
+            Lowering::Date(kind) => match value {
                 // Blank or (defensively) unparseable ⇒ `none`, so `!= none`
                 // guards are untouched.
                 serde_json::Value::String(s) => match datetime_constructor(s, kind) {
@@ -333,11 +382,34 @@ impl<'m> Codegen<'m> {
                 },
                 serde_json::Value::Null => "none".to_string(),
                 other => lit(other),
-            }
-        } else {
-            lit(value)
+            },
+            // An array element carries no window: its `.<i>` address is a real
+            // one, but the plate reaches it through a second shared site (the
+            // `.map`/index expression), so per-element identity needs its own
+            // pass. `none` stays `none`, keeping presence guards working.
+            Lowering::Scalar => match value {
+                serde_json::Value::String(_) | serde_json::Value::Number(_) => {
+                    self.scalar_object(path, value)
+                }
+                other => lit(other),
+            },
+            Lowering::Literal => lit(value),
         }
     }
+}
+
+/// How one data cell lowers. `Scalar` is card-only: a root field is placed
+/// through its own plate expression, which [`scalar_windows`] already windows,
+/// where a card field is read through one loop variable shared by every
+/// instance.
+///
+/// [`scalar_windows`]: crate::overlay::scalar_windows
+#[derive(Clone, Copy)]
+enum Lowering {
+    Content { inline: bool },
+    Date(DateKind),
+    Scalar,
+    Literal,
 }
 
 /// A field name never appears in both tables, so the order of the checks is
@@ -768,6 +840,71 @@ mod tests {
             "{lib}"
         );
         assert!(lib.contains("\"on\": _qm_d0"), "{lib}");
+    }
+
+    #[test]
+    fn card_scalars_become_per_instance_value_object_blocks() {
+        let meta = meta_from(serde_json::json!({
+            "properties": { "title": { "type": "string" } },
+            "$defs": { "stamp_card": { "properties": {
+                "from": { "type": "string" },
+                "count": { "type": "integer" },
+                "blank": { "type": "string" },
+                "missing": { "type": "string" },
+                "tags": { "type": "array", "items": { "type": "string" } },
+            }}}
+        }));
+        let data = serde_json::json!({
+            "title": "Root title",
+            "$cards": [
+                { "$kind": "stamp", "from": "ORG1", "count": 3, "blank": "",
+                  "missing": null, "tags": ["a"], "undeclared": "x" },
+                { "$kind": "stamp", "from": "ORG2" }
+            ]
+        });
+        let (lib, windows) = generate_lib_typ(&data, &meta).unwrap();
+
+        // Sorted keys: blank, count, from, then the second card's from.
+        assert!(
+            lib.contains("#let _qm_s0 = { let v = \"\"; (value: v, display: () => text(str(v))) }"),
+            "{lib}"
+        );
+        assert!(
+            lib.contains("#let _qm_s1 = { let v = 3; (value: v, display: () => text(str(v))) }"),
+            "{lib}"
+        );
+        assert!(
+            lib.contains(
+                "#let _qm_s2 = { let v = \"ORG1\"; (value: v, display: () => text(str(v))) }"
+            ),
+            "{lib}"
+        );
+        assert!(lib.contains("\"from\": _qm_s2"), "{lib}");
+        assert!(lib.contains("\"from\": _qm_s3"), "{lib}");
+
+        // Each instance keys its own window on its own card address.
+        let paths: Vec<&str> = windows.iter().map(|w| w.path.as_str()).collect();
+        assert_eq!(
+            paths,
+            vec![
+                "$cards.stamp.0.blank",
+                "$cards.stamp.0.count",
+                "$cards.stamp.0.from",
+                "$cards.stamp.1.from",
+            ]
+        );
+        for w in &windows {
+            assert_eq!(&lib[w.block.clone()], "text(str(v))");
+            assert!(w.segments.is_empty(), "a scalar window carries no segments");
+        }
+
+        // Untouched: the root scalar, `$kind` dispatch, an undeclared key, an
+        // absent value, and an array.
+        assert!(lib.contains("\"title\": \"Root title\""), "{lib}");
+        assert!(lib.contains("\"$kind\": \"stamp\""), "{lib}");
+        assert!(lib.contains("\"undeclared\": \"x\""), "{lib}");
+        assert!(lib.contains("\"missing\": none"), "{lib}");
+        assert!(lib.contains("\"tags\": (\"a\",)"), "{lib}");
     }
 
     #[test]
