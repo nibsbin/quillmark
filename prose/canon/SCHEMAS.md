@@ -65,6 +65,15 @@ bears a content leaf (`field_contains_content`), and its whole subtree conforms
 with it. Non-content-typed fields keep their authored shorthands; the typed
 write remains their canonicalizer.
 
+**A content leaf is readable at its codec wherever it sits in that subtree, not
+only when the field itself is one.** `reader.get_content(name)` answers for a
+whole-field leaf; `reader.get_content_at(name, path)` walks the same `items` /
+`properties` axis conform walks, reaching an `array<richtext>` element, an
+`object`'s content property, or a leaf under both. Without it the caller reads
+the stored element and decides for itself what the bytes mean, which is the
+judgement the resting form exists to remove. The caller also has less to decide
+with: the codec is a schema fact, and the stored shape does not carry it.
+
 ### A declared type change rewrites stored values
 
 Changing a field's declared type reinterprets every stored value in that field at the next bound load: `Quill::conform` derives rest from the current schema and value, holding no record of the type a value was written under, so the reinterpretation is unconditional and carries no diagnostic.
