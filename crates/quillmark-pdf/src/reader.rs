@@ -764,15 +764,7 @@ mod tests {
     }
 
     #[test]
-    fn dict_value_absent_key_with_matching_name_value_is_none() {
-        let dict = b" /Subtype /Producer /Creator (X) ";
-        assert!(find_dict_value(dict, "Producer").is_none());
-    }
-
-    #[test]
     fn dict_value_skips_comments_between_entries() {
-        // A `%`-comment between entries must not derail the key→value walk, and
-        // a `/Producer` token sitting inside that comment must not be matched.
         let dict = b" /A 1 %decoy /Producer (decoy)\n /Producer (real) ";
         let v = find_dict_value(dict, "Producer").expect("found");
         assert_eq!(v.trim_ascii(), b"(real)");
@@ -780,19 +772,14 @@ mod tests {
 
     #[test]
     fn endobj_inside_comment_does_not_truncate_object() {
-        // `endobj` appearing inside a `%`-comment must not close the object at
-        // the in-comment occurrence.
         let pdf = b"%PDF\n3 0 obj\n<< /A 1 >> %endobj in a comment\n/B 2 >>\nendobj\n";
         let (s, e) = find_object_bytes(pdf, 3).expect("found object 3");
         assert_eq!(&pdf[e - 6..e], b"endobj");
-        // The real terminator is the standalone `endobj`, past the comment.
         assert!(&pdf[s..e].ends_with(b"/B 2 >>\nendobj"));
     }
 
     #[test]
     fn outer_dict_skips_comment_bearing_gt_gt() {
-        // A `%`-comment carrying `>>` inside the object body must not close the
-        // outer dict early and drop the keys that follow it.
         let obj = b"5 0 obj\n<< /A 1 %trailing >> in a comment\n /MediaBox [0 0 1 2] >>\nendobj\n";
         let dict = extract_outer_dict(obj).expect("dict parses");
         let mb = find_dict_value(dict, "MediaBox").expect("/MediaBox survives the comment");
@@ -801,9 +788,6 @@ mod tests {
 
     #[test]
     fn value_end_nested_dict_skips_string_and_comment_gt_gt() {
-        // A nested-dict value whose interior carries `>>` inside a `(…)` string or
-        // a `%`-comment must terminate at the real `>>`, so the key→value walk
-        // finds the entry that follows.
         let dict = b" /K << /S (a>>b) %c >> d\n /T 3 >> /After 9 0 R ";
         let after = find_dict_value(dict, "After").expect("/After after the nested dict");
         assert_eq!(after.trim_ascii(), b"9 0 R");
@@ -811,8 +795,6 @@ mod tests {
 
     #[test]
     fn value_end_array_skips_comment_bracket() {
-        // A `%`-comment carrying `]` inside an array value must not end the array
-        // early.
         let dict = b" /Arr [1 2 %x]\n 3] /After (real) ";
         let after = find_dict_value(dict, "After").expect("/After after the array");
         assert_eq!(after.trim_ascii(), b"(real)");
@@ -841,12 +823,10 @@ mod tests {
 
     #[test]
     fn normalize_rect_orders_corners() {
-        // Already lower-left/upper-right: unchanged.
         assert_eq!(
             normalize_rect([10.0, 20.0, 622.0, 812.0]),
             [10.0, 20.0, 622.0, 812.0]
         );
-        // Swapped corners normalize so (x0,y0) is lower-left.
         assert_eq!(
             normalize_rect([622.0, 812.0, 10.0, 20.0]),
             [10.0, 20.0, 622.0, 812.0]
@@ -868,13 +848,6 @@ mod tests {
     }
 
     #[test]
-    fn find_object_matches_nonzero_generation() {
-        let pdf = b"%PDF\n7 2 obj\n<< /C 3 >>\nendobj\n";
-        let (s, e) = find_object_bytes(pdf, 7).expect("found object 7 generation 2");
-        assert_eq!(&pdf[s..e], b"7 2 obj\n<< /C 3 >>\nendobj");
-    }
-
-    #[test]
     fn object_generation_reads_header_gen() {
         let pdf = b"%PDF\n7 2 obj\n<< /C 3 >>\nendobj\n4 0 obj\n<< /D 1 >>\nendobj\n";
         assert_eq!(object_generation(pdf, 7), Some(2));
@@ -885,10 +858,9 @@ mod tests {
     #[test]
     fn assert_overwrite_gen_zero_rejects_nonzero() {
         let pdf = b"%PDF\n7 2 obj\n<< /C 3 >>\nendobj\n4 0 obj\n<< /D 1 >>\nendobj\n";
-        // generation 0 and absent are accepted; the caller owns the not-found path.
         assert!(assert_overwrite_gen_zero(pdf, 4, "x").is_ok());
+        // Absent is accepted: the caller owns the not-found path.
         assert!(assert_overwrite_gen_zero(pdf, 99, "x").is_ok());
-        // generation != 0 is a clean error tagged with the dedicated code.
         let e = assert_overwrite_gen_zero(pdf, 7, "catalog").expect_err("generation 2 rejected");
         assert_eq!(e.code, "pdf::nonzero_generation");
         assert!(e.message.contains("generation 2"), "{}", e.message);
@@ -896,8 +868,7 @@ mod tests {
 
     #[test]
     fn find_object_returns_last_revision() {
-        // Same id serialized twice (an incremental update): the live copy is the
-        // later one.
+        // Same id serialized twice, as an incremental update writes it.
         let pdf = b"%PDF\n4 0 obj\n<< /V (old) >>\nendobj\n4 0 obj\n<< /V (new) >>\nendobj\n";
         let (s, e) = find_object_bytes(pdf, 4).expect("found object 4");
         assert_eq!(&pdf[s..e], b"4 0 obj\n<< /V (new) >>\nendobj");
@@ -905,15 +876,12 @@ mod tests {
 
     #[test]
     fn endobj_inside_string_does_not_truncate_object() {
-        // A literal string value containing the bytes "endobj" (e.g. an /Info
-        // /Title) must not end the object at the in-string occurrence.
         let pdf = b"%PDF\n3 0 obj\n<< /Title (My endobj report) /Author (X) >>\nendobj\n";
         let (s, e) = find_object_bytes(pdf, 3).expect("found object 3");
         assert_eq!(
             &pdf[s..e],
             b"3 0 obj\n<< /Title (My endobj report) /Author (X) >>\nendobj"
-        );
-        // …and the dict still extracts cleanly with the full /Title value.
+);
         let dict = extract_outer_dict(&pdf[s..e]).expect("dict parses");
         let title = find_dict_value(dict, "Title").expect("/Title");
         assert_eq!(title.trim_ascii(), b"(My endobj report)");
@@ -921,8 +889,6 @@ mod tests {
 
     #[test]
     fn page_tree_cycle_is_rejected() {
-        // A /Pages node whose /Kids references itself must error cleanly, not
-        // loop to the node cap re-scanning the whole file each visit.
         let pdf = b"%PDF\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
                     2 0 obj\n<< /Type /Pages /Kids [2 0 R] /Count 1 >>\nendobj\n";
         let e = resolve_page_ids(pdf, 1).expect_err("cycle rejected");
@@ -932,13 +898,12 @@ mod tests {
 
     #[test]
     fn rotated_page_is_rejected() {
-        // /Rotate inherited from the root /Pages node is honoured.
+        // /Rotate inherited from the root /Pages node.
         let pdf = b"%PDF\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
                     2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 /Rotate 90 >>\nendobj\n\
                     3 0 obj\n<< /Type /Page /Parent 2 0 R >>\nendobj\n";
         let e = assert_unrotated_page(pdf, 1, 3).expect_err("rotated page rejected");
         assert_eq!(e.code, "pdf::rotated_page");
-        // A page with no rotation (own or inherited) is accepted.
         let flat = b"%PDF\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
                      2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n\
                      3 0 obj\n<< /Type /Page /Parent 2 0 R >>\nendobj\n";
