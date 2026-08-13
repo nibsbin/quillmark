@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.104.0 - 2026-08-13
 
 - feat(core,wasm): a quill declares, per body, the block constructs its plate
   does not typeset (`main.body.unsupported`, `card_kinds.<k>.body.unsupported`;
@@ -93,6 +93,33 @@
   fixture suite reached neither path. A fourth carries a `!must_fill` tag on two
   example-seeded cells through seed → store → load → conform. Refs #1234
 
+<!-- seed: commits since v0.103.0, confirm the entries above cover them, then delete this comment
+- Carry the thematic-break and unsupported-construct work into the guide
+- Dense-prose pass over the new comments and docs
+- Let a quill declare the constructs its plate does not typeset
+- Drain the memo's heading buffer instead of dropping it
+- Canonicalize a thematic break to `***`
+- Close the 0.104 release gaps: the migration guide, and four changelog entries
+- Retire the enum: modifier; project a field's domain by capability
+- Pin the render floor's two type-domain edges and the seeded fill tag
+- Raise the Node floor to 24
+- dense-prose pass over the added prose
+- docs: dense-prose pass on the text-type sections
+- docs: give the text-type choice a decision procedure
+- docs: state the backend seam's scope and reserve its namespaces
+- docs: drop the private intra-doc link from pathFor
+- fix(core): state the unspellable-tail conditions instead of linking a private fn
+- chore(wasm): density pass, and gate a core-build dead function
+- docs: dense-prose pass over the geometry-address translation
+- docs: dense-prose pass over the pathFor / cardPath prose
+- test(wasm): execute the static-export exemption instead of listing it
+- feat(wasm): mint a DocPath from an Addr (#1225)
+- fix(core)!: parse geometry addresses segment-wise (#1223)
+- docs: carry the 0.103 CLI break, and the init gate into the quickstart (#1222)
+- SCHEMAS.md: a declared type change rewrites stored values (#1221)
+-->
+
+
 ## v0.103.0 - 2026-08-09
 
 - docs: `docs/integration/operations.md`, carrying what the other integration
@@ -142,32 +169,6 @@
   sentinel that raised it retire with the door they guarded. Rust, Python,
   documents and stored blobs are unaffected. See
   `docs/migrations/0.102-to-0.103.md`
-
-<!-- seed: commits since v0.102.0, confirm the entries above cover them, then delete this comment
-- ci: tag the merge commit, and serialize a release against itself
-- ci: drop the tagger GitHub App from the release workflows
-- Cut SECURITY.md, and operations.md down to what only it can say
-- Drop the audit gate; keep the reachability finding in ci.yml's note
-- Fix two wrong claims, a dead property, and the stdout bug the review found
-- dense-prose pass over the added prose, and read the fixture once
-- Close four production-readiness gaps: audit gate, ops docs, CLI tests, PDF fuzzing
-- Drop the README's claim about the deleted sentinel patch
-- dense-prose pass: cut the restatement the change introduced
-- docs: the 0.102 → 0.103 step, and correct the surface it describes
-- The gate is the only door to the core surface
-- docs(migration): a span guide for 0.92 → 0.102
-- Cut over-specified style rules; author preference wins
-- dense-prose: remove the em-dash ban
-- dense-prose: drop the line-budget clause
-- dense-prose: wrong is worse than missing; relax em-dash ban
-- docs: dense-prose pass over the conform-scope and date-grammar prose
-- docs: migration guides are era-stamped, not immutable
-- docs(migrations): give the datetime split its corpus audit step
-- docs: scope conform to content fields, state the date corpus precondition
-- Tighten the failure-delivery prose
-- Deliver init's conflict as a rejection, not a synchronous throw
--->
-
 
 ## v0.102.0 - 2026-08-04
 
