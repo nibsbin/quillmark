@@ -1,14 +1,10 @@
 //! Schema-bound typed writer: the front door for typed field writes.
 //!
-//! `Card::commit_field` asks the caller to fetch a
-//! [`FieldSchema`] per write. Every consumer that wants typed writes (a
-//! form editor, an MCP server) already holds the resolved [`QuillConfig`]: it
-//! renders with it. [`Quill::writer`](crate::Quill::writer) binds the schema
-//! once, so callers issue one verb (`set`) and never pass a type token or an
-//! `inline` flag: the writer resolves each field's type itself, strict-commits
-//! a schema field, and rejects a name the schema does not declare with
-//! [`EditError::UnknownField`], on the typed path an undeclared name is a typo,
-//! not a fallback. Opaque storage stays available on purpose through the raw
+//! `Card::commit_field` asks the caller to fetch a [`FieldSchema`] per write.
+//! [`Quill::writer`](crate::Quill::writer) binds the schema once instead, so
+//! callers issue one verb (`set`) and never pass a type token or an `inline`
+//! flag. An undeclared name is [`EditError::UnknownField`]: on the typed path
+//! it is a typo, not a fallback. Opaque storage stays available through the raw
 //! [`Card::store_field`](crate::Card::store_field) verb.
 //!
 //! ```ignore
@@ -20,14 +16,13 @@
 //! ```
 //!
 //! The writer holds `&mut Document` and `&QuillConfig`, so a bound `TypedWriter`
-//! cannot cross a binding boundary that carries no lifetimes (wasm-bindgen /
-//! pyo3 objects); those surfaces construct one per call from the quill handle.
+//! cannot cross a lifetime-free binding boundary; those surfaces construct one
+//! per call from the quill handle.
 //!
 //! [`Quill::conform`](crate::Quill::conform) is this same strict commit driven
-//! by the schema rather than by a caller: it walks a document's declared content
-//! fields through the write-resolution seam these verbs use, so what an
-//! ingestion lands and what a write lands are the same bytes. Where a write
-//! refuses, conform leaves the value authored under a `conform::*` warning.
+//! by the schema rather than by a caller, so what an ingestion lands and what a
+//! write lands are the same bytes. Where a write refuses, conform leaves the
+//! value authored under a `conform::*` warning.
 
 use indexmap::IndexMap;
 
@@ -51,12 +46,11 @@ impl<'a> TypedWriter<'a> {
         Self { config, doc }
     }
 
-    /// Write a field on the main card. Resolves the field's schema type and
-    /// strict-commits it; a name the schema does not declare fails with
-    /// [`EditError::UnknownField`] rather than falling to the opaque store: on
-    /// the typed path it is a typo. For deliberate opaque storage use the raw
-    /// [`Card::store_field`](crate::Card::store_field). Other errors are those of
-    /// `Card::commit_field`.
+    /// Write a field on the main card, strict-committing it against the field's
+    /// schema type. An undeclared name fails with [`EditError::UnknownField`]
+    /// rather than falling to the opaque
+    /// [`Card::store_field`](crate::Card::store_field). Other errors are those
+    /// of `Card::commit_field`.
     pub fn set(&mut self, name: &str, value: impl Into<QuillValue>) -> Result<(), EditError> {
         let config = self.config;
         match config.main.fields.get(name) {
@@ -66,12 +60,10 @@ impl<'a> TypedWriter<'a> {
     }
 
     /// Write several main-card fields atomically, the typed twin of
-    /// [`Card::store_fields`](crate::Card::store_fields). Every field is resolved
-    /// (strict conform, or [`EditError::UnknownField`] for a name the schema does
-    /// not declare) before any is applied; on any violation nothing is written
-    /// and every offending field is returned as a `(name, error)` pair, so a
-    /// caller submitting a whole form sees every typo in one pass the way
-    /// [`Card::store_fields`](crate::Card::store_fields) does.
+    /// [`Card::store_fields`](crate::Card::store_fields). Every field resolves
+    /// before any is applied; on a violation nothing is written and every
+    /// offending field comes back as a `(name, error)` pair, so a caller
+    /// submitting a whole form sees every typo in one pass.
     pub fn set_all<K, V, I>(&mut self, fields: I) -> Result<(), Vec<(String, EditError)>>
     where
         K: Into<String>,
@@ -83,28 +75,22 @@ impl<'a> TypedWriter<'a> {
     }
 
     /// Revise the main card's body from markdown: edit semantics, surviving
-    /// anchors rebase, text [`Delta`] returned. This is
-    /// [`Card::revise_body`](crate::Card::revise_body) reached through the
-    /// writer, and it is the content lane's verb rather than a typed one
-    /// because a body carries no field schema to type against. Discard the
-    /// receipt with `let _ = writer.revise_body(md)?;` when caret stability is
-    /// not needed.
+    /// anchors rebase, text [`Delta`] returned. Untyped, because a body carries
+    /// no field schema to type against.
     pub fn revise_body(&mut self, markdown: &str) -> Result<Delta, EditError> {
         self.doc.main_mut().revise_body(markdown)
     }
 
     /// Revise a content field on the main card from authored text: typed *and*
-    /// anchor-preserving. Resolves the field's schema and defers to
-    /// `Card::revise_field_checked`, so
-    /// surviving anchors rebase and the diffed result is schema-conformed
-    /// (`richtext(inline)` rejects a multi-block result). Returns the text
-    /// [`Delta`]. A name the schema does not declare fails with
-    /// [`EditError::UnknownField`], as [`set`](Self::set).
+    /// anchor-preserving. Surviving anchors rebase and the diffed result is
+    /// schema-conformed (`richtext(inline)` rejects a multi-block result).
+    /// An undeclared name fails with [`EditError::UnknownField`], as
+    /// [`set`](Self::set).
     ///
     /// The codec comes from the declared type: `richtext` diffs markdown and
-    /// rebases anchors; `plaintext` diffs the literal text (nothing to rebase,
-    /// `is_plain` forbids every mark) and never imports markdown, so a
-    /// byte-identical revise of a value carrying escapes is a byte no-op.
+    /// rebases anchors; `plaintext` diffs the literal text and never imports
+    /// markdown, so a byte-identical revise of a value carrying escapes is a
+    /// byte no-op.
     pub fn revise_field(&mut self, name: &str, text: &str) -> Result<Delta, EditError> {
         match self.config.main.fields.get(name) {
             Some(schema) => self.doc.main_mut().revise_field_checked(name, text, schema),
@@ -113,20 +99,13 @@ impl<'a> TypedWriter<'a> {
     }
 
     /// Build a composable card of `kind`, typed-commit `fields` onto it,
-    /// optionally set its body from markdown, and place it, the fused
-    /// [`Card::new`](crate::Card::new) + typed writes + insertion. `at` picks the
-    /// position: `None` appends ([`push_card`]), `Some(i)` inserts at index `i`
-    /// ([`insert_card`]), so a positioned typed insert is one atomic call rather
-    /// than `add_card` + [`move_card`](Document::move_card). The card is committed
-    /// in full *before* it joins the document, so it is transactional by
-    /// construction: a rejected field (or an invalid kind, body, or out-of-range
-    /// `at`) leaves the document untouched. Field errors use the all-or-nothing
-    /// bundle of [`set_all`](Self::set_all); an invalid kind or body, or an
-    /// out-of-range position, surfaces as a single-entry bundle keyed `$kind` /
-    /// `$body`.
-    ///
-    /// [`push_card`]: Document::push_card
-    /// [`insert_card`]: Document::insert_card
+    /// optionally set its body from markdown, and place it. `at` picks the
+    /// position: `None` appends, `Some(i)` inserts at index `i`. The card is
+    /// committed in full *before* it joins the document, so a rejected field
+    /// (or an invalid kind, body, or out-of-range `at`) leaves the document
+    /// untouched. Field errors use the all-or-nothing bundle of
+    /// [`set_all`](Self::set_all); an invalid kind or body, or an out-of-range
+    /// position, surfaces as a single-entry bundle keyed `$kind` / `$body`.
     pub fn add_card<K, V, I>(
         &mut self,
         kind: &str,
@@ -154,18 +133,17 @@ impl<'a> TypedWriter<'a> {
         Ok(())
     }
 
-    /// Remove the composable card at `index`, returning it: the writer
-    /// spelling of [`Document::remove_card`], mirroring the JS `writer.removeCard`
-    /// sugar. `None` when `index` is out of range.
+    /// Remove the composable card at `index`, returning it. `None` when
+    /// `index` is out of range.
     pub fn remove_card(&mut self, index: usize) -> Option<Card> {
         self.doc.remove_card(index)
     }
 
     /// A schema-bound writer for the composable card at `index`. The card's
     /// `$kind` resolves its [`CardSchema`]; an unknown kind carries no schema, so
-    /// every field on it is undeclared and its typed writes fail with
-    /// [`EditError::UnknownField`] (write such a card opaquely through
-    /// [`Card::store_field`](crate::Card::store_field)). Returns
+    /// every typed write on it fails with [`EditError::UnknownField`] (write
+    /// such a card opaquely through
+    /// [`Card::store_field`](crate::Card::store_field)).
     /// [`EditError::IndexOutOfRange`] when `index` is out of range.
     pub fn card(&mut self, index: usize) -> Result<CardWriter<'_>, EditError> {
         let config = self.config;
@@ -192,10 +170,10 @@ impl CardWriter<'_> {
         self.card.kind()
     }
 
-    /// Write a field on this card. Resolves the field against the card's
-    /// [`CardSchema`] and strict-commits it; a field the schema does not declare
-    /// (or any field when the card kind is unknown) fails with
-    /// [`EditError::UnknownField`] rather than storing opaquely.
+    /// Write a field on this card, strict-committed against the card's
+    /// [`CardSchema`]. An undeclared field (or any field when the card kind is
+    /// unknown) fails with [`EditError::UnknownField`] rather than storing
+    /// opaquely.
     pub fn set(&mut self, name: &str, value: impl Into<QuillValue>) -> Result<(), EditError> {
         match self.schema.and_then(|s| s.fields.get(name)) {
             Some(schema) => self.card.commit_field(name, value, schema),
@@ -209,12 +187,8 @@ impl CardWriter<'_> {
         self.card.revise_body(markdown)
     }
 
-    /// Revise a content field on this card from authored text: typed *and*
-    /// anchor-preserving; the card twin of [`TypedWriter::revise_field`], codec
-    /// included (`richtext` diffs markdown, `plaintext` the literal text).
-    /// Resolves the field against the card's [`CardSchema`]; an undeclared name
-    /// (or any field when the card kind is unknown) fails with
-    /// [`EditError::UnknownField`].
+    /// The card twin of [`TypedWriter::revise_field`], resolved against the
+    /// card's [`CardSchema`].
     pub fn revise_field(&mut self, name: &str, text: &str) -> Result<Delta, EditError> {
         match self.schema.and_then(|s| s.fields.get(name)) {
             Some(schema) => self.card.revise_field_checked(name, text, schema),
@@ -236,11 +210,8 @@ impl CardWriter<'_> {
 }
 
 /// All-or-nothing batched write shared by [`TypedWriter::set_all`] and
-/// [`CardWriter::set_all`]: resolve every field first (collecting every error),
-/// apply none on failure, apply all on success. A name absent from
-/// `fields_schema` (or every name, when the whole schema is `None`: an unknown
-/// card kind) is an [`EditError::UnknownField`], the batch form of the scalar
-/// `set`'s reject-the-typo decision.
+/// [`CardWriter::set_all`]: resolve every field first, collecting every error.
+/// A `None` schema is an unknown card kind: every name on it is undeclared.
 fn set_all_impl<K, V, I>(
     card: &mut Card,
     fields_schema: Option<&IndexMap<String, FieldSchema>>,
