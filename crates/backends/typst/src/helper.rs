@@ -434,10 +434,8 @@ fn lit(v: &serde_json::Value) -> String {
         Number(n) => {
             if let Some(i) = n.as_i64() {
                 // Typst lexes a negative literal as unary `-` over an unsigned
-                // magnitude, and `i64::MIN`'s magnitude (2^63) overflows i64,
-                // so `-9223372036854775808` would not round-trip. Emit it as an
-                // int-typed expression instead (both operands fit i64). Every
-                // other i64 renders as its own literal.
+                // magnitude, and `i64::MIN`'s magnitude overflows i64, so it
+                // would not round-trip as a literal.
                 if i == i64::MIN {
                     "(-9223372036854775807 - 1)".to_string()
                 } else {
@@ -459,24 +457,18 @@ fn lit(v: &serde_json::Value) -> String {
     }
 }
 
-/// A map's entries in canonical (sorted-key) order: every dict the generator
-/// emits goes through this. The workspace builds `serde_json` with
-/// `preserve_order`, so a map's own iteration order is whatever the caller
-/// inserted (and the transform pipeline routes through a `std::collections::
-/// HashMap`, so it is not even that). Emitting in a canonical order instead
-/// makes the generated source a pure function of the data's *values*: a
-/// reorder-only `apply` produces byte-identical `lib.typ`, `Source::replace`
-/// sees an empty diff, comemo reuses the whole compile, and no content block's
-/// spans move.
+/// The workspace builds `serde_json` with `preserve_order`, so a map's own
+/// iteration order is the caller's. Sorting makes the generated source a pure
+/// function of the data's *values*, so a reorder-only `apply` produces
+/// byte-identical `lib.typ` and comemo reuses the whole compile.
 fn sorted(obj: &serde_json::Map<String, serde_json::Value>) -> Vec<(&String, &serde_json::Value)> {
     let mut entries: Vec<_> = obj.iter().collect();
     entries.sort_by(|a, b| a.0.cmp(b.0));
     entries
 }
 
-/// A Typst array literal from pre-rendered element expressions. The trailing
-/// comma keeps a single element an array rather than a parenthesized scalar;
-/// empty is `()`.
+/// The trailing comma keeps a single element an array rather than a
+/// parenthesized scalar.
 fn wrap_array(items: Vec<String>) -> String {
     if items.is_empty() {
         "()".to_string()
@@ -485,8 +477,6 @@ fn wrap_array(items: Vec<String>) -> String {
     }
 }
 
-/// A Typst dict literal from pre-rendered `"key": expr` entries; empty is
-/// `(:)`.
 fn wrap_dict(items: Vec<String>) -> String {
     if items.is_empty() {
         "(:)".to_string()
@@ -520,18 +510,15 @@ mod tests {
         SchemaMeta::from_schema_json(&schema)
     }
 
-    /// The canonical content JSON the seam carries for a richtext field.
     fn content(markdown: &str) -> serde_json::Value {
         let rt = quillmark_content::import::from_markdown(markdown).expect("import");
         quillmark_content::serial::to_canonical_value(&rt)
     }
 
-    /// A schema descriptor for a scalar richtext field.
     fn richtext_field() -> serde_json::Value {
         serde_json::json!({ "type": "object", "contentMediaType": CONTENT_MEDIA_TYPE })
     }
 
-    /// A schema descriptor for a scalar `richtext(inline)` field.
     fn inline_richtext_field() -> serde_json::Value {
         serde_json::json!({
             "type": "object",
@@ -540,9 +527,6 @@ mod tests {
         })
     }
 
-    /// An `inline` richtext field's block carries pure inline markup (no
-    /// `parbreak`), while a plain richtext field keeps its `\n\n` terminator,
-    /// so the inline value composes in `par(..)` without warning.
     #[test]
     fn inline_field_lowers_without_parbreak() {
         let meta = meta_from(serde_json::json!({ "properties": {
@@ -554,20 +538,17 @@ mod tests {
             "intro": content("An intro."),
         });
         let (lib, _) = generate_lib_typ(&data, &meta).unwrap();
-        // Inline: no parbreak inside the block.
         assert!(
             lib.contains("[\nA #strong[bold] subject\n]"),
             "inline block should carry no parbreak: {lib}"
         );
-        // Block: the paragraph still terminates with `\n\n`.
         assert!(
             lib.contains("[\nAn intro.\n\n\n]"),
             "block field keeps its terminator: {lib}"
         );
     }
 
-    /// Each element of an `array<richtext(inline)>` lowers inline (per the
-    /// `quillmark:inline` flag on `items`), so no element carries a parbreak.
+    /// The `quillmark:inline` flag sits on `items` for an array field.
     #[test]
     fn inline_array_lowers_each_element_without_parbreak() {
         let meta = meta_from(serde_json::json!({ "properties": {
@@ -579,17 +560,12 @@ mod tests {
         assert!(lib.contains("[\nSecond #strong[bold]\n]"), "{lib}");
     }
 
-    /// A richtext field's content lowers to a `#let _qm_cN = [ .. ]` block,
-    /// referenced from `data`, with the recorded window covering exactly its
-    /// bracketed range.
     #[test]
     fn content_field_becomes_a_referenced_block_with_a_bracket_window() {
         let meta = meta_from(serde_json::json!({ "properties": { "intro": richtext_field() } }));
         let data = serde_json::json!({ "intro": content("A **bold** intro.") });
         let (lib, windows) = generate_lib_typ(&data, &meta).unwrap();
 
-        // The emitter terminates the paragraph with `\n\n` (as the markdown
-        // lowering always did); the block wraps that in `[\n .. \n]`.
         let block = "[\nA #strong[bold] intro.\n\n\n]";
         assert!(lib.contains(&format!("#let _qm_c0 = {block}")));
         assert!(lib.contains("\"intro\": _qm_c0"));
@@ -604,10 +580,8 @@ mod tests {
         assert_eq!(&lib[windows[0].block.clone()], block);
     }
 
-    /// The segment-map offset check: every recorded `segment.generated` indexes the
-    /// emitted `lib.typ`, and every run's `generated` slices the escape of its
-    /// content substring, the source map is byte-accurate against the emitted
-    /// source, not just the emitter's own markup.
+    /// The source map must be byte-accurate against the emitted `lib.typ`, not
+    /// just against the emitter's own markup.
     #[test]
     fn segment_maps_index_the_generated_lib_typ() {
         let meta = meta_from(serde_json::json!({ "properties": { "intro": richtext_field() } }));
@@ -619,21 +593,18 @@ mod tests {
 
         assert_eq!(windows.len(), 1);
         let cm = &windows[0];
-        // Two paragraphs → two segments.
         assert_eq!(cm.segments.len(), 2);
         let chars: Vec<char> = rt.text.chars().collect();
         let mut saw_bold = false;
         for seg in &cm.segments {
             assert!(seg.generated.start <= seg.generated.end && seg.generated.end <= lib.len());
             for (content_range, generated, ctx) in &seg.runs {
-                // The run's generated bytes equal the escape of its content slice.
                 let src: String = chars[content_range.clone()].iter().collect();
                 let expect = match ctx {
                     EscapeCtx::Markup => escape_markup(&src),
                     EscapeCtx::StringLit => crate::emit::escape_string(&src),
                 };
                 assert_eq!(&lib[generated.clone()], expect, "run inverts to its content slice");
-                // The run sits inside its segment's window.
                 assert!(generated.start >= seg.generated.start && generated.end <= seg.generated.end);
                 if src == "bold" {
                     saw_bold = true;
@@ -643,8 +614,6 @@ mod tests {
         assert!(saw_bold, "the strong-wrapped run maps back to \"bold\"");
     }
 
-    /// An `array<richtext>` field lowers one block per non-blank element,
-    /// windowed as `<field>.<i>`; a blank content stays an empty-string literal.
     #[test]
     fn richtext_array_emits_a_block_per_nonblank_element() {
         let meta = meta_from(serde_json::json!({
@@ -665,10 +634,6 @@ mod tests {
         assert!(lib.contains("\"sections\": (_qm_c0, \"\", _qm_c1,)"));
     }
 
-    /// Every non-blank content field gets a `_qm-plaintext` entry keyed by its
-    /// schema address (the content text with marks dropped and island slots
-    /// stripped) so `plaintext(field)` returns the field's string. A
-    /// blank field is absent (it defaults to `""`).
     #[test]
     fn content_fields_populate_the_plaintext_table() {
         let meta = meta_from(serde_json::json!({ "properties": {
@@ -682,22 +647,15 @@ mod tests {
             "blank": content("   "),
         });
         let (lib, _) = generate_lib_typ(&data, &meta).unwrap();
-        // Scope to the `_qm-plaintext` table: `data` also carries these keys
-        // (bound to content blocks / the empty-string literal), so match the
-        // table, not the whole file.
+        // `data` carries the same keys, so match the table, not the whole file.
         let table = plaintext_table(&lib);
-        // Marks are dropped: the plaintext is the content text, not the markup.
         assert!(table.contains(r#""subject": "A bold subject""#), "{table}");
         assert!(table.contains(r#""refs.0": "first ref""#), "{table}");
         assert!(table.contains(r#""refs.1": "second ref""#), "{table}");
-        // The blank field carries no entry in the table.
         assert!(!table.contains("blank"), "{table}");
         assert!(lib.contains("#let plaintext(field) = _qm-plaintext.at(field"));
     }
 
-    /// An image/table island contributes no plaintext: `to_plaintext` strips the
-    /// island slot, so a field that is only an island yields no entry, the
-    /// table is empty (`(:)`).
     #[test]
     fn island_only_content_has_no_plaintext_entry() {
         let meta = meta_from(serde_json::json!({ "properties": { "fig": richtext_field() } }));
@@ -710,9 +668,6 @@ mod tests {
         );
     }
 
-    /// A card content field's plaintext is keyed by the full card address
-    /// (`$cards.<kind>.<n>.<field>`), so a plate composes it from the card's
-    /// `$path` prefix: `plaintext(card.at("$path") + "$body")`.
     #[test]
     fn card_content_plaintext_keyed_by_card_address() {
         let meta = meta_from(serde_json::json!({
@@ -729,11 +684,8 @@ mod tests {
         );
     }
 
-    /// The `_qm-plaintext = ( .. )` dict literal, sliced out of a generated
-    /// `lib.typ` so plaintext assertions don't collide with the `data` dict
-    /// (which reuses the same keys, bound to content blocks) or the following
-    /// `plaintext` helper's doc comment. The literal is single-line (`\n`s in
-    /// values are escaped), so it ends at the first newline.
+    /// The literal is single-line (`\n`s in values are escaped), so it ends at
+    /// the first newline.
     fn plaintext_table(lib: &str) -> &str {
         let start = lib
             .find("#let _qm-plaintext = ")
@@ -744,10 +696,6 @@ mod tests {
         &rest[..end]
     }
 
-    /// A present `date`/`datetime` field lowers to a value-object block whose
-    /// `v` is the `datetime(..)` (three-component for a `date`, six-component
-    /// wall-clock for a `datetime`, seconds zero-filled), referenced from the
-    /// data literal; a null field stays `none` inline, with no block.
     #[test]
     fn date_and_datetime_fields_become_value_object_blocks() {
         let meta = meta_from(serde_json::json!({
@@ -763,10 +711,7 @@ mod tests {
             "signed": null
         });
         let (lib, windows) = generate_lib_typ(&data, &meta).unwrap();
-        // Keys emit in sorted order (`at` < `issued` < `signed`), so `_qm_d0`
-        // is the six-component `datetime` field and `_qm_d1` the three-component
-        // date. Each captures its `datetime` once, with the region-bearing
-        // `text(v.display(..))` closure.
+        // Keys emit in sorted order, so `_qm_d0` is `at` and `_qm_d1` `issued`.
         assert!(
             lib.contains(
                 "#let _qm_d0 = { let v = datetime(year: 2026, month: 7, day: 3, \
@@ -782,21 +727,15 @@ mod tests {
             ),
             "{lib}"
         );
-        // The data literal references the blocks; the null field stays inline.
         assert!(lib.contains("\"at\": _qm_d0"), "{lib}");
         assert!(lib.contains("\"issued\": _qm_d1"), "{lib}");
         assert!(lib.contains("\"signed\": none"), "{lib}");
-        // Present dates surface a window keyed by their schema path; the null
-        // field contributes none.
         let paths: Vec<&str> = windows.iter().map(|w| w.path.as_str()).collect();
         assert!(paths.contains(&"issued"), "{paths:?}");
         assert!(paths.contains(&"at"), "{paths:?}");
         assert!(!paths.contains(&"signed"), "{paths:?}");
     }
 
-    /// Cards get a per-kind-ordinal `$path`, and content/date fields resolve
-    /// against the card kind's tables. A second card of the same kind gets
-    /// ordinal 1.
     #[test]
     fn cards_carry_path_and_per_kind_ordinals() {
         let meta = meta_from(serde_json::json!({
@@ -817,17 +756,13 @@ mod tests {
             ]
         });
         let (lib, windows) = generate_lib_typ(&data, &meta).unwrap();
-        // Each card instance gets its own per-instance windows: the body block
-        // and (for the first card's present date) a value-object window keyed
-        // by the card's full address, the per-instance identity that defeats the
-        // shared-loop-variable blindness.
+        // Each instance gets its own windows, keyed by the card's full address.
         let paths: Vec<&str> = windows.iter().map(|w| w.path.as_str()).collect();
         assert!(paths.contains(&"$cards.note.0.$body"), "{paths:?}");
         assert!(paths.contains(&"$cards.note.1.$body"), "{paths:?}");
         assert!(paths.contains(&"$cards.note.0.on"), "{paths:?}");
         assert!(lib.contains("\"$path\": \"$cards.note.0.\""));
         assert!(lib.contains("\"$path\": \"$cards.note.1.\""));
-        // The first card's date is a value-object block referenced from its cell.
         assert!(
             lib.contains("let v = datetime(year: 2026, month: 1, day: 2);"),
             "{lib}"
@@ -835,7 +770,6 @@ mod tests {
         assert!(lib.contains("\"on\": _qm_d0"), "{lib}");
     }
 
-    /// The address tables round-trip into the `_qm-meta` literal.
     #[test]
     fn meta_literal_carries_the_address_tables() {
         let meta = meta_from(serde_json::json!({
@@ -851,8 +785,7 @@ mod tests {
         assert!(lib.contains("\"array_fields\": (\"refs\",)"));
     }
 
-    /// Document data containing the literal slot text must not hijack the
-    /// splice: slots are located in the raw template only.
+    /// Slots are located in the raw template only.
     #[test]
     fn data_containing_placeholder_text_cannot_hijack_the_splice() {
         let meta = SchemaMeta::default();
@@ -868,10 +801,7 @@ mod tests {
         );
     }
 
-    /// The caller's field order must not reach the emitted source: the same
-    /// values in any key order (top-level, card, and nested dicts) produce
-    /// byte-identical `lib.typ` and identical windows, so a reorder-only
-    /// `apply` is a `Source::replace` no-op.
+    /// A reorder-only `apply` must be a `Source::replace` no-op.
     #[test]
     fn reordered_input_emits_byte_identical_source() {
         let meta = meta_from(serde_json::json!({
@@ -890,10 +820,6 @@ mod tests {
                 }
             }
         }));
-        // `content` is a pure function, so inlining it in both orderings yields
-        // the same content values: the point is the *key* order differs. The
-        // date value-object path is deterministic too: its `_qm_dN` IDs key on
-        // sorted emission order, so a reorder must not renumber them.
         let a = serde_json::json!({
             "body": content("The body."),
             "note": content("The note."),
@@ -922,8 +848,6 @@ mod tests {
         assert_eq!(lit(&serde_json::json!(null)), "none");
         assert_eq!(lit(&serde_json::json!(true)), "true");
         assert_eq!(lit(&serde_json::json!(42)), "42");
-        // i64::MIN cannot be a Typst literal (its magnitude overflows i64);
-        // it is emitted as an int-typed expression instead.
         assert_eq!(
             lit(&serde_json::json!(i64::MIN)),
             "(-9223372036854775807 - 1)"
