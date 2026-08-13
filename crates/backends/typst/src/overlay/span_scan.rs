@@ -766,10 +766,7 @@ mod tests {
         Quill::from_tree(FileTreeNode::Directory { files }).expect("load quill")
     }
 
-    /// The premise the whole mechanism stands on: content produced by a
-    /// generated markup **block** binding (`#let _qm_cN = [ .. ]`) resolves
-    /// into that block's recorded byte window in the helper `lib.typ` (a
-    /// *package* source, not a plate file) through the production classifier.
+    /// The premise the whole mechanism stands on.
     #[test]
     fn block_output_spans_resolve_into_the_helper_file() {
         const YAML: &str = r#"
@@ -795,7 +792,6 @@ main:
         let plate = crate::read_plate(&q).expect("plate");
         let schema = quillmark_core::quill::build_transform_schema(q.config());
         let meta = crate::SchemaMeta::from_schema_json(schema.as_json());
-        // The seam carries the content, not markdown.
         let rt = quillmark_content::import::from_markdown("A probe paragraph, PROBETOKEN.")
             .expect("import");
         let data =
@@ -826,14 +822,9 @@ main:
         );
     }
 
-    /// End-to-end: an `underline`/`strike` mark must not truncate its
-    /// line's `$body` region. Typst lowers all four wrapping marks the same way
-    /// (`#strong[`/`#emph[`/`#underline[`/`#strike[`), but `underline`/`strike`
-    /// additionally draw a decoration **`Shape` with a detached span** between
-    /// the decorated glyphs and the trailing plain run. That shape must not
-    /// classify `Foreign` and suspend the run: the region would stop at the
-    /// mark's start and lose the whole trailing run. Every mark's region spans
-    /// essentially the full line, like the undecorated marks.
+    /// `underline`/`strike` draw a decoration `Shape` with a detached span
+    /// between the decorated glyphs and the trailing plain run; classifying it
+    /// `Foreign` would truncate the region at the mark's start.
     #[test]
     fn decoration_marks_do_not_truncate_the_region() {
         use quillmark_content::model::{Line, LineKind, Mark, MarkKind, Content};
@@ -856,8 +847,6 @@ main:
 #set page(width: 400pt, height: 400pt, margin: 40pt)
 #data.body
 "#;
-        // The mark [6,11) over "uline" leaves a long trailing plain run: the
-        // part a suspended run would swallow.
         const TEXT: &str = "Start uline and then a long trailing plain run of text.";
         let region_width = |kind: MarkKind| -> f32 {
             let rt = Content::new(TEXT.to_string(), vec![Line::new(LineKind::Para)])
@@ -885,8 +874,7 @@ main:
                 .fold(0.0f32, f32::max)
         };
 
-        // `strong` is a stand-in for "no decoration shape": its region is the
-        // full paragraph width. Every mark should land within a hair of it.
+        // `strong` stands in for "no decoration shape".
         let baseline = region_width(MarkKind::Strong);
         assert!(
             baseline > 150.0,
@@ -930,23 +918,16 @@ main:
             ("subject", "data.at(\"subject\")"),
             ("refs", "data.refs.at(0)"),
             ("other", "data.other"),
-            // A wrapping call with a single reference owns its whole
-            // expression: ink stamped with the outer call's span attributes
-            // to the field.
             ("subject", "upper(data.subject)"),
         ] {
             assert!(spans.contains(&expected), "missing {expected:?}: {spans:?}");
         }
-        // An expression mixing two fields has no single owner: no enclosing
-        // window for either.
         assert!(
             !spans
                 .iter()
                 .any(|(_, t)| t.contains("data.subject + data.other")),
             "multi-reference expressions are not attributed: {spans:?}"
         );
-        // Chain windows precede enclosing-expression windows, so ink at the
-        // reference itself is never claimed by a wider window.
         let chain_pos = spans
             .iter()
             .position(|s| *s == ("subject", "data.subject"))
@@ -958,16 +939,6 @@ main:
         assert!(chain_pos < wide_pos, "chains sort before wides: {spans:?}");
     }
 
-    // -----------------------------------------------------------------
-    // Two-tier `(window, Option<segment>)` classification and the run-machine
-    // transparency arm. The tests below drive the production
-    // `Classifier::classify_seg` and `run_scan_machine` directly, pinning a
-    // transparent same-window arm that still suspends across fields against
-    // the shipped code, not a re-derived copy.
-    // -----------------------------------------------------------------
-
-    /// Every drawn item's span in a frame, geometry dropped: classification
-    /// is all this probe needs.
     fn collect_spans(frame: &Frame, out: &mut Vec<Span>) {
         for (_, item) in frame.items() {
             match item {
@@ -980,21 +951,8 @@ main:
         }
     }
 
-    /// A real two-item list lowers to two segments (`segment_shape` in
-    /// `emit.rs` pins this). Proves the two-tier construction classifies real
-    /// compiled output correctly on the half that *is* exercised: each
-    /// item's own ink resolves to its own segment.
-    ///
-    /// The other half (genuine `(window, None)` ink from container-open
-    /// syntax) does **not** materialize here: Typst's synthesized list
-    /// marker carries a **detached** span (`DiagSpanKind::Detached`, printed
-    /// as `Span(1)` below), not one resolving into the helper file, so it
-    /// correctly lands in the plain "no window at all" bucket alongside
-    /// package chrome. A block-quote wrapper (`#quote(block: true)[...]`)
-    /// draws no extra ink at all by default. The `(window, None)` *mechanism*
-    /// is real and needed regardless: proved directly, independent of
-    /// whichever container syntax exercises it, by
-    /// [`classify_two_tier_resolves_field_only_ink_between_segments`].
+    /// Typst's synthesized list marker carries a detached span, so it lands in
+    /// the "no window" bucket rather than producing `(window, None)` ink.
     #[test]
     fn two_tier_classification_resolves_each_segment_independently() {
         const YAML: &str = r#"
@@ -1064,153 +1022,10 @@ main:
             seg_hits[0] > 0 && seg_hits[1] > 0,
             "each list item's own ink resolves to its own segment: {seg_hits:?}"
         );
-        assert_eq!(
-            field_only_hits, 0,
-            "list markers do not produce (window, None) ink; see the doc comment"
-        );
+        assert_eq!(field_only_hits, 0, "list markers produce no (window, None) ink");
         assert!(
             untracked_hits > 0,
             "the two markers are hit but resolve to no window (detached span)"
-        );
-    }
-
-    /// The mechanism itself, independent of whether any *current* `emit.rs`
-    /// container produces it: a real, resolvable span strictly between two
-    /// recorded segments, but still inside the block window, must classify
-    /// `(window, None)`.
-    ///
-    /// A real compile of "before **BOLD** after" gives three distinct,
-    /// genuinely resolvable spans in one paragraph (a bold run is its own
-    /// content child, so it and its plain-text neighbors carry different
-    /// spans: unlike the undifferentiated multi-word prose in the sibling
-    /// test above, which Typst folds into one span per paragraph). This test
-    /// takes those three real spans and re-windows them by hand (segment 0
-    /// = "before", segment 1 = "after", the bold run deliberately excluded)
-    /// so the excluded span must classify `(window, None)`: real Typst spans,
-    /// a synthetic window, proving `classify_two_tier`'s containment logic
-    /// without depending on which container syntax does or doesn't produce
-    /// such ink today.
-    #[test]
-    fn classify_two_tier_resolves_field_only_ink_between_segments() {
-        const YAML: &str = r#"
-quill:
-  name: two_tier_mechanism_probe
-  version: 0.1.0
-  backend: typst
-  description: PR-F Unknown-1 classify_two_tier mechanism probe
-typst:
-  plate_file: plate.typ
-main:
-  fields:
-    body:
-      type: richtext
-      description: one paragraph, one bold run
-"#;
-        const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data
-#set page(width: 400pt, height: 400pt, margin: 40pt)
-#data.body
-"#;
-        let q = quill(YAML, PLATE);
-        let plate = crate::read_plate(&q).expect("plate");
-        let schema = quillmark_core::quill::build_transform_schema(q.config());
-        let meta = crate::SchemaMeta::from_schema_json(schema.as_json());
-        let rt =
-            quillmark_content::import::from_markdown("before **BOLD** after").expect("import");
-        let data =
-            serde_json::json!({ "body": quillmark_content::serial::to_canonical_value(&rt) });
-        let transformed = crate::transformed_data(&meta, &data).expect("transform");
-        let mut world = QuillWorld::new(&q, &plate).expect("world");
-        let windows = world
-            .inject_helper_package(transformed.as_ref(), &meta)
-            .expect("inject");
-        let (doc, _) = compile_document(&world).expect("compile");
-        let helper = world
-            .source(QuillWorld::helper_fid("lib.typ"))
-            .expect("helper source");
-        let real_win = windows
-            .iter()
-            .find(|w| w.path == "body")
-            .expect("body window");
-        assert_eq!(real_win.segments.len(), 1, "one paragraph, one segment");
-
-        let cls = Classifier::new(&world, &helper, &windows);
-        let mut spans = Vec::new();
-        for p in doc.pages().iter() {
-            collect_spans(&p.frame, &mut spans);
-        }
-        // Group by resolved (file, range) in first-seen (document) order:
-        // one entry per distinct real Typst node inside the field's window.
-        let mut nodes: Vec<(Span, Range<usize>)> = Vec::new();
-        for span in spans {
-            if let Some((file, range)) = cls.resolve_range(span) {
-                if file == real_win.file
-                    && real_win.range.start <= range.start
-                    && range.end <= real_win.range.end
-                    && !nodes.iter().any(|(_, r)| *r == range)
-                {
-                    nodes.push((span, range));
-                }
-            }
-        }
-        nodes.sort_by_key(|(_, r)| r.start);
-        // Word-level granularity: plain text and the space beside it are
-        // separate nodes too, so "before" contributes more than one node.
-        // Split on the node whose text is exactly "BOLD".
-        let text = helper.text();
-        let bold_idx = nodes
-            .iter()
-            .position(|(_, r)| &text[r.clone()] == "BOLD")
-            .expect("a node holding exactly \"BOLD\": {nodes:?}");
-        assert!(
-            bold_idx > 0 && bold_idx + 1 < nodes.len(),
-            "ink on both sides of BOLD: {nodes:?}"
-        );
-        let before = &nodes[..bold_idx];
-        let (bold_span, _) = nodes[bold_idx].clone();
-        let after = &nodes[bold_idx + 1..];
-
-        // Re-window by hand: segment 0 spans the "before" nodes, segment 1
-        // spans the "after" nodes, the bold run deliberately excluded from
-        // both, the boundaries a real two-tier classifier would compute
-        // from `emit.rs`'s recorded segment range, reconstructed here from
-        // the real node ranges either side of it.
-        let synthetic = vec![FieldWindow {
-            path: "body".to_string(),
-            file: real_win.file,
-            range: real_win.range.clone(),
-            segments: vec![
-                SegmentMap {
-                    content: 0..0,
-                    generated: before.first().unwrap().1.start..before.last().unwrap().1.end,
-                    runs: vec![],
-                },
-                SegmentMap {
-                    content: 0..0,
-                    generated: after.first().unwrap().1.start..after.last().unwrap().1.end,
-                    runs: vec![],
-                },
-            ],
-        }];
-        let mut synthetic_cls = Classifier::new(&world, &helper, &synthetic);
-        for (span, range) in before {
-            assert_eq!(
-                synthetic_cls.classify_seg(*span),
-                Some((0, Some(0))),
-                "a \"before\"-side node ({range:?}) -> segment 0"
-            );
-        }
-        for (span, range) in after {
-            assert_eq!(
-                synthetic_cls.classify_seg(*span),
-                Some((0, Some(1))),
-                "an \"after\"-side node ({range:?}) -> segment 1"
-            );
-        }
-        assert_eq!(
-            synthetic_cls.classify_seg(bold_span),
-            Some((0, None)),
-            "the excluded bold run sits inside the block window but outside every segment"
         );
     }
 
@@ -1255,8 +1070,8 @@ main:
         }
     }
 
-    /// Each key's accrued pages, in order, dropping never-accrued keys: the
-    /// production [`run_scan_machine`] read as page sequences.
+    /// [`run_scan_machine`] read as per-key page sequences, never-accrued keys
+    /// dropped.
     fn key_pages(
         keys: &[(usize, Option<usize>)],
         hits: &[Hit],
@@ -1269,11 +1084,8 @@ main:
             .collect()
     }
 
-    /// Shared crux for both ink-transparency tests below: `interrupt` between
-    /// two boxable hits of one segment keeps the run (both accrue into one
-    /// unioned box), while identically-placed foreign ink ends it, leaving
-    /// only the first hit's extent. Distinct rects make the difference
-    /// visible (same-page union vs. suppressed second hit).
+    /// `interrupt` between two boxable hits of one segment keeps the run, while
+    /// identically-placed foreign ink ends it.
     fn assert_transparent_but_foreign_ink_is_not(interrupt: Hit) {
         let keys = vec![(0usize, Some(0usize))];
         let (a, b) = (aabb(0.0, 0.0, 1.0, 1.0), aabb(10.0, 10.0, 11.0, 11.0));
@@ -1301,7 +1113,7 @@ main:
         let (_, bx) = boxes[0][0];
         assert!(
             bx.max_x < 11.0,
-            "only the first hit accrued: same-page foreign ink ends the run, exactly today's rule"
+            "only the first hit accrued: same-page foreign ink ends the run"
         );
     }
 
@@ -1310,28 +1122,18 @@ main:
         assert_transparent_but_foreign_ink_is_not(transparent_hit(0, 0));
     }
 
-    /// Detached decoration ink (a `#underline`/`#strike` line) drawn
-    /// between two hits of one segment must keep the run, where identically
-    /// placed *foreign* ink would end it. The underline case is exactly this
-    /// shape: `Start `, then the decorated run's glyphs, then the decoration
-    /// `Shape` (detached span), then the trailing plain run, all one segment.
-    /// Foreign ink here would truncate the region at the decoration,
-    /// orphaning the trailing run.
     #[test]
     fn anonymous_ink_is_transparent_but_foreign_ink_is_not() {
-        assert_transparent_but_foreign_ink_is_not(anonymous_hit(0)); // the underline/strike decoration Shape
+        assert_transparent_but_foreign_ink_is_not(anonymous_hit(0));
     }
 
-    /// Two adjacent segments of one field are tracked independently, exactly as
-    /// two distinct top-level fields are: the second item's transparent bullet
-    /// ink between them is a no-op, not a merge.
     #[test]
     fn adjacent_segments_of_one_field_run_independently() {
         let keys = vec![(0, Some(0)), (0, Some(1))];
         let r = aabb(0.0, 0.0, 1.0, 1.0);
         let hits = vec![
             boxable_hit(0, (0, Some(0)), r),
-            transparent_hit(0, 0), // e.g. the second item's bullet marker
+            transparent_hit(0, 0),
             boxable_hit(0, (0, Some(1)), r),
         ];
         let pages = key_pages(&keys, &hits);
@@ -1339,11 +1141,7 @@ main:
         assert_eq!(pages[&(0, Some(1))], vec![0]);
     }
 
-    /// The scoping the plan text omits: transparency is relative to a
-    /// *same-window* current run only. Field 1's segment mid-run, interrupted
-    /// by *field 0's* own field-only ink, must still suspend: else an
-    /// interleaved second placement of field 1 would merge across the gap into
-    /// one lying box.
+    /// Transparency is relative to a *same-window* current run only.
     #[test]
     fn field_only_ink_still_suspends_a_different_fields_current_run() {
         let keys = vec![(1, Some(0))];
@@ -1371,355 +1169,6 @@ main:
             vec![0],
             "no same-page resume: field-only ink is not a wildcard exception \
              to the foreign-ink suspension rule"
-        );
-    }
-
-    // -----------------------------------------------------------------
-    // Does `glyph.span.1` give usable per-character intra-node offsets, and
-    // where does it degrade (raw string literals, list/enum numbering,
-    // shaping clusters)? This test pins the empirical findings so a future Typst
-    // upgrade cannot silently change them unnoticed.
-    // -----------------------------------------------------------------
-
-    /// One glyph's classification-relevant facts: the resolved node range
-    /// (`glyph.span.0`, unpacked), the intra-node offset (`glyph.span.1`),
-    /// and the glyph's own text slice (via `glyph.range()` into the
-    /// `TextItem`'s text), enough to check whether `node.start + offset`
-    /// lands on the right generated byte, without needing the geometry
-    /// `collect_page_hits` computes.
-    struct GlyphProbe {
-        node: Range<usize>,
-        offset: u16,
-        text: String,
-    }
-
-    fn collect_glyph_probes(
-        frame: &Frame,
-        cls: &Classifier,
-        win: &FieldWindow,
-        out: &mut Vec<GlyphProbe>,
-    ) {
-        for (_, item) in frame.items() {
-            match item {
-                FrameItem::Group(group) => collect_glyph_probes(&group.frame, cls, win, out),
-                FrameItem::Text(text) => {
-                    for g in &text.glyphs {
-                        if let Some((file, range)) = cls.resolve_range(g.span.0) {
-                            if file == win.file
-                                && win.range.start <= range.start
-                                && range.end <= win.range.end
-                            {
-                                out.push(GlyphProbe {
-                                    node: range,
-                                    offset: g.span.1,
-                                    text: text.text[g.range()].to_string(),
-                                });
-                            }
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-
-    /// A formatted paragraph (plain text + one `#strong[...]` run) plus a
-    /// multi-line code fence, in one field: the two constructs the plan's
-    /// risk 2 names. Findings pinned here (see the module-level comment
-    /// above for the full write-up):
-    ///
-    /// - **Plain / bold markup text**: `glyph.span.1` is exact, byte-
-    ///   granular, per character. Every resolved node nests inside exactly
-    ///   one recorded `run`, and `run.generated.start + offset` (which for markup
-    ///   text equals `node.start + offset`, since Typst's own node range is
-    ///   already tight around that specific run) lands on the correct
-    ///   generated byte, for every glyph tested.
-    /// - **A multi-line `#raw(block: true, "...")` string literal**: every
-    ///   line's glyphs resolve to the **identical** node range (the whole
-    ///   call expression, not the string literal or any one line), and
-    ///   `span.1` **resets to 0 at each physical line**. Two consequences,
-    ///   pinned below: (a) `span.0` alone cannot tell which of the fence's N
-    ///   lines a hit belongs to, the same `(node, offset)` pair is
-    ///   ambiguous between lines; (b) the resolved node range does not fit
-    ///   inside *any* recorded run's `generated` range (it is wider than every one
-    ///   of them), so per-run inversion structurally fails, not just loses
-    ///   precision. It *does* still fit inside the segment's `generated` range, so
-    ///   segment-level classification (which segment, i.e. which field's
-    ///   code fence) remains correct; only the finer run/line/char answer is
-    ///   unavailable.
-    #[test]
-    fn glyph_span_1_precision_findings() {
-        const YAML: &str = r#"
-quill:
-  name: span_precision_probe
-  version: 0.1.0
-  backend: typst
-  description: PR-F Unknown-2 glyph.span.1 precision probe
-typst:
-  plate_file: plate.typ
-main:
-  fields:
-    body:
-      type: richtext
-      description: a formatted paragraph plus a multi-line code fence
-"#;
-        const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data
-#set page(width: 400pt, height: 400pt, margin: 40pt)
-#data.body
-"#;
-        // "difficult fickle" carries two "fi"/"ff"-adjacent clusters, probing
-        // (inconclusively) for shaping-ligature collapse under Typst's default
-        // font.
-        let md = "This is **bold** difficult fickle text.\n\n```\nfn add(a, b) {\n    return a + b;\n}\n```";
-        let q = quill(YAML, PLATE);
-        let plate = crate::read_plate(&q).expect("plate");
-        let schema = quillmark_core::quill::build_transform_schema(q.config());
-        let meta = crate::SchemaMeta::from_schema_json(schema.as_json());
-        let rt = quillmark_content::import::from_markdown(md).expect("import");
-        let data =
-            serde_json::json!({ "body": quillmark_content::serial::to_canonical_value(&rt) });
-        let transformed = crate::transformed_data(&meta, &data).expect("transform");
-        let mut world = QuillWorld::new(&q, &plate).expect("world");
-        let windows = world
-            .inject_helper_package(transformed.as_ref(), &meta)
-            .expect("inject");
-        let (doc, _) = compile_document(&world).expect("compile");
-        let helper = world
-            .source(QuillWorld::helper_fid("lib.typ"))
-            .expect("helper source");
-        let win = windows
-            .iter()
-            .find(|w| w.path == "body")
-            .expect("body window");
-        assert_eq!(
-            win.segments.len(),
-            2,
-            "one paragraph segment, one code segment"
-        );
-        let (para_seg, code_seg) = (&win.segments[0], &win.segments[1]);
-        assert!(
-            code_seg.runs.len() >= 2,
-            "the fence's multiple lines each recorded their own run: {:?}",
-            code_seg.runs
-        );
-
-        let cls = Classifier::new(&world, &helper, &windows);
-        let mut probes = Vec::new();
-        for p in doc.pages().iter() {
-            collect_glyph_probes(&p.frame, &cls, win, &mut probes);
-        }
-        assert!(!probes.is_empty(), "the field must place some glyphs");
-
-        // ---- plain/bold markup text: node.start + offset is exact ----
-        let mut checked_para_glyph = false;
-        for probe in &probes {
-            if probe.node.start >= para_seg.generated.start && probe.node.end <= para_seg.generated.end {
-                // The node nests inside exactly one recorded run, and that
-                // run's own `generated.start` is what `offset` is relative to.
-                let owning_run = para_seg
-                    .runs
-                    .iter()
-                    .find(|(_, generated, _)| generated.start <= probe.node.start && probe.node.end <= generated.end)
-                    .unwrap_or_else(|| {
-                        panic!("markup node {:?} must nest inside some run", probe.node)
-                    });
-                let absolute = probe.node.start + probe.offset as usize;
-                assert!(
-                    absolute >= owning_run.1.start && absolute < owning_run.1.end + 1,
-                    "node.start + offset ({absolute}) must land inside the owning run {:?} for {:?}",
-                    owning_run.1,
-                    probe.text,
-                );
-                // Byte-exact: the character at `absolute` in the generated
-                // source is exactly this glyph's own text.
-                assert_eq!(
-                    &helper.text()[absolute..absolute + probe.text.len()],
-                    probe.text,
-                    "node.start + offset must point at this glyph's own bytes"
-                );
-                checked_para_glyph = true;
-            }
-        }
-        assert!(
-            checked_para_glyph,
-            "at least one paragraph glyph must be checked"
-        );
-
-        // ---- multi-line #raw string literal: the per-line collapse ----
-        let code_probes: Vec<&GlyphProbe> = probes
-            .iter()
-            .filter(|p| p.node.start >= code_seg.generated.start && p.node.end <= code_seg.generated.end)
-            .collect();
-        assert!(!code_probes.is_empty(), "the code fence must place glyphs");
-
-        // (a) every line shares the identical resolved node: span.0 alone
-        // cannot disambiguate which line a hit belongs to.
-        let distinct_nodes: std::collections::HashSet<Range<usize>> =
-            code_probes.iter().map(|p| p.node.clone()).collect();
-        assert_eq!(
-            distinct_nodes.len(),
-            1,
-            "every raw-block glyph shares one node range regardless of physical line: {distinct_nodes:?}"
-        );
-        let raw_node = distinct_nodes.into_iter().next().unwrap();
-
-        // (b) offset resets to 0 more than once: once per physical line,
-        // not once for the whole multi-line literal.
-        let resets = code_probes
-            .windows(2)
-            .filter(|w| w[1].offset == 0 && w[0].offset != 0)
-            .count();
-        assert!(
-            resets >= 1,
-            "offset must reset at a line boundary at least once across 3 lines: {:?}",
-            code_probes.iter().map(|p| p.offset).collect::<Vec<_>>()
-        );
-
-        // (c) the shared node does not fit inside any single run's `generated`
-        // range (it is wider than every one of them): per-run inversion by
-        // containment structurally fails here, though the node still fits
-        // the *segment's* generated range (segment-level classification holds).
-        assert!(
-            raw_node.start >= code_seg.generated.start && raw_node.end <= code_seg.generated.end,
-            "the raw call's node still nests inside the code segment"
-        );
-        assert!(
-            !code_seg
-                .runs
-                .iter()
-                .any(|(_, generated, _)| generated.start <= raw_node.start && raw_node.end <= generated.end),
-            "no single run should contain the whole-call node: it is coarser than every run"
-        );
-    }
-
-    // -----------------------------------------------------------------
-    // Verification spikes, the value-object date design's load-bearing
-    // assumptions, pinned against Typst 0.15 (the driving-consumer gap: USAF
-    // memo/indorsement dates place through `.display()`, and indorsements are
-    // cards whose loop-variable ink `scalar_windows` deliberately does not
-    // chase). The design emits each present date as a dict value-object whose
-    // `display:` key holds a generated closure `(..args) => text(datetime(..)
-    // .display(..args))`, so the glyphs are born inside a recorded helper
-    // window. The spikes here drive real span/classification machinery;
-    // assertions that turn only on Typst's own error wording live in
-    // PLATE_DATA.md instead, where a Typst bump re-checks them.
-    // -----------------------------------------------------------------
-
-    /// Spike 2: **`text()` over a programmatic string
-    /// stamps its glyphs with the constructing node's span, which classifies
-    /// into a recorded segment-less window.**
-    ///
-    /// This is the mechanism the whole design turns on: the `display:` closure
-    /// returns `text(datetime(..).display(..))` (*content*, not a string) so
-    /// its glyphs are born at the `text(..)` node's lexical site inside the
-    /// generated helper, not at whatever reference laundered the value. The
-    /// worry is that `text(str)` output might carry a **detached** span
-    /// (`Anonymous`, like a decoration line or list marker), attributable to no
-    /// field. It does not: every glyph carries one uniform, resolvable span
-    /// (the `text(..)` call node) and a segment-less `FieldWindow` over that
-    /// node surfaces one whole-placement region, exactly like a scalar site.
-    ///
-    /// Driven on the plate here (the design's site is the generated helper, but
-    /// containment classification is file-agnostic: a plate window and a
-    /// helper window resolve identically); the end-to-end shipping-API view is
-    /// `tests/content_regions.rs`.
-    #[test]
-    fn spike_990_text_over_programmatic_string_classifies_into_recorded_window() {
-        const PLATE: &str = "#set page(width: 400pt, height: 400pt, margin: 20pt)\n\
-            #text(datetime(year: 2026, month: 1, day: 2).display(\"[year]\"))\n";
-        let q = quill(
-            "quill:\n  name: spike_990_text\n  version: 0.1.0\n  backend: typst\n  \
-             description: text() span attribution spike\ntypst:\n  plate_file: plate.typ\n",
-            PLATE,
-        );
-        let plate = crate::read_plate(&q).expect("plate");
-        let world = QuillWorld::new(&q, &plate).expect("world");
-        let (doc, _) = compile_document(&world).expect("compile");
-        let main_id = world.main();
-        let src = world.source(main_id).expect("main source");
-        let text = src.text().to_string();
-
-        // The `text(..)` call's byte window in the plate: the segment-less
-        // window a `date_object` sibling of `content_block` would record.
-        let start = text.find("text(").expect("the text() call");
-        let end = text.rfind(')').expect("its close paren") + 1;
-        let window_range = start..end;
-
-        // Part 1: the glyphs' spans are non-detached, uniform, and resolve into
-        // that window. An empty helper stands in: no glyph resolves there.
-        let helper = Source::new(QuillWorld::helper_fid("lib.typ"), String::new());
-        let cls = Classifier::new(&world, &helper, &[]);
-        let mut spans = Vec::new();
-        for p in doc.pages() {
-            collect_spans(&p.frame, &mut spans);
-        }
-        assert!(!spans.is_empty(), "the date renders at least one glyph");
-        for span in &spans {
-            assert!(!span.is_detached(), "date glyphs are not detached ink");
-            let (file, range) = cls
-                .resolve_range(*span)
-                .expect("a date glyph span resolves to a source range");
-            assert_eq!(file, main_id, "the span resolves into the plate, not elsewhere");
-            assert!(
-                window_range.start <= range.start && range.end <= window_range.end,
-                "the constructing `text(..)` node's span nests in the recorded window: \
-                 {range:?} ⊄ {window_range:?}"
-            );
-        }
-
-        // Part 2: a segment-less window over that node yields one
-        // whole-placement region, the same shape a scalar site produces.
-        let windows = vec![FieldWindow {
-            path: "issued".to_string(),
-            file: main_id,
-            range: window_range,
-            segments: vec![],
-        }];
-        let regions = scan_content_regions(&doc, &world, &helper, &windows);
-        let issued: Vec<_> = regions.iter().filter(|r| r.field == "issued").collect();
-        assert_eq!(
-            issued.len(),
-            1,
-            "the recorded window surfaces exactly one region: {regions:?}"
-        );
-        assert!(
-            issued[0].rect[2] - issued[0].rect[0] > 0.0
-                && issued[0].rect[3] - issued[0].rect[1] > 0.0,
-            "the date region has positive area: {:?}",
-            issued[0].rect
-        );
-    }
-
-    /// Spike 4: **page hashes are unmoved when ink is identical.** Today a
-    /// date's `.display("[year]")` interpolates a `str` into markup; the design
-    /// wraps the same glyphs in `text(..)` (content). The page
-    /// fingerprint is pixels-not-spans, so the two must hash identically:
-    /// the emission change moves ink *provenance*, never ink. Asserted, not
-    /// assumed.
-    #[test]
-    fn spike_990_text_wrapper_preserves_page_hash() {
-        const YAML: &str = "quill:\n  name: spike_990_hash\n  version: 0.1.0\n  \
-            backend: typst\n  description: page-hash invariance spike\ntypst:\n  \
-            plate_file: plate.typ\n";
-        let page_hash = |plate: &str| -> Vec<u128> {
-            let q = quill(YAML, plate);
-            let plate = crate::read_plate(&q).expect("plate");
-            let world = QuillWorld::new(&q, &plate).expect("world");
-            let (doc, _) = compile_document(&world).expect("compile");
-            crate::page_hashes(&doc)
-        };
-        let bare = page_hash(
-            "#set page(width: 400pt, height: 400pt, margin: 20pt)\n\
-             #(datetime(year: 2026, month: 1, day: 2).display(\"[year]\"))\n",
-        );
-        let wrapped = page_hash(
-            "#set page(width: 400pt, height: 400pt, margin: 20pt)\n\
-             #text(datetime(year: 2026, month: 1, day: 2).display(\"[year]\"))\n",
-        );
-        assert_eq!(
-            bare, wrapped,
-            "wrapping identical glyphs in text() must not move the page fingerprint"
         );
     }
 }
