@@ -10,9 +10,8 @@ use typst::{Library, World};
 use crate::helper;
 use quillmark_core::{Diagnostic, Quill, Severity};
 
-/// A file Typst's [`VirtualPath`] would not accept, skipped rather than loaded.
-/// One shape for both populations: an asset and a package file fail this the
-/// same way, and a consumer routing on the code should not have to know which.
+/// One shape for assets and package files alike, so a consumer routing on the
+/// code need not know which.
 fn skipped_path(path: &Path, err: impl std::fmt::Display) -> Diagnostic {
     Diagnostic::new(
         Severity::Warning,
@@ -25,8 +24,6 @@ fn skipped_path(path: &Path, err: impl std::fmt::Display) -> Diagnostic {
     .with_hint("Rename it to a plain relative path.".to_string())
 }
 
-/// Build a [`FileId`] for a virtual path, optionally scoped to a package.
-///
 /// Typst 0.15 routes file ids through [`RootedPath`]: project-local files use
 /// [`VirtualRoot::Project`], package files use [`VirtualRoot::Package`].
 fn file_id(spec: Option<PackageSpec>, vpath: VirtualPath) -> FileId {
@@ -38,32 +35,22 @@ static FALLBACK_REGULAR: &[u8] = include_bytes!("fonts/Figtree-Regular.ttf");
 static FALLBACK_BOLD: &[u8] = include_bytes!("fonts/Figtree-Bold.ttf");
 static FALLBACK_ITALIC: &[u8] = include_bytes!("fonts/Figtree-Italic.ttf");
 
-/// Typst `World` implementation for quill-based compilation.
-///
-/// Provides package loading, virtual-path handling, and asset management for
-/// quill templates. Packages are loaded from `{quill}/packages/` and assets
-/// from `{quill}/assets/`.
+/// Typst `World` implementation for quill-based compilation. Packages load from
+/// `{quill}/packages/` and assets from `{quill}/assets/`.
 pub struct QuillWorld {
     library: LazyHash<Library>,
     book: LazyHash<FontBook>,
-    fonts: Vec<Font>, // For fonts loaded from assets
+    fonts: Vec<Font>,
     source: Source,
     sources: HashMap<FileId, Source>,
     binaries: HashMap<FileId, Bytes>,
-    /// Non-fatal defects from loading the quill's assets and packages: a file
-    /// the loader had to skip, a manifest it could not read.
-    ///
-    /// Without them each defect degrades the compile unattributably: a skipped
-    /// package surfaces as an unresolved `#import` naming the plate, three files
-    /// from the cause.
-    ///
-    /// Static for the session's lifetime, since the world loads its files once.
-    /// [`crate::TypstSession`] carries them alongside every compile's own.
+    /// Non-fatal defects from loading the quill's assets and packages. Without
+    /// them a skipped package degrades the compile unattributably, surfacing as
+    /// an unresolved `#import` naming the plate. Static for the session.
     load_warnings: Vec<Diagnostic>,
 }
 
 impl QuillWorld {
-    /// Create a new QuillWorld from a quill template and Typst content
     pub fn new(
         source: &Quill,
         main: &str,
@@ -72,11 +59,9 @@ impl QuillWorld {
         let mut binaries = HashMap::new();
         let mut load_warnings = Vec::new();
 
-        // Create a new empty FontBook to ensure proper ordering
         let mut book = FontBook::new();
         let mut fonts = Vec::new();
 
-        // Load fonts from quill assets (eagerly loaded).
         let font_data_list = Self::load_fonts_from_quill(source)?;
         for font_data in font_data_list {
             let font_bytes = Bytes::new(font_data);
@@ -97,17 +82,13 @@ impl QuillWorld {
             }
         }
 
-        // Load assets from quill's in-memory file system
         Self::load_assets_from_quill(source, &mut binaries, &mut load_warnings)?;
 
-        // Load packages from quill's in-memory file system. Quillmark does
-        // not download external packages: every package a quill imports
-        // must be vendored under `packages/` in the quill tree.
+        // Quillmark never downloads packages: every package a quill imports is
+        // vendored under `packages/` in the quill tree.
         Self::load_packages_from_quill(source, &mut sources, &mut binaries, &mut load_warnings)?;
 
-        // The helper package's typst.toml is constant for the session's
-        // lifetime, so insert it once here. Re-injecting the helper `lib.typ`
-        // per apply leaves it untouched.
+        // Constant for the session: re-injecting `lib.typ` leaves it untouched.
         binaries.insert(
             Self::helper_fid("typst.toml"),
             Bytes::new(helper::generate_typst_toml().into_bytes()),
