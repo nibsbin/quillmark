@@ -1004,15 +1004,11 @@ mod tests {
         has_text.text = "x".to_string();
         assert!(!has_text.is_blank());
 
-        // An island slot is not whitespace, so an island-bearing content is
-        // never blank even with no other text.
         let mut island_only = Content::empty();
         island_only.text = ISLAND_SLOT.to_string();
         assert!(!island_only.is_blank());
     }
 
-    /// A single-line content over `text` tagged `kind`: the shape a `SetKind`
-    /// or a splice can leave behind.
     fn tagged(text: &str, kind: LineKind) -> Content {
         Content {
             text: text.to_string(),
@@ -1053,8 +1049,8 @@ mod tests {
                 mismatch: LineKindMismatch::RuleNotEmpty
             })
         );
-        // `Para`/`Heading` carry slots (an inline image is a slot in prose)
-        // so only a fence, whose text is emitted verbatim, refuses one.
+        // `Para`/`Heading` carry slots, so only a fence, whose text is emitted
+        // verbatim, refuses one.
         let mut code = tagged(&format!("a{ISLAND_SLOT}b"), LineKind::Code { lang: None });
         code.islands = vec![Island {
             id: "isl-0".into(),
@@ -1075,14 +1071,9 @@ mod tests {
         let mut heading = code.clone();
         heading.lines[0].kind = LineKind::Heading { level: 1 };
         assert_eq!(heading.validate(), Ok(()));
-        // The kinds that name their content, holding it.
         assert_eq!(tagged("", LineKind::Rule).validate(), Ok(()));
     }
 
-    /// A splice writes text, never kinds, so it can strand an
-    /// `Island` line over prose. `normalize` demotes the stranded kind to `Para`
-    /// rather than let export drop the text: the repair-side twin of the
-    /// invariant, and what keeps every op path's terminal normalize total.
     #[test]
     fn normalize_demotes_a_stranded_line_kind() {
         let mut rt = tagged("typed into a table line", LineKind::Island);
@@ -1105,9 +1096,6 @@ mod tests {
         assert_eq!(rt.validate(), Ok(()));
     }
 
-    /// Container nesting is capped at the same depth import
-    /// enforces, so a content that never went through import cannot reach the
-    /// emitters (which recurse one frame per container) with an unbounded path.
     #[test]
     fn container_nesting_is_capped() {
         let mut rt = tagged("hi", LineKind::Para);
@@ -1124,10 +1112,6 @@ mod tests {
         );
     }
 
-    /// [`container_nesting_is_capped`] on the payload axis. The
-    /// decoders refuse an over-deep bag at the wire; this is the same cap for
-    /// content that never went through one, since the recursive consumers spend
-    /// a frame per level whatever built the tree.
     #[test]
     fn json_payload_depth_is_capped() {
         let nested = |depth: usize| {
@@ -1186,7 +1170,6 @@ mod tests {
 
     #[test]
     fn same_kind_adjacent_unions() {
-        // [0,3) strong + [3,6) strong -> [0,6) strong (rule 1, adjacency).
         let got = normalize_marks(vec![f(3, 6, MarkKind::Strong), f(0, 3, MarkKind::Strong)]);
         assert_eq!(got, vec![f(0, 6, MarkKind::Strong)]);
     }
@@ -1199,7 +1182,6 @@ mod tests {
 
     #[test]
     fn different_kinds_overlap_freely() {
-        // Strong and emph over overlapping ranges stay two marks (rule 2).
         let got = normalize_marks(vec![f(0, 5, MarkKind::Strong), f(2, 7, MarkKind::Emph)]);
         assert_eq!(
             got,
@@ -1211,7 +1193,6 @@ mod tests {
     fn links_union_only_at_same_url() {
         let a = MarkKind::Link { url: "a".into() };
         let b = MarkKind::Link { url: "b".into() };
-        // Same url adjacent -> union; different url -> distinct.
         let got = normalize_marks(vec![
             f(0, 2, a.clone()),
             f(2, 4, a.clone()),
@@ -1222,7 +1203,6 @@ mod tests {
 
     #[test]
     fn identity_never_merges() {
-        // Two anchors over the same range are two distinct things (rule 3).
         let a = MarkKind::Anchor { id: "c1".into() };
         let b = MarkKind::Anchor { id: "c2".into() };
         let got = normalize_marks(vec![f(3, 3, a.clone()), f(3, 3, b.clone())]);
@@ -1241,11 +1221,6 @@ mod tests {
     }
 
     #[test]
-    fn empty_is_valid() {
-        assert_eq!(Content::empty().validate(), Ok(()));
-    }
-
-    #[test]
     fn is_inline_accepts_empty_and_single_para() {
         assert!(Content::empty().is_inline());
         assert!(crate::import::from_markdown("just one line")
@@ -1258,15 +1233,12 @@ mod tests {
 
     #[test]
     fn is_inline_rejects_blocks_containers_and_islands() {
-        // Two paragraphs → two Para lines.
         assert!(!crate::import::from_markdown("one\n\ntwo")
             .unwrap()
             .is_inline());
-        // A heading is a non-Para line kind.
         assert!(!crate::import::from_markdown("# heading")
             .unwrap()
             .is_inline());
-        // A list item sits in a container.
         assert!(!crate::import::from_markdown("- item").unwrap().is_inline());
     }
 
@@ -1317,9 +1289,7 @@ mod tests {
         assert_eq!(rt.validate(), Ok(()));
     }
 
-    /// A table cell built with un-normalized marks (reversed order, an adjacent
-    /// same-kind pair, a zero-width formatting mark) canonicalizes to the same
-    /// marks whatever the input order: the live-model determinism invariant.
+    /// Cell marks canonicalize to the same result whatever the input order.
     #[test]
     fn table_cell_marks_normalize_and_are_idempotent() {
         fn table(cell_marks: serde_json::Value) -> Content {
@@ -1342,8 +1312,6 @@ mod tests {
             }];
             rt
         }
-        // Reversed order + adjacent same-kind pair (0..2)+(2..4) → unioned 0..4;
-        // a zero-width strong at 1 → dropped.
         let mut a = table(serde_json::json!([
             {"start": 2, "end": 4, "type": "strong"},
             {"start": 1, "end": 1, "type": "strong"},
@@ -1355,27 +1323,22 @@ mod tests {
         assert_eq!(cell["marks"].as_array().unwrap().len(), 1);
         assert_eq!(cell["marks"][0]["start"], 0);
         assert_eq!(cell["marks"][0]["end"], 4);
-        // Same content, different input order → identical canonical bytes.
         let mut b = table(serde_json::json!([
             {"start": 0, "end": 2, "type": "strong"},
             {"start": 2, "end": 4, "type": "strong"}
         ]));
         b.normalize();
         assert_eq!(a.to_canonical_json(), b.to_canonical_json());
-        // Idempotent.
         let once = a.to_canonical_json();
         a.normalize();
         assert_eq!(a.to_canonical_json(), once);
     }
 
-    /// A cell is canonicalized in place, so a key this build does
-    /// not recognize survives. The rule has no slack: `normalize` runs on
-    /// decode, on every op apply, and on every serialize, so a cell rebuilt
-    /// whole drops the key on first contact and every contact after.
+    /// A cell is canonicalized in place, so a key this build does not recognize
+    /// survives. Two columns with one body cell, so `pad_row` mints the second
+    /// and the pass covers both a carried cell and a synthesized one.
     #[test]
     fn unrecognized_cell_key_survives_normalize() {
-        // Two columns, one body cell: `pad_row` mints the second, so the same
-        // pass exercises both a carried cell and a synthesized one.
         let mut rt = table_rt(serde_json::json!({
             "aligns": ["none", "none"],
             "header": [{"text": "h", "marks": [], "colspan": 2}, cell("h2")],
@@ -1383,13 +1346,10 @@ mod tests {
         }));
         rt.normalize();
         assert_eq!(rt.islands[0].props["header"][0]["colspan"], 2);
-        // A minted cell has nothing to carry.
         assert!(rt.islands[0].props["rows"][0][1].get("colspan").is_none());
-        // Hash input like any other key.
         assert!(rt.to_canonical_json().contains(r#""colspan":2"#));
     }
 
-    /// `validate` bounds a cell mark by its own cell's text length (in USV).
     #[test]
     fn validate_catches_cell_mark_out_of_range() {
         let mut rt = Content::empty();
@@ -1420,8 +1380,6 @@ mod tests {
         );
     }
 
-    /// A `Content` holding a single table island with the given props: the
-    /// shared fixture for the table-shape invariant tests.
     fn table_rt(props: serde_json::Value) -> Content {
         let mut rt = Content::empty();
         rt.text = ISLAND_SLOT.to_string();
@@ -1443,8 +1401,6 @@ mod tests {
         serde_json::json!({ "text": t, "marks": [] })
     }
 
-    /// `validate` rejects a ragged body row, an `aligns`/column mismatch, and a
-    /// cell carrying a `\n`: the three table-shape invariants.
     #[test]
     fn validate_catches_table_shape() {
         // Ragged row: header has 2 columns, the row has 3.
@@ -1482,12 +1438,8 @@ mod tests {
         assert_eq!(rt.validate(), Err(Invariant::TableCellNewline { cell: 1 }));
     }
 
-    /// `normalize` repairs every table-shape violation: pads the header and
-    /// short rows to the widest column count, syncs `aligns`, and rewrites a
-    /// cell `\n` to a space, so the result validates and is idempotent. This is
-    /// also the one-column-count unification: the widest row (3) drives the
-    /// header width, so the markdown (header-derived) and Typst (widest-row)
-    /// projections agree.
+    /// The widest row (3) drives the header width, so the markdown
+    /// (header-derived) and Typst (widest-row) projections agree.
     #[test]
     fn normalize_repairs_table_shape() {
         let mut rt = table_rt(serde_json::json!({
@@ -1507,20 +1459,15 @@ mod tests {
         for row in props["rows"].as_array().unwrap() {
             assert_eq!(row.as_array().unwrap().len(), 3);
         }
-        // Padded aligns default to "none"; the padded cells are empty.
         assert_eq!(props["aligns"][2], serde_json::json!("none"));
         assert_eq!(props["header"][1]["text"], serde_json::json!(""));
-        // The `\n` in "d\ne" became a space, preserving char count.
         assert_eq!(props["rows"][1][0]["text"], serde_json::json!("d e"));
 
-        // Idempotent on canonical bytes.
         let once = rt.to_canonical_json();
         rt.normalize();
         assert_eq!(rt.to_canonical_json(), once);
     }
 
-    /// An empty table (no header, no rows) is trivially well-formed: every width
-    /// is zero, so no shape invariant fires and `normalize` leaves it alone.
     #[test]
     fn empty_table_is_valid() {
         let mut rt = table_rt(serde_json::json!({
@@ -1533,9 +1480,6 @@ mod tests {
         assert_eq!(rt.validate(), Ok(()));
     }
 
-    /// A non-array `header` carries no cells: `validate` rejects it and
-    /// `normalize` repairs it to an empty array (a zero-column table that then
-    /// validates).
     #[test]
     fn non_array_table_header_is_rejected_then_repaired() {
         let mut rt = table_rt(serde_json::json!({
@@ -1549,8 +1493,6 @@ mod tests {
         assert_eq!(rt.islands[0].props["header"], serde_json::json!([]));
     }
 
-    /// Two islands sharing an `id` violate the minted-identity invariant.
-    /// Import mints ids by index so never collides; a hand-built content can.
     #[test]
     fn duplicate_island_id_is_rejected() {
         let mut rt = Content::empty();
@@ -1578,14 +1520,12 @@ mod tests {
             rt.validate(),
             Err(Invariant::IslandIdCollision { id: "dup".into() })
         );
-        // Distinct ids validate.
         rt.islands = vec![table("a"), table("b")];
         assert_eq!(rt.validate(), Ok(()));
     }
 
-    /// Two prose anchors sharing an `id` at different ranges violate the
-    /// anchor-id uniqueness invariant, as does the empty id. (Byte-identical
-    /// anchors `normalize` already dedupes; this is the surviving collision.)
+    /// Byte-identical anchors `normalize` already dedupes; this is the
+    /// surviving collision.
     #[test]
     fn duplicate_or_empty_anchor_id_is_rejected() {
         let mut rt = Content::empty();
@@ -1595,16 +1535,13 @@ mod tests {
             end,
             kind: MarkKind::Anchor { id: id.into() },
         };
-        // Same id at two ranges: `RemoveAnchor` can't disambiguate them.
         rt.marks = vec![anchor(0, 2, "x"), anchor(2, 4, "x")];
         assert_eq!(
             rt.validate(),
             Err(Invariant::AnchorIdCollision { id: "x".into() })
         );
-        // Distinct ids over distinct ranges validate.
         rt.marks = vec![anchor(0, 2, "x"), anchor(2, 4, "y")];
         assert_eq!(rt.validate(), Ok(()));
-        // The empty id is a degenerate handle.
         rt.marks = vec![anchor(0, 2, "")];
         assert_eq!(
             rt.validate(),
@@ -1612,9 +1549,6 @@ mod tests {
         );
     }
 
-    /// `normalize` drops a byte-identical duplicate identity mark (same range,
-    /// same id): the same handle recorded twice is redundant, not two handles.
-    /// Distinct-id anchors over the same range are kept.
     #[test]
     fn normalize_dedupes_identical_identity_marks() {
         let mut rt = Content::empty();
@@ -1627,7 +1561,6 @@ mod tests {
         rt.marks = vec![anchor("x"), anchor("x")];
         rt.normalize();
         assert_eq!(rt.marks, vec![anchor("x")]);
-        // Different ids over the same range are distinct handles: both survive.
         rt.marks = vec![anchor("x"), anchor("y")];
         rt.normalize();
         assert_eq!(rt.marks.len(), 2);
