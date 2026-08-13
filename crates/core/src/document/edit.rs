@@ -359,7 +359,6 @@ impl Document {
         Ok(())
     }
 
-    /// Validate that `card`'s `$kind` is a valid, non-reserved composable kind.
     /// A card with no `$kind` is rejected as an invalid (empty) name.
     fn check_composable_kind(card: &Card) -> Result<(), EditError> {
         let kind = card.kind().unwrap_or("");
@@ -378,10 +377,8 @@ impl Document {
 
     /// Replace the `$kind` of the composable card at `index`.
     ///
-    /// Only the `$kind` metadata changes; the payload and body are untouched
-    /// (field-bag semantics). Old-schema fields linger in the bag; new-schema
-    /// fields are absent until set explicitly. Schema migration is the caller's
-    /// responsibility: this is a structural primitive.
+    /// Only the `$kind` metadata changes; the payload and body are untouched, so
+    /// old-schema fields linger and schema migration is the caller's job.
     ///
     /// Returns [`EditError::IndexOutOfRange`], [`EditError::InvalidKindName`],
     /// or [`EditError::ReservedKind`] on constraint violations.
@@ -439,10 +436,9 @@ impl Card {
     }
 
     /// Store a payload field verbatim, clearing any `!must_fill` marker on that
-    /// key, the opaque store (**store** = verbatim, coercion deferred to render;
-    /// contrast the typed [`TypedWriter::set`](crate::TypedWriter::set)). Scalars
-    /// convert in place (`store_field("qty", 3)`); see the `From` impls on
-    /// [`QuillValue`].
+    /// key. Coercion is deferred to render; contrast the typed
+    /// [`TypedWriter::set`](crate::TypedWriter::set). Scalars convert in place
+    /// (`store_field("qty", 3)`) via the `From` impls on [`QuillValue`].
     ///
     /// Returns [`EditError::InvalidFieldName`] when `name` does not match
     /// `[A-Za-z_][A-Za-z0-9_]*`.
@@ -454,9 +450,8 @@ impl Card {
     }
 
     /// Store a payload field verbatim and mark it as a `!must_fill` placeholder.
-    /// `Null` emits as `key: !must_fill`; scalars/sequences as `key: !must_fill <value>`.
-    /// The opaque store's fill variant (quill-free, verbatim); same validation as
-    /// [`Card::store_field`].
+    /// `Null` emits as `key: !must_fill`; other values as
+    /// `key: !must_fill <value>`. Validation as [`Card::store_field`].
     pub fn store_fill(&mut self, name: &str, value: impl Into<QuillValue>) -> Result<(), EditError> {
         self.payload_mut()
             .insert_fill(name.to_string(), value.into())
@@ -465,15 +460,12 @@ impl Card {
     }
 
     /// Store several payload fields verbatim and atomically, clearing any
-    /// `!must_fill` marker on each key, the opaque store's batch (contrast the
-    /// typed [`TypedWriter::set_all`](crate::TypedWriter::set_all)). The whole
-    /// batch is validated first: on any violation nothing is applied and every
-    /// offending field is reported as a `(name, error)` pair, so a caller feeding
-    /// externally-sourced names (database columns, form keys) sees all violations
-    /// in one pass instead of fix-rerun-repeat. Per-field rules are those of
+    /// `!must_fill` marker on each key. The whole batch is validated first: on
+    /// any violation nothing is applied and every offending field is reported as
+    /// a `(name, error)` pair. Per-field rules are those of
     /// [`Card::store_field`]; insertion order follows the iterator, and a
-    /// repeated name behaves like repeated `store_field` calls (last value
-    /// wins, first position kept).
+    /// repeated name behaves like repeated `store_field` calls (last value wins,
+    /// first position kept).
     pub fn store_fields<K, V, I>(&mut self, fields: I) -> Result<(), Vec<(String, EditError)>>
     where
         K: Into<String>,
@@ -495,16 +487,14 @@ impl Card {
         if !errors.is_empty() {
             return Err(errors);
         }
-        // Batch validated above; apply through the unchecked insert so the
-        // whole-batch check is not re-run per field.
+        // Validated above; the unchecked insert avoids re-checking per field.
         for (name, value) in fields {
             self.payload_mut().insert_unchecked(name, value);
         }
         Ok(())
     }
 
-    /// Remove a payload field; returns `Ok(None)` if the name is absent.
-    /// Removal has no lane: the one verb serves every write path. Same
+    /// Remove a payload field; `Ok(None)` when the name is absent. Same name
     /// validation as [`Card::store_field`].
     pub fn remove_field(&mut self, name: &str) -> Result<Option<QuillValue>, EditError> {
         if !is_valid_field_name(name) {
@@ -519,15 +509,10 @@ impl Card {
     ///
     /// `$ext` carries out-of-band consumer state (editor renames, agent
     /// annotations, …) and is stripped from [`Document::to_plate_json`], so a
-    /// write here can never affect a render. Any nested comments attached to a
-    /// replaced `$ext` are dropped.
-    /// Returns [`EditError::ValueTooDeep`] when the map nests past the §8
-    /// depth limit: `$ext` never reaches the plate JSON, but it does flow
-    /// through the recursive emit and DTO paths, so it carries the same
-    /// depth bound as user fields.
-    ///
-    /// Quill-free and never coerced: an opaque `store_*` verb by the vocabulary
-    /// rule, not a typed `set`.
+    /// write here can never affect a render. Nested comments attached to a
+    /// replaced `$ext` are dropped. Returns [`EditError::ValueTooDeep`] when the
+    /// map nests past the §8 depth limit: `$ext` flows through the recursive
+    /// emit and DTO paths like any other value.
     pub fn store_ext(
         &mut self,
         value: serde_json::Map<String, serde_json::Value>,
@@ -537,11 +522,9 @@ impl Card {
         Ok(())
     }
 
-    /// Remove the card's `$ext` map *entirely*, returning the previous map if
-    /// present. This is a blunt escape hatch: it discards every namespace
-    /// (`$ext.editor`, `$ext.agent`, …) at once. To clear consumer
-    /// state, prefer [`Card::remove_ext_namespace`], which drops only your
-    /// own slot and leaves sibling consumers' state intact.
+    /// Remove the card's `$ext` map *entirely*, returning the previous map. This
+    /// discards every namespace at once; [`Card::remove_ext_namespace`] drops
+    /// only one slot and leaves sibling consumers' state intact.
     pub fn remove_ext(&mut self) -> Option<serde_json::Map<String, serde_json::Value>> {
         self.payload_mut().take_ext()
     }
@@ -549,13 +532,10 @@ impl Card {
     /// Merge `value` into the card's `$ext` map under `namespace`, creating
     /// the map when absent and replacing any existing value at that key.
     ///
-    /// This is the recommended way to write `$ext`: it preserves sibling
-    /// namespaces, so independent consumers keying on their own slot
-    /// (`$ext.editor`, `$ext.agent`, …) don't clobber each other.
-    /// Returns [`EditError::ValueTooDeep`] when the merged map nests past
-    /// the §8 depth limit (see [`Card::store_ext`]); the card's `$ext` is
-    /// unchanged on error. Quill-free and never coerced: an opaque `store_*`
-    /// verb.
+    /// Sibling namespaces are preserved, so independent consumers keying on
+    /// their own slot don't clobber each other. Returns
+    /// [`EditError::ValueTooDeep`] when the merged map nests past the §8 depth
+    /// limit; the card's `$ext` is unchanged on error.
     pub fn store_ext_namespace(
         &mut self,
         namespace: impl Into<String>,
@@ -567,20 +547,15 @@ impl Card {
     /// Remove `namespace` from the card's `$ext` map, returning the value
     /// that was stored there (or `None` when the map or the key was absent).
     ///
-    /// This is the recommended way to clear `$ext` state: it is the
-    /// namespace-scoped inverse of [`Card::store_ext_namespace`] and preserves
-    /// sibling namespaces, where [`Card::remove_ext`] would wipe them all.
-    /// When removing the last namespace empties the map, the `$ext` entry is
-    /// dropped entirely (not left as `$ext: {}`), so
-    /// `store_ext_namespace(ns, v)` followed by `remove_ext_namespace(ns)`
-    /// restores a card that had no `$ext` to its original state.
+    /// The namespace-scoped inverse of [`Card::store_ext_namespace`]: siblings
+    /// are preserved, where [`Card::remove_ext`] wipes them all. Emptying the
+    /// map drops the `$ext` entry entirely rather than leaving `$ext: {}`.
     pub fn remove_ext_namespace(&mut self, namespace: &str) -> Option<serde_json::Value> {
         self.remove_meta_namespace(MetaKey::Ext, namespace)
     }
 
-    /// Merge `value` into the `key` map under `namespace`, preserving siblings.
-    /// The map is written back only after the depth check passes, so the card
-    /// is unchanged on error.
+    /// The map is written back only after the depth check passes, so the card is
+    /// unchanged on error.
     fn merge_meta_namespace(
         &mut self,
         key: MetaKey,
@@ -595,9 +570,7 @@ impl Card {
         Ok(())
     }
 
-    /// Drop `namespace` from the `key` map, returning what was there. Emptying
-    /// the map drops the entry rather than leaving `$<key>: {}`, so a
-    /// merge/remove pair restores a card that carried no such entry.
+    /// Emptying the map drops the entry rather than leaving `$<key>: {}`.
     fn remove_meta_namespace(
         &mut self,
         key: MetaKey,
@@ -620,14 +593,12 @@ impl Card {
 
     /// Merge a card-kind's seed overlay `value` into the card's `$seed` map
     /// under `card_kind`, creating the map when absent and replacing any
-    /// existing overlay for that kind. Sibling kinds are preserved: this is
-    /// the per-kind-safe writer, the seed analogue of
-    /// [`Card::store_ext_namespace`]. `card_kind` must be a valid, non-reserved
-    /// composable kind ([`EditError::InvalidKindName`] / [`EditError::ReservedKind`]
-    /// otherwise): `$seed` is keyed by composable card-kind, unlike the
-    /// free-form namespaces of `$ext`. Returns [`EditError::ValueTooDeep`] when
-    /// the merged map nests past the §8 depth limit; the card is unchanged on
-    /// error. Quill-free and never coerced: an opaque `store_*` verb.
+    /// existing overlay for that kind; sibling kinds are preserved. Unlike the
+    /// free-form namespaces of `$ext`, `card_kind` must be a valid, non-reserved
+    /// composable kind ([`EditError::InvalidKindName`] /
+    /// [`EditError::ReservedKind`] otherwise). Returns
+    /// [`EditError::ValueTooDeep`] when the merged map nests past the §8 depth
+    /// limit; the card is unchanged on error.
     pub fn store_seed_overlay(
         &mut self,
         card_kind: impl Into<String>,
@@ -642,9 +613,7 @@ impl Card {
     }
 
     /// Remove `card_kind` from the card's `$seed` map, returning the overlay
-    /// stored there (or `None`). When removing the last kind empties the map,
-    /// the `$seed` entry is dropped entirely (not left as `$seed: {}`).
-    /// The seed analogue of [`Card::remove_ext_namespace`].
+    /// stored there. Emptying the map drops the `$seed` entry entirely.
     pub fn remove_seed_overlay(&mut self, card_kind: &str) -> Option<serde_json::Value> {
         self.remove_meta_namespace(MetaKey::Seed, card_kind)
     }
