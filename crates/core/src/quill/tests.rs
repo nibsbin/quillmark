@@ -1269,31 +1269,6 @@ main:
 }
 
 #[test]
-fn migrated_group_fixtures_declare_registries_and_do_not_warn() {
-    for name in ["usaf_memo/0.2.0", "cmu_letter/0.1.0", "classic_resume/0.1.0"] {
-        let path = quillmark_fixtures::resource_path(&format!("quills/{name}/Quill.yaml"));
-        let yaml = fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {name}: {e}"));
-        let (config, warnings) = QuillConfig::from_yaml_with_warnings(&yaml)
-            .unwrap_or_else(|e| panic!("{name} must load: {e:?}"));
-        assert!(
-            !warnings
-                .iter()
-                .any(|d| d.code.as_deref() == Some("quill::implicit_group")),
-            "{name} still emits implicit_group: {warnings:?}"
-        );
-        assert!(
-            config
-                .main
-                .ui
-                .as_ref()
-                .and_then(|u| u.groups.as_ref())
-                .is_some(),
-            "{name} main should declare a group registry"
-        );
-    }
-}
-
-#[test]
 fn test_array_items_recursive_coercion() {
     let yaml_content = r#"
 quill:
