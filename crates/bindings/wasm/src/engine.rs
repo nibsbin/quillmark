@@ -1116,19 +1116,14 @@ impl Document {
     /// whole-field read is.
     ///
     /// `undefined` when the field is absent **and when `path` names nothing in
-    /// the stored value** (an index past the end, a key the object lacks): a
-    /// repeater's row index goes stale between derive and read, and absence
-    /// there is a read, not a fault. Throws `edit::unknown_field` for an
-    /// undeclared name at any depth, `edit::field_not_content` when `path`
-    /// resolves to no content leaf, `edit::field_decode` for a value that
-    /// decodes under neither encoding (anchored at the addressed path), and
-    /// `edit::index_out_of_range` for a bad `addr.card`. A body address throws:
-    /// a body has no nested content address.
-    ///
-    /// `Addr` deliberately gains no element axis. It is the currency of every
-    /// `Document` verb, and `storeField` / `isFill` / `applyChange` cannot
-    /// answer one — a silently ignored index is the same failure mode as the
-    /// wrong-kind path `pathFor` documents.
+    /// the stored value**: a repeater's row index goes stale between derive and
+    /// read, and absence there is a read, not a fault. Throws
+    /// `edit::unknown_field` for an undeclared name at any depth,
+    /// `edit::field_not_content` when `path` resolves to no content leaf,
+    /// `edit::field_decode` for a value that decodes under neither encoding
+    /// (anchored at the addressed path), and `edit::index_out_of_range` for a
+    /// bad `addr.card`. A body address throws: a body has no nested content
+    /// address.
     #[wasm_bindgen(js_name = _readerGetContentAt, skip_typescript, unchecked_return_type = "Content | undefined")]
     pub fn reader_get_content_at(
         &self,

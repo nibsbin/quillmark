@@ -24,8 +24,7 @@ use crate::value::{PathSegment, QuillValue};
 use crate::version::QuillReference;
 
 /// An in-field path rendered as the tail of a [`DocPath`](crate::path::DocPath)
-/// field segment (`[0].name`), so an error message names the same address its
-/// anchor does. Empty for the whole-field case.
+/// field segment (`[0].name`), so a message names the address its anchor does.
 fn render_at(at: &[PathSegment]) -> String {
     at.iter()
         .map(|seg| match seg {
@@ -109,9 +108,7 @@ pub enum EditError {
     FieldDecode {
         field: String,
         /// The steps from the field to the value that failed, empty when the
-        /// field itself is the value
-        /// ([`get_content_at`](crate::TypedReader::get_content_at) is the only
-        /// producer of a non-empty one). Rides the [`doc_path`](Self::doc_path)
+        /// field itself is the value. Rides the [`doc_path`](Self::doc_path)
         /// anchor as its own segments, so `field` stays the field's name.
         at: Vec<PathSegment>,
         /// The codec that ran, named by the field's declared type:
@@ -196,9 +193,8 @@ impl EditError {
     /// also folds them into the anchor: [`DocPath`](crate::path::DocPath)
     /// renders field segments unescaped and parses on `.` and `[`, so a
     /// malformed name cannot be recovered from the rendered path. An `at` path
-    /// rides the anchor only, where its segments are structural and recoverable;
-    /// keeping it out of `field` is what leaves `field` a bare field name for a
-    /// consumer routing on it.
+    /// rides the anchor only, its segments being structural and recoverable
+    /// there.
     pub fn args(&self) -> BTreeMap<String, serde_json::Value> {
         match self {
             EditError::InvalidFieldName(field) => diag_args! { "field" => field },

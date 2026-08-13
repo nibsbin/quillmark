@@ -76,8 +76,7 @@ pub(crate) fn decode_plaintext_value(
 
 /// [`decode_richtext_value`] closed over the shapes a stored field can hold: a
 /// null is the empty content (null ≡ absent), and anything neither object nor
-/// string is a decode failure. The one richtext decode a schema-bound read runs,
-/// whether it addresses a whole field or a value nested inside one.
+/// string is a decode failure.
 pub(crate) fn decode_richtext_field(
     value: &serde_json::Value,
 ) -> Result<Content, RichtextDecodeError> {

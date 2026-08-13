@@ -762,13 +762,13 @@ export declare class DocumentReader {
 	 * Read the `Content` nested inside the composite field at `addr`, at `path`:
 	 * `[0]` an element of an `array<richtext>`, `["motto"]` an object's content
 	 * property, `[1, "notes"]` a leaf under both. The codec is the leaf's declared
-	 * type's, resolved through the field schema's `items` / `properties`, so an
-	 * element's storage form stops being the caller's business the way a scalar
-	 * field's already had. The empty path is {@link getContent}.
+	 * type's, resolved through the field schema's `items` / `properties`, so the
+	 * element's storage form is not the caller's business. The empty path is
+	 * {@link getContent}.
 	 *
 	 * `undefined` for an absent field and for a path that names nothing in the
-	 * stored value — a repeater's row index goes stale between derive and read,
-	 * and absence there is a read, not a fault. Throws `UnknownField` for an
+	 * stored value: a repeater's row index goes stale between derive and read,
+	 * so absence there is a read, not a fault. Throws `UnknownField` for an
 	 * undeclared name at any depth, `FieldNotContent` when `path` resolves to no
 	 * content leaf, `FieldDecode` anchored at the addressed path, and
 	 * `IndexOutOfRange` for a bad `addr.card`.

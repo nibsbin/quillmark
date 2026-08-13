@@ -741,7 +741,7 @@ def test_view_get_content_absence_unknown_and_non_content():
         taro.reader(tdoc).get_content("author")
 
 
-# The element read: get_content_at, the axis a repeater actually mutates.
+# ── Tier-1 typed reader: the nested content read ───────────────────────────────
 
 ELEMENT_QUILL_YAML = """quill:
   name: element_test
@@ -785,10 +785,7 @@ main:
 
 @pytest.fixture
 def element_quill(tmp_path):
-    """A quill declaring every content-bearing composite shape.
-
-    No shipped fixture declares one, which is part of why the read gap went
-    unnoticed."""
+    """A quill declaring every content-bearing composite shape."""
     root = tmp_path / "element_test" / "0.1.0"
     root.mkdir(parents=True)
     (root / "Quill.yaml").write_text(ELEMENT_QUILL_YAML)
@@ -801,8 +798,7 @@ def test_view_get_content_at_spans_both_storage_forms(element_quill):
 
     The bound door rests a plaintext element as its literal string and a richtext
     one as the canonical content object; the transport door leaves both as
-    authored strings. Before this read, a consumer editing the row had to decide
-    for itself what the stored bytes meant."""
+    authored strings."""
     md = (
         "~~~card-yaml\n$quill: element_test@0.1.0\n$kind: main\n"
         "recipients: ['a *literal* line']\nparagraphs: ['A **bold** intro.']\n~~~\n"
@@ -837,10 +833,7 @@ def test_view_get_content_at_reaches_object_and_nested_leaves(element_quill):
 
 
 def test_view_get_content_at_stale_index_and_no_content_leaf(element_quill):
-    """A stale row index reads absent; a path resolving to no content leaf raises.
-
-    An index goes stale between derive and read, so absence on the axis a
-    repeater mutates is a read, not a fault."""
+    """A stale row index reads absent; a path resolving to no content leaf raises."""
     doc = Document.from_markdown(
         "~~~card-yaml\n$quill: element_test@0.1.0\n$kind: main\n"
         "recipients: ['a']\ntags: ['x']\n~~~\n"
@@ -855,8 +848,6 @@ def test_view_get_content_at_stale_index_and_no_content_leaf(element_quill):
         v.get_content_at("recipients", [])  # the array itself has no one Content
     with raises_edit_code("edit::unknown_field"):
         v.get_content_at("letterhead", ["nope"])
-    # A malformed step raises rather than being dropped: a skipped step reads a
-    # different address and never says so.
     with pytest.raises(ValueError, match=r"path\[0\]"):
         v.get_content_at("recipients", [None])
 
@@ -864,9 +855,8 @@ def test_view_get_content_at_stale_index_and_no_content_leaf(element_quill):
 def test_view_get_content_at_names_the_element_in_a_decode_failure(element_quill):
     """A failing element names itself, rather than reporting against the field.
 
-    The structured anchor is asserted where it is carried: `convert_edit_error`
-    mints no `path` on this surface for any edit error, so the message is what
-    the element read adds here."""
+    `convert_edit_error` mints no `path` on this surface for any edit error, so
+    the message is where the element shows up here."""
     doc = Document.from_markdown(
         "~~~card-yaml\n$quill: element_test@0.1.0\n$kind: main\nparagraphs: ['ok', 3]\n~~~\n"
     )

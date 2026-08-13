@@ -68,11 +68,11 @@ write remains their canonicalizer.
 **A content leaf is readable at its codec wherever it sits in that subtree, not
 only when the field itself is one.** `reader.get_content(name)` answers for a
 whole-field leaf; `reader.get_content_at(name, path)` walks the same `items` /
-`properties` axis conform walks, to an `array<richtext>` element, an `object`'s
-content property, or a leaf under both. Otherwise the caller reads the stored
-element and decides for itself what the bytes mean — the judgement the resting
-form exists to remove, and the one a consumer has strictly less to make it with
-(the codec is a schema fact, and the stored shape does not carry it).
+`properties` axis conform walks, reaching an `array<richtext>` element, an
+`object`'s content property, or a leaf under both. Without it the caller reads
+the stored element and decides for itself what the bytes mean, which is the
+judgement the resting form exists to remove. The caller also has less to decide
+with: the codec is a schema fact, and the stored shape does not carry it.
 
 ### A declared type change rewrites stored values
 

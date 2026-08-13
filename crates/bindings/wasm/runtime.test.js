@@ -485,18 +485,14 @@ card_kinds:
     expect(empty.getContent('subject')).toBeUndefined()
   })
 
-  // getContentAt is that read one axis in. Before it, a consumer mounting an
-  // editor over an array row read the *stored* element and decided for itself
-  // what the bytes meant — the judgement getContent exists to make.
+  // getContentAt is that read one axis in: an element's codec is a schema fact,
+  // so naming the element is what keeps the judgement out of the consumer.
   it('getContentAt reads an element the same from either resting form', () => {
     const quill = buildQuill()
-    // The transport door leaves both elements as authored strings.
     const parsed = Document.fromMarkdown(
       "~~~card-yaml\n$quill: view_test\nrecipients: ['a *literal* line']\nparagraphs: ['Q3 **results**']\n~~~\n\nBody."
     )
     expect(typeof parsed.getStored('paragraphs')[0]).toBe('string')
-    // The bound door rests each element at its codec: plaintext as the literal
-    // string, richtext as the canonical Content object.
     const bound = quill.parse(
       "~~~card-yaml\n$quill: view_test\nrecipients: ['a *literal* line']\nparagraphs: ['Q3 **results**']\n~~~\n\nBody."
     )
@@ -527,9 +523,6 @@ card_kinds:
     expect(v.getContentAt('subject', [])).toBeUndefined() // empty path IS getContent
   })
 
-  // The axis a repeater mutates: an index that went stale between derive and
-  // read is absence, not a throw. The card axis still throws — it is guarded by
-  // a count the caller holds.
   it('getContentAt: stale index, no content leaf, undeclared name, cards', () => {
     const quill = buildQuill()
     const doc = Document.fromMarkdown('~~~card-yaml\n$quill: view_test\n~~~\n\nBody.')
@@ -543,8 +536,6 @@ card_kinds:
     expectEditCode(() => v.getContentAt('letterhead', ['nope']), 'edit::unknown_field')
     expectEditCode(() => v.getContentAt('nope', [0]), 'edit::unknown_field')
     expectEditCode(() => v.card(9).getContentAt('lines', [0]), 'edit::index_out_of_range')
-    // A malformed step throws rather than being dropped: a skipped step reads a
-    // different address and never says so. A body addr has no nested content.
     expect(() => v.getContentAt('recipients', [null])).toThrow(/path\[0\]/)
     expect(() => v.getContentAt('recipients', 0)).toThrow(/`path` must be an array/)
     expect(() => v.getContentAt({}, [0])).toThrow(/body address/)
@@ -562,8 +553,6 @@ card_kinds:
     }
     const diag = caught.diagnostics[0]
     expect(diag.code).toBe('edit::field_decode')
-    // The element rides the anchor as its own segments; `field` stays a bare
-    // field name for a consumer routing on it.
     expect(diag.path).toBe('main.paragraphs[1]')
     expect(diag.args.field).toBe('paragraphs')
     expect(parseDocPath(diag.path)).toEqual([

@@ -985,13 +985,12 @@ impl PyReader {
     /// Read the Content nested inside a composite field at `path`: `[0]` an
     /// element of an `array<richtext>`, `["motto"]` an object's content property,
     /// `[1, "notes"]` a leaf under both. The codec is the leaf's declared type's,
-    /// resolved through the field schema's `items` / `properties`, so an element's
-    /// storage form stops being the caller's business the way a scalar field's
-    /// already had. An empty `path` is `get_content`.
+    /// resolved through the field schema's `items` / `properties`, so the element's
+    /// storage form is not the caller's business. An empty `path` is `get_content`.
     ///
     /// `None` when the field is absent and when `path` names nothing in the stored
-    /// value — an editor's row index goes stale between derive and read, and
-    /// absence there is a read, not a fault. Raises `edit::unknown_field` for an
+    /// value: an editor's row index goes stale between derive and read, so absence
+    /// there is a read, not a fault. Raises `edit::unknown_field` for an
     /// undeclared name at any depth, `edit::field_not_content` when `path`
     /// resolves to no content leaf, and `edit::field_decode`, anchored at the
     /// addressed path, for a value that decodes under neither encoding.

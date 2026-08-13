@@ -100,30 +100,27 @@ impl<'a> TypedReader<'a> {
         self.get_content_at(name, &[])
     }
 
-    /// Read the [`Content`] *nested inside* a composite field at `at`: the
-    /// element of an `array<richtext>`, the content property of an `object`, or
-    /// a leaf under both (`cells[1].notes`). [`get_content`](Self::get_content)
-    /// is the empty path.
+    /// Read the [`Content`] *nested inside* a composite field at `at`: an
+    /// `array<richtext>` element, an `object`'s content property, or a leaf
+    /// under both (`cells[1].notes`). [`get_content`](Self::get_content) is the
+    /// empty path.
     ///
-    /// The codec is the leaf's declared type's, resolved by walking `at` through
-    /// the field schema (`items` for an [`Index`](crate::PathSegment::Index),
-    /// `properties` for a [`Key`](crate::PathSegment::Key)) — the same walk
-    /// `conform` and rest enforcement take, so a stored element reads back at
-    /// the codec it was conformed at whatever its resting form.
+    /// The codec is the leaf's, resolved by walking `at` through the field
+    /// schema — the same walk `conform` and rest enforcement take, so a stored
+    /// leaf reads back at the codec it was conformed at whatever its resting
+    /// form.
     ///
-    /// `Ok(None)` for an absent field **and for a path that names nothing in the
-    /// stored value**: an index past the end of the array, or a key the stored
-    /// object lacks. An editor's row index goes stale between derive and read,
-    /// and absence on the axis a repeater mutates is a read, not a fault — the
-    /// field axis's totality applied one level down. A bad *card* index still
-    /// raises, since [`card`](Self::card) is guarded by a count the caller holds.
+    /// `Ok(None)` for an absent field **and for a path that names nothing in
+    /// the stored value**: an editor's row index goes stale between derive and
+    /// read, so absence on the axis a repeater mutates is a read, not a fault.
+    /// A bad *card* index still raises, [`card`](Self::card) being guarded by a
+    /// count the caller holds.
     ///
-    /// [`EditError::UnknownField`] for a name (at any depth) the schema does not
+    /// [`EditError::UnknownField`] for a name at any depth the schema does not
     /// declare; [`EditError::FieldNotContent`] when `at` resolves to no content
-    /// leaf — a step the schema cannot take (an index into an `object`), or a
-    /// terminal that is not `richtext`/`plaintext`, which `declared` names;
-    /// [`EditError::FieldDecode`], anchored at the addressed path, when the
-    /// value there decodes under neither encoding.
+    /// leaf, either through a step the schema cannot take or at a non-content
+    /// terminal; [`EditError::FieldDecode`], anchored at the addressed path,
+    /// when the value there decodes under neither encoding.
     pub fn get_content_at(
         &self,
         name: &str,
@@ -262,7 +259,6 @@ fn read_content(
     })
 }
 
-/// A content leaf's decoder paired with the codec name it answers under.
 type ContentCodec = (
     fn(&serde_json::Value) -> Result<Content, RichtextDecodeError>,
     &'static str,
@@ -281,11 +277,9 @@ fn content_codec(r#type: &FieldType) -> Option<ContentCodec> {
     }
 }
 
-/// Walk `at` through a field's schema to the type declared at that address:
-/// [`Index`](PathSegment::Index) takes an `array`'s `items`,
-/// [`Key`](PathSegment::Key) an `object`'s named property. A step the schema
-/// cannot take is [`EditError::FieldNotContent`] naming the type that blocked
-/// it; a property an `object` does not declare is the same
+/// Walk `at` through a field's schema to the type declared at that address. A
+/// step the schema cannot take is [`EditError::FieldNotContent`] naming the type
+/// that blocked it; a property an `object` does not declare is the same
 /// [`EditError::UnknownField`] an undeclared field name is, one level down.
 fn schema_at<'a>(
     field: &'a FieldSchema,
@@ -313,9 +307,8 @@ fn schema_at<'a>(
     Ok(cursor)
 }
 
-/// Walk `at` through a stored value. `None` when the path names nothing there —
-/// an index past the end, a key the object lacks, or a null standing in for an
-/// absent subtree — which the read reports as absence, not as a fault.
+/// Walk `at` through a stored value. `None` when the path names nothing there,
+/// which the read reports as absence rather than as a fault.
 fn value_at<'a>(value: &'a serde_json::Value, at: &[PathSegment]) -> Option<&'a serde_json::Value> {
     let mut cursor = value;
     for seg in at {
@@ -580,17 +573,12 @@ card_kinds:
         vec![PathSegment::Key(k.to_string())]
     }
 
-    /// The asymmetry #1243 names: the element's storage form stops being the
-    /// caller's business, exactly as the scalar field's already had.
     #[test]
     fn element_read_spans_both_storage_forms() {
         let config = config();
         let mut doc = blank_doc();
         {
             let card = doc.main_mut();
-            // A conformed `plaintext` element rests as its literal string; a
-            // `richtext` one as the canonical content object. An unconformed
-            // document holds the authored string in both.
             card.store_field(
                 "recipients",
                 QuillValue::from_json(serde_json::json!(["a *literal* line"])),
@@ -658,7 +646,6 @@ card_kinds:
             .text,
             "a note"
         );
-        // Declared but unstored: absence, at any depth.
         assert_eq!(
             view.get_content_at(
                 "rows",
@@ -684,8 +671,6 @@ card_kinds:
         ));
     }
 
-    /// The index axis a repeater mutates: an index that went stale between
-    /// derive and read is absence, not a fault.
     #[test]
     fn element_read_out_of_range_and_absent_field_return_none() {
         let config = config();
@@ -707,15 +692,11 @@ card_kinds:
             .store_field("tags", QuillValue::from_json(serde_json::json!(["x"])))
             .unwrap();
         let view = TypedReader::new(&config, &doc);
-        // `declared` names the type *reached*, so a `string[]` element reports
-        // the element's type rather than the field's `array`.
         assert!(matches!(
             view.get_content_at("tags", &idx(0)),
             Err(EditError::FieldNotContent { field, declared, .. })
                 if field == "tags" && declared == "string"
         ));
-        // A step the schema cannot take: an index into a scalar, a key into an
-        // array, and the whole array itself.
         assert!(matches!(
             view.get_content_at("qty", &idx(0)),
             Err(EditError::FieldNotContent { declared, .. }) if declared == "integer"
@@ -728,7 +709,6 @@ card_kinds:
             view.get_content_at("recipients", &[]),
             Err(EditError::FieldNotContent { declared, .. }) if declared == "array"
         ));
-        // An undeclared property is the same typo an undeclared field is.
         assert!(matches!(
             view.get_content_at("letterhead", &key("nope")),
             Err(EditError::UnknownField(n)) if n == "nope"
@@ -748,9 +728,6 @@ card_kinds:
         let err = TypedReader::new(&config, &doc)
             .get_content_at("paragraphs", &idx(1))
             .unwrap_err();
-        // `field` stays the bare field name for a consumer routing on it; the
-        // element rides the anchor as its own segments, so the rendered path
-        // parses back to the same address.
         assert!(matches!(
             &err,
             EditError::FieldDecode { field, codec, .. }
