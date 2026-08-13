@@ -1,43 +1,18 @@
 //! Unified payload representation.
 //!
-//! A [`Payload`] is the typed representation of a card-yaml block's full
-//! YAML content. It carries, in source order, as variants of a single
-//! [`PayloadItem`] enum:
+//! A [`Payload`] carries a card-yaml block's whole YAML content in source order
+//! as [`PayloadItem`] variants: typed `$` system metadata, user fields, and
+//! comments. One source-ordered list is the canonical storage, so a comment
+//! adjacent to a `$` line round-trips through the same mechanism as one
+//! adjacent to a user field.
 //!
-//! - **System metadata**: typed `$quill` / `$kind` / `$ext` / `$seed`
-//!   entries.
-//! - **User fields**: `key: value` pairs with an optional `!must_fill` flag.
-//! - **Comments**: own-line or trailing inline, attached to whichever
-//!   item they immediately follow at emit time.
+//! Comments inside a structured value live on the [`PayloadItem::Field`] /
+//! [`PayloadItem::Meta`] that owns it, as `nested_comments` with paths relative
+//! to that item's value tree.
 //!
-//! The unified item list is the canonical storage of the block; treating
-//! `$` entries as just another variant means a comment adjacent to a `$`
-//! line round-trips through the same mechanism as a comment adjacent to a
-//! user field. No "metadata region" vs "payload region" routing decision is
-//! ever made: there is only the source-ordered list.
-//!
-//! ## Comments at every level
-//!
-//! Top-level YAML comments (own-line and trailing inline) live as
-//! `PayloadItem::Comment` entries interleaved with fields and `$` items.
-//! Comments **inside** a structured value (mapping or sequence) live on
-//! the [`PayloadItem::Field`] / [`PayloadItem::Meta`] that owns that
-//! value, as a `nested_comments` slice with paths relative to the
-//! field's value tree. One storage surface, scoped to the item that
-//! "owns" each comment: no sidecar Vec hanging off `Payload`.
-//!
-//! ## Two faces
-//!
-//! [`Payload`] exposes both ordered iteration (over the raw items vec) and
-//! map-keyed access (`get`, `iter`, `insert`, `remove`). The map-style
-//! accessors filter to [`PayloadItem::Field`] only: they intentionally
-//! don't expose `$` entries because typed `$` access has dedicated methods
-//! (`quill`, `kind`, `ext`, `seed`, `set_quill`, `set_kind`, `set_ext`,
-//! `set_seed`).
-//!
-//! The map-style accessors present the payload as a key/value map of user
-//! data, while comment preservation and `$` access ride on the same
-//! underlying storage.
+//! [`Payload`] exposes both ordered iteration over the raw items and map-keyed
+//! access (`get`, `iter`, `insert`, `remove`). The map-style accessors filter to
+//! [`PayloadItem::Field`]; `$` entries have dedicated typed accessors.
 
 use indexmap::IndexMap;
 use serde_json::{Map as JsonMap, Value as JsonValue};
@@ -49,11 +24,10 @@ use crate::version::QuillReference;
 /// Which out-of-band system-metadata map a [`PayloadItem::Meta`] carries.
 ///
 /// `$ext` and `$seed` are the same shape: an opaque `Map<String, Value>` that
-/// never reaches the plate JSON and round-trips through Markdown and the storage
-/// DTO, so the live model represents them as one variant discriminated by this
-/// key. They differ only in their canonical sort rank, whether they are
-/// root-only, and (downstream of storage) whether the seeding layer interprets
-/// them: `$ext` is opaque; `$seed` is read by [`crate::SeedOverlay::from_json`].
+/// never reaches the plate JSON but round-trips through Markdown and the storage
+/// DTO. They differ in canonical sort rank, root-only-ness, and whether the
+/// seeding layer interprets them ([`crate::SeedOverlay::from_json`] reads
+/// `$seed`; `$ext` stays opaque).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum MetaKey {
@@ -97,12 +71,11 @@ impl MetaKey {
     }
 }
 
-/// One entry in a [`Payload`]: a typed `$` system metadata entry, a user
-/// field, or a comment line.
+/// One entry in a [`Payload`]: a typed `$` system metadata entry, a user field,
+/// or a comment line.
 ///
-/// `PayloadItem` is the live in-memory model; it is intentionally **not**
-/// `Serialize`/`Deserialize`. Storage uses the versioned DTOs in
-/// `document::dto`, and bindings translate to their own wire types.
+/// The live in-memory model, deliberately **not** `Serialize`/`Deserialize`:
+/// storage goes through the versioned DTOs in `document::dto`.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum PayloadItem {
@@ -110,13 +83,9 @@ pub enum PayloadItem {
     Quill { reference: QuillReference },
     /// `$kind` system metadata: the card's kind name.
     Kind { value: String },
-    /// `$ext` / `$seed` system metadata: an opaque mapping (discriminated by
-    /// [`MetaKey`]) reserved for out-of-band data. Never emitted into the plate
-    /// JSON, always round-trips through Markdown and the storage DTO.
-    /// `nested_comments` carries YAML comments inside the mapping; paths are
-    /// **relative** to the value tree (the `$ext` / `$seed` key itself is not
-    /// part of the path). `$seed` is additionally interpreted by the seeding
-    /// layer; see [`crate::SeedOverlay::from_json`] and [`crate::Quill::seed_card`].
+    /// `$ext` / `$seed` system metadata: an opaque mapping discriminated by
+    /// [`MetaKey`], never emitted into the plate JSON. `nested_comments` carries
+    /// YAML comments inside the mapping, at paths **relative** to the value tree.
     Meta {
         key: MetaKey,
         value: JsonMap<String, JsonValue>,
@@ -124,10 +93,8 @@ pub enum PayloadItem {
     },
     /// A user-defined YAML field, optionally tagged `!must_fill`.
     ///
-    /// `nested_comments` carries YAML comments inside the field's value
-    /// (only meaningful when the value is a mapping or sequence); paths
-    /// are **relative** to the field's value tree (the field's key is
-    /// not part of the path).
+    /// `nested_comments` carries YAML comments inside the field's value, at
+    /// paths **relative** to that value tree.
     Field {
         key: String,
         value: QuillValue,
@@ -138,18 +105,13 @@ pub enum PayloadItem {
     },
     /// A YAML comment. Text excludes the leading `#` and one optional space.
     ///
-    /// `inline` distinguishes own-line comments (`# text` on a line by
-    /// itself) from trailing inline comments (`field: value # text`). An
-    /// inline comment attaches to the item that immediately precedes it
-    /// in the items vector; if no such item exists at emit time (orphan)
-    /// it degrades to an own-line comment.
+    /// An `inline` comment (`field: value # text`) attaches to the item that
+    /// immediately precedes it; an orphan degrades to an own-line comment.
     Comment { text: String, inline: bool },
 }
 
 impl PayloadItem {
-    /// Build a plain (non-fill) field entry with no nested comments. The
-    /// variants are public and constructible; this is the shorthand core's own
-    /// tests build item lists with.
+    /// Shorthand for a plain (non-fill) field entry with no nested comments.
     #[cfg(test)]
     pub(crate) fn field(key: impl Into<String>, value: QuillValue) -> Self {
         PayloadItem::Field {
@@ -160,8 +122,7 @@ impl PayloadItem {
         }
     }
 
-    /// Borrow the field/meta nested-comments slice. Returns `&[]` for
-    /// variants that don't carry nested comments.
+    /// `&[]` for variants that carry no nested comments.
     pub fn nested_comments(&self) -> &[NestedComment] {
         match self {
             PayloadItem::Field {
@@ -188,9 +149,8 @@ impl PayloadItem {
         }
     }
 
-    /// Canonical sort rank for typed `$` entries: `$quill` < `$kind` <
-    /// `$ext` < `$seed`. Returns `None` for user fields and comments,
-    /// which are positioned by source order and never reshuffled.
+    /// Canonical sort rank for typed `$` entries: `$quill` < `$kind` < `$ext` <
+    /// `$seed`. `None` for user fields and comments, which keep source order.
     fn meta_rank(&self) -> Option<u8> {
         match self {
             PayloadItem::Quill { .. } => Some(0),
@@ -202,16 +162,14 @@ impl PayloadItem {
 }
 
 /// Ordered, comment-preserving payload of a card-yaml block: a **read view**
-/// onto card-yaml storage.
-///
-/// Contains the block's `$` entries, user fields, and comments interleaved
-/// in source order. See the module docs for the full design.
+/// onto card-yaml storage, holding `$` entries, user fields, and comments
+/// interleaved in source order.
 ///
 /// Mutation is crate-internal. The invariants an edit must hold — at most one
 /// `$quill` / `$kind` / `$ext` / `$seed`, no duplicate field keys, every field
 /// name matching `[A-Za-z_][A-Za-z0-9_]*` — are not all expressible in the
 /// mutators' signatures, so out-of-crate authoring goes through the verbs that
-/// do enforce them: `Card::store_field` / `store_ext` / `store_seed_overlay`,
+/// enforce them: `Card::store_field` / `store_ext` / `store_seed_overlay`,
 /// `Document::set_quill_ref`, and [`TypedWriter`](crate::TypedWriter).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Payload {
@@ -219,13 +177,11 @@ pub struct Payload {
 }
 
 impl Payload {
-    /// Create an empty `Payload`.
     pub(crate) fn new() -> Self {
         Self { items: Vec::new() }
     }
 
-    /// Build from an `IndexMap` of user fields. No `$` entries, no
-    /// comments, no fill markers.
+    /// No `$` entries, no comments, no fill markers.
     pub(crate) fn from_index_map(map: IndexMap<String, QuillValue>) -> Self {
         let items = map
             .into_iter()
@@ -239,21 +195,14 @@ impl Payload {
         Self { items }
     }
 
-    /// Build from a pre-computed item list (parser and DTO entry point).
     pub(crate) fn from_items(items: Vec<PayloadItem>) -> Self {
         Self { items }
     }
 
-    /// Build from a pre-computed item list plus a flat absolute-path
-    /// `nested_comments` Vec, partitioning the latter onto the matching
-    /// [`PayloadItem::Field`] / [`PayloadItem::Meta`] items.
-    ///
-    /// The first segment of each comment's `container_path` must be a
-    /// `Key(field)` matching a Field or Meta (`$ext` / `$seed`) entry in `items`;
-    /// that first segment is stripped and the remainder attached to the
-    /// owning item. Comments whose first segment matches nothing in
-    /// `items` are dropped silently: this can only arise from a
-    /// hand-crafted storage DTO that references a non-existent field.
+    /// Partition a flat absolute-path `nested_comments` Vec onto the matching
+    /// [`PayloadItem::Field`] / [`PayloadItem::Meta`] items: the first path
+    /// segment names the owner and is stripped. Comments matching no item are
+    /// dropped, which can only arise from a hand-crafted storage DTO.
     pub(crate) fn from_items_with_flat_nested(
         mut items: Vec<PayloadItem>,
         nested_comments: Vec<NestedComment>,
@@ -303,11 +252,9 @@ impl Payload {
         Self { items }
     }
 
-    /// Walk every Field/Meta item and yield each nested comment with its
-    /// path re-prefixed by the owning item's key (`$ext` / `$seed` for Meta,
-    /// the field key for Field). Used by the storage DTO conversion to
-    /// flatten the per-item storage back to the wire format's
-    /// payload-level sidecar.
+    /// The inverse of [`from_items_with_nested`](Self::from_items_with_nested):
+    /// re-prefix each nested comment's path with its owning item's key, for the
+    /// storage DTO's payload-level sidecar.
     pub(crate) fn flat_nested_comments(&self) -> Vec<NestedComment> {
         let mut out = Vec::new();
         for item in &self.items {
@@ -339,32 +286,24 @@ impl Payload {
         out
     }
 
-    // ── Item-level access ───────────────────────────────────────────────────
-
     /// Ordered iterator over raw items (`$` entries, fields, comments).
     pub fn items(&self) -> &[PayloadItem] {
         &self.items
     }
 
-    /// Mutable access to the raw item list, for the in-crate rewrites that
-    /// touch an item in place rather than through a key — `normalize` NFC-folds
-    /// field names here. The slice cannot add or drop items, so the arity
-    /// invariants (at most one `Quill`/`Kind`/`Ext`/`Seed`, no duplicate field
-    /// keys) survive any use of it; a caller that rewrites a `Field` key owns
-    /// keeping it well-formed and distinct.
+    /// Mutable access to the raw item list for in-place rewrites. The slice
+    /// cannot add or drop items, so the arity invariants survive any use of it;
+    /// a caller that rewrites a `Field` key owns keeping it well-formed and
+    /// distinct.
     pub(crate) fn items_mut(&mut self) -> &mut [PayloadItem] {
         &mut self.items
     }
 
-    /// Remove the first item matching `pred` and return it. The typed
-    /// removers (`take_meta`, `remove`) wrap this and destructure
-    /// the returned variant, which `pred` guarantees.
+    /// Remove and return the first item matching `pred`.
     fn take_item(&mut self, pred: impl Fn(&PayloadItem) -> bool) -> Option<PayloadItem> {
         let pos = self.items.iter().position(pred)?;
         Some(self.items.remove(pos))
     }
-
-    // ── Typed `$` access ────────────────────────────────────────────────────
 
     /// The `$quill` reference, if declared.
     pub fn quill(&self) -> Option<&QuillReference> {
@@ -390,23 +329,21 @@ impl Payload {
         })
     }
 
-    /// The `$ext` map, if declared. The map is opaque: Quillmark does not
-    /// interpret its contents and never emits them into the plate JSON.
+    /// The `$ext` map, if declared. Opaque: never interpreted, never emitted
+    /// into the plate JSON.
     pub fn ext(&self) -> Option<&JsonMap<String, JsonValue>> {
         self.meta(MetaKey::Ext)
     }
 
-    /// The raw `$seed` map (keyed by card-kind), if declared. The seeding
-    /// layer interprets it; it never reaches the plate JSON. For a parsed,
-    /// per-kind overlay, index this map by kind and pass the entry to
-    /// [`crate::SeedOverlay::from_json`].
+    /// The raw `$seed` map, keyed by card-kind. Never reaches the plate JSON;
+    /// index it by kind and pass the entry to [`crate::SeedOverlay::from_json`]
+    /// for a parsed overlay.
     pub fn seed(&self) -> Option<&JsonMap<String, JsonValue>> {
         self.meta(MetaKey::Seed)
     }
 
-    /// Set or replace the `$quill` entry. Inserts at canonical position
-    /// (before any `$kind` / `$ext` / `$seed`) when adding. Comments are
-    /// untouched.
+    /// Set or replace the `$quill` entry, at its canonical position (before any
+    /// `$kind` / `$ext` / `$seed`). Comments are untouched.
     pub(crate) fn set_quill(&mut self, reference: QuillReference) {
         self.upsert_meta(PayloadItem::Quill { reference });
     }
@@ -428,20 +365,14 @@ impl Payload {
         });
     }
 
-    /// Set or replace the `$ext` entry. Same insertion rules as
-    /// [`set_quill`](Self::set_quill); the canonical position is after
-    /// `$quill` / `$kind` and before any user field.
-    ///
-    /// Nested comments on a replaced `$ext` entry are dropped (the new value
-    /// tree may not contain matching positions).
+    /// Set or replace the `$ext` entry, after `$quill` / `$kind` and before any
+    /// user field. Nested comments on a replaced entry are dropped.
     pub(crate) fn set_ext(&mut self, value: JsonMap<String, JsonValue>) {
         self.set_meta(MetaKey::Ext, value);
     }
 
-    /// Set or replace the `$seed` entry. Inserted at the canonical position
-    /// (after `$quill` / `$kind` / `$ext`, before any user field).
-    /// Nested comments on a replaced `$seed` are dropped, like
-    /// [`set_ext`](Self::set_ext).
+    /// Set or replace the `$seed` entry, after `$quill` / `$kind` / `$ext` and
+    /// before any user field. Nested comments on a replaced entry are dropped.
     pub(crate) fn set_seed(&mut self, value: JsonMap<String, JsonValue>) {
         self.set_meta(MetaKey::Seed, value);
     }
@@ -476,10 +407,9 @@ impl Payload {
             .iter()
             .position(|i| matches!(i.meta_rank(), Some(r) if r > new_rank))
             .unwrap_or_else(|| {
-                // No higher-ranked `$` item; insert after the last lower
-                // (or equal-rank-impossible) `$` item, before any non-`$`
-                // entry. This keeps the `$quill < $kind < $ext` ordering
-                // while not displacing user fields.
+                // Insert after the last lower-ranked `$` item and before any
+                // non-`$` entry: keeps the `$` ordering without displacing
+                // user fields.
                 self.items
                     .iter()
                     .rposition(|i| matches!(i.meta_rank(), Some(r) if r < new_rank))
@@ -488,8 +418,6 @@ impl Payload {
             });
         self.items.insert(insert_at, new);
     }
-
-    // ── User-field access (map-style, `$` entries filtered out) ─────────────
 
     /// Iterator over user `(key, &value)` pairs. Excludes `$` entries and
     /// comments; preserves source order.
@@ -521,9 +449,9 @@ impl Payload {
         self.len() == 0
     }
 
-    /// Look up a user-field value by key. `$` entries are not visible via
-    /// this accessor: use [`quill`](Self::quill) / [`kind`](Self::kind) /
-    /// [`ext`](Self::ext) / [`seed`](Self::seed).
+    /// Look up a user-field value by key. `$` entries are invisible here: use
+    /// [`quill`](Self::quill) / [`kind`](Self::kind) / [`ext`](Self::ext) /
+    /// [`seed`](Self::seed).
     pub fn get(&self, key: &str) -> Option<&QuillValue> {
         self.items.iter().find_map(|item| match item {
             PayloadItem::Field { key: k, value, .. } if k == key => Some(value),
@@ -549,13 +477,10 @@ impl Payload {
     /// and comments are untouched; replacing a field discards its
     /// `nested_comments` (the new value tree may not carry matching positions).
     ///
-    /// Validates the field name and value depth
-    /// ([`validate_field`](super::edit::validate_field)) at this boundary, so
-    /// the "a constructed document cannot be invalid" invariant holds even for
-    /// the direct `Payload` path reachable through
-    /// [`Card::payload_mut`](super::Card::payload_mut). Pre-validated callers
-    /// (typed commit, all-or-nothing batches) use `insert_unchecked` to skip the
-    /// redundant check.
+    /// Validates the field name and value depth here, so "a constructed document
+    /// cannot be invalid" holds even for the direct `Payload` path reachable
+    /// through [`Card::payload_mut`](super::Card::payload_mut). Pre-validated
+    /// callers use `insert_unchecked`.
     pub(crate) fn insert(
         &mut self,
         key: impl Into<String>,
@@ -578,10 +503,8 @@ impl Payload {
         Ok(self.insert_item(key, value, true))
     }
 
-    /// [`insert`](Self::insert) without the field-invariant check. `pub(crate)`
-    /// for callers that have already validated the exact stored `(name, value)`:
-    /// `resolve_field_write` and the batch setters that validate the whole
-    /// batch before applying any of it.
+    /// [`insert`](Self::insert) without the field-invariant check, for callers
+    /// that have already validated the exact stored `(name, value)`.
     pub(crate) fn insert_unchecked(
         &mut self,
         key: impl Into<String>,
@@ -700,8 +623,6 @@ mod tests {
     fn insert_enforces_the_field_invariant() {
         use super::super::edit::FieldViolation;
 
-        // A malformed name is refused: `payload_mut().insert(...)` cannot seat
-        // an invalid field in a "constructed" document.
         let mut fm = Payload::new();
         assert_eq!(fm.insert("bad name", qv("v")), Err(FieldViolation::InvalidName));
         assert_eq!(fm.insert("$id", qv("v")), Err(FieldViolation::InvalidName));
@@ -710,7 +631,6 @@ mod tests {
             Err(FieldViolation::InvalidName)
         );
 
-        // Over-deep value.
         let mut deep = serde_json::json!(0);
         for _ in 0..(crate::document::limits::MAX_YAML_DEPTH + 5) {
             deep = serde_json::json!([deep]);
@@ -720,10 +640,8 @@ mod tests {
             Err(FieldViolation::TooDeep)
         );
 
-        // Nothing was applied on any rejection.
         assert!(fm.items().is_empty());
 
-        // The unchecked path is the deliberate escape hatch: no validation.
         fm.insert_unchecked("bad name", qv("v"));
         assert_eq!(fm.items().len(), 1);
     }
@@ -735,7 +653,6 @@ mod tests {
         fm.set_kind("main");
         let _ = fm.insert("title", qv("Hello"));
         let items = fm.items().to_vec();
-        // Reconstruct with an interleaved comment.
         let mut items_with_comment = items;
         items_with_comment.insert(2, PayloadItem::comment("c"));
         let fm = Payload::from_items(items_with_comment);
@@ -744,7 +661,6 @@ mod tests {
             .map(|(k, v)| (k.clone(), v.as_str().unwrap_or_default().to_string()))
             .collect();
         assert_eq!(pairs, vec![("title".to_string(), "Hello".to_string())]);
-        // But the typed access still works:
         assert_eq!(fm.kind(), Some("main"));
     }
 
