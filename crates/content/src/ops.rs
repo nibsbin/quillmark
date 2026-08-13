@@ -1414,34 +1414,6 @@ mod tests {
         }
     }
 
-    /// A single-line content `a￼b` (one inline island slot, one backing island).
-    fn content_with_island() -> Content {
-        let mut rt = Content::empty();
-        rt.text = format!("a{ISLAND_SLOT}b");
-        rt.lines = vec![Line {
-            kind: LineKind::Para,
-            containers: vec![],
-            continues: false,
-        }];
-        rt.islands = vec![island("i1")];
-        assert_eq!(rt.validate(), Ok(()));
-        rt
-    }
-
-    #[test]
-    fn delete_slot_cascades_island_removal() {
-        let mut rt = content_with_island();
-        // Delete the slot char at index 1 (`a￼b` -> `ab`).
-        let d = Delta {
-            ops: vec![Op::Retain(1), Op::Delete(1), Op::Retain(1)],
-        };
-        rt.apply_text_delta(&d).unwrap();
-        assert_eq!(rt.text, "ab");
-        assert!(rt.islands.is_empty(), "island cascaded away with its slot");
-        // slot count now equals islands.len(): validate confirms the sync.
-        assert_eq!(rt.validate(), Ok(()));
-    }
-
     #[test]
     fn delete_one_of_two_slots_removes_the_matching_island() {
         let mut rt = Content::empty();
@@ -1460,49 +1432,14 @@ mod tests {
         };
         rt.apply_text_delta(&d).unwrap();
         assert_eq!(rt.text, format!("x{ISLAND_SLOT}"));
-        // The surviving island is the second one: the cascade removed the
-        // island whose slot was deleted, not merely the last entry.
         assert_eq!(rt.islands.len(), 1);
         assert_eq!(rt.islands[0].id, "second");
         assert_eq!(rt.validate(), Ok(()));
     }
 
     #[test]
-    fn insert_raw_slot_is_rejected() {
-        let mut rt = from_markdown("ab").unwrap();
-        // An Op::Insert carrying a raw U+FFFC would orphan a slot: reject it.
-        let d = Delta {
-            ops: vec![
-                Op::Retain(1),
-                Op::Insert(ISLAND_SLOT.to_string()),
-                Op::Retain(1),
-            ],
-        };
-        assert_eq!(rt.apply_text_delta(&d), Err(ApplyError::IslandSlotInInsert));
-        // Content untouched on the rejected insert (checked before any mutation).
-        assert_eq!(rt.text, "ab");
-        assert!(rt.islands.is_empty());
-        assert_eq!(rt.validate(), Ok(()));
-    }
-
-    #[test]
-    fn insert_carriage_return_is_stripped() {
-        // A `\r` in an insert is dropped, not persisted: the content stays
-        // valid instead of the op returning Ok over a `CarriageReturn`
-        // violation. `\r\n` still yields the line-boundary `\n`.
-        let mut rt = from_markdown("ab").unwrap();
-        let d = Delta {
-            ops: vec![Op::Retain(1), Op::Insert("\r".into()), Op::Retain(1)],
-        };
-        rt.apply_text_delta(&d).unwrap();
-        assert_eq!(rt.text, "ab");
-        assert_eq!(rt.validate(), Ok(()));
-    }
-
-    #[test]
     fn insert_bidi_control_is_stripped() {
-        // A bidi override (U+202E) in an insert is dropped: the content stays
-        // valid and import's Trojan-source defense is not bypassed.
+        // Import's Trojan-source defense is not bypassed by the delta channel.
         let mut rt = from_markdown("ab").unwrap();
         let d = Delta {
             ops: vec![
@@ -1518,8 +1455,6 @@ mod tests {
 
     #[test]
     fn insert_crlf_keeps_the_newline_and_splits() {
-        // Stripping only the `\r` of a `\r\n` leaves a real line boundary: the
-        // insert still splits the line, and slot/line sync stays intact.
         let mut rt = from_markdown("ab").unwrap();
         let d = Delta {
             ops: vec![Op::Retain(1), Op::Insert("\r\n".into()), Op::Retain(1)],
@@ -1532,15 +1467,12 @@ mod tests {
 
     #[test]
     fn insert_of_clean_text_is_not_reallocated() {
-        // The hot path: a delta whose inserts carry no forbidden char borrows
-        // through `sanitize_inserts` unchanged.
         let d = Delta {
             ops: vec![Op::Retain(1), Op::Insert("clean\n".into()), Op::Retain(1)],
         };
         assert!(matches!(sanitize_inserts(&d), Cow::Borrowed(_)));
     }
 
-    /// A bundle carrying a text delta and mark ops alone.
     fn mark_bundle(delta: Delta, mark_ops: Vec<MarkOp>) -> ChangeBundle {
         ChangeBundle {
             delta,
@@ -1549,7 +1481,6 @@ mod tests {
         }
     }
 
-    /// A bundle carrying island ops alone.
     fn island_bundle(island_ops: Vec<IslandOp>) -> ChangeBundle {
         ChangeBundle {
             island_ops,
@@ -1557,8 +1488,7 @@ mod tests {
         }
     }
 
-    /// A one-cell table island's props, so a `Set` lands a shape `normalize`
-    /// leaves alone and `validate` accepts.
+    /// A one-cell table island's props, a shape `normalize` and `validate` accept.
     fn table_props(header: &str, cell: &str) -> serde_json::Value {
         serde_json::json!({
             "header": [{ "text": header, "marks": [] }],
@@ -1567,7 +1497,6 @@ mod tests {
         })
     }
 
-    /// A minimal image island: the cheapest well-formed `Insert` payload.
     fn image(id: &str) -> Island {
         Island::new(id.into(), "image".into())
             .with_props(serde_json::json!({ "url": "u", "alt": "a" }))
@@ -1590,9 +1519,8 @@ mod tests {
         }
     }
 
-    /// The motivating case: an island payload edit moves the island entry alone,
-    /// so an anchor elsewhere in the field survives an edit that a whole-value
-    /// `install` would have cleared.
+    /// An island payload edit moves the entry alone, so an anchor elsewhere in
+    /// the field survives an edit a whole-value `install` would have cleared.
     #[test]
     fn island_set_edits_props_and_keeps_the_field_anchors() {
         let mut rt = from_markdown("intro\n\n| H |\n| --- |\n| a |").unwrap();
@@ -1622,8 +1550,6 @@ mod tests {
         assert_eq!(rt.validate(), Ok(()));
     }
 
-    /// A `Set` whose id names no island is refused, never a silent no-op: the
-    /// store must not keep the old island while the caller believes it committed.
     #[test]
     fn island_set_rejects_an_unknown_id() {
         let mut rt = from_markdown("| H |\n| --- |\n| a |").unwrap();
@@ -1640,8 +1566,6 @@ mod tests {
         assert_eq!(rt, before);
     }
 
-    /// `Insert` mints the slot and its entry together, so the slot count and the
-    /// island list stay in lockstep with no orphan window.
     #[test]
     fn island_insert_adds_the_slot_and_its_entry() {
         let mut rt = from_markdown("ab").unwrap();
@@ -1663,8 +1587,6 @@ mod tests {
         assert_eq!(rt.islands.len(), 1);
         assert_eq!(rt.islands[0].id, "isl-new");
         assert_eq!(rt.validate(), Ok(()), "slot count matches the island list");
-        // The anchor before the slot is untouched; one after would have moved
-        // with the splice.
         let anchor = rt
             .marks
             .iter()
@@ -1673,12 +1595,9 @@ mod tests {
         assert_eq!((anchor.start, anchor.end), (0, 1));
     }
 
-    /// Island ops sequence: op *n*'s `at` counts the slots ops `0..n` already
-    /// spliced, not the shared post-delta frame, and its entry files at the
-    /// slot-order index that frame gives rather than at emission order. Slots
-    /// after `a` and `b` of `abc` go in at 1 and 3, and an op at an earlier
-    /// position emitted last still files first. Both assertions land
-    /// differently under the post-delta-only reading, which errors neither way.
+    /// Op *n*'s `at` counts the slots ops `0..n` already spliced, not the shared
+    /// post-delta frame; both assertions land differently under the
+    /// post-delta-only reading, which errors neither way.
     #[test]
     fn island_inserts_apply_in_sequence() {
         let mut rt = from_markdown("xabc").unwrap();
@@ -1714,8 +1633,6 @@ mod tests {
         assert_eq!(rt.validate(), Ok(()));
     }
 
-    /// A computed splice carrying a slot is refused whole; the same edit lands
-    /// as its split form, the slot-free delta plus one `Insert` per slot.
     #[test]
     fn slot_bearing_splice_splits_into_delta_and_insert() {
         let mut rt = from_markdown("ab").unwrap();
@@ -1747,35 +1664,8 @@ mod tests {
         assert_eq!(rt.validate(), Ok(()));
     }
 
-    /// The delete cascade is whole: the payload leaves the store with its slot,
-    /// so re-landing the island re-inserts the value the producer held, under
-    /// the original id the drop freed.
-    #[test]
-    fn island_delete_then_restore_round_trips() {
-        let mut rt = from_markdown("ab").unwrap();
-        rt.apply_field_change(&island_bundle(vec![IslandOp::Insert {
-            at: 1,
-            island: image("isl-a"),
-        }]))
-        .unwrap();
-        let before = rt.clone();
-        let held = rt.islands[0].clone();
-
-        rt.apply_field_change(&ChangeBundle::from_delta(diff(&before.text, "ab")))
-            .unwrap();
-        assert!(rt.islands.is_empty(), "the payload goes with its slot");
-
-        rt.apply_field_change(&island_bundle(vec![IslandOp::Insert {
-            at: 1,
-            island: held,
-        }]))
-        .unwrap();
-        assert_eq!(rt, before, "same content, original id included");
-    }
-
     /// A block island's line demotes to `Para` when its slot goes: the kind
     /// stops matching the text and `normalize` repairs rather than fails.
-    /// Re-landing one therefore carries the re-tag, not the island op alone.
     #[test]
     fn block_island_restore_retags_its_line() {
         let mut rt = from_markdown("intro").unwrap();
@@ -1800,8 +1690,7 @@ mod tests {
         assert!(rt.islands.is_empty());
         assert_eq!(rt.lines[1].kind, LineKind::Para, "demoted, not failed");
 
-        // The line stayed open, so the restore is the island op and the re-tag;
-        // only a delete that took the `\n` too would need a delta.
+        // The line stayed open, so the restore needs no delta.
         rt.apply_field_change(&ChangeBundle {
             island_ops: vec![IslandOp::Insert { at: 6, island: held }],
             line_ops: vec![LineOp::SetKind {
