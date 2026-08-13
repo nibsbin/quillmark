@@ -162,3 +162,13 @@ Helper contents (generated in `backends/typst/helper.rs` from `lib.typ.template`
   Note the name collision: this Typst helper is distinct from the `plaintext`
   **field type**. The helper projects *any* content to a `str`; the field type
   declares a field's content plain from the start.
+- `display-of(cell, ..args)` / `value-of(cell, default: none)`: the two
+  projections of a value-object cell, wrapped. They exist because the raw
+  spellings make every plate re-derive the same two things — a missing-cell
+  branch, and the parenthesized-closure form Typst's dict-key method sugar
+  forces — which the three fixture plates each grew their own copy of before
+  the helpers landed. `display-of` forwards trailing arguments, so it serves a
+  date's pattern and a card scalar's empty call in one spelling. Both are
+  ordinary sugar over `cell.display` / `cell.value`: the region comes from
+  where the closure's ink is born, so wrapping the call site changes nothing
+  about attribution.

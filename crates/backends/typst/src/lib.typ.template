@@ -169,3 +169,19 @@
 /// `plaintext(card.at("$path") + "$body")`). Returns `""` for a blank field or
 /// an address carrying no richtext content.
 #let plaintext(field) = _qm-plaintext.at(field, default: "")
+
+/// A value-object field's **placement** projection: its rendered ink, whose
+/// glyphs carry the field's region. `date`/`datetime` fields and a card's
+/// declared string/number fields arrive as `(value:, display:)` objects; this
+/// spares every plate the parenthesized-closure form and the missing-cell
+/// branch, so `display-of(card.at("from", default: none))` covers a card that
+/// has no such key (⇒ `none`, which places as nothing). Trailing arguments
+/// forward to the closure, so a date takes its pattern here too:
+/// `display-of(data.issued, "[year]")`.
+#let display-of(cell, ..args) = if cell == none { none } else { (cell.display)(..args) }
+
+/// The **native** projection of the same object, `none`-total with a `default`.
+/// Use it where something consumes the value instead of placing it: a package
+/// argument that does string work, a comparison, a `form-field`'s `value:`.
+/// Ink drawn from it is the consumer's own, attributed to no field.
+#let value-of(cell, default: none) = if cell == none { default } else { cell.value }

@@ -1,4 +1,4 @@
-#import "@local/quillmark-helper:0.1.0": data
+#import "@local/quillmark-helper:0.1.0": data, display-of
 
 #set text(font: "Figtree")
 
@@ -20,7 +20,7 @@
 // Present each sub-document programatically
 #for card in data.at("$cards") {
   if card.at("$kind") == "quotes" [
-    *#(card.author.display)()*: _#card.at("$body") _
+    *#display-of(card.author)*: _#card.at("$body") _
   ]
 }
 

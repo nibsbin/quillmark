@@ -33,6 +33,10 @@ A present `type: date` / `type: datetime` field arrives as a small value-object 
 
 One rule: **native anything → `.value`; region render → `(…display)(…)`.** A package that formats a date internally still needs `.value` when it does native `datetime` work, but placing `(data.issued.display)(..)` (even deep inside a package) keeps the region, because the closure's ink is born at its generated definition site, not the call site.
 
+The `display-of` / `value-of` helpers wrap both projections and tolerate a
+missing cell; see [Card scalars](#card-scalars) below. `display-of(data.issued,
+"[year]")` is `(data.issued.display)("[year]")` without the parentheses trap.
+
 ### Card scalars
 
 A **card's** declared `string` / `integer` / `number` fields arrive as the same
@@ -41,16 +45,32 @@ shared loop variable (`card.<field>`), so only a per-instance render target can
 tell one card's cell from another's.
 
 ```typst
+#import "@local/quillmark-helper:0.1.0": data, display-of, value-of
+
 #for card in data.at("$cards", default: ()) {
-  (card.from.display)()          // rendered, click-to-edit, keyed on this card
-  card.from.value                // native str (packages, string ops, no region)
-  upper(card.from.value)         // string work → .value
+  display-of(card.from)                  // rendered, click-to-edit, keyed on this card
+  value-of(card.from)                    // native str (packages, string ops, no region)
+  upper(value-of(card.from))             // string work → the native value
+
+  // Both are total over a missing cell, and `value-of` takes a fallback.
+  display-of(card.at("note", default: none))
+  value-of(card.at("format", default: none), default: "standard")
 }
 ```
 
-The rule is the date rule: **native anything → `.value`; region render →
-`(…display)(…)`.** `display` takes no arguments here (`(card.from.display)()`),
-where a date's takes the format pattern.
+The rule is the date rule: **native anything → the value projection; region
+render → the display projection.**
+
+`display-of` / `value-of` are the spelling to reach for. They wrap the
+projections the object carries — `(cell.display)(..)` and `cell.value` — adding
+the two things every plate otherwise re-derives: tolerance for a missing cell,
+and freedom from the parenthesized-closure form. They work on **dates** too,
+forwarding trailing arguments, so one spelling covers both value-object kinds:
+
+```typst
+display-of(data.issued, "[day padding:none] [month repr:long] [year]")
+value-of(data.issued).year()           // the native datetime
+```
 
 Scope, and what stays a plain value:
 
@@ -70,8 +90,8 @@ Scope, and what stays a plain value:
 
 Two consequences worth checking when you migrate a plate: a comparison against
 the bare cell (`card.title != ""`) is now always true and must read
-`card.title.value != ""`, and a widget bound to a card scalar takes the raw
-value (`form-field("Qty", value: card.qty.value)`).
+`value-of(card.title) != ""`, and a widget bound to a card scalar takes the
+native value (`form-field("Qty", value: value-of(card.qty))`).
 
 ### Checking for Optional Fields
 

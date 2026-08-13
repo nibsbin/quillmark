@@ -587,9 +587,12 @@ card_kinds:
       count:
         type: integer
         description: how many copies
+      on:
+        type: date
+        description: the stamp date
 "#;
     const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data
+#import "@local/quillmark-helper:0.1.0": data, display-of, value-of
 #set page(width: 612pt, height: 792pt, margin: 72pt)
 #set text(size: 11pt)
 
@@ -602,12 +605,16 @@ card_kinds:
   }
   let c = card.at("count", default: none)
   if c != none { [ #(c.display)()] }
+  // The helper spares the paren form and the missing-cell branch, and forwards
+  // trailing arguments, so one spelling covers a date's pattern too.
+  [ #display-of(card.at("on", default: none), "[year]")]
+  [ #value-of(card.at("missing", default: none), default: "—")]
   parbreak()
 }
 "#;
     let data = serde_json::json!({
         "$cards": [
-            {"$kind": "stamp", "from": "ORG1/SYMBOL", "count": 3},
+            {"$kind": "stamp", "from": "ORG1/SYMBOL", "count": 3, "on": "2026-01-02"},
             {"$kind": "stamp", "from": ""},
             {"$kind": "stamp", "from": "ORG3/SYMBOL"},
         ],
@@ -624,6 +631,10 @@ card_kinds:
     assert!(
         fields.contains("$cards.stamp.0.count"),
         "a number field regions like a string: {fields:?}"
+    );
+    assert!(
+        fields.contains("$cards.stamp.0.on"),
+        "`display-of` forwards a date's pattern and keeps its region: {fields:?}"
     );
     // A blank scalar still lowers to a value object, but draws no ink.
     assert!(

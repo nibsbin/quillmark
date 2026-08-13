@@ -1,4 +1,4 @@
-#import "@local/quillmark-helper:0.1.0": data, signature-field
+#import "@local/quillmark-helper:0.1.0": data, display-of, signature-field, value-of
 #import "@local/tonguetoquill-usaf-memo:3.0.0": backmatter, frontmatter, indorsement, mainmatter
 
 // Frontmatter configuration
@@ -103,24 +103,22 @@
     // widget-name suffix only. The card body's region rides its own glyph
     // spans through the package rebuild, per-card because each card's body
     // has its own backend-generated eval site.
-    // A card's scalar fields arrive as value objects. `(…display)()` renders
-    // ink whose glyphs carry the field's per-instance region, so a click on an
+    // A card's scalar fields arrive as value objects. `display-of` renders ink
+    // whose glyphs carry the field's per-instance region, so a click on an
     // indorsement's FROM/MEMORANDUM FOR line routes to that card's own address;
-    // `format` and `action` take `.value` because the package does string work
-    // on them (an `in` assert, a `.trim()`).
-    let ink(cell) = if cell == none { none } else { (cell.display)() }
-    let card_format = card.at("format", default: none)
+    // `format` and `action` take the native value because the package does
+    // string work on them (an `in` assert, a `.trim()`).
     indorsement(
-      from: ink(card.at("from", default: none)),
-      to: ink(card.at("for", default: none)),
+      from: display-of(card.at("from", default: none)),
+      to: display-of(card.at("for", default: none)),
       signature_block: card.signature_block,
       signing_field: signature-field(
         "Ind_" + str(i) + "_Signature",
         field: card.at("$path") + "signature_block",
       ),
-      format: if card_format == none { "standard" } else { card_format.value },
+      format: value-of(card.at("format", default: none), default: "standard"),
       date: resolved_date,
-      ..if "action" in card { (action: card.action.value) },
+      ..if "action" in card { (action: value-of(card.action)) },
       body_content,
     )
   }

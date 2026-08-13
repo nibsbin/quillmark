@@ -16,10 +16,17 @@
   schema address, and `card.at("$kind")` dispatch is untouched), array elements
   stay raw, and booleans, `none`, and undeclared keys are unchanged.
   **Breaking** for Typst plates that read a card scalar: a package argument or
-  string op takes `.value`, and a comparison against the bare cell
+  string op takes the native value, and a comparison against the bare cell
   (`card.title != ""`) is now always true — the one break that surfaces as a
   wrong render rather than a Typst error. See
   [0.104 → 0.105](docs/migrations/0.104-to-0.105.md).
+- feat(typst): `display-of(cell, ..args)` and `value-of(cell, default: none)`
+  join the helper package: the two projections of a value-object cell, wrapped
+  so a plate stops re-deriving a missing-cell branch and the parenthesized
+  `(cell.display)(..)` form Typst's dict-key method sugar forces. They cover
+  dates as well as card scalars — `display-of` forwards trailing arguments, so
+  `display-of(data.issued, "[year]")` is the date spelling too. Sugar over the
+  projections, which keep working unchanged.
 
 - feat(core,wasm,python)!: a `Content` nested inside a composite field is
   readable at its own codec. `TypedReader::get_content_at(name, path)` (and the
