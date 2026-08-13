@@ -483,23 +483,20 @@ export declare class Engine {
 	open(quill: Quill, doc: Document): Promise<LiveSession>;
 
 	/**
-	 * Output formats `quill`'s backend can emit. An ALWAYS-free pre-render probe:
-	 * it answers from the descriptor's required `formats` manifest WITHOUT loading
-	 * the backend binary or cloning the quill. Async for API stability.
+	 * Output formats `quill`'s backend can emit. An always-free pre-render probe:
+	 * it answers from the descriptor's `formats` manifest without loading the
+	 * backend binary or cloning the quill. Async for API stability.
 	 */
 	supportedFormats(quill: Quill): Promise<OutputFormat[]>;
 
 	/**
-	 * Whether `quill`'s BACKEND can paint sessions to a canvas: a pre-session
-	 * ESTIMATE, not a fact about any particular compile. Same always-free probe
-	 * as `supportedFormats`: answered from the descriptor's required `canvas`
-	 * manifest, no binary load and no quill clone. Both the Typst and pdfform
-	 * backends report `true` here unconditionally; each paints a complete page
-	 * raster (see {@link LiveSession.paint}), but a specific compile can still
-	 * refuse to paint (e.g. a 0-page document), so this can answer `true` while
-	 * the resulting {@link LiveSession.supportsCanvas} answers `false`. Gate
-	 * mounting a canvas UI on this; gate the actual `paint` call on the session's
-	 * getter once `open()` has run.
+	 * Whether `quill`'s backend can paint sessions to a canvas: a pre-session
+	 * estimate, not a fact about any particular compile, answered from the
+	 * descriptor's `canvas` manifest like `supportedFormats`. A specific compile
+	 * can still refuse to paint (a 0-page document, say), so this can answer
+	 * `true` while the resulting {@link LiveSession.supportsCanvas} answers
+	 * `false`. Gate mounting a canvas UI on this, and the `paint` call itself on
+	 * the session's getter.
 	 */
 	supportsCanvas(quill: Quill): Promise<boolean>;
 }
@@ -507,14 +504,11 @@ export declare class Engine {
 /**
  * Iterative render session over a compiled snapshot. `free()` when done.
  *
- * CANVAS PAINT IS COMPLETE. {@link LiveSession.paint} writes a complete page
- * raster: every piece of page content is already visible in the painted
- * pixels, with NO compositing required by the caller. Both backends that
- * support canvas satisfy this: Typst rasterizes its laid-out page natively;
- * pdfform pre-flattens bound field values into the page content and rasterizes
- * that, so field values appear in the raster on their own.
- * {@link LiveSession.regions} carries schema-field geometry for interactive
- * overlays / cross-navigation drawn on top of the raster; it is never needed to
+ * CANVAS PAINT IS COMPLETE: {@link LiveSession.paint} writes a whole page
+ * raster, every piece of page content already visible in the painted pixels,
+ * with no compositing required by the caller — pdfform pre-flattens bound field
+ * values into the page content to satisfy this. {@link LiveSession.regions}
+ * carries schema-field geometry for overlays drawn on top; it is never needed to
  * complete the picture.
  */
 export declare class LiveSession {
@@ -523,21 +517,18 @@ export declare class LiveSession {
 	readonly backendId: string;
 	/**
 	 * `true` iff `paint`/`pageSize` will succeed for THIS compile: the
-	 * authoritative answer, derived from the session's canvas seam, so it can
-	 * never disagree with what `paint` actually does. This can be `false` even
-	 * when {@link Engine.supportsCanvas} answered `true` for the same `quill`
-	 * (that probe is a pre-session backend estimate; e.g. a canvas-capable
-	 * backend compiled to a 0-page document has nothing to paint). Re-check
-	 * this getter after `open()` rather than relying on the engine hint alone.
+	 * authoritative answer, which can be `false` even where
+	 * {@link Engine.supportsCanvas} answered `true` for the same `quill` (a
+	 * canvas-capable backend compiled to a 0-page document has nothing to paint).
+	 * Re-check it after `open()` rather than relying on the engine hint.
 	 */
 	readonly supportsCanvas: boolean;
 	readonly warnings: Diagnostic[];
 	/**
 	 * Recompile the session against `doc`: the edit verb of a live preview.
-	 * Transactional: on throw every read (`render`, `paint`, `pageSize`,
-	 * `regions`) keeps serving the last-good compile, and the session recovers
-	 * on the next successful `update`. On success reads serve the new compile;
-	 * repaint `dirtyPages ∩ visible`.
+	 * Transactional — on throw every read keeps serving the last-good compile and
+	 * the session recovers on the next successful `update`. On success, repaint
+	 * `dirtyPages ∩ visible`.
 	 */
 	update(doc: Document): ChangeSet;
 	render(options?: RenderOptions): RenderResult;
@@ -548,37 +539,29 @@ export declare class LiveSession {
 	 * field over a `paint`-ed canvas; the click direction is {@link fieldAt}.
 	 * Empty for backends that place no schema fields.
 	 *
-	 * `field` is **not** unique: a content field surfaces its **first
-	 * placement** as one {@link FieldRegion} per page that placement touches
-	 * (so a highlight covers continuation pages); a scalar referenced at
-	 * several plate sites surfaces each site; tracked content plus a
-	 * `field:`-bound widget yields both, widget ordered first. Group by
-	 * `field`: every entry routes to that field. Later placements of one
-	 * content value are not enumerated; {@link fieldAt} still resolves
-	 * clicks on them.
+	 * `field` is **not** unique: a content field surfaces its **first placement**
+	 * as one {@link FieldRegion} per page that placement touches, a scalar
+	 * referenced at several plate sites surfaces each site, and tracked content
+	 * plus a `field:`-bound widget yields both, widget first. Group by `field`.
+	 * Later placements of one content value are not enumerated; {@link fieldAt}
+	 * still resolves clicks on them.
 	 */
 	regions(): FieldRegion[];
 	/**
 	 * The whole-field highlight boxes for `field` (a canonical `DocPath` address,
-	 * as {@link regions} keys): one union rect per page, over the field's
-	 * `span`-bearing content segments (the "highlight the focused field"
-	 * quantity). Owns the union {@link regions} leaves derived
-	 * (span-filter + per-page union), keeping `regions()` the low-level disjoint
-	 * truth, so a consumer stops reimplementing it. **Content only**: a field
-	 * placed solely as a scalar reference or a bound widget carries no `span`
-	 * and returns `[]`; its box is a single {@link regions} rect. Reflects the
-	 * current compile, like `regions()`.
+	 * as {@link regions} keys): one union rect per page over the field's
+	 * `span`-bearing content segments, the union {@link regions} leaves derived.
+	 * **Content only**: a field placed solely as a scalar reference or a bound
+	 * widget carries no `span` and returns `[]`, its box being a single
+	 * {@link regions} rect. Reflects the current compile.
 	 */
 	fieldBoxes(field: string): FieldRegion[];
 	/**
-	 * The schema field whose content is under a point on `page`, the forward
-	 * (click → field) direction: hit-test a click against the compiled
-	 * document and get back the canonical `DocPath` field address
-	 * (`parseDocPath`-routable) to focus in the editor, or `undefined` off any
-	 * field's ink. `x`/`y` are PDF points with a **bottom-left** origin, the
-	 * same space as {@link FieldRegion.rect}, from a canvas click, invert the
-	 * overlay transform documented there:
-	 * `x = clickPx.x / renderScale`,
+	 * The schema field whose content is under a point on `page`: the canonical
+	 * `DocPath` address to focus in the editor, or `undefined` off any field's
+	 * ink. `x`/`y` are PDF points with a **bottom-left** origin, the same space as
+	 * {@link FieldRegion.rect}, so from a canvas click invert the overlay
+	 * transform documented there: `x = clickPx.x / renderScale`,
 	 * `y = pageHeightPt - clickPx.y / renderScale`. Unlike {@link regions},
 	 * *every* placement answers, not just the first.
 	 */
@@ -596,24 +579,19 @@ export declare class LiveSession {
 	/** Page geometry in points (1/72″). Report-only; the painter sizes the canvas. */
 	pageSize(page: number): PageSize;
 	/**
-	 * Paint `page` into a 2D canvas context, sizing the backing store itself
-	 * (it owns `canvas.width`/`height`; the caller owns `canvas.style.*`). The
-	 * painted raster is COMPLETE: all page content visible, no caller-side
-	 * compositing (Typst rasterizes natively; pdfform rasterizes its
-	 * pre-flattened page). Effective rasterization scale is
-	 * `layoutScale × densityScale`, clamped so neither backing dimension exceeds
-	 * 16384 px: {@link PaintResult.clamped} reports the clamp and
-	 * {@link PaintResult.effectiveDensityScale} the density actually applied.
+	 * Paint `page` into a 2D canvas context, sizing the backing store itself (it
+	 * owns `canvas.width`/`height`; the caller owns `canvas.style.*`). The
+	 * rasterization scale is `layoutScale × densityScale`, clamped so neither
+	 * backing dimension exceeds 16384 px; {@link PaintResult.clamped} reports the
+	 * clamp and {@link PaintResult.effectiveDensityScale} the density applied.
 	 *
 	 * The write is a whole-backing-store `putImageData`, which bypasses the 2D
-	 * context transform, `globalAlpha`, and clip: the painter owns the entire
-	 * canvas, so give each visible page its own `` element. You cannot
-	 * paint two pages into one canvas, paint into a sub-rect, or apply a context
-	 * transform through this call: the raster is complete precisely so you never
-	 * need to. Keep the per-page canvases alive while their pages stay near the
-	 * viewport: each `paint` re-rasterizes from scratch, so reusing (pooling) a
-	 * canvas across pages on scroll re-runs a full render, whereas an idle canvas
-	 * retains its pixels for free.
+	 * context transform, `globalAlpha`, and clip, so give each visible page its
+	 * own canvas: no compositing, sub-rect, or transform reaches through this
+	 * call, and the raster is complete precisely so none is needed. Keep the
+	 * per-page canvases alive while their pages stay near the viewport: each
+	 * `paint` re-rasterizes from scratch, whereas an idle canvas retains its
+	 * pixels for free.
 	 */
 	paint(
 		ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
@@ -631,11 +609,9 @@ export declare class LiveSession {
 declare module '../core/wasm.js' {
 	interface Quill {
 		/**
-		 * Bind this quill's schema to `doc` for typed writes: the documented
-		 * front door, mirroring core's `quill.writer(&mut doc)`. The schema grants
-		 * the typing, so the quill is the factory. The returned writer holds both
-		 * handles by reference and owns neither (nothing to `free()`); it is
-		 * ephemeral by convention: bind, write, discard.
+		 * Bind this quill's schema to `doc` for typed writes. The returned writer
+		 * holds both handles by reference and owns neither (nothing to `free()`);
+		 * it is ephemeral by convention: bind, write, discard.
 		 */
 		writer(doc: Document): DocumentWriter;
 		/**
