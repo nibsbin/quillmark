@@ -971,8 +971,7 @@ mod tests {
     use crate::import::from_markdown;
     use crate::model::{Line, Loss, Mark};
 
-    /// The contract: export∘import is the identity on the content (modulo
-    /// island loss class, which our test islands don't trigger).
+    /// export∘import is the identity on the content.
     fn round_trips(md: &str) {
         let rt = from_markdown(md).unwrap();
         let md2 = to_markdown(&rt);
@@ -983,11 +982,8 @@ mod tests {
         );
     }
 
-    /// A link over an island slot. A linked image is plain
-    /// CommonMark, so it sits inside the fixed-point domain: the link arm must
-    /// route its display text through the island renderer rather than emit the
-    /// slot char raw (which re-imports as nothing, losing island, link, and the
-    /// char with it).
+    /// The link arm must route its display text through the island renderer
+    /// rather than emit the slot char raw, which re-imports as nothing.
     #[test]
     fn link_over_island_slot_round_trips() {
         round_trips("[![a cat](cat.png)](https://e.com)");
@@ -998,10 +994,8 @@ mod tests {
         );
     }
 
-    /// A `Code` mark over an island slot: editor-buildable, not
-    /// importable. A code span is emitted verbatim, so it cannot carry the
-    /// island; the span splits around the slot, keeping both the text and the
-    /// island (one code mark lowered to two).
+    /// Editor-buildable, not importable. A code span is emitted verbatim, so it
+    /// splits around the slot, keeping both the text and the island.
     #[test]
     fn code_mark_over_island_slot_keeps_the_island() {
         let mut rt = from_markdown("a ![x](y.png) b").unwrap();
@@ -1015,11 +1009,6 @@ mod tests {
         assert_eq!(rt2.islands.len(), 1);
     }
 
-    /// An unknown block role projects as a paragraph and an unknown
-    /// container projects transparently: the older reader renders a future
-    /// construct as plain prose instead of refusing it. Text and marks survive;
-    /// only the role/container is lost, and only to *markdown* (both round-trip
-    /// through storage).
     #[test]
     fn unknown_block_vocabulary_projects_as_prose() {
         let mut rt = Content {
@@ -1050,26 +1039,20 @@ mod tests {
         };
         rt.normalize();
         assert_eq!(rt.validate(), Ok(()));
-        // Two paragraphs at the top level: no container prefix, no placeholder.
         assert_eq!(to_markdown(&rt), "**heads** up\n\nstill inside");
-        // An unknown container nested inside a known one keeps the known
-        // prefix and adds none of its own.
+        // An unknown container inside a known one adds no prefix of its own.
         rt.lines[0].containers.insert(0, Container::Quote);
         rt.lines[1].containers.insert(0, Container::Quote);
         assert_eq!(to_markdown(&rt), "> **heads** up\n>\n> still inside");
     }
 
-    /// [`to_plaintext`] keeps literal text, drops marks, and strips island
-    /// slots: the lossy projection pdfform binds to non-content fields.
     #[test]
     fn plaintext_drops_marks_and_islands() {
-        // Marks contribute no delimiters to plaintext.
         let rt = marked(
             "bold text",
             vec![Mark { start: 0, end: 4, kind: MarkKind::Strong }],
         );
         assert_eq!(to_plaintext(&rt), "bold text");
-        // An island slot in the text is removed.
         let mut rt = Content {
             text: format!("see {ISLAND_SLOT} here"),
             lines: vec![Line { kind: LineKind::Para, containers: vec![], continues: false }],
@@ -1085,9 +1068,8 @@ mod tests {
         assert_eq!(to_plaintext(&rt), "see  here");
     }
 
-    /// A single-paragraph content over `text` with hand-placed `marks`: the
-    /// free-overlap shapes an editor's `apply_mark_ops` produces but markdown
-    /// import never does. Normalized + validated before use.
+    /// A single-paragraph content with hand-placed `marks`: the free-overlap
+    /// shapes an editor produces but markdown import never does.
     fn marked(text: &str, marks: Vec<Mark>) -> Content {
         let mut rt = Content {
             text: text.to_string(),
@@ -1104,11 +1086,9 @@ mod tests {
         rt
     }
 
-    /// One deterministic fixed-point smoke per block/inline construct. Each is
-    /// a `document()` generator arm that `properties.rs` fuzzes; kept as a
-    /// labeled table so a break localizes to the exact construct without a
-    /// proptest seed. Constructs with NO generator coverage (nested_marks,
-    /// code_block, hard breaks) stay as their own tests below.
+    /// One deterministic fixed-point smoke per construct `properties.rs` fuzzes,
+    /// labeled so a break localizes without a proptest seed. Constructs with no
+    /// generator coverage stay as their own tests below.
     #[test]
     fn single_constructs_round_trip() {
         for (label, md) in [
@@ -1145,8 +1125,6 @@ mod tests {
 
     #[test]
     fn thematic_break_canonicalizes_to_stars() {
-        // `---`/`___` and `***` all import to the same `Rule` line, so export
-        // re-emits the canonical `***` whatever the source delimiter was.
         for src in ["---", "___", "- - -"] {
             let rt = from_markdown(&format!("one\n\n{src}\n\ntwo")).unwrap();
             let md = to_markdown(&rt);
@@ -1154,12 +1132,9 @@ mod tests {
         }
     }
 
-    /// A rule as a **bullet** item's first block, the one shape where the
-    /// marker and the rule can spell one token: `- ` + `---` is four dashes
-    /// separated by spaces, a thematic break, and a break outranks a list item
-    /// wherever both readings fit. An ordered marker cannot collide (digits are
-    /// not break characters) and a rule as a *later* block is disambiguated by
-    /// its indentation; both sit here so a regression localizes.
+    /// A rule as a bullet item's first block is the one shape where marker and
+    /// rule can spell one token: `- ` + `---` is four spaced dashes, a thematic
+    /// break, and a break outranks a list item wherever both readings fit.
     #[test]
     fn rule_opening_a_list_item_keeps_its_item() {
         for md in ["* ---", "+ ---", "- ***", "- ___", "- - ***", "- > ***"] {
@@ -1168,7 +1143,7 @@ mod tests {
         assert_eq!(to_markdown(&from_markdown("* ---").unwrap()), "- ***");
         // The shapes that never collide, pinned against a fix that trades one
         // collision for another: swapping the bullet marker to `*`/`+` starts a
-        // *new* list, resetting `ordinal` on this item and every one after it.
+        // *new* list, resetting `ordinal` on this item and every one after.
         round_trips("1. ---");
         round_trips("- one\n\n  ---");
         round_trips("- a\n- ***\n- c");
@@ -1191,7 +1166,6 @@ mod tests {
 
     #[test]
     fn leading_ordered_marker_escaped() {
-        // Content prose that begins `N.` must not re-import as an ordered list.
         let mut rt = from_markdown("x").unwrap();
         rt.text = "1. not a list".into();
         let md = to_markdown(&rt);
@@ -1203,8 +1177,6 @@ mod tests {
 
     #[test]
     fn table_with_formatted_cells_round_trips() {
-        // Option A: cells carry {text, marks}; export reconstructs their markdown
-        // from structure, so the content is a fixed point across formatted cells.
         round_trips("| Name | Note |\n| --- | --- |\n| **bold** | _italic_ |");
         round_trips("| A |\n| --- |\n| **b** and _i_ `c` [d](https://e.com) ~~e~~ |");
         round_trips("| A |\n| --- |\n| <u>under</u> |");
@@ -1214,9 +1186,6 @@ mod tests {
 
     #[test]
     fn formatted_cell_marks_are_structured_not_reparsed() {
-        // The cell stores marks, not a markdown slice: a strong cell's island
-        // props carry a `strong` mark over the cell-local range, and export
-        // renders it back to `**bold**` from that structure.
         let rt = from_markdown("| H |\n| --- |\n| **bold** |").unwrap();
         let cell = &rt.islands[0].props["rows"][0][0];
         assert_eq!(cell["text"], "bold");
@@ -1228,10 +1197,8 @@ mod tests {
 
     #[test]
     fn known_hard_break_limits() {
-        // Recorded, not hidden: a mark spanning a hard break splits per line.
         let rt = from_markdown("**one\\\ntwo**").unwrap();
         let rt2 = from_markdown(&to_markdown(&rt)).unwrap();
-        // The spanning strong becomes two per-line strongs on round-trip.
         assert!(
             rt != rt2,
             "if this ever round-trips, promote it out of the known-limits list"
@@ -1249,15 +1216,11 @@ mod tests {
         });
         rt.normalize();
         let md = to_markdown(&rt);
-        // No anchor syntax in the projection, but the text round-trips.
         let rt2 = from_markdown(&md).unwrap();
         assert_eq!(rt2.text, "comment target here");
         assert!(!md.contains("c1"));
     }
 
-    // ---------------------------------------------------------------------
-    // Markdown export fixed-point violations.
-    // ---------------------------------------------------------------------
 
     /// The exact repro: `strong[0,4)` + `emph[2,6)` over "abcdef" must
     /// export balanced markdown that preserves the text, not `**ab*cdef*`,
