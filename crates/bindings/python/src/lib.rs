@@ -11,10 +11,8 @@ pub use types::{
     PyQuillmark, PyRenderResult, PyReader, PyWriter,
 };
 
-// Python is Tier 1 + storage + render: field I/O flows through `quill.writer(doc)`
-// / `quill.reader(doc)`. The opaque store and the anchor-preserving content lane
-// (`overwrite` / `revise` / `apply_change` + the `importMarkdown` / `exportMarkdown`
-// / `rebase` / `mapPos` codec) are WASM-only by scope. See prose/canon/BINDINGS.md.
+// Field I/O flows through `quill.writer(doc)` / `quill.reader(doc)`. The opaque
+// store and the anchor-preserving content lane are WASM-only by scope.
 
 #[pymodule]
 fn _quillmark(m: &Bound<'_, PyModule>) -> PyResult<()> {

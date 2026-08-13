@@ -1,7 +1,6 @@
 use pyo3::prelude::*;
 use quillmark_core::{OutputFormat, Severity};
 
-// Macro with name attribute and all() method
 macro_rules! py_enum {
     (
         $(#[$meta:meta])*
@@ -29,7 +28,6 @@ macro_rules! py_enum {
                 }
             }
 
-            // Static all(): pyo3 enums expose iteration via a classmethod-style static.
             #[staticmethod]
             fn all() -> Vec<Self> {
                 vec![$(Self::$variant),*]
@@ -69,11 +67,8 @@ impl From<OutputFormat> for PyOutputFormat {
             OutputFormat::Pdf => PyOutputFormat::PDF,
             OutputFormat::Svg => PyOutputFormat::SVG,
             OutputFormat::Png => PyOutputFormat::PNG,
-            // Forced by `#[non_exhaustive]`, unreachable in practice: this
-            // crate is `publish = false` and path-deps the core beside it, so
-            // the two variant lists ship together. No fallback format is
-            // honest (every one of them promises bytes the caller did not ask
-            // for) so the arm refuses instead of guessing.
+            // Forced by `#[non_exhaustive]`; the two variant lists ship
+            // together. No fallback is honest, so the arm refuses.
             other => unreachable!("OutputFormat::{other:?} has no PyOutputFormat member"),
         }
     }
@@ -83,8 +78,7 @@ impl From<Severity> for PySeverity {
     fn from(val: Severity) -> Self {
         match val {
             Severity::Warning => PySeverity::WARNING,
-            // `Severity` is `#[non_exhaustive]`. Escalating an unrecognized
-            // level over-reports; the other direction could hide a fatal.
+            // Unrecognized levels escalate: the other direction hides a fatal.
             Severity::Error | _ => PySeverity::ERROR,
         }
     }
