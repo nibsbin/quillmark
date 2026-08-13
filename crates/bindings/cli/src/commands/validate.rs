@@ -16,10 +16,6 @@ pub struct ValidateArgs {
     verbose: bool,
 }
 
-/// The issues one `validate` run accumulates: real `quillmark_core::Diagnostic`s
-/// throughout, the same type `QuillConfig::from_yaml_with_warnings` already
-/// hands this file, printed through the same `fmt_pretty()` every other CLI
-/// diagnostic uses.
 #[derive(Debug, Default)]
 struct ValidationResult {
     issues: Vec<Diagnostic>,
@@ -71,9 +67,7 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
 
     let mut result = ValidationResult::new();
 
-    // Step 1: load the quill once. `quill_from_path_with_warnings` keeps the
-    // config warnings that the plain loader drops, so there is no second,
-    // hand-rolled `Quill.yaml` read to reach them.
+    // `_with_warnings` keeps the config warnings the plain loader drops.
     let (quill, config_warnings) = match quillmark::quill_from_path_with_warnings(&args.quill_path) {
         Ok(pair) => pair,
         Err(e) => {
@@ -91,8 +85,6 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
     };
     let config = quill.config();
 
-    // Already `Diagnostic`s: carry `code`/`path`/`hint` through instead of
-    // flattening each to its message.
     result.issues.extend(config_warnings);
 
     if args.verbose {
@@ -104,14 +96,10 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
         println!("  Defaults extracted: {}", config.main.defaults().len());
     }
 
-    // Step 2: Validate file references
     validate_file_references(&args.quill_path, config, &mut result);
 
-    // Step 3: Emit schema-quality warnings (example/default type errors were
-    // already caught at load time in Step 1).
     validate_field_schemas(&config.main.fields, &mut result, "field");
 
-    // Step 4: Validate card-kind schemas
     for card_schema in &config.card_kinds {
         validate_card_schema(&card_schema.name, card_schema, &mut result);
     }
@@ -133,12 +121,10 @@ fn validate_file_references(
     config: &QuillConfig,
     result: &mut ValidationResult,
 ) {
-    // Check a backend's `plate_file` reference (Typst declares it under its
-    // `typst:` section). It comes from the (untrusted) Quill.yaml, so reject
-    // anything that is not a simple relative filename before touching the
-    // filesystem: `Path::join` with an absolute path replaces the base
-    // entirely, and `..` escapes the quill root, either of which would turn
-    // `plate_path.exists()` into a host path-probing oracle.
+    // `plate_file` comes from the untrusted Quill.yaml, so reject anything but
+    // a simple relative filename before touching the filesystem: an absolute
+    // `Path::join` replaces the base and `..` escapes the quill root, either of
+    // which turns `plate_path.exists()` into a host path-probing oracle.
     if let Some(plate_file) = config
         .backend_config
         .get("plate_file")
@@ -168,13 +154,8 @@ fn validate_file_references(
     }
 }
 
-/// Emit schema-quality *warnings* for a card's fields.
-///
-/// Type/enum/format errors on `example:` and `default:` literals are caught
-/// authoritatively at parse time (`QuillConfig::from_yaml_with_warnings`, Step 1)
-/// via the shared `validate_schema_literal` core and reported there with full
-/// diagnostics. This pass only adds the advisory check the parser does not: a
-/// missing field description.
+/// The one advisory check config parsing does not already make: `example:` and
+/// `default:` literal errors are caught authoritatively at load time.
 fn validate_field_schemas(
     fields: &IndexMap<String, FieldSchema>,
     result: &mut ValidationResult,
@@ -218,9 +199,7 @@ fn print_validation_result(result: &ValidationResult, verbose: bool) {
     let error_count = result.count(Severity::Error);
     let warning_count = result.count(Severity::Warning);
 
-    // `-v` is the "all validation details including warnings" contract; errors
-    // always print. `fmt_pretty` is the same rendering `errors::print_warnings`
-    // gives every other CLI diagnostic, so `code`/`path`/`hint` survive.
+    // `-v` adds warnings; errors always print.
     for diag in &result.issues {
         if diag.severity == Severity::Error || verbose {
             eprintln!("{}", diag.fmt_pretty());
