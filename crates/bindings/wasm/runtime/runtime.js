@@ -990,10 +990,8 @@ export class DocumentWriter {
 		return this.#doc._commitFields(this.#quill, MAIN_CARD_ADDR, fields);
 	}
 	/**
-	 * Revise the main body from markdown (edit semantics: surviving anchors
-	 * rebase), returning the text {@link Delta}. The content lane's `revise`
-	 * reached through the writer: a body carries no field schema, so there is
-	 * nothing for a typed verb to type, and the receipt is the content lane's.
+	 * Revise the main body from markdown; anchors rebase. A body carries no field
+	 * schema, so this is the content lane's `revise` reached through the writer.
 	 * @param {string} markdown
 	 * @returns {import('../core/wasm.js').Delta}
 	 */
@@ -1002,14 +1000,9 @@ export class DocumentWriter {
 	}
 	/**
 	 * Revise the content main-card field `name` from authored text: typed *and*
-	 * anchor-preserving. Surviving anchors rebase, then the diffed result is
-	 * schema-conformed (`richtext(inline)` rejects a multi-block result). Throws
-	 * `UnknownField` for a name the schema does not declare. Returns the text
-	 * {@link Delta}.
-	 *
-	 * The codec comes from the declared type: `richtext` diffs markdown, while
-	 * `plaintext` diffs the literal text and never imports markdown, so a
-	 * byte-identical revise of a value carrying escapes is a byte no-op.
+	 * anchor-preserving. Anchors rebase, then the diffed result is
+	 * schema-conformed. The codec comes from the declared type: `richtext` diffs
+	 * markdown, `plaintext` the literal text.
 	 * @param {string} name
 	 * @param {string} text
 	 * @returns {import('../core/wasm.js').Delta}
@@ -1019,13 +1012,9 @@ export class DocumentWriter {
 	}
 	/**
 	 * Build a composable card of `kind`, typed-commit `fields` onto it, set its
-	 * body from optional markdown, and place it: the fused `makeCard` + typed
-	 * commit + insertion. `at` picks the position: omitted appends, a number
-	 * inserts at that index (`0..=cardCount`), so a positioned typed insert is one
-	 * atomic call rather than `addCard` + `moveCard`. Transactional: the card is
-	 * committed in full before it joins the document, so a rejected field (throws
-	 * a per-field diagnostic bundle, `UnknownField` per undeclared name) or an
-	 * invalid kind/body/position leaves the document untouched.
+	 * body from optional markdown, and place it. Transactional: the card is
+	 * committed in full before it joins the document, so a rejected field, kind,
+	 * body, or position leaves the document untouched.
 	 * @param {string} kind
 	 * @param {Record<string, unknown>} [fields]
 	 * @param {string} [body]
@@ -1036,8 +1025,6 @@ export class DocumentWriter {
 		return this.#doc._addCard(this.#quill, kind, fields, body, at);
 	}
 	/**
-	 * Remove the composable card at `index`, returning it (or `undefined` if the
-	 * index is out of range): the writer spelling of `Document.removeCard`.
 	 * @param {number} index
 	 * @returns {import('../core/wasm.js').Card | undefined}
 	 */
@@ -1045,14 +1032,9 @@ export class DocumentWriter {
 		return this.#doc.removeCard(index);
 	}
 	/**
-	 * A {@link CardWriter} bound to the composable card at `index`. Index
-	 * validity is checked lazily by the underlying write (it throws
-	 * `IndexOutOfRange` at commit time), so an out-of-range index does not throw
-	 * here.
-	 *
-	 * The cursor is ephemeral: bind, write, discard. It holds `index`, not the
-	 * card: a `removeCard`/`addCard` between binding and writing silently
-	 * retargets it. Re-resolve the index at write time when cards may move.
+	 * A {@link CardWriter} bound to the composable card at `index`, checked
+	 * lazily at the write. It holds `index`, not the card, so a
+	 * `removeCard`/`addCard` between binding and writing silently retargets it.
 	 * @param {number} index
 	 * @returns {CardWriter}
 	 */
@@ -1087,9 +1069,8 @@ export class CardWriter {
 		return this.#index;
 	}
 	/**
-	 * The bound card's `$kind` (empty string when it carries none), read through
-	 * the document: mirrors core `CardWriter::kind()`. Ephemeral like the cursor
-	 * itself: throws `IndexOutOfRange` if the bound index is out of range.
+	 * The bound card's `$kind`, empty string when it carries none. Throws
+	 * `IndexOutOfRange` for a bad bound index.
 	 * @returns {string}
 	 */
 	get kind() {
@@ -1117,8 +1098,7 @@ export class CardWriter {
 		return this.#doc._commitFields(this.#quill, { card: this.#index }, fields);
 	}
 	/**
-	 * Revise this card's body from markdown (edit semantics), returning the text
-	 * {@link Delta}: the card twin of {@link DocumentWriter.reviseBody}.
+	 * The card twin of {@link DocumentWriter.reviseBody}.
 	 * @param {string} markdown
 	 * @returns {import('../core/wasm.js').Delta}
 	 */
@@ -1126,11 +1106,8 @@ export class CardWriter {
 		return this.#doc.revise({ card: this.#index }, markdown);
 	}
 	/**
-	 * Revise the content field `name` on this card from authored text: typed *and*
-	 * anchor-preserving; the card twin of {@link DocumentWriter.reviseField},
-	 * codec included. Throws `UnknownField` for an undeclared name and
-	 * `IndexOutOfRange` if the bound index is out of range. Returns the text
-	 * {@link Delta}.
+	 * The card twin of {@link DocumentWriter.reviseField}. Throws `UnknownField`
+	 * for an undeclared name and `IndexOutOfRange` for a bad bound index.
 	 * @param {string} name
 	 * @param {string} text
 	 * @returns {import('../core/wasm.js').Delta}
@@ -1141,17 +1118,12 @@ export class CardWriter {
 }
 
 // ── `quill.writer(doc)`, the typed front door ──────────────────────────────
-// The schema-bound writer: bind the quill's schema to a document and issue bare
-// typed writes. Mirrors core's `quill.writer(&mut doc)`: the schema grants the
-// typing, so the quill (not the document) is the factory. Patched onto the
-// re-exported `Quill` prototype rather than wrapped: `Quill === CoreQuill`
-// stays true (the identity invariant above); this only adds a method that
-// constructs the pure-JS writer, which owns no WASM handle.
+// Patched onto the re-exported `Quill` prototype rather than wrapped, so
+// `Quill === CoreQuill` stays true: this only adds a method constructing the
+// pure-JS writer, which owns no WASM handle.
 /**
- * A {@link DocumentWriter} binding this quill's schema to `doc` for typed
- * writes: the documented front door. The returned writer holds both handles by
- * reference and owns neither, so there is nothing to `free()`. Ephemeral by
- * convention: bind, write, discard.
+ * A {@link DocumentWriter} binding this quill's schema to `doc`. It holds both
+ * handles by reference and owns neither: bind, write, discard.
  * @this {Quill}
  * @param {Document} doc the document to mutate, held by reference (not owned)
  * @returns {DocumentWriter}
@@ -1160,22 +1132,16 @@ Quill.prototype.writer = function writer(doc) {
 	return new DocumentWriter(this, doc);
 };
 
-// ── Typed-reader sugar: the schema-plane read surface ──────────────────────────
-// The read twin of the writer above. The transport `Document.getStored` is schema-free:
-// a `Document` cannot say which fields are richtext, so an unknown field name
+// ── Typed-reader sugar: the schema-plane read surface ─────────────────────────
+// The transport `Document.getStored` is schema-free, so an unknown field name
 // reads back `undefined` rather than as the typo it is. Binding the quill's
-// schema (`_readerGet` takes the handle, like the `commit*` verbs) lets one `get`
-// interpret by declared type: a richtext field to markdown, a plaintext field to
-// its literal text, every other type verbatim, and an unknown name throws
-// `UnknownField`. A field's markdown lives here, not on the body-only
-// `bodyMarkdown`. Like the writer classes these hold the caller's handles by
-// reference, own no WASM object, and have nothing to `free()`.
+// schema lets one `get` interpret by declared type and throw `UnknownField` on a
+// name the schema does not declare.
 
 /**
- * A {@link Document} bound to its {@link Quill} for typed reads: the JS twin of
- * Rust's `quill.reader(&doc)` and the read counterpart of {@link DocumentWriter}.
- * Reads target the main card; use {@link card} for a composable card. Holds both
- * handles by reference and owns neither, so there is nothing to `free()`.
+ * A {@link Document} bound to its {@link Quill} for typed reads, the read
+ * counterpart of {@link DocumentWriter}. Reads target the main card; use
+ * {@link card} for a composable one. Owns neither handle.
  */
 export class DocumentReader {
 	#quill;
@@ -1208,15 +1174,11 @@ export class DocumentReader {
 		return this.#doc._readerGet(this.#quill, addr);
 	}
 	/**
-	 * Read the content field at `addr` as its canonical `Content`: the
-	 * `Content` twin of {@link get}, which projects. Decodes through the codec the
-	 * declared type names (`richtext` as markdown, `plaintext` as literal text),
-	 * so a field the writer committed as a `Content` and one a markdown parse left
-	 * as an authored string read back the same; no branching on how the
-	 * document was built. An absent `addr.field` reads the body `Content`.
-	 * `undefined` for an absent field; throws `UnknownField`, `FieldNotContent`
-	 * for a type that is not a content leaf, `FieldDecode` for an undecodable
-	 * value, and `IndexOutOfRange` for a bad `addr.card`.
+	 * Read the content field at `addr` as canonical `Content`: the twin of
+	 * {@link get}, which projects. An absent `addr.field` reads the body
+	 * `Content`. `undefined` for an absent field; throws `UnknownField`,
+	 * `FieldNotContent` for a type that is not a content leaf, `FieldDecode` for
+	 * an undecodable value, and `IndexOutOfRange` for a bad `addr.card`.
 	 * @param {import('../core/wasm.js').Addr | string} addr
 	 * @returns {import('../core/wasm.js').Content | undefined}
 	 */
@@ -1224,18 +1186,15 @@ export class DocumentReader {
 		return this.#doc._readerGetContent(this.#quill, addr);
 	}
 	/**
-	 * The main body's markdown: the quill-free body read (a body's type is a
-	 * format fact, not a schema fact). Equivalent to `get({})`.
+	 * The main body's markdown: the quill-free body read. Equals `get({})`.
 	 * @returns {string}
 	 */
 	bodyMarkdown() {
 		return this.#doc._readerGet(this.#quill, {});
 	}
 	/**
-	 * A {@link CardReader} bound to the composable card at `index`. Index validity
-	 * is checked lazily by the underlying read (it throws `IndexOutOfRange` at read
-	 * time), so an out-of-range index does not throw here. Ephemeral like the
-	 * writer cursor: it holds `index`, not the card, so a `removeCard`/`addCard`
+	 * A {@link CardReader} bound to the composable card at `index`, checked lazily
+	 * at the read. It holds `index`, not the card, so a `removeCard`/`addCard`
 	 * between binding and reading silently retargets it.
 	 * @param {number} index
 	 * @returns {CardReader}
