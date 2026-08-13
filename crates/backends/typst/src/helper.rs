@@ -295,15 +295,6 @@ impl<'m> Codegen<'m> {
         wrap_dict(items)
     }
 
-    /// A single field's value literal. Content (richtext) fields (a content
-    /// object, or an array of them) lower to `#let` content blocks via
-    /// [`Self::content_field`]; a blank content stays an empty string literal.
-    /// `is_inline` picks pure-inline lowering (no `parbreak`) for a
-    /// `richtext(inline)` field, per element for an `array<richtext(inline)>`.
-    /// A `date_kind` field references a value-object block via
-    /// [`date_object`](Self::date_object) (or `none` when blank): the `datetime`
-    /// is three-component for a `date`, six-component for a `datetime`.
-    /// Everything else is a plain value literal.
     fn emit_field(
         &mut self,
         path: &str,
@@ -314,9 +305,8 @@ impl<'m> Codegen<'m> {
     ) -> String {
         if is_content {
             match value {
-                // A richtext field crosses the seam as canonical content JSON (an
-                // object); an `array<richtext>` as an array of them. Lower each
-                // content to a content block here.
+                // A richtext field crosses the seam as canonical content JSON;
+                // an `array<richtext>` as an array of them.
                 serde_json::Value::Object(_) => self.content_field(path, value, is_inline),
                 serde_json::Value::Array(arr) => {
                     let items = arr
@@ -335,9 +325,8 @@ impl<'m> Codegen<'m> {
             }
         } else if let Some(kind) = date_kind {
             match value {
-                // A present date lowers to a value-object block; blank or
-                // (defensively) unparseable ⇒ `none`, so `!= none` guards are
-                // untouched. Coercion has already rejected malformed values.
+                // Blank or (defensively) unparseable ⇒ `none`, so `!= none`
+                // guards are untouched.
                 serde_json::Value::String(s) => match datetime_constructor(s, kind) {
                     Some(ctor) => self.date_object(path, &ctor),
                     None => "none".to_string(),
@@ -351,9 +340,8 @@ impl<'m> Codegen<'m> {
     }
 }
 
-/// Which date type a field is, if any: selects the `datetime(..)` arity in
-/// [`datetime_literal`]. A field name never appears in both tables (a schema
-/// field has one type), so `date` is checked first and `datetime` second.
+/// A field name never appears in both tables, so the order of the checks is
+/// immaterial.
 fn date_kind_of(dates: &[String], datetimes: &[String], key: &str) -> Option<DateKind> {
     if dates.iter().any(|f| f == key) {
         Some(DateKind::Date)
@@ -367,14 +355,10 @@ fn date_kind_of(dates: &[String], datetimes: &[String], key: &str) -> Option<Dat
 /// The two date field types, distinguished by their Typst `datetime(..)` arity.
 #[derive(Clone, Copy)]
 enum DateKind {
-    /// `type: date`: `datetime(year:, month:, day:)`.
     Date,
-    /// `type: datetime`: `datetime(year:, month:, day:, hour:, minute:, second:)`.
     DateTime,
 }
 
-/// The card kind's field-name list from a `SchemaMeta` card table (content,
-/// date, datetime, …). Shared with `validate_date_fields` in `lib.rs`.
 pub(crate) fn card_names(
     table: &serde_json::Map<String, serde_json::Value>,
     kind: &str,
@@ -390,8 +374,8 @@ pub(crate) fn card_names(
         .unwrap_or_default()
 }
 
-/// The `_qm-meta` literal: the schema address tables `_qm-known-path` validates
-/// `form-field` paths against, emitted as a Typst dict literal.
+/// The schema address tables `_qm-known-path` validates `form-field` paths
+/// against.
 fn meta_literal(meta: &SchemaMeta) -> String {
     let tables = serde_json::json!({
         "fields": meta.fields,
@@ -402,12 +386,9 @@ fn meta_literal(meta: &SchemaMeta) -> String {
     lit(&tables)
 }
 
-/// The `_qm-plaintext` literal: each content field's plaintext projection
-/// (island slots stripped, marks dropped) keyed by schema address, emitted as a
-/// Typst dict literal for the `plaintext(field)` helper. Keys are sorted
-/// so the output is a pure function of the data's values: a reorder-only
-/// `apply` still produces byte-identical source (same invariant as the
-/// content blocks). Content addresses are unique, so no key collides.
+/// Each content field's plaintext projection keyed by schema address, backing
+/// the `plaintext(field)` helper. Keys sort so a reorder-only `apply` still
+/// produces byte-identical source.
 fn plaintext_literal(entries: &[(String, String)]) -> String {
     let mut sorted: Vec<&(String, String)> = entries.iter().collect();
     sorted.sort_by(|a, b| a.0.cmp(&b.0));
@@ -421,14 +402,9 @@ fn plaintext_literal(entries: &[(String, String)]) -> String {
     )
 }
 
-/// The `datetime(..)` constructor for a coerced date/datetime string (the `v`
-/// a [`date_object`](Codegen::date_object) captures) or `None` when the string
-/// does not parse (the empty string included, since both parsers reject it),
-/// which the caller lowers to `none`. Reuses the same parse the coercion layer
-/// validates with, so a value that reached here parses; `None` is the defensive
-/// arm. A `date` lowers to the three-component date-only form; a `datetime` to
-/// the six-component wall-clock form, seconds zero-filled: carrying the
-/// authored time-of-day through rather than truncating it.
+/// `None` for a string that does not parse (the empty string included), which
+/// the caller lowers to `none`. Reuses the coercion layer's own parse, so a
+/// value that reached here parses and `None` is the defensive arm.
 fn datetime_constructor(s: &str, kind: DateKind) -> Option<String> {
     match kind {
         DateKind::Date => quillmark_core::quill::parse_date(s)
