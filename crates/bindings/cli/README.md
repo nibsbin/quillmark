@@ -1,188 +1,79 @@
 # Quillmark CLI
 
-Command-line interface for Quillmark, a schema-driven document engine.
+`quillmark`, the command-line interface to [Quillmark](https://github.com/borb-sh/quillmark): renders Markdown with card-yaml blocks through a quill into PDF, SVG, or PNG.
 
 Maintained by [TTQ](https://tonguetoquill.com).
 
-## Overview
-
-`quillmark-cli` is a standalone executable that renders Markdown files with card-yaml blocks into PDF, SVG, and other formats using Quillmark templates.
-
 ## Installation
-
-### From crates.io (Recommended)
 
 ```bash
 cargo install quillmark-cli
 ```
 
-The binary will be installed to `~/.cargo/bin/quillmark` (ensure `~/.cargo/bin` is in your PATH).
-
-### From Git Repository
+The binary lands at `~/.cargo/bin/quillmark`. To build from a checkout instead:
 
 ```bash
-# Install latest from main branch
-cargo install --git https://github.com/borb-sh/quillmark quillmark-cli
-
-# Install from specific branch or tag
-cargo install --git https://github.com/borb-sh/quillmark --branch main quillmark-cli
-```
-
-### From Local Source
-
-```bash
-# From workspace root
 cargo install --path crates/bindings/cli
-
-# Or build without installing
-cargo build --release -p quillmark-cli
-# Binary will be at: target/release/quillmark
 ```
 
-## Quick Start
-
-Render a markdown file using a quill template:
+## Quick start
 
 ```bash
-quillmark render path/to/quill document.md
+# Render a document; output defaults to document.pdf
+quillmark render ./quills/usaf_memo document.md
+
+# Omit the markdown file to render the quill's seeded document
+quillmark render ./quills/usaf_memo -o preview.pdf
+
+# Pipe the artifact instead of writing a file
+quillmark render ./quills/usaf_memo document.md --stdout | evince -
 ```
 
-The output will be saved as `document.pdf` by default.
+## Commands
 
-## Usage
+Every command takes a `<QUILL_PATH>` pointing at a quill directory.
 
-### Basic Rendering
+### `quillmark render [OPTIONS] <QUILL_PATH> [MARKDOWN_FILE]`
 
-```bash
-# Render to PDF (default format)
-quillmark render ./quills/usaf_memo memo.md
+Renders a document. With `MARKDOWN_FILE` omitted, the quill's seeded document is
+rendered instead, so a quill previews without any authored input.
 
-# Specify output file
-quillmark render ./quills/usaf_memo memo.md -o output/final.pdf
+- `-o, --output <FILE>` — output path (default: the input filename with the format's extension)
+- `-f, --format <FORMAT>` — `pdf` (default), `svg`, or `png`
+- `--stdout` — write the artifact to stdout; all chatter moves to stderr
+- `--output-data <DATA_FILE>` — also write the compiled JSON data handed to the backend
+- `-v, --verbose` — progress detail on stderr
+- `--quiet` — suppress non-error output
 
-# Render to different format
-quillmark render ./quills/usaf_memo memo.md --format svg
-```
+### `quillmark schema <QUILL_PATH> [-o <FILE>]`
 
-### Rendering the seeded document
+Prints the quill's field schema as YAML.
 
-If you omit `MARKDOWN_FILE`, the quill's seeded document is rendered:
+### `quillmark blueprint <QUILL_PATH> [-o <FILE>]`
 
-```bash
-quillmark render ./quills/usaf_memo
-```
+Prints an annotated Markdown blueprint: a starting document with every declared
+field, `!must_fill` where a value is expected.
 
-### Advanced Options
+### `quillmark validate <QUILL_PATH> [-v]`
 
-```bash
-# Output to stdout (useful for piping)
-quillmark render ./quills/usaf_memo memo.md --stdout > output.pdf
+Checks the quill's configuration: `Quill.yaml` parse errors, `example:`/`default:`
+literals against their declared types, and referenced files. `-v` adds advisory
+warnings such as missing field descriptions. Exits 1 on any error.
 
-# Verbose output
-quillmark render ./quills/usaf_memo memo.md --verbose
+### `quillmark info <QUILL_PATH> [--json]`
 
-# Quiet mode (suppress all non-error output)
-quillmark render ./quills/usaf_memo memo.md --quiet
-```
+Prints quill metadata — name, version, author, backend, field and card counts.
+`--json` emits the same as one JSON object.
 
-## Command Reference
+## Exit codes
 
-### `quillmark render`
+`0` on success, `1` on any error, with diagnostics on stderr.
 
-Render a markdown file to the specified output format.
+## Links
 
-**Usage:**
-```
-quillmark render [OPTIONS] <QUILL_PATH> [MARKDOWN_FILE]
-```
-
-**Arguments:**
-- `<QUILL_PATH>` - Path to quill directory
-- `[MARKDOWN_FILE]` - Path to markdown file with card-yaml blocks (optional; when omitted, the quill's seeded document is rendered)
-
-**Options:**
-- `-o, --output <FILE>` - Output file path (default: derived from input filename)
-- `-f, --format <FORMAT>` - Output format: pdf, svg, png (default: pdf)
-- `--stdout` - Write output to stdout instead of file
-- `-v, --verbose` - Show detailed processing information
-- `--quiet` - Suppress all non-error output
-
-## Examples
-
-### Example: Render USAF Memo
-
-Omitting the Markdown file renders the quill's seeded document:
-
-```bash
-quillmark render \
-  crates/fixtures/resources/quills/usaf_memo/0.2.0 \
-  -o usaf_memo_output.pdf
-```
-
-### Example: Generate SVG
-
-```bash
-quillmark render ./quills/my_template \
-  document.md \
-  --format svg \
-  -o output.svg
-```
-
-### Example: Pipeline Usage
-
-```bash
-# Render and immediately view with a PDF viewer
-quillmark render ./quills/usaf_memo memo.md --stdout | evince -
-
-# Render to stdout and pipe to another tool
-quillmark render ./quills/usaf_memo memo.md --stdout > final.pdf
-```
-
-## Error Handling
-
-Common failures and what the CLI reports:
-
-- **Missing markdown file**: `Markdown file not found: path/to/file.md`
-- **Missing quill**: `Quill directory not found: path/to/quill`
-- **Parse errors**: Line numbers and context for YAML or markdown issues
-- **Template errors**: Compilation diagnostics from the rendering backend
-
-## Exit Codes
-
-- `0` - Success
-- `1` - Error occurred (see stderr for details)
-
-## Development
-
-### Building
-
-```bash
-cargo build
-```
-
-### Running Tests
-
-```bash
-cargo test
-```
-
-### Running Locally
-
-```bash
-cargo run -- render path/to/quill document.md
-```
-
-## Design Documentation
-
-For architectural details and design decisions, see:
-- [CLI Design Document](../../../prose/canon/CLI.md)
-
-## Changelog
-
-See the [changelog](https://github.com/borb-sh/quillmark/blob/main/CHANGELOG.md)
-and the [GitHub Releases](https://github.com/borb-sh/quillmark/releases) page for
-release notes and version history.
+- [CLI design document](../../../prose/canon/CLI.md)
+- [Changelog](https://github.com/borb-sh/quillmark/blob/main/CHANGELOG.md) and [releases](https://github.com/borb-sh/quillmark/releases)
 
 ## License
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](../../../LICENSE) for details.
+Licensed under the Apache License, Version 2.0. See [LICENSE](../../../LICENSE).
