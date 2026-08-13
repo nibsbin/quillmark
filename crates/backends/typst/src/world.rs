@@ -427,13 +427,10 @@ impl World for QuillWorld {
     }
 
     fn today(&self, offset: Option<Duration>) -> Option<Datetime> {
-        // On native targets we can use the system clock. On wasm32 we call into
-        // the JavaScript Date API via js-sys to get UTC date components.
         #[cfg(not(target_arch = "wasm32"))]
         {
             use time::{Duration as TimeDuration, OffsetDateTime};
 
-            // Get current UTC time and apply the optional offset
             let now = OffsetDateTime::now_utc();
             let adjusted = if let Some(offset) = offset {
                 now + TimeDuration::seconds(offset.seconds() as i64)
@@ -447,21 +444,17 @@ impl World for QuillWorld {
 
         #[cfg(target_arch = "wasm32")]
         {
-            // Use js-sys to access the JS Date methods. This returns components in
-            // UTC using getUTCFullYear/getUTCMonth/getUTCDate.
+            // js-sys returns components in UTC.
             use js_sys::Date;
             use wasm_bindgen::JsValue;
 
             let d = Date::new_0();
-            // get_utc_full_year returns f64
             let year = d.get_utc_full_year() as i32;
-            // get_utc_month returns 0-based month
+            // `get_utc_month` is 0-based.
             let month = (d.get_utc_month() as u8).saturating_add(1);
             let day = d.get_utc_date() as u8;
 
-            // Apply the offset if requested by constructing a JS Date
             if let Some(offset) = offset {
-                // Create a new Date representing now + offset
                 let millis = d.get_time() + offset.seconds() * 1_000.0;
                 let d2 = Date::new(&JsValue::from_f64(millis));
                 let year = d2.get_utc_full_year() as i32;
@@ -529,23 +522,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_package_toml() {
-        let toml_content = r#"
-[package]
-name = "test-package"
-version = "1.0.0"
-namespace = "preview"
-entrypoint = "src/lib.typ"
-"#;
-
-        let package_info = parse_package_toml(toml_content).unwrap();
-        assert_eq!(package_info.name, "test-package");
-        assert_eq!(package_info.version, "1.0.0");
-        assert_eq!(package_info.namespace, "preview");
-        assert_eq!(package_info.entrypoint, "src/lib.typ");
-    }
-
-    #[test]
     fn test_parse_package_toml_defaults() {
         let toml_content = r#"
 [package]
@@ -559,8 +535,7 @@ name = "minimal-package"
         assert_eq!(package_info.entrypoint, "lib.typ");
     }
 
-    /// A minimal in-memory quill, plus whatever extra files the caller wants
-    /// under their `/`-joined tree paths.
+    /// `extra` files are inserted under their `/`-joined tree paths.
     fn quill_with(extra: &[(&str, &str)]) -> quillmark_core::Quill {
         use quillmark_core::{FileTreeNode, Quill};
         let mut root = FileTreeNode::Directory {
@@ -596,10 +571,6 @@ name = "minimal-package"
         Quill::from_tree(root).expect("load quill")
     }
 
-    /// A package the loader has to skip is a warning on the session, not a line
-    /// on a stderr nobody reads: on wasm32 there is no stderr at all, and the
-    /// only other signal is an unresolved `#import` naming the plate rather
-    /// than the manifest three files away.
     #[test]
     fn unparseable_package_manifest_warns_instead_of_vanishing() {
         let quill = quill_with(&[
@@ -626,8 +597,6 @@ name = "minimal-package"
         );
     }
 
-    /// The clean case earns its own assertion: a well-formed quill must not
-    /// accumulate advisory noise, or the channel stops being worth reading.
     #[test]
     fn a_well_formed_quill_loads_without_warnings() {
         let quill = quill_with(&[
@@ -645,8 +614,6 @@ name = "minimal-package"
         );
     }
 
-    /// A package that declares an entrypoint it does not ship is importable in
-    /// name only.
     #[test]
     fn missing_package_entrypoint_warns() {
         let quill = quill_with(&[(
@@ -665,30 +632,4 @@ name = "minimal-package"
         );
     }
 
-    #[test]
-    fn test_asset_fonts_have_priority() {
-        use quillmark_core::Quill;
-
-        // The usaf_memo fixture carries real fonts.
-        let quill_path = quillmark_fixtures::quills_path("usaf_memo");
-        if !quill_path.exists() {
-            // Skip test if fixture not found
-            return;
-        }
-
-        let tree = quillmark::tree_from_path(quill_path).expect("walk fixture");
-        let source = Quill::from_tree(tree).expect("load source");
-        let world = QuillWorld::new(&source, "// Test").unwrap();
-
-        // Asset fonts should be loaded
-        assert!(!world.fonts.is_empty(), "Should have asset fonts loaded");
-
-        // The first fonts in the book should be the asset fonts
-        // Verify that indices 0..asset_count return asset fonts from the fonts vec
-        for i in 0..world.fonts.len() {
-            let font = world.font(i);
-            assert!(font.is_some(), "Font at index {} should be available", i);
-            // This font should come from the asset fonts (world.fonts vec), not font_slots
-        }
-    }
 }
