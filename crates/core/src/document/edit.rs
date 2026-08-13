@@ -822,10 +822,8 @@ impl Card {
             }
             None => String::new(),
         };
-        // The strict write is the codec: it runs the same `from_plaintext`
-        // boundary cleanup (CRLF, bidi, island slot) and enforces
-        // `plaintext(inline)`, so the committed string is what the diff must
-        // measure against. On any refusal the field is unchanged.
+        // The strict write is the codec: it runs the `from_plaintext` boundary
+        // cleanup, so the committed string is what the diff must measure against.
         let stored = resolve_field_write(name, QuillValue::from(text.into()), schema)?;
         let delta = quillmark_content::delta::diff(
             &base,
@@ -838,14 +836,11 @@ impl Card {
         Ok(delta)
     }
 
-    /// Apply a committed field-change bundle to the body content: the native
-    /// form-editor writer. Order is text delta → island ops → line ops → mark
-    /// ops, then one terminal normalization ([`Content::apply_field_change`]);
-    /// mark ranges are in final-text coordinates. Returns
+    /// Apply a committed field-change bundle to the body content. Order is text
+    /// delta → island ops → line ops → mark ops, then one terminal
+    /// normalization; mark ranges are in final-text coordinates. Returns
     /// [`EditError::ContentApply`] when an op is out of bounds; the apply is
-    /// all-or-nothing ([`Content::apply_field_change`]), so the body is
-    /// unchanged on error: apply the bundle against the body the delta was
-    /// computed from.
+    /// all-or-nothing, so the body is unchanged on error.
     pub fn apply_body_change(&mut self, bundle: &ChangeBundle) -> Result<(), EditError> {
         self.body_mut()
             .apply_field_change(bundle)
@@ -854,26 +849,21 @@ impl Card {
 
     /// Splice a content field-change bundle into a field's stored content: the
     /// field-path twin of [`apply_body_change`](Self::apply_body_change), and
-    /// what lets identity marks (anchors, island ids) persist on field content
-    /// across incremental edits. Decodes the field's canonical content, applies
-    /// the text delta plus any island/line/mark ops in the same all-or-nothing
+    /// what lets identity marks persist on field content across incremental
+    /// edits. Decodes the field's canonical content, applies the all-or-nothing
     /// bundle, and re-stores the canonical result.
     ///
-    /// An **absent** field splices against the empty content, as
-    /// [`revise_field`](Self::revise_field) diffs against it. A bundle that
+    /// An **absent** field splices against the empty content. A bundle that
     /// expected content still fails: its text delta declares the base length it
-    /// was computed against, so only a zero-base bundle lands, and a zero-base
-    /// bundle is one its producer computed against an empty field.
+    /// was computed against, so only a zero-base bundle lands.
     ///
     /// Returns [`EditError::InvalidFieldName`] for a malformed name,
-    /// [`EditError::FieldDecode`] when the stored value is not a content (the
-    /// caller addresses a field it knows is content-typed, exactly as when
-    /// writing it), and [`EditError::ContentApply`] when the bundle applies out
-    /// of bounds.
+    /// [`EditError::FieldDecode`] when the stored value is not a content, and
+    /// [`EditError::ContentApply`] when the bundle applies out of bounds.
     ///
     /// **Richtext codec**: schema-blind like [`revise_field`](Self::revise_field),
     /// so a `plaintext` field's stored string decodes here as markdown and a
-    /// splice lands it off its resting form. The next bound load converges it.
+    /// splice lands it off its resting form until the next bound load.
     pub fn apply_field_change(
         &mut self,
         name: &str,
@@ -888,8 +878,7 @@ impl Card {
                     message: e.into_message(),
                 })
             }
-            // Only this arm creates, so only this arm needs the name check the
-            // `Some` arms got by resolving an existing field.
+            // Only this arm creates; the `Some` arms resolved an existing field.
             None => {
                 if !is_valid_field_name(name) {
                     return Err(EditError::InvalidFieldName(name.to_string()));
@@ -912,7 +901,6 @@ mod tests {
 
     #[test]
     fn field_error_anchors_under_the_card_base() {
-        // A main field write: the `main` base roots the field path.
         let main = DocPath::main();
         assert_eq!(
             EditError::FieldCoercionFailed {
@@ -925,7 +913,6 @@ mod tests {
             .to_string(),
             "main.font_size"
         );
-        // A card field write: the card root qualifies the field.
         let card = DocPath::card(Some("indorsement"), 1);
         assert_eq!(
             EditError::UnknownField("signature_block".into())
@@ -938,7 +925,6 @@ mod tests {
 
     #[test]
     fn index_out_of_range_anchors_at_the_array_slot() {
-        // Structural op: names a slot, base-independent.
         for base in [DocPath::main(), DocPath::card(Some("note"), 0)] {
             assert_eq!(
                 EditError::IndexOutOfRange { index: 4, len: 2 }
@@ -952,7 +938,6 @@ mod tests {
 
     #[test]
     fn kind_and_depth_errors_anchor_at_base_or_nowhere() {
-        // A kind error on a structural op carries the slot base it was given.
         assert_eq!(
             EditError::ReservedKind
                 .doc_path(&DocPath::card(None, 2))
@@ -960,12 +945,10 @@ mod tests {
                 .to_string(),
             "cards[2]"
         );
-        // A config-space `$seed` depth error keeps an empty base: no anchor.
         assert_eq!(
             EditError::ValueTooDeep { max: 8 }.doc_path(&DocPath::new()),
             None
         );
-        // A main-card depth error roots at `main` (its base names the card).
         assert_eq!(
             EditError::ValueTooDeep { max: 8 }
                 .doc_path(&DocPath::main())
