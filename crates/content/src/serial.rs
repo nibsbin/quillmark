@@ -673,9 +673,8 @@ pub(crate) fn table_cells(props: &Value) -> Vec<(String, Vec<Mark>)> {
     table_cell_values(props).map(parse_cell).collect()
 }
 
-// The `table` codec below (props normalize, shape-validate, cell extraction) is
-// the primitive `crate::island` dispatches into for `KnownIslandType::Table`;
-// island-type dispatch itself lives there, not here.
+// The `table` codec below is the primitive `crate::island` dispatches into for
+// `KnownIslandType::Table`; island-type dispatch itself lives there.
 
 /// Repair a table island's props in place to the canonical shape:
 ///
@@ -695,9 +694,8 @@ pub(crate) fn normalize_table_props(props: &mut Value) {
         return;
     };
     let header = obj.entry("header").or_insert_with(|| Value::Array(vec![]));
-    // A non-array header (a bare string, say) carries no cells; rewrite it to an
-    // empty array so it canonicalizes to a zero-column, content-free table
-    // rather than retaining opaque garbage that `validate` would then reject.
+    // A non-array header carries no cells; rewrite it to an empty array rather
+    // than retaining garbage `validate` would reject.
     if !header.is_array() {
         *header = Value::Array(vec![]);
     }
@@ -751,12 +749,8 @@ fn pad_row(v: &mut Value, cols: usize) {
 }
 
 /// De-newline a cell's text (each `\n`/`\r` → a space, 1:1 so mark offsets hold)
-/// and re-normalize its marks. Reached per-cell from [`normalize_table_props`].
-///
-/// Writes `text` and `marks` back into the cell's **own** object rather than
-/// minting a fresh one, so a key this build does not recognize survives: a
-/// cell is an opaque carrier, not an envelope (`DOCUMENT_STORAGE.md` § Open
-/// vocabularies).
+/// and re-normalize its marks. Writes back into the cell's **own** object rather
+/// than minting a fresh one, so a key this build does not recognize survives.
 fn canon_cell(cell: &mut Value) {
     let (text, marks) = parse_cell(cell);
     let text = if text.contains(['\n', '\r']) {
@@ -766,10 +760,9 @@ fn canon_cell(cell: &mut Value) {
     };
     let canon = cell_to_value(&text, &crate::model::normalize_marks(marks));
     match (cell.as_object_mut(), canon) {
-        // Overwrite the canonical keys, leave the rest: the merge
-        // [`crate::ops`] does for a mark's fields on an op object.
+        // Overwrite the canonical keys, leave the rest.
         (Some(o), Value::Object(fields)) => o.extend(fields),
-        // A non-object cell (a bare string, a null) holds no keys to preserve.
+        // A non-object cell holds no keys to preserve.
         (_, canon) => *cell = canon,
     }
 }
