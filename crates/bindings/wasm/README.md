@@ -6,12 +6,11 @@ Maintained by [TTQ](https://tonguetoquill.com).
 
 ## Overview
 
-Use Quillmark in browsers/Node.js with explicit in-memory trees (`Map<string, Uint8Array>` / `Record<string, Uint8Array>`).
+Quillmark in browsers and Node, over explicit in-memory trees
+(`Map<string, Uint8Array>` / `Record<string, Uint8Array>`).
 
-The package exposes **one import surface**:
-
-- `@quillmark/wasm` (the root), the **canonical API**: `init`, resolving to
-  `Quill` and `Document`, and an `Engine` that renders them.
+The package has one import surface: `@quillmark/wasm`, whose `init` resolves to
+`Quill` and `Document`, plus an `Engine` that renders them.
 
 `Quill` and `Document` are the internal Typst-less core build's own classes,
 handed out verbatim by `init`, so editor/validation code (`Quill.fromTree`,
@@ -136,29 +135,14 @@ depend only on `quill.backendId`, and answer from the descriptor's required
 `formats`/`canvas` manifest: never loading the multi-MB backend binary and
 never cloning the quill. Use them as non-failing pre-render probes.
 
-### `Quill.fromTree(tree)`
-Build + validate a `Quill` from an in-memory tree. Pure: the declared backend
-is resolved at render time, not here. Loads no backend binary.
+### The two doors: `Document.fromMarkdown` vs `quill.parse` / `quill.conform`
 
-### `new Document(quillRef)`
-A blank document: a main card carrying only `$quill`, an empty body, and no
-composable cards: the programmatic blank canvas. Absent fields resolve at
-render time (schema `default`, else type-empty zero), so nothing the caller
-did not set reaches the output. Build it up with `storeFields` / `insertCard`.
-For an example-filled starter use `quill.seedDocument()`. Throws on an
-invalid quill reference.
+`Document.fromMarkdown` is the quill-free **transport door** (migrations, `$ext`
+stamping, a quill that will not load, opening a document to fix its `$quill`).
+It needs a root `~~~` block carrying a `$quill` line, and a content field rests
+as authored.
 
-### `Document.fromMarkdown(markdown)`
-Parse markdown to a parsed document, quill-free: the **transport door**
-(migrations, `$ext` stamping, a quill that will not load, opening a document to
-fix its `$quill`). Throws a JS `Error` (with `.diagnostics` attached, see
-[Errors](#errors)) on any parse failure, including a missing root `$quill`
-metadata line, malformed YAML, and inputs over the 10 MiB
-`parse::input_too_large` limit. A content field rests as authored; `quill.parse`
-below is the bound door that lands it at its canonical rest.
-
-### `quill.parse(markdown)` / `quill.conform(doc)`
-The **bound door**, and the primary ingestion path. `quill.parse` is
+`quill.parse` is the **bound door**, and the primary ingestion path. It is
 `Document.fromMarkdown` followed by `conform`: the returned document's declared
 content fields rest at one form per codec (a `richtext` field as the canonical
 content object, a `plaintext` field as its literal string), so `getStored`
@@ -181,60 +165,16 @@ const stale = Document.fromJson(row);
 const diags = quill.conform(stale);         // converges in place
 ```
 
-### `doc.toMarkdown()`
-Emit canonical Quillmark Markdown. Type-fidelity round-trip safe:
-`Document.fromMarkdown(doc.toMarkdown())` returns a document equal to `doc`
-under [`doc.equals`](#docequalsother). The output is **not** guaranteed
-byte-equal to the original source: YAML quoting, key ordering, and
-whitespace are normalised. Use `equals` (not string comparison) to test
-semantic equality.
+### Storage compatibility across versions
 
-### `doc.toJson()`
-Serialize the document to a versioned storage DTO: a JSON **string**
-carrying a `schema` version. Use this (not `toMarkdown`) to persist a
-document across a process restart or crate upgrade: the wire format is
-frozen per `schema` version, whereas Markdown syntax evolves. Parse-time
-`warnings` are not part of the DTO.
-
-The string is produced inside the module by `serde_json`; the JS `JSON`
-global is not involved. It is standard JSON text, so callers may
-`JSON.parse` it to inspect it, but it is intended as an opaque blob you
-persist and hand back.
-
-`toJson()` is **deterministic**: a `Document` that is `equals` to another
-serializes to a byte-identical string: across repeated calls, and across
-any crate upgrade that keeps the same `schema` version (every release does until
-the `Document` model changes; see [Storage compatibility](#storage-compatibility-across-versions)).
-Field order is fixed and object key order is preserved, so content hashes
-and string-equality dirty-checks over the output are stable.
-
-### `Document.fromJson(json)`
-Reconstruct a `Document` from a storage DTO string produced by `toJson`.
-Round-trips losslessly:
+Persist `doc.toJson()`, not `doc.toMarkdown()`: the DTO wire format is frozen
+per `schema` version, whereas Markdown syntax evolves, and `toMarkdown` output
+is normalised rather than byte-equal to the source. `Document.tryFromJson`
+discriminates the two formats without exceptions as control flow:
 
 ```ts
-const stored = doc.toJson();        // persist this string
-const restored = Document.fromJson(stored);
-restored.equals(doc);               // true
-```
-
-Throws a JS `Error` on malformed JSON, an unknown `schema` version, or a
-malformed payload. The restored document has no parse-time `warnings`.
-
-### `Document.tryFromJson(json)`
-Like `fromJson`, but returns `undefined` instead of throwing when `json` is
-not a valid storage DTO. Use it to branch on format without a heuristic or
-`try`/`catch` as control flow:
-
-```ts
-// "JSON canonical, Markdown fallback": no exceptions, no string sniffing
 const doc = Document.tryFromJson(content) ?? Document.fromMarkdown(content);
 ```
-
-`undefined` means only "not a storage DTO"; `fromMarkdown` still throws on
-genuinely malformed Markdown.
-
-### Storage compatibility across versions
 
 The `schema` value (`quillmark/document@0.93.0`) is the **model version**,
 not the running crate version. It is a hand-set constant, bumped only when
@@ -269,53 +209,17 @@ In short: persist the `toJson` string, upgrade freely, never downgrade. The
 full design (including how migrations are added) is in
 `prose/canon/DOCUMENT_STORAGE.md`.
 
-### `doc.equals(other)`
-Structural equality between two `Document` handles. Compares `main` and
-`cards` by value; parse-time `warnings` are intentionally excluded.
-
-Use this to debounce upstream prop updates: keep the last parsed `Document`
-and compare instead of re-parsing on every keystroke.
-
-### `doc.cardCount`
-O(1) getter for the number of composable cards (excluding the main card).
-Use this to validate indices before calling card mutators (`removeCard`,
-`storeField({ card, field }, …)`, etc.) without allocating the full `cards` array.
-
-### `quill.validate(doc)`
-
-Returns `Diagnostic[]`: the document validated against the quill schema,
-without invoking the backend. An empty array means the document is valid.
-Each diagnostic carries the canonical `validation::*` `code`, `path`, and
-`hint`. Includes the non-fatal `validation::must_fill` warning for each
-`!must_fill` marker left in the document (render zero-fills these rather
-than failing), so filter by `severity`/`code` for blockers vs. hints:
-
-```ts
-const diagnostics = quill.validate(Document.fromMarkdown(markdown));
-const errors = diagnostics.filter(d => d.severity === "error");
-```
+### Cards, seeds, and addresses
 
 To render a form editor, read field definitions from `quill.schema` (walk
 `fields` in key order: declaration order is display order) and the authored
 values from the `Document` payload: there is no separate form-view projection.
+`quill.validate(doc)` scores it without invoking the backend.
 
-### `quill.seedDocument()`
-
-Returns a starter `Document` seeded from the schema: each field's `example:`
-is committed and every other field is left absent (the render layer fills
-`default:` → type-empty zero). Illustration-first: a field with both an
-`example` and a `default` renders its example. Use as the initial state for a
-"new document" editor.
-
-```ts
-const doc = quill.seedDocument();
-const markdown = doc.toMarkdown();
-```
-
-For per-card seeding, `quill.seedMain()` returns just the `$kind: main` card
-and `quill.seedCard(kind)` returns a starter composable card (or `undefined`
-if the kind is not declared). Both return the read `Card` shape of
-`doc.main` / `doc.cards`, which `doc.insertCard` accepts directly:
+`quill.seedDocument()` returns a starter document with each field's `example:`
+committed; `quill.seedMain()` and `quill.seedCard(kind)` seed one card. All
+return the read `Card` shape of `doc.main` / `doc.cards`, which `doc.insertCard`
+accepts directly:
 
 ```ts
 doc.insertCard(quill.seedCard("note"));                 // seed → append
@@ -439,24 +343,10 @@ tells you which pages to repaint (`dirty ∩ visible`). Apply is transactional:
 on throw, every read keeps serving the last-good compile. Don't open a session
 per export, and don't re-open per edit: `apply` instead.
 
-### `engine.render(quill, parsed, opts?)`
-Render a pre-parsed `Document` against `quill`. Throws an
-`engine::backend_not_found` error if no registered backend matches the quill's
-declared backend.
-
-### `engine.open(quill, parsed)` + `session.render(opts?)`
-Open once, render all or selected pages (`opts.pages`).
-
-The session also exposes `pageCount`, `backendId`, `supportsCanvas`,
-`warnings` (non-fatal diagnostics of the current compile: set at `open`,
-refreshed by each committed `apply`),
-`apply(doc)` for in-place recompiles, `pageSize(page)`, and
-`paint(ctx, page, opts?)` for canvas previews. See below.
-
 A document that compiles to zero pages still produces a valid session
-(`pageCount === 0`); `paint(ctx, 0)` and `pageSize(0)` then throw
-`page index 0 out of range (pageCount=0)`. Branch on `pageCount === 0` to
-render a "no pages to preview" UI without relying on the throw.
+(`pageCount === 0`); `paint(ctx, 0)` and `pageSize(0)` then throw. Branch on
+`pageCount === 0` to render a "no pages to preview" UI rather than relying on
+the throw.
 
 ### Canvas Preview
 
@@ -582,6 +472,9 @@ compilation failures. The same shape applies to every throw site:
   text.
 - `engine.render` / `session.render`: backend compilation failures and
   validation errors.
+- `engine.render(quill, parsed)` against a quill whose *name* differs
+  (`quill::name_mismatch`) or whose *version* falls outside the document's
+  selector (`quill::version_mismatch`): a throw, never a warning.
 - Any method taking a `Quill` or `Document`: a handle from a *second* copy of
   `@quillmark/wasm` is refused with `runtime::foreign_handle`, hinting `npm ls
   @quillmark/wasm`. Two copies are two WASM memories and two `Quill`/`Document`
@@ -622,15 +515,6 @@ try {
 ```
 
 [erm]: https://github.com/tc39/proposal-explicit-resource-management
-
-## Notes
-
-- Parsed markdown requires a root `~~~` block (a bare three-tilde fence;
-  `~~~card-yaml` is also accepted as a non-canonical alias)
-  with a `$quill` system-metadata line. Empty input surfaces a dedicated
-  "Empty markdown input cannot be parsed" message.
-- A `$quill` mismatch during `engine.render(quill, parsed)` is a thrown error, not a warning: rendering with a quill whose *name* differs (`quill::name_mismatch`) or whose *version* falls outside the selector (`quill::version_mismatch`) is rejected.
-- Output schema APIs live on `Quill`, not the engine.
 
 ## Changelog
 
