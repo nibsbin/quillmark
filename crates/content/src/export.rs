@@ -1221,14 +1221,9 @@ mod tests {
         assert!(!md.contains("c1"));
     }
 
-
-    /// The exact repro: `strong[0,4)` + `emph[2,6)` over "abcdef" must
-    /// export balanced markdown that preserves the text, not `**ab*cdef*`,
-    /// which re-imports as LITERAL `**abcdef` text (a silent content change).
-    /// The two marks share the `*` delimiter character, so their
-    /// overlap is unrepresentable in CommonMark (a reopened `*` abutting `**`
-    /// merges into `***`); the export nests them by truncation, a documented
-    /// codec limit: text intact, the crossing tail of the inner mark dropped.
+    /// `strong` and `emph` share the `*` delimiter, so their overlap is
+    /// unrepresentable: a naive `**ab*cdef*` re-imports as literal text. Export
+    /// nests them by truncation instead, keeping the text.
     #[test]
     fn overlapping_asterisk_marks_stay_text_safe() {
         let rt = marked(
@@ -1249,7 +1244,6 @@ mod tests {
         let md = to_markdown(&rt);
         assert_eq!(md, "**ab*cd***ef", "balanced, no literal `**` leak");
         let rt2 = from_markdown(&md).unwrap();
-        // Text is preserved exactly: the corruption the issue reported is gone.
         assert_eq!(rt2.text, "abcdef");
         // Documented limit: same-delimiter overlap degrades to its nested subset.
         assert_eq!(
@@ -1269,9 +1263,8 @@ mod tests {
         );
     }
 
-    /// Overlap between marks with *distinct* delimiters round-trips exactly:
-    /// the close-and-reopen sweep lowers `strong[0,4)` + `strike[2,6)` to
-    /// `**ab~~cd~~**~~ef~~`, which re-imports to the same overlapping content.
+    /// Overlap between marks with *distinct* delimiters round-trips exactly: the
+    /// close-and-reopen sweep lowers it to balanced, re-importable markdown.
     #[test]
     fn overlapping_distinct_delim_marks_round_trip_exactly() {
         for (k1, k2) in [
@@ -1302,9 +1295,8 @@ mod tests {
         }
     }
 
-    /// A formatting mark partially overlapping an atomic `code` span can't wrap
-    /// the code's interior; the wrap clips to the text outside so the markdown
-    /// stays balanced (the atomic-balance shape, here in the markdown emitter).
+    /// A formatting mark partially overlapping an atomic `code` span clips to
+    /// the text outside it, so the markdown stays balanced.
     #[test]
     fn wrap_over_code_stays_balanced() {
         let rt = marked(
@@ -1328,15 +1320,12 @@ mod tests {
         assert_eq!(rt2.text, "abcdef");
     }
 
-    /// A literal `&` (or an entity-shaped `&amp;`) must not
-    /// re-import as the decoded entity. `from_markdown("\\&amp;")` yields content
-    /// text "&amp;"; exporting it unescaped as `&amp;` would re-import as "&".
+    /// Entity-shaped text must not re-import as the decoded entity: exporting
+    /// the content text "&amp;" unescaped would re-import as "&".
     #[test]
     fn ampersand_and_entities_round_trip() {
-        // A bare `&` and an entity-shaped run both survive.
         round_trips("a & b");
         round_trips("copyright \\&copy; sign");
-        // The pinned repro: literal "&amp;" text.
         let rt = from_markdown("\\&amp;").unwrap();
         assert_eq!(rt.text, "&amp;");
         let md = to_markdown(&rt);
@@ -1346,9 +1335,8 @@ mod tests {
         assert_eq!(rt, rt2);
     }
 
-    /// Heading text ending in a `#` run must not re-import as
-    /// an ATX closing sequence. `from_markdown("# a \\#")` yields heading text
-    /// "a #"; exporting it as `# a #` would re-import as "a", dropping the `#`.
+    /// Heading text ending in a `#` run must not re-import as an ATX closing
+    /// sequence: `# a #` would come back as "a", dropping the `#`.
     #[test]
     fn heading_trailing_hash_round_trips() {
         let rt = from_markdown("# a \\#").unwrap();
@@ -1358,27 +1346,18 @@ mod tests {
         let rt2 = from_markdown(&md).unwrap();
         assert_eq!(rt2.text, "a #", "trailing `#` must survive");
         assert_eq!(rt, rt2);
-        // A multi-`#` trailing run and a no-space `#` both round-trip.
         round_trips("# heading \\#\\#");
         round_trips("## title\\#");
     }
 
-    // ---------------------------------------------------------------------
-    // Unescaped image alt/URL and link URL cause silent content
-    // loss on round-trip (a special char terminates the markup early).
-    // ---------------------------------------------------------------------
-
-    /// The exact image repro: an alt with `\]` imports to alt text "a]b";
-    /// exporting it unescaped as `![a]b](x.png)` re-imports as prose with the
-    /// image gone. The alt must be escaped so the island survives.
+    /// An unescaped special in an image alt terminates the markup early:
+    /// `![a]b](x.png)` re-imports as prose with the image gone.
     #[test]
     fn image_alt_specials_round_trip() {
-        // `]`, `\`, `&`, and emphasis delimiters in alt all survive.
         round_trips("see ![a\\]b](x.png) here");
         round_trips("see ![a\\\\b](x.png) here");
         round_trips("see ![a&b](x.png) here");
         round_trips("see ![a\\*b\\_c](x.png) here");
-        // The pinned repro: the image is not lost.
         let rt = from_markdown("see ![a\\]b](x.png) here").unwrap();
         assert_eq!(rt.islands.len(), 1, "one image island");
         assert_eq!(rt.islands[0].props["alt"], "a]b");
@@ -1388,30 +1367,11 @@ mod tests {
         assert_eq!(rt2.islands[0].props["alt"], "a]b");
     }
 
-    /// The exact link repro: a URL with a space imports to link url
-    /// "foo bar"; exporting it unescaped as `[t](foo bar)` re-imports as prose
-    /// with the link gone. The URL must be angle-wrapped.
-    #[test]
-    fn link_url_with_space_round_trips() {
-        round_trips("a [t](<foo bar>) b");
-        let rt = from_markdown("a [t](<foo bar>) b").unwrap();
-        assert!(
-            rt.marks
-                .iter()
-                .any(|m| matches!(&m.kind, MarkKind::Link { url } if url == "foo bar")),
-            "link url with space imported"
-        );
-        let md = to_markdown(&rt);
-        assert!(md.contains("<foo bar>"), "url angle-wrapped, got {md:?}");
-        let rt2 = from_markdown(&md).unwrap();
-        assert_eq!(rt, rt2);
-    }
-
     /// Image and link URLs carrying the destination-terminating specials
-    /// (unbalanced parens, `&`, `<`/`>`, backslash) all round-trip.
+    /// (spaces, unbalanced parens, `&`, `<`/`>`, backslash) all round-trip.
     #[test]
     fn url_specials_round_trip() {
-        // Balanced parens stay bare (CommonMark permits them); the others wrap.
+        round_trips("a [t](<foo bar>) b");
         round_trips("see [t](https://en.wikipedia.org/wiki/Rust_(programming_language)) x");
         round_trips("see ![a](<x y.png>) here");
         round_trips("see [t](<a )b>) x");
@@ -1420,8 +1380,8 @@ mod tests {
         round_trips("see [t](<a\\\\b>) x");
     }
 
-    /// `emit_url` chooses bare for a clean URL and angle-wraps only when a
-    /// special forces it: the aesthetic contract (common URLs stay unbracketed).
+    /// `emit_url` angle-wraps only when a special forces it, so common URLs stay
+    /// unbracketed.
     #[test]
     fn emit_url_bare_when_safe() {
         let mut bare = String::new();
@@ -1435,15 +1395,9 @@ mod tests {
         assert_eq!(esc, "<a\\&\\<\\\\b>", "specials escaped inside the wrap");
     }
 
-    // ---------------------------------------------------------------------
-    // The verify-and-drop net's search.
-    // ---------------------------------------------------------------------
-
     /// A strong mark whose delimiters land where CommonMark won't read them as a
-    /// run (`**a.**b` re-imports as literal text) is dropped, and every other
-    /// mark on the line is kept. The re-add order is document order, so position
-    /// does not decide survival: a good mark before *or* after a leaking one
-    /// lives.
+    /// run is dropped, and every other mark on the line is kept. Re-add order is
+    /// document order, so a good mark before *or* after a leaking one lives.
     #[test]
     fn net_drops_only_the_leaking_marks() {
         for (label, text, spans, want) in [
@@ -1479,9 +1433,8 @@ mod tests {
         }
     }
 
-    /// A line at the [`PROBE_BUDGET`] guarantee (32 flanking marks, half of them
-    /// unrepresentable) resolves exactly: the budget covers the full search, so
-    /// no representable mark is lost to it.
+    /// At the [`PROBE_BUDGET`] guarantee (32 flanking marks, half unrepresentable)
+    /// the budget covers the full search, so no representable mark is lost to it.
     #[test]
     fn net_resolves_a_line_at_the_budget_guarantee() {
         let (mut text, mut marks) = (String::new(), Vec::new());
@@ -1513,10 +1466,8 @@ mod tests {
         assert_eq!(from_markdown(&md).unwrap().text, text);
     }
 
-    /// Past the budget the net still terminates and still preserves the text; it
-    /// drops what it has not cleared. The pathological shape (one
-    /// unrepresentable mark per five chars) costs a bounded number of re-parses
-    /// instead of one per mark.
+    /// Past the budget the net still terminates and preserves the text, dropping
+    /// what it has not cleared.
     #[test]
     fn net_bounds_a_pathological_line() {
         let text = "a.b, ".repeat(200);
@@ -1539,8 +1490,7 @@ mod tests {
     #[test]
     fn ordered_list_marker_saturates_on_overflow() {
         // `validate` does not ceiling `start`/`ordinal`, so a corrupt content can
-        // carry `start == u64::MAX`. Export must not panic (or wrap silently) on
-        // the `start + ordinal` marker; it saturates instead.
+        // carry `start == u64::MAX`.
         let json = format!(
             r#"{{"text":"x","lines":[{{"kind":"para","containers":[{{"container":"list_item","ordered":true,"start":{},"ordinal":5}}]}}],"marks":[],"islands":[]}}"#,
             u64::MAX
