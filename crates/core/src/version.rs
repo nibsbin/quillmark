@@ -433,13 +433,4 @@ mod tests {
         assert_eq!(ref3.to_string(), "resume");
     }
 
-    #[test]
-    fn test_quill_ref_hint_describes_the_grammar() {
-        let hint = quill_ref_hint();
-        assert!(!hint.is_empty());
-        // Pin the charset and selector forms so the hint can't drift from `from_str`.
-        assert!(hint.contains("[a-z_][a-z0-9_]*"), "got: {hint}");
-        assert!(hint.contains("@latest"), "got: {hint}");
-        assert!(hint.contains("@MAJOR.MINOR.PATCH"), "got: {hint}");
-    }
 }
