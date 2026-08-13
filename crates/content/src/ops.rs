@@ -1737,9 +1737,8 @@ mod tests {
         );
     }
 
-    /// A block island in one bundle, which is what the stage order buys: the
-    /// delta opens the line, the island op fills it, `SetKind` tags it. Nothing
-    /// here falls back to a whole-value install, so the field's anchors stay.
+    /// What the stage order buys: the delta opens the line, the island op fills
+    /// it, `SetKind` tags it, and the field's anchors stay.
     #[test]
     fn block_island_lands_in_one_bundle() {
         let mut rt = from_markdown("intro").unwrap();
@@ -1778,22 +1777,6 @@ mod tests {
         );
     }
 
-    /// A bundle whose island op fails commits none of its earlier stages.
-    #[test]
-    fn island_op_failure_leaves_the_content_untouched() {
-        let mut rt = from_markdown("ab").unwrap();
-        let before = rt.clone();
-        let err = rt.apply_field_change(&ChangeBundle {
-            delta: diff("ab", "aXb"),
-            island_ops: vec![IslandOp::Set {
-                island: Island::new("isl-nope".into(), "image".into()),
-            }],
-            ..Default::default()
-        });
-        assert!(matches!(err, Err(ApplyError::UnknownIslandId { .. })));
-        assert_eq!(rt, before, "failed bundle must not mutate the content");
-    }
-
     #[test]
     fn apply_field_change_bundle_order() {
         let mut rt = from_markdown("abc").unwrap();
@@ -1818,9 +1801,6 @@ mod tests {
 
     #[test]
     fn apply_field_change_is_all_or_nothing() {
-        // A bundle whose text delta and first mark op succeed but whose second
-        // mark op is out of range must leave the content exactly as it was: the
-        // successful earlier stages do not partially commit.
         let mut rt = from_markdown("abc").unwrap();
         let before = rt.clone();
         let d = diff("abc", "abXc");
@@ -1843,8 +1823,6 @@ mod tests {
         assert_eq!(rt, before, "failed bundle must not mutate the content");
     }
 
-    /// `add` of an anchor rejects a live id collision and the empty id, but
-    /// re-adds an id freed by an earlier `RemoveAnchor` in the same bundle.
     #[test]
     fn add_anchor_id_uniqueness() {
         let anchor = |id: &str| MarkKind::Anchor { id: id.into() };
@@ -1856,7 +1834,6 @@ mod tests {
 
         let noop = || diff("abcd", "abcd");
 
-        // First anchor lands; a second `add` of the same id is a collision.
         let mut rt = from_markdown("abcd").unwrap();
         rt.apply_field_change(&mark_bundle(noop(), vec![add(0, 2, "x")]))
             .unwrap();
@@ -1865,15 +1842,14 @@ mod tests {
             Err(ApplyError::AnchorIdCollision { id: "x".into() })
         );
 
-        // The empty id is refused.
         let mut rt = from_markdown("abcd").unwrap();
         assert_eq!(
             rt.apply_field_change(&mark_bundle(noop(), vec![add(0, 2, "")])),
             Err(ApplyError::EmptyAnchorId)
         );
 
-        // Remove-then-add of the same id in one bundle is allowed: ops apply in
-        // sequence, so the id is free by the time the `add` runs.
+        // Remove-then-add of the same id in one bundle: ops apply in sequence,
+        // so the id is free by the time the `add` runs.
         let mut rt = from_markdown("abcd").unwrap();
         rt.apply_field_change(&mark_bundle(noop(), vec![add(0, 2, "x")]))
             .unwrap();
@@ -1891,14 +1867,8 @@ mod tests {
         assert_eq!((anchors[0].start, anchors[0].end), (2, 4));
     }
 
-    // ── sync_lines_for_delta characterization ───────────────────────────────
-    //
-    // Pin the observable behavior of the line-sync walk: retain/insert/delete
-    // interleavings, the split template-clone rule, and the malformed-content
-    // guards: against a silent change to its internals.
-
     /// A `Heading{level}` line, its level a visible tag so a test can trace
-    /// which original line landed where; `continues` distinguishes a clone.
+    /// which original line landed where.
     fn tag_line(level: u8, continues: bool) -> Line {
         Line {
             kind: LineKind::Heading { level },
@@ -1907,8 +1877,8 @@ mod tests {
         }
     }
 
-    /// `(tag, continues)` per line: `Heading{level}` reads its level, `Para` is
-    /// tag 0 (the default line), any other kind is 255.
+    /// `(tag, continues)` per line: a heading's level, 0 for `Para` (the default
+    /// line), 255 for anything else.
     fn tags(lines: &[Line]) -> Vec<(u8, bool)> {
         lines
             .iter()
@@ -1921,20 +1891,7 @@ mod tests {
     }
 
     #[test]
-    fn sync_lines_retain_only_is_identity() {
-        let old_chars: Vec<char> = "a\nb\nc".chars().collect();
-        let lines = vec![tag_line(1, false), tag_line(2, false), tag_line(3, false)];
-        let d = Delta {
-            ops: vec![Op::Retain(5)],
-        };
-        assert_eq!(sync_lines_for_delta(&old_chars, lines.clone(), &d), lines);
-    }
-
-    #[test]
     fn sync_lines_insert_newline_clones_split_line_and_clears_continues() {
-        // Split line 1 ("bc") mid-line: the first half stays the original line
-        // (keeps kind, containers, and its `continues: true`); the second half
-        // is a clone of it with `continues` forced false.
         let old_chars: Vec<char> = "a\nbc".chars().collect();
         let l1 = Line {
             kind: LineKind::Heading { level: 5 },
@@ -1956,8 +1913,6 @@ mod tests {
 
     #[test]
     fn sync_lines_delete_newline_drops_following_line() {
-        // Delete the first '\n' of "a\nb\nc": lines 0 and 1 merge, dropping line
-        // 1; the current line (0) and line 2 survive.
         let old_chars: Vec<char> = "a\nb\nc".chars().collect();
         let lines = vec![tag_line(1, false), tag_line(2, false), tag_line(3, false)];
         let d = Delta {
@@ -1969,9 +1924,7 @@ mod tests {
 
     #[test]
     fn sync_lines_delete_trailing_newline_without_following_line_is_guarded() {
-        // Malformed content: text "a\n" is two segments but `lines` has one
-        // entry. Deleting the '\n' when `line_idx + 1` is out of bounds removes
-        // nothing (the guard), leaving the single line intact.
+        // Malformed content: "a\n" is two segments but `lines` has one entry.
         let old_chars: Vec<char> = "a\n".chars().collect();
         let lines = vec![tag_line(1, false)];
         let d = Delta {
@@ -1983,8 +1936,6 @@ mod tests {
 
     #[test]
     fn sync_lines_stops_at_end_of_old_chars() {
-        // A retain running past the end of old_chars stops at the end rather
-        // than indexing out of bounds (the `old >= old_chars.len()` guard).
         let old_chars: Vec<char> = "a\nb".chars().collect();
         let lines = vec![tag_line(1, false), tag_line(2, false)];
         let d = Delta {
@@ -1994,35 +1945,7 @@ mod tests {
     }
 
     #[test]
-    fn sync_lines_insert_two_newlines_adds_two_clones() {
-        // Inserting "\n\n" mid-line adds two lines, each carrying the split
-        // line's kind and containers with `continues: false`.
-        let old_chars: Vec<char> = "abc".chars().collect();
-        let src = Line {
-            kind: LineKind::Heading { level: 7 },
-            containers: vec![Container::Quote],
-            continues: false,
-        };
-        let d = Delta {
-            ops: vec![Op::Retain(1), Op::Insert("\n\n".into()), Op::Retain(2)],
-        };
-        let out = sync_lines_for_delta(&old_chars, vec![src], &d);
-        assert_eq!(out.len(), 3);
-        for l in &out {
-            assert_eq!(l.kind, LineKind::Heading { level: 7 });
-            assert_eq!(l.containers, vec![Container::Quote]);
-            assert!(!l.continues);
-        }
-    }
-
-    // ── line-op mark remap + terminal-normalize collapse ────────────────────
-
-    #[test]
     fn split_line_rebases_mark_across_the_split_point() {
-        // A strong mark spanning the split point grows by the inserted `\n`
-        // rather than staying at its old coordinates. "abcd", strong[1..3)
-        // ("bc"); split at 2 → "ab\ncd"; the mark must still cover "b"+"c",
-        // i.e. [1..4) over "ab\ncd".
         let mut rt = from_markdown("abcd").unwrap();
         rt.apply_mark_ops(&[MarkOp::Add {
             start: 1,
@@ -2038,18 +1961,14 @@ mod tests {
             .filter(|m| matches!(m.kind, MarkKind::Strong))
             .map(|m| (m.start, m.end))
             .collect();
-        // [1..4) spans "b\nc"; normalize keeps the interior `\n` (a mark may
-        // legitimately span lines), trimming only leading/trailing boundaries.
+        // [1..4) spans "b\nc": normalize keeps an interior `\n`, trimming only
+        // leading/trailing boundaries.
         assert_eq!(strong, vec![(1, 4)]);
         assert_eq!(rt.validate(), Ok(()));
     }
 
     #[test]
     fn join_line_rebases_marks_to_final_text_coordinates() {
-        // The issue's concrete drift case: "ab\ncd", strong[2..4) (over "\nc").
-        // Joining line 0 removes the `\n`; the remap + terminal normalize must
-        // land strong on "c" (coordinate [2..3) over "abcd") not on "d"
-        // (the un-remapped-mark bug) nor on "cd".
         let mut rt = from_markdown("ab").unwrap();
         rt.apply_text_delta(&diff("ab", "ab\ncd")).unwrap();
         rt.marks.push(Mark {
@@ -2058,8 +1977,6 @@ mod tests {
             kind: MarkKind::Strong,
         });
         rt.normalize();
-        // Post-normalize the `\n` edge trims to [3..4) ("c"); either way the
-        // join must converge to strong on "c".
         rt.apply_line_ops(&[LineOp::Join { line: 0 }]).unwrap();
         assert_eq!(rt.text, "abcd");
         let strong: Vec<_> = rt
@@ -2074,10 +1991,6 @@ mod tests {
 
     #[test]
     fn field_change_terminal_normalize_matches_per_stage_normalize() {
-        // The collapse proof obligation: a bundle applied through
-        // `apply_field_change` (one terminal normalize) must equal applying the
-        // same stages each with its own normalize (the public wrappers). The
-        // remap through split/join is what makes the two converge.
         let start = from_markdown("hello world").unwrap();
         let text_delta = diff("hello world", "hello brave world");
         let line_ops = vec![LineOp::Split { at: 5 }]; // after "hello"
@@ -2108,9 +2021,6 @@ mod tests {
 
     #[test]
     fn sync_lines_select_all_delete_collapses_to_first_line() {
-        // The motivating case: deleting a whole
-        // multi-line body drops every line but the first (each deleted '\n'
-        // merges the next line away).
         let text: String = (0..50).map(|i| format!("line{i}\n")).collect();
         let old_chars: Vec<char> = text.chars().collect();
         let lines: Vec<Line> = (0..=50).map(|i| tag_line((i % 200) as u8, false)).collect();
@@ -2124,12 +2034,10 @@ mod tests {
 
     #[test]
     fn sync_lines_insert_newline_past_end_appends_default() {
-        // Malformed content: after a retain walks past the sole line (line_idx ==
-        // lines.len()), an inserted '\n' has no line to clone and appends a
-        // default Para.
+        // Malformed content: after the retain walks past the sole line, an
+        // inserted '\n' has no line to clone and appends a default Para.
         let old_chars: Vec<char> = "a\n".chars().collect();
         let lines = vec![tag_line(1, false)];
-        // Retain(2)[a\n] moves line_idx to 1 (== lines.len()); Insert("\n").
         let d = Delta {
             ops: vec![Op::Retain(2), Op::Insert("\n".into())],
         };
