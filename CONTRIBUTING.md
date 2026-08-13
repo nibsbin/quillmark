@@ -2,12 +2,13 @@
 
 ## Documentation
 
-Comments and docs are dense, present-tense, and unsold:
+No comment is the default. Prose is added back only where a reader cannot get the fact from the code:
 
-- Say what the code can't say faster. Delete comments that restate the code; prefer a clearer name over a comment.
+- Public API — `pub` items of a published crate, TypeScript declarations, `.pyi` stubs, READMEs — earns a tight paragraph: the contract, the meaning the type does not carry, errors, panics. One example, where the call shape is not obvious.
+- Internal items earn a line at most, and only for the non-obvious *why*: a workaround, an ordering constraint, a spec citation, an invariant a reader would otherwise violate.
+- Delete comments that restate the code; prefer a clearer name over a comment. Never enumerate a module's items or behaviors — the hand-list rots.
 - No marketing words (powerful, seamless, robust, first-class, simply…). State the capability plainly.
 - Describe what *is*, not how it got here: except `docs/migrations/` (era-stamped) and load-bearing legacy.
-- Minimal examples on public APIs; err toward brevity.
 
 Where things live:
 
@@ -15,6 +16,17 @@ Where things live:
 - Canonical design docs: [`prose/canon/INDEX.md`](prose/canon/INDEX.md).
 - User guide: `docs/` (rendered by mkdocs).
 - Full style rubric and review pass: the `dense-prose` skill (`.claude/skills/dense-prose/`); `maintain-canon` covers canon structure.
+
+## Tests
+
+A test earns its place by exercising logic that can break: parsing, assembly, emission, diffing, resolution, validation, error classification, round-trips, rendering. It does not earn a place by restating a rule the implementation or canon already carries.
+
+- No spec-pinning. Diagnostic codes, wire-format keys, and public API names are contract; human-readable error prose, derive output, and constant literals are not.
+- No duplicates. One strong test beats three angles on the same behavior.
+- Assert the property, not the artifact. Byte counts, hashes, and full-string snapshots of rendered output rot; narrow to what matters.
+- The test name is its documentation. A regression test states the invariant guarded, not the bug's history.
+
+Deleting a stale test is maintenance, not loss — coverage can be added back when something real needs guarding.
 
 ## Binding tests
 
