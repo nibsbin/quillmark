@@ -3,122 +3,74 @@
 //! [`regions`](crate::LiveSession::regions) and
 //! [`field_at`](crate::LiveSession::field_at).
 //!
-//! A region ties a rectangle on the rendered page to the **quill schema field**
-//! that produced it: the address the document author already uses to refer to
-//! that field (the same address the Typst plate reads as `data.*` and the
-//! pdfform binder resolves against `compile_data`). The two directions a
-//! consumer navigates get two queries: `regions` answers *field → rectangle*
-//! (scroll to / highlight the focused field), `field_at` answers *point →
-//! field* (click a rendered field → focus it in the editor).
+//! A region ties a rectangle on the rendered page to the quill schema field
+//! that produced it. `regions` answers *field → rectangle*, `field_at` answers
+//! *point → field*.
 //!
 //! Three producers feed regions, all keyed on the schema path:
 //!
-//! - **Content fields** (a richtext body, a `richtext[]` element, a card's
-//!   content field) are tracked by the **spans** their glyphs carry: the
-//!   backend evaluates each one's value at its own generated call site and
-//!   records the site's byte window, so every glyph of that content resolves
-//!   back to its field, through *any* placement context, including a package
-//!   that rebuilds the content (a `show`-rule pass that captures paragraphs
-//!   into a state buffer and re-emits them), because the origin rides the
-//!   glyph, not a sibling marker a rebuild could drop. A field that is blank
-//!   or draws nothing (an empty or whitespace-only body) has no inked extent
-//!   to bound and surfaces no region: present-but-empty is not the same as
-//!   placed.
-//! - **Direct scalar references**, every `data.<field>` / `data.at("field")`
-//!   expression in the plate is its own tracked site: the interpolated
-//!   value's glyphs carry a span at or around that reference expression. A
-//!   scalar shown in both a header and a footer surfaces both sites, because
-//!   two source expressions are two origins; a reference wrapped in an
-//!   expression (`#upper(data.subject)`) attributes the whole expression's
-//!   ink to the field as long as it is the expression's only reference. Not
-//!   tracked: an expression mixing several fields (`data.from + ", " + rank`
-//!   has no single owner), a value laundered through an intermediate binding
-//!   (`#let s = data.x` … `#s`), and card scalars read from the per-card
-//!   loop variable (`card.from` is *one* expression site shared by every card
-//!   instance, span data holds no per-instance identity; bind a widget for
-//!   those).
-//! - **Form-field widgets** carry a schema path explicitly: pdfform binds it
-//!   from the form mapping; a Typst `form-field` binds it from its `field:`
-//!   argument. A widget that binds none produces **no** region: its backend
-//!   identifier (the `/T` widget name) is not a schema address, so there is
-//!   nothing for a consumer to route to. Only schema-addressable fields surface
-//!   a region.
+//! - **Content fields** are tracked by the spans their glyphs carry, so the
+//!   origin survives a package that rebuilds the content. A field that draws
+//!   nothing surfaces no region: present-but-empty is not placed.
+//! - **Direct scalar references** — each `data.<field>` expression in the
+//!   plate is its own site, so a scalar in both header and footer surfaces
+//!   twice. `#upper(data.subject)` attributes the whole expression as long as
+//!   it holds one reference. Not tracked: an expression mixing several fields,
+//!   a value laundered through an intermediate binding, and card scalars read
+//!   from the per-card loop variable (one site shared by every instance —
+//!   bind a widget for those).
+//! - **Form-field widgets** carry a schema path explicitly. A widget that
+//!   binds none produces no region: only schema-addressable fields surface.
 //!
-//! **First placement only.** A content value placed at two sites surfaces one
-//! region set (its first placement's) because span data cannot distinguish
-//! "package chrome interrupting one placement" from "a second placement of
-//! the same value", and a spanning union would claim the ink between them.
-//! The first placement is one region per page it touches, in page order, so
-//! highlighting covers continuation pages, page marginals (headers, footers,
-//! page numbers) between one page's body and the next's do not end it, only a
-//! same-page interruption does: foreign ink within a page (a rebuild's
-//! numbering chrome) shrinks the region to the placement's true start rather
-//! than lying about extent. `field` is still not unique in the
-//! result: page fragments, several scalar reference sites, or tracked content
-//! plus a bound widget each surface independently.
-//! [`LiveSession::regions`](crate::LiveSession::regions) passes the backend's
-//! entries through; consumers group by `field`. Later placements stay
-//! reachable point-wise: [`field_at`](crate::LiveSession::field_at) resolves
-//! a click on *any* placement, since one concrete point identifies one drawn
-//! item whose origin is unambiguous.
+//! **First placement only.** A content value placed twice surfaces one region
+//! set, because span data cannot distinguish "package chrome interrupting one
+//! placement" from "a second placement", and a union would claim the ink
+//! between them. That placement is one region per page it touches, in page
+//! order: page marginals between one page's body and the next's do not end it,
+//! but foreign ink within a page shrinks the region to the placement's true
+//! start. Later placements stay reachable point-wise through
+//! [`field_at`](crate::LiveSession::field_at), since a concrete point
+//! identifies one drawn item.
 //!
-//! Regions are primarily a session-level query: the geometry is a property of
-//! the current compile, re-read from the session per edit without producing
-//! any byte artifact, the interactive-preview path (overlays over a
-//! `paint`-ed canvas) reads it that way. A one-shot byte render carries the
-//! same sidecar only on request ([`RenderOptions::regions`](crate::RenderOptions))
-//! for consumers without a live session (static SVG overlays, PDF
-//! post-processing, CI coverage probes). Either way regions are an overlay
-//! sidecar, never a compositing input: every canvas backend hands back a
-//! complete page raster, so nothing about the picture depends on reading a
-//! region. Empty for backends that place no schema fields.
+//! Regions are an overlay sidecar, never a compositing input: every canvas
+//! backend hands back a complete page raster. A one-shot byte render carries
+//! the same sidecar on request ([`RenderOptions::regions`](crate::RenderOptions)).
+//! Empty for backends that place no schema fields.
 
 /// One schema field placement's extent on a rendered page.
 ///
 /// `rect` is `[x0, y0, x1, y1]` in PDF points with a **bottom-left** origin:
-/// the same final geometry the stamp spine writes to the widget `/Rect`, so the
-/// region and the rendered field describe the identical box.
+/// the same geometry the stamp spine writes to the widget `/Rect`.
 ///
-/// `field` is **not** unique within the `Vec` that
-/// [`LiveSession::regions`](crate::LiveSession::regions) returns: a content
-/// field breaks into one entry **per segment** (paragraph, heading, whole code
-/// fence) and per page each segment touches, a scalar referenced at several
-/// plate sites yields one per site, and tracked content plus a bound widget
-/// yields both. Consumers group by `field`; every entry routes to that field.
-/// The whole-field box is **derived**, the union of a page's `span`-bearing
-/// segment rects, so inter-paragraph whitespace stays uncovered; the
-/// [`field_boxes`] helper (and
-/// [`LiveSession::field_boxes`](crate::LiveSession::field_boxes)) owns that
-/// union so consumers need not reimplement it.
+/// `field` is **not** unique within a region set: a content field breaks into
+/// one entry per segment and per page, a scalar referenced at several plate
+/// sites yields one per site, and tracked content plus a bound widget yields
+/// both. Consumers group by `field`, or take the derived per-page union from
+/// [`field_boxes`].
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[non_exhaustive]
 pub struct RenderedRegion {
     /// The field's plate-space schema address as the backend keys it:
-    /// `"signature_block"`, `"references.0"` (an array element, `.`-separated
-    /// with a numeric segment per index) or `"$cards.<kind>.<ordinal>.<tail>"`
-    /// (a per-kind ordinal). This is the backend-native form; a binding that
-    /// owns the document's card kinds translates it to a canonical
-    /// [`DocPath`] at its boundary
-    /// ([`plate_addr_to_doc_path`]), so its consumers see one absolute-index
-    /// grammar and one index spelling (`main.references[0]`). A core consumer
-    /// reading `RenderedRegion` directly sees the plate-space form.
+    /// `"signature_block"`, `"references.0"` (a numeric segment per array
+    /// index) or `"$cards.<kind>.<ordinal>.<tail>"` (a per-kind ordinal).
+    /// [`plate_addr_to_doc_path`] translates it to a canonical [`DocPath`];
+    /// a core consumer reading `RenderedRegion` directly sees this form.
     pub field: String,
     /// 0-based page index.
     pub page: usize,
     /// `[x0, y0, x1, y1]`, PDF points, bottom-left origin.
     pub rect: [f32; 4],
     /// The content slice this box covers: USV `[start, end)` into the field's
-    /// `Content` for content ink (one segment's range), `None` for a scalar
-    /// reference site or a widget, geometry with no content address. Additive
-    /// and optional: omitted from the wire when `None`.
+    /// `Content`, `None` for a scalar reference site or a widget. Omitted from
+    /// the wire when `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub span: Option<[usize; 2]>,
 }
 
 impl RenderedRegion {
-    /// A geometry entry with no content address: a scalar reference site or a
-    /// widget. Content ink adds its slice with [`with_span`](Self::with_span).
+    /// A geometry entry with no content address. Content ink adds its slice
+    /// with [`with_span`](Self::with_span).
     pub fn new(field: String, page: usize, rect: [f32; 4]) -> Self {
         Self {
             field,
@@ -135,9 +87,8 @@ impl RenderedRegion {
     }
 
     /// Whether the point (`x`, `y`, PDF points, bottom-left origin) on `page`
-    /// falls inside this region, edges inclusive. The one point-in-region
-    /// predicate every `field_at` hit-test shares, so a click at a region
-    /// border resolves identically everywhere.
+    /// falls inside this region, edges inclusive. Every `field_at` hit-test
+    /// shares this predicate.
     pub fn contains(&self, page: usize, x: f32, y: f32) -> bool {
         self.page == page
             && self.rect[0] <= x
@@ -150,26 +101,16 @@ impl RenderedRegion {
 /// The whole-field highlight boxes for `field`, derived from a region set: one
 /// union rect per page, over that field's **`span`-bearing** (content) regions.
 ///
-/// This owns the subtle part [`regions`](crate::LiveSession::regions) leaves to
-/// consumers, filter by field, keep only the segment rects that carry a `span`,
-/// union per page, inherit first-placement-only from the input, so a
-/// "highlight the focused field" consumer never reimplements it and cannot
-/// reintroduce the field-level union the disjointness invariant exists to
-/// prevent (the input is already striped; this unions the *bounding* box per
-/// page, so inter-paragraph whitespace still is not a separate box but the
-/// derived rect does bound it). Pass the output of
-/// [`LiveSession::regions`](crate::LiveSession::regions) (or a one-shot
-/// [`RenderOptions::regions`](crate::RenderOptions) sidecar); the convenience
+/// Pass the output of [`LiveSession::regions`](crate::LiveSession::regions) or
+/// a one-shot [`RenderOptions::regions`](crate::RenderOptions) sidecar;
 /// [`LiveSession::field_boxes`](crate::LiveSession::field_boxes) reads the
-/// session's own.
+/// session's own. The union is a per-page *bounding* box, so it does cover
+/// inter-paragraph whitespace the input regions leave out.
 ///
-/// **Content only.** A scalar-reference site or a widget carries no `span`
-/// ([`RenderedRegion::span`] is `None`), so a field placed *only* as a scalar
-/// reference or a bound widget yields an empty result here: its highlight box
-/// is a single region's `rect`, read straight from the region set with no
-/// derivation. Each returned region carries the union `span`
-/// (`[min start, max end)` over the page's contributing segments);
-/// `page`-ascending.
+/// **Content only.** A scalar-reference site or a widget carries no `span`, so
+/// a field placed only that way yields an empty result here: its highlight box
+/// is a single region's `rect`, read straight from the set. Each returned
+/// region carries the union `span` and the result is `page`-ascending.
 pub fn field_boxes(regions: &[RenderedRegion], field: &str) -> Vec<RenderedRegion> {
     let mut by_page: Vec<RenderedRegion> = Vec::new();
     for r in regions
@@ -198,36 +139,23 @@ pub fn field_boxes(regions: &[RenderedRegion], field: &str) -> Vec<RenderedRegio
     by_page
 }
 
-// ── Address translation: plate-space geometry ⇄ DocPath ─────────────────────
+// Address translation: plate-space geometry ⇄ DocPath.
 //
-// A backend keys a region on the **plate-space** address its compiled plate
-// composes (`$path` = `$cards.<kind>.<ordinal>.`, `crates/backends/typst`), a
-// grammar with a `$cards` sigil, dot separators, and **per-kind ordinals**.
-// That grammar is the template-author contract inside the plate and stays
-// there; it must not cross to a consumer, which speaks one canonical
-// [`DocPath`]. The session owns the translation, resolving the per-kind ordinal
-// to the document-array absolute index (and back) against the ordered card
-// kinds of the current compile, so `regions` / `fieldAt` / `positionAt` /
-// `locate` speak `DocPath`, never `$cards.` ordinals.
+// A backend keys a region on the plate-space address its compiled plate
+// composes: a `$cards` sigil, dot separators, and per-kind ordinals. That
+// grammar is the template-author contract inside the plate and must not cross
+// to a consumer, so the session resolves the per-kind ordinal to the
+// document-array absolute index (and back) against the current compile's
+// ordered card kinds.
 //
-// **The plate-space tail** is a `.`-separated segment run, parsed and rendered
-// segment-wise by [`plate_tail_to_segs`] / [`plate_tail`]. A segment of all
-// ASCII digits is an array index, `$body` is the body terminal, anything else
-// is a field or map key. A tail's first segment is never an index (neither
-// `main` nor a card is an array), `$body` is never non-final, and no other
-// `$`-token appears. Segment-wise is what keeps the minted `DocPath` stable
-// across `Display` → `FromStr`, the leg a binding crosses: a tail carried whole
-// into one `Field` renders `main.references.0`, which reparses as a field named
-// `"0"`.
+// The tail is parsed and rendered segment-wise, which is what keeps the minted
+// `DocPath` stable across `Display` → `FromStr`: a tail carried whole into one
+// `Field` renders `main.references.0`, which reparses as a field named `"0"`.
 //
-// `.N` reads as an index **here and not in [`DocPath::from_str`]**: plate
-// addresses are schema-derived, so no plate address carries a digit map key (a
-// field name and a card kind open with a lowercase ASCII letter, pdfform's
-// `descend` reads any numeric segment as an array index, and the Typst helper's
-// `_qm-known-path` accepts a dotted suffix only under an array-typed parent).
-// `DocPath` space is different: a nested YAML map key is unconstrained, and
-// `collect_fill_diags` mints `main.m.0` as `Field{"0"}`. Teaching the parser
-// `.N` would cost that reading, so the two spellings meet here instead.
+// `.N` reads as an index here and not in `DocPath::from_str`, because plate
+// addresses are schema-derived and carry no digit map key, while a nested YAML
+// map key is unconstrained (`collect_fill_diags` mints `main.m.0` as
+// `Field{"0"}`). Teaching the parser `.N` would cost that reading.
 
 use crate::path::{DocPath, DocSeg};
 
