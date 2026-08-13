@@ -1,32 +1,23 @@
 //! Versioned, storage-stable serialization for [`Document`].
 //!
-//! [`Document`] and its component types (`Card`, `Payload`, …) track the
-//! evolving Quillmark model; their in-memory layout is an internal detail
-//! and is deliberately *not* serialized directly. To persist a document
-//! (e.g. in a database) it is converted to a [`StoredDocument`]: a versioned
-//! envelope whose wire format is frozen per schema version.
-//!
-//! `Document` itself serializes through this envelope via
-//! `#[serde(into / try_from)]`, so the ordinary serde entry points produce
-//! and consume the versioned form transparently.
+//! [`Document`]'s in-memory layout is an internal detail and is deliberately not
+//! serialized directly. Persisting one converts it to a [`StoredDocument`]: a
+//! versioned envelope whose wire format is frozen per schema version. `Document`
+//! serializes through it via `#[serde(into / try_from)]`, so the ordinary serde
+//! entry points produce and consume the versioned form transparently.
 //!
 //! ## Schema versions
 //!
-//! - **`quillmark/document@0.93.0`**: current. The V0_92_0 payload model with
-//!   the card `body` stored as the **canonical content** embedded
-//!   structurally (a nested object byte-identical to `to_canonical_json`), not a
-//!   markdown string. The envelope carries two byte disciplines: the outer
-//!   structure stays compact `serde_json` in frozen struct + payload-insertion
-//!   order (`preserve_order`), while every `body` subtree is the recursively
-//!   key-sorted canonical form. This is the format newly serialized documents
-//!   use.
-//! - **`quillmark/document@0.92.0`**: legacy, and the oldest wire format still
-//!   read. The unified [`Payload`] item list (typed `$` entries, user fields,
-//!   and comments interleaved in source order) with a per-field `nested_fills`
-//!   list (so `!must_fill` markers nested inside a field value survive a storage
-//!   round-trip) and the `$seed` payload-item variant (per-card-kind seed
-//!   overlays), with the body as a markdown string. Kept read-only; the body
-//!   cold-imports to a content and it migrates forward to V0_93_0 on read.
+//! - **`quillmark/document@0.93.0`**: current, and what new writes carry. The
+//!   V0_92_0 payload model with the card `body` embedded structurally as the
+//!   **canonical content** (a nested object byte-identical to
+//!   `to_canonical_json`), not a markdown string. Two byte disciplines in one
+//!   envelope: the outer structure is compact `serde_json` in struct +
+//!   payload-insertion order, every `body` subtree is recursively key-sorted.
+//! - **`quillmark/document@0.92.0`**: the oldest wire format still read. The
+//!   unified [`Payload`] item list with a per-field `nested_fills` list and the
+//!   `$seed` item variant, body as a markdown string. Read-only: the body
+//!   cold-imports and the document migrates forward to V0_93_0 on read.
 //!
 //! The canonical design (including the step-by-step procedure for adding
 //! a schema version) is `prose/canon/DOCUMENT_STORAGE.md`.
@@ -48,25 +39,18 @@ use super::{Card, Document};
 use crate::value::QuillValue;
 use crate::version::QuillReference;
 
-/// Storage version for the V0_93_0 wire format. Newly serialized documents carry
-/// this tag. Stores the card `body` as the canonical content embedded
-/// structurally (byte-identical to `to_canonical_json`) rather than a markdown string;
-/// the payload shape is unchanged from V0_92_0.
+/// Storage version tag newly serialized documents carry.
 ///
-/// Storage, not a field schema: a quill's field declarations are the only
-/// `schema` at the API. The wire key keeps that spelling because it is the serde
-/// tag [`StoredDocument`] dispatches on, and retagging it would break the
-/// versioning the tag exists to serve.
+/// The wire key is spelled `schema` though it names a storage version, not a
+/// field schema: it is the serde tag [`StoredDocument`] dispatches on, and
+/// retagging it would break the versioning it exists to serve.
 pub const STORAGE_V0_93_0: &str = "quillmark/document@0.93.0";
 
-/// Read the storage version off a raw storage DTO payload without
-/// performing full deserialization.
+/// Read the storage version off a raw DTO payload without deserializing it.
 ///
-/// Returns `None` if `json` is not valid JSON, is not an object, or has no
-/// version tag. The returned string is **not** validated against the
-/// set of supported storage versions: callers use this to distinguish
-/// "unknown future version" from "corrupt payload" when [`Document`]
-/// deserialization fails.
+/// `None` when `json` is not valid JSON, not an object, or carries no version
+/// tag. The returned string is **not** validated against the supported set:
+/// callers use it to tell "unknown future version" from "corrupt payload".
 pub fn peek_storage_version(json: &str) -> Option<String> {
     #[derive(Deserialize)]
     struct Peek {
@@ -97,12 +81,9 @@ pub enum StoredDocument {
 
 /// Failure while reconstructing a [`Document`] from a [`StoredDocument`].
 ///
-/// The taxonomy is intentionally minimal: only [`Self::InvalidQuillReference`]
-/// is typed, because that is the one error a non-malicious caller hits at
-/// the document/quill boundary. Every other defect (wrong-role card,
-/// invalid kind, duplicate key, too many fields) can only arise from a
-/// hand-crafted storage DTO (the markdown parser already rejects them)
-/// and is reported through [`Self::Malformed`] with a descriptive message.
+/// Only [`Self::InvalidQuillReference`] is typed: it is the one error a
+/// non-malicious caller hits. Every other defect can only arise from a
+/// hand-crafted storage DTO and reports through [`Self::Malformed`].
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum StorageError {
@@ -155,21 +136,18 @@ pub struct CardV0_93_0 {
 /// because payload is outside this freeze; a future payload change forks it.
 pub type PayloadV0_93_0 = PayloadV0_92_0;
 
-/// A card body embedded as the **canonical content**. Its serde *is* the
-/// frozen canonical serializer (`quillmark_content::serial`), delegated to, not
-/// a hand-mirrored DTO tree that could drift from the frozen wire format:
+/// A card body embedded as the **canonical content**. Its serde delegates to the
+/// frozen canonical serializer (`quillmark_content::serial`) rather than a
+/// hand-mirrored DTO tree that could drift from it:
 ///
 /// - `Serialize` emits the recursively key-sorted structure byte-identical to
-///   `self.0.to_canonical_json()` as a **nested JSON object**, never an escaped
-///   string. Embedded in the compact envelope, the `body` subtree bytes equal
-///   that canonical JSON, independent of `preserve_order`.
-/// - `Deserialize` parses that structure, normalizes, and validates, so an
-///   invalid content is rejected at load (a serde error) rather than silently
-///   round-tripped.
+///   `to_canonical_json()` as a **nested JSON object**, never an escaped string,
+///   independent of `preserve_order`.
+/// - `Deserialize` parses, normalizes, and validates, so an invalid content is
+///   rejected at load rather than silently round-tripped.
 ///
-/// Byte-equality with `to_canonical_json` holds because every `Content` in a live
-/// [`Document`] is normalized at construction; the serializer normalizes a copy
-/// regardless, so a hand-built value cannot leak non-canonical bytes.
+/// The serializer normalizes a copy regardless of its input, so a hand-built
+/// value cannot leak non-canonical bytes.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CanonicalContent(pub Content);
 
@@ -231,8 +209,7 @@ pub struct PayloadV0_92_0 {
 /// markers nested inside the field value (the JSON `value` is fill-free).
 ///
 /// **Deliberately exhaustive**, like every `V0_92_0` type: a shipped schema
-/// version never changes, so there is no variant to leave room for. A new item
-/// kind is a new schema version with its own type tree: which is what
+/// version never changes. A new item kind is a new schema version, which is what
 /// [`StoredDocument`] being `#[non_exhaustive]` makes room for.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
@@ -308,8 +285,6 @@ impl From<&Document> for DocumentV0_93_0 {
 
 impl From<&Card> for CardV0_93_0 {
     fn from(card: &Card) -> Self {
-        // The body is already a normalized content on the live model; embed it
-        // directly. `CanonicalContent`'s serializer emits the canonical form.
         CardV0_93_0 {
             payload: PayloadV0_92_0::from(card.payload()),
             body: CanonicalContent(card.body().clone()),
@@ -319,9 +294,8 @@ impl From<&Card> for CardV0_93_0 {
 
 impl From<&Payload> for PayloadV0_92_0 {
     fn from(payload: &Payload) -> Self {
-        // The wire format keeps `nested_comments` as a flat sidecar at
-        // the payload level. The in-memory model carries them per-item
-        // with relative paths, so we re-prefix and flatten here.
+        // The wire format keeps `nested_comments` as a flat payload-level
+        // sidecar; the live model carries them per-item with relative paths.
         let nested_comments = payload
             .flat_nested_comments()
             .iter()
@@ -347,11 +321,9 @@ impl From<&PayloadItem> for PayloadItemV0_92_0 {
             PayloadItem::Kind { value } => PayloadItemV0_92_0::Kind {
                 value: value.clone(),
             },
-            // The storage DTO keeps `$ext` / `$seed` as explicit, self-describing
-            // variants; the live model's unified `Meta` is split back out by key.
-            // Neither wire variant carries a `nested_comments` field: their
-            // comments live in the payload-level sidecar after
-            // `flat_nested_comments` re-prefixes them with `$ext` / `$seed`.
+            // The DTO keeps `$ext` / `$seed` as explicit variants, so the live
+            // model's unified `Meta` splits back out by key. Neither carries
+            // `nested_comments`: those live in the payload-level sidecar.
             PayloadItem::Meta {
                 key: MetaKey::Ext,
                 value,
@@ -416,9 +388,8 @@ impl TryFrom<StoredDocument> for Document {
     type Error = StorageError;
 
     fn try_from(stored: StoredDocument) -> Result<Self, Self::Error> {
-        // Migrations chain: only the newest DTO converts to the live model;
-        // the older version migrates forward (V0_92 → V0_93). That hop
-        // cold-imports the markdown body, so the older arm is fallible (`?`).
+        // Only the newest DTO converts to the live model; older versions migrate
+        // forward. The V0_92 → V0_93 hop cold-imports the body, so it is fallible.
         match stored {
             StoredDocument::V0_93_0(payload) => Document::try_from(payload),
             StoredDocument::V0_92_0(payload) => {
@@ -481,21 +452,18 @@ impl TryFrom<CardV0_93_0> for Card {
     fn try_from(card: CardV0_93_0) -> Result<Self, Self::Error> {
         let payload = Payload::try_from(card.payload)?;
         validate_dto_payload(&payload)?;
-        // `body` is already a normalized, validated content: `CanonicalContent`
-        // enforced that on deserialize (and the V0_92 → V0_93 migration produced
-        // it via cold import). Take it directly.
+        // `CanonicalContent`'s Deserialize already normalized and validated it.
         Ok(Card::from_parts(payload, card.body.0))
     }
 }
 
 // ─── V0_92_0 → V0_93_0 migration (fallible cold import) ───────────────────────
 //
-// The one hop that can reject: the stored markdown body cold-imports to the
-// content (`import_body`, pure/deterministic). An over-nested body
-// (> MAX_NESTING_DEPTH, surfaced as `ImportError::NestingTooDeep`) never
-// rendered, so mapping it to `StorageError::Malformed` loses nothing
-// renderable. Cross-release byte-stability of a *migrated* row is therefore
-// conditional on `pulldown-cmark` (DOCUMENT_STORAGE.md § byte stability).
+// The one hop that can reject: the stored markdown body cold-imports to a
+// content. An over-nested body never rendered, so mapping it to
+// `StorageError::Malformed` loses nothing renderable. Byte-stability of a
+// *migrated* row is therefore conditional on `pulldown-cmark`
+// (DOCUMENT_STORAGE.md § byte stability).
 
 impl TryFrom<DocumentV0_92_0> for DocumentV0_93_0 {
     type Error = StorageError;
@@ -538,8 +506,6 @@ impl TryFrom<PayloadV0_92_0> for Payload {
             .into_iter()
             .map(NestedComment::from)
             .collect();
-        // Partition the flat wire-format sidecar onto the matching
-        // Field / Ext / Seed items (paths become relative to the owning value).
         Ok(Payload::from_items_with_flat_nested(items, nested))
     }
 }
@@ -605,8 +571,7 @@ impl TryFrom<PayloadItemV0_92_0> for PayloadItem {
     }
 }
 
-/// Depth-bound a `$ext` / `$seed` mapping at the storage boundary; both flow
-/// through the recursive emit/DTO paths and carry the §8 value-depth limit.
+/// Depth-bound a `$ext` / `$seed` mapping at the storage boundary (§8).
 fn depth_check_meta_map(
     value: serde_json::Map<String, serde_json::Value>,
     key: &str,
@@ -705,10 +670,8 @@ This body and the metadata above are an indorsement card.
 
     #[test]
     fn content_field_survives_storage_round_trip_losslessly() {
-        // A richtext field stored as a canonical content object is the case the
-        // card-yaml markdown projection is lossy for; the storage DTO is the
-        // lossless carrier, so identity marks (an `underline` with no markdown
-        // form) survive a serde-JSON round-trip that a markdown save would drop.
+        // The storage DTO is the lossless carrier: an `underline` with no
+        // markdown form survives here where a markdown save would drop it.
         use quillmark_content::model::{Mark, MarkKind};
 
         let mut doc = sample();
@@ -737,8 +700,6 @@ This body and the metadata above are an indorsement card.
 
     #[test]
     fn nested_fill_survives_storage_round_trip() {
-        // A `!must_fill` marker on a nested object leaf rides the `nested_fills`
-        // path list (the JSON `value` projection is fill-free).
         let doc = Document::parse(
             "~~~card-yaml\n$quill: q@0.1\n$kind: main\naddr:\n  street: !must_fill\n  city: Anytown\n~~~\n",
         )
@@ -780,7 +741,6 @@ This body and the metadata above are an indorsement card.
         let json = serde_json::to_string(&doc).unwrap();
         assert_eq!(peek_storage_version(&json).as_deref(), Some(STORAGE_V0_93_0));
 
-        // Unknown future version: peek still succeeds.
         let future = r#"{"schema":"quillmark/document@0.99.0","main":{}}"#;
         assert_eq!(
             peek_storage_version(future).as_deref(),
@@ -792,8 +752,6 @@ This body and the metadata above are an indorsement card.
 
     #[test]
     fn comment_on_dollar_line_round_trips() {
-        // The headline case the unification enables: a `$kind` line with an
-        // inline trailing comment survives a JSON round-trip.
         let src = "\
 ~~~card-yaml
 $quill: q@1.0
@@ -805,7 +763,6 @@ title: Hi
         let json = serde_json::to_string(&doc).unwrap();
         let restored: Document = serde_json::from_str(&json).unwrap();
         assert_eq!(doc, restored);
-        // And the emitted markdown carries the comment back on the `$kind` line.
         assert!(restored
             .to_markdown()
             .contains("$kind: main # required for root"));
@@ -813,9 +770,7 @@ title: Hi
 
     #[test]
     fn retired_legacy_schema_tags_are_rejected() {
-        // The `@0.81.0` and `@0.82.0` schema tags have no reader: a blob
-        // carrying either is rejected as an unknown version, never migrated.
-        // (Everything persisted on this lineage is `@0.92.0` or newer.)
+        // `@0.81.0` and `@0.82.0` have no reader: rejected, never migrated.
         for tag in ["quillmark/document@0.81.0", "quillmark/document@0.82.0"] {
             let json = format!(
                 r#"{{"schema":"{tag}","main":{{"payload":{{"items":[]}},"body":""}},"cards":[]}}"#
@@ -876,8 +831,6 @@ title: Hi
 
     #[test]
     fn rejects_composable_card_with_seed() {
-        // `$seed` is root-only (like `$quill`): a stored composable card
-        // carrying it fails to load.
         let json = r#"{
             "schema": "quillmark/document@0.92.0",
             "main": {
@@ -929,11 +882,8 @@ title: Hi
         assert_eq!(doc, reser);
     }
 
-    // ─── V0_93_0 storage cutover ──────────────────────────────────────────────
-
-    /// Slice the value of the first top-level `"body":` object out of a compact
-    /// `serde_json` envelope: the exact bytes embedded, balanced-brace and
-    /// string-aware. Used to prove the body subtree equals `to_canonical_json`.
+    /// The exact embedded bytes of the first top-level `"body":` object,
+    /// balanced-brace and string-aware.
     fn locate_body_subtree(envelope: &str) -> &str {
         const KEY: &str = "\"body\":";
         let start = envelope.find(KEY).expect("body key present") + KEY.len();
@@ -970,9 +920,8 @@ title: Hi
 
     #[test]
     fn body_subtree_is_byte_identical_to_canonical_json() {
-        // Two disciplines in one envelope: the outer structure is compact
-        // insertion-ordered serde_json, but the `body` subtree is the canonical
-        // richtext form, byte-identical to `rt.to_canonical_json()`.
+        // Two disciplines in one envelope: compact insertion-ordered outer
+        // structure, canonical key-sorted `body` subtree.
         let doc = Document::parse(
             "~~~card-yaml\n$quill: q@0.1\n$kind: main\ntitle: Hi\n~~~\n\n\
              A paragraph with **bold**, _emph_, and a [link](https://example.com).\n\n\
@@ -992,7 +941,6 @@ title: Hi
             body, expected,
             "the envelope body subtree must equal to_canonical_json byte-for-byte"
         );
-        // A nested structure, not a double-encoded string.
         assert!(body.starts_with("{\"islands\":"));
     }
 
@@ -1012,9 +960,8 @@ title: Hi
 
     #[test]
     fn legacy_table_body_migrates_deterministically_with_islands() {
-        // A table-bearing 0.92.0 body cold-imports on the 92→93 hop to a content
-        // whose island ids are sequential (`isl-0`, …). Import is a pure
-        // function, so the same legacy row migrates to byte-identical storage.
+        // Import is a pure function, so the same legacy row migrates to
+        // byte-identical storage.
         let blob = r#"{
             "schema": "quillmark/document@0.92.0",
             "main": {
@@ -1031,10 +978,7 @@ title: Hi
         assert_eq!(body.islands.len(), 1, "table imports as one island");
         assert_eq!(body.islands[0].id, "isl-0", "sequential island id");
         assert_eq!(body.islands[0].island_type, "table");
-        // Option A: each cell is inline `{text, marks}`, not a raw markdown slice.
-        // The @0.93.0 table-body canonical bytes changed with this; the freeze is
-        // branch-private/unreleased, so amending this golden pre-release is
-        // expected. Regenerated golden below.
+        // Each table cell is inline `{text, marks}`, not a raw markdown slice.
         let key = body.to_canonical_json();
         assert_eq!(
             key,
@@ -1060,9 +1004,8 @@ title: Hi
 
     #[test]
     fn over_nested_legacy_body_is_malformed() {
-        // A legacy body whose container nesting exceeds MAX_NESTING_DEPTH never
-        // rendered; the fallible 92→93 import hop maps `NestingTooDeep` to
-        // `StorageError::Malformed` rather than silently dropping structure.
+        // An over-nested legacy body never rendered; the 92→93 hop maps
+        // `NestingTooDeep` to `Malformed` rather than dropping structure.
         let deep = ">".repeat(crate::error::MAX_NESTING_DEPTH + 5);
         let card = CardV0_92_0 {
             payload: PayloadV0_92_0::default(),
@@ -1075,9 +1018,6 @@ title: Hi
 
     #[test]
     fn deserialize_rejects_invalid_content_body() {
-        // `CanonicalContent`'s Deserialize validates: a structurally-embedded
-        // body whose `lines` count disagrees with its text is rejected at load,
-        // never silently round-tripped.
         let blob = r#"{
             "schema": "quillmark/document@0.93.0",
             "main": {
