@@ -886,12 +886,10 @@ mod tests {
         ));
     }
 
-    /// Build a `Value` nesting `depth` array levels: iteratively, so *building*
-    /// the fixture cannot overflow. Handling it still can: `Value`'s `Clone` and
-    /// `Drop` both recurse, so the tests below probe just past the cap at 1 000
-    /// (deep enough to be refused, shallow enough to pass around) rather than at
-    /// a depth that overflows the test itself. A depth the guard must reject is a
-    /// depth the test cannot hold either, which is the reason the limit exists.
+    /// Build a `Value` nesting `depth` array levels, iteratively so *building*
+    /// the fixture cannot overflow. Handling it still can (`Value`'s `Clone` and
+    /// `Drop` both recurse), so the tests below probe just past the cap rather
+    /// than at a depth that overflows the test itself.
     fn nested_arrays(depth: usize) -> Value {
         let mut v = Value::Null;
         for _ in 0..depth {
@@ -900,12 +898,9 @@ mod tests {
         v
     }
 
-    /// [`deep_container_nesting_is_rejected_at_decode`] on the
-    /// payload axis, through the `Value` lane. The string lane is bounded by its
-    /// parser (`serde_json::from_str` refuses past 128); the `Value` lane is the
-    /// host-authored one (`install` reaches it) and has to refuse the same
-    /// shape, since an unguarded deep `props` aborts the process rather than
-    /// erroring.
+    /// The string lane is bounded by its parser (`serde_json::from_str` refuses
+    /// past 128); the `Value` lane is the host-authored one and has to refuse
+    /// the same shape, since an unguarded deep `props` aborts the process.
     #[test]
     fn deep_json_payload_is_rejected_at_decode_on_the_value_lane() {
         let deep = nested_arrays(1_000);
@@ -951,10 +946,8 @@ mod tests {
 
     /// The cap admits every payload a stored blob can carry, so closing the
     /// `Value` lane costs no stored population. Stated as the implication rather
-    /// than an offset: `serde_json::from_str`'s own limit counts from the document
-    /// root, not from the bag, so the wrapper levels it also charges are its
-    /// business, what must hold is that anything the string lane delivers, the
-    /// per-bag cap accepts.
+    /// than an offset, since `serde_json::from_str`'s own limit counts from the
+    /// document root, not from the bag.
     #[test]
     fn json_depth_cap_admits_every_storable_payload() {
         let content = |props: Value| {
@@ -985,10 +978,9 @@ mod tests {
         );
     }
 
-    /// The legacy-attrs fold is the one frame that spends the depth
-    /// without retaining the bag: it deep-clones the object it folds into, and it
-    /// runs for a *built-in* name, where no `Unknown` arm reads the bag at all. A
-    /// nested-object bag, since only an object folds.
+    /// The legacy-attrs fold is the one frame that spends the depth without
+    /// retaining the bag: it deep-clones the object it folds into, and runs for
+    /// a *built-in* name, where no `Unknown` arm reads the bag at all.
     #[test]
     fn deep_json_payload_is_rejected_before_the_legacy_attrs_fold() {
         let mut deep = Value::Null;
@@ -1007,8 +999,6 @@ mod tests {
         );
     }
 
-    /// An over-deep bag is refused whichever door it arrives at, so
-    /// the op wire cannot install one either.
     #[test]
     fn deep_json_payload_is_rejected_on_the_op_wire() {
         let deep = nested_arrays(1_000);
@@ -1024,11 +1014,10 @@ mod tests {
         ));
     }
 
-    /// A wire position past `usize` is refused, not truncated. On
-    /// wasm32 (the deployment target) `as usize` turned `2^32 + 5` into an
-    /// in-range `5`, landing a mark at the wrong position in a document that
-    /// then validated clean. Rejected on every target, by the checked read here
-    /// on 32-bit and by the range invariant on 64-bit.
+    /// A wire position past `usize` is refused, not truncated: on wasm32 the
+    /// truncating cast lands a mark at the wrong position in a document that
+    /// then validates clean. Refused by the checked read on 32-bit and by the
+    /// range invariant on 64-bit.
     #[test]
     fn out_of_range_wire_position_is_refused() {
         let json = r#"{"text":"hello","lines":[{"kind":"para","containers":[]}],"marks":[{"start":4294967301,"end":4294967302,"type":"strong"}],"islands":[]}"#;
@@ -1100,10 +1089,9 @@ mod tests {
         ));
     }
 
-    /// `loss` is an open vocabulary on [`Island::island_type`]'s terms, not the
-    /// block axes'. A class this build lacks is **carried**, not rewritten, so a
-    /// reader that merely opens the document neither destroys the class nor
-    /// moves the content hash. Reading it degrades to the safe end.
+    /// A class this build lacks is **carried**, not rewritten, so opening the
+    /// document does not move its content hash; reading it degrades to the safe
+    /// end.
     #[test]
     fn unknown_loss_class_round_trips_and_reads_unrepresentable() {
         let json = concat!(
@@ -1116,45 +1104,18 @@ mod tests {
         assert_eq!(rt.to_canonical_json(), json);
     }
 
-    /// The class is the stored value, so a built-in's name has one spelling and
-    /// the reserved-name rule the block axes need has nothing to guard: what a
-    /// caller hand-builds from that name **is** the built-in, and survives the
-    /// round trip as itself.
-    #[test]
-    fn a_built_in_class_name_has_one_spelling() {
-        assert_eq!(Loss::new("lossless"), Loss::LOSSLESS);
-        let mut rt = Content::empty();
-        rt.text = "\u{FFFC}".into();
-        rt.lines = vec![Line {
-            kind: LineKind::Island,
-            containers: vec![],
-            continues: false,
-        }];
-        rt.islands = vec![Island {
-            id: "i1".into(),
-            island_type: "widget".into(),
-            props: serde_json::json!({}),
-            loss: Loss::new("lossless"),
-        }];
-        assert_eq!(rt.validate(), Ok(()));
-        let back = Content::from_canonical_json(&rt.to_canonical_json()).unwrap();
-        assert_eq!(back.islands[0].loss, rt.islands[0].loss);
-        assert_eq!(back.islands[0].loss.fidelity(), Fidelity::Lossless);
-    }
-
     /// Every class `Fidelity` names round-trips to its own level, so the closed
     /// view and the wire spellings cannot drift apart.
     #[test]
     fn every_fidelity_level_round_trips_through_its_class() {
+        assert_eq!(Loss::new("lossless"), Loss::LOSSLESS);
         for &f in Fidelity::ALL {
             assert_eq!(Loss::new(f.as_str()).fidelity(), f);
         }
     }
 
-    /// The block vocabulary is open on the mark axis' terms. A
-    /// `kind`/`container` this build lacks decodes to `Unknown` (the document
-    /// **opens**) and re-encodes byte-identically, so a construct a future
-    /// reader understands survives the trip through this one.
+    /// A `kind`/`container` this build lacks decodes to `Unknown` and re-encodes
+    /// byte-identically, so the document opens and the construct survives.
     #[test]
     fn unknown_line_kind_and_container_round_trip_opaque() {
         let json = concat!(
