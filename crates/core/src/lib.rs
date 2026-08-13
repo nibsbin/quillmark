@@ -1,14 +1,16 @@
 //! # Quillmark Core
 //!
-//! Foundational types and traits for the Quillmark schema-driven document
-//! engine: card-yaml block parsing (`~~~` metadata blocks), the [`Quill`]
-//! format bundle and its in-memory file tree, the [`Backend`] trait for output
-//! backends, and structured diagnostics with source-location tracking.
+//! Foundational types for the Quillmark document engine: the [`Document`] model
+//! and its `~~~` card-yaml blocks, the [`Quill`] format bundle, the [`Backend`]
+//! seam output backends implement, and structured diagnostics carrying source
+//! locations.
+//!
+//! The markdown grammar is specified in
+//! [markdown-spec.md](https://github.com/borb-sh/quillmark/blob/main/prose/references/markdown-spec.md).
 //!
 //! ```no_run
 //! use quillmark_core::Document;
 //!
-//! // Parse markdown with a card-yaml metadata block
 //! let markdown = "~~~\n$quill: my_quill\n$kind: main\ntitle: Example\n~~~\n\n# Content";
 //! let doc = Document::parse(markdown).unwrap().document;
 //! let title = doc.main()
@@ -18,11 +20,6 @@
 //!     .unwrap_or("Untitled");
 //! assert_eq!(title, "Example");
 //! ```
-//!
-//! ## Further Reading
-//!
-//! - [markdown-spec.md](https://github.com/borb-sh/quillmark/blob/main/prose/references/markdown-spec.md) - Quillmark Markdown parsing specification
-//! - [Examples](https://github.com/borb-sh/quillmark/tree/main/crates/core/examples) - Working examples
 
 pub mod document;
 pub use document::{
