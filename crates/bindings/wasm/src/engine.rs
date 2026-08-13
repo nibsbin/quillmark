@@ -1,5 +1,3 @@
-//! Quillmark WASM Engine - Simplified API
-
 use crate::error::WasmError;
 use crate::types::Diagnostic;
 #[cfg(any(feature = "typst", feature = "pdfform"))]
@@ -11,13 +9,10 @@ use serde::Serialize;
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
 
-/// TypeScript declarations for the quill metadata and schema surfaces.
-/// Emitted via `typescript_custom_section` as the single source of truth.
 #[wasm_bindgen(typescript_custom_section)]
 const METADATA_TS: &'static str = r#"
-/** UI layout hints for a single field. Field display order is not a hint:
- * key order in the schema's `fields`/`properties` objects is declaration
- * order, the ordering contract. */
+/** UI layout hints for a single field. Display order is not a hint: key order
+ * in the schema's `fields`/`properties` objects is the ordering contract. */
 export interface QuillFieldUi {
     title?: string;
     group?: string;
@@ -26,9 +21,8 @@ export interface QuillFieldUi {
 }
 
 /** One entry in a card's `ui.groups` registry: a display-label override for the
- * group id (the map key). An empty object carries no override: the consumer
- * derives the label from the id (`memo_for` → "Memo For"), as it does a field
- * label from its key. */
+ * group id (the map key). An empty object carries no override, and the consumer
+ * derives the label from the id (`memo_for` → "Memo For"). */
 export interface QuillGroupUi {
     title?: string;
 }
@@ -36,16 +30,14 @@ export interface QuillGroupUi {
 /** UI layout hints for a card (main or named card kind). */
 export interface QuillCardUi {
     title?: string;
-    /** The card's group registry: the ordered table of contents naming every
-     * group a field's `ui.group` may reference. The map key is the group id, and
-     * key order is declaration order: the display-order contract, the same one
-     * `fields` key order carries. Absent when the card declares no groups (or
-     * uses the deprecated implicit-group form). */
+    /** The groups a field's `ui.group` may reference, keyed by group id. Key
+     * order is the display-order contract, as with `fields`. Absent when the
+     * card declares no groups. */
     groups?: Record<string, QuillGroupUi>;
 }
 
-/** A block construct a body can hold. `paragraph` is absent on purpose: it is
- * the floor and cannot be declined. */
+/** A block construct a body can hold. `paragraph` is the floor and cannot be
+ * declined, so it is absent. */
 export type QuillBlockConstruct =
     | "heading"
     | "rule"
@@ -61,40 +53,34 @@ export interface QuillCardBody {
     enabled?: boolean;
     /** Example body content embedded verbatim in the blueprint body region. Fallback is "Write <card> body here." */
     example?: string;
-    /** Block constructs this quill's plate does not typeset in this body.
-     *
-     * Absent or empty means it declines nothing, which is the default. An
-     * editor reads this to decline a gesture before the author makes it; a body
-     * that holds one anyway draws a non-fatal `plate::unsupported_construct`
-     * warning carrying the construct and a count. It is the quill's claim about
-     * its own plate, and nothing verifies it: a construct absent from this list
-     * is not a promise that the plate typesets it. */
+    /** Block constructs this quill's plate does not typeset in this body;
+     * absent or empty declines nothing. A body that holds one anyway draws a
+     * non-fatal `plate::unsupported_construct` warning. Nothing verifies the
+     * claim: absence from this list is not a promise the plate typesets it. */
     unsupported?: QuillBlockConstruct[];
 }
 
 /** Schema entry for a single field declared in a quill's `Quill.yaml`.
  *
- * A field's *cell* is determined by `default`: a field with a `default`
- * is **Endorsed** (the rendered value is shippable as-is), while a field
- * without a `default` is **Unendorsed** (the blueprint carries a
- * `!must_fill` marker; a marker left in the document yields the non-fatal
- * `validation::must_fill` warning from validate, and the render path
- * zero-fills the field). There is no separate `required` axis.
+ * `default` determines the field's cell, and there is no separate `required`
+ * axis: with a default the field is **Endorsed** (shippable as rendered);
+ * without one it is **Unendorsed** — the blueprint carries a `!must_fill`
+ * marker, a marker left in the document warns `validation::must_fill`, and the
+ * render path zero-fills the field.
  */
 export interface QuillFieldSchema {
     type: "string" | "number" | "integer" | "boolean" | "array" | "object" | "date" | "datetime" | "richtext" | "plaintext" | "enum";
     description?: string;
     default?: unknown;
     example?: unknown;
-    /** Required on `type: "enum"`, and valid nowhere else: the closed set of
-     *  allowed string values. */
+    /** The closed set of allowed values. Required on `type: "enum"`, and valid
+     *  nowhere else. */
     values?: string[];
     ui?: QuillFieldUi;
     properties?: Record<string, QuillFieldSchema>;
     items?: QuillFieldSchema;
-    /** Present (and `true`) on a `richtext` or `plaintext` field declared
-     *  `inline`: the single-paragraph, container-free, island-free constraint.
-     *  Core serializes `inline: true` into the schema JSON; absent otherwise. */
+    /** `true` on a `richtext` or `plaintext` field declared `inline`: the
+     *  single-paragraph, container-free, island-free constraint. */
     inline?: boolean;
 }
 
@@ -107,10 +93,8 @@ export interface QuillCardSchema {
 }
 
 /**
- * Document schema returned by `Quill.schema`. Includes optional `ui` keys.
- *
- * Describes only the user-fillable fields. The quill reference
- * (constructed as `${metadata.name}@${metadata.version}`) and card-kind
+ * Document schema returned by `Quill.schema`: the user-fillable fields only.
+ * The quill reference (`${metadata.name}@${metadata.version}`) and card-kind
  * discriminators are document-level metadata, not schema fields.
  */
 export interface QuillSchema {
@@ -120,10 +104,9 @@ export interface QuillSchema {
 }
 
 /**
- * Identity snapshot mirroring the `quill:` section of `Quill.yaml`.
- * The schema lives on `Quill.schema`; the backend's output formats are a
- * resolved-backend capability read from the engine (`Quillmark.supportedFormats`),
- * not part of this pure-config snapshot.
+ * Identity snapshot mirroring the `quill:` section of `Quill.yaml`. The schema
+ * lives on `Quill.schema`; output formats are a resolved-backend capability read
+ * from `Quillmark.supportedFormats`, not part of this config snapshot.
  */
 export interface QuillMetadata {
     name: string;
@@ -134,13 +117,8 @@ export interface QuillMetadata {
 }
 "#;
 
-/// TypeScript for the canonical `Card` wire shape (mirrors
-/// `quillmark_core::CardWire`) and its write-input twin `CardInput`. `Card` is
-/// the read shape *returned* by `Document.main` / `cards` / `removeCard` /
-/// `quill.seedCard` / `Document.makeCard`; `CardInput` is the shape *accepted*
-/// by `insertCard` (referenced by name via `unchecked_param_type`).
-/// They differ only in `body`: a read is always canonical `Content`, a write
-/// also takes a markdown `string`.
+/// Mirrors `quillmark_core::CardWire`. `CardInput` is referenced by name via
+/// `unchecked_param_type`.
 #[wasm_bindgen(typescript_custom_section)]
 const CARD_TS: &'static str = r#"
 /**
@@ -166,17 +144,13 @@ export type PayloadItem =
     | { type: "comment"; text: string; inline?: boolean };
 
 /**
- * A single card block, as read back from a document: returned by
- * `Document.main` / `Document.cards` / `Document.removeCard` / `Quill.seedCard`
- * / `Document.makeCard`. To feed a card *into* a document use `CardInput`
- * (which `insertCard` accepts); every `Card` is a valid `CardInput`,
- * so a card read from one document pushes straight into another.
+ * A single card block, as read back from a document. Every `Card` is a valid
+ * `CardInput`, so a card read from one document pushes straight into another.
  *
  * `$` system entries are hoisted to named fields: `kind` (the `$kind`, empty
- * string when none), optional `quill` (the `$quill` `name@version`, main card
- * only), optional `ext` (`$ext`), and optional `seed`
- * (the `$seed` per-kind overlay map, main card only). `payloadItems` carries
- * user fields and comments in order.
+ * string when none), `quill` (`$quill` `name@version`, main card only), `ext`
+ * (`$ext`), and `seed` (the `$seed` per-kind overlay map, main card only).
+ * `payloadItems` carries user fields and comments in order.
  */
 export interface Card {
     kind: string;
@@ -185,21 +159,16 @@ export interface Card {
     seed?: Record<string, unknown>;
     payloadItems: PayloadItem[];
     /**
-     * The card body as canonical `Content`: the source-of-truth content model.
-     * Always this content shape on read, never a markdown string. For the markdown
-     * projection call the codec `exportMarkdown(card.body)`. Write a body back
-     * with `doc.overwrite(addr, rt)` / `doc.revise(addr, md)`, or via `CardInput.body`.
+     * The card body as canonical `Content`, never a markdown string. For the
+     * markdown projection call `exportMarkdown(card.body)`.
      */
     body: Content;
 }
 
 /**
- * A card written *into* a document: the input twin of `Card`, accepted by
- * `Document.insertCard`. Like `Card` but `body` also
- * takes a markdown `string` (imported to the content, so a markdown / LLM writer
- * needn't build the `Content` shape), and every field but `kind` is optional:
- * an absent field defaults (no payload items, an empty body). Write one inline
- * (`{ kind, body }`) or build it with `Document.makeCard`.
+ * A card written *into* a document, accepted by `Document.insertCard`. Like
+ * `Card`, but `body` also takes a markdown `string`, and every field but `kind`
+ * is optional (defaulting to no payload items and an empty body).
  */
 export interface CardInput {
     kind: string;
@@ -211,11 +180,10 @@ export interface CardInput {
 }
 
 /**
- * Canonical richtext content: the content model for a card body (and richtext
- * fields). One text sequence over a single coordinate space (Unicode scalar
- * values): `text` plus line attributes, anchored `marks`, and embedded
- * `islands`. Every edit is a splice; markdown is a projection, not the model.
- * Mirrors `quillmark_content::serial`'s canonical JSON encoding.
+ * Canonical richtext content: the model behind a card body and richtext fields.
+ * One text sequence over a single coordinate space (Unicode scalar values):
+ * `text` plus line attributes, anchored `marks`, and embedded `islands`. Every
+ * edit is a splice; markdown is a projection, not the model.
  */
 export interface Content {
     text: string;
@@ -224,19 +192,17 @@ export interface Content {
     islands: ContentIsland[];
 }
 
-/** One `\n`-separated segment of `Content.text`, in order. `kind` is an open set
- * (as on `ContentIsland` and `ContentMark`): a role this build does not know
- * round-trips with opaque `attrs` and renders as a paragraph, so a document
- * carrying a future block construct still opens. The open arm blocks discriminant
- * narrowing, so read `level`/`lang` behind a check of the arm you want. */
+/** One `\n`-separated segment of `Content.text`, in order. `kind` is an open set:
+ * an unknown role round-trips with opaque `attrs` and renders as a paragraph.
+ * The open arm blocks discriminant narrowing, so read `level`/`lang` behind a
+ * check of the arm you want. */
 export type ContentLine = {
     containers: ContentContainer[];
     /** A within-block hard line break rather than a new block. Omitted (false) in the common case. */
     continues?: boolean;
 } & ContentLineKind;
 
-/** A line's block role, declared once for `ContentLine` and the `setKind` op:
- * a new role is one edit here, as for `ContentContainer`. */
+/** A line's block role, shared by `ContentLine` and the `setKind` op. */
 export type ContentLineKind =
     | { kind: "para" }
     | { kind: "heading"; level: number }
@@ -254,13 +220,12 @@ export type ContentContainer =
     | { container: string; attrs: unknown };
 
 /** A mark over char range `[start, end)` into `Content.text`. The open `type`
- * arm blocks discriminant narrowing (as on `ContentIsland`), so read a
- * payload-carrying arm behind its guard: `isLinkMark` (`url`) / `isAnchorMark`
- * (`id`), from `@quillmark/wasm/runtime`; the bare arms carry no payload. An
- * `anchor`'s `id` is a caller-supplied, opaque handle, unique per `Content` and
- * invariant while the mark lives (positions rebase, the id never does); it has no
- * markdown projection and survives only through the edit lane. See DOCUMENT_STORAGE
- * § Anchor-id identity. */
+ * arm blocks discriminant narrowing, so read a payload-carrying arm behind its
+ * guard: `isLinkMark` (`url`) / `isAnchorMark` (`id`), from
+ * `@quillmark/wasm/runtime`. An `anchor`'s `id` is a caller-supplied opaque
+ * handle, unique per `Content` and invariant while the mark lives (positions
+ * rebase, the id never does); it has no markdown projection and survives only
+ * through the edit lane. */
 export type ContentMark = { start: number; end: number } & (
     | { type: "strong" | "emph" | "underline" | "strike" | "code" }
     | { type: "link"; url: string }
@@ -268,9 +233,8 @@ export type ContentMark = { start: number; end: number } & (
     | { type: string; attrs: unknown }
 );
 
-/** A cell in a `TableProps`: its plain `text` plus the `marks` over it. `marks`
- * rides the same wire shape as prose `ContentMark`, but each mark's `start`/`end`
- * are USV offsets into this cell's `text` (`0..text.length`), not into
+/** A cell in a `TableProps`. `marks` rides the prose `ContentMark` shape, but
+ * each mark's `start`/`end` are USV offsets into this cell's `text`, not into
  * `Content.text`. */
 export interface TableCell {
     text: string;
@@ -292,17 +256,15 @@ export interface ImageProps {
     alt: string;
 }
 
-/** A structured object occupying one island slot in `Content.text`. `type` is an
- * open set: the engine pins `props` as `TableProps` for `table` and `ImageProps`
- * for `image`; an island of any other type round-trips with opaque `props`. Like
- * `ContentMark`, the open `type` arm means a discriminant check does not itself
- * narrow `props`: read `props` as the matching shape behind the `isTableIsland` /
- * `isImageIsland` guards (from `@quillmark/wasm/runtime`), which narrow it. */
-/** How faithfully the markdown projection can carry an island. Open like an
- * island `type`: a class this build does not know round-trips verbatim, and
- * reads as `unrepresentable`. */
+/** How faithfully the markdown projection can carry an island. Open: an unknown
+ * class round-trips verbatim and reads as `unrepresentable`. */
 export type ContentLossClass = "lossless" | "degraded" | "unrepresentable" | (string & {});
 
+/** A structured object occupying one island slot in `Content.text`. `type` is an
+ * open set: `props` is `TableProps` for `table` and `ImageProps` for `image`,
+ * and any other type round-trips with opaque `props`. The open arm blocks
+ * narrowing, so read `props` behind the `isTableIsland` / `isImageIsland`
+ * guards (from `@quillmark/wasm/runtime`). */
 export type ContentIsland = {
     id: string;
     loss: ContentLossClass;
