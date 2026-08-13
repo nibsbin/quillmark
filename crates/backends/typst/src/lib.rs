@@ -542,9 +542,7 @@ fn engine_err(code: &str, message: impl Into<String>) -> RenderError {
 }
 
 /// `contentMediaType = application/quillmark-content+json`: `richtext` or
-/// `plaintext`. The codecs differ only in how a value is imported and emitted,
-/// so everything downstream of this classification — lowering, span tracking,
-/// regions, navigation — is shared.
+/// `plaintext`, which share everything downstream of this classification.
 fn is_content_field(field_schema: &serde_json::Value) -> bool {
     field_schema
         .get("contentMediaType")
@@ -553,8 +551,7 @@ fn is_content_field(field_schema: &serde_json::Value) -> bool {
         .unwrap_or(false)
 }
 
-/// `{type: array, items: {contentMediaType: …}}`: a content-typed array, whose
-/// elements each carry their own eval site and geometry.
+/// `{type: array, items: {contentMediaType: …}}`: a content-typed array.
 fn is_content_array_field(field_schema: &serde_json::Value) -> bool {
     field_schema
         .get("type")
