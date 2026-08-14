@@ -1818,6 +1818,25 @@ title: !must_fill
       ),
     ).toBe(true)
   })
+
+  it('validate surfaces the same code for a cell the schema obliges and nobody authored', () => {
+    const { quill } = buildQuill()
+
+    // No marker anywhere: this document never saw a blueprint.
+    const md = `~~~card-yaml
+$quill: schema_test
+$kind: main
+~~~
+`
+    const diags = quill.validate(Document.fromMarkdown(md))
+    const title = diags.find(
+      (d) => d.code === 'validation::must_fill' && d.path === 'main.title',
+    )
+    expect(title).toBeDefined()
+    expect(title.severity).toBe('warning')
+    // `trigger` is what a consumer routes on, so pin it crossing the boundary.
+    expect(title.args.trigger).toBe('unauthored')
+  })
 })
 
 describe('nested !must_fill', () => {

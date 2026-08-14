@@ -1,7 +1,7 @@
 //! The `Quill` type: portable, validated quill data.
 
 mod blueprint;
-mod compose;
+pub(crate) mod compose;
 mod config;
 pub(crate) mod conform;
 mod resolved;

@@ -16,8 +16,8 @@ use serde_json::{Map as JsonMap, Value as JsonValue};
 
 impl QuillConfig {
     /// Generate the canonical annotated Markdown blueprint for this quill:
-    /// the authoring surface handed to LLMs and humans, with Unendorsed cells
-    /// carrying the `!must_fill` marker. See module docs for the annotation
+    /// the authoring surface handed to LLMs and humans, with every must-fill
+    /// cell carrying the `!must_fill` marker. See module docs for the annotation
     /// grammar; the function is total over any valid `QuillConfig`.
     ///
     /// The "filled-out" twin of the blueprint is **seeding**
@@ -198,9 +198,11 @@ fn append_field(items: &mut Vec<PayloadItem>, field: &FieldSchema) {
 }
 
 /// Push the leading prose comments for a *top-level* field: the description,
-/// then the `# e.g.` hint. `eg_when` gates the hint: scalars surface it only
-/// when Endorsed (an Unendorsed example inlines as the marker value instead),
-/// while typed containers always surface it (their example never inlines).
+/// then the `# e.g.` hint. `eg_when` gates the hint: a scalar surfaces it only
+/// when a `default:` already occupies the cell (otherwise the example *is* the
+/// cell's value), while typed containers always surface it (their example never
+/// inlines). The gate is a value-axis question and stays keyed on `default`:
+/// `must_fill` never moves an example between the cell and the hint.
 fn push_leading(items: &mut Vec<PayloadItem>, field: &FieldSchema, eg_when: bool) {
     if let Some(desc) = collapse_opt(&field.description) {
         items.push(PayloadItem::comment(desc));
@@ -212,21 +214,30 @@ fn push_leading(items: &mut Vec<PayloadItem>, field: &FieldSchema, eg_when: bool
     }
 }
 
-/// The cell's `(value, fill)` for a scalar/array/richtext leaf, per the value
-/// cascade. Endorsed → the default, no marker. Unendorsed → the `example` (when
-/// present) carried by the marker, else a bare null marker. A richtext leaf never
-/// inlines an example: an Unendorsed richtext leaf is always a bare marker, but
-/// its `example:` still surfaces as a `# e.g.` hint (see `append_scalar`).
+/// The cell's `(value, fill)` for a scalar/array/richtext leaf: the two axes
+/// read independently. The value is `default:` › `example:` › bare null; the
+/// marker is the field's derived `must_fill`. A field carrying both a default
+/// and `must_fill: true` therefore shows the default *and* asks for
+/// confirmation, and an explicitly optional field with nothing to suggest emits
+/// a bare unmarked cell (the type annotation alone tells the reader what goes
+/// there).
 fn scalar_cell(field: &FieldSchema) -> (JsonValue, bool) {
+    (scalar_value(field), field.must_fill())
+}
+
+/// The value half. A richtext leaf never inlines an example: its `example:`
+/// surfaces as a `# e.g.` hint instead (see `append_scalar`), so its
+/// defaultless cell is always bare.
+fn scalar_value(field: &FieldSchema) -> JsonValue {
     if let Some(default) = &field.default {
-        return (default.as_json().clone(), false);
+        return default.as_json().clone();
     }
     if matches!(field.r#type, FieldType::RichText { .. }) {
-        return (JsonValue::Null, true);
+        return JsonValue::Null;
     }
     match field.example.as_ref() {
-        Some(eg) => (eg.as_json().clone(), true),
-        None => (JsonValue::Null, true),
+        Some(eg) => eg.as_json().clone(),
+        None => JsonValue::Null,
     }
 }
 
@@ -234,7 +245,7 @@ fn scalar_cell(field: &FieldSchema) -> (JsonValue, bool) {
 /// plus its trailing inline type annotation.
 fn append_scalar(items: &mut Vec<PayloadItem>, field: &FieldSchema) {
     // A richtext field never inlines its `example:` as the marker value, so
-    // (unlike other Unendorsed scalars) the example would vanish entirely.
+    // (unlike other defaultless scalars) the example would vanish entirely.
     // Surface it as a `# e.g.` hint instead (no-ops when no `example:` is set).
     let eg_when = field.default.is_some() || matches!(field.r#type, FieldType::RichText { .. });
     push_leading(items, field, eg_when);
@@ -248,7 +259,7 @@ fn append_scalar(items: &mut Vec<PayloadItem>, field: &FieldSchema) {
     items.push(PayloadItem::comment_inline(type_expression(field)));
 }
 
-/// Build the per-property body of an Unendorsed typed container: the value
+/// Build the per-property body of a defaultless typed container: the value
 /// mapping (each property at its own cell, in declaration order), the nested
 /// comments (description + `# e.g.` + inline type annotation, addressed by
 /// `container_path`/slot), and the nested fill paths. `prefix` is the container
@@ -274,7 +285,7 @@ fn build_property_mapping(
                 inline: false,
             });
         }
-        // `# e.g.` only when Endorsed (see `push_leading`).
+        // `# e.g.` only when a `default:` holds the cell (see `push_leading`).
         if prop.default.is_some() {
             if let Some(eg) = prop.example.as_ref() {
                 nested.push(NestedComment {
@@ -302,11 +313,13 @@ fn build_property_mapping(
     (map, nested, fills)
 }
 
-/// Append a typed-dictionary field (`object` with `properties`). Endorsed:
-/// render the default mapping (`{}` expands to the zero-filled shape; a
-/// non-empty partial default is rendered verbatim, all unmarked). Unendorsed:
-/// recurse per property with leaf-level markers and annotations; the container
-/// key itself is untagged.
+/// Append a typed-dictionary field (`object` with `properties`). With a
+/// `default:`: render the default mapping (`{}` expands to the blank-filled
+/// shape; a non-empty partial default is rendered verbatim, all unmarked).
+/// Without one: recurse per property with leaf-level markers and annotations;
+/// the container key itself is untagged, since `!must_fill` is rejected on a
+/// mapping (`prose/references/markdown-spec.md` §3.4). A typed dictionary's own
+/// `must_fill:` is therefore inert — the obligation lives on its leaves.
 fn append_typed_dict(
     items: &mut Vec<PayloadItem>,
     field: &FieldSchema,
@@ -315,15 +328,15 @@ fn append_typed_dict(
     push_leading(items, field, true);
 
     let (value, nested, fills) = match field.default.as_ref().map(|d| d.as_json()) {
-        // `default: {}` → expand to the field's zero-filled shape so every key
-        // is shown; all leaves are Endorsed-by-the-container, hence unmarked
-        // and unannotated (uniform with a concrete default).
+        // `default: {}` → expand to the field's blank-filled shape so every key
+        // is shown; the container's default covers its leaves, so they are
+        // unmarked and unannotated (uniform with a concrete default).
         Some(JsonValue::Object(map)) if map.is_empty() => {
             (blank(field).into_json(), Vec::new(), Vec::new())
         }
         // Concrete default (object or otherwise) → rendered verbatim, unmarked.
         Some(default) => (default.clone(), Vec::new(), Vec::new()),
-        // Unendorsed → per-property recursion at the mapping root.
+        // No default → per-property recursion at the mapping root.
         None => {
             let (map, nested, fills) = build_property_mapping(props, &[]);
             (JsonValue::Object(map), nested, fills)
@@ -333,10 +346,11 @@ fn append_typed_dict(
     push_container_field(items, &field.name, value, nested, fills, field);
 }
 
-/// Append a typed-table field (`array<object>`). Endorsed: render the default
-/// rows verbatim (including `default: []`, which stays inline `[]`: arrays do
-/// not expand). Unendorsed: emit one synthetic row carrying each property's
-/// leaf-level marker and annotation; the container key itself is untagged.
+/// Append a typed-table field (`array<object>`). With a `default:`: render the
+/// default rows verbatim (including `default: []`, which stays inline `[]`:
+/// arrays do not expand). Without one: emit one synthetic row carrying each
+/// property's leaf-level marker and annotation; the container key itself is
+/// untagged, so the field's own `must_fill:` is inert (as for a typed dict).
 fn append_typed_table(
     items: &mut Vec<PayloadItem>,
     field: &FieldSchema,
@@ -350,7 +364,7 @@ fn append_typed_table(
         // Row type declares no properties (schema-invalid in practice): emit a
         // type-valid empty array rather than a null synthetic row.
         None if item_props.is_empty() => (JsonValue::Array(Vec::new()), Vec::new(), Vec::new()),
-        // Unendorsed → one synthetic row, per-property markers at `[Index(0)]`.
+        // No default → one synthetic row, per-property markers at `[Index(0)]`.
         None => {
             let (row, nested, fills) = build_property_mapping(item_props, &[PathSegment::Index(0)]);
             (
@@ -460,6 +474,52 @@ main:
 "#)
         .blueprint();
         assert!(t.contains("# e.g. Hello world\nbio: !must_fill # richtext<markdown>\n"));
+    }
+
+    #[test]
+    fn a_default_and_an_explicit_must_fill_show_both() {
+        let t = cfg(r#"
+quill: { name: x, version: 1.0.0, backend: typst, description: x }
+main:
+  fields:
+    classification: { type: enum, values: [UNCLASSIFIED, CUI], default: UNCLASSIFIED, must_fill: true }
+"#)
+        .blueprint();
+        assert!(
+            t.contains("classification: !must_fill UNCLASSIFIED # enum<UNCLASSIFIED | CUI>\n"),
+            "{t}"
+        );
+    }
+
+    #[test]
+    fn an_opted_out_field_with_nothing_to_suggest_emits_a_bare_unmarked_cell() {
+        let t = cfg(r#"
+quill: { name: x, version: 1.0.0, backend: typst, description: x }
+main:
+  fields:
+    note: { type: string, must_fill: false }
+"#)
+        .blueprint();
+        // `null` is the emitter's spelling of an empty unmarked cell; it parses
+        // back to the state a missing key would.
+        assert!(t.contains("\nnote: null # string\n"), "{t}");
+        assert!(!t.contains("!must_fill"), "{t}");
+
+        let doc = Document::parse(&t).expect("the bare cell parses").document;
+        assert_eq!(doc, Document::parse(&doc.to_markdown()).expect("re-emit").document);
+    }
+
+    #[test]
+    fn an_opted_out_field_keeps_its_example_as_the_cell_value() {
+        let t = cfg(r#"
+quill: { name: x, version: 1.0.0, backend: typst, description: x }
+main:
+  fields:
+    note: { type: string, example: A note, must_fill: false }
+"#)
+        .blueprint();
+        assert!(t.contains("note: A note # string\n"), "{t}");
+        assert!(!t.contains("e.g."), "the example is the cell, not a hint: {t}");
     }
 
     #[test]

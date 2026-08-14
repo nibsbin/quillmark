@@ -84,13 +84,57 @@ main:
 |---------------|-------------------|----------|-------------|
 | `type`        | string            | yes      | Data type (see [Field Types](#field-types)) |
 | `description` | string            | no       | Detailed help text |
-| `default`     | matches `type`    | no       | The value the **majority of authors want**. When the field is omitted, the default is filled in. **Declaring `default` makes the field Endorsed**: the blueprint renders the concrete default value with a type-only annotation (no marker), shippable as-is. Omitting `default` makes the field **Unendorsed**: the blueprint stamps the `!must_fill` marker (carrying the field's `example` as a suggested value when present, else bare). A surviving marker raises the non-fatal `validation::must_fill` warning: it never gates render, since an absent or present-null field blank-fills. |
-| `example`     | matches `type`    | no       | A value matching the **type and shape** of what the author wants, but **not** the value desired most of the time. Documents shape only: surfaced in the [blueprint](https://github.com/borb-sh/quillmark/blob/main/prose/canon/BLUEPRINT.md)'s `# e.g.` line for documentation and LLM authoring, never rendered as the value. |
+| `default`     | matches `type`    | no       | The value the **majority of authors want**. When the field is omitted, the default is filled in, and the blueprint renders that concrete value with a type-only annotation, shippable as-is. Declaring it also flips the derived `must_fill` to `false` (see below). |
+| `example`     | matches `type`    | no       | A value matching the **type and shape** of what the author wants, but **not** the value desired most of the time. Documents shape only, never rendered as the value: it takes the blueprint cell when no `default` holds it, and surfaces in the `# e.g.` line otherwise. |
+| `must_fill`   | boolean           | no       | Whether a human must author this cell (see [Obligation: `must_fill`](#obligation-must_fill)). Defaults to `!default.is_some()`. |
 | `values`      | array of strings  | for `enum` | The closed set of allowed string values: the **choices**. Required on every `enum` field. Declaring `""` is a load error — every enum also accepts its [blank](#the-blank-values-is-for-choices-not-for-the-absence-of-one), which the engine supplies. |
 | `ui`          | object            | no       | UI rendering hints (see [UI Properties](#ui-properties)) |
 | `items`       | object            | for `array` | Element schema for an `array` field (a nested field schema). Required on every array. |
 | `properties`  | object            | for `object` | Nested field schemas for an `object` typed dictionary (or an array's `object`-typed `items`). Required on every `object` field. |
 | `inline`      | boolean           | no       | For `richtext` and `plaintext` only: constrain the content to a single paragraph/line (a one-line editor surface). |
+
+### Obligation: `must_fill`
+
+A field says two separate things. `default` and `example` say **what a cell
+holds**; `must_fill` says **whether a human must author it**. Leave it out and
+it derives from `default`: a defaulted field is not obliged, a defaultless one
+is.
+
+Write it when you want a combination the derivation cannot reach:
+
+```yaml
+# A safe value renders, and a human must still confirm it.
+classification:
+  type: enum
+  values: [UNCLASSIFIED, CUI]
+  default: UNCLASSIFIED
+  must_fill: true
+
+# Genuinely optional, with nothing to suggest.
+internal_note:
+  type: string
+  must_fill: false
+```
+
+An obliged field is one that carries the `!must_fill` marker in the blueprint,
+is stamped when seeding commits its `example`, and raises the non-fatal
+`validation::must_fill` warning from `Quill::validate` while the document leaves
+it unauthored. Three things discharge it: authoring a value, authoring the
+field's [blank](#the-blank-values-is-for-choices-not-for-the-absence-of-one)
+(deliberately nothing is an answer), or dropping the marker by hand.
+
+**It is an affordance, not a submit gate.** If you arrive from web forms, the
+familiar half transfers — the editor knows which fields to mark — and the
+enforcement half does not. An unfilled must-fill field **renders**; nothing
+refuses it. "Must pick" is this warning plus whatever policy a consumer layers
+on top, canonically *a strict consumer treats any outstanding marker as not
+done*. There is no `required:` and no severity knob: on this surface
+`Severity::Error` already means "won't render".
+
+On a **typed dictionary** the key is inert on the container — the obligation
+lives on its leaves, which is where the blueprint marks and the warning
+anchors. An **array** is its own cell, so `[]` is an authored answer that
+discharges it.
 
 ### Field Types
 

@@ -1,12 +1,14 @@
 //! Document seeding from a quill schema: commit each field's `example` and
 //! leave every other field absent, so the render layer still supplies
-//! `default`/zero and the absence-based completeness signal survives.
+//! `default`/blank. A committed `example` on a must-fill field carries the
+//! `!must_fill` marker, so seeding and the blueprint stamp the same cells and a
+//! fresh seed reads as incomplete exactly where a blank document does.
 
-use indexmap::IndexMap;
 use quillmark_content::Content;
 
 use super::Quill;
 use crate::quill::CardSchema;
+use crate::document::PayloadItem;
 use crate::{Card, Document, Payload, QuillReference, QuillValue, SeedOverlay};
 
 /// Build the seeded `(payload, body)` for one card schema, layering an optional
@@ -35,15 +37,26 @@ fn seed_parts(schema: &CardSchema, overlay: Option<&SeedOverlay>) -> (Payload, C
     // `example`, and the overlay overrides either (and can supply a value for a
     // `default`-only field the base omits). An overlay key naming no schema
     // field is skipped: it is never iterated here.
-    let mut fields: IndexMap<String, QuillValue> = IndexMap::new();
+    let mut items: Vec<PayloadItem> = Vec::new();
     for (name, field) in &schema.fields {
-        let value = overlay
-            .and_then(|o| o.fields.get(name))
+        let overlaid = overlay.and_then(|o| o.fields.get(name));
+        let Some(value) = overlaid
             .or(field.example_content.as_ref())
-            .or(field.example.as_ref());
-        if let Some(value) = value {
-            fields.insert(name.clone(), seeded_rest(name, value, field));
-        }
+            .or(field.example.as_ref())
+        else {
+            continue;
+        };
+        items.push(PayloadItem::Field {
+            key: name.clone(),
+            value: seeded_rest(name, value, field),
+            // An `example` on a must-fill field is shape documentation, not
+            // the answer, so it commits *carrying the marker*: that is what
+            // lands a seed on the same cells the blueprint stamps. An overlay
+            // value is exempt — `$seed` is a template author deciding, which is
+            // the act the marker asks for.
+            fill: overlaid.is_none() && field.must_fill(),
+            nested_comments: Vec::new(),
+        });
     }
 
     // Body region as a content: an overlay body (authored markdown) is imported;
@@ -65,7 +78,7 @@ fn seed_parts(schema: &CardSchema, overlay: Option<&SeedOverlay>) -> (Payload, C
         Content::empty()
     };
 
-    (Payload::from_index_map(fields), body)
+    (Payload::from_items(items), body)
 }
 
 /// The form a seeded value commits at: the strict write's, for a field whose

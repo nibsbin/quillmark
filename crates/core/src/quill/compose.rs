@@ -1,6 +1,7 @@
 //! Consumer-facing operations on a [`Quill`]: validation, seeding, and the
 //! zero-filled compile to backend wire JSON. Pure reads of the config.
 
+use std::collections::HashSet;
 use std::str::FromStr;
 
 use indexmap::IndexMap;
@@ -213,7 +214,17 @@ impl Quill {
     /// consumers route on the code without parsing message text: type
     /// mismatches, unknown card kinds, body-on-disabled-body, and the non-fatal
     /// `validation::must_fill` warning, the only non-fatal one; the rest are
-    /// blockers. Field absence is not surfaced (it blank-fills at render).
+    /// blockers.
+    ///
+    /// `validation::must_fill` has **two triggers**, covering disjoint failures
+    /// under one code: a `!must_fill` marker the document carries
+    /// (`validate_fills`), and a schema-side must-fill cell nobody authored
+    /// (`validate_unauthored`). Neither subsumes the other — a document that
+    /// never saw a blueprint carries no marker, and a seeded `example` is
+    /// present, in-domain, and structurally indistinguishable from authored
+    /// content — so both run, and the `trigger` arg tells a consumer which
+    /// fired. Where both would fire on one path (a bare marker on an unauthored
+    /// cell) the marker wins: its hint is the actionable one.
     ///
     /// Field values, defaults, and presentation order are not part of this
     /// surface: read them from the [`Document`] payload and the quill schema
@@ -223,7 +234,14 @@ impl Quill {
             Ok(()) => Vec::new(),
             Err(errors) => errors.iter().map(|e| e.to_diagnostic()).collect(),
         };
-        diags.extend(validate_fills(self.config(), doc));
+        let marked = validate_fills(self.config(), doc);
+        let claimed: HashSet<Option<String>> = marked.iter().map(|d| d.path.clone()).collect();
+        diags.extend(marked);
+        diags.extend(
+            validate_unauthored(self.config(), doc)
+                .into_iter()
+                .filter(|d| !claimed.contains(&d.path)),
+        );
         diags.extend(self.validate_seed(doc));
         diags
     }
@@ -604,7 +622,7 @@ fn collect_fill_diags(card: &Card, base: &DocPath, out: &mut Vec<Diagnostic>) {
     }
 }
 
-fn fill_warning(path: &DocPath) -> Diagnostic {
+pub(crate) fn fill_warning(path: &DocPath) -> Diagnostic {
     let path = path.to_string();
     Diagnostic::new(
         Severity::Warning,
@@ -612,12 +630,114 @@ fn fill_warning(path: &DocPath) -> Diagnostic {
     )
     .with_code("validation::must_fill".to_string())
     .with_path(path)
+    .with_arg("trigger", "marker".into())
     .with_hint(
         "Replace the value and drop the `!must_fill` marker, or remove the marker if the \
          current value is intended."
             .to_string(),
     )
 }
+
+/// Surface every schema-side must-fill cell the document leaves **unauthored**
+/// as a non-fatal warning, across the main card and every composable card. The
+/// schema half of `validation::must_fill`, reaching documents that carry no
+/// marker to read.
+///
+/// Unauthored is **absent-or-null**, never [`FieldSource`]: the rung is one per
+/// top-level field, so a present typed dict reports `Authored` as a whole
+/// ([`resolve_value_sourced`]) and a source-keyed check goes silent on a
+/// must-fill property inside it.
+fn validate_unauthored(config: &QuillConfig, doc: &Document) -> Vec<Diagnostic> {
+    let mut diags = Vec::new();
+    collect_unauthored_diags(&config.main, doc.main(), &DocPath::main(), &mut diags);
+    for (index, card) in doc.cards().iter().enumerate() {
+        let Some(schema) = card.kind().and_then(|k| config.card_kind(k)) else {
+            continue;
+        };
+        collect_unauthored_diags(
+            schema,
+            card,
+            &DocPath::card(card.kind(), index),
+            &mut diags,
+        );
+    }
+    diags
+}
+
+fn collect_unauthored_diags(
+    schema: &CardSchema,
+    card: &Card,
+    base: &DocPath,
+    out: &mut Vec<Diagnostic>,
+) {
+    let payload = card.payload();
+    for (name, field) in &schema.fields {
+        collect_unauthored_field(field, payload.get(name), &base.field(name), out);
+    }
+}
+
+/// Warn at each **cell** the schema obliges and the document leaves unauthored.
+/// Cells sit where the blueprint stamps its markers (`prose/canon/BLUEPRINT.md`
+/// § "Placeholder value precedence"), so the two triggers speak about the same
+/// paths:
+///
+/// - A **typed dictionary** is never itself a cell: `!must_fill` is rejected on
+///   a mapping (`prose/references/markdown-spec.md` §3.4). Recursion runs
+///   present or absent, so an absent `address` warns at `address.street`, a path
+///   an editor can resolve and a marker can occupy.
+/// - Every **other** type is the cell, the array included, so `[]` is an
+///   authored answer. A present array resolves its elements against the item
+///   schema; an absent one has no index to anchor on and warns at the container.
+fn collect_unauthored_field(
+    field: &FieldSchema,
+    value: Option<&QuillValue>,
+    path: &DocPath,
+    out: &mut Vec<Diagnostic>,
+) {
+    if let (FieldType::Object, Some(props)) = (&field.r#type, &field.properties) {
+        let obj = value.and_then(|v| v.as_json().as_object());
+        for (name, prop) in props {
+            let pv = obj
+                .and_then(|o| o.get(name))
+                .map(|j| QuillValue::from_json(j.clone()));
+            collect_unauthored_field(prop, pv.as_ref(), &path.field(name), out);
+        }
+        return;
+    }
+
+    let Some(present) = value.filter(|v| !v.as_json().is_null()) else {
+        if field.must_fill() {
+            out.push(unauthored_warning(path));
+        }
+        return;
+    };
+
+    if let (FieldType::Array, Some(items)) = (&field.r#type, &field.items) {
+        for (index, element) in present.as_json().as_array().into_iter().flatten().enumerate() {
+            let element = QuillValue::from_json(element.clone());
+            collect_unauthored_field(items, Some(&element), &path.index(index), out);
+        }
+    }
+}
+
+pub(crate) fn unauthored_warning(path: &DocPath) -> Diagnostic {
+    let path = path.to_string();
+    Diagnostic::new(
+        Severity::Warning,
+        format!("Field `{path}` must be filled in: nobody has authored a value."),
+    )
+    .with_code("validation::must_fill".to_string())
+    .with_path(path)
+    .with_arg("trigger", "unauthored".into())
+    .with_hint(
+        "Author a value. To record that empty is the intended answer, write the field's \
+         blank explicitly rather than leaving it out."
+            .to_string(),
+    )
+}
+
+#[cfg(test)]
+mod must_fill_tests;
 
 #[cfg(test)]
 mod tests {

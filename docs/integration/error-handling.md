@@ -58,7 +58,7 @@ Notable codes: `quill::name_mismatch` / `quill::version_mismatch` (a well-formed
 Fatality is a two-value ladder: `Error` blocks the stage that emits it; `Warning` never does. There is no lint-level configuration and no warning-to-error promotion. Warnings ride the same `Diagnostic` currency on non-fatal channels:
 
 - **Parse warnings** (e.g. a `~~~` opener missing its blank line) carried on the parsed document (`doc.warnings`) and spliced into a render's warnings.
-- **Validation warnings**: `quill.validate(doc)` returns every diagnostic; `validation::must_fill` (an outstanding `!must_fill` marker) and the `$seed` checks are the non-fatal ones. The render path never gates on incompleteness: an absent field blank-fills.
+- **Validation warnings**: `quill.validate(doc)` returns every diagnostic; `validation::must_fill` and the `$seed` checks are the non-fatal ones. `validation::must_fill` fires on two triggers, named by its `trigger` arg: `marker`, an outstanding `!must_fill` tag in the document, and `unauthored`, a cell the schema obliges (`must_fill:`) that nobody has authored. At most one per path; the marker wins where both apply. The render path never gates on either: an absent field blank-fills.
 - **Compile warnings**: a backend's non-fatal diagnostics (font fallback, overfull pages), carried on `result.warnings`.
 
 A successful render returns artifacts **and** a `warnings` list, so inspect it even on success.

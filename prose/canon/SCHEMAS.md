@@ -169,19 +169,41 @@ Validation is implemented by a native walker over `QuillConfig` in `quill/valida
   rarely-authored distinction, breaks YAML round-trip sanity (a loaded-then-
   saved document must not sprout `field: null` lines), and buys nothing the
   ladder does not already give. The simpler model is the contract.
-- **`!must_fill` marker → non-fatal warning.** For every `!must_fill` marker
-  present (root or nested, main card or composable card)
-  `Quill::validate` emits `validation::must_fill` at **`Severity::Warning`**,
-  regardless of whether the marker carries a value. It **never gates render**:
-  a marked document renders fine (the cell blank-fills, or uses its suggested
-  value). A strict consumer (e.g. an LLM authoring loop) treats any
-  outstanding marker as "not done."
+- **Null ≡ absent holds on the value ladder; the obligation surface splits
+  them.** The identification above is about *values*, and it stays unqualified:
+  null and absent blank-fill identically. `must_fill` asks a different question
+  — did a human make a call — and writing the field's blank is one while
+  clearing the key is not, so `field: ""` discharges the warning and
+  `field: null` does not. Two verbs therefore part company: `removeField` and
+  writing the blank are one act on the value ladder and two here, and a UI
+  rendering both as an empty box shows nothing of the difference. That is the
+  price of letting a human answer "deliberately nothing" at all: keying the
+  obligation on the resolved source rung instead would leave the deliberate
+  blank unspellable and go blind to a must-fill leaf inside a touched container.
+- **`validation::must_fill` → non-fatal warning, from two triggers.**
+  `Quill::validate` emits it at **`Severity::Warning`** when either holds, with a
+  `trigger` arg naming which:
+  - `marker` — a `!must_fill` marker is present (root or nested, main card or
+    composable card), whether or not it carries a value. The marker is
+    document-sovereign: it fires without consulting the schema, and a human
+    dropping it is a decision nothing re-derives.
+  - `unauthored` — the schema obliges the cell and the document leaves it
+    absent or present-null.
+
+  Neither subsumes the other. A hand-written or programmatically built document
+  carries no marker; a seeded `example` is present, in-domain, and structurally
+  indistinguishable from authored content. Where both would fire on one path
+  (a bare marker on an unauthored cell) one diagnostic is emitted and the marker
+  wins: its hint is the actionable one. It **never gates render**: the cell
+  blank-fills, or uses its suggested value. A strict consumer (e.g. an LLM
+  authoring loop) treats any outstanding warning as "not done."
 - **Absence semantics**: a missing (or present-null) field with a `default:`
   accepts the default; without a `default:` it blank-fills. Either way it
-  validates clean. Field absence is **not surfaced as a diagnostic**:
-  `Quill::validate` raises no completeness/`field_absent` code, so a merely
-  incomplete (or present-null) document validates clean. The only authoring
-  signal it raises is the non-fatal `validation::must_fill` warning.
+  coerces and validates clean — absence is never *malformed*, and there is no
+  `field_absent` code. On the editor surface it is surfaced where the schema
+  obliges it: an unauthored must-fill cell warns. So `Quill::validate` on an
+  incomplete document is not clean, and the count is per *document* — a card
+  kind obliges nothing until an instance of it exists.
 
 Field-level type and presence errors render under a uniform shape:
 field path, verbatim source token, schema declaration, and both exits
@@ -218,8 +240,8 @@ field maps rather than a sort key):
 | Projection | Per-field precedence | Floor | Output |
 |---|---|---|---|
 | render (fidelity) | authored › `default:` › blank | blank | plate JSON: [Blank-filled render](#blank-filled-render) |
-| `blueprint` document | Endorsed: `default:`; Unendorsed: `example:` else blank, stamped `!must_fill` | blank (under the marker) | annotated string, [BLUEPRINT.md](BLUEPRINT.md) |
-| seeding | `example:` › absent | (deferred to render floor) | committed `Document`: [Document seeding](#document-seeding) |
+| `blueprint` document | value: `default:` › `example:` › blank; marker: the derived `must_fill` | blank (under the marker) | annotated string, [BLUEPRINT.md](BLUEPRINT.md) |
+| seeding | `example:` › absent, stamped `!must_fill` where the schema obliges | (deferred to render floor) | committed `Document`: [Document seeding](#document-seeding) |
 | add-card (into a document) | `$seed` overlay › `example:` › absent | (deferred to render floor) | a new composable `Card`: [Document seeding](#document-seeding) |
 | editor (consumer-side) | authored › `default:` › blank, resolved per field and **tagged with its source rung** | blank | the engine's [`resolve()`](#the-resolved-value-view-resolve) resolved-value view: value and source rung per field |
 
@@ -231,9 +253,9 @@ the ladder in consumer code. Completeness and errors stay `Quill::validate`'s
 guidance (`example:`, labels, groups) reads from `Quill::schema`.
 
 Two seams are deliberate, not uniform: on `blueprint` the floor still
-blank-fills like every other projection (an Unendorsed cell with no `example`
+blank-fills like every other projection (a must-fill cell with no `example`
 carries bare null/empty under its marker), but the projection additionally
-**stamps the `!must_fill` marker** on every Unendorsed field: the marker
+**stamps the `!must_fill` marker** on every must-fill field: the marker
 rides *alongside* the value rather than replacing it; and `blank` is a property
 of the field rather than a member of the type's domain — an `enum`'s blank is
 `""`, outside `values:`
@@ -277,9 +299,10 @@ the `default:`, else the field's blank (`blank`, defined below): in the
 plate-JSON projection that feeds the backend **only, never in the persisted
 document**.
 
-- **Incomplete is renderable.** A document that merely omits an Unendorsed
-  field (or leaves it present-null) renders fine: the field is blank-filled
-  in the projection, and validates clean.
+- **Incomplete is renderable.** A document that merely omits a field (or
+  leaves it present-null) renders fine: the field is blank-filled in the
+  projection, and coercion/validation pass. A must-fill field it leaves
+  unauthored warns on the editor surface and still renders.
 - **Malformed is fatal.** The only malformed case is a value that cannot
   coerce to (or validate against) its declared type. Placeholders and null
   are *not* malformed: a `!must_fill` marker renders, using its suggested
@@ -388,15 +411,20 @@ path's "`default:` wins" rule applies to authored and blank documents, where no
   fills the body when bodies are enabled.
 - **The main card** carries `$quill` and `$kind: main`, so a seed round-trips
   through Markdown like an authored document.
-- **Provenance is untracked in the persisted document.** A seeded `example` is
-  committed as ordinary authored content, indistinguishable from hand-authored
-  input. Carrying no `!must_fill` marker, it reads as done: an Unendorsed field
-  seeded with an `example` raises no `validation::must_fill` warning. Whether a
-  field's value came from seeding or later authoring is not recorded; correctness
-  and renderability do not depend on the distinction. The commitment *rung* is a
-  separate axis and is reported on read: the
+- **A seeded `example` on a must-fill field commits carrying its marker.** An
+  `example` documents *shape*, so a seeded one is not an answer. Stamping it is
+  what makes the blueprint and its filled-out twin stamp the same cells: a fresh
+  seed reports incomplete in exactly the cells a hand-written document does. A `$seed` overlay value is exempt — supplying one is a template
+  author deciding, which is the act the marker asks for.
+- **Provenance is otherwise untracked in the persisted document.** A seeded
+  value is committed as ordinary authored content, indistinguishable from
+  hand-authored input; whether it came from seeding or later authoring is not
+  recorded, and correctness and renderability do not depend on the distinction.
+  The marker is not provenance — a human may drop it without changing the value,
+  and nothing re-derives it (see [Native validation](#native-validation)). The
+  commitment *rung* is a separate axis, reported on read: the
   [`resolve()`](#the-resolved-value-view-resolve) projection tags each
-  field `authored` / `default` / `zero`: a seeded and a hand-authored value both
+  field `authored` / `default` / `blank`: a seeded and a hand-authored value both
   read as `authored`, both being document content.
 
 Seeding is the **filled-out twin of the blueprint**
@@ -463,32 +491,58 @@ encode opposite author intents:
   authors want it, the field can be omitted entirely: at render time the
   default fills any field the document leaves out (an
   authored value always wins: `ladder_sourced` in core's
-  `quill::compose`). A field with a `default:` is **Endorsed**: the
-  rendered value is shippable as-is, and the blueprint renders that concrete
-  default value with a type-only annotation (no marker). Type-empty defaults
-  (`default: ""`, `[]`, `false`, `0`) are the canonical way to mark a
-  "skippable" cell.
+  `quill::compose`). The blueprint renders that concrete default value with a
+  type-only annotation. Type-empty defaults (`default: ""`, `[]`, `false`, `0`)
+  are the canonical way to mark a "skippable" cell.
 - **`example`** matches the semantic and type *shape* of the desired
   value but is *not* the value most authors want. It documents shape, not
-  the choice, so it never becomes the rendered value; it only surfaces in
-  the blueprint's `# e.g.` line.
+  the choice, so it never becomes the rendered value; it takes the cell in the
+  blueprint only when no `default:` holds it, and surfaces as a `# e.g.` line
+  otherwise.
 
-### Unendorsed vs. Endorsed fields
+### The two axes: value and obligation
 
-A field is **Unendorsed** when no `default:` is declared: the quill author
-has endorsed no value, so the blueprint stamps the `!must_fill` marker to
-ask an LLM or author to supply one. That is a *communication device on the
-blueprint surface*, not a requirement: a missing (or present-null) Unendorsed
-field blank-fills silently at render, and a surviving marker raises only the
-non-fatal warning. "Must-fill" therefore lives solely on the blueprint/marker
-surface; the schema axis is endorsement, not obligation.
+A field declares two independent things, and neither implies the other.
 
-A field is **Endorsed** when `default:` is declared; the rendered default
-is shippable as-is (the author can keep or override it).
+- The **value** axis is `default:` › `example:` › the field's blank. It decides
+  what a cell holds.
+- The **obligation** axis is `must_fill:`. It decides whether a human must
+  author that cell.
 
-There is no separate `required:` axis; the presence or absence of
-`default:` is the sole author choice per field. See
-[BLUEPRINT.md](BLUEPRINT.md) for how the two cells render.
+`must_fill:` is `true` / `false`, and when unset it **derives** from the value
+axis: a field with a `default:` is not obliged, a field without one is. So a
+quill that never writes the key gets the whole obligation surface off `default:`
+alone. The derivation reads `default`'s *presence*, so a `default: ""` stays a
+skippable cell rather than becoming a marker. The key lives on the field schema,
+so it applies at every nesting level.
+
+Declaring it reaches two cells the derivation cannot:
+
+- `must_fill: true` beside a `default:` — a safe value renders, **and** a human
+  must still confirm it. Classification markings and effective dates are the
+  cases it exists for: the document is never wrong out of the box, and nobody
+  ships one nobody looked at. An editor's *confirm* discharges it by writing the
+  default's value as authored content: no new state, at the cost that the cell
+  then holds that value rather than tracking a later `default:` change.
+- `must_fill: false` with no `default:` — genuinely optional, with nothing to
+  suggest.
+
+Obligation is a **warning, never a gate**: an unauthored must-fill field
+blank-fills and renders, and the signal is the non-fatal
+`validation::must_fill` (see [Native validation](#native-validation)). There is
+no `required:` axis and no severity knob on this one — severity already *is* the
+render-gate signal, so an `Error` that renders fine would break every consumer
+routing Error ≡ won't-render. An editor's "can't submit" is consumer policy over
+the warning: *a strict consumer treats any outstanding marker as not done*.
+A quill author arriving from web forms has the right prior for the affordance
+and the wrong one for the enforcement.
+
+On a typed dictionary the container's own `must_fill:` is **inert**: `!must_fill`
+is rejected on a mapping, so the obligation lives on the leaves and the
+blueprint and the predicate both address them there. An array is its own cell,
+including an array of objects.
+
+See [BLUEPRINT.md](BLUEPRINT.md) for how the two axes render into cells.
 
 Identity fields (`name`, `version`, `backend`, `author`, `description`) live on the parent metadata object (Wasm: `Quill.metadata` getter; Python: `Quill.metadata`). Both bindings also expose `backend_id`/`backendId` directly; Python additionally exposes `quill_ref`, a derived `name@version` string.
 
