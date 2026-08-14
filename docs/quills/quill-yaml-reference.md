@@ -97,8 +97,8 @@ main:
 
 A field says two separate things. `default` and `example` say **what a cell
 holds**; `must_fill` says **whether a human must author it**. Leave it out and
-it derives from `default` — a defaulted field is not obliged, a defaultless one
-is — which is what every quill written before the key already means.
+it derives from `default`: a defaulted field is not obliged, a defaultless one
+is.
 
 Write it when you want a combination the derivation cannot reach:
 
@@ -128,8 +128,8 @@ familiar half transfers — the editor knows which fields to mark — and the
 enforcement half does not. An unfilled must-fill field **renders**; nothing
 refuses it. "Must pick" is this warning plus whatever policy a consumer layers
 on top, canonically *a strict consumer treats any outstanding marker as not
-done*. There is deliberately no `required:` and no severity knob: on this
-surface `Severity::Error` already means "won't render".
+done*. There is no `required:` and no severity knob: on this surface
+`Severity::Error` already means "won't render".
 
 On a **typed dictionary** the key is inert on the container — the obligation
 lives on its leaves, which is where the blueprint marks and the warning

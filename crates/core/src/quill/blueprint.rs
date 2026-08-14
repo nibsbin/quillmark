@@ -245,7 +245,7 @@ fn scalar_value(field: &FieldSchema) -> JsonValue {
 /// plus its trailing inline type annotation.
 fn append_scalar(items: &mut Vec<PayloadItem>, field: &FieldSchema) {
     // A richtext field never inlines its `example:` as the marker value, so
-    // (unlike other Unendorsed scalars) the example would vanish entirely.
+    // (unlike other defaultless scalars) the example would vanish entirely.
     // Surface it as a `# e.g.` hint instead (no-ops when no `example:` is set).
     let eg_when = field.default.is_some() || matches!(field.r#type, FieldType::RichText { .. });
     push_leading(items, field, eg_when);
@@ -328,15 +328,15 @@ fn append_typed_dict(
     push_leading(items, field, true);
 
     let (value, nested, fills) = match field.default.as_ref().map(|d| d.as_json()) {
-        // `default: {}` → expand to the field's zero-filled shape so every key
-        // is shown; all leaves are Endorsed-by-the-container, hence unmarked
-        // and unannotated (uniform with a concrete default).
+        // `default: {}` → expand to the field's blank-filled shape so every key
+        // is shown; the container's default covers its leaves, so they are
+        // unmarked and unannotated (uniform with a concrete default).
         Some(JsonValue::Object(map)) if map.is_empty() => {
             (blank(field).into_json(), Vec::new(), Vec::new())
         }
         // Concrete default (object or otherwise) → rendered verbatim, unmarked.
         Some(default) => (default.clone(), Vec::new(), Vec::new()),
-        // Unendorsed → per-property recursion at the mapping root.
+        // No default → per-property recursion at the mapping root.
         None => {
             let (map, nested, fills) = build_property_mapping(props, &[]);
             (JsonValue::Object(map), nested, fills)
@@ -364,7 +364,7 @@ fn append_typed_table(
         // Row type declares no properties (schema-invalid in practice): emit a
         // type-valid empty array rather than a null synthetic row.
         None if item_props.is_empty() => (JsonValue::Array(Vec::new()), Vec::new(), Vec::new()),
-        // Unendorsed → one synthetic row, per-property markers at `[Index(0)]`.
+        // No default → one synthetic row, per-property markers at `[Index(0)]`.
         None => {
             let (row, nested, fills) = build_property_mapping(item_props, &[PathSegment::Index(0)]);
             (
@@ -478,9 +478,6 @@ main:
 
     #[test]
     fn a_default_and_an_explicit_must_fill_show_both() {
-        // The two axes are independent: the value cell carries the default (so
-        // the document renders something safe) and the marker still asks a human
-        // to confirm it. This cell had no spelling while `default:` carried both.
         let t = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
@@ -496,12 +493,6 @@ main:
 
     #[test]
     fn an_opted_out_field_with_nothing_to_suggest_emits_a_bare_unmarked_cell() {
-        // The cell shape the emitter never had to produce: no default, no
-        // example, no obligation. It stays in the blueprint rather than being
-        // omitted — the blueprint is the document's full shape, and the type
-        // annotation is exactly what a reader needs to fill it if they want to.
-        // The explicit `null` is the emitter's spelling of an empty unmarked
-        // cell; it parses back to the same state a missing key would.
         let t = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
@@ -509,6 +500,8 @@ main:
     note: { type: string, must_fill: false }
 "#)
         .blueprint();
+        // `null` is the emitter's spelling of an empty unmarked cell; it parses
+        // back to the state a missing key would.
         assert!(t.contains("\nnote: null # string\n"), "{t}");
         assert!(!t.contains("!must_fill"), "{t}");
 
@@ -518,8 +511,6 @@ main:
 
     #[test]
     fn an_opted_out_field_keeps_its_example_as_the_cell_value() {
-        // The value axis is untouched by the marker axis: `example:` still
-        // inlines when no `default:` holds the cell, marker or no marker.
         let t = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:

@@ -483,7 +483,7 @@ pub struct FieldSchema {
     pub r#type: FieldType,
     pub description: Option<String>,
     /// The value most authors want; interpolated when the field is omitted.
-    /// Its presence makes the field Endorsed.
+    /// Its presence is what an unset `must_fill:` derives from.
     pub default: Option<QuillValue>,
     /// A value matching the desired type and shape but not the value most
     /// authors want; documents shape only and never renders as the value.

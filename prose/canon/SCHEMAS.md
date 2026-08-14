@@ -170,18 +170,16 @@ Validation is implemented by a native walker over `QuillConfig` in `quill/valida
   saved document must not sprout `field: null` lines), and buys nothing the
   ladder does not already give. The simpler model is the contract.
 - **Null ≡ absent holds on the value ladder; the obligation surface splits
-  them.** The identification above is about *values*, and it is unqualified:
-  null and absent blank-fill identically, forever. But `must_fill` asks whether
-  a human made a call, and writing the field's blank is such a call while
-  clearing the key is not — so `field: ""` discharges the warning and
-  `field: null` does not. So two verbs part company here: `removeField` (drop
-  the key) and writing the blank are the same act on the value ladder and
-  different acts on this surface, and a UI rendering both as an empty box shows
-  nothing of the difference. This is the
-  cost of letting a human answer "deliberately nothing" at all; the alternative
-  (keying on the resolved source rung) cannot see a must-fill leaf inside a
-  container the author has touched, and leaves the deliberate blank with no
-  spelling.
+  them.** The identification above is about *values*, and it stays unqualified:
+  null and absent blank-fill identically. `must_fill` asks a different question
+  — did a human make a call — and writing the field's blank is one while
+  clearing the key is not, so `field: ""` discharges the warning and
+  `field: null` does not. Two verbs therefore part company: `removeField` and
+  writing the blank are one act on the value ladder and two here, and a UI
+  rendering both as an empty box shows nothing of the difference. That is the
+  price of letting a human answer "deliberately nothing" at all: keying the
+  obligation on the resolved source rung instead would leave the deliberate
+  blank unspellable and go blind to a must-fill leaf inside a touched container.
 - **`validation::must_fill` → non-fatal warning, from two triggers.**
   `Quill::validate` emits it at **`Severity::Warning`** when either holds, with a
   `trigger` arg naming which:
@@ -512,20 +510,20 @@ A field declares two independent things, and neither implies the other.
   author that cell.
 
 `must_fill:` is `true` / `false`, and when unset it **derives** from the value
-axis: a field with a `default:` is not obliged, a field without one is. Every
-quill that never writes the key therefore behaves exactly as before, and the
-derivation is keyed on `default`'s *presence*, so a `default: ""` stays a
-skippable cell rather than becoming a marker. Because the key lives on the field
-schema it applies at every nesting level.
+axis: a field with a `default:` is not obliged, a field without one is. So a
+quill that never writes the key gets the whole obligation surface off `default:`
+alone. The derivation reads `default`'s *presence*, so a `default: ""` stays a
+skippable cell rather than becoming a marker. The key lives on the field schema,
+so it applies at every nesting level.
 
 Declaring it reaches two cells the derivation cannot:
 
 - `must_fill: true` beside a `default:` — a safe value renders, **and** a human
   must still confirm it. Classification markings and effective dates are the
-  motivating cases: the document is never wrong out of the box, and nobody ships
-  one nobody looked at. An editor's *confirm* discharges this by writing the
-  default's value as authored content — no new state, at the stated cost that
-  the cell stops tracking a later `default:` change.
+  cases it exists for: the document is never wrong out of the box, and nobody
+  ships one nobody looked at. An editor's *confirm* discharges it by writing the
+  default's value as authored content: no new state, at the cost that the cell
+  then holds that value rather than tracking a later `default:` change.
 - `must_fill: false` with no `default:` — genuinely optional, with nothing to
   suggest.
 

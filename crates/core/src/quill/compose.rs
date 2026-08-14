@@ -639,19 +639,14 @@ pub(crate) fn fill_warning(path: &DocPath) -> Diagnostic {
 }
 
 /// Surface every schema-side must-fill cell the document leaves **unauthored**
-/// as a non-fatal warning, across the main card and every composable card.
+/// as a non-fatal warning, across the main card and every composable card. The
+/// schema half of `validation::must_fill`, reaching documents that carry no
+/// marker to read.
 ///
-/// The marker half ([`validate_fills`]) can only see documents that carry one.
-/// This half consults the schema, so a hand-written, programmatically built, or
-/// pre-field document gets the same completeness signal a blueprint-derived one
-/// does.
-///
-/// **Unauthored is absent-or-null**, not [`FieldSource`]. The two agree at top
-/// level, but `FieldSource` is one rung per top-level field by design
-/// ([`resolve_value_sourced`] reports a present typed dict `Authored` as a
-/// whole), so a source-keyed check would go silent on a must-fill property
-/// inside a touched container. Authoring the field's **blank** discharges the
-/// warning: the human made the call, and blank is a legitimate rendered state.
+/// Unauthored is **absent-or-null**, never [`FieldSource`]: the rung is one per
+/// top-level field, so a present typed dict reports `Authored` as a whole
+/// ([`resolve_value_sourced`]) and a source-keyed check goes silent on a
+/// must-fill property inside it.
 fn validate_unauthored(config: &QuillConfig, doc: &Document) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
     collect_unauthored_diags(&config.main, doc.main(), &DocPath::main(), &mut diags);
@@ -681,24 +676,18 @@ fn collect_unauthored_diags(
     }
 }
 
-/// Walk one declared field, warning at each **cell** the schema obliges and the
-/// document leaves unauthored. Cells sit where the blueprint stamps its markers
-/// (`prose/canon/BLUEPRINT.md` § "Placeholder value precedence"), so the two
-/// triggers agree on where an obligation lives and a fresh seed converges with a
-/// hand-written document:
+/// Warn at each **cell** the schema obliges and the document leaves unauthored.
+/// Cells sit where the blueprint stamps its markers (`prose/canon/BLUEPRINT.md`
+/// § "Placeholder value precedence"), so the two triggers speak about the same
+/// paths:
 ///
-/// - A **typed dictionary** is never itself a cell (`!must_fill` is rejected on
-///   a mapping, `prose/references/markdown-spec.md` §3.4, and the blueprint
-///   marks its leaves). Recursion runs whether or not the container is present,
-///   so an absent `address` warns at `address.street` — a path an editor can
-///   resolve and a marker can occupy — rather than at a container path that can
-///   be neither.
-/// - Every **other** type is the cell, the array included: an absent array is
-///   one unauthored cell, and `[]` is an authored answer that discharges it.
-///   Once present, elements resolve against the item schema, so a null element
-///   warns at its own index. The blueprint's synthetic row indexes a table the
-///   document has yet to have rows for, which is why the absent case anchors on
-///   the container here and on `[0]`'s leaves there.
+/// - A **typed dictionary** is never itself a cell: `!must_fill` is rejected on
+///   a mapping (`prose/references/markdown-spec.md` §3.4). Recursion runs
+///   present or absent, so an absent `address` warns at `address.street`, a path
+///   an editor can resolve and a marker can occupy.
+/// - Every **other** type is the cell, the array included, so `[]` is an
+///   authored answer. A present array resolves its elements against the item
+///   schema; an absent one has no index to anchor on and warns at the container.
 fn collect_unauthored_field(
     field: &FieldSchema,
     value: Option<&QuillValue>,

@@ -660,8 +660,8 @@ def test_typed_set_clears_must_fill_marker():
             if d.get("code") == "validation::must_fill" and d.get("path") == path
         ]
 
-    # Scoped to `main.title`: the other defaultless fields this quill declares
-    # are obliged too, and stay so until someone authors them.
+    # Scoped to `main.title`: this quill's other defaultless field is obliged
+    # too, and stays so.
     assert [d.get("args", {}).get("trigger") for d in fills("main.title")] == ["marker"]
 
     quill.writer(doc).set("title", "Real Title")

@@ -1822,8 +1822,7 @@ title: !must_fill
   it('validate surfaces the same code for a cell the schema obliges and nobody authored', () => {
     const { quill } = buildQuill()
 
-    // No marker anywhere: this document never saw a blueprint. The obligation
-    // is read off the schema, which is the whole point of the second trigger.
+    // No marker anywhere: this document never saw a blueprint.
     const md = `~~~card-yaml
 $quill: schema_test
 $kind: main
@@ -1835,8 +1834,7 @@ $kind: main
     )
     expect(title).toBeDefined()
     expect(title.severity).toBe('warning')
-    // The `trigger` arg is how a consumer tells the two apart; it crosses as
-    // an ordinary diagnostic arg.
+    // `trigger` is what a consumer routes on, so pin it crossing the boundary.
     expect(title.args.trigger).toBe('unauthored')
   })
 })
