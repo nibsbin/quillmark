@@ -174,26 +174,40 @@ Either quote the value (`build_number: "42"`) or change the schema's
 `type:` to `integer`.
 ```
 
+`validation::must_fill` has two triggers, distinguished by its `trigger` arg
+and by nothing else — one code, one anchor grammar, one severity. The messages
+differ because the two name different situations:
+
 ```
 Field `name` is marked `!must_fill`: a placeholder awaiting a value.
 ```
 
-with the hint *"Replace the value and drop the `!must_fill` marker, or remove
-the marker if the current value is intended."* It is a warning, not an error:
-the field still renders (the marked cell blank-fills or uses its suggested
-value).
+(`trigger: marker`) with the hint *"Replace the value and drop the `!must_fill`
+marker, or remove the marker if the current value is intended."*
 
-A present-null value (`subtitle:`, `subtitle: null`, `subtitle: ~`) is
-treated exactly like an omitted field: null ≡ absent. It validates clean
-and blank-fills at render (authored › `default:` › blank), so it produces
-no diagnostic. Field absence is likewise not surfaced as a diagnostic (see
-[SCHEMAS.md](SCHEMAS.md) § "Native validation"), so a merely incomplete
-document also produces no field-level diagnostic.
+```
+Field `name` must be filled in: nobody has authored a value.
+```
+
+(`trigger: unauthored`) with the hint *"Author a value. To record that empty is
+the intended answer, write the field's blank explicitly rather than leaving it
+out."* Either way it is a warning, not an error: the field still renders (the
+cell blank-fills or uses its suggested value). At most one is emitted per path;
+where both apply the marker wins, its hint being the actionable one.
+
+A present-null value (`subtitle:`, `subtitle: null`, `subtitle: ~`) is treated
+exactly like an omitted field on the **value** ladder: null ≡ absent, it
+coerces and validates clean, and it blank-fills at render (authored ›
+`default:` › blank). On the obligation surface the two are together on the
+other side: neither is an authored answer, so both trigger `unauthored` where
+the schema obliges the cell (see [SCHEMAS.md](SCHEMAS.md) § "Native
+validation"). An incomplete document therefore produces no *fatal* field-level
+diagnostic, and warns exactly where a human has yet to make a call.
 
 Implementation: `crates/core/src/quill/validation.rs` (the `ValidationError`
 `Display` impl, for `validation::type_mismatch`) and
-`crates/core/src/quill/compose.rs` (`validate_fills`/`fill_warning`, for
-`validation::must_fill`).
+`crates/core/src/quill/compose.rs` (`validate_fills`/`fill_warning` and
+`validate_unauthored`/`unauthored_warning`, for `validation::must_fill`).
 
 ## Document-model paths
 
