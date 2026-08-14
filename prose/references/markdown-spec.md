@@ -245,7 +245,7 @@ data payload.
   matching position.
 - **The `!must_fill` tag.** `!must_fill` marks a data field as a placeholder
   awaiting user input and round-trips through emit. It is what
-  `QuillConfig::blueprint` stamps into every Unendorsed cell: the canonical
+  `QuillConfig::blueprint` stamps into every obliged cell: the canonical
   authoring placeholder, and a marker that survives into a rendered document
   is surfaced by `Quill::validate` as the non-fatal `validation::must_fill`
   warning (it never gates render). It applies both to a

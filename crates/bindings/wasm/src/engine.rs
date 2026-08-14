@@ -18,6 +18,9 @@ export interface QuillFieldUi {
     group?: string;
     compact?: boolean;
     multiline?: boolean;
+    /** Label for an `enum`'s blank option. Absent, the consumer supplies a
+     *  conventional label of its own. */
+    blank_title?: string;
 }
 
 /** One entry in a card's `ui.groups` registry: a display-label override for the
@@ -62,11 +65,12 @@ export interface QuillCardBody {
 
 /** Schema entry for a single field declared in a quill's `Quill.yaml`.
  *
- * `default` determines the field's cell, and there is no separate `required`
- * axis: with a default the field is **Endorsed** (shippable as rendered);
- * without one it is **Unendorsed** — the blueprint carries a `!must_fill`
- * marker, a marker left in the document warns `validation::must_fill`, and the
- * render path zero-fills the field.
+ * Two independent axes, and no separate `required` one. `default` and
+ * `example` say what the cell holds; `must_fill` says whether a human must
+ * author it, deriving from `default`'s absence when left unset. An obliged
+ * field carries a `!must_fill` marker in the blueprint and warns
+ * `validation::must_fill` while the document leaves it unauthored. Neither
+ * axis gates render: an absent field blank-fills.
  */
 export interface QuillFieldSchema {
     type: "string" | "number" | "integer" | "boolean" | "array" | "object" | "date" | "datetime" | "richtext" | "plaintext" | "enum";
@@ -76,6 +80,9 @@ export interface QuillFieldSchema {
     /** The closed set of allowed values. Required on `type: "enum"`, and valid
      *  nowhere else. */
     values?: string[];
+    /** Whether a human must author the field. Absent, it derives from
+     *  `default`: a defaulted field is unobliged, a defaultless one obliged. */
+    must_fill?: boolean;
     ui?: QuillFieldUi;
     properties?: Record<string, QuillFieldSchema>;
     items?: QuillFieldSchema;
@@ -731,7 +738,7 @@ impl Quill {
     /// Seed a starter `Document` from the schema: the main card plus one instance
     /// of each composable card kind, each committing its fields' `example:`
     /// values and leaving every other field absent (interpolated at render as
-    /// `default:`, else type-empty zero). A field with both renders its example.
+    /// `default:`, else the field's blank). A field with both renders its example.
     #[wasm_bindgen(js_name = seedDocument)]
     pub fn seed_document(&self) -> Document {
         Document {
@@ -779,7 +786,7 @@ impl Quill {
 impl Document {
     /// A blank document: a main card carrying only `$quill`, an empty body, and
     /// no composable cards. Absent fields resolve at render time (`default`, else
-    /// type-empty zero), so nothing the caller did not set reaches the output.
+    /// the field's blank), so nothing the caller did not set reaches the output.
     /// For an example-filled starter use `Quill.seedDocument()`. Throws on an
     /// invalid quill reference.
     #[wasm_bindgen(constructor)]

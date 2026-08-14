@@ -28,7 +28,7 @@ The reader's one rule: a **`!must_fill`** marker present → replace it before s
 
 ## Seeding: the filled-out twin
 
-Seeding materializes a real `Document` (committed, structured content) rather than an annotated string. It commits each field's `example:` and leaves every other field absent, so the render floor fills `default:`, else the type-empty zero, underneath. Hand it to an editor as a "new document" starter, or render it directly.
+Seeding materializes a real `Document` (committed, structured content) rather than an annotated string. It commits each field's `example:` and leaves every other field absent, so the render floor fills `default:`, else the field's blank, underneath. Hand it to an editor as a "new document" starter, or render it directly.
 
 | Projection | Intent | Output |
 |---|---|---|
@@ -50,7 +50,7 @@ Seeding materializes a real `Document` (committed, structured content) rather th
 
 Under blank-filled render every absent field becomes its blank, so the empty document is the type-minimal valid input. A plate that renders it degrades gracefully on every valid shape. Two rules follow:
 
-- **No template asserts an Unendorsed field is *non-empty*.** The schema guarantees presence, not non-emptiness.
+- **No template asserts a declared field is *non-empty*.** The schema guarantees presence, not non-emptiness.
 - **A template branching on an `enum` covers `values ∪ blank` exhaustively.** The blank is valid present input for every enum, so an `else` fallback renders a variant nobody chose.
 
 Bundled quills are checked against this by fixture tests.

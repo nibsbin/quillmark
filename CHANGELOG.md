@@ -23,6 +23,88 @@
   `field` stays a bare field name and `args` is unchanged. `FieldNotContent`
   now names the type *reached*, so a `string[]` element reports `string` rather
   than the field's `array`.
+- feat(core,wasm)!: `must_fill:` on a field declares the **obligation** axis.
+  `default:` carried the fill value and the obligation signal on one bit, so
+  only that 2x2's diagonal was reachable; a safe value that still wants a
+  human's confirmation (`default: UNCLASSIFIED` with `must_fill: true`) and a
+  genuinely optional field with nothing to suggest (`must_fill: false`) now
+  each have a spelling. Left unset it derives `default.is_none()`, so no
+  existing quill's blueprint marker set changes. `Quill::validate` gains a
+  second trigger under the one `validation::must_fill` code, named by a
+  `trigger` arg: `marker` for a `!must_fill` tag the document carries, and
+  `unauthored` where the schema obliges a cell the document leaves absent or
+  present-null. The second closes a hole — `validate_fills` walked only the
+  payload, so a hand-written or programmatically built document drew no
+  completeness signal whatever `Quill.yaml` declared. **Breaking**: a merely
+  incomplete document no longer validates clean. Absence is still never
+  *malformed* and still never gates render, but a consumer reading "any
+  diagnostic ⇒ not done" now sees a warning per unauthored obliged cell on
+  documents that were silent. The obligation keys on cell presence rather than
+  the resolved source rung, so a must-fill leaf inside a container someone
+  touched still warns; a typed dict is never itself a cell and recurses to its
+  leaves, while an array is one cell, `[]` being a real answer. Authoring the
+  field's blank discharges it and `field: null` does not: null ≡ absent stays
+  unqualified on the value ladder, but obligation asks whether a human made a
+  call. Seeding stamps the marker on example-seeded obliged cells, so a fresh
+  seed and an empty document report the same cells, and the transform schema
+  carries `quillmark:must_fill` (#1255).
+- fix(core,wasm,pdfform)!: a field's **blank** — its spelling of "explicitly
+  nothing" — is a property of the field rather than a member of its type's
+  domain, and an `enum`'s is `""`. The render floor for a defaultless enum
+  returned `values.first()`: a choice nobody made, indistinguishable at the
+  plate from a deliberate one and reachable from a cosmetic `values:` reorder.
+  An unanswered enum now renders `""`, so a reorder is render-safe for every
+  document and only removing or renaming a member breaks
+  ([VERSIONING.md](prose/canon/VERSIONING.md)). **The accepted domain widens to
+  `values ∪ blank` for *every* enum**, defaulted ones included: `format: ""`
+  was a fatal `EnumViolation` and now coerces, validates and reaches the plate.
+  **A plate must therefore branch exhaustively over `values ∪ blank`** — an
+  `else` fallback re-opens exactly the fabrication the blank closes, and a
+  downstream package that asserts membership fails the compile outright. Note
+  `data.at(key, default: X)` is not a guard here: blank-filled render makes
+  every declared key present, so its `default:` is dead code and the blank
+  flows through. **Breaking**: `zero_value` → `blank`, `FieldSource::Zero` →
+  `Blank` and its wire token `"zero"` → `"blank"`; `""` declared in `values:`
+  is a load error (`quill::enum_blank_member`), the engine supplying the blank
+  instead; and `date: ""` renders blank rather than falling back to a
+  `default:`, settling a three-way disagreement between coercion, validation
+  and the floor. `default: ""` stays valid and keeps its meaning — `values:`
+  enumerates choices, `default:` is a value, and the blank is a legal value
+  that is never a choice. Additive: `ui.blank_title` labels an enum's blank and
+  rides the transform schema as `quillmark:blank_title`; that schema's `enum:`
+  leads with the blank, so a standard JSON-Schema validator accepts what the
+  engine accepts, and pdfform Choice widgets lead their options with it too. A
+  consumer's picker must keep the blank selectable and re-selectable — returning
+  to it is how an author clears a cell back to unset.
+  `integer`, `number` and `boolean` keep `0` / `false` as their blank,
+  indistinguishable from an authored zero — a permanent seam, since a wire
+  `none` would cost the totality the floor exists to buy. Full guide:
+  [0.104 → 0.105](docs/migrations/0.104-to-0.105.md) (#1254).
+- fix(fixtures,docs): the three fixture plates that dispatch on `$kind` read it
+  with a bare `card.at("$kind")`, which panics on a kindless card, and guarded
+  declared fields against an absence blank-filled render makes impossible.
+  Plate authors copy the fixtures rather than `PLATE_DATA.md`, so the fixtures
+  were teaching both the unsafe metadata read and a dead presence check.
+  `classic_resume` carried the live consequence: `url` is declared with no
+  `default:`, so the floor delivers `""`, `default: none` never fires, and the
+  package's `url != none` test always passes — an empty Courier element where
+  the block should have been skipped. Its `subheading-*` guard cost an empty
+  grid row the same way. Declared fields now guard their *value*, and
+  `docs/quills/typst-backend.md` states the rule as a table over the three key
+  kinds. `fixture_quills_render_test` renders every fixture quill's seed
+  document — the net that was missing, since `classic_resume`'s plate had no
+  test reaching it (#1256, #1257).
+- test(typst): `plaintext` reaches regions and navigation by inheritance — the
+  render floor coerces its resting literal to a content object, the backend
+  classifies that object by `contentMediaType` alone, and the shared lowering
+  emits it with a segment map — and every step was load-bearing and untested,
+  with the classification predicates named for richtext so the sharing read as
+  a coincidence. Pinned at engine altitude, because a test driving the backend
+  directly hand-builds the content object, bypassing the floor's coercion, and
+  would stay green through a regression that silently empties `regions()`. The
+  predicates are `is_content_field` / `is_content_array_field` /
+  `is_inline_content_field`, and `PREVIEW.md` names plaintext beside richtext
+  in its producer list (#1247, #1250).
 
 <!-- seed: commits since v0.104.0, confirm the entries above cover them, then delete this comment
 - Unlink two private walkers from a public doc

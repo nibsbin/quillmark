@@ -298,7 +298,7 @@ pub struct PyDocument {
 impl PyDocument {
     /// A blank document: a main card carrying only `$quill`, an empty body, and
     /// no composable cards. Absent fields resolve at render time (`default`, else
-    /// type-empty zero), so nothing the caller did not set reaches the output.
+    /// the field's blank), so nothing the caller did not set reaches the output.
     /// For an example-filled starter use `Quill.seed_document()`. Raises
     /// `ValueError` on an invalid quill reference.
     #[new]

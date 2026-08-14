@@ -1,5 +1,5 @@
 //! Consumer-facing operations on a [`Quill`]: validation, seeding, and the
-//! zero-filled compile to backend wire JSON. Pure reads of the config.
+//! blank-filled compile to backend wire JSON. Pure reads of the config.
 
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -38,14 +38,14 @@ impl Quill {
 }
 
 /// The document→data compile is a pure config read: coercion, validation,
-/// normalization, and zero-fill consult only the parsed schemas, never the
+/// normalization, and blank-fill consult only the parsed schemas, never the
 /// quill's file tree. Living on [`QuillConfig`] lets a consumer that only
 /// compiles data (e.g. a live session's `apply`) retain the config alone
 /// rather than the whole quill with its font/package bytes.
 impl QuillConfig {
-    /// Applies coercion, validation, normalization, and **zero-filled render**:
+    /// Applies coercion, validation, normalization, and **blank-filled render**:
     /// every absent schema field is resolved to its authored value, else its
-    /// schema default, else its type-empty zero value, in this plate-JSON
+    /// schema default, else the field's blank, in this plate-JSON
     /// projection only, never in the persisted document. A merely *incomplete*
     /// document compiles fine; only a *malformed* one (a value that won't
     /// coerce/validate) errors. A `!must_fill` placeholder never gates render:
@@ -146,7 +146,7 @@ impl QuillConfig {
 
         // Only *malformed* input is fatal (a value that won't coerce/validate).
         // An incomplete document (absent fields or `!must_fill` placeholders)
-        // renders fine via zero-fill. `validate_document` returns `Err` only
+        // renders fine via blank-fill. `validate_document` returns `Err` only
         // with a non-empty error list; each error keeps its own `path` for UI
         // navigation.
         self.validate_document(&coerced_doc).map_err(|errors| {
@@ -319,7 +319,7 @@ impl Quill {
     /// Seed a starter [`Document`]: the main card plus one instance of each
     /// declared composable card kind, each committing its fields' `example`
     /// values and leaving all other fields absent (interpolated at render:
-    /// `default` → type-empty zero). The committed, structured "filled-out" twin
+    /// `default` → the field's blank). The committed, structured "filled-out" twin
     /// of the [`blueprint`](crate::quill::QuillConfig::blueprint). See the
     /// `seed` module.
     pub fn seed_document(&self) -> Document {
@@ -549,7 +549,7 @@ pub(crate) fn resolve_value_sourced(
             }
             // Preserve undeclared keys verbatim; only rebuild the ones the
             // schema names. Skips keys already emitted above so a declared
-            // property keeps its resolved (zero-filled) value.
+            // property keeps its resolved (blank-filled) value.
             if let Some(o) = obj {
                 for (k, v) in o {
                     if !props.contains_key(k) {

@@ -19,7 +19,7 @@ use crate::value::QuillValue;
 /// Two concerns are deliberately *not* well-formedness errors and so have no
 /// variant here: the `!must_fill` marker (surfaced as a non-fatal warning by
 /// `Quill::validate`) and field absence (an absent or present-null field
-/// zero-fills at render). Both are handled outside the value-layer checks below.
+/// blank-fills at render). Both are handled outside the value-layer checks below.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ValidationError {
@@ -403,7 +403,7 @@ fn validate_fields_for_card_indexmap(
         let schema = &card.fields[field_name];
         let path = base.field(field_name);
         // Absence is a completeness concern, not a well-formedness one: an
-        // absent field (like a present-null one) is zero-filled at render and
+        // absent field (like a present-null one) is blank-filled at render and
         // raises nothing here.
         if let Some(value) = fields.get(field_name) {
             errors.extend(validate_field(schema, value, &path));
@@ -532,7 +532,7 @@ fn validate_value(
                         let property_path = path.field(property_name);
                         // Absent object property: completeness, not
                         // well-formedness. Like a top-level absent field, it
-                        // zero-fills at render and raises nothing here.
+                        // blank-fills at render and raises nothing here.
                         if let Some(property_value) = object.get(property_name) {
                             errors.extend(validate_value(
                                 property_schema,
@@ -550,7 +550,7 @@ fn validate_value(
     };
 
     // Content shape checks, run only on a type-valid value (a mistyped value
-    // already raises TypeMismatch below, and a null/absent field zero-fills to
+    // already raises TypeMismatch below, and a null/absent field blank-fills to
     // the empty content, which is both inline and plain). Mirror the
     // coercion-layer checks so a content that bypassed coercion (e.g. a direct
     // `validate_document`) is still caught. A decode failure is not this layer's
@@ -769,7 +769,7 @@ main:
     }
 
     #[test]
-    fn absent_unendorsed_field_raises_nothing() {
+    fn absent_defaultless_field_raises_nothing() {
         let config = config_with("    memo_for:\n      type: string", "");
         let doc = doc_from_fm(&[]);
         assert!(validate_typed_document(&config, &doc).is_ok());

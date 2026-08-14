@@ -1,5 +1,5 @@
 //! The quill authoring contract: every quill in the fixtures quiver loads and
-//! renders. An empty document is the type-minimal valid input under zero-filled
+//! renders. An empty document is the type-minimal valid input under blank-filled
 //! render, so a plate that renders it degrades gracefully on any valid input.
 
 #![cfg(feature = "typst")]
@@ -55,7 +55,7 @@ fn every_quill_in_quiver_renders() {
 }
 
 /// Every bundled quill's generated blueprint parses, round-trips idempotently,
-/// and renders with its `!must_fill` markers zero-filled.
+/// and renders with its `!must_fill` markers blank-filled.
 #[test]
 fn every_quill_blueprint_round_trips_and_renders() {
     let engine = Quillmark::new();
