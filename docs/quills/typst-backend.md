@@ -256,6 +256,58 @@ By default a widget's only identity is its `/T` name. Pass `field:` to additiona
 
 The label `<__qm_field__>` and metadata `kind: "__qm_field__"` are reserved for this hand-off: the same `query(metadata)` caveat noted for `signature-field` applies.
 
+## Tying Composed Content to a Field
+
+A live preview routes a click back to the schema field that produced the ink under it, and it finds that field automatically for content it generated: a `richtext` field's markup, a `#data.subject` reference in your plate. Content your plate *composes* — a banner keyed off `data.classification`, an address block a vendored package lays out, a computed table — draws ink Quillmark cannot attribute to anything. `field-region` claims it:
+
+```typst
+#import "@local/quillmark-helper:0.1.0": data, field-region
+
+#let banner(level) = box(stroke: 1pt, inset: 6pt)[#upper(level)]
+
+#field-region("classification")[#banner(data.classification)]
+```
+
+The banner now appears in `session.regions()` under `classification` and a click on it resolves through `session.fieldAt(...)`, exactly as if the field had drawn it.
+
+`body` is returned untouched, bracketed by two invisible `metadata` markers, so the wrapper changes nothing about layout or output bytes. Unlike a `form-field` widget it reserves no space and draws no click target of its own: it claims the ink that is already there.
+
+### What it claims
+
+A claim is a **fallback**, not an override. Ink already tracked to a field keeps that field, and the wrapper takes only what is left:
+
+```typst
+#field-region("recipient")[
+  #line(length: 2in)          // no field of its own → claimed for `recipient`
+  #data.body                  // a richtext field → stays `body`
+  Prepared by #data.author    // a scalar reference → stays `author`
+]
+```
+
+Nesting therefore reads as ordinary scoping, and wrapping never moves a region off the field that generated it. The flip side: you cannot use `field-region` to *retarget* ink that is already attributed. Ink Typst attributes to no source position at all — list bullets, underline rules — stays unclaimed here as it is everywhere else.
+
+Each **call** claims independently, so `field` need not be a literal and a wrapper used once per card yields one region per card:
+
+```typst
+#for card in data.at("$cards", default: ()) {
+  field-region(card.at("$path") + "$body", render-card(card))
+}
+```
+
+That is the way to give a card's *scalar* fields regions: read from the loop variable, they carry no per-instance identity of their own.
+
+### Parameters and errors
+
+| Name | Type | Default | Meaning |
+|------|------|---------|---------|
+| `field` | `str` | required (positional) | Schema address: a field name, an array element like `"refs.2"`, or a card path built from the card's `$path` prefix. |
+| `body` | any content | required (positional) | Returned unchanged; its ink is what gets claimed. |
+
+- A `field` that is not a known schema address, or is not a string, raises a Typst assert pointing at `field-region`.
+- A claim whose content Typst lays out somewhere else entirely (`#place`, a float) claims whatever ink lands between its markers instead; wrap the placed content rather than the `place` call.
+
+The label `<__qm_region__>` and metadata `kind: "__qm_region__"` are reserved for this hand-off: the same `query(metadata)` caveat applies.
+
 ## Output Formats
 
 PDF and SVG render as a single artifact. PNG renders one artifact per page.

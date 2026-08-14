@@ -146,3 +146,48 @@ fn usaf_memo_date_region_rides_the_vendored_display() {
         "a click on the vendored-placed memo date routes to its schema path"
     );
 }
+
+/// An indorsement whose date is blank prints a bare rule, so the only thing
+/// carrying that address is the widget seated on it. Without it the endorser's
+/// date is the one memo field a preview cannot route a click to.
+#[test]
+fn a_blank_indorsement_date_regions_through_its_fill_in_widget() {
+    let engine = Quillmark::new();
+    let quill =
+        quillmark::quill_from_path(quills_path("usaf_memo")).expect("usaf_memo should load");
+    // The seed leaves the indorsement date blank, which is the fill-in case.
+    let parsed = quill.seed_document();
+    let session = engine.open(&quill, &parsed).expect("open a session");
+
+    let regions = session.regions();
+    let date = regions
+        .iter()
+        .find(|r| r.field == "$cards.indorsement.0.date")
+        .unwrap_or_else(|| panic!("the blank date must surface a region: {regions:?}"));
+    assert!(
+        date.span.is_none(),
+        "a widget region carries no content span: {date:?}"
+    );
+    let cx = (date.rect[0] + date.rect[2]) / 2.0;
+    let cy = (date.rect[1] + date.rect[3]) / 2.0;
+    assert_eq!(
+        session.field_at(date.page, cx, cy).as_deref(),
+        Some("$cards.indorsement.0.date"),
+        "a click on the fill-in rule routes to the card's date"
+    );
+
+    let pdf = engine
+        .render(
+            &quill,
+            &parsed,
+            &RenderOptions::default().with_output_format(OutputFormat::Pdf),
+        )
+        .expect("render to PDF");
+    let bytes = &pdf.artifacts[0].bytes;
+    assert!(
+        bytes
+            .windows(b"Ind_0_Date".len())
+            .any(|w| w == b"Ind_0_Date"),
+        "the same span is a typeable AcroForm text field in the PDF"
+    );
+}
