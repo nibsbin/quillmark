@@ -84,7 +84,7 @@ families:
 - **Validation warnings**: `Quill::validate(doc)` returns every
   `validation::*` diagnostic, mixing severities; `validation::must_fill` and
   the `$seed` checks are the non-fatal ones. This is the editor-facing
-  surface; the render pipeline zero-fills instead of warning on incomplete
+  surface; the render pipeline blank-fills instead of warning on incomplete
   documents.
 - **`plate::unsupported_construct`: declined-construct warnings.** A quill
   names, per body (`BodyCardSchema.unsupported`), the block constructs its
@@ -180,12 +180,12 @@ Field `name` is marked `!must_fill`: a placeholder awaiting a value.
 
 with the hint *"Replace the value and drop the `!must_fill` marker, or remove
 the marker if the current value is intended."* It is a warning, not an error:
-the field still renders (the marked cell zero-fills or uses its suggested
+the field still renders (the marked cell blank-fills or uses its suggested
 value).
 
 A present-null value (`subtitle:`, `subtitle: null`, `subtitle: ~`) is
 treated exactly like an omitted field: null ≡ absent. It validates clean
-and zero-fills at render (authored › `default:` › type-zero), so it produces
+and blank-fills at render (authored › `default:` › blank), so it produces
 no diagnostic. Field absence is likewise not surfaced as a diagnostic (see
 [SCHEMAS.md](SCHEMAS.md) § "Native validation"), so a merely incomplete
 document also produces no field-level diagnostic.

@@ -16,9 +16,15 @@ and stringified to `"1"`, which fails validation.
 
 | Increment | When |
 |-----------|------|
-| **MAJOR** | Breaking changes: layout changes, removed fields, incompatible types |
-| **MINOR** | New optional fields, enhancements (backward-compatible) |
+| **MAJOR** | Breaking changes: layout changes, removed fields, incompatible types, an enum member removed or renamed |
+| **MINOR** | New optional fields, enhancements (backward-compatible), a new enum member |
 | **PATCH** | Bug fixes, corrections (backward-compatible) |
+
+**A `values:` reorder is render-safe.** A field's blank is `""`, not `values[0]`,
+so reordering changes no document's rendered output. It still changes picker
+order, the blueprint's `enum` annotation text, and pdfform dropdown order, so it
+is a presentation change rather than a no-op. Removing or renaming a member is
+breaking: a stored document carrying it stops validating.
 
 ## Document Syntax
 
@@ -55,10 +61,23 @@ Three distinct failure paths, and the parser owns one of them outright:
 
 ## Ref Immutability
 
-A canonical ref (`name@version`) is **immutable content**, at least within the
-lifespan of a runtime: once any layer has materialized a Quill for a ref, the
-content behind that ref never changes for that process. Publishing different
-content requires a version bump.
+A canonical ref (`name@version`) is **immutable content within the lifespan of a
+runtime**: once any layer has materialized a Quill for a ref, the content behind
+that ref never changes for that process.
+
+This is a **caching invariant, not a source-control policy.** It constrains the
+process, because the caches below key on the ref and none exposes invalidation.
+It does not forbid a maintainer from editing a published ref's bytes in the
+repository: a later build materializes fresh, and no running process sees
+content change underneath it. The constraint that governs such an edit is
+**compatibility with persisted artifacts** — stored documents must keep loading,
+validating, and rendering as they did. Removing or renaming an enum member fails
+that test; a `values:` reorder passes it, since a field's blank is `""` rather
+than `values[0]` (see [SCHEMAS.md](SCHEMAS.md) § "Blank-filled render"). An
+edit that changes what an existing document *renders* is a version bump's job.
+
+The one real hazard is a long-lived process holding a cached Quill across a
+deploy that rewrote the ref; a restart resolves it.
 
 Every cache between a document and its rendered output keys on this invariant,
 and none of them exposes an invalidation API, **by design**:
