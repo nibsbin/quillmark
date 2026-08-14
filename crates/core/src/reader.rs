@@ -117,7 +117,9 @@ impl<'a> TypedReader<'a> {
     /// count the caller holds.
     ///
     /// [`EditError::UnknownField`] for a name at any depth the schema does not
-    /// declare; [`EditError::FieldNotContent`] when `at` resolves to no content
+    /// declare, anchored at that name (`main.letterhead.nope`) rather than
+    /// reading as a claim about a top-level field;
+    /// [`EditError::FieldNotContent`] when `at` resolves to no content
     /// leaf, either through a step the schema cannot take or at a non-content
     /// terminal; [`EditError::FieldDecode`], anchored at the addressed path,
     /// when the value there decodes under neither encoding.
@@ -204,7 +206,7 @@ fn read_field(
 ) -> Result<Option<ReadValue>, EditError> {
     let schema = fields_schema
         .and_then(|m| m.get(name))
-        .ok_or_else(|| EditError::UnknownField(name.to_string()))?;
+        .ok_or_else(|| EditError::unknown_field(name))?;
     match schema.r#type {
         FieldType::RichText { .. } => project(
             card.field_markdown(name),
@@ -239,7 +241,7 @@ fn read_content(
 ) -> Result<Option<Content>, EditError> {
     let field = fields_schema
         .and_then(|m| m.get(name))
-        .ok_or_else(|| EditError::UnknownField(name.to_string()))?;
+        .ok_or_else(|| EditError::unknown_field(name))?;
     let leaf = schema_at(field, name, at)?;
     // The codec rides out of the dispatch: it is the declared type's, not the
     // stored shape's.
@@ -297,9 +299,12 @@ fn schema_at<'a>(
             (FieldType::Array, PathSegment::Index(_)) => cursor.items.as_deref().ok_or(blocked)?,
             (FieldType::Object, PathSegment::Key(key)) => match cursor.properties.as_ref() {
                 None => return Err(blocked),
-                Some(props) => props
-                    .get(key)
-                    .ok_or_else(|| EditError::UnknownField(key.clone()))?,
+                Some(props) => props.get(key).ok_or_else(|| EditError::UnknownField {
+                    field: name.to_string(),
+                    // Through the failed step, not up to it: the anchor names the
+                    // undeclared property, not the object holding it.
+                    at: at[..=depth].to_vec(),
+                })?,
             },
             _ => return Err(blocked),
         };
@@ -455,7 +460,7 @@ card_kinds:
         let view = TypedReader::new(&config, &doc);
         assert!(matches!(
             view.get("nope"),
-            Err(EditError::UnknownField(name)) if name == "nope"
+            Err(EditError::UnknownField { field, .. }) if field == "nope"
         ));
     }
 
@@ -541,7 +546,7 @@ card_kinds:
         assert_eq!(view.get_content("note").unwrap(), None);
         assert!(matches!(
             view.get_content("nope"),
-            Err(EditError::UnknownField(n)) if n == "nope"
+            Err(EditError::UnknownField { field, .. }) if field == "nope"
         ));
         // Answered from the schema, not the payload: `qty` holds 3.
         assert!(matches!(
@@ -709,10 +714,37 @@ card_kinds:
             view.get_content_at("recipients", &[]),
             Err(EditError::FieldNotContent { declared, .. }) if declared == "array"
         ));
-        assert!(matches!(
-            view.get_content_at("letterhead", &key("nope")),
-            Err(EditError::UnknownField(n)) if n == "nope"
-        ));
+    }
+
+    #[test]
+    fn unknown_property_anchors_at_the_property_it_names() {
+        let config = config();
+        let doc = blank_doc();
+        let view = TypedReader::new(&config, &doc);
+
+        let err = view.get_content_at("letterhead", &key("nope")).unwrap_err();
+        assert!(
+            matches!(&err, EditError::UnknownField { field, at }
+                if field == "letterhead" && at == &key("nope")),
+            "{err:?}"
+        );
+        assert_eq!(
+            err.to_string(),
+            "field 'letterhead.nope' is not declared in the schema",
+            "a property is not a claim about a top-level field of the same name"
+        );
+        assert_eq!(
+            err.doc_path(&crate::DocPath::main()).unwrap().to_string(),
+            "main.letterhead.nope"
+        );
+
+        let deep = view
+            .get_content_at("rows", &[PathSegment::Index(0), PathSegment::Key("nope".into())])
+            .unwrap_err();
+        assert_eq!(
+            deep.doc_path(&crate::DocPath::main()).unwrap().to_string(),
+            "main.rows[0].nope"
+        );
     }
 
     #[test]
@@ -769,7 +801,7 @@ card_kinds:
             card.get("body").unwrap(),
             Some(ReadValue::Markdown("a *card*".to_string()))
         );
-        assert!(matches!(card.get("nope"), Err(EditError::UnknownField(_))));
+        assert!(matches!(card.get("nope"), Err(EditError::UnknownField { .. })));
     }
 
     #[test]

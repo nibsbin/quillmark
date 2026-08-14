@@ -72,11 +72,21 @@ pub enum EditError {
     InvalidFieldName(String),
 
     /// A typed write ([`TypedWriter::set`](crate::TypedWriter::set) /
-    /// [`CardWriter::set`](crate::CardWriter::set)) addressed a well-formed name
-    /// the bound schema does not declare (or a card whose `$kind` carries no
-    /// schema). Use [`Card::store_field`](Card::store_field) for opaque storage.
-    #[error("field '{0}' is not declared in the schema")]
-    UnknownField(String),
+    /// [`CardWriter::set`](crate::CardWriter::set)) or a schema-bound read
+    /// addressed a well-formed name the bound schema does not declare (or a card
+    /// whose `$kind` carries no schema). A property an `object` field does not
+    /// declare is the same error one level down, `at` naming it. Use
+    /// [`Card::store_field`](Card::store_field) for opaque storage.
+    #[error("field '{field}{}' is not declared in the schema", render_at(.at))]
+    UnknownField {
+        field: String,
+        /// The steps from the field to the undeclared name, its last segment
+        /// being that name: empty when the field itself is the undeclared one,
+        /// `[Key("zip")]` for an `address` object that declares no `zip`. Rides
+        /// the [`doc_path`](Self::doc_path) anchor as its own segments, so
+        /// `field` stays the field's name.
+        at: Vec<PathSegment>,
+    },
 
     #[error("invalid card kind '{0}': must match [a-z_][a-z0-9_]*")]
     InvalidKindName(String),
@@ -166,13 +176,20 @@ pub enum EditError {
 }
 
 impl EditError {
+    pub(crate) fn unknown_field(name: impl Into<String>) -> Self {
+        EditError::UnknownField {
+            field: name.into(),
+            at: Vec::new(),
+        }
+    }
+
     /// The namespaced diagnostic `code` (e.g. `"edit::invalid_field_name"`),
     /// one per variant and the variant's only stable discriminator. Consumers
     /// route on this, not on message text. Taxonomy: `prose/canon/ERROR.md`.
     pub fn code(&self) -> &'static str {
         match self {
             EditError::InvalidFieldName(_) => "edit::invalid_field_name",
-            EditError::UnknownField(_) => "edit::unknown_field",
+            EditError::UnknownField { .. } => "edit::unknown_field",
             EditError::InvalidKindName(_) => "edit::invalid_kind_name",
             EditError::ReservedKind => "edit::reserved_kind",
             EditError::IndexOutOfRange { .. } => "edit::index_out_of_range",
@@ -198,7 +215,7 @@ impl EditError {
     pub fn args(&self) -> BTreeMap<String, serde_json::Value> {
         match self {
             EditError::InvalidFieldName(field) => diag_args! { "field" => field },
-            EditError::UnknownField(field) => diag_args! { "field" => field },
+            EditError::UnknownField { field, at: _ } => diag_args! { "field" => field },
             EditError::InvalidKindName(kind) => diag_args! { "kind" => kind },
             EditError::ReservedKind => diag_args! {},
             EditError::IndexOutOfRange { index, len } => diag_args! {
@@ -255,11 +272,11 @@ impl EditError {
         use crate::path::DocPath;
         match self {
             EditError::FieldNotContent { field: f, at, .. }
-            | EditError::FieldDecode { field: f, at, .. } => {
+            | EditError::FieldDecode { field: f, at, .. }
+            | EditError::UnknownField { field: f, at } => {
                 Some(at.iter().fold(base.field(f), |p, seg| p.segment(seg)))
             }
             EditError::InvalidFieldName(f)
-            | EditError::UnknownField(f)
             | EditError::FieldNotInline { field: f, .. }
             | EditError::FieldCoercionFailed { field: f, .. } => Some(base.field(f)),
             EditError::IndexOutOfRange { index, .. } => Some(DocPath::card(None, *index)),
@@ -953,7 +970,7 @@ mod tests {
         );
         let card = DocPath::card(Some("indorsement"), 1);
         assert_eq!(
-            EditError::UnknownField("signature_block".into())
+            EditError::unknown_field("signature_block")
                 .doc_path(&card)
                 .unwrap()
                 .to_string(),

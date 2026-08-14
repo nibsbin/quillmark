@@ -100,7 +100,7 @@ fn typed_read_spells_through_the_facade() {
     );
 
     let typo: Result<Option<ReadValue>, EditError> = reader.get("nope");
-    assert!(matches!(typo, Err(EditError::UnknownField(_))), "{typo:?}");
+    assert!(matches!(typo, Err(EditError::UnknownField { .. })), "{typo:?}");
 
     let card: CardReader = reader.card(0).expect("the note card resolves its schema");
     assert_eq!(card.kind(), Some("note"));

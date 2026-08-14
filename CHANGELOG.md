@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- fix(core,wasm,python)!: `EditError::UnknownField` carries the in-field path
+  `FieldDecode` and `FieldNotContent` carry. A property an `object` field does
+  not declare — `get_content_at("address", [Key("zip")])` against an `address`
+  with no `zip` — reported `field 'zip' is not declared in the schema`, which
+  reads as a claim about a top-level field and collides outright when a real
+  top-level field shares the name. It now reports
+  `field 'address.zip' is not declared in the schema` and anchors the
+  diagnostic at `main.address.zip`, so the caller can tell an undeclared
+  property from an undeclared field. **Breaking**: the variant is a struct
+  variant, `UnknownField { field, at }`, matching the two siblings; `field`
+  stays a bare field name, and the `edit::unknown_field` code, its `field` arg
+  and the whole-field message are unchanged.
+
 ## v0.105.0 - 2026-08-14
 
 - feat(core,wasm,python)!: a `Content` nested inside a composite field is
