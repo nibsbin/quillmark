@@ -9,8 +9,8 @@ Plates are plain Typst code. Document metadata reaches the plate as a JSON dicti
 ```typst
 #import "@local/quillmark-helper:0.1.0": data
 
-#data.title                                  // direct: errors if missing
-#data.at("title", default: "Untitled")       // safe with default
+#data.title                                  // a declared field: always present
+#data.at("logo", default: none)              // an undeclared key: may be absent
 ```
 
 Fields declared `type: richtext` in `Quill.yaml` arrive as Typst content (their content lowered to markup, ready to render). `type: date` and `type: datetime` fields arrive as a **value-object** (see below). Everything else is a plain JSON-shaped value.
@@ -33,25 +33,25 @@ A present `type: date` / `type: datetime` field arrives as a small value-object 
 
 One rule: **native anything → `.value`; region render → `(…display)(…)`.** A package that formats a date internally still needs `.value` when it does native `datetime` work, but placing `(data.issued.display)(..)` (even deep inside a package) keeps the region, because the closure's ink is born at its generated definition site, not the call site.
 
-### Checking for Optional Fields
+### Which accessor to reach for
 
-Use Typst's `in` operator to check for optional fields:
+A key's *declaration* decides whether it can be absent, and that decides the accessor. Three cases, no judgement calls:
+
+| Key | Accessor | Why |
+|---|---|---|
+| A field declared in `Quill.yaml` | `data.subtitle` | Always present: compilation fills every declared field with its authored value, else the schema `default:`, else its type's zero value (`""`, `()`, `0`). |
+| A `$`-sigiled key (`$kind`, `$body`, `$cards`, `$path`) | `data.at("$body", default: "")` | Typst identifiers exclude `$`, *and* `$`-metadata is present only where it is defined: `$kind` only on a card that authors one, `$body` only where the kind enables a body. |
+| An undeclared key, or any field of a card whose `$kind` is unknown | `data.at("logo", default: none)` | No schema fills it, so absence is real. |
+
+So a `default:` on a declared field is dead code, and an `#if "field" in data` guard on one is always true. When a declared field is optional, guard its *value*, not its presence:
 
 ```typst
-#if "subtitle" in data {
+#if data.subtitle != "" {
   [Subtitle: #data.subtitle]
 }
-
-// Or use spread syntax for function arguments
-#show: template.with(
-  title: data.title,
-  ..if "subtitle" in data {
-    (subtitle: data.subtitle,)
-  } else {
-    (:)
-  },
-)
 ```
+
+If a default belongs anywhere, it belongs in `Quill.yaml` — a `default:` restated in the plate is never read, and silently diverges when the schema's own default changes.
 
 ### Body, arrays, and cards
 
@@ -63,11 +63,13 @@ The document body is exposed under the `$body` key, accessed via `data.at("$body
 #for author in data.authors [- #author]
 
 #for card in data.at("$cards", default: ()) {
-  if card.at("$kind") == "product" {
-    [Product: #card.name — #card.at("$body")]
+  if card.at("$kind", default: none) == "product" {
+    [Product: #card.name — #card.at("$body", default: "")]
   }
 }
 ```
+
+A card block with no `$kind:` line is a *kindless* card: it reaches the plate carrying its authored fields verbatim and no `$kind`, so a bare `card.at("$kind")` panics on it. Read the discriminator with a default and let unrecognized kinds fall through.
 
 ## Typst Packages
 
