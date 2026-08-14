@@ -13,7 +13,7 @@ use super::{CardSchema, Quill, QuillConfig};
 use crate::{Card, Document, QuillValue};
 
 /// The rung of the commitment ladder that produced a [`ResolvedField::value`].
-/// Serializes lowercase (`"authored" | "default" | "zero"`).
+/// Serializes lowercase (`"authored" | "default" | "blank"`).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
@@ -22,8 +22,9 @@ pub enum FieldSource {
     Authored,
     /// The schema `default:` (or its content form for a content field).
     Default,
-    /// The type-empty [`zero_value`](crate::quill::zero_value) floor.
-    Zero,
+    /// The field's [`blank`](crate::quill::blank): its spelling of
+    /// "explicitly nothing", and the render floor.
+    Blank,
 }
 
 /// One resolved row: its `name`, the value the render projection would use, and
@@ -184,11 +185,11 @@ fn card_states(config: &QuillConfig, card: &Card, index: usize) -> ResolvedCard 
 /// The body row (`name: "body"`). The value is byte-identical to the plate's
 /// `$body` (canonical Content-JSON of the card body). A body has no `default:`
 /// rung, so its source is only ever [`Authored`](FieldSource::Authored)
-/// (non-blank) or [`Zero`](FieldSource::Zero) (blank).
+/// (non-blank) or [`Blank`](FieldSource::Blank) (blank).
 fn body_state(card: &Card) -> ResolvedField {
     let value = QuillValue::from_json(quillmark_content::serial::to_canonical_value(card.body()));
     let source = if card.body().is_blank() {
-        FieldSource::Zero
+        FieldSource::Blank
     } else {
         FieldSource::Authored
     };
@@ -260,7 +261,7 @@ card_kinds:
     // ── Sources ──────────────────────────────────────────────────────────────
 
     #[test]
-    fn scalar_sources_authored_default_zero() {
+    fn scalar_sources_authored_default_blank() {
         let quill = quill_from_yaml(QUILL);
         // title authored; status absent (has a default); notes absent (no default).
         let doc = parse("~~~card-yaml\n$quill: fs_test@1.0\n$kind: main\ntitle: Hello\n~~~\n");
@@ -273,7 +274,7 @@ card_kinds:
         assert_eq!(row(f, "status").source, FieldSource::Default);
         assert_eq!(row(f, "status").value.as_json(), &serde_json::json!("draft"));
 
-        assert_eq!(row(f, "notes").source, FieldSource::Zero);
+        assert_eq!(row(f, "notes").source, FieldSource::Blank);
         assert_eq!(row(f, "notes").value.as_json(), &serde_json::json!(""));
     }
 
@@ -394,7 +395,7 @@ card_kinds:
         let blank = parse("~~~card-yaml\n$quill: fs_test@1.0\n$kind: main\ntitle: T\n~~~\n");
         let states = quill.resolve(&blank);
         let body = states.main.body.as_ref().unwrap();
-        assert_eq!(body.source, FieldSource::Zero);
+        assert_eq!(body.source, FieldSource::Blank);
         assert!(body.value.as_json().is_object(), "blank body is empty content");
     }
 
@@ -465,6 +466,16 @@ card_kinds:
     }
 
     // ── Wire shape ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn field_source_serializes_the_blank_token() {
+        // The wire token consumers route on; `Quill.resolve` exposes it through
+        // the Wasm surface, whose TS union must carry the same three spellings.
+        let token = |s: FieldSource| serde_json::to_value(s).unwrap();
+        assert_eq!(token(FieldSource::Authored), serde_json::json!("authored"));
+        assert_eq!(token(FieldSource::Default), serde_json::json!("default"));
+        assert_eq!(token(FieldSource::Blank), serde_json::json!("blank"));
+    }
 
     #[test]
     fn field_state_is_name_value_and_source_only() {

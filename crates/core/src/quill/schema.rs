@@ -22,6 +22,11 @@ pub const QUILLMARK_INLINE_KEY: &str = "quillmark:inline";
 /// formatting-free surface and to author/project through the literal codec.
 pub const QUILLMARK_PLAIN_KEY: &str = "quillmark:plain";
 
+/// Transform-schema keyword carrying an `enum` blank's label (`ui.blank_title`).
+/// Emitted only when the author names one; absent, a consumer supplies its own
+/// conventional label.
+pub const QUILLMARK_BLANK_TITLE_KEY: &str = "quillmark:blank_title";
+
 /// Build a JSON-Schema-shaped descriptor of a [`QuillConfig`]'s main + card fields.
 ///
 /// The descriptor marks richtext fields with `contentMediaType:
@@ -47,15 +52,29 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
                 "type".to_string(),
                 serde_json::Value::String("string".to_string()),
             );
+            // The blank leads the domain. The model layer keeps `""` out of
+            // `values:` (it is not a choice), but this projection describes what
+            // is *wire-valid*, and the blank is: without it a standard
+            // JSON-Schema validator would reject a value the engine accepts.
+            // The blank option must stay selectable and re-selectable in a
+            // consumer's picker, never a vanishing placeholder — choosing it is
+            // how a human says "explicitly nothing", which is an act they must
+            // be able to repeat.
             schema.insert(
                 "enum".to_string(),
                 serde_json::Value::Array(
-                    values
-                        .iter()
-                        .map(|v| serde_json::Value::String(v.clone()))
+                    std::iter::once(String::new())
+                        .chain(values.iter().cloned())
+                        .map(serde_json::Value::String)
                         .collect(),
                 ),
             );
+            if let Some(blank_title) = field.ui.as_ref().and_then(|u| u.blank_title.as_ref()) {
+                schema.insert(
+                    QUILLMARK_BLANK_TITLE_KEY.to_string(),
+                    serde_json::Value::String(blank_title.clone()),
+                );
+            }
             return serde_json::Value::Object(schema);
         }
         match field.r#type {
@@ -257,13 +276,15 @@ main:
 "#;
         let schema = build_from_yaml(yaml);
         let json = schema.as_json();
-        let domain = serde_json::json!({ "type": "string", "enum": ["UNCLASSIFIED", "CUI"] });
+        // The blank leads the domain: the projection describes what is
+        // wire-valid, and every enum accepts its blank.
+        let domain = serde_json::json!({ "type": "string", "enum": ["", "UNCLASSIFIED", "CUI"] });
         assert_eq!(json["properties"]["classification"], domain);
         // The domain survives the recursion into an array's element object: a
-        // consumer building a validator sees it at the leaf too.
+        // consumer building a validator sees it, blank and all, at the leaf too.
         assert_eq!(
             json["properties"]["endorsements"]["items"]["properties"]["action"],
-            serde_json::json!({ "type": "string", "enum": ["approve", "disapprove"] })
+            serde_json::json!({ "type": "string", "enum": ["", "approve", "disapprove"] })
         );
     }
 

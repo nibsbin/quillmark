@@ -225,7 +225,7 @@ pub fn project_kind(
 ) -> Result<WidgetType, BindError> {
     if let Some(values) = &field.enum_values {
         return Ok(WidgetType::Choice {
-            options: values.clone(),
+            options: blank_first(values),
         });
     }
     let unbindable = || BindError::Unbindable {
@@ -247,7 +247,7 @@ pub fn project_kind(
         // The loader requires `values:` on an enum, so this arm is unreachable;
         // it keeps the match total.
         SchemaType::Enum => WidgetType::Choice {
-            options: field.enum_values.clone().unwrap_or_default(),
+            options: blank_first(field.enum_values.as_deref().unwrap_or_default()),
         },
         // An array of scalars binds as text, its elements joined with newlines
         // by `resolve::coerce_text`.
@@ -261,6 +261,20 @@ pub fn project_kind(
         // that this build has no widget shape for.
         _ => return Err(unbindable()),
     })
+}
+
+/// An enum's options with its blank leading them.
+///
+/// A blank cell needs an option to land on: `resolve::coerce_choice` keeps a
+/// value only when it matches a declared option, so without the blank an
+/// authored (or floored) blank binds to nothing. Prepended rather than
+/// appended so it reads as the unset state a picker opens on, and it stays a
+/// real, re-selectable option: a disabled placeholder cannot be returned to,
+/// and returning to it is how a human clears a cell back to unset.
+fn blank_first(values: &[String]) -> Vec<String> {
+    std::iter::once(String::new())
+        .chain(values.iter().cloned())
+        .collect()
 }
 
 fn is_multiline(field: &FieldSchema) -> bool {
@@ -375,12 +389,17 @@ card_kinds:
         assert_eq!(kind("agree").unwrap(), WidgetType::Checkbox);
     }
 
+    /// A schema-bound enum's options lead with its blank, so a blank cell has
+    /// an option to land on: `resolve::coerce_choice` keeps a value only when it
+    /// matches a declared option. An unbound widget declaring its own options
+    /// (the `widgets:` path in form.json) has no schema field behind it and so
+    /// no blank — pinned by `unbound_widgets_bind_without_schema_fields`.
     #[test]
-    fn enum_projects_to_choice() {
+    fn a_schema_bound_enum_leads_its_choices_with_the_blank() {
         assert_eq!(
             kind("favorite_color").unwrap(),
             WidgetType::Choice {
-                options: vec!["red".into(), "green".into(), "blue".into()]
+                options: vec!["".into(), "red".into(), "green".into(), "blue".into()]
             }
         );
     }

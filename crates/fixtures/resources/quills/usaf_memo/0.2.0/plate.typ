@@ -7,13 +7,19 @@
   letterhead_title: data.letterhead_title,
   letterhead_caption: data.letterhead_caption,
   letterhead_seal_subtitle: data.at("letterhead_seal_subtitle", default: none),
-  letterhead_seal: image(
-    if data.at("letterhead_seal", default: "dow") == "dod" {
-      "assets/dod_seal.png"
-    } else {
-      "assets/dow_seal.png"
-    }
-  ),
+  // Every enum branch below covers `values ∪ blank`. The blank is valid present
+  // input, so it must land somewhere chosen rather than fall through an `else`
+  // into a variant nobody picked. Here it omits the seal, which is exactly what
+  // `frontmatter`'s own `letterhead_seal: none` default means.
+  ..if data.at("letterhead_seal", default: "") != "" {
+    (letterhead_seal: image(
+      if data.letterhead_seal == "dod" {
+        "assets/dod_seal.png"
+      } else {
+        "assets/dow_seal.png"
+      }
+    ))
+  },
 
   // Date
   date: data.at("date", default: none),
@@ -44,8 +50,11 @@
   ..if "cui_limited_dissemination" in data { (cui_limited_dissemination: data.cui_limited_dissemination) },
   ..if "cui_poc" in data { (cui_poc: data.cui_poc) },
 
-  // USAF vs DAF memorandum style (date format, body indentation)
-  memo_style: data.at("memo_style", default: "usaf"),
+  // USAF vs DAF memorandum style (date format, body indentation). The blank
+  // takes the package's own default: `frontmatter` asserts membership of
+  // ("usaf", "daf"), so passing the blank through would fail the compile, and a
+  // memo has no "no style" state to render.
+  ..if data.at("memo_style", default: "") != "" { (memo_style: data.memo_style) },
 
   // Font size
   font_size: data.at("font_size", default: 12) * 1pt,
@@ -111,7 +120,11 @@
         "Ind_" + str(i) + "_Signature",
         field: card.at("$path") + "signature_block",
       ),
-      format: card.at("format", default: "standard"),
+      // The blank takes the package's own default (`standard`): `indorsement`
+      // asserts membership, and an indorsement has no "no layout" state. The
+      // `action` enum needs no such guard — the package already reads a
+      // blank action as "no action line".
+      ..if card.at("format", default: "") != "" { (format: card.format) },
       date: resolved_date,
       ..if "action" in card { (action: card.action) },
       body_content,

@@ -2264,6 +2264,72 @@ fn markdown_type_is_unknown_at_load() {
     );
 }
 
+/// `""` is rejected in `values:` and accepted as `default:` **on the same
+/// field**, which reads as a contradiction and is not one: `values:` enumerates
+/// choices, and every other surface ranges over `values ∪ blank`. `default:` is
+/// a value, not a choice, and the blank is a legal value.
+///
+/// Both halves are pinned together because `usaf_memo` ships exactly this shape
+/// on two enums. Someone "fixing" the asymmetry by rejecting a blank `default:`
+/// would break the reference quill; someone widening `values:` to accept `""`
+/// would restore the fabricated-variant floor. Neither half stands alone.
+#[test]
+fn enum_rejects_a_blank_value_but_accepts_a_blank_default() {
+    let err = quill_with_field(
+        "    classification:\n      type: enum\n      values: [\"\", UNCLASSIFIED]\n",
+    )
+    .unwrap_err();
+    assert!(
+        err.iter()
+            .any(|d| d.code.as_deref() == Some("quill::enum_blank_member")),
+        "`\"\"` in values: should be a load error, got: {err:?}"
+    );
+    assert!(
+        err.iter().any(|d| {
+            d.hint
+                .as_deref()
+                .is_some_and(|h| h.contains("default: \"\""))
+        }),
+        "the error should point at the key that survives, got: {err:?}"
+    );
+
+    let config = quill_with_field(
+        "    classification:\n      type: enum\n      values: [UNCLASSIFIED, CUI]\n      default: \"\"\n",
+    )
+    .expect("a blank default is the field's blank, not an out-of-domain member");
+    let field = config.main.fields.get("classification").unwrap();
+    assert_eq!(field.default.as_ref().unwrap().as_json(), &serde_json::json!(""));
+    assert_eq!(
+        field.enum_values.as_deref(),
+        Some(["UNCLASSIFIED".to_string(), "CUI".to_string()].as_slice()),
+        "the declared choices carry no blank"
+    );
+}
+
+/// The loader rejects a declared `""`, but `blank` may not lean on that: a
+/// config built through serde skips loader validation entirely, so the enum
+/// blank is `""` whatever `values:` happens to hold.
+#[test]
+fn enum_blank_ignores_a_declared_blank_member() {
+    let field = FieldSchema::from_quill_value(
+        "f".to_string(),
+        &QuillValue::from_yaml_str("type: enum\nvalues: [\"\", red]\n").unwrap(),
+    )
+    .unwrap();
+    assert_eq!(super::blank(&field).into_json(), serde_json::json!(""));
+
+    let reordered = FieldSchema::from_quill_value(
+        "f".to_string(),
+        &QuillValue::from_yaml_str("type: enum\nvalues: [red, green]\n").unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        super::blank(&reordered).into_json(),
+        serde_json::json!(""),
+        "a `values:` reorder is a render no-op: the blank is not values[0]"
+    );
+}
+
 #[test]
 fn richtext_inline_type_token_is_rejected_at_load() {
     let err = quill_with_field("    tag:\n      type: richtext(inline)\n").unwrap_err();
@@ -2399,9 +2465,9 @@ fn inline_coercion_accepts_single_line_document_value() {
 }
 
 #[test]
-fn richtext_zero_value_is_empty_content() {
+fn richtext_blank_is_empty_content() {
     let field = FieldSchema::new("x".to_string(), FieldType::RichText { inline: false }, None);
-    let zero = zero_value(&field);
+    let zero = blank(&field);
     assert!(
         zero.as_json().is_object(),
         "richtext zero-fill is the empty content, not a string: {:?}",
@@ -2500,6 +2566,7 @@ fn enum_type_projects_to_json_schema_string_enum() {
     .expect("type: enum loads");
     let field = config.main.fields.get("color").unwrap();
     assert_eq!(field.r#type, FieldType::Enum);
+    // The model layer carries the declared choices only: the blank is not one.
     assert_eq!(
         field.enum_values.as_deref(),
         Some(["red".to_string(), "green".to_string(), "blue".to_string()].as_slice())
@@ -2507,7 +2574,8 @@ fn enum_type_projects_to_json_schema_string_enum() {
     let schema = super::schema::build_transform_schema(&config);
     let color = &schema.as_json()["properties"]["color"];
     assert_eq!(color["type"], "string");
-    assert_eq!(color["enum"], serde_json::json!(["red", "green", "blue"]));
+    // The projection carries the wire-valid domain, which leads with the blank.
+    assert_eq!(color["enum"], serde_json::json!(["", "red", "green", "blue"]));
 }
 
 #[test]

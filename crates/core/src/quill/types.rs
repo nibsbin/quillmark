@@ -25,6 +25,12 @@ pub struct UiFieldSchema {
     /// Valid on `string` fields (plain text with newlines preserved) and `richtext` fields.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub multiline: Option<bool>,
+    /// Label for an `enum`'s blank option. Absent, a consumer renders a
+    /// conventional label of its own: naming the void is not every enum
+    /// author's job. Its own key rather than an entry in a member-label map,
+    /// because the blank is not a member.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blank_title: Option<String>,
 }
 
 /// Shared by the [`UiFieldSchema`] deserializer's error and
@@ -42,6 +48,7 @@ struct UiFieldSchemaDef {
     order: Option<serde_json::Value>,
     compact: Option<bool>,
     multiline: Option<bool>,
+    blank_title: Option<String>,
 }
 
 impl<'de> Deserialize<'de> for UiFieldSchema {
@@ -55,6 +62,7 @@ impl<'de> Deserialize<'de> for UiFieldSchema {
             group: def.group,
             compact: def.compact,
             multiline: def.multiline,
+            blank_title: def.blank_title,
         })
     }
 }

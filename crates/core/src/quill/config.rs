@@ -674,8 +674,14 @@ impl QuillConfig {
                     return Ok(QuillValue::from_json(serde_json::Value::Null));
                 }
                 let text = if let Some(s) = json_value.as_str() {
+                    // `""` is the blank, and the blank is a value: it survives
+                    // coercion so the ladder sees a *present* cell and lets it
+                    // outrank a `default:`, exactly as `""` already does for
+                    // `string`. Nulling it here would make the same authored
+                    // literal mean "absent" for `date` and "explicitly nothing"
+                    // for `string`.
                     if s.is_empty() {
-                        return Ok(QuillValue::from_json(serde_json::Value::Null));
+                        return Ok(value.clone());
                     }
                     s.to_string()
                 } else if let Some(arr) = json_value.as_array() {
@@ -957,9 +963,10 @@ impl QuillConfig {
         }
     }
 
-    /// Reject `>`, `;`, `|` in enum literals. These characters are reserved by
-    /// the blueprint inline annotation grammar (`<format>` close, role
-    /// separator, enum value separator) and have no escape syntax.
+    /// Reject `>`, `;`, `|` in enum literals (reserved by the blueprint inline
+    /// annotation grammar — `<format>` close, role separator, enum value
+    /// separator — with no escape syntax), and reject `""`, which is the
+    /// engine-supplied blank rather than a choice.
     fn validate_enum_literals(
         field: &FieldSchema,
         owner_label: &str,
@@ -967,6 +974,27 @@ impl QuillConfig {
     ) {
         if let Some(values) = &field.enum_values {
             for v in values {
+                if v.is_empty() {
+                    errors.push(
+                        Diagnostic::new(
+                            Severity::Error,
+                            format!(
+                                "{} declares `\"\"` in `values:`. The blank is not a \
+                                 choice: it is supplied by the engine and always \
+                                 accepted.",
+                                owner_label
+                            ),
+                        )
+                        .with_code("quill::enum_blank_member".to_string())
+                        .with_hint(
+                            "Remove `\"\"` from `values:`; every enum accepts the blank \
+                             already. Keep `default: \"\"` to leave the field optional, \
+                             and declare a member such as `undecided` or `n_a` where \
+                             the empty state is itself a choice someone makes."
+                                .to_string(),
+                        ),
+                    );
+                }
                 if v.contains('>') || v.contains(';') || v.contains('|') {
                     errors.push(
                         Diagnostic::new(

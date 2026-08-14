@@ -1,0 +1,111 @@
+//! An authored blank on every `usaf_memo` enum still renders.
+//!
+//! A field's blank is valid present input for every enum, so a plate must
+//! branch over `values ∪ blank` rather than fall through an `else`. Two of this
+//! quill's enums sit behind package assertions — `frontmatter` asserts
+//! `memo_style in ("usaf", "daf")` and `indorsement` asserts its `format` — so
+//! passing a blank straight through fails the Typst compile rather than
+//! rendering something wrong quietly. The plate's guards are what keep these
+//! green, and a reader who deletes one gets a failure here rather than in a
+//! user's document.
+
+#![cfg(feature = "typst")]
+
+use quillmark::{OutputFormat, Quillmark, RenderOptions};
+use quillmark_fixtures::quills_path;
+
+/// Every enum `usaf_memo` declares, authored blank at once: the main card's
+/// three and the indorsement kind's two.
+const BLANK_EVERYWHERE: &str = "\
+~~~card-yaml
+$quill: usaf_memo@0.2.0
+$kind: main
+letterhead_title: DEPARTMENT OF THE AIR FORCE
+letterhead_caption: [123D EXAMPLE WING]
+memo_for: [SOME/CC]
+subject: A memo whose every enum is blank
+letterhead_seal: \"\"
+classification: \"\"
+memo_style: \"\"
+signature_block: [A. AUTHOR, Captain, USAF, Flight Commander]
+~~~
+
+Body prose.
+
+~~~card-yaml
+$kind: indorsement
+from: SOME/CC
+for: OTHER/CC
+format: \"\"
+action: \"\"
+signature_block: [B. ENDORSER, Major, USAF, Commander]
+~~~
+Indorsement prose.
+";
+
+#[test]
+fn every_enum_authored_blank_still_renders() {
+    let engine = Quillmark::new();
+    let quill =
+        quillmark::quill_from_path(quills_path("usaf_memo")).expect("usaf_memo should load");
+
+    let parsed = quillmark::Document::parse(BLANK_EVERYWHERE)
+        .expect("document should parse")
+        .document;
+
+    // The gate: a blank is in-domain for every enum, so nothing here is an
+    // `EnumViolation`. Before the blank existed these were rejected outright.
+    let blocking: Vec<_> = quill
+        .validate(&parsed)
+        .into_iter()
+        .filter(|d| d.code.as_deref() != Some("validation::must_fill"))
+        .collect();
+    assert!(
+        blocking.is_empty(),
+        "an authored blank is in-domain for every enum; got: {blocking:?}"
+    );
+
+    let rendered = engine
+        .render(
+            &quill,
+            &parsed,
+            &RenderOptions::default().with_output_format(OutputFormat::Pdf),
+        )
+        .expect("a memo with every enum blank should render");
+    assert!(
+        !rendered.artifacts[0].bytes.is_empty(),
+        "the render should produce a non-empty PDF"
+    );
+}
+
+/// The seal is the one blank with a visible render consequence: it is omitted
+/// rather than silently falling back to the `dow` asset the old `else` picked.
+#[test]
+fn a_blank_seal_omits_the_seal_rather_than_choosing_one() {
+    let engine = Quillmark::new();
+    let quill =
+        quillmark::quill_from_path(quills_path("usaf_memo")).expect("usaf_memo should load");
+
+    let render = |seal: &str| {
+        let md = BLANK_EVERYWHERE.replace("letterhead_seal: \"\"", seal);
+        let doc = quillmark::Document::parse(&md).expect("parse").document;
+        engine
+            .render(
+                &quill,
+                &doc,
+                &RenderOptions::default().with_output_format(OutputFormat::Pdf),
+            )
+            .expect("render")
+            .artifacts[0]
+            .bytes
+            .len()
+    };
+
+    let blank = render("letterhead_seal: \"\"");
+    let dow = render("letterhead_seal: dow");
+    assert_ne!(
+        blank, dow,
+        "a blank seal must not render the same page as an authored `dow`: that \
+         is the silent fabrication the blank exists to close"
+    );
+}
