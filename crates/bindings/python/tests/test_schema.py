@@ -1,14 +1,12 @@
-"""Tests for the Unendorsed / Endorsed schema surface.
+"""Tests for the value and obligation axes of the schema surface.
 
-A field's *cell* is determined by whether the schema declares a `default:`.
-
-- No `default:` -> **Unendorsed**: the blueprint renders the ``!must_fill``
-  marker. A marker left in the document is non-fatal: validate reports a
-  ``validation::must_fill`` warning and render still succeeds (the field
-  zero-fills or uses its suggested value).
-- With `default:` -> **Endorsed**: the blueprint renders the default
-  value with a type-only ``# <type>`` annotation; the field is optional and
-  the default is used when absent.
+- No `default:` -> the field is **obliged**: the blueprint renders the
+  ``!must_fill`` marker. A marker left in the document is non-fatal: validate
+  reports a ``validation::must_fill`` warning and render still succeeds (the
+  field blank-fills or uses its suggested value).
+- With `default:` -> the blueprint renders the default value with a type-only
+  ``# <type>`` annotation; the field is unobliged and the default is used when
+  absent.
 """
 
 from quillmark import Document, OutputFormat, Quill
@@ -67,20 +65,20 @@ def test_schema_has_no_required_key(tmp_path):
         )
 
 
-def test_schema_default_marks_endorsed(tmp_path):
-    """Endorsed fields carry the `default` key; Unendorsed fields don't."""
+def test_schema_reports_declared_default(tmp_path):
+    """A defaulted field carries the `default` key; a defaultless one does not."""
     quill = make_quill(tmp_path)
     fields = quill.schema["main"]["fields"]
 
-    # Unendorsed: no `default`
+    # Defaultless: no `default`
     assert "default" not in fields["title"], (
-        "title is Unendorsed: no default should be reported"
+        "title is defaultless: no default should be reported"
     )
     assert "default" not in fields["count"], (
-        "count is Unendorsed: no default should be reported"
+        "count is defaultless: no default should be reported"
     )
 
-    # Endorsed: schema carries `default`
+    # Defaulted: schema carries `default`
     assert fields["status"]["default"] == "draft"
 
 
@@ -92,7 +90,7 @@ def test_blueprint_must_fill_marker(tmp_path):
     quill = make_quill(tmp_path)
     bp = quill.blueprint
 
-    # Unendorsed fields carry the marker
+    # Obliged fields carry the marker
     assert "title: !must_fill" in bp, (
         f"expected `title: !must_fill` in blueprint; got:\n{bp}"
     )
@@ -101,12 +99,12 @@ def test_blueprint_must_fill_marker(tmp_path):
     )
 
 
-def test_blueprint_endorsed_value(tmp_path):
-    """Endorsed cells render the concrete default with a type-only annotation."""
+def test_blueprint_defaulted_value(tmp_path):
+    """A defaulted cell renders the concrete default with a type-only annotation."""
     quill = make_quill(tmp_path)
     bp = quill.blueprint
 
-    # The Endorsed `status` field renders its default value with a type-only
+    # The defaulted `status` field renders its default value with a type-only
     # annotation. The exact format is `status: draft # string`.
     assert "status: draft" in bp, f"expected default in blueprint; got:\n{bp}"
     # Shippability is the value cell: the `; delete-ok` tag is gone entirely.
@@ -135,7 +133,7 @@ def test_blueprint_no_legacy_required_optional_tags(tmp_path):
 def test_render_tolerates_must_fill_marker(engine, tmp_path):
     """A ``!must_fill`` marker left in the document is non-fatal.
 
-    Render still succeeds (the field zero-fills or uses its suggested value),
+    Render still succeeds (the field blank-fills or uses its suggested value),
     and ``quill.validate`` surfaces a non-fatal ``validation::must_fill``
     warning for the marker.
     """
@@ -175,9 +173,9 @@ def test_render_tolerates_must_fill_marker(engine, tmp_path):
     assert by_path.get("main.count") is None, "an authored cell is discharged"
 
 
-def test_render_succeeds_when_unendorsed_supplied(engine, tmp_path):
-    """Filling every Unendorsed field renders successfully: Endorsed
-    fields fall back to their declared default."""
+def test_render_succeeds_when_obliged_fields_supplied(engine, tmp_path):
+    """Filling every obliged field renders successfully: defaulted fields
+    fall back to their declared default."""
     quill = make_quill(tmp_path)
     md = (
         "~~~card-yaml\n"

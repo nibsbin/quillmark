@@ -124,7 +124,7 @@ fn seed_document_emits_one_seeded_card_per_kind() {
 }
 
 #[test]
-fn seeded_document_compiles_with_default_then_zero_for_absent_fields() {
+fn seeded_document_compiles_with_default_then_blank_for_absent_fields() {
     let quill = quill_from_yaml(QUILL);
     let doc = quill.seed_document();
 

@@ -28,7 +28,7 @@ fn test_dry_run_tolerates_must_fill_marker() {
     let result = quill.dry_run(&parsed);
     assert!(
         result.is_ok(),
-        "dry_run should tolerate a !must_fill placeholder (zero-filled): {:?}",
+        "dry_run should tolerate a !must_fill placeholder (blank-filled): {:?}",
         result
     );
 }

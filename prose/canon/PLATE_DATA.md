@@ -11,7 +11,7 @@ Plates get document data through a backend-injected virtual Typst package, not a
 1. `Quill::compile_data()` coerces, validates, normalizes, and **blank-fills** the
    root-block fields, and each composable card's fields against its `card_kind`
    schema, into a plain JSON object: every absent schema field resolves to its
-   authored value, else the schema `default:`, else its type-empty zero value.
+   authored value, else the schema `default:`, else the field's blank.
    Content fields cross as canonical `Content` objects (coercion imports an
    authored markdown string to the `Content` and re-canonicalizes an
    editor-supplied one). An incomplete document still renders: an absent or

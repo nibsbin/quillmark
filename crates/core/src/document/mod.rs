@@ -131,7 +131,7 @@ pub const FORMAT_RULES: &str = "Document format rules:
 \u{2022} The first block is the root and MUST contain `$quill: <name>@<version>`. Its `$kind` is `main` by position \u{2014} an explicit `$kind: main` is accepted but not required. Additional blocks declare composable cards via `$kind: <card_kind>`.
 \u{2022} Reserved `$`-keys: `$quill`, `$kind`, `$ext`, `$seed`. User fields use lowercase snake_case.
 \u{2022} Prose body is the text after a block's closing `~~~`, up to the next opener or EOF. To include a literal fenced code block in prose, use a backtick fence (```); any column-zero `~~~` block is parsed as card metadata.
-\u{2022} A field that already shows a concrete value carries a default and is shippable as-is \u{2014} keep the line, override the value, or delete it to fall back to the default. A blank or null value (`field:`, `field: null`, `field: ~`) is treated the same as omitting the field: it falls back to the default, or to the type-empty zero value.
+\u{2022} A field that already shows a concrete value carries a default and is shippable as-is \u{2014} keep the line, override the value, or delete it to fall back to the default. A blank or null value (`field:`, `field: null`, `field: ~`) is treated the same as omitting the field: it falls back to the default, or to the field's blank.
 \u{2022} `field: !must_fill <value>` marks a placeholder awaiting your input \u{2014} replace it with a real value and drop the `!must_fill` tag before shipping. A bare `field: !must_fill` is an empty placeholder. A leftover marker never blocks rendering, but it is reported as a warning until you replace it.
 \u{2022} Numbers and booleans MUST be unquoted (`year: 2025`, `pinned: true`); quoting turns them into strings and fails validation.
 \u{2022} Plain-scalar values cannot start with `*` or `&` (YAML alias/anchor markers) and cannot contain `: ` (colon-space). For markdown emphasis, embedded colons, or other special prefixes, quote the value: `field: '**bold**'` or `field: \"Name: subtitle\"`. Multi-line values use `|-`, not multi-line quoted scalars.";
@@ -351,7 +351,7 @@ impl Document {
     /// Create a blank document: a main card carrying only `$quill`, an empty
     /// body, and no composable cards. The programmatic blank canvas: every
     /// schema field is absent and resolves at render time (`default`, else
-    /// type-empty zero), so nothing the caller did not set reaches the
+    /// the field's blank), so nothing the caller did not set reaches the
     /// output. For an example-filled starter shaped like the blueprint, use
     /// `Quill::seed_document`.
     pub fn new(quill: QuillReference) -> Self {

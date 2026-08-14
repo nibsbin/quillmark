@@ -561,7 +561,7 @@ impl FieldSchema {
     }
 
     /// Whether a human must author this cell, deriving from `default:` when
-    /// `must_fill:` is unset: a field the quill author endorsed no value for
+    /// `must_fill:` is unset: a field the quill author declared no value for
     /// asks for one, a defaulted field does not. The derivation is keyed on
     /// `default`'s *presence*, so a `default: ""` stays a skippable cell rather
     /// than becoming a marker.

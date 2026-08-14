@@ -370,7 +370,7 @@ for new ones.
 **every other field is left absent**. The seeding cascade is therefore
 `example: → absent`: absent fields are never written; they are interpolated at
 the compilation layer by [blank-filled render](#blank-filled-render) (`default:`,
-else type-empty zero), exactly as for any authored document.
+else the field's blank), exactly as for any authored document.
 
 **Seed-commits-rest.** A seeded content field commits its codec's resting form
 (a richtext field and the body the canonical content, a plaintext field its
@@ -390,11 +390,11 @@ untouched: it is the source of truth the schema emits and the blueprint prints;
 the content is a derived projection of it.
 
 Committing *only* `example` is the whole design. The render ladder already
-produces `default` and `zero` at compile time but **never `example`** (example
+produces `default` and the blank at compile time but **never `example`** (example
 is excluded from the render path; see [BLUEPRINT.md](BLUEPRINT.md)), so
 `example` is the one source the render floor cannot reproduce. Persisting a
 `default` would be redundant (the floor interpolates it anyway) and would
-*freeze* it against a later schema change; persisting a `zero` is outright
+*freeze* it against a later schema change; persisting a blank is outright
 forbidden ([Non-persist invariant](#blank-filled-render)). So the seed writes
 exactly the one source that wouldn't otherwise appear and leaves the rest to
 the floor. This keeps a split-screen editor/preview consistent: the document
@@ -441,7 +441,7 @@ Seeding a *new card into an existing document*: `Quill::seed_card(kind,
 overlay)`, adds one more rung above `example:`: a curated, per-document
 **overlay** read from the main card's `$seed` map. Per field the precedence is
 **`$seed` overlay › `example:` › absent** (ordered by field declaration order), and `default`
-/ `zero` stay deferred to the render floor exactly as everywhere else, so the
+/ the blank stay deferred to the render floor exactly as everywhere else, so the
 "never persist a `default`" invariant holds. The overlay is *sparse*: fields it
 omits keep flowing from the schema seed, so it tracks an evolving quill rather
 than freezing a snapshot. This is how a template author customizes the values

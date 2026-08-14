@@ -2462,11 +2462,11 @@ fn inline_coercion_accepts_single_line_document_value() {
 #[test]
 fn richtext_blank_is_empty_content() {
     let field = FieldSchema::new("x".to_string(), FieldType::RichText { inline: false }, None);
-    let zero = blank(&field);
+    let floor = blank(&field);
     assert!(
-        zero.as_json().is_object(),
-        "richtext zero-fill is the empty content, not a string: {:?}",
-        zero.as_json()
+        floor.as_json().is_object(),
+        "richtext blank is the empty content, not a string: {:?}",
+        floor.as_json()
     );
 }
 
