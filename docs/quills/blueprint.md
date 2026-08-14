@@ -46,6 +46,13 @@ Seeding materializes a real `Document` (committed, structured content) rather th
 
 ## The empty-document contract
 
-`blueprint()` guarantees the emitted document renders, but that also depends on the quill's `plate.typ`. The quill authoring contract: **a plate MUST render an empty document** (just `$quill` / `$kind: main`, no fields) without error. Under blank-filled render every absent field becomes its blank, so the empty document is the type-minimal valid input; a plate that renders it degrades gracefully on every valid shape. No template may assert an Unendorsed field is *non-empty*: the schema guarantees presence, not non-emptiness. A plate branching on an `enum` must cover `values ∪ blank` exhaustively — the blank is valid present input for every enum, so an `else` fallback renders a variant nobody chose. Bundled quills are checked against this by fixture tests.
+`blueprint()` guarantees the emitted document renders, but that also depends on the quill's `plate.typ`. The quill authoring contract: **a plate MUST render an empty document** (just `$quill` / `$kind: main`, no fields) without error.
+
+Under blank-filled render every absent field becomes its blank, so the empty document is the type-minimal valid input. A plate that renders it degrades gracefully on every valid shape. Two rules follow:
+
+- **No template asserts an Unendorsed field is *non-empty*.** The schema guarantees presence, not non-emptiness.
+- **A template branching on an `enum` covers `values ∪ blank` exhaustively.** The blank is valid present input for every enum, so an `else` fallback renders a variant nobody chose.
+
+Bundled quills are checked against this by fixture tests.
 
 Full model: [BLUEPRINT.md](https://github.com/borb-sh/quillmark/blob/main/prose/canon/BLUEPRINT.md); the seeding cascade is in [SCHEMAS.md](https://github.com/borb-sh/quillmark/blob/main/prose/canon/SCHEMAS.md) § "Document seeding".
