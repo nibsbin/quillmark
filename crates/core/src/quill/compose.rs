@@ -682,9 +682,10 @@ fn collect_unauthored_diags(
 }
 
 /// Walk one declared field, warning at each **cell** the schema obliges and the
-/// document leaves unauthored. The cell set is exactly the set of paths the
-/// blueprint would stamp `!must_fill`, so the two triggers agree on where an
-/// obligation lives and a fresh seed converges with a hand-written document:
+/// document leaves unauthored. Cells sit where the blueprint stamps its markers
+/// (`prose/canon/BLUEPRINT.md` § "Placeholder value precedence"), so the two
+/// triggers agree on where an obligation lives and a fresh seed converges with a
+/// hand-written document:
 ///
 /// - A **typed dictionary** is never itself a cell (`!must_fill` is rejected on
 ///   a mapping, `prose/references/markdown-spec.md` §3.4, and the blueprint
@@ -695,7 +696,9 @@ fn collect_unauthored_diags(
 /// - Every **other** type is the cell, the array included: an absent array is
 ///   one unauthored cell, and `[]` is an authored answer that discharges it.
 ///   Once present, elements resolve against the item schema, so a null element
-///   warns at its own index.
+///   warns at its own index. The blueprint's synthetic row indexes a table the
+///   document has yet to have rows for, which is why the absent case anchors on
+///   the container here and on `[0]`'s leaves there.
 fn collect_unauthored_field(
     field: &FieldSchema,
     value: Option<&QuillValue>,
