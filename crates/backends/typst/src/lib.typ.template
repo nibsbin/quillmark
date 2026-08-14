@@ -172,12 +172,10 @@
 
 /// A value-object field's **placement** projection: its rendered ink, whose
 /// glyphs carry the field's region. `date`/`datetime` fields and a card's
-/// declared string/number fields arrive as `(value:, display:)` objects; this
-/// spares every plate the parenthesized-closure form and the missing-cell
-/// branch, so `display-of(card.at("from", default: none))` covers a card that
-/// has no such key (⇒ `none`, which places as nothing). Trailing arguments
-/// forward to the closure, so a date takes its pattern here too:
-/// `display-of(data.issued, "[year]")`.
+/// declared string/number fields arrive as `(value:, display:)` objects. A
+/// `none` cell places as nothing, so `display-of(card.at("from", default:
+/// none))` needs no branch for a card carrying no such key. Trailing arguments
+/// forward to the closure: `display-of(data.issued, "[year]")`.
 #let display-of(cell, ..args) = if cell == none { none } else { (cell.display)(..args) }
 
 /// The **native** projection of the same object, `none`-total with a `default`.

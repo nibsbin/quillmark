@@ -566,9 +566,8 @@ card_kinds:
 
 #[test]
 fn card_scalars_surface_per_instance_regions_through_laundering() {
-    // The scalar twin of the card-date case: one `text(..)` node per card cell
-    // gives the shared `card.<field>` loop variable the per-instance identity
-    // `scalar_windows` cannot split, and `.value` still hands a package a `str`.
+    // The scalar twin of the card-date case, plus: `.value` still hands a
+    // consumer a native `str`.
     const YAML: &str = r#"
 quill:
   name: card_scalar_region
@@ -605,8 +604,7 @@ card_kinds:
   }
   let c = card.at("count", default: none)
   if c != none { [ #(c.display)()] }
-  // The helper spares the paren form and the missing-cell branch, and forwards
-  // trailing arguments, so one spelling covers a date's pattern too.
+  // `display-of` forwards trailing arguments, so it covers a date's pattern.
   [ #display-of(card.at("on", default: none), "[year]")]
   [ #value-of(card.at("missing", default: none), default: "—")]
   parbreak()
@@ -657,8 +655,7 @@ card_kinds:
         Some("$cards.stamp.0.from"),
         "a click on a laundered card scalar routes to its per-instance path"
     );
-    // The `.value` ink is the plate's own expression, attributable to no field:
-    // the region covers the `display` placement only.
+    // The `.value` ink is the plate's own expression, attributable to no field.
     assert_eq!(
         regions
             .iter()

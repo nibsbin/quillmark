@@ -62,10 +62,9 @@ The rule is the date rule: **native anything → the value projection; region
 render → the display projection.**
 
 `display-of` / `value-of` are the spelling to reach for. They wrap the
-projections the object carries — `(cell.display)(..)` and `cell.value` — adding
-the two things every plate otherwise re-derives: tolerance for a missing cell,
-and freedom from the parenthesized-closure form. They work on **dates** too,
-forwarding trailing arguments, so one spelling covers both value-object kinds:
+projections the object carries — `(cell.display)(..)` and `cell.value` — and add
+tolerance for a missing cell. They work on **dates** too, forwarding trailing
+arguments, so one spelling covers both value-object kinds:
 
 ```typst
 display-of(data.issued, "[day padding:none] [month repr:long] [year]")

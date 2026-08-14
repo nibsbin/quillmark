@@ -30,9 +30,7 @@ fn usaf_memo_regions_cover_body_signature_and_cards() {
         "$body",
         "signature_block",
         "$cards.indorsement.0.signature_block",
-        // Card scalars render through their generated `display` closure, so
-        // they region per instance even though the plate hands them to a
-        // vendored package through the shared loop variable.
+        // Per-instance even though the plate hands them to a vendored package.
         "$cards.indorsement.0.from",
         "$cards.indorsement.0.for",
     ] {

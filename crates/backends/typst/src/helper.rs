@@ -196,17 +196,15 @@ impl<'m> Codegen<'m> {
     }
 
     /// The scalar sibling of [`date_object`](Self::date_object), over a card's
-    /// declared string/number field: `value` is the raw `str`/`int`/`float`,
-    /// `display` a closure `() => text(str(v))` whose glyphs are born at this
-    /// `text(..)` node, so each card instance's cell records its own
-    /// segment-less window. That per-instance identity is the whole point: the
-    /// plate reads these through the shared loop variable (`card.<field>`),
-    /// one expression site for every card, which `scalar_windows` cannot split.
+    /// declared string/number field. One `text(..)` node per card *cell* is what
+    /// buys per-instance identity: the plate reads every card through the shared
+    /// loop variable (`card.<field>`), one expression site for N cards, which
+    /// `scalar_windows` cannot split.
     ///
-    /// `str(v)` rather than `v`: a number is not content, and `str` is a no-op
-    /// on the string case. Unlike a date, a blank value still lowers here, so
-    /// `.value` is total over a declared field and reads need no presence
-    /// guard; a blank one draws no ink and so surfaces no region.
+    /// `str(v)` rather than `v` because a number is not content, and `str` is a
+    /// no-op on the string case. Unlike a date, a blank value lowers here too
+    /// rather than degrading to `none`, so `.value` is total over a declared
+    /// field; it draws no ink and so surfaces no region.
     fn scalar_object(&mut self, path: &str, value: &serde_json::Value) -> String {
         let id = format!("_qm_s{}", self.scalar_counter);
         self.scalar_counter += 1;
@@ -399,9 +397,7 @@ impl<'m> Codegen<'m> {
 }
 
 /// How one data cell lowers. `Scalar` is card-only: a root field is placed
-/// through its own plate expression, which [`scalar_windows`] already windows,
-/// where a card field is read through one loop variable shared by every
-/// instance.
+/// through its own plate expression, which [`scalar_windows`] already windows.
 ///
 /// [`scalar_windows`]: crate::overlay::scalar_windows
 #[derive(Clone, Copy)]
@@ -882,7 +878,6 @@ mod tests {
         assert!(lib.contains("\"from\": _qm_s2"), "{lib}");
         assert!(lib.contains("\"from\": _qm_s3"), "{lib}");
 
-        // Each instance keys its own window on its own card address.
         let paths: Vec<&str> = windows.iter().map(|w| w.path.as_str()).collect();
         assert_eq!(
             paths,
@@ -898,8 +893,6 @@ mod tests {
             assert!(w.segments.is_empty(), "a scalar window carries no segments");
         }
 
-        // Untouched: the root scalar, `$kind` dispatch, an undeclared key, an
-        // absent value, and an array.
         assert!(lib.contains("\"title\": \"Root title\""), "{lib}");
         assert!(lib.contains("\"$kind\": \"stamp\""), "{lib}");
         assert!(lib.contains("\"undeclared\": \"x\""), "{lib}");

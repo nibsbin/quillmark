@@ -103,11 +103,10 @@
     // widget-name suffix only. The card body's region rides its own glyph
     // spans through the package rebuild, per-card because each card's body
     // has its own backend-generated eval site.
-    // A card's scalar fields arrive as value objects. `display-of` renders ink
-    // whose glyphs carry the field's per-instance region, so a click on an
-    // indorsement's FROM/MEMORANDUM FOR line routes to that card's own address;
-    // `format` and `action` take the native value because the package does
-    // string work on them (an `in` assert, a `.trim()`).
+    // `display-of` places a card scalar's ink under the field's own address, so
+    // a click on the FROM/MEMORANDUM FOR line routes to this card; `format` and
+    // `action` take the native value, which the package does string work on (an
+    // `in` assert, a `.trim()`).
     indorsement(
       from: display-of(card.at("from", default: none)),
       to: display-of(card.at("for", default: none)),

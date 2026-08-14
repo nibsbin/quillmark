@@ -127,28 +127,22 @@ Helper contents (generated in `backends/typst/helper.rs` from `lib.typ.template`
   node can key a region on `$cards.<kind>.<n>.<field>`. `str(v)` because a
   number is not content and `str` is a no-op on the string case.
 
-  The lowering is deliberately narrow, and each boundary is a place the identity
-  problem does not arise or the address does not exist:
-  - **Root fields keep their literals.** A root field is placed through its own
-    plate expression, which `scalar_windows` already windows; there is no shared
-    site to disambiguate, and converting them would break every plate to buy
-    nothing.
-  - **Declared fields only** (`card_field_names`), so every emitted window keys
-    on an address `_qm-known-path` would accept. `$kind` is document-defined,
-    not a schema property, so card dispatch is untouched.
-  - **Array elements stay raw.** `$cards.<k>.<n>.<field>.<i>` is a real address,
-    but the plate reaches an element through a *second* shared site (the index
-    or `.map`), so per-element identity needs its own pass rather than falling
-    out of this one.
-  - Booleans stay literals (`#if card.flag` must keep working, and a boolean
-    renders as chrome the plate draws, not as its own ink); `none` stays `none`,
-    so presence guards are unchanged.
+  The lowering is narrow: each boundary is a place the identity problem does not
+  arise or the address does not exist.
+
+  | Stays a literal | Because |
+  |---|---|
+  | Root fields | placed through their own plate expression, which `scalar_windows` already windows: no shared site to disambiguate |
+  | Undeclared card keys | no schema address for a region to key on. `$kind` is document-defined rather than a schema property, so card dispatch is untouched |
+  | Array elements | `$cards.<k>.<n>.<field>.<i>` is a real address, but the plate reaches an element through a *second* shared site (an index or `.map`), so per-element identity is its own problem |
+  | Booleans | `#if card.flag` must keep working, and a boolean renders as chrome the plate draws rather than as its own ink |
+  | `none` | presence guards stay unchanged |
 
   Unlike a date, a *blank* scalar still lowers here rather than degrading to
   `none`: that keeps `.value` total over a declared field, at the cost of a
-  direct `card.f != ""` comparison silently becoming always-true — the one break
-  in the migration a type error does not catch. A blank cell draws no ink and so
-  surfaces no region.
+  direct `card.f != ""` comparison silently becoming always-true, the one
+  mistake in this shape a Typst error does not catch. A blank cell draws no ink
+  and so surfaces no region.
 - `plaintext(field)`: the sanctioned content→`str` coercion. Where
   `data.<field>` is Typst **content**, `plaintext(field)` returns the content
   field's plain text: the content text with island slots stripped and marks
@@ -163,12 +157,9 @@ Helper contents (generated in `backends/typst/helper.rs` from `lib.typ.template`
   **field type**. The helper projects *any* content to a `str`; the field type
   declares a field's content plain from the start.
 - `display-of(cell, ..args)` / `value-of(cell, default: none)`: the two
-  projections of a value-object cell, wrapped. They exist because the raw
-  spellings make every plate re-derive the same two things — a missing-cell
-  branch, and the parenthesized-closure form Typst's dict-key method sugar
-  forces — which the three fixture plates each grew their own copy of before
-  the helpers landed. `display-of` forwards trailing arguments, so it serves a
-  date's pattern and a card scalar's empty call in one spelling. Both are
-  ordinary sugar over `cell.display` / `cell.value`: the region comes from
-  where the closure's ink is born, so wrapping the call site changes nothing
-  about attribution.
+  projections of a value-object cell, wrapped, so a plate carries neither a
+  missing-cell branch nor the parenthesized-closure form Typst's dict-key method
+  sugar forces. `display-of` forwards trailing arguments, so one spelling serves
+  a date's pattern and a card scalar's empty call. Both are sugar over
+  `cell.display` / `cell.value`: a region comes from where the closure's ink is
+  born, so wrapping the call site changes nothing about attribution.
