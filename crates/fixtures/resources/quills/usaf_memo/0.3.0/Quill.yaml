@@ -1,6 +1,6 @@
 quill:
   name: usaf_memo
-  version: 0.2.0
+  version: 0.3.0
   backend: typst
   description: U.S. Air Force and Space Force Official Memorandum
 
@@ -134,10 +134,13 @@ main:
     cui_controlled_by:
       type: string
       default: ""
+      must_fill_when:
+        field: classification
+        equals: CUI
       ui:
         group: classification
         compact: true
-      description: "Office or organization that designated this information as CUI (e.g., 'SAF/AA'). Required by DoDM 5200.48 when classification is CUI."
+      description: "Office or organization that designated this information as CUI (e.g., 'SAF/AA'). Required by DoDM 5200.48."
 
     cui_category:
       type: string
@@ -158,10 +161,13 @@ main:
     cui_poc:
       type: string
       default: ""
+      must_fill_when:
+        field: classification
+        equals: CUI
       ui:
         group: classification
         compact: true
-      description: "Point of contact for CUI questions (e.g., 'Capt J. Smith, DSN 555-1234, john.smith@us.af.mil'). Required by DoDM 5200.48 when classification is CUI."
+      description: "Point of contact for CUI questions (e.g., 'Capt J. Smith, DSN 555-1234, john.smith@us.af.mil'). Required by DoDM 5200.48."
 
     references:
       type: array
@@ -192,12 +198,15 @@ main:
       items:
         type: string
       default: []
+      must_fill_when:
+        field: memo_for
+        contains: SEE DISTRIBUTION
       example:
         - ORG1/SYMBOL
         - ORG2/SYMBOL
       ui:
         group: additional
-      description: Complete list of recipients if 'SEE DISTRIBUTION' is used in the 'Memo For' field.
+      description: Complete list of the recipients addressed by 'SEE DISTRIBUTION' in the 'Memo For' field.
 
     attachments:
       type: array

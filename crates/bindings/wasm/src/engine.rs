@@ -63,6 +63,21 @@ export interface QuillCardBody {
     unsupported?: QuillBlockConstruct[];
 }
 
+/** A field's conditional obligation: obliged only when a sibling field's
+ *  resolved value satisfies one test.
+ *
+ *  Exactly one operator key rides beside `field`. `nonblank` is always `true`
+ *  where present — the negative form is not spelled. */
+export interface QuillMustFillWhen {
+    /** The sibling field read, always a field of the same card. */
+    field: string;
+    equals?: unknown;
+    in?: unknown[];
+    /** Array membership: holds when `field`'s array carries this element. */
+    contains?: unknown;
+    nonblank?: true;
+}
+
 /** Schema entry for a single field declared in a quill's `Quill.yaml`.
  *
  * Two independent axes, and no separate `required` one. `default` and
@@ -81,8 +96,15 @@ export interface QuillFieldSchema {
      *  nowhere else. */
     values?: string[];
     /** Whether a human must author the field. Absent, it derives from
-     *  `default`: a defaulted field is unobliged, a defaultless one obliged. */
+     *  `default`: a defaulted field is unobliged, a defaultless one obliged —
+     *  unless `must_fill_when` is present, which turns the derivation off. */
     must_fill?: boolean;
+    /** A conditional obligation, mutually exclusive with `must_fill`. The cell
+     *  is obliged only while the condition holds, and obliged means *non-blank*
+     *  rather than merely authored, so writing the blank does not discharge it.
+     *  Never a render gate: it warns `validation::must_fill` with
+     *  `trigger: "conditional"`. */
+    must_fill_when?: QuillMustFillWhen;
     ui?: QuillFieldUi;
     properties?: Record<string, QuillFieldSchema>;
     items?: QuillFieldSchema;

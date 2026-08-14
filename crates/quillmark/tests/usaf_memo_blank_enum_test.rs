@@ -14,7 +14,7 @@ use quillmark_fixtures::quills_path;
 /// three and the indorsement kind's two.
 const BLANK_EVERYWHERE: &str = "\
 ~~~card-yaml
-$quill: usaf_memo@0.2.0
+$quill: usaf_memo@0.3.0
 $kind: main
 letterhead_title: DEPARTMENT OF THE AIR FORCE
 letterhead_caption: [123D EXAMPLE WING]

@@ -81,7 +81,12 @@ Per field, in order:
 1. `# <description>`: `description:` from `Quill.yaml`,
    whitespace-collapsed. **Single line only**; multi-line descriptions are
    rejected at `Quill.yaml` parse time.
-2. `# e.g. <value>`: emitted whenever `example:` is configured **and a
+2. `# required when <clause>`: the field's
+   [`must_fill_when:`](SCHEMAS.md#conditional-obligation-must_fill_when) rule,
+   stated as prose (`required when classification is CUI`). Emitted only when
+   the field declares one, and colon-free so it cannot collide with the
+   annotation grammar.
+3. `# e.g. <value>`: emitted whenever `example:` is configured **and a
    `default:` already holds the cell**. Independent of type. There the example
    never becomes the rendered value, so it surfaces as a hint; where no
    `default:` holds the cell the example inlines *as* the value (see
@@ -90,8 +95,16 @@ Per field, in order:
    defaultless richtext field with an `example:` therefore keeps the `# e.g.`
    line (see "Richtext fields").
 
-That's it. There is no leading `# required`, `# enum:`, `# default:`, or
-`# type:`: those collapse into the inline.
+The value hint sits last so it stays adjacent to the value line; the rule sits
+with the description because it is prose about the cell, not about its value.
+
+That's it. There is no leading `# enum:`, `# default:`, or `# type:`: those
+collapse into the inline. The one `# required` line is the exception the rest of
+the rule proves: an unconditional obligation *is* spellable in the cell, as the
+`!must_fill` marker, so it needs no prose. A conditional one is not — whether it
+binds depends on a filled-in document, and the blueprint is the empty form — so
+stamping a marker would assert an obligation that may not hold, and emitting
+nothing would hide the rule from the reader filling the form.
 
 ### Inline annotation
 

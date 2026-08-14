@@ -124,8 +124,11 @@ main:
       type: string
       description: >-
         Office or organization that designated this information as CUI (e.g.,
-        'SAF/AA'). Required by DoDM 5200.48 when classification is CUI.
+        'SAF/AA'). Required by DoDM 5200.48.
       default: ""
+      must_fill_when:
+        field: classification
+        equals: CUI
       ui:
         group: classification
         compact: true
@@ -151,8 +154,11 @@ main:
       type: string
       description: >-
         Point of contact for CUI questions (e.g., 'Capt J. Smith, DSN 555-1234,
-        john.smith@us.af.mil'). Required by DoDM 5200.48 when classification is CUI.
+        john.smith@us.af.mil'). Required by DoDM 5200.48.
       default: ""
+      must_fill_when:
+        field: classification
+        equals: CUI
       ui:
         group: classification
         compact: true
@@ -184,12 +190,15 @@ main:
     distribution:
       type: array
       description: >-
-        Complete list of recipients if 'SEE DISTRIBUTION' is used in the 'Memo For'
-        field.
+        Complete list of the recipients addressed by 'SEE DISTRIBUTION' in the 'Memo
+        For' field.
       default: []
       example:
       - ORG1/SYMBOL
       - ORG2/SYMBOL
+      must_fill_when:
+        field: memo_for
+        contains: SEE DISTRIBUTION
       ui:
         group: additional
       items:

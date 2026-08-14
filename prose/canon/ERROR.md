@@ -174,9 +174,9 @@ Either quote the value (`build_number: "42"`) or change the schema's
 `type:` to `integer`.
 ```
 
-`validation::must_fill` has two triggers, distinguished by its `trigger` arg
+`validation::must_fill` has three triggers, distinguished by its `trigger` arg
 and by nothing else — one code, one anchor grammar, one severity. The messages
-differ because the two name different situations:
+differ because they name different situations:
 
 ```
 Field `name` is marked `!must_fill`: a placeholder awaiting a value.
@@ -191,9 +191,27 @@ Field `name` must be filled in: nobody has authored a value.
 
 (`trigger: unauthored`) with the hint *"Author a value. To record that empty is
 the intended answer, write the field's blank explicitly rather than leaving it
-out."* Either way it is a warning, not an error: the field still renders (the
-cell blank-fills or uses its suggested value). At most one is emitted per path;
-where both apply the marker wins, its hint being the actionable one.
+out."*
+
+```
+Field `cui_controlled_by` must not be blank: `classification` is `CUI`.
+```
+
+(`trigger: conditional`) with the hint *"Either author `cui_controlled_by`, or
+change `classification` away from `CUI`."* Both clauses are generated from the
+rule's own closed, invertible operator set, so a quill states the relation once
+and the message names both ways out without the author writing either. The
+relation also rides the args (`conditionField`, `conditionOperator`, and
+`conditionOperand` where the operator carries one), so a consumer restates it
+without parsing prose. This message says "must not be blank" rather than "must
+be filled in" because it means it: writing the blank discharges an
+`unauthored` obligation but not a conditional one (see
+[SCHEMAS.md](SCHEMAS.md) § "Conditional obligation").
+
+All three are warnings, not errors: the field still renders (the cell
+blank-fills or uses its suggested value). At most one is emitted per path;
+where a marker shares a path with either schema-side trigger the marker wins,
+its hint being the actionable one.
 
 A present-null value (`subtitle:`, `subtitle: null`, `subtitle: ~`) is treated
 exactly like an omitted field on the **value** ladder: null ≡ absent, it
@@ -206,8 +224,9 @@ diagnostic, and warns exactly where a human has yet to make a call.
 
 Implementation: `crates/core/src/quill/validation.rs` (the `ValidationError`
 `Display` impl, for `validation::type_mismatch`) and
-`crates/core/src/quill/compose.rs` (`validate_fills`/`fill_warning` and
-`validate_unauthored`/`unauthored_warning`, for `validation::must_fill`).
+`crates/core/src/quill/compose.rs` (`validate_fills`/`fill_warning`,
+`validate_unauthored`/`unauthored_warning`, and
+`validate_conditional`/`conditional_warning`, for `validation::must_fill`).
 
 ## Document-model paths
 

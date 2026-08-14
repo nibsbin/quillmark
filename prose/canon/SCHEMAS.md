@@ -180,8 +180,8 @@ Validation is implemented by a native walker over `QuillConfig` in `quill/valida
   price of letting a human answer "deliberately nothing" at all: keying the
   obligation on the resolved source rung instead would leave the deliberate
   blank unspellable and go blind to a must-fill leaf inside a touched container.
-- **`validation::must_fill` → non-fatal warning, from two triggers.**
-  `Quill::validate` emits it at **`Severity::Warning`** when either holds, with a
+- **`validation::must_fill` → non-fatal warning, from three triggers.**
+  `Quill::validate` emits it at **`Severity::Warning`** when any holds, with a
   `trigger` arg naming which:
   - `marker` — a `!must_fill` marker is present (root or nested, main card or
     composable card), whether or not it carries a value. The marker is
@@ -189,14 +189,21 @@ Validation is implemented by a native walker over `QuillConfig` in `quill/valida
     dropping it is a decision nothing re-derives.
   - `unauthored` — the schema obliges the cell and the document leaves it
     absent or present-null.
+  - `conditional` — a [`must_fill_when:`](#conditional-obligation-must_fill_when)
+    rule's condition holds over a **blank** cell. Carries the relation as args
+    (`conditionField`, `conditionOperator`, `conditionOperand`) so a consumer can
+    restate it without parsing the message.
 
-  Neither subsumes the other. A hand-written or programmatically built document
+  None subsumes another. A hand-written or programmatically built document
   carries no marker; a seeded `example` is present, in-domain, and structurally
-  indistinguishable from authored content. Where both would fire on one path
-  (a bare marker on an unauthored cell) one diagnostic is emitted and the marker
-  wins: its hint is the actionable one. It **never gates render**: the cell
-  blank-fills, or uses its suggested value. A strict consumer (e.g. an LLM
-  authoring loop) treats any outstanding warning as "not done."
+  indistinguishable from authored content; a relational omission is invisible to
+  both. Where a marker shares a path with either schema-side trigger, one
+  diagnostic is emitted and the marker wins: its hint is the actionable one. The
+  two schema-side triggers cannot collide, since a rule turns the unconditional
+  obligation off. It **never gates render**: the cell blank-fills, or uses its
+  suggested value. A strict consumer (e.g. an LLM authoring loop) treats any
+  outstanding warning as "not done" — which is how a relationally incomplete
+  document now reaches such a loop at all.
 - **Absence semantics**: a missing (or present-null) field with a `default:`
   accepts the default; without a `default:` it blank-fills. Either way it
   coerces and validates clean — absence is never *malformed*, and there is no
@@ -543,6 +550,83 @@ blueprint and the predicate both address them there. An array is its own cell,
 including an array of objects.
 
 See [BLUEPRINT.md](BLUEPRINT.md) for how the two axes render into cells.
+
+#### Conditional obligation (`must_fill_when:`)
+
+`must_fill:` decides obligation per cell, in isolation. Real quills also carry
+obligations that depend on *another* field — "the CUI controlling office is
+required when the classification is CUI" — and before `must_fill_when:` those
+lived in `description:` prose, where nothing checked them and a document could
+validate clean while breaking the quill's own stated rule.
+
+A rule names one sibling field and one test:
+
+```yaml
+cui_controlled_by:
+  type: string
+  default: ""
+  must_fill_when: { field: classification, equals: CUI }
+```
+
+The vocabulary is four operators — `equals`, `in`, `contains` (array
+membership), `nonblank` — and exactly one per rule. It is closed for the reason
+every closed set here is: a misspelled operator must be a load error rather than
+a rule that matches nothing. It is also **invertible**, which is what buys the
+diagnostic its second clause: the engine generates both exits ("Either author
+`cui_controlled_by`, or change `classification` away from `CUI`") from the rule
+itself, so a quill states the relation once and the message reads like a type
+error's. An opaque expression string could not be inverted, and that — not
+sandboxing or binary size — is the argument that keeps this vocabulary small.
+
+Four properties fix the semantics:
+
+- **The condition reads the resolved ladder**, authored › `default:` › blank,
+  through the same producer [`resolve()`](#the-resolved-value-view-resolve)
+  cuts. A rule keyed on a value only a `default:` supplies fires on the document
+  that renders, not on the subset a human happened to type, so the rule and the
+  editor's field view cannot disagree about what a cell holds.
+- **Obliged means non-blank, not merely authored.** This is the one place the
+  triggers part company, and it is forced: `must_fill` asks whether a human made
+  a call, so writing the blank discharges it, while a conditional rule asks
+  whether the document holds the value it demands — and an explicitly blank
+  `cui_controlled_by` on a CUI memo is exactly the gap the rule closes. The
+  message says which it means ("must not be blank", not "must be filled in").
+- **A rule replaces the derivation rather than stacking on it.** Declaring
+  `must_fill_when:` turns the `default:`-presence derivation off, so a rule on a
+  defaultless field does not also inherit the unconditional obligation and draw
+  two diagnostics for one cell, one of them contradicting the author's rule.
+  Declaring `must_fill:` beside it is a load error: the two are not composable,
+  and refusing the pair beats resolving it by a precedence nobody can see.
+- **Card-local, and card-level only.** A rule reads a sibling on the same card,
+  and is rejected in a nested position (`quill::nested_must_fill_when`): inside
+  an object property or a table row there is no sibling namespace a bare field
+  name could resolve against.
+
+Load resolves every rule against its card, and those checks are what make a
+declared rule a *checked* one. An unknown or self-referencing condition field, an
+operator the field's shape cannot answer (`contains` on a scalar), and an operand
+outside a declared `enum` domain are all load errors. The last earns its keep:
+`equals: cui` against `values: [CUI, …]` is well-formed, loads clean, and never
+fires — unenforceable prose wearing a predicate's syntax, which is the failure
+this surface exists to remove.
+
+The two projections state a rule without enforcing it, each for its own reason.
+The blueprint emits a `# required when <clause>` line and stamps **no** marker:
+whether the obligation binds is a fact about a filled-in document, and a
+blueprint is the empty form, so a marker would assert an obligation that may not
+hold. The transform schema carries `quillmark:must_fill_when` as an annotation
+rather than the standard `if`/`then`, because that projection's contract is that
+a stock JSON-Schema validator accepts exactly what the engine accepts — and an
+enforcing conditional would refuse documents the engine renders, turning a
+warning into a hard failure at the one seam meant to agree with the engine.
+
+**The ceiling, stated.** A rule obliges the field it sits on and no other, so the
+first thing it cannot express is an assertion the obliged field does not own —
+the reverse of the distribution pairing, "a non-empty `distribution` requires
+`SEE DISTRIBUTION` in `memo_for`". That is where a card-level predicate block
+would begin, and it is deliberately not built: no case has named it. The gradient
+today is single-field types → conditional obligation → the plate, with this rung
+covering the shape quills actually keep writing as prose.
 
 Identity fields (`name`, `version`, `backend`, `author`, `description`) live on the parent metadata object (Wasm: `Quill.metadata` getter; Python: `Quill.metadata`). Both bindings also expose `backend_id`/`backendId` directly; Python additionally exposes `quill_ref`, a derived `name@version` string.
 

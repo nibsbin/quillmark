@@ -143,7 +143,7 @@ an optional reserved `$body` string) a freshly-added card of that kind inherits.
 
 ````markdown
 ~~~
-$quill: usaf_memo@0.2.0
+$quill: usaf_memo@0.3.0
 $kind: main
 $seed:
   indorsement:                 # keyed by card-kind; never "main"

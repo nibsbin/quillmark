@@ -87,6 +87,7 @@ main:
 | `default`     | matches `type`    | no       | The value the **majority of authors want**. When the field is omitted, the default is filled in, and the blueprint renders that concrete value with a type-only annotation, shippable as-is. Declaring it also flips the derived `must_fill` to `false` (see below). |
 | `example`     | matches `type`    | no       | A value matching the **type and shape** of what the author wants, but **not** the value desired most of the time. Documents shape only, never rendered as the value: it takes the blueprint cell when no `default` holds it, and surfaces in the `# e.g.` line otherwise. |
 | `must_fill`   | boolean           | no       | Whether a human must author this cell (see [Obligation: `must_fill`](#obligation-must_fill)). Defaults to `!default.is_some()`. |
+| `must_fill_when` | object         | no       | Oblige this cell only when a sibling field holds a given value (see [Conditional obligation](#conditional-obligation-must_fill_when)). Cannot be combined with `must_fill`. |
 | `values`      | array of strings  | for `enum` | The closed set of allowed string values: the **choices**. Required on every `enum` field. Declaring `""` is a load error — every enum also accepts its [blank](#the-blank-values-is-for-choices-not-for-the-absence-of-one), which the engine supplies. |
 | `ui`          | object            | no       | UI rendering hints (see [UI Properties](#ui-properties)) |
 | `items`       | object            | for `array` | Element schema for an `array` field (a nested field schema). Required on every array. |
@@ -130,6 +131,65 @@ refuses it. "Must pick" is this warning plus whatever policy a consumer layers
 on top, canonically *a strict consumer treats any outstanding marker as not
 done*. There is no `required:` and no severity knob: on this surface
 `Severity::Error` already means "won't render".
+
+### Conditional obligation: `must_fill_when`
+
+Some fields are required only in some documents. Rather than saying so in
+`description:` where nothing can check it, state the rule as data: name a
+sibling field and one test.
+
+```yaml
+classification:
+  type: enum
+  values: [UNCLASSIFIED, CUI, SECRET]
+  default: ""
+
+cui_controlled_by:
+  type: string
+  default: ""
+  must_fill_when: { field: classification, equals: CUI }
+```
+
+A CUI memo with no controlling office now raises `validation::must_fill` with
+`trigger: conditional`; an unclassified one raises nothing.
+
+Exactly one operator per rule:
+
+| Operator | Holds when the sibling's value… | Sibling must be |
+|---|---|---|
+| `equals: <v>`   | equals `<v>` | a scalar |
+| `in: [<v>, …]`  | equals any listed value | a scalar |
+| `contains: <v>` | is an array holding `<v>` as an element | an `array` |
+| `nonblank: true`| is not the field's blank | any type |
+
+Four things to know:
+
+- **The condition reads the rendered value**, not just what a human typed: it
+  resolves `authored → default → blank` first, so a rule keyed on a value your
+  `default:` supplies fires on documents that never mention the field.
+- **Blank does not discharge it.** Plain `must_fill` is satisfied by authoring
+  the blank ("deliberately nothing" is an answer), but a conditional rule
+  demands a value — `cui_controlled_by: ""` on a CUI memo still warns. That is
+  the point of the rule.
+- **It replaces the derived `must_fill`**, so the field is obliged *only* when
+  the condition holds. Declaring both keys on one field is a load error.
+- **It is card-level and card-local.** The sibling must be a field of the same
+  card (or the same card kind); rules inside `properties:` or `items:` are
+  rejected.
+
+Load-time checks catch the rules that would silently never fire: an unknown or
+self-referencing sibling, an operator the sibling's type cannot answer, and —
+most usefully — an operand outside a sibling `enum`'s `values:`. Writing
+`equals: cui` against `values: [CUI, …]` is a load error, not a rule that
+quietly matches nothing.
+
+Like every obligation here it is a **warning, never a gate**: the cell
+blank-fills and the document renders.
+
+The rule obliges the field it is written on. An assertion about a field it does
+not own — "if `distribution` is non-empty then `memo_for` must say SEE
+DISTRIBUTION" — is not expressible; write the rule from the obliged field's
+side, or keep it in `description:`.
 
 On a **typed dictionary** the key is inert on the container — the obligation
 lives on its leaves, which is where the blueprint marks and the warning

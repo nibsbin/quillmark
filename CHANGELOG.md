@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+- feat(core): a quill can state a cross-field constraint as data instead of
+  prose. `must_fill_when:` obliges a field only when a sibling field holds a
+  given value — `must_fill_when: { field: classification, equals: CUI }` — with
+  four operators (`equals`, `in`, `contains`, `nonblank`), exactly one per rule.
+  Before this the schema was complete at the single-field level and silent about
+  relations, so constraints like "required by DoDM 5200.48 when classification is
+  CUI" lived in `description:` where nothing checked them, and a CUI memo with no
+  controlling office validated clean (#1202). The condition reads the resolved
+  ladder (authored › `default:` › blank) through the same producer `resolve()`
+  cuts, so a rule sees the document that renders. Obliged means **non-blank**,
+  not merely authored: writing the blank discharges a plain `must_fill` but not a
+  conditional one, since an explicitly blank cell is the gap these rules close.
+  The signal is `validation::must_fill` with a third trigger, `conditional`, at
+  `Severity::Warning` — an outstanding rule blank-fills and renders, like every
+  other obligation here, so a strict consumer (an LLM authoring loop) now gets
+  "not done" for a relational omission with no protocol change. Because the
+  operator set is closed and invertible the diagnostic names both ways out
+  ("Either author `cui_controlled_by`, or change `classification` away from
+  `CUI`") without the quill author writing either clause. Load resolves every
+  rule against its card: an unknown or self-referencing condition field, an
+  operator the field's shape cannot answer, and an operand outside a declared
+  `enum` domain are all load errors, so `equals: cui` against `values: [CUI, …]`
+  cannot ship as a rule that silently never fires. A rule suppresses the
+  `default:`-presence derivation and cannot sit beside an explicit `must_fill:`,
+  so one cell never draws two obligations. The blueprint states the rule as a
+  `# required when …` line and stamps no marker (whether it binds is a fact about
+  a filled-in document); the transform schema carries `quillmark:must_fill_when`
+  as an annotation rather than `if`/`then`, keeping the promise that a stock
+  JSON-Schema validator accepts exactly what the engine accepts.
+- feat(fixtures)!: `usaf_memo` migrates to `0.3.0` and enforces the three
+  constraints it previously stated only in prose: `cui_controlled_by` and
+  `cui_poc` when `classification` is `CUI`, and `distribution` when `memo_for`
+  contains `SEE DISTRIBUTION`. Documents render byte-identically; a document
+  breaking one of these now draws a warning. **Breaking**: the `0.2.0` ref is
+  gone, so a document pinned to `usaf_memo@0.2.0` must move to `@0.3.0`.
+
 - fix(core,wasm,python)!: `EditError::UnknownField` carries the in-field path
   `FieldDecode` and `FieldNotContent` carry. A property an `object` field does
   not declare — `get_content_at("address", [Key("zip")])` against an `address`

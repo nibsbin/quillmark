@@ -54,7 +54,7 @@ export function expectEditCode(fn, code) {
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const TEST_FONT_PATH = join(
   __dirname,
-  '../../fixtures/resources/quills/usaf_memo/0.2.0/packages/tonguetoquill-usaf-memo/fonts/CopperplateCC/CopperplateCC-Heavy.otf',
+  '../../fixtures/resources/quills/usaf_memo/0.3.0/packages/tonguetoquill-usaf-memo/fonts/CopperplateCC/CopperplateCC-Heavy.otf',
 )
 const TEST_FONT_BYTES = new Uint8Array(readFileSync(TEST_FONT_PATH))
 

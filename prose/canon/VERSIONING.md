@@ -26,6 +26,19 @@ order, the blueprint's `enum` annotation text, and pdfform dropdown order, so it
 is a presentation change rather than a no-op. Removing or renaming a member is
 breaking: a stored document carrying it stops validating.
 
+**Adopting a `must_fill_when:` rule is MINOR, and splits the two axes this page
+keeps apart.** On the *document* axis it is backward-compatible: stored
+documents keep loading and render byte-identically, and a document that breaks
+the new rule draws a warning, never an error ([SCHEMAS.md](SCHEMAS.md)
+§ "Conditional obligation"). On the *engine* axis it is a hard floor rather than
+a gradient: `Quill.yaml` rejects unknown keys, so an engine predating the key
+fails to load the quill at all. That failure is the desired one — an old engine
+that silently ignored the rule would report a document clean while it broke the
+quill's own stated constraint — but it means adoption is gated on the engine,
+not merely on the ref. Tightening an existing rule (widening its `in:` list,
+adding a rule to a field authors already fill) is MINOR by the same reasoning;
+nothing about an obligation is a MAJOR event, because none of it gates render.
+
 ## Document Syntax
 
 The version selector rides on the root block's `$quill` system-metadata line (see [markdown-spec.md](../references/markdown-spec.md) §3.3):

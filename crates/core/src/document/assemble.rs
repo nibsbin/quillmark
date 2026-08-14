@@ -213,7 +213,7 @@ pub(super) fn decompose_with_warnings(
     if !has_root_quill {
         return Err(ParseError::MissingQuill(
             "The document's root card-yaml block must declare `$quill: <name>` as \
-             its first line (e.g. `$quill: usaf_memo@0.2.0`)."
+             its first line (e.g. `$quill: usaf_memo@0.3.0`)."
                 .to_string(),
         ));
     }
