@@ -31,7 +31,10 @@
   8.03em; USAF's "28 September 2026" is 7.78em). `date-placeholder-line` seats
   it with a measured `dx` rather than `place(bottom + right)`, Typst clamping
   an overflowing alignment back to zero, which leaves `right` indistinguishable
-  from `left`.
+  from `left`. That helper draws no rule now and is named `date-placeholder`
+  rather than `date-placeholder-line`: the widget carries the date, and a rule
+  under a widget wider than it underlines only the fraction of the value narrow
+  enough to sit over it. It is package-internal, not exported from `lib.typ`.
 
 - fix(core,wasm,python)!: `EditError::UnknownField` carries the in-field path
   `FieldDecode` and `FieldNotContent` carry. A property an `object` field does

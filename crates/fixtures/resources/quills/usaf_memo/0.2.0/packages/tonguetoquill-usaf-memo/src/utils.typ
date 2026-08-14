@@ -123,34 +123,34 @@
   }
 }
 
-/// Renders a horizontal rule sized to fit a handwritten date.
+/// Reserves the space an indorsement's undetermined signing date will occupy.
 ///
-/// Used for indorsements whose signing date is unknown at compile time: the
-/// endorser writes the date on the line by hand when signing. The rule sits at
-/// the baseline with one line of height above it so handwritten text can be
-/// written on the line without colliding with surrounding header text.
+/// Used for indorsements whose signing date is unknown at compile time. The
+/// space sits on the line's baseline with one line of height above it, so a
+/// date entered later lands where a typeset one would and cannot collide with
+/// surrounding header text. Nothing is drawn: the widget is what carries the
+/// date, and a rule under it would underline only the fraction of the value
+/// narrow enough to sit over it.
 ///
-/// - width (length): Length of the fill-in rule; defaults to fit a long date
-///   such as "15 September 2026".
-/// - field (content): Fill-in widget to seat on the rule, e.g. a Quillmark
-///   `form-field`. The rule is what prints; the widget makes the same span
-///   typeable in a PDF reader and addressable in a preview. `none` leaves a
-///   pen-only line.
+/// - width (length): Width of the reserved span, and the right edge `field` is
+///   seated against.
+/// - field (content): Fill-in widget to seat here, e.g. a Quillmark
+///   `form-field`, which makes the span typeable in a PDF reader and
+///   addressable in a preview. `none` reserves the space and leaves it empty.
 /// -> content
-#let date-placeholder-line(width: 1in, field: none) = box(
+#let date-placeholder(width: 1in, field: none) = box(
   width: width,
   height: 1em,
-  // Keep the rule on the line's baseline so it aligns with where the printed
+  // Keep the span on the line's baseline so it aligns with where the printed
   // date would sit. The 1em box height reserves the writing space above it.
-  // (A positive baseline shift would drop the rule a full line too low.)
+  // (A positive baseline shift would drop it a full line too low.)
   baseline: 0pt,
-  stroke: (bottom: 0.5pt + black),
-  // Placed, so a widget that measures differently from the rule cannot stretch
+  // Placed, so a widget that measures differently from this span cannot stretch
   // the box the surrounding header line is laid out against. Offset so the
-  // widget's *right* edge meets the rule's, that being the edge a date is set
-  // against: a widget wide enough to hold a long date at body size overruns
-  // this rule, and has to overrun it leftwards, into the whitespace a printed
-  // date grows into. `place(bottom + right)` cannot say that — Typst clamps an
+  // widget's *right* edge meets this span's, that being the edge a date is set
+  // against: a widget wide enough to hold a long date at body size overruns the
+  // span, and has to overrun it leftwards, into the whitespace a printed date
+  // grows into. `place(bottom + right)` cannot say that — Typst clamps an
   // overflowing alignment back to zero, leaving it identical to `left` — so the
   // offset is measured and applied directly.
   if field != none {

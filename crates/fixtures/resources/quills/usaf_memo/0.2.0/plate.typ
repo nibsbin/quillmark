@@ -93,9 +93,9 @@
     let card_date = card.date
     let resolved_date = if card_date == "" { none } else { card_date }
     // A filled date is typeset text and already regions through the date
-    // value-object's `display` closure. A blank one prints as a bare rule, so
-    // bind a text widget to the same schema address: typeable in a PDF reader,
-    // and the one thing that gives the *unfilled* date a region to click.
+    // value-object's `display` closure. A blank one draws nothing, so bind a
+    // text widget to the same schema address: typeable in a PDF reader, and the
+    // one thing that gives the *unfilled* date a region to click.
     //
     // Styled to match the printed date it stands in for, since the two are
     // alternatives for the same slot: the memo's Times-alike body face at the
@@ -111,10 +111,9 @@
     // where auto-size used to shrink. The longest date either memo style
     // produces sets just over 8em in Times ("September 28, 2026", the DAF
     // ordering, at 8.03em; USAF's "28 September 2026" is 7.78em), so 10em
-    // clears the worst case at any body size. Wider than the rule on purpose:
-    // the rule stays the width a hand writes on, and the widget hangs off its
-    // right edge, overrunning leftwards into the whitespace a printed date
-    // grows into.
+    // clears the worst case at any body size. Wider than `date-placeholder`'s
+    // reserved span on purpose: the widget hangs off that span's right edge and
+    // overruns leftwards, into the whitespace a printed date grows into.
     let date_size = data.font_size * 1pt
     let dating_field = form-field(
       "Ind_" + str(i) + "_Date",
