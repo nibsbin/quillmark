@@ -1,4 +1,4 @@
-#import "@local/quillmark-helper:0.1.0": data, signature-field
+#import "@local/quillmark-helper:0.1.0": data, form-field, signature-field
 #import "@local/tonguetoquill-usaf-memo:3.0.0": backmatter, frontmatter, indorsement, mainmatter
 
 // Frontmatter configuration
@@ -92,6 +92,18 @@
     // renders a fill-in line rather than stamping the compile date.
     let card_date = card.date
     let resolved_date = if card_date == "" { none } else { card_date }
+    // A filled date is typeset text and already regions through the date
+    // value-object's `display` closure. A blank one prints as a bare rule, so
+    // bind a text widget to the same schema address: typeable in a PDF reader,
+    // and the one thing that gives the *unfilled* date a region to click.
+    // 1in matches `date-placeholder-line`'s default rule width.
+    let dating_field = form-field(
+      "Ind_" + str(i) + "_Date",
+      type: "text",
+      width: 1in,
+      height: data.font_size * 1pt,
+      field: card.at("$path") + "date",
+    )
     // The card's `$path` prefix composes its canonical schema addresses
     // (`$cards.indorsement.<n>.…`, per-kind ordinal): the absolute loop
     // index `i` is NOT that ordinal once kinds interleave, so it stays a
@@ -114,6 +126,7 @@
       // the package reads a blank action as "no action line".
       ..if card.format != "" { (format: card.format) },
       date: resolved_date,
+      dating_field: dating_field,
       action: card.action,
       body_content,
     )

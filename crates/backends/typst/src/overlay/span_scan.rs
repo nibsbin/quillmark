@@ -16,13 +16,21 @@
 //! non-helper spans (plate, vendored packages: stable within a session)
 //! resolve through the live world.
 //!
-//! **First placement only.** Each key's region is its first maximal run of
-//! consecutive matching frame items. Span data cannot distinguish "package
-//! chrome between two placements" from "a second placement" (both are a gap of
-//! foreign spans), so later runs are not enumerated. One tolerance keeps
+//! **Marker claims.** A plate composes ink no field generated (a banner keyed
+//! on a field, a package-built block). The helper's `field-region` brackets such
+//! content with two invisible `metadata` markers, and the frame walk keeps a
+//! stack of the open ones: ink that resolves to no window is claimed by the
+//! innermost open marker instead of counting as foreign. Each *call* is its own
+//! claim, so a wrapper invoked per card yields one region per card.
+//!
+//! **First placement only.** Each span-window key's region is its first maximal
+//! run of consecutive matching frame items. Span data cannot distinguish
+//! "package chrome between two placements" from "a second placement" (both are a
+//! gap of foreign spans), so later runs are not enumerated. One tolerance keeps
 //! continuation pages covered: page marginals walk between one page's body and
 //! the next's, so a run may resume on the immediately following page; a
-//! same-page gap still ends it.
+//! same-page gap still ends it. A marker claim is exempt: its extent is
+//! delimited explicitly, so every hit inside it accrues.
 //!
 //! Geometry composes the group-transform stack exactly like
 //! `typst_layout::introspect::discover_frame`, transforming all four corners of
@@ -31,9 +39,12 @@
 use std::collections::HashMap;
 use std::ops::Range;
 
+use typst::foundations::{Content, Label, Value};
+use typst::introspection::Tag;
 use typst::layout::{Frame, FrameItem, Point, Transform};
 use typst::syntax::ast::{self, AstNode};
 use typst::syntax::{DiagSpan, DiagSpanKind, FileId, LinkedNode, Source, Span, SyntaxKind};
+use typst::utils::PicoStr;
 use typst::World;
 use typst_layout::PagedDocument;
 
@@ -108,14 +119,30 @@ fn pdf_rect(b: &Aabb, page_h: f64) -> [f32; 4] {
 struct Hit {
     page: usize,
     class: HitClass,
-    /// `Some` for any window-classified ink, `None` for foreign ink.
+    /// `Some` for any attributed ink, `None` for foreign ink.
     rect: Option<Aabb>,
 }
 
-/// Where a hit falls in the flattened key space `(window, Option<segment>)`.
+/// One box-accruing bucket in the run scan.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum Key {
+    /// A source window and, on a content window, the segment inside it.
+    Span(usize, Option<usize>),
+    /// One `field-region` call instance, indexed into [`Markers::claims`].
+    Marker(usize),
+}
+
+/// What a point query attributes a hit's ink to, boxable or not.
+#[derive(Clone, Copy)]
+enum Owner {
+    Window(usize),
+    Claim(usize),
+}
+
+/// Where a hit falls in the key space.
 #[derive(Clone, Copy)]
 enum HitClass {
-    Boxable { key: (usize, Option<usize>) },
+    Boxable { key: Key },
     /// A content window's ink between its segments (brackets, container-open
     /// syntax). Suspends a *different* window's run like foreign ink, but is a
     /// no-op while its own window's segment is the run.
@@ -125,35 +152,95 @@ enum HitClass {
     /// Attributable to no field, and never a run-breaker: a decoration drawn
     /// between a field's own glyphs would otherwise orphan the rest of the line.
     Anonymous,
-    /// No window, but a *resolvable* span: page chrome, another field's text,
-    /// vendored-package output. Breaks a run.
+    /// No window and no open marker, but a *resolvable* span: page chrome,
+    /// another field's text, vendored-package output. Breaks a run.
     Foreign,
 }
 
 impl HitClass {
-    fn window(self) -> Option<usize> {
+    fn owner(self) -> Option<Owner> {
         match self {
-            HitClass::Boxable { key } => Some(key.0),
-            HitClass::Transparent { window } => Some(window),
+            HitClass::Boxable { key: Key::Span(w, _) } => Some(Owner::Window(w)),
+            HitClass::Boxable { key: Key::Marker(c) } => Some(Owner::Claim(c)),
+            HitClass::Transparent { window } => Some(Owner::Window(window)),
             HitClass::Anonymous | HitClass::Foreign => None,
         }
     }
 }
 
 /// `(w, None)` splits by window kind: on a segment-less window it is the whole
-/// placement's boxable key; on a content window it is inter-segment ink.
+/// placement's boxable key; on a content window it is inter-segment ink. Falling
+/// through to `marker` only on an unresolved span is what makes nested tracked
+/// ink outrank an enclosing `field-region`.
 fn hit_class(
     resolved: Option<(usize, Option<usize>)>,
     detached: bool,
     windows: &[FieldWindow],
+    marker: Option<usize>,
 ) -> HitClass {
     match resolved {
         None if detached => HitClass::Anonymous,
-        None => HitClass::Foreign,
-        Some((w, Some(s))) => HitClass::Boxable { key: (w, Some(s)) },
-        Some((w, None)) if windows[w].segments.is_empty() => HitClass::Boxable { key: (w, None) },
+        None => match marker {
+            Some(c) => HitClass::Boxable { key: Key::Marker(c) },
+            None => HitClass::Foreign,
+        },
+        Some((w, Some(s))) => HitClass::Boxable { key: Key::Span(w, Some(s)) },
+        Some((w, None)) if windows[w].segments.is_empty() => {
+            HitClass::Boxable { key: Key::Span(w, None) }
+        }
         Some((w, None)) => HitClass::Transparent { window: w },
     }
+}
+
+/// The label and metadata `kind` the helper's `field-region` stamps on its two
+/// bracketing markers.
+const REGION_LABEL: &str = "__qm_region__";
+
+/// The `field-region` calls open at the current point of the frame walk, and
+/// every claim the walk has discovered.
+#[derive(Default)]
+struct Markers {
+    claims: Vec<String>,
+    stack: Vec<usize>,
+}
+
+impl Markers {
+    /// A close unwinds to the innermost open claim on `path`; one whose open
+    /// never reached the frame (content Typst laid out elsewhere) is dropped
+    /// rather than popping an unrelated claim.
+    fn edge(&mut self, path: &str, close: bool) {
+        if !close {
+            self.claims.push(path.to_string());
+            self.stack.push(self.claims.len() - 1);
+        } else if let Some(i) = self.stack.iter().rposition(|&c| self.claims[c] == path) {
+            self.stack.truncate(i);
+        }
+    }
+
+    fn current(&self) -> Option<usize> {
+        self.stack.last().copied()
+    }
+}
+
+/// `(field, is-close)` if `elem` is one of `field-region`'s markers.
+fn region_marker(elem: &Content) -> Option<(String, bool)> {
+    if elem.label()? != Label::new(PicoStr::intern(REGION_LABEL))? {
+        return None;
+    }
+    let Ok(Value::Dict(d)) = elem.get_by_name("value") else {
+        return None;
+    };
+    // A user attaching the reserved label to their own metadata is ignored.
+    if !matches!(d.get("kind"), Ok(Value::Str(k)) if k.as_str() == REGION_LABEL) {
+        return None;
+    }
+    let Ok(Value::Str(field)) = d.get("field") else {
+        return None;
+    };
+    Some((
+        field.to_string(),
+        matches!(d.get("close"), Ok(Value::Bool(true))),
+    ))
 }
 
 /// Memoizing span → two-tier classifier: the resolve + segment search runs once
@@ -222,20 +309,65 @@ impl<'a> Classifier<'a> {
     }
 }
 
-fn collect_page_hits(frame: &Frame, page: usize, cls: &mut Classifier, out: &mut Vec<Hit>) {
-    walk_items(frame, Transform::identity(), page, &mut |page, span, _offset, aabb| {
-        let class = hit_class(cls.classify_seg(span), span.is_detached(), cls.windows);
-        // Foreign ink still emits a rect-less Hit so the run machine sees the
-        // full ink sequence.
-        let rect = class.window().is_some().then(aabb);
-        out.push(Hit { page, class, rect });
+/// Records `page`'s ink against the marker stack, which pages before it may
+/// have left open.
+fn collect_page_hits(
+    frame: &Frame,
+    page: usize,
+    cls: &mut Classifier,
+    markers: &mut Markers,
+    out: &mut Vec<Hit>,
+) {
+    walk_items(frame, Transform::identity(), page, &mut |page, item| match item {
+        Item::Marker { path, close } => markers.edge(&path, close),
+        Item::Ink { span, aabb, .. } => {
+            let class = hit_class(
+                cls.classify_seg(span),
+                span.is_detached(),
+                cls.windows,
+                markers.current(),
+            );
+            // Foreign ink still emits a rect-less Hit so the run machine sees
+            // the full ink sequence.
+            let rect = class.owner().is_some().then(aabb);
+            out.push(Hit { page, class, rect });
+        }
     });
 }
 
-/// Per-item callback for [`walk_items`]: `(page, span, intra-node byte offset,
-/// thunk computing the page-space box on demand)`. The box is a thunk so a
-/// consumer that discards foreign ink pays no box arithmetic.
-type ItemVisitor<'a> = dyn FnMut(usize, Span, u16, &dyn Fn() -> Aabb) + 'a;
+/// The marker half of [`collect_page_hits`] for a page whose ink a query
+/// discards, since a claim opening there may still cover the page it wants.
+/// Skipping the per-glyph walk keeps that lookbehind linear in frame items.
+fn scan_markers(frame: &Frame, markers: &mut Markers) {
+    for (_, item) in frame.items() {
+        match item {
+            FrameItem::Group(group) => scan_markers(&group.frame, markers),
+            FrameItem::Tag(Tag::Start(elem, _)) => {
+                if let Some((path, close)) = region_marker(elem) {
+                    markers.edge(&path, close);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// One frame item [`walk_items`] reports. The box is a thunk so a consumer that
+/// discards foreign ink pays no box arithmetic.
+enum Item<'a> {
+    Ink {
+        span: Span,
+        /// Intra-node byte offset.
+        offset: u16,
+        aabb: &'a dyn Fn() -> Aabb,
+    },
+    Marker {
+        path: String,
+        close: bool,
+    },
+}
+
+type ItemVisitor<'a> = dyn for<'b> FnMut(usize, Item<'b>) + 'a;
 
 fn walk_items(frame: &Frame, ts: Transform, page: usize, visit: &mut ItemVisitor) {
     for (pos, item) in frame.items() {
@@ -257,19 +389,45 @@ fn walk_items(frame: &Frame, ts: Transform, page: usize, visit: &mut ItemVisitor
                     let lo = Point::new(cursor.x + offset.x, cursor.y + bb.min.y);
                     let hi = Point::new(cursor.x + offset.x + advance.x, cursor.y + bb.max.y);
                     let p = *pos;
-                    visit(page, glyph.span.0, glyph.span.1, &|| item_aabb(p, lo, hi, ts));
+                    visit(
+                        page,
+                        Item::Ink {
+                            span: glyph.span.0,
+                            offset: glyph.span.1,
+                            aabb: &|| item_aabb(p, lo, hi, ts),
+                        },
+                    );
                     cursor += advance;
                 }
             }
             FrameItem::Shape(shape, span) => {
                 let bb = shape.geometry.bbox(shape.stroke.as_ref());
                 let p = *pos;
-                visit(page, *span, 0, &|| item_aabb(p, bb.min, bb.max, ts));
+                visit(
+                    page,
+                    Item::Ink {
+                        span: *span,
+                        offset: 0,
+                        aabb: &|| item_aabb(p, bb.min, bb.max, ts),
+                    },
+                );
             }
             FrameItem::Image(_, size, span) => {
                 let sz = size.to_point();
                 let p = *pos;
-                visit(page, *span, 0, &|| item_aabb(p, Point::zero(), sz, ts));
+                visit(
+                    page,
+                    Item::Ink {
+                        span: *span,
+                        offset: 0,
+                        aabb: &|| item_aabb(p, Point::zero(), sz, ts),
+                    },
+                );
+            }
+            FrameItem::Tag(Tag::Start(elem, _)) => {
+                if let Some((path, close)) = region_marker(elem) {
+                    visit(page, Item::Marker { path, close });
+                }
             }
             _ => {}
         }
@@ -301,39 +459,46 @@ enum Run {
     Done,
 }
 
-/// Each window's **first placement**: one [`RenderedRegion`] per page the run
-/// touches, PDF bottom-left rects, sorted (page, field, window order).
+/// Each span window's **first placement** and each `field-region` call's whole
+/// claim: one [`RenderedRegion`] per page a run touches, PDF bottom-left rects,
+/// sorted (page, field, key order).
 pub(crate) fn scan_content_regions(
     doc: &PagedDocument,
     world: &QuillWorld,
     helper: &Source,
     windows: &[FieldWindow],
 ) -> Vec<RenderedRegion> {
-    if windows.is_empty() {
-        return Vec::new();
-    }
     let mut cls = Classifier::new(world, helper, windows);
+    let mut markers = Markers::default();
     let mut hits = Vec::new();
     for (page, p) in doc.pages().iter().enumerate() {
-        collect_page_hits(&p.frame, page, &mut cls, &mut hits);
+        collect_page_hits(&p.frame, page, &mut cls, &mut markers, &mut hits);
     }
 
-    let keys = flatten_keys(windows);
+    // Claims are only known after the walk, so keys extend the window keys.
+    let mut keys = flatten_keys(windows);
+    keys.extend((0..markers.claims.len()).map(Key::Marker));
     let boxes = run_scan_machine(&keys, &hits);
 
     let mut out: Vec<(RenderedRegion, usize)> = Vec::new();
-    for (ki, &(wi, seg)) in keys.iter().enumerate() {
-        let window = &windows[wi];
-        let span = seg.map(|s| {
-            let c = &window.segments[s].content;
-            [c.start, c.end]
-        });
+    for (ki, key) in keys.iter().enumerate() {
+        let (path, span) = match *key {
+            Key::Span(wi, seg) => {
+                let window = &windows[wi];
+                let span = seg.map(|s| {
+                    let c = &window.segments[s].content;
+                    [c.start, c.end]
+                });
+                (window.path.clone(), span)
+            }
+            // Geometry with no content address, like a scalar site or a widget.
+            Key::Marker(ci) => (markers.claims[ci].clone(), None),
+        };
         for (page, b) in &boxes[ki] {
             let Some(page_h) = doc.pages().get(*page).map(|p| p.frame.size().y.to_pt()) else {
                 continue;
             };
-            let mut region =
-                RenderedRegion::new(window.path.clone(), *page, pdf_rect(b, page_h));
+            let mut region = RenderedRegion::new(path.clone(), *page, pdf_rect(b, page_h));
             region.span = span;
             out.push((region, ki));
         }
@@ -344,24 +509,25 @@ pub(crate) fn scan_content_regions(
 }
 
 /// Window-major, segment-ascending: the order regions sort by.
-fn flatten_keys(windows: &[FieldWindow]) -> Vec<(usize, Option<usize>)> {
+fn flatten_keys(windows: &[FieldWindow]) -> Vec<Key> {
     let mut keys = Vec::new();
     for (wi, w) in windows.iter().enumerate() {
         if w.segments.is_empty() {
-            keys.push((wi, None));
+            keys.push(Key::Span(wi, None));
         } else {
-            keys.extend((0..w.segments.len()).map(|s| (wi, Some(s))));
+            keys.extend((0..w.segments.len()).map(|s| Key::Span(wi, Some(s))));
         }
     }
     keys
 }
 
-/// Each key's first placement as per-page boxes, indexed parallel to `keys`.
-/// `current` is the one key whose run is accruing; a boxable hit for a different
-/// key (or foreign ink) suspends it, and a suspended run resumes only on the
-/// immediately following page.
-fn run_scan_machine(keys: &[(usize, Option<usize>)], hits: &[Hit]) -> Vec<Vec<(usize, Aabb)>> {
-    let key_index: HashMap<(usize, Option<usize>), usize> =
+/// Each key's boxes per page, indexed parallel to `keys`. `current` is the one
+/// key whose run is accruing; a boxable hit for a different key (or foreign ink)
+/// suspends it, and a suspended span-window run resumes only on the immediately
+/// following page. A [`Key::Marker`] run always resumes: its extent is the
+/// bracketing markers, so an interruption inside it is never a second placement.
+fn run_scan_machine(keys: &[Key], hits: &[Hit]) -> Vec<Vec<(usize, Aabb)>> {
+    let key_index: HashMap<Key, usize> =
         keys.iter().enumerate().map(|(i, k)| (*k, i)).collect();
     let mut state = vec![Run::NotSeen; keys.len()];
     let mut boxes: Vec<Vec<(usize, Aabb)>> = vec![Vec::new(); keys.len()];
@@ -379,6 +545,10 @@ fn run_scan_machine(keys: &[(usize, Option<usize>)], hits: &[Hit]) -> Vec<Vec<(u
                         state[c] = Run::Suspended { last_page };
                     }
                     match state[ki] {
+                        _ if matches!(keys[ki], Key::Marker(_)) => {
+                            accrue(&mut boxes[ki], hit);
+                            current = Some((ki, hit.page));
+                        }
                         Run::NotSeen => {
                             accrue(&mut boxes[ki], hit);
                             current = Some((ki, hit.page));
@@ -395,7 +565,7 @@ fn run_scan_machine(keys: &[(usize, Option<usize>)], hits: &[Hit]) -> Vec<Vec<(u
             HitClass::Transparent { window } => match current {
                 // Transparent only while this field's own segment is the run,
                 // else interleaved placements merge into one lying box.
-                Some((c, _)) if keys[c].0 == window => {}
+                Some((c, _)) if matches!(keys[c], Key::Span(w, _) if w == window) => {}
                 _ => {
                     if let Some((c, last_page)) = current.take() {
                         state[c] = Run::Suspended { last_page };
@@ -425,6 +595,9 @@ fn accrue(boxes: &mut Vec<(usize, Aabb)>, hit: &Hit) {
 /// The schema field under a point (`x`/`y` in PDF bottom-left points). Unlike
 /// [`scan_content_regions`] every placement answers, not just the first. Among
 /// tracked ink the later-painted item wins; untracked ink never occludes.
+///
+/// Earlier pages are walked for their markers alone, so a `field-region` that
+/// opened on a previous page still claims this page's ink.
 pub(crate) fn field_at(
     doc: &PagedDocument,
     world: &QuillWorld,
@@ -434,22 +607,26 @@ pub(crate) fn field_at(
     x: f32,
     y: f32,
 ) -> Option<String> {
-    if windows.is_empty() {
-        return None;
-    }
     let frame = &doc.pages().get(page)?.frame;
     let page_h = frame.size().y.to_pt();
     let (x, y) = (x as f64, page_h - y as f64);
 
     let mut cls = Classifier::new(world, helper, windows);
+    let mut markers = Markers::default();
     let mut hits = Vec::new();
-    collect_page_hits(frame, page, &mut cls, &mut hits);
+    for earlier in doc.pages().iter().take(page) {
+        scan_markers(&earlier.frame, &mut markers);
+    }
+    collect_page_hits(frame, page, &mut cls, &mut markers, &mut hits);
 
     hits.iter()
         .rev()
         .find(|h| h.rect.is_some_and(|r| r.contains(x, y)))
-        .and_then(|h| h.class.window())
-        .map(|w| windows[w].path.clone())
+        .and_then(|h| h.class.owner())
+        .map(|owner| match owner {
+            Owner::Window(w) => windows[w].path.clone(),
+            Owner::Claim(c) => markers.claims[c].clone(),
+        })
 }
 
 /// The finer counterpart to [`Hit`], carrying the node range and intra-node
@@ -467,7 +644,7 @@ struct GlyphHit {
 }
 
 /// The content-position twin of [`collect_page_hits`]. Foreign and unresolvable
-/// ink is skipped: it has no content address.
+/// ink is skipped: it has no content address, marker claims included.
 ///
 /// `only` restricts emission to a single `(window, seg)`: the caret path knows
 /// its target segment up front, so it skips the box arithmetic and the
@@ -480,7 +657,10 @@ fn walk_glyphs(
     only: Option<(usize, Option<usize>)>,
     out: &mut Vec<GlyphHit>,
 ) {
-    walk_items(frame, Transform::identity(), page, &mut |page, span, offset, aabb| {
+    walk_items(frame, Transform::identity(), page, &mut |page, item| {
+        let Item::Ink { span, offset, aabb } = item else {
+            return;
+        };
         let Some((w, seg)) = cls.classify_seg(span) else {
             return;
         };
@@ -813,10 +993,11 @@ main:
         let mut cls = Classifier::new(&world, &helper, &windows);
         let mut hits = Vec::new();
         for (page, p) in doc.pages().iter().enumerate() {
-            collect_page_hits(&p.frame, page, &mut cls, &mut hits);
+            collect_page_hits(&p.frame, page, &mut cls, &mut Markers::default(), &mut hits);
         }
         assert!(
-            hits.iter().any(|h| h.class.window() == Some(intro_idx)),
+            hits.iter()
+                .any(|h| matches!(h.class.owner(), Some(Owner::Window(w)) if w == intro_idx)),
             "block output glyphs must classify into the helper file's recorded window {:?}",
             windows[intro_idx].range
         );
@@ -1029,6 +1210,167 @@ main:
         );
     }
 
+    const REGION_YAML: &str = r#"
+quill:
+  name: region_probe
+  version: 0.1.0
+  backend: typst
+  description: field-region claim probe
+typst:
+  plate_file: plate.typ
+main:
+  fields:
+    body:
+      type: richtext
+      description: the body
+    classification:
+      type: string
+      description: a scalar the plate interpolates
+"#;
+
+    /// Mirrors `open`'s window assembly, so a probe reads what a session would.
+    fn probe_regions(plate: &str, data: serde_json::Value) -> Vec<RenderedRegion> {
+        let q = quill(REGION_YAML, plate);
+        let plate_src = crate::read_plate(&q).expect("plate");
+        let schema = quillmark_core::quill::build_transform_schema(q.config());
+        let meta = crate::SchemaMeta::from_schema_json(schema.as_json());
+        let transformed = crate::transformed_data(&meta, &data).expect("transform");
+        let mut world = QuillWorld::new(&q, &plate_src).expect("world");
+        let mut windows = world
+            .inject_helper_package(transformed.as_ref(), &meta)
+            .expect("inject");
+        let main_id = world.main();
+        let src = world.source(main_id).expect("main source");
+        windows.extend(
+            scalar_windows(&src, &meta.fields)
+                .into_iter()
+                .map(|(path, range)| FieldWindow {
+                    path,
+                    file: main_id,
+                    range,
+                    segments: Vec::new(),
+                }),
+        );
+        let (doc, _) = compile_document(&world).expect("compile");
+        let helper = world
+            .source(QuillWorld::helper_fid("lib.typ"))
+            .expect("helper source");
+        scan_content_regions(&doc, &world, &helper, &windows)
+    }
+
+    fn body(markdown: &str) -> serde_json::Value {
+        let rt = quillmark_content::import::from_markdown(markdown).expect("import");
+        serde_json::json!({
+            "body": quillmark_content::serial::to_canonical_value(&rt),
+            "classification": "UNCLASSIFIED",
+        })
+    }
+
+    /// The premise of the wrapper: ink a package function draws carries that
+    /// function's spans, so only the markers can attribute it.
+    #[test]
+    fn field_region_claims_ink_no_window_tracks() {
+        const PLATE: &str = r#"
+#import "@local/quillmark-helper:0.1.0": data, field-region
+#set page(width: 400pt, height: 400pt, margin: 40pt)
+#let banner(level) = box(stroke: 1pt, inset: 4pt)[#upper(level)]
+#field-region("classification")[#banner("secret")]
+"#;
+        let regions = probe_regions(PLATE, body("A paragraph."));
+        let claimed: Vec<&RenderedRegion> = regions
+            .iter()
+            .filter(|r| r.field == "classification")
+            .collect();
+        assert_eq!(claimed.len(), 1, "one claim, one region: {regions:?}");
+        assert!(claimed[0].span.is_none(), "a claim carries no content span");
+        assert!(
+            claimed[0].rect[2] > claimed[0].rect[0] && claimed[0].rect[3] > claimed[0].rect[1],
+            "the claim boxes the banner's ink: {:?}",
+            claimed[0].rect
+        );
+    }
+
+    #[test]
+    fn field_region_yields_to_the_fields_nested_inside_it() {
+        const PLATE: &str = r#"
+#import "@local/quillmark-helper:0.1.0": data, field-region
+#set page(width: 400pt, height: 400pt, margin: 40pt)
+#field-region("classification")[
+  #line(length: 100pt)
+  #data.body
+]
+"#;
+        let regions = probe_regions(PLATE, body("Body PROBETOKEN text."));
+        assert!(
+            regions.iter().any(|r| r.field == "body" && r.span.is_some()),
+            "the nested content field keeps its own span-bearing region: {regions:?}"
+        );
+        assert!(
+            regions.iter().any(|r| r.field == "classification"),
+            "the wrapper still claims the rule it drew itself: {regions:?}"
+        );
+    }
+
+    #[test]
+    fn a_nested_scalar_reference_outranks_the_wrapper() {
+        const PLATE: &str = r#"
+#import "@local/quillmark-helper:0.1.0": data, field-region
+#set page(width: 400pt, height: 400pt, margin: 40pt)
+#field-region("body")[Level: #data.classification]
+"#;
+        let regions = probe_regions(PLATE, body("Unused."));
+        assert!(
+            regions.iter().any(|r| r.field == "classification"),
+            "the scalar site keeps its own region inside the wrapper: {regions:?}"
+        );
+    }
+
+    /// Two calls must not collapse into one shared first placement, or a
+    /// per-card wrapper would surface a single card.
+    #[test]
+    fn each_field_region_call_claims_separately() {
+        const PLATE: &str = r#"
+#import "@local/quillmark-helper:0.1.0": data, field-region
+#set page(width: 400pt, height: 400pt, margin: 40pt)
+#let stamp(n) = box(stroke: 1pt, inset: 4pt)[#n]
+#field-region("classification")[#stamp("one")]
+Interleaved plate chrome.
+#field-region("classification")[#stamp("two")]
+"#;
+        let regions = probe_regions(PLATE, body("Unused."));
+        let claimed = regions.iter().filter(|r| r.field == "classification").count();
+        assert_eq!(claimed, 2, "one region per call: {regions:?}");
+    }
+
+    /// An interruption must not truncate a claim: its extent is explicit, so
+    /// there is no second-placement ambiguity to be conservative about.
+    #[test]
+    fn a_claim_accrues_across_an_interruption() {
+        const PLATE: &str = r#"
+#import "@local/quillmark-helper:0.1.0": data, field-region
+#set page(width: 400pt, height: 400pt, margin: 40pt)
+#let chrome() = box(width: 40pt)[--]
+#field-region("classification")[LEFTMOST #chrome() #data.body RIGHTMOST]
+"#;
+        let regions = probe_regions(PLATE, body("mid"));
+        let claim = regions
+            .iter()
+            .find(|r| r.field == "classification")
+            .expect("the claim surfaces");
+        let body_box = regions
+            .iter()
+            .find(|r| r.field == "body")
+            .expect("the nested field surfaces");
+        // Bottom-left origin: the trailing text sits below the nested field.
+        assert!(
+            claim.rect[1] < body_box.rect[1],
+            "the claim reaches past the nested field's ink to its own trailing \
+             text: claim {:?} vs body {:?}",
+            claim.rect,
+            body_box.rect
+        );
+    }
+
     fn aabb(min_x: f64, min_y: f64, max_x: f64, max_y: f64) -> Aabb {
         Aabb {
             min_x,
@@ -1038,7 +1380,7 @@ main:
         }
     }
 
-    fn boxable_hit(page: usize, key: (usize, Option<usize>), rect: Aabb) -> Hit {
+    fn boxable_hit(page: usize, key: Key, rect: Aabb) -> Hit {
         Hit {
             page,
             class: HitClass::Boxable { key },
@@ -1072,10 +1414,7 @@ main:
 
     /// [`run_scan_machine`] read as per-key page sequences, never-accrued keys
     /// dropped.
-    fn key_pages(
-        keys: &[(usize, Option<usize>)],
-        hits: &[Hit],
-    ) -> HashMap<(usize, Option<usize>), Vec<usize>> {
+    fn key_pages(keys: &[Key], hits: &[Hit]) -> HashMap<Key, Vec<usize>> {
         run_scan_machine(keys, hits)
             .into_iter()
             .enumerate()
@@ -1087,13 +1426,13 @@ main:
     /// `interrupt` between two boxable hits of one segment keeps the run, while
     /// identically-placed foreign ink ends it.
     fn assert_transparent_but_foreign_ink_is_not(interrupt: Hit) {
-        let keys = vec![(0usize, Some(0usize))];
+        let keys = vec![Key::Span(0, Some(0))];
         let (a, b) = (aabb(0.0, 0.0, 1.0, 1.0), aabb(10.0, 10.0, 11.0, 11.0));
 
         let transparent = vec![
-            boxable_hit(0, (0, Some(0)), a),
+            boxable_hit(0, Key::Span(0, Some(0)), a),
             interrupt,
-            boxable_hit(0, (0, Some(0)), b),
+            boxable_hit(0, Key::Span(0, Some(0)), b),
         ];
         let boxes = run_scan_machine(&keys, &transparent);
         assert_eq!(boxes[0].len(), 1, "one page-0 box");
@@ -1104,9 +1443,9 @@ main:
         );
 
         let foreign = vec![
-            boxable_hit(0, (0, Some(0)), a),
+            boxable_hit(0, Key::Span(0, Some(0)), a),
             foreign_hit(0),
-            boxable_hit(0, (0, Some(0)), b),
+            boxable_hit(0, Key::Span(0, Some(0)), b),
         ];
         let boxes = run_scan_machine(&keys, &foreign);
         assert_eq!(boxes[0].len(), 1, "one page-0 box, unresumed");
@@ -1129,43 +1468,43 @@ main:
 
     #[test]
     fn adjacent_segments_of_one_field_run_independently() {
-        let keys = vec![(0, Some(0)), (0, Some(1))];
+        let keys = vec![Key::Span(0, Some(0)), Key::Span(0, Some(1))];
         let r = aabb(0.0, 0.0, 1.0, 1.0);
         let hits = vec![
-            boxable_hit(0, (0, Some(0)), r),
+            boxable_hit(0, Key::Span(0, Some(0)), r),
             transparent_hit(0, 0),
-            boxable_hit(0, (0, Some(1)), r),
+            boxable_hit(0, Key::Span(0, Some(1)), r),
         ];
         let pages = key_pages(&keys, &hits);
-        assert_eq!(pages[&(0, Some(0))], vec![0]);
-        assert_eq!(pages[&(0, Some(1))], vec![0]);
+        assert_eq!(pages[&Key::Span(0, Some(0))], vec![0]);
+        assert_eq!(pages[&Key::Span(0, Some(1))], vec![0]);
     }
 
     /// Transparency is relative to a *same-window* current run only.
     #[test]
     fn field_only_ink_still_suspends_a_different_fields_current_run() {
-        let keys = vec![(1, Some(0))];
+        let keys = vec![Key::Span(1, Some(0))];
         let r = aabb(0.0, 0.0, 1.0, 1.0);
 
         let cross_page = vec![
-            boxable_hit(0, (1, Some(0)), r), // field 1's segment 0, page 0
+            boxable_hit(0, Key::Span(1, Some(0)), r), // field 1's segment 0, page 0
             transparent_hit(0, 0),           // field 0's own structural ink
-            boxable_hit(1, (1, Some(0)), r), // field 1's segment 0 resumes, page 1
+            boxable_hit(1, Key::Span(1, Some(0)), r), // field 1's segment 0 resumes, page 1
         ];
         assert_eq!(
-            key_pages(&keys, &cross_page)[&(1, Some(0))],
+            key_pages(&keys, &cross_page)[&Key::Span(1, Some(0))],
             vec![0, 1],
             "a foreign field's field-only ink suspends the running field \
              (the page-turn tolerance still lets it resume)"
         );
 
         let same_page = vec![
-            boxable_hit(0, (1, Some(0)), r),
+            boxable_hit(0, Key::Span(1, Some(0)), r),
             transparent_hit(0, 0),
-            boxable_hit(0, (1, Some(0)), r),
+            boxable_hit(0, Key::Span(1, Some(0)), r),
         ];
         assert_eq!(
-            key_pages(&keys, &same_page)[&(1, Some(0))],
+            key_pages(&keys, &same_page)[&Key::Span(1, Some(0))],
             vec![0],
             "no same-page resume: field-only ink is not a wildcard exception \
              to the foreign-ink suspension rule"
