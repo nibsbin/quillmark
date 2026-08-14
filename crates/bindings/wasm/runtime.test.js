@@ -42,7 +42,7 @@ import {
 // door to the core surface. This also instantiates the core build the `CoreQuill`
 // identity pin below imports directly (same resolved file, same module
 // instance).
-const { Quill, Document, exportMarkdown } = await init()
+const { Quill, Document, exportMarkdown, parseDocPath } = await init()
 
 const TEST_PLATE = `#import "@local/quillmark-helper:0.1.0": data
 #let title = data.title
@@ -286,12 +286,42 @@ main:
       type: plaintext
     qty:
       type: integer
+    recipients:
+      type: array
+      items:
+        type: plaintext
+    paragraphs:
+      type: array
+      items:
+        type: richtext
+    tags:
+      type: array
+      items:
+        type: string
+    letterhead:
+      type: object
+      properties:
+        motto:
+          type: richtext
+        code:
+          type: string
+    rows:
+      type: array
+      items:
+        type: object
+        properties:
+          notes:
+            type: richtext
 
 card_kinds:
   note:
     fields:
       body:
         type: richtext
+      lines:
+        type: array
+        items:
+          type: plaintext
 `
   const buildQuill = () =>
     Quill.fromTree(makeQuill({ name: 'view_test', plate: TEST_PLATE, quillYaml: VIEW_QUILL_YAML }))
@@ -453,6 +483,92 @@ card_kinds:
       Document.fromMarkdown('~~~card-yaml\n$quill: view_test\n~~~\n\nBody.')
     )
     expect(empty.getContent('subject')).toBeUndefined()
+  })
+
+  // getContentAt is that read one axis in: an element's codec is a schema fact,
+  // so naming the element is what keeps the judgement out of the consumer.
+  it('getContentAt reads an element the same from either resting form', () => {
+    const quill = buildQuill()
+    const parsed = Document.fromMarkdown(
+      "~~~card-yaml\n$quill: view_test\nrecipients: ['a *literal* line']\nparagraphs: ['Q3 **results**']\n~~~\n\nBody."
+    )
+    expect(typeof parsed.getStored('paragraphs')[0]).toBe('string')
+    const bound = quill.parse(
+      "~~~card-yaml\n$quill: view_test\nrecipients: ['a *literal* line']\nparagraphs: ['Q3 **results**']\n~~~\n\nBody."
+    )
+    expect(bound.getStored('recipients')[0]).toBe('a *literal* line')
+    expect(typeof bound.getStored('paragraphs')[0]).toBe('object')
+
+    for (const [f, text] of [
+      ['recipients', 'a *literal* line'],
+      ['paragraphs', 'Q3 results'],
+    ]) {
+      const a = quill.reader(parsed).getContentAt(f, [0])
+      const b = quill.reader(bound).getContentAt(f, [0])
+      expect(a.text).toBe(text) // decoded at the element's declared codec
+      expect(b.text).toBe(a.text)
+      expect(b.marks).toEqual(a.marks)
+    }
+  })
+
+  it('getContentAt reaches an object property and a leaf under both', () => {
+    const quill = buildQuill()
+    const doc = Document.fromMarkdown('~~~card-yaml\n$quill: view_test\n~~~\n\nBody.')
+    doc.storeField('letterhead', { motto: 'Fly **fight**', code: '9' })
+    doc.storeField('rows', [{}, { notes: 'a *note*' }])
+    const v = quill.reader(doc)
+    expect(v.getContentAt('letterhead', ['motto']).text).toBe('Fly fight')
+    expect(v.getContentAt('rows', [1, 'notes']).text).toBe('a note')
+    expect(v.getContentAt('rows', [0, 'notes'])).toBeUndefined() // declared, unstored
+    expect(v.getContentAt('subject', [])).toBeUndefined() // empty path IS getContent
+  })
+
+  it('getContentAt: stale index, no content leaf, undeclared name, cards', () => {
+    const quill = buildQuill()
+    const doc = Document.fromMarkdown('~~~card-yaml\n$quill: view_test\n~~~\n\nBody.')
+    doc.storeField('recipients', ['a'])
+    doc.storeField('tags', ['x'])
+    const v = quill.reader(doc)
+    expect(v.getContentAt('recipients', [7])).toBeUndefined()
+    expect(v.getContentAt('paragraphs', [0])).toBeUndefined() // field absent
+    expectEditCode(() => v.getContentAt('tags', [0]), 'edit::field_not_content')
+    expectEditCode(() => v.getContentAt('qty', [0]), 'edit::field_not_content')
+    expectEditCode(() => v.getContentAt('letterhead', ['nope']), 'edit::unknown_field')
+    expectEditCode(() => v.getContentAt('nope', [0]), 'edit::unknown_field')
+    expectEditCode(() => v.card(9).getContentAt('lines', [0]), 'edit::index_out_of_range')
+    expect(() => v.getContentAt('recipients', [null])).toThrow(/path\[0\]/)
+    expect(() => v.getContentAt('recipients', 0)).toThrow(/`path` must be an array/)
+    expect(() => v.getContentAt({}, [0])).toThrow(/body address/)
+  })
+
+  it('an undecodable element anchors its diagnostic at the element', () => {
+    const quill = buildQuill()
+    const doc = Document.fromMarkdown('~~~card-yaml\n$quill: view_test\n~~~\n\nBody.')
+    doc.storeField('paragraphs', ['ok', 3])
+    let caught
+    try {
+      quill.reader(doc).getContentAt('paragraphs', [1])
+    } catch (e) {
+      caught = e
+    }
+    const diag = caught.diagnostics[0]
+    expect(diag.code).toBe('edit::field_decode')
+    expect(diag.path).toBe('main.paragraphs[1]')
+    expect(diag.args.field).toBe('paragraphs')
+    expect(parseDocPath(diag.path)).toEqual([
+      { seg: 'main' },
+      { seg: 'field', name: 'paragraphs' },
+      { seg: 'index', index: 1 },
+    ])
+  })
+
+  it('card(i).getContentAt reads an element through the $kind schema', () => {
+    const quill = buildQuill()
+    const doc = seededDoc(quill)
+    doc.storeField({ card: 0, field: 'lines' }, ['a *b*'])
+    const v = quill.reader(doc)
+    expect(v.card(0).getContentAt('lines', [0]).text).toBe('a *b*') // literal codec
+    expect(v.card(0).getContentAt('lines', [4])).toBeUndefined()
   })
 })
 
