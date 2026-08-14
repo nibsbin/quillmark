@@ -69,15 +69,11 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
             QUILLMARK_MUST_FILL_KEY.to_string(),
             serde_json::Value::Bool(field.must_fill()),
         );
-        // Beside `must_fill`, and in the prelude for the same reason: the enum
-        // arm returns early, and a discriminant's own variant fields are enums
-        // often enough. The pair reads "must fill, in this world" — `must_fill`
-        // stays the unconditional derived answer and this scopes it.
-        //
-        // No `if`/`then` companion: an out-of-variant value is wire-valid by
-        // design (it coerces, and the render floor projects it), so a standard
-        // validator accepting it agrees with the engine. Diagnosing it is
-        // `Quill::validate`'s (`validation::out_of_variant`).
+        // In the prelude beside `must_fill`, for the reason stated there. The
+        // pair reads "must fill, in this world": `must_fill` stays the
+        // unconditional answer and this scopes it. No `if`/`then` companion — an
+        // out-of-variant value is wire-valid (it coerces, and the floor projects
+        // it), so a standard validator accepting it agrees with the engine.
         if let Some(variant) = &field.variant_of {
             schema.insert(
                 QUILLMARK_VARIANT_OF_KEY.to_string(),

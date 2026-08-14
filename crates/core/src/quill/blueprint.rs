@@ -134,11 +134,8 @@ fn append_fields(items: &mut Vec<PayloadItem>, card: &CardSchema) {
         .map(|r| r.0.iter().map(|g| g.id.as_str()).collect());
     let variants = variant::index(card);
     for field in group_fields(card.fields.values(), registry.as_deref()) {
-        // The blueprint is one static form, so it shows the one world its own
-        // discriminant cell names. A skipped variant's fields are named on the
-        // discriminant instead (`when_lines`): an author who changes that cell
-        // learns which fields come into play, and re-validating then reports
-        // them unauthored.
+        // One static form shows the one world its own discriminant cell names;
+        // `when_lines` names the fields of every world it does not.
         if !variant::in_play(field, |d| variant::blueprint_value(card, d)) {
             continue;
         }
@@ -146,12 +143,9 @@ fn append_fields(items: &mut Vec<PayloadItem>, card: &CardSchema) {
     }
 }
 
-/// `when <VALUE>: <field>, <field>` for each of this discriminant's variants
-/// the blueprint is not showing, in declaration order. Empty for every field
-/// that is not a discriminant with skipped variants.
-///
-/// Field names are snake_case, so the line cannot collide with the inline
-/// annotation grammar's reserved characters.
+/// `when <VALUE>: <field>, <field>` per variant the blueprint is not showing,
+/// in declaration order. Field names are snake_case, so the line cannot collide
+/// with the reserved characters of the inline annotation grammar.
 fn when_lines(
     card: &CardSchema,
     variants: &IndexMap<&str, IndexMap<&str, Vec<&str>>>,

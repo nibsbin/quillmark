@@ -92,8 +92,7 @@ fn hoist_lands_variant_fields_after_their_discriminant() {
     );
 }
 
-/// `must_fill` derives from `default:` presence exactly as for a flat field:
-/// the variant scopes the obligation rather than introducing a second axis.
+/// The variant scopes the obligation; it does not add a second axis.
 #[test]
 fn a_variant_field_keeps_its_own_type_and_obligation() {
     let config = config(CLASSIFICATION);
@@ -117,8 +116,7 @@ fn a_variant_key_outside_the_domain_is_a_load_error() {
     assert!(codes.contains(&"quill::variant_unknown_value".to_string()), "{codes:?}");
 }
 
-/// The blank is never a member, so it owns no variant: it is the absence of a
-/// choice, and a field existing under it would exist under "nobody answered".
+/// The blank is no member, so a field under it would exist under "nobody chose".
 #[test]
 fn the_blank_owns_no_variant() {
     let codes = load_err(
@@ -127,9 +125,8 @@ fn the_blank_owns_no_variant() {
     assert!(codes.contains(&"quill::variant_unknown_value".to_string()), "{codes:?}");
 }
 
-/// One namespace per card. A name resolving to two schemas would make a field's
-/// type depend on the discriminant's value, the one thing that would force
-/// coercion to consult another field.
+/// One namespace per card: a name resolving to two schemas would make a field's
+/// type depend on the discriminant's value.
 #[test]
 fn a_variant_field_colliding_with_a_flat_field_is_a_load_error() {
     let codes = load_err(
@@ -162,8 +159,7 @@ fn variants_do_not_nest() {
     assert!(codes.contains(&"quill::variant_placement".to_string()), "{codes:?}");
 }
 
-/// `variant_of` is emission-only: `schema()` prints the hoisted form, and the
-/// authoring spelling stays nested.
+/// `variant_of` is emission-only; the authoring spelling stays nested.
 #[test]
 fn authoring_variant_of_directly_is_a_load_error() {
     let codes = load_err(
@@ -192,8 +188,7 @@ fn transform_schema_scopes_must_fill_with_variant_of() {
     let json = wire.as_json();
     let field = &json["properties"]["cui_controlled_by"];
     assert_eq!(field[QUILLMARK_VARIANT_OF_KEY]["value"], "CUI");
-    // Unconditional and scoped are separate answers: the field must be filled,
-    // in the world it belongs to.
+    // Separate answers: must be filled, in the world it belongs to.
     assert_eq!(field[QUILLMARK_MUST_FILL_KEY], serde_json::json!(true));
     assert!(
         json["properties"]["classification"]
@@ -203,14 +198,12 @@ fn transform_schema_scopes_must_fill_with_variant_of() {
     );
 }
 
-/// The plate reads a variant field unconditionally, so the floor stays total:
-/// conditional existence is an authoring fact, never a wire one.
+/// The plate reads a variant field unconditionally, so the floor stays total.
 #[test]
 fn an_out_of_play_field_is_still_blank_filled_at_the_floor() {
     let plate = config(CLASSIFICATION)
         .compile_data(&doc("classification: UNCLASSIFIED\n"))
         .expect("blank-filled render is total over every declared field");
-    // Each at its own blank, across two variants neither of which is in play.
     assert_eq!(plate["cui_controlled_by"], "");
     assert_eq!(plate["declassify_on"], "");
 }
@@ -227,8 +220,7 @@ fn an_unauthored_obligation_waits_for_its_variant() {
         "an out-of-play cell obliges nothing: {unclassified:?}"
     );
 
-    // The discriminant flip is the point: the same document, one cell changed,
-    // now reports the cells a strict authoring loop must fill.
+    // One cell changed, and the cells a strict loop must fill are now reported.
     let cui = diags(&quill, &doc("classification: CUI\n"));
     assert!(
         cui.contains(&(
@@ -269,16 +261,13 @@ fn out_of_variant_never_gates_render() {
         .map(|d| d.severity)
         .collect();
     assert_eq!(severities, [crate::Severity::Warning]);
-    // The stranded value is carried, not dropped: flipping a discriminant back
-    // must not have cost the author their answer.
+    // Carried, not dropped: a flip must not cost the author their answer.
     let plate = config(CLASSIFICATION)
         .compile_data(&document)
         .expect("still renders");
     assert_eq!(plate["cui_controlled_by"], "SAF/AA");
 }
 
-/// Absent, null, and the field's own blank all read as "nobody answered here",
-/// which is exactly what an out-of-play field should hold.
 #[test]
 fn a_blank_or_absent_out_of_play_field_is_silent() {
     let quill = quill_from_yaml(&yaml(CLASSIFICATION));
@@ -297,8 +286,7 @@ fn a_blank_or_absent_out_of_play_field_is_silent() {
     }
 }
 
-/// The marker is document-sovereign: a human dropping `!must_fill` is a
-/// decision nothing re-derives, so the schema never suppresses it.
+/// The marker is document-sovereign: the schema never suppresses one.
 #[test]
 fn a_marker_on_an_out_of_play_field_still_warns() {
     let quill = quill_from_yaml(&yaml(CLASSIFICATION));
@@ -317,8 +305,7 @@ fn a_marker_on_an_out_of_play_field_still_warns() {
 
 #[test]
 fn the_blueprint_shows_one_world_and_names_the_others() {
-    // Blank default: no variant is active, so every variant field is skipped
-    // and each is named on the discriminant.
+    // Blank default: no variant is active, so every one of them is skipped.
     let blueprint = config(CLASSIFICATION).blueprint();
     assert!(!blueprint.contains("cui_controlled_by:"), "{blueprint}");
     assert!(
@@ -379,8 +366,6 @@ fn seeding_commits_only_the_active_variant() {
     );
 }
 
-/// Variants are a per-card shape: a card kind carries its own discriminant, and
-/// the hoist runs on every card the same way.
 #[test]
 fn variants_work_on_a_card_kind() {
     let config = QuillConfig::from_yaml_with_warnings(
@@ -415,8 +400,6 @@ card_kinds:
     );
 }
 
-/// Two discriminants on one card are independent axes: each variant field
-/// resolves against its own, and the hoist keeps each block with its owner.
 #[test]
 fn two_discriminants_on_one_card_stay_independent() {
     let two = "    kind:\n      type: enum\n      values: [letter, memo]\n      default: letter\n      variants:\n        memo:\n          memo_for: { type: string }\n    urgency:\n      type: enum\n      values: [routine, flash]\n      default: flash\n      variants:\n        flash:\n          callback: { type: string }\n";

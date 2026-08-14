@@ -239,8 +239,8 @@ cannot collide with the reserved characters of the format slot.
 Discovery of those fields' types and descriptions is the **validate loop's**,
 not this line's: an author who writes `classification: CUI` and re-validates
 receives `validation::must_fill` (`trigger: unauthored`) at exactly the cells
-that came into play. That is the loop's whole point — a relational omission the
-DSL could not previously state now reaches a strict consumer as "not done."
+that came into play. That is the loop's whole point: it is how a relational
+omission reaches a strict consumer as "not done."
 
 The blueprint guarantee is unaffected: fewer fields and more comments, both of
 which parse, round-trip, and render.

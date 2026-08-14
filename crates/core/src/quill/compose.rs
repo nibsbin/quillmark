@@ -674,10 +674,9 @@ fn collect_unauthored_diags(
 ) {
     let payload = card.payload();
     for (name, field) in &schema.fields {
-        // An out-of-play variant field obliges nothing: the world it belongs to
-        // is not the one this document is in. Its `must_fill` is unchanged and
-        // applies the moment the discriminant names its variant, which is what
-        // makes a discriminant flip tell a strict consumer "not done".
+        // An out-of-play variant field obliges nothing. Its `must_fill` is
+        // unchanged and applies the moment the discriminant names its variant,
+        // which is how a flip tells a strict consumer "not done".
         if !variant::in_play(field, |d| {
             variant::document_value(schema, d, payload.get(d))
         }) {
@@ -689,13 +688,9 @@ fn collect_unauthored_diags(
 
 /// Warn at each authored, non-blank value sitting in a field whose variant is
 /// not in play: a `cui_poc` on a memo whose `classification` reads
-/// `UNCLASSIFIED`.
-///
-/// A warning, never a gate, and the value is carried rather than dropped. An
-/// editor flipping a discriminant strands the old world's answers, and deleting
-/// them to recover would be the form-toggle trap; the render floor keeps
-/// projecting them, so nothing is lost and the plate — which reads a variant
-/// field unconditionally — stays total.
+/// `UNCLASSIFIED`. The value is carried, not dropped — the render floor keeps
+/// projecting it, so flipping a discriminant strands an answer without
+/// destroying it.
 ///
 /// Blank-ness is the field's own [`blank`], so the `integer`/`number`/`boolean`
 /// seam applies here too: an authored `0` in an out-of-play numeric field is
@@ -732,8 +727,7 @@ fn collect_out_of_variant(
         if resolved == variant.value {
             continue;
         }
-        // Absent, null, and the field's own blank all say "nobody answered
-        // here", which is exactly what an out-of-play field should hold.
+        // Absent, null, and the blank are what an out-of-play field should hold.
         let Some(value) = payload.get(name).filter(|v| !v.as_json().is_null()) else {
             continue;
         };

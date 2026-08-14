@@ -2,10 +2,8 @@
 //!
 //! A field hoisted out of an enum's `variants:` carries a
 //! [`VariantOf`](super::VariantOf) back-reference and exists only where its
-//! discriminant resolves to that value. Every projection asks the same question
-//! and resolves the discriminant differently — the render ladder for a document,
-//! the blueprint's value axis for the form, the seed cascade for a seed — so the
-//! predicate takes the resolution as a closure rather than owning one.
+//! discriminant resolves to that value. Each projection cuts a different ladder
+//! to resolve it, so the predicate takes the resolution as a closure.
 
 use indexmap::IndexMap;
 
@@ -13,9 +11,7 @@ use super::{CardSchema, FieldSchema};
 use crate::value::QuillValue;
 
 /// Whether `field` is in play when each discriminant resolves through
-/// `resolve`. A field with no `variant_of` is unconditional and always in play;
-/// a variant field is in play exactly where its discriminant reads its value,
-/// so the blank (which is no member) activates nothing.
+/// `resolve`. The blank is no member, so it activates nothing.
 pub(crate) fn in_play(field: &FieldSchema, resolve: impl Fn(&str) -> String) -> bool {
     match &field.variant_of {
         None => true,
@@ -74,9 +70,8 @@ pub(crate) fn seed_value(card: &CardSchema, name: &str) -> String {
         .to_string()
 }
 
-/// Field names per discriminant value, for every field hoisted out of that
-/// discriminant's `variants:`, in hoisted order. The inverse of the hoist,
-/// rebuilt from the flat field map so `variant_of` stays the one carrier.
+/// Discriminant → value → the fields hoisted out of it, in hoisted order.
+/// Rebuilt from the flat field map, so `variant_of` stays the one carrier.
 pub(crate) fn index(card: &CardSchema) -> IndexMap<&str, IndexMap<&str, Vec<&str>>> {
     let mut out: IndexMap<&str, IndexMap<&str, Vec<&str>>> = IndexMap::new();
     for (name, field) in &card.fields {

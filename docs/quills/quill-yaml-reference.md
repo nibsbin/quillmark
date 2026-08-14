@@ -304,8 +304,8 @@ Rules worth knowing up front:
 - **Field names are one namespace per card.** A variant's field may not share a
   name with a card field or with another variant's field. A field belonging to
   more than one world is declared flat, outside `variants:`.
-- Each value gets its own block. Several values sharing one field set means
-  repeating it (or a YAML anchor) for now.
+- Each value gets its own block. Several values sharing one field set repeat it,
+  or share a YAML anchor.
 
 `quillmark schema` shows the result **flat**, each variant field annotated with
 the world it belongs to, in the position it will be displayed:

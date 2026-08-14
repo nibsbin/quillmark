@@ -942,17 +942,12 @@ impl QuillConfig {
     /// Lift every `variants:` field set into the card's flat field map, each
     /// lifted field stamped with the discriminant and value it exists under.
     ///
-    /// The hoist is the whole variant mechanism. After it runs there is no
-    /// nested structure left: `CardSchema::fields` carries every field a card
-    /// declares, so coercion, the render ladder, `conform`, and `resolve()` see
-    /// ordinary fields and need no variant knowledge. A lifted field lands
-    /// immediately after its discriminant, variants in declaration order and
-    /// fields in declaration order within each, so hoisted position *is* display
-    /// and blueprint position.
-    ///
-    /// Runs before group validation and the content-cache import, so a lifted
-    /// field earns the same `ui.group` reference check and the same
-    /// `default`/`example` content cache as a flatly-declared one.
+    /// After it runs there is no nested structure left: `CardSchema::fields`
+    /// carries every field a card declares, so coercion, the render ladder,
+    /// `conform`, and `resolve()` see ordinary fields and need no variant
+    /// knowledge. A lifted field lands immediately after its discriminant,
+    /// variants in declaration order and fields in declaration order within
+    /// each, so hoisted position *is* display and blueprint position.
     fn hoist_variants(card: &mut CardSchema, context: &str, errors: &mut Vec<Diagnostic>) {
         for (name, field) in &card.fields {
             Self::reject_nested_variants(field, &format!("{context} '{name}'"), errors);
@@ -961,12 +956,11 @@ impl QuillConfig {
             return;
         }
 
-        // Flat names are unique (they are map keys), so every duplicate here is
-        // a variant field colliding with a flat field or with another variant's.
-        // Counted across the whole card before anything is lifted: the effective
-        // type map is the flat union, and a name that resolved to two schemas
-        // would make a field's type depend on the discriminant's value, which is
-        // the one thing that would force coercion to consult another field.
+        // Flat names are map keys, so every duplicate here involves a variant
+        // field. Counted across the whole card before anything is lifted: a name
+        // resolving to two schemas would make a field's type depend on the
+        // discriminant's value, the one thing that would force coercion to
+        // consult another field.
         let mut counts: IndexMap<&str, usize> = IndexMap::new();
         for (name, field) in &card.fields {
             *counts.entry(name.as_str()).or_default() += 1;
@@ -1969,9 +1963,9 @@ impl QuillConfig {
             }
         }
 
-        // Lift every enum's `variants:` into its card's flat field map before
-        // any pass that iterates fields: group references, content caches, and
-        // every later consumer then see one field list with no variant knowledge.
+        // Before every pass that iterates fields, so a hoisted field earns the
+        // same `ui.group` reference check and `default`/`example` content cache
+        // as a flatly-declared one.
         Self::hoist_variants(&mut main, "field schema", &mut errors);
         for card in &mut card_kinds {
             let context = format!("card_kind '{}' field", card.name);

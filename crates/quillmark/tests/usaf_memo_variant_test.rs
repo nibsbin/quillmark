@@ -1,11 +1,10 @@
 //! `usaf_memo`'s CUI block as an enum variant of `classification`.
 //!
-//! The migration moved four flat fields under `classification.variants.CUI` and
-//! dropped the `default: ""` that made `cui_controlled_by` and `cui_poc`
-//! unaskable. Both halves of the contract are asserted here: the plate still
+//! Four fields live under `classification.variants.CUI`, two of them
+//! defaultless. Both halves of that contract are asserted here: the plate
 //! receives every CUI field unconditionally (`plate.typ` reads `data.cui_*`
-//! with no guard), and the obligation the statute states — DoDM 5200.48 —
-//! now fires as a diagnostic instead of living in `description:` prose.
+//! with no guard), and DoDM 5200.48's obligation fires as a diagnostic rather
+//! than sitting in `description:` prose.
 
 use quillmark_fixtures::quills_path;
 
@@ -44,9 +43,8 @@ fn must_fill_paths(quill: &quillmark::Quill, md: &str) -> Vec<String> {
     paths
 }
 
-/// The floor stays total: a variant field is declared, blank-filled, and
-/// present in the plate projection whatever the discriminant reads. `plate.typ`
-/// reads `data.cui_controlled_by` unguarded, so anything less fails the compile.
+/// The floor stays total whatever the discriminant reads. `plate.typ` reads
+/// `data.cui_controlled_by` unguarded, so anything less fails the compile.
 #[test]
 fn every_cui_field_reaches_the_plate_whatever_the_classification() {
     let quill = quill();
@@ -69,9 +67,8 @@ fn every_cui_field_reaches_the_plate_whatever_the_classification() {
     }
 }
 
-/// The statutory obligation, as a diagnostic. Unclassified asks for nothing;
-/// flipping the one cell to CUI asks for exactly the two fields DoDM 5200.48
-/// requires, and leaves the two optional ones alone.
+/// The statutory obligation, as a diagnostic: flipping the one cell to CUI asks
+/// for exactly the two fields DoDM 5200.48 requires.
 #[test]
 fn cui_obliges_controlled_by_and_poc_only_under_cui() {
     let quill = quill();
@@ -95,9 +92,8 @@ fn cui_obliges_controlled_by_and_poc_only_under_cui() {
     );
 }
 
-/// Stranded data warns and survives. An editor flipping the discriminant back
-/// to UNCLASSIFIED must not lose the author's answers, and must not be handed
-/// an invalid document either.
+/// Stranded data warns and survives: an editor flipping the discriminant back
+/// loses neither the author's answers nor a valid document.
 #[test]
 fn a_cui_answer_on_an_unclassified_memo_warns_without_blocking() {
     let quill = quill();

@@ -39,9 +39,7 @@ fn seed_parts(schema: &CardSchema, overlay: Option<&SeedOverlay>) -> (Payload, C
     // field is skipped: it is never iterated here.
     let mut items: Vec<PayloadItem> = Vec::new();
     for (name, field) in &schema.fields {
-        // A variant field seeds only in the world the seed itself lands in,
-        // resolved from the discriminant's own seeded value (`example:` ›
-        // `default:` › blank).
+        // A variant field seeds only in the world the seed itself lands in.
         if !crate::quill::variant::in_play(field, |d| crate::quill::variant::seed_value(schema, d)) {
             continue;
         }
