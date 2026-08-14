@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.105.0 - 2026-08-14
 
 - feat(core,wasm,python)!: a `Content` nested inside a composite field is
   readable at its own codec. `TypedReader::get_content_at(name, path)` (and the
@@ -23,6 +23,29 @@
   `field` stays a bare field name and `args` is unchanged. `FieldNotContent`
   now names the type *reached*, so a `string[]` element reports `string` rather
   than the field's `array`.
+
+<!-- seed: commits since v0.104.0, confirm the entries above cover them, then delete this comment
+- Unlink two private walkers from a public doc
+- dense-prose pass over the obligation axis
+- Docs: name the obligation axis where an author first meets it
+- Bindings: pin the trigger arg crossing, and scope a lifecycle assertion
+- Canon and docs: the two axes, and the second trigger
+- The obligation axis: must_fill: on the schema, and the unauthored-cell predicate
+- dense-prose pass over the blank change
+- Split the empty-document contract into its two rules
+- Canon and docs: the blank, and ref immutability demoted to a caching invariant
+- Blank replaces the zero value; an enum's blank is ""
+- Teach the fixture plates the real accessor rule
+- Pin the click sweep across a plaintext element
+- docs: apply dense-prose to the nested content read
+- Pin plaintext content geometry and name it in canon (#1250)
+- docs: the nested content read in canon and the changelog
+- feat(python): Reader.get_content_at / CardReader.get_content_at
+- feat(wasm): reader.getContentAt(addr, path)
+- feat(core): address a Content nested inside a composite field
+- Delete comments by default; prose only where code cannot (#1246)
+-->
+
 
 ## v0.104.0 - 2026-08-13
 
@@ -116,33 +139,6 @@
   declares a `default:` on every enum and none authors an empty `date`, so the
   fixture suite reached neither path. A fourth carries a `!must_fill` tag on two
   example-seeded cells through seed → store → load → conform. Refs #1234
-
-<!-- seed: commits since v0.103.0, confirm the entries above cover them, then delete this comment
-- Carry the thematic-break and unsupported-construct work into the guide
-- Dense-prose pass over the new comments and docs
-- Let a quill declare the constructs its plate does not typeset
-- Drain the memo's heading buffer instead of dropping it
-- Canonicalize a thematic break to `***`
-- Close the 0.104 release gaps: the migration guide, and four changelog entries
-- Retire the enum: modifier; project a field's domain by capability
-- Pin the render floor's two type-domain edges and the seeded fill tag
-- Raise the Node floor to 24
-- dense-prose pass over the added prose
-- docs: dense-prose pass on the text-type sections
-- docs: give the text-type choice a decision procedure
-- docs: state the backend seam's scope and reserve its namespaces
-- docs: drop the private intra-doc link from pathFor
-- fix(core): state the unspellable-tail conditions instead of linking a private fn
-- chore(wasm): density pass, and gate a core-build dead function
-- docs: dense-prose pass over the geometry-address translation
-- docs: dense-prose pass over the pathFor / cardPath prose
-- test(wasm): execute the static-export exemption instead of listing it
-- feat(wasm): mint a DocPath from an Addr (#1225)
-- fix(core)!: parse geometry addresses segment-wise (#1223)
-- docs: carry the 0.103 CLI break, and the init gate into the quickstart (#1222)
-- SCHEMAS.md: a declared type change rewrites stored values (#1221)
--->
-
 
 ## v0.103.0 - 2026-08-09
 
