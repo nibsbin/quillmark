@@ -106,29 +106,6 @@
   `is_inline_content_field`, and `PREVIEW.md` names plaintext beside richtext
   in its producer list (#1247, #1250).
 
-<!-- seed: commits since v0.104.0, confirm the entries above cover them, then delete this comment
-- Unlink two private walkers from a public doc
-- dense-prose pass over the obligation axis
-- Docs: name the obligation axis where an author first meets it
-- Bindings: pin the trigger arg crossing, and scope a lifecycle assertion
-- Canon and docs: the two axes, and the second trigger
-- The obligation axis: must_fill: on the schema, and the unauthored-cell predicate
-- dense-prose pass over the blank change
-- Split the empty-document contract into its two rules
-- Canon and docs: the blank, and ref immutability demoted to a caching invariant
-- Blank replaces the zero value; an enum's blank is ""
-- Teach the fixture plates the real accessor rule
-- Pin the click sweep across a plaintext element
-- docs: apply dense-prose to the nested content read
-- Pin plaintext content geometry and name it in canon (#1250)
-- docs: the nested content read in canon and the changelog
-- feat(python): Reader.get_content_at / CardReader.get_content_at
-- feat(wasm): reader.getContentAt(addr, path)
-- feat(core): address a Content nested inside a composite field
-- Delete comments by default; prose only where code cannot (#1246)
--->
-
-
 ## v0.104.0 - 2026-08-13
 
 - feat(core,wasm): a quill declares, per body, the block constructs its plate
