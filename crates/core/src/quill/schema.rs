@@ -52,14 +52,10 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
                 "type".to_string(),
                 serde_json::Value::String("string".to_string()),
             );
-            // The blank leads the domain. The model layer keeps `""` out of
-            // `values:` (it is not a choice), but this projection describes what
-            // is *wire-valid*, and the blank is: without it a standard
-            // JSON-Schema validator would reject a value the engine accepts.
-            // The blank option must stay selectable and re-selectable in a
-            // consumer's picker, never a vanishing placeholder — choosing it is
-            // how a human says "explicitly nothing", which is an act they must
-            // be able to repeat.
+            // The model layer keeps `""` out of `values:` (it is not a choice),
+            // but this projection describes what is *wire-valid*, and the blank
+            // is: without it a standard JSON-Schema validator rejects a value
+            // the engine accepts.
             schema.insert(
                 "enum".to_string(),
                 serde_json::Value::Array(

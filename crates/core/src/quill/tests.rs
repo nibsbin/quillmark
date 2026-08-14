@@ -2264,15 +2264,11 @@ fn markdown_type_is_unknown_at_load() {
     );
 }
 
-/// `""` is rejected in `values:` and accepted as `default:` **on the same
-/// field**, which reads as a contradiction and is not one: `values:` enumerates
-/// choices, and every other surface ranges over `values ∪ blank`. `default:` is
-/// a value, not a choice, and the blank is a legal value.
-///
-/// Both halves are pinned together because `usaf_memo` ships exactly this shape
-/// on two enums. Someone "fixing" the asymmetry by rejecting a blank `default:`
-/// would break the reference quill; someone widening `values:` to accept `""`
-/// would restore the fabricated-variant floor. Neither half stands alone.
+/// `values:` enumerates choices; `default:` is a value, and the blank is a legal
+/// value that is never a choice. Both halves are pinned on one field because
+/// `usaf_memo` ships this shape: rejecting a blank `default:` breaks the
+/// reference quill, and admitting `""` to `values:` restores the fabricated
+/// floor.
 #[test]
 fn enum_rejects_a_blank_value_but_accepts_a_blank_default() {
     let err = quill_with_field(
@@ -2306,9 +2302,8 @@ fn enum_rejects_a_blank_value_but_accepts_a_blank_default() {
     );
 }
 
-/// The loader rejects a declared `""`, but `blank` may not lean on that: a
-/// config built through serde skips loader validation entirely, so the enum
-/// blank is `""` whatever `values:` happens to hold.
+/// `blank` may not lean on the loader's rejection of a declared `""`: a config
+/// built through serde skips loader validation entirely.
 #[test]
 fn enum_blank_ignores_a_declared_blank_member() {
     let field = FieldSchema::from_quill_value(

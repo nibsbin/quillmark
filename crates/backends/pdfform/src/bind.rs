@@ -263,14 +263,9 @@ pub fn project_kind(
     })
 }
 
-/// An enum's options with its blank leading them.
-///
-/// A blank cell needs an option to land on: `resolve::coerce_choice` keeps a
-/// value only when it matches a declared option, so without the blank an
-/// authored (or floored) blank binds to nothing. Prepended rather than
-/// appended so it reads as the unset state a picker opens on, and it stays a
-/// real, re-selectable option: a disabled placeholder cannot be returned to,
-/// and returning to it is how a human clears a cell back to unset.
+/// An enum's options with its blank leading them: `resolve::coerce_choice`
+/// keeps a value only when it matches a declared option, so without the blank a
+/// blank cell binds to nothing.
 fn blank_first(values: &[String]) -> Vec<String> {
     std::iter::once(String::new())
         .chain(values.iter().cloned())

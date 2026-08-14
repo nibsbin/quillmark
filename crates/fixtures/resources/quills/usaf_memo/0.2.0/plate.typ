@@ -7,10 +7,9 @@
   letterhead_title: data.letterhead_title,
   letterhead_caption: data.letterhead_caption,
   letterhead_seal_subtitle: data.at("letterhead_seal_subtitle", default: none),
-  // Every enum branch below covers `values ∪ blank`. The blank is valid present
-  // input, so it must land somewhere chosen rather than fall through an `else`
-  // into a variant nobody picked. Here it omits the seal, which is exactly what
-  // `frontmatter`'s own `letterhead_seal: none` default means.
+  // Every enum branch below covers `values ∪ blank`: an `else` that swallows the
+  // blank renders a variant nobody picked. Here the blank omits the seal, which
+  // is what `frontmatter`'s own `letterhead_seal: none` default means.
   ..if data.at("letterhead_seal", default: "") != "" {
     (letterhead_seal: image(
       if data.letterhead_seal == "dod" {
@@ -50,10 +49,9 @@
   ..if "cui_limited_dissemination" in data { (cui_limited_dissemination: data.cui_limited_dissemination) },
   ..if "cui_poc" in data { (cui_poc: data.cui_poc) },
 
-  // USAF vs DAF memorandum style (date format, body indentation). The blank
-  // takes the package's own default: `frontmatter` asserts membership of
-  // ("usaf", "daf"), so passing the blank through would fail the compile, and a
-  // memo has no "no style" state to render.
+  // USAF vs DAF memorandum style (date format, body indentation). A memo has no
+  // "no style" state, so the blank takes the package's default; `frontmatter`
+  // asserts membership of ("usaf", "daf") and would fail the compile on a blank.
   ..if data.at("memo_style", default: "") != "" { (memo_style: data.memo_style) },
 
   // Font size
@@ -120,10 +118,9 @@
         "Ind_" + str(i) + "_Signature",
         field: card.at("$path") + "signature_block",
       ),
-      // The blank takes the package's own default (`standard`): `indorsement`
-      // asserts membership, and an indorsement has no "no layout" state. The
-      // `action` enum needs no such guard — the package already reads a
-      // blank action as "no action line".
+      // Same shape: `indorsement` asserts `format`'s membership, and an
+      // indorsement has no "no layout" state. `action` needs no such guard —
+      // the package reads a blank action as "no action line".
       ..if card.at("format", default: "") != "" { (format: card.format) },
       date: resolved_date,
       ..if "action" in card { (action: card.action) },

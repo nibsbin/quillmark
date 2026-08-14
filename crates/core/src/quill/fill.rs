@@ -26,17 +26,15 @@ use crate::value::QuillValue;
 /// on that: a [`QuillConfig`](super::QuillConfig) built through serde bypasses
 /// loader validation, so the `enum` blank is `""` unconditionally.
 ///
-/// `integer`, `number` and `boolean` are the seam: their blanks (`0`, `false`)
-/// are indistinguishable at the plate from an authored `0` / `false`, and so is
-/// any `object` or `array` over them, since their blank is the recursive one. A
-/// wire `none` would be type-*absent* rather than type-*minimal*, which Typst
-/// arithmetic and comparison reject — it would cost the totality the floor
-/// exists to buy. An author needing to spell "unset" for a number models it as
-/// an `enum`, which has a real blank.
+/// `integer`, `number` and `boolean` are a permanent seam: their blanks (`0`,
+/// `false`) are indistinguishable at the plate from an authored `0` / `false`,
+/// as is any container over them. A wire `none` for those types would be
+/// type-*absent* rather than type-*minimal*, and Typst arithmetic rejects it,
+/// costing the render totality this floor buys.
 ///
 /// An `object` with `properties` is shape-valid only when every property is
-/// present, so it blanks (recursively) to an object with every property at its
-/// own blank, not a bare `{}` (which only a property-less object degrades to).
+/// present, so it recurses rather than degrading to the bare `{}` that only a
+/// property-less object carries.
 pub fn blank(field: &FieldSchema) -> QuillValue {
     if field.enum_values.is_some() {
         return QuillValue::from_json(json!(""));

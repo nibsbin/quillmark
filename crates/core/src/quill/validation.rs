@@ -618,12 +618,10 @@ fn validate_value(
     }
 
     if type_valid {
-        // The accepted domain is `values ∪ blank`: a field's blank is a property
-        // of the field, not a member of the type's value domain, so `""` is
-        // valid input for every enum and is never a declared variant. Checked
-        // here rather than at the call sites so `validate_value` stays
-        // context-free: an enum at element position inside an array accepts the
-        // blank on the same line as one at the top level.
+        // The accepted domain is `values ∪ blank`. Checked here rather than at
+        // the call sites so `validate_value` stays context-free: an enum at
+        // element position inside an array accepts the blank on the same line
+        // as one at the top level.
         if let (Some(allowed), Some(actual)) = (&field.enum_values, value.as_str()) {
             if !actual.is_empty() && !allowed.contains(&actual.to_string()) {
                 errors.push(ValidationError::EnumViolation {

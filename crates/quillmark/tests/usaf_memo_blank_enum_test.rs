@@ -1,13 +1,9 @@
 //! An authored blank on every `usaf_memo` enum still renders.
 //!
-//! A field's blank is valid present input for every enum, so a plate must
-//! branch over `values ∪ blank` rather than fall through an `else`. Two of this
-//! quill's enums sit behind package assertions — `frontmatter` asserts
-//! `memo_style in ("usaf", "daf")` and `indorsement` asserts its `format` — so
-//! passing a blank straight through fails the Typst compile rather than
-//! rendering something wrong quietly. The plate's guards are what keep these
-//! green, and a reader who deletes one gets a failure here rather than in a
-//! user's document.
+//! `frontmatter` asserts `memo_style in ("usaf", "daf")` and `indorsement`
+//! asserts its `format`, so a plate that passes a blank through to either fails
+//! the Typst compile rather than mis-rendering quietly. Deleting a plate guard
+//! must fail here rather than in a user's document.
 
 #![cfg(feature = "typst")]
 
@@ -53,8 +49,6 @@ fn every_enum_authored_blank_still_renders() {
         .expect("document should parse")
         .document;
 
-    // The gate: a blank is in-domain for every enum, so nothing here is an
-    // `EnumViolation`. Before the blank existed these were rejected outright.
     let blocking: Vec<_> = quill
         .validate(&parsed)
         .into_iter()
@@ -78,8 +72,8 @@ fn every_enum_authored_blank_still_renders() {
     );
 }
 
-/// The seal is the one blank with a visible render consequence: it is omitted
-/// rather than silently falling back to the `dow` asset the old `else` picked.
+/// The seal is the one blank with a visible render consequence: it omits the
+/// seal rather than falling back to an asset nobody chose.
 #[test]
 fn a_blank_seal_omits_the_seal_rather_than_choosing_one() {
     let engine = Quillmark::new();

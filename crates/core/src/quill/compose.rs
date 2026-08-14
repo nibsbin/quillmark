@@ -836,11 +836,8 @@ main:
         );
     }
 
-    /// The domain widens for *every* enum, not only defaultless ones: an
-    /// authored blank used to be a fatal `EnumViolation` at the gate and now
-    /// coerces, validates and reaches the plate. This is the surface a plate
-    /// must branch over — `values ∪ blank` — and it is why an `else` fallback
-    /// re-opens the fabrication the blank exists to close.
+    /// A blank clears the gate on *every* enum, not only defaultless ones, so
+    /// `values ∪ blank` is the surface a plate must branch over.
     #[test]
     fn an_authored_blank_enum_clears_the_gate_and_reaches_the_plate() {
         let plate = plate_of(
