@@ -21,7 +21,7 @@ pub use config::{CoercionError, QuillConfig};
 pub(crate) use config::Leniency;
 pub use conform::BoundParseError;
 pub use resolved::{FieldSource, Resolved, ResolvedCard, ResolvedField, ResolvedMain};
-pub use fill::zero_value;
+pub use fill::blank;
 pub use formats::{parse_date, parse_datetime};
 pub use ignore::QuillIgnore;
 pub use schema::{build_transform_schema, QUILLMARK_INLINE_KEY, CONTENT_MEDIA_TYPE};

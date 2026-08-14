@@ -7,7 +7,7 @@
 
 use indexmap::IndexMap;
 
-use super::{zero_value, CardSchema, FieldSchema, FieldType, QuillConfig};
+use super::{blank, CardSchema, FieldSchema, FieldType, QuillConfig};
 use crate::document::emit::{saphyr_emit_flow, saphyr_emit_scalar};
 use crate::document::prescan::NestedComment;
 use crate::document::{Card, Document, Payload, PayloadItem};
@@ -319,7 +319,7 @@ fn append_typed_dict(
         // is shown; all leaves are Endorsed-by-the-container, hence unmarked
         // and unannotated (uniform with a concrete default).
         Some(JsonValue::Object(map)) if map.is_empty() => {
-            (zero_value(field).into_json(), Vec::new(), Vec::new())
+            (blank(field).into_json(), Vec::new(), Vec::new())
         }
         // Concrete default (object or otherwise) → rendered verbatim, unmarked.
         Some(default) => (default.clone(), Vec::new(), Vec::new()),

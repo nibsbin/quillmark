@@ -130,7 +130,7 @@ Patching one card at a time is for a document that is no longer a pure projectio
 
 ## Links
 
-- [SCHEMAS.md](SCHEMAS.md): schema model and the zero-filled render projection
+- [SCHEMAS.md](SCHEMAS.md): schema model and the blank-filled render projection
 - [BLUEPRINT.md](BLUEPRINT.md): the LLM/MCP authoring surface
 - [CARDS.md](CARDS.md): `$seed` overlays for editor-spawned cards
 - [DOCUMENT_STORAGE.md](DOCUMENT_STORAGE.md): persisting built documents

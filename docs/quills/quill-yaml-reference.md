@@ -84,9 +84,9 @@ main:
 |---------------|-------------------|----------|-------------|
 | `type`        | string            | yes      | Data type (see [Field Types](#field-types)) |
 | `description` | string            | no       | Detailed help text |
-| `default`     | matches `type`    | no       | The value the **majority of authors want**. When the field is omitted, the default is filled in. **Declaring `default` makes the field Endorsed**: the blueprint renders the concrete default value with a type-only annotation (no marker), shippable as-is. Omitting `default` makes the field **Unendorsed**: the blueprint stamps the `!must_fill` marker (carrying the field's `example` as a suggested value when present, else bare). A surviving marker raises the non-fatal `validation::must_fill` warning: it never gates render, since an absent or present-null field zero-fills. |
+| `default`     | matches `type`    | no       | The value the **majority of authors want**. When the field is omitted, the default is filled in. **Declaring `default` makes the field Endorsed**: the blueprint renders the concrete default value with a type-only annotation (no marker), shippable as-is. Omitting `default` makes the field **Unendorsed**: the blueprint stamps the `!must_fill` marker (carrying the field's `example` as a suggested value when present, else bare). A surviving marker raises the non-fatal `validation::must_fill` warning: it never gates render, since an absent or present-null field blank-fills. |
 | `example`     | matches `type`    | no       | A value matching the **type and shape** of what the author wants, but **not** the value desired most of the time. Documents shape only: surfaced in the [blueprint](https://github.com/borb-sh/quillmark/blob/main/prose/canon/BLUEPRINT.md)'s `# e.g.` line for documentation and LLM authoring, never rendered as the value. |
-| `values`      | array of strings  | for `enum` | The closed set of allowed string values. Required on every `enum` field. |
+| `values`      | array of strings  | for `enum` | The closed set of allowed string values: the **choices**. Required on every `enum` field. Declaring `""` is a load error — every enum also accepts its [blank](#the-blank-values-is-for-choices-not-for-the-absence-of-one), which the engine supplies. |
 | `ui`          | object            | no       | UI rendering hints (see [UI Properties](#ui-properties)) |
 | `items`       | object            | for `array` | Element schema for an `array` field (a nested field schema). Required on every array. |
 | `properties`  | object            | for `object` | Nested field schemas for an `object` typed dictionary (or an array's `object`-typed `items`). Required on every `object` field. |
@@ -97,7 +97,7 @@ main:
 | Type       | Notes |
 |------------|-------|
 | `string`   | Open scalar UTF-8 text: a value the template computes with (a URL, path, identifier, or reference key), not prose it lays out |
-| `enum`     | A closed set of string values; requires a `values:` list. Projects to JSON-Schema `{type: string, enum: […]}` |
+| `enum`     | A closed set of string values; requires a `values:` list. Also accepts its [blank](#the-blank-values-is-for-choices-not-for-the-absence-of-one) (`""`), which is not a declared member. Projects to JSON-Schema `{type: string, enum: ["", …]}` |
 | `plaintext`| Navigable, **unformatted** prose over the canonical content: the same nav/regions as `richtext`, but a literal codec (delimiters stay literal, no markup). Add `inline: true` for the single-line variant |
 | `number`   | Numeric scalar (integers and decimals) |
 | `integer`  | Integer-only numeric scalar |
@@ -162,6 +162,52 @@ main:
 
 `values:` on any other type is a load error, as is the retired `enum:`
 modifier on any type.
+
+#### The blank: `values:` is for choices, not for the absence of one
+
+Every `enum` accepts one value beyond its `values:` list — the **blank**, spelled
+`""`. The engine supplies it; you never declare it, and declaring `""` in
+`values:` is a load error (`quill::enum_blank_member`).
+
+That is what a document says when nobody has answered. A field with no `default:`
+renders its blank rather than the first variant, so reordering `values:` never
+changes what an unanswered document renders, and no reader ever sees a choice
+nobody made.
+
+The two keys range over different sets, which is why `""` is rejected in one and
+accepted in the other:
+
+```yaml
+    classification:
+      type: enum
+      values: [UNCLASSIFIED, CUI, SECRET]   # the choices — no "" here
+      default: ""                           # the blank — a value, and legal
+```
+
+`values:` enumerates *choices*. `default:`, your documents, and the projections
+all range over `values ∪ blank`. Keeping `default: ""` is how you say "this field
+is optional"; dropping it makes the field one an author is expected to answer.
+
+Where the empty state is itself a decision someone makes and the document should
+record it, make it a member — `undecided`, `waived`, `n_a` — not the blank. The
+blank means nobody chose; a member means someone chose "none".
+
+Name the blank's label with `ui.blank_title` when a bare empty row would read
+badly; absent one, consumers supply their own conventional label.
+
+If you arrive from **web forms**, your prior transfers: this is HTML's
+placeholder `<option value="">`, Django's `("", "---------")`, Rails'
+`include_blank:`. One caveat — the affordance carries over, the enforcement does
+not. There is no `required:`; an unanswered field is a warning plus consumer
+policy, never a load or render failure. If you arrive from **protobuf**, your
+prior is a near-miss: proto3 reserves slot 0 *inside* the enum
+(`FOO_UNSPECIFIED = 0`), whereas here the sentinel lives outside the domain and
+your `values:` list stays clean.
+
+> **Writing a plate against an enum:** branch over `values ∪ blank`
+> exhaustively. An `else` fallback silently renders a variant nobody chose, and
+> `data.at(key, default: X)` is not a guard — every declared key is always
+> present at render, so its `default:` never fires and the blank flows through.
 
 ### Primitive Arrays, Typed Tables, and Typed Dictionaries
 
@@ -289,6 +335,23 @@ The two registry forms are interchangeable: a bare sequence of ids (`[addressing
 Field display order is **declaration order**: the order the keys appear in `Quill.yaml`. This holds at every level: card-level fields, and the properties of a typed dictionary or typed-table row. The order is carried structurally (the schema's field maps preserve key order, and `schema()` re-emits that order), so no per-field knob is involved.
 
 There is no `ui.order` key: an authored `ui: { order: N }` is a load error (`quill::field_parse_error`) directing you to reorder the fields instead. To move a field, move its block in `Quill.yaml`.
+
+### `blank_title`
+
+Labels an `enum`'s [blank](#the-blank-values-is-for-choices-not-for-the-absence-of-one) option in a picker. Absent, consumers render a conventional label of their own, so this is only worth setting when a bare empty row would read badly:
+
+```yaml
+main:
+  fields:
+    classification:
+      type: enum
+      values: [UNCLASSIFIED, CUI, SECRET]
+      default: ""
+      ui:
+        blank_title: "(no marking)"
+```
+
+It labels the blank, never a member: `values:` carries no entry for it. Consumers must keep the blank **selectable and re-selectable** — returning to it is how an author clears a cell back to unset, so a disabled placeholder that vanishes once a choice is made is the wrong idiom.
 
 ### `compact`
 

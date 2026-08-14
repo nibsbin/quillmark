@@ -8,7 +8,7 @@ use indexmap::IndexMap;
 use super::resolved::FieldSource;
 use super::{seed, CardSchema, CoercionError, FieldSchema, FieldType, Leniency, Quill, QuillConfig};
 use crate::normalize::{normalize_document, normalize_field_name};
-use crate::quill::zero_value;
+use crate::quill::blank;
 use crate::path::DocPath;
 use crate::{
     Card, Diagnostic, Document, Payload, QuillValue, RenderError, SeedOverlay, Severity, Version,
@@ -213,7 +213,7 @@ impl Quill {
     /// consumers route on the code without parsing message text: type
     /// mismatches, unknown card kinds, body-on-disabled-body, and the non-fatal
     /// `validation::must_fill` warning, the only non-fatal one; the rest are
-    /// blockers. Field absence is not surfaced (it zero-fills at render).
+    /// blockers. Field absence is not surfaced (it blank-fills at render).
     ///
     /// Field values, defaults, and presentation order are not part of this
     /// surface: read them from the [`Document`] payload and the quill schema
@@ -466,20 +466,20 @@ fn resolve_value(value: Option<&QuillValue>, field: &FieldSchema) -> QuillValue 
 /// absent recursively so no bare null reaches the plate:
 ///
 /// - A null or absent value becomes the schema `default:`
-///   ([`Default`](FieldSource::Default)), else the type-empty [`zero_value`]
-///   ([`Zero`](FieldSource::Zero)).
+///   ([`Default`](FieldSource::Default)), else the field's [`blank`]
+///   ([`Blank`](FieldSource::Blank)).
 /// - A present **typed dictionary** is rebuilt from its declared properties so a
-///   null/absent property zero-fills and the projection matches the schema shape.
+///   null/absent property blank-fills and the projection matches the schema shape.
 ///   Source keys the schema does not declare pass through verbatim, matching
 ///   `config::coerce_object_props`'s coercion-time behavior: the schema is a
 ///   floor, not an allowlist, so an undeclared `note:` on a typed dict reaches
 ///   the plate instead of being silently dropped.
 /// - A present **typed array** resolves each element against the item schema, so
-///   a null element zero-fills in place.
+///   a null element blank-fills in place.
 /// - Any other present value is returned unchanged.
 ///
 /// Every present shape is [`Authored`](FieldSource::Authored) (the nested
-/// zero-fill inside a dict/array is a projection detail, not a source change).
+/// blank-fill inside a dict/array is a projection detail, not a source change).
 /// The source is the byproduct of the same branch that computes the value, so
 /// the render projection ([`resolve_value`]) and the field-state view cut the
 /// one commitment ladder rather than each re-deriving precedence
@@ -499,21 +499,21 @@ pub(crate) fn resolve_value_sourced(
         // values), so a bare authored string here would reach the plate
         // uncoerced and be misread. A content field with no cached
         // `default_content` (only reachable via a serde-built `QuillConfig`,
-        // never the loader) zero-fills to the empty content.
+        // never the loader) blank-fills to the empty content.
         if matches!(
             field.r#type,
             FieldType::RichText { .. } | FieldType::PlainText { .. }
         ) {
             return match field.default_content.clone() {
                 Some(content) => (content, FieldSource::Default),
-                None => (zero_value(field), FieldSource::Zero),
+                None => (blank(field), FieldSource::Blank),
             };
         }
         // Non-content: `default_content` is always `None`, so use the raw
-        // `default`, then the type-empty zero.
+        // `default`, then the field's blank.
         return match field.default.clone() {
             Some(default) => (default, FieldSource::Default),
-            None => (zero_value(field), FieldSource::Zero),
+            None => (blank(field), FieldSource::Blank),
         };
     };
     let resolved = match (&field.r#type, &field.properties, &field.items) {
@@ -572,7 +572,7 @@ fn rebuild_payload_with_meta(source: &Card, fields: IndexMap<String, QuillValue>
 /// across the main card and every composable card.
 ///
 /// The marker fires whether or not the cell carries a suggested value, and never
-/// gates render (the cell zero-fills or uses its suggested value). A strict
+/// gates render (the cell blank-fills or uses its suggested value). A strict
 /// consumer treats any outstanding marker as "not done".
 fn validate_fills(config: &QuillConfig, doc: &Document) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
@@ -792,7 +792,7 @@ card_kinds:
     }
 
     #[test]
-    fn absent_defaultless_enum_floors_to_the_first_variant() {
+    fn absent_defaultless_enum_floors_to_the_blank() {
         let plate = plate_of(
             r#"
 quill: { name: ev, version: 1.0.0, backend: typst, description: x }
@@ -806,13 +806,13 @@ main:
             "~~~card-yaml\n$quill: ev@1.0.0\n$kind: main\ntitle: T\n~~~\n",
         );
         assert_eq!(
-            plate["classification"], "UNCLASSIFIED",
-            "declaration order picks the value; got {plate}"
+            plate["classification"], "",
+            "an unanswered enum renders its blank, never a variant nobody chose; got {plate}"
         );
     }
 
     #[test]
-    fn nested_defaultless_enum_floors_to_the_first_variant() {
+    fn nested_defaultless_enum_floors_to_the_blank() {
         let plate = plate_of(
             r#"
 quill: { name: env, version: 1.0.0, backend: typst, description: x }
@@ -831,13 +831,35 @@ main:
         );
         assert_eq!(
             plate["marking"],
-            json!({ "level": "UNCLASSIFIED", "note": "" }),
-            "the recursive floor fills each property; got {plate}"
+            json!({ "level": "", "note": "" }),
+            "the recursive blank switches for a nested enum too; got {plate}"
+        );
+    }
+
+    /// A blank clears the gate on *every* enum, not only defaultless ones, so
+    /// `values ∪ blank` is the surface a plate must branch over.
+    #[test]
+    fn an_authored_blank_enum_clears_the_gate_and_reaches_the_plate() {
+        let plate = plate_of(
+            r#"
+quill: { name: eb, version: 1.0.0, backend: typst, description: x }
+main:
+  fields:
+    seal:
+      type: enum
+      values: [dow, dod]
+      default: dow
+"#,
+            "~~~card-yaml\n$quill: eb@1.0.0\n$kind: main\nseal: \"\"\n~~~\n",
+        );
+        assert_eq!(
+            plate["seal"], "",
+            "an authored blank outranks the default and is not a gate error; got {plate}"
         );
     }
 
     #[test]
-    fn authored_empty_date_coerces_to_absent_and_takes_the_default() {
+    fn authored_blank_date_outranks_the_default() {
         let plate = plate_of(
             r#"
 quill: { name: dz, version: 1.0.0, backend: typst, description: x }
@@ -853,12 +875,12 @@ main:
             "~~~card-yaml\n$quill: dz@1.0.0\n$kind: main\nsigned_on: \"\"\nsubtitle: \"\"\n~~~\n",
         );
         assert_eq!(
-            plate["signed_on"], "2026-01-01",
-            "the empty date nulls in coercion, so the default fills; got {plate}"
+            plate["signed_on"], "",
+            "the blank date survives coercion and outranks the default; got {plate}"
         );
         assert_eq!(
             plate["subtitle"], "",
-            "the empty string survives coercion and outranks the default"
+            "the blank string does the same: one spelling of \"explicitly nothing\" for both"
         );
     }
 }

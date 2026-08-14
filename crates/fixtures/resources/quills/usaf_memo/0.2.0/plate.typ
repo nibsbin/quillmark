@@ -7,13 +7,18 @@
   letterhead_title: data.letterhead_title,
   letterhead_caption: data.letterhead_caption,
   letterhead_seal_subtitle: data.at("letterhead_seal_subtitle", default: none),
-  letterhead_seal: image(
-    if data.at("letterhead_seal", default: "dow") == "dod" {
-      "assets/dod_seal.png"
-    } else {
-      "assets/dow_seal.png"
-    }
-  ),
+  // Every enum branch below covers `values ∪ blank`: an `else` that swallows the
+  // blank renders a variant nobody picked. Here the blank omits the seal, which
+  // is what `frontmatter`'s own `letterhead_seal: none` default means.
+  ..if data.at("letterhead_seal", default: "") != "" {
+    (letterhead_seal: image(
+      if data.letterhead_seal == "dod" {
+        "assets/dod_seal.png"
+      } else {
+        "assets/dow_seal.png"
+      }
+    ))
+  },
 
   // Date
   date: data.at("date", default: none),
@@ -44,8 +49,10 @@
   ..if "cui_limited_dissemination" in data { (cui_limited_dissemination: data.cui_limited_dissemination) },
   ..if "cui_poc" in data { (cui_poc: data.cui_poc) },
 
-  // USAF vs DAF memorandum style (date format, body indentation)
-  memo_style: data.at("memo_style", default: "usaf"),
+  // USAF vs DAF memorandum style (date format, body indentation). A memo has no
+  // "no style" state, so the blank takes the package's default; `frontmatter`
+  // asserts membership of ("usaf", "daf") and would fail the compile on a blank.
+  ..if data.at("memo_style", default: "") != "" { (memo_style: data.memo_style) },
 
   // Font size
   font_size: data.at("font_size", default: 12) * 1pt,
@@ -111,7 +118,10 @@
         "Ind_" + str(i) + "_Signature",
         field: card.at("$path") + "signature_block",
       ),
-      format: card.at("format", default: "standard"),
+      // Same shape: `indorsement` asserts `format`'s membership, and an
+      // indorsement has no "no layout" state. `action` needs no such guard —
+      // the package reads a blank action as "no action line".
+      ..if card.at("format", default: "") != "" { (format: card.format) },
       date: resolved_date,
       ..if "action" in card { (action: card.action) },
       body_content,
