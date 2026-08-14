@@ -36,6 +36,9 @@ use crate::value::QuillValue;
 /// present, so it recurses rather than degrading to the bare `{}` that only a
 /// property-less object carries.
 pub fn blank(field: &FieldSchema) -> QuillValue {
+    // Keyed on the carrier rather than the `Enum` token, as every consumer of a
+    // finite domain is (`SCHEMAS.md` § "Type coercion"), so a serde-built schema
+    // whose type and carrier disagree still blanks to the reserved `""`.
     if field.enum_values.is_some() {
         return QuillValue::from_json(json!(""));
     }
@@ -119,6 +122,16 @@ properties:
                 "address": { "city": "", "tags": [] }
             })
         );
+    }
+
+    /// The carrier decides, so the answer survives a schema whose type and
+    /// carrier disagree — which the loader rejects (`values:` on a non-enum
+    /// type) and serde builds anyway.
+    #[test]
+    fn enum_values_on_a_non_enum_type_blanks_to_the_empty_string() {
+        let mut schema = FieldSchema::new("clearance".to_string(), FieldType::Integer, None);
+        schema.enum_values = Some(vec!["1".to_string(), "2".to_string()]);
+        assert_eq!(blank(&schema).into_json(), json!(""));
     }
 
     #[test]

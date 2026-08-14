@@ -601,7 +601,7 @@ mod args_canon {
 
         for e in [
             EditError::InvalidFieldName("9bad".into()),
-            EditError::UnknownField("nope".into()),
+            EditError::unknown_field("nope"),
             EditError::InvalidKindName("Bad".into()),
             EditError::ReservedKind,
             EditError::IndexOutOfRange { index: 3, len: 1 },

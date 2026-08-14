@@ -55,7 +55,7 @@ impl<'a> TypedWriter<'a> {
         let config = self.config;
         match config.main.fields.get(name) {
             Some(schema) => self.doc.main_mut().commit_field(name, value, schema),
-            None => Err(EditError::UnknownField(name.to_string())),
+            None => Err(EditError::unknown_field(name)),
         }
     }
 
@@ -94,7 +94,7 @@ impl<'a> TypedWriter<'a> {
     pub fn revise_field(&mut self, name: &str, text: &str) -> Result<Delta, EditError> {
         match self.config.main.fields.get(name) {
             Some(schema) => self.doc.main_mut().revise_field_checked(name, text, schema),
-            None => Err(EditError::UnknownField(name.to_string())),
+            None => Err(EditError::unknown_field(name)),
         }
     }
 
@@ -177,7 +177,7 @@ impl CardWriter<'_> {
     pub fn set(&mut self, name: &str, value: impl Into<QuillValue>) -> Result<(), EditError> {
         match self.schema.and_then(|s| s.fields.get(name)) {
             Some(schema) => self.card.commit_field(name, value, schema),
-            None => Err(EditError::UnknownField(name.to_string())),
+            None => Err(EditError::unknown_field(name)),
         }
     }
 
@@ -192,7 +192,7 @@ impl CardWriter<'_> {
     pub fn revise_field(&mut self, name: &str, text: &str) -> Result<Delta, EditError> {
         match self.schema.and_then(|s| s.fields.get(name)) {
             Some(schema) => self.card.revise_field_checked(name, text, schema),
-            None => Err(EditError::UnknownField(name.to_string())),
+            None => Err(EditError::unknown_field(name)),
         }
     }
 
@@ -235,7 +235,7 @@ where
                 Ok(stored) => resolved.push((name, stored)),
                 Err(e) => errors.push((name, e)),
             },
-            None => errors.push((name.clone(), EditError::UnknownField(name))),
+            None => errors.push((name.clone(), EditError::unknown_field(name))),
         }
     }
     if !errors.is_empty() {
