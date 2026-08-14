@@ -36,6 +36,16 @@ pub const QUILLMARK_BLANK_TITLE_KEY: &str = "quillmark:blank_title";
 /// and enforcement — if a consumer wants any — is that consumer's policy.
 pub const QUILLMARK_MUST_FILL_KEY: &str = "quillmark:must_fill";
 
+/// Transform-schema keyword scoping a field to one value of a sibling `enum`
+/// ([`FieldSchema::variant_of`](crate::quill::FieldSchema::variant_of)), as
+/// `{field, value}`. Emitted only on a field hoisted out of an enum's
+/// `variants:`; an unconditional field carries nothing.
+///
+/// A hide/show signal for editors, not a validity constraint: the field is
+/// declared and blank-filled regardless of the discriminant, so a backend
+/// reads it unconditionally.
+pub const QUILLMARK_VARIANT_OF_KEY: &str = "quillmark:variant_of";
+
 /// Build a JSON-Schema-shaped descriptor of a [`QuillConfig`]'s main + card fields.
 ///
 /// The descriptor marks richtext fields with `contentMediaType:
@@ -59,6 +69,21 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
             QUILLMARK_MUST_FILL_KEY.to_string(),
             serde_json::Value::Bool(field.must_fill()),
         );
+        // Beside `must_fill`, and in the prelude for the same reason: the enum
+        // arm returns early, and a discriminant's own variant fields are enums
+        // often enough. The pair reads "must fill, in this world" — `must_fill`
+        // stays the unconditional derived answer and this scopes it.
+        //
+        // No `if`/`then` companion: an out-of-variant value is wire-valid by
+        // design (it coerces, and the render floor projects it), so a standard
+        // validator accepting it agrees with the engine. Diagnosing it is
+        // `Quill::validate`'s (`validation::out_of_variant`).
+        if let Some(variant) = &field.variant_of {
+            schema.insert(
+                QUILLMARK_VARIANT_OF_KEY.to_string(),
+                serde_json::json!({ "field": variant.field, "value": variant.value }),
+            );
+        }
         // A finite domain projects to the idiomatic JSON-Schema spelling
         // `{type: string, enum: [...]}`: exactly what a backend dispatches on
         // today (a plain string), plus the domain. Keyed on the domain, as the

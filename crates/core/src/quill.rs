@@ -16,6 +16,7 @@ mod seed;
 mod tree;
 mod types;
 pub(crate) mod validation;
+pub(crate) mod variant;
 
 pub use config::{CoercionError, QuillConfig};
 pub(crate) use config::Leniency;
@@ -30,7 +31,7 @@ pub use tree::FileTreeNode;
 pub use validation::ValidationError;
 pub use types::{
     BlockConstruct, BodyCardSchema, CardSchema, FieldSchema, FieldType, GroupRegistry, GroupSchema,
-    UiCardSchema, UiFieldSchema,
+    UiCardSchema, UiFieldSchema, VariantFields, VariantOf,
 };
 
 use std::collections::HashMap;

@@ -77,9 +77,9 @@ Two consumers in `validation.rs`:
 
 ## Fixture migration
 
-`usaf_memo` 0.2.0, edited in place: no type changes, no stored-value reinterpretation, and plate JSON stays byte-identical, so the VERSIONING ref-immutability rule (which targets type changes that rewrite stored values) is not tripped; the only behavioral delta is new warnings.
+`usaf_memo` 0.2.0, edited in place: no type changes and no stored-value reinterpretation, so the VERSIONING ref-immutability rule (which targets type changes that rewrite stored values) is not tripped. Every plate key and value is unchanged across the classification × CUI-authoring matrix; plate *key order* moves, since the hoist repositions the `cui_*` block ahead of `dissemination`, which no plate reads (`plate.typ` addresses fields by name). The behavioral deltas are new warnings and that order.
 
-- Move `cui_controlled_by`, `cui_poc`, `cui_category`, `cui_limited_dissemination` under `classification.variants.CUI`, keeping each field's `ui.group: classification`.
+- Move `cui_controlled_by`, `cui_poc`, `cui_category`, `cui_limited_dissemination` under `classification.variants.CUI`, keeping each field's `ui.group: classification`. The two obliged fields lead, so the block reads obligation-first.
 - Drop `default: ""` from `cui_controlled_by` and `cui_poc`: the derivation then obliges them when CUI is active, matching DoDM 5200.48. `cui_category` and `cui_limited_dissemination` keep `default: ""` (skippable).
 - Trim the "Required … when classification is CUI" clauses from descriptions: the scoping is structural now.
 - Hoist order places the `cui_*` fields between `classification` and `dissemination`; regenerate `__golden__/schema.yaml`. An omitted `cui_controlled_by`/`cui_poc` moves from the `default` rung to the `blank` rung in `resolve()` output (same `""` bytes); regenerate any golden that captures source tags.
@@ -98,7 +98,7 @@ Two consumers in `validation.rs`:
 - Validation: `out_of_variant` fires on authored non-blank out-of-play, not on blank/null/in-play, and resolves the discriminant through `default:`; `unauthored` skips out-of-play and fires in-play; marker sovereignty on an out-of-play field.
 - Blueprint: skip plus `# when` line with a blank-defaulted discriminant; live variant fields when the default names the variant; existing quiver round-trip/render tests cover the migrated fixture.
 - Seeding: out-of-play examples not committed.
-- Render: migrated `usaf_memo` plate JSON byte-identical to pre-migration.
+- Render: migrated `usaf_memo` reaches the plate with every `cui_*` field present and blank under every classification.
 
 ## Deferred
 

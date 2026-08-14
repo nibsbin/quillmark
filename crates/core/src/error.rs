@@ -712,6 +712,16 @@ mod args_canon {
             "both `validation::must_fill` triggers must carry one key set"
         );
         add("validation::must_fill", marker.args);
+        add(
+            "validation::out_of_variant",
+            crate::quill::compose::out_of_variant_warning(
+                &path,
+                "classification",
+                "UNCLASSIFIED",
+                "CUI",
+            )
+            .args,
+        );
         // Built at the pre-render walk rather than from an error type: a quill
         // declares the construct, so there is nothing to fail.
         add("plate::unsupported_construct", {

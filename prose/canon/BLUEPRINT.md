@@ -81,7 +81,10 @@ Per field, in order:
 1. `# <description>`: `description:` from `Quill.yaml`,
    whitespace-collapsed. **Single line only**; multi-line descriptions are
    rejected at `Quill.yaml` parse time.
-2. `# e.g. <value>`: emitted whenever `example:` is configured **and a
+2. `# when <VALUE>: <field>, <field>`: one line per variant an `enum`
+   discriminant declares and the blueprint is **not** showing (see "Enum
+   variants"). Absent on every other field.
+3. `# e.g. <value>`: emitted whenever `example:` is configured **and a
    `default:` already holds the cell**. Independent of type. There the example
    never becomes the rendered value, so it surfaces as a hint; where no
    `default:` holds the cell the example inlines *as* the value (see
@@ -208,6 +211,39 @@ speak about the same cells (`SCHEMAS.md` § "Native validation").
 | `richtext` | On the field (bare; no block scalar) | `bio: !must_fill # richtext<markdown>` |
 | `object` (typed dict) | Per-property recursion | leaves carry `!must_fill` |
 | `array<object>` (typed table) | Per-property recursion in one synthetic row | leaves carry `!must_fill` |
+
+### Enum variants
+
+A blueprint is one static document, but an enum's `variants:` make the field set
+a function of an answer given *while filling the form*
+([SCHEMAS.md](SCHEMAS.md) § "Enum variants"). The blueprint shows the **one
+world its own discriminant cell names**: the cell carries its value-axis answer
+(`default:` › `example:` › the blank), and only that variant's fields are
+emitted. Fields of every other variant are omitted entirely — not commented out,
+which the all-live-YAML rule forbids and which would collide with the leading-
+annotation grammar besides.
+
+What is omitted is still named. The discriminant carries one leading line per
+skipped variant:
+
+```
+# Select the classification marking shown in the header and footer banner.
+# when CUI: cui_controlled_by, cui_poc, cui_category
+classification: "" # enum<UNCLASSIFIED | CUI | SECRET>
+```
+
+So the form stays honest about what it is not showing, and the reader learns
+which cells an answer brings into play. Field names are snake_case, so the line
+cannot collide with the reserved characters of the format slot.
+
+Discovery of those fields' types and descriptions is the **validate loop's**,
+not this line's: an author who writes `classification: CUI` and re-validates
+receives `validation::must_fill` (`trigger: unauthored`) at exactly the cells
+that came into play. That is the loop's whole point — a relational omission the
+DSL could not previously state now reaches a strict consumer as "not done."
+
+The blueprint guarantee is unaffected: fewer fields and more comments, both of
+which parse, round-trip, and render.
 
 ### Richtext fields
 
@@ -456,6 +492,12 @@ degrades gracefully on every type-valid input shape. The contract requires:
 - No template asserts that a must-fill field is *non-empty*. The schema
   guarantees *presence*, not non-emptiness; the `!must_fill` marker
   is an authoring signal, not a render-time precondition.
+- **A template keys a variant's block on the discriminant, never on its variant
+  fields' non-emptiness.** Every variant field is declared and blank-filled
+  whatever the discriminant reads ([SCHEMAS.md](SCHEMAS.md) § "Enum variants"),
+  so the plate reads it unconditionally; and a stranded out-of-variant value
+  still reaches the plate, where it must stay inert rather than switching a
+  block on.
 - "Renders successfully" means "compiles without error," not "produces
   meaningful output." An empty-string title is a blank title: that is
   acceptable.

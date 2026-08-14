@@ -8,8 +8,10 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Diagnostic, Severity, diag_args};
 use crate::value::QuillValue;
 
-use super::types::{RICHTEXT_INLINE_TOKEN_MSG, UI_ORDER_REMOVED_MSG};
-use super::{BodyCardSchema, CardSchema, FieldSchema, FieldType, GroupRegistry, UiCardSchema};
+use super::types::{RICHTEXT_INLINE_TOKEN_MSG, UI_ORDER_REMOVED_MSG, VARIANT_OF_AUTHORED_MSG};
+use super::{
+    BodyCardSchema, CardSchema, FieldSchema, FieldType, GroupRegistry, UiCardSchema, VariantOf,
+};
 
 /// Canonical string text for a bare scalar unambiguously representable as a
 /// string: a boolean (`true`/`false`) or number (`47`, `1.0`). `None` for
@@ -937,6 +939,183 @@ impl QuillConfig {
         }
     }
 
+    /// Lift every `variants:` field set into the card's flat field map, each
+    /// lifted field stamped with the discriminant and value it exists under.
+    ///
+    /// The hoist is the whole variant mechanism. After it runs there is no
+    /// nested structure left: `CardSchema::fields` carries every field a card
+    /// declares, so coercion, the render ladder, `conform`, and `resolve()` see
+    /// ordinary fields and need no variant knowledge. A lifted field lands
+    /// immediately after its discriminant, variants in declaration order and
+    /// fields in declaration order within each, so hoisted position *is* display
+    /// and blueprint position.
+    ///
+    /// Runs before group validation and the content-cache import, so a lifted
+    /// field earns the same `ui.group` reference check and the same
+    /// `default`/`example` content cache as a flatly-declared one.
+    fn hoist_variants(card: &mut CardSchema, context: &str, errors: &mut Vec<Diagnostic>) {
+        for (name, field) in &card.fields {
+            Self::reject_nested_variants(field, &format!("{context} '{name}'"), errors);
+        }
+        if card.fields.values().all(|f| f.variants.is_none()) {
+            return;
+        }
+
+        // Flat names are unique (they are map keys), so every duplicate here is
+        // a variant field colliding with a flat field or with another variant's.
+        // Counted across the whole card before anything is lifted: the effective
+        // type map is the flat union, and a name that resolved to two schemas
+        // would make a field's type depend on the discriminant's value, which is
+        // the one thing that would force coercion to consult another field.
+        let mut counts: IndexMap<&str, usize> = IndexMap::new();
+        for (name, field) in &card.fields {
+            *counts.entry(name.as_str()).or_default() += 1;
+            for fields in field.variants.iter().flat_map(|v| v.values()) {
+                for variant_field in fields.keys() {
+                    *counts.entry(variant_field.as_str()).or_default() += 1;
+                }
+            }
+        }
+        let collisions: HashSet<String> = counts
+            .iter()
+            .filter(|(_, count)| **count > 1)
+            .map(|(name, _)| (*name).to_string())
+            .collect();
+        for name in &collisions {
+            errors.push(
+                Diagnostic::new(
+                    Severity::Error,
+                    format!(
+                        "{context} '{name}' is declared more than once on this card. A card's \
+                         field names are one namespace: a variant's fields share it with the \
+                         card's flat fields and with every other variant's."
+                    ),
+                )
+                .with_code("quill::variant_field_collision".to_string())
+                .with_hint(format!(
+                    "Rename one of the '{name}' declarations. A field that belongs to more than \
+                     one world is declared flat, outside `variants:`."
+                )),
+            );
+        }
+
+        let mut hoisted: IndexMap<String, FieldSchema> = IndexMap::new();
+        for (name, mut field) in std::mem::take(&mut card.fields) {
+            let variants = field.variants.take();
+            let owner = format!("{context} '{name}'");
+            let enum_values = field.enum_values.clone();
+            hoisted.insert(name.clone(), field);
+
+            let Some(variants) = variants else {
+                continue;
+            };
+            let Some(enum_values) = enum_values else {
+                errors.push(
+                    Diagnostic::new(
+                        Severity::Error,
+                        format!(
+                            "{owner} declares `variants:` but is not `type: enum`. Variants hang \
+                             off an enum's `values:`: only a closed domain can discriminate."
+                        ),
+                    )
+                    .with_code("quill::variants_on_non_enum".to_string())
+                    .with_hint(
+                        "Declare the field as `type: enum` with a `values:` list, or move the \
+                         variant's fields out to the card's own `fields:`."
+                            .to_string(),
+                    ),
+                );
+                continue;
+            };
+
+            for (value, fields) in variants {
+                if !enum_values.contains(&value) {
+                    errors.push(
+                        Diagnostic::new(
+                            Severity::Error,
+                            format!(
+                                "{owner} declares a variant for '{value}', which is not one of \
+                                 its `values:` ({}).",
+                                enum_values.join(", ")
+                            ),
+                        )
+                        .with_code("quill::variant_unknown_value".to_string())
+                        .with_hint(if value.is_empty() {
+                            "The blank is not a member and activates no variant. Declare a real \
+                             member (`undecided`, `n_a`) where the empty state owns fields."
+                                .to_string()
+                        } else {
+                            format!("Add '{value}' to `values:`, or correct the variant key.")
+                        }),
+                    );
+                    continue;
+                }
+                for (field_name, schema) in fields {
+                    if collisions.contains(&field_name) {
+                        continue;
+                    }
+                    let mut schema = *schema;
+                    schema.variant_of = Some(VariantOf {
+                        field: name.clone(),
+                        value: value.clone(),
+                    });
+                    let owner = format!("{context} '{field_name}'");
+                    if let Some(diag) = Self::validate_field_schema_shape(
+                        &schema,
+                        &field_name,
+                        ShapePosition::Top,
+                    ) {
+                        errors.push(diag);
+                        continue;
+                    }
+                    Self::validate_field_blueprint_constraints(&schema, &owner, errors);
+                    hoisted.insert(field_name, schema);
+                }
+            }
+        }
+        card.fields = hoisted;
+    }
+
+    /// Reject `variants:` anywhere below a card's own field map: inside an
+    /// `object`'s properties, an `array`'s element schema, or on a variant field
+    /// itself. A variant's discriminant is a sibling field on the card, so a
+    /// nested declaration has nothing to discriminate on, and variants do not
+    /// recurse.
+    fn reject_nested_variants(field: &FieldSchema, owner: &str, errors: &mut Vec<Diagnostic>) {
+        let mut nested: Vec<(&FieldSchema, String)> = Vec::new();
+        for (name, prop) in field.properties.iter().flatten() {
+            nested.push((prop, format!("{owner}.{name}")));
+        }
+        if let Some(items) = &field.items {
+            nested.push((items, format!("{owner}[]")));
+        }
+        for fields in field.variants.iter().flat_map(|v| v.values()) {
+            for (name, variant_field) in fields {
+                nested.push((variant_field, format!("{owner} variant field '{name}'")));
+            }
+        }
+        for (schema, label) in nested {
+            if schema.variants.is_some() {
+                errors.push(
+                    Diagnostic::new(
+                        Severity::Error,
+                        format!(
+                            "{label} declares `variants:`, which is valid only on a card's own \
+                             `enum` field. A discriminant is a sibling field on the card, and \
+                             variants do not nest."
+                        ),
+                    )
+                    .with_code("quill::variant_placement".to_string())
+                    .with_hint(
+                        "Move the enum and its `variants:` up to the card's `fields:`."
+                            .to_string(),
+                    ),
+                );
+            }
+            Self::reject_nested_variants(schema, &label, errors);
+        }
+    }
+
     /// Reject multi-line descriptions. Single-line is required so the leading
     /// `# <description>` blueprint slot stays one line and the field-comment
     /// stack remains parseable for LLM consumers.
@@ -1345,6 +1524,9 @@ impl QuillConfig {
             }
             if obj.get("type").and_then(|v| v.as_str()) == Some("richtext(inline)") {
                 return Some(format!("{RICHTEXT_INLINE_TOKEN_MSG}."));
+            }
+            if obj.contains_key("variant_of") {
+                return Some(format!("{VARIANT_OF_AUTHORED_MSG}."));
             }
             if obj.get("type").and_then(|v| v.as_str()) == Some("markdown") {
                 return Some(
@@ -1785,6 +1967,15 @@ impl QuillConfig {
                     }
                 }
             }
+        }
+
+        // Lift every enum's `variants:` into its card's flat field map before
+        // any pass that iterates fields: group references, content caches, and
+        // every later consumer then see one field list with no variant knowledge.
+        Self::hoist_variants(&mut main, "field schema", &mut errors);
+        for card in &mut card_kinds {
+            let context = format!("card_kind '{}' field", card.name);
+            Self::hoist_variants(card, &context, &mut errors);
         }
 
         // Warn when `body.example` is set together with `body.enabled: false`:

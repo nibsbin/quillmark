@@ -253,6 +253,74 @@ your `values:` list stays clean.
 > `data.at(key, default: X)` is not a guard — every declared key is always
 > present at render, so its `default:` never fires and the blank flows through.
 
+#### Variants: fields that exist only for one value
+
+Some fields only make sense under one choice. A CUI memo needs a controlling
+office and a point of contact; an unclassified one has nowhere to put them.
+Declare them under that value with `variants:`:
+
+```yaml
+    classification:
+      type: enum
+      values: [UNCLASSIFIED, CUI, SECRET]
+      default: ""
+      variants:
+        CUI:
+          cui_controlled_by: { type: string }
+          cui_poc:           { type: string }
+          cui_category:      { type: string, default: "" }
+```
+
+Three things follow, and the third is the one that surprises people.
+
+**Authors write them flat.** A variant field is an ordinary top-level field in
+the document — `cui_poc: Capt Smith`, never nested under `classification`.
+`variants:` groups the *declaration*, not the data.
+
+**Obligation becomes conditional, with no new key.** `must_fill` works exactly
+as it does anywhere: `cui_controlled_by` has no `default:`, so it must be
+filled — but only once `classification` is `CUI`. On an unclassified memo it
+asks for nothing. This is the whole reason to reach for `variants:`: before it,
+marking such a field required meant demanding it on every document.
+
+**Your plate still reads every variant field, always.** Variants scope the
+*authoring* surface — editors hide out-of-play fields, the blueprint omits them,
+seeding skips them. They do not change the render projection: every declared
+field is present and blank-filled at render, whatever the discriminant says. So
+write `data.cui_poc` unguarded, and key a CUI block on `classification`, never on
+whether `cui_poc` is non-empty.
+
+An author who fills in `cui_poc` and then switches `classification` back to
+`UNCLASSIFIED` keeps their text — it is not deleted — and gets a warning
+(`validation::out_of_variant`) saying it is out of play. Nothing blocks; nothing
+is lost.
+
+Rules worth knowing up front:
+
+- `variants:` is valid only on `type: enum`, and only on a card's own fields
+  (not inside `properties:` or `items:`, and not nested inside another variant).
+- Every key must be a member of `values:`. The blank owns no variant: it means
+  nobody chose, so nothing exists under it.
+- **Field names are one namespace per card.** A variant's field may not share a
+  name with a card field or with another variant's field. A field belonging to
+  more than one world is declared flat, outside `variants:`.
+- Each value gets its own block. Several values sharing one field set means
+  repeating it (or a YAML anchor) for now.
+
+`quillmark schema` shows the result **flat**, each variant field annotated with
+the world it belongs to, in the position it will be displayed:
+
+```yaml
+    cui_poc:
+      type: string
+      variant_of:
+        field: classification
+        value: CUI
+```
+
+That is emission only — write `variants:` in your `Quill.yaml`; `variant_of:`
+there is an error.
+
 ### Primitive Arrays, Typed Tables, and Typed Dictionaries
 
 Every array declares its element type under `items:`. For a **primitive list**, give `items` a scalar type, coercion and validation then apply element-wise (e.g. each element of an `integer[]` is coerced to an integer, and a bad element fails at its indexed path like `counts[1]`):

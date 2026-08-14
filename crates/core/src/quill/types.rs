@@ -267,6 +267,32 @@ impl Serialize for GroupRegistry {
     }
 }
 
+/// The enum value a variant field exists under: the back-reference the loader's
+/// hoist leaves on every field lifted out of an [`enum`](FieldType::Enum)
+/// field's `variants:` map.
+///
+/// A field carrying one is *in play* only where its discriminant resolves to
+/// `value`; out of play it is skipped by the blueprint, the seeder, and the
+/// must-fill predicate, and an authored non-blank value in it draws
+/// `validation::out_of_variant`. It stays declared, typed, and blank-filled at
+/// the render floor regardless: conditional existence is an authoring and
+/// validation fact, never a wire one, so a plate reads a variant field
+/// unconditionally.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[non_exhaustive]
+pub struct VariantOf {
+    /// The discriminant: a sibling `enum` field on the same card.
+    pub field: String,
+    /// The discriminant value this field exists under; a member of that enum's
+    /// `values:`, never the blank (which activates nothing).
+    pub value: String,
+}
+
+/// Per-value field sets authored under an `enum` field's `variants:`, keyed by
+/// enum value then by field name. Both levels keep declaration order, which the
+/// hoist turns into position in the card's field map.
+pub type VariantFields = IndexMap<String, IndexMap<String, Box<FieldSchema>>>;
+
 /// Schema definition for a card kind (composable content blocks)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -516,6 +542,17 @@ pub struct FieldSchema {
     /// commits this so a seeded field is content from birth. `None` under the same
     /// conditions as [`default_content`](Self::default_content).
     pub example_content: Option<QuillValue>,
+    /// Per-value field sets authored under this `enum` field's `variants:`.
+    ///
+    /// The parse landing zone only: the loader's hoist drains it into the card's
+    /// flat field map, stamping each lifted field's
+    /// [`variant_of`](Self::variant_of), so a loaded schema always reads `None`
+    /// here and `CardSchema::fields` is the one carrier thereafter. Never
+    /// serialized — `schema()` emits the hoisted form.
+    pub variants: Option<VariantFields>,
+    /// Set by the hoist on a field lifted out of an enum's `variants:`: the
+    /// discriminant and value it exists under. See [`VariantOf`].
+    pub variant_of: Option<VariantOf>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -540,7 +577,19 @@ struct FieldSchemaDef {
     // Element schema for arrays.
     pub items: Option<serde_json::Value>,
     pub inline: Option<bool>,
+    /// Per-value field sets on an `enum` field, keyed by enum value.
+    pub variants: Option<serde_json::Map<String, serde_json::Value>>,
+    /// Parsed only to reject it by name: `variant_of` is emitted by `schema()`,
+    /// never authored. Under `deny_unknown_fields` an absent binding reports
+    /// "unknown field `variant_of`" with no route to `variants:`.
+    pub variant_of: Option<serde_json::Value>,
 }
+
+/// Shared by this deserializer's error and `QuillConfig::field_parse_hint`'s
+/// hint text, so the two can't drift.
+pub(crate) const VARIANT_OF_AUTHORED_MSG: &str =
+    "variant_of is emitted by the schema projection, never authored; declare the field \
+     under its discriminant enum's variants: map";
 
 impl FieldSchema {
     pub fn new(name: String, r#type: FieldType, description: Option<String>) -> Self {
@@ -557,6 +606,8 @@ impl FieldSchema {
             items: None,
             default_content: None,
             example_content: None,
+            variants: None,
+            variant_of: None,
         }
     }
 
@@ -584,6 +635,33 @@ impl FieldSchema {
         // `type: enum` requires `values:`; `values:` on any other type, and
         // `enum:` on any type at all, is a hard error.
         let enum_values = Self::resolve_enum_values(&r#type, def.enum_key, def.values)?;
+        if def.variant_of.is_some() {
+            return Err(VARIANT_OF_AUTHORED_MSG.to_string());
+        }
+        // Membership, collision, and placement are the hoist's checks (they need
+        // the whole card); this only builds the tree it will drain.
+        let variants = match def.variants {
+            None => None,
+            Some(variants) => {
+                let mut out: VariantFields = IndexMap::new();
+                for (value, fields) in variants {
+                    let fields = fields.as_object().cloned().ok_or_else(|| {
+                        format!("variants.{value} must be a map of field name to field schema")
+                    })?;
+                    let mut parsed = IndexMap::new();
+                    for (name, schema) in fields {
+                        let field = FieldSchema::from_quill_value(
+                            name.clone(),
+                            &QuillValue::from_json(schema),
+                        )
+                        .map_err(|e| format!("variants.{value}.{name}: {e}"))?;
+                        parsed.insert(name, Box::new(field));
+                    }
+                    out.insert(value, parsed);
+                }
+                Some(out)
+            }
+        };
         Ok(Self {
             name: key.clone(),
             r#type,
@@ -621,6 +699,9 @@ impl FieldSchema {
             // them empty.
             default_content: None,
             example_content: None,
+            variants,
+            // Stamped by the loader's hoist, which alone knows the discriminant.
+            variant_of: None,
         })
     }
 
@@ -687,10 +768,12 @@ impl Serialize for FieldSchema {
         use serde::ser::SerializeMap;
         // `inline: true` is projected back out of the enum (the flag's single
         // carrier) so the wire round-trips. `name` rides the map key; the
-        // `*_content` caches are load-time derivations, never serialized.
+        // `*_content` caches are load-time derivations, never serialized, as is
+        // `variants`, which the hoist drains into the emitted flat field map.
         let inline = matches!(self.r#type, FieldType::RichText { inline: true }).then_some(true);
         let len = 1
             + inline.is_some() as usize
+            + self.variant_of.is_some() as usize
             + self.description.is_some() as usize
             + self.default.is_some() as usize
             + self.example.is_some() as usize
@@ -733,6 +816,13 @@ impl Serialize for FieldSchema {
         }
         if let Some(v) = inline {
             map.serialize_entry("inline", &v)?;
+        }
+        // The hoisted form: a variant field is emitted flat, in hoisted
+        // position, annotated with the world it belongs to. Consumers read one
+        // ordered field list and key hide/show on this, rather than
+        // re-implementing the hoist to match what `resolve()` returns.
+        if let Some(v) = &self.variant_of {
+            map.serialize_entry("variant_of", v)?;
         }
         map.end()
     }

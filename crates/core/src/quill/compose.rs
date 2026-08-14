@@ -7,6 +7,7 @@ use std::str::FromStr;
 use indexmap::IndexMap;
 
 use super::resolved::FieldSource;
+use super::variant;
 use super::{seed, CardSchema, CoercionError, FieldSchema, FieldType, Leniency, Quill, QuillConfig};
 use crate::normalize::{normalize_document, normalize_field_name};
 use crate::quill::blank;
@@ -212,9 +213,9 @@ impl Quill {
     /// The editor-facing validation surface. Forwards the canonical
     /// `validation::*` diagnostics verbatim (same code, `path`, `hint`) so
     /// consumers route on the code without parsing message text: type
-    /// mismatches, unknown card kinds, body-on-disabled-body, and the non-fatal
-    /// `validation::must_fill` warning, the only non-fatal one; the rest are
-    /// blockers.
+    /// mismatches, unknown card kinds, body-on-disabled-body, and the two
+    /// non-fatal warnings — `validation::must_fill` and
+    /// `validation::out_of_variant`; the rest are blockers.
     ///
     /// `validation::must_fill` has **two triggers**, covering disjoint failures
     /// under one code: a `!must_fill` marker the document carries
@@ -242,6 +243,7 @@ impl Quill {
                 .into_iter()
                 .filter(|d| !claimed.contains(&d.path)),
         );
+        diags.extend(validate_out_of_variant(self.config(), doc));
         diags.extend(self.validate_seed(doc));
         diags
     }
@@ -672,8 +674,109 @@ fn collect_unauthored_diags(
 ) {
     let payload = card.payload();
     for (name, field) in &schema.fields {
+        // An out-of-play variant field obliges nothing: the world it belongs to
+        // is not the one this document is in. Its `must_fill` is unchanged and
+        // applies the moment the discriminant names its variant, which is what
+        // makes a discriminant flip tell a strict consumer "not done".
+        if !variant::in_play(field, |d| {
+            variant::document_value(schema, d, payload.get(d))
+        }) {
+            continue;
+        }
         collect_unauthored_field(field, payload.get(name), &base.field(name), out);
     }
+}
+
+/// Warn at each authored, non-blank value sitting in a field whose variant is
+/// not in play: a `cui_poc` on a memo whose `classification` reads
+/// `UNCLASSIFIED`.
+///
+/// A warning, never a gate, and the value is carried rather than dropped. An
+/// editor flipping a discriminant strands the old world's answers, and deleting
+/// them to recover would be the form-toggle trap; the render floor keeps
+/// projecting them, so nothing is lost and the plate — which reads a variant
+/// field unconditionally — stays total.
+///
+/// Blank-ness is the field's own [`blank`], so the `integer`/`number`/`boolean`
+/// seam applies here too: an authored `0` in an out-of-play numeric field is
+/// indistinguishable from its blank and never warns.
+fn validate_out_of_variant(config: &QuillConfig, doc: &Document) -> Vec<Diagnostic> {
+    let mut diags = Vec::new();
+    collect_out_of_variant(&config.main, doc.main(), &DocPath::main(), &mut diags);
+    for (index, card) in doc.cards().iter().enumerate() {
+        let Some(schema) = card.kind().and_then(|k| config.card_kind(k)) else {
+            continue;
+        };
+        collect_out_of_variant(
+            schema,
+            card,
+            &DocPath::card(card.kind(), index),
+            &mut diags,
+        );
+    }
+    diags
+}
+
+fn collect_out_of_variant(
+    schema: &CardSchema,
+    card: &Card,
+    base: &DocPath,
+    out: &mut Vec<Diagnostic>,
+) {
+    let payload = card.payload();
+    for (name, field) in &schema.fields {
+        let Some(variant) = &field.variant_of else {
+            continue;
+        };
+        let resolved = variant::document_value(schema, &variant.field, payload.get(&variant.field));
+        if resolved == variant.value {
+            continue;
+        }
+        // Absent, null, and the field's own blank all say "nobody answered
+        // here", which is exactly what an out-of-play field should hold.
+        let Some(value) = payload.get(name).filter(|v| !v.as_json().is_null()) else {
+            continue;
+        };
+        if value.as_json() == blank(field).as_json() {
+            continue;
+        }
+        out.push(out_of_variant_warning(
+            &base.field(name),
+            &variant.field,
+            &resolved,
+            &variant.value,
+        ));
+    }
+}
+
+pub(crate) fn out_of_variant_warning(
+    path: &DocPath,
+    discriminant: &str,
+    resolved: &str,
+    owner: &str,
+) -> Diagnostic {
+    let path = path.to_string();
+    let reading = if resolved.is_empty() {
+        "is blank".to_string()
+    } else {
+        format!("reads `{resolved}`")
+    };
+    Diagnostic::new(
+        Severity::Warning,
+        format!(
+            "Field `{path}` exists only where `{discriminant}` is `{owner}`, but \
+             `{discriminant}` {reading}."
+        ),
+    )
+    .with_code("validation::out_of_variant".to_string())
+    .with_path(path)
+    .with_arg("discriminant", discriminant.into())
+    .with_arg("resolved", resolved.into())
+    .with_arg("variant", owner.into())
+    .with_hint(format!(
+        "Either set `{discriminant}` to `{owner}`, or clear the field. The value is kept and \
+         still renders."
+    ))
 }
 
 /// Warn at each **cell** the schema obliges and the document leaves unauthored.

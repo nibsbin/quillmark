@@ -111,24 +111,26 @@ main:
       - CONFIDENTIAL
       - SECRET
       - TOP SECRET
-    dissemination:
-      type: string
-      description: >-
-        Banner dissemination suffix appended after double slash (e.g. 'NF' renders as
-        CUI//NF in the header/footer). Leave blank for no suffix.
-      default: ""
-      ui:
-        group: classification
-        compact: true
     cui_controlled_by:
       type: string
-      description: >-
-        Office or organization that designated this information as CUI (e.g.,
-        'SAF/AA'). Required by DoDM 5200.48 when classification is CUI.
-      default: ""
+      description: Office or organization that designated this information as CUI (e.g., 'SAF/AA').
       ui:
         group: classification
         compact: true
+      variant_of:
+        field: classification
+        value: CUI
+    cui_poc:
+      type: string
+      description: >-
+        Point of contact for CUI questions (e.g., 'Capt J. Smith, DSN 555-1234,
+        john.smith@us.af.mil').
+      ui:
+        group: classification
+        compact: true
+      variant_of:
+        field: classification
+        value: CUI
     cui_category:
       type: string
       description: >-
@@ -138,6 +140,9 @@ main:
       ui:
         group: classification
         compact: true
+      variant_of:
+        field: classification
+        value: CUI
     cui_limited_dissemination:
       type: string
       description: >-
@@ -147,11 +152,14 @@ main:
       ui:
         group: classification
         compact: true
-    cui_poc:
+      variant_of:
+        field: classification
+        value: CUI
+    dissemination:
       type: string
       description: >-
-        Point of contact for CUI questions (e.g., 'Capt J. Smith, DSN 555-1234,
-        john.smith@us.af.mil'). Required by DoDM 5200.48 when classification is CUI.
+        Banner dissemination suffix appended after double slash (e.g. 'NF' renders as
+        CUI//NF in the header/footer). Leave blank for no suffix.
       default: ""
       ui:
         group: classification

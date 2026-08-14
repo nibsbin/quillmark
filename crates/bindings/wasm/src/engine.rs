@@ -89,6 +89,16 @@ export interface QuillFieldSchema {
     /** `true` on a `richtext` or `plaintext` field declared `inline`: the
      *  single-paragraph, container-free, island-free constraint. */
     inline?: boolean;
+    /** Present on a field that exists only where a sibling `enum` holds one
+     *  value: the quill declared it under that enum's `variants:`, and the
+     *  schema emits it flat, in display position, scoped by this.
+     *
+     *  A hide/show signal, not a validity constraint. The field is declared and
+     *  blank-filled whatever the discriminant reads, so it renders either way;
+     *  an authored value while the discriminant names another value warns
+     *  `validation::out_of_variant` and is kept. `must_fill` stays the
+     *  unconditional answer, and this scopes it: "must fill, in this world". */
+    variant_of?: { field: string; value: string };
 }
 
 /** Schema entry for the main card or a named card kind. */

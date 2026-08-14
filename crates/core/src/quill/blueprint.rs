@@ -7,7 +7,7 @@
 
 use indexmap::IndexMap;
 
-use super::{blank, CardSchema, FieldSchema, FieldType, QuillConfig};
+use super::{blank, variant, CardSchema, FieldSchema, FieldType, QuillConfig};
 use crate::document::emit::{saphyr_emit_flow, saphyr_emit_scalar};
 use crate::document::prescan::NestedComment;
 use crate::document::{Card, Document, Payload, PayloadItem};
@@ -132,9 +132,40 @@ fn append_fields(items: &mut Vec<PayloadItem>, card: &CardSchema) {
         .as_ref()
         .and_then(|u| u.groups.as_ref())
         .map(|r| r.0.iter().map(|g| g.id.as_str()).collect());
+    let variants = variant::index(card);
     for field in group_fields(card.fields.values(), registry.as_deref()) {
-        append_field(items, field);
+        // The blueprint is one static form, so it shows the one world its own
+        // discriminant cell names. A skipped variant's fields are named on the
+        // discriminant instead (`when_lines`): an author who changes that cell
+        // learns which fields come into play, and re-validating then reports
+        // them unauthored.
+        if !variant::in_play(field, |d| variant::blueprint_value(card, d)) {
+            continue;
+        }
+        append_field(items, field, &when_lines(card, &variants, &field.name));
     }
+}
+
+/// `when <VALUE>: <field>, <field>` for each of this discriminant's variants
+/// the blueprint is not showing, in declaration order. Empty for every field
+/// that is not a discriminant with skipped variants.
+///
+/// Field names are snake_case, so the line cannot collide with the inline
+/// annotation grammar's reserved characters.
+fn when_lines(
+    card: &CardSchema,
+    variants: &IndexMap<&str, IndexMap<&str, Vec<&str>>>,
+    name: &str,
+) -> Vec<String> {
+    let Some(values) = variants.get(name) else {
+        return Vec::new();
+    };
+    let shown = variant::blueprint_value(card, name);
+    values
+        .iter()
+        .filter(|(value, _)| **value != shown)
+        .map(|(value, fields)| format!("when {}: {}", value, fields.join(", ")))
+        .collect()
 }
 
 /// Order fields by `ui.group` (ungrouped lead, then grouped clusters),
@@ -173,7 +204,7 @@ fn group_fields<'a, I: IntoIterator<Item = &'a FieldSchema>>(
 /// Append one top-level field. Dispatches typed tables (`array<object>`) and
 /// typed dictionaries (`object` with `properties`) to their per-property
 /// builders; everything else is a scalar/array cell.
-fn append_field(items: &mut Vec<PayloadItem>, field: &FieldSchema) {
+fn append_field(items: &mut Vec<PayloadItem>, field: &FieldSchema, when: &[String]) {
     // Typed table: an array whose element is an object with properties.
     if matches!(field.r#type, FieldType::Array) {
         if let Some(elem) = &field.items {
@@ -194,18 +225,23 @@ fn append_field(items: &mut Vec<PayloadItem>, field: &FieldSchema) {
         }
     }
 
-    append_scalar(items, field);
+    append_scalar(items, field, when);
 }
 
 /// Push the leading prose comments for a *top-level* field: the description,
-/// then the `# e.g.` hint. `eg_when` gates the hint: a scalar surfaces it only
-/// when a `default:` already occupies the cell (otherwise the example *is* the
-/// cell's value), while typed containers always surface it (their example never
-/// inlines). The gate is a value-axis question and stays keyed on `default`:
-/// `must_fill` never moves an example between the cell and the hint.
-fn push_leading(items: &mut Vec<PayloadItem>, field: &FieldSchema, eg_when: bool) {
+/// the `when <VALUE>: …` lines a discriminant carries for the variants this
+/// blueprint is not showing, then the `# e.g.` hint. `eg_when` gates the hint: a
+/// scalar surfaces it only when a `default:` already occupies the cell
+/// (otherwise the example *is* the cell's value), while typed containers always
+/// surface it (their example never inlines). The gate is a value-axis question
+/// and stays keyed on `default`: `must_fill` never moves an example between the
+/// cell and the hint.
+fn push_leading(items: &mut Vec<PayloadItem>, field: &FieldSchema, eg_when: bool, when: &[String]) {
     if let Some(desc) = collapse_opt(&field.description) {
         items.push(PayloadItem::comment(desc));
+    }
+    for line in when {
+        items.push(PayloadItem::comment(line.clone()));
     }
     if eg_when {
         if let Some(eg) = field.example.as_ref() {
@@ -243,12 +279,12 @@ fn scalar_value(field: &FieldSchema) -> JsonValue {
 
 /// Append a scalar / scalar-array / richtext field as a single payload field
 /// plus its trailing inline type annotation.
-fn append_scalar(items: &mut Vec<PayloadItem>, field: &FieldSchema) {
+fn append_scalar(items: &mut Vec<PayloadItem>, field: &FieldSchema, when: &[String]) {
     // A richtext field never inlines its `example:` as the marker value, so
     // (unlike other defaultless scalars) the example would vanish entirely.
     // Surface it as a `# e.g.` hint instead (no-ops when no `example:` is set).
     let eg_when = field.default.is_some() || matches!(field.r#type, FieldType::RichText { .. });
-    push_leading(items, field, eg_when);
+    push_leading(items, field, eg_when, when);
     let (json, fill) = scalar_cell(field);
     items.push(PayloadItem::Field {
         key: field.name.clone(),
@@ -325,7 +361,7 @@ fn append_typed_dict(
     field: &FieldSchema,
     props: &IndexMap<String, Box<FieldSchema>>,
 ) {
-    push_leading(items, field, true);
+    push_leading(items, field, true, &[]);
 
     let (value, nested, fills) = match field.default.as_ref().map(|d| d.as_json()) {
         // `default: {}` → expand to the field's blank-filled shape so every key
@@ -356,7 +392,7 @@ fn append_typed_table(
     field: &FieldSchema,
     item_props: &IndexMap<String, Box<FieldSchema>>,
 ) {
-    push_leading(items, field, true);
+    push_leading(items, field, true, &[]);
 
     let (value, nested, fills) = match field.default.as_ref().map(|d| d.as_json()) {
         // Any default (including `[]`) is shippable as-is, rendered verbatim.

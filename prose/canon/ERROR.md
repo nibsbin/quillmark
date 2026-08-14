@@ -82,10 +82,10 @@ families:
   no content leaf never enters the walk, so a scalar the strict write would
   refuse raises no `conform::*` warning and reaches `validation::*` instead.
 - **Validation warnings**: `Quill::validate(doc)` returns every
-  `validation::*` diagnostic, mixing severities; `validation::must_fill` and
-  the `$seed` checks are the non-fatal ones. This is the editor-facing
-  surface; the render pipeline blank-fills instead of warning on incomplete
-  documents.
+  `validation::*` diagnostic, mixing severities; `validation::must_fill`,
+  `validation::out_of_variant`, and the `$seed` checks are the non-fatal ones.
+  This is the editor-facing surface; the render pipeline blank-fills instead of
+  warning on incomplete documents.
 - **`plate::unsupported_construct`: declined-construct warnings.** A quill
   names, per body (`BodyCardSchema.unsupported`), the block constructs its
   plate does not typeset; `Quill::unsupported_constructs` walks a document's
@@ -204,10 +204,27 @@ the schema obliges the cell (see [SCHEMAS.md](SCHEMAS.md) § "Native
 validation"). An incomplete document therefore produces no *fatal* field-level
 diagnostic, and warns exactly where a human has yet to make a call.
 
+`validation::out_of_variant` (non-fatal, `Severity::Warning`) is the same
+shape one axis over: an authored, non-blank value sitting in a field whose
+variant is not in play ([SCHEMAS.md](SCHEMAS.md) § "Enum variants").
+
+```
+Field `main.cui_poc` exists only where `classification` is `CUI`, but
+`classification` reads `UNCLASSIFIED`.
+```
+
+with the hint *"Either set `classification` to `CUI`, or clear the field. The
+value is kept and still renders."* Both exits, as above, and the second clause
+is the contract rather than reassurance: the value stays authored and keeps
+reaching the plate, so flipping a discriminant strands data without destroying
+it.
+
 Implementation: `crates/core/src/quill/validation.rs` (the `ValidationError`
 `Display` impl, for `validation::type_mismatch`) and
 `crates/core/src/quill/compose.rs` (`validate_fills`/`fill_warning` and
-`validate_unauthored`/`unauthored_warning`, for `validation::must_fill`).
+`validate_unauthored`/`unauthored_warning` for `validation::must_fill`,
+`validate_out_of_variant`/`out_of_variant_warning` for
+`validation::out_of_variant`).
 
 ## Document-model paths
 
@@ -307,6 +324,7 @@ Three outcomes, and the wire tells them apart only with this table in hand, sinc
 | `validation::body_disabled` | `card` | structured |
 | `validation::coercion_failed` | `value`, `target` | structured, coarser |
 | `validation::must_fill` | `trigger` | structured |
+| `validation::out_of_variant` | `discriminant`, `resolved`, `variant` | structured |
 | `validation::not_inline` | — | code-determined |
 | `validation::not_plain` | — | code-determined |
 | `edit::invalid_field_name` | `field` | structured |

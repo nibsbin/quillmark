@@ -38,6 +38,95 @@ stack and the same backend lowering (both carry `contentMediaType:
 application/quillmark-content+json`); `plaintext` additionally carries
 `quillmark:plain: true`, an editor-only annotation backends ignore.
 
+### Enum variants
+
+An `enum` field may declare `variants:`, a per-value field set that exists only
+in the world where the discriminant holds that value. It is the one cross-field
+shape the DSL carries.
+
+```yaml
+classification:
+  type: enum
+  values: [UNCLASSIFIED, CUI, CONFIDENTIAL, SECRET, TOP SECRET]
+  variants:
+    CUI:
+      cui_controlled_by: { type: string }
+      cui_poc:           { type: string }
+      cui_category:      { type: string, default: "" }
+```
+
+Each variant's fields use the full field grammar (`ui:`, `default:`,
+`example:`, `must_fill:`, nested `items:` / `properties:`).
+
+**The document stays flat.** A variant field is authored at the card's top level
+like any other (`cui_poc: …`, never nested under `classification:`), so the
+syntax borrows the tagged-union shape while the document remains a flat map with
+a predicate over it. The weakening is the design: nesting would break every
+existing document and the hand-authorability of the frontmatter.
+
+**Conditional existence is an authoring fact, not a wire one.** Three surfaces
+read it — the blueprint skips an out-of-play field, seeding does not commit one,
+and the must-fill predicate does not oblige one — and the render floor does not:
+a variant field is declared, blank-filled, and present in the plate projection
+whatever the discriminant reads. A plate therefore reads a variant field
+unconditionally, and the empty-document contract
+([BLUEPRINT.md](BLUEPRINT.md) § "Guarantees") is untouched.
+
+**Obligation costs no new axis.** `must_fill` inside a variant keeps the
+ordinary derivation, so `must_fill: true` (or a defaultless field) means
+"required *in this world*" with nothing added to the two axes below.
+
+#### The hoist
+
+At load the whole `variants:` map is **lifted into the card's flat field map**,
+each lifted field stamped with the discriminant and value it exists under
+(`FieldSchema::variant_of`). A lifted field lands immediately after its
+discriminant, variants in declaration order and fields in declaration order
+within each, so hoisted position *is* display and blueprint position.
+
+After the hoist there is no nested structure left: `CardSchema::fields` carries
+every field a card declares, so coercion, the render ladder, `conform`, and
+[`resolve()`](#the-resolved-value-view-resolve) see ordinary fields and need no
+variant knowledge. This is what keeps the feature to one load-time pass.
+
+The hoist runs before group validation and the content-cache import, so a
+lifted field earns the same `ui.group` reference check and the same
+`default`/`example` content cache as a flatly-declared one.
+
+| Condition | Load error |
+|---|---|
+| `variants:` on a non-enum field | `quill::variants_on_non_enum` |
+| a `variants:` key outside `values:` (the blank falls out here: it is never a member, so it owns no variant) | `quill::variant_unknown_value` |
+| a variant field name colliding with any other field on the card — flat fields and every variant of every enum, one namespace | `quill::variant_field_collision` |
+| `variants:` below card level (inside `items:` / `properties:`) or on a variant field itself | `quill::variant_placement` |
+
+The one-namespace rule is what keeps coercion value-independent: the effective
+type map is the flat union, so a name resolving to two schemas — which would
+make a field's type a function of the discriminant's *value* — is
+unrepresentable rather than handled.
+
+#### Stranded values
+
+An authored, non-blank value in a field whose variant is not in play raises
+`validation::out_of_variant` at `Severity::Warning`, and the value is **carried,
+not dropped**: it coerces, it stays authored, and the render floor keeps
+projecting it. An editor flipping a discriminant therefore strands the old
+world's answers without destroying them, which is the behavior every real form
+has; refusing the document instead would force deleting those answers to
+recover. Blank-ness is the field's own [blank](#blank-filled-render), so the
+`integer` / `number` / `boolean` seam applies here too: an authored `0` in an
+out-of-play numeric field is indistinguishable from its blank and never warns.
+
+#### Emission
+
+`variants:` is the **authoring** spelling and the only one: `variant_of:`
+written in `Quill.yaml` is a load error (`quill::field_parse_error`).
+`QuillConfig::schema()` emits the **hoisted** form — every field flat, in
+hoisted order, a variant field carrying `variant_of: {field, value}` — so a
+consumer reads one ordered field list and keys hide/show on the annotation
+instead of re-implementing the hoist to match what `resolve()` returns. The
+transform schema carries the same fact as `quillmark:variant_of`.
+
 ### Content fields rest per codec
 
 A content field's **resting form** is the shape it is stored in once anything
@@ -197,6 +286,18 @@ Validation is implemented by a native walker over `QuillConfig` in `quill/valida
   wins: its hint is the actionable one. It **never gates render**: the cell
   blank-fills, or uses its suggested value. A strict consumer (e.g. an LLM
   authoring loop) treats any outstanding warning as "not done."
+
+  The `unauthored` trigger skips an **out-of-play variant field**
+  ([Enum variants](#enum-variants)): the world it belongs to is not the one the
+  document is in, so it obliges nothing. Its obligation is unchanged and applies
+  the moment the discriminant names its variant, which is what lets the strict
+  loop above be told "not done" for a relational omission: authoring
+  `classification: CUI` brings `cui_poc` into play, and the next `validate`
+  reports it. The `marker` trigger is document-sovereign and fires regardless —
+  a human dropping a `!must_fill` is a decision the schema does not overrule.
+- **`validation::out_of_variant` → non-fatal warning.** An authored, non-blank
+  value in an out-of-play variant field. Never a gate, and the value is carried:
+  see [Stranded values](#stranded-values).
 - **Absence semantics**: a missing (or present-null) field with a `default:`
   accepts the default; without a `default:` it blank-fills. Either way it
   coerces and validates clean — absence is never *malformed*, and there is no
@@ -472,11 +573,14 @@ Top-level schema keys: `main`, optional `card_kinds` (map keyed by card name).
 `main` and each entry in `card_kinds` share the same `CardSchema` shape:
 `fields` (map keyed by field name), optional `description`, optional `ui`,
 optional `body`. Each `FieldSchema` includes `type`, optional
-`description`/`default`/`example`/`enum`/`values`/`inline`/`properties`/`items`/`ui`.
+`description`/`default`/`example`/`enum`/`values`/`inline`/`properties`/`items`/`ui`/`variant_of`.
 The type-gated keys:
 
 - `inline`: valid only on the prose types (`richtext`, `plaintext`).
 - `values`: declares an `enum` field's domain, required there.
+- `variants`: valid only on `enum`, and authoring-only — it never appears in
+  the emission, which carries the hoisted `variant_of` instead
+  ([Enum variants](#enum-variants)).
 - `items`: the element schema, itself a `FieldSchema`; required on `array`
   fields and rejected elsewhere.
 - `properties`: used by `object` fields, and by an array's `object`-typed
