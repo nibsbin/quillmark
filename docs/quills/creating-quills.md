@@ -59,6 +59,8 @@ The letter above needs no content field: its prose is the document body, which i
 
 Pick before a corpus exists. Changing a declared type reinterprets every value already stored in that field, and data → content is lossy: see [Choosing among `string`, `enum`, `plaintext`, and `richtext`](quill-yaml-reference.md#choosing-among-string-enum-plaintext-and-richtext).
 
+When you declare an `enum`, list only the real choices. Every enum also accepts a **blank** (`""`) that the engine supplies — what a document says when nobody has answered — so you never declare it, and declaring `""` in `values:` is a load error. Keep `default: ""` to mark the field optional. If the empty state is itself a decision worth recording, make it a member (`undecided`, `waived`), because the blank means nobody chose and a member means someone chose "none". See [the blank](quill-yaml-reference.md#the-blank-values-is-for-choices-not-for-the-absence-of-one).
+
 ## 3. Write `plate.typ`
 
 Your first plate template:

@@ -4,19 +4,19 @@
 
 ## TL;DR
 
-Plates get document data through a backend-injected virtual Typst package, not a template engine. Data flows in two stages: `Quill::compile_data()` produces validated, zero-filled JSON in which content fields are canonical `Content` objects; `Backend::open()` generates the helper's `lib.typ`, lowering each to Typst markup at codegen (and dates to click-to-edit value-objects wrapping `datetime(..)`), no per-field markdown re-parse.
+Plates get document data through a backend-injected virtual Typst package, not a template engine. Data flows in two stages: `Quill::compile_data()` produces validated, blank-filled JSON in which content fields are canonical `Content` objects; `Backend::open()` generates the helper's `lib.typ`, lowering each to Typst markup at codegen (and dates to click-to-edit value-objects wrapping `datetime(..)`), no per-field markdown re-parse.
 
 ## Overview
 
-1. `Quill::compile_data()` coerces, validates, normalizes, and **zero-fills** the
+1. `Quill::compile_data()` coerces, validates, normalizes, and **blank-fills** the
    root-block fields, and each composable card's fields against its `card_kind`
    schema, into a plain JSON object: every absent schema field resolves to its
    authored value, else the schema `default:`, else its type-empty zero value.
    Content fields cross as canonical `Content` objects (coercion imports an
    authored markdown string to the `Content` and re-canonicalizes an
    editor-supplied one). An incomplete document still renders: an absent or
-   present-null field zero-fills, and a `!must_fill` marker uses its suggested
-   value or zero-fills. Only a malformed value: one that won't coerce or
+   present-null field blank-fills, and a `!must_fill` marker uses its suggested
+   value or blank-fills. Only a malformed value: one that won't coerce or
    validate to its type: errors.
 2. `Backend::open()` receives that JSON and generates the helper package. Content fields lower to Typst markup at codegen via `emit::emit_content`, dates to value-objects wrapping `datetime(..)`; a direct `apply` path revalidates dates. There is no markdown-string transform.
 

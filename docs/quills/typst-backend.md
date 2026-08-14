@@ -39,7 +39,7 @@ A key's *declaration* decides whether it can be absent, and that decides the acc
 
 | Key | Accessor | Why |
 |---|---|---|
-| A field declared in `Quill.yaml` | `data.subtitle` | Always present: compilation fills every declared field with its authored value, else the schema `default:`, else its type's zero value (`""`, `()`, `0`). |
+| A field declared in `Quill.yaml` | `data.subtitle` | Always present: compilation blank-fills every declared field with its authored value, else the schema `default:`, else the field's blank (`""`, `()`, `0`, the empty content). |
 | A `$`-sigiled key (`$kind`, `$body`, `$cards`, `$path`) | `data.at("$body", default: "")` | Typst identifiers exclude `$`, *and* `$`-metadata is present only where it is defined: `$kind` only on a card that authors one, `$body` only where the kind enables a body. |
 | An undeclared key, or any field of a card whose `$kind` is unknown | `data.at("logo", default: none)` | No schema fills it, so absence is real. |
 
@@ -52,6 +52,12 @@ So a `default:` on a declared field is dead code, and an `#if "field" in data` g
 ```
 
 If a default belongs anywhere, it belongs in `Quill.yaml` — a `default:` restated in the plate is never read, and silently diverges when the schema's own default changes.
+
+An `enum` needs this most: its blank is `""`, which is never one of its `values:`, so branch over `values ∪ blank` and never let an `else` swallow the blank into a variant nobody picked.
+
+```typst
+#if data.seal != "" { .. }        // the blank means "no seal", not the first value
+```
 
 ### Body, arrays, and cards
 

@@ -106,7 +106,6 @@ main:
         group: classification
         compact: true
       values:
-      - ""
       - UNCLASSIFIED
       - CUI
       - CONFIDENTIAL
@@ -296,7 +295,6 @@ card_kinds:
           group: additional
           compact: true
         values:
-        - ""
         - undecided
         - approve
         - disapprove

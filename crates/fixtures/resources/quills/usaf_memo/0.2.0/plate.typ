@@ -7,13 +7,18 @@
   letterhead_title: data.letterhead_title,
   letterhead_caption: data.letterhead_caption,
   letterhead_seal_subtitle: data.letterhead_seal_subtitle,
-  letterhead_seal: image(
-    if data.letterhead_seal == "dod" {
-      "assets/dod_seal.png"
-    } else {
-      "assets/dow_seal.png"
-    }
-  ),
+  // Every enum branch below covers `values ∪ blank`: an `else` that swallows the
+  // blank renders a variant nobody picked. Here the blank omits the seal, which
+  // is what `frontmatter`'s own `letterhead_seal: none` default means.
+  ..if data.letterhead_seal != "" {
+    (letterhead_seal: image(
+      if data.letterhead_seal == "dod" {
+        "assets/dod_seal.png"
+      } else {
+        "assets/dow_seal.png"
+      }
+    ))
+  },
 
   // Date
   date: data.date,
@@ -39,8 +44,10 @@
   cui_limited_dissemination: data.cui_limited_dissemination,
   cui_poc: data.cui_poc,
 
-  // USAF vs DAF memorandum style (date format, body indentation)
-  memo_style: data.memo_style,
+  // USAF vs DAF memorandum style (date format, body indentation). A memo has no
+  // "no style" state, so the blank takes the package's default; `frontmatter`
+  // asserts membership of ("usaf", "daf") and would fail the compile on a blank.
+  ..if data.memo_style != "" { (memo_style: data.memo_style) },
 
   // Font size
   font_size: data.font_size * 1pt,
@@ -102,7 +109,10 @@
         "Ind_" + str(i) + "_Signature",
         field: card.at("$path") + "signature_block",
       ),
-      format: card.format,
+      // Same shape: `indorsement` asserts `format`'s membership, and an
+      // indorsement has no "no layout" state. `action` needs no such guard —
+      // the package reads a blank action as "no action line".
+      ..if card.format != "" { (format: card.format) },
       date: resolved_date,
       action: card.action,
       body_content,

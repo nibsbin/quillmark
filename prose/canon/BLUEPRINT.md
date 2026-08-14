@@ -194,7 +194,7 @@ which never inlines its example as a value in either endorsement state; its
 All fields render as **live YAML**: no commented-out fields. The `!must_fill`
 marker is the sole "must fill" signal: a reader's mental model is one rule,
 **`!must_fill` on a field → replace before shipping; otherwise the value cell
-is shippable as-is**. A marked document still renders (the cell zero-fills, or
+is shippable as-is**. A marked document still renders (the cell blank-fills, or
 uses its suggested value); the marker only drives the non-fatal
 `validation::must_fill` warning (see "Guarantees").
 
@@ -302,7 +302,7 @@ shippable as-is; no `default:` is Unendorsed:
   values only, no annotations). Only the keys present in the default are
   shown: a *partial* default is a deliberate "already handled, ignore the
   rest" signal and is rendered verbatim. The outer key carries `# object`.
-- `default: {}` **expands** to the field's zero-filled shape: every property
+- `default: {}` **expands** to the field's blank-filled shape: every property
   shown with its type-empty value (`""`, `0`, `false`, `[]`, …), all
   unmarked and unannotated (uniform with a concrete default, since the
   container is Endorsed). The bare `{}` is never emitted: an empty endorsed
@@ -314,7 +314,7 @@ shippable as-is; no `default:` is Unendorsed:
   The outer key carries `# object`.
 
 The `{}` expansion (and not partial defaults, and not arrays) makes the object
-rule a single statement: **show every key, fill from default-over-zero, mark
+rule a single statement: **show every key, fill from default-over-blank, mark
 per endorsement.** Arrays are unchanged: `default: []` stays inline `[]`.
 
 An `example:` never renders as a concrete mapping. Like every other
@@ -342,7 +342,7 @@ address: # object
   zip: "15213"
 ```
 
-With `default: {}` (expanded to the zero-filled shape, all unmarked):
+With `default: {}` (expanded to the blank-filled shape, all unmarked):
 
 ```
 address: # object
@@ -420,7 +420,7 @@ document round-trips through `Document::parse` and back, and every
 cell is type-valid. Endorsed cells coerce and validate against their default;
 Unendorsed cells carry the `!must_fill` marker on a value that is either the
 field's `example` (a real, type-valid suggested value) or bare null/empty:
-and because **null ≡ absent** (a present-null cell zero-fills at render, just
+and because **null ≡ absent** (a present-null cell blank-fills at render, just
 like an omitted field), even a bare-marked cell renders cleanly. A surviving
 marker is surfaced by `Quill::validate` as the **non-fatal**
 `validation::must_fill` warning: never a render gate. A strict consumer
@@ -432,16 +432,26 @@ contract**:
 
 > A quill's `plate.typ` MUST render an **empty document** (just `$quill` /
 > `$kind: main`, no fields) to a successful (non-error) output. Under
-> zero-filled render, every absent field is filled with its type-empty
-> (zero) value in the plate projection, so an empty document is by
+> blank-filled render, every absent field is filled with its blank in the
+> plate projection, so an empty document is by
 > construction the *type-minimal valid input*.
 
 It is the worst-case-but-renderable document, so a plate that renders it
 degrades gracefully on every type-valid input shape. The contract requires:
 
-- Templates treat type-empty values (`""`, `0`, `false`, `[]`, empty
-  richtext body) as valid *present* input: read via `data.field`,
+- Templates treat blanks (`""`, `0`, `false`, `[]`, empty richtext body) as
+  valid *present* input: read via `data.field`,
   `card.at("field", default: …)`, or guarded with `if "field" in data`.
+- **A template branching on an `enum` covers `values ∪ blank` exhaustively.**
+  The blank is valid present input for every enum, not only defaultless ones,
+  so an `else` fallback silently renders a variant nobody chose — the exact
+  fabrication the blank exists to close, re-opened one rung lower. Match the
+  blank explicitly and decide what it means: omit the parameter, take the
+  downstream package's own default, or render nothing. Note that
+  `data.at(key, default: X)` is **not** such a guard: under blank-filled
+  render every declared key is always present, so its `default:` is dead code
+  and the blank flows through. Where a package asserts membership, that is a
+  failed compile rather than a quiet mis-render.
 - No template asserts that an Unendorsed field is *non-empty*. The schema
   guarantees *presence*, not non-emptiness; the `!must_fill` marker
   is an authoring signal, not a render-time precondition.
@@ -468,11 +478,11 @@ content, not prose.
 | seeding | *"give me a filled-out one"* | `example:` › absent | committed `Document` | no |
 
 The **blueprint** column is this doc's contract (above). The **seeding**
-column: value precedence `example: → absent`, with `default:`/`zero` deferred
+column: value precedence `example: → absent`, with `default:`/`blank` deferred
 to the render floor: is owned by [SCHEMAS.md](SCHEMAS.md) § "Document
 seeding"; a seeded document renders each field's `example:` where present, else
-the render floor's `default: → zero` (`zero_value`, [SCHEMAS.md](SCHEMAS.md)
-§ "Zero-filled render").
+the render floor's `default: → blank` (`blank`, [SCHEMAS.md](SCHEMAS.md)
+§ "Blank-filled render").
 
 ## Bindings surface
 
