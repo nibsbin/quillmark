@@ -188,25 +188,25 @@ fn emit_payload_items(out: &mut String, items: &[PayloadItem]) {
                 nested_comments,
             } => {
                 // card-yaml is the human-authored surface, so a stored content
-                // object projects back to markdown here. Such a field is never
-                // `!must_fill` and carries no nested comments, so the projected
-                // scalar takes the plain string path.
-                if !*fill {
-                    if let Some(markdown) = project_content_field(value.as_json()) {
-                        emit_field(
-                            out,
-                            key,
-                            &JsonValue::String(markdown),
-                            0,
-                            false,
-                            &[],
-                            &[],
-                            &[],
-                            trailer,
-                        );
-                        i += if consumed_trailer { 2 } else { 1 };
-                        continue;
-                    }
+                // object projects back to markdown here. The projection runs
+                // marker or no marker: a seeded `example` on a must-fill content
+                // field carries one, and the raw object has no card-yaml
+                // spelling. Once projected the cell is a scalar, which is the
+                // shape `!must_fill` emits against.
+                if let Some(markdown) = project_content_field(value.as_json()) {
+                    emit_field(
+                        out,
+                        key,
+                        &JsonValue::String(markdown),
+                        0,
+                        *fill,
+                        &[],
+                        &[],
+                        &[],
+                        trailer,
+                    );
+                    i += if consumed_trailer { 2 } else { 1 };
+                    continue;
                 }
                 let path: Vec<CommentPathSegment> = Vec::new();
                 // Nested fill markers; the top-level one rides on `*fill`.
@@ -816,6 +816,38 @@ mod tests {
             parsed, &value,
             "scalar round-trip mismatch for {:?}: emitted as {:?}",
             value, yaml
+        );
+    }
+
+    #[test]
+    fn a_marked_content_cell_emits_its_markdown_projection() {
+        // A canonical content object has no card-yaml spelling: emitted
+        // unprojected it lands as a nested mapping that will not re-parse, and
+        // drops the marker on the way.
+        let mut payload = crate::document::Payload::new();
+        payload.set_quill("q@1.0.0".parse().expect("reference"));
+        payload.set_kind("main");
+        let mut card = crate::document::Card::from_parts(
+            payload,
+            quillmark_content::Content::empty(),
+        );
+        let content = quillmark_content::import::from_markdown("Q3 results").expect("content");
+        card.store_fill(
+            "subject",
+            QuillValue::from_json(quillmark_content::serial::to_canonical_value(&content)),
+        )
+        .expect("stored");
+
+        let md = crate::document::Document::from_main_and_cards(card, Vec::new()).to_markdown();
+
+        assert!(
+            md.contains("subject: !must_fill Q3 results\n"),
+            "the cell projects to markdown under its marker: {md}"
+        );
+        let reparsed = crate::document::Document::parse(&md).expect("re-parses").document;
+        assert!(
+            reparsed.main().payload().is_fill("subject"),
+            "and the marker survives: {md}"
         );
     }
 

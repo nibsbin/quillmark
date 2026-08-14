@@ -19,7 +19,7 @@ Supported field types:
 | Quill.yaml Type | Meaning |
 |---|---|
 | `string` | Open scalar UTF-8 text: a value the template computes with (URL, path, identifier, reference key), not prose it lays out |
-| `enum` | Closed string domain; requires a `values:` list. Projects to JSON-Schema `{type: string, enum: […]}`. `values:` on any other type, and `enum:` on any type at all, is a load error |
+| `enum` | Closed string domain of **choices**; requires a `values:` list. Also accepts its blank (`""`), which is never a declared member — declaring one is a load error (`quill::enum_blank_member`). Projects to JSON-Schema `{type: string, enum: ["", …]}`. `values:` on any other type, and `enum:` on any type at all, is a load error |
 | `number` | Numeric value (integers and decimals) |
 | `integer` | Integer-only numeric value |
 | `boolean` | `true` / `false` |
@@ -105,7 +105,7 @@ Coercion rules per type:
 - **`inline` richtext enforcement.** A `richtext` field with `inline: true`
   requires its content to be exactly one `Para` line, in no container, with no
   islands (`Content::is_inline`). The empty content satisfies it, so a blank or
-  zero-filled inline field passes. The constraint is checked in three places:
+  blank-filled inline field passes. The constraint is checked in three places:
   coercion (`CoercionError` for a document value), validation
   (`validation::not_inline`, the `TypeMismatch` fatality class, as a backstop for a
   content that bypassed coercion), and load-time example import (a schema literal
@@ -124,14 +124,14 @@ Coercion rules per type:
   coercion (`CoercionError`); validation (`validation::not_plain`, the
   `TypeMismatch` fatality class); load-time literal import. An `inline: true`
   plaintext field additionally requires a single line. The load-time content
-  caches (`default_content`/`example_content`) and the render-floor zero (the
+  caches (`default_content`/`example_content`) and the render-floor blank (the
   empty content) cover `plaintext` exactly as `richtext`: both are content
   leaves (`field_contains_content`)
 - **`enum` domain validation.** An `enum` field coerces as a string; domain membership is a *value* check (`validation::enum_violation`), not a type check, so an out-of-domain string is well-typed but invalid. `type: enum` requires a non-empty `values:` list; `values:` on any other type is a load error (`quill::field_parse_error`), as is `enum:` on any type. The domain rides one carrier (`FieldSchema::enum_values`), and every consumer keys on that carrier rather than on the `Enum` token: the render floor, the pdfform widget kind, the blueprint annotation, and the transform-schema projection to `{type: string, enum: […]}`
 - **Null short-circuits coercion.** A null value (`field:`, `field: null`,
   `field: ~`) passes coercion unchanged for *every* type: null ≡ absent, so
   it carries no data to coerce. The value reaches the render floor and
-  zero-fills (authored › `default:` › type-zero) exactly like an omitted
+  blank-fills (authored › `default:` › blank) exactly like an omitted
   field
 - **Bare scalars stringify into `string`/`richtext` fields.** A bare boolean,
   integer, or number written where a `string` is expected adopts its canonical
@@ -155,9 +155,9 @@ Validation is implemented by a native walker over `QuillConfig` in `quill/valida
 - `body.enabled: false` also drops `$body` from `build_transform_schema`'s `properties` for that kind: absent, not present-and-empty. This cascades into the Typst helper's generated `_qm-meta` address tables, so `form-field(field:)` rejects a `$body` address on that kind at compile time (see `PLATE_DATA.md`)
 - **Null ≡ absent.** A present-null value (`field:`, `field: null`,
   `field: ~`) carries no data: it is treated exactly like an omitted field.
-  It validates clean (no `TypeMismatch`) and zero-fills at render
-  (authored › `default:` › type-zero; see
-  [Zero-filled render](#zero-filled-render)).
+  It validates clean (no `TypeMismatch`) and blank-fills at render
+  (authored › `default:` › blank; see
+  [Blank-filled render](#blank-filled-render)).
 - **Null ≡ absent is a 1.0 commitment, not a stopgap.** The identification is
   chosen and final: `field: null` and an omitted field are one state,
   indistinguishable by design. The consequences are accepted, not worked
@@ -169,19 +169,41 @@ Validation is implemented by a native walker over `QuillConfig` in `quill/valida
   rarely-authored distinction, breaks YAML round-trip sanity (a loaded-then-
   saved document must not sprout `field: null` lines), and buys nothing the
   ladder does not already give. The simpler model is the contract.
-- **`!must_fill` marker → non-fatal warning.** For every `!must_fill` marker
-  present (root or nested, main card or composable card)
-  `Quill::validate` emits `validation::must_fill` at **`Severity::Warning`**,
-  regardless of whether the marker carries a value. It **never gates render**:
-  a marked document renders fine (the cell zero-fills, or uses its suggested
-  value). A strict consumer (e.g. an LLM authoring loop) treats any
-  outstanding marker as "not done."
+- **Null ≡ absent holds on the value ladder; the obligation surface splits
+  them.** The identification above is about *values*, and it stays unqualified:
+  null and absent blank-fill identically. `must_fill` asks a different question
+  — did a human make a call — and writing the field's blank is one while
+  clearing the key is not, so `field: ""` discharges the warning and
+  `field: null` does not. Two verbs therefore part company: `removeField` and
+  writing the blank are one act on the value ladder and two here, and a UI
+  rendering both as an empty box shows nothing of the difference. That is the
+  price of letting a human answer "deliberately nothing" at all: keying the
+  obligation on the resolved source rung instead would leave the deliberate
+  blank unspellable and go blind to a must-fill leaf inside a touched container.
+- **`validation::must_fill` → non-fatal warning, from two triggers.**
+  `Quill::validate` emits it at **`Severity::Warning`** when either holds, with a
+  `trigger` arg naming which:
+  - `marker` — a `!must_fill` marker is present (root or nested, main card or
+    composable card), whether or not it carries a value. The marker is
+    document-sovereign: it fires without consulting the schema, and a human
+    dropping it is a decision nothing re-derives.
+  - `unauthored` — the schema obliges the cell and the document leaves it
+    absent or present-null.
+
+  Neither subsumes the other. A hand-written or programmatically built document
+  carries no marker; a seeded `example` is present, in-domain, and structurally
+  indistinguishable from authored content. Where both would fire on one path
+  (a bare marker on an unauthored cell) one diagnostic is emitted and the marker
+  wins: its hint is the actionable one. It **never gates render**: the cell
+  blank-fills, or uses its suggested value. A strict consumer (e.g. an LLM
+  authoring loop) treats any outstanding warning as "not done."
 - **Absence semantics**: a missing (or present-null) field with a `default:`
-  accepts the default; without a `default:` it zero-fills. Either way it
-  validates clean. Field absence is **not surfaced as a diagnostic**:
-  `Quill::validate` raises no completeness/`field_absent` code, so a merely
-  incomplete (or present-null) document validates clean. The only authoring
-  signal it raises is the non-fatal `validation::must_fill` warning.
+  accepts the default; without a `default:` it blank-fills. Either way it
+  coerces and validates clean — absence is never *malformed*, and there is no
+  `field_absent` code. On the editor surface it is surfaced where the schema
+  obliges it: an unauthored must-fill cell warns. So `Quill::validate` on an
+  incomplete document is not clean, and the count is per *document* — a card
+  kind obliges nothing until an instance of it exists.
 
 Field-level type and presence errors render under a uniform shape:
 field path, verbatim source token, schema declaration, and both exits
@@ -198,8 +220,8 @@ Every field value comes from one of a small set of **sources**, ordered by
 | top | authored value | yes: it *is* the document content | yes |
 | | `default:` | **never** by the engine: lives in the schema, interpolated only into the ephemeral render projection | yes: the fidelity value |
 | | `example:` | only by [seeding](#document-seeding) | yes: once committed by seeding |
-| floor | type-empty `zero` (`zero_value`) | never ([Non-persist invariant](#zero-filled-render)) | last resort |
-| (signal) | `!must_fill` marker | yes: rides on the value as a YAML tag | yes: the marked value (suggested value or zero-fill); raises the non-fatal `validation::must_fill` warning |
+| floor | the field's `blank` (`blank`) | never ([Non-persist invariant](#blank-filled-render)) | last resort |
+| (signal) | `!must_fill` marker | yes: rides on the value as a YAML tag | yes: the marked value (suggested value or blank-fill); raises the non-fatal `validation::must_fill` warning |
 
 A `default` is never written back into a document: it lives in `Quill.yaml`,
 the render path interpolates it into the plate-JSON projection only, and seeding
@@ -211,17 +233,17 @@ it, that value is now ordinary **authored** content: the consumer committed
 it, not the engine.
 
 No surface owns a precedence *policy*; each **projection cuts the same ladder**
-at a different rung, and the per-rung producers are shared (`zero_value` for the
+at a different rung, and the per-rung producers are shared (`blank` for the
 floor; field ordering is declaration order, carried by the schema's ordered
 field maps rather than a sort key):
 
 | Projection | Per-field precedence | Floor | Output |
 |---|---|---|---|
-| render (fidelity) | authored › `default:` › zero | zero | plate JSON: [Zero-filled render](#zero-filled-render) |
-| `blueprint` document | Endorsed: `default:`; Unendorsed: `example:` else zero, stamped `!must_fill` | zero (under the marker) | annotated string, [BLUEPRINT.md](BLUEPRINT.md) |
-| seeding | `example:` › absent | (deferred to render floor) | committed `Document`: [Document seeding](#document-seeding) |
+| render (fidelity) | authored › `default:` › blank | blank | plate JSON: [Blank-filled render](#blank-filled-render) |
+| `blueprint` document | value: `default:` › `example:` › blank; marker: the derived `must_fill` | blank (under the marker) | annotated string, [BLUEPRINT.md](BLUEPRINT.md) |
+| seeding | `example:` › absent, stamped `!must_fill` where the schema obliges | (deferred to render floor) | committed `Document`: [Document seeding](#document-seeding) |
 | add-card (into a document) | `$seed` overlay › `example:` › absent | (deferred to render floor) | a new composable `Card`: [Document seeding](#document-seeding) |
-| editor (consumer-side) | authored › `default:` › zero, resolved per field and **tagged with its source rung** | zero | the engine's [`resolve()`](#the-resolved-value-view-resolve) resolved-value view: value and source rung per field |
+| editor (consumer-side) | authored › `default:` › blank, resolved per field and **tagged with its source rung** | blank | the engine's [`resolve()`](#the-resolved-value-view-resolve) resolved-value view: value and source rung per field |
 
 The consumer-side `Document`-payload × schema join is a **non-goal**:
 [`resolve()`](#the-resolved-value-view-resolve) supersedes it. The
@@ -231,25 +253,26 @@ the ladder in consumer code. Completeness and errors stay `Quill::validate`'s
 guidance (`example:`, labels, groups) reads from `Quill::schema`.
 
 Two seams are deliberate, not uniform: on `blueprint` the floor still
-zero-fills like every other projection (an Unendorsed cell with no `example`
+blank-fills like every other projection (a must-fill cell with no `example`
 carries bare null/empty under its marker), but the projection additionally
-**stamps the `!must_fill` marker** on every Unendorsed field: the marker
-rides *alongside* the value rather than replacing it; and `zero` is honestly
-blank for every type except `enum`, whose zero is the first declared variant
+**stamps the `!must_fill` marker** on every must-fill field: the marker
+rides *alongside* the value rather than replacing it; and `blank` is a property
+of the field rather than a member of the type's domain — an `enum`'s blank is
+`""`, outside `values:`
 (there is no empty enum member). Both are detailed below.
 
 ### The resolved-value view (`resolve()`)
 
 `Quill::resolve(doc)` (WASM `resolve`) cuts the render ladder into
 observable data: for every declared field, the value `compile_data` would emit
-into the plate, tagged with its source rung (`authored` / `default` / `zero`):
+into the plate, tagged with its source rung (`authored` / `default` / `blank`):
 byte-for-byte with the plate on every fixture. The shape is nested: a `main`
 card and a `cards` list, each card's `fields` an ordered array of `{ name,
 value, source }` rows in declaration order: order is structural, not object-key
 order. The card body is a `body` sibling on the card, not a row in `fields`:
 present iff the kind enables a body (`enabled: false` undeclares it, so `body` is
-`null`), its source only ever `authored` (non-blank) or `zero` (blank).
-Source is one **top-level** rung per field; a nested zero-fill inside an authored
+`null`), its source only ever `authored` (non-blank) or `blank` (blank).
+Source is one **top-level** rung per field; a nested blank-fill inside an authored
 dict or array is a projection detail of the value, not a per-subpath source.
 
 Value and provenance only. The view carries no diagnostics: completeness and
@@ -259,7 +282,7 @@ consumer code. Schema guidance (`example:`, labels, groups) reads from
 `Quill::schema`. Python is out of scope until a Python consumer names a call
 site (the Tier-1 cut, [BINDINGS.md](BINDINGS.md)).
 
-## Zero-filled render
+## Blank-filled render
 
 **A document need not be complete to render**: render success is not a
 completeness signal. Shippability is the author's judgment; the engine's only
@@ -270,32 +293,75 @@ surfaces as a diagnostic beyond the non-fatal `validation::must_fill` warning
 
 Rendering and the *completeness verdict* are orthogonal. The render path
 (`QuillConfig::compile_data` and the ladder it cuts, `ladder_sourced`, both in
-core's `quill::compose`; the engine calls it) uses **zero-filled render**:
+core's `quill::compose`; the engine calls it) uses **blank-filled render**:
 every absent schema field is resolved by precedence: an authored value, else
-the `default:`, else the type-empty zero value (`zero_value`, defined below):
-in the plate-JSON projection that feeds the backend **only, never in the
-persisted document**.
+the `default:`, else the field's blank (`blank`, defined below): in the
+plate-JSON projection that feeds the backend **only, never in the persisted
+document**.
 
-- **Incomplete is renderable.** A document that merely omits an Unendorsed
-  field (or leaves it present-null) renders fine: the field is zero-filled
-  in the projection, and validates clean.
+- **Incomplete is renderable.** A document that merely omits a field (or
+  leaves it present-null) renders fine: the field is blank-filled in the
+  projection, and coercion/validation pass. A must-fill field it leaves
+  unauthored warns on the editor surface and still renders.
 - **Malformed is fatal.** The only malformed case is a value that cannot
   coerce to (or validate against) its declared type. Placeholders and null
   are *not* malformed: a `!must_fill` marker renders, using its suggested
-  value or zero-filling, and a present-null cell zero-fills like an absent
+  value or blank-filling, and a present-null cell blank-fills like an absent
   field.
-- **Non-persist invariant.** The zero-fill lives only in the ephemeral
-  projection and must never be written back. A type-empty value is
+- **Non-persist invariant.** The blank-fill lives only in the ephemeral
+  projection and must never be written back. A blank is
   indistinguishable from authored-empty, so persisting it would erase the
   absence signal (which keys on a field being unwritten) and blind a future
   schema migration to author intent.
 
-The per-field zero value is honestly blank for every scalar type except
-`enum`, whose zero is the first declared variant. An `object` with
-`properties` is shape-valid only when every property is present, so its zero
-is the object whose each property carries that property's zero (recursively).
-It is the shared producer behind the render floor: for authored, blank, and
+**A field's blank is a property of the field, not a member of the type's value
+domain.** It is both the render floor and the value a reader recognizes as
+"nobody said anything":
+
+| Type | Blank |
+|---|---|
+| `string`, `date`, `datetime` | `""` (a date's `""` lowers to Typst `none`) |
+| `enum` | `""` — reserved, and never a member of `values:` |
+| `richtext`, `plaintext` | the empty content |
+| `array` | `[]` |
+| `object` | every property at its own blank, recursively |
+| `integer`, `number` | `0` |
+| `boolean` | `false` |
+
+Nothing forces an enum's blank to sit inside `values:`, and putting it there
+destroys it: the floor would return a real choice nobody made, and a cosmetic
+`values:` reorder would change what an unanswered document renders. So
+**`values:` is for choices; the blank is for the absence of one**, and a quill
+declaring `""` in `values:` fails to load (`quill::enum_blank_member`). Where
+the empty state is itself a decision the document should record, it is a member
+— `undecided`, `waived`, `n_a` — not the blank.
+
+The accepted domain is therefore `values ∪ blank` everywhere a value is checked
+or projected, at element position inside an `array` as well as at the top level.
+The two projections differ deliberately: `Quill::schema` is the *declaration*
+view and emits `values:` verbatim (injecting the blank would emit a schema that
+fails to load), while the transform schema is the *wire* contract and emits
+`enum: ["", …values]`, so a standard JSON-Schema validator accepts what the
+engine accepts. A consumer's picker offers the blank as a real, re-selectable
+option labelled by `ui.blank_title` — never a vanishing placeholder, because
+returning to it is how a human clears a cell back to unset.
+
+**The table has a permanent seam at `integer`, `number` and `boolean`**, and any
+`object` or `array` over them, since their blank is the recursive one: `0` and
+`false` are indistinguishable at the plate from an authored `0` and `false`. A
+wire `none` for those types would be type-*absent* rather than type-*minimal*,
+and Typst arithmetic and comparison reject it, which would cost the totality the
+floor exists to buy. An author needing to spell "unset" for a number models it
+as an `enum`, which has a real blank — at the cost of forfeiting arithmetic.
+
+`blank` is the shared producer behind the render floor: for authored, blank, and
 seeded documents alike (see [BLUEPRINT.md](BLUEPRINT.md)).
+
+**A plate must branch exhaustively over `values ∪ blank`.** The blank is valid
+present input, so an `else` fallback re-opens exactly the fabrication the blank
+closes: the cell renders a variant nobody chose, and the plate cannot tell the
+two apart. This is a retrofit obligation on existing plates, not only guidance
+for new ones.
 
 ## Document seeding
 
@@ -303,7 +369,7 @@ seeded documents alike (see [BLUEPRINT.md](BLUEPRINT.md)).
 ("new document"): each field that declares an `example:` is committed, and
 **every other field is left absent**. The seeding cascade is therefore
 `example: → absent`: absent fields are never written; they are interpolated at
-the compilation layer by [zero-filled render](#zero-filled-render) (`default:`,
+the compilation layer by [blank-filled render](#blank-filled-render) (`default:`,
 else type-empty zero), exactly as for any authored document.
 
 **Seed-commits-rest.** A seeded content field commits its codec's resting form
@@ -329,7 +395,7 @@ is excluded from the render path; see [BLUEPRINT.md](BLUEPRINT.md)), so
 `example` is the one source the render floor cannot reproduce. Persisting a
 `default` would be redundant (the floor interpolates it anyway) and would
 *freeze* it against a later schema change; persisting a `zero` is outright
-forbidden ([Non-persist invariant](#zero-filled-render)). So the seed writes
+forbidden ([Non-persist invariant](#blank-filled-render)). So the seed writes
 exactly the one source that wouldn't otherwise appear and leaves the rest to
 the floor. This keeps a split-screen editor/preview consistent: the document
 carries real content, the preview renders it, and absent fields resolve
@@ -345,15 +411,20 @@ path's "`default:` wins" rule applies to authored and blank documents, where no
   fills the body when bodies are enabled.
 - **The main card** carries `$quill` and `$kind: main`, so a seed round-trips
   through Markdown like an authored document.
-- **Provenance is untracked in the persisted document.** A seeded `example` is
-  committed as ordinary authored content, indistinguishable from hand-authored
-  input. Carrying no `!must_fill` marker, it reads as done: an Unendorsed field
-  seeded with an `example` raises no `validation::must_fill` warning. Whether a
-  field's value came from seeding or later authoring is not recorded; correctness
-  and renderability do not depend on the distinction. The commitment *rung* is a
-  separate axis and is reported on read: the
+- **A seeded `example` on a must-fill field commits carrying its marker.** An
+  `example` documents *shape*, so a seeded one is not an answer. Stamping it is
+  what makes the blueprint and its filled-out twin stamp the same cells: a fresh
+  seed reports incomplete in exactly the cells a hand-written document does. A `$seed` overlay value is exempt — supplying one is a template
+  author deciding, which is the act the marker asks for.
+- **Provenance is otherwise untracked in the persisted document.** A seeded
+  value is committed as ordinary authored content, indistinguishable from
+  hand-authored input; whether it came from seeding or later authoring is not
+  recorded, and correctness and renderability do not depend on the distinction.
+  The marker is not provenance — a human may drop it without changing the value,
+  and nothing re-derives it (see [Native validation](#native-validation)). The
+  commitment *rung* is a separate axis, reported on read: the
   [`resolve()`](#the-resolved-value-view-resolve) projection tags each
-  field `authored` / `default` / `zero`: a seeded and a hand-authored value both
+  field `authored` / `default` / `blank`: a seeded and a hand-authored value both
   read as `authored`, both being document content.
 
 Seeding is the **filled-out twin of the blueprint**
@@ -420,32 +491,58 @@ encode opposite author intents:
   authors want it, the field can be omitted entirely: at render time the
   default fills any field the document leaves out (an
   authored value always wins: `ladder_sourced` in core's
-  `quill::compose`). A field with a `default:` is **Endorsed**: the
-  rendered value is shippable as-is, and the blueprint renders that concrete
-  default value with a type-only annotation (no marker). Type-empty defaults
-  (`default: ""`, `[]`, `false`, `0`) are the canonical way to mark a
-  "skippable" cell.
+  `quill::compose`). The blueprint renders that concrete default value with a
+  type-only annotation. Type-empty defaults (`default: ""`, `[]`, `false`, `0`)
+  are the canonical way to mark a "skippable" cell.
 - **`example`** matches the semantic and type *shape* of the desired
   value but is *not* the value most authors want. It documents shape, not
-  the choice, so it never becomes the rendered value; it only surfaces in
-  the blueprint's `# e.g.` line.
+  the choice, so it never becomes the rendered value; it takes the cell in the
+  blueprint only when no `default:` holds it, and surfaces as a `# e.g.` line
+  otherwise.
 
-### Unendorsed vs. Endorsed fields
+### The two axes: value and obligation
 
-A field is **Unendorsed** when no `default:` is declared: the quill author
-has endorsed no value, so the blueprint stamps the `!must_fill` marker to
-ask an LLM or author to supply one. That is a *communication device on the
-blueprint surface*, not a requirement: a missing (or present-null) Unendorsed
-field zero-fills silently at render, and a surviving marker raises only the
-non-fatal warning. "Must-fill" therefore lives solely on the blueprint/marker
-surface; the schema axis is endorsement, not obligation.
+A field declares two independent things, and neither implies the other.
 
-A field is **Endorsed** when `default:` is declared; the rendered default
-is shippable as-is (the author can keep or override it).
+- The **value** axis is `default:` › `example:` › the field's blank. It decides
+  what a cell holds.
+- The **obligation** axis is `must_fill:`. It decides whether a human must
+  author that cell.
 
-There is no separate `required:` axis; the presence or absence of
-`default:` is the sole author choice per field. See
-[BLUEPRINT.md](BLUEPRINT.md) for how the two cells render.
+`must_fill:` is `true` / `false`, and when unset it **derives** from the value
+axis: a field with a `default:` is not obliged, a field without one is. So a
+quill that never writes the key gets the whole obligation surface off `default:`
+alone. The derivation reads `default`'s *presence*, so a `default: ""` stays a
+skippable cell rather than becoming a marker. The key lives on the field schema,
+so it applies at every nesting level.
+
+Declaring it reaches two cells the derivation cannot:
+
+- `must_fill: true` beside a `default:` — a safe value renders, **and** a human
+  must still confirm it. Classification markings and effective dates are the
+  cases it exists for: the document is never wrong out of the box, and nobody
+  ships one nobody looked at. An editor's *confirm* discharges it by writing the
+  default's value as authored content: no new state, at the cost that the cell
+  then holds that value rather than tracking a later `default:` change.
+- `must_fill: false` with no `default:` — genuinely optional, with nothing to
+  suggest.
+
+Obligation is a **warning, never a gate**: an unauthored must-fill field
+blank-fills and renders, and the signal is the non-fatal
+`validation::must_fill` (see [Native validation](#native-validation)). There is
+no `required:` axis and no severity knob on this one — severity already *is* the
+render-gate signal, so an `Error` that renders fine would break every consumer
+routing Error ≡ won't-render. An editor's "can't submit" is consumer policy over
+the warning: *a strict consumer treats any outstanding marker as not done*.
+A quill author arriving from web forms has the right prior for the affordance
+and the wrong one for the enforcement.
+
+On a typed dictionary the container's own `must_fill:` is **inert**: `!must_fill`
+is rejected on a mapping, so the obligation lives on the leaves and the
+blueprint and the predicate both address them there. An array is its own cell,
+including an array of objects.
+
+See [BLUEPRINT.md](BLUEPRINT.md) for how the two axes render into cells.
 
 Identity fields (`name`, `version`, `backend`, `author`, `description`) live on the parent metadata object (Wasm: `Quill.metadata` getter; Python: `Quill.metadata`). Both bindings also expose `backend_id`/`backendId` directly; Python additionally exposes `quill_ref`, a derived `name@version` string.
 

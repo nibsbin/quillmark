@@ -1,6 +1,7 @@
 //! Consumer-facing operations on a [`Quill`]: validation, seeding, and the
 //! zero-filled compile to backend wire JSON. Pure reads of the config.
 
+use std::collections::HashSet;
 use std::str::FromStr;
 
 use indexmap::IndexMap;
@@ -8,7 +9,7 @@ use indexmap::IndexMap;
 use super::resolved::FieldSource;
 use super::{seed, CardSchema, CoercionError, FieldSchema, FieldType, Leniency, Quill, QuillConfig};
 use crate::normalize::{normalize_document, normalize_field_name};
-use crate::quill::zero_value;
+use crate::quill::blank;
 use crate::path::DocPath;
 use crate::{
     Card, Diagnostic, Document, Payload, QuillValue, RenderError, SeedOverlay, Severity, Version,
@@ -213,7 +214,17 @@ impl Quill {
     /// consumers route on the code without parsing message text: type
     /// mismatches, unknown card kinds, body-on-disabled-body, and the non-fatal
     /// `validation::must_fill` warning, the only non-fatal one; the rest are
-    /// blockers. Field absence is not surfaced (it zero-fills at render).
+    /// blockers.
+    ///
+    /// `validation::must_fill` has **two triggers**, covering disjoint failures
+    /// under one code: a `!must_fill` marker the document carries
+    /// (`validate_fills`), and a schema-side must-fill cell nobody authored
+    /// (`validate_unauthored`). Neither subsumes the other — a document that
+    /// never saw a blueprint carries no marker, and a seeded `example` is
+    /// present, in-domain, and structurally indistinguishable from authored
+    /// content — so both run, and the `trigger` arg tells a consumer which
+    /// fired. Where both would fire on one path (a bare marker on an unauthored
+    /// cell) the marker wins: its hint is the actionable one.
     ///
     /// Field values, defaults, and presentation order are not part of this
     /// surface: read them from the [`Document`] payload and the quill schema
@@ -223,7 +234,14 @@ impl Quill {
             Ok(()) => Vec::new(),
             Err(errors) => errors.iter().map(|e| e.to_diagnostic()).collect(),
         };
-        diags.extend(validate_fills(self.config(), doc));
+        let marked = validate_fills(self.config(), doc);
+        let claimed: HashSet<Option<String>> = marked.iter().map(|d| d.path.clone()).collect();
+        diags.extend(marked);
+        diags.extend(
+            validate_unauthored(self.config(), doc)
+                .into_iter()
+                .filter(|d| !claimed.contains(&d.path)),
+        );
         diags.extend(self.validate_seed(doc));
         diags
     }
@@ -466,20 +484,20 @@ fn resolve_value(value: Option<&QuillValue>, field: &FieldSchema) -> QuillValue 
 /// absent recursively so no bare null reaches the plate:
 ///
 /// - A null or absent value becomes the schema `default:`
-///   ([`Default`](FieldSource::Default)), else the type-empty [`zero_value`]
-///   ([`Zero`](FieldSource::Zero)).
+///   ([`Default`](FieldSource::Default)), else the field's [`blank`]
+///   ([`Blank`](FieldSource::Blank)).
 /// - A present **typed dictionary** is rebuilt from its declared properties so a
-///   null/absent property zero-fills and the projection matches the schema shape.
+///   null/absent property blank-fills and the projection matches the schema shape.
 ///   Source keys the schema does not declare pass through verbatim, matching
 ///   `config::coerce_object_props`'s coercion-time behavior: the schema is a
 ///   floor, not an allowlist, so an undeclared `note:` on a typed dict reaches
 ///   the plate instead of being silently dropped.
 /// - A present **typed array** resolves each element against the item schema, so
-///   a null element zero-fills in place.
+///   a null element blank-fills in place.
 /// - Any other present value is returned unchanged.
 ///
 /// Every present shape is [`Authored`](FieldSource::Authored) (the nested
-/// zero-fill inside a dict/array is a projection detail, not a source change).
+/// blank-fill inside a dict/array is a projection detail, not a source change).
 /// The source is the byproduct of the same branch that computes the value, so
 /// the render projection ([`resolve_value`]) and the field-state view cut the
 /// one commitment ladder rather than each re-deriving precedence
@@ -499,21 +517,21 @@ pub(crate) fn resolve_value_sourced(
         // values), so a bare authored string here would reach the plate
         // uncoerced and be misread. A content field with no cached
         // `default_content` (only reachable via a serde-built `QuillConfig`,
-        // never the loader) zero-fills to the empty content.
+        // never the loader) blank-fills to the empty content.
         if matches!(
             field.r#type,
             FieldType::RichText { .. } | FieldType::PlainText { .. }
         ) {
             return match field.default_content.clone() {
                 Some(content) => (content, FieldSource::Default),
-                None => (zero_value(field), FieldSource::Zero),
+                None => (blank(field), FieldSource::Blank),
             };
         }
         // Non-content: `default_content` is always `None`, so use the raw
-        // `default`, then the type-empty zero.
+        // `default`, then the field's blank.
         return match field.default.clone() {
             Some(default) => (default, FieldSource::Default),
-            None => (zero_value(field), FieldSource::Zero),
+            None => (blank(field), FieldSource::Blank),
         };
     };
     let resolved = match (&field.r#type, &field.properties, &field.items) {
@@ -572,7 +590,7 @@ fn rebuild_payload_with_meta(source: &Card, fields: IndexMap<String, QuillValue>
 /// across the main card and every composable card.
 ///
 /// The marker fires whether or not the cell carries a suggested value, and never
-/// gates render (the cell zero-fills or uses its suggested value). A strict
+/// gates render (the cell blank-fills or uses its suggested value). A strict
 /// consumer treats any outstanding marker as "not done".
 fn validate_fills(config: &QuillConfig, doc: &Document) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
@@ -604,7 +622,7 @@ fn collect_fill_diags(card: &Card, base: &DocPath, out: &mut Vec<Diagnostic>) {
     }
 }
 
-fn fill_warning(path: &DocPath) -> Diagnostic {
+pub(crate) fn fill_warning(path: &DocPath) -> Diagnostic {
     let path = path.to_string();
     Diagnostic::new(
         Severity::Warning,
@@ -612,12 +630,114 @@ fn fill_warning(path: &DocPath) -> Diagnostic {
     )
     .with_code("validation::must_fill".to_string())
     .with_path(path)
+    .with_arg("trigger", "marker".into())
     .with_hint(
         "Replace the value and drop the `!must_fill` marker, or remove the marker if the \
          current value is intended."
             .to_string(),
     )
 }
+
+/// Surface every schema-side must-fill cell the document leaves **unauthored**
+/// as a non-fatal warning, across the main card and every composable card. The
+/// schema half of `validation::must_fill`, reaching documents that carry no
+/// marker to read.
+///
+/// Unauthored is **absent-or-null**, never [`FieldSource`]: the rung is one per
+/// top-level field, so a present typed dict reports `Authored` as a whole
+/// ([`resolve_value_sourced`]) and a source-keyed check goes silent on a
+/// must-fill property inside it.
+fn validate_unauthored(config: &QuillConfig, doc: &Document) -> Vec<Diagnostic> {
+    let mut diags = Vec::new();
+    collect_unauthored_diags(&config.main, doc.main(), &DocPath::main(), &mut diags);
+    for (index, card) in doc.cards().iter().enumerate() {
+        let Some(schema) = card.kind().and_then(|k| config.card_kind(k)) else {
+            continue;
+        };
+        collect_unauthored_diags(
+            schema,
+            card,
+            &DocPath::card(card.kind(), index),
+            &mut diags,
+        );
+    }
+    diags
+}
+
+fn collect_unauthored_diags(
+    schema: &CardSchema,
+    card: &Card,
+    base: &DocPath,
+    out: &mut Vec<Diagnostic>,
+) {
+    let payload = card.payload();
+    for (name, field) in &schema.fields {
+        collect_unauthored_field(field, payload.get(name), &base.field(name), out);
+    }
+}
+
+/// Warn at each **cell** the schema obliges and the document leaves unauthored.
+/// Cells sit where the blueprint stamps its markers (`prose/canon/BLUEPRINT.md`
+/// § "Placeholder value precedence"), so the two triggers speak about the same
+/// paths:
+///
+/// - A **typed dictionary** is never itself a cell: `!must_fill` is rejected on
+///   a mapping (`prose/references/markdown-spec.md` §3.4). Recursion runs
+///   present or absent, so an absent `address` warns at `address.street`, a path
+///   an editor can resolve and a marker can occupy.
+/// - Every **other** type is the cell, the array included, so `[]` is an
+///   authored answer. A present array resolves its elements against the item
+///   schema; an absent one has no index to anchor on and warns at the container.
+fn collect_unauthored_field(
+    field: &FieldSchema,
+    value: Option<&QuillValue>,
+    path: &DocPath,
+    out: &mut Vec<Diagnostic>,
+) {
+    if let (FieldType::Object, Some(props)) = (&field.r#type, &field.properties) {
+        let obj = value.and_then(|v| v.as_json().as_object());
+        for (name, prop) in props {
+            let pv = obj
+                .and_then(|o| o.get(name))
+                .map(|j| QuillValue::from_json(j.clone()));
+            collect_unauthored_field(prop, pv.as_ref(), &path.field(name), out);
+        }
+        return;
+    }
+
+    let Some(present) = value.filter(|v| !v.as_json().is_null()) else {
+        if field.must_fill() {
+            out.push(unauthored_warning(path));
+        }
+        return;
+    };
+
+    if let (FieldType::Array, Some(items)) = (&field.r#type, &field.items) {
+        for (index, element) in present.as_json().as_array().into_iter().flatten().enumerate() {
+            let element = QuillValue::from_json(element.clone());
+            collect_unauthored_field(items, Some(&element), &path.index(index), out);
+        }
+    }
+}
+
+pub(crate) fn unauthored_warning(path: &DocPath) -> Diagnostic {
+    let path = path.to_string();
+    Diagnostic::new(
+        Severity::Warning,
+        format!("Field `{path}` must be filled in: nobody has authored a value."),
+    )
+    .with_code("validation::must_fill".to_string())
+    .with_path(path)
+    .with_arg("trigger", "unauthored".into())
+    .with_hint(
+        "Author a value. To record that empty is the intended answer, write the field's \
+         blank explicitly rather than leaving it out."
+            .to_string(),
+    )
+}
+
+#[cfg(test)]
+mod must_fill_tests;
 
 #[cfg(test)]
 mod tests {
@@ -792,7 +912,7 @@ card_kinds:
     }
 
     #[test]
-    fn absent_defaultless_enum_floors_to_the_first_variant() {
+    fn absent_defaultless_enum_floors_to_the_blank() {
         let plate = plate_of(
             r#"
 quill: { name: ev, version: 1.0.0, backend: typst, description: x }
@@ -806,13 +926,13 @@ main:
             "~~~card-yaml\n$quill: ev@1.0.0\n$kind: main\ntitle: T\n~~~\n",
         );
         assert_eq!(
-            plate["classification"], "UNCLASSIFIED",
-            "declaration order picks the value; got {plate}"
+            plate["classification"], "",
+            "an unanswered enum renders its blank, never a variant nobody chose; got {plate}"
         );
     }
 
     #[test]
-    fn nested_defaultless_enum_floors_to_the_first_variant() {
+    fn nested_defaultless_enum_floors_to_the_blank() {
         let plate = plate_of(
             r#"
 quill: { name: env, version: 1.0.0, backend: typst, description: x }
@@ -831,13 +951,35 @@ main:
         );
         assert_eq!(
             plate["marking"],
-            json!({ "level": "UNCLASSIFIED", "note": "" }),
-            "the recursive floor fills each property; got {plate}"
+            json!({ "level": "", "note": "" }),
+            "the recursive blank switches for a nested enum too; got {plate}"
+        );
+    }
+
+    /// A blank clears the gate on *every* enum, not only defaultless ones, so
+    /// `values ∪ blank` is the surface a plate must branch over.
+    #[test]
+    fn an_authored_blank_enum_clears_the_gate_and_reaches_the_plate() {
+        let plate = plate_of(
+            r#"
+quill: { name: eb, version: 1.0.0, backend: typst, description: x }
+main:
+  fields:
+    seal:
+      type: enum
+      values: [dow, dod]
+      default: dow
+"#,
+            "~~~card-yaml\n$quill: eb@1.0.0\n$kind: main\nseal: \"\"\n~~~\n",
+        );
+        assert_eq!(
+            plate["seal"], "",
+            "an authored blank outranks the default and is not a gate error; got {plate}"
         );
     }
 
     #[test]
-    fn authored_empty_date_coerces_to_absent_and_takes_the_default() {
+    fn authored_blank_date_outranks_the_default() {
         let plate = plate_of(
             r#"
 quill: { name: dz, version: 1.0.0, backend: typst, description: x }
@@ -853,12 +995,12 @@ main:
             "~~~card-yaml\n$quill: dz@1.0.0\n$kind: main\nsigned_on: \"\"\nsubtitle: \"\"\n~~~\n",
         );
         assert_eq!(
-            plate["signed_on"], "2026-01-01",
-            "the empty date nulls in coercion, so the default fills; got {plate}"
+            plate["signed_on"], "",
+            "the blank date survives coercion and outranks the default; got {plate}"
         );
         assert_eq!(
             plate["subtitle"], "",
-            "the empty string survives coercion and outranks the default"
+            "the blank string does the same: one spelling of \"explicitly nothing\" for both"
         );
     }
 }

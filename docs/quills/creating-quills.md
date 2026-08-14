@@ -41,7 +41,7 @@ main:
 
 `name`, `backend`, `version`, and `description` are all required. `name` must be `snake_case`. Define your document's expected root-block fields under `main.fields`. Each field has a `type`, optional `default`, `description`, and validation constraints. Use `integer` for whole numbers only and `number` for values that may include decimals. For the full list of field types, UI hints, typed arrays, and enum constraints, see the [Quill.yaml Reference](quill-yaml-reference.md).
 
-Use `default` for the value most authors will accept as-is (the field becomes optional, filled in when omitted). Use `example` to document the expected shape without supplying a default. Fields with neither are flagged in the blueprint with a `!must_fill` marker. See the [Quill.yaml Reference](quill-yaml-reference.md) for details.
+Use `default` for the value most authors will accept as-is (filled in when the field is omitted). Use `example` to document the expected shape without supplying a default. A field with neither is one nobody has answered: the blueprint flags it with a `!must_fill` marker and `Quill::validate` warns while it stays unauthored. Set `must_fill:` explicitly where you want a default a human must still confirm, or an optional field with nothing to suggest — it is a warning either way, never a gate. See the [Quill.yaml Reference](quill-yaml-reference.md#obligation-must_fill) for details.
 
 ### Picking a text type
 
@@ -58,6 +58,8 @@ Four types hold text, and two questions pick one:
 The letter above needs no content field: its prose is the document body, which is already rich text. `plaintext` and `richtext` are for prose in a *named* field — an abstract, a summary. Such a field carries navigation, regions, and click-to-edit in editor consumers; `string` and `enum` carry none of that.
 
 Pick before a corpus exists. Changing a declared type reinterprets every value already stored in that field, and data → content is lossy: see [Choosing among `string`, `enum`, `plaintext`, and `richtext`](quill-yaml-reference.md#choosing-among-string-enum-plaintext-and-richtext).
+
+When you declare an `enum`, list only the real choices. Every enum also accepts a **blank** (`""`) that the engine supplies — what a document says when nobody has answered — so you never declare it, and declaring `""` in `values:` is a load error. Keep `default: ""` to mark the field optional. If the empty state is itself a decision worth recording, make it a member (`undecided`, `waived`), because the blank means nobody chose and a member means someone chose "none". See [the blank](quill-yaml-reference.md#the-blank-values-is-for-choices-not-for-the-absence-of-one).
 
 ## 3. Write `plate.typ`
 

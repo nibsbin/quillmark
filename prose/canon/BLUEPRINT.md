@@ -24,7 +24,7 @@ $kind: main
 # <field description>
 field: !must_fill # <type>
   - <example item>
-endorsed: value # <type>[<format>]
+settled: value # <type>[<format>]
 ~~~
 
 Write main body here.
@@ -81,15 +81,14 @@ Per field, in order:
 1. `# <description>`: `description:` from `Quill.yaml`,
    whitespace-collapsed. **Single line only**; multi-line descriptions are
    rejected at `Quill.yaml` parse time.
-2. `# e.g. <value>`: emitted on an **Endorsed** field whenever `example:`
-   is configured. Independent of type. On an Endorsed field the example
-   never becomes the rendered value, so it surfaces as a hint. On an
-   **Unendorsed** field there is normally no `# e.g.` line: the example inlines
-   directly as the `!must_fill` marker's suggested value (see "Placeholder
-   value precedence"), so a separate hint would be redundant. The one exception
-   is `richtext`, which never inlines its example as the value: an Unendorsed
-   richtext field with an `example:` therefore keeps the `# e.g.` line (see
-   "Richtext fields").
+2. `# e.g. <value>`: emitted whenever `example:` is configured **and a
+   `default:` already holds the cell**. Independent of type. There the example
+   never becomes the rendered value, so it surfaces as a hint; where no
+   `default:` holds the cell the example inlines *as* the value (see
+   "Placeholder value precedence") and a separate hint would be redundant. The
+   one exception is `richtext`, which never inlines its example as the value: a
+   defaultless richtext field with an `example:` therefore keeps the `# e.g.`
+   line (see "Richtext fields").
 
 That's it. There is no leading `# required`, `# enum:`, `# default:`, or
 `# type:`: those collapse into the inline.
@@ -119,13 +118,10 @@ Form: **`# <type>[<format>]`**
     (nothing meaningful to refine).
 
 The inline annotation is **purely structural**: it carries the type (and
-optional format), nothing else. Shippability is conveyed by the **value cell**,
-not by the annotation: an Endorsed field (one with a `default:`) renders its
-concrete default value, which is shippable as-is: keep or override; an
-Unendorsed field (no `default:`) carries the `!must_fill` marker on its value
-instead. The reader's single rule is: a `!must_fill` marker present → fill it;
-a concrete value present → shippable as-is (delete or blank the line to fall
-back to the default).
+optional format), nothing else. What a reader must *do* is carried by the cell:
+a `!must_fill` marker asks for a value, and its absence says the cell is
+shippable as-is (delete or blank the line to fall back to the default). The two
+can co-occur — a marked cell may still carry a concrete value to review.
 
 The `$`-prefixed system-metadata keys (`$quill`, `$kind`, …) carry no
 inline type annotation: they are not user-defined data fields, so there
@@ -152,16 +148,18 @@ Examples:
 
 | Line | Reading |
 |---|---|
-| `name: !must_fill # string` | Unendorsed string, no example: bare marker, replace before shipping |
-| `name: !must_fill Jane Doe # string` | Unendorsed string with an `example`: the example is the suggested value, still marked |
-| `title: "Curriculum Vitae" # string` | Endorsed string: concrete value, shippable as-is (keep or override) |
-| `count: 0 # integer` | Endorsed integer (type-empty default, shippable as-is) |
-| `active: false # boolean` | Endorsed boolean (type-empty default, shippable as-is) |
-| `notes: "" # string` | Endorsed empty string (the "skippable" cell) |
-| `bio: !must_fill # richtext<markdown>` | Unendorsed richtext: bare marker (see "Richtext fields") |
-| `recipient: !must_fill # array<string>` | Unendorsed array of strings |
-| `date: !must_fill # date<YYYY-MM-DD>` | Unendorsed date |
-| `severity: !must_fill # enum<low \| medium \| high>` | Unendorsed enum |
+| `name: !must_fill # string` | must-fill string, no example: bare marker, replace before shipping |
+| `name: !must_fill Jane Doe # string` | must-fill string with an `example`: the example is the suggested value, still marked |
+| `title: "Curriculum Vitae" # string` | defaulted string: concrete value, shippable as-is (keep or override) |
+| `count: 0 # integer` | defaulted integer (type-empty default, shippable as-is) |
+| `active: false # boolean` | defaulted boolean (type-empty default, shippable as-is) |
+| `notes: "" # string` | defaulted empty string (the "skippable" cell) |
+| `classification: !must_fill UNCLASSIFIED # enum<UNCLASSIFIED \| CUI>` | a default **and** `must_fill: true`: renders safely, still asks a human to confirm |
+| `note: null # string` | `must_fill: false` with nothing to suggest: explicitly optional, nothing to say |
+| `bio: !must_fill # richtext<markdown>` | must-fill richtext: bare marker (see "Richtext fields") |
+| `recipient: !must_fill # array<string>` | must-fill array of strings |
+| `date: !must_fill # date<YYYY-MM-DD>` | must-fill date |
+| `severity: !must_fill # enum<low \| medium \| high>` | must-fill enum |
 | `$quill: cmu_letter@0.1.0 # keep verbatim` | quill binding metadata, emitted verbatim; the inline reminder guards against dropping the line |
 | `$kind: skill` followed by `# composable (0..N)` | repeat the entire `~~~` … `~~~` block per instance |
 
@@ -172,33 +170,36 @@ what data the cell carries; the *marker axis* decides whether the cell is
 stamped `!must_fill`. They are independent: the marker never changes the
 value, and the value never implies the marker.
 
+**Value** is `default:` › `example:` › bare (null for scalars, empty for a
+container). **Marker** is the field's derived `must_fill` (`SCHEMAS.md` § "The
+two axes"). Reading them off separately gives the full grid:
+
 | Field state | Value rendered | Marker |
 |---|---|---|
-| Has `default` (Endorsed) | the default | none |
-| No `default`, no `example` (Unendorsed) | none (bare null/empty) | `!must_fill` |
-| No `default`, has `example` (Unendorsed) | the `example` | `!must_fill` |
+| `default` | the default | none |
+| `default` + `must_fill: true` | the default | `!must_fill` |
+| no `default`, has `example` | the `example` | `!must_fill` |
+| no `default`, no `example` | bare null/empty | `!must_fill` |
+| no `default`, `must_fill: false` | the `example` else bare null | none |
 
-So an Unendorsed field is always stamped `!must_fill`; its *value* is the
-field's `example` when one exists (a reviewable suggested value), else bare
-(null for scalars, empty for the marked container). An Endorsed field renders
-its default with **no marker**: the concrete value cell is the shippability
-signal on its own.
-
-An `example` on an **Endorsed** field never becomes the rendered value: it
-surfaces in the `# e.g.` leading line instead. Only **Unendorsed** fields
-inline the example as the marker's suggested value. This holds uniformly for
-scalars, arrays, typed tables, and typed dictionaries: **except `richtext`**,
-which never inlines its example as a value in either endorsement state; its
-`example:` always surfaces as the `# e.g.` line (see "Richtext fields").
+An `example` takes the cell only when no `default:` holds it, and surfaces in
+the `# e.g.` leading line otherwise. That gate is a *value*-axis question:
+`must_fill` never moves an example between the cell and the hint. The rule holds
+uniformly for scalars, arrays, typed tables, and typed dictionaries: **except
+`richtext`**, which never inlines its example as a value at all; its `example:`
+always surfaces as the `# e.g.` line (see "Richtext fields").
 
 All fields render as **live YAML**: no commented-out fields. The `!must_fill`
-marker is the sole "must fill" signal: a reader's mental model is one rule,
-**`!must_fill` on a field → replace before shipping; otherwise the value cell
-is shippable as-is**. A marked document still renders (the cell zero-fills, or
-uses its suggested value); the marker only drives the non-fatal
+marker is the sole "must fill" signal on this surface: a reader's mental model
+is one rule, **`!must_fill` on a field → replace before shipping; otherwise the
+value cell is shippable as-is**. A marked document still renders (the cell
+blank-fills, or uses its suggested value); the marker only drives the non-fatal
 `validation::must_fill` warning (see "Guarantees").
 
-The marker is stamped where the LLM types the value:
+The marker is stamped where the LLM types the value. This table is also the
+**cell set the `unauthored` trigger addresses**: the schema-side predicate warns
+at exactly these paths, so the blueprint and a document that never saw one
+speak about the same cells (`SCHEMAS.md` § "Native validation").
 
 | Type | Marker position | Example |
 |---|---|---|
@@ -214,7 +215,7 @@ A richtext field's value cell is markdown: the surface projection of the
 content model, which `to_markdown` re-emits: carried under a `# richtext<markdown>`
 annotation.
 
-An **Unendorsed** `richtext` field renders as a bare marker on the field:
+A defaultless `richtext` field renders as a bare marker on the field:
 no block scalar:
 
 ```
@@ -233,7 +234,7 @@ from real content). Instead the `example:` surfaces as a `# e.g.` leading hint:
 bio: !must_fill # richtext<markdown>
 ```
 
-When a `default:` is configured, the field is **Endorsed** and renders its
+When a `default:` is configured, the field renders its
 default as an **inline double-quoted scalar** with `\n` escapes: the canonical
 `to_markdown` string form (no `|`/`>` block scalars):
 
@@ -246,7 +247,7 @@ If the default is empty (`default: ""`), the cell is the inline empty string
 
 ### Multi-element example arrays
 
-The `example` of an Unendorsed array field rides the `!must_fill` marker as a
+The `example` of a defaultless array field rides the `!must_fill` marker as a
 **block-style sequence**: the canonical `to_markdown` form at every nesting
 level:
 
@@ -273,15 +274,15 @@ fallback; authors needing these characters must reshape their values.
 ## Typed tables
 
 A field of `type: array` with a `properties` map follows the uniform
-cell cascade: `default:` (any default, including `[]`) is Endorsed and
-shippable as-is; no `default:` is Unendorsed:
+cell cascade: `default:` (any default, including `[]`) is shippable as-is;
+without one:
 
 - A non-empty `default:` renders as actual rows (no per-property
   annotations on each row). The outer key carries `# array<object>`.
 - `default: []` renders inline as `[]` with `# array<object>`:
   shippable empty. Inline row shape is not surfaced under an empty
   default; use `example:` to document row shape.
-- No `default:` is Unendorsed: one synthetic row is emitted with each
+- Without a `default:`, one synthetic row is emitted with each
   property carrying its own description, inline annotation, and the
   `!must_fill` marker on its leaf value. The container key itself is
   untagged: you tag the leaves, not the container (per
@@ -295,26 +296,26 @@ sequence, e.g. `# e.g. [{org: ACME, year: 2020}]`.
 ## Typed dictionaries
 
 A field of `type: object` with a `properties` map follows the uniform
-cell cascade: `default:` (any default, including `{}`) is Endorsed and
-shippable as-is; no `default:` is Unendorsed:
+cell cascade: `default:` (any default, including `{}`) is shippable as-is;
+without one:
 
 - A non-empty `default:` renders as a concrete block mapping (property
   values only, no annotations). Only the keys present in the default are
   shown: a *partial* default is a deliberate "already handled, ignore the
   rest" signal and is rendered verbatim. The outer key carries `# object`.
-- `default: {}` **expands** to the field's zero-filled shape: every property
+- `default: {}` **expands** to the field's blank-filled shape: every property
   shown with its type-empty value (`""`, `0`, `false`, `[]`, …), all
-  unmarked and unannotated (uniform with a concrete default, since the
-  container is Endorsed). The bare `{}` is never emitted: an empty endorsed
-  object shows its structure. The outer key carries `# object`.
-- No `default:` is Unendorsed: each property is emitted with its own
+  unmarked and unannotated (uniform with a concrete default, the container
+  being defaulted either way). The bare `{}` is never emitted: an empty
+  defaulted object shows its structure. The outer key carries `# object`.
+- Without a `default:`, each property is emitted with its own
   description, inline annotation, and the `!must_fill` marker on its leaf
   value. The container key itself is untagged: you tag the leaves, not the
   container (per [markdown-spec.md](../references/markdown-spec.md) §3.4).
   The outer key carries `# object`.
 
 The `{}` expansion (and not partial defaults, and not arrays) makes the object
-rule a single statement: **show every key, fill from default-over-zero, mark
+rule a single statement: **show every key, fill from default-over-blank, mark
 per endorsement.** Arrays are unchanged: `default: []` stays inline `[]`.
 
 An `example:` never renders as a concrete mapping. Like every other
@@ -342,7 +343,7 @@ address: # object
   zip: "15213"
 ```
 
-With `default: {}` (expanded to the zero-filled shape, all unmarked):
+With `default: {}` (expanded to the blank-filled shape, all unmarked):
 
 ```
 address: # object
@@ -417,10 +418,10 @@ Write main body here.
 `blueprint()` guarantees the emitted document is **parseable** *and*
 **renders**: every field key is present, every value is YAML-valid, the
 document round-trips through `Document::parse` and back, and every
-cell is type-valid. Endorsed cells coerce and validate against their default;
-Unendorsed cells carry the `!must_fill` marker on a value that is either the
+cell is type-valid. A defaulted cell coerces and validates against its default;
+a defaultless cell carries the `!must_fill` marker on a value that is either the
 field's `example` (a real, type-valid suggested value) or bare null/empty:
-and because **null ≡ absent** (a present-null cell zero-fills at render, just
+and because **null ≡ absent** (a present-null cell blank-fills at render, just
 like an omitted field), even a bare-marked cell renders cleanly. A surviving
 marker is surfaced by `Quill::validate` as the **non-fatal**
 `validation::must_fill` warning: never a render gate. A strict consumer
@@ -432,17 +433,27 @@ contract**:
 
 > A quill's `plate.typ` MUST render an **empty document** (just `$quill` /
 > `$kind: main`, no fields) to a successful (non-error) output. Under
-> zero-filled render, every absent field is filled with its type-empty
-> (zero) value in the plate projection, so an empty document is by
+> blank-filled render, every absent field is filled with its blank in the
+> plate projection, so an empty document is by
 > construction the *type-minimal valid input*.
 
 It is the worst-case-but-renderable document, so a plate that renders it
 degrades gracefully on every type-valid input shape. The contract requires:
 
-- Templates treat type-empty values (`""`, `0`, `false`, `[]`, empty
-  richtext body) as valid *present* input: read via `data.field`,
+- Templates treat blanks (`""`, `0`, `false`, `[]`, empty richtext body) as
+  valid *present* input: read via `data.field`,
   `card.at("field", default: …)`, or guarded with `if "field" in data`.
-- No template asserts that an Unendorsed field is *non-empty*. The schema
+- **A template branching on an `enum` covers `values ∪ blank` exhaustively.**
+  The blank is valid present input for every enum, not only defaultless ones,
+  so an `else` fallback silently renders a variant nobody chose — the exact
+  fabrication the blank exists to close, re-opened one rung lower. Match the
+  blank explicitly and decide what it means: omit the parameter, take the
+  downstream package's own default, or render nothing. Note that
+  `data.at(key, default: X)` is **not** such a guard: under blank-filled
+  render every declared key is always present, so its `default:` is dead code
+  and the blank flows through. Where a package asserts membership, that is a
+  failed compile rather than a quiet mis-render.
+- No template asserts that a must-fill field is *non-empty*. The schema
   guarantees *presence*, not non-emptiness; the `!must_fill` marker
   is an authoring signal, not a render-time precondition.
 - "Renders successfully" means "compiles without error," not "produces
@@ -464,15 +475,15 @@ content, not prose.
 
 | Projection | Intent | Value precedence | Output | Markers? |
 |---|---|---|---|---|
-| `blueprint` | *"give me the form to fill"* | Endorsed: `default:`; Unendorsed: `example:` else bare | annotated string | yes (`!must_fill`) |
+| `blueprint` | *"give me the form to fill"* | value: `default:` › `example:` › bare; marker: the derived `must_fill` | annotated string | yes (`!must_fill`) |
 | seeding | *"give me a filled-out one"* | `example:` › absent | committed `Document` | no |
 
 The **blueprint** column is this doc's contract (above). The **seeding**
-column: value precedence `example: → absent`, with `default:`/`zero` deferred
+column: value precedence `example: → absent`, with `default:`/`blank` deferred
 to the render floor: is owned by [SCHEMAS.md](SCHEMAS.md) § "Document
 seeding"; a seeded document renders each field's `example:` where present, else
-the render floor's `default: → zero` (`zero_value`, [SCHEMAS.md](SCHEMAS.md)
-§ "Zero-filled render").
+the render floor's `default: → blank` (`blank`, [SCHEMAS.md](SCHEMAS.md)
+§ "Blank-filled render").
 
 ## Bindings surface
 

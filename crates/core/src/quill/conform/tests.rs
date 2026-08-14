@@ -278,12 +278,9 @@ fn conform_is_a_no_op_on_seeds() {
 #[test]
 fn a_fill_tag_on_a_seeded_cell_survives_store_load_conform() {
     let quill = quill();
-    let mut doc = quill.seed_document();
-
-    for key in ["subject", "note"] {
-        let seeded = doc.main().payload().get(key).expect("seeded").clone();
-        doc.main_mut().store_fill(key, seeded).unwrap();
-    }
+    let doc = quill.seed_document();
+    // Seeding stamps them: an `example` on a must-fill field is shape
+    // documentation, not the answer.
     let tagged = bytes(&doc);
 
     let mut loaded = Document::try_from(
@@ -308,8 +305,23 @@ fn a_fill_tag_on_a_seeded_cell_survives_store_load_conform() {
         "and the tagged richtext cell keeps its canonical content object"
     );
 
-    let untagged = bytes(&quill.seed_document());
+    // The flag rides the payload item; nothing recomputes it from the schema at
+    // load. Dropped from a document whose schema still says must-fill, it stays
+    // dropped — the document is sovereign over its own markers.
+    let mut cleared = quill.seed_document();
+    for key in ["subject", "note"] {
+        let seeded = cleared.main().payload().get(key).expect("seeded").clone();
+        cleared.main_mut().store_field(key, seeded).unwrap();
+    }
+    let untagged = bytes(&cleared);
     assert_ne!(tagged, untagged, "the tag is stored, not inferred");
+
+    let mut reloaded = Document::try_from(
+        serde_json::from_str::<StoredDocument>(&untagged).expect("the untagged seed loads"),
+    )
+    .expect("and converts to a document");
+    quill.conform(&mut reloaded).expect("the quill matches");
+    assert_eq!(bytes(&reloaded), untagged, "and no cycle re-stamps it");
 }
 
 #[test]
