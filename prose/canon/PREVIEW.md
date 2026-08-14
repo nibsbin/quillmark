@@ -174,7 +174,7 @@ four queries, two coarse and two fine:
 - `locate(field, pos)` answers *content position → caret rect*: the reverse of
   `positionAt`, the box to draw a caret at.
 
-Three producers: **content fields** (a `richtext` or `plaintext` value —
+Four producers: **content fields** (a `richtext` or `plaintext` value —
 a body, a card's field, a scalar or an `[]` element) are tracked by the
 spans their glyphs carry: the
 backend evaluates each value at its own generated call site and records the
@@ -189,7 +189,19 @@ whole expression's ink to the field when it is the only reference inside it.
 Not tracked: expressions mixing several fields (`data.from + ", " + rank` has
 no single owner), values laundered through intermediate bindings, and card
 scalars read from the per-card loop variable (one shared expression site
-carries no per-instance identity: bind a widget for those). **Form-field widgets** carry the path explicitly
+carries no per-instance identity: bind a widget or wrap a claim for those).
+**Marker claims** cover the ink a plate *composes* rather than reads off a
+field: a banner keyed on `data.classification`, a package-built address block, a
+computed table. The helper's `field-region(field, body)` brackets `body` with
+two invisible `metadata` markers, and the frame walk claims for `field` every
+piece of ink between them that resolves to no window. It is a **fallback**
+claim, not an override: content blocks, scalar sites, and nested
+`field-region`s inside keep their own field, so wrapping only ever adds a
+region, and nesting reads as ordinary scoping. Each *call* claims separately,
+so a wrapper invoked once per card with a `$path`-composed address is one
+region per card. Ink attributable to no source position at all (list bullets,
+underline rules) stays unclaimed here as everywhere.
+**Form-field widgets** carry the path explicitly
 (pdfform from the form mapping, a Typst `form-field` from its `field:`
 argument, validated against schema address tables baked into the generated
 helper: cards carry their canonical prefix as `$path`, so plates compose
@@ -203,8 +215,8 @@ A content field is not one box. The backend records a per-**segment** source
 map (a segment is one paragraph, heading, or whole code fence: the content's
 `continues`-joined line run), and `regions()` returns one region per
 `(segment, page)`, each carrying `span: [start, end)`: the USV range of the
-field's `Content` that box covers. A scalar reference site and a widget carry
-no `span` (`undefined`): geometry with no content address.
+field's `Content` that box covers. A scalar reference site, a marker claim, and
+a widget carry no `span` (`undefined`): geometry with no content address.
 
 The whole-field highlight is **derived, not emitted**: per `(field, page)`,
 union the `span`-bearing segment rects. The union is *striped*: it leaves
@@ -234,7 +246,10 @@ page it touches, so highlighting covers continuation pages (page marginals
 between one page's body and the next's do not end a placement; a same-page
 interruption does), not every placement: span data cannot distinguish
 package chrome interrupting one placement from a second placement of the same
-value, and a spanning union would claim the ink between them. A field's own
+value, and a spanning union would claim the ink between them. A marker claim is
+exempt from that rule and accrues its whole extent, because `field-region`
+delimits that extent explicitly: an interruption inside a claim is never a
+second placement. A field's own
 ink *between* its segments (brackets, container-open syntax: usually inkless)
 is transparent: it neither accrues a box nor breaks a run. `field` is still
 not unique: segment fragments, page fragments, several scalar sites, or
@@ -423,6 +438,15 @@ by `runtime.test.js`.
 - **`update` reports dirty pages, not new handles.** Page identity is the index;
   a `ChangeSet` is data. Nothing borrowed from a previous compile outlives an
   edit because reads resolve against the current compile at call time.
+- **A marker claim is a fallback, and ink still belongs to exactly one field.**
+  Wrapping content that already resolves to a field could plausibly make the
+  region name both. It does not: `fieldAt` and `positionAt` return one field, so
+  a two-field region has no answer to give, and `fieldBoxes` would double-count
+  it. Innermost wins instead, which is the ordinary scoping intuition and makes
+  wrapping purely additive: a `field-region` takes the ink nothing more specific
+  took, and never moves a region off the field that generated it. Retargeting
+  ink that is already tracked is therefore not expressible, and deliberately so:
+  the wrapper exists for ink with *no* attribution.
 - **Complete raster, never compose-from-regions.** Both backends hand back a
   finished page (Typst natively, pdfform by pre-flattening values into content
   streams before rasterizing). Regions are an overlay sidecar, not a
