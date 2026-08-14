@@ -174,9 +174,10 @@ Validation is implemented by a native walker over `QuillConfig` in `quill/valida
   null and absent blank-fill identically, forever. But `must_fill` asks whether
   a human made a call, and writing the field's blank is such a call while
   clearing the key is not — so `field: ""` discharges the warning and
-  `field: null` does not. Two verbs that are interchangeable today part company
-  here: `removeField` and writing the blank stop being the same act, and a UI
-  rendering both as an empty box shows nothing of the difference. This is the
+  `field: null` does not. So two verbs part company here: `removeField` (drop
+  the key) and writing the blank are the same act on the value ladder and
+  different acts on this surface, and a UI rendering both as an empty box shows
+  nothing of the difference. This is the
   cost of letting a human answer "deliberately nothing" at all; the alternative
   (keying on the resolved source rung) cannot see a must-fill leaf inside a
   container the author has touched, and leaves the deliberate blank with no
@@ -413,10 +414,9 @@ path's "`default:` wins" rule applies to authored and blank documents, where no
 - **The main card** carries `$quill` and `$kind: main`, so a seed round-trips
   through Markdown like an authored document.
 - **A seeded `example` on a must-fill field commits carrying its marker.** An
-  `example` documents *shape*, so a seeded one reading as done was the single
-  hole between the blueprint and its filled-out twin: the two now stamp the same
-  cells, and a fresh seed reports incomplete in exactly the cells a hand-written
-  document does. A `$seed` overlay value is exempt — supplying one is a template
+  `example` documents *shape*, so a seeded one is not an answer. Stamping it is
+  what makes the blueprint and its filled-out twin stamp the same cells: a fresh
+  seed reports incomplete in exactly the cells a hand-written document does. A `$seed` overlay value is exempt — supplying one is a template
   author deciding, which is the act the marker asks for.
 - **Provenance is otherwise untracked in the persisted document.** A seeded
   value is committed as ordinary authored content, indistinguishable from

@@ -164,12 +164,18 @@ def test_render_tolerates_must_fill_marker(engine, tmp_path):
         f"validation::must_fill must be a non-fatal warning; got: {fill}"
     )
 
-    # The removed `validation::field_absent` completeness code never surfaces:
-    # absent Unendorsed fields zero-fill silently.
+    # There is no separate completeness code: obligation, from either trigger,
+    # travels as `validation::must_fill`.
     codes = [d.get("code") for d in diags]
     assert "validation::field_absent" not in codes, (
         f"field_absent is removed and must not be surfaced; got: {codes}"
     )
+
+    # The `trigger` arg crosses the binding boundary, which is what lets a
+    # consumer route "drop the stale marker" apart from "nobody filled this in".
+    by_path = {d.get("path"): d.get("args", {}).get("trigger") for d in fill}
+    assert by_path.get("main.title") == "marker", f"got: {fill}"
+    assert by_path.get("main.count") is None, "an authored cell is discharged"
 
 
 def test_render_succeeds_when_unendorsed_supplied(engine, tmp_path):

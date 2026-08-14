@@ -822,9 +822,9 @@ mod tests {
     #[test]
     fn a_marked_content_cell_emits_its_markdown_projection() {
         // Seeding stamps `!must_fill` on an example-seeded must-fill field, so a
-        // content object and a marker now meet on one cell. The raw object has
-        // no card-yaml spelling: emitted unprojected it lands as a nested
-        // mapping that will not re-parse, and drops the marker on the way.
+        // content object and a marker meet on one cell. The raw object has no
+        // card-yaml spelling: emitted unprojected it lands as a nested mapping
+        // that will not re-parse, and drops the marker on the way.
         let mut payload = crate::document::Payload::new();
         payload.set_quill("q@1.0.0".parse().expect("reference"));
         payload.set_kind("main");

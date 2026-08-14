@@ -1818,6 +1818,27 @@ title: !must_fill
       ),
     ).toBe(true)
   })
+
+  it('validate surfaces the same code for a cell the schema obliges and nobody authored', () => {
+    const { quill } = buildQuill()
+
+    // No marker anywhere: this document never saw a blueprint. The obligation
+    // is read off the schema, which is the whole point of the second trigger.
+    const md = `~~~card-yaml
+$quill: schema_test
+$kind: main
+~~~
+`
+    const diags = quill.validate(Document.fromMarkdown(md))
+    const title = diags.find(
+      (d) => d.code === 'validation::must_fill' && d.path === 'main.title',
+    )
+    expect(title).toBeDefined()
+    expect(title.severity).toBe('warning')
+    // The `trigger` arg is how a consumer tells the two apart; it crosses as
+    // an ordinary diagnostic arg.
+    expect(title.args.trigger).toBe('unauthored')
+  })
 })
 
 describe('nested !must_fill', () => {

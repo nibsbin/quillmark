@@ -49,11 +49,11 @@ fn seed_parts(schema: &CardSchema, overlay: Option<&SeedOverlay>) -> (Payload, C
         items.push(PayloadItem::Field {
             key: name.clone(),
             value: seeded_rest(name, value, field),
-            // An `example` on a must-fill field is shape documentation, not the
-            // answer, so it commits *carrying the marker*: a seeded cell that
-            // read as done was the one hole between the blueprint and its
-            // filled-out twin. An overlay value is exempt — `$seed` is a
-            // template author deciding, which is the act the marker asks for.
+            // An `example` on a must-fill field is shape documentation, not
+            // the answer, so it commits *carrying the marker*: that is what
+            // lands a seed on the same cells the blueprint stamps. An overlay
+            // value is exempt — `$seed` is a template author deciding, which is
+            // the act the marker asks for.
             fill: overlaid.is_none() && field.must_fill(),
             nested_comments: Vec::new(),
         });

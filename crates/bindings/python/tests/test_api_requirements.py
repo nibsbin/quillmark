@@ -653,12 +653,19 @@ def test_typed_set_clears_must_fill_marker():
     doc = Document.from_markdown(
         "~~~card-yaml\n$quill: taro@0.1.0\n$kind: main\ntitle: !must_fill\n~~~\n"
     )
-    codes = [d.get("code") for d in quill.validate(doc)]
-    assert "validation::must_fill" in codes
+    def fills(path):
+        return [
+            d
+            for d in quill.validate(doc)
+            if d.get("code") == "validation::must_fill" and d.get("path") == path
+        ]
+
+    # Scoped to `main.title`: the other defaultless fields this quill declares
+    # are obliged too, and stay so until someone authors them.
+    assert [d.get("args", {}).get("trigger") for d in fills("main.title")] == ["marker"]
 
     quill.writer(doc).set("title", "Real Title")
-    codes_after = [d.get("code") for d in quill.validate(doc)]
-    assert "validation::must_fill" not in codes_after
+    assert fills("main.title") == []
     assert field(doc.main, "title") == "Real Title"
 
 
