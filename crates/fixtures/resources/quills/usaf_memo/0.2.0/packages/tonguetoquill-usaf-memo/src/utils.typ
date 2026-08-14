@@ -132,8 +132,12 @@
 ///
 /// - width (length): Length of the fill-in rule; defaults to fit a long date
 ///   such as "15 September 2026".
+/// - field (content): Fill-in widget to seat on the rule, e.g. a Quillmark
+///   `form-field`. The rule is what prints; the widget makes the same span
+///   typeable in a PDF reader and addressable in a preview. `none` leaves a
+///   pen-only line.
 /// -> content
-#let date-placeholder-line(width: 1in) = box(
+#let date-placeholder-line(width: 1in, field: none) = box(
   width: width,
   height: 1em,
   // Keep the rule on the line's baseline so it aligns with where the printed
@@ -141,6 +145,9 @@
   // (A positive baseline shift would drop the rule a full line too low.)
   baseline: 0pt,
   stroke: (bottom: 0.5pt + black),
+  // Placed, so a widget that measures differently from the rule cannot stretch
+  // the box the surrounding header line is laid out against.
+  if field != none { place(bottom + left, field) },
 )
 
 /// Gets the banner color for a classification marking.
