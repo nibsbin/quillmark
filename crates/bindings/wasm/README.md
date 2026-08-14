@@ -389,21 +389,25 @@ canvas.style.height = `${result.layoutHeight}px`;
 
 ### Schema model
 
-A field's *cell* is inferred from whether its schema declares a `default:`:
+A field carries two independent axes, and no `required` one.
 
-- **Unendorsed** (no `default:`): `quill.blueprint` renders the
-  `!must_fill` marker in the value cell (carrying the field's `example` as a
-  suggested value when one exists). An absent Unendorsed field zero-fills
-  silently. A `!must_fill` marker left in the document is non-fatal: it emits
-  the `validation::must_fill` warning and still renders. Partial documents
-  are accepted; `engine.render(quill, doc)` only throws for malformed
-  input.
-- **Endorsed** (with `default:`): `quill.blueprint` renders the
-  default value with a type-only `# <type>` annotation (shippable as-is),
-  and the default is used when the document omits the field.
+**Value** — what the cell holds. With a `default:`, `quill.blueprint` renders
+that value under a type-only `# <type>` annotation and the render path uses it
+when the document omits the field. Without one, an `example` takes the cell as
+a suggested value, and an absent field blank-fills.
 
-`QuillFieldSchema` has no `required` axis. A `!must_fill` marker left in the
-document emits the non-fatal `validation::must_fill` warning.
+**Obligation** — whether a human must author the field, declared by
+`must_fill:` and deriving from `default:`'s absence when left unset. An obliged
+field carries the `!must_fill` marker in `quill.blueprint`, and
+`quill.validate(doc)` emits the non-fatal `validation::must_fill` warning while
+the document leaves it unauthored — from either of two triggers, named by the
+diagnostic's `trigger` arg: `marker` for a marker the document still carries,
+`unauthored` for a cell the schema obliges and the document never filled.
+Authoring the field's blank discharges the obligation; clearing the key does
+not.
+
+Neither axis gates render. Partial documents are accepted, and
+`engine.render(quill, doc)` throws only for malformed input.
 
 ### Errors
 

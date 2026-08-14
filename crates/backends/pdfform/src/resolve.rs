@@ -2,8 +2,8 @@
 //! `compile_data` JSON into a stamp-spine [`FieldSpec`]. Kind, options,
 //! multiline, tooltip and geometry are already resolved by [`crate::bind`].
 //!
-//! Binding is against `compile_data` — the same validated, zero-filled object
-//! the Typst plate reads as `data.*` — so zero-fill, validation, defaults and
+//! Binding is against `compile_data` — the same validated, blank-filled object
+//! the Typst plate reads as `data.*` — so blank-fill, validation, defaults and
 //! scalar coercion are inherited rather than re-implemented. Addressing is a
 //! shallow path (`field`, `field.0`, `field.sub`); absent or null renders blank.
 //!

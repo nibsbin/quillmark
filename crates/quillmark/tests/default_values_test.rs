@@ -1,5 +1,5 @@
-//! Zero-fill of *nested* nulls in the plate projection. The authored/default/
-//! zero ladder itself is owned by `quillmark_core::quill::resolved`; what only
+//! Blank-fill of *nested* nulls in the plate projection. The authored/default/
+//! blank ladder itself is owned by `quillmark_core::quill::resolved`; what only
 //! shows up through a loaded quill is recursion into object properties and
 //! array elements.
 
@@ -20,7 +20,7 @@ fn create_test_quill(temp_dir: &TempDir, quill_yaml: &str) -> std::path::PathBuf
 }
 
 #[test]
-fn test_nested_null_zero_fills_in_plate() {
+fn test_nested_null_blank_fills_in_plate() {
     let temp_dir = TempDir::new().unwrap();
     let quill_path = create_test_quill(
         &temp_dir,
@@ -28,7 +28,7 @@ fn test_nested_null_zero_fills_in_plate() {
   name: "test_quill"
   version: "1.0"
   backend: "typst"
-  description: "Nested null zero-fill"
+  description: "Nested null blank-fill"
 
 main:
   fields:
@@ -58,7 +58,7 @@ main:
     assert_eq!(
         addr.get("street").and_then(|v| v.as_str()),
         Some(""),
-        "null nested property must zero-fill, not leak null: {data}"
+        "null nested property must blank-fill, not leak null: {data}"
     );
     let tags = data
         .get("tags")

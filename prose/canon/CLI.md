@@ -19,7 +19,7 @@ them.
   `quillmark::quill_from_path` and read the pure config-read operations a
   `Quill` already carries ([QUILL.md](QUILL.md)).
 - **Seeded fallback.** `render` with no `MARKDOWN_FILE` renders the quill's
-  seeded document: each field's `example:`, with `default:`/zero interpolated,
+  seeded document: each field's `example:`, with `default:`/blank interpolated,
   so a quill renders with no input file. Output defaults to
   `example.{format}`.
 - **Parsing is not relaxed for the CLI.** A `MARKDOWN_FILE` needs a root bare

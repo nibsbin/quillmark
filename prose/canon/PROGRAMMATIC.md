@@ -31,7 +31,7 @@ the same emitter parsed ones do.
 
 `Document::new(quill_ref)` is the blank canvas: a main card with no user
 fields, an empty body, and no composable cards. Absent fields resolve at
-render time (schema `default`, else type-empty zero; see
+render time (schema `default`, else the field's blank; see
 [SCHEMAS.md](SCHEMAS.md)), so nothing the program did not set reaches the
 output.
 

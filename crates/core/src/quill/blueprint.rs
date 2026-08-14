@@ -839,7 +839,7 @@ main:
     }
 
     #[test]
-    fn typed_dict_with_empty_default_expands_to_zero_filled() {
+    fn typed_dict_with_empty_default_expands_to_blank_filled() {
         let t = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:

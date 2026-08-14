@@ -2,7 +2,7 @@ use quillmark_fixtures::{example_output_dir, quills_path, write_example_output};
 use std::error::Error;
 
 /// Render a quill's seed document to PDF in the demo output directory. The seed
-/// (example › default › zero) carries illustrative values, where a plain
+/// (example › default › blank) carries illustrative values, where a plain
 /// `blueprint()` would carry warning `!must_fill` placeholders.
 pub fn demo(quill_dir: &str, render_output: &str) -> Result<(), Box<dyn Error>> {
     let quill_path = quills_path(quill_dir);

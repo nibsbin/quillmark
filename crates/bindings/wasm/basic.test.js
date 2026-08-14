@@ -1707,29 +1707,29 @@ count: "nope"
 })
 
 // ---------------------------------------------------------------------------
-// Schema / blueprint / validation: Unendorsed vs Endorsed
+// Schema / blueprint / validation: the value and obligation axes
 // ---------------------------------------------------------------------------
 //
-// The schema axis is implicit: a field with a `default:` is Endorsed (the
-// rendered default is shippable as-is); a field without one is Unendorsed (the
-// blueprint emits a `!must_fill` marker, and render zero-fills it).
+// A `default:` holds the cell and its value is shippable as rendered; without
+// one the field is obliged, so the blueprint emits a `!must_fill` marker and
+// render blank-fills it.
 //
 // The blueprint's exact text is pinned line-by-line in
-// `core/src/quill/blueprint.rs`, and the authored/default/zero ladder in
+// `core/src/quill/blueprint.rs`, and the authored/default/blank ladder in
 // `core/src/quill/resolved.rs`. What is JS-facing, and lives here:
 // the schema DTO's shape, the blueprint crossing as a string, and a
 // `!must_fill` marker reaching both render and validate intact.
 //
 // See prose/canon/SCHEMAS.md.
 
-describe('Unendorsed / Endorsed schema model', () => {
-  // The plate `unwrap`s `data.title` (Unendorsed) and substitutes the optional
+describe('value / obligation schema model', () => {
+  // The plate `unwrap`s `data.title` (obliged) and substitutes the optional
   // `data.subtitle` if present, so one quill carries both cell states.
   const SCHEMA_QUILL_YAML = `quill:
   name: schema_test
   version: "1.0"
   backend: typst
-  description: Unendorsed / Endorsed coverage
+  description: value / obligation coverage
 
 typst:
   plate_file: plate.typ
@@ -1738,11 +1738,11 @@ main:
   fields:
     title:
       type: string
-      description: Document title (Unendorsed, no default)
+      description: Document title (obliged, no default)
     subtitle:
       type: string
       default: "Untitled subtitle"
-      description: Document subtitle (Endorsed, default shippable)
+      description: Document subtitle (defaulted, shippable)
 `
 
   const SCHEMA_PLATE = `#import "@local/quillmark-helper:0.1.0": data
@@ -1781,11 +1781,11 @@ main:
     expect(quill.blueprint.length).toBeGreaterThan(0)
   })
 
-  it('render tolerates a `!must_fill` marker left in (non-fatal, zero-fills)', () => {
+  it('render tolerates a `!must_fill` marker left in (non-fatal, blank-fills)', () => {
     const { engine, quill } = buildQuill()
 
     // The marker survives the boundary as a marker rather than a bare null, so
-    // render zero-fills the field and succeeds.
+    // render blank-fills the field and succeeds.
     const md = `~~~card-yaml
 $quill: schema_test
 $kind: main
@@ -1933,7 +1933,7 @@ card_kinds:
   // Rows are an ordered array now; look one up by its `name`.
   const byName = (rows, name) => rows.find((r) => r.name === name)
 
-  it('tags main rows with their authored / default / zero source', () => {
+  it('tags main rows with their authored / default / blank source', () => {
     const quill = buildQuill()
     const md = `~~~card-yaml
 $quill: field_states_test
