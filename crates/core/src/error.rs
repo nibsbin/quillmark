@@ -605,11 +605,13 @@ mod args_canon {
             }),
             EditError::FieldDecode {
                 field: "body".into(),
+                at: Vec::new(),
                 codec: crate::document::edit::CODEC_RICHTEXT.into(),
                 message: "x".into(),
             },
             EditError::FieldNotContent {
                 field: "qty".into(),
+                at: Vec::new(),
                 declared: "integer".into(),
             },
             EditError::FieldNotInline {
@@ -641,6 +643,7 @@ mod args_canon {
             },
             EditError::FieldDecode {
                 field: "body".into(),
+                at: Vec::new(),
                 codec: crate::document::edit::CODEC_PLAINTEXT.into(),
                 message: "x".into(),
             },

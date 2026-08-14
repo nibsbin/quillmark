@@ -1,11 +1,14 @@
-//! A `plaintext` field lowers through the typst backend with no backend-side
-//! special case: it rides the same `contentMediaType` as richtext, so the
-//! shared content-lowering path emits it, and its literal codec keeps markdown
-//! delimiters verbatim.
+//! `plaintext` carries richtext's `contentMediaType`, so it lowers through the
+//! shared content path with no backend-side case and surfaces geometry as any
+//! content field does. Its literal codec keeps markdown delimiters verbatim.
+//!
+//! Engine altitude, not `Backend::open`: the sharing spans two links, and the
+//! render floor coerces the resting literal string to a content object before
+//! the backend classifies it.
 
 #![cfg(feature = "typst")]
 
-use quillmark::{Document, OutputFormat, Quillmark, RenderOptions};
+use quillmark::{Document, HitGranularity, LiveSession, OutputFormat, Quillmark, RenderOptions};
 use std::fs;
 use tempfile::TempDir;
 
@@ -20,6 +23,9 @@ fn plaintext_quill(temp_dir: &TempDir) -> std::path::PathBuf {
   backend: "typst"
   description: "plaintext lowering"
 
+typst:
+  plate_file: plate.typ
+
 main:
   body:
     enabled: false
@@ -27,37 +33,124 @@ main:
     subject:
       type: plaintext
       default: ""
+    tags:
+      type: array
+      items:
+        type: plaintext
+      description: plaintext elements
 "#,
     )
     .unwrap();
     // The backend pre-lowers content into the `data` dict; the plate just reads it.
     fs::write(
         quill_path.join("plate.typ"),
-        "#import \"@local/quillmark-helper:0.1.0\": data\n= Doc\n#data.subject\n",
+        "#import \"@local/quillmark-helper:0.1.0\": data\n\
+         #set page(width: 612pt, height: 792pt, margin: 72pt)\n\
+         #set text(size: 11pt)\n\
+         = Doc\n#data.subject\n#for t in data.tags { block(t) }\n",
     )
     .unwrap();
     quill_path
 }
 
+/// `plaintext` rests as its literal string, so these author unparsed and ride
+/// the floor's coercion.
+const SUBJECT: &str = "a *literal* subject with _no_ markup";
+const STAR_TAG: &str = "literal *star* tag";
+
+fn session(temp_dir: &TempDir) -> LiveSession {
+    let quill = quillmark::quill_from_path(plaintext_quill(temp_dir)).expect("load quill");
+    let md = format!(
+        "~~~card-yaml\n$quill: plain_quill\n$kind: main\n\
+         subject: \"{SUBJECT}\"\ntags:\n  - \"{STAR_TAG}\"\n  - \"second plain tag\"\n~~~\n"
+    );
+    let parsed = Document::parse(&md).expect("parse").document;
+    Quillmark::new().open(&quill, &parsed).expect("open")
+}
+
 #[test]
 fn plaintext_field_lowers_through_typst_backend() {
     let temp_dir = TempDir::new().unwrap();
-    let quill_path = plaintext_quill(&temp_dir);
-
-    let engine = Quillmark::new();
-    let quill = quillmark::quill_from_path(quill_path).expect("load quill");
-    let md = "~~~card-yaml\n$quill: plain_quill\n$kind: main\n\
-              subject: \"a *literal* subject with _no_ markup\"\n~~~\n";
-    let parsed = Document::parse(md).expect("parse").document;
-
-    let result = engine.render(
-        &quill,
-        &parsed,
+    let result = session(&temp_dir).render(
         &RenderOptions::default().with_output_format(OutputFormat::Svg),
     );
     assert!(
         result.is_ok(),
         "plaintext field should lower and render through the typst backend, got: {:?}",
         result.err()
+    );
+}
+
+#[test]
+fn plaintext_elements_and_scalars_surface_navigable_regions() {
+    let temp_dir = TempDir::new().unwrap();
+    let session = session(&temp_dir);
+    let regions = session.regions();
+
+    for (field, len) in [
+        ("subject", SUBJECT.chars().count()),
+        ("tags.0", STAR_TAG.chars().count()),
+        ("tags.1", "second plain tag".chars().count()),
+    ] {
+        let region = regions
+            .iter()
+            .find(|r| r.field == field)
+            .unwrap_or_else(|| panic!("a plaintext content field surfaces {field:?}: {regions:?}"));
+        assert_eq!(
+            region.span,
+            Some([0, len]),
+            "{field:?} spans its whole literal, delimiters counted as content"
+        );
+    }
+    assert!(
+        !regions.iter().any(|r| r.field == "tags"),
+        "the array itself is not a region key: {regions:?}"
+    );
+
+    let region = regions.iter().find(|r| r.field == "tags.0").unwrap();
+    let hit = session
+        .position_at(region.page, region.rect[0] + 5.0, region.rect[3] - 3.0)
+        .expect("a click inside a plaintext element resolves to a content position");
+    assert_eq!(hit.field, "tags.0");
+    assert!(hit.pos < STAR_TAG.chars().count());
+    assert_eq!(hit.granularity, Some(HitGranularity::Cluster));
+
+    let caret = session.locate("tags.0", hit.pos).expect("caret");
+    assert_eq!(caret.page, region.page);
+    assert_eq!(caret.span, Some([hit.pos, hit.pos]));
+    assert!(
+        caret.rect[0] >= region.rect[0] - 1.0 && caret.rect[2] <= region.rect[2] + 1.0,
+        "caret {:?} inside {:?}",
+        caret.rect,
+        region.rect
+    );
+}
+
+#[test]
+fn a_plaintext_delimiter_is_one_addressable_cluster() {
+    let temp_dir = TempDir::new().unwrap();
+    let session = session(&temp_dir);
+    let star = STAR_TAG.find('*').unwrap();
+
+    // The literal codec lowers `*` to `\*`: two generated bytes, one content char.
+    let caret_x = |pos: usize| session.locate("tags.0", pos).expect("caret").rect[0];
+    let mut prev = f32::MIN;
+    // Content chars only: at the exclusive end `locate` falls back to the
+    // segment start, for every codec.
+    for pos in 0..STAR_TAG.chars().count() {
+        let x = caret_x(pos);
+        assert!(x >= prev, "carets advance left to right at {pos}: {x} < {prev}");
+        prev = x;
+    }
+
+    let caret = session.locate("tags.0", star).expect("caret");
+    let next = caret_x(star + 1);
+    let hit = session
+        .position_at(caret.page, (caret.rect[0] + next) / 2.0, caret.rect[3] - 3.0)
+        .expect("the escaped glyph is hittable");
+    assert_eq!(
+        (hit.field.as_str(), hit.pos),
+        ("tags.0", star),
+        "a hit on `*` floors to the delimiter's own offset, never inside its escape"
     );
 }

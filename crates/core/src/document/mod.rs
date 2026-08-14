@@ -74,6 +74,34 @@ pub(crate) fn decode_plaintext_value(
     }
 }
 
+/// [`decode_richtext_value`] closed over the shapes a stored field can hold: a
+/// null is the empty content (null ≡ absent), and anything neither object nor
+/// string is a decode failure.
+pub(crate) fn decode_richtext_field(
+    value: &serde_json::Value,
+) -> Result<Content, RichtextDecodeError> {
+    match decode_richtext_value(value) {
+        Some(result) => result,
+        None if value.is_null() => Ok(Content::empty()),
+        None => Err(RichtextDecodeError::NotContent(
+            "expected a richtext content object or a markdown string".to_string(),
+        )),
+    }
+}
+
+/// The plaintext twin of [`decode_richtext_field`].
+pub(crate) fn decode_plaintext_field(
+    value: &serde_json::Value,
+) -> Result<Content, RichtextDecodeError> {
+    match decode_plaintext_value(value) {
+        Some(result) => result.map_err(RichtextDecodeError::NotContent),
+        None if value.is_null() => Ok(Content::empty()),
+        None => Err(RichtextDecodeError::NotContent(
+            "expected a plaintext content object or a string".to_string(),
+        )),
+    }
+}
+
 pub mod assemble;
 pub mod dto;
 pub mod edit;
@@ -199,16 +227,9 @@ impl Card {
     /// but neither a content object nor importable markdown. A `Document`
     /// carries no schema, so the caller names a field it knows is richtext.
     pub(crate) fn field_richtext(&self, name: &str) -> Option<Result<Content, RichtextDecodeError>> {
-        let value = self.payload.get(name)?.as_json();
-        Some(match crate::document::decode_richtext_value(value) {
-            Some(result) => result,
-            None => match value {
-                serde_json::Value::Null => Ok(Content::empty()),
-                _ => Err(RichtextDecodeError::NotContent(
-                    "expected a richtext content object or a markdown string".to_string(),
-                )),
-            },
-        })
+        Some(crate::document::decode_richtext_field(
+            self.payload.get(name)?.as_json(),
+        ))
     }
 
     /// The markdown projection of a richtext-valued field (`export ∘ decode`),
@@ -236,16 +257,9 @@ impl Card {
         &self,
         name: &str,
     ) -> Option<Result<Content, RichtextDecodeError>> {
-        let value = self.payload.get(name)?.as_json();
-        Some(match crate::document::decode_plaintext_value(value) {
-            Some(result) => result.map_err(RichtextDecodeError::NotContent),
-            None => match value {
-                serde_json::Value::Null => Ok(Content::empty()),
-                _ => Err(RichtextDecodeError::NotContent(
-                    "expected a plaintext content object or a string".to_string(),
-                )),
-            },
-        })
+        Some(crate::document::decode_plaintext_field(
+            self.payload.get(name)?.as_json(),
+        ))
     }
 
     /// The plaintext projection of a content-valued field (`to_plaintext ∘

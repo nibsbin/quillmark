@@ -741,6 +741,132 @@ def test_view_get_content_absence_unknown_and_non_content():
         taro.reader(tdoc).get_content("author")
 
 
+# ── Tier-1 typed reader: the nested content read ───────────────────────────────
+
+ELEMENT_QUILL_YAML = """quill:
+  name: element_test
+  version: 0.1.0
+  backend: typst
+  description: Content nested inside a composite field
+
+typst:
+  plate_file: plate.typ
+
+main:
+  fields:
+    recipients:
+      type: array
+      items:
+        type: plaintext
+    paragraphs:
+      type: array
+      items:
+        type: richtext
+    tags:
+      type: array
+      items:
+        type: string
+    letterhead:
+      type: object
+      properties:
+        motto:
+          type: richtext
+        code:
+          type: string
+    rows:
+      type: array
+      items:
+        type: object
+        properties:
+          notes:
+            type: richtext
+"""
+
+
+@pytest.fixture
+def element_quill(tmp_path):
+    """A quill declaring every content-bearing composite shape."""
+    root = tmp_path / "element_test" / "0.1.0"
+    root.mkdir(parents=True)
+    (root / "Quill.yaml").write_text(ELEMENT_QUILL_YAML)
+    (root / "plate.typ").write_text('#import "@local/quillmark-helper:0.1.0": data\n')
+    return Quill.from_path(str(root))
+
+
+def test_view_get_content_at_spans_both_storage_forms(element_quill):
+    """An element reads back the same Content whatever its resting form.
+
+    The bound door rests a plaintext element as its literal string and a richtext
+    one as the canonical content object; the transport door leaves both as
+    authored strings."""
+    md = (
+        "~~~card-yaml\n$quill: element_test@0.1.0\n$kind: main\n"
+        "recipients: ['a *literal* line']\nparagraphs: ['A **bold** intro.']\n~~~\n"
+    )
+    parsed = Document.from_markdown(md)
+    assert isinstance(field(parsed.main, "paragraphs")[0], str)
+
+    bound = element_quill.parse(md)
+    assert field(bound.main, "recipients")[0] == "a *literal* line"
+    assert isinstance(field(bound.main, "paragraphs")[0], dict)
+
+    for name, text in [("recipients", "a *literal* line"), ("paragraphs", "A bold intro.")]:
+        a = element_quill.reader(parsed).get_content_at(name, [0])
+        b = element_quill.reader(bound).get_content_at(name, [0])
+        assert a["text"] == text  # decoded at the element's declared codec
+        assert b["text"] == a["text"]
+        assert b["marks"] == a["marks"]
+
+
+def test_view_get_content_at_reaches_object_and_nested_leaves(element_quill):
+    """The path is the model's own in-field axis, so an object property and a
+    leaf under both array and object answer with the element."""
+    doc = Document.from_markdown(
+        "~~~card-yaml\n$quill: element_test@0.1.0\n$kind: main\n"
+        "letterhead:\n  motto: Fly **fight**\n  code: '9'\n"
+        "rows:\n  - {}\n  - notes: a *note*\n~~~\n"
+    )
+    v = element_quill.reader(doc)
+    assert v.get_content_at("letterhead", ["motto"])["text"] == "Fly fight"
+    assert v.get_content_at("rows", [1, "notes"])["text"] == "a note"
+    assert v.get_content_at("rows", [0, "notes"]) is None  # declared, unstored
+
+
+def test_view_get_content_at_stale_index_and_no_content_leaf(element_quill):
+    """A stale row index reads absent; a path resolving to no content leaf raises."""
+    doc = Document.from_markdown(
+        "~~~card-yaml\n$quill: element_test@0.1.0\n$kind: main\n"
+        "recipients: ['a']\ntags: ['x']\n~~~\n"
+    )
+    v = element_quill.reader(doc)
+    assert v.get_content_at("recipients", [7]) is None
+    assert v.get_content_at("paragraphs", [0]) is None  # field absent
+
+    with raises_edit_code("edit::field_not_content"):
+        v.get_content_at("tags", [0])  # `declared` names the element's type
+    with raises_edit_code("edit::field_not_content"):
+        v.get_content_at("recipients", [])  # the array itself has no one Content
+    with raises_edit_code("edit::unknown_field"):
+        v.get_content_at("letterhead", ["nope"])
+    with pytest.raises(ValueError, match=r"path\[0\]"):
+        v.get_content_at("recipients", [None])
+
+
+def test_view_get_content_at_names_the_element_in_a_decode_failure(element_quill):
+    """A failing element names itself, rather than reporting against the field.
+
+    `convert_edit_error` mints no `path` on this surface for any edit error, so
+    the message is where the element shows up here."""
+    doc = Document.from_markdown(
+        "~~~card-yaml\n$quill: element_test@0.1.0\n$kind: main\nparagraphs: ['ok', 3]\n~~~\n"
+    )
+    with pytest.raises(QuillmarkError) as excinfo:
+        element_quill.reader(doc).get_content_at("paragraphs", [1])
+    diag = excinfo.value.diagnostics[0]
+    assert diag.code == "edit::field_decode"
+    assert "paragraphs[1]" in diag.message
+
+
 def test_view_body_read_is_quill_free():
     """view.body_markdown reads the main body markdown: the quill-free body read."""
     quill = _taro_quill()

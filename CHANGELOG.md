@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+- feat(core,wasm,python)!: a `Content` nested inside a composite field is
+  readable at its own codec. `TypedReader::get_content_at(name, path)` (and the
+  `CardReader` twin, `reader.getContentAt(addr, path)` in JS,
+  `reader.get_content_at(name, path)` in Python) walks a `PathSegment` path
+  through the field schema — `items` for an index, `properties` for a key — to
+  the leaf whose declared type names the codec, then decodes through the same
+  dispatch the whole-field read uses. So an `array<richtext>` element, an
+  `object`'s content property and a leaf under both each read back the same
+  `Content` whatever their resting form, where before every one of them
+  answered `FieldNotContent` and the consumer had to decide for itself what the
+  stored bytes meant (#1243). The empty path *is* `get_content`. A path naming
+  nothing in the stored value reads absent rather than throwing: an editor's
+  row index goes stale between derive and read, and that is the axis a repeater
+  mutates. `Addr` deliberately gains no element axis — the path is the read's
+  own argument, since `storeField` / `isFill` / `applyChange` could not answer
+  one. **Breaking**: `EditError::FieldDecode` and `EditError::FieldNotContent`
+  each gain an `at: Vec<PathSegment>` field carrying the in-field path, so the
+  diagnostic anchors at `main.paragraphs[1]` and parses back to those segments;
+  `field` stays a bare field name and `args` is unchanged. `FieldNotContent`
+  now names the type *reached*, so a `string[]` element reports `string` rather
+  than the field's `array`.
+
 ## v0.104.0 - 2026-08-13
 
 - feat(core,wasm): a quill declares, per body, the block constructs its plate

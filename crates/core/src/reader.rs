@@ -40,7 +40,7 @@ use quillmark_content::Content;
 use crate::document::edit::{CODEC_PLAINTEXT, CODEC_RICHTEXT};
 use crate::document::{Card, Document, EditError, RichtextDecodeError};
 use crate::quill::{CardSchema, FieldSchema, FieldType, QuillConfig};
-use crate::value::QuillValue;
+use crate::value::{PathSegment, QuillValue};
 
 /// The interpreted value at a field address: the output of [`TypedReader::get`].
 /// Absence is the `None` of the enclosing `Option`, not a variant here.
@@ -97,7 +97,36 @@ impl<'a> TypedReader<'a> {
     /// [`EditError::FieldDecode`] when the stored value decodes under
     /// neither encoding.
     pub fn get_content(&self, name: &str) -> Result<Option<Content>, EditError> {
-        read_content(self.doc.main(), Some(&self.config.main.fields), name)
+        self.get_content_at(name, &[])
+    }
+
+    /// Read the [`Content`] *nested inside* a composite field at `at`: an
+    /// `array<richtext>` element, an `object`'s content property, or a leaf
+    /// under both (`cells[1].notes`). [`get_content`](Self::get_content) is the
+    /// empty path.
+    ///
+    /// The codec is the leaf's, resolved by walking `at` through the field
+    /// schema — the same walk `conform` and rest enforcement take, so a stored
+    /// leaf reads back at the codec it was conformed at whatever its resting
+    /// form.
+    ///
+    /// `Ok(None)` for an absent field **and for a path that names nothing in
+    /// the stored value**: an editor's row index goes stale between derive and
+    /// read, so absence on the axis a repeater mutates is a read, not a fault.
+    /// A bad *card* index still raises, [`card`](Self::card) being guarded by a
+    /// count the caller holds.
+    ///
+    /// [`EditError::UnknownField`] for a name at any depth the schema does not
+    /// declare; [`EditError::FieldNotContent`] when `at` resolves to no content
+    /// leaf, either through a step the schema cannot take or at a non-content
+    /// terminal; [`EditError::FieldDecode`], anchored at the addressed path,
+    /// when the value there decodes under neither encoding.
+    pub fn get_content_at(
+        &self,
+        name: &str,
+        at: &[PathSegment],
+    ) -> Result<Option<Content>, EditError> {
+        read_content(self.doc.main(), Some(&self.config.main.fields), name, at)
     }
 
     /// The main body's markdown projection. Consults no schema and never
@@ -147,7 +176,17 @@ impl CardReader<'_> {
     /// Read a content field on this card as its [`Content`]: the card twin
     /// of [`TypedReader::get_content`], carrying the same outcomes.
     pub fn get_content(&self, name: &str) -> Result<Option<Content>, EditError> {
-        read_content(self.card, self.schema.map(|s| &s.fields), name)
+        self.get_content_at(name, &[])
+    }
+
+    /// The card twin of [`TypedReader::get_content_at`], carrying the same
+    /// outcomes.
+    pub fn get_content_at(
+        &self,
+        name: &str,
+        at: &[PathSegment],
+    ) -> Result<Option<Content>, EditError> {
+        read_content(self.card, self.schema.map(|s| &s.fields), name, at)
     }
 
     /// This card's body markdown: the card twin of [`TypedReader::body_markdown`].
@@ -186,40 +225,99 @@ fn read_field(
     }
 }
 
-/// The shared [`Content`] dispatch behind [`TypedReader::get_content`] and
-/// [`CardReader::get_content`]. [`EditError::FieldNotContent`] is answered from
-/// the schema before the payload is read: whether a field has a [`Content`] is a
-/// declared-type fact, so a `string` holding markdown-looking text is not
-/// content and an `array<richtext>` has no single [`Content`].
+/// The shared [`Content`] dispatch behind every `get_content` /
+/// `get_content_at`, the whole-field read being the empty `at`.
+/// [`EditError::FieldNotContent`] is answered from the schema before the payload
+/// is read: whether an address has a [`Content`] is a declared-type fact, so a
+/// `string` holding markdown-looking text is not content, and an
+/// `array<richtext>` has no single [`Content`] while each of its elements does.
 fn read_content(
     card: &Card,
     fields_schema: Option<&IndexMap<String, FieldSchema>>,
     name: &str,
+    at: &[PathSegment],
 ) -> Result<Option<Content>, EditError> {
-    let schema = fields_schema
+    let field = fields_schema
         .and_then(|m| m.get(name))
         .ok_or_else(|| EditError::UnknownField(name.to_string()))?;
+    let leaf = schema_at(field, name, at)?;
     // The codec rides out of the dispatch: it is the declared type's, not the
     // stored shape's.
-    let (decoded, codec) = match schema.r#type {
-        FieldType::RichText { .. } => (card.field_richtext(name), CODEC_RICHTEXT),
-        FieldType::PlainText { .. } => (card.field_plaintext_content(name), CODEC_PLAINTEXT),
-        ref other => {
-            return Err(EditError::FieldNotContent {
-                field: name.to_string(),
-                declared: other.as_str().to_string(),
-            })
-        }
+    let (decode, codec) = content_codec(&leaf.r#type).ok_or_else(|| EditError::FieldNotContent {
+        field: name.to_string(),
+        at: at.to_vec(),
+        declared: leaf.r#type.as_str().to_string(),
+    })?;
+    let Some(value) = card.payload().get(name).and_then(|v| value_at(v.as_json(), at)) else {
+        return Ok(None);
     };
-    match decoded {
-        None => Ok(None),
-        Some(Ok(content)) => Ok(Some(content)),
-        Some(Err(e)) => Err(EditError::FieldDecode {
-            field: name.to_string(),
-            codec: codec.to_string(),
-            message: e.into_message(),
-        }),
+    decode(value).map(Some).map_err(|e| EditError::FieldDecode {
+        field: name.to_string(),
+        at: at.to_vec(),
+        codec: codec.to_string(),
+        message: e.into_message(),
+    })
+}
+
+type ContentCodec = (
+    fn(&serde_json::Value) -> Result<Content, RichtextDecodeError>,
+    &'static str,
+);
+
+/// The one declared-type → codec dispatch: `None` for a type that is no content
+/// leaf. Every schema-bound [`Content`] read routes through this, so a codec
+/// change reaches the whole-field and the nested read by construction.
+fn content_codec(r#type: &FieldType) -> Option<ContentCodec> {
+    match r#type {
+        FieldType::RichText { .. } => Some((crate::document::decode_richtext_field, CODEC_RICHTEXT)),
+        FieldType::PlainText { .. } => {
+            Some((crate::document::decode_plaintext_field, CODEC_PLAINTEXT))
+        }
+        _ => None,
     }
+}
+
+/// Walk `at` through a field's schema to the type declared at that address. A
+/// step the schema cannot take is [`EditError::FieldNotContent`] naming the type
+/// that blocked it; a property an `object` does not declare is the same
+/// [`EditError::UnknownField`] an undeclared field name is, one level down.
+fn schema_at<'a>(
+    field: &'a FieldSchema,
+    name: &str,
+    at: &[PathSegment],
+) -> Result<&'a FieldSchema, EditError> {
+    let mut cursor = field;
+    for (depth, seg) in at.iter().enumerate() {
+        let blocked = EditError::FieldNotContent {
+            field: name.to_string(),
+            at: at[..depth].to_vec(),
+            declared: cursor.r#type.as_str().to_string(),
+        };
+        cursor = match (&cursor.r#type, seg) {
+            (FieldType::Array, PathSegment::Index(_)) => cursor.items.as_deref().ok_or(blocked)?,
+            (FieldType::Object, PathSegment::Key(key)) => match cursor.properties.as_ref() {
+                None => return Err(blocked),
+                Some(props) => props
+                    .get(key)
+                    .ok_or_else(|| EditError::UnknownField(key.clone()))?,
+            },
+            _ => return Err(blocked),
+        };
+    }
+    Ok(cursor)
+}
+
+/// Walk `at` through a stored value. `None` when the path names nothing there,
+/// which the read reports as absence rather than as a fault.
+fn value_at<'a>(value: &'a serde_json::Value, at: &[PathSegment]) -> Option<&'a serde_json::Value> {
+    let mut cursor = value;
+    for seg in at {
+        cursor = match seg {
+            PathSegment::Key(key) => cursor.get(key)?,
+            PathSegment::Index(index) => cursor.get(index)?,
+        };
+    }
+    Some(cursor)
 }
 
 /// Lift a codec projection into a [`ReadValue`].
@@ -234,6 +332,7 @@ fn project(
         Some(Ok(text)) => Ok(Some(wrap(text))),
         Some(Err(e)) => Err(EditError::FieldDecode {
             field: name.to_string(),
+            at: Vec::new(),
             codec: codec.to_string(),
             message: e.into_message(),
         }),
@@ -262,11 +361,41 @@ main:
       type: plaintext
     qty:
       type: integer
+    recipients:
+      type: array
+      items:
+        type: plaintext
+    paragraphs:
+      type: array
+      items:
+        type: richtext
+    tags:
+      type: array
+      items:
+        type: string
+    letterhead:
+      type: object
+      properties:
+        motto:
+          type: richtext
+        code:
+          type: string
+    rows:
+      type: array
+      items:
+        type: object
+        properties:
+          notes:
+            type: richtext
 card_kinds:
   note:
     fields:
       body:
         type: richtext
+      lines:
+        type: array
+        items:
+          type: plaintext
 ";
 
     fn config() -> QuillConfig {
@@ -417,7 +546,7 @@ card_kinds:
         // Answered from the schema, not the payload: `qty` holds 3.
         assert!(matches!(
             view.get_content("qty"),
-            Err(EditError::FieldNotContent { field, declared })
+            Err(EditError::FieldNotContent { field, declared, .. })
                 if field == "qty" && declared == "integer"
         ));
     }
@@ -434,6 +563,199 @@ card_kinds:
             view.get_content("subject"),
             Err(EditError::FieldDecode { field, .. }) if field == "subject"
         ));
+    }
+
+    fn idx(i: usize) -> Vec<PathSegment> {
+        vec![PathSegment::Index(i)]
+    }
+
+    fn key(k: &str) -> Vec<PathSegment> {
+        vec![PathSegment::Key(k.to_string())]
+    }
+
+    #[test]
+    fn element_read_spans_both_storage_forms() {
+        let config = config();
+        let mut doc = blank_doc();
+        {
+            let card = doc.main_mut();
+            card.store_field(
+                "recipients",
+                QuillValue::from_json(serde_json::json!(["a *literal* line"])),
+            )
+            .unwrap();
+            card.store_field(
+                "paragraphs",
+                QuillValue::from_json(serde_json::json!(["Hello **world**"])),
+            )
+            .unwrap();
+        }
+        let mut committed = blank_doc();
+        {
+            let mut w = crate::TypedWriter::new(&config, &mut committed);
+            w.set("recipients", serde_json::json!(["a *literal* line"])).unwrap();
+            w.set("paragraphs", serde_json::json!(["Hello **world**"])).unwrap();
+        }
+
+        for (field, text) in [
+            ("recipients", "a *literal* line"),
+            ("paragraphs", "Hello world"),
+        ] {
+            let authored = TypedReader::new(&config, &doc)
+                .get_content_at(field, &idx(0))
+                .unwrap()
+                .unwrap();
+            let rested = TypedReader::new(&config, &committed)
+                .get_content_at(field, &idx(0))
+                .unwrap()
+                .unwrap();
+            assert_eq!(authored.text, text, "{field} decodes at its declared codec");
+            assert_eq!(authored, rested, "{field} reads the same from either rest");
+        }
+    }
+
+    #[test]
+    fn element_read_reaches_object_and_nested_shapes() {
+        let config = config();
+        let mut doc = blank_doc();
+        {
+            let card = doc.main_mut();
+            card.store_field(
+                "letterhead",
+                QuillValue::from_json(serde_json::json!({"motto": "Fly **fight**", "code": "9"})),
+            )
+            .unwrap();
+            card.store_field(
+                "rows",
+                QuillValue::from_json(serde_json::json!([{}, {"notes": "a *note*"}])),
+            )
+            .unwrap();
+        }
+        let view = TypedReader::new(&config, &doc);
+        assert_eq!(
+            view.get_content_at("letterhead", &key("motto")).unwrap().unwrap().text,
+            "Fly fight"
+        );
+        assert_eq!(
+            view.get_content_at(
+                "rows",
+                &[PathSegment::Index(1), PathSegment::Key("notes".to_string())]
+            )
+            .unwrap()
+            .unwrap()
+            .text,
+            "a note"
+        );
+        assert_eq!(
+            view.get_content_at(
+                "rows",
+                &[PathSegment::Index(0), PathSegment::Key("notes".to_string())]
+            )
+            .unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn empty_path_is_the_whole_field_read() {
+        let config = config();
+        let doc = seeded_doc(&config);
+        let view = TypedReader::new(&config, &doc);
+        assert_eq!(
+            view.get_content_at("subject", &[]).unwrap(),
+            view.get_content("subject").unwrap()
+        );
+        assert!(matches!(
+            view.get_content_at("qty", &[]),
+            Err(EditError::FieldNotContent { declared, .. }) if declared == "integer"
+        ));
+    }
+
+    #[test]
+    fn element_read_out_of_range_and_absent_field_return_none() {
+        let config = config();
+        let mut doc = blank_doc();
+        doc.main_mut()
+            .store_field("recipients", QuillValue::from_json(serde_json::json!(["a"])))
+            .unwrap();
+        let view = TypedReader::new(&config, &doc);
+        assert_eq!(view.get_content_at("recipients", &idx(7)).unwrap(), None);
+        assert_eq!(view.get_content_at("paragraphs", &idx(0)).unwrap(), None);
+        assert_eq!(view.get_content_at("letterhead", &key("motto")).unwrap(), None);
+    }
+
+    #[test]
+    fn element_read_without_a_content_leaf_raises_not_content() {
+        let config = config();
+        let mut doc = blank_doc();
+        doc.main_mut()
+            .store_field("tags", QuillValue::from_json(serde_json::json!(["x"])))
+            .unwrap();
+        let view = TypedReader::new(&config, &doc);
+        assert!(matches!(
+            view.get_content_at("tags", &idx(0)),
+            Err(EditError::FieldNotContent { field, declared, .. })
+                if field == "tags" && declared == "string"
+        ));
+        assert!(matches!(
+            view.get_content_at("qty", &idx(0)),
+            Err(EditError::FieldNotContent { declared, .. }) if declared == "integer"
+        ));
+        assert!(matches!(
+            view.get_content_at("recipients", &key("motto")),
+            Err(EditError::FieldNotContent { declared, .. }) if declared == "array"
+        ));
+        assert!(matches!(
+            view.get_content_at("recipients", &[]),
+            Err(EditError::FieldNotContent { declared, .. }) if declared == "array"
+        ));
+        assert!(matches!(
+            view.get_content_at("letterhead", &key("nope")),
+            Err(EditError::UnknownField(n)) if n == "nope"
+        ));
+    }
+
+    #[test]
+    fn element_decode_failure_anchors_at_the_element() {
+        let config = config();
+        let mut doc = blank_doc();
+        doc.main_mut()
+            .store_field(
+                "paragraphs",
+                QuillValue::from_json(serde_json::json!(["ok", 3])),
+            )
+            .unwrap();
+        let err = TypedReader::new(&config, &doc)
+            .get_content_at("paragraphs", &idx(1))
+            .unwrap_err();
+        assert!(matches!(
+            &err,
+            EditError::FieldDecode { field, codec, .. }
+                if field == "paragraphs" && codec == CODEC_RICHTEXT
+        ));
+        let path = err.doc_path(&crate::DocPath::main()).unwrap();
+        assert_eq!(path.to_string(), "main.paragraphs[1]");
+        assert_eq!(
+            crate::DocPath::from_str("main.paragraphs[1]").unwrap(),
+            path,
+            "the anchor round-trips as segments, not as a bracketed name"
+        );
+    }
+
+    #[test]
+    fn card_element_read_reaches_the_kind_schema() {
+        let config = config();
+        let mut doc = seeded_doc(&config);
+        doc.card_mut(0)
+            .unwrap()
+            .store_field("lines", QuillValue::from_json(serde_json::json!(["a *b*"])))
+            .unwrap();
+        let view = TypedReader::new(&config, &doc);
+        assert_eq!(
+            view.card(0).unwrap().get_content_at("lines", &idx(0)).unwrap().unwrap().text,
+            "a *b*"
+        );
+        assert_eq!(view.card(0).unwrap().get_content_at("lines", &idx(4)).unwrap(), None);
     }
 
     #[test]
