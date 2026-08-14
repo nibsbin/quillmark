@@ -1048,6 +1048,24 @@ impl QuillConfig {
                     if collisions.contains(&field_name) {
                         continue;
                     }
+                    // A hoisted field is a card field, so it earns the flat
+                    // path's key gate. Without it a variant could name a `$`
+                    // key or a non-identifier, and the blueprint would emit a
+                    // document that does not parse.
+                    if !Self::is_snake_case_identifier(&field_name) {
+                        errors.push(
+                            Diagnostic::new(
+                                Severity::Error,
+                                format!(
+                                    "Invalid {context} '{field_name}': field keys must be \
+                                     snake_case (lowercase letters, digits, and underscores \
+                                     only), and capitalized field keys are reserved."
+                                ),
+                            )
+                            .with_code("quill::invalid_field_name".to_string()),
+                        );
+                        continue;
+                    }
                     let mut schema = *schema;
                     schema.variant_of = Some(VariantOf {
                         field: name.clone(),

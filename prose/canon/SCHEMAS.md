@@ -66,7 +66,10 @@ existing document and the hand-authorability of the frontmatter.
 
 **Conditional existence is an authoring fact, not a wire one.** Three surfaces
 read it — the blueprint skips an out-of-play field, seeding does not commit one,
-and the must-fill predicate does not oblige one — and the render floor does not:
+and the must-fill predicate does not oblige one — and each resolves the
+discriminant by cutting its own ladder: the render ladder for a document, the
+blueprint's value axis for the form, and the seed cascade (`$seed` overlay
+included) for a seed. The render floor does not read it at all:
 a variant field is declared, blank-filled, and present in the plate projection
 whatever the discriminant reads. A plate therefore reads a variant field
 unconditionally, and the empty-document contract
@@ -99,6 +102,7 @@ lifted field earns the same `ui.group` reference check and the same
 | a `variants:` key outside `values:` (the blank falls out here: it is never a member, so it owns no variant) | `quill::variant_unknown_value` |
 | a variant field name colliding with any other field on the card — flat fields and every variant of every enum, one namespace | `quill::variant_field_collision` |
 | `variants:` below card level (inside `items:` / `properties:`) or on a variant field itself | `quill::variant_placement` |
+| a variant field name that is not a valid field key — a hoisted field is a card field and earns the same gate | `quill::invalid_field_name` |
 
 The one-namespace rule is what keeps coercion value-independent: the effective
 type map is the flat union, so a name resolving to two schemas — which would
@@ -113,9 +117,20 @@ not dropped**: it coerces, it stays authored, and the render floor keeps
 projecting it. An editor flipping a discriminant therefore strands the old
 world's answers without destroying them, which is the behavior every real form
 has; refusing the document instead would force deleting those answers to
-recover. Blank-ness is the field's own [blank](#blank-filled-render), so the
-`integer` / `number` / `boolean` seam applies here too: an authored `0` in an
-out-of-play numeric field is indistinguishable from its blank and never warns.
+recover.
+
+Blank-ness is the field's own [blank](#blank-filled-render), widened by the
+authored shorthands: `Quill::validate` reads the payload *before* coercion, so a
+content leaf rests at `""` and a typed dictionary at `{}` rather than at the
+coerced blank they compare as, and an empty scalar or container is unanswered
+whatever the field's type. The `integer` / `number` / `boolean` seam applies
+here too: an authored `0` in an out-of-play numeric field is indistinguishable
+from its blank and never warns.
+
+The discriminant resolves through the same canonicalization coercion applies, so
+a bare scalar in a `string`-domain enum (`flag: true` where `values:` holds
+`"true"`) puts its variant in play rather than reading as the blank. The axis
+and the plate never disagree about which world a document is in.
 
 #### Emission
 

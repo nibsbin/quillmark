@@ -727,11 +727,7 @@ fn collect_out_of_variant(
         if resolved == variant.value {
             continue;
         }
-        // Absent, null, and the blank are what an out-of-play field should hold.
-        let Some(value) = payload.get(name).filter(|v| !v.as_json().is_null()) else {
-            continue;
-        };
-        if value.as_json() == blank(field).as_json() {
+        if payload.get(name).is_none_or(|v| unanswered(field, v)) {
             continue;
         }
         out.push(out_of_variant_warning(
@@ -740,6 +736,24 @@ fn collect_out_of_variant(
             &resolved,
             &variant.value,
         ));
+    }
+}
+
+/// Whether `value` says "nobody answered here", the state an out-of-play field
+/// should be in. Null and the field's [`blank`] are that; so is an authored
+/// empty scalar or container, because `Quill::validate` reads the payload
+/// *before* coercion and a content leaf rests at `""` rather than at the empty
+/// content the blank compares as.
+fn unanswered(field: &FieldSchema, value: &QuillValue) -> bool {
+    let json = value.as_json();
+    if json.is_null() || *json == *blank(field).as_json() {
+        return true;
+    }
+    match json {
+        serde_json::Value::String(text) => text.is_empty(),
+        serde_json::Value::Object(map) => map.is_empty(),
+        serde_json::Value::Array(items) => items.is_empty(),
+        _ => false,
     }
 }
 

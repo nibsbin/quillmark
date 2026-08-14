@@ -9,6 +9,19 @@ use indexmap::IndexMap;
 
 use super::{CardSchema, FieldSchema};
 use crate::value::QuillValue;
+use crate::SeedOverlay;
+
+/// A discriminant's authored text, canonicalizing the bare scalars a `string`/
+/// `enum` field adopts at coercion (`true`, `47`). Without it the variant axis
+/// and coercion disagree: the plate lowers `flag: true` to `"true"` and puts the
+/// variant in play while the axis reads the blank and calls it out.
+fn authored_text(value: &QuillValue) -> String {
+    value
+        .as_str()
+        .map(str::to_string)
+        .or_else(|| super::config::scalar_as_string(value.as_json()))
+        .unwrap_or_default()
+}
 
 /// Whether `field` is in play when each discriminant resolves through
 /// `resolve`. The blank is no member, so it activates nothing.
@@ -29,7 +42,7 @@ pub(crate) fn document_value(
     // Null ≡ absent, so only those two fall through to the schema rung: an
     // authored blank is an answer, and it activates nothing.
     if let Some(value) = authored.filter(|v| !v.as_json().is_null()) {
-        return value.as_str().unwrap_or_default().to_string();
+        return authored_text(value);
     }
     card.fields
         .get(name)
@@ -55,9 +68,15 @@ pub(crate) fn blueprint_value(card: &CardSchema, name: &str) -> String {
         .to_string()
 }
 
-/// The discriminant value a **seed** renders: `example:` (the one source seeding
-/// commits) › `default:` › blank.
-pub(crate) fn seed_value(card: &CardSchema, name: &str) -> String {
+/// The discriminant value a **seed** renders: `$seed` overlay › `example:` (the
+/// one source seeding commits) › `default:` › blank. The overlay leads for the
+/// same reason it leads on every other field — supplying one is a template
+/// author deciding — and a seed that skipped it would commit a card whose own
+/// discriminant names a world its fields were drawn from another.
+pub(crate) fn seed_value(card: &CardSchema, name: &str, overlay: Option<&SeedOverlay>) -> String {
+    if let Some(value) = overlay.and_then(|o| o.fields.get(name)) {
+        return authored_text(value);
+    }
     let Some(field) = card.fields.get(name) else {
         return String::new();
     };

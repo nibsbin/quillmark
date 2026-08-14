@@ -426,6 +426,70 @@ fn two_discriminants_on_one_card_stay_independent() {
     );
 }
 
+/// A hoisted field is a card field, so it earns the flat path's key gate.
+/// Without it a variant could name a `$` key and the blueprint would emit a
+/// document with a duplicate mapping key, breaking its parseability guarantee.
+#[test]
+fn a_variant_field_name_must_be_a_valid_field_key() {
+    for bad in ["$kind", "$quill", "$body", "Foo", "bad-name", "9x", "a b"] {
+        let codes = load_err(&format!(
+            "    level:\n      type: enum\n      values: [a]\n      default: a\n      variants:\n        a:\n          \"{bad}\": {{ type: string, default: \"\" }}\n"
+        ));
+        assert!(
+            codes.contains(&"quill::invalid_field_name".to_string()),
+            "{bad:?} must be rejected: {codes:?}"
+        );
+    }
+}
+
+/// The variant axis and coercion must read one discriminant. Coercion adopts a
+/// bare scalar's canonical text, so an axis reading `as_str()` alone would call
+/// the field out of play while the plate puts it in.
+#[test]
+fn a_bare_scalar_discriminant_reads_as_its_coerced_text() {
+    let bare = "    flag:\n      type: enum\n      values: [\"true\", \"false\"]\n      default: \"false\"\n      variants:\n        \"true\":\n          why: { type: string }\n";
+    let quill = quill_from_yaml(&yaml(bare));
+
+    let authored = doc("flag: true\nwhy: because\n");
+    assert!(
+        !diags(&quill, &authored)
+            .iter()
+            .any(|(code, _)| code == "validation::out_of_variant"),
+        "the field is in play: the plate lowers `flag: true` to `\"true\"`"
+    );
+    assert_eq!(
+        config(bare).compile_data(&authored).expect("renders")["why"],
+        "because"
+    );
+    // The converse leak: an in-play obligation must not go silent either.
+    assert!(
+        diags(&quill, &doc("flag: true\n")).contains(&(
+            "validation::must_fill".to_string(),
+            "main.why".to_string()
+        )),
+        "an in-play must-fill cell still warns under a bare-scalar discriminant"
+    );
+}
+
+/// `Quill::validate` reads the payload before coercion, so a content leaf rests
+/// at `""` and a typed dict at `{}` rather than at the coerced blank. Comparing
+/// against the blank alone would warn at an already-clear field, with no edit
+/// that resolves it.
+#[test]
+fn an_uncoerced_blank_out_of_play_field_is_silent() {
+    let shapes = "    level:\n      type: enum\n      values: [p, q]\n      default: p\n      variants:\n        q:\n          rt: { type: richtext }\n          obj: { type: object, properties: { a: { type: string } } }\n          arr: { type: array, items: { type: string } }\n";
+    let found = diags(
+        &quill_from_yaml(&yaml(shapes)),
+        &doc("level: p\nrt: \"\"\nobj: {}\narr: []\n"),
+    );
+    assert!(
+        !found
+            .iter()
+            .any(|(code, _)| code == "validation::out_of_variant"),
+        "{found:?}"
+    );
+}
+
 #[test]
 fn blank_is_unchanged_by_the_variant_axis() {
     let config = config(CLASSIFICATION);

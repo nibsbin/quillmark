@@ -307,3 +307,42 @@ fn well_formed_seed_overlay_yields_no_seed_diagnostics() {
         "a well-formed overlay should produce no seed diagnostics: {diags:?}",
     );
 }
+
+/// The overlay leads the variant axis as it leads every other field: supplying
+/// one is a template author deciding. Resolving the discriminant from the
+/// schema alone commits a card whose own `action` names a world its fields were
+/// drawn from another, silently dropping the overlay's answer.
+#[test]
+fn a_seed_overlay_naming_a_discriminant_seeds_that_variant() {
+    const VARIANT_QUILL: &str = r#"
+quill: { name: seed_variant, version: "1.0", backend: typst, description: Seed variant test }
+main:
+  fields:
+    title: { type: string, default: "" }
+card_kinds:
+  indorsement:
+    fields:
+      action:
+        type: enum
+        values: [approve, disapprove]
+        default: approve
+        variants:
+          disapprove:
+            reason: { type: string, default: "" }
+"#;
+    let quill = quill_from_yaml(VARIANT_QUILL);
+
+    let card = quill
+        .seed_card(
+            "indorsement",
+            Some(&overlay(json!({"action": "disapprove", "reason": "not in my lane"}))),
+        )
+        .expect("known kind");
+    let fields = card.payload().to_index_map();
+    assert_eq!(fields["action"].as_str(), Some("disapprove"));
+    assert_eq!(fields["reason"].as_str(), Some("not in my lane"));
+
+    // With no overlay the schema default holds, and the other world stays out.
+    let plain = quill.seed_card("indorsement", None).expect("known kind");
+    assert!(plain.payload().to_index_map().get("reason").is_none());
+}
