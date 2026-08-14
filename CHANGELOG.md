@@ -17,6 +17,16 @@
   A field that sets none of them stamps byte-identically to before, and
   `pdfform` is untouched: `form.json` still carries no styling, so the flatten
   path and canvas preview are unchanged.
+- fix(fixtures): the `usaf_memo` indorsement date widget is set in the memo's
+  own 12pt Times and ends on the right margin, where the date it stands in for
+  would have ended. It was auto-sized Helvetica starting at the fill-in rule's
+  left end. Sizing it exposed that the rule-width box clips a real date — "28
+  September 2026" sets 93pt at 12pt Times against a 72pt box, and a fixed size
+  clips where auto-size had silently shrunk — so the widget is now 1.5in and
+  hangs off the rule's right edge, overrunning leftwards into the whitespace a
+  printed date grows into. `date-placeholder-line` seats it with a measured
+  `dx` rather than `place(bottom + right)`, Typst clamping an overflowing
+  alignment back to zero, which leaves `right` indistinguishable from `left`.
 
 - fix(core,wasm,python)!: `EditError::UnknownField` carries the in-field path
   `FieldDecode` and `FieldNotContent` carry. A property an `object` field does

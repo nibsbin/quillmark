@@ -97,12 +97,27 @@
     // bind a text widget to the same schema address: typeable in a PDF reader,
     // and the one thing that gives the *unfilled* date a region to click.
     // 1in matches `date-placeholder-line`'s default rule width.
+    // Styled to match the printed date it stands in for, since the two are
+    // alternatives for the same slot: the memo's Times-alike body face at the
+    // body size (auto-size would fit the widget box instead, landing well under
+    // 12pt and shrinking further as the endorser types), and flush right, so a
+    // typed date ends at the margin exactly where `display-date` puts a filled
+    // one. Right is unreachable through geometry here, the widget being wider
+    // than the text it will hold either way.
+    //
+    // Wider than `date-placeholder-line`'s rule on purpose: the longest date
+    // the memo styles produce ("28 September 2026") sets 93pt at 12pt Times, so
+    // a rule-width widget would clip it. The rule stays 1in, the width a hand
+    // writes on; the widget hangs off the same right edge and overruns it left.
     let dating_field = form-field(
       "Ind_" + str(i) + "_Date",
       type: "text",
-      width: 1in,
+      width: 1.5in,
       height: data.font_size * 1pt,
       field: card.at("$path") + "date",
+      font: "times",
+      size: data.font_size * 1pt,
+      align: "right",
     )
     // The card's `$path` prefix composes its canonical schema addresses
     // (`$cards.indorsement.<n>.…`, per-kind ordinal): the absolute loop

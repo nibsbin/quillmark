@@ -146,8 +146,16 @@
   baseline: 0pt,
   stroke: (bottom: 0.5pt + black),
   // Placed, so a widget that measures differently from the rule cannot stretch
-  // the box the surrounding header line is laid out against.
-  if field != none { place(bottom + left, field) },
+  // the box the surrounding header line is laid out against. Offset so the
+  // widget's *right* edge meets the rule's, that being the edge a date is set
+  // against: a widget wide enough to hold a long date at body size overruns
+  // this rule, and has to overrun it leftwards, into the whitespace a printed
+  // date grows into. `place(bottom + right)` cannot say that — Typst clamps an
+  // overflowing alignment back to zero, leaving it identical to `left` — so the
+  // offset is measured and applied directly.
+  if field != none {
+    context place(bottom + left, dx: width - measure(field).width, field)
+  },
 )
 
 /// Gets the banner color for a classification marking.
