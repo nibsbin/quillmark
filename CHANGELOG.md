@@ -14,6 +14,9 @@
   variant, `UnknownField { field, at }`, matching the two siblings; `field`
   stays a bare field name, and the `edit::unknown_field` code, its `field` arg
   and the whole-field message are unchanged.
+- fix(python): declaring `license-files` ships the `LICENSE` the sdist metadata
+  names, which PyPI rejected the sdist for lacking. v0.104.0 and v0.105.0 are
+  wheels only.
 
 ## v0.105.0 - 2026-08-14
 

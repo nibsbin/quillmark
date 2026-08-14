@@ -1,5 +1,6 @@
 [build-system]
-requires = ["maturin>=1.7,<2.0"]
+# >=1.9.3 puts declared `license-files` at the sdist root, where `License-File` points.
+requires = ["maturin>=1.9.3,<2.0"]
 build-backend = "maturin"
 
 [project]
@@ -8,12 +9,12 @@ dynamic = ["version"]
 description = "Python bindings for Quillmark - a schema-driven document engine"
 authors = [{ name = "Quillmark Contributors" }]
 readme = "README.md"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -32,7 +33,7 @@ Changelog = "https://github.com/borb-sh/quillmark/blob/main/CHANGELOG.md"
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
-    "maturin>=1.7,<2.0",
+    "maturin>=1.9.3,<2.0",
 ]
 
 [tool.maturin]
