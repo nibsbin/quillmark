@@ -13,11 +13,18 @@ use quillmark_fixtures::quills_path;
 
 const PT_PER_IN: f32 = 72.0;
 
-/// Advance width of `"28 September 2026"` — the longest date either memo style
-/// produces — set in 12pt Times-Roman, the face the widget's `/DA` names. The
-/// widget must hold it: auto-size would have shrunk an overlong value to fit,
-/// but a fixed size clips it instead, so the box is what guarantees the fit.
-const LONGEST_DATE_PT: f32 = 93.3;
+/// Advance width of `"September 28, 2026"` — the longest date either memo style
+/// produces, the DAF ordering being wider than USAF's `"28 September 2026"`
+/// (93.32pt) — set in 12pt Times-Roman, the face the widget's `/DA` names. Days
+/// are tabular digits and the year is four of them, so the only free variable is
+/// the month name, making this a measured maximum rather than an estimate.
+///
+/// The widget must hold it: auto-size would have shrunk an overlong value to
+/// fit, but a fixed size clips it instead, so the box is what guarantees the fit.
+const LONGEST_DATE_PT: f32 = 96.32;
+
+/// The seeded document leaves `font_size` at its schema default.
+const DEFAULT_FONT_SIZE_PT: f32 = 12.0;
 
 fn seeded_memo_pdf() -> Vec<u8> {
     let engine = Quillmark::new();
@@ -121,14 +128,19 @@ fn indorsement_date_widget_ends_on_the_right_margin() {
 /// The regression guard for the fixed-size trade-off: auto-size shrinks an
 /// overlong value to fit, a fixed size clips it. Only the box width keeps the
 /// longest real date on the page.
+///
+/// Asserted as a multiple of the body size, not as points, because `font_size`
+/// is a document field with no declared ceiling: a width that merely cleared
+/// 96pt would still clip once a memo raised the size under it.
 #[test]
-fn indorsement_date_widget_fits_the_longest_date_it_can_hold() {
+fn indorsement_date_widget_fits_the_longest_date_at_any_body_size() {
     let pdf = seeded_memo_pdf();
     let [x0, _, x1, _] = rect(widget_object(&pdf, "Ind_0_Date"));
-    let width = x1 - x0;
+    let ems = (x1 - x0) / DEFAULT_FONT_SIZE_PT;
+    let needed = LONGEST_DATE_PT / DEFAULT_FONT_SIZE_PT;
     assert!(
-        width >= LONGEST_DATE_PT,
-        "widget is {width}pt wide, too narrow for the {LONGEST_DATE_PT}pt \
-         \"28 September 2026\" sets at 12pt Times: a value that long would clip"
+        ems >= needed,
+        "widget is {ems:.2}em wide, under the {needed:.2}em \
+         \"September 28, 2026\" sets in Times: a value that long would clip"
     );
 }

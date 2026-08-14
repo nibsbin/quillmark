@@ -96,27 +96,34 @@
     // value-object's `display` closure. A blank one prints as a bare rule, so
     // bind a text widget to the same schema address: typeable in a PDF reader,
     // and the one thing that gives the *unfilled* date a region to click.
-    // 1in matches `date-placeholder-line`'s default rule width.
+    //
     // Styled to match the printed date it stands in for, since the two are
     // alternatives for the same slot: the memo's Times-alike body face at the
     // body size (auto-size would fit the widget box instead, landing well under
-    // 12pt and shrinking further as the endorser types), and flush right, so a
-    // typed date ends at the margin exactly where `display-date` puts a filled
-    // one. Right is unreachable through geometry here, the widget being wider
-    // than the text it will hold either way.
+    // body size and shrinking further as the endorser types), and flush right,
+    // so a typed date ends at the margin exactly where `display-date` puts a
+    // filled one. Right is unreachable through geometry here, the widget being
+    // wider than the text it will hold either way.
     //
-    // Wider than `date-placeholder-line`'s rule on purpose: the longest date
-    // the memo styles produce ("28 September 2026") sets 93pt at 12pt Times, so
-    // a rule-width widget would clip it. The rule stays 1in, the width a hand
-    // writes on; the widget hangs off the same right edge and overruns it left.
+    // Sized in multiples of that face's own size rather than inches, because
+    // `font_size` is a document field with no declared ceiling: an inch width
+    // would stay put while the text inside it grew, and a fixed size clips
+    // where auto-size used to shrink. The longest date either memo style
+    // produces sets just over 8em in Times ("September 28, 2026", the DAF
+    // ordering, at 8.03em; USAF's "28 September 2026" is 7.78em), so 10em
+    // clears the worst case at any body size. Wider than the rule on purpose:
+    // the rule stays the width a hand writes on, and the widget hangs off its
+    // right edge, overrunning leftwards into the whitespace a printed date
+    // grows into.
+    let date_size = data.font_size * 1pt
     let dating_field = form-field(
       "Ind_" + str(i) + "_Date",
       type: "text",
-      width: 1.5in,
-      height: data.font_size * 1pt,
+      width: 10 * date_size,
+      height: date_size,
       field: card.at("$path") + "date",
       font: "times",
-      size: data.font_size * 1pt,
+      size: date_size,
       align: "right",
     )
     // The card's `$path` prefix composes its canonical schema addresses

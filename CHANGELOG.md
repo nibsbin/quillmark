@@ -22,11 +22,16 @@
   would have ended. It was auto-sized Helvetica starting at the fill-in rule's
   left end. Sizing it exposed that the rule-width box clips a real date — "28
   September 2026" sets 93pt at 12pt Times against a 72pt box, and a fixed size
-  clips where auto-size had silently shrunk — so the widget is now 1.5in and
-  hangs off the rule's right edge, overrunning leftwards into the whitespace a
-  printed date grows into. `date-placeholder-line` seats it with a measured
-  `dx` rather than `place(bottom + right)`, Typst clamping an overflowing
-  alignment back to zero, which leaves `right` indistinguishable from `left`.
+  clips where auto-size had silently shrunk — so the widget is now 10em wide
+  and hangs off the rule's right edge, overrunning leftwards into the
+  whitespace a printed date grows into. Sized in ems of its own face rather
+  than inches because `font_size` is a document field with no ceiling: an inch
+  width would stay put while the text inside it grew. 10em clears both
+  orderings at any body size (DAF's "September 28, 2026" is the widest at
+  8.03em; USAF's "28 September 2026" is 7.78em). `date-placeholder-line` seats
+  it with a measured `dx` rather than `place(bottom + right)`, Typst clamping
+  an overflowing alignment back to zero, which leaves `right` indistinguishable
+  from `left`.
 
 - fix(core,wasm,python)!: `EditError::UnknownField` carries the in-field path
   `FieldDecode` and `FieldNotContent` carry. A property an `object` field does
