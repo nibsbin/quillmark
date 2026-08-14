@@ -218,8 +218,8 @@ impl Quill {
     ///
     /// `validation::must_fill` has **two triggers**, covering disjoint failures
     /// under one code: a `!must_fill` marker the document carries
-    /// ([`validate_fills`]), and a schema-side must-fill cell nobody authored
-    /// ([`validate_unauthored`]). Neither subsumes the other — a document that
+    /// (`validate_fills`), and a schema-side must-fill cell nobody authored
+    /// (`validate_unauthored`). Neither subsumes the other — a document that
     /// never saw a blueprint carries no marker, and a seeded `example` is
     /// present, in-domain, and structurally indistinguishable from authored
     /// content — so both run, and the `trigger` arg tells a consumer which
