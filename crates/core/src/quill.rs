@@ -29,8 +29,8 @@ pub use support::UNSUPPORTED_CONSTRUCT;
 pub use tree::FileTreeNode;
 pub use validation::ValidationError;
 pub use types::{
-    BlockConstruct, BodyCardSchema, CardSchema, FieldSchema, FieldType, GroupRegistry, GroupSchema,
-    UiCardSchema, UiFieldSchema,
+    BlockConstruct, BodyCardSchema, CardSchema, FieldSchema, FieldType, FillCondition,
+    GroupRegistry, GroupSchema, MustFillWhen, UiCardSchema, UiFieldSchema,
 };
 
 use std::collections::HashMap;

@@ -447,6 +447,171 @@ impl<'de> Deserialize<'de> for FieldType {
     }
 }
 
+/// The test a [`MustFillWhen`] applies to its condition field's resolved value.
+///
+/// A closed set, so a misspelled operator is a load error rather than a
+/// condition that never fires — the same discipline [`BlockConstruct`] carries,
+/// and for the same reason: a constraint that silently matches nothing is the
+/// unenforced-prose failure this whole surface exists to remove.
+///
+/// The set is closed *and* invertible, which is what lets the diagnostic name
+/// both ways out ("author the field, or change `classification` away from
+/// `CUI`") without the quill author writing either clause.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub enum FillCondition {
+    /// The condition field's resolved value equals this operand.
+    Equals(QuillValue),
+    /// The condition field's resolved value equals one of these operands.
+    In(Vec<QuillValue>),
+    /// The condition field is an array holding this operand as an element.
+    Contains(QuillValue),
+    /// The condition field's resolved value is not its
+    /// [`blank`](crate::quill::blank).
+    NonBlank,
+}
+
+impl FillCondition {
+    /// The operator's wire spelling, and the value riding the diagnostic's
+    /// `conditionOperator` arg.
+    pub fn operator(&self) -> &'static str {
+        match self {
+            Self::Equals(_) => "equals",
+            Self::In(_) => "in",
+            Self::Contains(_) => "contains",
+            Self::NonBlank => "nonblank",
+        }
+    }
+
+    /// The operand, for the operators that carry one: `In`'s list projects as a
+    /// JSON array, `NonBlank` carries none.
+    pub fn operand(&self) -> Option<serde_json::Value> {
+        match self {
+            Self::Equals(v) | Self::Contains(v) => Some(v.as_json().clone()),
+            Self::In(vs) => Some(serde_json::Value::Array(
+                vs.iter().map(|v| v.as_json().clone()).collect(),
+            )),
+            Self::NonBlank => None,
+        }
+    }
+}
+
+/// A **conditional obligation**: the field carrying this must hold a value
+/// whenever `condition` holds of `field`'s resolved value.
+///
+/// This is the obligation axis' one relational form, and it is deliberately
+/// narrow: a rule reads **one** sibling field on the **same card** and obliges
+/// **the field it sits on**. That covers the shape real quills keep writing as
+/// unenforceable `description:` prose ("required when classification is CUI"),
+/// and stops short of a general assertion language. The first constraint it
+/// cannot express — an assertion the obliged field does not own, such as
+/// "a non-empty `distribution` requires `SEE DISTRIBUTION` in `memo_for`" —
+/// is where a card-level predicate block would begin.
+///
+/// **Obliged means non-blank, not merely authored.** Plain `must_fill` asks
+/// whether a human made a call, so writing the field's blank discharges it. A
+/// conditional obligation asks whether the document holds the value its own
+/// rule demands, and an explicitly blank `cui_controlled_by` on a CUI memo does
+/// not: it is the very gap the rule exists to close. The two triggers therefore
+/// answer different questions under one code, and the message says which
+/// ("must not be blank" rather than "must be filled in").
+///
+/// A field declaring this is **not** unconditionally obliged: `must_fill_when`
+/// suppresses the `default:`-presence derivation
+/// ([`must_fill`](FieldSchema::must_fill)), so the two never both fire on one
+/// cell, and declaring `must_fill:` beside it is a load error rather than a
+/// silent precedence rule.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct MustFillWhen {
+    /// The sibling field the condition reads, by name. Card-local: a `main`
+    /// field names another `main` field, a card kind's field names one of its
+    /// own kind's. Resolved at load (`quill::must_fill_when_unknown_field`), so
+    /// a typo is never a rule that quietly never fires.
+    pub field: String,
+    /// The test applied to that field's resolved value (authored › `default:` ›
+    /// blank — the document that renders).
+    pub condition: FillCondition,
+}
+
+/// Wire shape of a `must_fill_when:` block: the condition field plus exactly
+/// one operator key.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MustFillWhenDef {
+    field: String,
+    equals: Option<QuillValue>,
+    r#in: Option<Vec<QuillValue>>,
+    contains: Option<QuillValue>,
+    nonblank: Option<bool>,
+}
+
+impl<'de> Deserialize<'de> for MustFillWhen {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let def = MustFillWhenDef::deserialize(deserializer)?;
+        // Exactly one operator: zero is a rule that cannot fire, and two is a
+        // rule whose meaning depends on a precedence nobody declared.
+        let declared = def.equals.is_some() as usize
+            + def.r#in.is_some() as usize
+            + def.contains.is_some() as usize
+            + def.nonblank.is_some() as usize;
+        if declared != 1 {
+            return Err(serde::de::Error::custom(format!(
+                "must_fill_when takes exactly one condition operator \
+                 (equals, in, contains, or nonblank); found {declared}"
+            )));
+        }
+        let condition = if let Some(v) = def.equals {
+            FillCondition::Equals(v)
+        } else if let Some(vs) = def.r#in {
+            if vs.is_empty() {
+                return Err(serde::de::Error::custom(
+                    "must_fill_when `in:` needs a non-empty list; an empty domain never matches",
+                ));
+            }
+            FillCondition::In(vs)
+        } else if let Some(v) = def.contains {
+            FillCondition::Contains(v)
+        } else {
+            // `nonblank: false` would spell "when the field IS blank". It is a
+            // coherent condition and deliberately absent: the negative form has
+            // no case yet, and admitting it now would fix its spelling before
+            // one exists.
+            match def.nonblank {
+                Some(true) => FillCondition::NonBlank,
+                _ => {
+                    return Err(serde::de::Error::custom(
+                        "must_fill_when `nonblank:` accepts only `true`; the negative form \
+                         (obliged when the condition field IS blank) is not supported",
+                    ))
+                }
+            }
+        };
+        Ok(MustFillWhen {
+            field: def.field,
+            condition,
+        })
+    }
+}
+
+impl Serialize for MustFillWhen {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        // Re-emits the authored form: the condition field plus the one operator
+        // key, so `Quill::schema`'s declaration view round-trips back through
+        // the loader.
+        let mut map = serializer.serialize_map(Some(2))?;
+        map.serialize_entry("field", &self.field)?;
+        match &self.condition {
+            FillCondition::Equals(v) => map.serialize_entry("equals", v)?,
+            FillCondition::In(vs) => map.serialize_entry("in", vs)?,
+            FillCondition::Contains(v) => map.serialize_entry("contains", v)?,
+            FillCondition::NonBlank => map.serialize_entry("nonblank", &true)?,
+        }
+        map.end()
+    }
+}
+
 /// Schema definition for a template field.
 ///
 /// `default` and `example` are both type-valid values with opposite intent:
@@ -490,8 +655,13 @@ pub struct FieldSchema {
     pub example: Option<QuillValue>,
     /// Whether a human must author this cell. Read through
     /// [`must_fill()`](Self::must_fill), never directly: `None` derives from
-    /// `default`.
+    /// `default` and [`must_fill_when`](Self::must_fill_when).
     pub must_fill: Option<bool>,
+    /// A conditional obligation on this cell, read from a sibling field. Its
+    /// presence turns the unconditional obligation off (see
+    /// [`must_fill()`](Self::must_fill)); declaring `must_fill:` beside it is a
+    /// load error.
+    pub must_fill_when: Option<MustFillWhen>,
     pub ui: Option<UiFieldSchema>,
     /// Restricts valid values on string fields. Serializes as `enum`.
     pub enum_values: Option<Vec<String>>,
@@ -526,6 +696,7 @@ struct FieldSchemaDef {
     pub default: Option<QuillValue>,
     pub example: Option<QuillValue>,
     pub must_fill: Option<bool>,
+    pub must_fill_when: Option<MustFillWhen>,
     pub ui: Option<UiFieldSchema>,
     /// The retired `enum:` modifier, parsed only to reject it by name: under
     /// `deny_unknown_fields` an absent binding reports "unknown field `enum`"
@@ -551,6 +722,7 @@ impl FieldSchema {
             default: None,
             example: None,
             must_fill: None,
+            must_fill_when: None,
             ui: None,
             enum_values: None,
             properties: None,
@@ -560,18 +732,27 @@ impl FieldSchema {
         }
     }
 
-    /// Whether a human must author this cell, deriving from `default:` when
-    /// `must_fill:` is unset: a field the quill author declared no value for
-    /// asks for one, a defaulted field does not. The derivation is keyed on
-    /// `default`'s *presence*, so a `default: ""` stays a skippable cell rather
-    /// than becoming a marker.
+    /// Whether a human must author this cell **unconditionally**, deriving from
+    /// `default:` when `must_fill:` is unset: a field the quill author declared
+    /// no value for asks for one, a defaulted field does not. The derivation is
+    /// keyed on `default`'s *presence*, so a `default: ""` stays a skippable
+    /// cell rather than becoming a marker.
+    ///
+    /// A [`must_fill_when`](Self::must_fill_when) suppresses the derivation.
+    /// The point of a conditional obligation is that the cell is obliged *only*
+    /// when its condition holds, so a rule declared on a defaultless field must
+    /// not also inherit the unconditional one — the document would draw two
+    /// diagnostics for one cell, one of them contradicting the rule its author
+    /// wrote. (An explicit `must_fill:` beside a `must_fill_when:` never reaches
+    /// here: it is a load error.)
     ///
     /// Read this rather than the raw [`must_fill`](Self::must_fill) field: the
     /// blueprint's marker, the seeding stamp, the `Quill::validate` predicate,
     /// and the transform schema's `quillmark:must_fill` are one answer, and it
     /// is this one.
     pub fn must_fill(&self) -> bool {
-        self.must_fill.unwrap_or(self.default.is_none())
+        self.must_fill
+            .unwrap_or(self.must_fill_when.is_none() && self.default.is_none())
     }
 
     pub fn from_quill_value(key: String, value: &QuillValue) -> Result<Self, String> {
@@ -584,6 +765,18 @@ impl FieldSchema {
         // `type: enum` requires `values:`; `values:` on any other type, and
         // `enum:` on any type at all, is a hard error.
         let enum_values = Self::resolve_enum_values(&r#type, def.enum_key, def.values)?;
+        // One cell, one obligation. The two keys are not composable — an
+        // unconditional `must_fill` subsumes any condition, and `must_fill:
+        // false` beside a rule denies it — so the pair is refused rather than
+        // resolved by a precedence the author cannot see.
+        if def.must_fill.is_some() && def.must_fill_when.is_some() {
+            return Err(
+                "must_fill and must_fill_when cannot both be declared on one field; \
+                 keep must_fill_when for a conditional obligation, or must_fill for an \
+                 unconditional one"
+                    .to_string(),
+            );
+        }
         Ok(Self {
             name: key.clone(),
             r#type,
@@ -591,6 +784,7 @@ impl FieldSchema {
             default: def.default,
             example: def.example,
             must_fill: def.must_fill,
+            must_fill_when: def.must_fill_when,
             ui: def.ui,
             enum_values,
             properties: if let Some(props) = def.properties {
@@ -695,6 +889,7 @@ impl Serialize for FieldSchema {
             + self.default.is_some() as usize
             + self.example.is_some() as usize
             + self.must_fill.is_some() as usize
+            + self.must_fill_when.is_some() as usize
             + self.ui.is_some() as usize
             + self.enum_values.is_some() as usize
             + self.properties.is_some() as usize
@@ -718,6 +913,9 @@ impl Serialize for FieldSchema {
         // obligation the first time a quill round-tripped through it.
         if let Some(v) = &self.must_fill {
             map.serialize_entry("must_fill", v)?;
+        }
+        if let Some(v) = &self.must_fill_when {
+            map.serialize_entry("must_fill_when", v)?;
         }
         if let Some(v) = &self.ui {
             map.serialize_entry("ui", v)?;

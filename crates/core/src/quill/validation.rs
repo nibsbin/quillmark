@@ -315,6 +315,21 @@ fn verbatim_yaml_scalar(value: &serde_json::Value) -> String {
     }
 }
 
+/// Render a JSON scalar as message text, for a site that supplies its own
+/// delimiters (a backticked span in a sentence). Strings appear **bare**, which
+/// is what separates this from [`verbatim_yaml_scalar`]: that one renders the
+/// token an author *wrote* (`"CUI"`, quotes included, because the quoting is
+/// part of what a type mismatch is about), this one renders the value a sentence
+/// *names* (`CUI`, already inside backticks).
+pub(crate) fn scalar_text(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Array(_) => "[…]".to_string(),
+        serde_json::Value::Object(_) => "{…}".to_string(),
+        other => other.to_string(),
+    }
+}
+
 /// YAML-parsed type name for a JSON value. Distinguishes `integer` from
 /// `number` so diagnostic messages can report the two separately.
 fn yaml_scalar_type(value: &serde_json::Value) -> &'static str {

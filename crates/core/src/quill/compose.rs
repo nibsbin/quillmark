@@ -216,15 +216,19 @@ impl Quill {
     /// `validation::must_fill` warning, the only non-fatal one; the rest are
     /// blockers.
     ///
-    /// `validation::must_fill` has **two triggers**, covering disjoint failures
-    /// under one code: a `!must_fill` marker the document carries
-    /// (`validate_fills`), and a schema-side must-fill cell nobody authored
-    /// (`validate_unauthored`). Neither subsumes the other — a document that
-    /// never saw a blueprint carries no marker, and a seeded `example` is
-    /// present, in-domain, and structurally indistinguishable from authored
-    /// content — so both run, and the `trigger` arg tells a consumer which
-    /// fired. Where both would fire on one path (a bare marker on an unauthored
-    /// cell) the marker wins: its hint is the actionable one.
+    /// `validation::must_fill` has **three triggers**, covering disjoint
+    /// failures under one code: a `!must_fill` marker the document carries
+    /// (`validate_fills`), a schema-side must-fill cell nobody authored
+    /// (`validate_unauthored`), and a conditional obligation whose condition
+    /// holds over a blank cell (`validate_conditional`). None subsumes another —
+    /// a document that never saw a blueprint carries no marker, a seeded
+    /// `example` is present, in-domain, and structurally indistinguishable from
+    /// authored content, and a relational omission is invisible to both — so all
+    /// three run, and the `trigger` arg tells a consumer which fired. Where a
+    /// marker shares a path with either schema-side trigger the marker wins: its
+    /// hint is the actionable one. The two schema-side triggers cannot collide,
+    /// since a `must_fill_when` turns the unconditional obligation off
+    /// ([`FieldSchema::must_fill`](crate::quill::FieldSchema::must_fill)).
     ///
     /// Field values, defaults, and presentation order are not part of this
     /// surface: read them from the [`Document`] payload and the quill schema
@@ -240,6 +244,7 @@ impl Quill {
         diags.extend(
             validate_unauthored(self.config(), doc)
                 .into_iter()
+                .chain(validate_conditional(self.config(), doc))
                 .filter(|d| !claimed.contains(&d.path)),
         );
         diags.extend(self.validate_seed(doc));
@@ -736,6 +741,182 @@ pub(crate) fn unauthored_warning(path: &DocPath) -> Diagnostic {
     )
 }
 
+/// Surface every **conditional** obligation whose condition holds and whose
+/// obliged cell is blank. The third `validation::must_fill` trigger, and the one
+/// that reads a *relation* rather than a cell: `cui_controlled_by` is obliged
+/// because `classification` says `CUI`, not because the schema obliges it
+/// always.
+///
+/// The condition reads the **resolved** ladder (authored › `default:` › blank),
+/// not the raw payload, so a rule keyed on a defaulted value fires on the
+/// document that actually renders rather than on the subset a human happened to
+/// type. `resolve_card_sourced` is the same producer `Quill::resolve` cuts, so
+/// the rule and the editor's field view can never disagree about what a cell
+/// holds.
+fn validate_conditional(config: &QuillConfig, doc: &Document) -> Vec<Diagnostic> {
+    let mut diags = Vec::new();
+    collect_conditional_diags(&config.main, doc.main(), &DocPath::main(), &mut diags);
+    for (index, card) in doc.cards().iter().enumerate() {
+        let Some(schema) = card.kind().and_then(|k| config.card_kind(k)) else {
+            continue;
+        };
+        collect_conditional_diags(schema, card, &DocPath::card(card.kind(), index), &mut diags);
+    }
+    diags
+}
+
+fn collect_conditional_diags(
+    schema: &CardSchema,
+    card: &Card,
+    base: &DocPath,
+    out: &mut Vec<Diagnostic>,
+) {
+    // Resolving the ladder conforms every field, so skip the card outright when
+    // it declares no rule — which is every card in every quill until one opts in.
+    if schema.fields.values().all(|f| f.must_fill_when.is_none()) {
+        return;
+    }
+    let resolved = resolve_card_sourced(schema, card);
+    for (name, field) in &schema.fields {
+        let Some(when) = &field.must_fill_when else {
+            continue;
+        };
+        // The condition field resolves at load (`validate_card_conditions`), so
+        // a miss here means a `QuillConfig` built through serde rather than the
+        // loader. Stay silent: a rule that cannot be read is not a rule broken.
+        let (Some(condition_schema), Some((condition_value, _))) = (
+            schema.fields.get(&when.field),
+            resolved.get(&when.field),
+        ) else {
+            continue;
+        };
+        if !condition_holds(&when.condition, condition_value, condition_schema) {
+            continue;
+        }
+        let obliged_blank = resolved
+            .get(name)
+            .is_none_or(|(value, _)| is_blank_value(field, value));
+        if obliged_blank {
+            out.push(conditional_warning(&base.field(name), when, condition_value));
+        }
+    }
+}
+
+/// Whether `value` (a condition field's resolved value) satisfies `condition`.
+fn condition_holds(
+    condition: &super::FillCondition,
+    value: &QuillValue,
+    schema: &FieldSchema,
+) -> bool {
+    use super::FillCondition;
+    match condition {
+        FillCondition::Equals(operand) => scalar_eq(value, operand),
+        FillCondition::In(operands) => operands.iter().any(|o| scalar_eq(value, o)),
+        FillCondition::Contains(operand) => value
+            .as_json()
+            .as_array()
+            .is_some_and(|elements| {
+                elements
+                    .iter()
+                    .any(|e| scalar_eq(&QuillValue::from_json(e.clone()), operand))
+            }),
+        FillCondition::NonBlank => !is_blank_value(schema, value),
+    }
+}
+
+/// Scalar equality across the authoring leniency: a bare YAML scalar written
+/// into a string-ish field adopts its canonical token (`scalar_as_string`), so
+/// an operand authored as `equals: 12` must still match the `"12"` the document
+/// carries. Without this the two sides could be equal on the page and unequal
+/// here, which is the silent-never-fires failure the load-time domain check
+/// exists to prevent.
+fn scalar_eq(value: &QuillValue, operand: &QuillValue) -> bool {
+    let (a, b) = (value.as_json(), operand.as_json());
+    if a == b {
+        return true;
+    }
+    let text = |v: &serde_json::Value| {
+        v.as_str()
+            .map(str::to_string)
+            .or_else(|| super::config::scalar_as_string(v))
+    };
+    match (text(a), text(b)) {
+        (Some(a), Some(b)) => a == b,
+        _ => false,
+    }
+}
+
+/// Whether `value` is `field`'s [`blank`]: the resolved-value spelling of
+/// "nobody said anything", and what a conditional obligation demands the
+/// document move off.
+fn is_blank_value(field: &FieldSchema, value: &QuillValue) -> bool {
+    value.as_json() == blank(field).as_json()
+}
+
+pub(crate) fn conditional_warning(
+    path: &DocPath,
+    when: &super::MustFillWhen,
+    observed: &QuillValue,
+) -> Diagnostic {
+    use super::FillCondition;
+    let path = path.to_string();
+    let condition_field = &when.field;
+    let observed_text = super::validation::scalar_text(observed.as_json());
+    // Both clauses come off the same closed operator set, so the sentence and
+    // its exit are generated rather than authored: a quill states the rule once
+    // and the diagnostic reads as well as a type error's.
+    let (because, exit) = match &when.condition {
+        FillCondition::Equals(v) => {
+            let token = super::validation::scalar_text(v.as_json());
+            (
+                format!("`{condition_field}` is `{token}`"),
+                format!("change `{condition_field}` away from `{token}`"),
+            )
+        }
+        FillCondition::In(vs) => {
+            let tokens: Vec<String> = vs
+                .iter()
+                .map(|v| format!("`{}`", super::validation::scalar_text(v.as_json())))
+                .collect();
+            (
+                format!("`{condition_field}` is `{observed_text}`"),
+                format!(
+                    "change `{condition_field}` to a value outside {}",
+                    tokens.join(", ")
+                ),
+            )
+        }
+        FillCondition::Contains(v) => {
+            let token = super::validation::scalar_text(v.as_json());
+            (
+                format!("`{condition_field}` contains `{token}`"),
+                format!("remove `{token}` from `{condition_field}`"),
+            )
+        }
+        FillCondition::NonBlank => (
+            format!("`{condition_field}` is not blank"),
+            format!("clear `{condition_field}`"),
+        ),
+    };
+
+    let mut diag = Diagnostic::new(
+        Severity::Warning,
+        format!("Field `{path}` must not be blank: {because}."),
+    )
+    .with_code("validation::must_fill".to_string())
+    .with_path(path.clone())
+    .with_arg("trigger", "conditional".into())
+    .with_arg("conditionField", condition_field.as_str().into())
+    .with_arg("conditionOperator", when.condition.operator().into())
+    .with_hint(format!("Either author `{path}`, or {exit}."));
+    if let Some(operand) = when.condition.operand() {
+        diag = diag.with_arg("conditionOperand", operand);
+    }
+    diag
+}
+
+#[cfg(test)]
+mod conditional_fill_tests;
 #[cfg(test)]
 mod must_fill_tests;
 

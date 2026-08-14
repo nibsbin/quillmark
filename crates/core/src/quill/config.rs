@@ -9,7 +9,9 @@ use crate::error::{Diagnostic, Severity, diag_args};
 use crate::value::QuillValue;
 
 use super::types::{RICHTEXT_INLINE_TOKEN_MSG, UI_ORDER_REMOVED_MSG};
-use super::{BodyCardSchema, CardSchema, FieldSchema, FieldType, GroupRegistry, UiCardSchema};
+use super::{
+    BodyCardSchema, CardSchema, FieldSchema, FieldType, FillCondition, GroupRegistry, UiCardSchema,
+};
 
 /// Canonical string text for a bare scalar unambiguously representable as a
 /// string: a boolean (`true`/`false`) or number (`47`, `1.0`). `None` for
@@ -851,6 +853,24 @@ impl QuillConfig {
             );
         }
 
+        // A conditional obligation names its condition field by bare name, and
+        // that name is resolved against the *card's* fields. Inside an object
+        // property or an array element there is no such namespace to resolve
+        // against — a row of a typed table has siblings the card does not see,
+        // and a card field the row cannot name — so the rule is rejected here
+        // rather than given a scope nobody could predict.
+        if position != ShapePosition::Top && schema.must_fill_when.is_some() {
+            return err(
+                "quill::nested_must_fill_when",
+                format!(
+                    "Field '{owner}' declares must_fill_when in a nested position. A \
+                     conditional obligation reads a sibling field on the same card, so it \
+                     is valid only on a card-level field, not on an object property or an \
+                     array item."
+                ),
+            );
+        }
+
         match schema.r#type {
             FieldType::Object => {
                 // An object nested inside another object (a Leaf position) is
@@ -1126,6 +1146,138 @@ impl QuillConfig {
                              from each field's ui.group."
                                 .to_string(),
                         ),
+                    );
+                }
+            }
+        }
+    }
+
+    /// Resolve every `must_fill_when:` on a card against that card's own
+    /// fields: the condition field must exist, must not be the obliged field
+    /// itself, must carry a shape the operator can read, and — where it declares
+    /// a finite domain — must actually admit the operand.
+    ///
+    /// The domain check is the one that earns its keep. A rule reading
+    /// `equals: cui` against a `values: [CUI, …]` enum is well-formed, loads
+    /// clean, and never fires: it is unenforceable constraint prose wearing a
+    /// predicate's syntax, which is the exact failure this surface exists to
+    /// remove. Catching it at load is what makes a declared rule a checked one.
+    ///
+    /// Nested rules are rejected upstream by
+    /// [`validate_field_schema_shape`](Self::validate_field_schema_shape), so
+    /// only card-level fields are considered here.
+    fn validate_card_conditions(label: &str, card: &CardSchema, errors: &mut Vec<Diagnostic>) {
+        for (name, field) in &card.fields {
+            let Some(when) = &field.must_fill_when else {
+                continue;
+            };
+            let condition_field = &when.field;
+
+            if condition_field == name {
+                errors.push(
+                    Diagnostic::new(
+                        Severity::Error,
+                        format!(
+                            "{label} field '{name}' declares must_fill_when on itself. A \
+                             conditional obligation reads a *sibling* field; a rule \
+                             conditioned on the cell it obliges can never be discharged."
+                        ),
+                    )
+                    .with_code("quill::must_fill_when_self_reference".to_string()),
+                );
+                continue;
+            }
+
+            let Some(target) = card.fields.get(condition_field) else {
+                errors.push(
+                    Diagnostic::new(
+                        Severity::Error,
+                        format!(
+                            "{label} field '{name}' declares must_fill_when on \
+                             '{condition_field}', which is not a field of this card."
+                        ),
+                    )
+                    .with_code("quill::must_fill_when_unknown_field".to_string())
+                    .with_hint(format!(
+                        "Name a field declared on the same card. A rule may not reach into \
+                         another card kind, and '{condition_field}' is not declared here."
+                    )),
+                );
+                continue;
+            };
+
+            let operator = when.condition.operator();
+            let shape_error = match &when.condition {
+                FillCondition::Contains(_) if target.r#type != FieldType::Array => Some(format!(
+                    "'contains' reads an array element, but '{condition_field}' is type: {}",
+                    target.r#type.as_str()
+                )),
+                FillCondition::Equals(_) | FillCondition::In(_)
+                    if matches!(target.r#type, FieldType::Array | FieldType::Object) =>
+                {
+                    Some(format!(
+                        "'{operator}' compares a scalar value, but '{condition_field}' is \
+                         type: {}",
+                        target.r#type.as_str()
+                    ))
+                }
+                _ => None,
+            };
+            if let Some(reason) = shape_error {
+                errors.push(
+                    Diagnostic::new(
+                        Severity::Error,
+                        format!("{label} field '{name}' declares must_fill_when where {reason}."),
+                    )
+                    .with_code("quill::must_fill_when_operator".to_string())
+                    .with_hint(
+                        "Use 'contains' for an array field, 'equals'/'in' for a scalar one, \
+                         or 'nonblank: true' for either."
+                            .to_string(),
+                    ),
+                );
+                continue;
+            }
+
+            // A `contains` operand is compared against array *elements*, so the
+            // domain that governs it is the item schema's, not the array's.
+            let domain_owner = match &when.condition {
+                FillCondition::Contains(_) => target.items.as_deref(),
+                _ => Some(target),
+            };
+            let Some(values) = domain_owner.and_then(|f| f.enum_values.as_ref()) else {
+                continue;
+            };
+            let operands: Vec<&QuillValue> = match &when.condition {
+                FillCondition::Equals(v) | FillCondition::Contains(v) => vec![v],
+                FillCondition::In(vs) => vs.iter().collect(),
+                FillCondition::NonBlank => vec![],
+            };
+            for operand in operands {
+                // The accepted domain is `values ∪ blank` everywhere a value is
+                // checked, and a rule keyed on the blank is legitimate ("obliged
+                // when nobody has chosen"), so the blank passes here too.
+                let admitted = operand
+                    .as_json()
+                    .as_str()
+                    .is_some_and(|s| s.is_empty() || values.iter().any(|v| v == s));
+                if !admitted {
+                    let token = crate::quill::validation::scalar_text(operand.as_json());
+                    errors.push(
+                        Diagnostic::new(
+                            Severity::Error,
+                            format!(
+                                "{label} field '{name}' declares must_fill_when \
+                                 {operator}: {token}, which is not a member of \
+                                 '{condition_field}''s domain {values:?}. The rule could \
+                                 never fire."
+                            ),
+                        )
+                        .with_code("quill::must_fill_when_domain".to_string())
+                        .with_hint(format!(
+                            "Use one of {values:?} (or \"\" for the blank), or correct \
+                             '{condition_field}''s values: list."
+                        )),
                     );
                 }
             }
@@ -1828,6 +1980,18 @@ impl QuillConfig {
                 card,
                 &mut errors,
                 &mut warnings,
+            );
+        }
+
+        // Resolve each card's conditional obligations against its own fields.
+        // Same shape as the group pass, and for the same reason: a `must_fill_when`
+        // names a sibling, so it cannot be checked until the whole card is parsed.
+        Self::validate_card_conditions("main", &main, &mut errors);
+        for card in &card_kinds {
+            Self::validate_card_conditions(
+                &format!("card_kinds.{}", card.name),
+                card,
+                &mut errors,
             );
         }
 
