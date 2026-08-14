@@ -154,3 +154,38 @@ fn a_plaintext_delimiter_is_one_addressable_cluster() {
         "a hit on `*` floors to the delimiter's own offset, never inside its escape"
     );
 }
+
+#[test]
+fn a_click_sweep_across_a_plaintext_element_walks_every_offset_once() {
+    let temp_dir = TempDir::new().unwrap();
+    let session = session(&temp_dir);
+    let region = session
+        .regions()
+        .into_iter()
+        .find(|r| r.field == "tags.0")
+        .expect("tags.0 region");
+
+    // Finer than the narrowest glyph at 11pt: a skipped offset is the
+    // inversion's, not the probe's.
+    const STEP: f32 = 0.25;
+    let y = region.rect[3] - 3.0;
+    let mut walk: Vec<usize> = Vec::new();
+    let mut x = region.rect[0];
+    while x <= region.rect[2] {
+        if let Some(hit) = session.position_at(region.page, x, y) {
+            assert_eq!(hit.field, "tags.0");
+            assert_eq!(hit.granularity, Some(HitGranularity::Cluster));
+            if walk.last() != Some(&hit.pos) {
+                walk.push(hit.pos);
+            }
+        }
+        x += STEP;
+    }
+
+    let expected: Vec<usize> = (0..STAR_TAG.chars().count()).collect();
+    assert_eq!(
+        walk, expected,
+        "one content offset per cluster: an escape resolving to its own interior \
+         would repeat, skip, or shift the tail"
+    );
+}
