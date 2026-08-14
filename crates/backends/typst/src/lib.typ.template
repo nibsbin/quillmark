@@ -131,11 +131,11 @@
   field: field,
 )
 
-/// Claim the ink `body` draws for schema field `field`, so a preview routes it
-/// the way it routes content the field generated: `session.regions()` lists it
-/// and `session.fieldAt(..)` resolves a click on it. For presentations a plate
-/// composes rather than reads straight off `data`: a banner keyed on
-/// `data.classification`, a package-built address block, a computed table.
+/// Claim the ink `body` draws for schema field `field`, so `session.regions()`
+/// lists it and `session.fieldAt(..)` resolves a click on it, exactly as for
+/// content the field generated. For presentations a plate composes rather than
+/// reads straight off `data`: a banner keyed on `data.classification`, a
+/// package-built address block, a computed table.
 ///
 /// Layout-neutral. `body` is returned untouched, bracketed by two invisible
 /// `metadata` markers; the backend claims the ink between them.
@@ -143,9 +143,9 @@
 /// It is a **fallback** claim, not an override: ink already tracked to a field
 /// (a richtext field's generated block, a `data.<field>` reference in the plate,
 /// a nested `field-region`) keeps that field, and this wrapper takes only what
-/// nothing more specific took. So wrapping never moves a region off its field,
-/// and nesting reads as ordinary scoping. Ink Typst attributes to no source
-/// position (list bullets, underline rules) stays unclaimed here as everywhere.
+/// nothing more specific took, so wrapping never moves a region off its field.
+/// Ink Typst attributes to no source position (list bullets, underline rules)
+/// stays unclaimed here as everywhere.
 ///
 /// `field` is a schema address, same grammar as `form-field`'s `field:`, but
 /// it need not be a literal: each *call* claims independently, so a wrapper

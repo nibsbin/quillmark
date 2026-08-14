@@ -61,9 +61,6 @@ fn a_claim_surfaces_as_a_region_and_answers_field_at() {
     );
 }
 
-/// The banner's text is `data.classification` laundered through `upper`, so the
-/// scalar site owns it and the claim owns the box the plate drew around it:
-/// wrapping adds a region, it never moves one.
 #[test]
 fn a_claim_does_not_displace_a_nested_scalar_site() {
     let plate = r#"

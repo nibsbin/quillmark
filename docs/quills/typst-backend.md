@@ -294,7 +294,7 @@ Each **call** claims independently, so `field` need not be a literal and a wrapp
 }
 ```
 
-That is the way to give a card's *scalar* fields regions: read from the loop variable they carry no per-instance identity of their own.
+That is the way to give a card's *scalar* fields regions: read from the loop variable, they carry no per-instance identity of their own.
 
 ### Parameters and errors
 

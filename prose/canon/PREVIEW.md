@@ -197,7 +197,7 @@ two invisible `metadata` markers, and the frame walk claims for `field` every
 piece of ink between them that resolves to no window. It is a **fallback**
 claim, not an override: content blocks, scalar sites, and nested
 `field-region`s inside keep their own field, so wrapping only ever adds a
-region, and nesting reads as ordinary scoping. Each *call* claims separately,
+region. Each *call* claims separately,
 so a wrapper invoked once per card with a `$path`-composed address is one
 region per card. Ink attributable to no source position at all (list bullets,
 underline rules) stays unclaimed here as everywhere.

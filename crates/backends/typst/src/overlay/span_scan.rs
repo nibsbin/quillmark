@@ -20,10 +20,8 @@
 //! on a field, a package-built block). The helper's `field-region` brackets such
 //! content with two invisible `metadata` markers, and the frame walk keeps a
 //! stack of the open ones: ink that resolves to no window is claimed by the
-//! innermost open marker instead of counting as foreign. Span-tracked ink nested
-//! inside keeps its own field, so a claim only takes what nothing more specific
-//! took. Each *call* is its own claim, so a wrapper invoked per card yields one
-//! region per card.
+//! innermost open marker instead of counting as foreign. Each *call* is its own
+//! claim, so a wrapper invoked per card yields one region per card.
 //!
 //! **First placement only.** Each span-window key's region is its first maximal
 //! run of consecutive matching frame items. Span data cannot distinguish
@@ -125,7 +123,7 @@ struct Hit {
     rect: Option<Aabb>,
 }
 
-/// One box-accruing bucket: a span window's segment, or a `field-region` call.
+/// One box-accruing bucket in the run scan.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum Key {
     /// A source window and, on a content window, the segment inside it.
@@ -171,9 +169,9 @@ impl HitClass {
 }
 
 /// `(w, None)` splits by window kind: on a segment-less window it is the whole
-/// placement's boxable key; on a content window it is inter-segment ink. A span
-/// resolving to no window falls through to `marker`, the innermost open
-/// `field-region`, which is why nested tracked ink outranks a wrapper.
+/// placement's boxable key; on a content window it is inter-segment ink. Falling
+/// through to `marker` only on an unresolved span is what makes nested tracked
+/// ink outrank an enclosing `field-region`.
 fn hit_class(
     resolved: Option<(usize, Option<usize>)>,
     detached: bool,
@@ -199,8 +197,7 @@ fn hit_class(
 const REGION_LABEL: &str = "__qm_region__";
 
 /// The `field-region` calls open at the current point of the frame walk, and
-/// every claim the walk has discovered. One claim per call, so a wrapper
-/// invoked per card claims per card.
+/// every claim the walk has discovered.
 #[derive(Default)]
 struct Markers {
     claims: Vec<String>,
@@ -339,9 +336,8 @@ fn collect_page_hits(
 }
 
 /// The marker half of [`collect_page_hits`] for a page whose ink a query
-/// discards: a claim that opens here may still cover the page the query wants,
-/// and skipping the per-glyph walk keeps the cost of that lookbehind in frame
-/// items rather than glyphs.
+/// discards, since a claim opening there may still cover the page it wants.
+/// Skipping the per-glyph walk keeps that lookbehind linear in frame items.
 fn scan_markers(frame: &Frame, markers: &mut Markers) {
     for (_, item) in frame.items() {
         match item {
@@ -1232,8 +1228,7 @@ main:
       description: a scalar the plate interpolates
 "#;
 
-    /// A whole session's region view: generated content windows, the plate's
-    /// scalar sites, and whatever the frame walk's markers claim.
+    /// Mirrors `open`'s window assembly, so a probe reads what a session would.
     fn probe_regions(plate: &str, data: serde_json::Value) -> Vec<RenderedRegion> {
         let q = quill(REGION_YAML, plate);
         let plate_src = crate::read_plate(&q).expect("plate");
@@ -1295,8 +1290,6 @@ main:
         );
     }
 
-    /// The fallback semantic: wrapping never moves a region off the field that
-    /// already owns the ink.
     #[test]
     fn field_region_yields_to_the_fields_nested_inside_it() {
         const PLATE: &str = r#"
@@ -1318,8 +1311,6 @@ main:
         );
     }
 
-    /// A scalar reference site is more specific than an enclosing wrapper, the
-    /// same way a generated content block is.
     #[test]
     fn a_nested_scalar_reference_outranks_the_wrapper() {
         const PLATE: &str = r#"
@@ -1334,8 +1325,8 @@ main:
         );
     }
 
-    /// Each call claims independently, so a per-card wrapper is one region per
-    /// card rather than one shared first placement.
+    /// Two calls must not collapse into one shared first placement, or a
+    /// per-card wrapper would surface a single card.
     #[test]
     fn each_field_region_call_claims_separately() {
         const PLATE: &str = r#"
@@ -1351,8 +1342,8 @@ Interleaved plate chrome.
         assert_eq!(claimed, 2, "one region per call: {regions:?}");
     }
 
-    /// Interruptions inside a claim must not truncate it: unlike a span window,
-    /// a marker's extent is explicit, so there is no second-placement ambiguity.
+    /// An interruption must not truncate a claim: its extent is explicit, so
+    /// there is no second-placement ambiguity to be conservative about.
     #[test]
     fn a_claim_accrues_across_an_interruption() {
         const PLATE: &str = r#"
