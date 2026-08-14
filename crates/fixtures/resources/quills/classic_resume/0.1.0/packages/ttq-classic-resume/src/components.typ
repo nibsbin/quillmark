@@ -74,7 +74,7 @@
       align(right, text(weight: "bold", heading-right)),
     )
 
-    if subheading-left != none or subheading-right != none {
+    if subheading-left not in (none, "") or subheading-right not in (none, "") {
       cells.push(align(left, text(style: "italic", subheading-left)))
       cells.push(align(right, text(style: "italic", subheading-right)))
     }
@@ -158,7 +158,9 @@
       row-gutter: config.leading,
       align(left, text(weight: "bold", name)),
       align(right, {
-        if url != none {
+        // A plate driven by a schema sends the empty string, not `none`, for an
+        // unset optional string: both mean "no URL, render nothing here".
+        if url not in (none, "") {
           // Only hyperlink if it looks like a URL
           if url.starts-with("http") {
             text(size: 8pt, font: "Courier New", emph(link(url)[#url]))

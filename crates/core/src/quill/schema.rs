@@ -22,6 +22,20 @@ pub const QUILLMARK_INLINE_KEY: &str = "quillmark:inline";
 /// formatting-free surface and to author/project through the literal codec.
 pub const QUILLMARK_PLAIN_KEY: &str = "quillmark:plain";
 
+/// Transform-schema keyword carrying an `enum` blank's label (`ui.blank_title`).
+/// Emitted only when the author names one; absent, a consumer supplies its own
+/// conventional label.
+pub const QUILLMARK_BLANK_TITLE_KEY: &str = "quillmark:blank_title";
+
+/// Transform-schema keyword carrying whether a human must author the field
+/// ([`FieldSchema::must_fill`](crate::quill::FieldSchema::must_fill)). Emitted
+/// on every field, always resolved: the obligation is not derivable from this
+/// projection, which carries no `default:`.
+///
+/// It is an authoring affordance, not a submit gate. An unfilled field renders,
+/// and enforcement — if a consumer wants any — is that consumer's policy.
+pub const QUILLMARK_MUST_FILL_KEY: &str = "quillmark:must_fill";
+
 /// Build a JSON-Schema-shaped descriptor of a [`QuillConfig`]'s main + card fields.
 ///
 /// The descriptor marks richtext fields with `contentMediaType:
@@ -37,6 +51,14 @@ pub const QUILLMARK_PLAIN_KEY: &str = "quillmark:plain";
 pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
     fn field_to_schema(field: &FieldSchema) -> serde_json::Value {
         let mut schema = serde_json::Map::new();
+        // In the prelude, not a type arm: the enum arm returns early below, and
+        // an enum is the type an obligation matters most for. The *derived*
+        // answer crosses, not the raw `Option` — a consumer reading this
+        // projection should never have to re-run the `default:` derivation.
+        schema.insert(
+            QUILLMARK_MUST_FILL_KEY.to_string(),
+            serde_json::Value::Bool(field.must_fill()),
+        );
         // A finite domain projects to the idiomatic JSON-Schema spelling
         // `{type: string, enum: [...]}`: exactly what a backend dispatches on
         // today (a plain string), plus the domain. Keyed on the domain, as the
@@ -47,15 +69,25 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
                 "type".to_string(),
                 serde_json::Value::String("string".to_string()),
             );
+            // The model layer keeps `""` out of `values:` (it is not a choice),
+            // but this projection describes what is *wire-valid*, and the blank
+            // is: without it a standard JSON-Schema validator rejects a value
+            // the engine accepts.
             schema.insert(
                 "enum".to_string(),
                 serde_json::Value::Array(
-                    values
-                        .iter()
-                        .map(|v| serde_json::Value::String(v.clone()))
+                    std::iter::once(String::new())
+                        .chain(values.iter().cloned())
+                        .map(serde_json::Value::String)
                         .collect(),
                 ),
             );
+            if let Some(blank_title) = field.ui.as_ref().and_then(|u| u.blank_title.as_ref()) {
+                schema.insert(
+                    QUILLMARK_BLANK_TITLE_KEY.to_string(),
+                    serde_json::Value::String(blank_title.clone()),
+                );
+            }
             return serde_json::Value::Object(schema);
         }
         match field.r#type {
@@ -234,6 +266,34 @@ mod tests {
     }
 
     #[test]
+    fn must_fill_is_resolved_and_reaches_every_type() {
+        let yaml = r#"
+quill:
+  name: x
+  version: 1.0.0
+  backend: typst
+  description: x
+main:
+  fields:
+    severity:   { type: enum, values: [low, high] }
+    status:     { type: string, default: draft }
+    confirmed:  { type: string, default: draft, must_fill: true }
+    optional:   { type: string, must_fill: false }
+"#;
+        let json = build_from_yaml(yaml).as_json().clone();
+        let flag = |name: &str| json["properties"][name][QUILLMARK_MUST_FILL_KEY].clone();
+
+        // The enum arm returns before the type match, so a key placed in a type
+        // arm would miss the one type an obligation matters most for.
+        assert_eq!(flag("severity"), serde_json::json!(true));
+        // Derived, not raw: a consumer reading this projection sees no
+        // `default:` and so cannot re-run the derivation itself.
+        assert_eq!(flag("status"), serde_json::json!(false));
+        assert_eq!(flag("confirmed"), serde_json::json!(true));
+        assert_eq!(flag("optional"), serde_json::json!(false));
+    }
+
+    #[test]
     fn enum_carries_its_domain_at_every_depth() {
         let yaml = r#"
 quill:
@@ -257,13 +317,23 @@ main:
 "#;
         let schema = build_from_yaml(yaml);
         let json = schema.as_json();
-        let domain = serde_json::json!({ "type": "string", "enum": ["UNCLASSIFIED", "CUI"] });
+        // The blank leads the domain: the projection describes what is
+        // wire-valid, and every enum accepts its blank.
+        let domain = serde_json::json!({
+            "type": "string",
+            "enum": ["", "UNCLASSIFIED", "CUI"],
+            QUILLMARK_MUST_FILL_KEY: true,
+        });
         assert_eq!(json["properties"]["classification"], domain);
         // The domain survives the recursion into an array's element object: a
-        // consumer building a validator sees it at the leaf too.
+        // consumer building a validator sees it, blank and all, at the leaf too.
         assert_eq!(
             json["properties"]["endorsements"]["items"]["properties"]["action"],
-            serde_json::json!({ "type": "string", "enum": ["approve", "disapprove"] })
+            serde_json::json!({
+                "type": "string",
+                "enum": ["", "approve", "disapprove"],
+                QUILLMARK_MUST_FILL_KEY: true,
+            })
         );
     }
 

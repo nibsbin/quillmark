@@ -112,7 +112,6 @@ main:
     classification:
       type: enum
       values:
-        - ""
         - UNCLASSIFIED
         - CUI
         - CONFIDENTIAL
@@ -281,7 +280,6 @@ card_kinds:
       action:
         type: enum
         values:
-          - ""
           - undecided
           - approve
           - disapprove

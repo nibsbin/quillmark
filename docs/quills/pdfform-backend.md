@@ -189,7 +189,7 @@ The background owns all visual chrome; each widget is a transparent input over i
 
 Each field's value comes from the **resolver**: for every bound field, the backend dereferences its `schema_field` against your document data and coerces it to the field's derived widget kind.
 
-- **Bound against the same validated data the Typst plate sees.** Schema validation, defaults, zero-fill, and scalar coercion are all inherited: there is no second data pipeline.
+- **Bound against the same validated data the Typst plate sees.** Schema validation, defaults, blank-fill, and scalar coercion are all inherited: there is no second data pipeline.
 - **Addressing** is a shallow path rooted at a schema field name, optionally with an array index or nested key: `full_name`, `comments.0`, `address.street`. The path is validated against the schema at load: a `.N` segment requires an array, a `.key` segment requires an object, and any miss is a `pdfform::dangling_binding` load error naming the failing segment.
 - **Coercion is type-directed:**
 

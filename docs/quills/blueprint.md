@@ -24,7 +24,7 @@ Write main body here.
 
 Two annotation slots, disjoint by purpose: **leading `# …` lines** carry prose (a description, an `# e.g.` example); the **inline `# …`** at the end of a value line carries structure, the field's `# <type>[<format>]`.
 
-The reader's one rule: a **`!must_fill`** marker present → replace it before shipping; a concrete value present → shippable as-is. A field with a `default:` is **Endorsed** and renders that default (keep or override); a field without one is **Unendorsed** and carries the marker, its value the field's `example:` when present (a suggested value), else bare. A surviving marker never blocks render: it raises only the non-fatal `validation::must_fill` warning; a strict consumer (an LLM authoring loop) treats any outstanding marker as "not done."
+The reader's one rule: a **`!must_fill`** marker present → replace it before shipping; a concrete value present → shippable as-is. The cell's *value* is `default:` › `example:` › bare; the *marker* is the field's `must_fill:`, which defaults to "obliged unless a `default:` says otherwise". The two are independent, so a cell can carry a concrete default **and** a marker asking a human to confirm it. A surviving marker never blocks render: it raises only the non-fatal `validation::must_fill` warning; a strict consumer (an LLM authoring loop) treats any outstanding marker as "not done."
 
 ## Seeding: the filled-out twin
 
@@ -46,6 +46,13 @@ Seeding materializes a real `Document` (committed, structured content) rather th
 
 ## The empty-document contract
 
-`blueprint()` guarantees the emitted document renders, but that also depends on the quill's `plate.typ`. The quill authoring contract: **a plate MUST render an empty document** (just `$quill` / `$kind: main`, no fields) without error. Under zero-filled render every absent field becomes its type-empty value, so the empty document is the type-minimal valid input; a plate that renders it degrades gracefully on every valid shape. No template may assert an Unendorsed field is *non-empty*: the schema guarantees presence, not non-emptiness. Bundled quills are checked against this by fixture tests.
+`blueprint()` guarantees the emitted document renders, but that also depends on the quill's `plate.typ`. The quill authoring contract: **a plate MUST render an empty document** (just `$quill` / `$kind: main`, no fields) without error.
+
+Under blank-filled render every absent field becomes its blank, so the empty document is the type-minimal valid input. A plate that renders it degrades gracefully on every valid shape. Two rules follow:
+
+- **No template asserts an Unendorsed field is *non-empty*.** The schema guarantees presence, not non-emptiness.
+- **A template branching on an `enum` covers `values ∪ blank` exhaustively.** The blank is valid present input for every enum, so an `else` fallback renders a variant nobody chose.
+
+Bundled quills are checked against this by fixture tests.
 
 Full model: [BLUEPRINT.md](https://github.com/borb-sh/quillmark/blob/main/prose/canon/BLUEPRINT.md); the seeding cascade is in [SCHEMAS.md](https://github.com/borb-sh/quillmark/blob/main/prose/canon/SCHEMAS.md) § "Document seeding".

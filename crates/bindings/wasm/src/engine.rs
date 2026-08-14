@@ -714,7 +714,7 @@ impl Quill {
 
     /// The resolved-value view of `doc`: for every declared field, the value the
     /// render projection would use and the `FieldSource` rung it came from
-    /// (`"authored" | "default" | "zero"`). The card body is a `body` sibling on
+    /// (`"authored" | "default" | "blank"`). The card body is a `body` sibling on
     /// its card, never a row in `fields`, and `null` when the kind enables no
     /// body. Value and provenance only; completeness stays `validate`'s.
     #[wasm_bindgen(js_name = resolve, unchecked_return_type = "Resolved")]
@@ -2026,7 +2026,7 @@ export type DocPathSeg =
 #[wasm_bindgen(typescript_custom_section)]
 const RESOLVED_TS: &'static str = r#"
 /** The commitment-ladder rung that produced a `ResolvedField.value`. */
-export type FieldSource = "authored" | "default" | "zero";
+export type FieldSource = "authored" | "default" | "blank";
 
 /**
  * One resolved row: its `name`, the value the render projection would use, and

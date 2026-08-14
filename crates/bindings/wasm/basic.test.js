@@ -1818,6 +1818,25 @@ title: !must_fill
       ),
     ).toBe(true)
   })
+
+  it('validate surfaces the same code for a cell the schema obliges and nobody authored', () => {
+    const { quill } = buildQuill()
+
+    // No marker anywhere: this document never saw a blueprint.
+    const md = `~~~card-yaml
+$quill: schema_test
+$kind: main
+~~~
+`
+    const diags = quill.validate(Document.fromMarkdown(md))
+    const title = diags.find(
+      (d) => d.code === 'validation::must_fill' && d.path === 'main.title',
+    )
+    expect(title).toBeDefined()
+    expect(title.severity).toBe('warning')
+    // `trigger` is what a consumer routes on, so pin it crossing the boundary.
+    expect(title.args.trigger).toBe('unauthored')
+  })
 })
 
 describe('nested !must_fill', () => {
@@ -1871,7 +1890,7 @@ addr:
 // ---------------------------------------------------------------------------
 //
 // For every declared field: the value the render projection would use and the
-// source rung it came from ("authored" | "default" | "zero"). Rows are an
+// source rung it came from ("authored" | "default" | "blank"). Rows are an
 // ordered array carrying their own `name`; the card body is a `body` sibling,
 // not a row in `fields`. Value and provenance only: diagnostics stay
 // validate(), guidance stays the schema. See prose/canon/SCHEMAS.md
@@ -1931,7 +1950,7 @@ title: Hello
     expect(byName(f, 'title').value).toBe('Hello')
     expect(byName(f, 'status').source).toBe('default')
     expect(byName(f, 'status').value).toBe('draft')
-    expect(byName(f, 'notes').source).toBe('zero')
+    expect(byName(f, 'notes').source).toBe('blank')
     expect(byName(f, 'notes').value).toBe('')
   })
 
@@ -1959,7 +1978,7 @@ title: T
 ~~~
 `
     const noBody = quill.resolve(Document.fromMarkdown(blank))
-    expect(noBody.main.body.source).toBe('zero')
+    expect(noBody.main.body.source).toBe('blank')
   })
 
   it('carries value and source only: no diagnostics, no example', () => {
