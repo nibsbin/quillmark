@@ -74,6 +74,18 @@
 /// (`none`), the widget exposes **no** region: its `/T` name is not a schema
 /// address, so there is nothing for a consumer to route to.
 ///
+/// `font`, `size`, and `align` set the type the *viewer* draws the value in,
+/// and apply to `"text"` and `"choice"` only (the other two carry no variable
+/// text, so passing a non-default there is an error rather than a silent
+/// no-op). `font` is one of `"helvetica"`, `"times"`, `"courier"`: the base-14
+/// families every viewer has, since a widget cannot carry a font program.
+/// `size` is an absolute length, or `auto` to let the viewer fit text to the
+/// box (which refits as the user types, so pass a size wherever the value must
+/// match surrounding text). `align` is `"left"`, `"center"`, or `"right"`, and
+/// is the only way to pin a value to an edge: the widget box is sized for the
+/// longest plausible value, so its width says nothing about where the text
+/// lands.
+///
 /// `<__qm_field__>` and `kind: "__qm_field__"` are reserved for this hand-off.
 /// Note: this emits a `metadata` element, so plates/packages that read their
 /// own config via an unfiltered `query(metadata)` (e.g. `.last()`) must query
@@ -88,6 +100,9 @@
   width: 200pt,
   height: 20pt,
   field: none,
+  font: "helvetica",
+  size: auto,
+  align: "left",
 ) = {
   assert(std.type(name) == str,
     message: "form-field: name must be a string, got " + repr(std.type(name)))
@@ -99,12 +114,23 @@
     message: "form-field: field must be a string or none, got " + repr(std.type(field)))
   assert(field == none or _qm-known-path(field),
     message: "form-field: " + repr(field) + " is not a schema field address; expected a field name, an array element like \"refs.2\", or a card path composed from the card's $path prefix")
+  assert(font in ("helvetica", "times", "courier"),
+    message: "form-field: font must be one of helvetica/times/courier, got " + repr(font))
+  assert(align in ("left", "center", "right"),
+    message: "form-field: align must be one of left/center/right, got " + repr(align))
+  assert(type in ("text", "choice") or (font == "helvetica" and size == auto and align == "left"),
+    message: "form-field: font/size/align apply to text and choice fields only, got type " + repr(type))
   let abs-pt(field, l) = {
     let r = repr(l)
     assert(not (r.contains("em") or r.ends-with("%")),
       message: "form-field: " + field + " must be an absolute length, got " + r)
     l / 1pt
   }
+  // Guarded rather than passed through: `0pt` would reach the PDF as the `0 Tf`
+  // that means auto-size, quietly granting the opposite of an explicit size.
+  let size-pt = if size == auto { none } else { abs-pt("size", size) }
+  assert(size-pt == none or size-pt > 0,
+    message: "form-field: size must be a positive length or auto, got " + repr(size))
   [#metadata((
     kind: "__qm_field__",
     name: name,
@@ -115,6 +141,9 @@
     width: abs-pt("width", width),
     height: abs-pt("height", height),
     field: field,
+    font: font,
+    size: size-pt,
+    align: align,
   )) <__qm_field__>]
   box(width: width, height: height, stroke: none, fill: none)
 }

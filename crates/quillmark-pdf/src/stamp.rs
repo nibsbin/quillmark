@@ -7,12 +7,15 @@
 //! output only via the [`RenderedRegion`] sidecar.
 //!
 //! The background owns all visual chrome, so a widget is a transparent input
-//! over it: one house style (Helvetica at `0 Tf`, black) registered once in the
-//! form `/DR` and named in every `/DA`. The form is built fresh from the spec;
-//! a foreign AcroForm is never reconciled.
+//! over it: no borders, no fills, and black as the only text color. What a
+//! widget does choose is the type its value is *set in*, since that has to
+//! match the background it sits on rather than decorate it: each field names
+//! its own face, size, and justification, and every face so named is registered
+//! in the form `/DR`. The form is built fresh from the spec; a foreign AcroForm
+//! is never reconciled.
 
-use pdf_writer::types::{AnnotationFlags, FieldFlags, FieldType as PwFieldType, SigFlags};
-use pdf_writer::writers::Form;
+use pdf_writer::types::{AnnotationFlags, FieldFlags, FieldType as PwFieldType, Quadding, SigFlags};
+use pdf_writer::writers::{Field, Form};
 use pdf_writer::{Chunk, Finish, Name, Rect, Ref, Str, TextStr};
 
 use quillmark_core::RenderedRegion;
@@ -24,7 +27,7 @@ use crate::reader::{
 };
 use crate::update::PdfUpdate;
 use crate::writer::{alloc_id, dict_object};
-use crate::{FieldSpec, FieldType};
+use crate::{FieldSpec, FieldType, FormFont, TextAlign};
 
 const CODE_PARSE: &str = "pdf::stamp_parse";
 
@@ -34,7 +37,30 @@ pub const CHECKBOX_ON_STATE: &str = "Yes";
 
 /// House-style default appearance: Helvetica, `0 Tf` (auto-size), black fill.
 /// `Helv` is registered in the form `/DR` `/Font`.
+///
+/// The form-level `/DA` fallback only; a widget carries its own, built by
+/// [`field_appearance`].
 const DEFAULT_APPEARANCE: &[u8] = b"/Helv 0 Tf 0 g";
+
+/// One widget's `/DA`: its face and size over the house black fill. `f32`'s
+/// `Display` drops the trailing `.0`, so a whole-point size writes `12`, and an
+/// absent size writes the `0 Tf` that defers to the viewer's auto-size.
+fn field_appearance(spec: &FieldSpec) -> Vec<u8> {
+    let mut da = b"/".to_vec();
+    da.extend_from_slice(spec.font.resource_name());
+    da.extend_from_slice(format!(" {} Tf 0 g", spec.font_size.unwrap_or(0.0)).as_bytes());
+    da
+}
+
+/// Every face named by a `/DA` this stamp writes: the widgets' own, plus the
+/// Helvetica of the form-level [`DEFAULT_APPEARANCE`].
+fn fonts_used(fields: &[FieldSpec]) -> Vec<FormFont> {
+    let mut fonts: Vec<FormFont> = fields.iter().map(|f| f.font).collect();
+    fonts.push(FormFont::Helvetica);
+    fonts.sort_by_key(|f| f.resource_name());
+    fonts.dedup();
+    fonts
+}
 
 /// Options for [`stamp`](crate::stamp).
 #[derive(Debug, Clone, Default)]
@@ -77,7 +103,11 @@ pub fn stamp(
         let page_ids = up.resolve_pages(&pdf, fields)?;
         let page_count = page_ids.len();
 
-        let font_id = alloc_id(&mut up.next_id)?;
+        let fonts = fonts_used(fields);
+        let font_ids: Vec<u32> = fonts
+            .iter()
+            .map(|_| alloc_id(&mut up.next_id))
+            .collect::<Result<_, _>>()?;
         let widget_ids: Vec<u32> = fields
             .iter()
             .map(|_| alloc_id(&mut up.next_id))
@@ -95,14 +125,16 @@ pub fn stamp(
             });
         }
 
-        let mut fchunk = Chunk::new();
-        fchunk
-            .type1_font(Ref::new(font_id as i32))
-            .base_font(Name(b"Helvetica"));
-        up.objects.push(UpdatedObject {
-            id: font_id,
-            bytes: fchunk.as_bytes().to_vec(),
-        });
+        for (font, &fid) in fonts.iter().zip(&font_ids) {
+            let mut fchunk = Chunk::new();
+            fchunk
+                .type1_font(Ref::new(fid as i32))
+                .base_font(Name(font.base_font()));
+            up.objects.push(UpdatedObject {
+                id: fid,
+                bytes: fchunk.as_bytes().to_vec(),
+            });
+        }
 
         let has_signature = fields
             .iter()
@@ -118,11 +150,13 @@ pub fn stamp(
             }
             form.pair(Name(b"NeedAppearances"), true);
             form.default_appearance(Str(DEFAULT_APPEARANCE));
-            // /DR << /Font << /Helv <font> >> >>
+            // /DR << /Font << /Helv <font> .. >> >>
             {
                 let mut dr = form.insert(Name(b"DR")).dict();
                 let mut font_dict = dr.insert(Name(b"Font")).dict();
-                font_dict.pair(Name(b"Helv"), Ref::new(font_id as i32));
+                for (font, &fid) in fonts.iter().zip(&font_ids) {
+                    font_dict.pair(Name(font.resource_name()), Ref::new(fid as i32));
+                }
             }
             form.finish();
         }
@@ -177,6 +211,17 @@ pub fn regions_of(fields: &[FieldSpec]) -> Vec<RenderedRegion> {
         .collect()
 }
 
+/// Left is the PDF's own `/Q` default, so it is left unwritten: a field that
+/// never touches this dial stamps exactly as it did before the dial existed.
+fn write_quadding(field: &mut Field<'_>, align: TextAlign) {
+    let q = match align {
+        TextAlign::Left => return,
+        TextAlign::Center => Quadding::Center,
+        TextAlign::Right => Quadding::Right,
+    };
+    field.vartext_quadding(q);
+}
+
 /// Serialize one field as a merged field+widget indirect object.
 fn write_widget_object(spec: &FieldSpec, wid: Ref, page_ref: Ref) -> Vec<u8> {
     let mut chunk = Chunk::new();
@@ -189,11 +234,13 @@ fn write_widget_object(spec: &FieldSpec, wid: Ref, page_ref: Ref) -> Vec<u8> {
 
         // Captured to also set the annotation `/AS` below.
         let mut checkbox_on: Option<bool> = None;
+        let da = field_appearance(spec);
 
         match &spec.field_type {
             FieldType::Text { multiline } => {
                 field.field_type(PwFieldType::Text);
-                field.vartext_default_appearance(Str(DEFAULT_APPEARANCE));
+                field.vartext_default_appearance(Str(&da));
+                write_quadding(&mut field, spec.align);
                 if *multiline {
                     field.field_flags(FieldFlags::MULTILINE);
                 }
@@ -223,7 +270,8 @@ fn write_widget_object(spec: &FieldSpec, wid: Ref, page_ref: Ref) -> Vec<u8> {
             FieldType::Choice { options } => {
                 field.field_type(PwFieldType::Choice);
                 field.field_flags(FieldFlags::COMBO);
-                field.vartext_default_appearance(Str(DEFAULT_APPEARANCE));
+                field.vartext_default_appearance(Str(&da));
+                write_quadding(&mut field, spec.align);
                 {
                     let mut opts = field.choice_options();
                     for o in options {

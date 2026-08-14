@@ -207,6 +207,9 @@ Each call drops an AcroForm widget at its call site (a clickable field in PDF; r
 | `width` | `length` | `200pt` | Absolute length (`pt`/`mm`/`cm`/`in`); relative lengths (`2em`, `50%`) are rejected. |
 | `height` | `length` | `20pt` | Same constraint as `width`. |
 | `field` | `str` or `none` | `none` | Schema-field address this widget's region is keyed on (see "Binding to a schema field"). |
+| `font` | `str` | `"helvetica"` | `"helvetica"`, `"times"`, or `"courier"`; `"text"`/`"choice"` only (see "Styling the value text"). |
+| `size` | `length` or `auto` | `auto` | Absolute length, or `auto` for the viewer's fit-to-box. `"text"`/`"choice"` only. |
+| `align` | `str` | `"left"` | `"left"`, `"center"`, or `"right"`. `"text"`/`"choice"` only. |
 
 Positioning works exactly as for `signature-field` (in-flow reserves space; wrap in `#place(...)` to overlay without displacement); see the "Positioning" notes above.
 
@@ -249,10 +252,28 @@ By default a widget's only identity is its `/T` name. Pass `field:` to additiona
 
 `field:` is **region-only**: the `/T` widget name stays `name`; only the sidecar entry keys on `field:`. The address must be a real schema field: a bare field name, an array element like `"refs.2"`, or a card path built from the card's `$path` prefix (a bad address raises a Typst assert). Omit `field:` and the widget exposes no region: a click has no schema field to route to.
 
+### Styling the value text
+
+The widget itself draws nothing: a viewer synthesizes the value's appearance when someone fills the field. `font`, `size`, and `align` are what that synthesis reads. They apply to `"text"` and `"choice"` only, the other two kinds having no variable text, and passing a non-default on those raises an assert rather than silently doing nothing.
+
+```typst
+#form-field("memo_date", type: "text", field: "date",
+            font: "times", size: 12pt, align: "right", width: 1.2in, height: 16pt)
+```
+
+**`size` is worth setting whenever the value has to match surrounding text.** The default `auto` is the AcroForm auto-size, which fits text to the box *and refits as the user types*, so a long value renders smaller than a short one in the same field. An explicit size is the only way to make the rendered size predictable.
+
+**`align` is the only way to pin a value to an edge.** A fillable box has to be sized for the longest plausible value, not the value actually typed, so its width says nothing about where the text lands: under the default `"left"` the value starts at the box's left edge and the leftover space trails off to the right. Right-aligning the box in Typst does not help, because that moves the box, not the text inside it. Reach for `align: "right"` wherever a template calls for a right-aligned fill-in, as a USAF memo does for its date.
+
+**`font` is limited to the three base-14 families** (`"helvetica"`, `"times"`, `"courier"`), which every PDF viewer is required to have. A widget cannot carry a font program, so a quill's own bundled fonts are not reachable here; pick the base-14 family closest to the surrounding type. `"times"` is a close match for the Times-alike faces most formal templates use.
+
+These affect the PDF only. SVG and PNG reserve the same invisible layout space regardless.
+
 ### Errors
 
 - Duplicate `name` across any `form-field`/`signature-field` calls → `typst::duplicate_form_field`.
-- A non-absolute `width`/`height`, a `type` outside the four values, a name violating `[A-Za-z0-9_.]+`, or a `field:` that is not a known schema address → a Typst assert pointing at `form-field`.
+- A non-absolute `width`/`height`/`size`, a `type` outside the four values, a `font`/`align` outside its set, a name violating `[A-Za-z0-9_.]+`, or a `field:` that is not a known schema address → a Typst assert pointing at `form-field`.
+- `font`/`size`/`align` set to a non-default on a `"checkbox"` or `"signature"` field → a Typst assert.
 
 The label `<__qm_field__>` and metadata `kind: "__qm_field__"` are reserved for this hand-off: the same `query(metadata)` caveat noted for `signature-field` applies.
 

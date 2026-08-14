@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- feat(typst,pdf): `form-field` takes `font`, `size`, and `align`, so an
+  injected widget's value can be set to match the type around it. A widget was
+  fixed at Helvetica, auto-size, left: auto-size makes the rendered size a
+  function of both box height and how much the user has typed, and left
+  justification cannot be overcome by geometry, because a fillable box is sized
+  for the longest plausible value rather than the value in it. A right-aligned
+  fill-in — a USAF memo's date, say — was unreachable. `font` is one of
+  `"helvetica"`/`"times"`/`"courier"`, a widget being unable to carry a font
+  program; `size` is an absolute length or `auto` for the old behavior; `align`
+  is `"left"`/`"center"`/`"right"` and lands in `/Q`. All three are rejected on
+  `"checkbox"` and `"signature"`, which carry no variable text. `FieldSpec`
+  gains `font`, `font_size`, and `align` (`FormFont` and `TextAlign` are new).
+  A field that sets none of them stamps byte-identically to before, and
+  `pdfform` is untouched: `form.json` still carries no styling, so the flatten
+  path and canvas preview are unchanged.
+
 - fix(core,wasm,python)!: `EditError::UnknownField` carries the in-field path
   `FieldDecode` and `FieldNotContent` carry. A property an `object` field does
   not declare — `get_content_at("address", [Key("zip")])` against an `address`
