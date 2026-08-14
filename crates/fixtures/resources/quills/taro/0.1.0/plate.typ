@@ -19,13 +19,16 @@
 
 // Present each sub-document programatically
 #for card in data.at("$cards") {
-  if card.at("$kind") == "quotes" [
+  // `$kind` is document-defined: a card block with no `$kind:` line carries
+  // none, so read it with a default rather than a bare `.at`.
+  if card.at("$kind", default: none) == "quotes" [
     *#card.author*: _#card.at("$body") _
   ]
 }
 
 
-// Include an image with a dynamic asset
+// Include an image with a dynamic asset. `picture` is undeclared, so unlike a
+// schema field it is genuinely absent until authored.
 #if "picture" in data {
   image(data.picture)
 }
