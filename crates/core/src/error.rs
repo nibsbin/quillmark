@@ -246,6 +246,13 @@ impl Diagnostic {
         self
     }
 
+    /// Attach one substitution fact, for a code minted inline rather than from
+    /// an error enum's `args()`. See [`Self::args`].
+    pub fn with_arg(mut self, key: &str, value: serde_json::Value) -> Self {
+        self.args.insert(key.to_string(), value);
+        self
+    }
+
     /// Walk `source`'s cause chain eagerly into [`Self::source_chain`].
     pub fn with_source(mut self, source: &(dyn std::error::Error + 'static)) -> Self {
         let mut current: Option<&(dyn std::error::Error + 'static)> = Some(source);
@@ -694,7 +701,17 @@ mod args_canon {
             }
             .args(),
         );
-        add("validation::must_fill", BTreeMap::new());
+        // Two constructors, one code: sampling one and pinning the other against
+        // it is what stops the pair from drifting into two key sets.
+        let path = crate::path::DocPath::main().field("subject");
+        let marker = crate::quill::compose::fill_warning(&path);
+        let unauthored = crate::quill::compose::unauthored_warning(&path);
+        assert_eq!(
+            marker.args.keys().collect::<Vec<_>>(),
+            unauthored.args.keys().collect::<Vec<_>>(),
+            "both `validation::must_fill` triggers must carry one key set"
+        );
+        add("validation::must_fill", marker.args);
         // Built at the pre-render walk rather than from an error type: a quill
         // declares the construct, so there is nothing to fail.
         add("plate::unsupported_construct", {

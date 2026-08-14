@@ -292,7 +292,7 @@ Three outcomes, and the wire tells them apart only with this table in hand, sinc
 | `validation::unknown_card` | `card` | structured |
 | `validation::body_disabled` | `card` | structured |
 | `validation::coercion_failed` | `value`, `target` | structured, coarser |
-| `validation::must_fill` | — | code-determined |
+| `validation::must_fill` | `trigger` | structured |
 | `validation::not_inline` | — | code-determined |
 | `validation::not_plain` | — | code-determined |
 | `edit::invalid_field_name` | `field` | structured |

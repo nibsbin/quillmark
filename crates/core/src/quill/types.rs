@@ -454,12 +454,15 @@ impl<'de> Deserialize<'de> for FieldType {
 /// omitted), while `example` matches the desired type and shape but is not
 /// the value most authors want (it documents shape only, never rendering).
 ///
-/// A field's *cell* is determined by `default`: a field with a `default:`
-/// is **Endorsed** (the rendered value is shippable as-is), while a field
-/// without a `default:` is **Unendorsed** (the author endorsed no value, so
-/// the blueprint carries a `!must_fill` placeholder to ask for one). Absence is
-/// not a requirement: a missing or null Unendorsed field zero-fills at
-/// render. A surviving `!must_fill` placeholder is surfaced as the non-fatal
+/// A field carries two independent axes. The **value** axis is `default:` ›
+/// `example:` › the field's [`blank`](crate::quill::blank), and decides what a
+/// cell holds. The **obligation** axis is [`must_fill()`](Self::must_fill), and
+/// decides whether a human must author it. Neither implies the other: a
+/// `default:` can still demand confirmation (`must_fill: true`), and a field
+/// with nothing to suggest can be genuinely optional (`must_fill: false`).
+///
+/// Obligation is a warning, never a gate: an unauthored must-fill field
+/// blank-fills and renders, and the only signal is the non-fatal
 /// `validation::must_fill` warning. There is no separate `required:` axis.
 ///
 /// The richtext single-line constraint has **one** carrier: the
@@ -485,6 +488,10 @@ pub struct FieldSchema {
     /// A value matching the desired type and shape but not the value most
     /// authors want; documents shape only and never renders as the value.
     pub example: Option<QuillValue>,
+    /// Whether a human must author this cell. Read through
+    /// [`must_fill()`](Self::must_fill), never directly: `None` derives from
+    /// `default`.
+    pub must_fill: Option<bool>,
     pub ui: Option<UiFieldSchema>,
     /// Restricts valid values on string fields. Serializes as `enum`.
     pub enum_values: Option<Vec<String>>,
@@ -518,6 +525,7 @@ struct FieldSchemaDef {
     pub description: Option<String>,
     pub default: Option<QuillValue>,
     pub example: Option<QuillValue>,
+    pub must_fill: Option<bool>,
     pub ui: Option<UiFieldSchema>,
     /// The retired `enum:` modifier, parsed only to reject it by name: under
     /// `deny_unknown_fields` an absent binding reports "unknown field `enum`"
@@ -542,6 +550,7 @@ impl FieldSchema {
             description,
             default: None,
             example: None,
+            must_fill: None,
             ui: None,
             enum_values: None,
             properties: None,
@@ -549,6 +558,20 @@ impl FieldSchema {
             default_content: None,
             example_content: None,
         }
+    }
+
+    /// Whether a human must author this cell, deriving from `default:` when
+    /// `must_fill:` is unset: a field the quill author endorsed no value for
+    /// asks for one, a defaulted field does not. The derivation is keyed on
+    /// `default`'s *presence*, so a `default: ""` stays a skippable cell rather
+    /// than becoming a marker.
+    ///
+    /// Read this rather than the raw [`must_fill`](Self::must_fill) field: the
+    /// blueprint's marker, the seeding stamp, the `Quill::validate` predicate,
+    /// and the transform schema's `quillmark:must_fill` are one answer, and it
+    /// is this one.
+    pub fn must_fill(&self) -> bool {
+        self.must_fill.unwrap_or(self.default.is_none())
     }
 
     pub fn from_quill_value(key: String, value: &QuillValue) -> Result<Self, String> {
@@ -567,6 +590,7 @@ impl FieldSchema {
             description: def.description,
             default: def.default,
             example: def.example,
+            must_fill: def.must_fill,
             ui: def.ui,
             enum_values,
             properties: if let Some(props) = def.properties {
@@ -670,6 +694,7 @@ impl Serialize for FieldSchema {
             + self.description.is_some() as usize
             + self.default.is_some() as usize
             + self.example.is_some() as usize
+            + self.must_fill.is_some() as usize
             + self.ui.is_some() as usize
             + self.enum_values.is_some() as usize
             + self.properties.is_some() as usize
@@ -687,6 +712,12 @@ impl Serialize for FieldSchema {
         }
         if let Some(v) = &self.example {
             map.serialize_entry("example", v)?;
+        }
+        // The raw `Option`, not the derived answer: the schema wire is what the
+        // author wrote, and re-emitting the derivation would pin every field's
+        // obligation the first time a quill round-tripped through it.
+        if let Some(v) = &self.must_fill {
+            map.serialize_entry("must_fill", v)?;
         }
         if let Some(v) = &self.ui {
             map.serialize_entry("ui", v)?;
