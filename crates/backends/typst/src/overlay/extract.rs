@@ -12,6 +12,8 @@ use typst_layout::PagedDocument;
 
 use quillmark_core::{Diagnostic, RenderError, Severity};
 
+use quillmark_pdf::{FormFont, TextAlign};
+
 use super::{err, FieldKind, FieldPlacement};
 
 const FIELD_LABEL: &str = "__qm_field__";
@@ -54,6 +56,9 @@ pub(crate) fn extract(doc: &PagedDocument) -> Result<Vec<FieldPlacement>, Render
         let width = read_f64(&dict, "width")?;
         let height = read_f64(&dict, "height")?;
         let kind = read_field_kind(&dict, &field_type)?;
+        let font = read_font(&dict)?;
+        let font_size = read_opt_f64(&dict, "size")?.map(|s| s as f32);
+        let align = read_align(&dict)?;
         let loc = c
             .location()
             .ok_or_else(|| err(CODE_INTERNAL, "form-field metadata is not located"))?;
@@ -77,6 +82,9 @@ pub(crate) fn extract(doc: &PagedDocument) -> Result<Vec<FieldPlacement>, Render
                 (pos.point.y.to_pt() + height) as f32,
             ],
             kind,
+            font,
+            font_size,
+            align,
         });
     }
 
@@ -107,6 +115,39 @@ fn read_field_kind(
             CODE_INTERNAL,
             format!("unknown form-field type {other:?}"),
         )),
+    }
+}
+
+/// The helper's asserts already reject anything outside these sets, so an
+/// unknown string here means the metadata was hand-forged, not mistyped.
+fn read_font(d: &typst::foundations::Dict) -> Result<FormFont, RenderError> {
+    match read_str(d, "font")?.as_str() {
+        "helvetica" => Ok(FormFont::Helvetica),
+        "times" => Ok(FormFont::Times),
+        "courier" => Ok(FormFont::Courier),
+        other => Err(err(
+            CODE_INTERNAL,
+            format!("unknown form-field font {other:?}"),
+        )),
+    }
+}
+
+fn read_align(d: &typst::foundations::Dict) -> Result<TextAlign, RenderError> {
+    match read_str(d, "align")?.as_str() {
+        "left" => Ok(TextAlign::Left),
+        "center" => Ok(TextAlign::Center),
+        "right" => Ok(TextAlign::Right),
+        other => Err(err(
+            CODE_INTERNAL,
+            format!("unknown form-field align {other:?}"),
+        )),
+    }
+}
+
+fn read_opt_f64(d: &typst::foundations::Dict, key: &str) -> Result<Option<f64>, RenderError> {
+    match d.get(key) {
+        Ok(Value::None) | Err(_) => Ok(None),
+        _ => read_f64(d, key).map(Some),
     }
 }
 

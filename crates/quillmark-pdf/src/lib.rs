@@ -61,10 +61,18 @@ pub struct FieldSpec {
     pub value: Option<String>,
     /// Optional `/TU` tooltip / accessible name.
     pub tooltip: Option<String>,
+    /// Base-14 face for the value text.
+    pub font: FormFont,
+    /// Value text size in points; `None` writes `0 Tf`, deferring to the
+    /// viewer's auto-size (which refits as the user types).
+    pub font_size: Option<f32>,
+    /// Value text justification, written to `/Q`.
+    pub align: TextAlign,
 }
 
 impl FieldSpec {
-    /// `schema_field`, `value`, and `tooltip` start `None`.
+    /// `schema_field`, `value`, and `tooltip` start `None`; the three type
+    /// dials start at the house style (Helvetica, auto-size, left).
     pub fn new(name: String, page: usize, rect: [f32; 4], field_type: FieldType) -> Self {
         Self {
             name,
@@ -74,6 +82,9 @@ impl FieldSpec {
             field_type,
             value: None,
             tooltip: None,
+            font: FormFont::default(),
+            font_size: None,
+            align: TextAlign::default(),
         }
     }
 
@@ -113,4 +124,59 @@ pub enum FieldType {
     Choice { options: Vec<String> },
     /// An unsigned signature field.
     Signature,
+}
+
+/// The base-14 face a widget's value text is set in.
+///
+/// Restricted to the three text families the PDF viewer is required to have, so
+/// a `/DA` never names a font the document does not carry: embedding an
+/// arbitrary face would mean shipping font programs the background already
+/// carries, which the two-asset model leaves to the background.
+///
+/// Only the [`FieldType::Text`] and [`FieldType::Choice`] widgets have variable
+/// text; this is inert on the other two.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum FormFont {
+    #[default]
+    Helvetica,
+    Times,
+    Courier,
+}
+
+impl FormFont {
+    /// The `/DR` `/Font` key a `/DA` names this face by.
+    pub(crate) fn resource_name(self) -> &'static [u8] {
+        match self {
+            Self::Helvetica => b"Helv",
+            Self::Times => b"TiRo",
+            Self::Courier => b"Cour",
+        }
+    }
+
+    /// The standard-14 `/BaseFont`, never embedded.
+    pub(crate) fn base_font(self) -> &'static [u8] {
+        match self {
+            Self::Helvetica => b"Helvetica",
+            Self::Times => b"Times-Roman",
+            Self::Courier => b"Courier",
+        }
+    }
+}
+
+/// Justification of a widget's value text, written to `/Q`.
+///
+/// A fillable widget's box is sized for the longest plausible value, not the
+/// value itself, so this is the only thing that pins text to an edge: geometry
+/// cannot, the text extent being unknown until someone types it.
+///
+/// Only the [`FieldType::Text`] and [`FieldType::Choice`] widgets have variable
+/// text; this is inert on the other two.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum TextAlign {
+    #[default]
+    Left,
+    Center,
+    Right,
 }
