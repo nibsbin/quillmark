@@ -296,6 +296,61 @@ fn an_outstanding_conditional_obligation_still_renders() {
     assert_eq!(plate["cui_controlled_by"], "");
 }
 
+// ---- projections ----------------------------------------------------------
+
+/// The blueprint states the rule as prose and stamps no marker: whether the
+/// obligation binds is a fact about a filled-in document, and the blueprint is
+/// the empty form.
+#[test]
+fn the_blueprint_states_the_rule_without_stamping_a_marker() {
+    let quill = quill_from_yaml(CUI);
+    let text = quill.config().blueprint();
+
+    assert!(
+        text.contains("# required when classification is CUI\ncui_controlled_by:"),
+        "blueprint missing the rule line:\n{text}"
+    );
+    assert!(
+        text.contains("# required when memo_for contains SEE DISTRIBUTION\ndistribution:"),
+        "blueprint missing the array rule line:\n{text}"
+    );
+    assert!(
+        !text.contains("cui_controlled_by: !must_fill"),
+        "a conditional obligation must not stamp an unconditional marker:\n{text}"
+    );
+}
+
+/// The blueprint is a document by construction, so its rule lines must survive
+/// the round-trip that contract rests on.
+#[test]
+fn the_blueprint_still_round_trips() {
+    let quill = quill_from_yaml(CUI);
+    let text = quill.config().blueprint();
+
+    Document::parse(&text).expect("blueprint round-trips through the parser");
+}
+
+#[test]
+fn the_transform_schema_carries_the_rule_as_an_annotation() {
+    let quill = quill_from_yaml(CUI);
+    let schema = crate::quill::build_transform_schema(quill.config()).into_json();
+    let field = &schema["properties"]["cui_controlled_by"];
+
+    assert_eq!(
+        field[crate::quill::QUILLMARK_MUST_FILL_WHEN_KEY],
+        serde_json::json!({ "field": "classification", "operator": "equals", "operand": "CUI" })
+    );
+    assert_eq!(
+        field["quillmark:must_fill"], false,
+        "a conditional obligation is not an unconditional one"
+    );
+    assert!(
+        field.get("if").is_none() && field.get("then").is_none(),
+        "the rule is an annotation, never an enforcing keyword: a stock validator \
+         must keep accepting what the engine accepts"
+    );
+}
+
 // ---- load-time resolution -------------------------------------------------
 
 fn load_error(yaml: &str) -> Vec<String> {

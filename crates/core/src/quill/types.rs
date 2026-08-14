@@ -534,6 +534,30 @@ pub struct MustFillWhen {
     pub condition: FillCondition,
 }
 
+impl MustFillWhen {
+    /// The condition as a bare English clause (`classification is CUI`): the
+    /// body of the blueprint's `# required when …` line.
+    ///
+    /// The diagnostic states the same relation with each token backticked, and
+    /// pairs it with the inverting exit clause. The two do not share a
+    /// formatter: this is prose inside a YAML comment (no colon, so it cannot
+    /// collide with the annotation grammar), that is a message whose spans a
+    /// consumer may style.
+    pub fn describe(&self) -> String {
+        let field = &self.field;
+        let text = |v: &QuillValue| crate::quill::validation::scalar_text(v.as_json());
+        match &self.condition {
+            FillCondition::Equals(v) => format!("{field} is {}", text(v)),
+            FillCondition::In(vs) => {
+                let tokens: Vec<String> = vs.iter().map(text).collect();
+                format!("{field} is one of {}", tokens.join(", "))
+            }
+            FillCondition::Contains(v) => format!("{field} contains {}", text(v)),
+            FillCondition::NonBlank => format!("{field} is not blank"),
+        }
+    }
+}
+
 /// Wire shape of a `must_fill_when:` block: the condition field plus exactly
 /// one operator key.
 #[derive(Debug, Deserialize)]

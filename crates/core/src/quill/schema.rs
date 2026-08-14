@@ -36,6 +36,23 @@ pub const QUILLMARK_BLANK_TITLE_KEY: &str = "quillmark:blank_title";
 /// and enforcement — if a consumer wants any — is that consumer's policy.
 pub const QUILLMARK_MUST_FILL_KEY: &str = "quillmark:must_fill";
 
+/// Transform-schema keyword carrying a field's conditional obligation
+/// (`must_fill_when:`) as `{field, operator, operand?}`.
+///
+/// An **annotation, not a constraint**, and deliberately not the standard
+/// `if`/`then` spelling. This projection's contract is that a stock
+/// JSON-Schema validator accepts exactly what the engine accepts (the same
+/// reason `enum` emits the blank), and the engine never *rejects* an
+/// outstanding obligation — it warns, and the document renders. An enforcing
+/// `if`/`then` would make a validator refuse documents the engine happily
+/// renders, converting a warning into a hard failure at the one seam that is
+/// supposed to agree with the engine.
+///
+/// So the rule crosses as data a consumer can act on at its own severity: an
+/// editor reveals the obligation live as the condition field changes, and a
+/// strict consumer routes it however it routes `validation::must_fill`.
+pub const QUILLMARK_MUST_FILL_WHEN_KEY: &str = "quillmark:must_fill_when";
+
 /// Build a JSON-Schema-shaped descriptor of a [`QuillConfig`]'s main + card fields.
 ///
 /// The descriptor marks richtext fields with `contentMediaType:
@@ -59,6 +76,27 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
             QUILLMARK_MUST_FILL_KEY.to_string(),
             serde_json::Value::Bool(field.must_fill()),
         );
+        // Beside it, and in the same prelude, for the same reason: the enum arm
+        // returns early, and a conditional obligation is most often keyed on an
+        // enum — so an enum field is exactly where a rule must still cross.
+        if let Some(when) = &field.must_fill_when {
+            let mut rule = serde_json::Map::new();
+            rule.insert(
+                "field".to_string(),
+                serde_json::Value::String(when.field.clone()),
+            );
+            rule.insert(
+                "operator".to_string(),
+                serde_json::Value::String(when.condition.operator().to_string()),
+            );
+            if let Some(operand) = when.condition.operand() {
+                rule.insert("operand".to_string(), operand);
+            }
+            schema.insert(
+                QUILLMARK_MUST_FILL_WHEN_KEY.to_string(),
+                serde_json::Value::Object(rule),
+            );
+        }
         // A finite domain projects to the idiomatic JSON-Schema spelling
         // `{type: string, enum: [...]}`: exactly what a backend dispatches on
         // today (a plain string), plus the domain. Keyed on the domain, as the

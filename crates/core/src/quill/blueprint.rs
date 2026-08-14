@@ -198,14 +198,28 @@ fn append_field(items: &mut Vec<PayloadItem>, field: &FieldSchema) {
 }
 
 /// Push the leading prose comments for a *top-level* field: the description,
-/// then the `# e.g.` hint. `eg_when` gates the hint: a scalar surfaces it only
-/// when a `default:` already occupies the cell (otherwise the example *is* the
-/// cell's value), while typed containers always surface it (their example never
-/// inlines). The gate is a value-axis question and stays keyed on `default`:
-/// `must_fill` never moves an example between the cell and the hint.
+/// the conditional-obligation line, then the `# e.g.` hint. `eg_when` gates the
+/// hint: a scalar surfaces it only when a `default:` already occupies the cell
+/// (otherwise the example *is* the cell's value), while typed containers always
+/// surface it (their example never inlines). The gate is a value-axis question
+/// and stays keyed on `default`: `must_fill` never moves an example between the
+/// cell and the hint.
+///
+/// A `must_fill_when:` earns a line rather than a marker because the obligation
+/// is *document-dependent*: whether it binds is a fact about a filled-in
+/// document, and a blueprint is the empty form. Stamping `!must_fill` would
+/// assert an obligation that may not hold, and omitting the rule entirely would
+/// hide it from the one reader — an LLM filling the form — with no other route
+/// to it. So the blueprint states the rule and `Quill::validate` decides it.
 fn push_leading(items: &mut Vec<PayloadItem>, field: &FieldSchema, eg_when: bool) {
     if let Some(desc) = collapse_opt(&field.description) {
         items.push(PayloadItem::comment(desc));
+    }
+    if let Some(when) = &field.must_fill_when {
+        items.push(PayloadItem::comment(format!(
+            "required when {}",
+            when.describe()
+        )));
     }
     if eg_when {
         if let Some(eg) = field.example.as_ref() {
