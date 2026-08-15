@@ -6,7 +6,7 @@ use crate::document::Document;
 use crate::error::{Diagnostic, Severity, diag_args};
 use crate::path::DocPath;
 use crate::quill::formats::{is_valid_date, is_valid_datetime};
-use crate::quill::{CardSchema, FieldSchema, FieldType, QuillConfig};
+use crate::quill::{CardSchema, FieldSchema, FieldType, QuillConfig, VARIANT_DISCRIMINANT_KEY};
 use crate::value::QuillValue;
 
 /// Validation error with a structured field path.
@@ -444,6 +444,10 @@ fn validate_value(
         return vec![];
     }
 
+    if field.is_variant_bearing() {
+        return validate_variant(field, value, path, ctx);
+    }
+
     let mut errors = Vec::new();
 
     let type_valid = match field.r#type {
@@ -629,6 +633,114 @@ fn validate_value(
                     value: actual.to_string(),
                     allowed: allowed.clone(),
                 });
+            }
+        }
+    }
+
+    errors
+}
+
+/// Validate a variant-bearing enum. The discriminant answers the domain check
+/// at `<path>.value`, and only the **live** world's fields are checked: a key a
+/// non-active variant declares is not this layer's to type-check, since nothing
+/// downstream reads it (`Quill::validate` reports it as
+/// `validation::out_of_variant`, a warning).
+///
+/// Both authored shapes reach here, because validation runs before coercion: the
+/// bare scalar (`classification: CUI`) and the container. The scalar is checked
+/// as the discriminant it stands for, at the container's own path — the path an
+/// author who wrote a scalar can act on.
+fn validate_variant(
+    field: &FieldSchema,
+    value: &QuillValue,
+    path: &DocPath,
+    ctx: ValueContext,
+) -> Vec<ValidationError> {
+    let mut errors = Vec::new();
+    let json = value.as_json();
+
+    let check_member = |member: &str, at: &DocPath, errors: &mut Vec<ValidationError>| {
+        if let Some(allowed) = &field.enum_values {
+            if !member.is_empty() && !allowed.contains(&member.to_string()) {
+                errors.push(ValidationError::EnumViolation {
+                    path: at.to_string(),
+                    value: member.to_string(),
+                    allowed: allowed.clone(),
+                });
+            }
+        }
+    };
+
+    let Some(object) = json.as_object() else {
+        // The bare scalar spelling. Anything that is not a member-shaped scalar
+        // is a type error against the container.
+        let scalar = value
+            .as_str()
+            .map(str::to_string)
+            .or_else(|| super::config::scalar_as_string(json));
+        match scalar {
+            Some(member) => check_member(&member, path, &mut errors),
+            None => errors.push(ValidationError::TypeMismatch {
+                path: path.to_string(),
+                expected: "enum".to_string(),
+                actual: yaml_scalar_type(json).to_string(),
+                source_token: verbatim_yaml_scalar(json),
+                default: match ctx {
+                    ValueContext::Document => field
+                        .default
+                        .as_ref()
+                        .map(|d| verbatim_yaml_scalar(d.as_json())),
+                    ValueContext::SchemaLiteral => None,
+                },
+            }),
+        }
+        return errors;
+    };
+
+    let discriminant_path = path.field(VARIANT_DISCRIMINANT_KEY);
+    let authored = object
+        .get(VARIANT_DISCRIMINANT_KEY)
+        .filter(|v| !v.is_null());
+    let member = match authored {
+        Some(v) => match v
+            .as_str()
+            .map(str::to_string)
+            .or_else(|| super::config::scalar_as_string(v))
+        {
+            Some(member) => {
+                check_member(&member, &discriminant_path, &mut errors);
+                member
+            }
+            None => {
+                errors.push(ValidationError::TypeMismatch {
+                    path: discriminant_path.to_string(),
+                    expected: "enum".to_string(),
+                    actual: yaml_scalar_type(v).to_string(),
+                    source_token: verbatim_yaml_scalar(v),
+                    default: None,
+                });
+                String::new()
+            }
+        },
+        // An absent discriminant blank-fills from the ladder, exactly as an
+        // absent scalar enum does; the world it selects is the default's.
+        None => field
+            .default
+            .as_ref()
+            .and_then(|d| d.as_str())
+            .unwrap_or_default()
+            .to_string(),
+    };
+
+    if let Some(fields) = field.variant_fields(&member) {
+        for (name, schema) in fields {
+            if let Some(cell) = object.get(name) {
+                errors.extend(validate_value(
+                    schema,
+                    &QuillValue::from_json(cell.clone()),
+                    &path.field(name),
+                    ctx,
+                ));
             }
         }
     }
