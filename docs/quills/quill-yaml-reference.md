@@ -253,6 +253,77 @@ your `values:` list stays clean.
 > `data.at(key, default: X)` is not a guard — every declared key is always
 > present at render, so its `default:` never fires and the blank flows through.
 
+#### Variants: fields that exist only for one choice
+
+Some fields belong to one choice and are meaningless beside any other. Declare
+them under `variants:`, keyed by the member that brings them into play:
+
+```yaml
+    classification:
+      type: enum
+      values: [UNCLASSIFIED, CUI, CONFIDENTIAL, SECRET, TOP SECRET]
+      default: ""
+      variants:
+        CUI:
+          controlled_by: { type: string }        # obliged, but only on a CUI memo
+          poc:           { type: string }
+          category:      { type: string, default: "" }
+```
+
+The field then holds a **container** instead of a bare string, and a document
+writes the choice under `value` with that world's answers beside it:
+
+```yaml
+classification:
+  value: CUI
+  controlled_by: SAF/AA
+  poc: Capt J. Smith, DSN 555-1234
+```
+
+A world with nothing to fill in still writes plainly — `classification:
+UNCLASSIFIED` is accepted and means the same as `{value: UNCLASSIFIED}`.
+
+Three things follow, and they are the reason to reach for this over a
+`cui_`-prefixed row of flat fields:
+
+- **The names shorten.** The prefix was hand-written namespacing; nesting
+  supplies it structurally, so `cui_poc` becomes `poc`.
+- **`must_fill` becomes conditional.** `controlled_by` declares no `default:`,
+  so it is obliged — but only where `classification` reads `CUI`. On every other
+  memo the same schema asks for nothing. That is the one cross-field rule the
+  engine checks rather than describes in `description:` prose.
+- **Editors know.** The schema says which cells are out of play, so a form
+  retires them instead of showing a CUI block on an unclassified memo.
+
+**Writing a plate against variants.** The live world's fields arrive only inside
+the branch that selects it, which is the branch you already owe every enum:
+
+```typst
+..if data.classification.value == "CUI" {
+  (controlled_by: data.classification.controlled_by, poc: data.classification.poc)
+},
+```
+
+Inside that branch every declared field of the world is present and blank-filled,
+so no guarded access is needed. Outside it there is nothing to read: an
+unanswered `classification` renders `{value: ""}`, and the blank brings no field
+set at all.
+
+**Flipping the choice keeps the answers.** Selecting `UNCLASSIFIED` after filling
+in a CUI block leaves those values in the document and warns
+(`validation::out_of_variant`); they simply stop rendering. Flip back and they
+are still there. Remove the field to drop the value for good.
+
+What a variant can hold is deliberately narrow — `string`, `enum`, `number`,
+`integer`, `boolean`. Prose and dates (`richtext`, `plaintext`, `date`,
+`datetime`) stay card-level fields (`quill::variant_field_type`), as do arrays
+and objects. `variants:` itself is valid only on a card-level `type: enum` field,
+keys only on declared members (never `""`, which owns no field set), and cannot
+declare a field named `value`. Variant fields inherit the discriminant's
+`ui.group`; declaring one inside a variant is an error. A field set shared by
+several members is repeated or shared with a YAML anchor — a variant keys on one
+member.
+
 ### Primitive Arrays, Typed Tables, and Typed Dictionaries
 
 Every array declares its element type under `items:`. For a **primitive list**, give `items` a scalar type, coercion and validation then apply element-wise (e.g. each element of an `integer[]` is coerced to an integer, and a bad element fails at its indexed path like `counts[1]`):

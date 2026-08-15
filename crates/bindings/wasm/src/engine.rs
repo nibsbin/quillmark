@@ -80,6 +80,11 @@ export interface QuillFieldSchema {
     /** The closed set of allowed values. Required on `type: "enum"`, and valid
      *  nowhere else. */
     values?: string[];
+    /** Per-member field sets on a card-level `type: "enum"` field, keyed by
+     *  member: the fields that exist only where the discriminant holds that
+     *  member. Declaring it makes the field rest as a container,
+     *  `{value: <member>, …that member's fields}`, rather than a bare string. */
+    variants?: Record<string, Record<string, QuillFieldSchema>>;
     /** Whether a human must author the field. Absent, it derives from
      *  `default`: a defaulted field is unobliged, a defaultless one obliged. */
     must_fill?: boolean;

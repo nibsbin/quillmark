@@ -35,14 +35,22 @@
 
   references: data.references,
   footer_tag_line: data.tag_line,
-  classification_level: data.classification,
+  classification_level: data.classification.value,
   dissemination: data.dissemination,
 
-  // CUI designation indicator block fields (DoDM 5200.48)
-  cui_controlled_by: data.cui_controlled_by,
-  cui_category: data.cui_category,
-  cui_limited_dissemination: data.cui_limited_dissemination,
-  cui_poc: data.cui_poc,
+  // CUI designation indicator block fields (DoDM 5200.48). `classification`
+  // declares a `CUI` variant, so these four exist only where the discriminant
+  // reads CUI and the branch is what makes reading them total: inside it every
+  // declared field of that world is present, outside it none is. The package's
+  // own `cui_*: none` defaults cover the worlds that omit them.
+  ..if data.classification.value == "CUI" {
+    (
+      cui_controlled_by: data.classification.controlled_by,
+      cui_category: data.classification.category,
+      cui_limited_dissemination: data.classification.limited_dissemination,
+      cui_poc: data.classification.poc,
+    )
+  },
 
   // USAF vs DAF memorandum style (date format, body indentation). A memo has no
   // "no style" state, so the blank takes the package's default; `frontmatter`
