@@ -20,8 +20,8 @@
   signature_blank_lines: 4,
   signing_field: none,
   date: none,
-  // Fill-in widget seated on the date rule when `date` is blank. The rule is
-  // what prints either way; see `date-placeholder-line`.
+  // Fill-in widget seated in the date's reserved space when `date` is blank;
+  // see `date-placeholder`.
   dating_field: none,
   // Format of indorsement: "standard" (same page), "informal" (no header), or "separate_page" (starts on new page)
   format: "standard",
@@ -80,7 +80,7 @@
       let indorsement_number = counters.indorsement.get().at(0, default: 1)
       let indorsement_label = format-indorsement-number(indorsement_number)
 
-      let ind_date = align(right)[#if actual_date != none { display-date(actual_date, memo-style: memo-style) } else { date-placeholder-line(field: dating_field) }]
+      let ind_date = align(right)[#if actual_date != none { display-date(actual_date, memo-style: memo-style) } else { date-placeholder(field: dating_field) }]
 
       // Separate-page header body: restates the original memo's identity (FROM,
       // date, subject) on its own line, since the indorsement no longer shares a

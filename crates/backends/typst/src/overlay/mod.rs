@@ -3,7 +3,7 @@
 //! here so the spine never imports `typst_layout`.
 
 use quillmark_core::{Diagnostic, RenderError, Severity};
-use quillmark_pdf::{FieldSpec, FieldType, CHECKBOX_ON_STATE};
+use quillmark_pdf::{FieldSpec, FieldType, FormFont, TextAlign, CHECKBOX_ON_STATE};
 use typst_layout::PagedDocument;
 
 mod extract;
@@ -40,6 +40,9 @@ pub(crate) struct FieldPlacement {
     pub page: usize,
     pub rect_typst_pt: [f32; 4],
     pub kind: FieldKind,
+    pub font: FormFont,
+    pub font_size: Option<f32>,
+    pub align: TextAlign,
 }
 
 pub(crate) fn err(code: &'static str, msg: impl Into<String>) -> RenderError {
@@ -115,6 +118,9 @@ pub(crate) fn build_field_specs(
             );
             spec.schema_field = p.schema_field.clone();
             spec.value = value;
+            spec.font = p.font;
+            spec.font_size = p.font_size;
+            spec.align = p.align;
             Ok(spec)
         })
         .collect()

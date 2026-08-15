@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+- feat(typst,pdf): `form-field` takes `font`, `size`, and `align`, so an
+  injected widget's value can be set to match the type around it. A widget was
+  fixed at Helvetica, auto-size, left: auto-size makes the rendered size a
+  function of both box height and how much the user has typed, and left
+  justification cannot be overcome by geometry, because a fillable box is sized
+  for the longest plausible value rather than the value in it. A right-aligned
+  fill-in — a USAF memo's date, say — was unreachable. `font` is one of
+  `"helvetica"`/`"times"`/`"courier"`, a widget being unable to carry a font
+  program; `size` is an absolute length or `auto` for the old behavior; `align`
+  is `"left"`/`"center"`/`"right"` and lands in `/Q`. All three are rejected on
+  `"checkbox"` and `"signature"`, which carry no variable text. `FieldSpec`
+  gains `font`, `font_size`, and `align` (`FormFont` and `TextAlign` are new).
+  A field that sets none of them stamps byte-identically to before, and
+  `pdfform` is untouched: `form.json` still carries no styling, so the flatten
+  path and canvas preview are unchanged.
+- fix(fixtures): the `usaf_memo` indorsement date widget is set in the memo's
+  own 12pt Times and ends on the right margin, where the date it stands in for
+  would have ended. It was auto-sized Helvetica starting at the fill-in rule's
+  left end. Sizing it exposed that the rule-width box clips a real date — "28
+  September 2026" sets 93pt at 12pt Times against a 72pt box, and a fixed size
+  clips where auto-size had silently shrunk — so the widget is now 10em wide
+  and hangs off the rule's right edge, overrunning leftwards into the
+  whitespace a printed date grows into. Sized in ems of its own face rather
+  than inches because `font_size` is a document field with no ceiling: an inch
+  width would stay put while the text inside it grew. 10em clears both
+  orderings at any body size (DAF's "September 28, 2026" is the widest at
+  8.03em; USAF's "28 September 2026" is 7.78em). `date-placeholder-line` seats
+  it with a measured `dx` rather than `place(bottom + right)`, Typst clamping
+  an overflowing alignment back to zero, which leaves `right` indistinguishable
+  from `left`. That helper draws no rule now and is named `date-placeholder`
+  rather than `date-placeholder-line`: the widget carries the date, and a rule
+  under a widget wider than it underlines only the fraction of the value narrow
+  enough to sit over it. It is package-internal, not exported from `lib.typ`.
+
 - fix(core,wasm,python)!: `EditError::UnknownField` carries the in-field path
   `FieldDecode` and `FieldNotContent` carry. A property an `object` field does
   not declare — `get_content_at("address", [Key("zip")])` against an `address`
