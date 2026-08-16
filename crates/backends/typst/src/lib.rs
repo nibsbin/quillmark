@@ -65,13 +65,34 @@ struct TypstSession {
     /// What [`session_warnings`] built for the live compile. The compile half
     /// swaps on each committed `apply`; the load half rides along unchanged.
     warnings: Vec<Diagnostic>,
+    /// [`overlay::unclosed_claims`] for the live document, suppressed by every
+    /// region and point query. Computed with the compile rather than per query:
+    /// `field_at` cannot derive it from the page prefix it walks.
+    unclosed_claims: Vec<usize>,
 }
 
-/// The quill's load warnings, then this compile's own. One order, built in one
-/// place, so an `apply` that swaps only what it recompiled keeps the load half.
-fn session_warnings(world: &world::QuillWorld, compile: Vec<Diagnostic>) -> Vec<Diagnostic> {
+/// The quill's load warnings, then this compile's own, then one per runaway
+/// `field-region`. One order, built in one place, so an `apply` that swaps only
+/// what it recompiled keeps the load half.
+fn session_warnings(
+    world: &world::QuillWorld,
+    compile: Vec<Diagnostic>,
+    unclosed: &[(usize, String)],
+) -> Vec<Diagnostic> {
     let mut all = world.load_warnings().to_vec();
     all.extend(compile);
+    all.extend(unclosed.iter().map(|(_, field)| {
+        Diagnostic::new(
+            Severity::Warning,
+            format!("`field-region(\"{field}\")` never closed; its claim was dropped"),
+        )
+        .with_code("typst::unclosed_field_region".to_string())
+        .with_hint(
+            "both markers must reach the frame together, so emit the call's \
+             return value whole rather than in parts"
+                .to_string(),
+        )
+    }));
     all
 }
 
@@ -279,6 +300,7 @@ impl SessionHandle for TypstSession {
         let helper_source = helper_source(&self.world)?;
         let field_placements = overlay::extract(&document)?;
         let new_hashes = page_hashes(&document);
+        let unclosed = overlay::unclosed_claims(&document);
 
         let dirty_pages = (0..new_hashes.len())
             .filter(|&i| self.page_hashes.get(i) != Some(&new_hashes[i]))
@@ -290,7 +312,8 @@ impl SessionHandle for TypstSession {
         self.helper_source = helper_source;
         self.page_count = new_hashes.len();
         self.page_hashes = new_hashes;
-        self.warnings = session_warnings(&self.world, compile_warnings);
+        self.warnings = session_warnings(&self.world, compile_warnings, &unclosed);
+        self.unclosed_claims = unclosed.into_iter().map(|(claim, _)| claim).collect();
 
         Ok(ChangeSet::new(self.page_count, dirty_pages))
     }
@@ -342,6 +365,7 @@ impl SessionHandle for TypstSession {
             &self.world,
             &self.helper_source,
             &self.windows,
+            &self.unclosed_claims,
         ));
         regions
     }
@@ -362,6 +386,7 @@ impl SessionHandle for TypstSession {
                     &self.world,
                     &self.helper_source,
                     &self.windows,
+                    &self.unclosed_claims,
                     page,
                     x,
                     y,
@@ -475,7 +500,8 @@ impl Backend for TypstBackend {
         };
         windows.extend(scalar_windows.iter().cloned());
         let (document, compile_warnings) = compile::compile_document(&world)?;
-        let warnings = session_warnings(&world, compile_warnings);
+        let unclosed = overlay::unclosed_claims(&document);
+        let warnings = session_warnings(&world, compile_warnings, &unclosed);
         let helper_src = helper_source(&world)?;
         let page_count = document.pages().len();
         let field_placements = overlay::extract(&document)?;
@@ -491,6 +517,7 @@ impl Backend for TypstBackend {
             helper_source: helper_src,
             page_hashes: hashes,
             warnings,
+            unclosed_claims: unclosed.into_iter().map(|(claim, _)| claim).collect(),
         };
         Ok(LiveSession::new(
             Box::new(session),

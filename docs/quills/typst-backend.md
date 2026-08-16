@@ -326,6 +326,7 @@ That is the way to give a card's *scalar* fields regions: read from the loop var
 
 - A `field` that is not a known schema address, or is not a string, raises a Typst assert pointing at `field-region`.
 - A claim whose content Typst lays out somewhere else entirely (`#place`, a float) claims whatever ink lands between its markers instead; wrap the placed content rather than the `place` call.
+- Emit the call's return value whole. Splitting it — passing `.children` through separately, say — can land the opening marker in a frame without its closing one. Such a claim is bounded by nothing, so rather than let it take every unattributed piece of ink to the end of the document it is dropped entirely and reported as a `typst::unclosed_field_region` warning naming the field.
 
 The label `<__qm_region__>` and metadata `kind: "__qm_region__"` are reserved for this hand-off: the same `query(metadata)` caveat applies.
 

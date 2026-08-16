@@ -11,7 +11,8 @@ mod span_scan;
 
 pub(crate) use extract::extract;
 pub(crate) use span_scan::{
-    field_at, locate, position_at, scalar_windows, scan_content_regions, FieldWindow,
+    field_at, locate, position_at, scalar_windows, scan_content_regions, unclosed_claims,
+    FieldWindow,
 };
 
 /// Mirrors the spine's [`FieldType`] but carries the *resolved* Typst value.

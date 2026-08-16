@@ -204,7 +204,11 @@ claim, not an override: content blocks, scalar sites, and nested
 region. Each *call* claims separately,
 so a wrapper invoked once per card with a `$path`-composed address is one
 region per card. Ink attributable to no source position at all (list bullets,
-underline rules) stays unclaimed here as everywhere.
+underline rules) stays unclaimed here as everywhere. The marker stack persists
+across pages so a claim can span a page break, which leaves a claim whose close
+marker never reaches a frame bounded by nothing: those are found before the
+scan, suppressed in both the region and point queries, and reported as a
+`typst::unclosed_field_region` warning naming the field.
 **Form-field widgets** carry the path explicitly — pdfform from the form
 mapping, a Typst `form-field` from its `field:` argument, both against the one
 address grammar ([PLATE_DATA.md](PLATE_DATA.md#schema-addresses)) — and surface

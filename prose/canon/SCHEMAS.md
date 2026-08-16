@@ -65,9 +65,9 @@ could not say:
   `default:`-presence derivation, so it reads *"required in this world"*: `poc`
   is obliged on a CUI memo and silent on every other one. This is the one
   cross-field constraint the engine checks rather than describes.
-- **A UI signal.** `quillmark:variant_of` on the transform schema names the
-  member that brings each cell into play, so an editor retires cells that are out
-  of play instead of hard-coding the rule.
+- **A UI signal.** `variants:` is keyed by member on the declaration view
+  ([`Quill::schema`](#schema-emission)), so an editor shows and retires
+  cells as the discriminant changes instead of hard-coding the rule.
 
 **The wire carries exactly the live world, and totality is per-world.** The
 render floor emits `value` plus the selected member's fields — blank-filled as
@@ -124,9 +124,7 @@ A repeated name is one **cell** of the container, not one per world: the coercio
 lookup and the transform schema both key on the name alone, never the
 discriminant. So every variant declaring a name must declare it identically —
 `quill::variant_field_collision` rejects disagreement at load, rather than letting
-a live value coerce under another world's type. The projection tags that cell
-`quillmark:variant_of` with the *first* declaring member, understating a shared
-cell's reach.
+a live value coerce under another world's type.
 
 The text-ish types form a **data vs content** × **open/plain vs closed/formatted**
 2×2: `enum` (closed data), `string` (open data), `plaintext` (plain content),
@@ -580,8 +578,8 @@ The type-gated keys:
 - `values`: declares an `enum` field's domain, required there.
 - `variants`: per-member field sets on an `enum` field, valid only there and only
   at card level (see [Enum variants](#enum-variants)). `schema()` emits it as
-  authored; the transform schema instead projects the container, flattening every
-  world's fields under `properties` and tagging each `quillmark:variant_of`.
+  authored, keyed by member; the transform schema instead projects the container,
+  flattening every world's fields under `properties` with no member scoping.
 - `items`: the element schema, itself a `FieldSchema`; required on `array`
   fields and rejected elsewhere.
 - `properties`: used by `object` fields, and by an array's `object`-typed

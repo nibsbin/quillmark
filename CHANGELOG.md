@@ -32,11 +32,12 @@
   (`validation::out_of_variant`), never dropped at coercion or gated at render.
   The ceiling is enforced at load, not discovered at render: a variant carries
   plain data only, sits at card level only, and cannot declare `value`. The
-  transform schema projects the container with every world's fields tagged
-  `quillmark:variant_of`, since a binding built once against a schema must
-  address a field today's document has not selected. `FieldSchema` gains
-  `variants`; `VariantFields`, `VARIANT_DISCRIMINANT_KEY` and
-  `QUILLMARK_VARIANT_OF_KEY` are new.
+  transform schema projects the container with every world's fields flattened
+  under `properties`, since a binding built once against a schema must address a
+  field today's document has not selected; member scoping stays on the
+  declaration view, where `schema()` emits `variants:` keyed by member.
+  `FieldSchema` gains `variants`; `VariantFields` and `VARIANT_DISCRIMINANT_KEY`
+  are new.
 - feat(fixtures)!: `usaf_memo`'s four `cui_*` fields move under
   `classification`'s `CUI` variant as `controlled_by`, `poc`, `category`, and
   `limited_dissemination`. `controlled_by` and `poc` drop their `default: ""`
@@ -53,7 +54,15 @@
   additive and cannot retarget. Each *call* claims independently, so a wrapper
   invoked once per card yields one region per card — the way a card's scalar
   fields get regions at all, reading as they do from a loop variable that carries
-  no per-instance identity.
+  no per-instance identity. The marker stack persists across pages so a claim can
+  span a page break, which leaves a claim whose closing marker never reaches a
+  frame bounded by nothing: it would take every unattributed piece of ink to the
+  end of the document. Those are found before the scan and suppressed in both the
+  region and point queries — an unbounded claim yields nothing rather than
+  everything — and reported as a `typst::unclosed_field_region` warning naming
+  the field, since only the plate author can act on it. Typst does not separate
+  the two markers on its own — they are siblings in content flow — but a plate
+  emitting the call's return value in parts can.
 - feat(typst,pdf): `form-field` takes `font`, `size`, and `align`, so an
   injected widget's value can be set to match the type around it. A widget was
   fixed at Helvetica, auto-size, left: auto-size makes the rendered size a
