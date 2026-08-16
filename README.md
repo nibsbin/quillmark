@@ -6,7 +6,9 @@
 [![CI](https://github.com/borb-sh/quillmark/workflows/CI/badge.svg)](https://github.com/borb-sh/quillmark/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-lightgray.svg)](LICENSE)
  
-Quills define document presentation and schema. Use a quill to generate a formatted document from markdown or code.
+A schema-driven document engine. A quill declares a document format as data — a typed schema plus the presentation that renders it — and the engine turns a document conforming to that schema into a typeset artifact (PDF, SVG, PNG) or a stamped AcroForm PDF.
+
+A document is a structured value, not text. Markdown, the annotated blueprint an LLM fills in, and programmatic construction are three projections of it; all three produce the same `Document`, validated against the same schema.
 
 Maintained by [borb-sh](https://github.com/borb-sh).
 
