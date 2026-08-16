@@ -36,13 +36,6 @@ pub const QUILLMARK_BLANK_TITLE_KEY: &str = "quillmark:blank_title";
 /// and enforcement — if a consumer wants any — is that consumer's policy.
 pub const QUILLMARK_MUST_FILL_KEY: &str = "quillmark:must_fill";
 
-/// Transform-schema keyword naming the enum member that brings a field into
-/// play. It sits on each property of a variant-bearing enum's container except
-/// the discriminant itself, and is the signal a UI needs to show or retire a
-/// cell as the discriminant changes — the fact the flat `cui_`-prefix convention
-/// could only carry in prose.
-pub const QUILLMARK_VARIANT_OF_KEY: &str = "quillmark:variant_of";
-
 /// Build a JSON-Schema-shaped descriptor of a [`QuillConfig`]'s main + card fields.
 ///
 /// The descriptor marks richtext fields with `contentMediaType:
@@ -105,32 +98,25 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
         // render floor, the pdfform widget and the blueprint annotation all are,
         // so a `FieldSchema` built outside the loader projects its domain too.
         // A variant-bearing enum crosses as the container it rests as: the
-        // discriminant under `value`, and every world's fields beside it, each
-        // tagged with the member that brings it into play. The union — not the
-        // live world — is what a *contract* describes: a pdfform binding and an
-        // editor form are built once, against a schema, and must address a field
-        // whose world today's document has not selected.
+        // discriminant under `value`, and every world's fields flattened beside
+        // it. The schema describes resting shapes, and at schema time there is
+        // no live world, so the union is the only projection available. Which
+        // member owns a cell is not restated here: `variants:` on the
+        // declaration view (`QuillConfig::schema`) carries that, keyed by member.
         if let Some(variants) = &field.variants {
             let mut properties = serde_json::Map::new();
             properties.insert(
                 VARIANT_DISCRIMINANT_KEY.to_string(),
                 discriminant_schema(field),
             );
-            for (member, fields) in variants {
+            for fields in variants.values() {
                 for (name, variant_field) in fields {
-                    // Names may repeat across worlds; the first declaration wins,
-                    // as only one world is ever live.
+                    // One slot per name: every repetition is the same
+                    // declaration (`quill::variant_field_collision`).
                     if properties.contains_key(name) {
                         continue;
                     }
-                    let mut child = field_to_schema(variant_field);
-                    if let Some(object) = child.as_object_mut() {
-                        object.insert(
-                            QUILLMARK_VARIANT_OF_KEY.to_string(),
-                            serde_json::Value::String(member.clone()),
-                        );
-                    }
-                    properties.insert(name.clone(), child);
+                    properties.insert(name.clone(), field_to_schema(variant_field));
                 }
             }
             schema.insert(

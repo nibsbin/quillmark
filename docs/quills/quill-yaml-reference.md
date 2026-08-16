@@ -322,7 +322,9 @@ keys only on declared members (never `""`, which owns no field set), and cannot
 declare a field named `value`. Variant fields inherit the discriminant's
 `ui.group`; declaring one inside a variant is an error. A field set shared by
 several members is repeated or shared with a YAML anchor — a variant keys on one
-member.
+member — but every variant declaring a given name must declare it *identically*,
+since the name is one cell of the container whichever world brings it into play
+(`quill::variant_field_collision`).
 
 ### Primitive Arrays, Typed Tables, and Typed Dictionaries
 

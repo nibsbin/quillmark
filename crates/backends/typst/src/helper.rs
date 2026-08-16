@@ -273,10 +273,10 @@ impl<'m> Codegen<'m> {
         kind: &str,
         prefix: &str,
     ) -> String {
-        let content = card_names(&self.meta.card_content_fields, kind);
-        let dates = card_names(&self.meta.card_date_fields, kind);
-        let datetimes = card_names(&self.meta.card_datetime_fields, kind);
-        let inlines = card_names(&self.meta.card_inline_fields, kind);
+        let content = names_at(&self.meta.card_content_fields, kind);
+        let dates = names_at(&self.meta.card_date_fields, kind);
+        let datetimes = names_at(&self.meta.card_datetime_fields, kind);
+        let inlines = names_at(&self.meta.card_inline_fields, kind);
         let mut items = Vec::with_capacity(obj.len() + 1);
         // The canonical address prefix, so plates compose schema-field addresses
         // without reimplementing the kind+ordinal grammar.
@@ -359,7 +359,7 @@ enum DateKind {
     DateTime,
 }
 
-pub(crate) fn card_names(
+pub(crate) fn names_at(
     table: &serde_json::Map<String, serde_json::Value>,
     kind: &str,
 ) -> Vec<String> {
@@ -382,6 +382,8 @@ fn meta_literal(meta: &SchemaMeta) -> String {
         "card_fields": meta.card_field_names,
         "array_fields": meta.array_fields,
         "card_array_fields": meta.card_array_fields,
+        "object_fields": meta.object_fields,
+        "card_object_fields": meta.card_object_fields,
     });
     lit(&tables)
 }
@@ -502,6 +504,8 @@ entrypoint = "lib.typ"
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
+
     use crate::emit::escape_markup;
     use crate::emit::EscapeCtx;
     use quillmark_core::quill::CONTENT_MEDIA_TYPE;
@@ -783,6 +787,54 @@ mod tests {
         assert!(lib.contains("\"fields\": ("));
         assert!(lib.contains("\"subject\""));
         assert!(lib.contains("\"array_fields\": (\"refs\",)"));
+    }
+
+    /// A typed dictionary and a variant container reach the same table: both
+    /// project as `type: object` carrying `properties`, the container's `value`
+    /// discriminant among them. A richtext field is `type: object` too and must
+    /// stay out of it, offering no property step.
+    #[test]
+    fn object_fields_table_carries_every_declared_container() {
+        let meta = meta_from(serde_json::json!({
+            "properties": {
+                "subject": { "type": "string" },
+                "body": richtext_field(),
+                "address": { "type": "object", "properties": {
+                    "city": { "type": "string" },
+                }},
+                "classification": { "type": "object", "properties": {
+                    "value": { "type": "string", "enum": ["", "CUI"] },
+                    "poc": { "type": "string" },
+                }},
+            },
+            "$defs": { "note_card": { "properties": {
+                "origin": { "type": "object", "properties": { "office": { "type": "string" } } },
+            }}}
+        }));
+        assert_eq!(
+            meta.object_fields,
+            BTreeMap::from([
+                ("address".to_string(), vec!["city".to_string()]),
+                (
+                    "classification".to_string(),
+                    vec!["value".to_string(), "poc".to_string()],
+                ),
+            ]),
+        );
+        assert_eq!(
+            meta.card_object_fields,
+            BTreeMap::from([(
+                "note".to_string(),
+                BTreeMap::from([("origin".to_string(), vec!["office".to_string()])]),
+            )]),
+        );
+
+        let (lib, _) = generate_lib_typ(&serde_json::json!({}), &meta).unwrap();
+        assert!(lib.contains("\"object_fields\": ("), "{lib}");
+        assert!(
+            lib.contains("\"card_object_fields\": (\"note\": (\"origin\": (\"office\",),),)"),
+            "{lib}"
+        );
     }
 
     /// Slots are located in the raw template only.

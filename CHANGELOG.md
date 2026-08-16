@@ -2,6 +2,67 @@
 
 ## v0.106.0 - 2026-08-16
 
+- feat(typst,pdfform): a schema address may step one property into a declared
+  container, so `form-field(field: "classification.poc")` and
+  `field-region("address.city")` name a cell rather than the container holding
+  it. Two generated address tables gate the step the way `array_fields` gates
+  the index step, and a typed dictionary and a variant container reach both
+  alike: `classification.value` addresses the discriminant, `classification.poc`
+  a variant cell in any world. The pdfform binder descends a variant container
+  to match, so one address binds on either backend where `address.city` bound
+  only on pdfform and asserted on Typst. **Region addresses shift** for a plate
+  that reads a container property directly: `#data.classification.poc` regions
+  as `classification.poc` where it regioned as `classification`, and `fieldAt`
+  answers the same. A container read whole is unchanged, as is a read of a key
+  the container does not declare.
+- feat(core,wasm)!: an `enum` may declare `variants:`, a per-member field set
+  that exists only in the world where the discriminant holds that member. This
+  is the DSL's first cross-field shape, and it replaces the `cui_`-prefix
+  convention with one the engine checks: `must_fill` inside a variant keeps its
+  ordinary `default:`-presence derivation, so it reads *required in this world* —
+  a `poc` obliged on a CUI memo and silent on every other one, the thing
+  `must_fill` alone could not say. **Breaking**: declaring `variants:` changes
+  the field's resting shape at every projection, from a bare string to a
+  container, `{value: <member>, …that member's fields}`; the bare scalar
+  (`classification: CUI`) is still accepted as the spelling of a world carrying
+  no answers, and coercion normalizes both. The wire carries exactly the live
+  world, so a plate reads a variant field inside the `values ∪ blank` branch it
+  already owes the enum, and inside that branch every declared field is present
+  and needs no guard. A value stranded by a discriminant flip is kept and warned
+  (`validation::out_of_variant`), never dropped at coercion or gated at render.
+  The ceiling is enforced at load, not discovered at render: a variant carries
+  plain data only, sits at card level only, and cannot declare `value`. The
+  transform schema projects the container with every world's fields flattened
+  under `properties`, since a binding built once against a schema must address a
+  field today's document has not selected; member scoping stays on the
+  declaration view, where `schema()` emits `variants:` keyed by member.
+  `FieldSchema` gains `variants` and `variant_field` (the cell a name declares
+  under any world); `VariantFields` and `VARIANT_DISCRIMINANT_KEY` are new.
+- feat(fixtures)!: `usaf_memo`'s four `cui_*` fields move under
+  `classification`'s `CUI` variant as `controlled_by`, `poc`, `category`, and
+  `limited_dissemination`. `controlled_by` and `poc` drop their `default: ""`
+  and are therefore obliged — on a CUI memo only, which is what DoDM 5200.48
+  actually requires and what the flat spelling could state only in
+  `description:` prose. A document writes `classification: {value: CUI, …}` and
+  a plate reads `data.classification.value`.
+- feat(typst): `field-region(field, body)` claims the ink `body` draws for a
+  schema field, so a plate can tie content it *composes* — a banner keyed on a
+  field, a package-built block, a computed table — to `session.regions()` and
+  `session.fieldAt(..)`. Layout-neutral: `body` is returned untouched between two
+  invisible `metadata` markers. It is a **fallback** claim, never an override:
+  ink already tracked to a field keeps that field, so wrapping is purely
+  additive and cannot retarget. Each *call* claims independently, so a wrapper
+  invoked once per card yields one region per card — the way a card's scalar
+  fields get regions at all, reading as they do from a loop variable that carries
+  no per-instance identity. The marker stack persists across pages so a claim can
+  span a page break, which leaves a claim whose closing marker never reaches a
+  frame bounded by nothing: it would take every unattributed piece of ink to the
+  end of the document. Those are found before the scan and suppressed in both the
+  region and point queries — an unbounded claim yields nothing rather than
+  everything — and reported as a `typst::unclosed_field_region` warning naming
+  the field, since only the plate author can act on it. Typst does not separate
+  the two markers on its own — they are siblings in content flow — but a plate
+  emitting the call's return value in parts can.
 - feat(typst,pdf): `form-field` takes `font`, `size`, and `align`, so an
   injected widget's value can be set to match the type around it. A widget was
   fixed at Helvetica, auto-size, left: auto-size makes the rendered size a
@@ -35,7 +96,16 @@
   rather than `date-placeholder-line`: the widget carries the date, and a rule
   under a widget wider than it underlines only the fraction of the value narrow
   enough to sit over it. It is package-internal, not exported from `lib.typ`.
-
+- fix(core): a name two variants declare *differently* is a load error,
+  `quill::variant_field_collision`. The name is one cell of the container
+  whichever world brings it into play — neither the coercion lookup nor the
+  transform schema consults the discriminant to fill it — so two readings of it
+  coerced a live value under the other world's type: a document selecting a
+  world whose `note` is `integer` had its `42` coerced to `"42"` by a sibling
+  world's `string` and then failed `validation::type_mismatch`, undraftable and
+  blamed for a string it never wrote. Identical declarations, which is what
+  repeating a shared field set or sharing a YAML anchor produces, collapse to
+  that one cell without loss and stay legal.
 - fix(core,wasm,python)!: `EditError::UnknownField` carries the in-field path
   `FieldDecode` and `FieldNotContent` carry. A property an `object` field does
   not declare — `get_content_at("address", [Key("zip")])` against an `address`

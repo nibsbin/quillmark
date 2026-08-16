@@ -818,9 +818,10 @@ impl QuillConfig {
     /// author their answers; `validation::out_of_variant` reports it, and the
     /// render floor drops it from the plate.
     ///
-    /// Names may repeat across variants (only one world is ever live), so the
-    /// lookup takes the first variant declaring the name: an ambiguity only
-    /// reachable for a stranded value, whose type nothing downstream reads.
+    /// Names may repeat across variants, and the lookup takes the first variant
+    /// declaring one without consulting the discriminant. That is total because
+    /// `quill::variant_field_collision` rejects a name two worlds declare
+    /// *differently*, so every repetition is the same declaration.
     fn conform_variant(
         json_value: &serde_json::Value,
         field_schema: &super::FieldSchema,
@@ -884,7 +885,7 @@ impl QuillConfig {
                 }
                 continue;
             }
-            match Self::variant_field_schema(field_schema, key) {
+            match field_schema.variant_field(key) {
                 Some(schema) => {
                     let coerced = Self::conform_value(
                         &QuillValue::from_json(value.clone()),
@@ -900,19 +901,6 @@ impl QuillConfig {
             }
         }
         Ok(QuillValue::from_json(serde_json::Value::Object(out)))
-    }
-
-    /// The schema for `name` under any of `field`'s variants, active or not.
-    pub(crate) fn variant_field_schema<'a>(
-        field: &'a super::FieldSchema,
-        name: &str,
-    ) -> Option<&'a super::FieldSchema> {
-        field
-            .variants
-            .as_ref()?
-            .values()
-            .find_map(|set| set.get(name))
-            .map(|boxed| boxed.as_ref())
     }
 
     /// Recursively validate a field's structural shape, enforcing the
@@ -1083,6 +1071,27 @@ impl QuillConfig {
                                  number, integer, or boolean. Declare prose and dates as \
                                  card-level fields.",
                                 field.r#type.as_str()
+                            ),
+                        );
+                    }
+                    // The coercion lookup and the transform schema both key on
+                    // the name alone, never the discriminant, so a name resolves
+                    // to one slot however many worlds declare it.
+                    if let Some((first, _)) = variants
+                        .iter()
+                        .take_while(|(m, _)| *m != member)
+                        .find_map(|(m, set)| set.get(name).map(|f| (m, f)))
+                        .filter(|(_, first)| first.as_ref() != field.as_ref())
+                    {
+                        return err(
+                            "quill::variant_field_collision",
+                            format!(
+                                "Field '{owner}' declares '{name}' differently under \
+                                 '{first}' and '{member}'. A name is one cell of the \
+                                 container whichever world brings it into play, so every \
+                                 variant declaring it must declare it identically; give \
+                                 the two readings separate names, or share one declaration \
+                                 with a YAML anchor."
                             ),
                         );
                     }

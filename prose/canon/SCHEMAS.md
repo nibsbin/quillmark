@@ -65,9 +65,9 @@ could not say:
   `default:`-presence derivation, so it reads *"required in this world"*: `poc`
   is obliged on a CUI memo and silent on every other one. This is the one
   cross-field constraint the engine checks rather than describes.
-- **A UI signal.** `quillmark:variant_of` on the transform schema names the
-  member that brings each cell into play, so an editor retires cells that are out
-  of play instead of hard-coding the rule.
+- **A UI signal.** `variants:` is keyed by member on the declaration view
+  ([`Quill::schema`](#schema-emission)), so an editor shows and retires
+  cells as the discriminant changes instead of hard-coding the rule.
 
 **The wire carries exactly the live world, and totality is per-world.** The
 render floor emits `value` plus the selected member's fields — blank-filled as
@@ -96,21 +96,35 @@ The ceiling is deliberate and enforced at load rather than discovered at render:
 | an empty `variants:` map, or an empty variant | `quill::variant_empty` |
 | a variant field named `value` | `quill::variant_reserved_field_name` |
 | a `richtext`, `plaintext`, `date`, or `datetime` variant field | `quill::variant_field_type` |
+| a name two variants declare *differently* | `quill::variant_field_collision` |
 
 The last is the load-bearing one: content and dates lower to Typst through
-*top-level* name tables that do not descend into a container
-([PLATE_DATA.md](PLATE_DATA.md)), so such a field would load clean and reach the
-plate as a raw dict. **A variant carries plain data** — `string`, `enum`,
+*top-level* content and date name tables that do not descend into a container
+([PLATE_DATA.md](PLATE_DATA.md)) — unlike the address tables, which do — so such
+a field would load clean and reach the plate as a raw dict. **A variant carries plain data** — `string`, `enum`,
 `number`, `integer`, `boolean` — and prose and dates stay card-level fields.
 Variant fields are otherwise leaves exactly as an object's properties are: no
 container one level down, and no `ui.group` (they inherit the discriminant's).
 
-Three limits follow from the container shape and are accepted, not worked around:
+Two limits follow from the container shape and are accepted, not worked around:
 [`resolve()`](#the-resolved-value-view-resolve) reports **one** rung for the whole
-container, as it does for a typed dictionary; a variant field cannot host a
-Typst `form-field` widget or click-to-edit region, whose address grammar is flat
-plus one index; and a field set **shared** across several members is spelled by
-repeating it or sharing a YAML anchor, since a variant keys on one member.
+container, as it does for a typed dictionary; and a field set **shared** across
+several members is spelled by repeating it or sharing a YAML anchor, since a
+variant keys on one member.
+
+A cell is addressable one step down, exactly as a typed dictionary's property is
+([PLATE_DATA.md](PLATE_DATA.md#schema-addresses)): `classification.poc` binds a
+`form-field` widget or a `field-region` claim on either backend, and
+`classification.value` the discriminant. Addressing is against the *schema*, so a
+cell is bindable in every world — a form is built once and the document selects
+its world later. The whole container is not bindable: its value is the container
+object, which no widget coerces.
+
+A repeated name is one **cell** of the container, not one per world: the coercion
+lookup and the transform schema both key on the name alone, never the
+discriminant. So every variant declaring a name must declare it identically —
+`quill::variant_field_collision` rejects disagreement at load, rather than letting
+a live value coerce under another world's type.
 
 The text-ish types form a **data vs content** × **open/plain vs closed/formatted**
 2×2: `enum` (closed data), `string` (open data), `plaintext` (plain content),
@@ -564,8 +578,8 @@ The type-gated keys:
 - `values`: declares an `enum` field's domain, required there.
 - `variants`: per-member field sets on an `enum` field, valid only there and only
   at card level (see [Enum variants](#enum-variants)). `schema()` emits it as
-  authored; the transform schema instead projects the container, flattening every
-  world's fields under `properties` and tagging each `quillmark:variant_of`.
+  authored, keyed by member; the transform schema instead projects the container,
+  flattening every world's fields under `properties` with no member scoping.
 - `items`: the element schema, itself a `FieldSchema`; required on `array`
   fields and rejected elsewhere.
 - `properties`: used by `object` fields, and by an array's `object`-typed

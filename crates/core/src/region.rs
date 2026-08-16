@@ -15,7 +15,9 @@
 //! - **Direct scalar references** — each `data.<field>` expression in the
 //!   plate is its own site, so a scalar in both header and footer surfaces
 //!   twice. `#upper(data.subject)` attributes the whole expression as long as
-//!   it holds one reference. Not tracked: an expression mixing several fields,
+//!   it holds one reference, and a read stepping into a declared container
+//!   (`data.classification.poc`) attributes the property rather than the
+//!   container. Not tracked: an expression mixing several fields,
 //!   a value laundered through an intermediate binding, and card scalars read
 //!   from the per-card loop variable (one site shared by every instance —
 //!   bind a widget for those).
@@ -53,7 +55,8 @@
 pub struct RenderedRegion {
     /// The field's plate-space schema address as the backend keys it:
     /// `"signature_block"`, `"references.0"` (a numeric segment per array
-    /// index) or `"$cards.<kind>.<ordinal>.<tail>"` (a per-kind ordinal).
+    /// index), `"classification.poc"` (a container property) or
+    /// `"$cards.<kind>.<ordinal>.<tail>"` (a per-kind ordinal).
     /// [`plate_addr_to_doc_path`] translates it to a canonical [`DocPath`];
     /// a core consumer reading `RenderedRegion` directly sees this form.
     pub field: String,

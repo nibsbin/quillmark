@@ -215,9 +215,11 @@ speak about the same cells (`SCHEMAS.md` § "Native validation").
 A variant-bearing `enum` emits its container: the discriminant under `value`,
 then the fields of the world that discriminant names (`default:` › `example:` ›
 blank). A blueprint **is** a document, so it can show only one world; the others
-are named instead, one `# when <MEMBER>: <fields>` leading line each. Every world
-is listed, the shown one included — the lines are the map, the cells are the
-position.
+are named instead, one `# when <MEMBER>: <fields>` leading line each. Every member
+owning a field set gets a line, the shown one included if it owns one — a member
+that brings no cells has nothing to announce, which is why the example below,
+sitting in the blank world, carries only `CUI`'s. The lines are the map, the cells
+are the position.
 
 ```
 # Select the classification marking shown in the header and footer banner.

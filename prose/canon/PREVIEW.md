@@ -186,6 +186,10 @@ glyph, not a marker a rebuild could drop. **Direct scalar references**: each
 tracked site; a scalar shown in header and footer surfaces both sites, and a
 reference wrapped in an expression (`#upper(data.subject)`) attributes the
 whole expression's ink to the field when it is the only reference inside it.
+A read that steps into a declared container (`data.classification.poc`,
+`data.address.at("city")`) tracks on the **property**, so the region names the
+cell the plate read rather than the container holding it; a key the container
+does not declare is no address, and the read falls back to the container.
 Not tracked: expressions mixing several fields (`data.from + ", " + rank` has
 no single owner), values laundered through intermediate bindings, and card
 scalars read from the per-card loop variable (one shared expression site
@@ -200,13 +204,15 @@ claim, not an override: content blocks, scalar sites, and nested
 region. Each *call* claims separately,
 so a wrapper invoked once per card with a `$path`-composed address is one
 region per card. Ink attributable to no source position at all (list bullets,
-underline rules) stays unclaimed here as everywhere.
-**Form-field widgets** carry the path explicitly
-(pdfform from the form mapping, a Typst `form-field` from its `field:`
-argument, validated against schema address tables baked into the generated
-helper: cards carry their canonical prefix as `$path`, so plates compose
-card addresses without reimplementing the kind+ordinal grammar) and surface a
-region only when they bind one: a widget with no schema field is a backend
+underline rules) stays unclaimed here as everywhere. The marker stack persists
+across pages so a claim can span a page break, which leaves a claim whose close
+marker never reaches a frame bounded by nothing: those are found before the
+scan, suppressed in both the region and point queries, and reported as a
+`typst::unclosed_field_region` warning naming the field.
+**Form-field widgets** carry the path explicitly — pdfform from the form
+mapping, a Typst `form-field` from its `field:` argument, both against the one
+address grammar ([PLATE_DATA.md](PLATE_DATA.md#schema-addresses)) — and surface
+a region only when they bind one: a widget with no schema field is a backend
 artifact, not a routable field.
 
 ### Segments and the striped union

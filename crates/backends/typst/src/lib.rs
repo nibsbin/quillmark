@@ -21,6 +21,7 @@ mod overlay;
 mod world;
 
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 
 use quillmark_core::{
     quill::{build_transform_schema, QUILLMARK_INLINE_KEY, CONTENT_MEDIA_TYPE},
@@ -65,13 +66,34 @@ struct TypstSession {
     /// What [`session_warnings`] built for the live compile. The compile half
     /// swaps on each committed `apply`; the load half rides along unchanged.
     warnings: Vec<Diagnostic>,
+    /// [`overlay::unclosed_claims`] for the live document, suppressed by every
+    /// region and point query. Computed with the compile rather than per query:
+    /// `field_at` cannot derive it from the page prefix it walks.
+    unclosed_claims: Vec<usize>,
 }
 
-/// The quill's load warnings, then this compile's own. One order, built in one
-/// place, so an `apply` that swaps only what it recompiled keeps the load half.
-fn session_warnings(world: &world::QuillWorld, compile: Vec<Diagnostic>) -> Vec<Diagnostic> {
+/// The quill's load warnings, then this compile's own, then one per runaway
+/// `field-region`. One order, built in one place, so an `apply` that swaps only
+/// what it recompiled keeps the load half.
+fn session_warnings(
+    world: &world::QuillWorld,
+    compile: Vec<Diagnostic>,
+    unclosed: &[(usize, String)],
+) -> Vec<Diagnostic> {
     let mut all = world.load_warnings().to_vec();
     all.extend(compile);
+    all.extend(unclosed.iter().map(|(_, field)| {
+        Diagnostic::new(
+            Severity::Warning,
+            format!("`field-region(\"{field}\")` never closed; its claim was dropped"),
+        )
+        .with_code("typst::unclosed_field_region".to_string())
+        .with_hint(
+            "both markers must reach the frame together, so emit the call's \
+             return value whole rather than in parts"
+                .to_string(),
+        )
+    }));
     all
 }
 
@@ -229,8 +251,8 @@ fn validate_date_fields(
                 continue;
             };
             let prefix = format!("$cards.{kind}.");
-            let dates = helper::card_names(&meta.card_date_fields, kind);
-            let datetimes = helper::card_names(&meta.card_datetime_fields, kind);
+            let dates = helper::names_at(&meta.card_date_fields, kind);
+            let datetimes = helper::names_at(&meta.card_datetime_fields, kind);
             check(&dates, card_obj, &prefix, false)?;
             check(&datetimes, card_obj, &prefix, true)?;
         }
@@ -279,6 +301,7 @@ impl SessionHandle for TypstSession {
         let helper_source = helper_source(&self.world)?;
         let field_placements = overlay::extract(&document)?;
         let new_hashes = page_hashes(&document);
+        let unclosed = overlay::unclosed_claims(&document);
 
         let dirty_pages = (0..new_hashes.len())
             .filter(|&i| self.page_hashes.get(i) != Some(&new_hashes[i]))
@@ -290,7 +313,8 @@ impl SessionHandle for TypstSession {
         self.helper_source = helper_source;
         self.page_count = new_hashes.len();
         self.page_hashes = new_hashes;
-        self.warnings = session_warnings(&self.world, compile_warnings);
+        self.warnings = session_warnings(&self.world, compile_warnings, &unclosed);
+        self.unclosed_claims = unclosed.into_iter().map(|(claim, _)| claim).collect();
 
         Ok(ChangeSet::new(self.page_count, dirty_pages))
     }
@@ -342,6 +366,7 @@ impl SessionHandle for TypstSession {
             &self.world,
             &self.helper_source,
             &self.windows,
+            &self.unclosed_claims,
         ));
         regions
     }
@@ -362,6 +387,7 @@ impl SessionHandle for TypstSession {
                     &self.world,
                     &self.helper_source,
                     &self.windows,
+                    &self.unclosed_claims,
                     page,
                     x,
                     y,
@@ -461,7 +487,7 @@ impl Backend for TypstBackend {
                 .source(main_id)
                 .ok()
                 .map(|src| {
-                    overlay::scalar_windows(&src, &schema_meta.fields)
+                    overlay::scalar_windows(&src, &schema_meta.fields, &schema_meta.object_fields)
                         .into_iter()
                         .map(|(path, range)| overlay::FieldWindow {
                             path,
@@ -475,7 +501,8 @@ impl Backend for TypstBackend {
         };
         windows.extend(scalar_windows.iter().cloned());
         let (document, compile_warnings) = compile::compile_document(&world)?;
-        let warnings = session_warnings(&world, compile_warnings);
+        let unclosed = overlay::unclosed_claims(&document);
+        let warnings = session_warnings(&world, compile_warnings, &unclosed);
         let helper_src = helper_source(&world)?;
         let page_count = document.pages().len();
         let field_placements = overlay::extract(&document)?;
@@ -491,6 +518,7 @@ impl Backend for TypstBackend {
             helper_source: helper_src,
             page_hashes: hashes,
             warnings,
+            unclosed_claims: unclosed.into_iter().map(|(claim, _)| claim).collect(),
         };
         Ok(LiveSession::new(
             Box::new(session),
@@ -632,6 +660,28 @@ fn array_field_names(properties: &serde_json::Map<String, serde_json::Value>) ->
     })
 }
 
+/// The fields addressable by one property step (`address.city`,
+/// `classification.poc`), each mapped to the property names it declares. The
+/// index step's twin: `array_fields` gates `field.0`, this gates `field.sub`.
+///
+/// A typed dictionary and a variant container both project as `type: object`
+/// carrying `properties` — the container's own `value` among them — so one
+/// predicate spans both. A richtext field is `type: object` too but declares no
+/// `properties`, so it contributes no step.
+fn object_field_names(
+    properties: &serde_json::Map<String, serde_json::Value>,
+) -> BTreeMap<String, Vec<String>> {
+    properties
+        .iter()
+        .filter(|(_, fs)| fs.get("type").and_then(|v| v.as_str()) == Some("object"))
+        .filter_map(|(name, fs)| {
+            let props = fs.get("properties")?.as_object()?;
+            let names: Vec<String> = props.keys().cloned().collect();
+            (!names.is_empty()).then(|| (name.clone(), names))
+        })
+        .collect()
+}
+
 /// Schema-derived tables backing `form-field` path validation and the helper's
 /// content/date classification. A schema with no top-level `properties` yields
 /// all-empty tables: `build_transform_schema` always emits `properties`, so
@@ -642,6 +692,10 @@ pub(crate) struct SchemaMeta {
     pub(crate) date_fields: Vec<String>,
     pub(crate) datetime_fields: Vec<String>,
     pub(crate) array_fields: Vec<String>,
+    /// Container field → its property names, gating the `field.sub` step.
+    /// Native rather than JSON like the card tables: the span scan reads it on
+    /// the AST walk, and `meta_literal` serializes it either way.
+    pub(crate) object_fields: BTreeMap<String, Vec<String>>,
     /// A subset of `content_fields`, driving the pure-inline lowering.
     pub(crate) inline_fields: Vec<String>,
     pub(crate) card_content_fields: serde_json::Map<String, serde_json::Value>,
@@ -649,6 +703,8 @@ pub(crate) struct SchemaMeta {
     pub(crate) card_datetime_fields: serde_json::Map<String, serde_json::Value>,
     pub(crate) card_field_names: serde_json::Map<String, serde_json::Value>,
     pub(crate) card_array_fields: serde_json::Map<String, serde_json::Value>,
+    /// The card twin of `object_fields`, keyed kind → field → property names.
+    pub(crate) card_object_fields: BTreeMap<String, BTreeMap<String, Vec<String>>>,
     pub(crate) card_inline_fields: serde_json::Map<String, serde_json::Value>,
     pub(crate) fields: Vec<String>,
 }
@@ -663,6 +719,7 @@ impl SchemaMeta {
         let date_fields = date_field_names(properties_obj);
         let datetime_fields = datetime_field_names(properties_obj);
         let array_fields = array_field_names(properties_obj);
+        let object_fields = object_field_names(properties_obj);
         let inline_fields = inline_field_names(properties_obj);
         let fields = properties_obj.keys().cloned().collect();
 
@@ -671,6 +728,7 @@ impl SchemaMeta {
         let mut card_datetime_fields = serde_json::Map::new();
         let mut card_field_names = serde_json::Map::new();
         let mut card_array_fields = serde_json::Map::new();
+        let mut card_object_fields = BTreeMap::new();
         let mut card_inline_fields = serde_json::Map::new();
         fn insert_names(
             table: &mut serde_json::Map<String, serde_json::Value>,
@@ -711,6 +769,10 @@ impl SchemaMeta {
                         card_kind,
                         card_props.map(array_field_names).unwrap_or_default(),
                     );
+                    let objects = card_props.map(object_field_names).unwrap_or_default();
+                    if !objects.is_empty() {
+                        card_object_fields.insert(card_kind.to_string(), objects);
+                    }
                     insert_names(
                         &mut card_inline_fields,
                         card_kind,
@@ -725,12 +787,14 @@ impl SchemaMeta {
             date_fields,
             datetime_fields,
             array_fields,
+            object_fields,
             inline_fields,
             card_content_fields,
             card_date_fields,
             card_datetime_fields,
             card_field_names,
             card_array_fields,
+            card_object_fields,
             card_inline_fields,
             fields,
         }

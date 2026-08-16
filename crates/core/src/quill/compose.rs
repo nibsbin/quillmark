@@ -775,7 +775,7 @@ fn collect_unauthored_field(
     // discriminant and — *only in the world the discriminant selects* — that
     // world's fields. This is where obligation becomes conditional: a `poc` with
     // no `default:` is obliged on a CUI memo and silent on every other one, which
-    // is the thing `must_fill` alone could not say (#1202).
+    // is the thing `must_fill` alone cannot say.
     if field.is_variant_bearing() {
         let json = value.map(|v| v.as_json());
         let object = json.and_then(|j| j.as_object());

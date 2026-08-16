@@ -23,6 +23,12 @@
 //! innermost open marker instead of counting as foreign. Each *call* is its own
 //! claim, so a wrapper invoked per card yields one region per card.
 //!
+//! The stack persists across pages so a claim can span a page break, which means
+//! an open marker whose close never reaches the frame would claim every
+//! unattributed hit to the end of the document. [`unclosed_claims`] names those
+//! ahead of the scan and both queries suppress them, so an unbounded claim
+//! yields nothing rather than everything.
+//!
 //! **First placement only.** Each span-window key's region is its first maximal
 //! run of consecutive matching frame items. Span data cannot distinguish
 //! "package chrome between two placements" from "a second placement" (both are a
@@ -36,7 +42,7 @@
 //! `typst_layout::introspect::discover_frame`, transforming all four corners of
 //! each item box (the stack may rotate or scale).
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ops::Range;
 
 use typst::foundations::{Content, Label, Value};
@@ -202,16 +208,36 @@ const REGION_LABEL: &str = "__qm_region__";
 struct Markers {
     claims: Vec<String>,
     stack: Vec<usize>,
+    /// Claim indices [`unclosed_claims`] found still open at the end of the
+    /// document. Keeping them off `stack` leaves their ink foreign, exactly as
+    /// if the plate had emitted no marker at all.
+    suppressed: Vec<usize>,
 }
 
 impl Markers {
+    fn suppressing(suppressed: &[usize]) -> Self {
+        Self {
+            suppressed: suppressed.to_vec(),
+            ..Self::default()
+        }
+    }
+
     /// A close unwinds to the innermost open claim on `path`; one whose open
     /// never reached the frame (content Typst laid out elsewhere) is dropped
-    /// rather than popping an unrelated claim.
+    /// rather than popping an unrelated claim. An open still on the stack when
+    /// the walk ends is the mirror case, handled by [`unclosed_claims`]: it
+    /// cannot be detected here, where the rest of the document is still ahead.
+    ///
+    /// `claims` grows on every open, suppressed or not, so an index addresses
+    /// the same call in any walk of one document — including the page prefix
+    /// [`field_at`] walks.
     fn edge(&mut self, path: &str, close: bool) {
         if !close {
             self.claims.push(path.to_string());
-            self.stack.push(self.claims.len() - 1);
+            let claim = self.claims.len() - 1;
+            if !self.suppressed.contains(&claim) {
+                self.stack.push(claim);
+            }
         } else if let Some(i) = self.stack.iter().rposition(|&c| self.claims[c] == path) {
             self.stack.truncate(i);
         }
@@ -220,6 +246,22 @@ impl Markers {
     fn current(&self) -> Option<usize> {
         self.stack.last().copied()
     }
+}
+
+/// The `(claim, field)` of every `field-region` whose open marker reached a
+/// frame but whose close never did, over the whole document. A claim an
+/// enclosing close unwound past counts as closed: its extent was bounded, so
+/// nothing ran away.
+pub(crate) fn unclosed_claims(doc: &PagedDocument) -> Vec<(usize, String)> {
+    let mut markers = Markers::default();
+    for page in doc.pages() {
+        scan_markers(&page.frame, &mut markers);
+    }
+    markers
+        .stack
+        .iter()
+        .map(|&c| (c, markers.claims[c].clone()))
+        .collect()
 }
 
 /// `(field, is-close)` if `elem` is one of `field-region`'s markers.
@@ -461,15 +503,17 @@ enum Run {
 
 /// Each span window's **first placement** and each `field-region` call's whole
 /// claim: one [`RenderedRegion`] per page a run touches, PDF bottom-left rects,
-/// sorted (page, field, key order).
+/// sorted (page, field, key order). A claim in `unclosed` accrues nothing and so
+/// surfaces no region.
 pub(crate) fn scan_content_regions(
     doc: &PagedDocument,
     world: &QuillWorld,
     helper: &Source,
     windows: &[FieldWindow],
+    unclosed: &[usize],
 ) -> Vec<RenderedRegion> {
     let mut cls = Classifier::new(world, helper, windows);
-    let mut markers = Markers::default();
+    let mut markers = Markers::suppressing(unclosed);
     let mut hits = Vec::new();
     for (page, p) in doc.pages().iter().enumerate() {
         collect_page_hits(&p.frame, page, &mut cls, &mut markers, &mut hits);
@@ -597,12 +641,16 @@ fn accrue(boxes: &mut Vec<(usize, Aabb)>, hit: &Hit) {
 /// tracked ink the later-painted item wins; untracked ink never occludes.
 ///
 /// Earlier pages are walked for their markers alone, so a `field-region` that
-/// opened on a previous page still claims this page's ink.
+/// opened on a previous page still claims this page's ink. `unclosed` is
+/// supplied rather than derived here because whether a claim open at `page` ever
+/// closes is knowable only from the pages after it, which this walk never
+/// reaches.
 pub(crate) fn field_at(
     doc: &PagedDocument,
     world: &QuillWorld,
     helper: &Source,
     windows: &[FieldWindow],
+    unclosed: &[usize],
     page: usize,
     x: f32,
     y: f32,
@@ -612,7 +660,7 @@ pub(crate) fn field_at(
     let (x, y) = (x as f64, page_h - y as f64);
 
     let mut cls = Classifier::new(world, helper, windows);
-    let mut markers = Markers::default();
+    let mut markers = Markers::suppressing(unclosed);
     let mut hits = Vec::new();
     for earlier in doc.pages().iter().take(page) {
         scan_markers(&earlier.frame, &mut markers);
@@ -819,9 +867,24 @@ fn forward_pos(helper: &Source, segmap: &SegmentMap, pos: usize) -> usize {
 /// Chain windows sort first, so ink resolving to the reference itself is never
 /// claimed by a wider window. A value laundered through `#let s = data.x` is not
 /// chased: it carries the binding's span.
-pub(crate) fn scalar_windows(source: &Source, fields: &[String]) -> Vec<(String, Range<usize>)> {
+///
+/// A reference that steps into a declared container (`data.classification.poc`)
+/// anchors on the property, so the region carries the address the plate actually
+/// read rather than the container's. `containers` is the `object_fields` table
+/// [`_qm-known-path`] validates against, so a region path is one a
+/// `form-field`/`field-region` could bind.
+pub(crate) fn scalar_windows(
+    source: &Source,
+    fields: &[String],
+    containers: &BTreeMap<String, Vec<String>>,
+) -> Vec<(String, Range<usize>)> {
     let mut anchors: Vec<(String, Range<usize>, Range<usize>)> = Vec::new();
-    collect_anchors(&LinkedNode::new(source.root()), fields, &mut anchors);
+    collect_anchors(
+        &LinkedNode::new(source.root()),
+        fields,
+        containers,
+        &mut anchors,
+    );
 
     let mut out: Vec<(String, Range<usize>)> = anchors
         .iter()
@@ -847,9 +910,10 @@ pub(crate) fn scalar_windows(source: &Source, fields: &[String]) -> Vec<(String,
 fn collect_anchors(
     node: &LinkedNode,
     fields: &[String],
+    containers: &BTreeMap<String, Vec<String>>,
     out: &mut Vec<(String, Range<usize>, Range<usize>)>,
 ) {
-    if let Some((path, anchor)) = data_access(node, fields) {
+    if let Some((path, anchor)) = data_access(node, fields, containers) {
         // Chain: the outermost postfix chain headed by this access.
         let mut chain = anchor.clone();
         while let Some(parent) = chain.parent() {
@@ -877,47 +941,82 @@ fn collect_anchors(
         out.push((path, chain.range(), wide.range()));
     }
     for child in node.children() {
-        collect_anchors(&child, fields, out);
+        collect_anchors(&child, fields, containers, out);
     }
 }
 
 /// If `node` is a `data.<field>` access or a `data.at("<field>")` call head
-/// with a declared field, its schema path and the node to widen from.
-fn data_access<'a>(node: &LinkedNode<'a>, fields: &[String]) -> Option<(String, LinkedNode<'a>)> {
+/// with a declared field, its schema path and the node to widen from — stepped
+/// one property deeper where the field is a container and the plate selected
+/// one of its declared keys.
+fn data_access<'a>(
+    node: &LinkedNode<'a>,
+    fields: &[String],
+    containers: &BTreeMap<String, Vec<String>>,
+) -> Option<(String, LinkedNode<'a>)> {
     if node.kind() != SyntaxKind::FieldAccess {
         return None;
     }
-    let access = node.cast::<ast::FieldAccess>()?;
-    let ast::Expr::Ident(target) = access.target() else {
+    let ast::Expr::Ident(target) = node.cast::<ast::FieldAccess>()?.target() else {
         return None;
     };
     if target.as_str() != "data" {
         return None;
     }
-    let field = access.field();
-    if fields.iter().any(|f| f == field.as_str()) {
-        return Some((field.as_str().to_string(), node.clone()));
+    let (name, anchor) = selected(node, fields)?;
+    let keys = containers.get(&name).map(Vec::as_slice).unwrap_or_default();
+    match select_property(&anchor, keys) {
+        Some((key, deeper)) => Some((format!("{name}.{key}"), deeper)),
+        None => Some((name, anchor)),
     }
-    // `data.at("field")`: the parent call carries the field name as its first
-    // positional string argument.
-    if field.as_str() == "at" {
-        let parent = node.parent()?;
-        let call = parent.cast::<ast::FuncCall>()?;
-        let ast::Expr::FieldAccess(callee) = call.callee() else {
-            return None;
-        };
-        if callee.to_untyped() != node.get() {
-            return None;
-        }
-        let first = call.args().items().find_map(|arg| match arg {
-            ast::Arg::Pos(ast::Expr::Str(s)) => Some(s.get().to_string()),
-            _ => None,
-        })?;
-        if fields.contains(&first) {
-            return Some((first, parent.clone()));
-        }
+}
+
+/// The declared key `node`'s parent selects off it — `.<key>` or
+/// `.at("<key>")` — and the node that selection widens to.
+fn select_property<'a>(
+    node: &LinkedNode<'a>,
+    keys: &[String],
+) -> Option<(String, LinkedNode<'a>)> {
+    let parent = node.parent()?;
+    if parent.cast::<ast::FieldAccess>()?.target().to_untyped() != node.get() {
+        return None;
     }
-    None
+    selected(parent, keys)
+}
+
+/// The key `access` selects out of `keys` and the node the selection widens to.
+/// One grammar, two spellings: `.<key>` names it directly, `.at("<key>")`
+/// reaches the keys an identifier cannot spell.
+fn selected<'a>(access: &LinkedNode<'a>, keys: &[String]) -> Option<(String, LinkedNode<'a>)> {
+    let field = access.cast::<ast::FieldAccess>()?.field();
+    if keys.iter().any(|k| k == field.as_str()) {
+        return Some((field.as_str().to_string(), access.clone()));
+    }
+    (field.as_str() == "at")
+        .then(|| select_by_at(access, keys))
+        .flatten()
+}
+
+/// The `.at("<key>")` spelling: `access` is the `<expr>.at` field access, and
+/// its parent call carries the key as its first positional string argument.
+/// Reaches the keys an identifier cannot spell.
+fn select_by_at<'a>(
+    access: &LinkedNode<'a>,
+    keys: &[String],
+) -> Option<(String, LinkedNode<'a>)> {
+    let parent = access.parent()?;
+    let call = parent.cast::<ast::FuncCall>()?;
+    let ast::Expr::FieldAccess(callee) = call.callee() else {
+        return None;
+    };
+    if callee.to_untyped() != access.get() {
+        return None;
+    }
+    let first = call.args().items().find_map(|arg| match arg {
+        ast::Arg::Pos(ast::Expr::Str(s)) => Some(s.get().to_string()),
+        _ => None,
+    })?;
+    keys.contains(&first).then(|| (first, parent.clone()))
 }
 
 #[cfg(test)]
@@ -1047,7 +1146,7 @@ main:
             let helper = world
                 .source(QuillWorld::helper_fid("lib.typ"))
                 .expect("helper source");
-            let regions = scan_content_regions(&doc, &world, &helper, &windows);
+            let regions = scan_content_regions(&doc, &world, &helper, &windows, &[]);
             regions
                 .iter()
                 .filter(|r| r.field == "body")
@@ -1070,6 +1169,24 @@ main:
         }
     }
 
+    /// `(path, source text)` per window, over the fields and the one container
+    /// the tests below address.
+    fn probe_spans(src: &Source) -> Vec<(String, String)> {
+        let fields = ["subject", "refs", "other", "classification"].map(str::to_string);
+        let containers = BTreeMap::from([(
+            "classification".to_string(),
+            ["value", "poc", "controlled by"].map(str::to_string).into(),
+        )]);
+        scalar_windows(src, &fields, &containers)
+            .into_iter()
+            .map(|(path, r)| (path, src.text()[r].to_string()))
+            .collect()
+    }
+
+    fn has(spans: &[(String, String)], path: &str, text: &str) -> bool {
+        spans.iter().any(|(p, t)| p == path && t == text)
+    }
+
     #[test]
     fn scalar_windows_track_chains_and_single_owner_enclosing_expressions() {
         let src = Source::detached(
@@ -1083,25 +1200,15 @@ main:
 #let s = data.other
 "#,
         );
-        let fields = vec![
-            "subject".to_string(),
-            "refs".to_string(),
-            "other".to_string(),
-        ];
-        let wins = scalar_windows(&src, &fields);
-        let text = src.text();
-        let spans: Vec<(&str, &str)> = wins
-            .iter()
-            .map(|(p, r)| (p.as_str(), &text[r.clone()]))
-            .collect();
-        for expected in [
+        let spans = probe_spans(&src);
+        for (path, text) in [
             ("subject", "data.subject"),
             ("subject", "data.at(\"subject\")"),
             ("refs", "data.refs.at(0)"),
             ("other", "data.other"),
             ("subject", "upper(data.subject)"),
         ] {
-            assert!(spans.contains(&expected), "missing {expected:?}: {spans:?}");
+            assert!(has(&spans, path, text), "missing {path}/{text}: {spans:?}");
         }
         assert!(
             !spans
@@ -1109,15 +1216,59 @@ main:
                 .any(|(_, t)| t.contains("data.subject + data.other")),
             "multi-reference expressions are not attributed: {spans:?}"
         );
-        let chain_pos = spans
-            .iter()
-            .position(|s| *s == ("subject", "data.subject"))
-            .unwrap();
-        let wide_pos = spans
-            .iter()
-            .position(|s| *s == ("subject", "upper(data.subject)"))
-            .unwrap();
-        assert!(chain_pos < wide_pos, "chains sort before wides: {spans:?}");
+        let at = |text: &str| {
+            spans
+                .iter()
+                .position(|(p, t)| p == "subject" && t == text)
+                .unwrap()
+        };
+        assert!(
+            at("data.subject") < at("upper(data.subject)"),
+            "chains sort before wides: {spans:?}"
+        );
+    }
+
+    /// The container step: a property read anchors on the property, so the
+    /// region carries an address `_qm-known-path` would accept, while the
+    /// container read whole still anchors on the container.
+    #[test]
+    fn scalar_windows_step_into_a_declared_container_property() {
+        let src = Source::detached(
+            r#"
+#import "@local/quillmark-helper:0.1.0": data
+#data.classification.value
+#data.classification.poc
+#data.classification.at("controlled by")
+#data.at("classification").poc
+#data.classification
+#data.classification.undeclared
+#upper(data.classification.poc)
+"#,
+        );
+        let spans = probe_spans(&src);
+        for (path, text) in [
+            ("classification.value", "data.classification.value"),
+            ("classification.poc", "data.classification.poc"),
+            (
+                "classification.controlled by",
+                "data.classification.at(\"controlled by\")",
+            ),
+            ("classification.poc", "data.at(\"classification\").poc"),
+            ("classification", "data.classification"),
+            ("classification.poc", "upper(data.classification.poc)"),
+        ] {
+            assert!(has(&spans, path, text), "missing {path}/{text}: {spans:?}");
+        }
+        // An undeclared key is no address, so the read falls back to the
+        // container rather than minting `classification.undeclared`.
+        assert!(
+            !spans.iter().any(|(p, _)| p.ends_with(".undeclared")),
+            "an undeclared key mints no address: {spans:?}"
+        );
+        assert!(
+            has(&spans, "classification", "data.classification.undeclared"),
+            "the undeclared read still anchors on the container: {spans:?}"
+        );
     }
 
     fn collect_spans(frame: &Frame, out: &mut Vec<Span>) {
@@ -1228,8 +1379,16 @@ main:
       description: a scalar the plate interpolates
 "#;
 
-    /// Mirrors `open`'s window assembly, so a probe reads what a session would.
-    fn probe_regions(plate: &str, data: serde_json::Value) -> Vec<RenderedRegion> {
+    /// A compiled plate with the inputs both queries take. Mirrors `open`'s
+    /// window assembly, so a probe reads what a session would.
+    struct Probe {
+        world: QuillWorld,
+        doc: PagedDocument,
+        helper: Source,
+        windows: Vec<FieldWindow>,
+    }
+
+    fn probe(plate: &str, data: serde_json::Value) -> Probe {
         let q = quill(REGION_YAML, plate);
         let plate_src = crate::read_plate(&q).expect("plate");
         let schema = quillmark_core::quill::build_transform_schema(q.config());
@@ -1242,7 +1401,7 @@ main:
         let main_id = world.main();
         let src = world.source(main_id).expect("main source");
         windows.extend(
-            scalar_windows(&src, &meta.fields)
+            scalar_windows(&src, &meta.fields, &meta.object_fields)
                 .into_iter()
                 .map(|(path, range)| FieldWindow {
                     path,
@@ -1255,7 +1414,42 @@ main:
         let helper = world
             .source(QuillWorld::helper_fid("lib.typ"))
             .expect("helper source");
-        scan_content_regions(&doc, &world, &helper, &windows)
+        Probe {
+            world,
+            doc,
+            helper,
+            windows,
+        }
+    }
+
+    impl Probe {
+        /// What `open` stores on the session: the claims left open at the end
+        /// of the walk, by index.
+        fn unclosed(&self) -> Vec<usize> {
+            unclosed_claims(&self.doc).into_iter().map(|(c, _)| c).collect()
+        }
+
+        fn regions(&self, unclosed: &[usize]) -> Vec<RenderedRegion> {
+            scan_content_regions(&self.doc, &self.world, &self.helper, &self.windows, unclosed)
+        }
+
+        fn field_at(&self, unclosed: &[usize], page: usize, x: f32, y: f32) -> Option<String> {
+            field_at(
+                &self.doc,
+                &self.world,
+                &self.helper,
+                &self.windows,
+                unclosed,
+                page,
+                x,
+                y,
+            )
+        }
+    }
+
+    fn probe_regions(plate: &str, data: serde_json::Value) -> Vec<RenderedRegion> {
+        let p = probe(plate, data);
+        p.regions(&p.unclosed())
     }
 
     fn body(markdown: &str) -> serde_json::Value {
@@ -1368,6 +1562,115 @@ Interleaved plate chrome.
              text: claim {:?} vs body {:?}",
             claim.rect,
             body_box.rect
+        );
+    }
+
+    /// Typst never separates the two markers on its own, so the way to strand an
+    /// open is a plate emitting the call's return value in parts.
+    const STRANDED_OPEN: &str = r#"
+#import "@local/quillmark-helper:0.1.0": data, field-region
+#set page(width: 300pt, height: 200pt, margin: 20pt, header: [PAGE CHROME])
+#let r = field-region("classification")[#box(stroke: 1pt)[X]]
+#r.children.at(0)
+#data.body
+"#;
+
+    #[test]
+    fn an_open_marker_whose_close_never_lands_is_reported_unclosed() {
+        let p = probe(STRANDED_OPEN, body("Body text."));
+        assert_eq!(
+            unclosed_claims(&p.doc),
+            vec![(0, "classification".to_string())],
+            "the stranded open is named, so a plate author can act on it"
+        );
+    }
+
+    /// A claim left open would own every unattributed hit to the end of the
+    /// document, page chrome included.
+    #[test]
+    fn an_unclosed_claim_surfaces_no_region_at_all() {
+        let long = body(&"A long paragraph of body text. ".repeat(60));
+        let regions = probe_regions(STRANDED_OPEN, long.clone());
+        assert!(
+            regions.iter().any(|r| r.field == "body"),
+            "the fields that do resolve are untouched: {regions:?}"
+        );
+        assert!(
+            !regions.iter().any(|r| r.field == "classification"),
+            "the unbounded claim yields nothing rather than every page's chrome: \
+             {:?}",
+            regions
+                .iter()
+                .filter(|r| r.field == "classification")
+                .map(|r| r.page)
+                .collect::<Vec<_>>()
+        );
+    }
+
+    /// The point query cannot derive the suppression set itself, so this guards
+    /// that it is threaded through.
+    #[test]
+    fn an_unclosed_claim_does_not_capture_clicks_on_later_pages() {
+        let p = probe(STRANDED_OPEN, body(&"A long paragraph of body text. ".repeat(60)));
+        assert!(p.doc.pages().len() > 1, "the runaway needs a later page");
+
+        let last = p.doc.pages().len() - 1;
+        let runaway = p
+            .regions(&[])
+            .into_iter()
+            .find(|r| r.field == "classification" && r.page == last)
+            .expect("unsuppressed, the claim reaches the last page");
+        let (cx, cy) = (
+            (runaway.rect[0] + runaway.rect[2]) / 2.0,
+            (runaway.rect[1] + runaway.rect[3]) / 2.0,
+        );
+        assert_eq!(
+            p.field_at(&[], last, cx, cy),
+            Some("classification".to_string()),
+            "sanity: unsuppressed, that ink routes to the stranded claim"
+        );
+        assert_eq!(
+            p.field_at(&p.unclosed(), last, cx, cy),
+            None,
+            "suppressed, page chrome under a runaway claim answers to no field"
+        );
+    }
+
+    /// Suppression is per claim, not per field name: a second, well-formed call
+    /// on the same field keeps its region.
+    #[test]
+    fn a_balanced_claim_beside_an_unclosed_one_still_surfaces() {
+        const PLATE: &str = r#"
+#import "@local/quillmark-helper:0.1.0": data, field-region
+#set page(width: 300pt, height: 200pt, margin: 20pt)
+#let r = field-region("classification")[#box(stroke: 1pt)[X]]
+#r.children.at(0)
+#field-region("classification")[#box(stroke: 1pt)[OK]]
+"#;
+        let regions = probe_regions(PLATE, body("Body."));
+        assert_eq!(
+            regions
+                .iter()
+                .filter(|r| r.field == "classification")
+                .count(),
+            1,
+            "only the balanced call claims: {regions:?}"
+        );
+    }
+
+    #[test]
+    fn an_inner_claim_closed_by_its_enclosing_one_is_not_suppressed() {
+        const PLATE: &str = r#"
+#import "@local/quillmark-helper:0.1.0": data, field-region
+#set page(width: 300pt, height: 200pt, margin: 20pt)
+#let inner = field-region("body")[#box(stroke: 1pt)[I]]
+#field-region("classification")[#inner.children.at(0) #box(stroke: 1pt)[C]]
+#data.body
+"#;
+        let regions = probe_regions(PLATE, body("Text."));
+        assert!(
+            regions.iter().any(|r| r.field == "body"),
+            "the inner claim is bounded by the outer close: {regions:?}"
         );
     }
 
