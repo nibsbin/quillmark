@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.106.0 - 2026-08-16
 
 - feat(typst,pdfform): a schema address may step one property into a declared
   container, so `form-field(field: "classification.poc")` and
@@ -121,6 +121,22 @@
 - fix(python): declaring `license-files` ships the `LICENSE` the sdist metadata
   names, which PyPI rejected the sdist for lacking. v0.104.0 and v0.105.0 are
   wheels only.
+
+<!-- seed: commits since v0.105.0, confirm the entries above cover them, then delete this comment
+- chore(repo): union-merge CHANGELOG.md
+- feat: migrate usaf_memo to enum variants, document the axis
+- feat(core): enum variants — fields that exist only for one enum value
+- fix(fixtures): drop the rule under the indorsement date
+- fix(fixtures): size the indorsement date widget in ems, not inches
+- fix(fixtures): set the memo's indorsement date widget like a date
+- feat(typst,pdf): font, size, and align on injected form fields
+- Make the usaf_memo indorsement's blank date a bound fill-in widget
+- Compress the field-region prose
+- Add `field-region` so plates can tie composed content to a field
+- fix(python): declare license-files so the sdist ships its LICENSE
+- Anchor an undeclared property at the property, not at a bare name
+-->
+
 
 ## v0.105.0 - 2026-08-14
 
