@@ -21,6 +21,7 @@ mod overlay;
 mod world;
 
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 
 use quillmark_core::{
     quill::{build_transform_schema, QUILLMARK_INLINE_KEY, CONTENT_MEDIA_TYPE},
@@ -669,14 +670,14 @@ fn array_field_names(properties: &serde_json::Map<String, serde_json::Value>) ->
 /// `properties`, so it contributes no step.
 fn object_field_names(
     properties: &serde_json::Map<String, serde_json::Value>,
-) -> serde_json::Map<String, serde_json::Value> {
+) -> BTreeMap<String, Vec<String>> {
     properties
         .iter()
         .filter(|(_, fs)| fs.get("type").and_then(|v| v.as_str()) == Some("object"))
         .filter_map(|(name, fs)| {
             let props = fs.get("properties")?.as_object()?;
             let names: Vec<String> = props.keys().cloned().collect();
-            (!names.is_empty()).then(|| (name.clone(), names.into()))
+            (!names.is_empty()).then(|| (name.clone(), names))
         })
         .collect()
 }
@@ -692,7 +693,9 @@ pub(crate) struct SchemaMeta {
     pub(crate) datetime_fields: Vec<String>,
     pub(crate) array_fields: Vec<String>,
     /// Container field → its property names, gating the `field.sub` step.
-    pub(crate) object_fields: serde_json::Map<String, serde_json::Value>,
+    /// Native rather than JSON like the card tables: the span scan reads it on
+    /// the AST walk, and `meta_literal` serializes it either way.
+    pub(crate) object_fields: BTreeMap<String, Vec<String>>,
     /// A subset of `content_fields`, driving the pure-inline lowering.
     pub(crate) inline_fields: Vec<String>,
     pub(crate) card_content_fields: serde_json::Map<String, serde_json::Value>,
@@ -701,7 +704,7 @@ pub(crate) struct SchemaMeta {
     pub(crate) card_field_names: serde_json::Map<String, serde_json::Value>,
     pub(crate) card_array_fields: serde_json::Map<String, serde_json::Value>,
     /// The card twin of `object_fields`, keyed kind → field → property names.
-    pub(crate) card_object_fields: serde_json::Map<String, serde_json::Value>,
+    pub(crate) card_object_fields: BTreeMap<String, BTreeMap<String, Vec<String>>>,
     pub(crate) card_inline_fields: serde_json::Map<String, serde_json::Value>,
     pub(crate) fields: Vec<String>,
 }
@@ -725,7 +728,7 @@ impl SchemaMeta {
         let mut card_datetime_fields = serde_json::Map::new();
         let mut card_field_names = serde_json::Map::new();
         let mut card_array_fields = serde_json::Map::new();
-        let mut card_object_fields = serde_json::Map::new();
+        let mut card_object_fields = BTreeMap::new();
         let mut card_inline_fields = serde_json::Map::new();
         fn insert_names(
             table: &mut serde_json::Map<String, serde_json::Value>,
@@ -768,7 +771,7 @@ impl SchemaMeta {
                     );
                     let objects = card_props.map(object_field_names).unwrap_or_default();
                     if !objects.is_empty() {
-                        card_object_fields.insert(card_kind.to_string(), objects.into());
+                        card_object_fields.insert(card_kind.to_string(), objects);
                     }
                     insert_names(
                         &mut card_inline_fields,

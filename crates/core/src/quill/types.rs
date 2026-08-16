@@ -590,6 +590,18 @@ impl FieldSchema {
         self.variants.as_ref()?.get(member)
     }
 
+    /// The declaration of the cell `name` under *any* of this field's variants,
+    /// active world or not. A name several worlds declare is one cell
+    /// (`quill::variant_field_collision` rejects disagreement at load), so the
+    /// first match is the declaration.
+    pub fn variant_field(&self, name: &str) -> Option<&FieldSchema> {
+        self.variants
+            .as_ref()?
+            .values()
+            .find_map(|set| set.get(name))
+            .map(Box::as_ref)
+    }
+
     /// Whether this field rests as a variant container (`{value: …, …}`) rather
     /// than a bare scalar. Keyed on `variants:`, the one thing that changes the
     /// resting shape: a plain `enum` stays a string everywhere.

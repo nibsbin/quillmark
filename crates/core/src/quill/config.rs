@@ -885,7 +885,7 @@ impl QuillConfig {
                 }
                 continue;
             }
-            match Self::variant_field_schema(field_schema, key) {
+            match field_schema.variant_field(key) {
                 Some(schema) => {
                     let coerced = Self::conform_value(
                         &QuillValue::from_json(value.clone()),
@@ -901,19 +901,6 @@ impl QuillConfig {
             }
         }
         Ok(QuillValue::from_json(serde_json::Value::Object(out)))
-    }
-
-    /// The schema for `name` under any of `field`'s variants, active or not.
-    pub(crate) fn variant_field_schema<'a>(
-        field: &'a super::FieldSchema,
-        name: &str,
-    ) -> Option<&'a super::FieldSchema> {
-        field
-            .variants
-            .as_ref()?
-            .values()
-            .find_map(|set| set.get(name))
-            .map(|boxed| boxed.as_ref())
     }
 
     /// Recursively validate a field's structural shape, enforcing the

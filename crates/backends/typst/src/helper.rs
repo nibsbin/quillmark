@@ -506,6 +506,7 @@ mod tests {
     use super::*;
     use crate::emit::escape_markup;
     use crate::emit::EscapeCtx;
+    use std::collections::BTreeMap;
     use quillmark_core::quill::CONTENT_MEDIA_TYPE;
 
     fn meta_from(schema: serde_json::Value) -> SchemaMeta {
@@ -802,7 +803,7 @@ mod tests {
                 }},
                 "classification": { "type": "object", "properties": {
                     "value": { "type": "string", "enum": ["", "CUI"] },
-                    "poc": { "type": "string", "quillmark:variant_of": "CUI" },
+                    "poc": { "type": "string" },
                 }},
             },
             "$defs": { "note_card": { "properties": {
@@ -811,20 +812,20 @@ mod tests {
         }));
         assert_eq!(
             meta.object_fields,
-            serde_json::json!({
-                "address": ["city"],
-                "classification": ["value", "poc"],
-            })
-            .as_object()
-            .unwrap()
-            .clone(),
+            BTreeMap::from([
+                ("address".to_string(), vec!["city".to_string()]),
+                (
+                    "classification".to_string(),
+                    vec!["value".to_string(), "poc".to_string()],
+                ),
+            ]),
         );
         assert_eq!(
             meta.card_object_fields,
-            serde_json::json!({ "note": { "origin": ["office"] } })
-                .as_object()
-                .unwrap()
-                .clone(),
+            BTreeMap::from([(
+                "note".to_string(),
+                BTreeMap::from([("origin".to_string(), vec!["office".to_string()])]),
+            )]),
         );
 
         let (lib, _) = generate_lib_typ(&serde_json::json!({}), &meta).unwrap();
