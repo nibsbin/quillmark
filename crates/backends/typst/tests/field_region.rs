@@ -77,6 +77,41 @@ fn a_claim_does_not_displace_a_nested_scalar_site() {
     }
 }
 
+/// Silence is the worst outcome for a runaway claim: the plate author is the
+/// only one who can fix it, and the symptom (chrome routing clicks to a field)
+/// does not point at its cause.
+#[test]
+fn an_unclosed_claim_warns_and_claims_nothing() {
+    let plate = r#"
+#import "@local/quillmark-helper:0.1.0": data, field-region
+#set page(width: 300pt, height: 200pt, margin: 20pt, header: [PAGE CHROME])
+#let r = field-region("classification")[#box(stroke: 1pt)[X]]
+#r.children.at(0)
+#lorem(300)
+"#;
+    let session = open(plate);
+    assert!(
+        session.page_count() > 1,
+        "the runaway needs a page after the stranded open"
+    );
+
+    let warning = session
+        .warnings()
+        .iter()
+        .find(|d| d.code.as_deref() == Some("typst::unclosed_field_region"))
+        .expect("the unclosed claim is reported");
+    assert!(
+        warning.message.contains("classification"),
+        "the warning names the field the author must fix: {}",
+        warning.message
+    );
+
+    assert!(
+        !session.regions().iter().any(|r| r.field == "classification"),
+        "and the claim surfaces nothing rather than every page's chrome"
+    );
+}
+
 #[test]
 fn an_unknown_field_address_fails_the_compile() {
     let plate = r#"
