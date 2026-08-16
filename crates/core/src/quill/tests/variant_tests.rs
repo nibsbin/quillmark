@@ -494,11 +494,8 @@ fn seeding_resolves_the_discriminant_before_walking_the_field_set() {
     assert!(value.get("declassify_on").is_none());
 }
 
-/// A contract describes every world: a pdfform binding and an editor form are
-/// built once, against the schema, and must address a field whose world today's
-/// document has not selected.
 #[test]
-fn the_transform_schema_carries_every_world_tagged_by_member() {
+fn the_transform_schema_flattens_every_world_into_one_container() {
     let schema = build_transform_schema(&config());
     let json = schema.as_json();
     let cls = &json["properties"]["classification"];
@@ -507,14 +504,26 @@ fn the_transform_schema_carries_every_world_tagged_by_member() {
         cls["properties"]["value"]["enum"],
         json!(["", "UNCLASSIFIED", "CUI", "SECRET"])
     );
-    assert_eq!(
-        cls["properties"]["controlled_by"]["quillmark:variant_of"],
-        json!("CUI")
-    );
-    assert_eq!(
-        cls["properties"]["declassify_on"]["quillmark:variant_of"],
-        json!("SECRET")
-    );
+    assert_eq!(cls["properties"]["controlled_by"]["type"], json!("string"));
+    assert_eq!(cls["properties"]["declassify_on"]["type"], json!("string"));
+}
+
+/// `variants:` on the declaration view states it instead, keyed by member.
+#[test]
+fn the_transform_schema_does_not_restate_which_member_owns_a_cell() {
+    let schema = build_transform_schema(&config());
+    let cls = &schema.as_json()["properties"]["classification"];
+    for name in ["controlled_by", "category", "declassify_on"] {
+        assert_eq!(
+            cls["properties"][name]
+                .as_object()
+                .expect("variant cell projects as an object")
+                .keys()
+                .filter(|k| k.starts_with("quillmark:variant"))
+                .count(),
+            0
+        );
+    }
 }
 
 /// `schema()` is the declaration view and emits what the author wrote, so a
