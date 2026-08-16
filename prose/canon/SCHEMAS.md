@@ -96,6 +96,7 @@ The ceiling is deliberate and enforced at load rather than discovered at render:
 | an empty `variants:` map, or an empty variant | `quill::variant_empty` |
 | a variant field named `value` | `quill::variant_reserved_field_name` |
 | a `richtext`, `plaintext`, `date`, or `datetime` variant field | `quill::variant_field_type` |
+| a name two variants declare *differently* | `quill::variant_field_collision` |
 
 The last is the load-bearing one: content and dates lower to Typst through
 *top-level* name tables that do not descend into a container
@@ -111,6 +112,14 @@ container, as it does for a typed dictionary; a variant field cannot host a
 Typst `form-field` widget or click-to-edit region, whose address grammar is flat
 plus one index; and a field set **shared** across several members is spelled by
 repeating it or sharing a YAML anchor, since a variant keys on one member.
+
+A repeated name is one **cell** of the container, not one per world: both the
+coercion lookup and the transform schema key on the name alone. So every variant
+declaring a name must declare it identically — `quill::variant_field_collision`
+rejects disagreement at load, rather than letting a live value coerce under
+another world's type. (A YAML anchor satisfies this by construction; hand-copying
+does not.) The projection still tags that cell `quillmark:variant_of` with the
+*first* declaring member, which understates a shared cell's reach.
 
 The text-ish types form a **data vs content** × **open/plain vs closed/formatted**
 2×2: `enum` (closed data), `string` (open data), `plaintext` (plain content),

@@ -45,10 +45,20 @@ const DEFAULT_APPEARANCE: &[u8] = b"/Helv 0 Tf 0 g";
 /// One widget's `/DA`: its face and size over the house black fill. `f32`'s
 /// `Display` drops the trailing `.0`, so a whole-point size writes `12`, and an
 /// absent size writes the `0 Tf` that defers to the viewer's auto-size.
+///
+/// A size that is not a positive finite number falls back to that same `0 Tf`:
+/// `font_size` is a public field, and `NaN`/`inf` would reach the `/DA` as a
+/// token no PDF number grammar admits, while a negative one is `0 Tf` said
+/// obscurely. The Typst helper rejects all three at the call site; this keeps a
+/// direct spine consumer from writing a file no viewer can parse.
 fn field_appearance(spec: &FieldSpec) -> Vec<u8> {
+    let size = spec
+        .font_size
+        .filter(|s| s.is_finite() && *s > 0.0)
+        .unwrap_or(0.0);
     let mut da = b"/".to_vec();
     da.extend_from_slice(spec.font.resource_name());
-    da.extend_from_slice(format!(" {} Tf 0 g", spec.font_size.unwrap_or(0.0)).as_bytes());
+    da.extend_from_slice(format!(" {size} Tf 0 g").as_bytes());
     da
 }
 

@@ -359,8 +359,9 @@ fn append_typed_dict(
 /// discriminant names (`default:` › `example:` › blank). The worlds it cannot
 /// show are named instead, one `# when <MEMBER>: <fields>` line each, so a reader
 /// filling the form learns that choosing a different member brings different
-/// cells. Every world is listed, the shown one included: the lines are the map,
-/// the cells are the position.
+/// cells. Every member owning a field set is listed, the shown one included if it
+/// owns one; a member that brings no cells has nothing to announce. The lines are
+/// the map, the cells are the position.
 ///
 /// The discriminant carries the container's `!must_fill` marker (a mapping
 /// cannot hold one) and no inline annotation of its own — the container line

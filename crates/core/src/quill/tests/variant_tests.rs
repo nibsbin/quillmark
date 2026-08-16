@@ -193,6 +193,38 @@ fn a_variant_field_may_not_be_a_container_or_carry_a_group() {
     .contains("quill::nested_group_not_supported"));
 }
 
+/// A name resolves to one slot of the container, and neither the coercion
+/// lookup nor the transform schema consults the discriminant to fill it. Two
+/// worlds spelling it differently would coerce a live value under the other
+/// world's type — a hard `validation::type_mismatch` on a document that is
+/// valid against the world it selected.
+#[test]
+fn a_name_two_worlds_declare_differently_is_a_load_error() {
+    let err = load_error(
+        "    c:\n      type: enum\n      values: [A, B]\n      variants:\n        A:\n          note: { type: string }\n        B:\n          note: { type: integer }\n",
+    );
+    assert!(err.contains("quill::variant_field_collision"), "{err}");
+    assert!(err.contains("'A'") && err.contains("'B'"), "{err}");
+}
+
+/// Repetition is how a shared field set is spelled, so identical declarations
+/// collapse to the one slot without loss and stay legal.
+#[test]
+fn a_name_two_worlds_declare_identically_loads() {
+    let config = QuillConfig::from_yaml(&quill_yaml().replace(
+        "        SECRET:\n          declassify_on: { type: string }",
+        "        SECRET:\n          declassify_on: { type: string }\n          controlled_by: { type: string }",
+    ))
+    .expect("an identically-repeated variant field loads");
+    let doc = Document::parse(
+        "~~~\n$quill: variant_probe@0.1.0\n$kind: main\nclassification:\n  value: SECRET\n  controlled_by: SAF/AA\n  declassify_on: 20301231\n~~~\n",
+    )
+    .expect("parses")
+    .document;
+    let data = config.compile_data(&doc).expect("compile_data succeeds");
+    assert_eq!(data["classification"]["controlled_by"], json!("SAF/AA"));
+}
+
 /// A variant turns its field into a container, and a container may not sit
 /// inside one.
 #[test]

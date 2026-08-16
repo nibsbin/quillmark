@@ -118,8 +118,11 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
             );
             for (member, fields) in variants {
                 for (name, variant_field) in fields {
-                    // Names may repeat across worlds; the first declaration wins,
-                    // as only one world is ever live.
+                    // Names may repeat across worlds, and every repetition is
+                    // the same declaration (`quill::variant_field_collision`),
+                    // so the first fills the one slot the name gets. Its
+                    // `variant_of` names only that first world, which understates
+                    // a shared cell's reach.
                     if properties.contains_key(name) {
                         continue;
                     }

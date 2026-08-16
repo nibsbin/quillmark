@@ -1,9 +1,9 @@
 //! Styling and placement of the USAF memo's injected indorsement-date widget.
 //!
 //! An indorsement is dated when the endorser signs it, so the date is normally
-//! blank at compile time and prints as a fill-in rule. The widget seated on that
-//! rule stands in for a date the memo would otherwise typeset, so it has to be
-//! set like one: AFH 33-337's 12 point Times body face, ending at the same right
+//! blank at compile time and the widget is the only thing occupying its slot.
+//! It stands in for a date the memo would otherwise typeset, so it has to be set
+//! like one: AFH 33-337's 12 point Times body face, ending at the same right
 //! margin `display-date` would have ended at.
 
 #![cfg(feature = "typst")]

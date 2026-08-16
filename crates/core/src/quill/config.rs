@@ -818,9 +818,11 @@ impl QuillConfig {
     /// author their answers; `validation::out_of_variant` reports it, and the
     /// render floor drops it from the plate.
     ///
-    /// Names may repeat across variants (only one world is ever live), so the
-    /// lookup takes the first variant declaring the name: an ambiguity only
-    /// reachable for a stranded value, whose type nothing downstream reads.
+    /// Names may repeat across variants, and the lookup takes the first variant
+    /// declaring one without consulting the discriminant. That is total because
+    /// `quill::variant_field_collision` rejects a name two worlds declare
+    /// *differently* at load: whichever world is live, the one slot the name
+    /// resolves to carries the one declaration every world gave it.
     fn conform_variant(
         json_value: &serde_json::Value,
         field_schema: &super::FieldSchema,
@@ -1083,6 +1085,32 @@ impl QuillConfig {
                                  number, integer, or boolean. Declare prose and dates as \
                                  card-level fields.",
                                 field.r#type.as_str()
+                            ),
+                        );
+                    }
+                    // A name several worlds declare resolves to one slot: the
+                    // coercion lookup and the transform schema both key on the
+                    // name alone, so two spellings of it would coerce a live
+                    // value under the wrong world's type and describe it to a
+                    // consumer under the wrong one. Identical declarations —
+                    // what repeating a shared field set or sharing a YAML anchor
+                    // produces — collapse to that one slot without loss, so the
+                    // gate is disagreement, not repetition.
+                    if let Some((first, _)) = variants
+                        .iter()
+                        .take_while(|(m, _)| *m != member)
+                        .find_map(|(m, set)| set.get(name).map(|f| (m, f)))
+                        .filter(|(_, first)| first.as_ref() != field.as_ref())
+                    {
+                        return err(
+                            "quill::variant_field_collision",
+                            format!(
+                                "Field '{owner}' declares '{name}' differently under \
+                                 '{first}' and '{member}'. A name is one cell of the \
+                                 container whichever world brings it into play, so every \
+                                 variant declaring it must declare it identically; give \
+                                 the two readings separate names, or share one declaration \
+                                 with a YAML anchor."
                             ),
                         );
                     }

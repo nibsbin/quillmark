@@ -147,9 +147,9 @@ fn usaf_memo_date_region_rides_the_vendored_display() {
     );
 }
 
-/// An indorsement whose date is blank prints a bare rule, so the only thing
-/// carrying that address is the widget seated on it. Without it the endorser's
-/// date is the one memo field a preview cannot route a click to.
+/// An indorsement whose date is blank draws nothing at all, so the widget seated
+/// in its reserved space is the only thing carrying that address. Without it the
+/// endorser's date is the one memo field a preview cannot route a click to.
 #[test]
 fn a_blank_indorsement_date_regions_through_its_fill_in_widget() {
     let engine = Quillmark::new();
@@ -173,7 +173,7 @@ fn a_blank_indorsement_date_regions_through_its_fill_in_widget() {
     assert_eq!(
         session.field_at(date.page, cx, cy).as_deref(),
         Some("$cards.indorsement.0.date"),
-        "a click on the fill-in rule routes to the card's date"
+        "a click on the fill-in widget routes to the card's date"
     );
 
     let pdf = engine
