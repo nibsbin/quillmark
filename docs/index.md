@@ -5,7 +5,7 @@
 [![npm](https://img.shields.io/npm/v/@quillmark/wasm.svg?color=CB3837)](https://www.npmjs.com/package/@quillmark/wasm)
 [![Documentation](https://docs.rs/quillmark/badge.svg)](https://docs.rs/quillmark)
 
-**Quillmark is a schema-driven document engine.** A Quill declares a document format as data — a typed schema plus the presentation that renders it — and the engine turns a document conforming to that schema into a typeset artifact (PDF, SVG, PNG) through the Typst backend, or into a stamped interactive AcroForm PDF through the `pdfform` backend.
+**Quillmark is a schema-driven document engine.** A Quill declares a document format as data: a typed schema plus the presentation that renders it. The engine turns a document conforming to that schema into a typeset artifact (PDF, SVG, PNG) through the Typst backend, or into a stamped interactive AcroForm PDF through the `pdfform` backend.
 
 A document is a structured value, not text. Markdown, the annotated blueprint an LLM fills in, and programmatic construction are three projections of it; all three produce the same `Document`, and it is validated against the same schema whichever wrote it.
 
