@@ -11,26 +11,34 @@
 // `plaintext` (a content field's string projection, reading `_qm-plaintext`).
 
 /// Backend-generated schema address tables (`fields`, `card_fields`,
-/// `array_fields`, `card_array_fields`) that validate `form-field` paths.
-/// A generated literal: never parsed from document data.
+/// `array_fields`, `card_array_fields`, `object_fields`, `card_object_fields`)
+/// that validate `form-field` paths. A generated literal: never parsed from
+/// document data.
 #let _qm-meta = {meta_literal}
 
 /// Whether `path` parses against the schema address tables: a top-level field
-/// (`subject`), an array element (`refs.2`), or a card address
-/// (`$cards.<kind>.<n>.<field>`, optional `.<i>` element suffix). An indexed
-/// suffix (`field.N`) is only a real address for an array-typed field (any
-/// array, matching the pdfform resolver's grammar) so it validates against
-/// `array_fields`/`card_array_fields`, not the broader `fields`/`card_fields`
-/// name tables, rejecting `subject.0` on a scalar `subject` even though the
-/// name itself is known: a scalar has no element for the address to resolve
-/// to. Distinct from present-with-empty tables (e.g. a body-disabled main with
-/// no other fields and no cards), which validates against the empty set and so
-/// rejects every address.
+/// (`subject`), an array element (`refs.2`), a container property
+/// (`classification.poc`), or a card address (`$cards.<kind>.<n>.<field>`, with
+/// either suffix). A one-step suffix is gated on the step the field actually
+/// offers, not on the broader `fields`/`card_fields` name tables:
+/// `array_fields`/`card_array_fields` admit the index step, and
+/// `object_fields`/`card_object_fields` the property step, so `subject.0` and
+/// `subject.poc` are both rejected on a scalar `subject` even though the name
+/// itself is known — a scalar has neither an element nor a property for the
+/// address to resolve to. A container's properties are those its schema
+/// declares, so a variant container admits its `value` discriminant and every
+/// world's cells, and a typed dictionary its own keys. This is the pdfform
+/// resolver's grammar (`bind.rs`), so one schema address binds on either
+/// backend. Distinct from present-with-empty tables (e.g. a body-disabled main
+/// with no other fields and no cards), which validates against the empty set
+/// and so rejects every address.
 #let _qm-known-path(path) = {
   let fields = _qm-meta.at("fields", default: ())
   let card-fields = _qm-meta.at("card_fields", default: (:))
   let array-fields = _qm-meta.at("array_fields", default: ())
   let card-array-fields = _qm-meta.at("card_array_fields", default: (:))
+  let object-fields = _qm-meta.at("object_fields", default: (:))
+  let card-object-fields = _qm-meta.at("card_object_fields", default: (:))
   let is-index(s) = s.match(regex("^[0-9]+$")) != none
   let parts = path.split(".")
   if parts.at(0) == "$cards" {
@@ -40,12 +48,18 @@
     if not is-index(parts.at(2)) { return false }
     let field = parts.at(3)
     if parts.len() == 5 {
-      return field in card-array-fields.at(kind, default: ()) and is-index(parts.at(4))
+      let step = parts.at(4)
+      if field in card-array-fields.at(kind, default: ()) and is-index(step) { return true }
+      return step in card-object-fields.at(kind, default: (:)).at(field, default: ())
     }
     return field in card-fields.at(kind)
   }
   if parts.len() == 1 { return path in fields }
-  if parts.len() == 2 { return parts.at(0) in array-fields and is-index(parts.at(1)) }
+  if parts.len() == 2 {
+    let (field, step) = (parts.at(0), parts.at(1))
+    if field in array-fields and is-index(step) { return true }
+    return step in object-fields.at(field, default: ())
+  }
   false
 }
 
@@ -114,7 +128,7 @@
   assert(field == none or std.type(field) == str,
     message: "form-field: field must be a string or none, got " + repr(std.type(field)))
   assert(field == none or _qm-known-path(field),
-    message: "form-field: " + repr(field) + " is not a schema field address; expected a field name, an array element like \"refs.2\", or a card path composed from the card's $path prefix")
+    message: "form-field: " + repr(field) + " is not a schema field address; expected a field name, an array element like \"refs.2\", a container property like \"classification.poc\", or a card path composed from the card's $path prefix")
   assert(font in ("helvetica", "times", "courier"),
     message: "form-field: font must be one of helvetica/times/courier, got " + repr(font))
   assert(align in ("left", "center", "right"),
@@ -187,7 +201,7 @@
   assert(std.type(field) == str,
     message: "field-region: field must be a string, got " + repr(std.type(field)))
   assert(_qm-known-path(field),
-    message: "field-region: " + repr(field) + " is not a schema field address; expected a field name, an array element like \"refs.2\", or a card path composed from the card's $path prefix")
+    message: "field-region: " + repr(field) + " is not a schema field address; expected a field name, an array element like \"refs.2\", a container property like \"classification.poc\", or a card path composed from the card's $path prefix")
   [#metadata((kind: "__qm_region__", field: field, close: false)) <__qm_region__>]
   body
   [#metadata((kind: "__qm_region__", field: field, close: true)) <__qm_region__>]
