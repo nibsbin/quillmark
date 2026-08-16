@@ -30,6 +30,88 @@ Supported field types:
 | `plaintext` | Navigable **unformatted** prose over the same canonical content (`Content`) as `richtext` (same media type, nav, and regions) but a **literal** codec (`from_plaintext`/`to_plaintext`): delimiters stay literal, no markup, verbatim round-trip. Declare `inline: true` for the single-line variant. Constrained mark-/island-free (`Content::is_plain`); a formatted wire content is rejected (`validation::not_plain`), not stripped. **Rests as the literal string** |
 | `richtext` | Rich **formatted** prose over a canonical content (`Content`); markdown is a projection of it. Declare `inline: true` for the single-line variant (exactly one `Para` line, no container, no islands). The pre-richtext `markdown` spelling and the retired `type: richtext(inline)` token are schema load errors (`quill::field_parse_error`). **Rests as the canonical content object** |
 
+### Enum variants
+
+An `enum` may declare `variants:`, a per-member field set that exists only in the
+world where the discriminant holds that member:
+
+```yaml
+classification:
+  type: enum
+  values: [UNCLASSIFIED, CUI, CONFIDENTIAL, SECRET, TOP SECRET]
+  variants:
+    CUI:
+      controlled_by: { type: string }
+      poc:           { type: string }
+      category:      { type: string, default: "" }
+```
+
+`variants:` is the one key that changes a field's **resting shape**: the field
+rests as `{value: <member>, …the member's fields}` at every projection, where a
+variantless enum rests as a bare string. A document authors it as the container,
+and the bare scalar (`classification: CUI`) is accepted as the spelling of a
+world carrying no variant answers — coercion normalizes both, so one shape
+reaches every surface downstream. `value` is reserved
+(`quill::variant_reserved_field_name`); it is the date value-object's `.value`,
+the sibling idiom for the scalar inside a wrapper.
+
+This is the DSL's only cross-field shape, and it buys three things the flat map
+could not say:
+
+- **Existence.** A `cui_`-style name prefix is hand-written namespacing that only
+  prose can scope. Nesting supplies the namespace structurally, and the names
+  shorten to what they mean.
+- **Obligation, conditionally.** `must_fill` inside a variant keeps its ordinary
+  `default:`-presence derivation, so it reads *"required in this world"*: `poc`
+  is obliged on a CUI memo and silent on every other one. This is the one
+  cross-field constraint the engine checks rather than describes.
+- **A UI signal.** `quillmark:variant_of` on the transform schema names the
+  member that brings each cell into play, so an editor retires cells that are out
+  of play instead of hard-coding the rule.
+
+**The wire carries exactly the live world, and totality is per-world.** The
+render floor emits `value` plus the selected member's fields — blank-filled as
+usual — and nothing else: the container is a *closed* shape, so a payload never
+reaches a plate under a tag that disowns it. A plate is already obliged to branch
+over `values ∪ blank` ([Blank-filled render](#blank-filled-render)); inside that
+branch every declared field of that world is present, so the access needs no
+guard, and outside it there is nothing to guard. The blank owns no field set, so
+an unanswered discriminant renders `{value: ""}` and the empty-document contract
+is untouched.
+
+**A stranded value is carried, not dropped.** An authored cell whose variant is
+out of play stays in the document and draws the non-fatal
+`validation::out_of_variant`; the render floor omits it. Dropping it at coercion
+would spend the author's answers on the ordinary editor gesture — choose CUI,
+fill the block, flip to UNCLASSIFIED to compare, flip back — and gating render
+would hand them an undraftable document. Only the wire is strict.
+
+The ceiling is deliberate and enforced at load rather than discovered at render:
+
+| Rule | Code |
+|---|---|
+| `variants:` on a non-enum field | `quill::variants_on_non_enum` |
+| a key outside `values:` (the blank owns no variant) | `quill::variant_unknown_value` |
+| `variants:` below card level, or inside another variant | `quill::variant_placement` |
+| an empty `variants:` map, or an empty variant | `quill::variant_empty` |
+| a variant field named `value` | `quill::variant_reserved_field_name` |
+| a `richtext`, `plaintext`, `date`, or `datetime` variant field | `quill::variant_field_type` |
+
+The last is the load-bearing one: content and dates lower to Typst through
+*top-level* name tables that do not descend into a container
+([PLATE_DATA.md](PLATE_DATA.md)), so such a field would load clean and reach the
+plate as a raw dict. **A variant carries plain data** — `string`, `enum`,
+`number`, `integer`, `boolean` — and prose and dates stay card-level fields.
+Variant fields are otherwise leaves exactly as an object's properties are: no
+container one level down, and no `ui.group` (they inherit the discriminant's).
+
+Three limits follow from the container shape and are accepted, not worked around:
+[`resolve()`](#the-resolved-value-view-resolve) reports **one** rung for the whole
+container, as it does for a typed dictionary; a variant field cannot host a
+Typst `form-field` widget or click-to-edit region, whose address grammar is flat
+plus one index; and a field set **shared** across several members is spelled by
+repeating it or sharing a YAML anchor, since a variant keys on one member.
+
 The text-ish types form a **data vs content** × **open/plain vs closed/formatted**
 2×2: `enum` (closed data), `string` (open data), `plaintext` (plain content),
 `richtext` (formatted content). Navigation/regions are a property of the content
@@ -327,6 +409,7 @@ domain.** It is both the render floor and the value a reader recognizes as
 | `object` | every property at its own blank, recursively |
 | `integer`, `number` | `0` |
 | `boolean` | `false` |
+| `enum` with `variants:` | `{value: ""}` — the container holding the blank |
 
 Nothing forces an enum's blank to sit inside `values:`, and putting it there
 destroys it: the floor would return a real choice nobody made, and a cosmetic
@@ -361,7 +444,9 @@ seeded documents alike (see [BLUEPRINT.md](BLUEPRINT.md)).
 present input, so an `else` fallback re-opens exactly the fabrication the blank
 closes: the cell renders a variant nobody chose, and the plate cannot tell the
 two apart. This is a retrofit obligation on existing plates, not only guidance
-for new ones.
+for new ones. Where the enum declares `variants:` the obligation also earns
+something: the branch is what makes the world's fields readable without a guard
+(see [Enum variants](#enum-variants)).
 
 ## Document seeding
 
@@ -472,11 +557,15 @@ Top-level schema keys: `main`, optional `card_kinds` (map keyed by card name).
 `main` and each entry in `card_kinds` share the same `CardSchema` shape:
 `fields` (map keyed by field name), optional `description`, optional `ui`,
 optional `body`. Each `FieldSchema` includes `type`, optional
-`description`/`default`/`example`/`enum`/`values`/`inline`/`properties`/`items`/`ui`.
+`description`/`default`/`example`/`enum`/`values`/`variants`/`inline`/`properties`/`items`/`ui`.
 The type-gated keys:
 
 - `inline`: valid only on the prose types (`richtext`, `plaintext`).
 - `values`: declares an `enum` field's domain, required there.
+- `variants`: per-member field sets on an `enum` field, valid only there and only
+  at card level (see [Enum variants](#enum-variants)). `schema()` emits it as
+  authored; the transform schema instead projects the container, flattening every
+  world's fields under `properties` and tagging each `quillmark:variant_of`.
 - `items`: the element schema, itself a `FieldSchema`; required on `array`
   fields and rejected elsewhere.
 - `properties`: used by `object` fields, and by an array's `object`-typed

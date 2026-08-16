@@ -7,7 +7,10 @@ use std::str::FromStr;
 use indexmap::IndexMap;
 
 use super::resolved::FieldSource;
-use super::{seed, CardSchema, CoercionError, FieldSchema, FieldType, Leniency, Quill, QuillConfig};
+use super::{
+    seed, CardSchema, CoercionError, FieldSchema, FieldType, Leniency, Quill, QuillConfig,
+    VARIANT_DISCRIMINANT_KEY,
+};
 use crate::normalize::{normalize_document, normalize_field_name};
 use crate::quill::blank;
 use crate::path::DocPath;
@@ -242,6 +245,7 @@ impl Quill {
                 .into_iter()
                 .filter(|d| !claimed.contains(&d.path)),
         );
+        diags.extend(validate_variants(self.config(), doc));
         diags.extend(self.validate_seed(doc));
         diags
     }
@@ -506,6 +510,9 @@ pub(crate) fn resolve_value_sourced(
     value: Option<&QuillValue>,
     field: &FieldSchema,
 ) -> (QuillValue, FieldSource) {
+    if field.is_variant_bearing() {
+        return resolve_variant_sourced(value, field);
+    }
     let present = value.filter(|v| !v.as_json().is_null());
     let Some(v) = present else {
         // A content-bearing field (`richtext` or its literal sibling
@@ -570,6 +577,75 @@ pub(crate) fn resolve_value_sourced(
         _ => v.clone(),
     };
     (resolved, FieldSource::Authored)
+}
+
+/// Resolve a variant-bearing enum into the container the plate receives:
+/// `{value: <member>}` plus, when that member owns a field set, exactly that
+/// set — each cell blank-filled by the ordinary ladder.
+///
+/// **The container is a closed shape.** Only the live world's fields cross, so a
+/// value stranded by a discriminant flip and a key belonging to another variant
+/// are both dropped here rather than shipped alongside a tag that disowns them.
+/// That is what makes the plate contract total *per world*: inside the branch a
+/// plate is already obliged to write over `values ∪ blank`
+/// (`prose/canon/SCHEMAS.md` § "Blank-filled render"), every declared field of
+/// that world is present, so no guarded access is needed; outside it, none is.
+///
+/// The discriminant cuts the same ladder as any enum (authored › `default:` ›
+/// blank) and its rung is the container's: a member nobody chose leaves the
+/// whole cell at the rung that supplied it.
+fn resolve_variant_sourced(
+    value: Option<&QuillValue>,
+    field: &FieldSchema,
+) -> (QuillValue, FieldSource) {
+    let present = value.filter(|v| !v.as_json().is_null());
+    let authored = present.map(|v| v.as_json());
+    // Coercion normalizes to the container, so the authored discriminant is the
+    // `value` key. A bare scalar that bypassed coercion (a serde-built payload)
+    // still reads, keeping this total.
+    let authored_member = authored.and_then(|json| match json {
+        serde_json::Value::Object(o) => o.get(VARIANT_DISCRIMINANT_KEY),
+        other => Some(other),
+    });
+    let authored_member = authored_member
+        .filter(|v| !v.is_null())
+        .and_then(|v| v.as_str());
+
+    let (member, source) = match authored_member {
+        Some(member) => (member.to_string(), FieldSource::Authored),
+        None => match field.default.as_ref().and_then(|d| d.as_str()) {
+            Some(default) => (default.to_string(), FieldSource::Default),
+            None => (String::new(), FieldSource::Blank),
+        },
+    };
+    // A present container with no discriminant is still authored: the author
+    // wrote the cell, and the ladder filled the tag they left out.
+    let source = match (present.is_some(), source) {
+        (true, FieldSource::Blank) => FieldSource::Authored,
+        (_, s) => s,
+    };
+
+    let mut out = serde_json::Map::new();
+    out.insert(
+        VARIANT_DISCRIMINANT_KEY.to_string(),
+        serde_json::Value::String(member.clone()),
+    );
+    if let Some(fields) = field.variant_fields(&member) {
+        let object = authored.and_then(|j| j.as_object());
+        for (name, schema) in fields {
+            let cell = object
+                .and_then(|o| o.get(name))
+                .map(|j| QuillValue::from_json(j.clone()));
+            out.insert(
+                name.clone(),
+                resolve_value(cell.as_ref(), schema).into_json(),
+            );
+        }
+    }
+    (
+        QuillValue::from_json(serde_json::Value::Object(out)),
+        source,
+    )
 }
 
 /// Build a [`Payload`] from a coerced/defaulted field map, re-attaching `$quill`
@@ -694,6 +770,49 @@ fn collect_unauthored_field(
     path: &DocPath,
     out: &mut Vec<Diagnostic>,
 ) {
+    // A variant container is not itself a cell, for the reason a typed dictionary
+    // is not: `!must_fill` is rejected on a mapping. Its cells are the
+    // discriminant and — *only in the world the discriminant selects* — that
+    // world's fields. This is where obligation becomes conditional: a `poc` with
+    // no `default:` is obliged on a CUI memo and silent on every other one, which
+    // is the thing `must_fill` alone could not say (#1202).
+    if field.is_variant_bearing() {
+        let json = value.map(|v| v.as_json());
+        let object = json.and_then(|j| j.as_object());
+        // Pre-coercion the cell may still be the bare scalar; read either.
+        let authored = match json {
+            Some(serde_json::Value::Object(o)) => o.get(VARIANT_DISCRIMINANT_KEY),
+            other => other,
+        }
+        .filter(|v| !v.is_null());
+
+        let discriminant = path.field(VARIANT_DISCRIMINANT_KEY);
+        if authored.is_none() && field.must_fill() {
+            out.push(unauthored_warning(&discriminant));
+        }
+        let member = authored
+            .and_then(|v| v.as_str())
+            .map(str::to_string)
+            .or_else(|| {
+                field
+                    .default
+                    .as_ref()
+                    .and_then(|d| d.as_str())
+                    .map(str::to_string)
+            })
+            .unwrap_or_default();
+
+        if let Some(fields) = field.variant_fields(&member) {
+            for (name, schema) in fields {
+                let cell = object
+                    .and_then(|o| o.get(name))
+                    .map(|j| QuillValue::from_json(j.clone()));
+                collect_unauthored_field(schema, cell.as_ref(), &path.field(name), out);
+            }
+        }
+        return;
+    }
+
     if let (FieldType::Object, Some(props)) = (&field.r#type, &field.properties) {
         let obj = value.and_then(|v| v.as_json().as_object());
         for (name, prop) in props {
@@ -718,6 +837,104 @@ fn collect_unauthored_field(
             collect_unauthored_field(items, Some(&element), &path.index(index), out);
         }
     }
+}
+
+/// Report every authored cell that belongs to a variant the discriminant does
+/// not select, across the main card and every composable card.
+///
+/// **Carried, not dropped.** The value stays in the document and the diagnostic
+/// is non-fatal, because the alternative punishes the ordinary editor gesture:
+/// choose CUI, fill the block, flip to UNCLASSIFIED to compare, flip back. A
+/// coercion-time drop would spend the author's answers on that flip; gating
+/// render would hand them an undraftable document. So the wire stays honest —
+/// the render floor emits only the live world — and the document keeps what a
+/// human typed until a human clears it.
+fn validate_variants(config: &QuillConfig, doc: &Document) -> Vec<Diagnostic> {
+    let mut diags = Vec::new();
+    collect_variant_diags(&config.main, doc.main(), &DocPath::main(), &mut diags);
+    for (index, card) in doc.cards().iter().enumerate() {
+        let Some(schema) = card.kind().and_then(|k| config.card_kind(k)) else {
+            continue;
+        };
+        collect_variant_diags(schema, card, &DocPath::card(card.kind(), index), &mut diags);
+    }
+    diags
+}
+
+fn collect_variant_diags(
+    schema: &CardSchema,
+    card: &Card,
+    base: &DocPath,
+    out: &mut Vec<Diagnostic>,
+) {
+    let payload = card.payload();
+    for (name, field) in &schema.fields {
+        if !field.is_variant_bearing() {
+            continue;
+        }
+        let Some(object) = payload.get(name).and_then(|v| v.as_json().as_object().cloned()) else {
+            continue;
+        };
+        let member = object
+            .get(VARIANT_DISCRIMINANT_KEY)
+            .filter(|v| !v.is_null())
+            .and_then(|v| v.as_str())
+            .map(str::to_string)
+            .or_else(|| {
+                field
+                    .default
+                    .as_ref()
+                    .and_then(|d| d.as_str())
+                    .map(str::to_string)
+            })
+            .unwrap_or_default();
+        let live = field.variant_fields(&member);
+        for key in object.keys() {
+            if key == VARIANT_DISCRIMINANT_KEY || live.is_some_and(|f| f.contains_key(key)) {
+                continue;
+            }
+            // A key no variant declares is an undeclared field, which every
+            // other surface carries without comment; only a key some *other*
+            // world owns is the stranded case worth naming.
+            let Some(owner) = field.variants.as_ref().and_then(|variants| {
+                variants
+                    .iter()
+                    .find(|(_, set)| set.contains_key(key))
+                    .map(|(member, _)| member.clone())
+            }) else {
+                continue;
+            };
+            out.push(out_of_variant_warning(
+                &base.field(name).field(key),
+                &owner,
+                &member,
+            ));
+        }
+    }
+}
+
+pub(crate) fn out_of_variant_warning(path: &DocPath, owner: &str, member: &str) -> Diagnostic {
+    let path = path.to_string();
+    let selected = if member.is_empty() {
+        "left blank".to_string()
+    } else {
+        format!("`{member}`")
+    };
+    Diagnostic::new(
+        Severity::Warning,
+        format!(
+            "Field `{path}` belongs to the `{owner}` variant, but the discriminant is {selected}: \
+             the value is kept and will not render."
+        ),
+    )
+    .with_code("validation::out_of_variant".to_string())
+    .with_path(path)
+    .with_arg("variant", owner.into())
+    .with_arg("selected", member.into())
+    .with_hint(format!(
+        "Select `{owner}` to bring the field back into play, or remove the field to drop the \
+         value."
+    ))
 }
 
 pub(crate) fn unauthored_warning(path: &DocPath) -> Diagnostic {

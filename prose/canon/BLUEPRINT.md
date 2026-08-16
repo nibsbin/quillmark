@@ -208,6 +208,35 @@ speak about the same cells (`SCHEMAS.md` § "Native validation").
 | `richtext` | On the field (bare; no block scalar) | `bio: !must_fill # richtext<markdown>` |
 | `object` (typed dict) | Per-property recursion | leaves carry `!must_fill` |
 | `array<object>` (typed table) | Per-property recursion in one synthetic row | leaves carry `!must_fill` |
+| `enum` with `variants:` | On the `value` cell, plus per-field recursion in the live world | `value: !must_fill` |
+
+### Enum variants
+
+A variant-bearing `enum` emits its container: the discriminant under `value`,
+then the fields of the world that discriminant names (`default:` › `example:` ›
+blank). A blueprint **is** a document, so it can show only one world; the others
+are named instead, one `# when <MEMBER>: <fields>` leading line each. Every world
+is listed, the shown one included — the lines are the map, the cells are the
+position.
+
+```
+# Select the classification marking shown in the header and footer banner.
+# when CUI: controlled_by, poc, category, limited_dissemination
+classification: # enum<UNCLASSIFIED | CUI | CONFIDENTIAL | SECRET | TOP SECRET>
+  value: ""
+```
+
+The container line carries the `enum<…>` annotation and `value` carries none:
+`value` *is* that enum, so a second annotation would restate it. The marker sits
+on `value` rather than the container, since `!must_fill` is rejected on a
+mapping.
+
+This is the one place the `unauthored` cell set is **value-dependent**: which
+cells the schema-side predicate addresses follows from the discriminant a
+document authored, so the blueprint and that document speak about the same cells
+only once both are in the same world. That is the point of the feature rather
+than a seam in it — an obligation that ignored the discriminant is exactly the
+unconditional `must_fill` variants exist to refine.
 
 ### Richtext fields
 
@@ -453,6 +482,12 @@ degrades gracefully on every type-valid input shape. The contract requires:
   render every declared key is always present, so its `default:` is dead code
   and the blank flows through. Where a package asserts membership, that is a
   failed compile rather than a quiet mis-render.
+- **A template reads a variant field only inside the branch that selects its
+  world.** A variant-bearing enum arrives as `{value: …}` carrying exactly the
+  live world's fields, so `data.c.value == "CUI"` is what makes `data.c.poc`
+  total; reading it outside that branch is a missing-key error on every other
+  document. The exhaustive branch above is therefore not just an obligation here
+  but the access path (`SCHEMAS.md` § "Enum variants").
 - No template asserts that a must-fill field is *non-empty*. The schema
   guarantees *presence*, not non-emptiness; the `!must_fill` marker
   is an authoring signal, not a render-time precondition.

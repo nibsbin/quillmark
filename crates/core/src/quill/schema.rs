@@ -2,7 +2,7 @@
 //! [`QuillValue`]. Backend-agnostic: backends consume it to drive per-field
 //! transforms such as markdown to backend markup.
 
-use super::{FieldSchema, FieldType, QuillConfig};
+use super::{FieldSchema, FieldType, QuillConfig, VARIANT_DISCRIMINANT_KEY};
 use crate::value::QuillValue;
 
 /// The `contentMediaType` marking a richtext field in the transform schema. The
@@ -36,6 +36,13 @@ pub const QUILLMARK_BLANK_TITLE_KEY: &str = "quillmark:blank_title";
 /// and enforcement — if a consumer wants any — is that consumer's policy.
 pub const QUILLMARK_MUST_FILL_KEY: &str = "quillmark:must_fill";
 
+/// Transform-schema keyword naming the enum member that brings a field into
+/// play. It sits on each property of a variant-bearing enum's container except
+/// the discriminant itself, and is the signal a UI needs to show or retire a
+/// cell as the discriminant changes — the fact the flat `cui_`-prefix convention
+/// could only carry in prose.
+pub const QUILLMARK_VARIANT_OF_KEY: &str = "quillmark:variant_of";
+
 /// Build a JSON-Schema-shaped descriptor of a [`QuillConfig`]'s main + card fields.
 ///
 /// The descriptor marks richtext fields with `contentMediaType:
@@ -48,6 +55,39 @@ pub const QUILLMARK_MUST_FILL_KEY: &str = "quillmark:must_fill";
 /// tables so `form-field(field:)` rejects `$body` addresses on that
 /// kind at compile time, matching `Quill::validate`'s hard error on authored
 /// body content for the same kind.
+/// The discriminant cell of a variant-bearing enum: the same
+/// `{type: string, enum: ["", …]}` a plain enum projects to, carrying the
+/// container's obligation. The container is a mapping and therefore not a cell
+/// (`!must_fill` is rejected on one), so this is where "a human must choose"
+/// lands.
+fn discriminant_schema(field: &FieldSchema) -> serde_json::Value {
+    let mut schema = serde_json::Map::new();
+    schema.insert(
+        QUILLMARK_MUST_FILL_KEY.to_string(),
+        serde_json::Value::Bool(field.must_fill()),
+    );
+    schema.insert(
+        "type".to_string(),
+        serde_json::Value::String("string".to_string()),
+    );
+    schema.insert(
+        "enum".to_string(),
+        serde_json::Value::Array(
+            std::iter::once(String::new())
+                .chain(field.enum_values.iter().flatten().cloned())
+                .map(serde_json::Value::String)
+                .collect(),
+        ),
+    );
+    if let Some(blank_title) = field.ui.as_ref().and_then(|u| u.blank_title.as_ref()) {
+        schema.insert(
+            QUILLMARK_BLANK_TITLE_KEY.to_string(),
+            serde_json::Value::String(blank_title.clone()),
+        );
+    }
+    serde_json::Value::Object(schema)
+}
+
 pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
     fn field_to_schema(field: &FieldSchema) -> serde_json::Value {
         let mut schema = serde_json::Map::new();
@@ -64,6 +104,42 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
         // today (a plain string), plus the domain. Keyed on the domain, as the
         // render floor, the pdfform widget and the blueprint annotation all are,
         // so a `FieldSchema` built outside the loader projects its domain too.
+        // A variant-bearing enum crosses as the container it rests as: the
+        // discriminant under `value`, and every world's fields beside it, each
+        // tagged with the member that brings it into play. The union — not the
+        // live world — is what a *contract* describes: a pdfform binding and an
+        // editor form are built once, against a schema, and must address a field
+        // whose world today's document has not selected.
+        if let Some(variants) = &field.variants {
+            let mut properties = serde_json::Map::new();
+            properties.insert(
+                VARIANT_DISCRIMINANT_KEY.to_string(),
+                discriminant_schema(field),
+            );
+            for (member, fields) in variants {
+                for (name, variant_field) in fields {
+                    // Names may repeat across worlds; the first declaration wins,
+                    // as only one world is ever live.
+                    if properties.contains_key(name) {
+                        continue;
+                    }
+                    let mut child = field_to_schema(variant_field);
+                    if let Some(object) = child.as_object_mut() {
+                        object.insert(
+                            QUILLMARK_VARIANT_OF_KEY.to_string(),
+                            serde_json::Value::String(member.clone()),
+                        );
+                    }
+                    properties.insert(name.clone(), child);
+                }
+            }
+            schema.insert(
+                "type".to_string(),
+                serde_json::Value::String("object".to_string()),
+            );
+            schema.insert("properties".to_string(), properties.into());
+            return serde_json::Value::Object(schema);
+        }
         if let Some(values) = &field.enum_values {
             schema.insert(
                 "type".to_string(),

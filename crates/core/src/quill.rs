@@ -24,13 +24,15 @@ pub use resolved::{FieldSource, Resolved, ResolvedCard, ResolvedField, ResolvedM
 pub use fill::blank;
 pub use formats::{parse_date, parse_datetime};
 pub use ignore::QuillIgnore;
-pub use schema::{build_transform_schema, QUILLMARK_INLINE_KEY, CONTENT_MEDIA_TYPE};
+pub use schema::{
+    build_transform_schema, CONTENT_MEDIA_TYPE, QUILLMARK_INLINE_KEY, QUILLMARK_VARIANT_OF_KEY,
+};
 pub use support::UNSUPPORTED_CONSTRUCT;
 pub use tree::FileTreeNode;
 pub use validation::ValidationError;
 pub use types::{
     BlockConstruct, BodyCardSchema, CardSchema, FieldSchema, FieldType, GroupRegistry, GroupSchema,
-    UiCardSchema, UiFieldSchema,
+    UiCardSchema, UiFieldSchema, VariantFields, VARIANT_DISCRIMINANT_KEY,
 };
 
 use std::collections::HashMap;

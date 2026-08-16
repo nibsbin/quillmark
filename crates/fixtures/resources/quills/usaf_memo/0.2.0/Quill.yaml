@@ -122,6 +122,24 @@ main:
         group: classification
         compact: true
       description: "Select the classification marking shown in the header and footer banner. Unclassified documents typically omit this banner entirely, leave blank unless the document is CUI or classified. Mark per DAFI 16-1404 (DoDM 5200.48 for CUI) and applicable DoD guidance."
+      variants:
+        CUI:
+          controlled_by:
+            type: string
+            example: SAF/AA
+            description: "Office or organization that designated this information as CUI. Required by DoDM 5200.48."
+          poc:
+            type: string
+            example: "Capt J. Smith, DSN 555-1234, john.smith@us.af.mil"
+            description: "Point of contact for CUI questions. Required by DoDM 5200.48."
+          category:
+            type: string
+            default: ""
+            description: "CUI category from the DoD CUI Registry (e.g., 'Privacy/MED', 'CTI', 'PRVCY'). Leave blank to omit."
+          limited_dissemination:
+            type: string
+            default: ""
+            description: "Limited dissemination control shown in the indicator block (e.g., 'FEDONLY', 'NOFORN'). Independent from the banner suffix."
 
     dissemination:
       type: string
@@ -130,38 +148,6 @@ main:
         group: classification
         compact: true
       description: "Banner dissemination suffix appended after double slash (e.g. 'NF' renders as CUI//NF in the header/footer). Leave blank for no suffix."
-
-    cui_controlled_by:
-      type: string
-      default: ""
-      ui:
-        group: classification
-        compact: true
-      description: "Office or organization that designated this information as CUI (e.g., 'SAF/AA'). Required by DoDM 5200.48 when classification is CUI."
-
-    cui_category:
-      type: string
-      default: ""
-      ui:
-        group: classification
-        compact: true
-      description: "CUI category from the DoD CUI Registry (e.g., 'Privacy/MED', 'CTI', 'PRVCY'). Leave blank to omit."
-
-    cui_limited_dissemination:
-      type: string
-      default: ""
-      ui:
-        group: classification
-        compact: true
-      description: "Limited dissemination control shown in the indicator block (e.g., 'FEDONLY', 'NOFORN'). Independent from the banner suffix above."
-
-    cui_poc:
-      type: string
-      default: ""
-      ui:
-        group: classification
-        compact: true
-      description: "Point of contact for CUI questions (e.g., 'Capt J. Smith, DSN 555-1234, john.smith@us.af.mil'). Required by DoDM 5200.48 when classification is CUI."
 
     references:
       type: array
