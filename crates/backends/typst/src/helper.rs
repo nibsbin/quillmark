@@ -504,9 +504,10 @@ entrypoint = "lib.typ"
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
+
     use crate::emit::escape_markup;
     use crate::emit::EscapeCtx;
-    use std::collections::BTreeMap;
     use quillmark_core::quill::CONTENT_MEDIA_TYPE;
 
     fn meta_from(schema: serde_json::Value) -> SchemaMeta {

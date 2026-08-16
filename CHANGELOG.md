@@ -36,8 +36,8 @@
   under `properties`, since a binding built once against a schema must address a
   field today's document has not selected; member scoping stays on the
   declaration view, where `schema()` emits `variants:` keyed by member.
-  `FieldSchema` gains `variants`; `VariantFields` and `VARIANT_DISCRIMINANT_KEY`
-  are new.
+  `FieldSchema` gains `variants` and `variant_field` (the cell a name declares
+  under any world); `VariantFields` and `VARIANT_DISCRIMINANT_KEY` are new.
 - feat(fixtures)!: `usaf_memo`'s four `cui_*` fields move under
   `classification`'s `CUI` variant as `controlled_by`, `poc`, `category`, and
   `limited_dissemination`. `controlled_by` and `poc` drop their `default: ""`
