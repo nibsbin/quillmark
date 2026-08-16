@@ -4,6 +4,23 @@
 # serialiser still emits \n), so the tree is pinned to LF everywhere instead.
 * text=auto eol=lf
 
+# Every branch appends its release note under the changelog's `## Unreleased`
+# heading, at the same line, so this was the one merge conflict most branches
+# had and never an interesting one. `union` takes both sides of a conflicting
+# hunk instead of writing markers, so two branches each adding an entry merge to
+# both entries.
+#
+# It resolves silently: two branches editing the *same* entry merge to the union
+# of both, with nothing to flag it. Tolerable for prose no build step parses,
+# which is why it stays scoped to the changelog — a union-merged Cargo.lock is
+# duplicate `[[package]]` entries and a file cargo cannot read.
+#
+# Real git applies it: a local merge, a rebase, a CI runner. GitHub's merge
+# machinery reads its own attributes rather than this file, so a PR page can
+# still report the conflict that a local `git merge origin/main` resolves by
+# itself.
+CHANGELOG.md merge=union
+
 # Vendored upstream assets, byte-identical to what their projects ship.
 *.ttf binary
 *.otf binary
