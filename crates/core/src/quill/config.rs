@@ -821,8 +821,7 @@ impl QuillConfig {
     /// Names may repeat across variants, and the lookup takes the first variant
     /// declaring one without consulting the discriminant. That is total because
     /// `quill::variant_field_collision` rejects a name two worlds declare
-    /// *differently* at load: whichever world is live, the one slot the name
-    /// resolves to carries the one declaration every world gave it.
+    /// *differently*, so every repetition is the same declaration.
     fn conform_variant(
         json_value: &serde_json::Value,
         field_schema: &super::FieldSchema,
@@ -1088,14 +1087,9 @@ impl QuillConfig {
                             ),
                         );
                     }
-                    // A name several worlds declare resolves to one slot: the
-                    // coercion lookup and the transform schema both key on the
-                    // name alone, so two spellings of it would coerce a live
-                    // value under the wrong world's type and describe it to a
-                    // consumer under the wrong one. Identical declarations —
-                    // what repeating a shared field set or sharing a YAML anchor
-                    // produces — collapse to that one slot without loss, so the
-                    // gate is disagreement, not repetition.
+                    // The coercion lookup and the transform schema both key on
+                    // the name alone, never the discriminant, so a name resolves
+                    // to one slot however many worlds declare it.
                     if let Some((first, _)) = variants
                         .iter()
                         .take_while(|(m, _)| *m != member)

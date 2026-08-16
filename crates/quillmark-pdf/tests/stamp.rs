@@ -539,9 +539,8 @@ fn xref_emits_multiple_subsections_when_ids_have_gaps() {
     );
 }
 
-/// `font_size` is a public field, so the spine cannot assume the Typst helper's
-/// call-site asserts ran. A `/DA` reading `NaN Tf` parses as no PDF number, and
-/// the file a viewer cannot open is worse than the auto-size it asked for.
+/// `font_size` is public, so the spine cannot assume the Typst helper's asserts
+/// ran, and a `/DA` reading `NaN Tf` parses as no PDF number.
 #[test]
 fn a_nonsense_font_size_falls_back_to_auto_rather_than_forging_a_da() {
     let base = build_base_pdf(1);

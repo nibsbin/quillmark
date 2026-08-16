@@ -193,11 +193,9 @@ fn a_variant_field_may_not_be_a_container_or_carry_a_group() {
     .contains("quill::nested_group_not_supported"));
 }
 
-/// A name resolves to one slot of the container, and neither the coercion
-/// lookup nor the transform schema consults the discriminant to fill it. Two
-/// worlds spelling it differently would coerce a live value under the other
-/// world's type — a hard `validation::type_mismatch` on a document that is
-/// valid against the world it selected.
+/// Two spellings of one name would coerce a live value under the other world's
+/// type, failing `validation::type_mismatch` on a document valid against the
+/// world it selected.
 #[test]
 fn a_name_two_worlds_declare_differently_is_a_load_error() {
     let err = load_error(
@@ -207,8 +205,8 @@ fn a_name_two_worlds_declare_differently_is_a_load_error() {
     assert!(err.contains("'A'") && err.contains("'B'"), "{err}");
 }
 
-/// Repetition is how a shared field set is spelled, so identical declarations
-/// collapse to the one slot without loss and stay legal.
+/// Repetition is how a shared field set is spelled, so the gate is disagreement
+/// rather than repetition.
 #[test]
 fn a_name_two_worlds_declare_identically_loads() {
     let config = QuillConfig::from_yaml(&quill_yaml().replace(
@@ -350,8 +348,8 @@ fn resolve_reports_the_container_as_one_cell_matching_the_plate() {
 // ------------------------------------------------------------------ validation
 
 /// The conditional-obligation payoff: a field with no `default:` is obliged in
-/// its own world and silent everywhere else — the thing `must_fill` alone could
-/// not say (#1202).
+/// its own world and silent everywhere else — the thing `must_fill` alone cannot
+/// say.
 #[test]
 fn obligation_follows_the_selected_world() {
     let obliged = codes(&doc("classification:\n  value: CUI\n"));

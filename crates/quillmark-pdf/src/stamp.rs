@@ -46,11 +46,10 @@ const DEFAULT_APPEARANCE: &[u8] = b"/Helv 0 Tf 0 g";
 /// `Display` drops the trailing `.0`, so a whole-point size writes `12`, and an
 /// absent size writes the `0 Tf` that defers to the viewer's auto-size.
 ///
-/// A size that is not a positive finite number falls back to that same `0 Tf`:
-/// `font_size` is a public field, and `NaN`/`inf` would reach the `/DA` as a
-/// token no PDF number grammar admits, while a negative one is `0 Tf` said
-/// obscurely. The Typst helper rejects all three at the call site; this keeps a
-/// direct spine consumer from writing a file no viewer can parse.
+/// A size that is not positive and finite falls back to that same `0 Tf`:
+/// `font_size` is public, so the Typst helper's call-site asserts do not cover
+/// every caller, and `NaN`/`inf` reach the `/DA` as a token no PDF number
+/// grammar admits.
 fn field_appearance(spec: &FieldSpec) -> Vec<u8> {
     let size = spec
         .font_size
