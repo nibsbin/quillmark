@@ -538,3 +538,29 @@ fn xref_emits_multiple_subsections_when_ids_have_gaps() {
         "expected multiple xref subsections, found {headers}"
     );
 }
+
+/// `font_size` is public, so the spine cannot assume the Typst helper's asserts
+/// ran, and a `/DA` reading `NaN Tf` parses as no PDF number.
+#[test]
+fn a_nonsense_font_size_falls_back_to_auto_rather_than_forging_a_da() {
+    let base = build_base_pdf(1);
+    let mut fields = vec![FieldSpec::new(
+        "Date".into(),
+        0,
+        [180.0, 700.0, 520.0, 720.0],
+        FieldType::Text { multiline: false },
+    )];
+    for bad in [f32::NAN, f32::INFINITY, -12.0] {
+        fields[0].font_size = Some(bad);
+        let out = stamp(base.clone(), &fields, &StampOptions::default())
+            .unwrap_or_else(|e| panic!("{bad} should stamp: {}", e.message));
+        let text = String::from_utf8_lossy(&out);
+        assert!(
+            text.contains("/Helv 0 Tf 0 g"),
+            "{bad} should write the auto-size /DA"
+        );
+        for token in ["NaN", "inf", "-12 Tf"] {
+            assert!(!text.contains(token), "{bad} leaked {token:?} into the PDF");
+        }
+    }
+}

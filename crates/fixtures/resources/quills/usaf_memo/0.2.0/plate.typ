@@ -116,7 +116,7 @@
     // Sized in multiples of that face's own size rather than inches, because
     // `font_size` is a document field with no declared ceiling: an inch width
     // would stay put while the text inside it grew, and a fixed size clips
-    // where auto-size used to shrink. The longest date either memo style
+    // where auto-size would shrink. The longest date either memo style
     // produces sets just over 8em in Times ("September 28, 2026", the DAF
     // ordering, at 8.03em; USAF's "28 September 2026" is 7.78em), so 10em
     // clears the worst case at any body size. Wider than `date-placeholder`'s
