@@ -131,3 +131,34 @@ Helper contents (generated in `backends/typst/helper.rs` from `lib.typ.template`
   Note the name collision: this Typst helper is distinct from the `plaintext`
   **field type**. The helper projects *any* content to a `str`; the field type
   declares a field's content plain from the start.
+
+### Schema addresses
+
+`form-field(field:)` and `field-region(field)` name a schema field, and the
+generated `_qm-meta` address tables (`_qm-known-path`) validate that name at
+compile time rather than leaving it silently unbound:
+
+| Address | Admitted by |
+|---|---|
+| `subject` | any declared field |
+| `refs.2` | an array field — the element step |
+| `classification.poc` | a container field — the property step |
+| `$cards.<kind>.<n>.<field>` | a card field, `<n>` the per-kind ordinal |
+| `$cards.<kind>.<n>.<field>.<step>` | either step, on a card field |
+
+A one-step suffix is gated on the step the field actually offers, not on the
+name alone, so `subject.0` and `subject.poc` are both rejected on a scalar
+`subject`: a scalar has neither an element nor a property for the address to
+resolve to. A **container** is a typed dictionary or a variant container — both
+project as `type: object` carrying `properties`, so a variant's cells and its
+`value` discriminant are addressable exactly as a dictionary's keys are
+([SCHEMAS.md](SCHEMAS.md#enum-variants)). This is the pdfform resolver's grammar
+(`backends/pdfform/src/bind.rs`), so one address binds on either backend.
+
+Cards carry their canonical prefix as `$path`, so a plate composes a card
+address without reimplementing the kind+ordinal grammar:
+`field-region(card.at("$path") + "$body")`.
+
+The same addresses key the preview's region sidecar
+([PREVIEW.md](PREVIEW.md)), so a plate that reads one container property
+surfaces a region a consumer can route back to that property.

@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- feat(typst,pdfform): a schema address may step one property into a declared
+  container, so `form-field(field: "classification.poc")` and
+  `field-region("address.city")` name a cell rather than the container holding
+  it. Two generated address tables gate the step the way `array_fields` gates
+  the index step, and a typed dictionary and a variant container reach both
+  alike: `classification.value` addresses the discriminant, `classification.poc`
+  a variant cell in any world. The pdfform binder descends a variant container
+  to match, so one address binds on either backend where `address.city` bound
+  only on pdfform and asserted on Typst. **Region addresses shift** for a plate
+  that reads a container property directly: `#data.classification.poc` regions
+  as `classification.poc` where it regioned as `classification`, and `fieldAt`
+  answers the same. A container read whole is unchanged, as is a read of a key
+  the container does not declare.
 - feat(core,wasm)!: an `enum` may declare `variants:`, a per-member field set
   that exists only in the world where the discriminant holds that member. This
   is the DSL's first cross-field shape, and it replaces the `cui_`-prefix
