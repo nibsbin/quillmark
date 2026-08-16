@@ -201,10 +201,10 @@ region. Each *call* claims separately,
 so a wrapper invoked once per card with a `$path`-composed address is one
 region per card. Ink attributable to no source position at all (list bullets,
 underline rules) stays unclaimed here as everywhere. The marker stack persists
-across pages so a claim can span a page break, so a claim whose close marker
-never reaches a frame would run to the end of the document: those are found
-before the scan, suppressed in both the region and point queries, and reported
-as a `typst::unclosed_field_region` warning naming the field.
+across pages so a claim can span a page break, which leaves a claim whose close
+marker never reaches a frame bounded by nothing: those are found before the
+scan, suppressed in both the region and point queries, and reported as a
+`typst::unclosed_field_region` warning naming the field.
 **Form-field widgets** carry the path explicitly
 (pdfform from the form mapping, a Typst `form-field` from its `field:`
 argument, validated against schema address tables baked into the generated

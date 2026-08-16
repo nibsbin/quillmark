@@ -41,15 +41,14 @@
   invoked once per card yields one region per card — the way a card's scalar
   fields get regions at all, reading as they do from a loop variable that carries
   no per-instance identity. The marker stack persists across pages so a claim can
-  span a page break, so a claim whose closing marker never reaches a frame is
-  bounded by nothing and would take every unattributed piece of ink to the end of
-  the document. Those are found before the scan and suppressed in both the region
-  and point queries — an unbounded claim yields nothing rather than everything —
-  and reported as a `typst::unclosed_field_region` warning naming the field,
-  since only the plate author can act on it. Typst does not separate the two
-  markers on its own (they are siblings in content flow, and clipping, overflow,
-  floats, footnotes and marginals all keep them together); a plate emitting the
-  call's return value in parts can.
+  span a page break, which leaves a claim whose closing marker never reaches a
+  frame bounded by nothing: it would take every unattributed piece of ink to the
+  end of the document. Those are found before the scan and suppressed in both the
+  region and point queries — an unbounded claim yields nothing rather than
+  everything — and reported as a `typst::unclosed_field_region` warning naming
+  the field, since only the plate author can act on it. Typst does not separate
+  the two markers on its own — they are siblings in content flow — but a plate
+  emitting the call's return value in parts can.
 - feat(typst,pdf): `form-field` takes `font`, `size`, and `align`, so an
   injected widget's value can be set to match the type around it. A widget was
   fixed at Helvetica, auto-size, left: auto-size makes the rendered size a

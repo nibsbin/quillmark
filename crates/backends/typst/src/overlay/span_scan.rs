@@ -252,8 +252,6 @@ impl Markers {
 /// frame but whose close never did, over the whole document. A claim an
 /// enclosing close unwound past counts as closed: its extent was bounded, so
 /// nothing ran away.
-///
-/// Marker-only, so the cost is frame items rather than glyphs.
 pub(crate) fn unclosed_claims(doc: &PagedDocument) -> Vec<(usize, String)> {
     let mut markers = Markers::default();
     for page in doc.pages() {
@@ -643,10 +641,10 @@ fn accrue(boxes: &mut Vec<(usize, Aabb)>, hit: &Hit) {
 /// tracked ink the later-painted item wins; untracked ink never occludes.
 ///
 /// Earlier pages are walked for their markers alone, so a `field-region` that
-/// opened on a previous page still claims this page's ink. That lookbehind is
-/// also why `unclosed` has to be supplied rather than derived here: whether a
-/// claim open at `page` ever closes is only knowable from the pages after it,
-/// which this walk never reaches.
+/// opened on a previous page still claims this page's ink. `unclosed` is
+/// supplied rather than derived here because whether a claim open at `page` ever
+/// closes is knowable only from the pages after it, which this walk never
+/// reaches.
 pub(crate) fn field_at(
     doc: &PagedDocument,
     world: &QuillWorld,
@@ -1422,9 +1420,8 @@ Interleaved plate chrome.
         );
     }
 
-    /// Typst never separates the two markers on its own — every overflow, clip,
-    /// float and marginal case keeps them together — so the reachable way to
-    /// strand an open is a plate emitting the call's return value in parts.
+    /// Typst never separates the two markers on its own, so the way to strand an
+    /// open is a plate emitting the call's return value in parts.
     const STRANDED_OPEN: &str = r#"
 #import "@local/quillmark-helper:0.1.0": data, field-region
 #set page(width: 300pt, height: 200pt, margin: 20pt, header: [PAGE CHROME])
@@ -1453,8 +1450,8 @@ Interleaved plate chrome.
         );
     }
 
-    /// The runaway: a claim left open owns every unattributed hit to the end of
-    /// the document, page chrome included.
+    /// A claim left open would own every unattributed hit to the end of the
+    /// document, page chrome included.
     #[test]
     fn an_unclosed_claim_surfaces_no_region_at_all() {
         let long = body(&"A long paragraph of body text. ".repeat(60));
@@ -1475,9 +1472,8 @@ Interleaved plate chrome.
         );
     }
 
-    /// The point query is the symptom users see: chrome on a later page routing
-    /// clicks to whatever field was wrapped somewhere above. It cannot derive
-    /// the suppression set itself, so this guards that it is threaded through.
+    /// The point query cannot derive the suppression set itself, so this guards
+    /// that it is threaded through.
     #[test]
     fn an_unclosed_claim_does_not_capture_clicks_on_later_pages() {
         let q = quill(REGION_YAML, STRANDED_OPEN);
@@ -1497,8 +1493,6 @@ Interleaved plate chrome.
         let unclosed: Vec<usize> = unclosed_claims(&doc).into_iter().map(|(c, _)| c).collect();
         assert!(doc.pages().len() > 1, "the runaway needs a later page");
 
-        // Aim at ink the unsuppressed claim demonstrably swallows on a page it
-        // has no business reaching, rather than guessing where chrome sits.
         let last = doc.pages().len() - 1;
         let runaway = scan_content_regions(&doc, &world, &helper, &windows, &[])
             .into_iter()
@@ -1542,8 +1536,6 @@ Interleaved plate chrome.
         );
     }
 
-    /// A claim an enclosing close unwound past is bounded, so it is not a
-    /// runaway and keeps its region.
     #[test]
     fn an_inner_claim_closed_by_its_enclosing_one_is_not_suppressed() {
         const PLATE: &str = r#"

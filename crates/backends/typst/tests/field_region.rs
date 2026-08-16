@@ -77,9 +77,8 @@ fn a_claim_does_not_displace_a_nested_scalar_site() {
     }
 }
 
-/// Silence is the worst outcome for a runaway claim: the plate author is the
-/// only one who can fix it, and the symptom (chrome routing clicks to a field)
-/// does not point at its cause.
+/// The symptom — chrome routing clicks to a field — does not point at its
+/// cause, and only the plate author can fix it.
 #[test]
 fn an_unclosed_claim_warns_and_claims_nothing() {
     let plate = r#"
