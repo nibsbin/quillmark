@@ -99,9 +99,9 @@ The ceiling is deliberate and enforced at load rather than discovered at render:
 | a name two variants declare *differently* | `quill::variant_field_collision` |
 
 The last is the load-bearing one: content and dates lower to Typst through
-*top-level* name tables that do not descend into a container
-([PLATE_DATA.md](PLATE_DATA.md)), so such a field would load clean and reach the
-plate as a raw dict. **A variant carries plain data** — `string`, `enum`,
+*top-level* content and date name tables that do not descend into a container
+([PLATE_DATA.md](PLATE_DATA.md)) — unlike the address tables, which do — so such
+a field would load clean and reach the plate as a raw dict. **A variant carries plain data** — `string`, `enum`,
 `number`, `integer`, `boolean` — and prose and dates stay card-level fields.
 Variant fields are otherwise leaves exactly as an object's properties are: no
 container one level down, and no `ui.group` (they inherit the discriminant's).
