@@ -23,6 +23,12 @@
 //! innermost open marker instead of counting as foreign. Each *call* is its own
 //! claim, so a wrapper invoked per card yields one region per card.
 //!
+//! The stack persists across pages so a claim can span a page break, which means
+//! an open marker whose close never reaches the frame would claim every
+//! unattributed hit to the end of the document. [`unclosed_claims`] names those
+//! ahead of the scan and both queries suppress them, so an unbounded claim
+//! yields nothing rather than everything.
+//!
 //! **First placement only.** Each span-window key's region is its first maximal
 //! run of consecutive matching frame items. Span data cannot distinguish
 //! "package chrome between two placements" from "a second placement" (both are a
@@ -202,16 +208,36 @@ const REGION_LABEL: &str = "__qm_region__";
 struct Markers {
     claims: Vec<String>,
     stack: Vec<usize>,
+    /// Claim indices [`unclosed_claims`] found still open at the end of the
+    /// document. Keeping them off `stack` leaves their ink foreign, exactly as
+    /// if the plate had emitted no marker at all.
+    suppressed: Vec<usize>,
 }
 
 impl Markers {
+    fn suppressing(suppressed: &[usize]) -> Self {
+        Self {
+            suppressed: suppressed.to_vec(),
+            ..Self::default()
+        }
+    }
+
     /// A close unwinds to the innermost open claim on `path`; one whose open
     /// never reached the frame (content Typst laid out elsewhere) is dropped
-    /// rather than popping an unrelated claim.
+    /// rather than popping an unrelated claim. An open still on the stack when
+    /// the walk ends is the mirror case, handled by [`unclosed_claims`]: it
+    /// cannot be detected here, where the rest of the document is still ahead.
+    ///
+    /// `claims` grows on every open, suppressed or not, so an index addresses
+    /// the same call in any walk of one document — including the page prefix
+    /// [`field_at`] walks.
     fn edge(&mut self, path: &str, close: bool) {
         if !close {
             self.claims.push(path.to_string());
-            self.stack.push(self.claims.len() - 1);
+            let claim = self.claims.len() - 1;
+            if !self.suppressed.contains(&claim) {
+                self.stack.push(claim);
+            }
         } else if let Some(i) = self.stack.iter().rposition(|&c| self.claims[c] == path) {
             self.stack.truncate(i);
         }
@@ -220,6 +246,22 @@ impl Markers {
     fn current(&self) -> Option<usize> {
         self.stack.last().copied()
     }
+}
+
+/// The `(claim, field)` of every `field-region` whose open marker reached a
+/// frame but whose close never did, over the whole document. A claim an
+/// enclosing close unwound past counts as closed: its extent was bounded, so
+/// nothing ran away.
+pub(crate) fn unclosed_claims(doc: &PagedDocument) -> Vec<(usize, String)> {
+    let mut markers = Markers::default();
+    for page in doc.pages() {
+        scan_markers(&page.frame, &mut markers);
+    }
+    markers
+        .stack
+        .iter()
+        .map(|&c| (c, markers.claims[c].clone()))
+        .collect()
 }
 
 /// `(field, is-close)` if `elem` is one of `field-region`'s markers.
@@ -461,15 +503,17 @@ enum Run {
 
 /// Each span window's **first placement** and each `field-region` call's whole
 /// claim: one [`RenderedRegion`] per page a run touches, PDF bottom-left rects,
-/// sorted (page, field, key order).
+/// sorted (page, field, key order). A claim in `unclosed` accrues nothing and so
+/// surfaces no region.
 pub(crate) fn scan_content_regions(
     doc: &PagedDocument,
     world: &QuillWorld,
     helper: &Source,
     windows: &[FieldWindow],
+    unclosed: &[usize],
 ) -> Vec<RenderedRegion> {
     let mut cls = Classifier::new(world, helper, windows);
-    let mut markers = Markers::default();
+    let mut markers = Markers::suppressing(unclosed);
     let mut hits = Vec::new();
     for (page, p) in doc.pages().iter().enumerate() {
         collect_page_hits(&p.frame, page, &mut cls, &mut markers, &mut hits);
@@ -597,12 +641,16 @@ fn accrue(boxes: &mut Vec<(usize, Aabb)>, hit: &Hit) {
 /// tracked ink the later-painted item wins; untracked ink never occludes.
 ///
 /// Earlier pages are walked for their markers alone, so a `field-region` that
-/// opened on a previous page still claims this page's ink.
+/// opened on a previous page still claims this page's ink. `unclosed` is
+/// supplied rather than derived here because whether a claim open at `page` ever
+/// closes is knowable only from the pages after it, which this walk never
+/// reaches.
 pub(crate) fn field_at(
     doc: &PagedDocument,
     world: &QuillWorld,
     helper: &Source,
     windows: &[FieldWindow],
+    unclosed: &[usize],
     page: usize,
     x: f32,
     y: f32,
@@ -612,7 +660,7 @@ pub(crate) fn field_at(
     let (x, y) = (x as f64, page_h - y as f64);
 
     let mut cls = Classifier::new(world, helper, windows);
-    let mut markers = Markers::default();
+    let mut markers = Markers::suppressing(unclosed);
     let mut hits = Vec::new();
     for earlier in doc.pages().iter().take(page) {
         scan_markers(&earlier.frame, &mut markers);
@@ -1047,7 +1095,7 @@ main:
             let helper = world
                 .source(QuillWorld::helper_fid("lib.typ"))
                 .expect("helper source");
-            let regions = scan_content_regions(&doc, &world, &helper, &windows);
+            let regions = scan_content_regions(&doc, &world, &helper, &windows, &[]);
             regions
                 .iter()
                 .filter(|r| r.field == "body")
@@ -1255,7 +1303,8 @@ main:
         let helper = world
             .source(QuillWorld::helper_fid("lib.typ"))
             .expect("helper source");
-        scan_content_regions(&doc, &world, &helper, &windows)
+        let unclosed: Vec<usize> = unclosed_claims(&doc).into_iter().map(|(c, _)| c).collect();
+        scan_content_regions(&doc, &world, &helper, &windows, &unclosed)
     }
 
     fn body(markdown: &str) -> serde_json::Value {
@@ -1368,6 +1417,138 @@ Interleaved plate chrome.
              text: claim {:?} vs body {:?}",
             claim.rect,
             body_box.rect
+        );
+    }
+
+    /// Typst never separates the two markers on its own, so the way to strand an
+    /// open is a plate emitting the call's return value in parts.
+    const STRANDED_OPEN: &str = r#"
+#import "@local/quillmark-helper:0.1.0": data, field-region
+#set page(width: 300pt, height: 200pt, margin: 20pt, header: [PAGE CHROME])
+#let r = field-region("classification")[#box(stroke: 1pt)[X]]
+#r.children.at(0)
+#data.body
+"#;
+
+    #[test]
+    fn an_open_marker_whose_close_never_lands_is_reported_unclosed() {
+        let q = quill(REGION_YAML, STRANDED_OPEN);
+        let plate = crate::read_plate(&q).expect("plate");
+        let schema = quillmark_core::quill::build_transform_schema(q.config());
+        let meta = crate::SchemaMeta::from_schema_json(schema.as_json());
+        let data = body("Body text.");
+        let transformed = crate::transformed_data(&meta, &data).expect("transform");
+        let mut world = QuillWorld::new(&q, &plate).expect("world");
+        world
+            .inject_helper_package(transformed.as_ref(), &meta)
+            .expect("inject");
+        let (doc, _) = compile_document(&world).expect("compile");
+        assert_eq!(
+            unclosed_claims(&doc),
+            vec![(0, "classification".to_string())],
+            "the stranded open is named, so a plate author can act on it"
+        );
+    }
+
+    /// A claim left open would own every unattributed hit to the end of the
+    /// document, page chrome included.
+    #[test]
+    fn an_unclosed_claim_surfaces_no_region_at_all() {
+        let long = body(&"A long paragraph of body text. ".repeat(60));
+        let regions = probe_regions(STRANDED_OPEN, long.clone());
+        assert!(
+            regions.iter().any(|r| r.field == "body"),
+            "the fields that do resolve are untouched: {regions:?}"
+        );
+        assert!(
+            !regions.iter().any(|r| r.field == "classification"),
+            "the unbounded claim yields nothing rather than every page's chrome: \
+             {:?}",
+            regions
+                .iter()
+                .filter(|r| r.field == "classification")
+                .map(|r| r.page)
+                .collect::<Vec<_>>()
+        );
+    }
+
+    /// The point query cannot derive the suppression set itself, so this guards
+    /// that it is threaded through.
+    #[test]
+    fn an_unclosed_claim_does_not_capture_clicks_on_later_pages() {
+        let q = quill(REGION_YAML, STRANDED_OPEN);
+        let plate = crate::read_plate(&q).expect("plate");
+        let schema = quillmark_core::quill::build_transform_schema(q.config());
+        let meta = crate::SchemaMeta::from_schema_json(schema.as_json());
+        let data = body(&"A long paragraph of body text. ".repeat(60));
+        let transformed = crate::transformed_data(&meta, &data).expect("transform");
+        let mut world = QuillWorld::new(&q, &plate).expect("world");
+        let windows = world
+            .inject_helper_package(transformed.as_ref(), &meta)
+            .expect("inject");
+        let (doc, _) = compile_document(&world).expect("compile");
+        let helper = world
+            .source(QuillWorld::helper_fid("lib.typ"))
+            .expect("helper source");
+        let unclosed: Vec<usize> = unclosed_claims(&doc).into_iter().map(|(c, _)| c).collect();
+        assert!(doc.pages().len() > 1, "the runaway needs a later page");
+
+        let last = doc.pages().len() - 1;
+        let runaway = scan_content_regions(&doc, &world, &helper, &windows, &[])
+            .into_iter()
+            .find(|r| r.field == "classification" && r.page == last)
+            .expect("unsuppressed, the claim reaches the last page");
+        let (cx, cy) = (
+            (runaway.rect[0] + runaway.rect[2]) / 2.0,
+            (runaway.rect[1] + runaway.rect[3]) / 2.0,
+        );
+        assert_eq!(
+            field_at(&doc, &world, &helper, &windows, &[], last, cx, cy),
+            Some("classification".to_string()),
+            "sanity: unsuppressed, that ink routes to the stranded claim"
+        );
+        assert_eq!(
+            field_at(&doc, &world, &helper, &windows, &unclosed, last, cx, cy),
+            None,
+            "suppressed, page chrome under a runaway claim answers to no field"
+        );
+    }
+
+    /// Suppression is per claim, not per field name: a second, well-formed call
+    /// on the same field keeps its region.
+    #[test]
+    fn a_balanced_claim_beside_an_unclosed_one_still_surfaces() {
+        const PLATE: &str = r#"
+#import "@local/quillmark-helper:0.1.0": data, field-region
+#set page(width: 300pt, height: 200pt, margin: 20pt)
+#let r = field-region("classification")[#box(stroke: 1pt)[X]]
+#r.children.at(0)
+#field-region("classification")[#box(stroke: 1pt)[OK]]
+"#;
+        let regions = probe_regions(PLATE, body("Body."));
+        assert_eq!(
+            regions
+                .iter()
+                .filter(|r| r.field == "classification")
+                .count(),
+            1,
+            "only the balanced call claims: {regions:?}"
+        );
+    }
+
+    #[test]
+    fn an_inner_claim_closed_by_its_enclosing_one_is_not_suppressed() {
+        const PLATE: &str = r#"
+#import "@local/quillmark-helper:0.1.0": data, field-region
+#set page(width: 300pt, height: 200pt, margin: 20pt)
+#let inner = field-region("body")[#box(stroke: 1pt)[I]]
+#field-region("classification")[#inner.children.at(0) #box(stroke: 1pt)[C]]
+#data.body
+"#;
+        let regions = probe_regions(PLATE, body("Text."));
+        assert!(
+            regions.iter().any(|r| r.field == "body"),
+            "the inner claim is bounded by the outer close: {regions:?}"
         );
     }
 
