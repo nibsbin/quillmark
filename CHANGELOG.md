@@ -19,11 +19,12 @@
   (`validation::out_of_variant`), never dropped at coercion or gated at render.
   The ceiling is enforced at load, not discovered at render: a variant carries
   plain data only, sits at card level only, and cannot declare `value`. The
-  transform schema projects the container with every world's fields tagged
-  `quillmark:variant_of`, since a binding built once against a schema must
-  address a field today's document has not selected. `FieldSchema` gains
-  `variants`; `VariantFields`, `VARIANT_DISCRIMINANT_KEY` and
-  `QUILLMARK_VARIANT_OF_KEY` are new.
+  transform schema projects the container with every world's fields flattened
+  under `properties`, since a binding built once against a schema must address a
+  field today's document has not selected; member scoping stays on the
+  declaration view, where `schema()` emits `variants:` keyed by member.
+  `FieldSchema` gains `variants`; `VariantFields` and `VARIANT_DISCRIMINANT_KEY`
+  are new.
 - feat(fixtures)!: `usaf_memo`'s four `cui_*` fields move under
   `classification`'s `CUI` variant as `controlled_by`, `poc`, `category`, and
   `limited_dissemination`. `controlled_by` and `poc` drop their `default: ""`
