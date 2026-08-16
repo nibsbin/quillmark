@@ -1,4 +1,5 @@
 mod support_tests;
+mod variant_tests;
 
 use super::*;
 use crate::{Diagnostic, Severity};

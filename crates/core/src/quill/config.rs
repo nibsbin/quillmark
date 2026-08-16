@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Diagnostic, Severity, diag_args};
 use crate::value::QuillValue;
 
-use super::types::{RICHTEXT_INLINE_TOKEN_MSG, UI_ORDER_REMOVED_MSG};
+use super::types::{RICHTEXT_INLINE_TOKEN_MSG, UI_ORDER_REMOVED_MSG, VARIANT_DISCRIMINANT_KEY};
 use super::{BodyCardSchema, CardSchema, FieldSchema, FieldType, GroupRegistry, UiCardSchema};
 
 /// Canonical string text for a bare scalar unambiguously representable as a
@@ -319,6 +319,15 @@ impl QuillConfig {
         // is never part of the JSON projection).
         if json_value.is_null() {
             return Ok(value.clone());
+        }
+
+        // A variant-bearing enum rests as a container, so it normalizes here and
+        // every surface downstream sees one shape. The bare scalar
+        // (`classification: CUI`) is the hand-authored spelling of a world with
+        // nothing filled in, and it is adopted rather than rejected: a document
+        // only needs the map once it has a variant field to carry.
+        if field_schema.is_variant_bearing() {
+            return Self::conform_variant(json_value, field_schema, path, mode);
         }
 
         match field_schema.r#type {
@@ -794,6 +803,118 @@ impl QuillConfig {
         Ok(out)
     }
 
+    /// Coerce a variant-bearing enum to its container form, `{value: <member>,
+    /// …}`. Two authored shapes reach here and both normalize to one:
+    ///
+    /// - a **bare scalar** (`classification: CUI`), the hand-authored spelling of
+    ///   a world carrying no variant answers, wrapped as `{value: "CUI"}`;
+    /// - a **map**, whose `value` coerces as the enum's string and whose other
+    ///   keys coerce against whichever variant declares them.
+    ///
+    /// A key no variant declares carries through verbatim, as an undeclared key
+    /// on a typed dictionary does: the schema is a floor here too. A key declared
+    /// by a *non-active* variant is coerced by that variant's schema and kept, so
+    /// flipping the discriminant in an editor and flipping back does not cost the
+    /// author their answers; `validation::out_of_variant` reports it, and the
+    /// render floor drops it from the plate.
+    ///
+    /// Names may repeat across variants (only one world is ever live), so the
+    /// lookup takes the first variant declaring the name: an ambiguity only
+    /// reachable for a stranded value, whose type nothing downstream reads.
+    fn conform_variant(
+        json_value: &serde_json::Value,
+        field_schema: &super::FieldSchema,
+        path: &str,
+        mode: Leniency,
+    ) -> Result<QuillValue, CoercionError> {
+        let discriminant = |v: &serde_json::Value| -> Option<String> {
+            v.as_str()
+                .map(str::to_string)
+                .or_else(|| scalar_as_string(v))
+        };
+
+        let Some(object) = json_value.as_object() else {
+            return match discriminant(json_value) {
+                Some(member) => {
+                    let mut out = serde_json::Map::new();
+                    out.insert(
+                        VARIANT_DISCRIMINANT_KEY.to_string(),
+                        serde_json::Value::String(member),
+                    );
+                    Ok(QuillValue::from_json(serde_json::Value::Object(out)))
+                }
+                // A shape that is neither a member nor a container: the render
+                // floor defers to validation, a strict write fails now.
+                None => match mode {
+                    Leniency::Render => Ok(QuillValue::from_json(json_value.clone())),
+                    Leniency::Write => Err(CoercionError::Uncoercible {
+                        path: path.to_string(),
+                        value: json_value.to_string(),
+                        target: "enum".to_string(),
+                        reason: "value is neither a member nor a variant container".to_string(),
+                    }),
+                },
+            };
+        };
+
+        let mut out = serde_json::Map::new();
+        for (key, value) in object {
+            if key == VARIANT_DISCRIMINANT_KEY {
+                // Null ≡ absent: leave the key out so the ladder fills it.
+                if value.is_null() {
+                    continue;
+                }
+                match discriminant(value) {
+                    Some(member) => {
+                        out.insert(key.clone(), serde_json::Value::String(member));
+                    }
+                    None => match mode {
+                        Leniency::Render => {
+                            out.insert(key.clone(), value.clone());
+                        }
+                        Leniency::Write => {
+                            return Err(CoercionError::Uncoercible {
+                                path: format!("{path}.{key}"),
+                                value: value.to_string(),
+                                target: "enum".to_string(),
+                                reason: "value is not a string".to_string(),
+                            });
+                        }
+                    },
+                }
+                continue;
+            }
+            match Self::variant_field_schema(field_schema, key) {
+                Some(schema) => {
+                    let coerced = Self::conform_value(
+                        &QuillValue::from_json(value.clone()),
+                        schema,
+                        &format!("{path}.{key}"),
+                        mode,
+                    )?;
+                    out.insert(key.clone(), coerced.into_json());
+                }
+                None => {
+                    out.insert(key.clone(), value.clone());
+                }
+            }
+        }
+        Ok(QuillValue::from_json(serde_json::Value::Object(out)))
+    }
+
+    /// The schema for `name` under any of `field`'s variants, active or not.
+    pub(crate) fn variant_field_schema<'a>(
+        field: &'a super::FieldSchema,
+        name: &str,
+    ) -> Option<&'a super::FieldSchema> {
+        field
+            .variants
+            .as_ref()?
+            .values()
+            .find_map(|set| set.get(name))
+            .map(|boxed| boxed.as_ref())
+    }
+
     /// Recursively validate a field's structural shape, enforcing the
     /// one-level nesting contract in a single pass. The `position` records
     /// what shapes are legal at the current depth:
@@ -849,6 +970,124 @@ impl QuillConfig {
                      join a group."
                 ),
             );
+        }
+
+        if let Some(variants) = &schema.variants {
+            // A variant set is a *card-level* shape: it turns its field into a
+            // container, and a container may not sit inside one (the same
+            // one-level rule `nested_object_not_supported` states from the
+            // object side).
+            if position != ShapePosition::Top {
+                return err(
+                    "quill::variant_placement",
+                    format!(
+                        "Field '{owner}' declares 'variants' in a nested position. \
+                         Variants apply only to card-level enum fields; an object \
+                         property, an array item, and another variant's field cannot \
+                         carry one."
+                    ),
+                );
+            }
+            let Some(values) = &schema.enum_values else {
+                return err(
+                    "quill::variants_on_non_enum",
+                    format!(
+                        "Field '{owner}' declares 'variants' but is not type: enum. \
+                         A variant names one member of a closed domain, so declare \
+                         type: enum with a values: list."
+                    ),
+                );
+            };
+            if variants.is_empty() {
+                return err(
+                    "quill::variant_empty",
+                    format!(
+                        "Field '{owner}' has an empty 'variants' map. Declare at least \
+                         one member's field set, or remove the key entirely."
+                    ),
+                );
+            }
+            for (member, fields) in variants {
+                let member_owner = format!("{owner}.variants.{member}");
+                if !values.iter().any(|v| v == member) {
+                    // The blank lands here too, and its message is the pointed
+                    // one: it is not a member, so it owns no field set.
+                    return err(
+                        "quill::variant_unknown_value",
+                        format!(
+                            "Field '{owner}' declares a variant for '{member}', which is \
+                             not one of its 'values'. A variant keys on a declared member; \
+                             the blank (\"\") is not one and owns no field set."
+                        ),
+                    );
+                }
+                if fields.is_empty() {
+                    return err(
+                        "quill::variant_empty",
+                        format!(
+                            "Field '{member_owner}' declares no fields. A variant exists to \
+                             bring a field set into play; drop the member's entry if it \
+                             brings none."
+                        ),
+                    );
+                }
+                for (name, field) in fields {
+                    if name == VARIANT_DISCRIMINANT_KEY {
+                        return err(
+                            "quill::variant_reserved_field_name",
+                            format!(
+                                "Field '{member_owner}' declares a field named \
+                                 '{VARIANT_DISCRIMINANT_KEY}', which carries the \
+                                 discriminant itself. Rename the field."
+                            ),
+                        );
+                    }
+                    if !Self::is_snake_case_identifier(name) {
+                        return err(
+                            "quill::invalid_field_name",
+                            format!(
+                                "Invalid variant field key '{name}' on '{member_owner}': \
+                                 field keys must be snake_case (lowercase letters, digits, \
+                                 and underscores only), and capitalized field keys are \
+                                 reserved."
+                            ),
+                        );
+                    }
+                    // A variant's fields are leaves, exactly as an object's
+                    // properties are: scalars only, no `ui.group` (they inherit
+                    // the discriminant's), no container one level down.
+                    if let Some(diag) = Self::validate_field_schema_shape(
+                        field,
+                        &format!("{member_owner}.{name}"),
+                        ShapePosition::Leaf,
+                    ) {
+                        return Some(diag);
+                    }
+                    // Content and dates lower to Typst through *top-level* name
+                    // tables (`content_field_names`, the date tables), which do
+                    // not descend into a container. Declaring one here would
+                    // load clean and reach the plate as a raw dict, so the
+                    // ceiling is enforced rather than discovered at render.
+                    if matches!(
+                        field.r#type,
+                        FieldType::RichText { .. }
+                            | FieldType::PlainText { .. }
+                            | FieldType::Date
+                            | FieldType::DateTime
+                    ) {
+                        return err(
+                            "quill::variant_field_type",
+                            format!(
+                                "Field '{member_owner}.{name}' is type: {}, which a variant \
+                                 cannot carry. A variant holds plain data: string, enum, \
+                                 number, integer, or boolean. Declare prose and dates as \
+                                 card-level fields.",
+                                field.r#type.as_str()
+                            ),
+                        );
+                    }
+                }
+            }
         }
 
         match schema.r#type {
@@ -1031,6 +1270,14 @@ impl QuillConfig {
             for (name, prop) in props {
                 let nested = format!("{}.{}", owner_label, name);
                 Self::validate_field_blueprint_constraints(prop, &nested, errors);
+            }
+        }
+        if let Some(variants) = &schema.variants {
+            for (member, fields) in variants {
+                for (name, field) in fields {
+                    let nested = format!("{owner_label}.variants.{member}.{name}");
+                    Self::validate_field_blueprint_constraints(field, &nested, errors);
+                }
             }
         }
         if let Some(items) = &schema.items {
@@ -1927,6 +2174,8 @@ pub(crate) fn field_contains_content(field: &FieldSchema) -> bool {
             .properties
             .as_ref()
             .is_some_and(|p| p.values().any(|f| field_contains_content(f))),
+        // A variant carries plain data only (`quill::variant_field_type`), so no
+        // content leaf can sit inside one and the container never bears content.
         _ => false,
     }
 }

@@ -447,6 +447,16 @@ impl<'de> Deserialize<'de> for FieldType {
     }
 }
 
+/// The field set one enum member brings into play, in declaration order.
+pub type VariantFields = IndexMap<String, Box<FieldSchema>>;
+
+/// The key carrying the discriminant inside a variant-bearing enum's value.
+///
+/// Reserved: a variant may not declare a field under this name
+/// (`quill::variant_reserved_field_name`). Named for the date value-object's
+/// `.value`, the sibling idiom for "the scalar inside the wrapper".
+pub const VARIANT_DISCRIMINANT_KEY: &str = "value";
+
 /// Schema definition for a template field.
 ///
 /// `default` and `example` are both type-valid values with opposite intent:
@@ -495,6 +505,15 @@ pub struct FieldSchema {
     pub ui: Option<UiFieldSchema>,
     /// Restricts valid values on string fields. Serializes as `enum`.
     pub enum_values: Option<Vec<String>>,
+    /// Per-member field sets on an `enum` field: the fields that exist only in
+    /// the world where the discriminant holds that member. Keyed by member (a
+    /// subset of [`enum_values`](Self::enum_values); the blank owns no set).
+    ///
+    /// Declaring it is what turns the field into a **container**: a
+    /// variant-bearing enum rests as `{value: <member>, …the member's fields}`
+    /// rather than a bare string, at every projection. A member absent from this
+    /// map is a world with no fields of its own, spelled `{value: <member>}`.
+    pub variants: Option<IndexMap<String, VariantFields>>,
     /// Nested field schemas for `object` types (the typed dictionary's
     /// properties). Ordered: declaration order is display order at every
     /// nesting level, carried by the map itself.
@@ -535,6 +554,9 @@ struct FieldSchemaDef {
     /// The domain of a `type: enum` field, and the only spelling of one.
     /// Lands in [`FieldSchema::enum_values`].
     pub values: Option<Vec<String>>,
+    /// Per-member field sets, keyed by member. Lands in
+    /// [`FieldSchema::variants`].
+    pub variants: Option<serde_json::Map<String, serde_json::Value>>,
     // Nested schema support
     pub properties: Option<serde_json::Map<String, serde_json::Value>>,
     // Element schema for arrays.
@@ -553,11 +575,26 @@ impl FieldSchema {
             must_fill: None,
             ui: None,
             enum_values: None,
+            variants: None,
             properties: None,
             items: None,
             default_content: None,
             example_content: None,
         }
+    }
+
+    /// The fields `member` brings into play, or `None` where the field declares
+    /// no variants, the member owns no set, or `member` is the blank (which
+    /// activates nothing).
+    pub fn variant_fields(&self, member: &str) -> Option<&VariantFields> {
+        self.variants.as_ref()?.get(member)
+    }
+
+    /// Whether this field rests as a variant container (`{value: …, …}`) rather
+    /// than a bare scalar. Keyed on `variants:`, the one thing that changes the
+    /// resting shape: a plain `enum` stays a string everywhere.
+    pub fn is_variant_bearing(&self) -> bool {
+        self.variants.is_some()
     }
 
     /// Whether a human must author this cell, deriving from `default:` when
@@ -593,6 +630,30 @@ impl FieldSchema {
             must_fill: def.must_fill,
             ui: def.ui,
             enum_values,
+            variants: match def.variants {
+                Some(variants) => {
+                    let mut out = IndexMap::new();
+                    for (member, body) in variants {
+                        let fields = body.as_object().ok_or_else(|| {
+                            format!(
+                                "variant '{member}' must be a map of field schemas, \
+                                 written as it would be under `fields:`"
+                            )
+                        })?;
+                        let mut set = VariantFields::new();
+                        for (key, value) in fields {
+                            let field = FieldSchema::from_quill_value(
+                                key.clone(),
+                                &QuillValue::from_json(value.clone()),
+                            )?;
+                            set.insert(key.clone(), Box::new(field));
+                        }
+                        out.insert(member, set);
+                    }
+                    Some(out)
+                }
+                None => None,
+            },
             properties: if let Some(props) = def.properties {
                 // Declaration order (preserved by serde_json's `preserve_order`)
                 // carries straight into the `IndexMap`, so nested properties
@@ -697,6 +758,7 @@ impl Serialize for FieldSchema {
             + self.must_fill.is_some() as usize
             + self.ui.is_some() as usize
             + self.enum_values.is_some() as usize
+            + self.variants.is_some() as usize
             + self.properties.is_some() as usize
             + self.items.is_some() as usize;
         // Field order matches the struct declaration (what a derived impl
@@ -724,6 +786,9 @@ impl Serialize for FieldSchema {
         }
         if let Some(v) = &self.enum_values {
             map.serialize_entry("values", v)?;
+        }
+        if let Some(v) = &self.variants {
+            map.serialize_entry("variants", v)?;
         }
         if let Some(v) = &self.properties {
             map.serialize_entry("properties", v)?;

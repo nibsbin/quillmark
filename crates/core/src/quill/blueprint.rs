@@ -7,7 +7,7 @@
 
 use indexmap::IndexMap;
 
-use super::{blank, CardSchema, FieldSchema, FieldType, QuillConfig};
+use super::{blank, CardSchema, FieldSchema, FieldType, QuillConfig, VARIANT_DISCRIMINANT_KEY};
 use crate::document::emit::{saphyr_emit_flow, saphyr_emit_scalar};
 use crate::document::prescan::NestedComment;
 use crate::document::{Card, Document, Payload, PayloadItem};
@@ -174,6 +174,12 @@ fn group_fields<'a, I: IntoIterator<Item = &'a FieldSchema>>(
 /// typed dictionaries (`object` with `properties`) to their per-property
 /// builders; everything else is a scalar/array cell.
 fn append_field(items: &mut Vec<PayloadItem>, field: &FieldSchema) {
+    // Variant-bearing enum: a container whose live world the discriminant picks.
+    if field.is_variant_bearing() {
+        append_variant(items, field);
+        return;
+    }
+
     // Typed table: an array whose element is an object with properties.
     if matches!(field.r#type, FieldType::Array) {
         if let Some(elem) = &field.items {
@@ -344,6 +350,95 @@ fn append_typed_dict(
     };
 
     push_container_field(items, &field.name, value, nested, fills, field);
+}
+
+/// Append a variant-bearing enum: the container, its discriminant cell, and the
+/// fields of the world that discriminant selects.
+///
+/// A blueprint **is** a document, so it can only show one world — the one its own
+/// discriminant names (`default:` › `example:` › blank). The worlds it cannot
+/// show are named instead, one `# when <MEMBER>: <fields>` line each, so a reader
+/// filling the form learns that choosing a different member brings different
+/// cells. Every world is listed, the shown one included: the lines are the map,
+/// the cells are the position.
+///
+/// The discriminant carries the container's `!must_fill` marker (a mapping
+/// cannot hold one) and no inline annotation of its own — the container line
+/// already carries `enum<…>`, and `value` is that enum.
+fn append_variant(items: &mut Vec<PayloadItem>, field: &FieldSchema) {
+    push_leading(items, field, field.default.is_some());
+    if let Some(variants) = &field.variants {
+        for (member, fields) in variants {
+            let names: Vec<&str> = fields.keys().map(String::as_str).collect();
+            items.push(PayloadItem::comment(format!(
+                "when {member}: {}",
+                names.join(", ")
+            )));
+        }
+    }
+
+    let member = scalar_value(field);
+    let mut map = JsonMap::new();
+    let mut nested = Vec::new();
+    let mut fills = Vec::new();
+    map.insert(
+        VARIANT_DISCRIMINANT_KEY.to_string(),
+        match &member {
+            // A null discriminant would read as "no cell"; the blank is the
+            // enum's own spelling of an unanswered choice, and it round-trips.
+            JsonValue::Null => JsonValue::String(String::new()),
+            other => other.clone(),
+        },
+    );
+    if field.must_fill() {
+        fills.push(vec![PathSegment::Key(VARIANT_DISCRIMINANT_KEY.to_string())]);
+    }
+
+    let live = member.as_str().and_then(|m| field.variant_fields(m));
+    if let Some(fields) = live {
+        for (slot, prop) in fields.values().map(|b| b.as_ref()).enumerate() {
+            // Slot 0 is the discriminant, so every variant field sits one past it.
+            let position = slot + 1;
+            if let Some(desc) = collapse_opt(&prop.description) {
+                nested.push(NestedComment {
+                    container_path: Vec::new(),
+                    position,
+                    text: desc,
+                    inline: false,
+                });
+            }
+            if prop.default.is_some() {
+                if let Some(eg) = prop.example.as_ref() {
+                    nested.push(NestedComment {
+                        container_path: Vec::new(),
+                        position,
+                        text: format!("e.g. {}", eg_hint(eg)),
+                        inline: false,
+                    });
+                }
+            }
+            let (json, fill) = scalar_cell(prop);
+            map.insert(prop.name.clone(), json);
+            if fill {
+                fills.push(vec![PathSegment::Key(prop.name.clone())]);
+            }
+            nested.push(NestedComment {
+                container_path: Vec::new(),
+                position,
+                text: type_expression(prop),
+                inline: true,
+            });
+        }
+    }
+
+    push_container_field(
+        items,
+        &field.name,
+        JsonValue::Object(map),
+        nested,
+        fills,
+        field,
+    );
 }
 
 /// Append a typed-table field (`array<object>`). With a `default:`: render the

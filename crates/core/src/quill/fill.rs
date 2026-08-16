@@ -3,7 +3,7 @@
 
 use serde_json::json;
 
-use super::{FieldSchema, FieldType};
+use super::{FieldSchema, FieldType, VARIANT_DISCRIMINANT_KEY};
 use crate::value::QuillValue;
 
 /// The **blank** for `field`: the leanest value satisfying its declared type,
@@ -18,6 +18,7 @@ use crate::value::QuillValue;
 /// | `object` | every property at its own blank, recursively |
 /// | `integer`, `number` | `0` |
 /// | `boolean` | `false` |
+/// | `enum` with `variants:` | `{value: ""}` — the container holding the blank |
 ///
 /// A field's blank is a property of the *field*, not a member of the type's
 /// value domain: an `enum`'s blank sits outside `values:` rather than claiming
@@ -36,6 +37,15 @@ use crate::value::QuillValue;
 /// present, so it recurses rather than degrading to the bare `{}` that only a
 /// property-less object carries.
 pub fn blank(field: &FieldSchema) -> QuillValue {
+    // A variant-bearing enum rests as a container, so its blank is the container
+    // holding the blank discriminant. The blank activates no variant, so the
+    // object carries nothing else: the field set a member would bring is exactly
+    // what nobody has chosen.
+    if field.is_variant_bearing() {
+        let mut obj = serde_json::Map::new();
+        obj.insert(VARIANT_DISCRIMINANT_KEY.to_string(), json!(""));
+        return QuillValue::from_json(serde_json::Value::Object(obj));
+    }
     // Keyed on the carrier rather than the `Enum` token, as every consumer of a
     // finite domain is (`SCHEMAS.md` § "Type coercion"), so a serde-built schema
     // whose type and carrier disagree still blanks to the reserved `""`.

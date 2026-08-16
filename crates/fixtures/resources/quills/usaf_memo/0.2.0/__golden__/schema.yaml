@@ -111,47 +111,35 @@ main:
       - CONFIDENTIAL
       - SECRET
       - TOP SECRET
+      variants:
+        CUI:
+          controlled_by:
+            type: string
+            description: >-
+              Office or organization that designated this information as CUI. Required by
+              DoDM 5200.48.
+            example: SAF/AA
+          poc:
+            type: string
+            description: Point of contact for CUI questions. Required by DoDM 5200.48.
+            example: Capt J. Smith, DSN 555-1234, john.smith@us.af.mil
+          category:
+            type: string
+            description: >-
+              CUI category from the DoD CUI Registry (e.g., 'Privacy/MED', 'CTI', 'PRVCY').
+              Leave blank to omit.
+            default: ""
+          limited_dissemination:
+            type: string
+            description: >-
+              Limited dissemination control shown in the indicator block (e.g., 'FEDONLY',
+              'NOFORN'). Independent from the banner suffix.
+            default: ""
     dissemination:
       type: string
       description: >-
         Banner dissemination suffix appended after double slash (e.g. 'NF' renders as
         CUI//NF in the header/footer). Leave blank for no suffix.
-      default: ""
-      ui:
-        group: classification
-        compact: true
-    cui_controlled_by:
-      type: string
-      description: >-
-        Office or organization that designated this information as CUI (e.g.,
-        'SAF/AA'). Required by DoDM 5200.48 when classification is CUI.
-      default: ""
-      ui:
-        group: classification
-        compact: true
-    cui_category:
-      type: string
-      description: >-
-        CUI category from the DoD CUI Registry (e.g., 'Privacy/MED', 'CTI', 'PRVCY').
-        Leave blank to omit.
-      default: ""
-      ui:
-        group: classification
-        compact: true
-    cui_limited_dissemination:
-      type: string
-      description: >-
-        Limited dissemination control shown in the indicator block (e.g., 'FEDONLY',
-        'NOFORN'). Independent from the banner suffix above.
-      default: ""
-      ui:
-        group: classification
-        compact: true
-    cui_poc:
-      type: string
-      description: >-
-        Point of contact for CUI questions (e.g., 'Capt J. Smith, DSN 555-1234,
-        john.smith@us.af.mil'). Required by DoDM 5200.48 when classification is CUI.
       default: ""
       ui:
         group: classification
