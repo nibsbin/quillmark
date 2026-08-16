@@ -3,7 +3,9 @@
 //! layer. Pure in the quill, so it runs once at open: a widget bound to a
 //! nonexistent field or an out-of-range page is a load error, not a silent blank.
 
-use quillmark_core::quill::{FieldSchema, FieldType as SchemaType, QuillConfig};
+use quillmark_core::quill::{
+    FieldSchema, FieldType as SchemaType, QuillConfig, VARIANT_DISCRIMINANT_KEY,
+};
 use quillmark_pdf::FieldType as WidgetType;
 
 use crate::form::{BoundField, FormSpec, Rect, UnboundWidget, WidgetKind};
@@ -168,6 +170,13 @@ fn flip_rect(r: Rect, media_box: [f32; 4]) -> [f32; 4] {
 /// index, selected at value time. Absolute-index addressing (`$cards.<i>.…`) is
 /// rejected — the widget kind must be statically derivable, and only kind+index
 /// identifies the schema field.
+///
+/// A variant container is addressed through its resting shape rather than as a
+/// whole: `classification.value` is the discriminant and `classification.<cell>`
+/// a variant field, active world or not, since a form binds against the schema
+/// once and the document selects its world later. The container itself resolves
+/// but binds nothing — its value is the container object, which no widget
+/// coerces — so a plate wanting the level binds `.value`.
 pub fn bind<'a>(
     config: &'a QuillConfig,
     name: &str,
@@ -197,7 +206,17 @@ pub fn bind<'a>(
         config.main.fields.get(root).ok_or_else(|| dangling(root))?
     };
 
+    // The discriminant is the container's own enum, so the step selects a value
+    // rather than a child schema and nothing may follow it.
+    let mut at_discriminant = false;
     for seg in parts {
+        if at_discriminant {
+            return Err(dangling(seg));
+        }
+        if cur.is_variant_bearing() && seg == VARIANT_DISCRIMINANT_KEY {
+            at_discriminant = true;
+            continue;
+        }
         cur = descend(cur, seg).ok_or_else(|| dangling(seg))?;
     }
     Ok(cur)
@@ -211,7 +230,15 @@ fn descend<'a>(cur: &'a FieldSchema, seg: &str) -> Option<&'a FieldSchema> {
         },
         Err(_) => match cur.r#type {
             SchemaType::Object => cur.properties.as_ref()?.get(seg).map(Box::as_ref),
-            _ => None,
+            // A name several worlds declare is one cell
+            // (`quill::variant_field_collision`), so the first match is the
+            // declaration.
+            _ => cur
+                .variants
+                .as_ref()?
+                .values()
+                .find_map(|set| set.get(seg))
+                .map(Box::as_ref),
         },
     }
 }
@@ -352,6 +379,14 @@ main:
         type: object
         properties:
           org: { type: string }
+    classification:
+      type: enum
+      values: [UNCLASSIFIED, CUI]
+      default: ""
+      variants:
+        CUI:
+          poc: { type: string }
+          urgent: { type: boolean }
 card_kinds:
   indorsement:
     fields:
@@ -414,6 +449,25 @@ card_kinds:
         assert_eq!(kind("address.street").unwrap(), WidgetType::Text { multiline: false });
     }
 
+    /// A variant container is bound through its resting shape: the discriminant
+    /// under `value`, each world's cells beside it. Binding is against the
+    /// *schema*, so a cell binds whether or not today's document selects its
+    /// world — the form is built once and the document picks a world later.
+    #[test]
+    fn variant_container_binds_through_its_resting_shape() {
+        assert_eq!(
+            kind("classification.value").unwrap(),
+            WidgetType::Choice {
+                options: vec!["".into(), "UNCLASSIFIED".into(), "CUI".into()]
+            }
+        );
+        assert_eq!(
+            kind("classification.poc").unwrap(),
+            WidgetType::Text { multiline: false }
+        );
+        assert_eq!(kind("classification.urgent").unwrap(), WidgetType::Checkbox);
+    }
+
     #[test]
     fn object_and_object_array_are_unbindable() {
         // `array<array>` never reaches `bind`: the schema loader rejects it
@@ -436,6 +490,9 @@ card_kinds:
             ("full_name.0", "0"),
             ("address.zip", "zip"),
             ("comments.oops", "oops"),
+            ("classification.nosuch", "nosuch"),
+            // The discriminant is a value, not a schema to descend further.
+            ("classification.value.oops", "oops"),
         ] {
             let c = config();
             match bind(&c, "W", path) {

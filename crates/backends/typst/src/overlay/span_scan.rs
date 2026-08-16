@@ -867,9 +867,24 @@ fn forward_pos(helper: &Source, segmap: &SegmentMap, pos: usize) -> usize {
 /// Chain windows sort first, so ink resolving to the reference itself is never
 /// claimed by a wider window. A value laundered through `#let s = data.x` is not
 /// chased: it carries the binding's span.
-pub(crate) fn scalar_windows(source: &Source, fields: &[String]) -> Vec<(String, Range<usize>)> {
+///
+/// A reference that steps into a declared container (`data.classification.poc`)
+/// anchors on the property, so the region carries the address the plate actually
+/// read rather than the container's. `containers` is the `object_fields` table
+/// [`_qm-known-path`] validates against, so a region path is one a
+/// `form-field`/`field-region` could bind.
+pub(crate) fn scalar_windows(
+    source: &Source,
+    fields: &[String],
+    containers: &serde_json::Map<String, serde_json::Value>,
+) -> Vec<(String, Range<usize>)> {
     let mut anchors: Vec<(String, Range<usize>, Range<usize>)> = Vec::new();
-    collect_anchors(&LinkedNode::new(source.root()), fields, &mut anchors);
+    collect_anchors(
+        &LinkedNode::new(source.root()),
+        fields,
+        containers,
+        &mut anchors,
+    );
 
     let mut out: Vec<(String, Range<usize>)> = anchors
         .iter()
@@ -895,9 +910,10 @@ pub(crate) fn scalar_windows(source: &Source, fields: &[String]) -> Vec<(String,
 fn collect_anchors(
     node: &LinkedNode,
     fields: &[String],
+    containers: &serde_json::Map<String, serde_json::Value>,
     out: &mut Vec<(String, Range<usize>, Range<usize>)>,
 ) {
-    if let Some((path, anchor)) = data_access(node, fields) {
+    if let Some((path, anchor)) = data_access(node, fields, containers) {
         // Chain: the outermost postfix chain headed by this access.
         let mut chain = anchor.clone();
         while let Some(parent) = chain.parent() {
@@ -925,13 +941,19 @@ fn collect_anchors(
         out.push((path, chain.range(), wide.range()));
     }
     for child in node.children() {
-        collect_anchors(&child, fields, out);
+        collect_anchors(&child, fields, containers, out);
     }
 }
 
 /// If `node` is a `data.<field>` access or a `data.at("<field>")` call head
-/// with a declared field, its schema path and the node to widen from.
-fn data_access<'a>(node: &LinkedNode<'a>, fields: &[String]) -> Option<(String, LinkedNode<'a>)> {
+/// with a declared field, its schema path and the node to widen from — stepped
+/// one property deeper where the field is a container and the plate selected
+/// one of its declared keys.
+fn data_access<'a>(
+    node: &LinkedNode<'a>,
+    fields: &[String],
+    containers: &serde_json::Map<String, serde_json::Value>,
+) -> Option<(String, LinkedNode<'a>)> {
     if node.kind() != SyntaxKind::FieldAccess {
         return None;
     }
@@ -943,29 +965,64 @@ fn data_access<'a>(node: &LinkedNode<'a>, fields: &[String]) -> Option<(String, 
         return None;
     }
     let field = access.field();
-    if fields.iter().any(|f| f == field.as_str()) {
-        return Some((field.as_str().to_string(), node.clone()));
+    let (name, anchor) = if fields.iter().any(|f| f == field.as_str()) {
+        (field.as_str().to_string(), node.clone())
+    } else if field.as_str() == "at" {
+        select_by_at(node, fields)?
+    } else {
+        return None;
+    };
+    let keys = crate::helper::names_at(containers, &name);
+    match select_property(&anchor, &keys) {
+        Some((key, deeper)) => Some((format!("{name}.{key}"), deeper)),
+        None => Some((name, anchor)),
     }
-    // `data.at("field")`: the parent call carries the field name as its first
-    // positional string argument.
+}
+
+/// The declared key `node`'s parent selects off it — `.<key>` or
+/// `.at("<key>")` — and the node that selection widens to.
+fn select_property<'a>(
+    node: &LinkedNode<'a>,
+    keys: &[String],
+) -> Option<(String, LinkedNode<'a>)> {
+    if keys.is_empty() {
+        return None;
+    }
+    let parent = node.parent()?;
+    let access = parent.cast::<ast::FieldAccess>()?;
+    if access.target().to_untyped() != node.get() {
+        return None;
+    }
+    let field = access.field();
+    if keys.iter().any(|k| k == field.as_str()) {
+        return Some((field.as_str().to_string(), parent.clone()));
+    }
     if field.as_str() == "at" {
-        let parent = node.parent()?;
-        let call = parent.cast::<ast::FuncCall>()?;
-        let ast::Expr::FieldAccess(callee) = call.callee() else {
-            return None;
-        };
-        if callee.to_untyped() != node.get() {
-            return None;
-        }
-        let first = call.args().items().find_map(|arg| match arg {
-            ast::Arg::Pos(ast::Expr::Str(s)) => Some(s.get().to_string()),
-            _ => None,
-        })?;
-        if fields.contains(&first) {
-            return Some((first, parent.clone()));
-        }
+        return select_by_at(parent, keys);
     }
     None
+}
+
+/// The `.at("<key>")` spelling: `access` is the `<expr>.at` field access, and
+/// its parent call carries the key as its first positional string argument.
+/// Reaches the keys an identifier cannot spell.
+fn select_by_at<'a>(
+    access: &LinkedNode<'a>,
+    keys: &[String],
+) -> Option<(String, LinkedNode<'a>)> {
+    let parent = access.parent()?;
+    let call = parent.cast::<ast::FuncCall>()?;
+    let ast::Expr::FieldAccess(callee) = call.callee() else {
+        return None;
+    };
+    if callee.to_untyped() != access.get() {
+        return None;
+    }
+    let first = call.args().items().find_map(|arg| match arg {
+        ast::Arg::Pos(ast::Expr::Str(s)) => Some(s.get().to_string()),
+        _ => None,
+    })?;
+    keys.contains(&first).then(|| (first, parent.clone()))
 }
 
 #[cfg(test)]
@@ -1118,6 +1175,25 @@ main:
         }
     }
 
+    /// `(path, source text)` per window, over the fields and the one container
+    /// the tests below address.
+    fn probe_spans(src: &Source) -> Vec<(String, String)> {
+        let fields = ["subject", "refs", "other", "classification"].map(str::to_string);
+        let mut containers = serde_json::Map::new();
+        containers.insert(
+            "classification".to_string(),
+            serde_json::json!(["value", "poc", "controlled by"]),
+        );
+        scalar_windows(src, &fields, &containers)
+            .into_iter()
+            .map(|(path, r)| (path, src.text()[r].to_string()))
+            .collect()
+    }
+
+    fn has(spans: &[(String, String)], path: &str, text: &str) -> bool {
+        spans.iter().any(|(p, t)| p == path && t == text)
+    }
+
     #[test]
     fn scalar_windows_track_chains_and_single_owner_enclosing_expressions() {
         let src = Source::detached(
@@ -1131,25 +1207,15 @@ main:
 #let s = data.other
 "#,
         );
-        let fields = vec![
-            "subject".to_string(),
-            "refs".to_string(),
-            "other".to_string(),
-        ];
-        let wins = scalar_windows(&src, &fields);
-        let text = src.text();
-        let spans: Vec<(&str, &str)> = wins
-            .iter()
-            .map(|(p, r)| (p.as_str(), &text[r.clone()]))
-            .collect();
-        for expected in [
+        let spans = probe_spans(&src);
+        for (path, text) in [
             ("subject", "data.subject"),
             ("subject", "data.at(\"subject\")"),
             ("refs", "data.refs.at(0)"),
             ("other", "data.other"),
             ("subject", "upper(data.subject)"),
         ] {
-            assert!(spans.contains(&expected), "missing {expected:?}: {spans:?}");
+            assert!(has(&spans, path, text), "missing {path}/{text}: {spans:?}");
         }
         assert!(
             !spans
@@ -1157,15 +1223,59 @@ main:
                 .any(|(_, t)| t.contains("data.subject + data.other")),
             "multi-reference expressions are not attributed: {spans:?}"
         );
-        let chain_pos = spans
-            .iter()
-            .position(|s| *s == ("subject", "data.subject"))
-            .unwrap();
-        let wide_pos = spans
-            .iter()
-            .position(|s| *s == ("subject", "upper(data.subject)"))
-            .unwrap();
-        assert!(chain_pos < wide_pos, "chains sort before wides: {spans:?}");
+        let at = |text: &str| {
+            spans
+                .iter()
+                .position(|(p, t)| p == "subject" && t == text)
+                .unwrap()
+        };
+        assert!(
+            at("data.subject") < at("upper(data.subject)"),
+            "chains sort before wides: {spans:?}"
+        );
+    }
+
+    /// The container step: a property read anchors on the property, so the
+    /// region carries an address `_qm-known-path` would accept, while the
+    /// container read whole still anchors on the container.
+    #[test]
+    fn scalar_windows_step_into_a_declared_container_property() {
+        let src = Source::detached(
+            r#"
+#import "@local/quillmark-helper:0.1.0": data
+#data.classification.value
+#data.classification.poc
+#data.classification.at("controlled by")
+#data.at("classification").poc
+#data.classification
+#data.classification.undeclared
+#upper(data.classification.poc)
+"#,
+        );
+        let spans = probe_spans(&src);
+        for (path, text) in [
+            ("classification.value", "data.classification.value"),
+            ("classification.poc", "data.classification.poc"),
+            (
+                "classification.controlled by",
+                "data.classification.at(\"controlled by\")",
+            ),
+            ("classification.poc", "data.at(\"classification\").poc"),
+            ("classification", "data.classification"),
+            ("classification.poc", "upper(data.classification.poc)"),
+        ] {
+            assert!(has(&spans, path, text), "missing {path}/{text}: {spans:?}");
+        }
+        // An undeclared key is no address, so the read falls back to the
+        // container rather than minting `classification.undeclared`.
+        assert!(
+            !spans.iter().any(|(p, _)| p.ends_with(".undeclared")),
+            "an undeclared key mints no address: {spans:?}"
+        );
+        assert!(
+            has(&spans, "classification", "data.classification.undeclared"),
+            "the undeclared read still anchors on the container: {spans:?}"
+        );
     }
 
     fn collect_spans(frame: &Frame, out: &mut Vec<Span>) {
@@ -1290,7 +1400,7 @@ main:
         let main_id = world.main();
         let src = world.source(main_id).expect("main source");
         windows.extend(
-            scalar_windows(&src, &meta.fields)
+            scalar_windows(&src, &meta.fields, &meta.object_fields)
                 .into_iter()
                 .map(|(path, range)| FieldWindow {
                     path,

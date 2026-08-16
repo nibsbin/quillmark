@@ -99,19 +99,26 @@ The ceiling is deliberate and enforced at load rather than discovered at render:
 | a name two variants declare *differently* | `quill::variant_field_collision` |
 
 The last is the load-bearing one: content and dates lower to Typst through
-*top-level* name tables that do not descend into a container
-([PLATE_DATA.md](PLATE_DATA.md)), so such a field would load clean and reach the
-plate as a raw dict. **A variant carries plain data** — `string`, `enum`,
+*top-level* content and date name tables that do not descend into a container
+([PLATE_DATA.md](PLATE_DATA.md)) — unlike the address tables, which do — so such
+a field would load clean and reach the plate as a raw dict. **A variant carries plain data** — `string`, `enum`,
 `number`, `integer`, `boolean` — and prose and dates stay card-level fields.
 Variant fields are otherwise leaves exactly as an object's properties are: no
 container one level down, and no `ui.group` (they inherit the discriminant's).
 
-Three limits follow from the container shape and are accepted, not worked around:
+Two limits follow from the container shape and are accepted, not worked around:
 [`resolve()`](#the-resolved-value-view-resolve) reports **one** rung for the whole
-container, as it does for a typed dictionary; a variant field cannot host a
-Typst `form-field` widget or click-to-edit region, whose address grammar is flat
-plus one index; and a field set **shared** across several members is spelled by
-repeating it or sharing a YAML anchor, since a variant keys on one member.
+container, as it does for a typed dictionary; and a field set **shared** across
+several members is spelled by repeating it or sharing a YAML anchor, since a
+variant keys on one member.
+
+A cell is addressable one step down, exactly as a typed dictionary's property is
+([PLATE_DATA.md](PLATE_DATA.md#schema-addresses)): `classification.poc` binds a
+`form-field` widget or a `field-region` claim on either backend, and
+`classification.value` the discriminant. Addressing is against the *schema*, so a
+cell is bindable in every world — a form is built once and the document selects
+its world later. The whole container is not bindable: its value is the container
+object, which no widget coerces.
 
 A repeated name is one **cell** of the container, not one per world: the coercion
 lookup and the transform schema both key on the name alone, never the
