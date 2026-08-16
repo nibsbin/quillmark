@@ -40,6 +40,10 @@
   let object-fields = _qm-meta.at("object_fields", default: (:))
   let card-object-fields = _qm-meta.at("card_object_fields", default: (:))
   let is-index(s) = s.match(regex("^[0-9]+$")) != none
+  // The one-step suffix rule, shared by the top-level and card branches.
+  let step-ok(field, step, arrays, objects) = (
+    (field in arrays and is-index(step)) or step in objects.at(field, default: ())
+  )
   let parts = path.split(".")
   if parts.at(0) == "$cards" {
     if parts.len() < 4 or parts.len() > 5 { return false }
@@ -48,17 +52,17 @@
     if not is-index(parts.at(2)) { return false }
     let field = parts.at(3)
     if parts.len() == 5 {
-      let step = parts.at(4)
-      if field in card-array-fields.at(kind, default: ()) and is-index(step) { return true }
-      return step in card-object-fields.at(kind, default: (:)).at(field, default: ())
+      return step-ok(
+        field, parts.at(4),
+        card-array-fields.at(kind, default: ()),
+        card-object-fields.at(kind, default: (:)),
+      )
     }
     return field in card-fields.at(kind)
   }
   if parts.len() == 1 { return path in fields }
   if parts.len() == 2 {
-    let (field, step) = (parts.at(0), parts.at(1))
-    if field in array-fields and is-index(step) { return true }
-    return step in object-fields.at(field, default: ())
+    return step-ok(parts.at(0), parts.at(1), array-fields, object-fields)
   }
   false
 }

@@ -206,20 +206,19 @@ pub fn bind<'a>(
         config.main.fields.get(root).ok_or_else(|| dangling(root))?
     };
 
-    // The discriminant is the container's own enum, so the step selects a value
-    // rather than a child schema and nothing may follow it.
-    let mut at_discriminant = false;
-    for seg in parts {
-        if at_discriminant {
-            return Err(dangling(seg));
-        }
+    for seg in parts.by_ref() {
+        // The discriminant is the container's own enum, so the step selects a
+        // value rather than a child schema: the walk stops on it, and the
+        // trailing check below rejects anything that follows.
         if cur.is_variant_bearing() && seg == VARIANT_DISCRIMINANT_KEY {
-            at_discriminant = true;
-            continue;
+            break;
         }
         cur = descend(cur, seg).ok_or_else(|| dangling(seg))?;
     }
-    Ok(cur)
+    match parts.next() {
+        Some(seg) => Err(dangling(seg)),
+        None => Ok(cur),
+    }
 }
 
 fn descend<'a>(cur: &'a FieldSchema, seg: &str) -> Option<&'a FieldSchema> {
@@ -230,15 +229,7 @@ fn descend<'a>(cur: &'a FieldSchema, seg: &str) -> Option<&'a FieldSchema> {
         },
         Err(_) => match cur.r#type {
             SchemaType::Object => cur.properties.as_ref()?.get(seg).map(Box::as_ref),
-            // A name several worlds declare is one cell
-            // (`quill::variant_field_collision`), so the first match is the
-            // declaration.
-            _ => cur
-                .variants
-                .as_ref()?
-                .values()
-                .find_map(|set| set.get(seg))
-                .map(Box::as_ref),
+            _ => cur.variant_field(seg),
         },
     }
 }

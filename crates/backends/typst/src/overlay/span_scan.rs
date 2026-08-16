@@ -42,7 +42,7 @@
 //! `typst_layout::introspect::discover_frame`, transforming all four corners of
 //! each item box (the stack may rotate or scale).
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ops::Range;
 
 use typst::foundations::{Content, Label, Value};
@@ -876,7 +876,7 @@ fn forward_pos(helper: &Source, segmap: &SegmentMap, pos: usize) -> usize {
 pub(crate) fn scalar_windows(
     source: &Source,
     fields: &[String],
-    containers: &serde_json::Map<String, serde_json::Value>,
+    containers: &BTreeMap<String, Vec<String>>,
 ) -> Vec<(String, Range<usize>)> {
     let mut anchors: Vec<(String, Range<usize>, Range<usize>)> = Vec::new();
     collect_anchors(
@@ -910,7 +910,7 @@ pub(crate) fn scalar_windows(
 fn collect_anchors(
     node: &LinkedNode,
     fields: &[String],
-    containers: &serde_json::Map<String, serde_json::Value>,
+    containers: &BTreeMap<String, Vec<String>>,
     out: &mut Vec<(String, Range<usize>, Range<usize>)>,
 ) {
     if let Some((path, anchor)) = data_access(node, fields, containers) {
@@ -952,28 +952,20 @@ fn collect_anchors(
 fn data_access<'a>(
     node: &LinkedNode<'a>,
     fields: &[String],
-    containers: &serde_json::Map<String, serde_json::Value>,
+    containers: &BTreeMap<String, Vec<String>>,
 ) -> Option<(String, LinkedNode<'a>)> {
     if node.kind() != SyntaxKind::FieldAccess {
         return None;
     }
-    let access = node.cast::<ast::FieldAccess>()?;
-    let ast::Expr::Ident(target) = access.target() else {
+    let ast::Expr::Ident(target) = node.cast::<ast::FieldAccess>()?.target() else {
         return None;
     };
     if target.as_str() != "data" {
         return None;
     }
-    let field = access.field();
-    let (name, anchor) = if fields.iter().any(|f| f == field.as_str()) {
-        (field.as_str().to_string(), node.clone())
-    } else if field.as_str() == "at" {
-        select_by_at(node, fields)?
-    } else {
-        return None;
-    };
-    let keys = crate::helper::names_at(containers, &name);
-    match select_property(&anchor, &keys) {
+    let (name, anchor) = selected(node, fields)?;
+    let keys = containers.get(&name).map(Vec::as_slice).unwrap_or_default();
+    match select_property(&anchor, keys) {
         Some((key, deeper)) => Some((format!("{name}.{key}"), deeper)),
         None => Some((name, anchor)),
     }
@@ -985,22 +977,24 @@ fn select_property<'a>(
     node: &LinkedNode<'a>,
     keys: &[String],
 ) -> Option<(String, LinkedNode<'a>)> {
-    if keys.is_empty() {
-        return None;
-    }
     let parent = node.parent()?;
-    let access = parent.cast::<ast::FieldAccess>()?;
-    if access.target().to_untyped() != node.get() {
+    if parent.cast::<ast::FieldAccess>()?.target().to_untyped() != node.get() {
         return None;
     }
-    let field = access.field();
+    selected(parent, keys)
+}
+
+/// The key `access` selects out of `keys` and the node the selection widens to.
+/// One grammar, two spellings: `.<key>` names it directly, `.at("<key>")`
+/// reaches the keys an identifier cannot spell.
+fn selected<'a>(access: &LinkedNode<'a>, keys: &[String]) -> Option<(String, LinkedNode<'a>)> {
+    let field = access.cast::<ast::FieldAccess>()?.field();
     if keys.iter().any(|k| k == field.as_str()) {
-        return Some((field.as_str().to_string(), parent.clone()));
+        return Some((field.as_str().to_string(), access.clone()));
     }
-    if field.as_str() == "at" {
-        return select_by_at(parent, keys);
-    }
-    None
+    (field.as_str() == "at")
+        .then(|| select_by_at(access, keys))
+        .flatten()
 }
 
 /// The `.at("<key>")` spelling: `access` is the `<expr>.at` field access, and
@@ -1179,11 +1173,10 @@ main:
     /// the tests below address.
     fn probe_spans(src: &Source) -> Vec<(String, String)> {
         let fields = ["subject", "refs", "other", "classification"].map(str::to_string);
-        let mut containers = serde_json::Map::new();
-        containers.insert(
+        let containers = BTreeMap::from([(
             "classification".to_string(),
-            serde_json::json!(["value", "poc", "controlled by"]),
-        );
+            ["value", "poc", "controlled by"].map(str::to_string).into(),
+        )]);
         scalar_windows(src, &fields, &containers)
             .into_iter()
             .map(|(path, r)| (path, src.text()[r].to_string()))
@@ -1386,8 +1379,16 @@ main:
       description: a scalar the plate interpolates
 "#;
 
-    /// Mirrors `open`'s window assembly, so a probe reads what a session would.
-    fn probe_regions(plate: &str, data: serde_json::Value) -> Vec<RenderedRegion> {
+    /// A compiled plate with the inputs both queries take. Mirrors `open`'s
+    /// window assembly, so a probe reads what a session would.
+    struct Probe {
+        world: QuillWorld,
+        doc: PagedDocument,
+        helper: Source,
+        windows: Vec<FieldWindow>,
+    }
+
+    fn probe(plate: &str, data: serde_json::Value) -> Probe {
         let q = quill(REGION_YAML, plate);
         let plate_src = crate::read_plate(&q).expect("plate");
         let schema = quillmark_core::quill::build_transform_schema(q.config());
@@ -1413,8 +1414,42 @@ main:
         let helper = world
             .source(QuillWorld::helper_fid("lib.typ"))
             .expect("helper source");
-        let unclosed: Vec<usize> = unclosed_claims(&doc).into_iter().map(|(c, _)| c).collect();
-        scan_content_regions(&doc, &world, &helper, &windows, &unclosed)
+        Probe {
+            world,
+            doc,
+            helper,
+            windows,
+        }
+    }
+
+    impl Probe {
+        /// What `open` stores on the session: the claims left open at the end
+        /// of the walk, by index.
+        fn unclosed(&self) -> Vec<usize> {
+            unclosed_claims(&self.doc).into_iter().map(|(c, _)| c).collect()
+        }
+
+        fn regions(&self, unclosed: &[usize]) -> Vec<RenderedRegion> {
+            scan_content_regions(&self.doc, &self.world, &self.helper, &self.windows, unclosed)
+        }
+
+        fn field_at(&self, unclosed: &[usize], page: usize, x: f32, y: f32) -> Option<String> {
+            field_at(
+                &self.doc,
+                &self.world,
+                &self.helper,
+                &self.windows,
+                unclosed,
+                page,
+                x,
+                y,
+            )
+        }
+    }
+
+    fn probe_regions(plate: &str, data: serde_json::Value) -> Vec<RenderedRegion> {
+        let p = probe(plate, data);
+        p.regions(&p.unclosed())
     }
 
     fn body(markdown: &str) -> serde_json::Value {
@@ -1542,19 +1577,9 @@ Interleaved plate chrome.
 
     #[test]
     fn an_open_marker_whose_close_never_lands_is_reported_unclosed() {
-        let q = quill(REGION_YAML, STRANDED_OPEN);
-        let plate = crate::read_plate(&q).expect("plate");
-        let schema = quillmark_core::quill::build_transform_schema(q.config());
-        let meta = crate::SchemaMeta::from_schema_json(schema.as_json());
-        let data = body("Body text.");
-        let transformed = crate::transformed_data(&meta, &data).expect("transform");
-        let mut world = QuillWorld::new(&q, &plate).expect("world");
-        world
-            .inject_helper_package(transformed.as_ref(), &meta)
-            .expect("inject");
-        let (doc, _) = compile_document(&world).expect("compile");
+        let p = probe(STRANDED_OPEN, body("Body text."));
         assert_eq!(
-            unclosed_claims(&doc),
+            unclosed_claims(&p.doc),
             vec![(0, "classification".to_string())],
             "the stranded open is named, so a plate author can act on it"
         );
@@ -1586,25 +1611,12 @@ Interleaved plate chrome.
     /// that it is threaded through.
     #[test]
     fn an_unclosed_claim_does_not_capture_clicks_on_later_pages() {
-        let q = quill(REGION_YAML, STRANDED_OPEN);
-        let plate = crate::read_plate(&q).expect("plate");
-        let schema = quillmark_core::quill::build_transform_schema(q.config());
-        let meta = crate::SchemaMeta::from_schema_json(schema.as_json());
-        let data = body(&"A long paragraph of body text. ".repeat(60));
-        let transformed = crate::transformed_data(&meta, &data).expect("transform");
-        let mut world = QuillWorld::new(&q, &plate).expect("world");
-        let windows = world
-            .inject_helper_package(transformed.as_ref(), &meta)
-            .expect("inject");
-        let (doc, _) = compile_document(&world).expect("compile");
-        let helper = world
-            .source(QuillWorld::helper_fid("lib.typ"))
-            .expect("helper source");
-        let unclosed: Vec<usize> = unclosed_claims(&doc).into_iter().map(|(c, _)| c).collect();
-        assert!(doc.pages().len() > 1, "the runaway needs a later page");
+        let p = probe(STRANDED_OPEN, body(&"A long paragraph of body text. ".repeat(60)));
+        assert!(p.doc.pages().len() > 1, "the runaway needs a later page");
 
-        let last = doc.pages().len() - 1;
-        let runaway = scan_content_regions(&doc, &world, &helper, &windows, &[])
+        let last = p.doc.pages().len() - 1;
+        let runaway = p
+            .regions(&[])
             .into_iter()
             .find(|r| r.field == "classification" && r.page == last)
             .expect("unsuppressed, the claim reaches the last page");
@@ -1613,12 +1625,12 @@ Interleaved plate chrome.
             (runaway.rect[1] + runaway.rect[3]) / 2.0,
         );
         assert_eq!(
-            field_at(&doc, &world, &helper, &windows, &[], last, cx, cy),
+            p.field_at(&[], last, cx, cy),
             Some("classification".to_string()),
             "sanity: unsuppressed, that ink routes to the stranded claim"
         );
         assert_eq!(
-            field_at(&doc, &world, &helper, &windows, &unclosed, last, cx, cy),
+            p.field_at(&p.unclosed(), last, cx, cy),
             None,
             "suppressed, page chrome under a runaway claim answers to no field"
         );
