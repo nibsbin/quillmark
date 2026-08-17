@@ -1,12 +1,11 @@
-//! One schema address grammar, two implementations. pdfform's `bind` walks the
-//! `QuillConfig`; the Typst helper's `_qm-known-path` reads the address tables
-//! `SchemaMeta` derives from the transform schema. `PLATE_DATA.md` promises a
-//! plate author that one address binds on either backend, and [`GRAMMAR`] is
-//! what holds the two to it — neither side can move alone.
+//! One schema address grammar, two implementations: pdfform's `bind` walks the
+//! `QuillConfig`, and the Typst helper's `_qm-known-path` reads the address
+//! tables `SchemaMeta` derives from the transform schema. `PLATE_DATA.md`
+//! promises a plate author that one address binds on either backend, and
+//! `GRAMMAR` is what holds the two to it.
 //!
-//! The two content addresses sit outside that promise:
-//! [`a_body_address_is_typst_only`] pins them so the asymmetry reads as declared
-//! rather than as drift.
+//! A `$body` address is outside that table: a body is content rather than a
+//! bindable field, so pdfform's resolver roots none.
 
 #![cfg(all(feature = "typst", feature = "pdfform"))]
 
@@ -14,8 +13,8 @@ use quillmark::{Backend, FileTreeNode, Quill};
 use quillmark_typst::TypstBackend;
 use std::collections::HashMap;
 
-/// Every position the one-level nesting contract admits, declared once at card
-/// level and once inside a card kind so each address has its card twin.
+/// Every position the one-level nesting contract admits, declared on `main` and
+/// again on a card kind so each address has its card twin.
 const YAML: &str = r#"
 quill:
   name: address_grammar
@@ -83,9 +82,8 @@ card_kinds:
 
 /// Every address both backends must resolve, and every one both must refuse.
 ///
-/// An index is not bounds-checked at address time on either side — `refs.9` and
-/// the ninth endorsement resolve against a document carrying one of each — so
-/// the grammar is a question about the schema alone.
+/// An index is not bounds-checked: `refs.9` resolves against a document carrying
+/// one ref, because the grammar asks about the schema alone.
 const GRAMMAR: &[(&str, bool)] = &[
     ("subject", true),
     ("tags", true),
@@ -170,7 +168,6 @@ fn data() -> serde_json::Value {
     })
 }
 
-/// A plate claiming each of `addresses`, so one compile answers a whole column.
 fn claims(addresses: impl IntoIterator<Item = &'static str>) -> String {
     addresses
         .into_iter()
@@ -216,9 +213,6 @@ fn typst_refuses_every_address_the_grammar_refuses() {
     }
 }
 
-/// A body is content rather than a widget-bindable field, so the promise
-/// [`GRAMMAR`] pins stops at the two body addresses: a plate writes them and
-/// pdfform's resolver roots neither.
 #[test]
 fn a_body_address_is_typst_only() {
     let bodies = ["$body", "$cards.endorsement.0.$body"];

@@ -108,11 +108,9 @@ impl Backend for PdfformBackend {
 
 /// Whether `path` resolves against `config` as a schema address.
 ///
-/// Binding a widget needs more than this — the resolved field must also project
-/// to a widget shape — but the grammar alone is what the Typst helper's
-/// `_qm-known-path` states a second time, so the drift pin
-/// (`quillmark/tests/address_grammar.rs`) compares the two at exactly this
-/// question. Not part of the rendering seam.
+/// Binding a widget needs more: the resolved field must also project to a widget
+/// shape. The grammar alone is what the Typst helper's `_qm-known-path` states a
+/// second time, so `quillmark/tests/address_grammar.rs` compares the two here.
 #[doc(hidden)]
 pub fn resolves_schema_address(config: &QuillConfig, path: &str) -> bool {
     bind::bind(config, "", path).is_ok()

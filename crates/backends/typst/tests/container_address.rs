@@ -2,8 +2,8 @@
 //! the public `Backend`/`LiveSession` path, and the address a region carries for
 //! a plate that reads one property.
 //!
-//! Which addresses the grammar admits is `quillmark/tests/address_grammar.rs`,
-//! stated once there against both backends.
+//! The addresses the grammar admits are stated once, against both backends, in
+//! `quillmark/tests/address_grammar.rs`.
 
 use quillmark_core::Backend;
 use quillmark_typst::TypstBackend;
@@ -336,8 +336,8 @@ fn a_variant_cell_lowers_its_declared_type() {
     );
 }
 
-/// The two helpers carrying the grammar assert on the same table, so an address
-/// the shared pin refuses is refused at the widget seam too.
+/// The shared pin drives `field-region`; `form-field` carries its own copy of
+/// the assert.
 #[test]
 fn a_widget_binds_the_same_grammar_a_claim_does() {
     let err = rejects(
