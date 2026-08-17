@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- feat(wasm): `VARIANT_DISCRIMINANT_KEY` joins the runtime's static exports,
+  beside `MAIN_CARD_ADDR`. v0.106.0 announced the constant as new API but shipped
+  it to Rust only, leaving a JS consumer reading or writing a variant container
+  to spell `"value"` itself — a hardcoded copy of the one value whose purpose is
+  to not be hardcoded, at the seam where the two can drift unobserved, since the
+  key crosses the boundary inside untyped container data. The `.d.ts` types it as
+  the string *literal*, which `string` would stop narrowing an index into the
+  container. `known_names_drift.rs` pins both spellings against the Rust
+  constant, the guard the hand-spelled name tables beside it already carry.
+  `VariantFields` stays Rust-only: it is a type alias the TypeScript surface
+  already inlines as `QuillFieldSchema.variants`, naming no shape a consumer
+  builds.
 - docs: `0.105-to-0.106.md`, the migration guide v0.106.0 shipped without. It
   leads with the region-address shift rather than the three `!` entries: the
   changelog is organized by feature, and the address step is one clause inside a

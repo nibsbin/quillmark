@@ -1,11 +1,12 @@
-//! Drift guard for the open sets' known halves. `runtime/runtime.js`'s
-//! `isUnknown*` guards decide known-vs-unknown from hand-spelled name tables; a
-//! table that lags a new built-in reports it as unknown, and a read-modify-write
-//! consumer then round-trips it through its unknown carrier, silently dropping
-//! the payload. So the tables are checked against the Rust constants they mirror.
+//! Drift guard for the names `runtime/runtime.js` spells for itself instead of
+//! reading off a type. Each is checked against the Rust constant it mirrors,
+//! because nothing else observes the two diverging: an `isUnknown*` table that
+//! lags a new built-in reports it as unknown, and a read-modify-write consumer
+//! then round-trips it through its unknown carrier, dropping the payload.
 
 use quillmark_content::island::KnownIslandType;
 use quillmark_content::{Content, Fidelity};
+use quillmark_core::quill::VARIANT_DISCRIMINANT_KEY;
 
 const RUNTIME_JS: &str = include_str!("../runtime/runtime.js");
 
@@ -34,6 +35,24 @@ fn js_known_name_tables_match_the_rust_open_sets() {
     // never an `Unknown` variant) so `KnownIslandType` is the known half.
     let island_types: Vec<_> = KnownIslandType::ALL.iter().map(|k| k.as_str()).collect();
     assert_eq!(js_set("KNOWN_ISLAND_TYPES"), island_types);
+}
+
+/// The `.d.ts` is pinned as a string *literal* type: widened to `string` it
+/// would stop narrowing an index into the container.
+#[test]
+fn js_variant_discriminant_matches_the_rust_key() {
+    const RUNTIME_DTS: &str = include_str!("../runtime/runtime.d.ts");
+    let key = VARIANT_DISCRIMINANT_KEY;
+
+    for (file, decl) in [
+        (RUNTIME_JS, format!("export const VARIANT_DISCRIMINANT_KEY = '{key}'")),
+        (
+            RUNTIME_DTS,
+            format!("export declare const VARIANT_DISCRIMINANT_KEY: '{key}'"),
+        ),
+    ] {
+        assert!(file.contains(&decl), "the JS layer has no `{decl}`");
+    }
 }
 
 /// The same names are spelled a third time as TypeScript unions in

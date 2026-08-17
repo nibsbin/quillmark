@@ -84,6 +84,16 @@ import type { CardAddr } from '../core/wasm.js';
  */
 export declare const MAIN_CARD_ADDR: CardAddr;
 
+/**
+ * The key carrying the discriminant inside a variant-bearing enum's value. A
+ * field declaring `variants:` rests as `{value: <member>, …that member's
+ * fields}`, so reading or writing one means naming this key; it crosses the
+ * boundary inside untyped container data, with no type to read it off.
+ * Reserved: no variant may declare a field under it, and
+ * {@link QuillFieldSchema.variants}, keyed by member, never contains it.
+ */
+export declare const VARIANT_DISCRIMINANT_KEY: 'value';
+
 // Core-build types consumers read off `Quill`/`Document`.
 export type {
 	Card,
