@@ -16,6 +16,21 @@
   `example:` — now fails load as a card-level one always has, naming the leaf's
   declaration path. Nested `example:` *surfacing* was never broken: the
   blueprint prints the raw literal at every depth.
+- **breaking** typst: a plate's direct read of a typed-table row cell regions on
+  the cell (`refs.0.org`), where it regioned on the whole array before — a
+  *wrong* address, not a missing one, routing a click on the org cell to the
+  entire table. The span scan was the third component deriving a schema address
+  and the one left at the one-level ceiling: 0.106 lifted the lowering walk and
+  `_qm-known-path` to the row property, so the three no longer agreed, and the
+  scan is the one that decides what a *read* is attributed to. It now takes the
+  index step (`.at(n)`, the only spelling Typst has for an array index) and then
+  the row property, gated on the `array_fields` table. Each step is its own
+  address, so a whole-row read names the row (`refs.0`) and a primitive
+  element's read names the element (`tags.0`); a negative index and an
+  undeclared row key mint nothing and fall back as before. Consumers keying on
+  the array's address for element ink see the narrower address instead. Explicit
+  `field-region` / `form-field` claims are unchanged, and the alias lane keeps
+  parity: `#let row = data.refs.at(0)` … `#row.org` regions on `refs.0.org`.
 - **breaking** typst: lowering dispatches on the schema node beside each value
   rather than on tables of top-level field names, so a declared type means the
   same thing wherever it is declared. A `date`, `richtext` or `plaintext`

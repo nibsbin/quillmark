@@ -421,15 +421,20 @@ impl Backend for TypstBackend {
                 .source(main_id)
                 .ok()
                 .map(|src| {
-                    overlay::scalar_windows(&src, &schema_meta.fields, &schema_meta.object_fields)
-                        .into_iter()
-                        .map(|(path, range)| overlay::FieldWindow {
-                            path,
-                            file: main_id,
-                            range,
-                            segments: Vec::new(),
-                        })
-                        .collect()
+                    overlay::scalar_windows(
+                        &src,
+                        &schema_meta.fields,
+                        &schema_meta.object_fields,
+                        &schema_meta.array_fields,
+                    )
+                    .into_iter()
+                    .map(|(path, range)| overlay::FieldWindow {
+                        path,
+                        file: main_id,
+                        range,
+                        segments: Vec::new(),
+                    })
+                    .collect()
                 })
                 .unwrap_or_default()
         };

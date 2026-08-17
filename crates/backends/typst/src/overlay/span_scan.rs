@@ -867,11 +867,9 @@ fn forward_pos(helper: &Source, segmap: &SegmentMap, pos: usize) -> usize {
 /// Chain windows sort first, so ink resolving to the reference itself is never
 /// claimed by a wider window.
 ///
-/// A reference that steps into a declared container (`data.classification.poc`)
-/// anchors on the property, so the region carries the address the plate actually
-/// read rather than the container's. `containers` is the `object_fields` table
-/// [`_qm-known-path`] validates against, so a region path is one a
-/// `form-field`/`field-region` could bind.
+/// A reference that steps into a declared container (`data.classification.poc`,
+/// `data.refs.at(0).org`) anchors on the cell, so the region carries the address
+/// the plate actually read rather than the container's.
 ///
 /// A read through a single-assignment `let` alias ([`alias_bindings`]) is a
 /// reference site like the chain it names, so naming a container before
@@ -881,12 +879,18 @@ fn forward_pos(helper: &Source, segmap: &SegmentMap, pos: usize) -> usize {
 pub(crate) fn scalar_windows(
     source: &Source,
     fields: &[String],
-    containers: &BTreeMap<String, Vec<String>>,
+    objects: &BTreeMap<String, Vec<String>>,
+    arrays: &BTreeMap<String, Vec<String>>,
 ) -> Vec<(String, Range<usize>)> {
+    let tables = Tables {
+        fields,
+        objects,
+        arrays,
+    };
     let root = LinkedNode::new(source.root());
-    let aliases = alias_bindings(&root, fields, containers);
+    let aliases = alias_bindings(&root, &tables);
     let mut anchors: Vec<(String, Range<usize>, Range<usize>)> = Vec::new();
-    collect_anchors(&root, fields, containers, &aliases, &mut anchors);
+    collect_anchors(&root, &tables, &aliases, &mut anchors);
 
     let mut out: Vec<(String, Range<usize>)> = anchors
         .iter()
@@ -907,6 +911,40 @@ pub(crate) fn scalar_windows(
     out
 }
 
+/// The address tables the scan resolves a read against: the top-level field
+/// names, and the step each container field offers — `object_fields` the property
+/// step, `array_fields` the index step and the row properties that may follow it.
+/// The same tables [`_qm-known-path`] validates a `form-field` / `field-region`
+/// path against, so a scanned region path is one a claim could bind.
+struct Tables<'a> {
+    fields: &'a [String],
+    objects: &'a BTreeMap<String, Vec<String>>,
+    arrays: &'a BTreeMap<String, Vec<String>>,
+}
+
+impl Tables<'_> {
+    /// The property names an address offers a step into: a container field's own
+    /// keys, or the row properties left by an index step. Everything the grammar
+    /// caps — a scalar, a row property, a primitive element — offers none.
+    ///
+    /// Keying on the address rather than on the anchor is what puts an alias to a
+    /// row (`#let r = data.refs.at(0)`) at parity with the chain it names: the
+    /// index step may have been taken in the initializer.
+    fn property_keys(&self, path: &str) -> &[String] {
+        if let Some(keys) = self.objects.get(path) {
+            return keys;
+        }
+        match path.rsplit_once('.') {
+            Some((array, index))
+                if !index.is_empty() && index.bytes().all(|b| b.is_ascii_digit()) =>
+            {
+                self.arrays.get(array).map(Vec::as_slice).unwrap_or_default()
+            }
+            _ => &[],
+        }
+    }
+}
+
 /// A read before `bound_at` reads whatever else held the name, so the position
 /// bounds the alias the way lexical order does.
 struct Alias {
@@ -923,13 +961,9 @@ struct Alias {
 /// else — `#let x = upper(data.subject)` and `#let x = data.a + data.b` both
 /// yield no alias, the first because the chain is not the whole expression and
 /// the second because no single field owns it.
-fn alias_bindings(
-    root: &LinkedNode,
-    fields: &[String],
-    containers: &BTreeMap<String, Vec<String>>,
-) -> HashMap<String, Alias> {
+fn alias_bindings(root: &LinkedNode, tables: &Tables) -> HashMap<String, Alias> {
     let mut found = Binders::default();
-    collect_binders(root, fields, containers, &mut found);
+    collect_binders(root, tables, &mut found);
     if found.wildcard_import {
         return HashMap::new();
     }
@@ -949,12 +983,7 @@ struct Binders {
     wildcard_import: bool,
 }
 
-fn collect_binders(
-    node: &LinkedNode,
-    fields: &[String],
-    containers: &BTreeMap<String, Vec<String>>,
-    out: &mut Binders,
-) {
+fn collect_binders(node: &LinkedNode, tables: &Tables, out: &mut Binders) {
     let bind = |name: &str, out: &mut Binders| {
         *out.counts.entry(name.to_string()).or_default() += 1;
     };
@@ -964,7 +993,7 @@ fn collect_binders(
                 for ident in binding.kind().bindings() {
                     bind(ident.as_str(), out);
                 }
-                if let Some((name, alias)) = alias_candidate(node, binding, fields, containers) {
+                if let Some((name, alias)) = alias_candidate(node, binding, tables) {
                     out.candidates.push((name, alias));
                 }
             }
@@ -1034,15 +1063,14 @@ fn collect_binders(
         _ => {}
     }
     for child in node.children() {
-        collect_binders(&child, fields, containers, out);
+        collect_binders(&child, tables, out);
     }
 }
 
 fn alias_candidate(
     node: &LinkedNode,
     binding: ast::LetBinding,
-    fields: &[String],
-    containers: &BTreeMap<String, Vec<String>>,
+    tables: &Tables,
 ) -> Option<(String, Alias)> {
     let ast::LetBindingKind::Normal(ast::Pattern::Normal(ast::Expr::Ident(name))) = binding.kind()
     else {
@@ -1051,7 +1079,7 @@ fn alias_candidate(
     let init = binding.init()?.to_untyped();
     let init = node.children().find(|c| std::ptr::eq(c.get(), init))?;
     let mut inner = Vec::new();
-    collect_anchors(&init, fields, containers, &HashMap::new(), &mut inner);
+    collect_anchors(&init, tables, &HashMap::new(), &mut inner);
     let [(path, chain, _)] = inner.as_slice() else {
         return None;
     };
@@ -1070,12 +1098,11 @@ fn alias_candidate(
 /// chain's arguments is its own site.
 fn collect_anchors(
     node: &LinkedNode,
-    fields: &[String],
-    containers: &BTreeMap<String, Vec<String>>,
+    tables: &Tables,
     aliases: &HashMap<String, Alias>,
     out: &mut Vec<(String, Range<usize>, Range<usize>)>,
 ) {
-    if let Some((path, anchor)) = data_access(node, fields, containers, aliases) {
+    if let Some((path, anchor)) = data_access(node, tables, aliases) {
         // Chain: the outermost postfix chain headed by this access.
         let mut chain = anchor.clone();
         while let Some(parent) = chain.parent() {
@@ -1103,18 +1130,17 @@ fn collect_anchors(
         out.push((path, chain.range(), wide.range()));
     }
     for child in node.children() {
-        collect_anchors(&child, fields, containers, aliases, out);
+        collect_anchors(&child, tables, aliases, out);
     }
 }
 
 /// The schema path `node` reads and the node to widen from, for the two shapes
 /// that name a field: a `data.<field>` / `data.at("<field>")` access, and a
-/// read through a `let` alias. Either steps one property deeper where the field
-/// is a container and the plate selected one of its declared keys.
+/// read through a `let` alias. Either steps deeper where the field is a
+/// container and the plate selected into it ([`step_into`]).
 fn data_access<'a>(
     node: &LinkedNode<'a>,
-    fields: &[String],
-    containers: &BTreeMap<String, Vec<String>>,
+    tables: &Tables,
     aliases: &HashMap<String, Alias>,
 ) -> Option<(String, LinkedNode<'a>)> {
     match node.kind() {
@@ -1125,29 +1151,38 @@ fn data_access<'a>(
             if target.as_str() != "data" {
                 return None;
             }
-            let (name, anchor) = selected(node, fields)?;
-            Some(step_property(name, anchor, containers))
+            let (name, anchor) = selected(node, tables.fields)?;
+            Some(step_into(name, anchor, tables))
         }
         // Reads before the binding ends — its own pattern, its initializer —
         // are not reads of the field.
         SyntaxKind::Ident => {
             let alias = aliases.get(node.cast::<ast::Ident>()?.as_str())?;
             (node.range().start >= alias.bound_at)
-                .then(|| step_property(alias.path.clone(), node.clone(), containers))
+                .then(|| step_into(alias.path.clone(), node.clone(), tables))
         }
         _ => None,
     }
 }
 
-/// One property step where `name` is a container and the read selected a
-/// declared key, else the field itself.
-fn step_property<'a>(
+/// The steps the read takes into `name`, or the field itself where it takes
+/// none: an array index (`refs.0`), then one property off whatever that leaves —
+/// a container field's own keys (`classification.poc`) or an indexed row's
+/// (`refs.0.org`).
+///
+/// Two steps is the address grammar's ceiling ([`_qm-known-path`]'s `steps-ok`),
+/// not a recursion: a row property is a leaf. Each step is its own address, so a
+/// whole-row read anchors on the row rather than on the table.
+fn step_into<'a>(
     name: String,
     anchor: LinkedNode<'a>,
-    containers: &BTreeMap<String, Vec<String>>,
+    tables: &Tables,
 ) -> (String, LinkedNode<'a>) {
-    let keys = containers.get(&name).map(Vec::as_slice).unwrap_or_default();
-    match select_property(&anchor, keys) {
+    let (name, anchor) = match tables.arrays.get(&name).and_then(|_| select_index(&anchor)) {
+        Some((index, row)) => (format!("{name}.{index}"), row),
+        None => (name, anchor),
+    };
+    match select_property(&anchor, tables.property_keys(&name)) {
         Some((key, deeper)) => (format!("{name}.{key}"), deeper),
         None => (name, anchor),
     }
@@ -1179,26 +1214,55 @@ fn selected<'a>(access: &LinkedNode<'a>, keys: &[String]) -> Option<(String, Lin
         .flatten()
 }
 
-/// The `.at("<key>")` spelling: `access` is the `<expr>.at` field access, and
-/// its parent call carries the key as its first positional string argument.
-/// Reaches the keys an identifier cannot spell.
+/// The array index `node`'s parent selects off it, and the node that selection
+/// widens to. `.at(n)` is the only spelling — Typst has no `.0` field access for
+/// an array element — and the grammar takes any non-negative literal, matching
+/// [`_qm-known-path`]'s digit test: a negative index lexes as unary minus over
+/// the magnitude and so never matches an `Int` argument.
+fn select_index<'a>(node: &LinkedNode<'a>) -> Option<(i64, LinkedNode<'a>)> {
+    let parent = node.parent()?;
+    let access = parent.cast::<ast::FieldAccess>()?;
+    if access.target().to_untyped() != node.get() || access.field().as_str() != "at" {
+        return None;
+    }
+    let (ast::Expr::Int(index), call) = at_selector(parent)? else {
+        return None;
+    };
+    Some((index.get(), call))
+}
+
+/// The `.at("<key>")` spelling of a property step. Reaches the keys an
+/// identifier cannot spell.
 fn select_by_at<'a>(
     access: &LinkedNode<'a>,
     keys: &[String],
 ) -> Option<(String, LinkedNode<'a>)> {
+    let (ast::Expr::Str(key), call) = at_selector(access)? else {
+        return None;
+    };
+    let key = key.get().to_string();
+    keys.contains(&key).then_some((key, call))
+}
+
+/// The selector argument of the `<expr>.at(..)` call `access` heads, and the call
+/// node the selection widens to: the spine both `.at` steps share, a string key
+/// and an integer index. `access` is the `<expr>.at` field access.
+fn at_selector<'a>(access: &LinkedNode<'a>) -> Option<(ast::Expr<'a>, LinkedNode<'a>)> {
     let parent = access.parent()?;
-    let call = parent.cast::<ast::FuncCall>()?;
+    // Cast off the underlying node, whose lifetime is the tree's: casting off the
+    // `LinkedNode` would tie the returned expression to this borrow of `access`.
+    let call: ast::FuncCall = parent.get().cast()?;
     let ast::Expr::FieldAccess(callee) = call.callee() else {
         return None;
     };
     if callee.to_untyped() != access.get() {
         return None;
     }
-    let first = call.args().items().find_map(|arg| match arg {
-        ast::Arg::Pos(ast::Expr::Str(s)) => Some(s.get().to_string()),
+    let selector = call.args().items().find_map(|arg| match arg {
+        ast::Arg::Pos(expr) => Some(expr),
         _ => None,
     })?;
-    keys.contains(&first).then(|| (first, parent.clone()))
+    Some((selector, parent.clone()))
 }
 
 #[cfg(test)]
@@ -1351,15 +1415,19 @@ main:
         }
     }
 
-    /// `(path, source text)` per window, over the fields and the one container
-    /// the tests below address.
+    /// `(path, source text)` per window, over the fields and the two containers
+    /// the tests below address: a variant container and a typed table.
     fn probe_spans(src: &Source) -> Vec<(String, String)> {
-        let fields = ["subject", "refs", "other", "classification"].map(str::to_string);
-        let containers = BTreeMap::from([(
+        let fields = ["subject", "refs", "tags", "other", "classification"].map(str::to_string);
+        let objects = BTreeMap::from([(
             "classification".to_string(),
             ["value", "poc", "controlled by"].map(str::to_string).into(),
         )]);
-        scalar_windows(src, &fields, &containers)
+        let arrays = BTreeMap::from([
+            ("refs".to_string(), ["org", "num"].map(str::to_string).into()),
+            ("tags".to_string(), Vec::new()),
+        ]);
+        scalar_windows(src, &fields, &objects, &arrays)
             .into_iter()
             .map(|(path, r)| (path, src.text()[r].to_string()))
             .collect()
@@ -1476,7 +1544,7 @@ main:
         for (path, text) in [
             ("subject", "data.subject"),
             ("subject", "data.at(\"subject\")"),
-            ("refs", "data.refs.at(0)"),
+            ("refs.0", "data.refs.at(0)"),
             ("other", "data.other"),
             ("subject", "upper(data.subject)"),
         ] {
@@ -1540,6 +1608,50 @@ main:
         assert!(
             has(&spans, "classification", "data.classification.undeclared"),
             "the undeclared read still anchors on the container: {spans:?}"
+        );
+    }
+
+    /// The index step and the row property it opens: `.at(n)` is the only spelling
+    /// of an array index, and what may follow it is the row's declared keys.
+    #[test]
+    fn scalar_windows_step_into_a_typed_table_row() {
+        let src = Source::detached(
+            r#"
+#import "@local/quillmark-helper:0.1.0": data
+#data.refs.at(0).org
+#data.refs.at(12).at("num")
+#data.at("refs").at(0).org
+#let row = data.refs.at(0)
+#row.org
+#data.refs.at(0)
+#data.tags.at(3)
+#data.refs
+#data.refs.at(0).undeclared
+#data.refs.at(-1)
+#data.tags.at(0).org
+"#,
+        );
+        let spans = probe_spans(&src);
+        for (path, text) in [
+            ("refs.0.org", "data.refs.at(0).org"),
+            ("refs.12.num", "data.refs.at(12).at(\"num\")"),
+            ("refs.0.org", "data.at(\"refs\").at(0).org"),
+            ("refs.0.org", "row.org"),
+            ("refs.0", "data.refs.at(0)"),
+            ("tags.3", "data.tags.at(3)"),
+            ("refs", "data.refs"),
+            // An undeclared row key is no address, so the read falls back to the
+            // row; a primitive element offers no property at all.
+            ("refs.0", "data.refs.at(0).undeclared"),
+            ("tags.0", "data.tags.at(0).org"),
+        ] {
+            assert!(has(&spans, path, text), "missing {path}/{text}: {spans:?}");
+        }
+        // A negative index lexes as unary minus over the magnitude, so it never
+        // matches the integer arm and the read stays on the table.
+        assert!(
+            has(&spans, "refs", "data.refs.at(-1)"),
+            "a negative index mints no address: {spans:?}"
         );
     }
 
@@ -1673,7 +1785,7 @@ main:
         let main_id = world.main();
         let src = world.source(main_id).expect("main source");
         windows.extend(
-            scalar_windows(&src, &meta.fields, &meta.object_fields)
+            scalar_windows(&src, &meta.fields, &meta.object_fields, &meta.array_fields)
                 .into_iter()
                 .map(|(path, range)| FieldWindow {
                     path,
