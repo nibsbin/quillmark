@@ -2179,12 +2179,11 @@ pub(crate) fn field_contains_content(field: &FieldSchema) -> bool {
 /// a failed import or a `richtext(inline)` violation is appended to `errors` as a
 /// load diagnostic.
 ///
-/// **The walk is over the schema, not the card's field map.** A content leaf's
-/// `default:` is its own wherever it is declared, and the render floor reads the
-/// companion off whichever leaf it resolves, so an unpopulated position
-/// blank-fills and drops the author's default silently. Covering every one is
-/// what makes the floor's `None` mean "no literal to cache" rather than "not
-/// walked to".
+/// **The walk is over the schema, not the card's field map.** The render floor
+/// reads the companion off whichever leaf it resolves, so covering every
+/// declaration position is what makes its `None` mean "no literal to cache"
+/// rather than "not walked to"; a position left out blank-fills and drops the
+/// author's `default:` silently.
 ///
 /// `card` labels the owning card and `path` the field's declaration path
 /// (`dict.note`, `rows[].note`, `c.variants.CUI.note`), the spelling

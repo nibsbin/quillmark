@@ -292,10 +292,9 @@ fn a_typed_table_row_property_is_addressable() {
     );
 }
 
-/// A direct read of a row cell anchors on the cell: the scan takes the index step
-/// and then the row property, so the region carries the address the lowering and
-/// `_qm-known-path` already agree on and a click on the org cell routes there
-/// rather than to the whole table.
+/// The address the scan reports must be the one the lowering and `_qm-known-path`
+/// already agree on: anchoring on the array routes a click on the org cell to the
+/// whole table.
 #[test]
 fn a_direct_row_cell_read_anchors_on_the_row_property() {
     let session = open(
@@ -328,9 +327,6 @@ fn a_direct_row_cell_read_anchors_on_the_row_property() {
     );
 }
 
-/// Each step is its own address, so a read that stops short of the row property
-/// anchors on the row, and one that never indexes at all still anchors on the
-/// table.
 #[test]
 fn a_read_that_stops_short_anchors_on_the_step_it_took() {
     let session = open(
@@ -348,9 +344,8 @@ fn a_read_that_stops_short_anchors_on_the_step_it_took() {
     }
 }
 
-/// Naming a row before stepping into it costs no address, so the alias lane
-/// reaches the same cell the direct chain does even though the index step was
-/// taken in the initializer.
+/// The alias lane reaches the cell even though the index step was taken in the
+/// initializer, so the address is not the one the anchor alone would offer.
 #[test]
 fn a_row_cell_read_through_a_let_alias_keeps_the_cell_address() {
     let session = open(

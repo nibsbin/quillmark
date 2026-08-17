@@ -192,8 +192,7 @@ region names what the plate read rather than the container holding it; a key the
 container does not declare is no address, and the read falls back to the
 container. The steps are the address grammar's
 ([PLATE_DATA.md](PLATE_DATA.md#schema-addresses)), so a scanned region is a
-name a `field-region` could claim: one property off a container, or an array
-index and then that row's property. Each step is its own address, so a
+name a `field-region` could claim, and each step is its own address: a
 whole-row read (`data.refs.at(0)`) names the row.
 A read through a `let` alias tracks where the chain it names would, so naming a
 container or a row before stepping into it costs no address. The alias holds only where

@@ -2409,10 +2409,9 @@ fn block_richtext_default_caches_content() {
     );
 }
 
-/// A content leaf's `default:` reaches the plate wherever the leaf is declared.
-/// The four positions are one test because the failure shape is a companion walk
-/// that stops at one of them, and a document authoring only the containers is what
-/// makes each cell fall to the render floor.
+/// The four positions ride one test because the failure shape is a companion walk
+/// that stops at one of them. Authoring only the containers is what drops each
+/// cell to the render floor, where a missing companion blank-fills.
 #[test]
 fn a_nested_content_defaults_literal_reaches_the_plate_at_every_position() {
     const YAML: &str = r#"
@@ -2493,9 +2492,9 @@ main:
     assert_eq!(literal["marks"], serde_json::json!([]));
 }
 
-/// Importing a literal is what checks it, so reaching a nested leaf puts its
-/// literal in front of the same `richtext(inline)` gate a card-level one faces.
-/// The diagnostic names the leaf's declaration path, not the card field holding it.
+/// Importing a literal is what checks it, so the nested gate is the companion walk
+/// reaching the leaf rather than a validation pass of its own. The diagnostic must
+/// name the leaf's declaration path: the card field holding it is not the mistake.
 #[test]
 fn a_nested_inline_richtext_default_over_one_para_is_a_load_error() {
     let err = quill_with_field(concat!(

@@ -134,8 +134,8 @@ scalar has neither an element nor a property for the address to resolve to. A
 `type: object` carrying `properties`, so a variant's cells and its `value`
 discriminant are addressable exactly as a dictionary's keys are
 ([SCHEMAS.md](SCHEMAS.md#enum-variants)). The row property is where the grammar
-stops: two steps, enumerated rather than derived, matching the one-level nesting
-contract the schema itself holds to. This is the pdfform resolver's grammar
+stops, at two steps, matching the one-level nesting contract the schema itself
+holds to. This is the pdfform resolver's grammar
 (`backends/pdfform/src/bind.rs`), so one address binds on either backend.
 
 Cards carry their canonical prefix as `$path`, so a plate composes a card

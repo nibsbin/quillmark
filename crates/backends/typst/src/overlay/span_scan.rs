@@ -911,11 +911,9 @@ pub(crate) fn scalar_windows(
     out
 }
 
-/// The address tables the scan resolves a read against: the top-level field
-/// names, and the step each container field offers — `object_fields` the property
-/// step, `array_fields` the index step and the row properties that may follow it.
-/// The same tables [`_qm-known-path`] validates a `form-field` / `field-region`
-/// path against, so a scanned region path is one a claim could bind.
+/// The address tables the scan resolves a read against — the same ones
+/// [`_qm-known-path`] validates a `form-field` / `field-region` path against, so
+/// a scanned region path is one a claim could bind.
 struct Tables<'a> {
     fields: &'a [String],
     objects: &'a BTreeMap<String, Vec<String>>,
@@ -924,11 +922,10 @@ struct Tables<'a> {
 
 impl Tables<'_> {
     /// The property names an address offers a step into: a container field's own
-    /// keys, or the row properties left by an index step. Everything the grammar
-    /// caps — a scalar, a row property, a primitive element — offers none.
+    /// keys, or an indexed row's. An address the grammar already caps offers none.
     ///
-    /// Keying on the address rather than on the anchor is what puts an alias to a
-    /// row (`#let r = data.refs.at(0)`) at parity with the chain it names: the
+    /// Keyed on the address rather than the anchor, so an alias to a row
+    /// (`#let r = data.refs.at(0)`) reaches the cell the chain it names does: the
     /// index step may have been taken in the initializer.
     fn property_keys(&self, path: &str) -> &[String] {
         if let Some(keys) = self.objects.get(path) {
@@ -1165,13 +1162,12 @@ fn data_access<'a>(
     }
 }
 
-/// The steps the read takes into `name`, or the field itself where it takes
-/// none: an array index (`refs.0`), then one property off whatever that leaves —
-/// a container field's own keys (`classification.poc`) or an indexed row's
-/// (`refs.0.org`).
+/// The address the read reaches into `name`: an array index (`refs.0`), then one
+/// property step (`classification.poc`, `refs.0.org`), or `name` itself where the
+/// read takes neither.
 ///
-/// Two steps is the address grammar's ceiling ([`_qm-known-path`]'s `steps-ok`),
-/// not a recursion: a row property is a leaf. Each step is its own address, so a
+/// Two steps is the grammar's ceiling ([`_qm-known-path`]'s `steps-ok`), not a
+/// recursion: a row property is a leaf. Each step is its own address, so a
 /// whole-row read anchors on the row rather than on the table.
 fn step_into<'a>(
     name: String,
@@ -1215,10 +1211,10 @@ fn selected<'a>(access: &LinkedNode<'a>, keys: &[String]) -> Option<(String, Lin
 }
 
 /// The array index `node`'s parent selects off it, and the node that selection
-/// widens to. `.at(n)` is the only spelling — Typst has no `.0` field access for
-/// an array element — and the grammar takes any non-negative literal, matching
-/// [`_qm-known-path`]'s digit test: a negative index lexes as unary minus over
-/// the magnitude and so never matches an `Int` argument.
+/// widens to. `.at(n)` is the only spelling: Typst has no `.0` field access for an
+/// array element. Any non-negative literal is admitted, matching
+/// [`_qm-known-path`]'s digit test — a negative index lexes as unary minus over
+/// the magnitude, so it never reaches the `Int` arm and needs no sign check.
 fn select_index<'a>(node: &LinkedNode<'a>) -> Option<(i64, LinkedNode<'a>)> {
     let parent = node.parent()?;
     let access = parent.cast::<ast::FieldAccess>()?;
@@ -1245,8 +1241,7 @@ fn select_by_at<'a>(
 }
 
 /// The selector argument of the `<expr>.at(..)` call `access` heads, and the call
-/// node the selection widens to: the spine both `.at` steps share, a string key
-/// and an integer index. `access` is the `<expr>.at` field access.
+/// node the selection widens to. `access` is the `<expr>.at` field access.
 fn at_selector<'a>(access: &LinkedNode<'a>) -> Option<(ast::Expr<'a>, LinkedNode<'a>)> {
     let parent = access.parent()?;
     // Cast off the underlying node, whose lifetime is the tree's: casting off the
@@ -1415,8 +1410,7 @@ main:
         }
     }
 
-    /// `(path, source text)` per window, over the fields and the two containers
-    /// the tests below address: a variant container and a typed table.
+    /// `(path, source text)` per window, over the fields the tests below address.
     fn probe_spans(src: &Source) -> Vec<(String, String)> {
         let fields = ["subject", "refs", "tags", "other", "classification"].map(str::to_string);
         let objects = BTreeMap::from([(
@@ -1611,8 +1605,6 @@ main:
         );
     }
 
-    /// The index step and the row property it opens: `.at(n)` is the only spelling
-    /// of an array index, and what may follow it is the row's declared keys.
     #[test]
     fn scalar_windows_step_into_a_typed_table_row() {
         let src = Source::detached(
