@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.107.0 - 2026-08-17
 
 - fix(typst): `display(field, ..)` validates its address against the schema, the
   assert `form-field` and `field-region` already carry. It is the one helper keyed
@@ -23,8 +23,10 @@
   covers leaf and container alike and drops the type test. `usaf_memo`'s
   `references` (`array<richtext(inline)>`, `default: []`) carried the same
   defect, invisible only because the list was empty.
-- fix: **a container-shaped `default:`/`example:` on a variant-bearing enum is a
-  load error** (`quill::default_type_mismatch`, `quill::example_type_mismatch`).
+- **breaking** a container-shaped `default:`/`example:` on a variant-bearing
+  enum is a load error (`quill::default_type_mismatch`,
+  `quill::example_type_mismatch`). A quill declaring one loaded before, so the
+  upgrade reads as a quill that stopped loading rather than as a fix.
   The container is the shape a *document* writes. As a schema literal it cached
   no content form and yielded no discriminant, so the field blank-filled in
   silence as if nothing were declared. The diagnostic names the discriminant
@@ -74,11 +76,14 @@
   container (`dict: {}`, `rows: [{}]`, `c: {value: CUI}`) rendered correctly
   with the author's default missing, and nothing upstream had anything to
   report. The walk now recurses `properties` / `items` / `variants`, the shapes
-  `field_contains_content` already descended. Importing a literal is also what
-  checks it, so a nested `richtext(inline)` violation — in a `default:` or an
-  `example:` — now fails load as a card-level one always has, naming the leaf's
-  declaration path. Nested `example:` *surfacing* was never broken: the
-  blueprint prints the raw literal at every depth.
+  `field_contains_content` already descended, so such a document now renders
+  **with** the author's default — a render-output change for any quill that
+  declared one. Importing a literal is also what checks it, so a nested
+  `richtext(inline)` violation — in a `default:` or an `example:` — now fails
+  load as a card-level one always has, naming the leaf's declaration path.
+  **Breaking on that second count**: the literal loaded before, so a quill
+  carrying one stops loading. Nested `example:` *surfacing* was never broken:
+  the blueprint prints the raw literal at every depth.
 - **breaking** typst: a plate's direct read of a typed-table row cell regions on
   the cell (`refs.0.org`), where it regioned on the whole array before — a
   *wrong* address, not a missing one, routing a click on the org cell to the
@@ -135,7 +140,7 @@
   now available to any date at any depth without shaping the value. `none` for
   a blank date, so a `== none` fallback still fires. The rule plates follow:
   want a value → `data.<field>`; want clickable ink → `display("<field>", ..)`.
-- feat: a variant may carry any **leaf** type a card field may, prose and dates
+- feat: a variant cell may carry **any type a card field may**, prose and dates
   included — `quill::variant_field_type` is gone. The load error existed because
   lowering read flat top-level name tables that could not descend into a
   container, so a `date` or `richtext` cell inside a variant would have loaded
@@ -147,9 +152,11 @@
   `field_contains_content` returned `false` for a variant container on the
   strength of this very guard, which would have silently skipped the content
   companion caches, the resting-form conversion and the seed path for a variant
-  content cell. It now answers on the union of the worlds' cells. A variant still
-  holds no *container*: arrays and objects stay card-level, the same one-level
-  nesting rule an object's properties obey.
+  content cell. It now answers on the union of the worlds' cells. Containers
+  are included: "every type nests at every depth" lands in this same release, so
+  a variant cell holds a typed table or a typed dictionary like any other
+  position. `variants:` itself stays card-level (`quill::variant_placement`) on
+  the reasoning stated there.
 
 - **breaking** typst: the `plaintext(field)` helper and its `_qm-plaintext`
   table are removed. Shipped in 0.94 as the sanctioned content→`str` coercion,
@@ -220,6 +227,44 @@
   `CONTRIBUTING.md` gains the two rules that would have caught the gap: `!` marks
   an observable-contract shift even where no type changes, and a release carrying
   one ships its guide.
+- docs: `0.106-to-0.107.md`, this release's guide, under the rule the entry above
+  adds. It leads with the region-address index step — `main.refs[0].org` where
+  `main.refs` stood, a wrong address rather than a missing one — and then with
+  the two schema literals that stop a quill loading, since those read as a build
+  that broke rather than as a fix. `ERROR.md` names `display(..)` as the
+  address-keyed template-author contract, `plaintext(..)` having been removed
+  here.
+
+<!-- seed: commits since v0.106.0, confirm the entries above cover them, then delete this comment
+- fix: a container's own `default:` crosses as content, or is refused
+- fix(typst): anchor a `let` alias only where the name is read
+- fix(typst): display validates its schema address
+- fix(docs): point the variants cross-reference at this page's own anchor
+- fix(docs): link canon by URL, not by a path outside the docs tree
+- docs: dense-prose pass over the nesting collapse
+- feat: every type nests at every depth
+- docs: dense-prose pass over the two address walks
+- feat(typst)!: the span scan takes the index step, so a row cell read anchors on the cell
+- fix: a nested content leaf's `default:` reaches the plate
+- docs: dense-prose pass over the address-grammar pin
+- test: pin the schema address grammar across both backends
+- Carry the prose style in CLAUDE.md at minimum size
+- Drop two CLAUDE.md lines that steer toward defaults
+- Cut the rules that steer toward defaults
+- docs: dense-prose pass over the lowering walk
+- Cut two lines that restated defaults
+- Rewrite dense-prose as a project-agnostic skill
+- feat!: a variant carries any leaf type, prose and dates included
+- refactor(typst)!: delete the `plaintext(field)` projection
+- feat(typst)!: depth-invariant lowering, and `date` as a native `datetime`
+- docs: dense-prose pass over the alias pass
+- docs: a bound read keeps its address, and what still needs a claim
+- fix(typst): disqualify aliases on a wildcard import in either order
+- feat(typst): follow a single-assignment `let` alias to its schema address
+- feat(wasm): export VARIANT_DISCRIMINANT_KEY to the runtime surface
+- docs: the 0.105 → 0.106 migration guide, and the rules that missed it
+-->
+
 
 ## v0.106.0 - 2026-08-16
 
@@ -342,22 +387,6 @@
 - fix(python): declaring `license-files` ships the `LICENSE` the sdist metadata
   names, which PyPI rejected the sdist for lacking. v0.104.0 and v0.105.0 are
   wheels only.
-
-<!-- seed: commits since v0.105.0, confirm the entries above cover them, then delete this comment
-- chore(repo): union-merge CHANGELOG.md
-- feat: migrate usaf_memo to enum variants, document the axis
-- feat(core): enum variants — fields that exist only for one enum value
-- fix(fixtures): drop the rule under the indorsement date
-- fix(fixtures): size the indorsement date widget in ems, not inches
-- fix(fixtures): set the memo's indorsement date widget like a date
-- feat(typst,pdf): font, size, and align on injected form fields
-- Make the usaf_memo indorsement's blank date a bound fill-in widget
-- Compress the field-region prose
-- Add `field-region` so plates can tie composed content to a field
-- fix(python): declare license-files so the sdist ships its LICENSE
-- Anchor an undeclared property at the property, not at a bare name
--->
-
 
 ## v0.105.0 - 2026-08-14
 
