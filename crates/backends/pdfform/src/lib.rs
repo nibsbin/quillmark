@@ -15,6 +15,7 @@ mod typography;
 use bind::BoundWidget;
 use flatten::flatten as flatten_to_pdf;
 use form::FormSpec;
+use quillmark_core::quill::QuillConfig;
 use quillmark_core::session::SessionHandle;
 use quillmark_core::{
     Artifact, Backend, ChangeSet, Diagnostic, LiveSession, OutputFormat, Quill, RenderError,
@@ -103,6 +104,16 @@ impl Backend for PdfformBackend {
             source.config().clone(),
         ))
     }
+}
+
+/// Whether `path` resolves against `config` as a schema address.
+///
+/// Binding a widget needs more: the resolved field must also project to a widget
+/// shape. The grammar alone is what the Typst helper's `_qm-known-path` states a
+/// second time, so `quillmark/tests/address_grammar.rs` compares the two here.
+#[doc(hidden)]
+pub fn resolves_schema_address(config: &QuillConfig, path: &str) -> bool {
+    bind::bind(config, "", path).is_ok()
 }
 
 fn resolve_field_specs(bound: &[BoundWidget], json_data: &serde_json::Value) -> Vec<FieldSpec> {
