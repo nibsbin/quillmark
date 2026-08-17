@@ -261,7 +261,7 @@ confused with it:
   mints: a `.`-separated run under an optional `$cards.<kind>.<ordinal>` head,
   where an all-digit segment is an array index (`references.0`) and `$body` the
   body terminal. A template-author contract (`form-field(field: "refs.2")`,
-  `plaintext(..)`, every published `form.json`), so it keeps its own spelling
+  `display(..)`, every published `form.json`), so it keeps its own spelling
   (renaming it is a blast radius) and translates to `DocPath` before it crosses.
 - **Schema-space coercion anchors**: `CoercionError` keeps its own
   `card_kinds.<kind>.<field>` / bare-field anchors, a schema-declaration

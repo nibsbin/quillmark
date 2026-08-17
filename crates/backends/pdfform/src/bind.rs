@@ -461,8 +461,8 @@ card_kinds:
 
     #[test]
     fn object_and_object_array_are_unbindable() {
-        // `array<array>` never reaches `bind`: the schema loader rejects it
-        // (`quill::nested_array_not_supported`).
+        // A container is unbindable at every depth: no widget renders one.
+        // Its leaves bind, which is what `descend` walks to.
         for (path, ty) in [("address", "object"), ("refs", "array<object>")] {
             match kind(path) {
                 Err(e @ BindError::Unbindable { .. }) => {
