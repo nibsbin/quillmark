@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+- feat: **every type nests at every depth**. A property or an element is an
+  ordinary field, so it carries whatever a card-level field carries, itself
+  included: `object<array<string>>`, `array<array<integer>>`, a typed table whose
+  row holds a typed dictionary, and a variant cell holding either.
+  `quill::nested_object_not_supported` and `quill::nested_array_not_supported`
+  are gone, and `ShapePosition`'s three positions collapse to the one question
+  the walk still asks — is this card level, where `variants:` and `ui.group` are
+  the two keys that live. A widening: every quill that loaded before loads
+  unchanged.
+  The depth budget was what the flat address tables existed for.
+  `SchemaMeta` carried six name-keyed tables (`array_fields`, `object_fields`
+  and their card twins) so the helper's `_qm-known-path` could enumerate two
+  suffix steps rather than derive a grammar; they are replaced by one address
+  tree — the schema pruned to the steps it offers — that the helper and the span
+  scan both walk, converging on the unbounded descent `pdfform::bind` always
+  had. Three components deriving an address become one walk each side of the
+  seam, and `quillmark/tests/address_grammar.rs` pins the two against the deep
+  shapes as well as the shallow ones.
+  `variants:` stays card-level, now on its own reasoning rather than by
+  inheriting the depth ban: a variant's shape is a function of the schema *and*
+  the discriminant, and the union projection, the once-bound form, the plate's
+  single branch and `validation::out_of_variant` each hold because that gap is
+  one level deep ([SCHEMAS.md](prose/canon/SCHEMAS.md) §"Enum variants"). An
+  array-valued variant cell used to report `nested_array_not_supported`, whose
+  message named array elements and object properties — neither the situation;
+  the shape is now legal and `quill::variant_placement` is left saying only what
+  it means.
+- fix: `blueprint()` expands a container at every depth. `build_property_mapping`
+  spent each property through the scalar builder, so a nested `object` or typed
+  table rendered as `key: null # object` — its own properties, their markers and
+  their annotations absent — where the same shape one level up expanded. It now
+  recurses, and the card-level and nested paths are one implementation, so a
+  `default:` covers its subtree identically wherever it is declared. No
+  document changes shape: the shapes this fixes could not be declared before.
 - fix: a content leaf's `default:` reaches the plate from **every** position it
   can be declared in, not only card level. The load pass that imports each
   richtext/plaintext literal into its companion cache walked the card's field

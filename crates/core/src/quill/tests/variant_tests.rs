@@ -275,22 +275,36 @@ classification:
     assert_eq!(blank_plate, json!({ "value": "" }));
 }
 
+/// A variant cell carries any type a card field does, containers included. The
+/// two card-level keys are what it may not carry.
 #[test]
-fn a_variant_field_may_not_be_a_container_or_carry_a_group() {
-    assert!(load_error(
-        "    c:\n      type: enum\n      values: [A]\n      variants:\n        A:\n          x: { type: object, properties: { y: { type: string } } }\n"
-    )
-    .contains("quill::nested_object_not_supported"));
-    assert!(load_error(
-        "    c:\n      type: enum\n      values: [A]\n      variants:\n        A:\n          x: { type: array, items: { type: string } }\n"
-    )
-    .contains("quill::nested_array_not_supported"));
+fn a_variant_field_may_not_carry_variants_or_a_group() {
     // Variant fields inherit the discriminant's group; declaring one is the
     // same dead knob a nested `ui.group` always was.
     assert!(load_error(
         "    c:\n      type: enum\n      values: [A]\n      variants:\n        A:\n          x: { type: string, ui: { group: g } }\n"
     )
     .contains("quill::nested_group_not_supported"));
+    assert!(load_error(
+        "    c:\n      type: enum\n      values: [A]\n      variants:\n        A:\n          x: { type: enum, values: [P], variants: { P: { y: { type: string } } } }\n"
+    )
+    .contains("quill::variant_placement"));
+}
+
+/// The union projection is what stays one level deep; the shapes below it do
+/// not, so a cell holds a typed dictionary and a typed table like any field.
+#[test]
+fn a_variant_field_holds_a_container() {
+    for cell in [
+        "x: { type: object, properties: { y: { type: string } } }",
+        "x: { type: array, items: { type: string } }",
+        "x: { type: array, items: { type: object, properties: { y: { type: string } } } }",
+    ] {
+        let yaml = format!(
+            "quill:\n  name: ok\n  version: \"0.1.0\"\n  backend: typst\n  description: ok\n\ntypst:\n  plate_file: plate.typ\n\nmain:\n  fields:\n    c:\n      type: enum\n      values: [A]\n      variants:\n        A:\n          {cell}\n"
+        );
+        QuillConfig::from_yaml(&yaml).unwrap_or_else(|e| panic!("{cell}: {e:?}"));
+    }
 }
 
 /// Two spellings of one name would coerce a live value under the other world's

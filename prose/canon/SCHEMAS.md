@@ -96,9 +96,20 @@ The ceiling is deliberate and enforced at load rather than discovered at render:
 | a variant field named `value` | `quill::variant_reserved_field_name` |
 | a name two variants declare *differently* | `quill::variant_field_collision` |
 
-A variant carries any **leaf** type a card field may, prose and dates included. Every surface reaches a cell through the same dispatcher a card field uses — coercion through `conform_value`, validation through `validate_value`, the render floor through `resolve_value`, lowering through the schema-node walk ([PLATE_DATA.md](PLATE_DATA.md)) — so a `richtext` or `date` cell behaves as a card-level one does.
+A variant cell carries any type a card field may — prose, dates and containers included. Every surface reaches it through the same dispatcher a card field uses — coercion through `conform_value`, validation through `validate_value`, the render floor through `resolve_value`, lowering through the schema-node walk ([PLATE_DATA.md](PLATE_DATA.md)) — so it behaves as a card-level field of that type does. What a cell does not carry is `ui.group` (it inherits the discriminant's) or `variants:` of its own.
 
-Variant fields are leaves exactly as an object's properties are: no container one level down, and no `ui.group` (they inherit the discriminant's).
+**Why `variants:` alone stays card-level.** Every other container's shape is a
+function of the schema; a variant's is a function of the schema *and* the
+discriminant. The transform schema can only project the union of the worlds
+("at schema time there is no live world"), and the wire carries whichever one
+the document selects. Four things hold because that gap is exactly one level
+deep: `variant_field` resolves a name by a flat scan across the worlds, so
+`quill::variant_field_collision` can guarantee one name is one cell; a form
+binds once at open, so a cell is *unconditionally addressable* while only
+*conditionally live*; a plate branches once over `values ∪ blank` and needs no
+guard inside that branch; and `validation::out_of_variant` names one
+discriminant rather than a chain of them. Nesting spends all four, so the rule
+is its own, not the depth budget bottoming out.
 
 Two limits follow from the container shape and are accepted, not worked around:
 [`resolve()`](#the-resolved-value-view-resolve) reports **one** rung for the whole
@@ -363,7 +374,10 @@ order. The card body is a `body` sibling on the card, not a row in `fields`:
 present iff the kind enables a body (`enabled: false` undeclares it, so `body` is
 `null`), its source only ever `authored` (non-blank) or `blank` (blank).
 Source is one **top-level** rung per field; a nested blank-fill inside an authored
-dict or array is a projection detail of the value, not a per-subpath source.
+dict or array is a projection detail of the value, not a per-subpath source. The
+rung is therefore coarser the deeper a field nests, and a container authored at
+all reads `authored` however much of it the document left to the floor. Accepted:
+per-subpath provenance is a different view, and no consumer has asked for one.
 
 Value and provenance only. The view carries no diagnostics: completeness and
 errors stay `Quill::validate`'s, which a consumer merges with its own producers

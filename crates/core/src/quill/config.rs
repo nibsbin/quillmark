@@ -110,19 +110,6 @@ struct CardSchemaDef {
     pub body: Option<BodyCardSchema>,
 }
 
-/// Depth context for [`QuillConfig::validate_field_schema_shape`]. Encodes
-/// which shapes are legal at the current nesting level, so the one-level
-/// nesting contract is enforced by a single recursive walk.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ShapePosition {
-    /// A field declared directly on a card: scalar, object, or array.
-    Top,
-    /// An array's `items`: scalar or object (typed-table row), not an array.
-    ArrayItem,
-    /// An object's property: scalar only.
-    Leaf,
-}
-
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum CoercionError {
@@ -903,19 +890,9 @@ impl QuillConfig {
         Ok(QuillValue::from_json(serde_json::Value::Object(out)))
     }
 
-    /// Recursively validate a field's structural shape, enforcing the
-    /// one-level nesting contract in a single pass. The `position` records
-    /// what shapes are legal at the current depth:
-    ///
-    /// - [`ShapePosition::Top`], a field declared directly on a card: scalar,
-    ///   `object` (typed dictionary), or `array` (primitive list or typed
-    ///   table).
-    /// - [`ShapePosition::ArrayItem`], an array's `items`: a scalar or an
-    ///   `object` (the typed-table row), but **not** another array.
-    /// - [`ShapePosition::Leaf`], an object's property (whether a top-level
-    ///   typed dictionary or a typed-table row): scalar only. No deeper
-    ///   containers, so `array<object<array>>` and `object<array>` are
-    ///   rejected here.
+    /// Recursively validate a field's structural shape. Every type nests at
+    /// every depth; `at_card_level` gates the two keys that do not,
+    /// `variants:` and `ui.group`.
     ///
     /// Returns the first violation as a ready-to-push [`Diagnostic`] whose
     /// message names `owner` (the field-name path, e.g. `rows[].tags`), or
@@ -923,7 +900,7 @@ impl QuillConfig {
     fn validate_field_schema_shape(
         schema: &FieldSchema,
         owner: &str,
-        position: ShapePosition,
+        at_card_level: bool,
     ) -> Option<Diagnostic> {
         let err = |code: &str, message: String| {
             Some(Diagnostic::new(Severity::Error, message).with_code(code.to_string()))
@@ -947,9 +924,7 @@ impl QuillConfig {
         // pass never descends into object properties or array items, so a nested
         // `group` is an inert knob. Reject it rather than let it silently do
         // nothing, the same dead-knob class this walk exists to catch.
-        if position != ShapePosition::Top
-            && schema.ui.as_ref().and_then(|u| u.group.as_ref()).is_some()
-        {
+        if !at_card_level && schema.ui.as_ref().and_then(|u| u.group.as_ref()).is_some() {
             return err(
                 "quill::nested_group_not_supported",
                 format!(
@@ -961,11 +936,13 @@ impl QuillConfig {
         }
 
         if let Some(variants) = &schema.variants {
-            // A variant set is a *card-level* shape: it turns its field into a
-            // container, and a container may not sit inside one (the same
-            // one-level rule `nested_object_not_supported` states from the
-            // object side).
-            if position != ShapePosition::Top {
+            // Every other container's shape is a function of the schema alone.
+            // A variant's is a function of the schema *and* the discriminant:
+            // the transform schema can only project the union of the worlds,
+            // and the wire carries whichever one the document selects. That gap
+            // is sound one level deep — a cell is unconditionally addressable
+            // and conditionally live — and compounds into a chain at two.
+            if !at_card_level {
                 return err(
                     "quill::variant_placement",
                     format!(
@@ -1041,13 +1018,13 @@ impl QuillConfig {
                             ),
                         );
                     }
-                    // A variant's fields are leaves, exactly as an object's
-                    // properties are: scalars only, no `ui.group` (they inherit
-                    // the discriminant's), no container one level down.
+                    // A variant's cells sit below card level, exactly as an
+                    // object's properties do: no `variants:` of their own, and
+                    // no `ui.group` (they inherit the discriminant's).
                     if let Some(diag) = Self::validate_field_schema_shape(
                         field,
                         &format!("{member_owner}.{name}"),
-                        ShapePosition::Leaf,
+                        false,
                     ) {
                         return Some(diag);
                     }
@@ -1078,17 +1055,6 @@ impl QuillConfig {
 
         match schema.r#type {
             FieldType::Object => {
-                // An object nested inside another object (a Leaf position) is
-                // the classic "nested type: object" rejection.
-                if position == ShapePosition::Leaf {
-                    return err(
-                        "quill::nested_object_not_supported",
-                        format!(
-                            "Field '{owner}' uses a nested type: object, which is not supported. \
-                             An object's properties may only be scalars."
-                        ),
-                    );
-                }
                 let Some(props) = &schema.properties else {
                     return err(
                         "quill::object_missing_properties",
@@ -1108,28 +1074,11 @@ impl QuillConfig {
                         ),
                     );
                 }
-                // Object properties are leaves: scalars only.
                 props.iter().find_map(|(name, prop)| {
-                    Self::validate_field_schema_shape(
-                        prop,
-                        &format!("{owner}.{name}"),
-                        ShapePosition::Leaf,
-                    )
+                    Self::validate_field_schema_shape(prop, &format!("{owner}.{name}"), false)
                 })
             }
             FieldType::Array => {
-                // An array may sit at the top level only; an array element may
-                // not itself be an array, and neither may an object property.
-                if position != ShapePosition::Top {
-                    return err(
-                        "quill::nested_array_not_supported",
-                        format!(
-                            "Field '{owner}' declares a nested array, which is not supported. \
-                             Array elements must be scalars or objects, and object properties \
-                             may only be scalars."
-                        ),
-                    );
-                }
                 if schema.properties.is_some() {
                     return err(
                         "quill::array_properties_not_supported",
@@ -1151,11 +1100,7 @@ impl QuillConfig {
                         ),
                     );
                 };
-                Self::validate_field_schema_shape(
-                    items,
-                    &format!("{owner}[]"),
-                    ShapePosition::ArrayItem,
-                )
+                Self::validate_field_schema_shape(items, &format!("{owner}[]"), false)
             }
             // Scalars are leaves; nothing further to validate.
             _ => None,
@@ -1530,10 +1475,10 @@ impl QuillConfig {
                 Ok(schema) => {
                     // One recursive pass enforces the whole shape contract:
                     // containers carry the right child schema (`object` →
-                    // `properties`, `array` → `items`), and nesting stops after
-                    // one structural level (a typed table is the deepest shape).
+                    // `properties`, `array` → `items`), and the card-level-only
+                    // keys appear only here.
                     if let Some(diag) =
-                        Self::validate_field_schema_shape(&schema, field_name, ShapePosition::Top)
+                        Self::validate_field_schema_shape(&schema, field_name, true)
                     {
                         errors.push(diag);
                         continue;

@@ -1,8 +1,8 @@
 //! One schema address grammar, two implementations: pdfform's `bind` walks the
-//! `QuillConfig`, and the Typst helper's `_qm-known-path` reads the address
-//! tables `SchemaMeta` derives from the transform schema. `PLATE_DATA.md`
-//! promises a plate author that one address binds on either backend, and
-//! `GRAMMAR` is what holds the two to it.
+//! `QuillConfig`, and the Typst helper's `_qm-known-path` walks the address tree
+//! `SchemaMeta` derives from the transform schema. `PLATE_DATA.md` promises a
+//! plate author that one address binds on either backend, and `GRAMMAR` is what
+//! holds the two to it.
 //!
 //! A `$body` address is outside that table: a body is content rather than a
 //! bindable field, so pdfform's resolver roots none.
@@ -13,8 +13,9 @@ use quillmark::{Backend, FileTreeNode, Quill};
 use quillmark_typst::TypstBackend;
 use std::collections::HashMap;
 
-/// Every position the one-level nesting contract admits, declared on `main` and
-/// again on a card kind so each address has its card twin.
+/// Every position the schema admits, containers nested inside containers and a
+/// variant cell holding a typed table among them, declared on `main` and again
+/// on a card kind so each address has its card twin.
 const YAML: &str = r#"
 quill:
   name: address_grammar
@@ -38,11 +39,29 @@ main:
         properties:
           org: { type: string }
           num: { type: string }
+          lead:
+            type: object
+            properties:
+              email: { type: string }
     address:
       type: object
       properties:
         city: { type: string }
         street: { type: string }
+        geo:
+          type: object
+          properties:
+            lat: { type: number }
+        lines:
+          type: array
+          items:
+            type: string
+    grid:
+      type: array
+      items:
+        type: array
+        items:
+          type: integer
     classification:
       type: enum
       values: [UNCLASSIFIED, CUI]
@@ -50,6 +69,12 @@ main:
       variants:
         CUI:
           poc: { type: string }
+          history:
+            type: array
+            items:
+              type: object
+              properties:
+                when: { type: string }
 card_kinds:
   endorsement:
     fields:
@@ -71,6 +96,10 @@ card_kinds:
         properties:
           office: { type: string }
           city: { type: string }
+          geo:
+            type: object
+            properties:
+              lat: { type: number }
       level:
         type: enum
         values: [FIRST, SECOND]
@@ -92,11 +121,21 @@ const GRAMMAR: &[(&str, bool)] = &[
     ("refs.0", true),
     ("refs.9", true),
     ("refs.0.org", true),
+    ("refs.0.lead", true),
+    ("refs.0.lead.email", true),
     ("address", true),
     ("address.city", true),
+    ("address.geo.lat", true),
+    ("address.lines", true),
+    ("address.lines.0", true),
+    ("grid.0", true),
+    ("grid.0.0", true),
     ("classification", true),
     ("classification.value", true),
     ("classification.poc", true),
+    ("classification.history", true),
+    ("classification.history.0", true),
+    ("classification.history.0.when", true),
     ("$cards.endorsement.0.from", true),
     ("$cards.endorsement.9.from", true),
     ("$cards.endorsement.0.tags", true),
@@ -106,6 +145,7 @@ const GRAMMAR: &[(&str, bool)] = &[
     ("$cards.endorsement.0.refs.0.org", true),
     ("$cards.endorsement.0.origin", true),
     ("$cards.endorsement.0.origin.office", true),
+    ("$cards.endorsement.0.origin.geo.lat", true),
     ("$cards.endorsement.0.level", true),
     ("$cards.endorsement.0.level.value", true),
     ("$cards.endorsement.0.level.endorser", true),
@@ -118,9 +158,18 @@ const GRAMMAR: &[(&str, bool)] = &[
     ("address.9", false),
     ("address.zip", false),
     ("address.city.0", false),
+    ("address.geo.lon", false),
+    ("address.geo.lat.0", false),
+    ("address.lines.0.0", false),
+    ("refs.0.lead.phone", false),
+    ("refs.0.lead.email.0", false),
+    ("grid.0.0.0", false),
+    ("grid.0.x", false),
     ("classification.0", false),
     ("classification.undeclared", false),
     ("classification.value.oops", false),
+    ("classification.history.0.nosuch", false),
+    ("classification.history.x", false),
     ("$cards", false),
     ("$cards.endorsement", false),
     ("$cards.endorsement.0", false),
@@ -131,6 +180,7 @@ const GRAMMAR: &[(&str, bool)] = &[
     ("$cards.endorsement.0.from.0", false),
     ("$cards.endorsement.0.tags.0.org", false),
     ("$cards.endorsement.0.origin.office.0", false),
+    ("$cards.endorsement.0.origin.geo.lon", false),
 ];
 
 const PREAMBLE: &str = r#"#import "@local/quillmark-helper:0.1.0": field-region
@@ -154,15 +204,25 @@ fn data() -> serde_json::Value {
     serde_json::json!({
         "subject": "Widgets",
         "tags": ["urgent"],
-        "refs": [{ "org": "AFRL/RQ", "num": "2026-01" }],
-        "address": { "city": "Dayton", "street": "1864 Fourth St" },
-        "classification": { "value": "CUI", "poc": "Capt J. Smith" },
+        "refs": [{ "org": "AFRL/RQ", "num": "2026-01", "lead": { "email": "lead@example.mil" } }],
+        "address": {
+            "city": "Dayton",
+            "street": "1864 Fourth St",
+            "geo": { "lat": 39.78 },
+            "lines": ["Bldg 15", "Rm 200"],
+        },
+        "grid": [[1, 2], [3, 4]],
+        "classification": {
+            "value": "CUI",
+            "poc": "Capt J. Smith",
+            "history": [{ "when": "2026-01-02" }],
+        },
         "$cards": [{
             "$kind": "endorsement",
             "from": "SAF/AA",
             "tags": ["routine"],
             "refs": [{ "org": "AFRL/RQ", "num": "2026-02" }],
-            "origin": { "office": "SAF/AA", "city": "Dayton" },
+            "origin": { "office": "SAF/AA", "city": "Dayton", "geo": { "lat": 38.88 } },
             "level": { "value": "SECOND", "endorser": "Col K. Lee" },
         }],
     })

@@ -115,7 +115,7 @@ Helper contents (generated in `backends/typst/helper.rs` from `lib.typ.template`
 ### Schema addresses
 
 `form-field(field:)` and `field-region(field)` name a schema field, and the
-generated `_qm-meta` address tables (`_qm-known-path`) validate that name at
+generated `_qm-meta` address tree (`_qm-known-path`) validates that name at
 compile time rather than leaving it silently unbound:
 
 | Address | Admitted by |
@@ -124,18 +124,18 @@ compile time rather than leaving it silently unbound:
 | `refs.2` | an array field — the element step |
 | `refs.2.org` | a typed table's row property, after the element step |
 | `classification.poc` | a container field — the property step |
+| `contact.address.city` | either step again, wherever the schema nests |
 | `$cards.<kind>.<n>.<field>` | a card field, `<n>` the per-kind ordinal |
 | `$cards.<kind>.<n>.<field>.<suffix>` | any of those suffixes, on a card field |
 
-A suffix is gated on the step the field actually offers, not on the name alone,
-so `subject.0` and `subject.poc` are both rejected on a scalar `subject`: a
-scalar has neither an element nor a property for the address to resolve to. A
-**container** is a typed dictionary or a variant container — both project as
-`type: object` carrying `properties`, so a variant's cells and its `value`
-discriminant are addressable exactly as a dictionary's keys are
-([SCHEMAS.md](SCHEMAS.md#enum-variants)). The row property is where the grammar
-stops, at two steps, matching the one-level nesting contract the schema itself
-holds to. This is the pdfform resolver's grammar
+Every step is gated on what the node it steps out of actually offers, not on the
+name alone, so `subject.0` and `subject.poc` are both rejected on a scalar
+`subject`: a scalar has neither an element nor a property for the address to
+resolve to. A **container** is a typed dictionary or a variant container — both
+project as `type: object` carrying `properties`, so a variant's cells and its
+`value` discriminant are addressable exactly as a dictionary's keys are
+([SCHEMAS.md](SCHEMAS.md#enum-variants)). The grammar stops where the schema
+does, at whatever depth that is. This is the pdfform resolver's grammar
 (`backends/pdfform/src/bind.rs`), so one address binds on either backend. The
 grammar is written twice, in two languages, and held to one table by
 `quillmark/tests/address_grammar.rs`.

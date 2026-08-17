@@ -104,7 +104,7 @@ Metadata resolution:
 - Unknown keys in the `quill:` section error with `quill::unknown_key` (typos like `platefile` are not silently captured).
 - Unknown top-level sections error with `quill::unknown_section` (typos like `card_kind:` are not silently ignored). Root-level `fields:` gets a targeted hint pointing to `main.fields:`.
 - Field schemas that fail to parse (e.g. a bare `title:`, missing `type:`) error with `quill::field_parse_error` and an actionable hint where applicable, rather than being dropped from the schema.
-- `object` fields without a `properties` map error with `quill::object_missing_properties`; an empty `properties` map errors with `quill::object_empty_properties`; an object nested inside another object errors with `quill::nested_object_not_supported`.
+- `object` fields without a `properties` map error with `quill::object_missing_properties`; an empty `properties` map errors with `quill::object_empty_properties`.
 - Malformed `quill.ui` / `main.ui` blocks error with `quill::invalid_ui` rather than being silently discarded.
 - Malformed `main.body` / `card_kinds.<name>.body` blocks error with `quill::invalid_body`.
 - A `body.example` set together with `body.enabled: false` warns with `quill::body_example_unused` (the example has no effect).

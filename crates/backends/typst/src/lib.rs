@@ -421,12 +421,7 @@ impl Backend for TypstBackend {
                 .source(main_id)
                 .ok()
                 .map(|src| {
-                    overlay::scalar_windows(
-                        &src,
-                        &schema_meta.fields,
-                        &schema_meta.object_fields,
-                        &schema_meta.array_fields,
-                    )
+                    overlay::scalar_windows(&src, &schema_meta.root)
                     .into_iter()
                     .map(|(path, range)| overlay::FieldWindow {
                         path,
@@ -508,118 +503,125 @@ fn engine_err(code: &str, message: impl Into<String>) -> RenderError {
     )
 }
 
-/// Property names a container node declares, in declaration order.
-fn property_names(node: &serde_json::Value) -> Vec<String> {
-    node.get("properties")
-        .and_then(|v| v.as_object())
-        .map(|props| props.keys().cloned().collect())
-        .unwrap_or_default()
-}
-
-/// The fields addressable by index suffix (`refs.0`), each mapped to the
-/// property names its *row* offers (`refs.0.org`). A primitive-element array
-/// maps to the empty list: the index step is all it admits.
+/// The steps a schema address may take out of one node, and nothing else: the
+/// schema pruned to its address grammar.
 ///
-/// The property step's twin, and the same shape, so one predicate reads both.
-/// The nesting contract caps the suffix at a row property, so neither recurses.
-fn array_field_names(
-    properties: &serde_json::Map<String, serde_json::Value>,
-) -> BTreeMap<String, Vec<String>> {
-    properties
-        .iter()
-        .filter(|(_, fs)| fs.get("type").and_then(|v| v.as_str()) == Some("array"))
-        .map(|(name, fs)| {
-            let row = fs.get("items").map(property_names).unwrap_or_default();
-            (name.clone(), row)
-        })
-        .collect()
-}
-
-/// The fields addressable by one property step (`address.city`,
-/// `classification.poc`), each mapped to the property names it declares.
-///
+/// A node offers a property step (`props`), an index step (`item`), or neither.
 /// A typed dictionary and a variant container both project as `type: object`
 /// carrying `properties` — the container's own `value` among them — so one
-/// predicate spans both. A richtext field is `type: object` too but declares no
-/// `properties`; unlike an array, which always offers its index step, an
-/// object with no properties offers no step at all and so is left out.
-fn object_field_names(
-    properties: &serde_json::Map<String, serde_json::Value>,
-) -> BTreeMap<String, Vec<String>> {
-    properties
-        .iter()
-        .filter(|(_, fs)| fs.get("type").and_then(|v| v.as_str()) == Some("object"))
-        .map(|(name, fs)| (name.clone(), property_names(fs)))
-        .filter(|(_, names)| !names.is_empty())
-        .collect()
+/// shape spans both, and a richtext field, an `object` declaring no
+/// `properties`, offers no step at all. An array always offers its index step,
+/// whatever its element.
+#[derive(Debug, Default, Clone, PartialEq)]
+pub(crate) struct AddressNode {
+    pub(crate) props: BTreeMap<String, AddressNode>,
+    pub(crate) item: Option<Box<AddressNode>>,
 }
 
-/// The transform schema plus the address tables derived from it, kept apart
-/// because they answer different questions at different depths. Lowering reads
-/// the schema node ([`helper::lowering`]) and is depth-invariant; the tables
-/// answer which *names* a plate may write, and are bounded by the address
-/// grammar. A table can only ever answer the second.
+impl AddressNode {
+    pub(crate) fn from_schema(node: &serde_json::Value) -> Self {
+        let props = node
+            .get("properties")
+            .and_then(|v| v.as_object())
+            .map(|props| {
+                props
+                    .iter()
+                    .map(|(name, child)| (name.clone(), Self::from_schema(child)))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let item = (node.get("type").and_then(|v| v.as_str()) == Some("array")).then(|| {
+            Box::new(
+                node.get("items")
+                    .map(Self::from_schema)
+                    .unwrap_or_default(),
+            )
+        });
+        Self { props, item }
+    }
+
+    /// The node `path` addresses, or `None` where it takes a step the schema
+    /// does not offer. A digit segment is the index step; any other is a
+    /// property step.
+    pub(crate) fn resolve(&self, path: &str) -> Option<&Self> {
+        path.split('.').try_fold(self, |node, seg| {
+            match seg.bytes().all(|b| b.is_ascii_digit()) && !seg.is_empty() {
+                true => node.item.as_deref(),
+                false => node.props.get(seg),
+            }
+        })
+    }
+
+    /// The generated `_qm-meta` shape: absent keys are absent steps, so a leaf
+    /// serializes as the empty dict.
+    fn to_json(&self) -> serde_json::Value {
+        let mut out = serde_json::Map::new();
+        if !self.props.is_empty() {
+            out.insert(
+                "props".to_string(),
+                serde_json::Value::Object(
+                    self.props
+                        .iter()
+                        .map(|(name, child)| (name.clone(), child.to_json()))
+                        .collect(),
+                ),
+            );
+        }
+        if let Some(item) = &self.item {
+            out.insert("item".to_string(), item.to_json());
+        }
+        serde_json::Value::Object(out)
+    }
+}
+
+/// The transform schema plus the address tree derived from it, kept apart
+/// because they answer different questions. Lowering reads the schema node
+/// ([`helper::lowering`]); the tree answers which *addresses* a plate may
+/// write, which is the same walk with everything but the steps pruned away.
 #[derive(Default)]
 pub(crate) struct SchemaMeta {
     /// The walk's cursor source: the same recursive projection
     /// `build_transform_schema` produced, kept whole rather than flattened.
     schema: serde_json::Value,
-    pub(crate) fields: Vec<String>,
-    /// Array field → its row's property names, gating `field.0` and
-    /// `field.0.prop`.
-    pub(crate) array_fields: BTreeMap<String, Vec<String>>,
-    /// Container field → its property names, gating `field.sub`. Native rather
-    /// than JSON: the span scan reads it on the AST walk, and `meta_literal`
-    /// serializes it either way.
-    pub(crate) object_fields: BTreeMap<String, Vec<String>>,
-    pub(crate) card_fields: BTreeMap<String, Vec<String>>,
-    pub(crate) card_array_fields: BTreeMap<String, BTreeMap<String, Vec<String>>>,
-    pub(crate) card_object_fields: BTreeMap<String, BTreeMap<String, Vec<String>>>,
+    /// Native rather than JSON: the span scan reads it on the AST walk, and
+    /// [`AddressNode::to_json`] serializes it for the helper either way.
+    pub(crate) root: AddressNode,
+    pub(crate) cards: BTreeMap<String, AddressNode>,
 }
 
 impl SchemaMeta {
-    /// A schema with no top-level `properties` yields empty tables and a walk
+    /// A schema with no top-level `properties` yields an empty tree and a walk
     /// that lowers every value literally: `build_transform_schema` always emits
     /// `properties`, so that only arises for hand-built schemas in tests.
     pub(crate) fn from_schema_json(schema_json: &serde_json::Value) -> Self {
-        let empty = serde_json::Map::new();
-        let properties_obj = schema_json
-            .get("properties")
-            .and_then(|v| v.as_object())
-            .unwrap_or(&empty);
-
-        let mut card_fields = BTreeMap::new();
-        let mut card_array_fields = BTreeMap::new();
-        let mut card_object_fields = BTreeMap::new();
+        let mut cards = BTreeMap::new();
         if let Some(defs) = schema_json.get("$defs").and_then(|v| v.as_object()) {
             for (def_name, def_schema) in defs {
                 let Some(kind) = def_name.strip_suffix("_card") else {
                     continue;
                 };
-                let Some(props) = def_schema.get("properties").and_then(|v| v.as_object()) else {
-                    continue;
-                };
-                card_fields.insert(kind.to_string(), props.keys().cloned().collect());
-                let arrays = array_field_names(props);
-                if !arrays.is_empty() {
-                    card_array_fields.insert(kind.to_string(), arrays);
-                }
-                let objects = object_field_names(props);
-                if !objects.is_empty() {
-                    card_object_fields.insert(kind.to_string(), objects);
-                }
+                cards.insert(kind.to_string(), AddressNode::from_schema(def_schema));
             }
         }
 
         Self {
-            fields: properties_obj.keys().cloned().collect(),
-            array_fields: array_field_names(properties_obj),
-            object_fields: object_field_names(properties_obj),
-            card_fields,
-            card_array_fields,
-            card_object_fields,
+            root: AddressNode::from_schema(schema_json),
+            cards,
             schema: schema_json.clone(),
         }
+    }
+
+    /// The address tables the helper's `_qm-known-path` validates against.
+    pub(crate) fn address_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "fields": self.root.to_json(),
+            "cards": serde_json::Value::Object(
+                self.cards
+                    .iter()
+                    .map(|(kind, node)| (kind.clone(), node.to_json()))
+                    .collect(),
+            ),
+        })
     }
 
     /// The schema node declaring a top-level field.
@@ -856,15 +858,15 @@ mod tests {
 
         let meta = SchemaMeta::from_schema_json(schema.as_json());
 
-        assert!(meta.array_fields.contains_key("sections"));
-        assert!(meta.array_fields.contains_key("signature_block"));
-        assert!(!meta.array_fields.contains_key("subject"));
-        // A richtext element declares no `properties`, so the row is empty and
-        // `sections.0.anything` stays unaddressable.
-        assert!(meta.array_fields["sections"].is_empty());
+        assert!(meta.root.resolve("sections.0").is_some());
+        assert!(meta.root.resolve("signature_block.0").is_some());
+        // A scalar offers no element for an index to resolve to.
+        assert!(meta.root.resolve("subject.0").is_none());
+        // A richtext element declares no `properties`, so `sections.0.anything`
+        // stays unaddressable.
+        assert!(meta.root.resolve("sections.0.anything").is_none());
 
-        let card_arrays = meta.card_array_fields.get("indorsement").unwrap();
-        assert_eq!(card_arrays["refs"], vec!["org".to_string()]);
+        assert!(meta.cards["indorsement"].resolve("refs.0.org").is_some());
     }
 
     #[test]

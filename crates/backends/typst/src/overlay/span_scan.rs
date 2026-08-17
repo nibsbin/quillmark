@@ -42,7 +42,7 @@
 //! `typst_layout::introspect::discover_frame`, transforming all four corners of
 //! each item box (the stack may rotate or scale).
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::ops::Range;
 
 use typst::foundations::{Content, Label, Value};
@@ -58,6 +58,7 @@ use quillmark_core::{ContentHit, HitGranularity, RenderedRegion};
 
 use crate::emit::SegmentMap;
 use crate::world::QuillWorld;
+use crate::AddressNode;
 
 /// A tracked byte window in a compiled source: the schema field whose content
 /// resolves into `range` of `file`. Content fields point at their generated
@@ -878,15 +879,9 @@ fn forward_pos(helper: &Source, segmap: &SegmentMap, pos: usize) -> usize {
 /// still carries the binding's span and needs a `field-region` claim.
 pub(crate) fn scalar_windows(
     source: &Source,
-    fields: &[String],
-    objects: &BTreeMap<String, Vec<String>>,
-    arrays: &BTreeMap<String, Vec<String>>,
+    address_root: &AddressNode,
 ) -> Vec<(String, Range<usize>)> {
-    let tables = Tables {
-        fields,
-        objects,
-        arrays,
-    };
+    let tables = Tables { root: address_root };
     let root = LinkedNode::new(source.root());
     let aliases = alias_bindings(&root, &tables);
     let mut anchors: Vec<(String, Range<usize>, Range<usize>)> = Vec::new();
@@ -911,34 +906,35 @@ pub(crate) fn scalar_windows(
     out
 }
 
-/// The address tables the scan resolves a read against — the same ones
+/// The address tree the scan resolves a read against — the same one
 /// [`_qm-known-path`] validates a `form-field` / `field-region` path against, so
 /// a scanned region path is one a claim could bind.
 struct Tables<'a> {
-    fields: &'a [String],
-    objects: &'a BTreeMap<String, Vec<String>>,
-    arrays: &'a BTreeMap<String, Vec<String>>,
+    root: &'a AddressNode,
 }
 
 impl Tables<'_> {
-    /// The property names an address offers a step into: a container field's own
-    /// keys, or an indexed row's. An address the grammar already caps offers none.
+    fn field_names(&self) -> Vec<String> {
+        self.root.props.keys().cloned().collect()
+    }
+
+    /// The property names an address offers a step into.
     ///
     /// Keyed on the address rather than the anchor, so an alias to a row
     /// (`#let r = data.refs.at(0)`) reaches the cell the chain it names does: the
     /// index step may have been taken in the initializer.
-    fn property_keys(&self, path: &str) -> &[String] {
-        if let Some(keys) = self.objects.get(path) {
-            return keys;
-        }
-        match path.rsplit_once('.') {
-            Some((array, index))
-                if !index.is_empty() && index.bytes().all(|b| b.is_ascii_digit()) =>
-            {
-                self.arrays.get(array).map(Vec::as_slice).unwrap_or_default()
-            }
-            _ => &[],
-        }
+    fn property_keys(&self, path: &str) -> Vec<String> {
+        self.root
+            .resolve(path)
+            .map(|node| node.props.keys().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    /// Whether the address offers an index step.
+    fn is_indexable(&self, path: &str) -> bool {
+        self.root
+            .resolve(path)
+            .is_some_and(|node| node.item.is_some())
     }
 }
 
@@ -1148,7 +1144,7 @@ fn data_access<'a>(
             if target.as_str() != "data" {
                 return None;
             }
-            let (name, anchor) = selected(node, tables.fields)?;
+            let (name, anchor) = selected(node, &tables.field_names())?;
             Some(step_into(name, anchor, tables))
         }
         // Reads before the binding ends — its own pattern, its initializer —
@@ -1162,25 +1158,34 @@ fn data_access<'a>(
     }
 }
 
-/// The address the read reaches into `name`: an array index (`refs.0`), then one
-/// property step (`classification.poc`, `refs.0.org`), or `name` itself where the
-/// read takes neither.
+/// The address the read reaches into `name`: every index (`refs.0`) and property
+/// (`classification.poc`, `refs.0.org`) step the plate actually takes, or `name`
+/// itself where it takes none.
 ///
-/// Two steps is the grammar's ceiling ([`_qm-known-path`]'s `steps-ok`), not a
-/// recursion: a row property is a leaf. Each step is its own address, so a
-/// whole-row read anchors on the row rather than on the table.
+/// Each step is its own address, so a whole-row read anchors on the row rather
+/// than on the table, and a read that stops halfway anchors where it stopped.
 fn step_into<'a>(
     name: String,
     anchor: LinkedNode<'a>,
     tables: &Tables,
 ) -> (String, LinkedNode<'a>) {
-    let (name, anchor) = match tables.arrays.get(&name).and_then(|_| select_index(&anchor)) {
-        Some((index, row)) => (format!("{name}.{index}"), row),
-        None => (name, anchor),
-    };
-    match select_property(&anchor, tables.property_keys(&name)) {
-        Some((key, deeper)) => (format!("{name}.{key}"), deeper),
-        None => (name, anchor),
+    let mut name = name;
+    let mut anchor = anchor;
+    loop {
+        if tables.is_indexable(&name) {
+            if let Some((index, row)) = select_index(&anchor) {
+                name = format!("{name}.{index}");
+                anchor = row;
+                continue;
+            }
+        }
+        match select_property(&anchor, &tables.property_keys(&name)) {
+            Some((key, deeper)) => {
+                name = format!("{name}.{key}");
+                anchor = deeper;
+            }
+            None => return (name, anchor),
+        }
     }
 }
 
@@ -1412,16 +1417,31 @@ main:
 
     /// `(path, source text)` per window, over the fields the tests below address.
     fn probe_spans(src: &Source) -> Vec<(String, String)> {
-        let fields = ["subject", "refs", "tags", "other", "classification"].map(str::to_string);
-        let objects = BTreeMap::from([(
-            "classification".to_string(),
-            ["value", "poc", "controlled by"].map(str::to_string).into(),
-        )]);
-        let arrays = BTreeMap::from([
-            ("refs".to_string(), ["org", "num"].map(str::to_string).into()),
-            ("tags".to_string(), Vec::new()),
-        ]);
-        scalar_windows(src, &fields, &objects, &arrays)
+        let root = AddressNode::from_schema(&serde_json::json!({
+            "properties": {
+                "subject": { "type": "string" },
+                "other": { "type": "string" },
+                "tags": { "type": "array", "items": { "type": "string" } },
+                "refs": { "type": "array", "items": { "type": "object", "properties": {
+                    "org": { "type": "string" },
+                    "num": { "type": "string" },
+                }}},
+                "classification": { "type": "object", "properties": {
+                    "value": { "type": "string" },
+                    "poc": { "type": "string" },
+                    "controlled by": { "type": "string" },
+                }},
+                "contact": { "type": "object", "properties": {
+                    "address": { "type": "object", "properties": {
+                        "city": { "type": "string" },
+                    }},
+                    "log": { "type": "array", "items": { "type": "object", "properties": {
+                        "note": { "type": "string" },
+                    }}},
+                }},
+            }
+        }));
+        scalar_windows(src, &root)
             .into_iter()
             .map(|(path, r)| (path, src.text()[r].to_string()))
             .collect()
@@ -1429,6 +1449,37 @@ main:
 
     fn has(spans: &[(String, String)], path: &str, text: &str) -> bool {
         spans.iter().any(|(p, t)| p == path && t == text)
+    }
+
+    /// A read anchors on the cell it reaches, however many steps that takes, and
+    /// a read that stops partway anchors where it stopped.
+    #[test]
+    fn scalar_windows_take_every_step_the_plate_takes() {
+        let src = Source::detached(
+            r#"
+#import "@local/quillmark-helper:0.1.0": data
+#data.contact.address.city
+#data.contact.address
+#data.contact
+#data.contact.log.at(0).note
+#data.contact.address.city.oops
+#let a = data.contact.address
+#a.city
+"#,
+        );
+        let spans = probe_spans(&src);
+        for (path, text) in [
+            ("contact.address.city", "data.contact.address.city"),
+            ("contact.address", "data.contact.address"),
+            ("contact", "data.contact"),
+            ("contact.log.0.note", "data.contact.log.at(0).note"),
+            // An undeclared step past a leaf mints nothing of its own: the read
+            // anchors on the deepest declared cell it reached.
+            ("contact.address.city", "data.contact.address.city.oops"),
+            ("contact.address.city", "a.city"),
+        ] {
+            assert!(has(&spans, path, text), "{path} / {text}: {spans:?}");
+        }
     }
 
     /// Naming the container before stepping into it must keep the address the
@@ -1777,7 +1828,7 @@ main:
         let main_id = world.main();
         let src = world.source(main_id).expect("main source");
         windows.extend(
-            scalar_windows(&src, &meta.fields, &meta.object_fields, &meta.array_fields)
+            scalar_windows(&src, &meta.root)
                 .into_iter()
                 .map(|(path, range)| FieldWindow {
                     path,
