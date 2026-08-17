@@ -206,6 +206,23 @@ async function instantiateCore(source) {
  */
 export const MAIN_CARD_ADDR = Object.freeze({});
 
+// ── The variant discriminant key ────────────────────────────────────────────
+/**
+ * The key carrying the discriminant inside a variant-bearing enum's value.
+ *
+ * A field declaring `variants:` rests as a container, `{value: <member>, …that
+ * member's fields}`, so reading or writing one means naming this key:
+ * `doc.storeFields(MAIN_CARD_ADDR, { classification: { [VARIANT_DISCRIMINANT_KEY]: 'CUI' } })`.
+ * It crosses the boundary inside untyped container data, with no type to read
+ * it off.
+ *
+ * Reserved: no variant may declare a field under it
+ * (`quill::variant_reserved_field_name`), and `QuillFieldSchema.variants`,
+ * keyed by member, never contains it.
+ * @type {'value'}
+ */
+export const VARIANT_DISCRIMINANT_KEY = 'value';
+
 /**
  * Narrow an unknown caught value to a `QuillmarkError`, the error every
  * fallible method in this package throws: a real `Error` with a non-empty
