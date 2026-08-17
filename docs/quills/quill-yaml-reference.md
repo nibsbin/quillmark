@@ -314,10 +314,9 @@ in a CUI block leaves those values in the document and warns
 (`validation::out_of_variant`); they simply stop rendering. Flip back and they
 are still there. Remove the field to drop the value for good.
 
-A variant holds any **leaf** type a card field may, prose and dates included:
-a `richtext` or `date` cell reaches the plate exactly as a card-level one does.
-What it cannot hold is another container — arrays and objects stay card-level,
-the same one-level nesting rule an object's properties obey. `variants:` itself
+A variant cell is an ordinary field: any type a card field may carry, prose,
+dates and containers included, reaching the plate exactly as a card-level one
+does. What it cannot carry is `variants:` of its own. `variants:` itself
 is valid only on a card-level `type: enum` field,
 keys only on declared members (never `""`, which owns no field set), and cannot
 declare a field named `value`. Variant fields inherit the discriminant's
@@ -378,7 +377,9 @@ main:
           type: string
 ```
 
-Nesting beyond one level is not supported: an array element may not itself be an array.
+Containers nest freely: a property or an element is an ordinary field, so it carries whatever type a card-level field carries, itself included. `object<array<string>>`, `array<array<integer>>` and a typed table whose row holds a typed dictionary are all declarable, and each leaf is addressable by the schema address its path spells (`contact.address.city`, `grid.0.0` — see [PLATE_DATA.md](https://github.com/borb-sh/quillmark/blob/main/prose/canon/PLATE_DATA.md#schema-addresses)).
+
+Two keys are card-level regardless of depth: `ui.group` (grouping never descends) and `variants:` (see [Variants](#variants-fields-that-exist-only-for-one-choice)).
 
 ---
 

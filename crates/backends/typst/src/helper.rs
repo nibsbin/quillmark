@@ -401,15 +401,7 @@ enum DateKind {
 /// The schema address tables `_qm-known-path` validates `form-field` paths
 /// against.
 fn meta_literal(meta: &SchemaMeta) -> String {
-    let tables = serde_json::json!({
-        "fields": meta.fields,
-        "card_fields": meta.card_fields,
-        "array_fields": meta.array_fields,
-        "card_array_fields": meta.card_array_fields,
-        "object_fields": meta.object_fields,
-        "card_object_fields": meta.card_object_fields,
-    });
-    lit(&tables)
+    lit(&meta.address_json())
 }
 
 /// Each present date's `_qm_dN` closure keyed by schema address, backing the
@@ -526,7 +518,6 @@ entrypoint = "lib.typ"
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::BTreeMap;
 
     use crate::emit::escape_markup;
     use crate::emit::EscapeCtx;
@@ -823,11 +814,12 @@ mod tests {
         }));
         let (lib, _) = generate_lib_typ(&serde_json::json!({}), &meta).unwrap();
         assert!(lib.contains("#let _qm-meta = ("));
-        assert!(lib.contains("\"fields\": ("));
-        assert!(lib.contains("\"subject\""));
-        // A primitive-element array maps to the empty row: the index step is
-        // all it admits.
-        assert!(lib.contains("\"array_fields\": (\"refs\": (),)"), "{lib}");
+        // A scalar is a leaf, and a primitive-element array offers its index
+        // step onto one: neither carries a `props` entry.
+        assert!(
+            lib.contains("\"props\": (\"refs\": (\"item\": (:),), \"subject\": (:),)"),
+            "{lib}"
+        );
     }
 
     /// `array_fields` and `object_fields` are one shape, so one predicate reads
@@ -843,12 +835,18 @@ mod tests {
                 }}},
             }
         }));
+        // A primitive-element array offers the index step and nothing past it.
+        let tags = meta.root.resolve("tags.0").expect("tags.0");
+        assert!(tags.props.is_empty() && tags.item.is_none());
         assert_eq!(
-            meta.array_fields,
-            BTreeMap::from([
-                ("tags".to_string(), vec![]),
-                ("refs".to_string(), vec!["org".to_string(), "num".to_string()]),
-            ]),
+            meta.root
+                .resolve("refs.0")
+                .expect("refs.0")
+                .props
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>(),
+            vec!["num".to_string(), "org".to_string()],
         );
     }
 
@@ -874,28 +872,17 @@ mod tests {
                 "origin": { "type": "object", "properties": { "office": { "type": "string" } } },
             }}}
         }));
-        assert_eq!(
-            meta.object_fields,
-            BTreeMap::from([
-                ("address".to_string(), vec!["city".to_string()]),
-                (
-                    "classification".to_string(),
-                    vec!["value".to_string(), "poc".to_string()],
-                ),
-            ]),
-        );
-        assert_eq!(
-            meta.card_object_fields,
-            BTreeMap::from([(
-                "note".to_string(),
-                BTreeMap::from([("origin".to_string(), vec!["office".to_string()])]),
-            )]),
-        );
+        assert!(meta.root.resolve("address.city").is_some());
+        assert!(meta.root.resolve("classification.value").is_some());
+        assert!(meta.root.resolve("classification.poc").is_some());
+        // A scalar and a richtext field each offer no step.
+        assert!(meta.root.resolve("subject.anything").is_none());
+        assert!(meta.root.resolve("body.text").is_none());
+        assert!(meta.cards["note"].resolve("origin.office").is_some());
 
         let (lib, _) = generate_lib_typ(&serde_json::json!({}), &meta).unwrap();
-        assert!(lib.contains("\"object_fields\": ("), "{lib}");
         assert!(
-            lib.contains("\"card_object_fields\": (\"note\": (\"origin\": (\"office\",),),)"),
+            lib.contains("\"cards\": (\"note\": (\"props\": (\"origin\": (\"props\": (\"office\": (:),),),),),)"),
             "{lib}"
         );
     }

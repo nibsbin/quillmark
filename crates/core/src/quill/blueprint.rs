@@ -180,27 +180,34 @@ fn append_field(items: &mut Vec<PayloadItem>, field: &FieldSchema) {
         return;
     }
 
-    // Typed table: an array whose element is an object with properties.
-    if matches!(field.r#type, FieldType::Array) {
-        if let Some(elem) = &field.items {
-            if matches!(elem.r#type, FieldType::Object) {
-                if let Some(props) = &elem.properties {
-                    append_typed_table(items, field, props);
-                    return;
-                }
-            }
-        }
-    }
-
-    // Typed dictionary: standalone object with defined properties.
-    if matches!(field.r#type, FieldType::Object) {
-        if let Some(props) = &field.properties {
-            append_typed_dict(items, field, props);
-            return;
-        }
+    if typed_dict_props(field).is_some() || typed_table_props(field).is_some() {
+        // The container key itself is untagged: `!must_fill` is rejected on a
+        // mapping (`prose/references/markdown-spec.md` §3.4), so a container's
+        // own `must_fill:` is inert and the obligation lives on its leaves.
+        push_leading(items, field, true);
+        let (value, nested, fills) = container_cell(field, &[]);
+        push_container_field(items, &field.name, value, nested, fills, field);
+        return;
     }
 
     append_scalar(items, field);
+}
+
+fn typed_dict_props(field: &FieldSchema) -> Option<&IndexMap<String, Box<FieldSchema>>> {
+    match field.r#type {
+        FieldType::Object => field.properties.as_ref(),
+        _ => None,
+    }
+}
+
+fn typed_table_props(field: &FieldSchema) -> Option<&IndexMap<String, Box<FieldSchema>>> {
+    match field.r#type {
+        FieldType::Array => match field.items.as_deref() {
+            Some(elem) => typed_dict_props(elem),
+            None => None,
+        },
+        _ => None,
+    }
 }
 
 /// Push the leading prose comments for a *top-level* field: the description,
@@ -302,13 +309,12 @@ fn build_property_mapping(
                 });
             }
         }
-        let (json, fill) = scalar_cell(prop);
+        let mut path = prefix.to_vec();
+        path.push(PathSegment::Key(prop.name.clone()));
+        let (json, sub_nested, sub_fills) = property_cell(prop, &path);
         map.insert(prop.name.clone(), json);
-        if fill {
-            let mut path = prefix.to_vec();
-            path.push(PathSegment::Key(prop.name.clone()));
-            fills.push(path);
-        }
+        nested.extend(sub_nested);
+        fills.extend(sub_fills);
         nested.push(NestedComment {
             container_path: prefix.to_vec(),
             position: slot,
@@ -319,37 +325,64 @@ fn build_property_mapping(
     (map, nested, fills)
 }
 
-/// Append a typed-dictionary field (`object` with `properties`). With a
-/// `default:`: render the default mapping (`{}` expands to the blank-filled
-/// shape; a non-empty partial default is rendered verbatim, all unmarked).
-/// Without one: recurse per property with leaf-level markers and annotations;
-/// the container key itself is untagged, since `!must_fill` is rejected on a
-/// mapping (`prose/references/markdown-spec.md` §3.4). A typed dictionary's own
-/// `must_fill:` is therefore inert — the obligation lives on its leaves.
-fn append_typed_dict(
-    items: &mut Vec<PayloadItem>,
+/// One property's contribution to its parent's mapping: its value, and the
+/// nested comments and fill paths its own subtree carries. `path` is the
+/// property's address relative to the field value.
+fn property_cell(
+    prop: &FieldSchema,
+    path: &[PathSegment],
+) -> (JsonValue, Vec<NestedComment>, Vec<Vec<PathSegment>>) {
+    if typed_dict_props(prop).is_some() || typed_table_props(prop).is_some() {
+        return container_cell(prop, path);
+    }
+    let (json, fill) = scalar_cell(prop);
+    let fills = if fill { vec![path.to_vec()] } else { Vec::new() };
+    (json, Vec::new(), fills)
+}
+
+/// A container's value plus the nested comments and fill paths its subtree
+/// carries, at `path` relative to the field value (`[]` at card level).
+///
+/// A `default:` is shippable as-is, so it renders verbatim and its subtree
+/// carries neither marker nor annotation. `default: {}` on a typed dictionary
+/// instead expands to the blank-filled shape, so every key is shown.
+fn container_cell(
     field: &FieldSchema,
-    props: &IndexMap<String, Box<FieldSchema>>,
-) {
-    push_leading(items, field, true);
+    path: &[PathSegment],
+) -> (JsonValue, Vec<NestedComment>, Vec<Vec<PathSegment>>) {
+    if let Some(props) = typed_dict_props(field) {
+        return match field.default.as_ref().map(|d| d.as_json()) {
+            Some(JsonValue::Object(map)) if map.is_empty() => {
+                (blank(field).into_json(), Vec::new(), Vec::new())
+            }
+            Some(default) => (default.clone(), Vec::new(), Vec::new()),
+            None => {
+                let (map, nested, fills) = build_property_mapping(props, path);
+                (JsonValue::Object(map), nested, fills)
+            }
+        };
+    }
 
-    let (value, nested, fills) = match field.default.as_ref().map(|d| d.as_json()) {
-        // `default: {}` → expand to the field's blank-filled shape so every key
-        // is shown; the container's default covers its leaves, so they are
-        // unmarked and unannotated (uniform with a concrete default).
-        Some(JsonValue::Object(map)) if map.is_empty() => {
-            (blank(field).into_json(), Vec::new(), Vec::new())
-        }
-        // Concrete default (object or otherwise) → rendered verbatim, unmarked.
+    let row_props = typed_table_props(field).unwrap_or_else(|| {
+        unreachable!("container_cell is reached only for a typed dictionary or a typed table")
+    });
+    match field.default.as_ref().map(|d| d.as_json()) {
+        // `[]` included: an array default stays inline rather than expanding.
         Some(default) => (default.clone(), Vec::new(), Vec::new()),
-        // No default → per-property recursion at the mapping root.
+        // A row type declaring no properties is schema-invalid in practice:
+        // emit a type-valid empty array rather than a null synthetic row.
+        None if row_props.is_empty() => (JsonValue::Array(Vec::new()), Vec::new(), Vec::new()),
         None => {
-            let (map, nested, fills) = build_property_mapping(props, &[]);
-            (JsonValue::Object(map), nested, fills)
+            let mut row_path = path.to_vec();
+            row_path.push(PathSegment::Index(0));
+            let (row, nested, fills) = build_property_mapping(row_props, &row_path);
+            (
+                JsonValue::Array(vec![JsonValue::Object(row)]),
+                nested,
+                fills,
+            )
         }
-    };
-
-    push_container_field(items, &field.name, value, nested, fills, field);
+    }
 }
 
 /// Append a variant-bearing enum: the container, its discriminant cell, and the
@@ -441,38 +474,6 @@ fn append_variant(items: &mut Vec<PayloadItem>, field: &FieldSchema) {
     );
 }
 
-/// Append a typed-table field (`array<object>`). With a `default:`: render the
-/// default rows verbatim (including `default: []`, which stays inline `[]`:
-/// arrays do not expand). Without one: emit one synthetic row carrying each
-/// property's leaf-level marker and annotation; the container key itself is
-/// untagged, so the field's own `must_fill:` is inert (as for a typed dict).
-fn append_typed_table(
-    items: &mut Vec<PayloadItem>,
-    field: &FieldSchema,
-    item_props: &IndexMap<String, Box<FieldSchema>>,
-) {
-    push_leading(items, field, true);
-
-    let (value, nested, fills) = match field.default.as_ref().map(|d| d.as_json()) {
-        // Any default (including `[]`) is shippable as-is, rendered verbatim.
-        Some(default) => (default.clone(), Vec::new(), Vec::new()),
-        // Row type declares no properties (schema-invalid in practice): emit a
-        // type-valid empty array rather than a null synthetic row.
-        None if item_props.is_empty() => (JsonValue::Array(Vec::new()), Vec::new(), Vec::new()),
-        // No default → one synthetic row, per-property markers at `[Index(0)]`.
-        None => {
-            let (row, nested, fills) = build_property_mapping(item_props, &[PathSegment::Index(0)]);
-            (
-                JsonValue::Array(vec![JsonValue::Object(row)]),
-                nested,
-                fills,
-            )
-        }
-    };
-
-    push_container_field(items, &field.name, value, nested, fills, field);
-}
-
 /// Push a typed-container field (value + nested comments + nested fills) and
 /// its trailing inline type annotation. The top-level `fill` flag is always
 /// `false`: typed containers are tagged on their leaves, never the container.
@@ -557,6 +558,91 @@ mod tests {
 
     fn cfg(yaml: &str) -> QuillConfig {
         QuillConfig::from_yaml(yaml).expect("valid yaml")
+    }
+
+    /// Marker, annotation and description reach a leaf at whatever depth it is
+    /// declared, and a `default:` still covers the subtree under it.
+    #[test]
+    fn a_container_expands_at_every_depth() {
+        let t = cfg(r#"
+quill: { name: x, version: 1.0.0, backend: typst, description: x }
+main:
+  fields:
+    contact:
+      type: object
+      properties:
+        tags: { type: array, items: { type: string } }
+        address:
+          type: object
+          properties:
+            city: { type: string, description: The city }
+            zip: { type: string, default: "00000" }
+    refs:
+      type: array
+      items:
+        type: object
+        properties:
+          org: { type: string }
+          lead:
+            type: object
+            properties:
+              email: { type: string }
+"#)
+        .blueprint();
+
+        assert!(
+            t.contains(concat!(
+                "contact: # object\n",
+                "  tags: !must_fill # array<string>\n",
+                "  address: # object\n",
+                "    # The city\n",
+                "    city: !must_fill # string\n",
+                "    zip: \"00000\" # string\n",
+            )),
+            "{t}"
+        );
+        assert!(
+            t.contains(concat!(
+                "refs: # array<object>\n",
+                "  - org: !must_fill # string\n",
+                "    lead: # object\n",
+                "      email: !must_fill # string\n",
+            )),
+            "{t}"
+        );
+
+        // A blueprint is written to be parsed back, markers at depth included.
+        let doc1 = Document::parse(&t).expect("blueprint must parse").document;
+        let doc2 = Document::parse(&doc1.to_markdown())
+            .expect("re-emit must parse")
+            .document;
+        assert_eq!(doc1, doc2, "a deep blueprint must round-trip");
+    }
+
+    #[test]
+    fn a_nested_container_default_renders_verbatim_and_covers_its_leaves() {
+        let t = cfg(r#"
+quill: { name: x, version: 1.0.0, backend: typst, description: x }
+main:
+  fields:
+    contact:
+      type: object
+      properties:
+        address:
+          type: object
+          default: { city: Reston, zip: "20190" }
+          properties:
+            city: { type: string }
+            zip: { type: string }
+"#)
+        .blueprint();
+        assert!(t.contains("  address: # object\n"), "{t}");
+        assert!(!t.contains("address: !must_fill"), "{t}");
+        assert!(t.contains("Reston"), "{t}");
+        assert!(
+            !t.contains("city: !must_fill"),
+            "a covered leaf asks for nothing: {t}"
+        );
     }
 
     #[test]

@@ -1033,14 +1033,16 @@ main:
     }
 }
 
+/// A type means the same thing wherever it is declared, so a row property is
+/// an ordinary field carrying an ordinary container.
 #[test]
-fn test_nested_object_in_typed_table_rejected_with_error() {
+fn a_typed_table_row_carries_a_container_property() {
     let yaml_content = r#"
 quill:
   name: nested_obj_test
   version: "1.0"
   backend: typst
-  description: Test nested object in typed table rejection
+  description: Test nested object in typed table
 
 main:
   fields:
@@ -1058,15 +1060,13 @@ main:
                 type: string
 "#;
 
-    let err = QuillConfig::from_yaml_with_warnings(yaml_content).unwrap_err();
-
-    assert_eq!(err.len(), 1);
-    assert_eq!(err[0].severity, Severity::Error);
-    assert_eq!(
-        err[0].code.as_deref(),
-        Some("quill::nested_object_not_supported")
-    );
-    assert!(err[0].message.contains("rows"));
+    let config = QuillConfig::from_yaml_with_warnings(yaml_content)
+        .expect("loads")
+        .0;
+    let row = config.main.fields["rows"].items.as_ref().expect("items");
+    let nested = &row.properties.as_ref().expect("properties")["nested"];
+    assert_eq!(nested.r#type, FieldType::Object);
+    assert!(nested.properties.as_ref().expect("properties").contains_key("inner"));
 }
 
 #[test]
@@ -1546,7 +1546,7 @@ main:
 }
 
 #[test]
-fn test_nested_array_rejected() {
+fn an_array_element_is_itself_an_array() {
     let yaml_content = r#"
 quill:
   name: nested_array
@@ -1563,15 +1563,19 @@ main:
         items:
           type: integer
 "#;
-    let err = QuillConfig::from_yaml_with_warnings(yaml_content).unwrap_err();
-    assert!(err.iter().any(
-        |d| d.code.as_deref() == Some("quill::nested_array_not_supported")
-            && d.message.contains("grid")
-    ));
+    let config = QuillConfig::from_yaml_with_warnings(yaml_content)
+        .expect("loads")
+        .0;
+    let row = config.main.fields["grid"].items.as_ref().expect("items");
+    assert_eq!(row.r#type, FieldType::Array);
+    assert_eq!(
+        row.items.as_ref().expect("items").r#type,
+        FieldType::Integer
+    );
 }
 
 #[test]
-fn test_object_with_array_property_rejected() {
+fn a_typed_dictionary_carries_an_array_property() {
     let yaml_content = r#"
 quill:
   name: object_with_array
@@ -1589,11 +1593,15 @@ main:
           items:
             type: string
 "#;
-    let err = QuillConfig::from_yaml_with_warnings(yaml_content).unwrap_err();
-    assert!(err.iter().any(
-        |d| d.code.as_deref() == Some("quill::nested_array_not_supported")
-            && d.message.contains("address")
-    ));
+    let config = QuillConfig::from_yaml_with_warnings(yaml_content)
+        .expect("loads")
+        .0;
+    let lines = &config.main.fields["address"]
+        .properties
+        .as_ref()
+        .expect("properties")["lines"];
+    assert_eq!(lines.r#type, FieldType::Array);
+    assert_eq!(lines.items.as_ref().expect("items").r#type, FieldType::String);
 }
 
 #[test]
