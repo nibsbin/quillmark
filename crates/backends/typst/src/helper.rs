@@ -7,9 +7,8 @@
 //! that node at any depth. Content lowers to markup block bindings (`#let _qm_cN
 //! = [ .. ]`) via [`emit_content`], every other type to its native Typst value;
 //! the document data is a Typst literal (`#let data = ( .. )`) referencing those
-//! blocks. Backend-generated *ink* projections — [`plaintext_literal`] and the
-//! date closures behind `display` — are keyed by schema address instead, since
-//! they are what a plate reaches for rather than what a value is.
+//! blocks. The date closures behind `display` are keyed by schema address
+//! instead, since a plate reaches for them by name rather than through a value.
 //!
 //! Output is **canonical**: dict keys emit in sorted order at every level (via
 //! [`sorted`]), so equal data produces byte-equal source regardless of the
@@ -57,14 +56,13 @@ pub fn generate_lib_typ(
         return Err(e);
     }
     let meta_literal = meta_literal(meta);
-    let plaintext_literal = plaintext_literal(&cg.plaintext);
-    let display_literal = address_table(&cg.display, |binding| binding.to_string());
+    let display_literal = display_literal(&cg.display);
 
     // Placeholders are located in the *raw template* (trusted static text), never
     // in already-substituted output, so document data spelling a placeholder
     // cannot hijack a splice point.
     let mut out = String::with_capacity(
-        LIB_TYP_TEMPLATE.len() + cg.blocks.len() + data_literal.len() + plaintext_literal.len(),
+        LIB_TYP_TEMPLATE.len() + cg.blocks.len() + data_literal.len() + display_literal.len(),
     );
     let mut cursor = 0usize;
     let mut blocks_at = 0usize;
@@ -73,7 +71,6 @@ pub fn generate_lib_typ(
         ("{meta_literal}", meta_literal.as_str()),
         ("{content_blocks}", cg.blocks.as_str()),
         ("{data_literal}", data_literal.as_str()),
-        ("{plaintext_literal}", plaintext_literal.as_str()),
         ("{display_literal}", display_literal.as_str()),
     ] {
         let rel = LIB_TYP_TEMPLATE[cursor..]
@@ -122,11 +119,7 @@ struct Codegen<'m> {
     windows: Vec<(String, Range<usize>, Vec<SegmentMap>)>,
     counter: usize,
     emit_error: Option<EmitError>,
-    /// `(schema address, plaintext)` per non-blank content field: the content
-    /// text with island slots stripped and marks dropped. Backs `_qm-plaintext`.
-    plaintext: Vec<(String, String)>,
-    /// `(schema address, block binding)` per present date. Backs `_qm-display`,
-    /// the date twin of the plaintext table.
+    /// `(schema address, block binding)` per present date. Backs `_qm-display`.
     display: Vec<(String, String)>,
 }
 
@@ -138,7 +131,6 @@ impl<'m> Codegen<'m> {
             windows: Vec::new(),
             counter: 0,
             emit_error: None,
-            plaintext: Vec::new(),
             display: Vec::new(),
         }
     }
@@ -233,11 +225,6 @@ impl<'m> Codegen<'m> {
         };
         match from_canonical_value(value) {
             Ok(rt) if !rt.is_blank() => {
-                // Blank values are skipped: `plaintext` defaults them to `""`.
-                let plain = quillmark_content::export::to_plaintext(&rt);
-                if !plain.is_empty() {
-                    self.plaintext.push((path.to_string(), plain));
-                }
                 match emit(&rt) {
                     Ok(ec) => self.content_block(path, ec),
                     Err(e) => {
@@ -325,8 +312,8 @@ impl<'m> Codegen<'m> {
     /// a nested `date` or `richtext` cannot silently degrade to its wire value.
     ///
     /// `path` is the value's schema address. Every generated projection keys on
-    /// it — a content block's window, the plaintext table, the display table —
-    /// so the addresses fall out of the recursion rather than being reassembled.
+    /// it — a content block's window, the display table — so the addresses fall
+    /// out of the recursion rather than being reassembled.
     ///
     /// A value whose shape contradicts its declaration (never produced by the
     /// seam, reachable through a direct `apply`) falls to its literal, the same
@@ -433,24 +420,18 @@ fn meta_literal(meta: &SchemaMeta) -> String {
     lit(&tables)
 }
 
-/// A projection table keyed by schema address, `expr` rendering each entry's
-/// Typst expression. Keys sort so a reorder-only `apply` still produces
-/// byte-identical source.
-fn address_table(entries: &[(String, String)], expr: impl Fn(&str) -> String) -> String {
+/// Each present date's `_qm_dN` closure keyed by schema address, backing the
+/// `display(field, ..)` helper. Keys sort so a reorder-only `apply` still
+/// produces byte-identical source.
+fn display_literal(entries: &[(String, String)]) -> String {
     let mut sorted: Vec<&(String, String)> = entries.iter().collect();
     sorted.sort_by(|a, b| a.0.cmp(&b.0));
     wrap_dict(
         sorted
             .into_iter()
-            .map(|(path, value)| format!("\"{}\": {}", escape_string(path), expr(value)))
+            .map(|(path, binding)| format!("\"{}\": {}", escape_string(path), binding))
             .collect(),
     )
-}
-
-/// Each content field's plaintext projection keyed by schema address, backing
-/// the `plaintext(field)` helper.
-fn plaintext_literal(entries: &[(String, String)]) -> String {
-    address_table(entries, |text| format!("\"{}\"", escape_string(text)))
 }
 
 /// `None` for a string that does not parse (the empty string included), which
@@ -688,68 +669,6 @@ mod tests {
     }
 
     #[test]
-    fn content_fields_populate_the_plaintext_table() {
-        let meta = meta_from(serde_json::json!({ "properties": {
-            "subject": richtext_field(),
-            "refs": { "type": "array", "items": richtext_field() },
-            "blank": richtext_field(),
-        }}));
-        let data = serde_json::json!({
-            "subject": content("A **bold** subject"),
-            "refs": [content("first ref"), content("second _ref_")],
-            "blank": content("   "),
-        });
-        let (lib, _) = generate_lib_typ(&data, &meta).unwrap();
-        // `data` carries the same keys, so match the table, not the whole file.
-        let table = plaintext_table(&lib);
-        assert!(table.contains(r#""subject": "A bold subject""#), "{table}");
-        assert!(table.contains(r#""refs.0": "first ref""#), "{table}");
-        assert!(table.contains(r#""refs.1": "second ref""#), "{table}");
-        assert!(!table.contains("blank"), "{table}");
-        assert!(lib.contains("#let plaintext(field) = _qm-plaintext.at(field"));
-    }
-
-    #[test]
-    fn island_only_content_has_no_plaintext_entry() {
-        let meta = meta_from(serde_json::json!({ "properties": { "fig": richtext_field() } }));
-        let data = serde_json::json!({ "fig": content("![alt](x.png)") });
-        let (lib, _) = generate_lib_typ(&data, &meta).unwrap();
-        assert_eq!(
-            plaintext_table(&lib),
-            "(:)",
-            "island-only field yields an empty plaintext table"
-        );
-    }
-
-    #[test]
-    fn card_content_plaintext_keyed_by_card_address() {
-        let meta = meta_from(serde_json::json!({
-            "properties": {},
-            "$defs": { "note_card": { "properties": { "$body": richtext_field() } } }
-        }));
-        let data = serde_json::json!({
-            "$cards": [ { "$kind": "note", "$body": content("Note **body**") } ]
-        });
-        let (lib, _) = generate_lib_typ(&data, &meta).unwrap();
-        assert!(
-            plaintext_table(&lib).contains(r#""$cards.note.0.$body": "Note body""#),
-            "{lib}"
-        );
-    }
-
-    /// The literal is single-line (`\n`s in values are escaped), so it ends at
-    /// the first newline.
-    fn plaintext_table(lib: &str) -> &str {
-        let start = lib
-            .find("#let _qm-plaintext = ")
-            .expect("plaintext table present")
-            + "#let _qm-plaintext = ".len();
-        let rest = &lib[start..];
-        let end = rest.find('\n').unwrap_or(rest.len());
-        &rest[..end]
-    }
-
-    #[test]
     fn date_fields_lower_to_native_datetimes_beside_a_display_projection() {
         let meta = meta_from(serde_json::json!({
             "properties": {
@@ -844,9 +763,6 @@ mod tests {
         for expected in ["stamps.0", "contact.reply_by", "contact.note", "rows.0.on", "rows.0.notes"] {
             assert!(paths.contains(&expected), "missing {expected}: {paths:?}");
         }
-        let table = plaintext_table(&lib);
-        assert!(table.contains(r#""contact.note": "a nested note""#), "{table}");
-        assert!(table.contains(r#""rows.0.notes": "row one""#), "{table}");
     }
 
     /// The check the standalone date pre-pass used to run, now depth-total

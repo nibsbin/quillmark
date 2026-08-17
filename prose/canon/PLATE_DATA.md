@@ -6,7 +6,7 @@
 
 Plates get document data through a backend-injected virtual Typst package, not a template engine. Data flows in two stages: `Quill::compile_data()` produces validated, blank-filled JSON in which content fields are canonical `Content` objects; `Backend::open()` generates the helper's `lib.typ`, walking each value beside its transform-schema node to lower it, no per-field markdown re-parse.
 
-One rule governs the lowering, at every depth: **a declared type means the same thing wherever it is declared, and every type lowers to its native Typst value unless it has a canonical rendering.** Only the content types have one — the authored text — so only they lower to content; a date lowers to a native `datetime`, because every rendering of `2026-01-02` is a typographic decision the plate owns. Backend-generated *ink* is reached by address instead (`plaintext(addr)`, `display(addr, ..)`), which is also what makes it laundering-proof.
+One rule governs the lowering, at every depth: **a declared type means the same thing wherever it is declared, and every type lowers to its native Typst value unless it has a canonical rendering.** Only the content types have one — the authored text — so only they lower to content; a date lowers to a native `datetime`, because every rendering of `2026-01-02` is a typographic decision the plate owns. Backend-generated *ink* is reached by address instead (`display(addr, ..)`), which is also what makes it laundering-proof.
 
 ## Overview
 
@@ -96,28 +96,16 @@ Helper contents (generated in `backends/typst/helper.rs` from `lib.typ.template`
   error raised from the walk. There is no separate validation pass: codegen was
   already parsing at the emit site, so the check rides it and is total over depth
   for free.
-- **Address-keyed projections.** `data.<addr>` is the value; a projection is
-  something the backend *generates ink for*, and is reached by address instead.
-  Both read a generated literal keyed by schema address (`subject`, `refs.2`,
-  `contact.note`, `$cards.<kind>.<n>.<field>`; compose a card address from the
-  card's `$path`):
-  - `plaintext(field)` → `str`. The sanctioned content→`str` coercion: the
-    content text with island slots stripped and marks dropped, the same
-    projection pdfform lowers a richtext field to. Use it where a plate or
-    package needs a string (string ops, an `assert(type(item) == str)` consumer)
-    for any content field. `""` for a blank field or an address with no content.
+- **`display(field, ..args)`** → content, the one address-keyed projection.
+  `_qm-display` binds one `#let _qm_dN = (..args) => text(datetime(..).display(..args))`
+  closure per present date, keyed by schema address (`issued`, `stamps.2`,
+  `contact.reply_by`, `$cards.<kind>.<n>.<field>`; compose a card address from
+  the card's `$path`), and `display` calls it. `none` for a blank date or an
+  address carrying none, so a `== none` fallback still fires. Formatting through
+  the date's own `display` inherits its type, so a `date`-only field throws
+  Typst's native error on an `[hour]` pattern.
 
-    Note the name collision: this helper is distinct from the `plaintext`
-    **field type**. The helper projects *any* content to a `str`; the field type
-    declares a field's content plain from the start.
-  - `display(field, ..args)` → content. The date twin: `_qm-display` binds one
-    `#let _qm_dN = (..args) => text(datetime(..).display(..args))` closure per
-    present date, and `display` calls it. `none` for a blank date or an address
-    carrying none, so a `== none` fallback still fires. Formatting through the
-    date's own `display` inherits its type, so a `date`-only field throws Typst's
-    native error on an `[hour]` pattern.
-
-  The reason a projection is addressed rather than carried on the value is
+  The reason it is addressed rather than carried on the value is
   **regions**. Its ink is born at the generated node, not at the plate's
   reference site, so it survives being laundered — through a `#let` binding, a
   loop variable, or a vendored package that formats it internally — and one node

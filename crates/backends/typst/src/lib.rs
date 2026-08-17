@@ -825,46 +825,6 @@ mod tests {
         );
     }
 
-    /// The plate uses a content field where `data.subject` (Typst `content`)
-    /// would fail, so a `plaintext` returning content fails this compile.
-    #[test]
-    fn plate_uses_plaintext_projection_as_string() {
-        use quillmark_core::FileTreeNode;
-
-        const PLATE: &str = r#"#import "@local/quillmark-helper:0.1.0": data, plaintext
-#set page(width: 300pt, height: 200pt, margin: 20pt)
-#set text(size: 11pt)
-#assert(type(plaintext("subject")) == str, message: "plaintext must be a str")
-#assert(plaintext("subject").starts-with("Hello"), message: "string op works")
-#assert(plaintext("missing") == "", message: "absent field defaults to empty string")
-#upper(plaintext("subject"))
-"#;
-        let quill = || {
-            let yaml = "quill:\n  name: plaintext\n  version: 0.1.0\n  backend: typst\n  description: plaintext probe\ntypst:\n  plate_file: plate.typ\nmain:\n  fields:\n    subject:\n      type: richtext\n      description: subject\n";
-            let mut files = HashMap::new();
-            files.insert(
-                "Quill.yaml".to_string(),
-                FileTreeNode::File { contents: yaml.as_bytes().to_vec() },
-            );
-            files.insert(
-                "plate.typ".to_string(),
-                FileTreeNode::File { contents: PLATE.as_bytes().to_vec() },
-            );
-            Quill::from_tree(FileTreeNode::Directory { files }).expect("quill")
-        };
-        let q = quill();
-        let json = serde_json::json!({ "subject": content("Hello **bold** world") });
-        let plate_content = read_plate(&q).expect("plate");
-        let transform_schema = build_transform_schema(q.config());
-        let schema_meta = SchemaMeta::from_schema_json(transform_schema.as_json());
-        let data = transformed_data(&json);
-        let (world, _w) =
-            world::QuillWorld::new_with_data(&q, &plate_content, data.as_ref(), &schema_meta)
-                .expect("world");
-        // Compile succeeds ⇒ every `#assert` in the plate held.
-        let (_doc, _warn) = compile::compile_document(&world).expect("compile");
-    }
-
     #[test]
     fn schema_meta_array_fields_distinguish_scalar_from_array() {
         // Any array is element-addressable (`field.N`); only scalars are not.

@@ -25,13 +25,24 @@
   every rendering of `2026-01-02` is a typographic decision the plate owns — so
   it lowers to its value and reaches ink by address instead.
 - feat(typst): `display(field, ..args)`, a date field's content projection,
-  keyed by schema address exactly as `plaintext(field)` is. It places rendered
+  keyed by schema address rather than carried on the value. It places rendered
   ink whose glyphs are born in generated source, so a date formatted through a
   `#let` binding, a per-card loop variable, or a vendored package keeps a
   region on its schema field — the affordance the value-object existed to buy,
   now available to any date at any depth without shaping the value. `none` for
   a blank date, so a `== none` fallback still fires. The rule plates follow:
   want a value → `data.<field>`; want clickable ink → `display("<field>", ..)`.
+- **breaking** typst: the `plaintext(field)` helper and its `_qm-plaintext`
+  table are removed. Shipped in 0.94 as the sanctioned content→`str` coercion,
+  it never acquired a caller: no plate, no vendored package, and no binding
+  surface referenced it, and the `create-auto-grid` consumer its own docstring
+  cited passes an `array<string>` rather than a content field, so the only
+  things exercising it were its three tests. It also carried a three-way name
+  collision with the `plaintext` field type and that type's document-layer
+  resting shape, which took a standing caveat in canon and the template to hold
+  down. A plate that needs a `str` from a content field now has no route, which
+  is the honest state of the requirement: reinstating it is additive and cheap
+  when a plate actually asks.
 - feat(typst): a typed table's row property (`refs.0.org`) is a writable
   schema address. `form-field(field:)` and `field-region` capped at one suffix
   step while pdfform's resolver descended unboundedly, so a shape

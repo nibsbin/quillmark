@@ -8,7 +8,7 @@
 // is `form-field` / `signature-field` (widget geometry + metadata hand-off),
 // `field-region` (the same hand-off for a region with no widget),
 // `_qm-known-path` (path validation, reading the generated `_qm-meta`), and
-// `plaintext` (a content field's string projection, reading `_qm-plaintext`).
+// `display` (a date field's content projection, reading `_qm-display`).
 
 /// Backend-generated schema address tables (`fields`, `card_fields`,
 /// `array_fields`, `card_array_fields`, `object_fields`, `card_object_fields`)
@@ -235,39 +235,21 @@
 /// generation time.
 #let data = {data_literal}
 
-/// Backend-generated plaintext table for every non-blank content field, keyed
-/// by schema address (a field name `subject`, an array element `refs.2`, or a
-/// card path `$cards.<kind>.<n>.<field>`). Each value is the richtext content
-/// text with island slots (tables/images) stripped and all formatting marks
-/// dropped: the same projection the pdfform backend lowers a richtext field
-/// to. A generated literal; blank fields are absent (they default to `""`).
-#let _qm-plaintext = {plaintext_literal}
-
-/// A content field's **plaintext** projection as a `str`. Where `data.<field>`
-/// carries Typst **content** (a `richtext` field lowers to a markup block),
-/// this returns the field's plain text, use it when a plate or vendored
-/// package needs a string for a content field: string ops (`.trim()`,
-/// `.starts-with()`, `upper(..)`) or an `assert(type(item) == str)`-style
-/// consumer (e.g. `create-auto-grid`). This is the sanctioned richtext→str
-/// coercion: do NOT `repr`/stringify the content block. `field` is the schema
-/// address (compose a card field from the card's `$path`:
-/// `plaintext(card.at("$path") + "$body")`). Returns `""` for a blank field or
-/// an address carrying no richtext content.
-#let plaintext(field) = _qm-plaintext.at(field, default: "")
-
 /// Backend-generated content projection for every present `date`/`datetime`
-/// field, keyed by the same schema address `_qm-plaintext` uses. Each value is a
-/// `_qm_dN` closure block, so the ink it places is born in generated source. A
-/// generated literal; blank dates are absent.
+/// field, keyed by schema address (a field name `issued`, an array element
+/// `stamps.2`, a container property `contact.reply_by`, or a card path
+/// `$cards.<kind>.<n>.<field>`). Each value is a `_qm_dN` closure block, so the
+/// ink it places is born in generated source. A generated literal; blank dates
+/// are absent.
 #let _qm-display = {display_literal}
 
 /// A date field's **content** projection, formatted with Typst's own
-/// `datetime.display` patterns. The date twin of `plaintext`: where
-/// `data.<field>` carries the native `datetime` (arithmetic, comparison,
-/// `.year()`, a package that wants a real date), this places rendered ink whose
-/// glyphs carry a region keyed on `field`, so a date formatted through a `#let`
-/// binding, a loop variable, or a vendored package stays click-to-edit. Use
-/// `data.<field>.display(..)` where a plain `str` is wanted and no region is.
+/// `datetime.display` patterns. Where `data.<field>` carries the native
+/// `datetime` (arithmetic, comparison, `.year()`, a package that wants a real
+/// date), this places rendered ink whose glyphs carry a region keyed on `field`,
+/// so a date formatted through a `#let` binding, a loop variable, or a vendored
+/// package stays click-to-edit. Use `data.<field>.display(..)` where a plain
+/// `str` is wanted and no region is.
 ///
 /// `field` is the schema address (compose a card field from the card's `$path`:
 /// `display(card.at("$path") + "on", "[year]")`). Returns `none` for a blank
