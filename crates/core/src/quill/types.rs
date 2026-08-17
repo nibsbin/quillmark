@@ -453,8 +453,7 @@ pub type VariantFields = IndexMap<String, Box<FieldSchema>>;
 /// The key carrying the discriminant inside a variant-bearing enum's value.
 ///
 /// Reserved: a variant may not declare a field under this name
-/// (`quill::variant_reserved_field_name`). Named for the date value-object's
-/// `.value`, the sibling idiom for "the scalar inside the wrapper".
+/// (`quill::variant_reserved_field_name`).
 pub const VARIANT_DISCRIMINANT_KEY: &str = "value";
 
 /// Schema definition for a template field.

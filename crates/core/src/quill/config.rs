@@ -1051,11 +1051,13 @@ impl QuillConfig {
                     ) {
                         return Some(diag);
                     }
-                    // Content and dates lower to Typst through *top-level* name
-                    // tables (`content_field_names`, the date tables), which do
-                    // not descend into a container. Declaring one here would
-                    // load clean and reach the plate as a raw dict, so the
-                    // ceiling is enforced rather than discovered at render.
+                    // Lowering reads the schema node beside each value, so a
+                    // variant cell would lower correctly if it got this far.
+                    // What is untested is the path in front of it: a variant's
+                    // worlds resolve at value time, and no coercion, blank-fill
+                    // or validation case exercises a content leaf inside one.
+                    // Provisional, not structural — lifting it is a widening
+                    // that owes those cases, not a codegen change.
                     if matches!(
                         field.r#type,
                         FieldType::RichText { .. }

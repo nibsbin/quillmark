@@ -87,14 +87,25 @@
   ]
 }
 
+/// The date pattern a memo style prints, per AFH 33-337. Exported so a caller
+/// that must pre-format the date still matches what this package would have
+/// produced, rather than restating the pattern.
+///
+/// - memo-style (str): `"usaf"` or `"daf"`
+/// -> str
+#let date-pattern(memo-style: "usaf") = if memo-style == "daf" {
+  "[month repr:long] [day padding:none], [year]"
+} else {
+  "[day padding:none] [month repr:long] [year]"
+}
+
 /// Formats a date for the memo heading.
 ///
-/// - String: shown as-is (use for fixed text like placeholders).
+/// - str, content: shown as-is (a fixed placeholder, or ink the caller already
+///   formatted through [`date-pattern`]).
 /// - datetime: USAF style `DD Month YYYY`; DAF style `Month DD, YYYY`.
-/// - dictionary: a Quillmark date value-object; its `display` closure renders
-///   region-bearing content in the same style.
 ///
-/// - date (str|datetime|dictionary): Date to format for display
+/// - date (str|content|datetime): Date to format for display
 /// - memo-style (str): `"usaf"` or `"daf"`
 /// -> content
 #let display-date(date, memo-style: "usaf") = {
@@ -102,24 +113,12 @@
     memo-style in ("usaf", "daf"),
     message: "memo-style for display-date must be \"usaf\" or \"daf\"",
   )
-  if type(date) == str {
+  // A caller that pre-formatted — to keep a click-to-edit region the package
+  // cannot mint itself — passes the finished ink through untouched.
+  if type(date) in (str, content) {
     date
   } else {
-    let pattern = if memo-style == "daf" {
-      "[month repr:long] [day padding:none], [year]"
-    } else {
-      "[day padding:none] [month repr:long] [year]"
-    }
-    // A Quillmark date field crosses as a value-object dict whose `display` key
-    // is a closure returning region-bearing content (click-to-edit); a bare
-    // `datetime` — the `today()` fallback for a blank date — keeps native
-    // method sugar. Grabbing `.display` off a native datetime without calling
-    // it is a compile error, so dispatch on the shape.
-    if type(date) == datetime {
-      date.display(pattern)
-    } else {
-      (date.display)(pattern)
-    }
+    date.display(date-pattern(memo-style: memo-style))
   }
 }
 

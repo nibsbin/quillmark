@@ -159,9 +159,10 @@ fn an_empty_variant_and_an_empty_variants_map_are_load_errors() {
     );
 }
 
-/// Content and dates lower to Typst through top-level name tables that do not
-/// descend into a container, so declaring one inside a variant would load clean
-/// and reach the plate as a raw dict. The ceiling is enforced, not discovered.
+/// A provisional ceiling: lowering would handle a variant cell of either type,
+/// but nothing exercises coercion, blank-fill or validation for a content leaf
+/// whose world resolves at value time. Enforced rather than discovered at
+/// render, until that path is covered.
 #[test]
 fn a_variant_carries_plain_data_only() {
     for ty in ["richtext", "plaintext", "date", "datetime"] {

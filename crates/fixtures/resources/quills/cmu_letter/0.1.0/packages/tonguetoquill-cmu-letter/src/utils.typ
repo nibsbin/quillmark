@@ -71,23 +71,22 @@
 // DATE FORMATTING
 // =============================================================================
 
+/// The date pattern this letter prints, per guidelines section 3.2: "Month Day,
+/// Year" (e.g. November 29, 2025). Exported so a caller that must pre-format the
+/// date still matches, rather than restating the pattern.
+#let DATE_PATTERN = "[month repr:long] [day padding:none], [year]"
+
 /// Formats a date in CMU civilian format: "Month Day, Year"
-/// Guidelines section 3.2: Date format is "Month Day, Year" (e.g., November 29, 2025)
 ///
-/// - date (str|datetime|dictionary): Date to format — a raw string, a native
-///   `datetime`, or a Quillmark date value-object.
+/// - date (str|content|datetime): Date to format — a raw string, ink the caller
+///   already formatted through [`DATE_PATTERN`], or a native `datetime`.
 /// -> str | content
 #let display-date(date) = {
-  if type(date) == str {
+  // A caller that pre-formatted — to keep a click-to-edit region the package
+  // cannot mint itself — passes the finished ink through untouched.
+  if type(date) in (str, content) {
     date
-  } else if type(date) == datetime {
-    // A bare `datetime` — the `today()` fallback for a blank date — keeps
-    // native method sugar (returns `str`).
-    date.display("[month repr:long] [day padding:none], [year]")
   } else {
-    // A Quillmark date field crosses as a value-object dict whose `display` key
-    // is a closure returning region-bearing content; grabbing `.display` off a
-    // native datetime is a compile error, so the dict takes the paren form.
-    (date.display)("[month repr:long] [day padding:none], [year]")
+    date.display(DATE_PATTERN)
   }
 }

@@ -24,7 +24,7 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use quillmark_core::{
-    quill::{build_transform_schema, QUILLMARK_INLINE_KEY, CONTENT_MEDIA_TYPE},
+    quill::build_transform_schema,
     session::SessionHandle,
     Backend, ChangeSet, ContentHit, Diagnostic, LiveSession, OutputFormat, Quill, RenderError,
     RenderOptions, RenderResult, RenderedRegion, Severity,
@@ -183,81 +183,14 @@ pub(crate) fn page_hashes(document: &typst_layout::PagedDocument) -> Vec<u128> {
 }
 
 /// The seam already carries the render shape, so no per-field transform happens
-/// here; the one check kept is defensive date validation, because a direct
-/// `apply` can hand the backend uncoerced data. Borrows `json_data` unchanged
-/// for the object case: only a non-object input allocates.
-fn transformed_data<'a>(
-    meta: &SchemaMeta,
-    json_data: &'a serde_json::Value,
-) -> Result<Cow<'a, serde_json::Value>, RenderError> {
-    match json_data.as_object() {
-        Some(obj) => {
-            validate_date_fields(meta, obj)?;
-            Ok(Cow::Borrowed(json_data))
-        }
-        None => {
-            Ok(Cow::Owned(serde_json::Value::Object(serde_json::Map::new())))
-        }
+/// here. Date validation is not a pre-pass: codegen already parses every date at
+/// its emit site, so it raises there and is depth-total for free. Borrows
+/// `json_data` unchanged for the object case: only a non-object input allocates.
+fn transformed_data(json_data: &serde_json::Value) -> Cow<'_, serde_json::Value> {
+    match json_data.is_object() {
+        true => Cow::Borrowed(json_data),
+        false => Cow::Owned(serde_json::Value::Object(serde_json::Map::new())),
     }
-}
-
-/// Rejects any non-empty date/datetime string the shared
-/// [`parse_date`](quillmark_core::quill::parse_date) /
-/// [`parse_datetime`](quillmark_core::quill::parse_datetime) parsers reject.
-fn validate_date_fields(
-    meta: &SchemaMeta,
-    obj: &serde_json::Map<String, serde_json::Value>,
-) -> Result<(), RenderError> {
-    fn bad_date(field: &str, value: &str) -> RenderError {
-        RenderError::from_diag(
-            Diagnostic::new(
-                Severity::Error,
-                format!("invalid date in field {field:?}: {value:?} is not a recognized date"),
-            )
-            .with_code("backend::invalid_date".to_string()),
-        )
-    }
-    // `is_datetime` selects the strict wall-clock parser, so a `datetime`
-    // field's time components are validated too.
-    fn check(
-        names: &[String],
-        dict: &serde_json::Map<String, serde_json::Value>,
-        prefix: &str,
-        is_datetime: bool,
-    ) -> Result<(), RenderError> {
-        for key in names {
-            if let Some(serde_json::Value::String(s)) = dict.get(key) {
-                let ok = if is_datetime {
-                    quillmark_core::quill::parse_datetime(s).is_some()
-                } else {
-                    quillmark_core::quill::parse_date(s).is_some()
-                };
-                if !s.is_empty() && !ok {
-                    return Err(bad_date(&format!("{prefix}{key}"), s));
-                }
-            }
-        }
-        Ok(())
-    }
-
-    check(&meta.date_fields, obj, "", false)?;
-    check(&meta.datetime_fields, obj, "", true)?;
-    if let Some(cards) = obj.get("$cards").and_then(|v| v.as_array()) {
-        for card in cards {
-            let Some(card_obj) = card.as_object() else {
-                continue;
-            };
-            let Some(kind) = card_obj.get("$kind").and_then(|v| v.as_str()) else {
-                continue;
-            };
-            let prefix = format!("$cards.{kind}.");
-            let dates = helper::names_at(&meta.card_date_fields, kind);
-            let datetimes = helper::names_at(&meta.card_datetime_fields, kind);
-            check(&dates, card_obj, &prefix, false)?;
-            check(&datetimes, card_obj, &prefix, true)?;
-        }
-    }
-    Ok(())
 }
 
 impl SessionHandle for TypstSession {
@@ -290,11 +223,11 @@ impl SessionHandle for TypstSession {
     /// warnings swap together only after the compile *and* placement extraction
     /// succeed, so on `Err` every read keeps serving the last-good compile.
     fn update(&mut self, json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> {
-        let data = transformed_data(&self.schema_meta, json_data)?;
+        let data = transformed_data(json_data);
         let mut windows = self
             .world
             .inject_helper_package(data.as_ref(), &self.schema_meta)
-            .map_err(|e| engine_err("typst::emit", e.to_string()))?;
+            .map_err(|e| engine_err(e.code(), e.to_string()))?;
         windows.extend(self.scalar_windows.iter().cloned());
 
         let (document, compile_warnings) = compile::compile_document(&self.world)?;
@@ -464,21 +397,23 @@ impl Backend for TypstBackend {
 
         let transform_schema = build_transform_schema(source.config());
         let schema_meta = SchemaMeta::from_schema_json(transform_schema.as_json());
-        let data = transformed_data(&schema_meta, json_data)?;
-        let (world, mut windows) =
-            world::QuillWorld::new_with_data(source, &plate_content, data.as_ref(), &schema_meta)
-                .map_err(
-                |e| {
-                    RenderError::from_diag(
-                        Diagnostic::new(
-                            Severity::Error,
-                            format!("Failed to create Typst compilation environment: {}", e),
-                        )
-                        .with_code("typst::world_creation".to_string())
-                        .with_source(e.as_ref()),
-                    )
-                },
-            )?;
+        let data = transformed_data(json_data);
+        // Built in two steps rather than through `new_with_data` so codegen's own
+        // diagnostic code survives: boxing it into the world-creation error would
+        // relabel a bad date `typst::world_creation`.
+        let mut world = world::QuillWorld::new(source, &plate_content).map_err(|e| {
+            RenderError::from_diag(
+                Diagnostic::new(
+                    Severity::Error,
+                    format!("Failed to create Typst compilation environment: {}", e),
+                )
+                .with_code("typst::world_creation".to_string())
+                .with_source(e.as_ref()),
+            )
+        })?;
+        let mut windows = world
+            .inject_helper_package(data.as_ref(), &schema_meta)
+            .map_err(|e| engine_err(e.code(), e.to_string()))?;
         // The plate is static for the session: window its scalar sites once.
         let scalar_windows: Vec<overlay::FieldWindow> = {
             use typst::World as _;
@@ -569,241 +504,150 @@ fn engine_err(code: &str, message: impl Into<String>) -> RenderError {
     )
 }
 
-/// `contentMediaType = application/quillmark-content+json`: `richtext` or
-/// `plaintext`, which share everything downstream of this classification.
-fn is_content_field(field_schema: &serde_json::Value) -> bool {
-    field_schema
-        .get("contentMediaType")
-        .and_then(|v| v.as_str())
-        .map(|s| s == CONTENT_MEDIA_TYPE)
-        .unwrap_or(false)
+/// Property names a container node declares, in declaration order; empty for a
+/// node declaring none.
+fn property_names(node: &serde_json::Value) -> Vec<String> {
+    node.get("properties")
+        .and_then(|v| v.as_object())
+        .map(|props| props.keys().cloned().collect())
+        .unwrap_or_default()
 }
 
-/// `{type: array, items: {contentMediaType: …}}`: a content-typed array.
-fn is_content_array_field(field_schema: &serde_json::Value) -> bool {
-    field_schema
-        .get("type")
-        .and_then(|v| v.as_str())
-        .map(|s| s == "array")
-        .unwrap_or(false)
-        && field_schema
-            .get("items")
-            .map(is_content_field)
-            .unwrap_or(false)
-}
-
-/// Carries [`QUILLMARK_INLINE_KEY`], on the content schema itself or, for an
-/// array, on its `items` (mirroring `build_transform_schema`).
-fn is_inline_content_field(field_schema: &serde_json::Value) -> bool {
-    fn marked_inline(fs: &serde_json::Value) -> bool {
-        fs.get(QUILLMARK_INLINE_KEY).and_then(|v| v.as_bool()) == Some(true)
-    }
-    (is_content_field(field_schema) && marked_inline(field_schema))
-        || (is_content_array_field(field_schema)
-            && field_schema
-                .get("items")
-                .map(marked_inline)
-                .unwrap_or(false))
-}
-
-/// `format = "date"`: the date-only type, lowered to `datetime(y, m, d)`.
-fn is_date_field(field_schema: &serde_json::Value) -> bool {
-    has_format(field_schema, "date")
-}
-
-/// `format = "date-time"`: the wall-clock type, lowered to six components.
-fn is_datetime_field(field_schema: &serde_json::Value) -> bool {
-    has_format(field_schema, "date-time")
-}
-
-fn has_format(field_schema: &serde_json::Value, format: &str) -> bool {
-    field_schema.get("format").and_then(|v| v.as_str()) == Some(format)
-}
-
-/// Names of the schema `properties` satisfying `predicate`, in map order.
-fn field_names_where(
+/// The fields addressable by index suffix (`refs.0`), each mapped to the
+/// property names its *row* offers (`refs.0.org`). A primitive-element array
+/// maps to the empty list: the index step is all it admits.
+///
+/// The property step's twin, and deliberately the same shape: one table says
+/// which fields take an index step and what follows it, the other which take a
+/// property step. The nesting contract caps both at a row property, so neither
+/// recurses.
+fn array_field_names(
     properties: &serde_json::Map<String, serde_json::Value>,
-    predicate: impl Fn(&serde_json::Value) -> bool,
-) -> Vec<String> {
+) -> BTreeMap<String, Vec<String>> {
     properties
         .iter()
-        .filter(|(_, fs)| predicate(fs))
-        .map(|(name, _)| name.clone())
+        .filter(|(_, fs)| fs.get("type").and_then(|v| v.as_str()) == Some("array"))
+        .map(|(name, fs)| {
+            let row = fs.get("items").map(property_names).unwrap_or_default();
+            (name.clone(), row)
+        })
         .collect()
 }
 
-fn content_field_names(properties: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
-    field_names_where(properties, |fs| {
-        is_content_field(fs) || is_content_array_field(fs)
-    })
-}
-
-/// A subset of [`content_field_names`] lowering to pure inline markup.
-fn inline_field_names(properties: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
-    field_names_where(properties, is_inline_content_field)
-}
-
-fn date_field_names(properties: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
-    field_names_where(properties, is_date_field)
-}
-
-fn datetime_field_names(properties: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
-    field_names_where(properties, is_datetime_field)
-}
-
-/// The fields addressable by index suffix (`field.0`). `form-field`'s path
-/// validator uses this to reject an index suffix on a scalar field. Any array
-/// qualifies, matching the pdfform resolver's shallow-path grammar.
-fn array_field_names(properties: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
-    field_names_where(properties, |fs| {
-        fs.get("type").and_then(|v| v.as_str()) == Some("array")
-    })
-}
-
 /// The fields addressable by one property step (`address.city`,
-/// `classification.poc`), each mapped to the property names it declares. The
-/// index step's twin: `array_fields` gates `field.0`, this gates `field.sub`.
+/// `classification.poc`), each mapped to the property names it declares.
 ///
 /// A typed dictionary and a variant container both project as `type: object`
 /// carrying `properties` — the container's own `value` among them — so one
 /// predicate spans both. A richtext field is `type: object` too but declares no
-/// `properties`, so it contributes no step.
+/// `properties`; unlike an array, which always offers its index step, an
+/// object with no properties offers no step at all and so is left out.
 fn object_field_names(
     properties: &serde_json::Map<String, serde_json::Value>,
 ) -> BTreeMap<String, Vec<String>> {
     properties
         .iter()
         .filter(|(_, fs)| fs.get("type").and_then(|v| v.as_str()) == Some("object"))
-        .filter_map(|(name, fs)| {
-            let props = fs.get("properties")?.as_object()?;
-            let names: Vec<String> = props.keys().cloned().collect();
-            (!names.is_empty()).then(|| (name.clone(), names))
-        })
+        .map(|(name, fs)| (name.clone(), property_names(fs)))
+        .filter(|(_, names)| !names.is_empty())
         .collect()
 }
 
-/// Schema-derived tables backing `form-field` path validation and the helper's
-/// content/date classification. A schema with no top-level `properties` yields
-/// all-empty tables: `build_transform_schema` always emits `properties`, so
-/// that only arises for hand-built schemas in tests.
+/// The transform schema plus the address tables derived from it.
+///
+/// The two answer different questions and are kept apart on purpose. *"How do I
+/// lower this value?"* is answered at the codegen walk site from the schema
+/// node in hand ([`helper::lowering`]), needs no table, and is depth-invariant
+/// because a node is a node at any depth. *"Is this address writable in a
+/// plate?"* is a question about **names**, answered at Typst compile time by
+/// `_qm-known-path` reading these tables, and is depth-bounded because the
+/// address grammar is.
 #[derive(Default)]
 pub(crate) struct SchemaMeta {
-    pub(crate) content_fields: Vec<String>,
-    pub(crate) date_fields: Vec<String>,
-    pub(crate) datetime_fields: Vec<String>,
-    pub(crate) array_fields: Vec<String>,
-    /// Container field → its property names, gating the `field.sub` step.
-    /// Native rather than JSON like the card tables: the span scan reads it on
-    /// the AST walk, and `meta_literal` serializes it either way.
-    pub(crate) object_fields: BTreeMap<String, Vec<String>>,
-    /// A subset of `content_fields`, driving the pure-inline lowering.
-    pub(crate) inline_fields: Vec<String>,
-    pub(crate) card_content_fields: serde_json::Map<String, serde_json::Value>,
-    pub(crate) card_date_fields: serde_json::Map<String, serde_json::Value>,
-    pub(crate) card_datetime_fields: serde_json::Map<String, serde_json::Value>,
-    pub(crate) card_field_names: serde_json::Map<String, serde_json::Value>,
-    pub(crate) card_array_fields: serde_json::Map<String, serde_json::Value>,
-    /// The card twin of `object_fields`, keyed kind → field → property names.
-    pub(crate) card_object_fields: BTreeMap<String, BTreeMap<String, Vec<String>>>,
-    pub(crate) card_inline_fields: serde_json::Map<String, serde_json::Value>,
+    /// The walk's cursor source: the same recursive projection
+    /// `build_transform_schema` produced, kept whole rather than flattened.
+    schema: serde_json::Value,
     pub(crate) fields: Vec<String>,
+    /// Array field → its row's property names, gating `field.0` and
+    /// `field.0.prop`.
+    pub(crate) array_fields: BTreeMap<String, Vec<String>>,
+    /// Container field → its property names, gating `field.sub`. Native rather
+    /// than JSON: the span scan reads it on the AST walk, and `meta_literal`
+    /// serializes it either way.
+    pub(crate) object_fields: BTreeMap<String, Vec<String>>,
+    pub(crate) card_fields: BTreeMap<String, Vec<String>>,
+    pub(crate) card_array_fields: BTreeMap<String, BTreeMap<String, Vec<String>>>,
+    pub(crate) card_object_fields: BTreeMap<String, BTreeMap<String, Vec<String>>>,
 }
 
 impl SchemaMeta {
+    /// A schema with no top-level `properties` yields empty tables and a walk
+    /// that lowers every value literally: `build_transform_schema` always emits
+    /// `properties`, so that only arises for hand-built schemas in tests.
     pub(crate) fn from_schema_json(schema_json: &serde_json::Value) -> Self {
-        let Some(properties_obj) = schema_json.get("properties").and_then(|v| v.as_object()) else {
-            return Self::default();
-        };
+        let empty = serde_json::Map::new();
+        let properties_obj = schema_json
+            .get("properties")
+            .and_then(|v| v.as_object())
+            .unwrap_or(&empty);
 
-        let content_fields = content_field_names(properties_obj);
-        let date_fields = date_field_names(properties_obj);
-        let datetime_fields = datetime_field_names(properties_obj);
-        let array_fields = array_field_names(properties_obj);
-        let object_fields = object_field_names(properties_obj);
-        let inline_fields = inline_field_names(properties_obj);
-        let fields = properties_obj.keys().cloned().collect();
-
-        let mut card_content_fields = serde_json::Map::new();
-        let mut card_date_fields = serde_json::Map::new();
-        let mut card_datetime_fields = serde_json::Map::new();
-        let mut card_field_names = serde_json::Map::new();
-        let mut card_array_fields = serde_json::Map::new();
+        let mut card_fields = BTreeMap::new();
+        let mut card_array_fields = BTreeMap::new();
         let mut card_object_fields = BTreeMap::new();
-        let mut card_inline_fields = serde_json::Map::new();
-        fn insert_names(
-            table: &mut serde_json::Map<String, serde_json::Value>,
-            kind: &str,
-            names: Vec<String>,
-        ) {
-            if !names.is_empty() {
-                table.insert(kind.to_string(), names.into());
-            }
-        }
         if let Some(defs) = schema_json.get("$defs").and_then(|v| v.as_object()) {
             for (def_name, def_schema) in defs {
-                if let Some(card_kind) = def_name.strip_suffix("_card") {
-                    let card_props = def_schema.get("properties").and_then(|v| v.as_object());
-                    if let Some(props) = card_props {
-                        card_field_names.insert(
-                            card_kind.to_string(),
-                            props.keys().cloned().collect::<Vec<String>>().into(),
-                        );
-                    }
-                    insert_names(
-                        &mut card_content_fields,
-                        card_kind,
-                        card_props.map(content_field_names).unwrap_or_default(),
-                    );
-                    insert_names(
-                        &mut card_date_fields,
-                        card_kind,
-                        card_props.map(date_field_names).unwrap_or_default(),
-                    );
-                    insert_names(
-                        &mut card_datetime_fields,
-                        card_kind,
-                        card_props.map(datetime_field_names).unwrap_or_default(),
-                    );
-                    insert_names(
-                        &mut card_array_fields,
-                        card_kind,
-                        card_props.map(array_field_names).unwrap_or_default(),
-                    );
-                    let objects = card_props.map(object_field_names).unwrap_or_default();
-                    if !objects.is_empty() {
-                        card_object_fields.insert(card_kind.to_string(), objects);
-                    }
-                    insert_names(
-                        &mut card_inline_fields,
-                        card_kind,
-                        card_props.map(inline_field_names).unwrap_or_default(),
-                    );
+                let Some(kind) = def_name.strip_suffix("_card") else {
+                    continue;
+                };
+                let Some(props) = def_schema.get("properties").and_then(|v| v.as_object()) else {
+                    continue;
+                };
+                card_fields.insert(kind.to_string(), props.keys().cloned().collect());
+                let arrays = array_field_names(props);
+                if !arrays.is_empty() {
+                    card_array_fields.insert(kind.to_string(), arrays);
+                }
+                let objects = object_field_names(props);
+                if !objects.is_empty() {
+                    card_object_fields.insert(kind.to_string(), objects);
                 }
             }
         }
 
         Self {
-            content_fields,
-            date_fields,
-            datetime_fields,
-            array_fields,
-            object_fields,
-            inline_fields,
-            card_content_fields,
-            card_date_fields,
-            card_datetime_fields,
-            card_field_names,
+            fields: properties_obj.keys().cloned().collect(),
+            array_fields: array_field_names(properties_obj),
+            object_fields: object_field_names(properties_obj),
+            card_fields,
             card_array_fields,
             card_object_fields,
-            card_inline_fields,
-            fields,
+            schema: schema_json.clone(),
         }
+    }
+
+    /// The schema node declaring a top-level field, `None` for a data key the
+    /// schema does not declare.
+    pub(crate) fn field_node(&self, name: &str) -> Option<&serde_json::Value> {
+        self.schema.get("properties")?.get(name)
+    }
+
+    /// The `properties` map of a card kind, `None` for an unknown kind.
+    pub(crate) fn card_props(
+        &self,
+        kind: &str,
+    ) -> Option<&serde_json::Map<String, serde_json::Value>> {
+        self.schema
+            .get("$defs")?
+            .get(format!("{kind}_card"))?
+            .get("properties")?
+            .as_object()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use quillmark_core::quill::CONTENT_MEDIA_TYPE;
     use quillmark_core::QuillValue;
     use serde_json::json;
     use std::collections::HashMap;
@@ -857,7 +701,7 @@ mod tests {
             let plate_content = read_plate(quill).expect("plate");
             let transform_schema = build_transform_schema(quill.config());
             let schema_meta = SchemaMeta::from_schema_json(transform_schema.as_json());
-            let data = transformed_data(&schema_meta, &json).expect("data");
+            let data = transformed_data(&json);
             let (world, _windows) =
                 world::QuillWorld::new_with_data(quill, &plate_content, data.as_ref(), &schema_meta)
                     .expect("world");
@@ -915,7 +759,7 @@ mod tests {
         let plate_content = read_plate(&q).expect("plate");
         let transform_schema = build_transform_schema(q.config());
         let schema_meta = SchemaMeta::from_schema_json(transform_schema.as_json());
-        let data = transformed_data(&schema_meta, &json).expect("data");
+        let data = transformed_data(&json);
         let (world, _w) =
             world::QuillWorld::new_with_data(&q, &plate_content, data.as_ref(), &schema_meta)
                 .expect("world");
@@ -960,7 +804,7 @@ mod tests {
             let plate_content = read_plate(&q).expect("plate");
             let transform_schema = build_transform_schema(q.config());
             let schema_meta = SchemaMeta::from_schema_json(transform_schema.as_json());
-            let data = transformed_data(&schema_meta, &json).expect("data");
+            let data = transformed_data(&json);
             let (world, _w) =
                 world::QuillWorld::new_with_data(&q, &plate_content, data.as_ref(), &schema_meta)
                     .expect("world");
@@ -1013,7 +857,7 @@ mod tests {
         let plate_content = read_plate(&q).expect("plate");
         let transform_schema = build_transform_schema(q.config());
         let schema_meta = SchemaMeta::from_schema_json(transform_schema.as_json());
-        let data = transformed_data(&schema_meta, &json).expect("data");
+        let data = transformed_data(&json);
         let (world, _w) =
             world::QuillWorld::new_with_data(&q, &plate_content, data.as_ref(), &schema_meta)
                 .expect("world");
@@ -1022,27 +866,9 @@ mod tests {
     }
 
     #[test]
-    fn schema_meta_classifies_richtext_content_fields() {
-        let schema = QuillValue::from_json(json!({
-            "type": "object",
-            "properties": {
-                "title": { "type": "string" },
-                "intro": { "type": "object", "contentMediaType": CONTENT_MEDIA_TYPE },
-                "sections": {
-                    "type": "array",
-                    "items": { "type": "object", "contentMediaType": CONTENT_MEDIA_TYPE }
-                }
-            }
-        }));
-        let meta = SchemaMeta::from_schema_json(schema.as_json());
-        assert!(meta.content_fields.contains(&"intro".to_string()));
-        assert!(meta.content_fields.contains(&"sections".to_string()));
-        assert!(!meta.content_fields.contains(&"title".to_string()));
-    }
-
-    #[test]
     fn schema_meta_array_fields_distinguish_scalar_from_array() {
         // Any array is element-addressable (`field.N`); only scalars are not.
+        // A typed table's rows publish their properties too (`refs.0.org`).
         let schema = QuillValue::from_json(json!({
             "type": "object",
             "properties": {
@@ -1063,7 +889,10 @@ mod tests {
                         "$body": { "type": "object", "contentMediaType": CONTENT_MEDIA_TYPE },
                         "refs": {
                             "type": "array",
-                            "items": { "type": "string" }
+                            "items": {
+                                "type": "object",
+                                "properties": { "org": { "type": "string" } }
+                            }
                         }
                     }
                 }
@@ -1072,39 +901,57 @@ mod tests {
 
         let meta = SchemaMeta::from_schema_json(schema.as_json());
 
-        assert!(meta.array_fields.contains(&"sections".to_string()));
-        assert!(meta.array_fields.contains(&"signature_block".to_string()));
-        assert!(!meta.array_fields.contains(&"subject".to_string()));
+        assert!(meta.array_fields.contains_key("sections"));
+        assert!(meta.array_fields.contains_key("signature_block"));
+        assert!(!meta.array_fields.contains_key("subject"));
+        // A richtext element declares no `properties`, so the row is empty and
+        // `sections.0.anything` stays unaddressable.
+        assert!(meta.array_fields["sections"].is_empty());
 
         let card_arrays = meta.card_array_fields.get("indorsement").unwrap();
-        assert_eq!(card_arrays, &serde_json::json!(["refs"]));
+        assert_eq!(card_arrays["refs"], vec!["org".to_string()]);
     }
 
+    /// The walk's cursor: codegen reads a field's declaration off the schema
+    /// rather than off a flattened name table, which is what makes the lowering
+    /// depth-invariant.
     #[test]
-    fn schema_meta_collects_date_and_datetime_fields() {
+    fn schema_meta_serves_the_declaring_node_at_every_position() {
         let schema = QuillValue::from_json(json!({
             "type": "object",
             "properties": {
-                "title": { "type": "string" },
                 "issued": { "type": "string", "format": "date" },
-                "created_at": { "type": "string", "format": "date-time" }
+                "contact": { "type": "object", "properties": {
+                    "reply_by": { "type": "string", "format": "date" }
+                }}
             },
             "$defs": {
                 "indorsement_card": {
                     "type": "object",
-                    "properties": {
-                        "signed_on": { "type": "string", "format": "date" },
-                        "filed_at": { "type": "string", "format": "date-time" }
-                    }
+                    "properties": { "signed_on": { "type": "string", "format": "date" } }
                 }
             }
         }));
         let meta = SchemaMeta::from_schema_json(schema.as_json());
-        assert!(meta.date_fields.contains(&"issued".to_string()));
-        assert!(!meta.date_fields.contains(&"created_at".to_string()));
-        assert!(meta.datetime_fields.contains(&"created_at".to_string()));
-        assert_eq!(meta.card_date_fields["indorsement"], json!(["signed_on"]));
-        assert_eq!(meta.card_datetime_fields["indorsement"], json!(["filed_at"]));
-    }
 
+        let format_of = |node: Option<&serde_json::Value>| {
+            node.and_then(|n| n.get("format"))
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        };
+        assert_eq!(format_of(meta.field_node("issued")).as_deref(), Some("date"));
+        // The nested declaration is present and reachable: the fact the flat
+        // tables were structurally incapable of carrying.
+        let contact = meta.field_node("contact").expect("contact declared");
+        assert_eq!(
+            format_of(contact.get("properties").and_then(|p| p.get("reply_by"))).as_deref(),
+            Some("date"),
+        );
+        assert_eq!(
+            format_of(meta.card_props("indorsement").and_then(|p| p.get("signed_on"))).as_deref(),
+            Some("date"),
+        );
+        assert!(meta.field_node("nonexistent").is_none());
+        assert!(meta.card_props("nonexistent").is_none());
+    }
 }

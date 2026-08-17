@@ -29,6 +29,21 @@ main:
           type: string
         street:
           type: string
+    tags:
+      type: array
+      description: a primitive list, whose element offers no further step
+      items:
+        type: string
+    refs:
+      type: array
+      description: a typed table
+      items:
+        type: object
+        properties:
+          org:
+            type: string
+          num:
+            type: string
     classification:
       type: enum
       values: [UNCLASSIFIED, CUI]
@@ -47,6 +62,8 @@ fn data() -> serde_json::Value {
         "subject": "Widgets",
         "address": { "city": "Dayton", "street": "1864 Fourth St" },
         "classification": { "value": "CUI", "poc": "Capt J. Smith", "controlled_by": "SAF/AA" },
+        "tags": ["urgent"],
+        "refs": [{ "org": "AFRL/RQ", "num": "2026-01" }],
     })
 }
 
@@ -241,6 +258,52 @@ card_kinds:
 
 /// The step is gated on what the field offers, so a scalar admits neither an
 /// index nor a property, and a container admits only its declared keys.
+/// A typed table's row property is one address on both backends. pdfform's
+/// `bind` descends unboundedly and has always resolved `refs.0.org`; the Typst
+/// grammar capped at one suffix step, so the shape `ShapePosition::ArrayItem`
+/// admits was writable on one backend only.
+#[test]
+fn a_typed_table_row_property_is_addressable() {
+    let session = open(
+        r#"
+#import "@local/quillmark-helper:0.1.0": data, field-region, form-field
+#field-region("refs.0.org")[AFRL/RQ]
+#form-field("Ref0Num", field: "refs.0.num", value: data.refs.at(0).num)
+"#,
+    );
+    let fields: Vec<String> = session.regions().into_iter().map(|r| r.field).collect();
+    assert!(
+        fields.iter().any(|f| f == "refs.0.org"),
+        "an explicit claim regions on the row property: {fields:?}"
+    );
+    assert!(
+        fields.iter().any(|f| f == "refs.0.num"),
+        "a widget binds the same grammar: {fields:?}"
+    );
+}
+
+/// The span scan is the third component deriving an address, and the one this
+/// change does not lift: `collect_anchors` steps one *property* into a declared
+/// container and has no index step, so a direct read of a row cell anchors on
+/// the array. The address grammar and the lowering now both reach `refs.0.org`
+/// while the scan stops at `refs`, which is a wrong address rather than a
+/// missing one — a click on the org cell routes to the whole table.
+///
+/// Pinned, not fixed: lifting it retargets regions on every plate that reads an
+/// array element today, which belongs to its own change with its own sweep.
+#[test]
+fn a_direct_row_cell_read_still_anchors_on_the_array() {
+    let session = open(
+        r#"
+#import "@local/quillmark-helper:0.1.0": data
+#data.refs.at(0).org
+"#,
+    );
+    let fields: Vec<String> = session.regions().into_iter().map(|r| r.field).collect();
+    assert!(fields.iter().any(|f| f == "refs"), "{fields:?}");
+    assert!(!fields.iter().any(|f| f == "refs.0.org"), "{fields:?}");
+}
+
 #[test]
 fn the_step_is_gated_on_the_declared_shape() {
     for (address, plate_field) in [
@@ -248,6 +311,10 @@ fn the_step_is_gated_on_the_declared_shape() {
         ("classification.undeclared", "an undeclared key is no cell"),
         ("classification.0", "a container has no element"),
         ("address.9", "a typed dictionary has no element"),
+        ("refs.0.undeclared", "an undeclared row key is no cell"),
+        ("tags.0.org", "a primitive element has no property"),
+        ("address.city.0", "the grammar stops at the declared depth"),
+        ("refs.org", "a row property needs its index"),
     ] {
         let plate = format!(
             r#"

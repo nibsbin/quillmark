@@ -2,10 +2,14 @@
 //! document data to Typst plates.
 //!
 //! `lib.typ` is regenerated per render as pure source text: no runtime data
-//! processing. Richtext fields lower to markup block bindings (`#let _qm_cN =
-//! [ .. ]`) via [`emit_content`]; the document data is a Typst literal
-//! (`#let data = ( .. )`) referencing those blocks, with present date fields
-//! referencing a `date` value-object block and everything else a value literal.
+//! processing. [`Codegen::emit_value`] walks the document data beside the
+//! transform-schema node declaring it, so what a value lowers to is read off
+//! that node at any depth. Content lowers to markup block bindings (`#let _qm_cN
+//! = [ .. ]`) via [`emit_content`], every other type to its native Typst value;
+//! the document data is a Typst literal (`#let data = ( .. )`) referencing those
+//! blocks. Backend-generated *ink* projections — [`plaintext_literal`] and the
+//! date closures behind `display` — are keyed by schema address instead, since
+//! they are what a plate reaches for rather than what a value is.
 //!
 //! Output is **canonical**: dict keys emit in sorted order at every level (via
 //! [`sorted`]), so equal data produces byte-equal source regardless of the
@@ -19,6 +23,7 @@ use crate::emit::{
 };
 use crate::SchemaMeta;
 use quillmark_content::serial::from_canonical_value;
+use quillmark_core::quill::{CONTENT_MEDIA_TYPE, QUILLMARK_INLINE_KEY};
 
 pub const HELPER_VERSION: &str = "0.1.0";
 pub const HELPER_NAMESPACE: &str = "local";
@@ -30,6 +35,7 @@ const LIB_TYP_TEMPLATE: &str = include_str!("lib.typ.template");
 /// bracketed `block` range (brackets included) plus the emitter's
 /// [`SegmentMap`]s, rebased so every `generated` range indexes `lib.typ`
 /// directly. Every glyph the block places carries a span resolving into `block`.
+#[derive(Debug)]
 pub struct ContentMap {
     pub path: String,
     pub block: Range<usize>,
@@ -52,6 +58,7 @@ pub fn generate_lib_typ(
     }
     let meta_literal = meta_literal(meta);
     let plaintext_literal = plaintext_literal(&cg.plaintext);
+    let display_literal = address_table(&cg.display, |binding| binding.to_string());
 
     // Placeholders are located in the *raw template* (trusted static text), never
     // in already-substituted output, so document data spelling a placeholder
@@ -67,6 +74,7 @@ pub fn generate_lib_typ(
         ("{content_blocks}", cg.blocks.as_str()),
         ("{data_literal}", data_literal.as_str()),
         ("{plaintext_literal}", plaintext_literal.as_str()),
+        ("{display_literal}", display_literal.as_str()),
     ] {
         let rel = LIB_TYP_TEMPLATE[cursor..]
             .find(slot)
@@ -113,11 +121,13 @@ struct Codegen<'m> {
     blocks: String,
     windows: Vec<(String, Range<usize>, Vec<SegmentMap>)>,
     counter: usize,
-    date_counter: usize,
     emit_error: Option<EmitError>,
     /// `(schema address, plaintext)` per non-blank content field: the content
     /// text with island slots stripped and marks dropped. Backs `_qm-plaintext`.
     plaintext: Vec<(String, String)>,
+    /// `(schema address, block binding)` per present date. Backs `_qm-display`,
+    /// the date twin of the plaintext table.
+    display: Vec<(String, String)>,
 }
 
 impl<'m> Codegen<'m> {
@@ -127,9 +137,9 @@ impl<'m> Codegen<'m> {
             blocks: String::new(),
             windows: Vec::new(),
             counter: 0,
-            date_counter: 0,
             emit_error: None,
             plaintext: Vec::new(),
+            display: Vec::new(),
         }
     }
 
@@ -161,35 +171,56 @@ impl<'m> Codegen<'m> {
         id
     }
 
-    /// The date sibling of [`content_block`](Self::content_block), binding a
-    /// value object over the date encoded once in `v`: `value` is the native
-    /// `datetime`, `display` a closure `(..args) => text(v.display(..args))`.
-    /// `display` returns *content*, so its glyphs are born at this `text(..)`
-    /// node per emission, pinning the per-instance identity a shared wrapper
-    /// would collapse; wrapping `v.display` rather than a re-literalized date
-    /// inherits `v`'s type, so a date-only `v` throws Typst's native
-    /// `[hour]`-pattern error. The segment-less window it records gives a card
-    /// date the per-instance identity `scalar_windows` cannot chase.
+    /// The date sibling of [`content_block`](Self::content_block), binding the
+    /// field's *content* projection: a closure whose body is a `text(..)` call
+    /// over the native date's own `display`. The glyphs it places are born at
+    /// this generated node rather than at the plate site that calls it, which is
+    /// what makes `display(addr, ..)` survive laundering — a `#let` binding, a
+    /// loop variable, a vendored package — where the native `data.<addr>` value
+    /// cannot. The segment-less window keys them on `path`, so each emitted cell
+    /// is its own region.
     ///
-    /// Plates call it as `(data.<field>.display)(..)`: Typst reserves dict-key
-    /// method sugar for built-in dict methods.
-    fn date_object(&mut self, path: &str, constructor: &str) -> String {
-        let id = format!("_qm_d{}", self.date_counter);
-        self.date_counter += 1;
+    /// Formatting through the date's own `display` inherits its type, so a
+    /// date-only field throws Typst's native `[hour]`-pattern error.
+    fn display_block(&mut self, path: &str, constructor: &str) {
+        let id = format!("_qm_d{}", self.display.len());
         self.blocks.push_str("#let ");
         self.blocks.push_str(&id);
-        self.blocks.push_str(" = { let v = ");
-        self.blocks.push_str(constructor);
-        self.blocks.push_str("; (value: v, display: (..args) => ");
+        self.blocks.push_str(" = (..args) => ");
         // The window covers exactly the `text(..)` call: the node whose span the
         // produced glyphs carry.
         let text_start = self.blocks.len();
-        self.blocks.push_str("text(v.display(..args))");
+        self.blocks.push_str("text(");
+        self.blocks.push_str(constructor);
+        self.blocks.push_str(".display(..args))");
         let text_end = self.blocks.len();
-        self.blocks.push_str(") }\n");
+        self.blocks.push('\n');
         self.windows
             .push((path.to_string(), text_start..text_end, Vec::new()));
-        id
+        self.display.push((path.to_string(), id));
+    }
+
+    /// A date lowers to its **native** `datetime(..)`, so arithmetic,
+    /// comparison, components and package interop are ordinary Typst. Blank ⇒
+    /// `none`, so `!= none` guards are untouched; a non-blank value that will
+    /// not parse is the render error the standalone date pre-pass used to
+    /// raise, now recorded at the one site that was already parsing and
+    /// therefore total over depth.
+    fn date_field(&mut self, path: &str, s: &str, kind: DateKind) -> String {
+        match datetime_constructor(s, kind) {
+            Some(constructor) => {
+                self.display_block(path, &constructor);
+                constructor
+            }
+            None if s.is_empty() => "none".to_string(),
+            None => {
+                self.emit_error.get_or_insert(EmitError::InvalidDate {
+                    field: path.to_string(),
+                    value: s.to_string(),
+                });
+                "none".to_string()
+            }
+        }
     }
 
     /// A blank content lowers to `""`, not a block; a value that is not a valid
@@ -232,10 +263,8 @@ impl<'m> Codegen<'m> {
                     continue;
                 }
             }
-            let is_content = self.meta.content_fields.iter().any(|f| f == key);
-            let date_kind = date_kind_of(&self.meta.date_fields, &self.meta.datetime_fields, key);
-            let is_inline = self.meta.inline_fields.iter().any(|f| f == key);
-            let expr = self.emit_field(key, value, is_content, date_kind, is_inline);
+            let node = self.meta.field_node(key);
+            let expr = self.emit_value(key, node, value);
             items.push(format!("\"{}\": {}", escape_string(key), expr));
         }
         wrap_dict(items)
@@ -273,10 +302,7 @@ impl<'m> Codegen<'m> {
         kind: &str,
         prefix: &str,
     ) -> String {
-        let content = names_at(&self.meta.card_content_fields, kind);
-        let dates = names_at(&self.meta.card_date_fields, kind);
-        let datetimes = names_at(&self.meta.card_datetime_fields, kind);
-        let inlines = names_at(&self.meta.card_inline_fields, kind);
+        let props = self.meta.card_props(kind);
         let mut items = Vec::with_capacity(obj.len() + 1);
         // The canonical address prefix, so plates compose schema-field addresses
         // without reimplementing the kind+ordinal grammar.
@@ -285,70 +311,104 @@ impl<'m> Codegen<'m> {
             if key == "$path" {
                 continue;
             }
-            let is_content = content.iter().any(|f| f == key);
-            let date_kind = date_kind_of(&dates, &datetimes, key);
-            let is_inline = inlines.iter().any(|f| f == key);
-            let path = format!("{prefix}{key}");
-            let expr = self.emit_field(&path, value, is_content, date_kind, is_inline);
+            let node = props.and_then(|p| p.get(key));
+            let expr = self.emit_value(&format!("{prefix}{key}"), node, value);
             items.push(format!("\"{}\": {}", escape_string(key), expr));
         }
         wrap_dict(items)
     }
 
-    fn emit_field(
+    /// Lower one value against the schema node that declares it, recursing on
+    /// shape: the exact inverse of the walk `field_to_schema` built the node
+    /// with. Because the dispatch reads a node rather than a table of top-level
+    /// names, a declared type means the same thing wherever it is declared, and
+    /// a nested `date` or `richtext` cannot silently degrade to its wire value.
+    ///
+    /// `path` is the value's schema address. Every generated projection keys on
+    /// it — a content block's window, the plaintext table, the display table —
+    /// so the addresses fall out of the recursion rather than being reassembled.
+    ///
+    /// A value whose shape contradicts its declaration (never produced by the
+    /// seam, reachable through a direct `apply`) falls to its literal, the same
+    /// arm every native type takes.
+    fn emit_value(
         &mut self,
         path: &str,
+        node: Option<&serde_json::Value>,
         value: &serde_json::Value,
-        is_content: bool,
-        date_kind: Option<DateKind>,
-        is_inline: bool,
     ) -> String {
-        if is_content {
-            match value {
-                // A richtext field crosses the seam as canonical content JSON;
-                // an `array<richtext>` as an array of them.
-                serde_json::Value::Object(_) => self.content_field(path, value, is_inline),
-                serde_json::Value::Array(arr) => {
-                    let items = arr
-                        .iter()
-                        .enumerate()
-                        .map(|(i, elem)| match elem {
-                            serde_json::Value::Object(_) => {
-                                self.content_field(&format!("{path}.{i}"), elem, is_inline)
-                            }
-                            other => lit(other),
-                        })
-                        .collect();
-                    wrap_array(items)
-                }
-                other => lit(other),
+        match (lowering(node), value) {
+            (Lower::Content { inline }, serde_json::Value::Object(_)) => {
+                self.content_field(path, value, inline)
             }
-        } else if let Some(kind) = date_kind {
-            match value {
-                // Blank or (defensively) unparseable ⇒ `none`, so `!= none`
-                // guards are untouched.
-                serde_json::Value::String(s) => match datetime_constructor(s, kind) {
-                    Some(ctor) => self.date_object(path, &ctor),
-                    None => "none".to_string(),
-                },
-                serde_json::Value::Null => "none".to_string(),
-                other => lit(other),
-            }
-        } else {
-            lit(value)
+            (Lower::Date(kind), serde_json::Value::String(s)) => self.date_field(path, s, kind),
+            (Lower::Array(items), serde_json::Value::Array(elems)) => wrap_array(
+                elems
+                    .iter()
+                    .enumerate()
+                    .map(|(i, elem)| self.emit_value(&format!("{path}.{i}"), items, elem))
+                    .collect(),
+            ),
+            (Lower::Object(props), serde_json::Value::Object(obj)) => wrap_dict(
+                sorted(obj)
+                    .into_iter()
+                    .map(|(key, elem)| {
+                        let expr =
+                            self.emit_value(&format!("{path}.{key}"), props.get(key), elem);
+                        format!("\"{}\": {}", escape_string(key), expr)
+                    })
+                    .collect(),
+            ),
+            _ => lit(value),
         }
     }
 }
 
-/// A field name never appears in both tables, so the order of the checks is
-/// immaterial.
-fn date_kind_of(dates: &[String], datetimes: &[String], key: &str) -> Option<DateKind> {
-    if dates.iter().any(|f| f == key) {
-        Some(DateKind::Date)
-    } else if datetimes.iter().any(|f| f == key) {
-        Some(DateKind::DateTime)
-    } else {
-        None
+/// What a schema node lowers to: the codegen walk's whole dispatch.
+///
+/// A declared type means the same thing wherever it is declared, and every type
+/// lowers to its native Typst value unless it has a canonical rendering. Only
+/// the content types have one — the authored text — so only they lower to
+/// content; a date's rendering is a typographic decision the plate owns, and
+/// reaches ink through `display(addr, ..)` instead.
+enum Lower<'a> {
+    /// `richtext` / `plaintext`, which share everything downstream of this
+    /// classification. `inline` lowers to pure inline markup, with no block
+    /// terminator to warn inside a paragraph.
+    Content { inline: bool },
+    Date(DateKind),
+    /// The element node, absent where an array declares no `items`.
+    Array(Option<&'a serde_json::Value>),
+    Object(&'a serde_json::Map<String, serde_json::Value>),
+    /// Every other declared type, plus every data key the schema does not
+    /// declare and every container declaring no members to recurse on.
+    Native,
+}
+
+fn lowering(node: Option<&serde_json::Value>) -> Lower<'_> {
+    let Some(node) = node else {
+        return Lower::Native;
+    };
+    let str_key = |key: &str| node.get(key).and_then(|v| v.as_str());
+    if str_key("contentMediaType") == Some(CONTENT_MEDIA_TYPE) {
+        return Lower::Content {
+            inline: node.get(QUILLMARK_INLINE_KEY).and_then(|v| v.as_bool()) == Some(true),
+        };
+    }
+    match str_key("format") {
+        Some("date") => return Lower::Date(DateKind::Date),
+        Some("date-time") => return Lower::Date(DateKind::DateTime),
+        _ => {}
+    }
+    match str_key("type") {
+        Some("array") => Lower::Array(node.get("items")),
+        // A richtext node is `type: object` too, and the media type claimed it
+        // above; what is left here is a typed dictionary or a variant container.
+        Some("object") => match node.get("properties").and_then(|v| v.as_object()) {
+            Some(props) => Lower::Object(props),
+            None => Lower::Native,
+        },
+        _ => Lower::Native,
     }
 }
 
@@ -359,27 +419,12 @@ enum DateKind {
     DateTime,
 }
 
-pub(crate) fn names_at(
-    table: &serde_json::Map<String, serde_json::Value>,
-    kind: &str,
-) -> Vec<String> {
-    table
-        .get(kind)
-        .and_then(|v| v.as_array())
-        .map(|a| {
-            a.iter()
-                .filter_map(|s| s.as_str().map(str::to_string))
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 /// The schema address tables `_qm-known-path` validates `form-field` paths
 /// against.
 fn meta_literal(meta: &SchemaMeta) -> String {
     let tables = serde_json::json!({
         "fields": meta.fields,
-        "card_fields": meta.card_field_names,
+        "card_fields": meta.card_fields,
         "array_fields": meta.array_fields,
         "card_array_fields": meta.card_array_fields,
         "object_fields": meta.object_fields,
@@ -388,20 +433,24 @@ fn meta_literal(meta: &SchemaMeta) -> String {
     lit(&tables)
 }
 
-/// Each content field's plaintext projection keyed by schema address, backing
-/// the `plaintext(field)` helper. Keys sort so a reorder-only `apply` still
-/// produces byte-identical source.
-fn plaintext_literal(entries: &[(String, String)]) -> String {
+/// A projection table keyed by schema address, `expr` rendering each entry's
+/// Typst expression. Keys sort so a reorder-only `apply` still produces
+/// byte-identical source.
+fn address_table(entries: &[(String, String)], expr: impl Fn(&str) -> String) -> String {
     let mut sorted: Vec<&(String, String)> = entries.iter().collect();
     sorted.sort_by(|a, b| a.0.cmp(&b.0));
     wrap_dict(
         sorted
             .into_iter()
-            .map(|(path, text)| {
-                format!("\"{}\": \"{}\"", escape_string(path), escape_string(text))
-            })
+            .map(|(path, value)| format!("\"{}\": {}", escape_string(path), expr(value)))
             .collect(),
     )
+}
+
+/// Each content field's plaintext projection keyed by schema address, backing
+/// the `plaintext(field)` helper.
+fn plaintext_literal(entries: &[(String, String)]) -> String {
+    address_table(entries, |text| format!("\"{}\"", escape_string(text)))
 }
 
 /// `None` for a string that does not parse (the empty string included), which
@@ -701,7 +750,7 @@ mod tests {
     }
 
     #[test]
-    fn date_and_datetime_fields_become_value_object_blocks() {
+    fn date_fields_lower_to_native_datetimes_beside_a_display_projection() {
         let meta = meta_from(serde_json::json!({
             "properties": {
                 "issued": { "type": "string", "format": "date" },
@@ -715,29 +764,109 @@ mod tests {
             "signed": null
         });
         let (lib, windows) = generate_lib_typ(&data, &meta).unwrap();
+        // The data cell is the constructor itself: `data.issued.year()` and
+        // `data.issued < data.at` are ordinary Typst.
+        assert!(
+            lib.contains("\"issued\": datetime(year: 2026, month: 7, day: 3)"),
+            "{lib}"
+        );
+        assert!(
+            lib.contains(
+                "\"at\": datetime(year: 2026, month: 7, day: 3, hour: 9, minute: 30, second: 0)"
+            ),
+            "{lib}"
+        );
+        assert!(lib.contains("\"signed\": none"), "{lib}");
+
         // Keys emit in sorted order, so `_qm_d0` is `at` and `_qm_d1` `issued`.
         assert!(
-            lib.contains(
-                "#let _qm_d0 = { let v = datetime(year: 2026, month: 7, day: 3, \
-                 hour: 9, minute: 30, second: 0); \
-                 (value: v, display: (..args) => text(v.display(..args))) }"
-            ),
+            lib.contains("#let _qm_d1 = (..args) => text(datetime(year: 2026, month: 7, day: 3).display(..args))"),
             "{lib}"
         );
         assert!(
-            lib.contains(
-                "#let _qm_d1 = { let v = datetime(year: 2026, month: 7, day: 3); \
-                 (value: v, display: (..args) => text(v.display(..args))) }"
-            ),
-            "{lib}"
+            lib.contains(r#"("at": _qm_d0, "issued": _qm_d1,)"#),
+            "the display table keys by schema address: {lib}"
         );
-        assert!(lib.contains("\"at\": _qm_d0"), "{lib}");
-        assert!(lib.contains("\"issued\": _qm_d1"), "{lib}");
-        assert!(lib.contains("\"signed\": none"), "{lib}");
         let paths: Vec<&str> = windows.iter().map(|w| w.path.as_str()).collect();
         assert!(paths.contains(&"issued"), "{paths:?}");
         assert!(paths.contains(&"at"), "{paths:?}");
         assert!(!paths.contains(&"signed"), "{paths:?}");
+    }
+
+    /// The whole point of the walk: a declared type means the same thing
+    /// wherever it is declared. Every nested position the schema's one-level
+    /// nesting contract admits, for both rich types.
+    #[test]
+    fn nested_dates_and_content_lower_exactly_as_card_level_ones_do() {
+        let meta = meta_from(serde_json::json!({ "properties": {
+            "stamps": { "type": "array", "items": { "type": "string", "format": "date" } },
+            "contact": { "type": "object", "properties": {
+                "reply_by": { "type": "string", "format": "date" },
+                "note": richtext_field(),
+            }},
+            "rows": { "type": "array", "items": { "type": "object", "properties": {
+                "on": { "type": "string", "format": "date" },
+                "notes": richtext_field(),
+            }}},
+        }}));
+        let data = serde_json::json!({
+            "stamps": ["2026-01-02"],
+            "contact": { "reply_by": "2026-03-04", "note": content("a **nested** note") },
+            "rows": [{ "on": "2026-05-06", "notes": content("row _one_") }],
+        });
+        let (lib, windows) = generate_lib_typ(&data, &meta).unwrap();
+
+        assert!(
+            lib.contains("\"stamps\": (datetime(year: 2026, month: 1, day: 2),)"),
+            "an array element is a date: {lib}"
+        );
+        assert!(
+            lib.contains("\"reply_by\": datetime(year: 2026, month: 3, day: 4)"),
+            "an object property is a date: {lib}"
+        );
+        assert!(
+            lib.contains("\"on\": datetime(year: 2026, month: 5, day: 6)"),
+            "a typed-table row property is a date: {lib}"
+        );
+        assert!(
+            lib.contains("[\na #strong[nested] note\n\n\n]"),
+            "an object's content property is a markup block: {lib}"
+        );
+        assert!(
+            lib.contains("[\nrow #emph[one]\n\n\n]"),
+            "a row's content property is a markup block: {lib}"
+        );
+        // No canonical-content wire JSON survives anywhere in the data literal.
+        assert!(!lib.contains("\"lines\""), "wire JSON leaked: {lib}");
+
+        // Every projection keys on the address the recursion produced.
+        let paths: Vec<&str> = windows.iter().map(|w| w.path.as_str()).collect();
+        for expected in ["stamps.0", "contact.reply_by", "contact.note", "rows.0.on", "rows.0.notes"] {
+            assert!(paths.contains(&expected), "missing {expected}: {paths:?}");
+        }
+        let table = plaintext_table(&lib);
+        assert!(table.contains(r#""contact.note": "a nested note""#), "{table}");
+        assert!(table.contains(r#""rows.0.notes": "row one""#), "{table}");
+    }
+
+    /// The check the standalone date pre-pass used to run, now depth-total
+    /// because it rides the walk rather than a table of top-level names.
+    #[test]
+    fn an_unparseable_nested_date_is_a_coded_render_error() {
+        let meta = meta_from(serde_json::json!({ "properties": {
+            "contact": { "type": "object", "properties": {
+                "reply_by": { "type": "string", "format": "date" },
+            }},
+        }}));
+        let data = serde_json::json!({ "contact": { "reply_by": "not-a-date" } });
+        let err = generate_lib_typ(&data, &meta).expect_err("a bad date stops codegen");
+        assert_eq!(err.code(), "backend::invalid_date");
+        assert!(err.to_string().contains("contact.reply_by"), "{err}");
+
+        // A blank stays `none`, so a plate's `!= none` guard is untouched.
+        let blank = serde_json::json!({ "contact": { "reply_by": "" } });
+        let (lib, _) = generate_lib_typ(&blank, &meta).unwrap();
+        assert!(lib.contains("\"reply_by\": none"), "{lib}");
     }
 
     #[test]
@@ -768,10 +897,13 @@ mod tests {
         assert!(lib.contains("\"$path\": \"$cards.note.0.\""));
         assert!(lib.contains("\"$path\": \"$cards.note.1.\""));
         assert!(
-            lib.contains("let v = datetime(year: 2026, month: 1, day: 2);"),
+            lib.contains("\"on\": datetime(year: 2026, month: 1, day: 2)"),
             "{lib}"
         );
-        assert!(lib.contains("\"on\": _qm_d0"), "{lib}");
+        assert!(
+            lib.contains(r#"("$cards.note.0.on": _qm_d0,)"#),
+            "a card date's display projection keys on its per-instance address: {lib}"
+        );
     }
 
     #[test]
@@ -786,7 +918,32 @@ mod tests {
         assert!(lib.contains("#let _qm-meta = ("));
         assert!(lib.contains("\"fields\": ("));
         assert!(lib.contains("\"subject\""));
-        assert!(lib.contains("\"array_fields\": (\"refs\",)"));
+        // A primitive-element array maps to the empty row: the index step is
+        // all it admits.
+        assert!(lib.contains("\"array_fields\": (\"refs\": (),)"), "{lib}");
+    }
+
+    /// `array_fields` and `object_fields` are one shape on purpose: the index
+    /// step names what may follow it exactly as the property step does, so the
+    /// grammar reads off one predicate rather than three tables.
+    #[test]
+    fn a_typed_table_row_publishes_its_property_names() {
+        let meta = meta_from(serde_json::json!({
+            "properties": {
+                "tags": { "type": "array", "items": { "type": "string" } },
+                "refs": { "type": "array", "items": { "type": "object", "properties": {
+                    "org": { "type": "string" },
+                    "num": { "type": "string" },
+                }}},
+            }
+        }));
+        assert_eq!(
+            meta.array_fields,
+            BTreeMap::from([
+                ("tags".to_string(), vec![]),
+                ("refs".to_string(), vec!["org".to_string(), "num".to_string()]),
+            ]),
+        );
     }
 
     /// A typed dictionary and a variant container reach the same table: both
@@ -835,6 +992,27 @@ mod tests {
             lib.contains("\"card_object_fields\": (\"note\": (\"origin\": (\"office\",),),)"),
             "{lib}"
         );
+    }
+
+    /// A richtext field is `type: object` and would answer the object arm, so
+    /// the media type must claim it first — otherwise its wire JSON walks as a
+    /// dictionary and reaches the plate as raw canonical content.
+    #[test]
+    fn a_content_node_is_classified_before_the_object_arm() {
+        assert!(matches!(
+            lowering(Some(&richtext_field())),
+            Lower::Content { inline: false }
+        ));
+        assert!(matches!(
+            lowering(Some(&inline_richtext_field())),
+            Lower::Content { inline: true }
+        ));
+        // An undeclared data key and a scalar take the same arm.
+        assert!(matches!(lowering(None), Lower::Native));
+        assert!(matches!(
+            lowering(Some(&serde_json::json!({ "type": "string" }))),
+            Lower::Native
+        ));
     }
 
     /// Slots are located in the raw template only.

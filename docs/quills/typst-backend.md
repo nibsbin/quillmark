@@ -13,25 +13,27 @@ Plates are plain Typst code. Document metadata reaches the plate as a JSON dicti
 #data.at("logo", default: none)              // an undeclared key: may be absent
 ```
 
-Fields declared `type: richtext` in `Quill.yaml` arrive as Typst content (their content lowered to markup, ready to render). `type: date` and `type: datetime` fields arrive as a **value-object** (see below). Everything else is a plain JSON-shaped value.
+Every field arrives at its **native** Typst type — a `date` as a `datetime`, a number as an int or float, an `object` as a dict — with one exception: `richtext` and `plaintext` arrive as Typst content, their text already lowered to markup, because the authored text *is* their rendering. This holds at every depth: a `date` declared inside an `object` or an `array` row is the same `datetime` a top-level one is.
 
 ### Dates
 
-A present `type: date` / `type: datetime` field arrives as a small value-object with two projections; a blank date is `none` (so `#if data.field != none` guards are unchanged):
+A present `type: date` / `type: datetime` field is a native `datetime`; a blank date is `none` (so `#if data.field != none` guards are unchanged):
 
 ```typst
-#(data.issued.display)("[day padding:none] [month repr:long] [year]")  // rendered, click-to-edit
-#(data.issued.display)()                                                // rendered, ISO default
-#data.issued.value                                                      // native datetime (math, compare, pkgs)
-#data.issued.value.display("[year]")                                    // native string (no region)
-#data.issued.value.year()                                              // components: int
-#if data.issued != none { .. }                                          // presence
+#data.issued.display("[day padding:none] [month repr:long] [year]")  // native string
+#data.issued.year()                                                   // components: int
+#data.issued < data.due                                               // comparison, arithmetic
+#some-package(date: data.issued)                                      // any datetime-consuming package
+#display("issued", "[day padding:none] [month repr:long] [year]")     // rendered, click-to-edit
+#if data.issued != none { .. }                                        // presence
 ```
 
-- **`display` renders and is clickable.** It is a closure returning Typst *content*, so its glyphs carry a region keyed on the field's schema path: the atomic, picker-editable click-to-edit target. Note the **parentheses**: `(data.issued.display)(..)`, not `data.issued.display(..)`. Typst reserves dict-key method sugar for built-in dict methods, so the stored closure must be called through the parenthesized form. The date it wraps is the field's declared type, so a `date`-only field's `display` inherits Typst's native error on a `[hour]` pattern.
-- **`.value` is the native escape hatch.** It is the underlying `datetime` for arithmetic, comparison, `.year()`/`.weekday()`/… components, and any datetime-consuming package. `data.issued.value.display("…")` returns a native `str` (no region).
+Everything except the last two is ordinary Typst, because the value is an ordinary `datetime`.
 
-One rule: **native anything → `.value`; region render → `(…display)(…)`.** A package that formats a date internally still needs `.value` when it does native `datetime` work, but placing `(data.issued.display)(..)` (even deep inside a package) keeps the region, because the closure's ink is born at its generated definition site, not the call site.
+- **`display(field, ..args)` renders and is clickable.** It takes the field's *schema address*, not its value, and returns Typst *content* whose glyphs carry a region keyed on that address: the atomic, picker-editable click-to-edit target. It accepts the same patterns `datetime.display` does, and a `date`-only field inherits Typst's native error on a `[hour]` pattern. `none` for a blank date, so a `== none` fallback still fires.
+- **`data.<field>` is the value.** Reach for it whenever you want a `datetime` — math, comparison, components, handing it to a package. A direct plate reference (`#data.issued.display("…")` written in the plate itself) still regions, the same way any scalar reference site does.
+
+One rule: **want a value → `data.<field>`; want clickable ink → `display("<field>", ..)`.** The difference matters exactly when a *package* does the inking: a `datetime` handed to a package draws its glyphs wherever the package places them, so nothing ties them to your schema field, while `display`'s ink is born in generated code and keeps its address however deep it travels. `display` is the date sibling of [`plaintext(field)`](#plaintextfield): both are address-keyed projections for the same reason.
 
 ### Which accessor to reach for
 
@@ -298,7 +300,7 @@ Rebind that name anywhere in the plate — a second `let`, a closure parameter, 
 
 Each of those still renders correctly and loses only the click target, which is why nothing announces it. Wrap the read in a `field-region` claim to get the region back.
 
-**Content and date fields need none of this.** A `richtext` value's ink is born in generated code, so it keeps its address through a function, a loop, or a package that rebuilds it; a `date` field's `(.display)(..)` closure is tracked the same way.
+**Backend-generated ink needs none of this.** A `richtext` value's ink is born in generated code, so it keeps its address through a function, a loop, or a package that rebuilds it — and so does a date placed through `display("<field>", ..)`, which is why the projection takes an address rather than a value. A *value* laundered through any of the shapes above is on the list like every other value, dates included.
 
 ## Tying Composed Content to a Field
 

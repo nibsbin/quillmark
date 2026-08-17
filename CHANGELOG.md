@@ -2,6 +2,47 @@
 
 ## Unreleased
 
+- **breaking** typst: lowering dispatches on the schema node beside each value
+  rather than on tables of top-level field names, so a declared type means the
+  same thing wherever it is declared. A `date`, `richtext` or `plaintext`
+  declared inside an `object` or an `array` row reached the plate as its raw
+  wire value before — a bare string for a date, and for a rich field the
+  *internal canonical-content JSON*, rendered as a Typst dict — while the same
+  type one level up lowered correctly. Ten of the twelve nested positions the
+  schema admits degraded that way, silently: core coerced and validated the
+  value correctly, so nothing upstream had anything to report. `contact.note`
+  is now a markup block, `contact.reply_by` and `rows.0.on` are `datetime`s,
+  and `_qm-plaintext` gains the nested entries that closed the
+  `plaintext(field)` escape hatch. The walk is the inverse of the one
+  `build_transform_schema` builds the node with, so it cannot be shallower than
+  the schema is.
+- **breaking** typst: a `date` / `datetime` field lowers to a **native**
+  `datetime`, not the `(value:, display:)` wrapper. `data.issued.year()`,
+  `data.issued < data.due` and handing the field to a datetime-consuming
+  package are ordinary Typst; `.value` and the paren form `(data.issued.display)(..)`
+  are hard Typst compile errors, never a silent degrade, and all consumers are
+  first party. A date has no canonical rendering the way authored text does —
+  every rendering of `2026-01-02` is a typographic decision the plate owns — so
+  it lowers to its value and reaches ink by address instead.
+- feat(typst): `display(field, ..args)`, a date field's content projection,
+  keyed by schema address exactly as `plaintext(field)` is. It places rendered
+  ink whose glyphs are born in generated source, so a date formatted through a
+  `#let` binding, a per-card loop variable, or a vendored package keeps a
+  region on its schema field — the affordance the value-object existed to buy,
+  now available to any date at any depth without shaping the value. `none` for
+  a blank date, so a `== none` fallback still fires. The rule plates follow:
+  want a value → `data.<field>`; want clickable ink → `display("<field>", ..)`.
+- feat(typst): a typed table's row property (`refs.0.org`) is a writable
+  schema address. `form-field(field:)` and `field-region` capped at one suffix
+  step while pdfform's resolver descended unboundedly, so a shape
+  `ShapePosition` explicitly admits bound on one backend only, against
+  `PLATE_DATA.md`'s claim that one address binds on either. `array_fields` now
+  carries each array's row property names, the same shape `object_fields`
+  already had.
+- fix(typst): a non-blank date the shared parsers reject raises
+  `backend::invalid_date` from codegen rather than a pre-pass over top-level
+  name tables, so the check covers every depth. Only a direct `apply` can
+  deliver one; coercion parses the same way.
 - feat(typst): a scalar read through a `let` alias regions on the address the
   chain it names would carry, so `#let c = data.classification` … `#c.poc`
   surfaces `classification.poc` where it surfaced nothing at all — not the
