@@ -936,12 +936,10 @@ impl QuillConfig {
         }
 
         if let Some(variants) = &schema.variants {
-            // Every other container's shape is a function of the schema alone.
-            // A variant's is a function of the schema *and* the discriminant:
-            // the transform schema can only project the union of the worlds,
-            // and the wire carries whichever one the document selects. That gap
-            // is sound one level deep — a cell is unconditionally addressable
-            // and conditionally live — and compounds into a chain at two.
+            // A variant's shape is a function of the schema *and* the
+            // discriminant, so every projection downstream is the union of its
+            // worlds: sound one level deep, a chain at two (`SCHEMAS.md`
+            // §"Enum variants").
             if !at_card_level {
                 return err(
                     "quill::variant_placement",
@@ -1018,9 +1016,7 @@ impl QuillConfig {
                             ),
                         );
                     }
-                    // A variant's cells sit below card level, exactly as an
-                    // object's properties do: no `variants:` of their own, and
-                    // no `ui.group` (they inherit the discriminant's).
+                    // A cell inherits the discriminant's `ui.group`.
                     if let Some(diag) = Self::validate_field_schema_shape(
                         field,
                         &format!("{member_owner}.{name}"),
@@ -1475,8 +1471,7 @@ impl QuillConfig {
                 Ok(schema) => {
                     // One recursive pass enforces the whole shape contract:
                     // containers carry the right child schema (`object` →
-                    // `properties`, `array` → `items`), and the card-level-only
-                    // keys appear only here.
+                    // `properties`, `array` → `items`).
                     if let Some(diag) =
                         Self::validate_field_schema_shape(&schema, field_name, true)
                     {

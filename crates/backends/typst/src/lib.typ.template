@@ -36,8 +36,7 @@
   let fields = _qm-meta.at("fields", default: (:))
   let cards = _qm-meta.at("cards", default: (:))
   let is-index(s) = s.match(regex("^[0-9]+$")) != none
-  // Every step out of a node, walked against the tree the schema declares: a
-  // digit takes the array element, any other segment a declared property. A
+  // A digit takes the array element, any other segment a declared property. A
   // node offering neither ends the walk, so a step past a leaf is rejected.
   let steps-ok(node, steps) = {
     for step in steps {

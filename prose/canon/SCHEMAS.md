@@ -100,16 +100,20 @@ A variant cell carries any type a card field may — prose, dates and containers
 
 **Why `variants:` alone stays card-level.** Every other container's shape is a
 function of the schema; a variant's is a function of the schema *and* the
-discriminant. The transform schema can only project the union of the worlds
-("at schema time there is no live world"), and the wire carries whichever one
-the document selects. Four things hold because that gap is exactly one level
-deep: `variant_field` resolves a name by a flat scan across the worlds, so
-`quill::variant_field_collision` can guarantee one name is one cell; a form
-binds once at open, so a cell is *unconditionally addressable* while only
-*conditionally live*; a plate branches once over `values ∪ blank` and needs no
-guard inside that branch; and `validation::out_of_variant` names one
-discriminant rather than a chain of them. Nesting spends all four, so the rule
-is its own, not the depth budget bottoming out.
+discriminant. The transform schema projects the union of the worlds — at schema
+time there is no live world — and the wire carries whichever one the document
+selects. Four things hold because that gap is exactly one level deep:
+
+- `variant_field` resolves a name by a flat scan across the worlds, which is
+  what lets `quill::variant_field_collision` guarantee one name is one cell.
+- A form binds once at open, so a cell is *unconditionally addressable* while
+  only *conditionally live*.
+- A plate branches once over `values ∪ blank` and needs no guard inside that
+  branch.
+- `validation::out_of_variant` names one discriminant rather than a chain.
+
+Nesting spends all four, so the restriction is a rule about `variants:` rather
+than about depth.
 
 Two limits follow from the container shape and are accepted, not worked around:
 [`resolve()`](#the-resolved-value-view-resolve) reports **one** rung for the whole

@@ -193,7 +193,6 @@ fn append_field(items: &mut Vec<PayloadItem>, field: &FieldSchema) {
     append_scalar(items, field);
 }
 
-/// The properties of a typed dictionary: an `object` carrying `properties`.
 fn typed_dict_props(field: &FieldSchema) -> Option<&IndexMap<String, Box<FieldSchema>>> {
     match field.r#type {
         FieldType::Object => field.properties.as_ref(),
@@ -201,8 +200,6 @@ fn typed_dict_props(field: &FieldSchema) -> Option<&IndexMap<String, Box<FieldSc
     }
 }
 
-/// The row properties of a typed table: an `array` whose element is an `object`
-/// carrying `properties`.
 fn typed_table_props(field: &FieldSchema) -> Option<&IndexMap<String, Box<FieldSchema>>> {
     match field.r#type {
         FieldType::Array => match field.items.as_deref() {
@@ -347,9 +344,8 @@ fn property_cell(
 /// carries, at `path` relative to the field value (`[]` at card level).
 ///
 /// A `default:` is shippable as-is, so it renders verbatim and its subtree
-/// carries neither marker nor annotation — the leaves are covered by the
-/// container's own answer. `default: {}` on a typed dictionary instead expands
-/// to the blank-filled shape, so every key is shown.
+/// carries neither marker nor annotation. `default: {}` on a typed dictionary
+/// instead expands to the blank-filled shape, so every key is shown.
 fn container_cell(
     field: &FieldSchema,
     path: &[PathSegment],
@@ -371,12 +367,11 @@ fn container_cell(
         unreachable!("container_cell is reached only for a typed dictionary or a typed table")
     });
     match field.default.as_ref().map(|d| d.as_json()) {
-        // Any default (including `[]`) is shippable as-is, rendered verbatim.
+        // `[]` included: an array default stays inline rather than expanding.
         Some(default) => (default.clone(), Vec::new(), Vec::new()),
         // A row type declaring no properties is schema-invalid in practice:
         // emit a type-valid empty array rather than a null synthetic row.
         None if row_props.is_empty() => (JsonValue::Array(Vec::new()), Vec::new(), Vec::new()),
-        // One synthetic row, its properties addressed under `[Index(0)]`.
         None => {
             let mut row_path = path.to_vec();
             row_path.push(PathSegment::Index(0));
@@ -616,8 +611,7 @@ main:
             "{t}"
         );
 
-        // A blueprint is a document: what it stamps at depth must survive the
-        // parse it is written to be fed to.
+        // A blueprint is written to be parsed back, markers at depth included.
         let doc1 = Document::parse(&t).expect("blueprint must parse").document;
         let doc2 = Document::parse(&doc1.to_markdown())
             .expect("re-emit must parse")
@@ -625,10 +619,8 @@ main:
         assert_eq!(doc1, doc2, "a deep blueprint must round-trip");
     }
 
-    /// A container's `default:` is shippable as-is, so its subtree renders
-    /// verbatim and carries no marker of its own.
     #[test]
-    fn a_nested_container_default_renders_verbatim() {
+    fn a_nested_container_default_renders_verbatim_and_covers_its_leaves() {
         let t = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:

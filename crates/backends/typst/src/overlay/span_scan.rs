@@ -930,7 +930,6 @@ impl Tables<'_> {
             .unwrap_or_default()
     }
 
-    /// Whether the address offers an index step.
     fn is_indexable(&self, path: &str) -> bool {
         self.root
             .resolve(path)
@@ -1451,8 +1450,8 @@ main:
         spans.iter().any(|(p, t)| p == path && t == text)
     }
 
-    /// A read anchors on the cell it reaches, however many steps that takes, and
-    /// a read that stops partway anchors where it stopped.
+    /// A read that stops partway anchors where it stopped, so naming a
+    /// container is its own address rather than the leaf's.
     #[test]
     fn scalar_windows_take_every_step_the_plate_takes() {
         let src = Source::detached(
