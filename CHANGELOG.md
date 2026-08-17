@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- docs: `0.105-to-0.106.md`, the migration guide v0.106.0 shipped without. It
+  leads with the region-address shift rather than the three `!` entries: the
+  changelog is organized by feature, and the address step is one clause inside a
+  long entry while being the item most likely to break a working consumer, since
+  `FieldRegion.field` is a bare `string` that no type checker reports a grammar
+  change under. The guide states both gates on the step, and points a consumer at
+  `doc.pathFor` for the prefix grammar it would otherwise match as a literal —
+  with that helper's limit stated, a field name passing through it verbatim.
+  `CONTRIBUTING.md` gains the two rules that would have caught the gap: `!` marks
+  an observable-contract shift even where no type changes, and a release carrying
+  one ships its guide.
+
 ## v0.106.0 - 2026-08-16
 
 - feat(typst,pdfform): a schema address may step one property into a declared
