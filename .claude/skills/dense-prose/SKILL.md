@@ -39,5 +39,5 @@ Compression is not density: one claim per sentence. A sentence carrying seven cl
 
 - Era-stamped records — changelogs, applied migrations, incident notes — are **repair only**. They are accurate to their moment: fix what was wrong when written, leave what was right in its era's vocabulary.
 - Never rename identifiers. Out of scope, pure churn.
-- Edits are surgical. Touch a line only when it breaks a rule, and match the file's existing formatting rather than reflowing around the change.
-- Run the project's own checks before finishing. A doc example is compiled code, and a test may assert the wording being changed.
+- Edits are surgical. Touch a line only when it breaks a rule.
+- A comment-only change can break the build: doc examples compile, and a test may assert the wording being changed.
