@@ -45,3 +45,4 @@
 #import "frontmatter.typ": frontmatter
 #import "mainmatter.typ": mainmatter
 #import "backmatter.typ": backmatter
+#import "utils.typ": DATE_PATTERN

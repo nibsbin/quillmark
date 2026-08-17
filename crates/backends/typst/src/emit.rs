@@ -192,12 +192,27 @@ pub struct Emission {
     pub segments: Vec<SegmentMap>,
 }
 
-/// Import already caps nesting at [`MAX_NESTING_DEPTH`], so this fires only on
-/// a hand-built content that skipped that guard.
+/// What stops codegen mid-walk. Each carries the diagnostic code the render
+/// error reports, so folding a check into the walk does not relabel it.
 #[derive(Debug, thiserror::Error)]
 pub enum EmitError {
+    /// Import already caps nesting at [`MAX_NESTING_DEPTH`], so this fires only
+    /// on a hand-built content that skipped that guard.
     #[error("Nesting too deep: {depth} levels (max: {max} levels)")]
     NestingTooDeep { depth: usize, max: usize },
+    /// A non-blank date the shared parsers reject. Only a direct `apply` can
+    /// deliver one: coercion parses the same way.
+    #[error("invalid date in field {field:?}: {value:?} is not a recognized date")]
+    InvalidDate { field: String, value: String },
+}
+
+impl EmitError {
+    pub fn code(&self) -> &'static str {
+        match self {
+            EmitError::NestingTooDeep { .. } => "typst::emit",
+            EmitError::InvalidDate { .. } => "backend::invalid_date",
+        }
+    }
 }
 
 pub fn emit_content(rt: &Content) -> Result<Emission, EmitError> {

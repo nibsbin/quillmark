@@ -1,7 +1,9 @@
 //! The container property step (`classification.poc`, `address.city`) through
-//! the public `Backend`/`LiveSession` path: what the address grammar accepts,
-//! what it still rejects, and the address a region carries for a plate that
-//! reads one property.
+//! the public `Backend`/`LiveSession` path, and the address a region carries for
+//! a plate that reads one property.
+//!
+//! The addresses the grammar admits are stated once, against both backends, in
+//! `quillmark/tests/address_grammar.rs`.
 
 use quillmark_core::Backend;
 use quillmark_typst::TypstBackend;
@@ -29,6 +31,21 @@ main:
           type: string
         street:
           type: string
+    tags:
+      type: array
+      description: a primitive list, whose element offers no further step
+      items:
+        type: string
+    refs:
+      type: array
+      description: a typed table
+      items:
+        type: object
+        properties:
+          org:
+            type: string
+          num:
+            type: string
     classification:
       type: enum
       values: [UNCLASSIFIED, CUI]
@@ -40,13 +57,25 @@ main:
             type: string
           controlled_by:
             type: string
+          note:
+            type: richtext
+          reply_by:
+            type: date
 "#;
 
 fn data() -> serde_json::Value {
     serde_json::json!({
         "subject": "Widgets",
         "address": { "city": "Dayton", "street": "1864 Fourth St" },
-        "classification": { "value": "CUI", "poc": "Capt J. Smith", "controlled_by": "SAF/AA" },
+        "classification": {
+            "value": "CUI",
+            "poc": "Capt J. Smith",
+            "controlled_by": "SAF/AA",
+            "note": common::content("Handle per **DoDM 5200.48**"),
+            "reply_by": "2026-03-04",
+        },
+        "tags": ["urgent"],
+        "refs": [{ "org": "AFRL/RQ", "num": "2026-01" }],
     })
 }
 
@@ -239,26 +268,83 @@ card_kinds:
     );
 }
 
-/// The step is gated on what the field offers, so a scalar admits neither an
-/// index nor a property, and a container admits only its declared keys.
+/// A typed table's row property claims ink of its own, through an explicit
+/// claim and through a widget alike.
 #[test]
-fn the_step_is_gated_on_the_declared_shape() {
-    for (address, plate_field) in [
-        ("subject.poc", "a scalar has no property"),
-        ("classification.undeclared", "an undeclared key is no cell"),
-        ("classification.0", "a container has no element"),
-        ("address.9", "a typed dictionary has no element"),
-    ] {
-        let plate = format!(
-            r#"
-#import "@local/quillmark-helper:0.1.0": field-region
-#field-region("{address}")[x]
-"#
-        );
-        let err = rejects(&plate);
-        assert!(
-            err.contains("not a schema field address"),
-            "{plate_field} ({address:?}): {err}"
-        );
-    }
+fn a_typed_table_row_property_is_addressable() {
+    let session = open(
+        r#"
+#import "@local/quillmark-helper:0.1.0": data, field-region, form-field
+#field-region("refs.0.org")[AFRL/RQ]
+#form-field("Ref0Num", field: "refs.0.num", value: data.refs.at(0).num)
+"#,
+    );
+    let fields: Vec<String> = session.regions().into_iter().map(|r| r.field).collect();
+    assert!(
+        fields.iter().any(|f| f == "refs.0.org"),
+        "an explicit claim regions on the row property: {fields:?}"
+    );
+    assert!(
+        fields.iter().any(|f| f == "refs.0.num"),
+        "a widget binds the same grammar: {fields:?}"
+    );
+}
+
+/// `collect_anchors` steps one *property* into a declared container and has no
+/// index step, so a direct read of a row cell anchors on the array: a click on
+/// the org cell routes to the whole table. The address grammar and the lowering
+/// both reach `refs.0.org`, so this is a wrong address rather than a missing
+/// one. Pinned here so widening the scan is a deliberate change with its own
+/// sweep over every plate that reads an array element.
+#[test]
+fn a_direct_row_cell_read_still_anchors_on_the_array() {
+    let session = open(
+        r#"
+#import "@local/quillmark-helper:0.1.0": data
+#data.refs.at(0).org
+"#,
+    );
+    let fields: Vec<String> = session.regions().into_iter().map(|r| r.field).collect();
+    assert!(fields.iter().any(|f| f == "refs"), "{fields:?}");
+    assert!(!fields.iter().any(|f| f == "refs.0.org"), "{fields:?}");
+}
+
+/// A variant cell of a rich type lowers exactly as a card-level one does: the
+/// container projects as `type: object` carrying `properties`, so the walk
+/// recurses into it without knowing what a variant is.
+#[test]
+fn a_variant_cell_lowers_its_declared_type() {
+    let session = open(
+        r#"
+#import "@local/quillmark-helper:0.1.0": data, display
+#set page(width: 612pt, height: 792pt, margin: 72pt)
+// A markup block, not the canonical-content wire JSON a raw dict carries.
+#data.classification.note
+// Native `datetime`: the component read would not compile against a string.
+#assert(data.classification.reply_by.year() == 2026)
+#display("classification.reply_by", "[year]")
+"#,
+    );
+    let fields: Vec<String> = session.regions().into_iter().map(|r| r.field).collect();
+    assert!(
+        fields.iter().any(|f| f == "classification.note"),
+        "the cell's content regions on its own address: {fields:?}"
+    );
+    assert!(
+        fields.iter().any(|f| f == "classification.reply_by"),
+        "the cell's date projection regions too: {fields:?}"
+    );
+}
+
+/// The shared pin drives `field-region`; `form-field` carries its own copy of
+/// the assert.
+#[test]
+fn a_widget_binds_the_same_grammar_a_claim_does() {
+    let err = rejects(
+        r#"
+#import "@local/quillmark-helper:0.1.0": form-field
+#form-field("Bad", field: "address.city.0", value: "x")
+"#,
+    );
+    assert!(err.contains("not a schema field address"), "{err}");
 }

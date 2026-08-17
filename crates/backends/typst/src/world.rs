@@ -121,6 +121,10 @@ impl QuillWorld {
     /// access document data and auto-evaluated markup fields. Returns the
     /// world plus the generated content windows (see
     /// [`inject_helper_package`](Self::inject_helper_package)).
+    ///
+    /// Test-only: boxing collapses codegen's own error, so `open` runs the two
+    /// steps itself to keep a bad date's diagnostic code.
+    #[cfg(test)]
     pub fn new_with_data(
         source: &Quill,
         main: &str,
