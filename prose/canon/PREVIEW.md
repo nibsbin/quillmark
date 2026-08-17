@@ -197,7 +197,11 @@ whole-row read (`data.refs.at(0)`) names the row.
 A read through a `let` alias tracks where the chain it names would, so naming a
 container or a row before stepping into it costs no address. The alias holds only where
 the plate binds the name exactly once to one whole chain: a name a second binder
-could rebind would attribute another value's ink to the field.
+could rebind would attribute another value's ink to the field. Only the
+occurrences that *read* the name track: an identifier spelling it as a named
+argument (`#text(size: 12pt)` under `#let size = data.size`), a dict key, or
+another value's field reads nothing off the field, and schema field names
+collide freely with the parameter names of callees the plate never defines.
 Not tracked: expressions mixing several fields (`data.from + ", " + rank` has
 no single owner), a value laundered past what the alias pass follows (a
 function parameter, a destructured binding), and card scalars read from the

@@ -183,6 +183,14 @@
   name a second `let`, a closure parameter, a loop pattern, an import, or an
   assignment could rebind is dropped rather than risk attributing another
   value's ink to the field, and a wildcard import disqualifies every alias.
+  Which name is followed is half the rule; which *occurrence* is the other half,
+  since a schema field name collides freely with the parameter names of a callee
+  the plate never defines (`date`, `title`, `caption`, `align`, `subject`). Only
+  an occurrence that reads the binding anchors: an identifier spelling the alias
+  as a named argument (`#text(size: 12pt)`), a dict key, another value's field
+  (`#styles.subject`) or an imported item's path draws no ink off the field, and
+  a window minted over one would carry a *wrong* address rather than a missing
+  one.
   Laundering past that — a function parameter, a destructured binding, a
   per-card loop variable — is unchanged and still needs a `field-region` claim,
   now stated for plate authors under "Which Reads Get Regions" in the Typst
