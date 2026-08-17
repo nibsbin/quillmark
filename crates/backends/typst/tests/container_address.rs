@@ -388,8 +388,8 @@ fn a_variant_cell_lowers_its_declared_type() {
     );
 }
 
-/// The shared pin drives `field-region`; `form-field` carries its own copy of
-/// the assert.
+/// The shared pin drives `field-region`; `form-field` and `display` carry their
+/// own copies of the assert.
 #[test]
 fn a_widget_binds_the_same_grammar_a_claim_does() {
     let err = rejects(
@@ -399,4 +399,33 @@ fn a_widget_binds_the_same_grammar_a_claim_does() {
 "#,
     );
     assert!(err.contains("not a schema field address"), "{err}");
+}
+
+/// A date projection is keyed by address, so a typo would otherwise render the
+/// document with the date silently missing.
+#[test]
+fn a_date_projection_binds_the_same_grammar_a_claim_does() {
+    let err = rejects(
+        r#"
+#import "@local/quillmark-helper:0.1.0": display
+#display("classification.repply_by", "[year]")
+"#,
+    );
+    assert!(err.contains("not a schema field address"), "{err}");
+}
+
+/// The assert answers about the address, the `none` about the value: a declared
+/// date left blank keeps the documented fallback rather than becoming an error.
+#[test]
+fn a_blank_date_still_projects_none() {
+    let plate = r#"
+#import "@local/quillmark-helper:0.1.0": display
+#set page(width: 400pt, height: 200pt, margin: 40pt)
+#assert(display("classification.reply_by", "[year]") == none)
+"#;
+    let mut blank = data();
+    blank["classification"]["reply_by"] = serde_json::Value::String(String::new());
+    TypstBackend
+        .open(&common::quill_with_plate(YAML, plate), &blank)
+        .expect("a blank date compiles");
 }

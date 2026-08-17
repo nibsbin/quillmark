@@ -244,9 +244,17 @@
 /// `str` is wanted and no region is.
 ///
 /// `field` is the schema address (compose a card field from the card's `$path`:
-/// `display(card.at("$path") + "on", "[year]")`). Returns `none` for a blank
-/// date or an address carrying none, so a `== none` fallback still fires.
+/// `display(card.at("$path") + "on", "[year]")`). An address the schema does not
+/// have is a compile error, as it is for `form-field` and `field-region`:
+/// `_qm-display` holds an entry per *present* date, so a typo and a blank date
+/// are both absent from it and only the schema tells them apart. Returns `none`
+/// where a known address carries no date — a blank one, or a field that is not a
+/// date — so a `== none` fallback still fires.
 #let display(field, ..args) = {
+  assert(std.type(field) == str,
+    message: "display: field must be a string, got " + repr(std.type(field)))
+  assert(_qm-known-path(field),
+    message: "display: " + repr(field) + " is not a schema field address; expected a field name, an array element like \"refs.2\", a container property like \"classification.poc\", or a card path composed from the card's $path prefix")
   let render = _qm-display.at(field, default: none)
   if render != none { render(..args) }
 }
