@@ -191,9 +191,9 @@ A read that steps into a declared container (`data.classification.poc`,
 cell the plate read rather than the container holding it; a key the container
 does not declare is no address, and the read falls back to the container.
 A read through a `let` alias tracks where the chain it names would, so naming a
-container before stepping into it costs no address; the alias must be bound
-exactly once to one whole chain, since a name a second binder could rebind
-would attribute another value's ink to the field.
+container before stepping into it costs no address. The alias holds only where
+the plate binds the name exactly once to one whole chain: a name a second binder
+could rebind would attribute another value's ink to the field.
 Not tracked: expressions mixing several fields (`data.from + ", " + rank` has
 no single owner), a value laundered past what the alias pass follows (a
 function parameter, a destructured binding), and card scalars read from the

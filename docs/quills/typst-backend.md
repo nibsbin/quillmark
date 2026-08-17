@@ -296,7 +296,7 @@ Rebind that name anywhere in the plate — a second `let`, a closure parameter, 
 | a destructured binding (`#let (poc, ..) = data.classification`) | the pattern names no chain |
 | a per-card loop variable (`#for card in data.at("$cards")`) | one shared expression site carries no per-instance identity |
 
-In each of those the document still renders correctly and only the click target is missing, so nothing fails to tell you — reach for a `field-region` claim below.
+Each of those still renders correctly and loses only the click target, which is why nothing announces it. Wrap the read in a `field-region` claim to get the region back.
 
 **Content and date fields need none of this.** A `richtext` value's ink is born in generated code, so it keeps its address through a function, a loop, or a package that rebuilds it; a `date` field's `(.display)(..)` closure is tracked the same way.
 

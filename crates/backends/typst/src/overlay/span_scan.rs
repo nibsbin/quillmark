@@ -907,9 +907,8 @@ pub(crate) fn scalar_windows(
     out
 }
 
-/// What one `let` alias names: the schema path its initializer resolved to, and
-/// the byte the binding ends at. A read before that byte reads whatever else
-/// held the name, so the position bounds the alias the way lexical order does.
+/// A read before `bound_at` reads whatever else held the name, so the position
+/// bounds the alias the way lexical order does.
 struct Alias {
     path: String,
     bound_at: usize,
@@ -941,9 +940,8 @@ fn alias_bindings(
         .collect()
 }
 
-/// What one walk of the plate finds: how many binding positions each name has,
-/// the alias candidates among them, and whether a wildcard import bound names
-/// the walk cannot see at all.
+/// A wildcard import binds names in another file, so it disqualifies every
+/// alias no matter which side of a binding it sits on.
 #[derive(Default)]
 struct Binders {
     counts: HashMap<String, usize>,
@@ -1040,8 +1038,6 @@ fn collect_binders(
     }
 }
 
-/// The `(name, alias)` a `#let <ident> = <data chain>` names, if its
-/// initializer is one whole chain resolving to a schema path.
 fn alias_candidate(
     node: &LinkedNode,
     binding: ast::LetBinding,
@@ -1156,7 +1152,6 @@ fn step_property<'a>(
         None => (name, anchor),
     }
 }
-
 
 /// The declared key `node`'s parent selects off it — `.<key>` or
 /// `.at("<key>")` — and the node that selection widens to.
@@ -1374,8 +1369,8 @@ main:
         spans.iter().any(|(p, t)| p == path && t == text)
     }
 
-    /// The refactor #1284 reports: naming the container before stepping into it
-    /// must keep the address the direct chain carries.
+    /// Naming the container before stepping into it must keep the address the
+    /// direct chain carries.
     #[test]
     fn scalar_windows_follow_a_single_assignment_let_alias() {
         let src = Source::detached(

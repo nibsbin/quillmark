@@ -102,9 +102,8 @@ fn a_property_read_regions_on_the_property() {
     );
 }
 
-/// Naming the container before stepping into it is the refactor a plate author
-/// reaches for once a container is worth reading, and it must cost no address:
-/// the region a bound read surfaces is the one the direct chain surfaces.
+/// A bound read surfaces the region the direct chain surfaces, so naming a
+/// container before stepping into it costs no address.
 #[test]
 fn a_property_read_through_a_let_alias_keeps_the_property_address() {
     let plate = r#"
