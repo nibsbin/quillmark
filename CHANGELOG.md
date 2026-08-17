@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- feat(typst): a scalar read through a `let` alias regions on the address the
+  chain it names would carry, so `#let c = data.classification` … `#c.poc`
+  surfaces `classification.poc` where it surfaced nothing at all — not the
+  container's address, absent. 0.106 made a container property addressable,
+  which makes stepping into one worth writing, and binding the container once
+  before stepping into it three times is the refactor that follows; it cost the
+  address, silently, with the document still rendering correctly. An alias is
+  followed only where the plate binds the name exactly once to one whole `data`
+  chain: a name a second `let`, a closure parameter, a loop pattern, an import,
+  or an assignment could rebind is dropped rather than risk attributing another
+  value's ink to the field, and a wildcard import disqualifies every alias. What
+  the pass cannot follow — a function parameter, a destructured binding, a
+  per-card loop variable — is unchanged and still needs a `field-region` claim,
+  now stated for plate authors under "Which Reads Get Regions" in the Typst
+  backend guide. Content and date fields were never affected: their ink is born
+  in generated code.
+
 - feat(wasm): `VARIANT_DISCRIMINANT_KEY` joins the runtime's static exports,
   beside `MAIN_CARD_ADDR`. v0.106.0 announced the constant as new API but shipped
   it to Rust only, leaving a JS consumer reading or writing a variant container
