@@ -697,6 +697,21 @@ fn validate_variant(
         return errors;
     };
 
+    // The container is a document spelling. A schema literal names the
+    // discriminant alone, each world's cells carrying their own; the container
+    // caches no content and yields no discriminant, so accepting it would
+    // blank-fill the field in silence.
+    if ctx == ValueContext::SchemaLiteral {
+        errors.push(ValidationError::TypeMismatch {
+            path: path.to_string(),
+            expected: "enum".to_string(),
+            actual: yaml_scalar_type(json).to_string(),
+            source_token: verbatim_yaml_scalar(json),
+            default: None,
+        });
+        return errors;
+    }
+
     let discriminant_path = path.field(VARIANT_DISCRIMINANT_KEY);
     let authored = object
         .get(VARIANT_DISCRIMINANT_KEY)
