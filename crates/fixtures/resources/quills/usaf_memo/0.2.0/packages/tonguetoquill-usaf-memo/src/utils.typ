@@ -88,8 +88,7 @@
 }
 
 /// The date pattern a memo style prints, per AFH 33-337. Exported so a caller
-/// that must pre-format the date still matches what this package would have
-/// produced, rather than restating the pattern.
+/// that pre-formats the date matches this package instead of restating it.
 ///
 /// - memo-style (str): `"usaf"` or `"daf"`
 /// -> str

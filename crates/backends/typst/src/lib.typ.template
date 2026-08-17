@@ -230,9 +230,8 @@
 /// The rule holds at every depth: the backend read each value's own schema node
 /// to lower it, so a `date` inside an `object` or an `array` row is the same
 /// `datetime` a card-level one is. `$cards` carry their per-kind-ordinal `$path`
-/// prefix. No runtime processing: the former `__meta__` strip, content
-/// insertion, date parsing, and card loop are gone, the backend did that work at
-/// generation time.
+/// prefix. The backend did every transform at generation time, so this file runs
+/// no data processing at all.
 #let data = {data_literal}
 
 /// Backend-generated content projection for every present `date`/`datetime`

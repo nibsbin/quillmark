@@ -93,9 +93,8 @@ Helper contents (generated in `backends/typst/helper.rs` from `lib.typ.template`
   `from_plaintext`), never at codegen.
 
   A non-blank date the shared parsers reject is a `backend::invalid_date` render
-  error raised from the walk. There is no separate validation pass: codegen was
-  already parsing at the emit site, so the check rides it and is total over depth
-  for free.
+  error raised from the walk, at the site that parses it, which is what makes the
+  check total over depth.
 - **`display(field, ..args)`** → content, the one address-keyed projection.
   `_qm-display` binds one `#let _qm_dN = (..args) => text(datetime(..).display(..args))`
   closure per present date, keyed by schema address (`issued`, `stamps.2`,

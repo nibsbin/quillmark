@@ -163,14 +163,11 @@ impl<'m> Codegen<'m> {
         id
     }
 
-    /// The date sibling of [`content_block`](Self::content_block), binding the
-    /// field's *content* projection: a closure whose body is a `text(..)` call
-    /// over the native date's own `display`. The glyphs it places are born at
-    /// this generated node rather than at the plate site that calls it, which is
-    /// what makes `display(addr, ..)` survive laundering — a `#let` binding, a
-    /// loop variable, a vendored package — where the native `data.<addr>` value
-    /// cannot. The segment-less window keys them on `path`, so each emitted cell
-    /// is its own region.
+    /// The date sibling of [`content_block`](Self::content_block): a closure
+    /// whose `text(..)` body is where the glyphs are born, so they carry this
+    /// generated span wherever the plate finally calls it. That is what
+    /// `display(addr, ..)` survives laundering on and a native `datetime` does
+    /// not, and one block per cell is what gives a card its per-instance region.
     ///
     /// Formatting through the date's own `display` inherits its type, so a
     /// date-only field throws Typst's native `[hour]`-pattern error.
@@ -194,10 +191,9 @@ impl<'m> Codegen<'m> {
 
     /// A date lowers to its **native** `datetime(..)`, so arithmetic,
     /// comparison, components and package interop are ordinary Typst. Blank ⇒
-    /// `none`, so `!= none` guards are untouched; a non-blank value that will
-    /// not parse is the render error the standalone date pre-pass used to
-    /// raise, now recorded at the one site that was already parsing and
-    /// therefore total over depth.
+    /// `none`, so `!= none` guards are untouched. A non-blank value that will not
+    /// parse raises `backend::invalid_date` from here, the one site that parses,
+    /// which is what makes the check total over depth.
     fn date_field(&mut self, path: &str, s: &str, kind: DateKind) -> String {
         match datetime_constructor(s, kind) {
             Some(constructor) => {
@@ -306,18 +302,14 @@ impl<'m> Codegen<'m> {
     }
 
     /// Lower one value against the schema node that declares it, recursing on
-    /// shape: the exact inverse of the walk `field_to_schema` built the node
-    /// with. Because the dispatch reads a node rather than a table of top-level
-    /// names, a declared type means the same thing wherever it is declared, and
-    /// a nested `date` or `richtext` cannot silently degrade to its wire value.
+    /// shape: the exact inverse of the walk `field_to_schema` builds the node
+    /// with, which is why it cannot be shallower than the schema is.
     ///
-    /// `path` is the value's schema address. Every generated projection keys on
-    /// it — a content block's window, the display table — so the addresses fall
-    /// out of the recursion rather than being reassembled.
+    /// `path` is the value's schema address, so every generated projection keys
+    /// on an address the recursion produced rather than one reassembled.
     ///
-    /// A value whose shape contradicts its declaration (never produced by the
-    /// seam, reachable through a direct `apply`) falls to its literal, the same
-    /// arm every native type takes.
+    /// A value whose shape contradicts its declaration reaches here through a
+    /// direct `apply`, never the seam, and falls to its literal.
     fn emit_value(
         &mut self,
         path: &str,
@@ -712,9 +704,8 @@ mod tests {
         assert!(!paths.contains(&"signed"), "{paths:?}");
     }
 
-    /// The whole point of the walk: a declared type means the same thing
-    /// wherever it is declared. Every nested position the schema's one-level
-    /// nesting contract admits, for both rich types.
+    /// Every nested position the one-level nesting contract admits, for both
+    /// rich types.
     #[test]
     fn nested_dates_and_content_lower_exactly_as_card_level_ones_do() {
         let meta = meta_from(serde_json::json!({ "properties": {
@@ -765,8 +756,8 @@ mod tests {
         }
     }
 
-    /// The check the standalone date pre-pass used to run, now depth-total
-    /// because it rides the walk rather than a table of top-level names.
+    /// A bad date must fail loudly at any depth, and must keep its code: a
+    /// silent blank would ship a document dated wrong.
     #[test]
     fn an_unparseable_nested_date_is_a_coded_render_error() {
         let meta = meta_from(serde_json::json!({ "properties": {
@@ -839,9 +830,8 @@ mod tests {
         assert!(lib.contains("\"array_fields\": (\"refs\": (),)"), "{lib}");
     }
 
-    /// `array_fields` and `object_fields` are one shape on purpose: the index
-    /// step names what may follow it exactly as the property step does, so the
-    /// grammar reads off one predicate rather than three tables.
+    /// `array_fields` and `object_fields` are one shape, so one predicate reads
+    /// both steps.
     #[test]
     fn a_typed_table_row_publishes_its_property_names() {
         let meta = meta_from(serde_json::json!({

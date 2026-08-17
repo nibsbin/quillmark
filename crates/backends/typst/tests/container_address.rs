@@ -292,15 +292,12 @@ fn a_typed_table_row_property_is_addressable() {
     );
 }
 
-/// The span scan is the third component deriving an address, and the one this
-/// change does not lift: `collect_anchors` steps one *property* into a declared
-/// container and has no index step, so a direct read of a row cell anchors on
-/// the array. The address grammar and the lowering now both reach `refs.0.org`
-/// while the scan stops at `refs`, which is a wrong address rather than a
-/// missing one — a click on the org cell routes to the whole table.
-///
-/// Pinned, not fixed: lifting it retargets regions on every plate that reads an
-/// array element today, which belongs to its own change with its own sweep.
+/// `collect_anchors` steps one *property* into a declared container and has no
+/// index step, so a direct read of a row cell anchors on the array: a click on
+/// the org cell routes to the whole table. The address grammar and the lowering
+/// both reach `refs.0.org`, so this is a wrong address rather than a missing
+/// one. Pinned here so widening the scan is a deliberate change with its own
+/// sweep over every plate that reads an array element.
 #[test]
 fn a_direct_row_cell_read_still_anchors_on_the_array() {
     let session = open(
@@ -314,18 +311,16 @@ fn a_direct_row_cell_read_still_anchors_on_the_array() {
     assert!(!fields.iter().any(|f| f == "refs.0.org"), "{fields:?}");
 }
 
-/// A variant cell of a rich type lowers exactly as a card-level one does. The
+/// A variant cell of a rich type lowers exactly as a card-level one does: the
 /// container projects as `type: object` carrying `properties`, so the walk
-/// recurses into it without knowing what a variant is — which is why the load
-/// error that used to refuse these cells had no mechanism left to protect.
+/// recurses into it without knowing what a variant is.
 #[test]
 fn a_variant_cell_lowers_its_declared_type() {
     let session = open(
         r#"
 #import "@local/quillmark-helper:0.1.0": data, display
 #set page(width: 612pt, height: 792pt, margin: 72pt)
-// Content: a markup block, not the canonical-content wire JSON a raw dict
-// would have carried.
+// A markup block, not the canonical-content wire JSON a raw dict carries.
 #data.classification.note
 // Native `datetime`: the component read would not compile against a string.
 #assert(data.classification.reply_by.year() == 2026)

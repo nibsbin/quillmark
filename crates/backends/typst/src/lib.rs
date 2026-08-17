@@ -183,8 +183,7 @@ pub(crate) fn page_hashes(document: &typst_layout::PagedDocument) -> Vec<u128> {
 }
 
 /// The seam already carries the render shape, so no per-field transform happens
-/// here. Date validation is not a pre-pass: codegen already parses every date at
-/// its emit site, so it raises there and is depth-total for free. Borrows
+/// here; codegen validates each date at the site it parses it. Borrows
 /// `json_data` unchanged for the object case: only a non-object input allocates.
 fn transformed_data(json_data: &serde_json::Value) -> Cow<'_, serde_json::Value> {
     match json_data.is_object() {
@@ -504,8 +503,7 @@ fn engine_err(code: &str, message: impl Into<String>) -> RenderError {
     )
 }
 
-/// Property names a container node declares, in declaration order; empty for a
-/// node declaring none.
+/// Property names a container node declares, in declaration order.
 fn property_names(node: &serde_json::Value) -> Vec<String> {
     node.get("properties")
         .and_then(|v| v.as_object())
@@ -517,10 +515,8 @@ fn property_names(node: &serde_json::Value) -> Vec<String> {
 /// property names its *row* offers (`refs.0.org`). A primitive-element array
 /// maps to the empty list: the index step is all it admits.
 ///
-/// The property step's twin, and deliberately the same shape: one table says
-/// which fields take an index step and what follows it, the other which take a
-/// property step. The nesting contract caps both at a row property, so neither
-/// recurses.
+/// The property step's twin, and the same shape, so one predicate reads both.
+/// The nesting contract caps the suffix at a row property, so neither recurses.
 fn array_field_names(
     properties: &serde_json::Map<String, serde_json::Value>,
 ) -> BTreeMap<String, Vec<String>> {
@@ -553,15 +549,11 @@ fn object_field_names(
         .collect()
 }
 
-/// The transform schema plus the address tables derived from it.
-///
-/// The two answer different questions and are kept apart on purpose. *"How do I
-/// lower this value?"* is answered at the codegen walk site from the schema
-/// node in hand ([`helper::lowering`]), needs no table, and is depth-invariant
-/// because a node is a node at any depth. *"Is this address writable in a
-/// plate?"* is a question about **names**, answered at Typst compile time by
-/// `_qm-known-path` reading these tables, and is depth-bounded because the
-/// address grammar is.
+/// The transform schema plus the address tables derived from it, kept apart
+/// because they answer different questions at different depths. Lowering reads
+/// the schema node ([`helper::lowering`]) and is depth-invariant; the tables
+/// answer which *names* a plate may write, and are bounded by the address
+/// grammar. A table can only ever answer the second.
 #[derive(Default)]
 pub(crate) struct SchemaMeta {
     /// The walk's cursor source: the same recursive projection
@@ -625,13 +617,11 @@ impl SchemaMeta {
         }
     }
 
-    /// The schema node declaring a top-level field, `None` for a data key the
-    /// schema does not declare.
+    /// The schema node declaring a top-level field.
     pub(crate) fn field_node(&self, name: &str) -> Option<&serde_json::Value> {
         self.schema.get("properties")?.get(name)
     }
 
-    /// The `properties` map of a card kind, `None` for an unknown kind.
     pub(crate) fn card_props(
         &self,
         kind: &str,
@@ -872,9 +862,6 @@ mod tests {
         assert_eq!(card_arrays["refs"], vec!["org".to_string()]);
     }
 
-    /// The walk's cursor: codegen reads a field's declaration off the schema
-    /// rather than off a flattened name table, which is what makes the lowering
-    /// depth-invariant.
     #[test]
     fn schema_meta_serves_the_declaring_node_at_every_position() {
         let schema = QuillValue::from_json(json!({
@@ -900,8 +887,8 @@ mod tests {
                 .map(str::to_string)
         };
         assert_eq!(format_of(meta.field_node("issued")).as_deref(), Some("date"));
-        // The nested declaration is present and reachable: the fact the flat
-        // tables were structurally incapable of carrying.
+        // A nested declaration is reachable, which is what the lowering walk
+        // reads and what a table of top-level names cannot express.
         let contact = meta.field_node("contact").expect("contact declared");
         assert_eq!(
             format_of(contact.get("properties").and_then(|p| p.get("reply_by"))).as_deref(),

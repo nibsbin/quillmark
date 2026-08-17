@@ -96,18 +96,9 @@ The ceiling is deliberate and enforced at load rather than discovered at render:
 | a variant field named `value` | `quill::variant_reserved_field_name` |
 | a name two variants declare *differently* | `quill::variant_field_collision` |
 
-A variant carries any **leaf** type a card field may, prose and dates included.
-The four rich types were once refused here (`quill::variant_field_type`) because
-lowering read flat top-level name tables that could not descend into a
-container, so such a cell would have loaded clean and reached the plate as its
-raw wire value. The schema-node walk reads a cell's own declaration
-([PLATE_DATA.md](PLATE_DATA.md)) and every value surface already descended —
-coercion through `conform_value`, validation through `validate_value`, the
-render floor through `resolve_value` — so the ceiling had no mechanism left to
-protect and is gone.
+A variant carries any **leaf** type a card field may, prose and dates included. Every surface reaches a cell through the same dispatcher a card field uses — coercion through `conform_value`, validation through `validate_value`, the render floor through `resolve_value`, lowering through the schema-node walk ([PLATE_DATA.md](PLATE_DATA.md)) — so a `richtext` or `date` cell behaves as a card-level one does.
 
-Variant fields are leaves exactly as an object's properties are: no container
-one level down, and no `ui.group` (they inherit the discriminant's).
+Variant fields are leaves exactly as an object's properties are: no container one level down, and no `ui.group` (they inherit the discriminant's).
 
 Two limits follow from the container shape and are accepted, not worked around:
 [`resolve()`](#the-resolved-value-view-resolve) reports **one** rung for the whole
