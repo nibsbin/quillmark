@@ -996,15 +996,20 @@ fn collect_binders(node: &LinkedNode, tables: &Tables, out: &mut Binders) {
                     bind(ident.as_str(), out);
                 }
                 for param in closure.params().children() {
-                    let pattern = match param {
-                        ast::Param::Pos(pattern) => Some(pattern),
-                        ast::Param::Named(named) => Some(ast::Pattern::Normal(named.expr())),
-                        ast::Param::Spread(spread) => spread.sink_ident().map(|i| {
-                            ast::Pattern::Normal(ast::Expr::Ident(i))
-                        }),
-                    };
-                    for ident in pattern.map(ast::Pattern::bindings).unwrap_or_default() {
-                        bind(ident.as_str(), out);
+                    match param {
+                        ast::Param::Pos(pattern) => {
+                            for ident in pattern.bindings() {
+                                bind(ident.as_str(), out);
+                            }
+                        }
+                        // The name is the parameter; the default beside it binds
+                        // nothing.
+                        ast::Param::Named(named) => bind(named.name().as_str(), out),
+                        ast::Param::Spread(spread) => {
+                            if let Some(ident) = spread.sink_ident() {
+                                bind(ident.as_str(), out);
+                            }
+                        }
                     }
                 }
             }
@@ -1150,10 +1155,37 @@ fn data_access<'a>(
         // are not reads of the field.
         SyntaxKind::Ident => {
             let alias = aliases.get(node.cast::<ast::Ident>()?.as_str())?;
-            (node.range().start >= alias.bound_at)
+            (node.range().start >= alias.bound_at && reads_its_binding(node))
                 .then(|| step_into(alias.path.clone(), node.clone(), tables))
         }
         _ => None,
+    }
+}
+
+/// Whether the identifier reads what the name holds, rather than spelling a name
+/// of its own: a key selected off another value (`styles.subject`), a named
+/// argument or dict key (`text(subject: 12pt)`, `(subject: [Ink])`), an item
+/// named inside an import.
+///
+/// [`alias_bindings`] bounds which *name* an anchor may follow, this which
+/// *occurrence*. Both are needed: a schema field name collides freely with the
+/// parameter names of a callee the plate never defines (`date`, `caption`,
+/// `align`, `subject`), and a window over one would carry a wrong address over
+/// ink the field never drew. [`select_property`] tests the mirror of this for
+/// the step it takes.
+fn reads_its_binding(node: &LinkedNode) -> bool {
+    let Some(parent) = node.parent() else {
+        return true;
+    };
+    match parent.kind() {
+        SyntaxKind::FieldAccess => parent
+            .cast::<ast::FieldAccess>()
+            .is_some_and(|access| access.target().to_untyped() == node.get()),
+        SyntaxKind::Named => parent
+            .cast::<ast::Named>()
+            .is_some_and(|named| named.expr().to_untyped() == node.get()),
+        SyntaxKind::ImportItemPath | SyntaxKind::RenamedImportItem => false,
+        _ => true,
     }
 }
 
@@ -1534,6 +1566,7 @@ main:
         for plate in [
             "#let c = data.classification\n#let c = \"other\"\n#c.poc",
             "#let c = data.classification\n#let f(c) = [#c.poc]\n#f(1)",
+            "#let c = data.classification\n#let f(c: 1) = [#c.poc]\n#f()",
             "#let c = data.classification\n#for c in (1, 2) [#c.poc]",
             "#let c = data.classification\n#{ c = \"other\" }\n#c.poc",
             "#let c = data.classification\n#import \"x.typ\": *\n#c.poc",
@@ -1546,6 +1579,64 @@ main:
                 rebound(plate).is_empty(),
                 "alias survived a rebind in {plate:?}: {:?}",
                 rebound(plate)
+            );
+        }
+    }
+
+    /// An occurrence spelling the alias as a *name* reads nothing off the field,
+    /// so it anchors nothing: attributing a callee's argument to the field is a
+    /// wrong address, worse than the missing one dropping the alias would leave.
+    #[test]
+    fn scalar_windows_anchor_an_alias_only_where_the_name_is_read() {
+        let named = |plate: &str| {
+            let src = Source::detached(&format!(
+                "#import \"@local/quillmark-helper:0.1.0\": data\n{plate}\n"
+            ));
+            probe_spans(&src)
+                .into_iter()
+                .filter(|(_, t)| !t.starts_with("data"))
+                .collect::<Vec<_>>()
+        };
+        for plate in [
+            "#let other = data.other\n#text(other: 12pt)[Hello]",
+            "#let other = data.other\n#figure(caption: [Cap], other: 1)[Body]",
+            "#let other = data.other\n#let d = (other: [Inner])",
+            "#let other = data.other\n#set text(other: 1)",
+            "#let subject = data.subject\n#box[#mydict.subject]",
+            // The bound name is the path's last segment, so an earlier segment
+            // survives the name rule while naming a module, not a value.
+            "#let other = data.other\n#import \"x.typ\": other.deeper",
+        ] {
+            assert!(
+                named(plate).is_empty(),
+                "a name position anchored in {plate:?}: {:?}",
+                named(plate)
+            );
+        }
+    }
+
+    /// The collision is between a name and an occurrence, so the genuine read
+    /// still carries the address while the key beside it carries none.
+    #[test]
+    fn scalar_windows_keep_the_genuine_read_beside_a_colliding_key() {
+        let src = Source::detached(
+            r#"
+#import "@local/quillmark-helper:0.1.0": data
+#let subject = data.subject
+#let styles = (subject: [UNRELATED INK])
+#styles.subject
+#subject
+#upper(subject)
+"#,
+        );
+        let spans = probe_spans(&src);
+        for text in ["subject", "upper(subject)"] {
+            assert!(has(&spans, "subject", text), "missing {text}: {spans:?}");
+        }
+        for text in ["subject: [UNRELATED INK]", "styles.subject"] {
+            assert!(
+                !spans.iter().any(|(_, t)| t == text),
+                "{text:?} is no read of the field: {spans:?}"
             );
         }
     }

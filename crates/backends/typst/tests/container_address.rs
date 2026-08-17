@@ -184,6 +184,45 @@ fn a_rebound_alias_surfaces_no_region() {
     );
 }
 
+/// An identifier spelling the alias in a *name* position draws no ink off the
+/// field, so a click there must not route to it: a wrong address is worse than a
+/// missing one. The genuine read beside it keeps its region.
+#[test]
+fn a_key_spelling_an_alias_claims_none_of_its_ink() {
+    let plate = r#"
+#import "@local/quillmark-helper:0.1.0": data
+#set page(width: 400pt, height: 200pt, margin: 40pt)
+#let subject = data.subject
+#let styles = (subject: [UNRELATED INK])
+#styles.subject
+#subject
+"#;
+    let session = open(plate);
+    let regions: Vec<_> = session
+        .regions()
+        .into_iter()
+        .filter(|r| r.field == "subject")
+        .collect();
+    let [region] = regions.as_slice() else {
+        panic!("only the read of the field regions on it: {regions:?}");
+    };
+    let (cx, cy) = (
+        (region.rect[0] + region.rect[2]) / 2.0,
+        (region.rect[1] + region.rect[3]) / 2.0,
+    );
+    assert_eq!(
+        session.field_at(region.page, cx, cy).as_deref(),
+        Some("subject"),
+        "the surviving region is the read, and a click on it routes to the field"
+    );
+    // The dict's ink shares the line, starting at the 40pt margin.
+    assert_eq!(
+        session.field_at(region.page, 60.0, cy),
+        None,
+        "a click on the dict's ink routes nowhere: {region:?}"
+    );
+}
+
 /// The container read whole is still one region: the step is what narrows it.
 #[test]
 fn the_container_read_whole_still_regions_on_the_container() {
