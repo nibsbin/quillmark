@@ -314,10 +314,11 @@ in a CUI block leaves those values in the document and warns
 (`validation::out_of_variant`); they simply stop rendering. Flip back and they
 are still there. Remove the field to drop the value for good.
 
-What a variant can hold is deliberately narrow — `string`, `enum`, `number`,
-`integer`, `boolean`. Prose and dates (`richtext`, `plaintext`, `date`,
-`datetime`) stay card-level fields (`quill::variant_field_type`), as do arrays
-and objects. `variants:` itself is valid only on a card-level `type: enum` field,
+A variant holds any **leaf** type a card field may, prose and dates included:
+a `richtext` or `date` cell reaches the plate exactly as a card-level one does.
+What it cannot hold is another container — arrays and objects stay card-level,
+the same one-level nesting rule an object's properties obey. `variants:` itself
+is valid only on a card-level `type: enum` field,
 keys only on declared members (never `""`, which owns no field set), and cannot
 declare a field named `value`. Variant fields inherit the discriminant's
 `ui.group`; declaring one inside a variant is an error. A field set shared by

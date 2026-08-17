@@ -4,7 +4,9 @@
 
 ## TL;DR
 
-Plates get document data through a backend-injected virtual Typst package, not a template engine. Data flows in two stages: `Quill::compile_data()` produces validated, blank-filled JSON in which content fields are canonical `Content` objects; `Backend::open()` generates the helper's `lib.typ`, lowering each to Typst markup at codegen (and dates to click-to-edit value-objects wrapping `datetime(..)`), no per-field markdown re-parse.
+Plates get document data through a backend-injected virtual Typst package, not a template engine. Data flows in two stages: `Quill::compile_data()` produces validated, blank-filled JSON in which content fields are canonical `Content` objects; `Backend::open()` generates the helper's `lib.typ`, walking each value beside its transform-schema node to lower it, no per-field markdown re-parse.
+
+One rule governs the lowering, at every depth: **a declared type means the same thing wherever it is declared, and every type lowers to its native Typst value unless it has a canonical rendering.** Only the content types have one — the authored text — so only they lower to content; a date lowers to a native `datetime`, because every rendering of `2026-01-02` is a typographic decision the plate owns. Backend-generated *ink* is reached by address instead (`display(addr, ..)`), which is also what makes it laundering-proof.
 
 ## Overview
 
@@ -18,7 +20,7 @@ Plates get document data through a backend-injected virtual Typst package, not a
    present-null field blank-fills, and a `!must_fill` marker uses its suggested
    value or blank-fills. Only a malformed value: one that won't coerce or
    validate to its type: errors.
-2. `Backend::open()` receives that JSON and generates the helper package. Content fields lower to Typst markup at codegen via `emit::emit_content`, dates to value-objects wrapping `datetime(..)`; a direct `apply` path revalidates dates. There is no markdown-string transform.
+2. `Backend::open()` receives that JSON and generates the helper package. `Codegen::emit_value` walks the data beside the schema node declaring it: a content node lowers via `emit::emit_content`, a date node to `datetime(..)`, an `array` recurses on `items`, an `object` on `properties`, everything else to a value literal. There is no markdown-string transform, and no name table: the walk is the inverse of the one `field_to_schema` built the node with, so it cannot be shallower than the schema is.
 
 ### Data Shape
 
@@ -46,7 +48,8 @@ The Typst backend injects a virtual package `@local/quillmark-helper:<version>` 
 
 #data.title                  // plain field access
 #data.at("$body")            // root $body: a content object when the main enables a body
-#(data.date.display)("…")    // date/datetime fields are value-objects; .value is the native datetime
+#data.date.year()            // date/datetime fields are native datetimes
+#display("date", "…")        // …and `display` places the click-to-edit rendering
 #for card in data.at("$cards") {
   if card.at("$kind", default: none) == "indorsement" {
     // per-kind handling; $kind/$body are present only where the schema
@@ -59,78 +62,55 @@ The `$`-prefixed keys must be accessed via `.at("$...")` because Typst identifie
 
 Helper contents (generated in `backends/typst/helper.rs` from `lib.typ.template`):
 
-- `data`: a backend-generated Typst dictionary **literal** of all fields, no runtime processing, no `__meta__` sentinel. The backend classified and lowered every field at generation time, reading classification from the session's cached `SchemaMeta`.
-- Content fields lower to Typst content: each field's `Content` value lowered
-  by `emit::emit_content`. Two schema shapes qualify (see
-  `content_field_names`), both classified on `contentMediaType:
-  application/quillmark-content+json`:
-  - a scalar richtext field (`{type: object, contentMediaType:
-    application/quillmark-content+json}`): one `Content` object, lowered in
-    place.
-  - `array<richtext>` (`{type: array, items: {type: object, contentMediaType:
-    application/quillmark-content+json}}`): each array element lowered
-    individually.
+- `data`: a backend-generated Typst dictionary **literal** of all fields, no runtime processing, no `__meta__` sentinel. `Codegen::emit_value` lowered every value at generation time, dispatching on the schema node beside it.
+- **The lowering walk.** `helper::lowering` classifies one schema node; the walk
+  recurses on shape and does nothing else:
 
-  Each non-blank content is emitted as a markup **block** binding (`#let _qm_cN
-  = [ .. ]`) that `data` references; a blank content stays an empty string
-  literal.
+  | node | lowers to | recursion |
+  |---|---|---|
+  | `contentMediaType: application/quillmark-content+json` | a `#let _qm_cN = [ .. ]` markup block the data cell references (blank ⇒ `""`) | — |
+  | `format: date` / `date-time` | `datetime(year:, month:, day:)` / the six-component form, authored wall-clock, seconds zero-filled (blank ⇒ `none`) | — |
+  | `type: array` | a Typst array | each element against `items`, at `{path}.{i}` |
+  | `type: object` with `properties` | a Typst dict | each value against `properties[key]`, at `{path}.{key}` |
+  | anything else, and any key the schema does not declare | its value literal | — |
 
-  A `richtext(inline)` field (`quillmark:inline: true`, classified by
-  `inline_field_names`) instead lowers via `emit::emit_content_inline` to **pure
-  inline** markup: the single `Para`'s content with no block terminator, so no
-  `parbreak`. The value therefore composes in an inline slot (`par(..)`, a grid
-  cell) without Typst's "parbreak may not occur inside of a paragraph" warning.
+  The dispatch is a node test, never a table of names, which is what makes it
+  **depth-invariant**: `contact.reply_by` is the same `datetime` a card-level
+  `date` is, `rows.0.notes` the same markup block a card-level `richtext` is, and
+  the addresses every projection keys on fall out of the recursion. A name table
+  keyed on a top-level name cannot be depth-invariant; this cannot fail to be.
+
+  A `richtext(inline)` node (`quillmark:inline: true`) lowers via
+  `emit::emit_content_inline` to **pure inline** markup: the single `Para`'s
+  content with no block terminator, so no `parbreak`. The value therefore
+  composes in an inline slot (`par(..)`, a grid cell) without Typst's "parbreak
+  may not occur inside of a paragraph" warning. The flag is read at the content
+  leaf, so `array<richtext(inline)>` needs no separate rule.
 
   A `plaintext` field rides the *same* media type (plus an editor-only
-  `quillmark:plain: true`), so `content_field_names` classifies it identically
-  and it lowers through this exact path. The codec differs only at
-  authoring/coercion (literal `from_plaintext`), never at codegen.
-- `date` / `datetime` fields (`format: date` / `format: date-time`) lower to a
-  **value-object**, a `#let _qm_dN = { let v = datetime(..); (value: v, display:
-  (..args) => text(v.display(..args))) }` block the data cell references (blank ⇒
-  `none`). `v` is the three-component `datetime(year:, month:, day:)` for a
-  `date`, the six-component `datetime(year:, .., second:)` (authored wall-clock,
-  seconds zero-filled) for a `datetime`: the distinct transform-schema `format`
-  stamps the backend keys its per-type lowering on. The object exposes two
-  projections and is the date sibling of the content block
-  ([`date_object`](../../crates/backends/typst/src/helper.rs)):
-  - `value`: the native `datetime` `v`, for arithmetic, comparison, `.year()`/`.weekday()`/… components, and datetime-consuming packages. `.value.display(..)` is the native `str`.
-  - `display`: a closure `(..args) => text(v.display(..args))` called as
-    `(data.<field>.display)(..)` (the paren form; Typst reserves dict-key method
-    sugar). It returns *content*, so its glyphs are born at the generated
-    `text(..)` node's site, inside a recorded **segment-less window** keyed by
-    the field's schema path → one whole-placement **region** per emitted cell.
+  `quillmark:plain: true`), so it classifies identically and lowers through this
+  exact path. The codec differs only at authoring/coercion (literal
+  `from_plaintext`), never at codegen.
 
-    This is what makes a date the first click-to-edit target. A closure's ink is
-    born at its lexical definition site, not the reference, so the region
-    survives the value being laundered (`#let d = card.on`) or handed into a
-    vendored package that formats it internally. Emitting one `text(..)` node
-    per cell manufactures the per-instance identity a shared loop variable
-    (`card.<field>`) lacks: the case `span_scan`'s "Not chased" note describes,
-    so each card's date surfaces its own region. Wrapping `v.display` (not a
-    re-literalized date) inherits `v`'s type, so a `date`-only field's `display`
-    throws Typst's native error on an `[hour]` pattern.
+  A non-blank date the shared parsers reject is a `backend::invalid_date` render
+  error raised from the walk, at the site that parses it, which is what makes the
+  check total over depth.
+- **`display(field, ..args)`** → content, the one address-keyed projection.
+  `_qm-display` binds one `#let _qm_dN = (..args) => text(datetime(..).display(..args))`
+  closure per present date, keyed by schema address (`issued`, `stamps.2`,
+  `contact.reply_by`, `$cards.<kind>.<n>.<field>`; compose a card address from
+  the card's `$path`), and `display` calls it. `none` for a blank date or an
+  address carrying none, so a `== none` fallback still fires. Formatting through
+  the date's own `display` inherits its type, so a `date`-only field throws
+  Typst's native error on an `[hour]` pattern.
 
-    Two Typst-language facts the paren form rests on, verified against **Typst
-    0.15** and worth re-checking on a major bump: dict-key method sugar
-    (`d.display(..)`) is a hard error, and grabbing `.display` off a *native*
-    `datetime` without calling it is too: which is why `display-date`
-    dispatches on `type(date)` instead of parenthesizing uniformly. Neither is
-    pinned by a test: a test on Typst's error wording fails on a reworded
-    message, which says nothing about a Quillmark regression.
-- `plaintext(field)`: the sanctioned content→`str` coercion. Where
-  `data.<field>` is Typst **content**, `plaintext(field)` returns the content
-  field's plain text: the content text with island slots stripped and marks
-  dropped (the same projection pdfform lowers a richtext field to). It reads a
-  generated `_qm-plaintext` literal keyed by schema address (`subject`,
-  `refs.2`, `$cards.<kind>.<n>.<field>`); `""` for a blank field or an address
-  with no content. Use it when a plate or package needs a string (string ops, an
-  `assert(type(item) == str)` consumer) for any content field: `richtext` or
-  `plaintext`.
-
-  Note the name collision: this Typst helper is distinct from the `plaintext`
-  **field type**. The helper projects *any* content to a `str`; the field type
-  declares a field's content plain from the start.
+  The reason it is addressed rather than carried on the value is
+  **regions**. Its ink is born at the generated node, not at the plate's
+  reference site, so it survives being laundered — through a `#let` binding, a
+  loop variable, or a vendored package that formats it internally — and one node
+  per cell gives a card's date the per-instance identity a shared `card.<field>`
+  loop variable lacks. A native `datetime` handed to a package cannot do that:
+  the ink is born wherever the package places it.
 
 ### Schema addresses
 

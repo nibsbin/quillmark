@@ -1,5 +1,9 @@
-#import "@local/quillmark-helper:0.1.0": data, form-field, signature-field
-#import "@local/tonguetoquill-usaf-memo:3.0.0": backmatter, frontmatter, indorsement, mainmatter
+#import "@local/quillmark-helper:0.1.0": data, display, form-field, signature-field
+#import "@local/tonguetoquill-usaf-memo:3.0.0": backmatter, date-pattern, frontmatter, indorsement, mainmatter
+
+// A memo has no "no style" state, so the blank takes the package's default.
+// Resolved once here: `frontmatter` and the date's pattern must agree.
+#let memo_style = if data.memo_style != "" { data.memo_style } else { "usaf" }
 
 // Frontmatter configuration
 #show: frontmatter.with(
@@ -20,8 +24,13 @@
     ))
   },
 
-  // Date
-  date: data.date,
+  // Date. `data.date` is the native `datetime` and would render identically,
+  // but its ink would be born inside the package and carry no schema address.
+  // `display` places the field's *content* projection instead: the glyphs are
+  // born in the generated helper, so the memo date stays click-to-edit however
+  // deep the package formats it. A blank date yields `none`, which is what
+  // `frontmatter`'s `datetime.today()` fallback keys on.
+  date: display("date", date-pattern(memo-style: memo_style)),
 
   // Receiver information
   memo_for: data.memo_for,
@@ -52,10 +61,10 @@
     )
   },
 
-  // USAF vs DAF memorandum style (date format, body indentation). A memo has no
-  // "no style" state, so the blank takes the package's default; `frontmatter`
-  // asserts membership of ("usaf", "daf") and would fail the compile on a blank.
-  ..if data.memo_style != "" { (memo_style: data.memo_style) },
+  // USAF vs DAF memorandum style (date format, body indentation). `frontmatter`
+  // asserts membership of ("usaf", "daf"), which the blank resolution above
+  // already guarantees.
+  memo_style: memo_style,
 
   // Font size
   font_size: data.font_size * 1pt,
@@ -98,12 +107,17 @@
     // it (distinct from the originating memo's date). The signing date is
     // generally unknown at compile time and filled in by hand, so a blank date
     // renders a fill-in line rather than stamping the compile date.
-    let card_date = card.date
-    let resolved_date = if card_date == "" { none } else { card_date }
-    // A filled date is typeset text and already regions through the date
-    // value-object's `display` closure. A blank one draws nothing, so bind a
-    // text widget to the same schema address: typeable in a PDF reader, and the
-    // one thing that gives the *unfilled* date a region to click.
+    // The card's own address, composed from its `$path` prefix: `display`
+    // takes an address, so a per-card call yields a per-card region even
+    // though every iteration shares one `card` loop variable. `none` for a
+    // blank date, which is the fill-in case below.
+    let resolved_date = display(
+      card.at("$path") + "date",
+      date-pattern(memo-style: memo_style),
+    )
+    // A filled date regions through that call. A blank one draws nothing, so
+    // bind a text widget to the same schema address: typeable in a PDF reader,
+    // and the one thing that gives the *unfilled* date a region to click.
     //
     // Styled to match the printed date it stands in for, since the two are
     // alternatives for the same slot: the memo's Times-alike body face at the

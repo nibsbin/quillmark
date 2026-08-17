@@ -25,9 +25,9 @@ Supported field types:
 | `boolean` | `true` / `false` |
 | `array` | Ordered list; requires an `items:` element schema (e.g. `items: { type: string }` for `string[]`, `items: { type: object, properties: … }` for a typed table) |
 | `object` | Structured map; requires `properties:` |
-| `date` | A strict calendar date `YYYY-MM-DD`. Rejects any time component (a time-bearing string is a `datetime`, not a truncated date). The common case in a document engine, so it is the unmarked date type. Stored verbatim; lowers to a Typst value-object wrapping `datetime(year:, month:, day:)` (`.value` native, `(.display)(..)` renders: a click-to-edit region; see `PLATE_DATA.md`) |
-| `datetime` | A strict offset-less wall-clock datetime `YYYY-MM-DDThh:mm[:ss]`, seconds optional (zero-filled). Rejects timezone offsets (`Z`, `±HH:MM`), the space separator, fractional seconds, and a bare date (which is a `date`). An offset is **rejected, never dropped**: the engine does no zone math, keeping wall-clock semantics end to end. Stored verbatim; lowers to the same value-object over the six-component `datetime(year:, .., second:)` |
-| `plaintext` | Navigable **unformatted** prose over the same canonical content (`Content`) as `richtext` (same media type, nav, and regions) but a **literal** codec (`from_plaintext`/`to_plaintext`): delimiters stay literal, no markup, verbatim round-trip. Declare `inline: true` for the single-line variant. Constrained mark-/island-free (`Content::is_plain`); a formatted wire content is rejected (`validation::not_plain`), not stripped. **Rests as the literal string** |
+| `date` | A strict calendar date `YYYY-MM-DD`. Rejects any time component (a time-bearing string is a `datetime`, not a truncated date). The common case in a document engine, so it is the unmarked date type. Stored verbatim; lowers to a native Typst `datetime(year:, month:, day:)`, with `display(<addr>, ..)` for a click-to-edit rendering (see `PLATE_DATA.md`) |
+| `datetime` | A strict offset-less wall-clock datetime `YYYY-MM-DDThh:mm[:ss]`, seconds optional (zero-filled). Rejects timezone offsets (`Z`, `±HH:MM`), the space separator, fractional seconds, and a bare date (which is a `date`). An offset is **rejected, never dropped**: the engine does no zone math, keeping wall-clock semantics end to end. Stored verbatim; lowers the same way over the six-component `datetime(year:, .., second:)` |
+| `plaintext` | Navigable **unformatted** prose over the same canonical content (`Content`) as `richtext` (same media type, nav, and regions) but a **literal** codec (`from_plaintext`/`to_plaintext`): delimiters stay literal, no markup, verbatim round-trip. Declare `inline: true` for the single-line variant. Constrained mark-/island-free (`Content::is_plain`); a formatted wire content is rejected (`validation::not_plain`), not stripped. **Rests as the literal string** — in the *document*. A plate receives the content object, exactly as for `richtext` (no backend reads the `plaintext` annotation): there is deliberately no plate-side content→`str` projection, since no plate has needed one |
 | `richtext` | Rich **formatted** prose over a canonical content (`Content`); markdown is a projection of it. Declare `inline: true` for the single-line variant (exactly one `Para` line, no container, no islands). The pre-richtext `markdown` spelling and the retired `type: richtext(inline)` token are schema load errors (`quill::field_parse_error`). **Rests as the canonical content object** |
 
 ### Enum variants
@@ -52,8 +52,7 @@ variantless enum rests as a bare string. A document authors it as the container,
 and the bare scalar (`classification: CUI`) is accepted as the spelling of a
 world carrying no variant answers — coercion normalizes both, so one shape
 reaches every surface downstream. `value` is reserved
-(`quill::variant_reserved_field_name`); it is the date value-object's `.value`,
-the sibling idiom for the scalar inside a wrapper.
+(`quill::variant_reserved_field_name`): it names the discriminant.
 
 This is the DSL's only cross-field shape, and it buys three things the flat map
 could not say:
@@ -95,16 +94,11 @@ The ceiling is deliberate and enforced at load rather than discovered at render:
 | `variants:` below card level, or inside another variant | `quill::variant_placement` |
 | an empty `variants:` map, or an empty variant | `quill::variant_empty` |
 | a variant field named `value` | `quill::variant_reserved_field_name` |
-| a `richtext`, `plaintext`, `date`, or `datetime` variant field | `quill::variant_field_type` |
 | a name two variants declare *differently* | `quill::variant_field_collision` |
 
-The last is the load-bearing one: content and dates lower to Typst through
-*top-level* content and date name tables that do not descend into a container
-([PLATE_DATA.md](PLATE_DATA.md)) — unlike the address tables, which do — so such
-a field would load clean and reach the plate as a raw dict. **A variant carries plain data** — `string`, `enum`,
-`number`, `integer`, `boolean` — and prose and dates stay card-level fields.
-Variant fields are otherwise leaves exactly as an object's properties are: no
-container one level down, and no `ui.group` (they inherit the discriminant's).
+A variant carries any **leaf** type a card field may, prose and dates included. Every surface reaches a cell through the same dispatcher a card field uses — coercion through `conform_value`, validation through `validate_value`, the render floor through `resolve_value`, lowering through the schema-node walk ([PLATE_DATA.md](PLATE_DATA.md)) — so a `richtext` or `date` cell behaves as a card-level one does.
+
+Variant fields are leaves exactly as an object's properties are: no container one level down, and no `ui.group` (they inherit the discriminant's).
 
 Two limits follow from the container shape and are accepted, not worked around:
 [`resolve()`](#the-resolved-value-view-resolve) reports **one** rung for the whole

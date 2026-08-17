@@ -1051,29 +1051,6 @@ impl QuillConfig {
                     ) {
                         return Some(diag);
                     }
-                    // Content and dates lower to Typst through *top-level* name
-                    // tables (`content_field_names`, the date tables), which do
-                    // not descend into a container. Declaring one here would
-                    // load clean and reach the plate as a raw dict, so the
-                    // ceiling is enforced rather than discovered at render.
-                    if matches!(
-                        field.r#type,
-                        FieldType::RichText { .. }
-                            | FieldType::PlainText { .. }
-                            | FieldType::Date
-                            | FieldType::DateTime
-                    ) {
-                        return err(
-                            "quill::variant_field_type",
-                            format!(
-                                "Field '{member_owner}.{name}' is type: {}, which a variant \
-                                 cannot carry. A variant holds plain data: string, enum, \
-                                 number, integer, or boolean. Declare prose and dates as \
-                                 card-level fields.",
-                                field.r#type.as_str()
-                            ),
-                        );
-                    }
                     // The coercion lookup and the transform schema both key on
                     // the name alone, never the discriminant, so a name resolves
                     // to one slot however many worlds declare it.
@@ -2183,8 +2160,15 @@ pub(crate) fn field_contains_content(field: &FieldSchema) -> bool {
             .properties
             .as_ref()
             .is_some_and(|p| p.values().any(|f| field_contains_content(f))),
-        // A variant carries plain data only (`quill::variant_field_type`), so no
-        // content leaf can sit inside one and the container never bears content.
+        // A variant container bears content when any world's cell does. Which
+        // world is live is a value-time fact and this is a schema question, so
+        // the union answers it: a cell that can hold content means the
+        // container's companions, resting form and seed must all handle one.
+        FieldType::Enum => field.variants.as_ref().is_some_and(|v| {
+            v.values()
+                .flat_map(|set| set.values())
+                .any(|f| field_contains_content(f))
+        }),
         _ => false,
     }
 }

@@ -443,7 +443,7 @@ quill:
   name: date_region
   version: 0.1.0
   backend: typst
-  description: date value-object region test
+  description: date content-projection region test
 typst:
   plate_file: plate.typ
 main:
@@ -452,12 +452,16 @@ main:
       type: date
       description: the memo date
 "#;
+    // `data.issued` is the native `datetime`, so the comparison and the
+    // component read are ordinary Typst; `display` places the ink that regions.
     const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data
+#import "@local/quillmark-helper:0.1.0": data, display
 #set page(width: 612pt, height: 792pt, margin: 72pt)
 #set text(size: 11pt)
 
-#(data.issued.display)("[day padding:none] [month repr:long] [year]")
+#assert(data.issued.year() == 2026)
+#assert(data.issued < datetime(year: 2027, month: 1, day: 1))
+#display("issued", "[day padding:none] [month repr:long] [year]")
 "#;
     let data = serde_json::json!({ "issued": "2026-01-02" });
 
@@ -492,9 +496,10 @@ main:
 fn card_dates_surface_per_instance_regions_through_laundering() {
     // `scalar_windows` does not chase the shared `card.<field>` loop variable,
     // so a card date surfaces only through its own per-instance `text(..)` node.
-    // A closure's body ink is born at its lexical definition site, so
-    // laundering the value through `#let d = card.at("on")` keeps it
-    // attributable.
+    // `display` reaches that node by address rather than through the value, so
+    // the card composes the address from its `$path` exactly as it does for
+    // `plaintext`, and the region survives the loop variable the value's own
+    // type never could.
     const YAML: &str = r#"
 quill:
   name: card_date_region
@@ -512,14 +517,14 @@ card_kinds:
         description: the stamp date
 "#;
     const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data
+#import "@local/quillmark-helper:0.1.0": data, display
 #set page(width: 612pt, height: 792pt, margin: 72pt)
 #set text(size: 11pt)
 
 #for card in data.at("$cards", default: ()) {
   let d = card.at("on", default: none)
   if d != none {
-    (d.display)("[day padding:none] [month repr:long] [year]")
+    display(card.at("$path") + "on", "[day padding:none] [month repr:long] [year]")
   } else {
     [—]
   }

@@ -109,9 +109,10 @@ fn usaf_memo_regions_cover_body_signature_and_cards() {
 }
 
 /// The laundered shape: the vendored package, not the plate, inks the date
-/// deep inside `utils.typ`'s `display-date`. The value-object's `display`
-/// closure is born in the generated helper, so its glyphs carry a helper span
-/// that resolves to the recorded window wherever the package calls it.
+/// deep inside `utils.typ`'s `display-date`. The plate passes the field's
+/// *content projection* rather than its value, and that ink is born in the
+/// generated helper, so its glyphs carry a helper span resolving to the
+/// recorded window wherever the package finally places them.
 #[test]
 fn usaf_memo_date_region_rides_the_vendored_display() {
     let engine = Quillmark::new();
