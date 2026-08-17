@@ -290,6 +290,16 @@ A **scalar** is tracked at the expression that draws it, so where you write the 
 #c.poc                       // regions as `classification.poc`, same as #data.classification.poc
 ```
 
+A read into a typed table works the same way, one step further: the index and
+then the row property, the addresses `form-field(field:)` takes.
+
+```typst
+#data.refs.at(0).org         // regions as `refs.0.org`
+#data.refs.at(0)             // regions as `refs.0` — each step is its own address
+#let row = data.refs.at(0)
+#row.org                     // regions as `refs.0.org` too
+```
+
 Rebind that name anywhere in the plate — a second `let`, a closure parameter, a loop pattern, an assignment — and it stops being followed, because a read can no longer be tied to one value. Three shapes are past what the tracker follows at all:
 
 | Shape | Why |

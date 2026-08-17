@@ -187,11 +187,15 @@ tracked site; a scalar shown in header and footer surfaces both sites, and a
 reference wrapped in an expression (`#upper(data.subject)`) attributes the
 whole expression's ink to the field when it is the only reference inside it.
 A read that steps into a declared container (`data.classification.poc`,
-`data.address.at("city")`) tracks on the **property**, so the region names the
-cell the plate read rather than the container holding it; a key the container
-does not declare is no address, and the read falls back to the container.
+`data.address.at("city")`, `data.refs.at(0).org`) tracks on the **cell**, so the
+region names what the plate read rather than the container holding it; a key the
+container does not declare is no address, and the read falls back to the
+container. The steps are the address grammar's
+([PLATE_DATA.md](PLATE_DATA.md#schema-addresses)), so a scanned region is a
+name a `field-region` could claim, and each step is its own address: a
+whole-row read (`data.refs.at(0)`) names the row.
 A read through a `let` alias tracks where the chain it names would, so naming a
-container before stepping into it costs no address. The alias holds only where
+container or a row before stepping into it costs no address. The alias holds only where
 the plate binds the name exactly once to one whole chain: a name a second binder
 could rebind would attribute another value's ink to the field.
 Not tracked: expressions mixing several fields (`data.from + ", " + rank` has

@@ -290,23 +290,75 @@ fn a_typed_table_row_property_is_addressable() {
     );
 }
 
-/// `collect_anchors` steps one *property* into a declared container and has no
-/// index step, so a direct read of a row cell anchors on the array: a click on
-/// the org cell routes to the whole table. The address grammar and the lowering
-/// both reach `refs.0.org`, so this is a wrong address rather than a missing
-/// one. Pinned here so widening the scan is a deliberate change with its own
-/// sweep over every plate that reads an array element.
+/// The address the scan reports must be the one the lowering and `_qm-known-path`
+/// already agree on: anchoring on the array routes a click on the org cell to the
+/// whole table.
 #[test]
-fn a_direct_row_cell_read_still_anchors_on_the_array() {
+fn a_direct_row_cell_read_anchors_on_the_row_property() {
     let session = open(
         r#"
 #import "@local/quillmark-helper:0.1.0": data
+#set page(width: 400pt, height: 200pt, margin: 40pt)
 #data.refs.at(0).org
 "#,
     );
+    let regions = session.regions();
+    let fields: Vec<&str> = regions.iter().map(|r| r.field.as_str()).collect();
+    assert!(fields.contains(&"refs.0.org"), "{fields:?}");
+    assert!(
+        !fields.contains(&"refs"),
+        "the table does not also claim the cell's ink: {fields:?}"
+    );
+
+    let cell = regions
+        .iter()
+        .find(|r| r.field == "refs.0.org")
+        .expect("the row property region surfaces");
+    let (cx, cy) = (
+        (cell.rect[0] + cell.rect[2]) / 2.0,
+        (cell.rect[1] + cell.rect[3]) / 2.0,
+    );
+    assert_eq!(
+        session.field_at(cell.page, cx, cy).as_deref(),
+        Some("refs.0.org"),
+        "a click on the cell routes to the cell, not the table"
+    );
+}
+
+#[test]
+fn a_read_that_stops_short_anchors_on_the_step_it_took() {
+    let session = open(
+        r#"
+#import "@local/quillmark-helper:0.1.0": data
+#set page(width: 400pt, height: 200pt, margin: 40pt)
+#repr(data.refs.at(0))
+#data.tags.at(0)
+#repr(data.refs)
+"#,
+    );
     let fields: Vec<String> = session.regions().into_iter().map(|r| r.field).collect();
-    assert!(fields.iter().any(|f| f == "refs"), "{fields:?}");
-    assert!(!fields.iter().any(|f| f == "refs.0.org"), "{fields:?}");
+    for field in ["refs.0", "tags.0", "refs"] {
+        assert!(fields.iter().any(|f| f == field), "{field:?}: {fields:?}");
+    }
+}
+
+/// The alias lane reaches the cell even though the index step was taken in the
+/// initializer, so the address is not the one the anchor alone would offer.
+#[test]
+fn a_row_cell_read_through_a_let_alias_keeps_the_cell_address() {
+    let session = open(
+        r#"
+#import "@local/quillmark-helper:0.1.0": data
+#set page(width: 400pt, height: 200pt, margin: 40pt)
+#let row = data.refs.at(0)
+#let table = data.refs
+#row.org #row.at("num") #table.at(0).org
+"#,
+    );
+    let fields: Vec<String> = session.regions().into_iter().map(|r| r.field).collect();
+    for field in ["refs.0.org", "refs.0.num"] {
+        assert!(fields.iter().any(|f| f == field), "{field:?}: {fields:?}");
+    }
 }
 
 /// A variant cell of a rich type lowers exactly as a card-level one does: the

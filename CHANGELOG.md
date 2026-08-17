@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+- fix: a content leaf's `default:` reaches the plate from **every** position it
+  can be declared in, not only card level. The load pass that imports each
+  richtext/plaintext literal into its companion cache walked the card's field
+  map, so an `object` property, a typed-table row property and a variant cell
+  each kept their authored `default:` and cached nothing; the render floor read
+  the leaf's empty companion and blank-filled. A document authoring only the
+  container (`dict: {}`, `rows: [{}]`, `c: {value: CUI}`) rendered correctly
+  with the author's default missing, and nothing upstream had anything to
+  report. The walk now recurses `properties` / `items` / `variants`, the shapes
+  `field_contains_content` already descended. Importing a literal is also what
+  checks it, so a nested `richtext(inline)` violation — in a `default:` or an
+  `example:` — now fails load as a card-level one always has, naming the leaf's
+  declaration path. Nested `example:` *surfacing* was never broken: the
+  blueprint prints the raw literal at every depth.
+- **breaking** typst: a plate's direct read of a typed-table row cell regions on
+  the cell (`refs.0.org`), where it regioned on the whole array before — a
+  *wrong* address, not a missing one, routing a click on the org cell to the
+  entire table. The span scan was the third component deriving a schema address
+  and the one left at the one-level ceiling: 0.106 lifted the lowering walk and
+  `_qm-known-path` to the row property, so the three no longer agreed, and the
+  scan is the one that decides what a *read* is attributed to. It now takes the
+  index step (`.at(n)`, the only spelling Typst has for an array index) and then
+  the row property, gated on the `array_fields` table. Each step is its own
+  address, so a whole-row read names the row (`refs.0`) and a primitive
+  element's read names the element (`tags.0`); a negative index and an
+  undeclared row key mint nothing and fall back as before. Consumers keying on
+  the array's address for element ink see the narrower address instead. Explicit
+  `field-region` / `form-field` claims are unchanged, and the alias lane keeps
+  parity: `#let row = data.refs.at(0)` … `#row.org` regions on `refs.0.org`.
 - test: one table pins the schema address grammar on both backends
   (`quillmark/tests/address_grammar.rs`), covering every position the nesting
   contract admits, each position's card twin, and the rejects that bound each

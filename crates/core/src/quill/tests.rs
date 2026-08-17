@@ -2,7 +2,7 @@ mod support_tests;
 mod variant_tests;
 
 use super::*;
-use crate::{Diagnostic, Severity};
+use crate::{Diagnostic, Document, Severity};
 use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::fs;
@@ -2406,6 +2406,113 @@ fn block_richtext_default_caches_content() {
     assert!(
         content.as_json().is_object(),
         "cached default is a content object"
+    );
+}
+
+/// The four positions ride one test because the failure shape is a companion walk
+/// that stops at one of them. Authoring only the containers is what drops each
+/// cell to the render floor, where a missing companion blank-fills.
+#[test]
+fn a_nested_content_defaults_literal_reaches_the_plate_at_every_position() {
+    const YAML: &str = r#"
+quill:
+  name: nested_default
+  version: "1.0"
+  backend: typst
+  description: nested content default probe
+main:
+  fields:
+    top:
+      type: richtext
+      default: "A **top** note"
+    dict:
+      type: object
+      properties:
+        note:
+          type: richtext
+          default: "A **dict** note"
+    rows:
+      type: array
+      items:
+        type: object
+        properties:
+          note:
+            type: richtext
+            default: "A **row** note"
+    literal:
+      type: array
+      items:
+        type: plaintext
+        default: "A *literal* line"
+    c:
+      type: enum
+      values: [CUI]
+      default: ""
+      variants:
+        CUI:
+          note:
+            type: richtext
+            default: "A **variant** note"
+"#;
+    let config = QuillConfig::from_yaml(YAML).expect("nested defaults load");
+    let document = Document::parse(concat!(
+        "~~~\n",
+        "$quill: nested_default@1.0\n",
+        "$kind: main\n",
+        "dict: {}\n",
+        "rows:\n  - {}\n",
+        "literal: [null]\n",
+        "c:\n  value: CUI\n",
+        "~~~\n",
+    ))
+    .expect("parses")
+    .document;
+    let plate = config.compile_data(&document).expect("compiles");
+
+    for (path, cell, text) in [
+        ("top", &plate["top"], "A top note"),
+        ("dict.note", &plate["dict"]["note"], "A dict note"),
+        ("rows.0.note", &plate["rows"][0]["note"], "A row note"),
+        ("c.note", &plate["c"]["note"], "A variant note"),
+    ] {
+        assert_eq!(
+            cell["text"].as_str(),
+            Some(text),
+            "{path} carries its own default: {plate}"
+        );
+        assert_eq!(
+            cell["marks"][0]["type"], "strong",
+            "{path} keeps the default's marks: {plate}"
+        );
+    }
+    // A `plaintext` leaf is the other content codec, and its literal imports
+    // verbatim: the asterisks are text, not emphasis.
+    let literal = &plate["literal"][0];
+    assert_eq!(literal["text"].as_str(), Some("A *literal* line"));
+    assert_eq!(literal["marks"], serde_json::json!([]));
+}
+
+/// Importing a literal is what checks it, so the nested gate is the companion walk
+/// reaching the leaf rather than a validation pass of its own. The diagnostic must
+/// name the leaf's declaration path: the card field holding it is not the mistake.
+#[test]
+fn a_nested_inline_richtext_default_over_one_para_is_a_load_error() {
+    let err = quill_with_field(concat!(
+        "    dict:\n",
+        "      type: object\n",
+        "      properties:\n",
+        "        tag:\n",
+        "          type: richtext\n",
+        "          inline: true\n",
+        "          default: \"one\\n\\ntwo\"\n",
+    ))
+    .unwrap_err();
+    assert!(
+        err.iter().any(|d| {
+            d.code.as_deref() == Some("validation::not_inline")
+                && d.message.contains("`dict.tag`")
+        }),
+        "the nested literal fails load, naming the leaf: {err:?}"
     );
 }
 
