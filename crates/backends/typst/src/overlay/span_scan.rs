@@ -929,43 +929,52 @@ fn alias_bindings(
     fields: &[String],
     containers: &BTreeMap<String, Vec<String>>,
 ) -> HashMap<String, Alias> {
-    let mut candidates: Vec<(String, Alias)> = Vec::new();
-    let mut binders: HashMap<String, usize> = HashMap::new();
-    collect_binders(root, fields, containers, &mut candidates, &mut binders);
-    candidates
+    let mut found = Binders::default();
+    collect_binders(root, fields, containers, &mut found);
+    if found.wildcard_import {
+        return HashMap::new();
+    }
+    found
+        .candidates
         .into_iter()
-        .filter(|(name, _)| binders.get(name) == Some(&1))
+        .filter(|(name, _)| found.counts.get(name) == Some(&1))
         .collect()
 }
 
-/// Counts every binding position by name, and collects the alias candidates
-/// among them. A wildcard import binds names this walk cannot see, so one
-/// anywhere in the plate disqualifies every alias.
+/// What one walk of the plate finds: how many binding positions each name has,
+/// the alias candidates among them, and whether a wildcard import bound names
+/// the walk cannot see at all.
+#[derive(Default)]
+struct Binders {
+    counts: HashMap<String, usize>,
+    candidates: Vec<(String, Alias)>,
+    wildcard_import: bool,
+}
+
 fn collect_binders(
     node: &LinkedNode,
     fields: &[String],
     containers: &BTreeMap<String, Vec<String>>,
-    candidates: &mut Vec<(String, Alias)>,
-    binders: &mut HashMap<String, usize>,
+    out: &mut Binders,
 ) {
-    let bind = |name: &str, binders: &mut HashMap<String, usize>| {
-        *binders.entry(name.to_string()).or_default() += 1;
+    let bind = |name: &str, out: &mut Binders| {
+        *out.counts.entry(name.to_string()).or_default() += 1;
     };
     match node.kind() {
         SyntaxKind::LetBinding => {
             if let Some(binding) = node.cast::<ast::LetBinding>() {
                 for ident in binding.kind().bindings() {
-                    bind(ident.as_str(), binders);
+                    bind(ident.as_str(), out);
                 }
                 if let Some((name, alias)) = alias_candidate(node, binding, fields, containers) {
-                    candidates.push((name, alias));
+                    out.candidates.push((name, alias));
                 }
             }
         }
         SyntaxKind::Closure => {
             if let Some(closure) = node.cast::<ast::Closure>() {
                 for ident in closure.name().into_iter() {
-                    bind(ident.as_str(), binders);
+                    bind(ident.as_str(), out);
                 }
                 for param in closure.params().children() {
                     let pattern = match param {
@@ -976,7 +985,7 @@ fn collect_binders(
                         }),
                     };
                     for ident in pattern.map(ast::Pattern::bindings).unwrap_or_default() {
-                        bind(ident.as_str(), binders);
+                        bind(ident.as_str(), out);
                     }
                 }
             }
@@ -984,26 +993,24 @@ fn collect_binders(
         SyntaxKind::ForLoop => {
             if let Some(loop_) = node.cast::<ast::ForLoop>() {
                 for ident in loop_.pattern().bindings() {
-                    bind(ident.as_str(), binders);
+                    bind(ident.as_str(), out);
                 }
             }
         }
         SyntaxKind::DestructAssignment => {
             if let Some(assign) = node.cast::<ast::DestructAssignment>() {
                 for ident in assign.pattern().bindings() {
-                    bind(ident.as_str(), binders);
+                    bind(ident.as_str(), out);
                 }
             }
         }
         SyntaxKind::ModuleImport => {
             if let Some(import) = node.cast::<ast::ModuleImport>() {
                 match import.imports() {
-                    // The bound names are in another file; disqualify every
-                    // alias by binding a name no read can resolve to.
-                    Some(ast::Imports::Wildcard) => binders.values_mut().for_each(|c| *c += 1),
+                    Some(ast::Imports::Wildcard) => out.wildcard_import = true,
                     Some(ast::Imports::Items(items)) => {
                         for item in items.iter() {
-                            bind(item.bound_name().as_str(), binders);
+                            bind(item.bound_name().as_str(), out);
                         }
                     }
                     None => {}
@@ -1021,7 +1028,7 @@ fn collect_binders(
                         | ast::BinOp::DivAssign
                 ) {
                     if let ast::Expr::Ident(ident) = binary.lhs() {
-                        bind(ident.as_str(), binders);
+                        bind(ident.as_str(), out);
                     }
                 }
             }
@@ -1029,7 +1036,7 @@ fn collect_binders(
         _ => {}
     }
     for child in node.children() {
-        collect_binders(&child, fields, containers, candidates, binders);
+        collect_binders(&child, fields, containers, out);
     }
 }
 
@@ -1046,7 +1053,7 @@ fn alias_candidate(
         return None;
     };
     let init = binding.init()?.to_untyped();
-    let init = node.children().find(|c| c.get() == init)?;
+    let init = node.children().find(|c| std::ptr::eq(c.get(), init))?;
     let mut inner = Vec::new();
     collect_anchors(&init, fields, containers, &HashMap::new(), &mut inner);
     let [(path, chain, _)] = inner.as_slice() else {
@@ -1423,6 +1430,9 @@ main:
             "#let c = data.classification\n#for c in (1, 2) [#c.poc]",
             "#let c = data.classification\n#{ c = \"other\" }\n#c.poc",
             "#let c = data.classification\n#import \"x.typ\": *\n#c.poc",
+            // The wildcard binds names this walk never sees, whichever side of
+            // the binding it sits on.
+            "#import \"x.typ\": *\n#let c = data.classification\n#c.poc",
             "#let (c, d) = (data.classification, 1)\n#c.poc",
         ] {
             assert!(
