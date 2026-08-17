@@ -865,26 +865,28 @@ fn forward_pos(helper: &Source, segmap: &SegmentMap, pos: usize) -> usize {
 ///   one reference sits inside it: `data.a + data.b` has no single owner.
 ///
 /// Chain windows sort first, so ink resolving to the reference itself is never
-/// claimed by a wider window. A value laundered through `#let s = data.x` is not
-/// chased: it carries the binding's span.
+/// claimed by a wider window.
 ///
 /// A reference that steps into a declared container (`data.classification.poc`)
 /// anchors on the property, so the region carries the address the plate actually
 /// read rather than the container's. `containers` is the `object_fields` table
 /// [`_qm-known-path`] validates against, so a region path is one a
 /// `form-field`/`field-region` could bind.
+///
+/// A read through a single-assignment `let` alias ([`alias_bindings`]) is a
+/// reference site like the chain it names, so naming a container before
+/// stepping into it keeps the address. Laundering the tracker cannot follow —
+/// a function parameter, a destructured binding, a per-card loop variable —
+/// still carries the binding's span and needs a `field-region` claim.
 pub(crate) fn scalar_windows(
     source: &Source,
     fields: &[String],
     containers: &BTreeMap<String, Vec<String>>,
 ) -> Vec<(String, Range<usize>)> {
+    let root = LinkedNode::new(source.root());
+    let aliases = alias_bindings(&root, fields, containers);
     let mut anchors: Vec<(String, Range<usize>, Range<usize>)> = Vec::new();
-    collect_anchors(
-        &LinkedNode::new(source.root()),
-        fields,
-        containers,
-        &mut anchors,
-    );
+    collect_anchors(&root, fields, containers, &aliases, &mut anchors);
 
     let mut out: Vec<(String, Range<usize>)> = anchors
         .iter()
@@ -905,15 +907,175 @@ pub(crate) fn scalar_windows(
     out
 }
 
+/// A read before `bound_at` reads whatever else held the name, so the position
+/// bounds the alias the way lexical order does.
+struct Alias {
+    path: String,
+    bound_at: usize,
+}
+
+/// Each identifier the plate binds exactly once, to exactly one `data` chain.
+///
+/// The single-binder rule is what makes an alias safe to follow: a name a
+/// second `let`, a closure parameter, a loop pattern, an import, or an
+/// assignment could rebind is dropped, so no window is ever minted over ink
+/// belonging to another value. An initializer must be the chain and nothing
+/// else — `#let x = upper(data.subject)` and `#let x = data.a + data.b` both
+/// yield no alias, the first because the chain is not the whole expression and
+/// the second because no single field owns it.
+fn alias_bindings(
+    root: &LinkedNode,
+    fields: &[String],
+    containers: &BTreeMap<String, Vec<String>>,
+) -> HashMap<String, Alias> {
+    let mut found = Binders::default();
+    collect_binders(root, fields, containers, &mut found);
+    if found.wildcard_import {
+        return HashMap::new();
+    }
+    found
+        .candidates
+        .into_iter()
+        .filter(|(name, _)| found.counts.get(name) == Some(&1))
+        .collect()
+}
+
+/// A wildcard import binds names in another file, so it disqualifies every
+/// alias no matter which side of a binding it sits on.
+#[derive(Default)]
+struct Binders {
+    counts: HashMap<String, usize>,
+    candidates: Vec<(String, Alias)>,
+    wildcard_import: bool,
+}
+
+fn collect_binders(
+    node: &LinkedNode,
+    fields: &[String],
+    containers: &BTreeMap<String, Vec<String>>,
+    out: &mut Binders,
+) {
+    let bind = |name: &str, out: &mut Binders| {
+        *out.counts.entry(name.to_string()).or_default() += 1;
+    };
+    match node.kind() {
+        SyntaxKind::LetBinding => {
+            if let Some(binding) = node.cast::<ast::LetBinding>() {
+                for ident in binding.kind().bindings() {
+                    bind(ident.as_str(), out);
+                }
+                if let Some((name, alias)) = alias_candidate(node, binding, fields, containers) {
+                    out.candidates.push((name, alias));
+                }
+            }
+        }
+        SyntaxKind::Closure => {
+            if let Some(closure) = node.cast::<ast::Closure>() {
+                for ident in closure.name().into_iter() {
+                    bind(ident.as_str(), out);
+                }
+                for param in closure.params().children() {
+                    let pattern = match param {
+                        ast::Param::Pos(pattern) => Some(pattern),
+                        ast::Param::Named(named) => Some(ast::Pattern::Normal(named.expr())),
+                        ast::Param::Spread(spread) => spread.sink_ident().map(|i| {
+                            ast::Pattern::Normal(ast::Expr::Ident(i))
+                        }),
+                    };
+                    for ident in pattern.map(ast::Pattern::bindings).unwrap_or_default() {
+                        bind(ident.as_str(), out);
+                    }
+                }
+            }
+        }
+        SyntaxKind::ForLoop => {
+            if let Some(loop_) = node.cast::<ast::ForLoop>() {
+                for ident in loop_.pattern().bindings() {
+                    bind(ident.as_str(), out);
+                }
+            }
+        }
+        SyntaxKind::DestructAssignment => {
+            if let Some(assign) = node.cast::<ast::DestructAssignment>() {
+                for ident in assign.pattern().bindings() {
+                    bind(ident.as_str(), out);
+                }
+            }
+        }
+        SyntaxKind::ModuleImport => {
+            if let Some(import) = node.cast::<ast::ModuleImport>() {
+                match import.imports() {
+                    Some(ast::Imports::Wildcard) => out.wildcard_import = true,
+                    Some(ast::Imports::Items(items)) => {
+                        for item in items.iter() {
+                            bind(item.bound_name().as_str(), out);
+                        }
+                    }
+                    None => {}
+                }
+            }
+        }
+        SyntaxKind::Binary => {
+            if let Some(binary) = node.cast::<ast::Binary>() {
+                if matches!(
+                    binary.op(),
+                    ast::BinOp::Assign
+                        | ast::BinOp::AddAssign
+                        | ast::BinOp::SubAssign
+                        | ast::BinOp::MulAssign
+                        | ast::BinOp::DivAssign
+                ) {
+                    if let ast::Expr::Ident(ident) = binary.lhs() {
+                        bind(ident.as_str(), out);
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+    for child in node.children() {
+        collect_binders(&child, fields, containers, out);
+    }
+}
+
+fn alias_candidate(
+    node: &LinkedNode,
+    binding: ast::LetBinding,
+    fields: &[String],
+    containers: &BTreeMap<String, Vec<String>>,
+) -> Option<(String, Alias)> {
+    let ast::LetBindingKind::Normal(ast::Pattern::Normal(ast::Expr::Ident(name))) = binding.kind()
+    else {
+        return None;
+    };
+    let init = binding.init()?.to_untyped();
+    let init = node.children().find(|c| std::ptr::eq(c.get(), init))?;
+    let mut inner = Vec::new();
+    collect_anchors(&init, fields, containers, &HashMap::new(), &mut inner);
+    let [(path, chain, _)] = inner.as_slice() else {
+        return None;
+    };
+    (*chain == init.range()).then(|| {
+        (
+            name.as_str().to_string(),
+            Alias {
+                path: path.clone(),
+                bound_at: node.range().end,
+            },
+        )
+    })
+}
+
 /// Recursion continues into matched subtrees: a reference nested in another
 /// chain's arguments is its own site.
 fn collect_anchors(
     node: &LinkedNode,
     fields: &[String],
     containers: &BTreeMap<String, Vec<String>>,
+    aliases: &HashMap<String, Alias>,
     out: &mut Vec<(String, Range<usize>, Range<usize>)>,
 ) {
-    if let Some((path, anchor)) = data_access(node, fields, containers) {
+    if let Some((path, anchor)) = data_access(node, fields, containers, aliases) {
         // Chain: the outermost postfix chain headed by this access.
         let mut chain = anchor.clone();
         while let Some(parent) = chain.parent() {
@@ -941,33 +1103,53 @@ fn collect_anchors(
         out.push((path, chain.range(), wide.range()));
     }
     for child in node.children() {
-        collect_anchors(&child, fields, containers, out);
+        collect_anchors(&child, fields, containers, aliases, out);
     }
 }
 
-/// If `node` is a `data.<field>` access or a `data.at("<field>")` call head
-/// with a declared field, its schema path and the node to widen from — stepped
-/// one property deeper where the field is a container and the plate selected
-/// one of its declared keys.
+/// The schema path `node` reads and the node to widen from, for the two shapes
+/// that name a field: a `data.<field>` / `data.at("<field>")` access, and a
+/// read through a `let` alias. Either steps one property deeper where the field
+/// is a container and the plate selected one of its declared keys.
 fn data_access<'a>(
     node: &LinkedNode<'a>,
     fields: &[String],
     containers: &BTreeMap<String, Vec<String>>,
+    aliases: &HashMap<String, Alias>,
 ) -> Option<(String, LinkedNode<'a>)> {
-    if node.kind() != SyntaxKind::FieldAccess {
-        return None;
+    match node.kind() {
+        SyntaxKind::FieldAccess => {
+            let ast::Expr::Ident(target) = node.cast::<ast::FieldAccess>()?.target() else {
+                return None;
+            };
+            if target.as_str() != "data" {
+                return None;
+            }
+            let (name, anchor) = selected(node, fields)?;
+            Some(step_property(name, anchor, containers))
+        }
+        // Reads before the binding ends — its own pattern, its initializer —
+        // are not reads of the field.
+        SyntaxKind::Ident => {
+            let alias = aliases.get(node.cast::<ast::Ident>()?.as_str())?;
+            (node.range().start >= alias.bound_at)
+                .then(|| step_property(alias.path.clone(), node.clone(), containers))
+        }
+        _ => None,
     }
-    let ast::Expr::Ident(target) = node.cast::<ast::FieldAccess>()?.target() else {
-        return None;
-    };
-    if target.as_str() != "data" {
-        return None;
-    }
-    let (name, anchor) = selected(node, fields)?;
+}
+
+/// One property step where `name` is a container and the read selected a
+/// declared key, else the field itself.
+fn step_property<'a>(
+    name: String,
+    anchor: LinkedNode<'a>,
+    containers: &BTreeMap<String, Vec<String>>,
+) -> (String, LinkedNode<'a>) {
     let keys = containers.get(&name).map(Vec::as_slice).unwrap_or_default();
     match select_property(&anchor, keys) {
-        Some((key, deeper)) => Some((format!("{name}.{key}"), deeper)),
-        None => Some((name, anchor)),
+        Some((key, deeper)) => (format!("{name}.{key}"), deeper),
+        None => (name, anchor),
     }
 }
 
@@ -1185,6 +1367,96 @@ main:
 
     fn has(spans: &[(String, String)], path: &str, text: &str) -> bool {
         spans.iter().any(|(p, t)| p == path && t == text)
+    }
+
+    /// Naming the container before stepping into it must keep the address the
+    /// direct chain carries.
+    #[test]
+    fn scalar_windows_follow_a_single_assignment_let_alias() {
+        let src = Source::detached(
+            r#"
+#import "@local/quillmark-helper:0.1.0": data
+#let c = data.classification
+#c.poc
+#c.at("controlled by")
+#c
+#c.undeclared
+#let s = data.subject
+#s
+#upper(s)
+#let a = data.at("classification", default: (:))
+#a.poc
+"#,
+        );
+        let spans = probe_spans(&src);
+        for (path, text) in [
+            ("classification.poc", "c.poc"),
+            ("classification.controlled by", "c.at(\"controlled by\")"),
+            ("classification", "c"),
+            ("subject", "s"),
+            ("subject", "upper(s)"),
+            ("classification.poc", "a.poc"),
+        ] {
+            assert!(has(&spans, path, text), "missing {path}/{text}: {spans:?}");
+        }
+        assert!(
+            has(&spans, "classification", "c.undeclared"),
+            "an undeclared key falls back to the container: {spans:?}"
+        );
+    }
+
+    /// A name a second binder could rebind carries no alias: attributing
+    /// another value's ink to the field is worse than surfacing no region.
+    #[test]
+    fn scalar_windows_drop_an_alias_any_second_binder_could_rebind() {
+        let rebound = |plate: &str| {
+            let src = Source::detached(&format!(
+                "#import \"@local/quillmark-helper:0.1.0\": data\n{plate}\n"
+            ));
+            probe_spans(&src)
+                .into_iter()
+                .filter(|(p, _)| p.starts_with("classification"))
+                .filter(|(_, t)| !t.starts_with("data"))
+                .collect::<Vec<_>>()
+        };
+        for plate in [
+            "#let c = data.classification\n#let c = \"other\"\n#c.poc",
+            "#let c = data.classification\n#let f(c) = [#c.poc]\n#f(1)",
+            "#let c = data.classification\n#for c in (1, 2) [#c.poc]",
+            "#let c = data.classification\n#{ c = \"other\" }\n#c.poc",
+            "#let c = data.classification\n#import \"x.typ\": *\n#c.poc",
+            // The wildcard binds names this walk never sees, whichever side of
+            // the binding it sits on.
+            "#import \"x.typ\": *\n#let c = data.classification\n#c.poc",
+            "#let (c, d) = (data.classification, 1)\n#c.poc",
+        ] {
+            assert!(
+                rebound(plate).is_empty(),
+                "alias survived a rebind in {plate:?}: {:?}",
+                rebound(plate)
+            );
+        }
+    }
+
+    /// An initializer that is not one whole chain names no single field.
+    #[test]
+    fn scalar_windows_alias_only_a_whole_data_chain() {
+        let src = Source::detached(
+            r#"
+#import "@local/quillmark-helper:0.1.0": data
+#let w = upper(data.subject)
+#w
+#let m = data.subject + data.other
+#m
+"#,
+        );
+        let spans = probe_spans(&src);
+        for text in ["w", "m"] {
+            assert!(
+                !spans.iter().any(|(_, t)| t == text),
+                "{text:?} is no alias: {spans:?}"
+            );
+        }
     }
 
     #[test]

@@ -17,10 +17,11 @@
 //!   twice. `#upper(data.subject)` attributes the whole expression as long as
 //!   it holds one reference, and a read stepping into a declared container
 //!   (`data.classification.poc`) attributes the property rather than the
-//!   container. Not tracked: an expression mixing several fields,
-//!   a value laundered through an intermediate binding, and card scalars read
-//!   from the per-card loop variable (one site shared by every instance —
-//!   bind a widget for those).
+//!   container. A read through a `let` alias bound exactly once to one whole
+//!   chain tracks where that chain would. Not tracked: an expression mixing
+//!   several fields, a value laundered past the alias (a function parameter, a
+//!   destructured binding), and card scalars read from the per-card loop
+//!   variable (one site shared by every instance — bind a widget for those).
 //! - **Form-field widgets** carry a schema path explicitly. A widget that
 //!   binds none produces no region: only schema-addressable fields surface.
 //!

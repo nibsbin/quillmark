@@ -279,6 +279,27 @@ These affect the PDF only. SVG and PNG reserve the same invisible layout space r
 
 The label `<__qm_field__>` and metadata `kind: "__qm_field__"` are reserved for this hand-off: the same `query(metadata)` caveat noted for `signature-field` applies.
 
+## Which Reads Get Regions
+
+A **scalar** is tracked at the expression that draws it, so where you write the read decides whether it surfaces in `session.regions()`. Naming the value first is fine: a `let` bound once to one whole `data` chain is followed, and stepping into a container through that name keeps the cell's address.
+
+```typst
+#let c = data.classification
+#c.poc                       // regions as `classification.poc`, same as #data.classification.poc
+```
+
+Rebind that name anywhere in the plate — a second `let`, a closure parameter, a loop pattern, an assignment — and it stops being followed, because a read can no longer be tied to one value. Three shapes are past what the tracker follows at all:
+
+| Shape | Why |
+|---|---|
+| a value handed to a function (`#let f(c) = [#c.poc]`) | the parameter is a fresh name bound per call |
+| a destructured binding (`#let (poc, ..) = data.classification`) | the pattern names no chain |
+| a per-card loop variable (`#for card in data.at("$cards")`) | one shared expression site carries no per-instance identity |
+
+Each of those still renders correctly and loses only the click target, which is why nothing announces it. Wrap the read in a `field-region` claim to get the region back.
+
+**Content and date fields need none of this.** A `richtext` value's ink is born in generated code, so it keeps its address through a function, a loop, or a package that rebuilds it; a `date` field's `(.display)(..)` closure is tracked the same way.
+
 ## Tying Composed Content to a Field
 
 A live preview routes a click back to the schema field that produced the ink under it, and it finds that field automatically for content it generated: a `richtext` field's markup, a `#data.subject` reference in your plate. Content your plate *composes* — a banner keyed off `data.classification`, an address block a vendored package lays out, a computed table — draws ink Quillmark cannot attribute to anything. `field-region` claims it:

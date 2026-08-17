@@ -102,6 +102,59 @@ fn a_property_read_regions_on_the_property() {
     );
 }
 
+/// A bound read surfaces the region the direct chain surfaces, so naming a
+/// container before stepping into it costs no address.
+#[test]
+fn a_property_read_through_a_let_alias_keeps_the_property_address() {
+    let plate = r#"
+#import "@local/quillmark-helper:0.1.0": data
+#set page(width: 400pt, height: 200pt, margin: 40pt)
+#let c = data.classification
+#let a = data.at("address", default: (:))
+#c.poc #c.at("controlled_by") #a.city
+"#;
+    let session = open(plate);
+    let regions = session.regions();
+    for field in ["classification.poc", "classification.controlled_by", "address.city"] {
+        assert!(
+            regions.iter().any(|r| r.field == field),
+            "{field:?} regions through the alias: {regions:?}"
+        );
+    }
+
+    let poc = regions
+        .iter()
+        .find(|r| r.field == "classification.poc")
+        .expect("the property region surfaces");
+    let (cx, cy) = (
+        (poc.rect[0] + poc.rect[2]) / 2.0,
+        (poc.rect[1] + poc.rect[3]) / 2.0,
+    );
+    assert_eq!(
+        session.field_at(poc.page, cx, cy).as_deref(),
+        Some("classification.poc"),
+        "a click on a bound read routes to the cell it read"
+    );
+}
+
+/// A name the plate could rebind is not followed, so a stale alias never
+/// attributes another value's ink to the field.
+#[test]
+fn a_rebound_alias_surfaces_no_region() {
+    let plate = r#"
+#import "@local/quillmark-helper:0.1.0": data
+#set page(width: 400pt, height: 200pt, margin: 40pt)
+#let c = data.classification
+#let c = (poc: "someone else")
+#c.poc
+"#;
+    let regions = open(plate).regions();
+    assert!(
+        !regions.iter().any(|r| r.field.starts_with("classification")),
+        "a rebound name carries no address: {regions:?}"
+    );
+}
+
 /// The container read whole is still one region: the step is what narrows it.
 #[test]
 fn the_container_read_whole_still_regions_on_the_container() {

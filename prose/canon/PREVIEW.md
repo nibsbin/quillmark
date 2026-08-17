@@ -190,10 +190,15 @@ A read that steps into a declared container (`data.classification.poc`,
 `data.address.at("city")`) tracks on the **property**, so the region names the
 cell the plate read rather than the container holding it; a key the container
 does not declare is no address, and the read falls back to the container.
+A read through a `let` alias tracks where the chain it names would, so naming a
+container before stepping into it costs no address. The alias holds only where
+the plate binds the name exactly once to one whole chain: a name a second binder
+could rebind would attribute another value's ink to the field.
 Not tracked: expressions mixing several fields (`data.from + ", " + rank` has
-no single owner), values laundered through intermediate bindings, and card
-scalars read from the per-card loop variable (one shared expression site
-carries no per-instance identity: bind a widget or wrap a claim for those).
+no single owner), a value laundered past what the alias pass follows (a
+function parameter, a destructured binding), and card scalars read from the
+per-card loop variable (one shared expression site carries no per-instance
+identity: bind a widget or wrap a claim for those).
 **Marker claims** cover the ink a plate *composes* rather than reads off a
 field: a banner keyed on `data.classification`, a package-built address block, a
 computed table. The helper's `field-region(field, body)` brackets `body` with
