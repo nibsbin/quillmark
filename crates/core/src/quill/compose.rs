@@ -515,28 +515,17 @@ pub(crate) fn resolve_value_sourced(
     }
     let present = value.filter(|v| !v.as_json().is_null());
     let Some(v) = present else {
-        // A content-bearing field (`richtext` or its literal sibling
-        // `plaintext`) commits the *content* form of its default
-        // (`default_content`, cached at load by `from_yaml_with_warnings` for every
-        // content leaf at every declaration depth), so the seam carries canonical
-        // Content-JSON the backend can classify. It
-        // must NOT fall through to the raw `default`: the ladder injects this
-        // default without re-coercing it (coercion touched only authored
-        // values), so a bare authored string here would reach the plate
-        // uncoerced and be misread. A content field with no cached
-        // `default_content` (only reachable via a serde-built `QuillConfig`,
-        // never the loader) blank-fills to the empty content.
-        if matches!(
-            field.r#type,
-            FieldType::RichText { .. } | FieldType::PlainText { .. }
-        ) {
-            return match field.default_content.clone() {
-                Some(content) => (content, FieldSource::Default),
-                None => (blank(field), FieldSource::Blank),
-            };
+        // `default_content` holds the imported form of `default:`, cached at
+        // load wherever the type tree bears a content leaf. The ladder injects
+        // a default without re-coercing it, so the cache is the only safe
+        // source: a raw `default` would cross to the plate as unimported
+        // markdown.
+        if let Some(content) = field.default_content.clone() {
+            return (content, FieldSource::Default);
         }
-        // Non-content: `default_content` is always `None`, so use the raw
-        // `default`, then the field's blank.
+        if crate::quill::config::field_contains_content(field) {
+            return (blank(field), FieldSource::Blank);
+        }
         return match field.default.clone() {
             Some(default) => (default, FieldSource::Default),
             None => (blank(field), FieldSource::Blank),

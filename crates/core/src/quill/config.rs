@@ -1355,7 +1355,18 @@ impl QuillConfig {
                     } else {
                         Self::truncate_preview(source_token)
                     };
-                    let hint = if actual == "number" || actual == "integer" {
+                    let hint = if schema.is_variant_bearing() && actual == "object" {
+                        let member = schema
+                            .enum_values
+                            .as_ref()
+                            .and_then(|v| v.first())
+                            .map(String::as_str)
+                            .unwrap_or("<member>");
+                        format!(
+                            "Write the {slot} as the discriminant alone ({slot}: {member}); \
+                             a variant's own field carries its {slot} on that field."
+                        )
+                    } else if actual == "number" || actual == "integer" {
                         let schema_type = if actual == "integer" {
                             "integer"
                         } else {

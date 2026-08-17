@@ -2500,6 +2500,67 @@ main:
     assert_eq!(literal["marks"], serde_json::json!([]));
 }
 
+/// The sibling position: a `default:` on the **container**. It commits the same
+/// imported content a leaf's does — which declaration carries the literal does
+/// not change what crosses.
+#[test]
+fn a_containers_own_content_default_reaches_the_plate_as_content() {
+    const YAML: &str = r#"
+quill:
+  name: container_default
+  version: "1.0"
+  backend: typst
+  description: container content default probe
+main:
+  fields:
+    dict:
+      type: object
+      default: { note: "A **dict** note" }
+      properties:
+        note:
+          type: richtext
+    rows:
+      type: array
+      default: ["A **row** note"]
+      items:
+        type: richtext
+    plain:
+      type: object
+      default: { tag: bare }
+      properties:
+        tag:
+          type: string
+"#;
+    let config = QuillConfig::from_yaml(YAML).expect("container defaults load");
+    let document = Document::parse(concat!(
+        "~~~\n",
+        "$quill: container_default@1.0\n",
+        "$kind: main\n",
+        "~~~\n",
+    ))
+    .expect("parses")
+    .document;
+    let plate = config.compile_data(&document).expect("compiles");
+
+    for (path, cell, text) in [
+        ("dict.note", &plate["dict"]["note"], "A dict note"),
+        ("rows.0", &plate["rows"][0], "A row note"),
+    ] {
+        assert_eq!(
+            cell["text"].as_str(),
+            Some(text),
+            "{path} is canonical content, not the raw markdown: {plate}"
+        );
+        assert_eq!(
+            cell["marks"][0]["type"], "strong",
+            "{path} keeps the default's marks: {plate}"
+        );
+    }
+    // A container bearing no content leaf has no companion to read, and its
+    // `default:` still crosses verbatim.
+    assert_eq!(plate["plain"]["tag"], serde_json::json!("bare"));
+}
+
 /// Importing a literal is what checks it, so the nested gate is the companion walk
 /// reaching the leaf rather than a validation pass of its own. The diagnostic must
 /// name the leaf's declaration path: the card field holding it is not the mistake.
