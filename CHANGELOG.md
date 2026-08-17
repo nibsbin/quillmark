@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.107.0 - 2026-08-17
 
 - fix(typst): `display(field, ..)` validates its address against the schema, the
   assert `form-field` and `field-region` already carry. It is the one helper keyed
@@ -221,6 +221,37 @@
   an observable-contract shift even where no type changes, and a release carrying
   one ships its guide.
 
+<!-- seed: commits since v0.106.0, confirm the entries above cover them, then delete this comment
+- fix: a container's own `default:` crosses as content, or is refused
+- fix(typst): anchor a `let` alias only where the name is read
+- fix(typst): display validates its schema address
+- fix(docs): point the variants cross-reference at this page's own anchor
+- fix(docs): link canon by URL, not by a path outside the docs tree
+- docs: dense-prose pass over the nesting collapse
+- feat: every type nests at every depth
+- docs: dense-prose pass over the two address walks
+- feat(typst)!: the span scan takes the index step, so a row cell read anchors on the cell
+- fix: a nested content leaf's `default:` reaches the plate
+- docs: dense-prose pass over the address-grammar pin
+- test: pin the schema address grammar across both backends
+- Carry the prose style in CLAUDE.md at minimum size
+- Drop two CLAUDE.md lines that steer toward defaults
+- Cut the rules that steer toward defaults
+- docs: dense-prose pass over the lowering walk
+- Cut two lines that restated defaults
+- Rewrite dense-prose as a project-agnostic skill
+- feat!: a variant carries any leaf type, prose and dates included
+- refactor(typst)!: delete the `plaintext(field)` projection
+- feat(typst)!: depth-invariant lowering, and `date` as a native `datetime`
+- docs: dense-prose pass over the alias pass
+- docs: a bound read keeps its address, and what still needs a claim
+- fix(typst): disqualify aliases on a wildcard import in either order
+- feat(typst): follow a single-assignment `let` alias to its schema address
+- feat(wasm): export VARIANT_DISCRIMINANT_KEY to the runtime surface
+- docs: the 0.105 → 0.106 migration guide, and the rules that missed it
+-->
+
+
 ## v0.106.0 - 2026-08-16
 
 - feat(typst,pdfform): a schema address may step one property into a declared
@@ -342,22 +373,6 @@
 - fix(python): declaring `license-files` ships the `LICENSE` the sdist metadata
   names, which PyPI rejected the sdist for lacking. v0.104.0 and v0.105.0 are
   wheels only.
-
-<!-- seed: commits since v0.105.0, confirm the entries above cover them, then delete this comment
-- chore(repo): union-merge CHANGELOG.md
-- feat: migrate usaf_memo to enum variants, document the axis
-- feat(core): enum variants — fields that exist only for one enum value
-- fix(fixtures): drop the rule under the indorsement date
-- fix(fixtures): size the indorsement date widget in ems, not inches
-- fix(fixtures): set the memo's indorsement date widget like a date
-- feat(typst,pdf): font, size, and align on injected form fields
-- Make the usaf_memo indorsement's blank date a bound fill-in widget
-- Compress the field-region prose
-- Add `field-region` so plates can tie composed content to a field
-- fix(python): declare license-files so the sdist ships its LICENSE
-- Anchor an undeclared property at the property, not at a bare name
--->
-
 
 ## v0.105.0 - 2026-08-14
 
