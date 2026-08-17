@@ -2174,12 +2174,32 @@ pub(crate) fn field_contains_content(field: &FieldSchema) -> bool {
 }
 
 /// Populate a field's `default_content` / `example_content` companion caches from
-/// its markdown literals. No-op for a non-richtext field; a failed import or a
-/// `richtext(inline)` violation is appended to `errors` as a load diagnostic.
-fn populate_field_content(field: &mut FieldSchema, owner: &str, errors: &mut Vec<Diagnostic>) {
+/// its markdown literals, and every nested declaration's from its own. No-op
+/// where the type tree bears no content leaf, since nothing below it does either;
+/// a failed import or a `richtext(inline)` violation is appended to `errors` as a
+/// load diagnostic.
+///
+/// **The walk is over the schema, not the card's field map.** A content leaf's
+/// `default:` is its own wherever it is declared, and the render floor reads the
+/// companion off whichever leaf it resolves, so an unpopulated position
+/// blank-fills and drops the author's default silently. Covering every one is
+/// what makes the floor's `None` mean "no literal to cache" rather than "not
+/// walked to".
+///
+/// `card` labels the owning card and `path` the field's declaration path
+/// (`dict.note`, `rows[].note`, `c.variants.CUI.note`), the spelling
+/// `validate_field_blueprint_constraints` uses, so the two load passes anchor a
+/// diagnostic the same way.
+fn populate_field_content(
+    field: &mut FieldSchema,
+    card: &str,
+    path: &str,
+    errors: &mut Vec<Diagnostic>,
+) {
     if !field_contains_content(field) {
         return;
     }
+    let owner = format!("{card} field `{path}`");
     if let Some(default) = field.default.clone() {
         match literal_content(&default, field, &format!("{owner} `default`")) {
             Ok(content) => field.default_content = content,
@@ -2192,15 +2212,31 @@ fn populate_field_content(field: &mut FieldSchema, owner: &str, errors: &mut Vec
             Err(d) => errors.push(d),
         }
     }
+    if let Some(props) = field.properties.as_mut() {
+        for (name, prop) in props.iter_mut() {
+            populate_field_content(prop, card, &format!("{path}.{name}"), errors);
+        }
+    }
+    if let Some(variants) = field.variants.as_mut() {
+        for (member, set) in variants.iter_mut() {
+            for (name, cell) in set.iter_mut() {
+                let nested = format!("{path}.variants.{member}.{name}");
+                populate_field_content(cell, card, &nested, errors);
+            }
+        }
+    }
+    if let Some(items) = field.items.as_mut() {
+        populate_field_content(items, card, &format!("{path}[]"), errors);
+    }
 }
 
 /// Populate every content companion on a card: each field's
-/// `default`/`example`, and the card's `body.example` (block richtext, no
-/// inline constraint; skipped when the body is disabled, since its example is
-/// inert).
+/// `default`/`example` and each nested declaration's, plus the card's
+/// `body.example` (block richtext, no inline constraint; skipped when the body is
+/// disabled, since its example is inert).
 fn populate_card_content(card: &mut CardSchema, label: &str, errors: &mut Vec<Diagnostic>) {
     for (name, field) in card.fields.iter_mut() {
-        populate_field_content(field, &format!("{label} field `{name}`"), errors);
+        populate_field_content(field, label, name, errors);
     }
     let body_enabled = card.body.as_ref().is_none_or(|b| b.enabled != Some(false));
     if body_enabled {

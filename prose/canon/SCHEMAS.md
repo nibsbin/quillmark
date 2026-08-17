@@ -482,6 +482,8 @@ seed's commit takes the extra step to the field's rest. The authored markdown li
 untouched: it is the source of truth the schema emits and the blueprint prints;
 the content is a derived projection of it.
 
+The load pass walks the **schema**, not the card's field map, so a leaf's companions are populated wherever it is declared — an object property, a typed table's row property, a variant cell. A leaf's `default:` is its own, and the render floor reads the companion off whichever leaf it resolves, so an unpopulated position blank-fills and drops the author's default silently: covering every one is what makes an absent companion mean "no literal" rather than "not reached". Importing is also checking, so a nested `richtext(inline)` violation is a load error there, in a `default:` or an `example:`.
+
 Committing *only* `example` is the whole design. The render ladder already
 produces `default` and the blank at compile time but **never `example`** (example
 is excluded from the render path; see [BLUEPRINT.md](BLUEPRINT.md)), so

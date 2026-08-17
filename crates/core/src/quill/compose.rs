@@ -517,7 +517,8 @@ pub(crate) fn resolve_value_sourced(
     let Some(v) = present else {
         // A content-bearing field (`richtext` or its literal sibling
         // `plaintext`) commits the *content* form of its default
-        // (`default_content`, cached at load by `from_yaml_with_warnings`), so
+        // (`default_content`, cached at load by `from_yaml_with_warnings` for
+        // every content leaf at every declaration depth), so
         // the seam carries canonical Content-JSON the backend can classify. It
         // must NOT fall through to the raw `default`: the ladder injects this
         // default without re-coercing it (coercion touched only authored

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- fix: a content leaf's `default:` reaches the plate from **every** position it
+  can be declared in, not only card level. The load pass that imports each
+  richtext/plaintext literal into its companion cache walked the card's field
+  map, so an `object` property, a typed-table row property and a variant cell
+  each kept their authored `default:` and cached nothing; the render floor read
+  the leaf's empty companion and blank-filled. A document authoring only the
+  container (`dict: {}`, `rows: [{}]`, `c: {value: CUI}`) rendered correctly
+  with the author's default missing, and nothing upstream had anything to
+  report. The walk now recurses `properties` / `items` / `variants`, the shapes
+  `field_contains_content` already descended. Importing a literal is also what
+  checks it, so a nested `richtext(inline)` violation — in a `default:` or an
+  `example:` — now fails load as a card-level one always has, naming the leaf's
+  declaration path. Nested `example:` *surfacing* was never broken: the
+  blueprint prints the raw literal at every depth.
 - **breaking** typst: lowering dispatches on the schema node beside each value
   rather than on tables of top-level field names, so a declared type means the
   same thing wherever it is declared. A `date`, `richtext` or `plaintext`
