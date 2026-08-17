@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- fix(typst): `display(field, ..)` validates its address against the schema, the
+  assert `form-field` and `field-region` already carry. It is the one helper keyed
+  by address rather than by value, and it was the one accepting an address the
+  schema does not have: `display("issed", "[year]")` compiled, drew nothing, and
+  reported nothing — the failure a plate author is least placed to see, a card
+  address being a string the plate builds by concatenating `$path`. `_qm-display`
+  cannot catch it, carrying an entry per *present* date, so a blank date and a
+  typo are absent from it alike; `_qm-known-path` answers about the schema and
+  tells the two apart. A known address carrying no date still returns `none`, so
+  a `== none` fallback is unchanged: the assert is about the address, the `none`
+  about the value.
 - fix: **a container's own `default:` reaches the plate as content.** The render
   floor read `default_content` only for a `richtext`/`plaintext` leaf. An
   `object` or `array` carrying its `default:` on the container fell through to

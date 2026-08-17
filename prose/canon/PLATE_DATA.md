@@ -99,9 +99,11 @@ Helper contents (generated in `backends/typst/helper.rs` from `lib.typ.template`
   `_qm-display` binds one `#let _qm_dN = (..args) => text(datetime(..).display(..args))`
   closure per present date, keyed by schema address (`issued`, `stamps.2`,
   `contact.reply_by`, `$cards.<kind>.<n>.<field>`; compose a card address from
-  the card's `$path`), and `display` calls it. `none` for a blank date or an
-  address carrying none, so a `== none` fallback still fires. Formatting through
-  the date's own `display` inherits its type, so a `date`-only field throws
+  the card's `$path`), and `display` calls it. The address is validated like any
+  other (below), so a typo is a compile error rather than ink that quietly goes
+  missing; `none` comes back for a known address carrying no date — a blank one,
+  or a field that is not a date — so a `== none` fallback still fires. Formatting
+  through the date's own `display` inherits its type, so a `date`-only field throws
   Typst's native error on an `[hour]` pattern.
 
   The reason it is addressed rather than carried on the value is
@@ -114,9 +116,9 @@ Helper contents (generated in `backends/typst/helper.rs` from `lib.typ.template`
 
 ### Schema addresses
 
-`form-field(field:)` and `field-region(field)` name a schema field, and the
-generated `_qm-meta` address tree (`_qm-known-path`) validates that name at
-compile time rather than leaving it silently unbound:
+`form-field(field:)`, `field-region(field)` and `display(field, ..)` name a
+schema field, and the generated `_qm-meta` address tree (`_qm-known-path`)
+validates that name at compile time rather than leaving it silently unbound:
 
 | Address | Admitted by |
 |---|---|
