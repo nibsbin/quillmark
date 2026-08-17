@@ -23,8 +23,10 @@
   covers leaf and container alike and drops the type test. `usaf_memo`'s
   `references` (`array<richtext(inline)>`, `default: []`) carried the same
   defect, invisible only because the list was empty.
-- fix: **a container-shaped `default:`/`example:` on a variant-bearing enum is a
-  load error** (`quill::default_type_mismatch`, `quill::example_type_mismatch`).
+- **breaking** a container-shaped `default:`/`example:` on a variant-bearing
+  enum is a load error (`quill::default_type_mismatch`,
+  `quill::example_type_mismatch`). A quill declaring one loaded before, so the
+  upgrade reads as a quill that stopped loading rather than as a fix.
   The container is the shape a *document* writes. As a schema literal it cached
   no content form and yielded no discriminant, so the field blank-filled in
   silence as if nothing were declared. The diagnostic names the discriminant
@@ -74,11 +76,14 @@
   container (`dict: {}`, `rows: [{}]`, `c: {value: CUI}`) rendered correctly
   with the author's default missing, and nothing upstream had anything to
   report. The walk now recurses `properties` / `items` / `variants`, the shapes
-  `field_contains_content` already descended. Importing a literal is also what
-  checks it, so a nested `richtext(inline)` violation — in a `default:` or an
-  `example:` — now fails load as a card-level one always has, naming the leaf's
-  declaration path. Nested `example:` *surfacing* was never broken: the
-  blueprint prints the raw literal at every depth.
+  `field_contains_content` already descended, so such a document now renders
+  **with** the author's default — a render-output change for any quill that
+  declared one. Importing a literal is also what checks it, so a nested
+  `richtext(inline)` violation — in a `default:` or an `example:` — now fails
+  load as a card-level one always has, naming the leaf's declaration path.
+  **Breaking on that second count**: the literal loaded before, so a quill
+  carrying one stops loading. Nested `example:` *surfacing* was never broken:
+  the blueprint prints the raw literal at every depth.
 - **breaking** typst: a plate's direct read of a typed-table row cell regions on
   the cell (`refs.0.org`), where it regioned on the whole array before — a
   *wrong* address, not a missing one, routing a click on the org cell to the
@@ -135,7 +140,7 @@
   now available to any date at any depth without shaping the value. `none` for
   a blank date, so a `== none` fallback still fires. The rule plates follow:
   want a value → `data.<field>`; want clickable ink → `display("<field>", ..)`.
-- feat: a variant may carry any **leaf** type a card field may, prose and dates
+- feat: a variant cell may carry **any type a card field may**, prose and dates
   included — `quill::variant_field_type` is gone. The load error existed because
   lowering read flat top-level name tables that could not descend into a
   container, so a `date` or `richtext` cell inside a variant would have loaded
@@ -147,9 +152,11 @@
   `field_contains_content` returned `false` for a variant container on the
   strength of this very guard, which would have silently skipped the content
   companion caches, the resting-form conversion and the seed path for a variant
-  content cell. It now answers on the union of the worlds' cells. A variant still
-  holds no *container*: arrays and objects stay card-level, the same one-level
-  nesting rule an object's properties obey.
+  content cell. It now answers on the union of the worlds' cells. Containers
+  are included: "every type nests at every depth" lands in this same release, so
+  a variant cell holds a typed table or a typed dictionary like any other
+  position. `variants:` itself stays card-level (`quill::variant_placement`) on
+  the reasoning stated there.
 
 - **breaking** typst: the `plaintext(field)` helper and its `_qm-plaintext`
   table are removed. Shipped in 0.94 as the sanctioned content→`str` coercion,
@@ -220,6 +227,13 @@
   `CONTRIBUTING.md` gains the two rules that would have caught the gap: `!` marks
   an observable-contract shift even where no type changes, and a release carrying
   one ships its guide.
+- docs: `0.106-to-0.107.md`, this release's guide, under the rule the entry above
+  adds. It leads with the region-address index step — `main.refs[0].org` where
+  `main.refs` stood, a wrong address rather than a missing one — and then with
+  the two schema literals that stop a quill loading, since those read as a build
+  that broke rather than as a fix. `ERROR.md` names `display(..)` as the
+  address-keyed template-author contract, `plaintext(..)` having been removed
+  here.
 
 <!-- seed: commits since v0.106.0, confirm the entries above cover them, then delete this comment
 - fix: a container's own `default:` crosses as content, or is refused
