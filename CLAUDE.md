@@ -4,11 +4,10 @@ Schema-driven document engine: Markdown + YAML card metadata → rendered PDF/SV
 
 Crate layout and what each crate carries: [`ARCHITECTURE.md`](prose/canon/ARCHITECTURE.md) §"Crate Structure".
 
-Design docs: [`prose/canon/INDEX.md`](prose/canon/INDEX.md). Comments and docs follow the `dense-prose` skill.
+Design docs: [`prose/canon/INDEX.md`](prose/canon/INDEX.md).
 
 - The `Cargo.toml` version is the last *released* one; CI bumps it on release.
 - A `CHANGELOG.md` conflict resolves itself: `.gitattributes` marks it `merge=union`, so merge `main` with local git rather than pressing "Update branch", which does not read it.
-- Commit early and often; CI gates every push.
 - Don't run `cargo fmt`.
 
 ## Tests
