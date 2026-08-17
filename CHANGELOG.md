@@ -32,6 +32,22 @@
   now available to any date at any depth without shaping the value. `none` for
   a blank date, so a `== none` fallback still fires. The rule plates follow:
   want a value → `data.<field>`; want clickable ink → `display("<field>", ..)`.
+- feat: a variant may carry any **leaf** type a card field may, prose and dates
+  included — `quill::variant_field_type` is gone. The load error existed because
+  lowering read flat top-level name tables that could not descend into a
+  container, so a `date` or `richtext` cell inside a variant would have loaded
+  clean and reached the plate as its raw wire value; the schema-node walk reads
+  the cell's own declaration, leaving the ceiling nothing to protect. Every value
+  surface already descended per live-world cell — coercion through
+  `conform_value`, validation through `validate_value`, the render floor through
+  `resolve_value` — so the widening needed one real fix:
+  `field_contains_content` returned `false` for a variant container on the
+  strength of this very guard, which would have silently skipped the content
+  companion caches, the resting-form conversion and the seed path for a variant
+  content cell. It now answers on the union of the worlds' cells. A variant still
+  holds no *container*: arrays and objects stay card-level, the same one-level
+  nesting rule an object's properties obey.
+
 - **breaking** typst: the `plaintext(field)` helper and its `_qm-plaintext`
   table are removed. Shipped in 0.94 as the sanctioned content→`str` coercion,
   it never acquired a caller: no plate, no vendored package, and no binding

@@ -55,13 +55,23 @@ main:
             type: string
           controlled_by:
             type: string
+          note:
+            type: richtext
+          reply_by:
+            type: date
 "#;
 
 fn data() -> serde_json::Value {
     serde_json::json!({
         "subject": "Widgets",
         "address": { "city": "Dayton", "street": "1864 Fourth St" },
-        "classification": { "value": "CUI", "poc": "Capt J. Smith", "controlled_by": "SAF/AA" },
+        "classification": {
+            "value": "CUI",
+            "poc": "Capt J. Smith",
+            "controlled_by": "SAF/AA",
+            "note": common::content("Handle per **DoDM 5200.48**"),
+            "reply_by": "2026-03-04",
+        },
         "tags": ["urgent"],
         "refs": [{ "org": "AFRL/RQ", "num": "2026-01" }],
     })
@@ -302,6 +312,35 @@ fn a_direct_row_cell_read_still_anchors_on_the_array() {
     let fields: Vec<String> = session.regions().into_iter().map(|r| r.field).collect();
     assert!(fields.iter().any(|f| f == "refs"), "{fields:?}");
     assert!(!fields.iter().any(|f| f == "refs.0.org"), "{fields:?}");
+}
+
+/// A variant cell of a rich type lowers exactly as a card-level one does. The
+/// container projects as `type: object` carrying `properties`, so the walk
+/// recurses into it without knowing what a variant is — which is why the load
+/// error that used to refuse these cells had no mechanism left to protect.
+#[test]
+fn a_variant_cell_lowers_its_declared_type() {
+    let session = open(
+        r#"
+#import "@local/quillmark-helper:0.1.0": data, display
+#set page(width: 612pt, height: 792pt, margin: 72pt)
+// Content: a markup block, not the canonical-content wire JSON a raw dict
+// would have carried.
+#data.classification.note
+// Native `datetime`: the component read would not compile against a string.
+#assert(data.classification.reply_by.year() == 2026)
+#display("classification.reply_by", "[year]")
+"#,
+    );
+    let fields: Vec<String> = session.regions().into_iter().map(|r| r.field).collect();
+    assert!(
+        fields.iter().any(|f| f == "classification.note"),
+        "the cell's content regions on its own address: {fields:?}"
+    );
+    assert!(
+        fields.iter().any(|f| f == "classification.reply_by"),
+        "the cell's date projection regions too: {fields:?}"
+    );
 }
 
 #[test]

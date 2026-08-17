@@ -159,21 +159,120 @@ fn an_empty_variant_and_an_empty_variants_map_are_load_errors() {
     );
 }
 
-/// A provisional ceiling: lowering would handle a variant cell of either type,
-/// but nothing exercises coercion, blank-fill or validation for a content leaf
-/// whose world resolves at value time. Enforced rather than discovered at
-/// render, until that path is covered.
+/// A variant carries any leaf type a card field may. The four rich types were
+/// refused while lowering read flat top-level name tables that could not
+/// descend into a container; the schema-node walk reads a cell's own
+/// declaration, so the ceiling had no mechanism left to protect.
+///
+/// Each surface is pinned separately below; this one is load.
 #[test]
-fn a_variant_carries_plain_data_only() {
+fn a_variant_carries_any_leaf_type() {
     for ty in ["richtext", "plaintext", "date", "datetime"] {
-        let err = load_error(&format!(
-            "    c:\n      type: enum\n      values: [A]\n      variants:\n        A:\n          x: {{ type: {ty} }}\n"
-        ));
-        assert!(
-            err.contains("quill::variant_field_type"),
-            "type: {ty} should be refused inside a variant, got {err}"
+        let yaml = format!(
+            r#"
+quill:
+  name: ok
+  version: "0.1.0"
+  backend: typst
+  description: ok
+
+typst:
+  plate_file: plate.typ
+
+main:
+  fields:
+    c:
+      type: enum
+      values: [A]
+      variants:
+        A:
+          x: {{ type: {ty} }}
+"#
         );
+        let config = QuillConfig::from_yaml(&yaml)
+            .unwrap_or_else(|e| panic!("type: {ty} must load inside a variant: {e:?}"));
+        let cell = config.main.fields["c"]
+            .variant_field("x")
+            .unwrap_or_else(|| panic!("type: {ty} cell resolves"));
+        assert_eq!(cell.r#type.as_str(), ty);
     }
+}
+
+/// The four value surfaces on a content cell whose world resolves at value
+/// time: coercion imports the markdown, validation type-checks it, the render
+/// floor carries the live world's cell and blank-fills the absent one, and the
+/// content companion cache sees the container as content-bearing at all.
+#[test]
+fn a_variant_content_cell_crosses_every_value_surface() {
+    const YAML: &str = r#"
+quill:
+  name: variant_content
+  version: "0.1.0"
+  backend: typst
+  description: variant content probe
+
+typst:
+  plate_file: plate.typ
+
+main:
+  fields:
+    classification:
+      type: enum
+      values: [CUI]
+      default: ""
+      variants:
+        CUI:
+          note: { type: richtext }
+          reply_by: { type: date }
+"#;
+    let config = QuillConfig::from_yaml(YAML).expect("loads");
+    // The gate every companion, resting-form and seed path consults: a
+    // container whose world carries a content leaf must read as content-bearing.
+    assert!(crate::quill::config::field_contains_content(
+        &config.main.fields["classification"]
+    ));
+
+    let markdown = "~~~
+$quill: variant_content@0.1.0
+$kind: main
+classification:
+  value: CUI
+  note: A **bold** note
+  reply_by: 2026-03-04
+~~~
+";
+    let document = Document::parse(markdown).expect("parses").document;
+    assert!(
+        quill_from_yaml(YAML)
+            .validate(&document)
+            .iter()
+            .all(|d| d.severity != crate::Severity::Error),
+        "a variant content cell validates: {:?}",
+        quill_from_yaml(YAML).validate(&document)
+    );
+
+    let plate = config.compile_data(&document).expect("compiles")["classification"].clone();
+    // Coercion imported the markdown to canonical content, so the cell reaches
+    // the plate as the content object a card-level richtext would.
+    assert_eq!(plate["value"], json!("CUI"));
+    assert!(
+        plate["note"].get("text").is_some(),
+        "the cell is canonical content, not a raw string: {plate}"
+    );
+    assert_eq!(plate["reply_by"], json!("2026-03-04"));
+
+    // The blank world carries no cell at all, per the closed-container rule.
+    let blank_doc = Document::parse(concat!(
+        "~~~\n",
+        "$quill: variant_content@0.1.0\n",
+        "$kind: main\n",
+        "classification: \"\"\n",
+        "~~~\n",
+    ))
+    .expect("parses")
+    .document;
+    let blank_plate = config.compile_data(&blank_doc).expect("compiles")["classification"].clone();
+    assert_eq!(blank_plate, json!({ "value": "" }));
 }
 
 #[test]

@@ -94,18 +94,20 @@ The ceiling is deliberate and enforced at load rather than discovered at render:
 | `variants:` below card level, or inside another variant | `quill::variant_placement` |
 | an empty `variants:` map, or an empty variant | `quill::variant_empty` |
 | a variant field named `value` | `quill::variant_reserved_field_name` |
-| a `richtext`, `plaintext`, `date`, or `datetime` variant field | `quill::variant_field_type` |
 | a name two variants declare *differently* | `quill::variant_field_collision` |
 
-The `variant_field_type` ceiling is **provisional**, and the only limit here that
-is: lowering reads each value's own schema node ([PLATE_DATA.md](PLATE_DATA.md)),
-so a variant cell of either type would lower correctly. What is uncovered is the
-path in front of it — a variant's world resolves at value time, and no coercion,
-blank-fill or validation case exercises a content leaf inside one. Until it does,
-**a variant carries plain data** — `string`, `enum`, `number`, `integer`,
-`boolean` — and prose and dates stay card-level fields.
-Variant fields are otherwise leaves exactly as an object's properties are: no
-container one level down, and no `ui.group` (they inherit the discriminant's).
+A variant carries any **leaf** type a card field may, prose and dates included.
+The four rich types were once refused here (`quill::variant_field_type`) because
+lowering read flat top-level name tables that could not descend into a
+container, so such a cell would have loaded clean and reached the plate as its
+raw wire value. The schema-node walk reads a cell's own declaration
+([PLATE_DATA.md](PLATE_DATA.md)) and every value surface already descended —
+coercion through `conform_value`, validation through `validate_value`, the
+render floor through `resolve_value` — so the ceiling had no mechanism left to
+protect and is gone.
+
+Variant fields are leaves exactly as an object's properties are: no container
+one level down, and no `ui.group` (they inherit the discriminant's).
 
 Two limits follow from the container shape and are accepted, not worked around:
 [`resolve()`](#the-resolved-value-view-resolve) reports **one** rung for the whole
