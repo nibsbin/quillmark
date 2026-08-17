@@ -31,6 +31,17 @@
   the array's address for element ink see the narrower address instead. Explicit
   `field-region` / `form-field` claims are unchanged, and the alias lane keeps
   parity: `#let row = data.refs.at(0)` … `#row.org` regions on `refs.0.org`.
+- test: one table pins the schema address grammar on both backends
+  (`quillmark/tests/address_grammar.rs`), covering every position the nesting
+  contract admits, each position's card twin, and the rejects that bound each
+  step. `PLATE_DATA.md` promises a plate author that one address binds on
+  either backend, and the grammar is written twice to keep it — an unbounded
+  schema walk in `pdfform::bind`, an enumeration of the suffix forms in the
+  Typst helper's `_qm-known-path` — reading two different projections of the
+  same `QuillConfig`, so either side can move alone. `pdfform` exports
+  `resolves_schema_address` (`#[doc(hidden)]`) so the pin can ask both the same
+  question. A body address is the plate grammar's alone and is pinned as such.
+
 - **breaking** typst: lowering dispatches on the schema node beside each value
   rather than on tables of top-level field names, so a declared type means the
   same thing wherever it is declared. A `date`, `richtext` or `plaintext`

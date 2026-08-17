@@ -1,7 +1,9 @@
 //! The container property step (`classification.poc`, `address.city`) through
-//! the public `Backend`/`LiveSession` path: what the address grammar accepts,
-//! what it still rejects, and the address a region carries for a plate that
-//! reads one property.
+//! the public `Backend`/`LiveSession` path, and the address a region carries for
+//! a plate that reads one property.
+//!
+//! The addresses the grammar admits are stated once, against both backends, in
+//! `quillmark/tests/address_grammar.rs`.
 
 use quillmark_core::Backend;
 use quillmark_typst::TypstBackend;
@@ -266,12 +268,8 @@ card_kinds:
     );
 }
 
-/// The step is gated on what the field offers, so a scalar admits neither an
-/// index nor a property, and a container admits only its declared keys.
-/// A typed table's row property is one address on both backends. pdfform's
-/// `bind` descends unboundedly and has always resolved `refs.0.org`; the Typst
-/// grammar capped at one suffix step, so the shape `ShapePosition::ArrayItem`
-/// admits was writable on one backend only.
+/// A typed table's row property claims ink of its own, through an explicit
+/// claim and through a widget alike.
 #[test]
 fn a_typed_table_row_property_is_addressable() {
     let session = open(
@@ -390,28 +388,15 @@ fn a_variant_cell_lowers_its_declared_type() {
     );
 }
 
+/// The shared pin drives `field-region`; `form-field` carries its own copy of
+/// the assert.
 #[test]
-fn the_step_is_gated_on_the_declared_shape() {
-    for (address, plate_field) in [
-        ("subject.poc", "a scalar has no property"),
-        ("classification.undeclared", "an undeclared key is no cell"),
-        ("classification.0", "a container has no element"),
-        ("address.9", "a typed dictionary has no element"),
-        ("refs.0.undeclared", "an undeclared row key is no cell"),
-        ("tags.0.org", "a primitive element has no property"),
-        ("address.city.0", "the grammar stops at the declared depth"),
-        ("refs.org", "a row property needs its index"),
-    ] {
-        let plate = format!(
-            r#"
-#import "@local/quillmark-helper:0.1.0": field-region
-#field-region("{address}")[x]
-"#
-        );
-        let err = rejects(&plate);
-        assert!(
-            err.contains("not a schema field address"),
-            "{plate_field} ({address:?}): {err}"
-        );
-    }
+fn a_widget_binds_the_same_grammar_a_claim_does() {
+    let err = rejects(
+        r#"
+#import "@local/quillmark-helper:0.1.0": form-field
+#form-field("Bad", field: "address.city.0", value: "x")
+"#,
+    );
+    assert!(err.contains("not a schema field address"), "{err}");
 }

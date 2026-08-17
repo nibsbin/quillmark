@@ -136,11 +136,15 @@ discriminant are addressable exactly as a dictionary's keys are
 ([SCHEMAS.md](SCHEMAS.md#enum-variants)). The row property is where the grammar
 stops, at two steps, matching the one-level nesting contract the schema itself
 holds to. This is the pdfform resolver's grammar
-(`backends/pdfform/src/bind.rs`), so one address binds on either backend.
+(`backends/pdfform/src/bind.rs`), so one address binds on either backend. The
+grammar is written twice, in two languages, and held to one table by
+`quillmark/tests/address_grammar.rs`.
 
 Cards carry their canonical prefix as `$path`, so a plate composes a card
 address without reimplementing the kind+ordinal grammar:
-`field-region(card.at("$path") + "$body")`.
+`field-region(card.at("$path") + "$body")`. A body is content rather than a
+bindable field, so a `$body` address is the plate grammar's alone: pdfform's
+resolver roots none.
 
 The same addresses key the preview's region sidecar
 ([PREVIEW.md](PREVIEW.md)), so a plate that reads one container property or one
