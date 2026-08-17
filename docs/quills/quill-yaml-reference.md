@@ -283,6 +283,11 @@ classification:
 A world with nothing to fill in still writes plainly — `classification:
 UNCLASSIFIED` is accepted and means the same as `{value: UNCLASSIFIED}`.
 
+The container is a *document* shape. The schema's own `default:` and `example:`
+name the discriminant alone (`default: ""`, `example: CUI`); a container-shaped
+one is a load error, because each cell in a world carries its literal on its own
+declaration.
+
 Three things follow, and they are the reason to reach for this over a
 `cui_`-prefixed row of flat fields:
 

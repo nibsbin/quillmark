@@ -245,7 +245,11 @@ Coercion rules per type:
   token as its markdown source. The leniency is scoped to
   *document* payloads via the shared `scalar_as_string` predicate; a quill
   author's own `default:`/`example:` literals stay strict, so the blueprint
-  keeps quoting ambiguous string literals
+  keeps quoting ambiguous string literals. The same strictness rejects a
+  container-shaped literal on a variant-bearing enum
+  (`quill::{default,example}_type_mismatch`): the container is a *document*
+  spelling, and a schema literal names the discriminant alone; the cells inside
+  a world carry their literals on their own declarations
 
 ## Native validation
 
@@ -500,7 +504,18 @@ seed's commit takes the extra step to the field's rest. The authored markdown li
 untouched: it is the source of truth the schema emits and the blueprint prints;
 the content is a derived projection of it.
 
-The load pass walks the **schema**, not the card's field map, so a leaf's companions are populated wherever it is declared — an object property, a typed table's row property, a variant cell. The render floor reads the companion off whichever leaf it resolves, so covering every position is what makes an absent companion mean "no literal" rather than "not reached"; a gap blank-fills and drops the author's `default:` silently. Importing is also checking, so a nested `richtext(inline)` violation is a load error there, in a `default:` or an `example:`.
+The load pass walks the **schema**, not the card's field map, so companions are
+populated at every declaration whose type tree bears a content leaf
+(`field_contains_content`) — the leaf wherever it sits, and the container above
+it carrying a literal of its own.
+
+The render floor reads the companion off whichever declaration it resolves, so
+covering every position is what makes an absent companion mean "no literal"
+rather than "not reached"; a gap blank-fills and drops the author's `default:`
+silently. The cache is also the gate: a content-bearing tree with no companion
+blank-fills rather than falling through to the raw literal, which would cross as
+unimported markdown. Importing is also checking, so a nested `richtext(inline)`
+violation is a load error there, in a `default:` or an `example:`.
 
 Committing *only* `example` is the whole design. The render ladder already
 produces `default` and the blank at compile time but **never `example`** (example

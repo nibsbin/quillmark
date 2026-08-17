@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- fix: **a container's own `default:` reaches the plate as content.** The render
+  floor read `default_content` only for a `richtext`/`plaintext` leaf. An
+  `object` or `array` carrying its `default:` on the container fell through to
+  the raw literal instead, crossing as unimported markdown where every other
+  content position delivers a canonical content object. The companion was
+  already cached and never read. The floor now keys off the cache — present is
+  the form to commit, absent over a content-bearing tree blank-fills — which
+  covers leaf and container alike and drops the type test. `usaf_memo`'s
+  `references` (`array<richtext(inline)>`, `default: []`) carried the same
+  defect, invisible only because the list was empty.
+- fix: **a container-shaped `default:`/`example:` on a variant-bearing enum is a
+  load error** (`quill::default_type_mismatch`, `quill::example_type_mismatch`).
+  The container is the shape a *document* writes. As a schema literal it cached
+  no content form and yielded no discriminant, so the field blank-filled in
+  silence as if nothing were declared. The diagnostic names the discriminant
+  spelling instead, which is where a world's cells carry their own literals.
+  Scalar literals are unaffected.
+
 - feat: **every type nests at every depth**. A property or an element is an
   ordinary field, so it carries whatever a card-level field carries, itself
   included: `object<array<string>>`, `array<array<integer>>`, a typed table whose
