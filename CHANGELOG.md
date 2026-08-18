@@ -29,6 +29,36 @@
   an undeclared key to the plate. This is the variant container's rule
   (`quill::default_type_mismatch`) generalized; an `array` keeps its literal,
   since `items:` fixes the element type but never the arity.
+- **breaking** `must_fill:` is retired: obligation is a reading of `default:`,
+  never a declaration of its own. Declaring the key is a load error
+  (`quill::field_parse_error`) naming the migration that field's shape takes,
+  `FieldSchema::must_fill()` is `default.is_none()`, and the raw
+  `FieldSchema.must_fill` field is gone. Four of the five legacy declarations
+  restate the derivation and migrate by **deletion**: `must_fill:` on a typed
+  dictionary (a namespace carries no obligation — its leaves do), `must_fill:
+  true` with no `default:`, and `must_fill: false` beside one. `must_fill:
+  false` with no `default:` becomes `default: <the type's blank>` (`""`, `[]`,
+  `0`, `false`) — already the corpus's most common `default:`. The fifth,
+  `must_fill: true` beside a `default:`, is the one behavior deleted and the
+  one judgment call: keep the `default:` to render the value unasked, or move
+  it to `example:` to keep the ask. An example fills the blueprint cell the
+  default vacated, seeds *carrying* the `!must_fill` marker where a
+  `default:`-only field seeds nothing, and never renders — so an untouched
+  document renders the blank rather than asserting a value nobody chose. For a
+  `string` or `enum` the blueprint bytes are identical either way; three shapes
+  are not. A `richtext` example never inlines, so its cell becomes a bare
+  marker and the value survives only as the `# e.g.` hint. An
+  `integer`/`number`/`boolean` blank is indistinguishable at the plate from an
+  authored zero. On a variant container the two targets select different
+  worlds: `default: CUI` renders the CUI world and obliges its cells, while
+  `example: CUI` leaves the discriminant blank. Also removed:
+  `quillmark:must_fill` from the transform schema, which is the wire *validity*
+  contract, and an unauthored must-fill cell is wire-valid by design; the
+  declaration view carries `default:` for a consumer that wants to derive.
+  No in-tree quill declared the key and the declaration view emits only what an
+  author wrote, so no emitted JSON changes for any real quill — the WASM
+  `QuillFieldSchema` TS interface loses `must_fill?: boolean`, a compile-time
+  break for editors typed against it.
 - fix: **seeding descends into a container's `example:`.** A dictionary with no
   `example:` of its own seeded nothing, so a property's `example:` was
   unreachable at every projection — the render floor never emits an example, and

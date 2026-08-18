@@ -84,37 +84,35 @@ main:
 |---------------|-------------------|----------|-------------|
 | `type`        | string            | yes      | Data type (see [Field Types](#field-types)) |
 | `description` | string            | no       | Detailed help text |
-| `default`     | matches `type`    | no       | The value the **majority of authors want**. When the cell is omitted, the default is filled in — at any depth, whether or not the container above it was authored — and the blueprint renders that concrete value with a type-only annotation, shippable as-is. Declaring it also flips the derived `must_fill` to `false` (see below). Declared on a **cell**: a leaf or an `array`. On an `object` it is a load error (`quill::default_on_namespace`), since its properties hold their own. |
+| `default`     | matches `type`    | no       | The value the **majority of authors want**. When the cell is omitted, the default is filled in — at any depth, whether or not the container above it was authored — and the blueprint renders that concrete value with a type-only annotation, shippable as-is. Declaring it also makes the field unobliged (see [Obligation](#obligation)). Declared on a **cell**: a leaf or an `array`. On an `object` it is a load error (`quill::default_on_namespace`), since its properties hold their own. |
 | `example`     | matches `type`    | no       | A value matching the **type and shape** of what the author wants, but **not** the value desired most of the time. Documents shape only, never rendered as the value: it takes the blueprint cell when no `default` holds it, and surfaces in the `# e.g.` line otherwise. Declared on a **cell**, as `default` is (`quill::example_on_namespace`). |
-| `must_fill`   | boolean           | no       | Whether a human must author this cell (see [Obligation: `must_fill`](#obligation-must_fill)). Defaults to `!default.is_some()`. |
 | `values`      | array of strings  | for `enum` | The closed set of allowed string values: the **choices**. Required on every `enum` field. Declaring `""` is a load error — every enum also accepts its [blank](#the-blank-values-is-for-choices-not-for-the-absence-of-one), which the engine supplies. |
 | `ui`          | object            | no       | UI rendering hints (see [UI Properties](#ui-properties)) |
 | `items`       | object            | for `array` | Element schema for an `array` field (a nested field schema). Required on every array. |
 | `properties`  | object            | for `object` | Nested field schemas for an `object` typed dictionary (or an array's `object`-typed `items`). Required on every `object` field. |
 | `inline`      | boolean           | no       | For `richtext` and `plaintext` only: constrain the content to a single paragraph/line (a one-line editor surface). |
 
-### Obligation: `must_fill`
+### Obligation
 
-A field says two separate things. `default` and `example` say **what a cell
-holds**; `must_fill` says **whether a human must author it**. Leave it out and
-it derives from `default`: a defaulted field is not obliged, a defaultless one
-is.
-
-Write it when you want a combination the derivation cannot reach:
+One question per field: **does it have a value when nobody types anything?**
+`default` is the answer, and its absence is what obliges a human.
 
 ```yaml
-# A safe value renders, and a human must still confirm it.
+# Optional, with nothing to suggest: the type's blank is the answer "nothing".
+internal_note:
+  type: string
+  default: ""
+
+# A suggested marking a human must still confirm: no default, so the cell is
+# obliged, and the example fills it under the marker.
 classification:
   type: enum
   values: [UNCLASSIFIED, CUI]
-  default: UNCLASSIFIED
-  must_fill: true
-
-# Genuinely optional, with nothing to suggest.
-internal_note:
-  type: string
-  must_fill: false
+  example: UNCLASSIFIED
 ```
+
+There is no `must_fill:` key: declaring one is a load error naming the `default:`
+or `example:` to write instead.
 
 An obliged field is one that carries the `!must_fill` marker in the blueprint,
 is stamped when seeding commits its `example`, and raises the non-fatal

@@ -463,16 +463,18 @@ pub const VARIANT_DISCRIMINANT_KEY: &str = "value";
 /// omitted), while `example` matches the desired type and shape but is not
 /// the value most authors want (it documents shape only, never rendering).
 ///
-/// A field carries two independent axes. The **value** axis is `default:` ›
-/// `example:` › the field's [`blank`](crate::quill::blank), and decides what a
-/// cell holds. The **obligation** axis is [`must_fill()`](Self::must_fill), and
-/// decides whether a human must author it. Neither implies the other: a
-/// `default:` can still demand confirmation (`must_fill: true`), and a field
-/// with nothing to suggest can be genuinely optional (`must_fill: false`).
+/// `default:` is the one dial an author turns, and it answers both questions a
+/// field raises. The **value** axis is `default:` › `example:` › the field's
+/// [`blank`](crate::quill::blank), and decides what a cell holds. The
+/// **obligation** axis, [`must_fill()`](Self::must_fill), is a reading of the
+/// same declaration: a field nobody supplied a value for is one a human must
+/// answer.
 ///
 /// Obligation is a warning, never a gate: an unauthored must-fill field
 /// blank-fills and renders, and the only signal is the non-fatal
-/// `validation::must_fill` warning. There is no separate `required:` axis.
+/// `validation::must_fill` warning. There is no separate `required:` axis, and
+/// no `must_fill:` key — [`from_quill_value`](Self::from_quill_value) rejects
+/// one, routing the declaration back to `default:`.
 ///
 /// The richtext single-line constraint has **one** carrier: the
 /// `FieldType::RichText { inline }` enum. The wire's sibling `inline:` key folds
@@ -492,15 +494,11 @@ pub struct FieldSchema {
     pub r#type: FieldType,
     pub description: Option<String>,
     /// The value most authors want; interpolated when the field is omitted.
-    /// Its presence is what an unset `must_fill:` derives from.
+    /// Its presence is the whole of [`must_fill()`](Self::must_fill).
     pub default: Option<QuillValue>,
     /// A value matching the desired type and shape but not the value most
     /// authors want; documents shape only and never renders as the value.
     pub example: Option<QuillValue>,
-    /// Whether a human must author this cell. Read through
-    /// [`must_fill()`](Self::must_fill), never directly: `None` derives from
-    /// `default`.
-    pub must_fill: Option<bool>,
     pub ui: Option<UiFieldSchema>,
     /// Restricts valid values on string fields. Serializes as `enum`.
     pub enum_values: Option<Vec<String>>,
@@ -543,6 +541,9 @@ struct FieldSchemaDef {
     pub description: Option<String>,
     pub default: Option<QuillValue>,
     pub example: Option<QuillValue>,
+    /// The retired `must_fill:` key, parsed only to reject it by name and route
+    /// the author to `default:`
+    /// ([`FieldSchema::retired_must_fill`](FieldSchema::retired_must_fill)).
     pub must_fill: Option<bool>,
     pub ui: Option<UiFieldSchema>,
     /// The retired `enum:` modifier, parsed only to reject it by name: under
@@ -563,6 +564,12 @@ struct FieldSchemaDef {
     pub inline: Option<bool>,
 }
 
+/// A schema literal spelled as `Quill.yaml` would carry it: JSON is a YAML
+/// subset, so the JSON form pastes back into the file it came from.
+fn literal(value: &QuillValue) -> String {
+    serde_json::to_string(value.as_json()).unwrap_or_else(|_| "null".to_string())
+}
+
 impl FieldSchema {
     pub fn new(name: String, r#type: FieldType, description: Option<String>) -> Self {
         Self {
@@ -571,7 +578,6 @@ impl FieldSchema {
             description,
             default: None,
             example: None,
-            must_fill: None,
             ui: None,
             enum_values: None,
             variants: None,
@@ -608,18 +614,15 @@ impl FieldSchema {
         self.variants.is_some()
     }
 
-    /// Whether a human must author this cell, deriving from `default:` when
-    /// `must_fill:` is unset: a field the quill author declared no value for
-    /// asks for one, a defaulted field does not. The derivation is keyed on
+    /// Whether a human must author this cell: a field the quill author declared
+    /// no value for asks for one, a defaulted field does not. Keyed on
     /// `default`'s *presence*, so a `default: ""` stays a skippable cell rather
     /// than becoming a marker.
     ///
-    /// Read this rather than the raw [`must_fill`](Self::must_fill) field: the
-    /// blueprint's marker, the seeding stamp, the `Quill::validate` predicate,
-    /// and the transform schema's `quillmark:must_fill` are one answer, and it
-    /// is this one.
+    /// The blueprint's marker, the seeding stamp and the `Quill::validate`
+    /// predicate are one answer, and it is this one.
     pub fn must_fill(&self) -> bool {
-        self.must_fill.unwrap_or(self.default.is_none())
+        self.default.is_none()
     }
 
     pub fn from_quill_value(key: String, value: &QuillValue) -> Result<Self, String> {
@@ -632,13 +635,12 @@ impl FieldSchema {
         // `type: enum` requires `values:`; `values:` on any other type, and
         // `enum:` on any type at all, is a hard error.
         let enum_values = Self::resolve_enum_values(&r#type, def.enum_key, def.values)?;
-        Ok(Self {
+        let schema = Self {
             name: key.clone(),
             r#type,
             description: def.description,
             default: def.default,
             example: def.example,
-            must_fill: def.must_fill,
             ui: def.ui,
             enum_values,
             variants: match def.variants {
@@ -693,7 +695,58 @@ impl FieldSchema {
             // them empty.
             default_content: None,
             example_content: None,
-        })
+        };
+        // Last, so the rejection reads the resolved field: the migration it
+        // names turns on the type and the `default:`.
+        match def.must_fill {
+            Some(declared) => Err(Self::retired_must_fill(declared, &schema)),
+            None => Ok(schema),
+        }
+    }
+
+    /// The migration for a declared `must_fill:`. Which one the field takes
+    /// turns on the rest of its declaration, which an author cannot read off the
+    /// retired key alone.
+    fn retired_must_fill(declared: bool, schema: &FieldSchema) -> String {
+        let head = "must_fill: is retired; obligation derives from default:'s absence";
+        let namespace = matches!(schema.r#type, FieldType::Object) && schema.properties.is_some();
+        let route = match (namespace, declared, schema.default.is_some()) {
+            (true, _, _) => "remove it — a typed dictionary is a namespace, and each property \
+                             carries its own obligation"
+                .to_string(),
+            (_, true, false) => {
+                "remove it — a field with no default: is obliged already".to_string()
+            }
+            (_, false, true) => {
+                "remove it — a field with a default: is unobliged already".to_string()
+            }
+            (_, false, false) => format!(
+                "write `default: {}` instead — a defaulted cell is the skippable one",
+                Self::blank_literal(schema)
+            ),
+            (_, true, true) => format!(
+                "keep the default: to render {value} unasked, or move it to `example: {value}` to \
+                 ask — an example seeds under the !must_fill marker and never renders, so an \
+                 untouched document renders {blank}",
+                value = literal(schema.default.as_ref().expect("default is present")),
+                blank = Self::blank_literal(schema),
+            ),
+        };
+        format!("{head}, so {route}")
+    }
+
+    /// The blank as an author writes it into `default:`. Not
+    /// [`blank`](crate::quill::blank), which builds the *resting* form: a prose
+    /// field's is `""` rather than the empty content, and a variant container's
+    /// is the blank discriminant rather than the container.
+    fn blank_literal(schema: &FieldSchema) -> &'static str {
+        match schema.r#type {
+            FieldType::Array => "[]",
+            FieldType::Integer | FieldType::Number => "0",
+            FieldType::Boolean => "false",
+            FieldType::Object => "{}",
+            _ => "\"\"",
+        }
     }
 
     /// Fold the sibling `inline:` key into a prose type's enum payload. Both
@@ -766,7 +819,6 @@ impl Serialize for FieldSchema {
             + self.description.is_some() as usize
             + self.default.is_some() as usize
             + self.example.is_some() as usize
-            + self.must_fill.is_some() as usize
             + self.ui.is_some() as usize
             + self.enum_values.is_some() as usize
             + self.variants.is_some() as usize
@@ -785,12 +837,6 @@ impl Serialize for FieldSchema {
         }
         if let Some(v) = &self.example {
             map.serialize_entry("example", v)?;
-        }
-        // The raw `Option`, not the derived answer: the schema wire is what the
-        // author wrote, and re-emitting the derivation would pin every field's
-        // obligation the first time a quill round-tripped through it.
-        if let Some(v) = &self.must_fill {
-            map.serialize_entry("must_fill", v)?;
         }
         if let Some(v) = &self.ui {
             map.serialize_entry("ui", v)?;
