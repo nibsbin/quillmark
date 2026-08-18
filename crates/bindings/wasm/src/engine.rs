@@ -2037,7 +2037,14 @@ export type DocPathSeg =
 
 #[wasm_bindgen(typescript_custom_section)]
 const RESOLVED_TS: &'static str = r#"
-/** The commitment-ladder rung that produced a `ResolvedField.value`. */
+/**
+ * The commitment-ladder rung that produced a `ResolvedField.value`.
+ *
+ * A container has no rung of its own — it is a namespace, and its value is the
+ * composition of its cells' — so it reports the strongest rung that contributed:
+ * `authored` if the document wrote any of it, else `default` if any cell below
+ * resolved to one, else `blank`.
+ */
 export type FieldSource = "authored" | "default" | "blank";
 
 /**

@@ -14,17 +14,33 @@ use crate::{Card, Document, QuillValue};
 
 /// The rung of the commitment ladder that produced a [`ResolvedField::value`].
 /// Serializes lowercase (`"authored" | "default" | "blank"`).
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+///
+/// Variants are declared floor-first, so `Ord` ranks by *commitment*: how
+/// strongly the value claims to be the real answer. Reordering them reorders the
+/// ladder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
 pub enum FieldSource {
-    /// The authored value: the document's own content.
-    Authored,
-    /// The schema `default:` (or its content form for a content field).
-    Default,
     /// The field's [`blank`](crate::quill::blank): its spelling of
     /// "explicitly nothing", and the render floor.
     Blank,
+    /// The schema `default:` (or its content form for a content field).
+    Default,
+    /// The authored value: the document's own content.
+    Authored,
+}
+
+impl FieldSource {
+    /// The more committed of two rungs.
+    ///
+    /// A container has no rung of its own — it is a namespace, and its value is
+    /// the composition of its cells' — so it reports the strongest rung that
+    /// contributed to it: authored if the document wrote any of it, else
+    /// `default` if any cell below resolved to one, else the floor.
+    pub(crate) fn join(self, other: Self) -> Self {
+        self.max(other)
+    }
 }
 
 /// One resolved row: its `name`, the value the render projection would use, and

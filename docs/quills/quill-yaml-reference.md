@@ -84,8 +84,8 @@ main:
 |---------------|-------------------|----------|-------------|
 | `type`        | string            | yes      | Data type (see [Field Types](#field-types)) |
 | `description` | string            | no       | Detailed help text |
-| `default`     | matches `type`    | no       | The value the **majority of authors want**. When the field is omitted, the default is filled in, and the blueprint renders that concrete value with a type-only annotation, shippable as-is. Declaring it also flips the derived `must_fill` to `false` (see below). |
-| `example`     | matches `type`    | no       | A value matching the **type and shape** of what the author wants, but **not** the value desired most of the time. Documents shape only, never rendered as the value: it takes the blueprint cell when no `default` holds it, and surfaces in the `# e.g.` line otherwise. |
+| `default`     | matches `type`    | no       | The value the **majority of authors want**. When the cell is omitted, the default is filled in — at any depth, whether or not the container above it was authored — and the blueprint renders that concrete value with a type-only annotation, shippable as-is. Declaring it also flips the derived `must_fill` to `false` (see below). Declared on a **cell**: a leaf or an `array`. On an `object` it is a load error (`quill::default_on_namespace`), since its properties hold their own. |
+| `example`     | matches `type`    | no       | A value matching the **type and shape** of what the author wants, but **not** the value desired most of the time. Documents shape only, never rendered as the value: it takes the blueprint cell when no `default` holds it, and surfaces in the `# e.g.` line otherwise. Declared on a **cell**, as `default` is (`quill::example_on_namespace`). |
 | `must_fill`   | boolean           | no       | Whether a human must author this cell (see [Obligation: `must_fill`](#obligation-must_fill)). Defaults to `!default.is_some()`. |
 | `values`      | array of strings  | for `enum` | The closed set of allowed string values: the **choices**. Required on every `enum` field. Declaring `""` is a load error — every enum also accepts its [blank](#the-blank-values-is-for-choices-not-for-the-absence-of-one), which the engine supplies. |
 | `ui`          | object            | no       | UI rendering hints (see [UI Properties](#ui-properties)) |
@@ -383,6 +383,29 @@ main:
 ```
 
 Containers nest freely: a property or an element is an ordinary field, so it carries whatever type a card-level field carries, itself included. `object<array<string>>`, `array<array<integer>>` and a typed table whose row holds a typed dictionary are all declarable, and each leaf is addressable by the schema address its path spells (`contact.address.city`, `grid.0.0` — see [PLATE_DATA.md](https://github.com/borb-sh/quillmark/blob/main/prose/canon/PLATE_DATA.md#schema-addresses)).
+
+**A dictionary holds no `default:` or `example:` of its own** — its properties do:
+
+```yaml
+address:
+  type: object
+  # default: { street: "5000 Forbes Ave" }   # quill::default_on_namespace
+  properties:
+    street: { type: string, default: "5000 Forbes Ave" }
+    city:   { type: string, default: "" }    # type-empty: a skippable cell
+```
+
+The container spelling would be a second declaration of a value the property
+already holds, and the two disagree: `must_fill` derives per property, so a
+container default renders a value *and* still reports the cell unauthored. Each
+property's `default:` is reached whether or not a document authors the container
+above it, so writing `address: {}` changes nothing — which also makes a whole
+dictionary skippable by giving each property a type-empty default.
+
+An `array` **does** keep its own `default:` / `example:`: `items:` fixes the
+element type but never the arity, so `default: []` and `default: [{…}]` say
+something no property declaration can. Each element it supplies is completed
+against `items` exactly as an authored element is.
 
 Two keys are card-level regardless of depth: `ui.group` (grouping never descends) and `variants:` (see [Variants](#variants-fields-that-exist-only-for-one-choice)).
 

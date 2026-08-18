@@ -307,3 +307,47 @@ fn well_formed_seed_overlay_yields_no_seed_diagnostics() {
         "a well-formed overlay should produce no seed diagnostics: {diags:?}",
     );
 }
+
+/// A typed dictionary's seed composes from the examples its properties declare,
+/// and stays absent when none of them declare any.
+#[test]
+fn a_dictionarys_seed_is_composed_from_its_properties_examples() {
+    let quill = quill_from_yaml(
+        r#"
+quill: { name: sd, version: 1.0.0, backend: typst, description: x }
+main:
+  fields:
+    contact:
+      type: object
+      properties:
+        name: { type: string, example: Ada }
+        email: { type: string, default: "hi@example.com" }
+        note: { type: string }
+    empty:
+      type: object
+      properties:
+        tag: { type: string, default: t }
+"#,
+    );
+    let seeded = quill.seed_document();
+    let payload = seeded.main().payload();
+
+    assert_eq!(
+        payload.get("contact").map(|v| v.as_json().clone()),
+        Some(serde_json::json!({ "name": "Ada" })),
+        "the commit is sparse: only the cells with an example, the rest deferred"
+    );
+    assert!(
+        payload.get("empty").is_none(),
+        "a dictionary whose cells commit nothing stays absent, as any field does"
+    );
+    // The marker rides a committed example on a must-fill cell, at its own path.
+    assert!(
+        payload
+            .get("contact")
+            .expect("contact seeded")
+            .nonroot_fill_paths()
+            .any(|p| p == vec![crate::value::PathSegment::Key("name".to_string())]),
+        "a must-fill cell's marker rides at the cell, not the container"
+    );
+}

@@ -2,6 +2,46 @@
 
 ## Unreleased
 
+- fix: **the value ladder is cut per cell, so the plate is total at every
+  depth.** An absent container returned a value instead of descending, and
+  everything below it was decided by that one branch: an absent `contact` never
+  reached `contact.email`'s own `default:`, and a container `default: {name: A}`
+  crossed whole, so a declared property it omitted was **missing from the
+  plate** — a direct Typst read of it a compile error, on an address
+  `form-field` still binds. Two spellings of the same state disagreed:
+  authoring `contact: {}` rendered the leaf defaults that leaving `contact` out
+  did not, and `default: {}` — documented as expanding to the blank-filled
+  shape — emitted `{}` with no declared key at all. Resolution is now a descent:
+  a rung supplies a *seed*, and the same composition runs over it whichever rung
+  it came from, so absence is inherited rather than terminal and each cell cuts
+  its own ladder. A partial element inside an `array` `default:` is completed
+  against `items` as an authored element is. The variant container already
+  worked this way and stops being the special case.
+- **breaking** a `default:`/`example:` on an `object` with `properties` is a
+  load error (`quill::default_on_namespace`, `quill::example_on_namespace`),
+  naming the properties that hold it. A quill declaring one loaded before, so
+  the upgrade reads as a quill that stopped loading rather than as a fix; no
+  in-tree quill declares one. A typed dictionary is a namespace, not a cell:
+  the container literal was a second declaration of a value the property
+  already holds, and the two axes read different ones — `default: {name: A}`
+  rendered `A` while `must_fill` derives per property and still reported `name`
+  unauthored. It was also unchecked, so `default: {nope: 1}` loaded and crossed
+  an undeclared key to the plate. This is the variant container's rule
+  (`quill::default_type_mismatch`) generalized; an `array` keeps its literal,
+  since `items:` fixes the element type but never the arity.
+- fix: **seeding descends into a container's `example:`.** A dictionary with no
+  `example:` of its own seeded nothing, so a property's `example:` was
+  unreachable at every projection — the render floor never emits an example, and
+  the blueprint is a different document. A seed is now composed from whatever
+  its cells commit, sparse at every depth, and stays absent when none of them
+  commit anything. Markers ride the cell they belong to.
+- fix: `resolve()`'s rung is honest for a container. It has no rung of its own,
+  so it reports the strongest that contributed: `authored` when the document
+  wrote any of it, else `default` when a cell below resolved to one, else the
+  floor. An absent container over defaulted cells read `blank` while rendering
+  those defaults, which is the fact an editor ghosts from. Nothing inside a
+  container the document did not author reads `authored`.
+
 - chore(deps): the Typst floor moves to 0.15.1. The workspace already resolved
   there under the 0.15.0 caret; the pin now names the version the tree is built
   and tested against. `pdf-writer` stays at 0.15.0, still the version
