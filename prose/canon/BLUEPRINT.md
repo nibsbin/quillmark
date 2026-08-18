@@ -301,21 +301,25 @@ fallback; authors needing these characters must reshape their values.
 
 ## Typed tables
 
-A field of `type: array` with a `properties` map follows the uniform
-cell cascade: `default:` (any default, including `[]`) is shippable as-is;
-without one:
+A field of `type: array` whose `items:` declare a `properties` map. The array is
+a **cell**, so it keeps its own literal and the cascade is the uniform one:
+`default:` (any default, including `[]`) is shippable as-is; without one:
 
 - A non-empty `default:` renders as actual rows (no per-property
   annotations on each row). The outer key carries `# array<object>`.
 - `default: []` renders inline as `[]` with `# array<object>`:
   shippable empty. Inline row shape is not surfaced under an empty
   default; use `example:` to document row shape.
-- Without a `default:`, one synthetic row is emitted with each
-  property carrying its own description, inline annotation, and the
-  `!must_fill` marker on its leaf value. The container key itself is
-  untagged: you tag the leaves, not the container (per
-  [markdown-spec.md](../references/markdown-spec.md) §3.4). The outer key
-  carries `# array<object>`.
+- Without a `default:`, one synthetic row is emitted with each property
+  carrying its own description, inline annotation, and its own derived
+  `!must_fill` marker — so a row property holding a `default:` renders that
+  value unmarked. The container key itself is untagged: you tag the leaves, not
+  the container (per [markdown-spec.md](../references/markdown-spec.md) §3.4).
+  The outer key carries `# array<object>`.
+
+The row schema is a namespace, so it declares no `default:` / `example:` of its
+own (`quill::default_on_namespace`). The array's literal is where element values
+go, and each element it supplies is completed against `items:`.
 
 An `example:` never renders as rows. Like every other field type, it
 surfaces only in the `# e.g.` leading line: as a one-line flow
