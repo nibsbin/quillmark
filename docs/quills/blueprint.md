@@ -24,7 +24,7 @@ Write main body here.
 
 Two annotation slots, disjoint by purpose: **leading `# …` lines** carry prose (a description, an `# e.g.` example); the **inline `# …`** at the end of a value line carries structure, the field's `# <type>[<format>]`.
 
-The reader's one rule: a **`!must_fill`** marker present → replace it before shipping; a concrete value present → shippable as-is. The cell's *value* is `default:` › `example:` › bare; the *marker* is the field's `must_fill:`, which defaults to "obliged unless a `default:` says otherwise". The two are independent, so a cell can carry a concrete default **and** a marker asking a human to confirm it. A surviving marker never blocks render: it raises only the non-fatal `validation::must_fill` warning; a strict consumer (an LLM authoring loop) treats any outstanding marker as "not done."
+The reader's one rule: a **`!must_fill`** marker present → replace it before shipping; a concrete value present → shippable as-is. The cell's *value* is `default:` › `example:` › bare; the *marker* is `default:`'s absence, so a cell can carry a suggested `example` **and** a marker asking a human to confirm it. A surviving marker never blocks render: it raises only the non-fatal `validation::must_fill` warning; a strict consumer (an LLM authoring loop) treats any outstanding marker as "not done."
 
 ## Seeding: the filled-out twin
 

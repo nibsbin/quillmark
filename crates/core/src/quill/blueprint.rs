@@ -182,8 +182,8 @@ fn append_field(items: &mut Vec<PayloadItem>, field: &FieldSchema) {
 
     if typed_dict_props(field).is_some() || typed_table_props(field).is_some() {
         // The container key itself is untagged: `!must_fill` is rejected on a
-        // mapping (`prose/references/markdown-spec.md` §3.4), so a container's
-        // own `must_fill:` is inert and the obligation lives on its leaves.
+        // mapping (`prose/references/markdown-spec.md` §3.4), so the obligation
+        // lives on the leaves.
         push_leading(items, field, true);
         let (value, nested, fills) = container_cell(field, &[]);
         push_container_field(items, &field.name, value, nested, fills, field);
@@ -227,13 +227,9 @@ fn push_leading(items: &mut Vec<PayloadItem>, field: &FieldSchema, eg_when: bool
     }
 }
 
-/// The cell's `(value, fill)` for a scalar/array/richtext leaf: the two axes
-/// read independently. The value is `default:` › `example:` › bare null; the
-/// marker is the field's derived `must_fill`. A field carrying both a default
-/// and `must_fill: true` therefore shows the default *and* asks for
-/// confirmation, and an explicitly optional field with nothing to suggest emits
-/// a bare unmarked cell (the type annotation alone tells the reader what goes
-/// there).
+/// The cell's `(value, fill)` for a scalar/array/richtext leaf. The value is
+/// `default:` › `example:` › bare null; the marker is `default:`'s absence, so
+/// an `example` always arrives under it.
 fn scalar_cell(field: &FieldSchema) -> (JsonValue, bool) {
     (scalar_value(field), field.must_fill())
 }
@@ -651,50 +647,38 @@ main:
         assert!(t.contains("# e.g. Hello world\nbio: !must_fill # richtext<markdown>\n"));
     }
 
+    /// A suggested value a human must still confirm: the example takes the cell
+    /// no `default:` holds, and the derived obligation marks it there.
     #[test]
-    fn a_default_and_an_explicit_must_fill_show_both() {
+    fn an_example_takes_the_cell_it_suggests_under_the_marker() {
         let t = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
   fields:
-    classification: { type: enum, values: [UNCLASSIFIED, CUI], default: UNCLASSIFIED, must_fill: true }
+    classification: { type: enum, values: [UNCLASSIFIED, CUI], example: UNCLASSIFIED }
 "#)
         .blueprint();
         assert!(
             t.contains("classification: !must_fill UNCLASSIFIED # enum<UNCLASSIFIED | CUI>\n"),
             "{t}"
         );
+        assert!(!t.contains("e.g."), "the example is the cell, not a hint: {t}");
     }
 
     #[test]
-    fn an_opted_out_field_with_nothing_to_suggest_emits_a_bare_unmarked_cell() {
+    fn a_blank_default_emits_an_unmarked_cell() {
         let t = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
   fields:
-    note: { type: string, must_fill: false }
+    note: { type: string, default: "" }
 "#)
         .blueprint();
-        // `null` is the emitter's spelling of an empty unmarked cell; it parses
-        // back to the state a missing key would.
-        assert!(t.contains("\nnote: null # string\n"), "{t}");
+        assert!(t.contains("\nnote: \"\" # string\n"), "{t}");
         assert!(!t.contains("!must_fill"), "{t}");
 
-        let doc = Document::parse(&t).expect("the bare cell parses").document;
+        let doc = Document::parse(&t).expect("the blank cell parses").document;
         assert_eq!(doc, Document::parse(&doc.to_markdown()).expect("re-emit").document);
-    }
-
-    #[test]
-    fn an_opted_out_field_keeps_its_example_as_the_cell_value() {
-        let t = cfg(r#"
-quill: { name: x, version: 1.0.0, backend: typst, description: x }
-main:
-  fields:
-    note: { type: string, example: A note, must_fill: false }
-"#)
-        .blueprint();
-        assert!(t.contains("note: A note # string\n"), "{t}");
-        assert!(!t.contains("e.g."), "the example is the cell, not a hint: {t}");
     }
 
     #[test]

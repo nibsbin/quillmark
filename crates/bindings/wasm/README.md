@@ -396,8 +396,8 @@ that value under a type-only `# <type>` annotation and the render path uses it
 when the document omits the field. Without one, an `example` takes the cell as
 a suggested value, and an absent field blank-fills.
 
-**Obligation** — whether a human must author the field, declared by
-`must_fill:` and deriving from `default:`'s absence when left unset. An obliged
+**Obligation** — whether a human must author the field, read off `default:`'s
+absence: a defaulted field asks nobody, a defaultless one asks. An obliged
 field carries the `!must_fill` marker in `quill.blueprint`, and
 `quill.validate(doc)` emits the non-fatal `validation::must_fill` warning while
 the document leaves it unauthored — from either of two triggers, named by the

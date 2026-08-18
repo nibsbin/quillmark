@@ -699,49 +699,56 @@ encode opposite author intents:
   blueprint only when no `default:` holds it, and surfaces as a `# e.g.` line
   otherwise.
 
-### The two axes: value and obligation
+### Value and obligation: one declaration
 
-A field declares two independent things, and neither implies the other.
+A field asks one question, and `default:` is the whole answer: *does this field
+have a value when nobody types anything?*
 
 - The **value** axis is `default:` › `example:` › the field's blank. It decides
   what a cell holds.
-- The **obligation** axis is `must_fill:`. It decides whether a human must
-  author that cell.
+- The **obligation** axis is `default:`'s **absence**. It decides whether a human
+  must author that cell.
 
-`must_fill:` is `true` / `false`, and when unset it **derives** from the value
-axis: a field with a `default:` is not obliged, a field without one is. So a
-quill that never writes the key gets the whole obligation surface off `default:`
-alone. The derivation reads `default`'s *presence*, so a `default: ""` stays a
-skippable cell rather than becoming a marker. The key lives on the field schema,
-so it applies at every nesting level.
+Declare a `default:` and the document renders with it, unasked; the type's blank
+(`""`, `[]`, `0`, `false`) is how a field declares the answer "nothing". Leave it
+off and the field is the engine's to ask about. The derivation reads
+`default`'s *presence*, so a
+`default: ""` stays a skippable cell rather than becoming a marker. The
+derivation lives on the field schema, so it applies at every nesting level.
 
-Declaring it reaches two cells the derivation cannot:
+`example:` is commentary either way: it shows what goes there, seeds new
+documents, and never renders. On a defaultless field it takes the blueprint cell
+*under* the marker, and seeds carrying it. That is how a quill suggests a value a
+human must still confirm — a classification marking, an effective date — and
+until somebody accepts the suggestion the document renders the blank rather than
+asserting a value nobody chose.
 
-- `must_fill: true` beside a `default:` — a safe value renders, **and** a human
-  must still confirm it. Classification markings and effective dates are the
-  cases it exists for: the document is never wrong out of the box, and nobody
-  ships one nobody looked at. An editor's *confirm* discharges it by writing the
-  default's value as authored content: no new state, at the cost that the cell
-  then holds that value rather than tracking a later `default:` change.
-- `must_fill: false` with no `default:` — genuinely optional, with nothing to
-  suggest.
+There is no `must_fill:` key and no `required:` one. Declaring `must_fill:` is a
+load error (`quill::field_parse_error`), and the message names the `default:` or
+`example:` that field carries in its place.
 
 Obligation is a **warning, never a gate**: an unauthored must-fill field
 blank-fills and renders, and the signal is the non-fatal
 `validation::must_fill` (see [Native validation](#native-validation)). There is
-no `required:` axis and no severity knob on this one — severity already *is* the
-render-gate signal, so an `Error` that renders fine would break every consumer
-routing Error ≡ won't-render. An editor's "can't submit" is consumer policy over
-the warning: *a strict consumer treats any outstanding marker as not done*.
-A quill author arriving from web forms has the right prior for the affordance
-and the wrong one for the enforcement.
+no severity knob on this one — severity already *is* the render-gate signal, so
+an `Error` that renders fine would break every consumer routing Error ≡
+won't-render. An editor's "can't submit" is consumer policy over the warning: *a
+strict consumer treats any outstanding marker as not done*. A quill author
+arriving from web forms has the right prior for the affordance and the wrong one
+for the enforcement.
 
-On a typed dictionary the container's own `must_fill:` is **inert**: `!must_fill`
-is rejected on a mapping, so the obligation lives on the leaves and the
+Obligation belongs to a **cell**. A namespace holds none of its own: `!must_fill`
+is rejected on a mapping, so the obligation lives on the leaves, and the
 blueprint and the predicate both address them there. An array is its own cell,
 including an array of objects.
 
-See [BLUEPRINT.md](BLUEPRINT.md) for how the two axes render into cells.
+The transform schema carries no obligation at all. That projection is the wire
+*validity* contract, and an unauthored must-fill cell is wire-valid by design —
+the blank leads every emitted `enum` domain precisely so a generated validator
+accepts it. The declaration view carries `default:`, so a consumer wanting the
+obligation reads it there.
+
+See [BLUEPRINT.md](BLUEPRINT.md) for how value and obligation render into cells.
 
 Identity fields (`name`, `version`, `backend`, `author`, `description`) live on the parent metadata object (Wasm: `Quill.metadata` getter; Python: `Quill.metadata`). Both bindings also expose `backend_id`/`backendId` directly; Python additionally exposes `quill_ref`, a derived `name@version` string.
 

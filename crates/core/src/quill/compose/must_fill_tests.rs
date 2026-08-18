@@ -1,4 +1,4 @@
-//! The obligation axis: `must_fill:` and the unauthored-cell predicate.
+//! The obligation axis: `default:`'s absence and the unauthored-cell predicate.
 
 use crate::quill::quill_from_yaml;
 use crate::quill::resolved::FieldSource;
@@ -32,8 +32,8 @@ main:
     subject:    { type: string }
     severity:   { type: enum, values: [low, high] }
     status:     { type: string, default: draft }
-    confirmed:  { type: string, default: draft, must_fill: true }
-    optional:   { type: string, must_fill: false }
+    confirmed:  { type: string, example: draft }
+    optional:   { type: string, default: "" }
 "#;
 
 fn md(fields: &str) -> String {
