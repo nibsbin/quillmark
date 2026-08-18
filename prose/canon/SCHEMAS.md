@@ -425,15 +425,20 @@ value, source }` rows in declaration order: order is structural, not object-key
 order. The card body is a `body` sibling on the card, not a row in `fields`:
 present iff the kind enables a body (`enabled: false` undeclares it, so `body` is
 `null`), its source only ever `authored` (non-blank) or `blank` (blank).
-Source is one rung per **field**. A namespace holds no rung of its own
-([Cells and namespaces](#cells-and-namespaces)), so it reports the strongest that
-contributed: `authored` when the document wrote any of it, else `default` when a
-cell below resolved to one, else the floor. Nothing inside a container the
-document did not author reads `authored`, however the seed reached it. So the
-rung answers *"does anything here come from the schema"* at any depth, but not
-*which cell*. Per-subpath rows are a further view: the descent computes each
-cell's rung already, so exposing them is additive to this shape rather than a
-second resolver, and waits on a consumer naming the call site.
+Source is one **top-level** rung per field; a nested blank-fill inside an authored
+dict or array is a projection detail of the value, not a per-subpath source. The
+rung is therefore coarser the deeper a field nests, and a container authored at
+all reads `authored` however much of it the document left to the floor.
+
+The coarseness is recoverable, because **the ladder is per-address local**:
+`resolve_value_sourced` descends a present container with the property's own
+value against the property's own schema node, so a nested rung is a function of
+those two and never of the container's. A surface holding both derives it. Two
+positions are not derivable that way, and are what a per-subpath view would be
+for: a **content**-typed `default:`, whose plate form is the `Content` imported
+at load rather than the schema literal; and an **absent** container, which
+resolves to its container-level `default:` whole, with no property-level fill
+inside it. Neither has a caller.
 
 Value and provenance only. The view carries no diagnostics: completeness and
 errors stay `Quill::validate`'s, which a consumer merges with its own producers
