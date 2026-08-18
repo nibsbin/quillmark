@@ -27,18 +27,6 @@ pub const QUILLMARK_PLAIN_KEY: &str = "quillmark:plain";
 /// conventional label.
 pub const QUILLMARK_BLANK_TITLE_KEY: &str = "quillmark:blank_title";
 
-/// Build a JSON-Schema-shaped descriptor of a [`QuillConfig`]'s main + card fields.
-///
-/// The descriptor marks richtext fields with `contentMediaType:
-/// application/quillmark-content+json` (see [`CONTENT_MEDIA_TYPE`]) and
-/// date/date-time fields with the corresponding JSON Schema `format`.
-///
-/// `$body` is injected into a kind's `properties` only when that kind's
-/// `body.enabled` is not `false`. A body-disabled kind's `$body` is absent,
-/// not present-and-empty: absence cascades through the `__meta__` address
-/// tables so `form-field(field:)` rejects `$body` addresses on that
-/// kind at compile time, matching `Quill::validate`'s hard error on authored
-/// body content for the same kind.
 /// The discriminant cell of a variant-bearing enum: the same
 /// `{type: string, enum: ["", …]}` a plain enum projects to. The container is a
 /// mapping and therefore not a cell, so this is where the choice lands.
@@ -66,6 +54,18 @@ fn discriminant_schema(field: &FieldSchema) -> serde_json::Value {
     serde_json::Value::Object(schema)
 }
 
+/// Build a JSON-Schema-shaped descriptor of a [`QuillConfig`]'s main + card fields.
+///
+/// The descriptor marks richtext fields with `contentMediaType:
+/// application/quillmark-content+json` (see [`CONTENT_MEDIA_TYPE`]) and
+/// date/date-time fields with the corresponding JSON Schema `format`.
+///
+/// `$body` is injected into a kind's `properties` only when that kind's
+/// `body.enabled` is not `false`. A body-disabled kind's `$body` is absent,
+/// not present-and-empty: absence cascades through the `__meta__` address
+/// tables so `form-field(field:)` rejects `$body` addresses on that
+/// kind at compile time, matching `Quill::validate`'s hard error on authored
+/// body content for the same kind.
 pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
     fn field_to_schema(field: &FieldSchema) -> serde_json::Value {
         let mut schema = serde_json::Map::new();
