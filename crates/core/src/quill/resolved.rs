@@ -14,24 +14,31 @@ use crate::{Card, Document, QuillValue};
 
 /// The rung of the commitment ladder that produced a [`ResolvedField::value`].
 /// Serializes lowercase (`"authored" | "default" | "blank"`).
-///
-/// Variants are declared floor-first, so `Ord` ranks by *commitment*: how
-/// strongly the value claims to be the real answer. Reordering them reorders the
-/// ladder.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
 pub enum FieldSource {
+    /// The authored value: the document's own content.
+    Authored,
+    /// The schema `default:` (or its content form for a content field).
+    Default,
     /// The field's [`blank`](crate::quill::blank): its spelling of
     /// "explicitly nothing", and the render floor.
     Blank,
-    /// The schema `default:` (or its content form for a content field).
-    Default,
-    /// The authored value: the document's own content.
-    Authored,
 }
 
 impl FieldSource {
+    /// Height on the ladder: how strongly the value claims to be the real
+    /// answer. Private, so the two operations below are the ladder's only
+    /// order — a consumer reads a rung, it never compares two.
+    fn commitment(self) -> u8 {
+        match self {
+            Self::Blank => 0,
+            Self::Default => 1,
+            Self::Authored => 2,
+        }
+    }
+
     /// The more committed of two rungs.
     ///
     /// A container has no rung of its own — it is a namespace, and its value is
@@ -39,7 +46,20 @@ impl FieldSource {
     /// contributed to it: authored if the document wrote any of it, else
     /// `default` if any cell below resolved to one, else the floor.
     pub(crate) fn join(self, other: Self) -> Self {
-        self.max(other)
+        if other.commitment() > self.commitment() {
+            other
+        } else {
+            self
+        }
+    }
+
+    /// This rung, held down to `ceiling`.
+    pub(crate) fn capped_at(self, ceiling: Self) -> Self {
+        if self.commitment() > ceiling.commitment() {
+            ceiling
+        } else {
+            self
+        }
     }
 }
 

@@ -27,38 +27,11 @@ pub const QUILLMARK_PLAIN_KEY: &str = "quillmark:plain";
 /// conventional label.
 pub const QUILLMARK_BLANK_TITLE_KEY: &str = "quillmark:blank_title";
 
-/// Transform-schema keyword carrying whether a human must author the field
-/// ([`FieldSchema::must_fill`](crate::quill::FieldSchema::must_fill)). Emitted
-/// on every field, always resolved: the obligation is not derivable from this
-/// projection, which carries no `default:`.
-///
-/// It is an authoring affordance, not a submit gate. An unfilled field renders,
-/// and enforcement — if a consumer wants any — is that consumer's policy.
-pub const QUILLMARK_MUST_FILL_KEY: &str = "quillmark:must_fill";
-
-/// Build a JSON-Schema-shaped descriptor of a [`QuillConfig`]'s main + card fields.
-///
-/// The descriptor marks richtext fields with `contentMediaType:
-/// application/quillmark-content+json` (see [`CONTENT_MEDIA_TYPE`]) and
-/// date/date-time fields with the corresponding JSON Schema `format`.
-///
-/// `$body` is injected into a kind's `properties` only when that kind's
-/// `body.enabled` is not `false`. A body-disabled kind's `$body` is absent,
-/// not present-and-empty: absence cascades through the `__meta__` address
-/// tables so `form-field(field:)` rejects `$body` addresses on that
-/// kind at compile time, matching `Quill::validate`'s hard error on authored
-/// body content for the same kind.
 /// The discriminant cell of a variant-bearing enum: the same
-/// `{type: string, enum: ["", …]}` a plain enum projects to, carrying the
-/// container's obligation. The container is a mapping and therefore not a cell
-/// (`!must_fill` is rejected on one), so this is where "a human must choose"
-/// lands.
+/// `{type: string, enum: ["", …]}` a plain enum projects to. The container is a
+/// mapping and therefore not a cell, so this is where the choice lands.
 fn discriminant_schema(field: &FieldSchema) -> serde_json::Value {
     let mut schema = serde_json::Map::new();
-    schema.insert(
-        QUILLMARK_MUST_FILL_KEY.to_string(),
-        serde_json::Value::Bool(field.must_fill()),
-    );
     schema.insert(
         "type".to_string(),
         serde_json::Value::String("string".to_string()),
@@ -81,17 +54,21 @@ fn discriminant_schema(field: &FieldSchema) -> serde_json::Value {
     serde_json::Value::Object(schema)
 }
 
+/// Build a JSON-Schema-shaped descriptor of a [`QuillConfig`]'s main + card fields.
+///
+/// The descriptor marks richtext fields with `contentMediaType:
+/// application/quillmark-content+json` (see [`CONTENT_MEDIA_TYPE`]) and
+/// date/date-time fields with the corresponding JSON Schema `format`.
+///
+/// `$body` is injected into a kind's `properties` only when that kind's
+/// `body.enabled` is not `false`. A body-disabled kind's `$body` is absent,
+/// not present-and-empty: absence cascades through the `__meta__` address
+/// tables so `form-field(field:)` rejects `$body` addresses on that
+/// kind at compile time, matching `Quill::validate`'s hard error on authored
+/// body content for the same kind.
 pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
     fn field_to_schema(field: &FieldSchema) -> serde_json::Value {
         let mut schema = serde_json::Map::new();
-        // In the prelude, not a type arm: the enum arm returns early below, and
-        // an enum is the type an obligation matters most for. The *derived*
-        // answer crosses, not the raw `Option` — a consumer reading this
-        // projection should never have to re-run the `default:` derivation.
-        schema.insert(
-            QUILLMARK_MUST_FILL_KEY.to_string(),
-            serde_json::Value::Bool(field.must_fill()),
-        );
         // A finite domain projects to the idiomatic JSON-Schema spelling
         // `{type: string, enum: [...]}`: exactly what a backend dispatches on
         // today (a plain string), plus the domain. Keyed on the domain, as the
@@ -327,8 +304,11 @@ mod tests {
         build_transform_schema(&config)
     }
 
+    /// The projection is the wire *validity* contract, and obligation is not a
+    /// validity fact: an unauthored must-fill cell is wire-valid by design. A
+    /// `required`-shaped flag here would read as the gate `SCHEMAS.md` forbids.
     #[test]
-    fn must_fill_is_resolved_and_reaches_every_type() {
+    fn obligation_does_not_cross_into_the_transform_schema() {
         let yaml = r#"
 quill:
   name: x
@@ -339,20 +319,11 @@ main:
   fields:
     severity:   { type: enum, values: [low, high] }
     status:     { type: string, default: draft }
-    confirmed:  { type: string, default: draft, must_fill: true }
-    optional:   { type: string, must_fill: false }
 "#;
         let json = build_from_yaml(yaml).as_json().clone();
-        let flag = |name: &str| json["properties"][name][QUILLMARK_MUST_FILL_KEY].clone();
 
-        // The enum arm returns before the type match, so a key placed in a type
-        // arm would miss the one type an obligation matters most for.
-        assert_eq!(flag("severity"), serde_json::json!(true));
-        // Derived, not raw: a consumer reading this projection sees no
-        // `default:` and so cannot re-run the derivation itself.
-        assert_eq!(flag("status"), serde_json::json!(false));
-        assert_eq!(flag("confirmed"), serde_json::json!(true));
-        assert_eq!(flag("optional"), serde_json::json!(false));
+        assert!(!json.to_string().contains("must_fill"), "{json}");
+        assert_eq!(json["properties"]["status"], serde_json::json!({"type": "string"}));
     }
 
     #[test]
@@ -384,7 +355,6 @@ main:
         let domain = serde_json::json!({
             "type": "string",
             "enum": ["", "UNCLASSIFIED", "CUI"],
-            QUILLMARK_MUST_FILL_KEY: true,
         });
         assert_eq!(json["properties"]["classification"], domain);
         // The domain survives the recursion into an array's element object: a
@@ -394,7 +364,6 @@ main:
             serde_json::json!({
                 "type": "string",
                 "enum": ["", "approve", "disapprove"],
-                QUILLMARK_MUST_FILL_KEY: true,
             })
         );
     }

@@ -65,12 +65,11 @@ export interface QuillCardBody {
 
 /** Schema entry for a single field declared in a quill's `Quill.yaml`.
  *
- * Two independent axes, and no separate `required` one. `default` and
- * `example` say what the cell holds; `must_fill` says whether a human must
- * author it, deriving from `default`'s absence when left unset. An obliged
- * field carries a `!must_fill` marker in the blueprint and warns
+ * One declaration, and no `required` key. `default` and `example` say what the
+ * cell holds, and `default`'s absence is the obligation: a field nobody
+ * declared a value for carries a `!must_fill` marker in the blueprint and warns
  * `validation::must_fill` while the document leaves it unauthored. Neither
- * axis gates render: an absent field blank-fills.
+ * gates render: an absent field blank-fills.
  */
 export interface QuillFieldSchema {
     type: "string" | "number" | "integer" | "boolean" | "array" | "object" | "date" | "datetime" | "richtext" | "plaintext" | "enum";
@@ -85,9 +84,6 @@ export interface QuillFieldSchema {
      *  member. Declaring it makes the field rest as a container,
      *  `{value: <member>, …that member's fields}`, rather than a bare string. */
     variants?: Record<string, Record<string, QuillFieldSchema>>;
-    /** Whether a human must author the field. Absent, it derives from
-     *  `default`: a defaulted field is unobliged, a defaultless one obliged. */
-    must_fill?: boolean;
     ui?: QuillFieldUi;
     properties?: Record<string, QuillFieldSchema>;
     items?: QuillFieldSchema;

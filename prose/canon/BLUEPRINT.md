@@ -154,8 +154,7 @@ Examples:
 | `count: 0 # integer` | defaulted integer (type-empty default, shippable as-is) |
 | `active: false # boolean` | defaulted boolean (type-empty default, shippable as-is) |
 | `notes: "" # string` | defaulted empty string (the "skippable" cell) |
-| `classification: !must_fill UNCLASSIFIED # enum<UNCLASSIFIED \| CUI>` | a default **and** `must_fill: true`: renders safely, still asks a human to confirm |
-| `note: null # string` | `must_fill: false` with nothing to suggest: explicitly optional, nothing to say |
+| `classification: !must_fill UNCLASSIFIED # enum<UNCLASSIFIED \| CUI>` | an `example` on a defaultless enum: the suggested marking fills the cell, still asking a human to confirm it |
 | `bio: !must_fill # richtext<markdown>` | must-fill richtext: bare marker (see "Richtext fields") |
 | `recipient: !must_fill # array<string>` | must-fill array of strings |
 | `date: !must_fill # date<YYYY-MM-DD>` | must-fill date |
@@ -165,26 +164,23 @@ Examples:
 
 ## Placeholder value precedence
 
-The blueprint emits along **two orthogonal axes**. The *value axis* decides
-what data the cell carries; the *marker axis* decides whether the cell is
-stamped `!must_fill`. They are independent: the marker never changes the
-value, and the value never implies the marker.
+The blueprint emits along **two axes**, and one declaration answers both. The
+*value axis* decides what data the cell carries; the *marker axis* decides
+whether the cell is stamped `!must_fill`.
 
 **Value** is `default:` › `example:` › bare (null for scalars, empty for a
-container). **Marker** is the field's derived `must_fill` (`SCHEMAS.md` § "The
-two axes"). Reading them off separately gives the full grid:
+container). **Marker** is the field's derived `must_fill` (`SCHEMAS.md` § "Value
+and obligation"), which is `default:`'s absence. The full grid:
 
 | Field state | Value rendered | Marker |
 |---|---|---|
 | `default` | the default | none |
-| `default` + `must_fill: true` | the default | `!must_fill` |
 | no `default`, has `example` | the `example` | `!must_fill` |
 | no `default`, no `example` | bare null/empty | `!must_fill` |
-| no `default`, `must_fill: false` | the `example` else bare null | none |
 
 An `example` takes the cell only when no `default:` holds it, and surfaces in
-the `# e.g.` leading line otherwise. That gate is a *value*-axis question:
-`must_fill` never moves an example between the cell and the hint. The rule holds
+the `# e.g.` leading line otherwise. The `default:` that vacates the cell is the
+one that marks it, so a suggested value arrives under its marker. The rule holds
 uniformly for scalars, arrays and typed tables, and for each **property** of a
 typed dictionary (which holds no cell of its own): **except `richtext`**, which
 never inlines its example as a value at all; its `example:` always surfaces as

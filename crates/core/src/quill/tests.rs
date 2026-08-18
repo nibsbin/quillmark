@@ -2801,6 +2801,70 @@ fn the_enum_modifier_is_a_load_error_on_every_type() {
     }
 }
 
+/// Every legacy declaration fails load, and the message names the one migration
+/// that shape takes: four are a deletion, and the fifth is the judgment call.
+#[test]
+fn the_must_fill_key_is_a_load_error_naming_its_migration() {
+    for (field, route) in [
+        (
+            "    s:\n      type: string\n      must_fill: true\n",
+            "obliged already",
+        ),
+        (
+            "    s:\n      type: string\n      default: draft\n      must_fill: false\n",
+            "unobliged already",
+        ),
+        (
+            "    s:\n      type: string\n      must_fill: false\n",
+            "write `default: \"\"`",
+        ),
+        (
+            "    n:\n      type: integer\n      must_fill: false\n",
+            "write `default: 0`",
+        ),
+        (
+            "    tags:\n      type: array\n      items: { type: string }\n      must_fill: false\n",
+            "write `default: []`",
+        ),
+        (
+            "    s:\n      type: string\n      default: draft\n      must_fill: true\n",
+            "move it to `example: \"draft\"`",
+        ),
+        (
+            "    c:\n      type: object\n      properties: { name: { type: string } }\n      \
+             must_fill: false\n",
+            "each property carries its own obligation",
+        ),
+    ] {
+        let err = quill_with_field(field).unwrap_err();
+        assert!(
+            err.iter()
+                .any(|d| d.code.as_deref() == Some("quill::field_parse_error")
+                    && d.message.contains("must_fill: is retired")
+                    && d.message.contains(route)),
+            "must_fill: should fail load routing to `{route}`, got: {err:?}"
+        );
+    }
+}
+
+/// The key is rejected wherever a field schema is, not only at card level.
+#[test]
+fn the_must_fill_key_is_rejected_at_every_depth() {
+    for field in [
+        "    c:\n      type: object\n      properties: { name: { type: string, must_fill: true } }\n",
+        "    tags:\n      type: array\n      items: { type: string, must_fill: true }\n",
+        "    c:\n      type: enum\n      values: [a]\n      variants: { a: { poc: { type: string, must_fill: true } } }\n",
+    ] {
+        let err = quill_with_field(field).unwrap_err();
+        assert!(
+            err.iter()
+                .any(|d| d.code.as_deref() == Some("quill::field_parse_error")
+                    && d.message.contains("must_fill: is retired")),
+            "a nested must_fill: should fail load, got: {err:?}"
+        );
+    }
+}
+
 #[test]
 fn values_on_a_non_enum_type_is_a_load_error() {
     let err = quill_with_field("    s:\n      type: string\n      values: [a, b]\n").unwrap_err();
