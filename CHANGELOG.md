@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.108.0 - 2026-08-18
 
 - fix: **the value ladder is cut per cell, so the plate is total at every
   depth.** An absent container returned a value instead of descending, and
@@ -78,6 +78,12 @@
   there under the 0.15.0 caret; the pin now names the version the tree is built
   and tested against. `pdf-writer` stays at 0.15.0, still the version
   `typst-pdf` → `krilla` forces and the newest published.
+- docs: `0.107-to-0.108.md`, the guide for this step. It leads with the two load
+  errors, since both reject the quill rather than the document, and gives
+  `must_fill: true` beside a `default:` — the one behavior deleted — the space
+  its judgment call needs. `BLUEPRINT.md` § "Typed dictionaries" loses the `{}`
+  expansion and the container-literal renderings with the cascade that produced
+  them, and states the nesting the 0.107 collapse admits.
 
 ## v0.107.0 - 2026-08-17
 
@@ -313,37 +319,6 @@
   that broke rather than as a fix. `ERROR.md` names `display(..)` as the
   address-keyed template-author contract, `plaintext(..)` having been removed
   here.
-
-<!-- seed: commits since v0.106.0, confirm the entries above cover them, then delete this comment
-- fix: a container's own `default:` crosses as content, or is refused
-- fix(typst): anchor a `let` alias only where the name is read
-- fix(typst): display validates its schema address
-- fix(docs): point the variants cross-reference at this page's own anchor
-- fix(docs): link canon by URL, not by a path outside the docs tree
-- docs: dense-prose pass over the nesting collapse
-- feat: every type nests at every depth
-- docs: dense-prose pass over the two address walks
-- feat(typst)!: the span scan takes the index step, so a row cell read anchors on the cell
-- fix: a nested content leaf's `default:` reaches the plate
-- docs: dense-prose pass over the address-grammar pin
-- test: pin the schema address grammar across both backends
-- Carry the prose style in CLAUDE.md at minimum size
-- Drop two CLAUDE.md lines that steer toward defaults
-- Cut the rules that steer toward defaults
-- docs: dense-prose pass over the lowering walk
-- Cut two lines that restated defaults
-- Rewrite dense-prose as a project-agnostic skill
-- feat!: a variant carries any leaf type, prose and dates included
-- refactor(typst)!: delete the `plaintext(field)` projection
-- feat(typst)!: depth-invariant lowering, and `date` as a native `datetime`
-- docs: dense-prose pass over the alias pass
-- docs: a bound read keeps its address, and what still needs a claim
-- fix(typst): disqualify aliases on a wildcard import in either order
-- feat(typst): follow a single-assignment `let` alias to its schema address
-- feat(wasm): export VARIANT_DISCRIMINANT_KEY to the runtime surface
-- docs: the 0.105 → 0.106 migration guide, and the rules that missed it
--->
-
 
 ## v0.106.0 - 2026-08-16
 

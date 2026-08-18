@@ -301,21 +301,25 @@ fallback; authors needing these characters must reshape their values.
 
 ## Typed tables
 
-A field of `type: array` with a `properties` map follows the uniform
-cell cascade: `default:` (any default, including `[]`) is shippable as-is;
-without one:
+A field of `type: array` whose `items:` declare a `properties` map. The array is
+a **cell**, so it keeps its own literal and the cascade is the uniform one:
+`default:` (any default, including `[]`) is shippable as-is; without one:
 
 - A non-empty `default:` renders as actual rows (no per-property
   annotations on each row). The outer key carries `# array<object>`.
 - `default: []` renders inline as `[]` with `# array<object>`:
   shippable empty. Inline row shape is not surfaced under an empty
   default; use `example:` to document row shape.
-- Without a `default:`, one synthetic row is emitted with each
-  property carrying its own description, inline annotation, and the
-  `!must_fill` marker on its leaf value. The container key itself is
-  untagged: you tag the leaves, not the container (per
-  [markdown-spec.md](../references/markdown-spec.md) §3.4). The outer key
-  carries `# array<object>`.
+- Without a `default:`, one synthetic row is emitted with each property
+  carrying its own description, inline annotation, and its own derived
+  `!must_fill` marker — so a row property holding a `default:` renders that
+  value unmarked. The container key itself is untagged: you tag the leaves, not
+  the container (per [markdown-spec.md](../references/markdown-spec.md) §3.4).
+  The outer key carries `# array<object>`.
+
+The row schema is a namespace, so it declares no `default:` / `example:` of its
+own (`quill::default_on_namespace`). The array's literal is where element values
+go, and each element it supplies is completed against `items:`.
 
 An `example:` never renders as rows. Like every other field type, it
 surfaces only in the `# e.g.` leading line: as a one-line flow
@@ -341,16 +345,13 @@ there is no container-level cascade to choose between:
 The cells the blueprint shows are the cells the render floor fills, from the same
 declarations: an author who deletes a defaulted line gets that default back at
 render, which is what the "shippable as-is" affordance promises.
-  The outer key carries `# object`.
 
-The `{}` expansion (and not partial defaults, and not arrays) makes the object
-rule a single statement: **show every key, fill from default-over-blank, mark
-per endorsement.** Arrays are unchanged: `default: []` stays inline `[]`.
+An `array` differs because it is a cell: its own `default:` renders, and
+`default: []` stays inline `[]`.
 
-An `example:` never renders as a concrete mapping. Like every other
-field type, it surfaces only in the `# e.g.` leading line: as a
-one-line flow mapping, e.g. `# e.g. {street: 1 Infinite Loop, city:
-Cupertino}`.
+A property's `example:` behaves as a card-level field's does — it takes the cell
+when no `default:` holds it, and surfaces in the `# e.g.` leading line otherwise.
+The container declares none (`quill::example_on_namespace`).
 
 ```
 # The sender's mailing address.
@@ -363,28 +364,23 @@ address: # object
   zip: "" # string
 ```
 
-With a default:
+With a `default:` on the first two properties and an `example:` on the third:
 
 ```
+# The sender's mailing address.
 address: # object
-  street: 5000 Forbes Avenue
-  city: Pittsburgh
-  zip: "15213"
+  # Street address line.
+  street: 5000 Forbes Ave # string
+  # City name.
+  city: Pittsburgh # string
+  # ZIP or postal code.
+  zip: !must_fill "15213" # string
 ```
 
-With `default: {}` (expanded to the blank-filled shape, all unmarked):
-
-```
-address: # object
-  street: ""
-  city: ""
-  zip: ""
-```
-
-Properties of a typed dictionary may not themselves be objects (nesting
-beyond one level is not supported). The same rule applies to typed table
-properties. Freeform `type: object` fields without a `properties` map are
-rejected at `Quill.yaml` parse time (`quill::object_missing_properties`).
+A property is an ordinary field carrying whatever type a card-level field
+carries, itself included, so the expansion recurses to whatever depth the schema
+declares. A freeform `type: object` without a `properties` map is rejected at
+`Quill.yaml` parse time (`quill::object_missing_properties`).
 
 ## UI metadata honored
 
