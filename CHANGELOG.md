@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- chore(deps): the Typst floor moves to 0.15.1. The workspace already resolved
+  there under the 0.15.0 caret; the pin now names the version the tree is built
+  and tested against. `pdf-writer` stays at 0.15.0, still the version
+  `typst-pdf` → `krilla` forces and the newest published.
+
 ## v0.107.0 - 2026-08-17
 
 - fix(typst): `display(field, ..)` validates its address against the schema, the

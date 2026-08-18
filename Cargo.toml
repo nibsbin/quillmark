@@ -64,11 +64,11 @@ time = { version = "0.3.44", features = ["formatting", "parsing"] }
 # Pinned to the version the Typst toolchain (typst-pdf → krilla) already forces,
 # so the workspace links a single copy of the PDF writer.
 pdf-writer = "0.15.0"
-typst = "0.15.0"
-typst-layout = "0.15.0"
-typst-pdf = "0.15.0"
-typst-render = "0.15.0"
-typst-svg = "0.15.0"
+typst = "0.15.1"
+typst-layout = "0.15.1"
+typst-pdf = "0.15.1"
+typst-render = "0.15.1"
+typst-svg = "0.15.1"
 
 # Intra-project dependencies
 quillmark-core = { version = "0.107.0", path = "crates/core" }
