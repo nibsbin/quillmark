@@ -24,7 +24,7 @@ default-members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.107.0"
+version = "0.108.0"
 edition = "2024"
 # No `rust-version`. The floor the Typst toolchain forces moves when that tree
 # moves, so a declared floor holds only while something rebuilds the workspace
@@ -71,12 +71,12 @@ typst-render = "0.15.1"
 typst-svg = "0.15.1"
 
 # Intra-project dependencies
-quillmark-core = { version = "0.107.0", path = "crates/core" }
-quillmark-content = { version = "0.107.0", path = "crates/content" }
-quillmark-pdf = { version = "0.107.0", path = "crates/quillmark-pdf" }
-quillmark-typst = { version = "0.107.0", path = "crates/backends/typst" }
-quillmark-pdfform = { version = "0.107.0", path = "crates/backends/pdfform" }
-quillmark = { version = "0.107.0", path = "crates/quillmark" }
+quillmark-core = { version = "0.108.0", path = "crates/core" }
+quillmark-content = { version = "0.108.0", path = "crates/content" }
+quillmark-pdf = { version = "0.108.0", path = "crates/quillmark-pdf" }
+quillmark-typst = { version = "0.108.0", path = "crates/backends/typst" }
+quillmark-pdfform = { version = "0.108.0", path = "crates/backends/pdfform" }
+quillmark = { version = "0.108.0", path = "crates/quillmark" }
 
 # WASM host seam. Target-gated in the Typst backend, unconditional in the
 # binding; one pin either way.
