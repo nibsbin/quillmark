@@ -40,7 +40,9 @@
   wrote any of it, else `default` when a cell below resolved to one, else the
   floor. An absent container over defaulted cells read `blank` while rendering
   those defaults, which is the fact an editor ghosts from. Nothing inside a
-  container the document did not author reads `authored`.
+  container the document did not author reads `authored`. A variant container
+  counts its live world's cells the same way, so writing one of them lifts a
+  container whose discriminant fell to the schema's `default:`.
 
 - chore(deps): the Typst floor moves to 0.15.1. The workspace already resolved
   there under the 0.15.0 caret; the pin now names the version the tree is built

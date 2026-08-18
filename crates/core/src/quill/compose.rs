@@ -474,11 +474,9 @@ fn plate_fields(
 }
 
 /// The value half of [`resolve_value_sourced`], discarding the rung tag: the
-/// nested-recursion helper for a typed dictionary's properties and a typed
-/// array's elements, where the source of an inner cell is not surfaced (a
-/// present dict/array is [`Authored`](FieldSource::Authored) as a whole). Both
-/// canon projections cut the sourced ladder through [`resolve_card_sourced`];
-/// this is the inner value-only cut beneath it.
+/// nested cut for a typed array's elements, whose rungs no projection surfaces —
+/// an `array` is a cell, since arity is a fact no leaf carries, so its own rung
+/// is the one its seed supplied.
 fn resolve_value(value: Option<&QuillValue>, field: &FieldSchema) -> QuillValue {
     resolve_value_sourced(value, field).0
 }
@@ -554,33 +552,18 @@ fn seed_default(field: &FieldSchema) -> Option<QuillValue> {
 /// undeclared `note:` on a typed dict reaches the plate instead of being
 /// silently dropped.
 ///
-/// `outer` is the container's own rung, which **ceilings** its cells': nothing
-/// inside a container the document did not author may read
-/// [`Authored`](FieldSource::Authored). [`resolve_value_sourced`] cannot tell a
-/// seeded value from a written one, so without the ceiling a cell fed from a
-/// container `default:` would report itself authored.
+/// `seed_rung` is the rung that supplied `seed`, and it ceilings the cells'
+/// ([`compose_members`]).
 fn compose(
     seed: Option<&QuillValue>,
     field: &FieldSchema,
-    outer: FieldSource,
+    seed_rung: FieldSource,
 ) -> (QuillValue, FieldSource) {
-    let ceiling = match outer {
-        FieldSource::Authored => FieldSource::Authored,
-        _ => FieldSource::Default,
-    };
     match (&field.r#type, &field.properties, &field.items) {
         (FieldType::Object, Some(props), _) => {
             let obj = seed.and_then(|v| v.as_json().as_object());
             let mut out = serde_json::Map::new();
-            let mut rung = FieldSource::Blank;
-            for (pname, pschema) in props {
-                let pv = obj
-                    .and_then(|o| o.get(pname))
-                    .map(|j| QuillValue::from_json(j.clone()));
-                let (value, source) = resolve_value_sourced(pv.as_ref(), pschema);
-                rung = rung.join(source.min(ceiling));
-                out.insert(pname.clone(), value.into_json());
-            }
+            let rung = compose_members(obj, props, seed_rung, &mut out);
             // Preserve undeclared keys verbatim; only rebuild the ones the
             // schema names. Skips keys already emitted above so a declared
             // property keeps its resolved (blank-filled) value.
@@ -613,6 +596,40 @@ fn compose(
     }
 }
 
+/// Resolve every declared member of a namespace over its slice of `seed` into
+/// `out`, reporting the strongest rung any of them contributed. The two
+/// namespaces a schema can spell — a typed dictionary's `properties` and the
+/// live world of a variant container — compose identically; only the seed and
+/// the discriminant differ.
+///
+/// `seed_rung` is where the seed itself came from, and it **ceilings** its
+/// members': a value the document did not write may not read
+/// [`Authored`](FieldSource::Authored) one level down.
+/// [`resolve_value_sourced`] cannot tell a seeded value from a written one, so
+/// without the ceiling a cell fed from a container `default:` would report
+/// itself authored.
+fn compose_members(
+    seed: Option<&serde_json::Map<String, serde_json::Value>>,
+    members: &IndexMap<String, Box<FieldSchema>>,
+    seed_rung: FieldSource,
+    out: &mut serde_json::Map<String, serde_json::Value>,
+) -> FieldSource {
+    let ceiling = match seed_rung {
+        FieldSource::Authored => FieldSource::Authored,
+        _ => FieldSource::Default,
+    };
+    let mut rung = FieldSource::Blank;
+    for (name, schema) in members {
+        let cell = seed
+            .and_then(|o| o.get(name))
+            .map(|j| QuillValue::from_json(j.clone()));
+        let (value, source) = resolve_value_sourced(cell.as_ref(), schema);
+        rung = rung.join(source.capped_at(ceiling));
+        out.insert(name.clone(), value.into_json());
+    }
+    rung
+}
+
 /// Resolve a variant-bearing enum into the container the plate receives:
 /// `{value: <member>}` plus, when that member owns a field set, exactly that
 /// set — each cell blank-filled by the ordinary ladder.
@@ -626,8 +643,8 @@ fn compose(
 /// that world is present, so no guarded access is needed; outside it, none is.
 ///
 /// The discriminant cuts the same ladder as any enum (authored › `default:` ›
-/// blank) and its rung is the container's: a member nobody chose leaves the
-/// whole cell at the rung that supplied it.
+/// blank), and the container reports it joined with what its live world's cells
+/// contributed ([`compose_members`]) — the rule every namespace follows.
 fn resolve_variant_sourced(
     value: Option<&QuillValue>,
     field: &FieldSchema,
@@ -664,21 +681,26 @@ fn resolve_variant_sourced(
         VARIANT_DISCRIMINANT_KEY.to_string(),
         serde_json::Value::String(member.clone()),
     );
-    if let Some(fields) = field.variant_fields(&member) {
-        let object = authored.and_then(|j| j.as_object());
-        for (name, schema) in fields {
-            let cell = object
-                .and_then(|o| o.get(name))
-                .map(|j| QuillValue::from_json(j.clone()));
-            out.insert(
-                name.clone(),
-                resolve_value(cell.as_ref(), schema).into_json(),
-            );
-        }
-    }
+    // The cells are seeded from the authored container, never from the
+    // discriminant's `default:` — a member the schema chose brings no values
+    // with it — so their ceiling is whether the document wrote the container,
+    // not which rung supplied the tag.
+    let seed_rung = match present {
+        Some(_) => FieldSource::Authored,
+        None => FieldSource::Blank,
+    };
+    let cells = match field.variant_fields(&member) {
+        Some(fields) => compose_members(
+            authored.and_then(|j| j.as_object()),
+            fields,
+            seed_rung,
+            &mut out,
+        ),
+        None => FieldSource::Blank,
+    };
     (
         QuillValue::from_json(serde_json::Value::Object(out)),
-        source,
+        source.join(cells),
     )
 }
 
