@@ -305,7 +305,7 @@ mod tests {
     }
 
     /// The projection is the wire *validity* contract, and obligation is not a
-    /// validity fact: an unauthored must-fill cell is wire-valid by design, so a
+    /// validity fact: an unauthored must-fill cell is wire-valid by design. A
     /// `required`-shaped flag here would read as the gate `SCHEMAS.md` forbids.
     #[test]
     fn obligation_does_not_cross_into_the_transform_schema() {

@@ -65,11 +65,11 @@ export interface QuillCardBody {
 
 /** Schema entry for a single field declared in a quill's `Quill.yaml`.
  *
- * One declared dial, and no `required` key. `default` and `example` say what
- * the cell holds, and `default`'s absence is also the obligation: a field
- * nobody declared a value for carries a `!must_fill` marker in the blueprint
- * and warns `validation::must_fill` while the document leaves it unauthored.
- * Neither gates render: an absent field blank-fills.
+ * One declaration, and no `required` key. `default` and `example` say what the
+ * cell holds, and `default`'s absence is the obligation: a field nobody
+ * declared a value for carries a `!must_fill` marker in the blueprint and warns
+ * `validation::must_fill` while the document leaves it unauthored. Neither
+ * gates render: an absent field blank-fills.
  */
 export interface QuillFieldSchema {
     type: "string" | "number" | "integer" | "boolean" | "array" | "object" | "date" | "datetime" | "richtext" | "plaintext" | "enum";

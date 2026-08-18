@@ -463,8 +463,8 @@ pub const VARIANT_DISCRIMINANT_KEY: &str = "value";
 /// omitted), while `example` matches the desired type and shape but is not
 /// the value most authors want (it documents shape only, never rendering).
 ///
-/// `default:` is the one dial an author turns, and it answers both questions a
-/// field raises. The **value** axis is `default:` › `example:` › the field's
+/// `default:` is the only declaration, and it answers both questions a field
+/// raises. The **value** axis is `default:` › `example:` › the field's
 /// [`blank`](crate::quill::blank), and decides what a cell holds. The
 /// **obligation** axis, [`must_fill()`](Self::must_fill), is a reading of the
 /// same declaration: a field nobody supplied a value for is one a human must
@@ -564,8 +564,8 @@ struct FieldSchemaDef {
     pub inline: Option<bool>,
 }
 
-/// A schema literal spelled as `Quill.yaml` would carry it: JSON is a YAML
-/// subset, so the JSON form pastes back into the file it came from.
+/// A schema literal as `Quill.yaml` would spell it. JSON is a YAML subset, so
+/// the JSON form quotes straight back into the file.
 fn literal(value: &QuillValue) -> String {
     serde_json::to_string(value.as_json()).unwrap_or_else(|_| "null".to_string())
 }
@@ -614,10 +614,8 @@ impl FieldSchema {
         self.variants.is_some()
     }
 
-    /// Whether a human must author this cell: a field the quill author declared
-    /// no value for asks for one, a defaulted field does not. Keyed on
-    /// `default`'s *presence*, so a `default: ""` stays a skippable cell rather
-    /// than becoming a marker.
+    /// Whether a human must author this cell. Keyed on `default`'s *presence*,
+    /// so a `default: ""` stays a skippable cell rather than becoming a marker.
     ///
     /// The blueprint's marker, the seeding stamp and the `Quill::validate`
     /// predicate are one answer, and it is this one.
@@ -697,16 +695,15 @@ impl FieldSchema {
             example_content: None,
         };
         // Last, so the rejection reads the resolved field: the migration it
-        // names turns on the type and the `default:`.
+        // names turns on the type and `default:`.
         match def.must_fill {
             Some(declared) => Err(Self::retired_must_fill(declared, &schema)),
             None => Ok(schema),
         }
     }
 
-    /// The migration for a declared `must_fill:`. Which one the field takes
-    /// turns on the rest of its declaration, which an author cannot read off the
-    /// retired key alone.
+    /// The migration for a declared `must_fill:`, classified by the rest of the
+    /// declaration: the key alone does not say which one the field takes.
     fn retired_must_fill(declared: bool, schema: &FieldSchema) -> String {
         let head = "must_fill: is retired; obligation derives from default:'s absence";
         let namespace = matches!(schema.r#type, FieldType::Object) && schema.properties.is_some();

@@ -228,9 +228,8 @@ fn push_leading(items: &mut Vec<PayloadItem>, field: &FieldSchema, eg_when: bool
 }
 
 /// The cell's `(value, fill)` for a scalar/array/richtext leaf. The value is
-/// `default:` › `example:` › bare null; the marker is the field's derived
-/// `must_fill`. Both read `default:`: a defaulted cell shows its value unmarked,
-/// a defaultless one carries the marker over whatever `example:` suggests.
+/// `default:` › `example:` › bare null; the marker is `default:`'s absence, so
+/// an `example` always arrives under it.
 fn scalar_cell(field: &FieldSchema) -> (JsonValue, bool) {
     (scalar_value(field), field.must_fill())
 }
@@ -675,7 +674,6 @@ main:
     note: { type: string, default: "" }
 "#)
         .blueprint();
-        // The type's blank is how a quill says "optional, nothing to suggest".
         assert!(t.contains("\nnote: \"\" # string\n"), "{t}");
         assert!(!t.contains("!must_fill"), "{t}");
 

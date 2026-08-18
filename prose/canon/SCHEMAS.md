@@ -713,14 +713,14 @@ Declare a `default:` and the document renders with it, unasked; the type's blank
 (`""`, `[]`, `0`, `false`) is how a field declares the answer "nothing". Leave it
 off and the field is the engine's to ask about. The derivation reads
 `default`'s *presence*, so a
-`default: ""` stays a skippable cell rather than becoming a marker. It lives on
-the field schema, so it applies at every nesting level.
+`default: ""` stays a skippable cell rather than becoming a marker. The
+derivation lives on the field schema, so it applies at every nesting level.
 
 `example:` is commentary either way: it shows what goes there, seeds new
 documents, and never renders. On a defaultless field it takes the blueprint cell
-*under* the marker and seeds carrying it, which is how a quill suggests a value a
-human must still confirm — a classification marking, an effective date. Until
-somebody accepts the suggestion the document renders the blank rather than
+*under* the marker, and seeds carrying it. That is how a quill suggests a value a
+human must still confirm — a classification marking, an effective date — and
+until somebody accepts the suggestion the document renders the blank rather than
 asserting a value nobody chose.
 
 There is no `must_fill:` key and no `required:` one. Declaring `must_fill:` is a
