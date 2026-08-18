@@ -459,6 +459,31 @@ fn resolve_reports_the_container_as_one_cell_matching_the_plate() {
     assert_eq!(row.source, crate::quill::resolved::FieldSource::Default);
 }
 
+/// The container is a namespace like any other: its rung is the strongest that
+/// contributed, so a cell the document wrote lifts a container whose
+/// discriminant came from the schema.
+#[test]
+fn an_authored_cell_lifts_a_defaulted_discriminant() {
+    let yaml = quill_yaml().replace(
+        "      default: \"\"\n      variants:",
+        "      default: CUI\n      variants:",
+    );
+    let quill = quill_from_yaml(&yaml);
+    let document = doc("classification:\n  controlled_by: SAF/AA\n");
+    let row = quill
+        .resolve(&document)
+        .main
+        .fields
+        .into_iter()
+        .find(|f| f.name == "classification")
+        .expect("classification row");
+    assert_eq!(
+        row.value.as_json(),
+        &json!({ "value": "CUI", "controlled_by": "SAF/AA", "category": "" })
+    );
+    assert_eq!(row.source, crate::quill::resolved::FieldSource::Authored);
+}
+
 // ------------------------------------------------------------------ validation
 
 /// The conditional-obligation payoff: a field with no `default:` is obliged in
