@@ -384,8 +384,17 @@ present iff the kind enables a body (`enabled: false` undeclares it, so `body` i
 Source is one **top-level** rung per field; a nested blank-fill inside an authored
 dict or array is a projection detail of the value, not a per-subpath source. The
 rung is therefore coarser the deeper a field nests, and a container authored at
-all reads `authored` however much of it the document left to the floor. Accepted:
-per-subpath provenance is a different view, and no consumer has asked for one.
+all reads `authored` however much of it the document left to the floor.
+
+The coarseness is recoverable, because **the ladder is per-address local**:
+`resolve_value_sourced` descends a present container with the property's own
+value against the property's own schema node, so a nested rung is a function of
+those two and never of the container's. A surface holding both derives it. Two
+positions are not derivable that way, and are what a per-subpath view would be
+for: a **content**-typed `default:`, whose plate form is the `Content` imported
+at load rather than the schema literal; and an **absent** container, which
+resolves to its container-level `default:` whole, with no property-level fill
+inside it. Neither has a caller.
 
 Value and provenance only. The view carries no diagnostics: completeness and
 errors stay `Quill::validate`'s, which a consumer merges with its own producers
