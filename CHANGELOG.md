@@ -78,18 +78,12 @@
   there under the 0.15.0 caret; the pin now names the version the tree is built
   and tested against. `pdf-writer` stays at 0.15.0, still the version
   `typst-pdf` → `krilla` forces and the newest published.
-
-<!-- seed: commits since v0.107.0, confirm the entries above cover them, then delete this comment
-- attach build_transform_schema's contract to build_transform_schema
-- dense-prose pass over the obligation rewrite
-- retire `must_fill:`: obligation is a reading of `default:`
-- fix: the variant container joins its cells' rungs, as every namespace does
-- dense-prose pass: cut the restatement the change introduced
-- fix: the value ladder is cut per cell, so the plate is total at every depth
-- Say why one rung per field costs a consumer nothing
-- chore(deps): move the Typst floor to 0.15.1
--->
-
+- docs: `0.107-to-0.108.md`, the guide for this step. It leads with the two load
+  errors, since both reject the quill rather than the document, and gives
+  `must_fill: true` beside a `default:` — the one behavior deleted — the space
+  its judgment call needs. `BLUEPRINT.md` § "Typed dictionaries" loses the `{}`
+  expansion and the container-literal renderings with the cascade that produced
+  them, and states the nesting the 0.107 collapse admits.
 
 ## v0.107.0 - 2026-08-17
 
