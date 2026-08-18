@@ -117,7 +117,8 @@ than about depth.
 
 Two limits follow from the container shape and are accepted, not worked around:
 [`resolve()`](#the-resolved-value-view-resolve) reports **one** rung for the whole
-container, as it does for a typed dictionary; and a field set **shared** across
+container — the strongest that contributed — as it does for a typed dictionary;
+and a field set **shared** across
 several members is spelled by repeating it or sharing a YAML anchor, since a
 variant keys on one member.
 
@@ -324,6 +325,12 @@ Every field value comes from one of a small set of **sources**, ordered by
 *commitment*: how strongly the value claims to be the real answer. This is the
 **commitment ladder**:
 
+The ladder is cut per **cell**, not per field. A cell is any leaf, an `array`
+(arity is a fact no element declaration carries), and a variant discriminant. An
+`object` and a variant's world are **namespaces**: they hold no value of their
+own, and theirs is the composition of their cells'. See
+[Cells and namespaces](#cells-and-namespaces).
+
 | Rung | Source | Persisted into a `Document`? | Renders? |
 |---|---|---|---|
 | top | authored value | yes: it *is* the document content | yes |
@@ -354,6 +361,47 @@ field maps rather than a sort key):
 | add-card (into a document) | `$seed` overlay › `example:` › absent | (deferred to render floor) | a new composable `Card`: [Document seeding](#document-seeding) |
 | editor (consumer-side) | authored › `default:` › blank, resolved per field and **tagged with its source rung** | blank | the engine's [`resolve()`](#the-resolved-value-view-resolve) resolved-value view: value and source rung per field |
 
+### Cells and namespaces
+
+A **cell** holds a value and cuts the ladder for it. A **namespace** holds cells,
+and its value is what they compose to. The split decides where a literal may be
+declared and how absence travels:
+
+| Shape | Kind | Why |
+|---|---|---|
+| every leaf | cell | it is the value |
+| `array` | cell | `items` fixes the element type, never the **arity**: `default: []` and `default: [{…}]` say what no element declaration can |
+| `enum` discriminant | cell | the member is a leaf choice |
+| `object` with `properties` | namespace | the schema fixes the keys, so nothing in the value is absent from its cells |
+| a variant's field set | namespace | same, once the discriminant selects the world |
+
+Two rules follow, and between them the plate is total at every depth:
+
+- **A literal is declared where its cell is.** A `default:` / `example:` on a
+  typed dictionary is a load error (`quill::{default,example}_on_namespace`)
+  naming the properties that hold it, as a container-shaped literal on a
+  variant-bearing enum already is
+  (`quill::{default,example}_type_mismatch`). The container spelling is a
+  *second* declaration of a fact the cells already carry, and the two axes read
+  different ones: `default: {name: A}` renders `A` while `must_fill` derives per
+  property and still warns that nobody authored `name`. Schema literals are
+  strict where document payloads are lenient ([Type coercion](#type-coercion)),
+  so this is the same strictness, not a new kind.
+- **Absence is inherited, not terminal.** An absent namespace makes every cell
+  below it absent, and each cell then cuts its own ladder — so a property's
+  `default:` is reached whether or not the document authored the container above
+  it, at any depth. Resolution is therefore a **descent**: the rung supplies a
+  *seed*, and the same composition runs over it whichever rung it came from. A
+  partial element inside an `array` `default:` is completed against `items`
+  exactly as an authored element is, and writing `contact: {}` is a no-op rather
+  than an edit that changes the render.
+
+A namespace has no rung of its own, so [`resolve()`](#the-resolved-value-view-resolve)
+reports the strongest rung that contributed: `authored` if the document wrote any
+of it, else `default` if any cell below resolved to one, else the floor. Nothing
+inside a container the document did not author can read `authored`, however the
+seed reached it.
+
 The consumer-side `Document`-payload × schema join is a **non-goal**:
 [`resolve()`](#the-resolved-value-view-resolve) supersedes it. The
 editor reads value and source rung from one engine call rather than re-cutting
@@ -381,11 +429,14 @@ value, source }` rows in declaration order: order is structural, not object-key
 order. The card body is a `body` sibling on the card, not a row in `fields`:
 present iff the kind enables a body (`enabled: false` undeclares it, so `body` is
 `null`), its source only ever `authored` (non-blank) or `blank` (blank).
-Source is one **top-level** rung per field; a nested blank-fill inside an authored
-dict or array is a projection detail of the value, not a per-subpath source. The
-rung is therefore coarser the deeper a field nests, and a container authored at
-all reads `authored` however much of it the document left to the floor. Accepted:
-per-subpath provenance is a different view, and no consumer has asked for one.
+Source is one rung per **field**, and a container's is the strongest rung that
+contributed to it ([Cells and namespaces](#cells-and-namespaces)): a container
+authored at all reads `authored` however much of it the document left to the
+floor, and an absent one reads `default` when any cell below took a `default:`.
+So the rung answers *"does anything here come from the schema"* at any depth,
+but not *which cell*. Per-subpath rows are a further view: the descent computes
+each cell's rung already, so exposing them is additive to this shape rather than
+a second resolver, and waits on a consumer naming the call site.
 
 Value and provenance only. The view carries no diagnostics: completeness and
 errors stay `Quill::validate`'s, which a consumer merges with its own producers
@@ -406,10 +457,19 @@ surfaces as a diagnostic beyond the non-fatal `validation::must_fill` warning
 Rendering and the *completeness verdict* are orthogonal. The render path
 (`QuillConfig::compile_data` and the ladder it cuts, `ladder_sourced`, both in
 core's `quill::compose`; the engine calls it) uses **blank-filled render**:
-every absent schema field is resolved by precedence: an authored value, else
+every absent schema **cell** is resolved by precedence: an authored value, else
 the `default:`, else the field's blank (`blank`, defined below): in the
 plate-JSON projection that feeds the backend **only, never in the persisted
 document**.
+
+The fill is **total at every depth**, which is what lets a plate read a declared
+address directly rather than through a guarded accessor
+([PLATE_DATA.md](PLATE_DATA.md)). Totality does not depend on which rung supplied
+a value, or on how much of a container the document authored: absence is
+inherited and each cell cuts its own ladder
+([Cells and namespaces](#cells-and-namespaces)), so a declared address is present
+whether its container was written, left out, or seeded from an `array`
+`default:`.
 
 - **Incomplete is renderable.** A document that merely omits a field (or
   leaves it present-null) renders fine: the field is blank-filled in the
@@ -481,11 +541,19 @@ something: the branch is what makes the world's fields readable without a guard
 ## Document seeding
 
 **Seeding** builds a starter `Document` from the schema for editor consumers
-("new document"): each field that declares an `example:` is committed, and
-**every other field is left absent**. The seeding cascade is therefore
-`example: → absent`: absent fields are never written; they are interpolated at
+("new document"): each **cell** that declares an `example:` is committed, and
+**every other cell is left absent**. The seeding cascade is therefore
+`example: → absent`: absent cells are never written; they are interpolated at
 the compilation layer by [blank-filled render](#blank-filled-render) (`default:`,
 else the field's blank), exactly as for any authored document.
+
+Seeding descends a namespace for the same reason the render floor does: a typed
+dictionary carries no `example:` of its own, so its seed is composed from
+whatever its properties commit, and it stays absent when none of them commit
+anything. The commit is **sparse** at every depth — only the cells with an
+`example:` appear, and the rest defer to the render floor — so a nested
+`example:` is reachable at all. It otherwise would not be: the render floor never
+emits an `example`, and the blueprint is a different document.
 
 **Seed-commits-rest.** A seeded content field commits its codec's resting form
 (a richtext field and the body the canonical content, a plaintext field its
@@ -625,7 +693,9 @@ encode opposite author intents:
   authored value always wins: `ladder_sourced` in core's
   `quill::compose`). The blueprint renders that concrete default value with a
   type-only annotation. Type-empty defaults (`default: ""`, `[]`, `false`, `0`)
-  are the canonical way to mark a "skippable" cell.
+  are the canonical way to mark a "skippable" cell; a *dictionary* is skippable
+  by its properties each carrying one, since the container holds no literal
+  ([Cells and namespaces](#cells-and-namespaces)).
 - **`example`** matches the semantic and type *shape* of the desired
   value but is *not* the value most authors want. It documents shape, not
   the choice, so it never becomes the rendered value; it takes the cell in the

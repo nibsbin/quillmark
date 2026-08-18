@@ -7,7 +7,7 @@
 
 use indexmap::IndexMap;
 
-use super::{blank, CardSchema, FieldSchema, FieldType, QuillConfig, VARIANT_DISCRIMINANT_KEY};
+use super::{CardSchema, FieldSchema, FieldType, QuillConfig, VARIANT_DISCRIMINANT_KEY};
 use crate::document::emit::{saphyr_emit_flow, saphyr_emit_scalar};
 use crate::document::prescan::NestedComment;
 use crate::document::{Card, Document, Payload, PayloadItem};
@@ -343,24 +343,20 @@ fn property_cell(
 /// A container's value plus the nested comments and fill paths its subtree
 /// carries, at `path` relative to the field value (`[]` at card level).
 ///
-/// A `default:` is shippable as-is, so it renders verbatim and its subtree
-/// carries neither marker nor annotation. `default: {}` on a typed dictionary
-/// instead expands to the blank-filled shape, so every key is shown.
+/// An **array** `default:` is shippable as-is, so it renders verbatim and its
+/// subtree carries neither marker nor annotation. A **typed dictionary** has no
+/// `default:` to render — it is a namespace, and a literal on it is a load error
+/// (`quill::default_on_namespace`) — so it always expands per property, each cell
+/// showing its own `default:` › `example:` › blank. That expansion is what the
+/// render floor now produces for an absent container, so the blueprint's cells
+/// and the plate's agree cell by cell.
 fn container_cell(
     field: &FieldSchema,
     path: &[PathSegment],
 ) -> (JsonValue, Vec<NestedComment>, Vec<Vec<PathSegment>>) {
     if let Some(props) = typed_dict_props(field) {
-        return match field.default.as_ref().map(|d| d.as_json()) {
-            Some(JsonValue::Object(map)) if map.is_empty() => {
-                (blank(field).into_json(), Vec::new(), Vec::new())
-            }
-            Some(default) => (default.clone(), Vec::new(), Vec::new()),
-            None => {
-                let (map, nested, fills) = build_property_mapping(props, path);
-                (JsonValue::Object(map), nested, fills)
-            }
-        };
+        let (map, nested, fills) = build_property_mapping(props, path);
+        return (JsonValue::Object(map), nested, fills);
     }
 
     let row_props = typed_table_props(field).unwrap_or_else(|| {
@@ -619,8 +615,11 @@ main:
         assert_eq!(doc1, doc2, "a deep blueprint must round-trip");
     }
 
+    /// A nested container's cells carry their own defaults, and each covered
+    /// leaf asks for nothing — the same cells the render floor now fills from
+    /// the same declarations.
     #[test]
-    fn a_nested_container_default_renders_verbatim_and_covers_its_leaves() {
+    fn a_nested_containers_leaf_defaults_cover_their_own_cells() {
         let t = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
@@ -630,10 +629,9 @@ main:
       properties:
         address:
           type: object
-          default: { city: Reston, zip: "20190" }
           properties:
-            city: { type: string }
-            zip: { type: string }
+            city: { type: string, default: Reston }
+            zip: { type: string, default: "20190" }
 "#)
         .blueprint();
         assert!(t.contains("  address: # object\n"), "{t}");
@@ -1020,26 +1018,27 @@ main:
     }
 
     #[test]
-    fn typed_dict_with_empty_default_expands_to_blank_filled() {
+    /// The "wholly skippable dictionary" is spelled as a type-empty `default:`
+    /// on each property — the spelling `default: {}` on the container used to
+    /// approximate, and the only one whose cells the render floor can reach.
+    fn typed_dict_with_type_empty_property_defaults_asks_for_nothing() {
         let t = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
   fields:
     address:
       type: object
-      default: {}
       properties:
-        street: { type: string }
-        zip:    { type: integer }
+        street: { type: string, default: "" }
+        zip:    { type: integer, default: 0 }
 "#)
         .blueprint();
         assert!(
-            t.contains("address: # object\n  street: \"\"\n  zip: 0\n"),
+            t.contains("address: # object\n  street: \"\" # string\n  zip: 0 # integer\n"),
             "wrong rendering: {t}"
         );
         assert!(!t.contains("{}"), "no bare empty object expected: {t}");
         assert!(!t.contains("!must_fill"), "no markers expected: {t}");
-        assert!(!t.contains("# string"), "no leaf annotations expected: {t}");
     }
 
     #[test]
@@ -1063,50 +1062,83 @@ main:
         assert!(t.contains("  zip: \"\" # string\n"));
     }
 
+    /// A typed dictionary always expands per property, each cell showing its
+    /// own `default:` — the cells the render floor fills from the same
+    /// declarations, so the two projections agree cell by cell.
     #[test]
-    fn typed_dict_endorsed_renders_block_mapping() {
+    fn typed_dict_endorsed_per_property_renders_block_mapping() {
         let t = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
   fields:
     address:
       type: object
-      default: { street: "5000 Forbes Ave", city: Pittsburgh }
       properties:
-        street: { type: string }
-        city:   { type: string }
+        street: { type: string, default: "5000 Forbes Ave" }
+        city:   { type: string, default: Pittsburgh }
 "#)
         .blueprint();
         assert!(t.contains("address: # object\n"));
         assert!(
-            t.contains("  street: 5000 Forbes Ave\n")
-                || t.contains("  street: \"5000 Forbes Ave\"\n")
+            t.contains("  street: 5000 Forbes Ave # string\n")
+                || t.contains("  street: \"5000 Forbes Ave\" # string\n")
         );
-        assert!(t.contains("  city: Pittsburgh\n"));
-        assert!(!t.contains("# string"));
+        assert!(t.contains("  city: Pittsburgh # string\n"));
+        assert!(
+            !t.contains("street: !must_fill"),
+            "a defaulted leaf asks for nothing: {t}"
+        );
     }
 
+    /// A property's `example:` surfaces as its own `# e.g.` hint beside its
+    /// cell, since the container has no literal to hold one for it.
     #[test]
-    fn typed_dict_with_example_keeps_eg_line_and_per_property() {
+    fn typed_dict_property_example_keeps_its_own_eg_line() {
         let t = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
   fields:
     address:
       type: object
-      example: { street: "1 Infinite Loop", city: Cupertino }
       properties:
         street: { type: string }
-        city:   { type: string, default: "" }
+        city:   { type: string, default: "", example: Cupertino }
 "#)
         .blueprint();
         assert!(t.contains("address: # object\n"));
-        assert!(
-            t.contains("# e.g. {street: 1 Infinite Loop, city: Cupertino}\n")
-                || t.contains("# e.g. {city: Cupertino, street: 1 Infinite Loop}\n")
-        );
+        assert!(t.contains("# e.g. Cupertino\n"), "{t}");
         assert!(t.contains("  street: !must_fill # string\n"));
         assert!(t.contains("  city: \"\" # string\n"));
+    }
+
+    /// A typed dictionary is a namespace, not a cell: a literal on the
+    /// container is refused at load, naming the properties that hold it.
+    #[test]
+    fn a_literal_on_a_typed_dictionary_is_a_load_error() {
+        for (slot, code) in [
+            ("default", "quill::default_on_namespace"),
+            ("example", "quill::example_on_namespace"),
+        ] {
+            let yaml = format!(
+                r#"
+quill: {{ name: x, version: 1.0.0, backend: typst, description: x }}
+main:
+  fields:
+    address:
+      type: object
+      {slot}: {{ street: "5000 Forbes Ave" }}
+      properties:
+        street: {{ type: string }}
+        city:   {{ type: string }}
+"#
+            );
+            let err = QuillConfig::from_yaml(&yaml).expect_err("must refuse");
+            assert!(err.contains(code), "expected {code}; got {err}");
+            assert!(
+                err.contains("street") && err.contains("city"),
+                "the hint names the properties that hold the {slot}: {err}"
+            );
+        }
     }
 
     const LETTER_QUILL: &str = r#"

@@ -7,7 +7,7 @@
 use quillmark_content::Content;
 
 use super::Quill;
-use crate::quill::{CardSchema, VARIANT_DISCRIMINANT_KEY};
+use crate::quill::{CardSchema, FieldType, VARIANT_DISCRIMINANT_KEY};
 use crate::document::PayloadItem;
 use crate::{Card, Document, Payload, QuillReference, QuillValue, SeedOverlay};
 
@@ -46,21 +46,20 @@ fn seed_parts(schema: &CardSchema, overlay: Option<&SeedOverlay>) -> (Payload, C
             }
             continue;
         }
-        let Some(value) = overlaid
-            .or(field.example_content.as_ref())
-            .or(field.example.as_ref())
-        else {
+        let Some(Seeded { value, fills }) = seed_field(field, overlaid) else {
             continue;
         };
+        let mut value = seeded_rest(name, &value, field);
+        for path in fills.iter().filter(|p| !p.is_empty()) {
+            value.set_fill_at(path);
+        }
         items.push(PayloadItem::Field {
             key: name.clone(),
-            value: seeded_rest(name, value, field),
-            // An `example` on a must-fill field is shape documentation, not
-            // the answer, so it commits *carrying the marker*: that is what
-            // lands a seed on the same cells the blueprint stamps. An overlay
-            // value is exempt — `$seed` is a template author deciding, which is
-            // the act the marker asks for.
-            fill: overlaid.is_none() && field.must_fill(),
+            value,
+            // The root marker, where the field itself is the marked cell. A
+            // mapping never carries one: its obligation sits on the leaves
+            // inside it, which `fills` addresses by path.
+            fill: fills.iter().any(Vec::is_empty),
             nested_comments: Vec::new(),
         });
     }
@@ -85,6 +84,74 @@ fn seed_parts(schema: &CardSchema, overlay: Option<&SeedOverlay>) -> (Payload, C
     };
 
     (Payload::from_items(items), body)
+}
+
+/// What one field contributes to a seed: the value to commit, and the paths
+/// inside it that carry a `!must_fill` marker (the empty path being the value's
+/// own root).
+struct Seeded {
+    value: QuillValue,
+    fills: Vec<Vec<crate::value::PathSegment>>,
+}
+
+/// The `example:` a field commits, descending a typed dictionary to reach the
+/// examples its properties declare.
+///
+/// **A namespace has no example of its own** — a typed dictionary carries no
+/// `default:`/`example:` (`quill::example_on_namespace`) — so the seed composes
+/// one from whatever its cells commit, and stays absent when none of them commit
+/// anything. Without the descent a property's `example:` would be unreachable at
+/// every projection: the render floor never emits an example, and the blueprint
+/// is a different document. The commit is *sparse*, exactly as at card level:
+/// only the cells with an example appear, and the rest defer to the render floor.
+///
+/// Per cell the precedence is the ordinary `overlay › example_content › example ›
+/// absent`, the content companion first so a content field seeds its resting
+/// form. An overlay applies to the whole field, cells included: `$seed` is a
+/// template author deciding, so it also lifts the marker.
+fn seed_field(field: &crate::quill::FieldSchema, overlaid: Option<&QuillValue>) -> Option<Seeded> {
+    if let Some(value) = overlaid {
+        return Some(Seeded {
+            value: value.clone(),
+            fills: Vec::new(),
+        });
+    }
+    if let (FieldType::Object, Some(props)) = (&field.r#type, &field.properties) {
+        let mut map = serde_json::Map::new();
+        let mut fills = Vec::new();
+        for (name, prop) in props {
+            let Some(seeded) = seed_field(prop, None) else {
+                continue;
+            };
+            for path in seeded.fills {
+                let mut rebased = vec![crate::value::PathSegment::Key(name.clone())];
+                rebased.extend(path);
+                fills.push(rebased);
+            }
+            map.insert(name.clone(), seeded.value.into_json());
+        }
+        if map.is_empty() {
+            return None;
+        }
+        return Some(Seeded {
+            value: QuillValue::from_json(serde_json::Value::Object(map)),
+            fills,
+        });
+    }
+    let value = field
+        .example_content
+        .as_ref()
+        .or(field.example.as_ref())?
+        .clone();
+    // An `example` on a must-fill field is shape documentation, not the answer,
+    // so it commits *carrying the marker*: that is what lands a seed on the same
+    // cells the blueprint stamps.
+    let fills = if field.must_fill() {
+        vec![Vec::new()]
+    } else {
+        Vec::new()
+    };
+    Some(Seeded { value, fills })
 }
 
 /// Seed one variant-bearing enum, or `None` where neither the overlay nor any
@@ -129,27 +196,36 @@ fn seed_variant(
         VARIANT_DISCRIMINANT_KEY.to_string(),
         serde_json::Value::String(member.clone()),
     );
-    let mut fills: Vec<String> = Vec::new();
+    let mut fills: Vec<Vec<crate::value::PathSegment>> = Vec::new();
     if overlay_member.is_none() && field.must_fill() {
-        fills.push(VARIANT_DISCRIMINANT_KEY.to_string());
+        fills.push(vec![crate::value::PathSegment::Key(
+            VARIANT_DISCRIMINANT_KEY.to_string(),
+        )]);
     }
 
     if let Some(fields) = field.variant_fields(&member) {
         for (key, schema) in fields {
-            let overlaid_cell = overlay_object.and_then(|o| o.get(key));
-            let Some(value) = overlaid_cell.or(schema.example.as_ref().map(|e| e.as_json())) else {
+            // A cell carries any type a card field may, so it seeds through the
+            // same descent: a cell that is itself a typed dictionary composes
+            // from its properties' examples rather than needing one of its own.
+            let overlaid_cell = overlay_object
+                .and_then(|o| o.get(key))
+                .map(|j| QuillValue::from_json(j.clone()));
+            let Some(seeded) = seed_field(schema, overlaid_cell.as_ref()) else {
                 continue;
             };
-            map.insert(key.clone(), value.clone());
-            if overlaid_cell.is_none() && schema.must_fill() {
-                fills.push(key.clone());
+            for path in seeded.fills {
+                let mut rebased = vec![crate::value::PathSegment::Key(key.clone())];
+                rebased.extend(path);
+                fills.push(rebased);
             }
+            map.insert(key.clone(), seeded.value.into_json());
         }
     }
 
     let mut value = QuillValue::from_json(serde_json::Value::Object(map));
-    for key in &fills {
-        value.set_fill_at(&[crate::value::PathSegment::Key(key.clone())]);
+    for path in &fills {
+        value.set_fill_at(path);
     }
     Some(PayloadItem::Field {
         key: name.to_string(),

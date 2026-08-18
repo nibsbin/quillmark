@@ -485,27 +485,31 @@ fn resolve_value(value: Option<&QuillValue>, field: &FieldSchema) -> QuillValue 
 
 /// Resolve one (possibly absent or null) value against its field schema,
 /// reporting the [`FieldSource`] rung that produced it, and applying null ≡
-/// absent recursively so no bare null reaches the plate:
+/// absent recursively so no bare null reaches the plate.
 ///
-/// - A null or absent value becomes the schema `default:`
-///   ([`Default`](FieldSource::Default)), else the field's [`blank`]
-///   ([`Blank`](FieldSource::Blank)).
-/// - A present **typed dictionary** is rebuilt from its declared properties so a
-///   null/absent property blank-fills and the projection matches the schema shape.
-///   Source keys the schema does not declare pass through verbatim, matching
-///   `config::coerce_object_props`'s coercion-time behavior: the schema is a
-///   floor, not an allowlist, so an undeclared `note:` on a typed dict reaches
-///   the plate instead of being silently dropped.
-/// - A present **typed array** resolves each element against the item schema, so
-///   a null element blank-fills in place.
-/// - Any other present value is returned unchanged.
+/// **The ladder is per cell, and resolution is a descent rather than a return.**
+/// A cell is a leaf, an `array` (arity is a fact no leaf carries), or a variant
+/// discriminant; an `object` is a *namespace*, whose value is the composition of
+/// its cells'. So this picks a **seed** — the authored value, else the schema
+/// `default:` — and then hands it to [`compose`], which rebuilds a container from
+/// its declared members whichever rung the seed came from, and floors a leaf at
+/// its [`blank`]. Absence is *inherited*, not terminal: an absent container makes
+/// every cell below it absent, and each cell then cuts its own ladder.
 ///
-/// Every present shape is [`Authored`](FieldSource::Authored) (the nested
-/// blank-fill inside a dict/array is a projection detail, not a source change).
-/// The source is the byproduct of the same branch that computes the value, so
-/// the render projection ([`resolve_value`]) and the field-state view cut the
-/// one commitment ladder rather than each re-deriving precedence
-/// (`prose/canon/SCHEMAS.md` § "Value sources and projections").
+/// This is what makes the plate total at every depth: a declared address is
+/// present however much of its container the document left out
+/// (`prose/canon/PLATE_DATA.md`). Resolving through one composition also keeps
+/// the rungs from disagreeing with the obligation surface, which has always
+/// addressed cells through absence ([`collect_unauthored_field`]).
+///
+/// The rung is the seed's, and for a namespace it is the strongest rung
+/// contributing to the value: a container the document authored reads
+/// [`Authored`](FieldSource::Authored), an absent one reads
+/// [`Default`](FieldSource::Default) when any cell below took a `default:`, else
+/// [`Blank`](FieldSource::Blank). The source is the byproduct of the same walk
+/// that computes the value, so the render projection ([`resolve_value`]) and the
+/// resolved-value view cut the one commitment ladder rather than each re-deriving
+/// precedence (`prose/canon/SCHEMAS.md` § "Value sources and projections").
 pub(crate) fn resolve_value_sourced(
     value: Option<&QuillValue>,
     field: &FieldSchema,
@@ -513,36 +517,80 @@ pub(crate) fn resolve_value_sourced(
     if field.is_variant_bearing() {
         return resolve_variant_sourced(value, field);
     }
-    let present = value.filter(|v| !v.as_json().is_null());
-    let Some(v) = present else {
-        // `default_content` holds the imported form of `default:`, cached at
-        // load wherever the type tree bears a content leaf. The ladder injects
-        // a default without re-coercing it, so the cache is the only safe
-        // source: a raw `default` would cross to the plate as unimported
-        // markdown.
-        if let Some(content) = field.default_content.clone() {
-            return (content, FieldSource::Default);
-        }
-        if crate::quill::config::field_contains_content(field) {
-            return (blank(field), FieldSource::Blank);
-        }
-        return match field.default.clone() {
-            Some(default) => (default, FieldSource::Default),
-            None => (blank(field), FieldSource::Blank),
-        };
+    let (seed, source) = match value.filter(|v| !v.as_json().is_null()) {
+        Some(v) => (Some(v.clone()), FieldSource::Authored),
+        None => match seed_default(field) {
+            Some(default) => (Some(default), FieldSource::Default),
+            None => (None, FieldSource::Blank),
+        },
     };
-    let resolved = match (&field.r#type, &field.properties, &field.items) {
+    let (resolved, composed) = compose(seed.as_ref(), field, source);
+    (resolved, source.join(composed))
+}
+
+/// The `default:` a cell enters the descent with, in the form the plate takes it.
+///
+/// `default_content` holds the imported form, cached at load wherever the type
+/// tree bears a content leaf. The ladder injects a default without re-coercing
+/// it, so the cache is the only safe source: a raw `default` would cross to the
+/// plate as unimported markdown. A content-bearing tree whose companion is
+/// absent therefore has *no* seed rather than falling through to the raw
+/// literal — the gate `populate_field_content` is written against.
+fn seed_default(field: &FieldSchema) -> Option<QuillValue> {
+    if let Some(content) = field.default_content.clone() {
+        return Some(content);
+    }
+    if crate::quill::config::field_contains_content(field) {
+        return None;
+    }
+    field.default.clone()
+}
+
+/// Build `field`'s value from `seed`, the value its own rung supplied (`None`
+/// where no rung above the floor had one), and report the strongest rung any
+/// cell below contributed.
+///
+/// - A **typed dictionary** is rebuilt from its declared properties, each cell
+///   cutting its own ladder over its slice of the seed, so an absent or
+///   null property resolves to *its* `default:` and only then to its blank, and
+///   the projection matches the schema shape. Seed keys the schema does not
+///   declare pass through verbatim, matching `config::coerce_object_props`'s
+///   coercion-time behavior: the schema is a floor, not an allowlist, so an
+///   undeclared `note:` on a typed dict reaches the plate instead of being
+///   silently dropped.
+/// - A **typed array** resolves each element against the item schema, so a null
+///   element blank-fills in place and a partial element from an array `default:`
+///   is completed exactly as an authored one is.
+/// - Every other type is a leaf: the seed, else the field's [`blank`].
+///
+/// Terminates because each recursion descends strictly into the schema tree.
+///
+/// `outer` is the container's own rung, which **ceilings** its cells': nothing
+/// inside a container the document did not author can read
+/// [`Authored`](FieldSource::Authored), however the seed reached it. Without the
+/// ceiling a cell fed from a container `default:` would report itself authored,
+/// since [`resolve_value_sourced`] cannot tell a seeded value from a written one.
+fn compose(
+    seed: Option<&QuillValue>,
+    field: &FieldSchema,
+    outer: FieldSource,
+) -> (QuillValue, FieldSource) {
+    let ceiling = match outer {
+        FieldSource::Authored => FieldSource::Authored,
+        _ => FieldSource::Default,
+    };
+    match (&field.r#type, &field.properties, &field.items) {
         (FieldType::Object, Some(props), _) => {
-            let obj = v.as_json().as_object();
+            let obj = seed.and_then(|v| v.as_json().as_object());
             let mut out = serde_json::Map::new();
+            let mut rung = FieldSource::Blank;
             for (pname, pschema) in props {
                 let pv = obj
                     .and_then(|o| o.get(pname))
                     .map(|j| QuillValue::from_json(j.clone()));
-                out.insert(
-                    pname.clone(),
-                    resolve_value(pv.as_ref(), pschema).into_json(),
-                );
+                let (value, source) = resolve_value_sourced(pv.as_ref(), pschema);
+                rung = rung.join(source.min(ceiling));
+                out.insert(pname.clone(), value.into_json());
             }
             // Preserve undeclared keys verbatim; only rebuild the ones the
             // schema names. Skips keys already emitted above so a declared
@@ -554,19 +602,26 @@ pub(crate) fn resolve_value_sourced(
                     }
                 }
             }
-            QuillValue::from_json(serde_json::Value::Object(out))
+            (QuillValue::from_json(serde_json::Value::Object(out)), rung)
         }
         (FieldType::Array, _, Some(items)) => {
-            let arr = v.as_json().as_array().cloned().unwrap_or_default();
+            let arr = seed
+                .and_then(|v| v.as_json().as_array().cloned())
+                .unwrap_or_default();
             let out: Vec<serde_json::Value> = arr
                 .into_iter()
                 .map(|e| resolve_value(Some(&QuillValue::from_json(e)), items).into_json())
                 .collect();
-            QuillValue::from_json(serde_json::Value::Array(out))
+            (
+                QuillValue::from_json(serde_json::Value::Array(out)),
+                FieldSource::Blank,
+            )
         }
-        _ => v.clone(),
-    };
-    (resolved, FieldSource::Authored)
+        _ => match seed {
+            Some(v) => (v.clone(), FieldSource::Blank),
+            None => (blank(field), FieldSource::Blank),
+        },
+    }
 }
 
 /// Resolve a variant-bearing enum into the container the plate receives:
@@ -1182,6 +1237,152 @@ main:
         assert_eq!(
             plate["seal"], "",
             "an authored blank outranks the default and is not a gate error; got {plate}"
+        );
+    }
+
+    /// The ladder is per cell: an absent container reaches every leaf's own
+    /// `default:`, so a declared address is present *and* carries its author's
+    /// answer however much of the container the document left out.
+    #[test]
+    fn an_absent_container_reaches_every_leaf_default() {
+        const YAML: &str = r#"
+quill: { name: ac, version: 1.0.0, backend: typst, description: x }
+main:
+  fields:
+    contact:
+      type: object
+      properties:
+        name: { type: string }
+        email: { type: string, default: "hi@example.com" }
+        addr:
+          type: object
+          properties:
+            city: { type: string, default: Pgh }
+"#;
+        let absent = plate_of(YAML, "~~~card-yaml\n$quill: ac@1.0.0\n$kind: main\n~~~\n");
+        assert_eq!(
+            absent["contact"],
+            json!({ "name": "", "email": "hi@example.com", "addr": { "city": "Pgh" } }),
+            "an absent container cuts each cell's own ladder, at every depth; got {absent}"
+        );
+        // Authoring the empty map is a no-op: the same cells, the same rungs.
+        let authored = plate_of(
+            YAML,
+            "~~~card-yaml\n$quill: ac@1.0.0\n$kind: main\ncontact: {}\n~~~\n",
+        );
+        assert_eq!(
+            absent["contact"], authored["contact"],
+            "writing `contact: {{}}` must not change what renders; got {authored}"
+        );
+    }
+
+    /// The blueprint's cells and the plate's cells are cut from the same
+    /// declarations, so a value the blueprint shows is the value that renders
+    /// when the author leaves that line alone — the "shippable as-is"
+    /// affordance, which held only at card level while an absent container
+    /// short-circuited the ladder.
+    #[test]
+    fn the_blueprint_and_the_plate_agree_cell_by_cell() {
+        const YAML: &str = r#"
+quill: { name: bp, version: 1.0.0, backend: typst, description: x }
+main:
+  fields:
+    contact:
+      type: object
+      properties:
+        email: { type: string, default: "hi@example.com" }
+        when: { type: date, default: "2026-01-01" }
+        addr:
+          type: object
+          properties:
+            city: { type: string, default: Pgh }
+"#;
+        let blueprint = QuillConfig::from_yaml(YAML).expect("valid quill").blueprint();
+        let plate = plate_of(YAML, "~~~card-yaml\n$quill: bp@1.0.0\n$kind: main\n~~~\n");
+        for shown in ["hi@example.com", "2026-01-01", "Pgh"] {
+            assert!(
+                blueprint.contains(shown),
+                "the blueprint shows {shown}: {blueprint}"
+            );
+        }
+        assert_eq!(
+            plate["contact"],
+            json!({ "email": "hi@example.com", "when": "2026-01-01", "addr": { "city": "Pgh" } }),
+            "and the plate renders exactly those cells; got {plate}"
+        );
+    }
+
+    /// An `array` is a cell — arity is a fact no element declaration carries —
+    /// so it keeps its own `default:`, and each element it supplies is completed
+    /// against `items` exactly as an authored element is.
+    #[test]
+    fn an_array_default_completes_its_elements_against_items() {
+        const YAML: &str = r#"
+quill: { name: ad, version: 1.0.0, backend: typst, description: x }
+main:
+  fields:
+    rows:
+      type: array
+      default: [{ who: A }]
+      items:
+        type: object
+        properties:
+          who: { type: string }
+          role: { type: string, default: lead }
+"#;
+        let defaulted = plate_of(YAML, "~~~card-yaml\n$quill: ad@1.0.0\n$kind: main\n~~~\n");
+        assert_eq!(
+            defaulted["rows"],
+            json!([{ "who": "A", "role": "lead" }]),
+            "a partial default element blank-fills against `items`; got {defaulted}"
+        );
+        let authored = plate_of(
+            YAML,
+            "~~~card-yaml\n$quill: ad@1.0.0\n$kind: main\nrows:\n  - who: A\n~~~\n",
+        );
+        assert_eq!(
+            defaulted["rows"], authored["rows"],
+            "which rung supplied the row does not change its shape; got {authored}"
+        );
+    }
+
+    /// A container has no rung of its own: it reports the strongest rung that
+    /// contributed to it, so an absent container whose cells took defaults reads
+    /// `default` rather than claiming the floor.
+    #[test]
+    fn a_containers_rung_is_the_strongest_its_cells_contributed() {
+        let defaulted = field(
+            r#"
+type: object
+properties:
+  name: { type: string }
+  email: { type: string, default: "hi@example.com" }
+"#,
+        );
+        assert_eq!(
+            resolve_value_sourced(None, &defaulted).1,
+            FieldSource::Default,
+            "a cell below took its `default:`, so the container is not at the floor"
+        );
+
+        let floored = field(
+            r#"
+type: object
+properties:
+  name: { type: string }
+"#,
+        );
+        assert_eq!(
+            resolve_value_sourced(None, &floored).1,
+            FieldSource::Blank,
+            "nothing below the floor contributed, so the container reports it"
+        );
+
+        let authored = QuillValue::from_json(json!({}));
+        assert_eq!(
+            resolve_value_sourced(Some(&authored), &floored).1,
+            FieldSource::Authored,
+            "a container the document wrote is authored, however little it holds"
         );
     }
 

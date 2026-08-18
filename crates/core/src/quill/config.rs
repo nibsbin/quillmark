@@ -1187,6 +1187,12 @@ impl QuillConfig {
     ) {
         Self::validate_description_singleline(schema.description.as_deref(), owner_label, errors);
         Self::validate_enum_literals(schema, owner_label, errors);
+        if schema.example.is_some() {
+            Self::reject_namespace_literal("example", schema, owner_label, errors);
+        }
+        if schema.default.is_some() {
+            Self::reject_namespace_literal("default", schema, owner_label, errors);
+        }
         if let Some(v) = &schema.example {
             Self::validate_schema_slot("example", v, schema, owner_label, errors);
         }
@@ -1304,6 +1310,50 @@ impl QuillConfig {
                 }
             }
         }
+    }
+
+    /// Refuse a `default:` / `example:` declared on a **typed dictionary**, which
+    /// is a namespace rather than a cell: its value is the composition of its
+    /// properties', so a literal on the container is a second declaration of a
+    /// fact the properties already carry, and the two disagree. The value axis
+    /// would read the container while the obligation axis reads the leaf — a
+    /// `default: {name: A}` renders `A` and still warns that nobody authored
+    /// `name`, since `must_fill` derives per property.
+    ///
+    /// The variant container refuses the same shape for the same reason
+    /// (`quill::{default,example}_type_mismatch`, its `is_variant_bearing` hint),
+    /// and schema literals are strict where document payloads are lenient
+    /// (`prose/canon/SCHEMAS.md` § "Type coercion"). An `array` keeps its literal:
+    /// arity is a fact no element declaration carries, so it *is* a cell.
+    fn reject_namespace_literal(
+        slot: &str,
+        schema: &FieldSchema,
+        owner_label: &str,
+        errors: &mut Vec<Diagnostic>,
+    ) {
+        let Some(props) = schema
+            .properties
+            .as_ref()
+            .filter(|_| matches!(schema.r#type, FieldType::Object))
+        else {
+            return;
+        };
+        let names: Vec<&str> = props.keys().map(String::as_str).collect();
+        errors.push(
+            Diagnostic::new(
+                Severity::Error,
+                format!(
+                    "{owner_label} declares type 'object' but carries a {slot}. A typed \
+                     dictionary is a namespace, not a cell: each property holds its own {slot}."
+                ),
+            )
+            .with_code(format!("quill::{slot}_on_namespace"))
+            .with_hint(format!(
+                "Move each value onto the property that holds it ({}), and remove the \
+                 container's {slot}.",
+                names.join(", ")
+            )),
+        );
     }
 
     /// Validate a single `example:` or `default:` literal against the declared

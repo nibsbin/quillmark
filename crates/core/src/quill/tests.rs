@@ -2500,11 +2500,11 @@ main:
     assert_eq!(literal["marks"], serde_json::json!([]));
 }
 
-/// The sibling position: a `default:` on the **container**. It commits the same
-/// imported content a leaf's does — which declaration carries the literal does
-/// not change what crosses.
+/// The sibling position: a `default:` reached *through* an absent container. A
+/// cell's literal commits the same imported content whatever sits above it, and
+/// an `array` — the one container that is itself a cell — commits its own.
 #[test]
-fn a_containers_own_content_default_reaches_the_plate_as_content() {
+fn a_content_default_inside_an_absent_container_reaches_the_plate_as_content() {
     const YAML: &str = r#"
 quill:
   name: container_default
@@ -2515,10 +2515,10 @@ main:
   fields:
     dict:
       type: object
-      default: { note: "A **dict** note" }
       properties:
         note:
           type: richtext
+          default: "A **dict** note"
     rows:
       type: array
       default: ["A **row** note"]
@@ -2526,10 +2526,10 @@ main:
         type: richtext
     plain:
       type: object
-      default: { tag: bare }
       properties:
         tag:
           type: string
+          default: bare
 "#;
     let config = QuillConfig::from_yaml(YAML).expect("container defaults load");
     let document = Document::parse(concat!(
@@ -2556,8 +2556,8 @@ main:
             "{path} keeps the default's marks: {plate}"
         );
     }
-    // A container bearing no content leaf has no companion to read, and its
-    // `default:` still crosses verbatim.
+    // A cell bearing no content has no companion to read, and its `default:`
+    // still crosses verbatim through the absent container above it.
     assert_eq!(plate["plain"]["tag"], serde_json::json!("bare"));
 }
 

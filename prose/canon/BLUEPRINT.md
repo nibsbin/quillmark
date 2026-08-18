@@ -185,9 +185,10 @@ two axes"). Reading them off separately gives the full grid:
 An `example` takes the cell only when no `default:` holds it, and surfaces in
 the `# e.g.` leading line otherwise. That gate is a *value*-axis question:
 `must_fill` never moves an example between the cell and the hint. The rule holds
-uniformly for scalars, arrays, typed tables, and typed dictionaries: **except
-`richtext`**, which never inlines its example as a value at all; its `example:`
-always surfaces as the `# e.g.` line (see "Richtext fields").
+uniformly for scalars, arrays and typed tables, and for each **property** of a
+typed dictionary (which holds no cell of its own): **except `richtext`**, which
+never inlines its example as a value at all; its `example:` always surfaces as
+the `# e.g.` line (see "Richtext fields").
 
 All fields render as **live YAML**: no commented-out fields. The `!must_fill`
 marker is the sole "must fill" signal on this surface: a reader's mental model
@@ -326,23 +327,24 @@ sequence, e.g. `# e.g. [{org: ACME, year: 2020}]`.
 
 ## Typed dictionaries
 
-A field of `type: object` with a `properties` map follows the uniform
-cell cascade: `default:` (any default, including `{}`) is shippable as-is;
-without one:
+A field of `type: object` with a `properties` map carries **no cell of its own**:
+it is a namespace, and a `default:`/`example:` on it is a load error
+([SCHEMAS.md](SCHEMAS.md) § "Cells and namespaces"). So it always expands, and
+there is no container-level cascade to choose between:
 
-- A non-empty `default:` renders as a concrete block mapping (property
-  values only, no annotations). Only the keys present in the default are
-  shown: a *partial* default is a deliberate "already handled, ignore the
-  rest" signal and is rendered verbatim. The outer key carries `# object`.
-- `default: {}` **expands** to the field's blank-filled shape: every property
-  shown with its type-empty value (`""`, `0`, `false`, `[]`, …), all
-  unmarked and unannotated (uniform with a concrete default, the container
-  being defaulted either way). The bare `{}` is never emitted: an empty
-  defaulted object shows its structure. The outer key carries `# object`.
-- Without a `default:`, each property is emitted with its own
-  description, inline annotation, and the `!must_fill` marker on its leaf
-  value. The container key itself is untagged: you tag the leaves, not the
-  container (per [markdown-spec.md](../references/markdown-spec.md) §3.4).
+- Each property is emitted with its own description, inline annotation, and
+  its own cell cascade — `default:` › `example:` › blank under the derived
+  `!must_fill` marker — exactly as a card-level field of that type. A property
+  carrying a `default:` therefore renders that concrete value unmarked, and a
+  wholly skippable dictionary is spelled by each property carrying a type-empty
+  one.
+- The container key itself is untagged: you tag the leaves, not the
+  container (per [markdown-spec.md](../references/markdown-spec.md) §3.4). The
+  outer key carries `# object`.
+
+The cells the blueprint shows are the cells the render floor fills, from the same
+declarations: an author who deletes a defaulted line gets that default back at
+render, which is what the "shippable as-is" affordance promises.
   The outer key carries `# object`.
 
 The `{}` expansion (and not partial defaults, and not arrays) makes the object
