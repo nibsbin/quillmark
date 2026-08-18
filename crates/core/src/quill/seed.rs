@@ -31,12 +31,8 @@ use crate::{Card, Document, Payload, QuillReference, QuillValue, SeedOverlay};
 /// a hash on a seed → store → load → conform cycle nobody edited.
 fn seed_parts(schema: &CardSchema, overlay: Option<&SeedOverlay>) -> (Payload, Content) {
     // Drive by `schema.fields` (declaration order), so the result is in
-    // declaration order natively: no merge-then-sort. Per field the precedence
-    // is `overlay › example_content › example › absent`: a richtext-bearing field
-    // seeds from its pre-validated content companion, every other from its raw
-    // `example`, and the overlay overrides either (and can supply a value for a
-    // `default`-only field the base omits). An overlay key naming no schema
-    // field is skipped: it is never iterated here.
+    // declaration order natively: no merge-then-sort. An overlay key naming no
+    // schema field is skipped: it is never iterated here.
     let mut items: Vec<PayloadItem> = Vec::new();
     for (name, field) in &schema.fields {
         let overlaid = overlay.and_then(|o| o.fields.get(name));
@@ -97,18 +93,17 @@ struct Seeded {
 /// The `example:` a field commits, descending a typed dictionary to reach the
 /// examples its properties declare.
 ///
-/// **A namespace has no example of its own** — a typed dictionary carries no
-/// `default:`/`example:` (`quill::example_on_namespace`) — so the seed composes
-/// one from whatever its cells commit, and stays absent when none of them commit
-/// anything. Without the descent a property's `example:` would be unreachable at
-/// every projection: the render floor never emits an example, and the blueprint
-/// is a different document. The commit is *sparse*, exactly as at card level:
-/// only the cells with an example appear, and the rest defer to the render floor.
+/// A typed dictionary carries no `example:` of its own
+/// (`quill::example_on_namespace`), so its seed composes from whatever its cells
+/// commit and stays `None` when none of them commit anything. Nothing else
+/// reaches a nested `example:`: the render floor never emits one, and the
+/// blueprint is a different document. The commit is *sparse*, as at card level —
+/// only the cells with an example appear, the rest deferring to the render floor.
 ///
-/// Per cell the precedence is the ordinary `overlay › example_content › example ›
-/// absent`, the content companion first so a content field seeds its resting
-/// form. An overlay applies to the whole field, cells included: `$seed` is a
-/// template author deciding, so it also lifts the marker.
+/// The content companion is read before the raw `example:` so a content field
+/// seeds its resting form. An overlay covers the whole field, cells included, and
+/// lifts the marker: `$seed` is a template author deciding, which is the act the
+/// marker asks for.
 fn seed_field(field: &crate::quill::FieldSchema, overlaid: Option<&QuillValue>) -> Option<Seeded> {
     if let Some(value) = overlaid {
         return Some(Seeded {
@@ -206,8 +201,7 @@ fn seed_variant(
     if let Some(fields) = field.variant_fields(&member) {
         for (key, schema) in fields {
             // A cell carries any type a card field may, so it seeds through the
-            // same descent: a cell that is itself a typed dictionary composes
-            // from its properties' examples rather than needing one of its own.
+            // same descent.
             let overlaid_cell = overlay_object
                 .and_then(|o| o.get(key))
                 .map(|j| QuillValue::from_json(j.clone()));

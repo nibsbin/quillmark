@@ -12,12 +12,12 @@ use super::compose::resolve_card_sourced;
 use super::{CardSchema, Quill, QuillConfig};
 use crate::{Card, Document, QuillValue};
 
-/// The rung of the commitment ladder that produced a [`ResolvedField::value`],
-/// ordered by *commitment*: how strongly the value claims to be the real answer.
+/// The rung of the commitment ladder that produced a [`ResolvedField::value`].
 /// Serializes lowercase (`"authored" | "default" | "blank"`).
 ///
-/// The declaration order **is** the ordering, floor first, so `Ord` ranks a rung
-/// against another and [`join`](Self::join) picks the more committed of two.
+/// Variants are declared floor-first, so `Ord` ranks by *commitment*: how
+/// strongly the value claims to be the real answer. Reordering them reorders the
+/// ladder.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]

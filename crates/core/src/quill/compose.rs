@@ -498,16 +498,12 @@ fn resolve_value(value: Option<&QuillValue>, field: &FieldSchema) -> QuillValue 
 ///
 /// This is what makes the plate total at every depth: a declared address is
 /// present however much of its container the document left out
-/// (`prose/canon/PLATE_DATA.md`). Resolving through one composition also keeps
-/// the rungs from disagreeing with the obligation surface, which has always
-/// addressed cells through absence ([`collect_unauthored_field`]).
+/// (`prose/canon/PLATE_DATA.md`), which is what lets a plate read one directly
+/// rather than through a guarded accessor.
 ///
-/// The rung is the seed's, and for a namespace it is the strongest rung
-/// contributing to the value: a container the document authored reads
-/// [`Authored`](FieldSource::Authored), an absent one reads
-/// [`Default`](FieldSource::Default) when any cell below took a `default:`, else
-/// [`Blank`](FieldSource::Blank). The source is the byproduct of the same walk
-/// that computes the value, so the render projection ([`resolve_value`]) and the
+/// The rung is the seed's, joined with what the descent found
+/// ([`FieldSource::join`]). It is the byproduct of the same walk that computes
+/// the value, so the render projection ([`resolve_value`]) and the
 /// resolved-value view cut the one commitment ladder rather than each re-deriving
 /// precedence (`prose/canon/SCHEMAS.md` § "Value sources and projections").
 pub(crate) fn resolve_value_sourced(
@@ -532,10 +528,10 @@ pub(crate) fn resolve_value_sourced(
 ///
 /// `default_content` holds the imported form, cached at load wherever the type
 /// tree bears a content leaf. The ladder injects a default without re-coercing
-/// it, so the cache is the only safe source: a raw `default` would cross to the
-/// plate as unimported markdown. A content-bearing tree whose companion is
-/// absent therefore has *no* seed rather than falling through to the raw
-/// literal — the gate `populate_field_content` is written against.
+/// it, so the cache is the only safe source: a raw `default` would cross as
+/// unimported markdown. A content-bearing tree whose companion is absent
+/// therefore has *no* seed — the gate `populate_field_content` is written
+/// against.
 fn seed_default(field: &FieldSchema) -> Option<QuillValue> {
     if let Some(content) = field.default_content.clone() {
         return Some(content);
@@ -548,28 +544,21 @@ fn seed_default(field: &FieldSchema) -> Option<QuillValue> {
 
 /// Build `field`'s value from `seed`, the value its own rung supplied (`None`
 /// where no rung above the floor had one), and report the strongest rung any
-/// cell below contributed.
+/// cell below contributed. Terminates because each recursion descends strictly
+/// into the schema tree.
 ///
-/// - A **typed dictionary** is rebuilt from its declared properties, each cell
-///   cutting its own ladder over its slice of the seed, so an absent or
-///   null property resolves to *its* `default:` and only then to its blank, and
-///   the projection matches the schema shape. Seed keys the schema does not
-///   declare pass through verbatim, matching `config::coerce_object_props`'s
-///   coercion-time behavior: the schema is a floor, not an allowlist, so an
-///   undeclared `note:` on a typed dict reaches the plate instead of being
-///   silently dropped.
-/// - A **typed array** resolves each element against the item schema, so a null
-///   element blank-fills in place and a partial element from an array `default:`
-///   is completed exactly as an authored one is.
-/// - Every other type is a leaf: the seed, else the field's [`blank`].
-///
-/// Terminates because each recursion descends strictly into the schema tree.
+/// A typed dictionary's cells each cut their own ladder over their slice of the
+/// seed, so an absent property resolves to *its* `default:` before its blank. A
+/// seed key the schema does not declare passes through verbatim, matching
+/// `config::coerce_object_props`: the schema is a floor, not an allowlist, so an
+/// undeclared `note:` on a typed dict reaches the plate instead of being
+/// silently dropped.
 ///
 /// `outer` is the container's own rung, which **ceilings** its cells': nothing
-/// inside a container the document did not author can read
-/// [`Authored`](FieldSource::Authored), however the seed reached it. Without the
-/// ceiling a cell fed from a container `default:` would report itself authored,
-/// since [`resolve_value_sourced`] cannot tell a seeded value from a written one.
+/// inside a container the document did not author may read
+/// [`Authored`](FieldSource::Authored). [`resolve_value_sourced`] cannot tell a
+/// seeded value from a written one, so without the ceiling a cell fed from a
+/// container `default:` would report itself authored.
 fn compose(
     seed: Option<&QuillValue>,
     field: &FieldSchema,
@@ -1240,9 +1229,6 @@ main:
         );
     }
 
-    /// The ladder is per cell: an absent container reaches every leaf's own
-    /// `default:`, so a declared address is present *and* carries its author's
-    /// answer however much of the container the document left out.
     #[test]
     fn an_absent_container_reaches_every_leaf_default() {
         const YAML: &str = r#"
@@ -1276,11 +1262,8 @@ main:
         );
     }
 
-    /// The blueprint's cells and the plate's cells are cut from the same
-    /// declarations, so a value the blueprint shows is the value that renders
-    /// when the author leaves that line alone — the "shippable as-is"
-    /// affordance, which held only at card level while an absent container
-    /// short-circuited the ladder.
+    /// A value the blueprint shows is the value that renders when the author
+    /// leaves that line alone: the "shippable as-is" affordance, at any depth.
     #[test]
     fn the_blueprint_and_the_plate_agree_cell_by_cell() {
         const YAML: &str = r#"
@@ -1312,9 +1295,8 @@ main:
         );
     }
 
-    /// An `array` is a cell — arity is a fact no element declaration carries —
-    /// so it keeps its own `default:`, and each element it supplies is completed
-    /// against `items` exactly as an authored element is.
+    /// An `array` is a cell: `items:` fixes the element type but never the
+    /// arity, so it keeps its own `default:`.
     #[test]
     fn an_array_default_completes_its_elements_against_items() {
         const YAML: &str = r#"
@@ -1346,9 +1328,6 @@ main:
         );
     }
 
-    /// A container has no rung of its own: it reports the strongest rung that
-    /// contributed to it, so an absent container whose cells took defaults reads
-    /// `default` rather than claiming the floor.
     #[test]
     fn a_containers_rung_is_the_strongest_its_cells_contributed() {
         let defaulted = field(

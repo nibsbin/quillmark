@@ -325,11 +325,9 @@ Every field value comes from one of a small set of **sources**, ordered by
 *commitment*: how strongly the value claims to be the real answer. This is the
 **commitment ladder**:
 
-The ladder is cut per **cell**, not per field. A cell is any leaf, an `array`
-(arity is a fact no element declaration carries), and a variant discriminant. An
-`object` and a variant's world are **namespaces**: they hold no value of their
-own, and theirs is the composition of their cells'. See
-[Cells and namespaces](#cells-and-namespaces).
+The ladder is cut per **cell**, not per field: see
+[Cells and namespaces](#cells-and-namespaces) for which shapes are which, and
+what follows for literals and for absence.
 
 | Rung | Source | Persisted into a `Document`? | Renders? |
 |---|---|---|---|
@@ -396,11 +394,9 @@ Two rules follow, and between them the plate is total at every depth:
   exactly as an authored element is, and writing `contact: {}` is a no-op rather
   than an edit that changes the render.
 
-A namespace has no rung of its own, so [`resolve()`](#the-resolved-value-view-resolve)
-reports the strongest rung that contributed: `authored` if the document wrote any
-of it, else `default` if any cell below resolved to one, else the floor. Nothing
-inside a container the document did not author can read `authored`, however the
-seed reached it.
+A namespace has no rung of its own, so what
+[`resolve()`](#the-resolved-value-view-resolve) reports for one is derived: see
+that section.
 
 The consumer-side `Document`-payload × schema join is a **non-goal**:
 [`resolve()`](#the-resolved-value-view-resolve) supersedes it. The
@@ -429,14 +425,15 @@ value, source }` rows in declaration order: order is structural, not object-key
 order. The card body is a `body` sibling on the card, not a row in `fields`:
 present iff the kind enables a body (`enabled: false` undeclares it, so `body` is
 `null`), its source only ever `authored` (non-blank) or `blank` (blank).
-Source is one rung per **field**, and a container's is the strongest rung that
-contributed to it ([Cells and namespaces](#cells-and-namespaces)): a container
-authored at all reads `authored` however much of it the document left to the
-floor, and an absent one reads `default` when any cell below took a `default:`.
-So the rung answers *"does anything here come from the schema"* at any depth,
-but not *which cell*. Per-subpath rows are a further view: the descent computes
-each cell's rung already, so exposing them is additive to this shape rather than
-a second resolver, and waits on a consumer naming the call site.
+Source is one rung per **field**. A namespace holds no rung of its own
+([Cells and namespaces](#cells-and-namespaces)), so it reports the strongest that
+contributed: `authored` when the document wrote any of it, else `default` when a
+cell below resolved to one, else the floor. Nothing inside a container the
+document did not author reads `authored`, however the seed reached it. So the
+rung answers *"does anything here come from the schema"* at any depth, but not
+*which cell*. Per-subpath rows are a further view: the descent computes each
+cell's rung already, so exposing them is additive to this shape rather than a
+second resolver, and waits on a consumer naming the call site.
 
 Value and provenance only. The view carries no diagnostics: completeness and
 errors stay `Quill::validate`'s, which a consumer merges with its own producers

@@ -308,10 +308,8 @@ fn well_formed_seed_overlay_yields_no_seed_diagnostics() {
     );
 }
 
-/// A typed dictionary carries no `example:` of its own — it is a namespace —
-/// so the seed composes one from the examples its properties declare, and stays
-/// absent when none of them declare any. Without the descent a nested `example:`
-/// would be unreachable at every projection: the render floor never emits one.
+/// A typed dictionary's seed composes from the examples its properties declare,
+/// and stays absent when none of them declare any.
 #[test]
 fn a_dictionarys_seed_is_composed_from_its_properties_examples() {
     let quill = quill_from_yaml(

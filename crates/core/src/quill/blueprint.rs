@@ -344,12 +344,9 @@ fn property_cell(
 /// carries, at `path` relative to the field value (`[]` at card level).
 ///
 /// An **array** `default:` is shippable as-is, so it renders verbatim and its
-/// subtree carries neither marker nor annotation. A **typed dictionary** has no
-/// `default:` to render — it is a namespace, and a literal on it is a load error
-/// (`quill::default_on_namespace`) — so it always expands per property, each cell
-/// showing its own `default:` › `example:` › blank. That expansion is what the
-/// render floor now produces for an absent container, so the blueprint's cells
-/// and the plate's agree cell by cell.
+/// subtree carries neither marker nor annotation. A **typed dictionary** holds no
+/// literal to render (`quill::default_on_namespace`), so it always expands per
+/// property — the cells the render floor fills from those same declarations.
 fn container_cell(
     field: &FieldSchema,
     path: &[PathSegment],
@@ -615,9 +612,8 @@ main:
         assert_eq!(doc1, doc2, "a deep blueprint must round-trip");
     }
 
-    /// A nested container's cells carry their own defaults, and each covered
-    /// leaf asks for nothing — the same cells the render floor now fills from
-    /// the same declarations.
+    /// A nested container's cells carry their own defaults, and a covered leaf
+    /// asks for nothing.
     #[test]
     fn a_nested_containers_leaf_defaults_cover_their_own_cells() {
         let t = cfg(r#"
@@ -1018,9 +1014,8 @@ main:
     }
 
     #[test]
-    /// The "wholly skippable dictionary" is spelled as a type-empty `default:`
-    /// on each property — the spelling `default: {}` on the container used to
-    /// approximate, and the only one whose cells the render floor can reach.
+    /// A wholly skippable dictionary is spelled as a type-empty `default:` on
+    /// each property.
     fn typed_dict_with_type_empty_property_defaults_asks_for_nothing() {
         let t = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
@@ -1062,9 +1057,6 @@ main:
         assert!(t.contains("  zip: \"\" # string\n"));
     }
 
-    /// A typed dictionary always expands per property, each cell showing its
-    /// own `default:` — the cells the render floor fills from the same
-    /// declarations, so the two projections agree cell by cell.
     #[test]
     fn typed_dict_endorsed_per_property_renders_block_mapping() {
         let t = cfg(r#"
@@ -1090,8 +1082,6 @@ main:
         );
     }
 
-    /// A property's `example:` surfaces as its own `# e.g.` hint beside its
-    /// cell, since the container has no literal to hold one for it.
     #[test]
     fn typed_dict_property_example_keeps_its_own_eg_line() {
         let t = cfg(r#"
