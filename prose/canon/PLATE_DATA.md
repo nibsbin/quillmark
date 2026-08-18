@@ -142,6 +142,13 @@ does, at whatever depth that is. This is the pdfform resolver's grammar
 grammar is written twice, in two languages, and held to one table by
 `quillmark/tests/address_grammar.rs`.
 
+**An address the grammar admits is a key the plate carries.** The blank-fill is
+total at every depth ([SCHEMAS.md](SCHEMAS.md#blank-filled-render)), so a
+declared address resolves however much of its container the document left out:
+`data.contact.address.city` is a direct read, never a guarded one. This is the
+converse of the `$`-metadata rule above — those keys are read with a total
+accessor *because* they may be absent, and a declared field may not be.
+
 Cards carry their canonical prefix as `$path`, so a plate composes a card
 address without reimplementing the kind+ordinal grammar:
 `field-region(card.at("$path") + "$body")`. A body is content rather than a
