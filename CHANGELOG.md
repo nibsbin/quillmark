@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.108.1 - 2026-08-19
 
 - fix: **a content cell under `variants:` is readable at its codec.**
   `schema_at`, the walk behind `reader.get_content_at`, stepped `items` and
@@ -13,6 +13,11 @@
   stale row index does; a name no world declares is `edit::unknown_field`, and a
   variantless enum stays a scalar. The write is unchanged — a variant container
   has no per-cell op address and needs none, committing whole.
+
+<!-- seed: commits since v0.108.0, confirm the entries above cover them, then delete this comment
+- fix: a content cell under `variants:` reads at its codec
+-->
+
 
 ## v0.108.0 - 2026-08-18
 
