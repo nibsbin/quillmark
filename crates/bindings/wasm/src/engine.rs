@@ -1117,7 +1117,8 @@ impl Document {
     /// and [`reader.getContent`](Self::reader_get_content) with the path spelled
     /// out. `path` is a `PathStep[]` from the field to the leaf — `[0]` an
     /// element of an `array<richtext>`, `["motto"]` an `object`'s content
-    /// property, `[1, "notes"]` a leaf under both.
+    /// property, `[1, "notes"]` a leaf under both, `["controlled_by"]` a
+    /// variant's cell.
     ///
     /// The codec is the leaf's declared type's, so the caller stops deciding
     /// what an element's stored bytes mean. Total over the storage form, as the

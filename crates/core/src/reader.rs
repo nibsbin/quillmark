@@ -101,9 +101,9 @@ impl<'a> TypedReader<'a> {
     }
 
     /// Read the [`Content`] *nested inside* a composite field at `at`: an
-    /// `array<richtext>` element, an `object`'s content property, or a leaf
-    /// under both (`cells[1].notes`). [`get_content`](Self::get_content) is the
-    /// empty path.
+    /// `array<richtext>` element, an `object`'s content property, a leaf under
+    /// both (`cells[1].notes`), or a variant's cell.
+    /// [`get_content`](Self::get_content) is the empty path.
     ///
     /// The codec is the leaf's, resolved by walking `at` through the field
     /// schema — the same walk `conform` and rest enforcement take, so a stored
@@ -113,8 +113,9 @@ impl<'a> TypedReader<'a> {
     /// `Ok(None)` for an absent field **and for a path that names nothing in
     /// the stored value**: an editor's row index goes stale between derive and
     /// read, so absence on the axis a repeater mutates is a read, not a fault.
-    /// A bad *card* index still raises, [`card`](Self::card) being guarded by a
-    /// count the caller holds.
+    /// A cell of a variant world that is not live reads the same way, the
+    /// schema walk unioning the worlds. A bad *card* index still raises,
+    /// [`card`](Self::card) being guarded by a count the caller holds.
     ///
     /// [`EditError::UnknownField`] for a name at any depth the schema does not
     /// declare, anchored at that name (`main.letterhead.nope`) rather than
@@ -306,6 +307,16 @@ fn schema_at<'a>(
                     at: at[..=depth].to_vec(),
                 })?,
             },
+            // Which world is live is a value-time fact, so the walk unions the
+            // worlds: a dormant cell resolves here and reads absent at
+            // `value_at`. The guard holds a variantless enum to a scalar, which
+            // `variant_field` alone would answer as an unknown cell.
+            (FieldType::Enum, PathSegment::Key(key)) if cursor.is_variant_bearing() => cursor
+                .variant_field(key)
+                .ok_or_else(|| EditError::UnknownField {
+                    field: name.to_string(),
+                    at: at[..=depth].to_vec(),
+                })?,
             _ => return Err(blocked),
         };
     }
@@ -392,6 +403,25 @@ main:
         properties:
           notes:
             type: richtext
+    plain_enum:
+      type: enum
+      values: [a, b]
+    classification:
+      type: enum
+      values: [UNCLASSIFIED, CUI]
+      variants:
+        CUI:
+          controlled_by:
+            type: plaintext
+          banner:
+            type: richtext
+          count:
+            type: integer
+          nest:
+            type: object
+            properties:
+              deep:
+                type: richtext
 card_kinds:
   note:
     fields:
@@ -659,6 +689,110 @@ card_kinds:
             .unwrap(),
             None
         );
+    }
+
+    fn cui_doc() -> Document {
+        let mut doc = blank_doc();
+        doc.main_mut()
+            .store_field(
+                "classification",
+                QuillValue::from_json(serde_json::json!({
+                    "value": "CUI",
+                    "controlled_by": "a *literal* line",
+                    "banner": "Hello **world**",
+                    "count": 3,
+                    "nest": {"deep": "a *note*"},
+                })),
+            )
+            .unwrap();
+        doc
+    }
+
+    #[test]
+    fn variant_cell_reads_at_its_declared_codec() {
+        let config = config();
+        let doc = cui_doc();
+        let view = TypedReader::new(&config, &doc);
+        assert_eq!(
+            view.get_content_at("classification", &key("controlled_by")).unwrap().unwrap().text,
+            "a *literal* line",
+            "a plaintext cell decodes literally, as a card-level one does"
+        );
+        assert_eq!(
+            view.get_content_at("classification", &key("banner")).unwrap().unwrap().text,
+            "Hello world"
+        );
+        assert_eq!(
+            view.get_content_at(
+                "classification",
+                &[PathSegment::Key("nest".into()), PathSegment::Key("deep".into())]
+            )
+            .unwrap()
+            .unwrap()
+            .text,
+            "a note",
+            "the walk continues past the cell into its own subtree"
+        );
+    }
+
+    #[test]
+    fn a_dormant_worlds_cell_reads_absent() {
+        let config = config();
+        let mut doc = blank_doc();
+        doc.main_mut()
+            .store_field(
+                "classification",
+                QuillValue::from_json(serde_json::json!("UNCLASSIFIED")),
+            )
+            .unwrap();
+        assert_eq!(
+            TypedReader::new(&config, &doc)
+                .get_content_at("classification", &key("controlled_by"))
+                .unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn a_variant_step_the_schema_cannot_take_is_blocked() {
+        let config = config();
+        let doc = cui_doc();
+        let view = TypedReader::new(&config, &doc);
+        assert!(matches!(
+            view.get_content_at("classification", &key("count")),
+            Err(EditError::FieldNotContent { declared, .. }) if declared == "integer"
+        ));
+        assert!(
+            matches!(
+                view.get_content_at("plain_enum", &key("a")),
+                Err(EditError::FieldNotContent { declared, .. }) if declared == "enum"
+            ),
+            "a variantless enum is a scalar, not a container"
+        );
+        assert!(matches!(
+            view.get_content_at("classification", &idx(0)),
+            Err(EditError::FieldNotContent { declared, .. }) if declared == "enum"
+        ));
+        assert!(matches!(
+            view.get_content_at("classification", &[]),
+            Err(EditError::FieldNotContent { declared, .. }) if declared == "enum"
+        ));
+    }
+
+    #[test]
+    fn a_cell_no_world_declares_is_unknown_field() {
+        let config = config();
+        let doc = cui_doc();
+        let view = TypedReader::new(&config, &doc);
+        for name in ["nope", "value"] {
+            assert!(
+                matches!(
+                    view.get_content_at("classification", &key(name)),
+                    Err(EditError::UnknownField { at, .. }) if at == key(name)
+                ),
+                "`{name}` anchors through the failed step"
+            );
+        }
     }
 
     #[test]

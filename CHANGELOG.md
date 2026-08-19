@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- fix: **a content cell under `variants:` is readable at its codec.**
+  `schema_at`, the walk behind `reader.get_content_at`, stepped `items` and
+  `properties` where conform steps `variants` as well, so a key into a variant
+  container fell to the catch-all and answered `edit::field_not_content` naming
+  `enum` — for a cell the same config declares `plaintext`. Such a cell stored,
+  conformed, seeded, validated and rendered, and nothing could read it back, so
+  no consumer could mount a content editor over it. The walk unions the worlds,
+  so a cell of a world that is not live reads absent rather than raising, as a
+  stale row index does; a name no world declares is `edit::unknown_field`, and a
+  variantless enum stays a scalar. The write is unchanged — a variant container
+  has no per-cell op address and needs none, committing whole.
+
 ## v0.108.0 - 2026-08-18
 
 - fix: **the value ladder is cut per cell, so the plate is total at every

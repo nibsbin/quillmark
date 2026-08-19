@@ -96,7 +96,7 @@ The ceiling is deliberate and enforced at load rather than discovered at render:
 | a variant field named `value` | `quill::variant_reserved_field_name` |
 | a name two variants declare *differently* | `quill::variant_field_collision` |
 
-A variant cell carries any type a card field may — prose, dates and containers included. Every surface reaches it through the same dispatcher a card field uses — coercion through `conform_value`, validation through `validate_value`, the render floor through `resolve_value`, lowering through the schema-node walk ([PLATE_DATA.md](PLATE_DATA.md)) — so it behaves as a card-level field of that type does. What a cell does not carry is `ui.group` (it inherits the discriminant's) or `variants:` of its own.
+A variant cell carries any type a card field may — prose, dates and containers included. Every surface reaches it through the same dispatcher a card field uses — coercion through `conform_value`, validation through `validate_value`, the render floor through `resolve_value`, lowering through the schema-node walk ([PLATE_DATA.md](PLATE_DATA.md)), the content read through `get_content_at` — so it behaves as a card-level field of that type does. What a cell does not carry is `ui.group` (it inherits the discriminant's) or `variants:` of its own.
 
 **Why `variants:` alone stays card-level.** Every other container's shape is a
 function of the schema; a variant's is a function of the schema *and* the
@@ -174,11 +174,12 @@ write remains their canonicalizer.
 **A content leaf is readable at its codec wherever it sits in that subtree, not
 only when the field itself is one.** `reader.get_content(name)` answers for a
 whole-field leaf; `reader.get_content_at(name, path)` walks the same `items` /
-`properties` axis conform walks, reaching an `array<richtext>` element, an
-`object`'s content property, or a leaf under both. Without it the caller reads
-the stored element and decides for itself what the bytes mean, which is the
-judgement the resting form exists to remove. The caller also has less to decide
-with: the codec is a schema fact, and the stored shape does not carry it.
+`properties` / `variants` axis conform walks, reaching an `array<richtext>`
+element, an `object`'s content property, a leaf under both, or a variant's cell.
+Without it the caller reads the stored element and decides for itself what the
+bytes mean, which is the judgement the resting form exists to remove. The caller
+also has less to decide with: the codec is a schema fact, and the stored shape
+does not carry it.
 
 ### A declared type change rewrites stored values
 

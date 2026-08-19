@@ -1205,7 +1205,8 @@ export class DocumentReader {
 	/**
 	 * Read the `Content` nested inside the composite field at `addr`, at `path`:
 	 * `[0]` an `array<richtext>` element, `["motto"]` an object's content property,
-	 * `[1, "notes"]` a leaf under both. The codec is the leaf's declared type's.
+	 * `[1, "notes"]` a leaf under both, `["controlled_by"]` a variant's cell. The
+	 * codec is the leaf's declared type's.
 	 * `undefined` for an absent field and for a path that names nothing stored;
 	 * throws `UnknownField`, `FieldNotContent` when `path` resolves to no content
 	 * leaf, `FieldDecode` anchored at the addressed path, and `IndexOutOfRange`.
