@@ -771,10 +771,10 @@ export declare class DocumentReader {
 	/**
 	 * Read the `Content` nested inside the composite field at `addr`, at `path`:
 	 * `[0]` an element of an `array<richtext>`, `["motto"]` an object's content
-	 * property, `[1, "notes"]` a leaf under both. The codec is the leaf's declared
-	 * type's, resolved through the field schema's `items` / `properties`, so the
-	 * element's storage form is not the caller's business. The empty path is
-	 * {@link getContent}.
+	 * property, `[1, "notes"]` a leaf under both, `["controlled_by"]` a variant's
+	 * cell. The codec is the leaf's declared type's, resolved through the field
+	 * schema's `items` / `properties` / `variants`, so the element's storage
+	 * form is not the caller's business. The empty path is {@link getContent}.
 	 *
 	 * `undefined` for an absent field and for a path that names nothing in the
 	 * stored value: a repeater's row index goes stale between derive and read,
