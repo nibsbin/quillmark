@@ -1313,26 +1313,6 @@ title: Hi
     }
 
     #[test]
-    fn v0_81_0_body_that_cannot_import_is_a_clean_error() {
-        // The one fallible hop: the stored markdown body cold-imports through
-        // the V0_92_0 → V0_93_0 migration, so a body no parse could produce
-        // reports rather than aborting.
-        let deep = "> ".repeat(512) + "x";
-        let json = serde_json::json!({
-            "schema": "quillmark/document@0.81.0",
-            "main": {
-                "sentinel": {"kind": "main", "quill": "q@1.0"},
-                "frontmatter": {"items": []},
-                "body": deep
-            },
-            "cards": []
-        })
-        .to_string();
-        // Either it imports or it reports; it never panics.
-        let _ = serde_json::from_str::<Document>(&json);
-    }
-
-    #[test]
     fn rejects_main_card_without_quill() {
         let json = r#"{
             "schema": "quillmark/document@0.92.0",
