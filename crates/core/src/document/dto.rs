@@ -18,12 +18,11 @@
 //!   per-field `nested_fills` list and the `$seed` item variant, body as a
 //!   markdown string. Read-only: the body cold-imports and the document
 //!   migrates forward to V0_93_0 on read.
-//! - **`quillmark/document@0.82.0`**: the same unified item list without
-//!   `nested_fills` or `$seed`, plus the `$id` item. Its tag names a shape
-//!   *union*, not a frozen format: `0.83.0` added `$ext` in place under the
-//!   unchanged tag, and every release through `0.91.0` wrote it. Read-only,
-//!   and the one **lossy** hop: `$id` is dropped, having no live counterpart
-//!   since `0.100.0` removed it.
+//! - **`quillmark/document@0.82.0`**: the same item list without
+//!   `nested_fills` or `$seed`, plus `$id`. The tag names a shape **union**
+//!   rather than one frozen format — `$ext` entered under it unchanged — so
+//!   the reader accepts every shape stamped with it. Read-only, and the one
+//!   **lossy** hop: `$id` has no live counterpart and is dropped.
 //! - **`quillmark/document@0.81.0`**: the oldest wire format still read. The
 //!   pre-unification shape: a separate `sentinel` (the typed `$quill` /
 //!   `$kind`) beside a `frontmatter` item list carrying user fields and
@@ -633,11 +632,9 @@ impl From<CommentPathSegmentV0_92_0> for CommentPathSegment {
 
 // ─── V0_81_0 wire format ──────────────────────────────────────────────────────
 //
-// Read + migrate-forward only. `0.81.0` is the sole release that wrote this tag,
-// so unlike `@0.82.0` it names one frozen shape.
-//
-// It predates `$id` (`0.82.0`) and `$ext` (`0.83.0`), so the forward hop below
-// loses nothing.
+// Read + migrate-forward only. One release wrote this tag, so unlike `@0.82.0`
+// it names one frozen shape. It carries neither `$id` nor `$ext`, so the hop
+// below is lossless.
 
 /// Frozen `0.81.0` representation of a [`Document`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -711,9 +708,8 @@ pub enum CommentPathSegmentV0_81_0 {
 
 // ─── V0_81_0 → V0_82_0 migration ──────────────────────────────────────────────
 //
-// Structural: the sentinel becomes a prelude of typed `$` items and every other
-// item maps 1:1. Typed validation — quill reference, field names, depth —
-// happens once, further down the chain.
+// Quill-reference, field-name, and depth validation happen once, further down
+// the chain.
 
 impl From<DocumentV0_81_0> for DocumentV0_82_0 {
     fn from(d: DocumentV0_81_0) -> Self {
@@ -728,9 +724,8 @@ impl From<CardV0_81_0> for CardV0_82_0 {
     fn from(c: CardV0_81_0) -> Self {
         let mut items: Vec<PayloadItemV0_82_0> = Vec::new();
 
-        // `Main` implies `$kind: main`, which V0_81_0 left implicit in the
-        // sentinel; the reconstructed model carries it so the markdown emit
-        // produces a parseable document.
+        // The sentinel leaves `$kind: main` implicit; the live model needs it
+        // explicit for the markdown emit to produce a parseable document.
         match c.sentinel {
             SentinelV0_81_0::Main { quill } => {
                 items.push(PayloadItemV0_82_0::Quill { value: quill });
@@ -743,8 +738,8 @@ impl From<CardV0_81_0> for CardV0_82_0 {
             }
         }
 
-        // V0_81_0 tracked no `$`-line comments, so comment positions migrate
-        // as-is, after the `$` prelude.
+        // Comments migrate as-is, landing after the `$` prelude: V0_81_0
+        // tracks no `$`-line comments to interleave them with.
         for item in c.frontmatter.items {
             items.push(match item {
                 FrontmatterItemV0_81_0::Field { key, value, fill } => {
@@ -797,10 +792,9 @@ impl From<CommentPathSegmentV0_81_0> for CommentPathSegmentV0_82_0 {
 
 // ─── V0_82_0 wire format ──────────────────────────────────────────────────────
 //
-// Read + migrate-forward only. Its tag names a shape *union*, not a frozen
-// format: `0.83.0` added `Ext` in place under the unchanged tag, and every
-// release through `0.91.0` wrote it. Accepting the union is what lets a row
-// from any of those writers load.
+// Read + migrate-forward only. The tag names a shape union, not one frozen
+// format: `Ext` entered under it unchanged. Accepting the union is what lets a
+// row from any writer that stamped `@0.82.0` decode here.
 
 /// Frozen `0.82.0` representation of a [`Document`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -835,10 +829,11 @@ pub enum PayloadItemV0_82_0 {
     Quill { value: String },
     /// `$kind` system metadata.
     Kind { value: String },
-    /// `$id` system metadata. The live model has no counterpart: `0.100.0`
-    /// removed `$id`, so this is the one item the forward migration drops.
+    /// `$id` system metadata. The live model has no counterpart, so this is
+    /// the one item the forward migration drops.
     Id { value: String },
-    /// `$ext` system metadata. Added by `0.83.0` under this same tag.
+    /// `$ext` system metadata: an opaque mapping carrying out-of-band
+    /// extension data.
     Ext {
         value: serde_json::Map<String, serde_json::Value>,
     },
@@ -873,14 +868,10 @@ pub enum CommentPathSegmentV0_82_0 {
     Index(usize),
 }
 
-// ─── V0_82_0 → V0_92_0 migration (lossy: `$id` is dropped) ────────────────────
+// ─── V0_82_0 → V0_92_0 migration ──────────────────────────────────────────────
 //
-// Every item maps 1:1 but `Id`, which has no live counterpart since `0.100.0`
-// removed `$id`. Dropping it is the deliberate trade: the alternative is
-// refusing to read the row at all, and `$id` reached no backend and was never
-// read by the engine. A consumer that kept a key there re-establishes it under
-// a `$ext` namespace it owns. The V0_92_0 additions are absent by construction:
-// `nested_fills` empty, no `Seed`.
+// Lossy by decision: `$id` has no live counterpart, and dropping it is chosen
+// over refusing the row.
 
 impl From<DocumentV0_82_0> for DocumentV0_92_0 {
     fn from(d: DocumentV0_82_0) -> Self {
@@ -918,7 +909,7 @@ impl From<PayloadV0_82_0> for PayloadV0_92_0 {
 }
 
 impl PayloadItemV0_92_0 {
-    /// `None` for the `$id` item, which has no live counterpart.
+    /// `None` for `$id`, which has no live counterpart.
     fn from_v0_82_0(item: PayloadItemV0_82_0) -> Option<Self> {
         Some(match item {
             PayloadItemV0_82_0::Id { .. } => return None,
@@ -1154,8 +1145,6 @@ title: Hi
 
     #[test]
     fn v0_82_0_ext_item_loads() {
-        // `$ext` was added under the unchanged `@0.82.0` tag by `0.83.0`, so a
-        // row from any writer through `0.91.0` carries it.
         let json = r#"{
             "schema": "quillmark/document@0.82.0",
             "main": {
@@ -1174,8 +1163,6 @@ title: Hi
 
     #[test]
     fn v0_82_0_id_item_is_dropped_not_rejected() {
-        // The one lossy hop. `$id` left the live model in `0.100.0`; a row
-        // carrying it loads without it rather than failing to load at all.
         let json = r#"{
             "schema": "quillmark/document@0.82.0",
             "main": {
@@ -1202,8 +1189,8 @@ title: Hi
 
     #[test]
     fn v0_82_0_seed_item_is_rejected() {
-        // `$seed` is what the `@0.92.0` bump was for; it is not a legal
-        // `@0.82.0` item, so a blob claiming the older tag must not load.
+        // `$seed` is what the `@0.92.0` bump added: a blob claiming the older
+        // tag cannot legitimately carry one.
         let json = r#"{
             "schema": "quillmark/document@0.82.0",
             "main": {
@@ -1274,9 +1261,9 @@ title: Hi
 
     #[test]
     fn v0_81_0_comments_and_fill_survive_the_migration() {
-        // The two things the sentinel split could have dropped: comment order
-        // relative to the `$` prelude, and nested-comment paths, which V0_81_0
-        // carried in the same payload-level absolute form V0_92_0 uses.
+        // The two the sentinel split could drop: comment order against the `$`
+        // prelude, and nested-comment paths, whose absolute payload-level form
+        // V0_81_0 and V0_92_0 share.
         let json = r#"{
             "schema": "quillmark/document@0.81.0",
             "main": {
@@ -1306,8 +1293,7 @@ title: Hi
         assert!(md.contains("!must_fill"), "{md}");
         assert!(md.contains("# inline note"), "{md}");
 
-        // The migrated document equals the same document re-parsed from its
-        // own markdown: the migration invents nothing the parser would not.
+        // The migration invents nothing the parser would not.
         let reparsed = Document::parse(&md).unwrap().document;
         assert_eq!(doc, reparsed);
     }
