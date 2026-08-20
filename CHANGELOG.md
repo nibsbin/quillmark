@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.108.2 - 2026-08-20
 
 - fix(core): **storage blobs tagged `@0.81.0` and `@0.82.0` load again.** Both
   tags migrate forward on read instead of failing as an unknown schema version.
@@ -53,6 +53,27 @@
   sequence item (`- {}`) and a wholly empty `$ext: {}` already used, so an
   emptied container survives the round-trip as the value a consumer stored.
 
+<!-- seed: commits since v0.108.1, confirm the entries above cover them, then delete this comment
+- docs(canon): record that @0.81.0 is the oldest tag that exists
+- docs: leave the applied migration guide untouched
+- docs: dense-prose pass on the DTO backfill
+- test(core): drop the vacuous V0_81_0 body-import test
+- fix(core): restore the V0_82_0 read shim; 0.82.0 was never yanked (#1327)
+- chore(deps): bump the cargo group with 2 updates
+- chore(deps): bump taiki-e/install-action in the actions group
+- fix(core): restore the V0_81_0 storage read shim (#1327)
+- docs: changelog entry for the simplify sweep
+- refactor(core)!: apply simplify-review cleanups to the session seam
+- docs(pdf): trim test helper doc to its contract
+- refactor(core/document): apply simplify-review cleanups
+- refactor(pdf): apply simplify-review cleanups
+- refactor(typst): apply simplify-review cleanups
+- refactor(core/quill): apply simplify-review cleanups
+- refactor(content): apply simplify-review cleanups
+- fix: an empty mapping emits as `{}` rather than losing its key
+-->
+
+
 ## v0.108.1 - 2026-08-19
 
 - fix: **a content cell under `variants:` is readable at its codec.**
@@ -66,11 +87,6 @@
   stale row index does; a name no world declares is `edit::unknown_field`, and a
   variantless enum stays a scalar. The write is unchanged — a variant container
   has no per-cell op address and needs none, committing whole.
-
-<!-- seed: commits since v0.108.0, confirm the entries above cover them, then delete this comment
-- fix: a content cell under `variants:` reads at its codec
--->
-
 
 ## v0.108.0 - 2026-08-18
 
