@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- fix(core): **storage blobs tagged `@0.81.0` load again.** The `V0_81_0` read
+  shim retired in #929 is restored: a stored document carrying
+  `quillmark/document@0.81.0` migrates forward to the current model on read
+  instead of failing as an unknown schema version. #929 retired it on the basis
+  that nothing persisted on this lineage predates `@0.92.0`; #1327 reports
+  stored rows in that shape, so the premise was wrong. The migration is
+  structural (the sentinel becomes a prelude of typed `$` items, every other
+  item maps 1:1) and targets `V0_92_0` directly, skipping `@0.82.0`. The write
+  path is untouched: re-serializing a migrated row emits `@0.93.0`.
+
+  `@0.82.0` stays unreadable, on two grounds that do not apply to `@0.81.0`:
+  its tag never named one frozen shape (`0.82.0` was yanked, so `0.83.0`
+  extended that DTO in place under the same tag and every release through
+  `0.91.0` wrote it), and it carries the `$id` payload item that `0.100.0`
+  removed from the live model as a hard cutover. Reading it needs a policy
+  decision for `$id`, not just a restored type tree (#1327)
+
 - refactor!: **one definition per mechanism across the rust crates.** A
   whole-codebase simplify pass: the typst session compiles through one
   `recompile` pipeline whose derived tables (regions, span windows, page hashes)

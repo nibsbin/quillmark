@@ -78,15 +78,32 @@ document came through the bound door) live on the `Parsed` record, not on
 their `Document` handle as session state and exclude them from `equals` and
 the DTO alike.
 
-### Legacy schema (V0_92_0)
+### Legacy schemas (V0_92_0, V0_81_0)
 
 Documents written before `0.93.0` carry
 `"schema": "quillmark/document@0.92.0"` and store the card `body` as a
 markdown string rather than the embedded canonical content. Readers accept
 them and migrate forward to V0_93_0 on load; writers do not produce this
 shape. The one hop that can reject is the body cold-import (see
-Byte-stability). Tags older than `@0.92.0` (`@0.81.0`, `@0.82.0`) have no
-reader; a blob carrying one is rejected as an unknown schema version.
+Byte-stability).
+
+`"schema": "quillmark/document@0.81.0"` is the oldest tag read: the
+pre-unification shape, a separate `sentinel` beside a `frontmatter` item
+list. It migrates to V0_92_0 in one structural hop, skipping `@0.82.0`.
+
+`@0.82.0` has **no reader**, and is the one tag between two readable ones.
+Two facts disqualify it, both absent from `@0.81.0`:
+
+- Its tag never named one frozen shape. `0.82.0` was yanked, so `0.83.0`
+  extended that DTO in place under the same tag (adding `$ext`) rather than
+  versioning to `@0.83.0`; every release through `0.91.0` wrote it. A reader
+  for it would be a reader for a shape union, not a schema version.
+- It carries the `$id` payload item, which `0.100.0` removed from the live
+  model as a hard cutover. Reading one demands a policy for `$id` — reject,
+  drop, or lift into `$ext` — that the live model has no answer to.
+
+`0.81.0` is the sole release that wrote `@0.81.0`, and that shape predates
+`$id`, so neither applies.
 
 ## Byte-stability
 
@@ -464,10 +481,12 @@ pathologically over-nested legacy body is rejected
 (`StorageError::Malformed`) rather than silently truncated. Only the newest
 DTO converts to the live `Document`; a `0.92.0` blob migrates one hop first.
 
-Schema tags older than `0.92.0` (`@0.81.0`, `@0.82.0`) have no reader: a
-blob carrying one is rejected as an unknown version. Their shims are retired
-because no stored population in those shapes remains on this lineage (see
-"Adding a Schema Version" on retiring a variant).
+`0.81.0` is the oldest tag read. Its migration to V0_92_0 is structural: the
+sentinel becomes a prelude of typed `$` items, every other item maps 1:1, and
+the V0_92_0 additions are absent by construction (`nested_fills` empty, no
+`seed`). It targets V0_92_0 directly rather than chaining through `@0.82.0`,
+which has no reader (see "Legacy schemas" for why that tag alone is
+unreadable).
 
 ## Adding a Schema Version
 
@@ -522,9 +541,14 @@ per version bump.
 
 A legacy variant may be **retired**: its DTO tree, migration, and tests
 deleted: once a product/release-history call confirms no stored population
-remains in that shape (the `0.81.0` and `0.82.0` shims were dropped this
-way). A row that later surfaces in a retired shape then fails as an unknown
-version, so retirement is reserved for shapes with no live rows.
+remains in that shape. A row that later surfaces in a retired shape then
+fails as an unknown version, so retirement is reserved for shapes with no
+live rows, and the evidence for "no live rows" is what the call turns on. The
+`@0.81.0` retirement was reversed on a consumer report of stored rows in that
+shape, which restoring a frozen tree and its migration answers. Retirement is
+therefore cheap to undo while the deleted tree remains recoverable from
+history, and the chain need not be contiguous: `@0.82.0` stays retired
+between two readable tags.
 
 ## Gotchas
 
