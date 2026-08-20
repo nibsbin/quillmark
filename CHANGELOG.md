@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- refactor!: **one definition per mechanism across the rust crates.** A
+  whole-codebase simplify pass: the typst session compiles through one
+  `recompile` pipeline whose derived tables (regions, span windows, page hashes)
+  are built per commit instead of per query; the pdf reader's scan plumbing
+  (`object_dict`, `open_trailer`, `dict_end`, `ws_end`) and the page-dict array
+  splice are single definitions shared by stamp and flatten; the flattened PDF
+  is shared by `Arc` instead of copied per render; emission, prescan, payload
+  assembly and validation in core lose their duplicated dispatch and their
+  per-keystroke deep clones. Two outputs shift: a blank pdfform document returns
+  the base PDF unchanged rather than appending a revision carrying two
+  unreferenced font objects, and three `quillmark-pdf` parse-failure messages
+  share one `dict not parseable` spelling (codes unchanged). Dead public API is
+  deleted: `FileTreeNode::{file_exists, dir_exists, list_files,
+  list_subdirectories}`, `Payload::contains_key`, `PayloadItem::nested_comments`,
+  `QuillValue::{string, integer, bool, null}` (the `From` impls and `from_json`
+  are the constructors), `FieldSpec::{with_schema_field, with_value,
+  with_tooltip}` (assign the fields), and `quillmark-content`'s
+  `strip_bidi_formatting` / `fix_html_comment_fences` (internal to
+  `normalize_markdown`). None had a caller in the workspace or bindings.
+
 - fix: **an empty mapping emits as `{}` rather than losing its key.** `emit_field`
   dropped an empty-object field entirely, which composes with the block form of
   its parent into markdown no parser accepts: a `$ext` whose every namespace
