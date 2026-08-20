@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- fix(core): **storage blobs tagged `@0.81.0` and `@0.82.0` load again.** Both
+  tags migrate forward on read instead of failing as an unknown schema version.
+  Migrations chain (`V0_81_0 → V0_82_0 → V0_92_0 → V0_93_0`); the write path is
+  untouched, so re-serializing a migrated row emits `@0.93.0`.
+
+  The `V0_82_0` hop is **lossy in one place**: the `$id` payload item is
+  dropped, the live model having no counterpart for it. The alternative is
+  refusing the row. A consumer that kept a key under `$id` re-establishes it
+  under a `$ext` namespace it owns.
+
+  This reverses the #929 retirement, whose two premises were both wrong. Rows
+  do predate `@0.92.0` — #1327 reports stored `@0.81.0` ones. And `0.82.0` was
+  not yanked: every published Quillmark version is live on crates.io, npm, and
+  PyPI. Because no yank happened, `@0.82.0` names a shape
+  union rather than a frozen format — every release from `0.83.0` through
+  `0.91.0` stamped it — so the restored reader accepts the union (#1327)
+
 - refactor!: **one definition per mechanism across the rust crates.** A
   whole-codebase simplify pass: the typst session compiles through one
   `recompile` pipeline whose derived tables (regions, span windows, page hashes)

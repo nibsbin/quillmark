@@ -78,15 +78,31 @@ document came through the bound door) live on the `Parsed` record, not on
 their `Document` handle as session state and exclude them from `equals` and
 the DTO alike.
 
-### Legacy schema (V0_92_0)
+### Legacy schemas (V0_92_0, V0_82_0, V0_81_0)
 
 Documents written before `0.93.0` carry
 `"schema": "quillmark/document@0.92.0"` and store the card `body` as a
 markdown string rather than the embedded canonical content. Readers accept
 them and migrate forward to V0_93_0 on load; writers do not produce this
 shape. The one hop that can reject is the body cold-import (see
-Byte-stability). Tags older than `@0.92.0` (`@0.81.0`, `@0.82.0`) have no
-reader; a blob carrying one is rejected as an unknown schema version.
+Byte-stability).
+
+`"schema": "quillmark/document@0.82.0"` is the same item list without
+`nested_fills` or `$seed`, plus `$id`. Its tag names a shape **union**
+rather than one frozen format: `$ext` entered under it unchanged, and many
+release versions stamped it. The reader accepts the union, which is what
+lets a row from any of those writers load.
+
+That hop is the one **lossy** migration: `$id` is dropped. The live model
+has no counterpart for it, so the alternative is refusing the row; `$id`
+reached no backend, which is what makes dropping it the cheaper loss.
+
+`"schema": "quillmark/document@0.81.0"` is the oldest tag that exists, not
+just the oldest one read: `0.81.0` introduced `toJson` / `fromJson`, and no
+build before it serialized a `Document` at all. Every stored blob therefore
+carries one of the four tags above, and the reader set is complete. Its shape
+is pre-unification: a separate `sentinel` beside a `frontmatter` item list. It
+carries neither `$id` nor `$ext`, so its hop to V0_82_0 is lossless.
 
 ## Byte-stability
 
@@ -448,26 +464,25 @@ current format was fixed in `0.93.0`, so the version tag is
 `quillmark/document@0.93.0`; every later patch release writes that same
 value, because patches do not change the format.
 
-The oldest wire format still read is `0.92.0`: a unified payload-item list
-(typed `$` entries living alongside user fields and comments in a single
-`Vec<PayloadItem>`), a per-field `nested_fills` list so `!must_fill` markers
-nested inside a field value survive a storage round-trip (the JSON `value`
-projection is fill-free), and the `seed` payload-item variant (the `$seed`
-per-card-kind overlay map). `0.93.0` leaves the payload model unchanged and
-instead embeds the card `body` as the **canonical content**:
-structurally, as a nested object, not a markdown string (see Byte-stability).
+`0.92.0` is a unified payload-item list (typed `$` entries living alongside
+user fields and comments in a single `Vec<PayloadItem>`), a per-field
+`nested_fills` list so `!must_fill` markers nested inside a field value
+survive a storage round-trip (the JSON `value` projection is fill-free), and
+the `seed` payload-item variant (the `$seed` per-card-kind overlay map).
+`0.93.0` leaves the payload model unchanged and instead embeds the card
+`body` as the **canonical content**: structurally, as a nested object, not a
+markdown string (see Byte-stability).
 
 The V0_92_0 → V0_93_0 migration is the one hop that can fail: it
 cold-imports the stored markdown `body` string through the same
 Markdown → richtext path `Document::parse` uses, so a
 pathologically over-nested legacy body is rejected
-(`StorageError::Malformed`) rather than silently truncated. Only the newest
-DTO converts to the live `Document`; a `0.92.0` blob migrates one hop first.
+(`StorageError::Malformed`) rather than silently truncated.
 
-Schema tags older than `0.92.0` (`@0.81.0`, `@0.82.0`) have no reader: a
-blob carrying one is rejected as an unknown version. Their shims are retired
-because no stored population in those shapes remains on this lineage (see
-"Adding a Schema Version" on retiring a variant).
+`0.81.0` is the oldest tag read, and migrations chain
+(`V0_81_0 → V0_82_0 → V0_92_0 → V0_93_0`); only the newest DTO converts to
+the live `Document`. The `V0_81_0` hop is structural, the `V0_82_0` hop is
+lossy in exactly one place — `$id` is dropped (see "Legacy schemas").
 
 ## Adding a Schema Version
 
@@ -522,9 +537,19 @@ per version bump.
 
 A legacy variant may be **retired**: its DTO tree, migration, and tests
 deleted: once a product/release-history call confirms no stored population
-remains in that shape (the `0.81.0` and `0.82.0` shims were dropped this
-way). A row that later surfaces in a retired shape then fails as an unknown
-version, so retirement is reserved for shapes with no live rows.
+remains in that shape. A row that later surfaces in a retired shape fails as
+an unknown version, so the evidence for "no live rows" is what the whole call
+turns on.
+
+Two things that evidence is not. A release version is not a schema tag: the
+tag a build stamps is the newest one its DTO carries, so one tag's population
+spans every release between its bump and the next. And prose is not registry
+state — whether a version was yanked is checkable against crates.io, npm, and
+PyPI, and only those answer it.
+
+Retirement is cheap to undo while the deleted tree is recoverable from
+history. That is the argument for retiring when the evidence holds, and for
+sourcing it from a row count rather than a version number.
 
 ## Gotchas
 
