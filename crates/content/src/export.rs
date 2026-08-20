@@ -26,7 +26,7 @@
 //! adversarial delimiter/break placement.
 
 use crate::island::KnownIslandType;
-use crate::model::{Container, Island, LineKind, MarkKind, Content, ISLAND_SLOT};
+use crate::model::{Container, Island, LineKind, Mark, MarkKind, Content, ISLAND_SLOT};
 
 /// Render a content to markdown. An island projects by **type**: a type this
 /// build knows emits its markdown, any other a placeholder comment.
@@ -449,24 +449,7 @@ fn render_inline(ctx: &Ctx, i: usize, escape_leading_block: bool) -> String {
     let chars: Vec<char> = text.chars().collect();
     let n = chars.len();
 
-    let mut code_ranges: Vec<(usize, usize)> = Vec::new();
-    let mut fmt: Vec<(usize, usize, &MarkKind)> = Vec::new();
-    let mut links: Vec<(usize, usize, &str)> = Vec::new();
-    for m in &ctx.rt.marks {
-        let s = m.start.saturating_sub(line_start);
-        let e = m.end.saturating_sub(line_start);
-        if m.end <= line_start || m.start >= line_start + n {
-            continue; // outside this line
-        }
-        let s = s.min(n);
-        let e = e.min(n);
-        match &m.kind {
-            MarkKind::Anchor { .. } => {} // omitted from the projection
-            MarkKind::Code => code_ranges.push((s, e)),
-            MarkKind::Link { url } => links.push((s, e, url)),
-            _ => fmt.push((s, e, &m.kind)),
-        }
-    }
+    let (code_ranges, fmt, links) = bucket_marks(&ctx.rt.marks, line_start, n, false);
 
     // Leading ordered-list marker: a line whose text starts `<digits>.` or
     // `<digits>)` would re-import as an ordered list, so escape that punctuation.
@@ -503,6 +486,43 @@ fn render_inline(ctx: &Ctx, i: usize, escape_leading_block: bool) -> String {
             })
         },
     )
+}
+
+/// Route `marks` into the three lists [`render_marked_core`] takes, each range
+/// clipped to the `n` chars starting at `line_start` and rebased to local
+/// offsets. Anchors are dropped: the projection has no syntax for them.
+/// `drop_empty` also drops a range the clip left empty, which a cell wants and
+/// a prose line does not.
+fn bucket_marks(
+    marks: &[Mark],
+    line_start: usize,
+    n: usize,
+    drop_empty: bool,
+) -> (
+    Vec<(usize, usize)>,
+    Vec<(usize, usize, &MarkKind)>,
+    Vec<(usize, usize, &str)>,
+) {
+    let mut code_ranges: Vec<(usize, usize)> = Vec::new();
+    let mut fmt: Vec<(usize, usize, &MarkKind)> = Vec::new();
+    let mut links: Vec<(usize, usize, &str)> = Vec::new();
+    for m in marks {
+        if m.end <= line_start || m.start >= line_start + n {
+            continue;
+        }
+        let s = m.start.saturating_sub(line_start).min(n);
+        let e = m.end.saturating_sub(line_start).min(n);
+        if drop_empty && s >= e {
+            continue;
+        }
+        match &m.kind {
+            MarkKind::Anchor { .. } => {}
+            MarkKind::Code => code_ranges.push((s, e)),
+            MarkKind::Link { url } => links.push((s, e, url.as_str())),
+            _ => fmt.push((s, e, &m.kind)),
+        }
+    }
+    (code_ranges, fmt, links)
 }
 
 /// Render marks over a standalone char slice to markdown: the projection's mark
@@ -583,13 +603,13 @@ fn render_marked_core(
                 let mut reopen: Vec<usize> = Vec::new();
                 while stack.len() > idx {
                     let fi = stack.pop().unwrap();
-                    out.push_str(&delim_close(fmt[fi].2));
+                    out.push_str(delim_close(fmt[fi].2));
                     if fmt[fi].1 != pos {
                         reopen.push(fi);
                     }
                 }
                 for fi in reopen.into_iter().rev() {
-                    out.push_str(&delim_open(fmt[fi].2));
+                    out.push_str(delim_open(fmt[fi].2));
                     stack.push(fi);
                 }
             }
@@ -607,7 +627,7 @@ fn render_marked_core(
                 if !keep[fi] {
                     continue;
                 }
-                out.push_str(&delim_open(fmt[fi].2));
+                out.push_str(delim_open(fmt[fi].2));
                 stack.push(fi);
             }
             // A link is emitted atomically as [text](url). Nested marks in link
@@ -666,7 +686,7 @@ fn render_marked_core(
         // Clipping keeps every wrap `end` reachable, so this normally drains
         // nothing.
         while let Some(fi) = stack.pop() {
-            out.push_str(&delim_close(fmt[fi].2));
+            out.push_str(delim_close(fmt[fi].2));
         }
         out
     };
@@ -676,24 +696,26 @@ fn render_marked_core(
     // pulldown re-reads as literal text, leaking a delimiter into the content.
     // Re-parse the rendered line and, if its plain text drifted, search for a set
     // of flanking marks that keeps the text intact.
-    //
+    let is_flanking = |k: &MarkKind| {
+        matches!(k, MarkKind::Strong | MarkKind::Emph | MarkKind::Strike)
+    };
+    let out = sweep(&vec![true; fmt.len()]);
+    if !fmt.iter().any(|m| is_flanking(m.2)) {
+        return out;
+    }
     // The probe wraps the fragment in `,…,`: parsed standalone, a leading `0. ` /
     // `# ` / `> ` would read as a list/heading/quote marker and drop a good mark.
     // A punctuation sentinel blocks every leading-block construct, preserves edge
     // whitespace, and is flanking-equivalent to the line start/end it replaces,
     // so it never masks or invents a leak.
     let expected: String = chars.iter().collect();
-    let is_flanking = |k: &MarkKind| {
-        matches!(k, MarkKind::Strong | MarkKind::Emph | MarkKind::Strike)
-    };
     let want = format!(",{expected},");
     let text_safe = |md: &str| {
         crate::import::from_markdown(&format!(",{md},"))
             .map(|rt| rt.text == want)
             .unwrap_or(false)
     };
-    let out = sweep(&vec![true; fmt.len()]);
-    if !fmt.iter().any(|m| is_flanking(m.2)) || text_safe(&out) {
+    if text_safe(&out) {
         return out;
     }
     // The flanking marks in document order. That order is the re-add priority
@@ -857,26 +879,7 @@ fn clip_asterisk_overlap(fmt: &mut [(usize, usize, &MarkKind)]) {
 fn render_cell_md(v: &serde_json::Value) -> String {
     let (text, marks) = crate::serial::parse_cell(v);
     let chars: Vec<char> = text.chars().collect();
-    let n = chars.len();
-    let mut code_ranges: Vec<(usize, usize)> = Vec::new();
-    let mut fmt: Vec<(usize, usize, &MarkKind)> = Vec::new();
-    let mut links: Vec<(usize, usize, &str)> = Vec::new();
-    for m in &marks {
-        if m.start >= n {
-            continue;
-        }
-        let s = m.start;
-        let e = m.end.min(n);
-        if s >= e {
-            continue;
-        }
-        match &m.kind {
-            MarkKind::Anchor { .. } => {}
-            MarkKind::Code => code_ranges.push((s, e)),
-            MarkKind::Link { url } => links.push((s, e, url)),
-            _ => fmt.push((s, e, &m.kind)),
-        }
-    }
+    let (code_ranges, fmt, links) = bucket_marks(&marks, 0, chars.len(), true);
     render_marked_core(
         &chars,
         &code_ranges,
@@ -889,26 +892,26 @@ fn render_cell_md(v: &serde_json::Value) -> String {
     )
 }
 
-fn delim_open(kind: &MarkKind) -> String {
+fn delim_open(kind: &MarkKind) -> &'static str {
     match kind {
-        MarkKind::Strong => "**".into(),
+        MarkKind::Strong => "**",
         // `*`, not `_`: `_` cannot do intraword emphasis (CommonMark flanking),
         // so `_a_你` re-imports as literal text; `*a*你` emphasizes correctly.
-        MarkKind::Emph => "*".into(),
-        MarkKind::Underline => "<u>".into(),
-        MarkKind::Strike => "~~".into(),
+        MarkKind::Emph => "*",
+        MarkKind::Underline => "<u>",
+        MarkKind::Strike => "~~",
         // Code/Link/Anchor are handled elsewhere.
-        _ => String::new(),
+        _ => "",
     }
 }
 
-fn delim_close(kind: &MarkKind) -> String {
+fn delim_close(kind: &MarkKind) -> &'static str {
     match kind {
-        MarkKind::Strong => "**".into(),
-        MarkKind::Emph => "*".into(),
-        MarkKind::Underline => "</u>".into(),
-        MarkKind::Strike => "~~".into(),
-        _ => String::new(),
+        MarkKind::Strong => "**",
+        MarkKind::Emph => "*",
+        MarkKind::Underline => "</u>",
+        MarkKind::Strike => "~~",
+        _ => "",
     }
 }
 

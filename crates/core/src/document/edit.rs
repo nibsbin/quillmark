@@ -18,20 +18,20 @@ use quillmark_content::{ApplyError, ChangeBundle, Content, Delta};
 use crate::document::meta::{validate_composable_kind, CardKindError};
 use crate::error::diag_args;
 use crate::document::payload::MetaKey;
-use crate::document::{Card, Document, Payload};
+use crate::document::{Card, Document, Payload, RichtextDecodeError};
 use crate::quill::{CoercionError, FieldSchema, FieldType, Leniency, QuillConfig};
 use crate::value::{PathSegment, QuillValue};
 use crate::version::QuillReference;
 
-/// An in-field path rendered as the tail of a [`DocPath`](crate::path::DocPath)
-/// field segment (`[0].name`), so a message names the address its anchor does.
-fn render_at(at: &[PathSegment]) -> String {
+/// A field plus its in-field path, rendered through
+/// [`DocPath`](crate::path::DocPath) (`recipients[0].name`), so a message names
+/// the address its anchor does.
+fn render_at(field: &str, at: &[PathSegment]) -> String {
     at.iter()
-        .map(|seg| match seg {
-            PathSegment::Key(k) => format!(".{k}"),
-            PathSegment::Index(i) => format!("[{i}]"),
+        .fold(crate::path::DocPath::new().field(field), |p, seg| {
+            p.segment(seg)
         })
-        .collect()
+        .to_string()
 }
 
 /// `true` if `name` matches `[A-Za-z_][A-Za-z0-9_]*` after NFC normalisation.
@@ -39,21 +39,14 @@ fn render_at(at: &[PathSegment]) -> String {
 /// Case is preserved verbatim; only `$`-prefixed keys are reserved, so a user
 /// field can never shadow system metadata.
 pub fn is_valid_field_name(name: &str) -> bool {
-    let normalized: String = name.nfc().collect();
-    if normalized.is_empty() {
+    let mut chars = name.nfc();
+    let Some(first) = chars.next() else {
         return false;
-    }
-    let mut chars = normalized.chars();
-    let first = chars.next().unwrap();
+    };
     if !first.is_ascii_alphabetic() && first != '_' {
         return false;
     }
-    for ch in chars {
-        if !ch.is_ascii_alphanumeric() && ch != '_' {
-            return false;
-        }
-    }
-    true
+    chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
 }
 
 /// The `richtext` codec name carried by [`EditError::FieldDecode`] and
@@ -77,7 +70,7 @@ pub enum EditError {
     /// whose `$kind` carries no schema). A property an `object` field does not
     /// declare is the same error one level down, `at` naming it. Use
     /// [`Card::store_field`](Card::store_field) for opaque storage.
-    #[error("field '{field}{}' is not declared in the schema", render_at(.at))]
+    #[error("field '{}' is not declared in the schema", render_at(.field, .at))]
     UnknownField {
         field: String,
         /// The steps from the field to the undeclared name, its last segment
@@ -114,7 +107,7 @@ pub enum EditError {
     ///
     /// `codec` is the declared type's, not the stored shape's. Absence is not
     /// this error: a missing field is `None`, and reads as the empty content.
-    #[error("{codec} field '{field}{}': {message}", render_at(.at))]
+    #[error("{codec} field '{}': {message}", render_at(.field, .at))]
     FieldDecode {
         field: String,
         /// The steps from the field to the value that failed, empty when the
@@ -134,7 +127,7 @@ pub enum EditError {
     /// `Content`, so it lands here. Address one of its elements with
     /// [`get_content_at`](crate::TypedReader::get_content_at), which raises this
     /// in turn for a path that resolves to no content leaf.
-    #[error("field '{field}{}' is declared '{declared}', which is not a content field", render_at(.at))]
+    #[error("field '{}' is declared '{declared}', which is not a content field", render_at(.field, .at))]
     FieldNotContent {
         field: String,
         /// The steps from the field to the addressed value, empty when the field
@@ -312,8 +305,36 @@ fn check_field(name: &str, value: &serde_json::Value) -> Result<(), EditError> {
     validate_field(name, value).map_err(|v| edit_error_from_violation(name, v))
 }
 
-fn check_meta_depth(map: &serde_json::Map<String, serde_json::Value>) -> Result<(), EditError> {
-    crate::value::depth_check_meta_map(map.clone(), |max| EditError::ValueTooDeep { max })?;
+/// The composable-kind rule mapped onto the mutator error surface.
+fn check_kind(kind: &str) -> Result<(), EditError> {
+    validate_composable_kind(kind).map_err(|e| match e {
+        CardKindError::InvalidName => EditError::InvalidKindName(kind.to_string()),
+        CardKindError::Reserved => EditError::ReservedKind,
+    })
+}
+
+/// A decode failure on the field itself, under the codec that ran.
+fn field_decode(name: &str, codec: &str, e: RichtextDecodeError) -> EditError {
+    EditError::FieldDecode {
+        field: name.to_string(),
+        at: Vec::new(),
+        codec: codec.to_string(),
+        message: e.into_message(),
+    }
+}
+
+/// Depth-bound the values of an `$ext` / `$seed` map: the map itself is level
+/// 1, so its values carry the rest of the budget.
+fn check_meta_depth<'v>(
+    values: impl IntoIterator<Item = &'v serde_json::Value>,
+) -> Result<(), EditError> {
+    let max = crate::document::limits::MAX_YAML_DEPTH;
+    if values
+        .into_iter()
+        .any(|v| crate::value::json_depth_exceeds(v, max - 1))
+    {
+        return Err(EditError::ValueTooDeep { max });
+    }
     Ok(())
 }
 
@@ -413,11 +434,7 @@ impl Document {
 
     /// A card with no `$kind` is rejected as an invalid (empty) name.
     fn check_composable_kind(card: &Card) -> Result<(), EditError> {
-        let kind = card.kind().unwrap_or("");
-        validate_composable_kind(kind).map_err(|e| match e {
-            CardKindError::InvalidName => EditError::InvalidKindName(kind.to_string()),
-            CardKindError::Reserved => EditError::ReservedKind,
-        })
+        check_kind(card.kind().unwrap_or(""))
     }
 
     pub fn remove_card(&mut self, index: usize) -> Option<Card> {
@@ -440,10 +457,7 @@ impl Document {
         new_kind: impl Into<String>,
     ) -> Result<(), EditError> {
         let new_kind = new_kind.into();
-        validate_composable_kind(&new_kind).map_err(|e| match e {
-            CardKindError::InvalidName => EditError::InvalidKindName(new_kind.clone()),
-            CardKindError::Reserved => EditError::ReservedKind,
-        })?;
+        check_kind(&new_kind)?;
         let len = self.cards().len();
         let card = self
             .card_mut(index)
@@ -475,10 +489,7 @@ impl Card {
     /// Create a composable card with the given kind, no fields, and an empty body.
     pub fn new(kind: impl Into<String>) -> Result<Self, EditError> {
         let kind = kind.into();
-        validate_composable_kind(&kind).map_err(|e| match e {
-            CardKindError::InvalidName => EditError::InvalidKindName(kind.clone()),
-            CardKindError::Reserved => EditError::ReservedKind,
-        })?;
+        check_kind(&kind)?;
         let mut payload = Payload::new();
         payload.set_kind(kind);
         Ok(Card::from_parts(
@@ -569,7 +580,7 @@ impl Card {
         &mut self,
         value: serde_json::Map<String, serde_json::Value>,
     ) -> Result<(), EditError> {
-        check_meta_depth(&value)?;
+        check_meta_depth(value.values())?;
         self.payload_mut().set_ext(value);
         Ok(())
     }
@@ -614,10 +625,16 @@ impl Card {
         namespace: String,
         value: serde_json::Value,
     ) -> Result<(), EditError> {
-        let mut map = self.payload_mut().meta(key).cloned().unwrap_or_default();
+        let surviving = self
+            .payload()
+            .meta(key)
+            .into_iter()
+            .flatten()
+            .filter(|(k, _)| **k != namespace)
+            .map(|(_, v)| v);
+        check_meta_depth(surviving.chain(std::iter::once(&value)))?;
+        let mut map = self.payload_mut().take_meta(key).unwrap_or_default();
         map.insert(namespace, value);
-        check_meta_depth(&map)?;
-        self.payload_mut().take_meta(key);
         self.payload_mut().set_meta(key, map);
         Ok(())
     }
@@ -657,10 +674,7 @@ impl Card {
         value: serde_json::Value,
     ) -> Result<(), EditError> {
         let card_kind = card_kind.into();
-        validate_composable_kind(&card_kind).map_err(|e| match e {
-            CardKindError::InvalidName => EditError::InvalidKindName(card_kind.clone()),
-            CardKindError::Reserved => EditError::ReservedKind,
-        })?;
+        check_kind(&card_kind)?;
         self.merge_meta_namespace(MetaKey::Seed, card_kind, value)
     }
 
@@ -774,14 +788,7 @@ impl Card {
         }
         let base = match self.field_richtext(name) {
             Some(Ok(rt)) => rt,
-            Some(Err(e)) => {
-                return Err(EditError::FieldDecode {
-                    field: name.to_string(),
-                    at: Vec::new(),
-                    codec: CODEC_RICHTEXT.to_string(),
-                    message: e.into_message(),
-                })
-            }
+            Some(Err(e)) => return Err(field_decode(name, CODEC_RICHTEXT, e)),
             None => Content::empty(),
         };
         diff_import(&base, &body.into()).map_err(EditError::Import)
@@ -866,14 +873,7 @@ impl Card {
         }
         let base = match self.field_plaintext_content(name) {
             Some(Ok(rt)) => quillmark_content::export::to_plaintext(&rt),
-            Some(Err(e)) => {
-                return Err(EditError::FieldDecode {
-                    field: name.to_string(),
-                    at: Vec::new(),
-                    codec: CODEC_PLAINTEXT.to_string(),
-                    message: e.into_message(),
-                })
-            }
+            Some(Err(e)) => return Err(field_decode(name, CODEC_PLAINTEXT, e)),
             None => String::new(),
         };
         // The strict write is the codec: it runs the `from_plaintext` boundary
@@ -925,14 +925,7 @@ impl Card {
     ) -> Result<(), EditError> {
         let mut content = match self.field_richtext(name) {
             Some(Ok(rt)) => rt,
-            Some(Err(e)) => {
-                return Err(EditError::FieldDecode {
-                    field: name.to_string(),
-                    at: Vec::new(),
-                    codec: CODEC_RICHTEXT.to_string(),
-                    message: e.into_message(),
-                })
-            }
+            Some(Err(e)) => return Err(field_decode(name, CODEC_RICHTEXT, e)),
             // Only this arm creates; the `Some` arms resolved an existing field.
             None => {
                 if !is_valid_field_name(name) {

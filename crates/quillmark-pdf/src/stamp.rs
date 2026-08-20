@@ -21,12 +21,9 @@ use pdf_writer::{Chunk, Finish, Name, Rect, Ref, Str, TextStr};
 use quillmark_core::RenderedRegion;
 
 use crate::error::PdfError;
-use crate::reader::{
-    err, extract_outer_dict, find_dict_value, find_object_bytes, parse_indirect_ref,
-    splice_dict_value, UpdatedObject,
-};
+use crate::reader::{err, object_dict, parse_indirect_ref, UpdatedObject};
 use crate::update::PdfUpdate;
-use crate::writer::{alloc_id, dict_object};
+use crate::writer::{alloc_id, append_refs_to_array_key, dict_object, OnNonArray};
 use crate::{FieldSpec, FieldType, FormFont, TextAlign};
 
 const CODE_PARSE: &str = "pdf::stamp_parse";
@@ -176,10 +173,7 @@ pub fn stamp(
 
         // A widget is fillable only if reachable both ways: the catalog's
         // `/AcroForm /Fields` (added here) and the page's `/Annots` (below).
-        let (cs, ce) = find_object_bytes(&pdf, up.catalog_id)
-            .ok_or_else(|| err(CODE_PARSE, "catalog not found"))?;
-        let cat_dict = extract_outer_dict(&pdf[cs..ce])
-            .ok_or_else(|| err(CODE_PARSE, "catalog dict not parseable"))?;
+        let cat_dict = object_dict(&pdf, up.catalog_id, CODE_PARSE, "catalog")?;
         let mut cat_inner = cat_dict.to_vec();
         cat_inner.extend_from_slice(format!(" /AcroForm {acroform_id} 0 R").as_bytes());
         up.objects.push(dict_object(up.catalog_id, &cat_inner));
@@ -189,10 +183,8 @@ pub fn stamp(
                 continue;
             }
             let page_obj_id = page_ids[page_idx];
-            let (s, e) = find_object_bytes(&pdf, page_obj_id)
-                .ok_or_else(|| err(CODE_PARSE, format!("page node {page_obj_id} not found")))?;
-            let pg_dict = extract_outer_dict(&pdf[s..e])
-                .ok_or_else(|| err(CODE_PARSE, format!("page node {page_obj_id} not parseable")))?;
+            let what = format!("page node {page_obj_id}");
+            let pg_dict = object_dict(&pdf, page_obj_id, CODE_PARSE, &what)?;
             up.objects.push(dict_object(
                 page_obj_id,
                 &rewrite_page_with_annots(pg_dict, widget_refs)?,
@@ -323,45 +315,22 @@ fn write_widget_object(spec: &FieldSpec, wid: Ref, page_ref: Ref) -> Vec<u8> {
 /// inline array (splice widget refs before `]`); indirect reference (hard
 /// error, the input contract requires inline annots).
 fn rewrite_page_with_annots(pg_dict: &[u8], widget_refs: &[u32]) -> Result<Vec<u8>, PdfError> {
-    let widgets_str = widget_refs
-        .iter()
-        .map(|r| format!("{r} 0 R"))
-        .collect::<Vec<_>>()
-        .join(" ");
+    append_refs_to_array_key(
+        pg_dict,
+        "Annots",
+        widget_refs,
+        CODE_PARSE,
+        OnNonArray::Reject(non_array_annots),
+    )
+}
 
-    match find_dict_value(pg_dict, "Annots") {
-        None => {
-            let mut out = pg_dict.to_vec();
-            out.extend_from_slice(format!(" /Annots [{widgets_str}]").as_bytes());
-            Ok(out)
-        }
-        Some(existing) => {
-            let trimmed = existing.trim_ascii();
-            if trimmed.starts_with(b"[") {
-                let end = trimmed
-                    .iter()
-                    .rposition(|&b| b == b']')
-                    .ok_or_else(|| err(CODE_PARSE, "/Annots array missing ]"))?;
-                let inner = &trimmed[1..end];
-                let merged = format!(
-                    "[{} {}]",
-                    String::from_utf8_lossy(inner).trim(),
-                    widgets_str
-                );
-                Ok(splice_dict_value(
-                    pg_dict,
-                    b"/Annots",
-                    existing,
-                    merged.as_bytes(),
-                ))
-            } else if parse_indirect_ref(existing).is_some() {
-                Err(err(
-                    "pdf::indirect_annots",
-                    "/Annots is an indirect reference; only inline arrays are supported",
-                ))
-            } else {
-                Err(err(CODE_PARSE, "/Annots is neither array nor indirect ref"))
-            }
-        }
+fn non_array_annots(existing: &[u8]) -> PdfError {
+    if parse_indirect_ref(existing).is_some() {
+        err(
+            "pdf::indirect_annots",
+            "/Annots is an indirect reference; only inline arrays are supported",
+        )
+    } else {
+        err(CODE_PARSE, "/Annots is neither array nor indirect ref")
     }
 }

@@ -614,6 +614,28 @@ impl FieldSchema {
         self.variants.is_some()
     }
 
+    /// The discriminant a document authored for a variant-bearing field, read
+    /// off either shape: the container's [`VARIANT_DISCRIMINANT_KEY`] or a bare
+    /// scalar that bypassed coercion. `None` where the cell is absent or null,
+    /// which is what makes it the *authored* rung of the ladder.
+    pub fn authored_member(value: Option<&serde_json::Value>) -> Option<&serde_json::Value> {
+        match value {
+            Some(serde_json::Value::Object(o)) => o.get(VARIANT_DISCRIMINANT_KEY),
+            other => other,
+        }
+        .filter(|v| !v.is_null())
+    }
+
+    /// The member the ladder selects: the authored discriminant, else
+    /// `default:`, else the blank.
+    pub fn selected_member(&self, value: Option<&serde_json::Value>) -> String {
+        Self::authored_member(value)
+            .and_then(|v| v.as_str())
+            .or_else(|| self.default.as_ref()?.as_str())
+            .unwrap_or_default()
+            .to_string()
+    }
+
     /// Whether a human must author this cell. Keyed on `default`'s *presence*,
     /// so a `default: ""` stays a skippable cell rather than becoming a marker.
     ///

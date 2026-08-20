@@ -55,7 +55,6 @@ pub fn generate_lib_typ(
     if let Some(e) = cg.emit_error.take() {
         return Err(e);
     }
-    let meta_literal = meta_literal(meta);
     let display_literal = display_literal(&cg.display);
 
     // Placeholders are located in the *raw template* (trusted static text), never
@@ -68,7 +67,7 @@ pub fn generate_lib_typ(
     let mut blocks_at = 0usize;
     for (slot, value) in [
         ("{version}", HELPER_VERSION),
-        ("{meta_literal}", meta_literal.as_str()),
+        ("{meta_literal}", meta.meta_literal()),
         ("{content_blocks}", cg.blocks.as_str()),
         ("{data_literal}", data_literal.as_str()),
         ("{display_literal}", display_literal.as_str()),
@@ -398,12 +397,6 @@ enum DateKind {
     DateTime,
 }
 
-/// The schema address tables `_qm-known-path` validates `form-field` paths
-/// against.
-fn meta_literal(meta: &SchemaMeta) -> String {
-    lit(&meta.address_json())
-}
-
 /// Each present date's `_qm_dN` closure keyed by schema address, backing the
 /// `display(field, ..)` helper. Keys sort so a reorder-only `apply` still
 /// produces byte-identical source.
@@ -442,7 +435,7 @@ fn datetime_constructor(s: &str, kind: DateKind) -> Option<String> {
 /// exponent syntax, but the `float(str)` constructor parses every finite
 /// `f64`, and `json()` rejects non-finite numbers); strings via
 /// [`escape_string`]; arrays and objects via [`wrap_array`] / [`wrap_dict`].
-fn lit(v: &serde_json::Value) -> String {
+pub(crate) fn lit(v: &serde_json::Value) -> String {
     use serde_json::Value::*;
     match v {
         Null => "none".to_string(),

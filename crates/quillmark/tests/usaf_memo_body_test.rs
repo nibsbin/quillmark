@@ -7,16 +7,16 @@
 
 #![cfg(feature = "typst")]
 
-use quillmark::{Document, Quillmark};
-use quillmark_fixtures::quills_path;
+use quillmark::Document;
+
+mod common;
 
 /// `$body` regions as (content span, top edge) pairs in content order.
 fn body_regions(body: &str) -> Vec<([usize; 2], f32)> {
     let markdown = format!("~~~card-yaml\n$quill: usaf_memo\n$kind: main\n~~~\n\n{body}\n");
-    let engine = Quillmark::new();
-    let quill = quillmark::quill_from_path(quills_path("usaf_memo")).expect("usaf_memo loads");
+    let (engine, quill) = common::memo();
     let parsed = Document::parse(&markdown).expect("parses").document;
-    let session = engine.open(&quill, &parsed).expect("opens");
+    let session = engine.open(quill, &parsed).expect("opens");
     let mut regions: Vec<_> = session
         .regions()
         .iter()
@@ -84,7 +84,7 @@ fn the_run_in_style_still_runs_in() {
 /// walk's warning is the only place that says so.
 #[test]
 fn a_rule_in_the_memo_body_warns() {
-    let quill = quillmark::quill_from_path(quills_path("usaf_memo")).expect("usaf_memo loads");
+    let (_engine, quill) = common::memo();
     let markdown = "~~~card-yaml\n$quill: usaf_memo\n$kind: main\n~~~\n\none\n\n***\n\ntwo\n";
     let warnings: Vec<_> = quill
         .parse(markdown)

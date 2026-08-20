@@ -122,19 +122,6 @@ impl PayloadItem {
         }
     }
 
-    /// `&[]` for variants that carry no nested comments.
-    pub fn nested_comments(&self) -> &[NestedComment] {
-        match self {
-            PayloadItem::Field {
-                nested_comments, ..
-            }
-            | PayloadItem::Meta {
-                nested_comments, ..
-            } => nested_comments,
-            _ => &[],
-        }
-    }
-
     pub(crate) fn comment(text: impl Into<String>) -> Self {
         PayloadItem::Comment {
             text: text.into(),
@@ -457,11 +444,6 @@ impl Payload {
             PayloadItem::Field { key: k, value, .. } if k == key => Some(value),
             _ => None,
         })
-    }
-
-    /// `true` if a user field with this key is present.
-    pub fn contains_key(&self, key: &str) -> bool {
-        self.get(key).is_some()
     }
 
     /// `true` if a user field with this key is marked `!must_fill`.

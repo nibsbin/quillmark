@@ -7,8 +7,9 @@
 
 #![cfg(feature = "typst")]
 
-use quillmark::{OutputFormat, Quillmark, RenderOptions};
-use quillmark_fixtures::quills_path;
+use quillmark::{OutputFormat, RenderOptions};
+
+mod common;
 
 /// Every enum `usaf_memo` declares, authored blank at once: the main card's
 /// three and the indorsement kind's two.
@@ -41,9 +42,7 @@ Indorsement prose.
 
 #[test]
 fn every_enum_authored_blank_still_renders() {
-    let engine = Quillmark::new();
-    let quill =
-        quillmark::quill_from_path(quills_path("usaf_memo")).expect("usaf_memo should load");
+    let (engine, quill) = common::memo();
 
     let parsed = quillmark::Document::parse(BLANK_EVERYWHERE)
         .expect("document should parse")
@@ -61,7 +60,7 @@ fn every_enum_authored_blank_still_renders() {
 
     let rendered = engine
         .render(
-            &quill,
+            quill,
             &parsed,
             &RenderOptions::default().with_output_format(OutputFormat::Pdf),
         )
@@ -76,16 +75,14 @@ fn every_enum_authored_blank_still_renders() {
 /// seal rather than falling back to an asset nobody chose.
 #[test]
 fn a_blank_seal_omits_the_seal_rather_than_choosing_one() {
-    let engine = Quillmark::new();
-    let quill =
-        quillmark::quill_from_path(quills_path("usaf_memo")).expect("usaf_memo should load");
+    let (engine, quill) = common::memo();
 
     let render = |seal: &str| {
         let md = BLANK_EVERYWHERE.replace("letterhead_seal: \"\"", seal);
         let doc = quillmark::Document::parse(&md).expect("parse").document;
         engine
             .render(
-                &quill,
+                quill,
                 &doc,
                 &RenderOptions::default().with_output_format(OutputFormat::Pdf),
             )

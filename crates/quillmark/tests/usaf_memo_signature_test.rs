@@ -5,8 +5,9 @@
 
 #![cfg(feature = "typst")]
 
-use quillmark::{OutputFormat, Quillmark, RenderOptions};
-use quillmark_fixtures::quills_path;
+use quillmark::{OutputFormat, RenderOptions};
+
+mod common;
 
 const PT_PER_IN: f32 = 72.0;
 const SIG_BLOCK_LEFT_IN: f32 = 4.5;
@@ -47,15 +48,11 @@ fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 
 #[test]
 fn usaf_memo_signature_widget_aligns_with_signature_block() {
-    let engine = Quillmark::new();
-    let quill =
-        quillmark::quill_from_path(quills_path("usaf_memo")).expect("usaf_memo should load");
-
     // One card per declared kind, so both `Signature` and `Ind_0_Signature` emit.
-    let parsed = quill.seed_document();
+    let (engine, quill, parsed) = common::seeded_memo();
 
     let result = engine.render(
-        &quill,
+        quill,
         &parsed,
         &RenderOptions::default().with_output_format(OutputFormat::Pdf),
     );

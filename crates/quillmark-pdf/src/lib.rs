@@ -87,24 +87,6 @@ impl FieldSpec {
             align: TextAlign::default(),
         }
     }
-
-    /// Set [`schema_field`](Self::schema_field); without it, no region is emitted.
-    pub fn with_schema_field(mut self, schema_field: String) -> Self {
-        self.schema_field = Some(schema_field);
-        self
-    }
-
-    /// Set [`value`](Self::value).
-    pub fn with_value(mut self, value: String) -> Self {
-        self.value = Some(value);
-        self
-    }
-
-    /// Set [`tooltip`](Self::tooltip).
-    pub fn with_tooltip(mut self, tooltip: String) -> Self {
-        self.tooltip = Some(tooltip);
-        self
-    }
 }
 
 /// A field's definition, never a runtime value (that rides in

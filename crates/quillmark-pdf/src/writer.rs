@@ -4,8 +4,7 @@
 
 use crate::error::PdfError;
 use crate::reader::{
-    assert_overwrite_gen_zero, err, extract_outer_dict, find_dict_value, find_object_bytes,
-    splice_dict_value, UpdatedObject,
+    assert_overwrite_gen_zero, err, find_dict_value, object_dict, splice_dict_value, UpdatedObject,
 };
 
 const CODE_PARSE: &str = "pdf::write";
@@ -63,6 +62,59 @@ pub(crate) fn pdf_text_string(s: &str) -> Vec<u8> {
     }
 }
 
+/// What an existing value that is not an inline array means for
+/// [`append_refs_to_array_key`].
+pub enum OnNonArray {
+    /// Take it as the array's first element (`/Contents 4 0 R` → `[4 0 R …]`).
+    Wrap,
+    /// Refuse it, with the error the fn builds from the raw value.
+    Reject(fn(&[u8]) -> PdfError),
+}
+
+/// Append `refs` as indirect references to `dict`'s inline array `key`, writing
+/// a fresh single-element array when the key is absent. `code` carries the
+/// caller's error code for an array that never closes.
+pub fn append_refs_to_array_key(
+    dict: &[u8],
+    key: &str,
+    refs: &[u32],
+    code: &'static str,
+    on_non_array: OnNonArray,
+) -> Result<Vec<u8>, PdfError> {
+    let refs_str = refs
+        .iter()
+        .map(|r| format!("{r} 0 R"))
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let Some(existing) = find_dict_value(dict, key) else {
+        let mut out = dict.to_vec();
+        out.extend_from_slice(format!(" /{key} [{refs_str}]").as_bytes());
+        return Ok(out);
+    };
+
+    let trimmed = existing.trim_ascii();
+    let inner = if trimmed.starts_with(b"[") {
+        let end = trimmed
+            .iter()
+            .rposition(|&b| b == b']')
+            .ok_or_else(|| err(code, format!("/{key} array missing ]")))?;
+        &trimmed[1..end]
+    } else {
+        match on_non_array {
+            OnNonArray::Wrap => trimmed,
+            OnNonArray::Reject(to_err) => return Err(to_err(existing)),
+        }
+    };
+    let merged = format!("[{} {refs_str}]", String::from_utf8_lossy(inner).trim());
+    Ok(splice_dict_value(
+        dict,
+        format!("/{key}").as_bytes(),
+        existing,
+        merged.as_bytes(),
+    ))
+}
+
 /// Replace `/Producer`'s value if present, else append the entry.
 pub(crate) fn upsert_producer(info_dict: &[u8], literal: &[u8]) -> Vec<u8> {
     let key = b"/Producer";
@@ -93,10 +145,8 @@ pub(crate) fn apply_producer_stamp(
             // Overwritten in place at generation 0; a non-zero-generation
             // `/Info` would be silently corrupted.
             assert_overwrite_gen_zero(pdf, info_id, "/Info")?;
-            let (s, e) = find_object_bytes(pdf, info_id)
-                .ok_or_else(|| err(CODE_PARSE, format!("/Info object {info_id} not found")))?;
-            let info_dict = extract_outer_dict(&pdf[s..e])
-                .ok_or_else(|| err(CODE_PARSE, "/Info dict not parseable"))?;
+            let what = format!("/Info object {info_id}");
+            let info_dict = object_dict(pdf, info_id, CODE_PARSE, &what)?;
             objects.push(dict_object(info_id, &upsert_producer(info_dict, &literal)));
             Ok(None)
         }

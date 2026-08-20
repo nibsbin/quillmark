@@ -2,18 +2,17 @@
 //! shared `quillmark-pdf` stamping spine. Typst→PDF coordinate ownership lives
 //! here so the spine never imports `typst_layout`.
 
-use quillmark_core::{Diagnostic, RenderError, Severity};
+use quillmark_core::RenderError;
 use quillmark_pdf::{FieldSpec, FieldType, FormFont, TextAlign, CHECKBOX_ON_STATE};
 use typst_layout::PagedDocument;
+
+use crate::engine_err;
 
 mod extract;
 mod span_scan;
 
 pub(crate) use extract::extract;
-pub(crate) use span_scan::{
-    field_at, locate, position_at, scalar_windows, scan_content_regions, unclosed_claims,
-    FieldWindow,
-};
+pub(crate) use span_scan::{scalar_windows, unclosed_claims, FieldWindow, Scan};
 
 /// Mirrors the spine's [`FieldType`] but carries the *resolved* Typst value.
 #[derive(Debug, Clone, PartialEq)]
@@ -46,10 +45,6 @@ pub(crate) struct FieldPlacement {
     pub align: TextAlign,
 }
 
-pub(crate) fn err(code: &'static str, msg: impl Into<String>) -> RenderError {
-    RenderError::from_diag(Diagnostic::new(Severity::Error, msg.into()).with_code(code.into()))
-}
-
 /// Owned by the backend, never defaulted from the leaf spine's version.
 pub(crate) fn default_producer() -> String {
     format!("Quillmark {}", env!("CARGO_PKG_VERSION"))
@@ -73,7 +68,7 @@ pub(crate) fn build_field_specs(
         .iter()
         .map(|p| {
             let page_h = *page_heights.get(p.page).ok_or_else(|| {
-                err(
+                engine_err(
                     "typst::form_field_page_out_of_range",
                     format!(
                         "form-field {:?} targets page {} but the document has {} page(s)",

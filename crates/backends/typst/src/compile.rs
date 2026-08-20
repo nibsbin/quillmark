@@ -14,7 +14,7 @@ use crate::world::QuillWorld;
 use quillmark_core::{Artifact, Diagnostic, OutputFormat, RenderError, RenderResult, Severity};
 use quillmark_pdf::{stamp, StampOptions};
 
-fn render_options(pixel_per_pt: f32) -> RenderOptions {
+pub(crate) fn render_options(pixel_per_pt: f32) -> RenderOptions {
     RenderOptions {
         pixel_per_pt: Scalar::new(pixel_per_pt as f64),
         ..Default::default()

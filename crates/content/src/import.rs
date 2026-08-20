@@ -103,11 +103,7 @@ pub fn from_plaintext(s: &str) -> Content {
         .map(|seg| {
             let continues = prev_nonempty && !seg.is_empty();
             prev_nonempty = !seg.is_empty();
-            Line {
-                kind: LineKind::Para,
-                containers: Vec::new(),
-                continues,
-            }
+            Line::new(LineKind::Para).with_continues(continues)
         })
         .collect();
     Content {
@@ -628,33 +624,23 @@ impl Builder {
 
     // ---- table ----
 
-    /// The open table cell's inline accumulator, if one is open.
-    fn cell_mut(&mut self) -> Option<&mut Inline> {
-        self.table.as_mut()?.cell.as_mut()
-    }
-
     /// Route one table event: structural events shape the accumulator, inline
     /// events build the open cell with the same [`Inline`] machinery prose uses.
     /// A cell is flat inline, so its marks are USV offsets into its own text.
     fn table_event(&mut self, event: &Event, underline: bool) {
+        let Some(acc) = self.table.as_mut() else {
+            return;
+        };
         // An image open inside the current cell intercepts everything until it
         // closes: the alt lands as plain text, the url is dropped, and the
         // island is flagged degraded, a cell having no slot to carry an image.
-        if self.table.as_ref().is_some_and(|a| a.img_depth > 0) {
+        if acc.img_depth > 0 {
             match event {
-                Event::Start(Tag::Image { .. }) => {
-                    if let Some(a) = self.table.as_mut() {
-                        a.img_depth += 1;
-                    }
-                }
-                Event::End(TagEnd::Image) => {
-                    if let Some(a) = self.table.as_mut() {
-                        a.img_depth -= 1;
-                    }
-                }
+                Event::Start(Tag::Image { .. }) => acc.img_depth += 1,
+                Event::End(TagEnd::Image) => acc.img_depth -= 1,
                 other => {
                     if let Some(s) = image_alt_text(other) {
-                        if let Some(c) = self.cell_mut() {
+                        if let Some(c) = acc.cell.as_mut() {
                             c.push_text(s);
                         }
                     }
@@ -664,96 +650,76 @@ impl Builder {
         }
         match event {
             Event::Start(Tag::Image { .. }) => {
-                if let Some(a) = self.table.as_mut() {
-                    a.img_depth += 1;
-                    a.degraded = true;
-                }
+                acc.img_depth += 1;
+                acc.degraded = true;
             }
-            Event::Start(Tag::TableHead) => {
-                if let Some(a) = self.table.as_mut() {
-                    a.in_head = true;
-                }
-            }
+            Event::Start(Tag::TableHead) => acc.in_head = true,
             Event::End(TagEnd::TableHead) => {
-                if let Some(a) = self.table.as_mut() {
-                    a.header = std::mem::take(&mut a.cur_row);
-                    a.in_head = false;
-                }
+                acc.header = std::mem::take(&mut acc.cur_row);
+                acc.in_head = false;
             }
-            Event::Start(Tag::TableRow) => {
-                if let Some(a) = self.table.as_mut() {
-                    a.cur_row.clear();
-                }
-            }
+            Event::Start(Tag::TableRow) => acc.cur_row.clear(),
             Event::End(TagEnd::TableRow) => {
-                if let Some(a) = self.table.as_mut() {
-                    if !a.in_head {
-                        let row = std::mem::take(&mut a.cur_row);
-                        a.rows.push(row);
-                    }
+                if !acc.in_head {
+                    let row = std::mem::take(&mut acc.cur_row);
+                    acc.rows.push(row);
                 }
             }
-            Event::Start(Tag::TableCell) => {
-                if let Some(a) = self.table.as_mut() {
-                    a.cell = Some(Inline::default());
-                }
-            }
+            Event::Start(Tag::TableCell) => acc.cell = Some(Inline::default()),
             Event::End(TagEnd::TableCell) => {
-                if let Some(a) = self.table.as_mut() {
-                    if let Some(mut cell) = a.cell.take() {
-                        // Close any marks pulldown left open (malformed input).
-                        while !cell.open.is_empty() {
-                            cell.close_mark();
-                        }
-                        a.cur_row
-                            .push(crate::serial::cell_to_value(&cell.text, &cell.marks));
+                if let Some(mut cell) = acc.cell.take() {
+                    // Close any marks pulldown left open (malformed input).
+                    while !cell.open.is_empty() {
+                        cell.close_mark();
                     }
+                    acc.cur_row
+                        .push(crate::serial::cell_to_value(&cell.text, &cell.marks));
                 }
             }
             // Inline content of the open cell. A soft/hard break in a
             // single-line cell is a space.
             Event::Text(t) => {
-                if let Some(c) = self.cell_mut() {
+                if let Some(c) = acc.cell.as_mut() {
                     c.push_text(t);
                 }
             }
             Event::Code(t) => {
-                if let Some(c) = self.cell_mut() {
+                if let Some(c) = acc.cell.as_mut() {
                     c.push_code(t);
                 }
             }
             Event::SoftBreak | Event::HardBreak => {
-                if let Some(c) = self.cell_mut() {
+                if let Some(c) = acc.cell.as_mut() {
                     c.push_text(" ");
                 }
             }
             Event::Start(Tag::Emphasis) => {
-                if let Some(c) = self.cell_mut() {
+                if let Some(c) = acc.cell.as_mut() {
                     c.open_mark(MarkKind::Emph);
                 }
             }
             Event::Start(Tag::Strong) => {
-                let kind = strong_kind(underline);
-                if let Some(c) = self.cell_mut() {
-                    c.open_mark(kind);
+                if let Some(c) = acc.cell.as_mut() {
+                    c.open_mark(strong_kind(underline));
                 }
             }
             Event::Start(Tag::Strikethrough) => {
-                if let Some(c) = self.cell_mut() {
+                if let Some(c) = acc.cell.as_mut() {
                     c.open_mark(MarkKind::Strike);
                 }
             }
             Event::Start(Tag::Link { dest_url, .. }) => {
-                let url = dest_url.to_string();
-                if let Some(c) = self.cell_mut() {
-                    c.open_mark(MarkKind::Link { url });
+                if let Some(c) = acc.cell.as_mut() {
+                    c.open_mark(MarkKind::Link {
+                        url: dest_url.to_string(),
+                    });
                 }
             }
             Event::End(TagEnd::Emphasis)
             | Event::End(TagEnd::Strong)
             | Event::End(TagEnd::Strikethrough)
             | Event::End(TagEnd::Link) => {
-                if let Some(c) = self.cell_mut() {
+                if let Some(c) = acc.cell.as_mut() {
                     c.close_mark();
                 }
             }
@@ -794,11 +760,7 @@ impl Builder {
             self.lines.push(last);
         }
         if self.lines.is_empty() {
-            self.lines.push(Line {
-                kind: LineKind::Para,
-                containers: Vec::new(),
-                continues: false,
-            });
+            self.lines.push(Line::new(LineKind::Para));
         }
         // Close any marks left open (unterminated `<u>`, malformed input).
         while !self.inline.open.is_empty() {
@@ -825,8 +787,9 @@ fn heading_level(level: pulldown_cmark::HeadingLevel) -> u8 {
     }
 }
 
-/// Sanitize a code-block info string to a language identifier, matching the
-/// typst backend's `sanitize_lang_tag`.
+/// A code-block info string reduced to a language identifier: its leading run of
+/// ASCII alphanumerics and `-`/`_`/`.`/`+`. Every stored `lang` has this shape,
+/// so an emitter writes it into its own syntax unquoted and unescaped.
 fn sanitize_lang(lang: &str) -> String {
     lang.chars()
         .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '+'))

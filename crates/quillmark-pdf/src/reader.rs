@@ -175,8 +175,8 @@ pub fn find_object_bytes(pdf: &[u8], id: u32) -> Option<(usize, usize)> {
     let mut last_start = None;
     let mut i = 0;
     while i + p.len() <= pdf.len() {
-        if pdf[i..].starts_with(p)
-            && (i == 0 || matches!(pdf[i - 1], b'\n' | b'\r' | b' '))
+        if (i == 0 || matches!(pdf[i - 1], b'\n' | b'\r' | b' '))
+            && pdf[i..].starts_with(p)
             && is_obj_header_tail(&pdf[i + p.len()..])
         {
             last_start = Some(i);
@@ -195,15 +195,14 @@ fn find_endobj_end(pdf: &[u8], from: usize) -> Option<usize> {
     let needle = b"endobj";
     let mut i = from;
     while i < pdf.len() {
-        if pdf[i] == b'(' {
-            i = skip_pdf_string(pdf, i);
-        } else if pdf[i] == b'%' {
-            i = skip_ws_and_comments(pdf, i);
-        } else if pdf[i..].starts_with(needle) {
-            return Some(i + needle.len());
-        } else {
-            i += 1;
+        if let Some(ni) = skip_string_or_comment(pdf, i) {
+            i = ni;
+            continue;
         }
+        if pdf[i..].starts_with(needle) {
+            return Some(i + needle.len());
+        }
+        i += 1;
     }
     None
 }
@@ -318,9 +317,7 @@ pub fn splice_dict_value(dict: &[u8], key: &[u8], value: &[u8], new_value: &[u8]
 fn skip_ws_and_comments(b: &[u8], start: usize) -> usize {
     let mut i = start;
     loop {
-        while i < b.len() && matches!(b[i], b' ' | b'\t' | b'\n' | b'\r' | b'\x0c') {
-            i += 1;
-        }
+        i = ws_end(b, i);
         if b.get(i) == Some(&b'%') {
             while i < b.len() && b[i] != b'\n' && b[i] != b'\r' {
                 i += 1;
@@ -352,10 +349,7 @@ fn skip_string_or_comment(b: &[u8], i: usize) -> Option<usize> {
 /// The index after the last byte of the value beginning at `start`, whose
 /// leading whitespace is skipped before the value type is classified.
 fn read_value_end(b: &[u8], start: usize) -> Option<usize> {
-    let mut i = start;
-    while i < b.len() && matches!(b[i], b' ' | b'\t' | b'\n' | b'\r' | b'\x0c') {
-        i += 1;
-    }
+    let mut i = ws_end(b, start);
     if i >= b.len() {
         return Some(i);
     }
@@ -381,26 +375,10 @@ fn read_value_end(b: &[u8], start: usize) -> Option<usize> {
             Some(i)
         }
         b'(' => Some(skip_pdf_string(b, i)),
-        b'<' if b[i..].starts_with(b"<<") => {
-            let mut depth = 1;
-            i += 2;
-            while i + 1 < b.len() && depth > 0 {
-                if let Some(ni) = skip_string_or_comment(b, i) {
-                    i = ni;
-                    continue;
-                }
-                if b[i..].starts_with(b"<<") {
-                    depth += 1;
-                    i += 2;
-                } else if b[i..].starts_with(b">>") {
-                    depth -= 1;
-                    i += 2;
-                } else {
-                    i += 1;
-                }
-            }
-            Some(i)
-        }
+        b'<' if b[i..].starts_with(b"<<") => Some(match dict_end(b, i) {
+            Ok(close) => close + 2,
+            Err(stop) => stop,
+        }),
         b'<' => Some(skip_pdf_hex_string(b, i)),
         b'/' => {
             i += 1;
@@ -515,37 +493,78 @@ pub(crate) fn parse_indirect_ref(s: &[u8]) -> Option<(u32, u16)> {
 /// Slice between the outermost `<< ... >>` of an indirect object's body.
 pub fn extract_outer_dict(obj_bytes: &[u8]) -> Option<&[u8]> {
     let open = obj_bytes.windows(2).position(|w| w == b"<<")?;
+    let close = dict_end(obj_bytes, open).ok()?;
+    Some(&obj_bytes[open + 2..close])
+}
+
+/// The index of the `>>` matching the `<<` at `open`. Literal strings and
+/// `%`-comments are skipped: either can carry `<<` / `>>` as raw bytes that
+/// would otherwise skew the nesting depth. `Err` carries the index the scan ran
+/// out at, for a caller that reads an unbalanced dict leniently.
+fn dict_end(b: &[u8], open: usize) -> Result<usize, usize> {
     let mut depth = 0i32;
     let mut i = open;
-    while i + 1 < obj_bytes.len() {
-        // Skip literal strings and `%`-comments: either can carry `<<` / `>>` as
-        // raw bytes that would otherwise skew the nesting depth.
-        if let Some(ni) = skip_string_or_comment(obj_bytes, i) {
+    while i + 1 < b.len() {
+        if let Some(ni) = skip_string_or_comment(b, i) {
             i = ni;
             continue;
         }
-        if obj_bytes[i..].starts_with(b"<<") {
+        if b[i..].starts_with(b"<<") {
             depth += 1;
             i += 2;
-        } else if obj_bytes[i..].starts_with(b">>") {
+        } else if b[i..].starts_with(b">>") {
             depth -= 1;
             if depth == 0 {
-                return Some(&obj_bytes[open + 2..i]);
+                return Ok(i);
             }
             i += 2;
         } else {
             i += 1;
         }
     }
-    None
+    Err(i)
+}
+
+/// The index of the first byte at or after `i` that is not whitespace.
+fn ws_end(b: &[u8], i: usize) -> usize {
+    let mut i = i;
+    while i < b.len() && matches!(b[i], b' ' | b'\t' | b'\n' | b'\r' | b'\x0c') {
+        i += 1;
+    }
+    i
 }
 
 fn skip_ws(s: &[u8]) -> &[u8] {
-    let mut i = 0;
-    while i < s.len() && matches!(s[i], b' ' | b'\t' | b'\n' | b'\r' | b'\x0c') {
-        i += 1;
-    }
-    &s[i..]
+    &s[ws_end(s, 0)..]
+}
+
+/// The inner dict bytes of object `id`. `what` names the object in both failure
+/// messages — `"{what} not found"` and `"{what} dict not parseable"` — under
+/// the caller's error `code`; an Option-returning caller calls `.ok()`.
+pub fn object_dict<'a>(
+    pdf: &'a [u8],
+    id: u32,
+    code: &'static str,
+    what: &str,
+) -> Result<&'a [u8], PdfError> {
+    let (s, e) = find_object_bytes(pdf, id).ok_or_else(|| err(code, format!("{what} not found")))?;
+    extract_outer_dict(&pdf[s..e]).ok_or_else(|| err(code, format!("{what} dict not parseable")))
+}
+
+/// Open the base's trailer: the xref offset, the trailer dict, and the catalog
+/// (`/Root`) object id, after refusing an xref stream. `code` carries the
+/// caller's error code for a missing or malformed `/Root`.
+pub(crate) fn open_trailer<'a>(
+    pdf: &'a [u8],
+    code: &'static str,
+) -> Result<(usize, &'a [u8], u32), PdfError> {
+    let xref_offset = find_startxref(pdf)?;
+    assert_traditional_xref(pdf, xref_offset)?;
+    let trailer = find_trailer_dict(pdf, xref_offset)?;
+    let (catalog_id, _) = find_dict_value(trailer, "Root")
+        .and_then(parse_indirect_ref)
+        .ok_or_else(|| err(code, "/Root missing or malformed in trailer"))?;
+    Ok((xref_offset, trailer, catalog_id))
 }
 
 /// Flatten the catalog's `/Pages` tree into page object ids in document order.
@@ -570,14 +589,7 @@ pub(crate) fn resolve_page_ids(pdf: &[u8], catalog_id: u32) -> Result<Vec<u32>, 
         if seen.len() > MAX_NODES {
             return Err(err(CODE_PARSE, "page tree exceeds 100 000 nodes"));
         }
-        let (s, e) = find_object_bytes(pdf, node_id)
-            .ok_or_else(|| err(CODE_PARSE, format!("page node {node_id} not found")))?;
-        let dict = extract_outer_dict(&pdf[s..e]).ok_or_else(|| {
-            err(
-                CODE_PARSE,
-                format!("page node {node_id} dict not parseable"),
-            )
-        })?;
+        let dict = object_dict(pdf, node_id, CODE_PARSE, &format!("page node {node_id}"))?;
         let typ = find_dict_value(dict, "Type")
             .map(|b| String::from_utf8_lossy(b.trim_ascii()).into_owned())
             .unwrap_or_default();
@@ -599,10 +611,7 @@ pub(crate) fn resolve_page_ids(pdf: &[u8], catalog_id: u32) -> Result<Vec<u32>, 
 
 /// The catalog's root `/Pages` node id.
 fn root_pages_id(pdf: &[u8], catalog_id: u32) -> Result<u32, PdfError> {
-    let (cs, ce) =
-        find_object_bytes(pdf, catalog_id).ok_or_else(|| err(CODE_PARSE, "catalog not found"))?;
-    let cat_dict = extract_outer_dict(&pdf[cs..ce])
-        .ok_or_else(|| err(CODE_PARSE, "catalog dict not parseable"))?;
+    let cat_dict = object_dict(pdf, catalog_id, CODE_PARSE, "catalog")?;
     find_dict_value(cat_dict, "Pages")
         .and_then(parse_indirect_ref)
         .map(|(id, _)| id)
@@ -613,14 +622,16 @@ fn root_pages_id(pdf: &[u8], catalog_id: u32) -> Result<u32, PdfError> {
 /// from the root `/Pages`. The stamp and flatten paths write geometry in
 /// unrotated user space and do not compensate, so a rotated base page would
 /// display every widget away from its intended box.
-pub(crate) fn assert_unrotated_page(
+///
+/// The inherited value is resolved once for the whole batch: reading it costs a
+/// full-file scan per page otherwise.
+pub(crate) fn assert_unrotated_pages(
     pdf: &[u8],
     catalog_id: u32,
-    page_id: u32,
+    page_ids: &[u32],
 ) -> Result<(), PdfError> {
     let read_rotate = |id: u32| -> Option<i64> {
-        let (s, e) = find_object_bytes(pdf, id)?;
-        let dict = extract_outer_dict(&pdf[s..e])?;
+        let dict = object_dict(pdf, id, CODE_PARSE, "page").ok()?;
         let raw = find_dict_value(dict, "Rotate")?;
         std::str::from_utf8(raw.trim_ascii())
             .ok()?
@@ -628,17 +639,18 @@ pub(crate) fn assert_unrotated_page(
             .parse::<i64>()
             .ok()
     };
-    let rotate = read_rotate(page_id)
-        .or_else(|| root_pages_id(pdf, catalog_id).ok().and_then(read_rotate))
-        .unwrap_or(0);
-    if rotate.rem_euclid(360) != 0 {
-        return Err(err(
-            "pdf::rotated_page",
-            format!(
-                "page object {page_id} has /Rotate {rotate}; the stamp spine only \
-                 handles unrotated pages"
-            ),
-        ));
+    let inherited = root_pages_id(pdf, catalog_id).ok().and_then(read_rotate);
+    for &page_id in page_ids {
+        let rotate = read_rotate(page_id).or(inherited).unwrap_or(0);
+        if rotate.rem_euclid(360) != 0 {
+            return Err(err(
+                "pdf::rotated_page",
+                format!(
+                    "page object {page_id} has /Rotate {rotate}; the stamp spine only \
+                     handles unrotated pages"
+                ),
+            ));
+        }
     }
     Ok(())
 }
@@ -705,21 +717,13 @@ fn normalize_rect(mb: [f32; 4]) -> [f32; 4] {
 /// The full rect rather than width/height, so a caller flipping page-relative
 /// top-left geometry can honour a non-zero page origin.
 pub(crate) fn page_media_boxes(pdf: &[u8]) -> Result<Vec<[f32; 4]>, PdfError> {
-    let xref_offset = find_startxref(pdf)?;
-    assert_traditional_xref(pdf, xref_offset)?;
-    let trailer = find_trailer_dict(pdf, xref_offset)?;
-    let (catalog_id, _) = find_dict_value(trailer, "Root")
-        .and_then(parse_indirect_ref)
-        .ok_or_else(|| err(CODE_PARSE, "/Root missing or malformed in trailer"))?;
+    let (_, _, catalog_id) = open_trailer(pdf, CODE_PARSE)?;
 
     let inherited = root_pages_media_box(pdf, catalog_id);
     let page_ids = resolve_page_ids(pdf, catalog_id)?;
     let mut out = Vec::with_capacity(page_ids.len());
     for id in page_ids {
-        let (s, e) = find_object_bytes(pdf, id)
-            .ok_or_else(|| err(CODE_PARSE, format!("page node {id} not found")))?;
-        let dict = extract_outer_dict(&pdf[s..e])
-            .ok_or_else(|| err(CODE_PARSE, format!("page node {id} dict not parseable")))?;
+        let dict = object_dict(pdf, id, CODE_PARSE, &format!("page node {id}"))?;
         let mb = find_dict_value(dict, "MediaBox")
             .and_then(parse_rect_array)
             .or(inherited)
@@ -732,8 +736,7 @@ pub(crate) fn page_media_boxes(pdf: &[u8]) -> Result<Vec<[f32; 4]>, PdfError> {
 /// The root `/Pages` node's `/MediaBox`, if present: the value pages inherit.
 fn root_pages_media_box(pdf: &[u8], catalog_id: u32) -> Option<[f32; 4]> {
     let pages_id = root_pages_id(pdf, catalog_id).ok()?;
-    let (s, e) = find_object_bytes(pdf, pages_id)?;
-    let dict = extract_outer_dict(&pdf[s..e])?;
+    let dict = object_dict(pdf, pages_id, CODE_PARSE, "root /Pages node").ok()?;
     find_dict_value(dict, "MediaBox").and_then(parse_rect_array)
 }
 
@@ -902,11 +905,11 @@ mod tests {
         let pdf = b"%PDF\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
                     2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 /Rotate 90 >>\nendobj\n\
                     3 0 obj\n<< /Type /Page /Parent 2 0 R >>\nendobj\n";
-        let e = assert_unrotated_page(pdf, 1, 3).expect_err("rotated page rejected");
+        let e = assert_unrotated_pages(pdf, 1, &[3]).expect_err("rotated page rejected");
         assert_eq!(e.code, "pdf::rotated_page");
         let flat = b"%PDF\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
                      2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n\
                      3 0 obj\n<< /Type /Page /Parent 2 0 R >>\nendobj\n";
-        assert!(assert_unrotated_page(flat, 1, 3).is_ok());
+        assert!(assert_unrotated_pages(flat, 1, &[3]).is_ok());
     }
 }

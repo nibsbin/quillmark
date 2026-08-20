@@ -4,6 +4,7 @@ use crate::{
     Severity,
 };
 pub use quillmark_content::{ApplyError, Assoc, ChangeBundle, Delta, IslandOp, LineOp, MarkOp, Op};
+use std::sync::OnceLock;
 
 /// What a committed [`LiveSession::update`] changed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -154,6 +155,9 @@ pub struct LiveSession {
     /// because the compile is a pure config read; the font and package bytes
     /// stay with the backend that needed them.
     config: QuillConfig,
+    /// The current compile's geometry, rebuilt by the backend at most once per
+    /// compile: invariant between commits, so the commit points clear it.
+    regions: OnceLock<Vec<RenderedRegion>>,
 }
 
 impl LiveSession {
@@ -165,7 +169,11 @@ impl LiveSession {
     /// structural, not an obligation on the caller.
     #[doc(hidden)]
     pub fn new(inner: Box<dyn SessionHandle>, config: QuillConfig) -> Self {
-        Self { inner, config }
+        Self {
+            inner,
+            config,
+            regions: OnceLock::new(),
+        }
     }
 
     pub fn page_count(&self) -> usize {
@@ -208,7 +216,11 @@ impl LiveSession {
     /// Reflects the current compile; re-read after each committed
     /// [`update`](Self::update).
     pub fn regions(&self) -> Vec<RenderedRegion> {
-        self.inner.regions()
+        self.cached_regions().to_vec()
+    }
+
+    fn cached_regions(&self) -> &[RenderedRegion] {
+        self.regions.get_or_init(|| self.inner.regions())
     }
 
     /// The whole-field highlight boxes for `field`: one union rect per page,
@@ -216,7 +228,7 @@ impl LiveSession {
     /// placed solely as a scalar reference or a bound widget yields nothing
     /// here, its box being a single [`regions`](Self::regions) rect.
     pub fn field_boxes(&self, field: &str) -> Vec<RenderedRegion> {
-        crate::field_boxes(&self.regions(), field)
+        crate::field_boxes(self.cached_regions(), field)
     }
 
     /// The schema field whose content is under a point on `page`. `x`/`y` are
@@ -264,7 +276,7 @@ impl LiveSession {
         // Attached at the wrapper, so a backend needs nothing beyond the
         // `regions` accessor it already has.
         if opts.regions {
-            result.regions = self.inner.regions();
+            result.regions = self.regions();
         }
         Ok(result)
     }
@@ -278,6 +290,7 @@ impl LiveSession {
     /// under a schema the session was not opened against.
     pub fn update(&mut self, doc: &Document) -> Result<ChangeSet, RenderError> {
         let json_data = self.config.compile_checked(doc)?;
+        self.regions.take();
         self.inner.update(&json_data)
     }
 
@@ -293,6 +306,7 @@ impl LiveSession {
     #[cfg(feature = "internal-test-seam")]
     #[doc(hidden)]
     pub fn update_data(&mut self, json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> {
+        self.regions.take();
         self.inner.update(json_data)
     }
 }

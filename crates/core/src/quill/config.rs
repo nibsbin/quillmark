@@ -123,6 +123,20 @@ pub enum CoercionError {
 }
 
 impl CoercionError {
+    fn uncoercible(
+        path: &str,
+        value: impl std::fmt::Display,
+        target: &str,
+        reason: impl Into<String>,
+    ) -> Self {
+        CoercionError::Uncoercible {
+            path: path.to_string(),
+            value: value.to_string(),
+            target: target.to_string(),
+            reason: reason.into(),
+        }
+    }
+
     /// The facts this error's message interpolates. See
     /// [`Diagnostic::args`](crate::error::Diagnostic::args).
     ///
@@ -230,19 +244,7 @@ impl QuillConfig {
         &self,
         payload: &IndexMap<String, QuillValue>,
     ) -> Result<IndexMap<String, QuillValue>, CoercionError> {
-        let mut coerced: IndexMap<String, QuillValue> = IndexMap::new();
-        for (field_name, field_value) in payload {
-            if let Some(field_schema) = self.main.fields.get(field_name) {
-                let path = field_name.as_str();
-                coerced.insert(
-                    field_name.clone(),
-                    Self::conform_value(field_value, field_schema, path, Leniency::Render)?,
-                );
-            } else {
-                coerced.insert(field_name.clone(), field_value.clone());
-            }
-        }
-        Ok(coerced)
+        Self::coerce_fields(&self.main, None, payload)
     }
 
     /// Coerce typed fields for a single card (IndexMap of user fields only).
@@ -256,10 +258,24 @@ impl QuillConfig {
         let Some(card_schema) = self.card_kind(card_kind) else {
             return Ok(fields.clone());
         };
+        Self::coerce_fields(card_schema, Some(card_kind), fields)
+    }
+
+    /// Coerce every field the schema declares and copy the rest through. A
+    /// `card_kind` anchors the error path under `card_kinds.<kind>.`; `None` is
+    /// the main card, whose fields are named bare.
+    fn coerce_fields(
+        schema: &CardSchema,
+        card_kind: Option<&str>,
+        fields: &IndexMap<String, QuillValue>,
+    ) -> Result<IndexMap<String, QuillValue>, CoercionError> {
         let mut coerced: IndexMap<String, QuillValue> = IndexMap::new();
         for (field_name, field_value) in fields {
-            if let Some(field_schema) = card_schema.fields.get(field_name) {
-                let path = format!("card_kinds.{card_kind}.{field_name}");
+            if let Some(field_schema) = schema.fields.get(field_name) {
+                let path: std::borrow::Cow<'_, str> = match card_kind {
+                    Some(kind) => format!("card_kinds.{kind}.{field_name}").into(),
+                    None => field_name.as_str().into(),
+                };
                 coerced.insert(
                     field_name.clone(),
                     Self::conform_value(field_value, field_schema, &path, Leniency::Render)?,
@@ -376,12 +392,12 @@ impl QuillConfig {
                     }
                 }
 
-                Err(CoercionError::Uncoercible {
-                    path: path.to_string(),
-                    value: json_value.to_string(),
-                    target: "boolean".to_string(),
-                    reason: "value is not coercible to boolean".to_string(),
-                })
+                Err(CoercionError::uncoercible(
+                    path,
+                    json_value,
+                    "boolean",
+                    "value is not coercible to boolean",
+                ))
             }
             FieldType::Number => {
                 if json_value.is_number() {
@@ -396,12 +412,12 @@ impl QuillConfig {
                             return Ok(QuillValue::from_json(num.into()));
                         }
                     }
-                    return Err(CoercionError::Uncoercible {
-                        path: path.to_string(),
-                        value: s.to_string(),
-                        target: "number".to_string(),
-                        reason: "string is not a valid number".to_string(),
-                    });
+                    return Err(CoercionError::uncoercible(
+                        path,
+                        s,
+                        "number",
+                        "string is not a valid number",
+                    ));
                 }
                 // Cross-type boolean→number is a render-floor leniency only.
                 if mode == Leniency::Render {
@@ -413,12 +429,12 @@ impl QuillConfig {
                     }
                 }
 
-                Err(CoercionError::Uncoercible {
-                    path: path.to_string(),
-                    value: json_value.to_string(),
-                    target: "number".to_string(),
-                    reason: "value is not coercible to number".to_string(),
-                })
+                Err(CoercionError::uncoercible(
+                    path,
+                    json_value,
+                    "number",
+                    "value is not coercible to number",
+                ))
             }
             FieldType::Integer => {
                 if let Some(i) = json_value.as_i64() {
@@ -428,23 +444,23 @@ impl QuillConfig {
                     if let Ok(i) = i64::try_from(u) {
                         return Ok(QuillValue::from_json(serde_json::Number::from(i).into()));
                     }
-                    return Err(CoercionError::Uncoercible {
-                        path: path.to_string(),
-                        value: json_value.to_string(),
-                        target: "integer".to_string(),
-                        reason: "integer value exceeds i64 range".to_string(),
-                    });
+                    return Err(CoercionError::uncoercible(
+                        path,
+                        json_value,
+                        "integer",
+                        "integer value exceeds i64 range",
+                    ));
                 }
                 if let Some(s) = json_value.as_str() {
                     if let Ok(i) = s.parse::<i64>() {
                         return Ok(QuillValue::from_json(serde_json::Number::from(i).into()));
                     }
-                    return Err(CoercionError::Uncoercible {
-                        path: path.to_string(),
-                        value: s.to_string(),
-                        target: "integer".to_string(),
-                        reason: "string is not a valid integer".to_string(),
-                    });
+                    return Err(CoercionError::uncoercible(
+                        path,
+                        s,
+                        "integer",
+                        "string is not a valid integer",
+                    ));
                 }
                 // Cross-type boolean→integer is a render-floor leniency only.
                 if mode == Leniency::Render {
@@ -456,12 +472,12 @@ impl QuillConfig {
                     }
                 }
 
-                Err(CoercionError::Uncoercible {
-                    path: path.to_string(),
-                    value: json_value.to_string(),
-                    target: "integer".to_string(),
-                    reason: "value is not coercible to integer".to_string(),
-                })
+                Err(CoercionError::uncoercible(
+                    path,
+                    json_value,
+                    "integer",
+                    "value is not coercible to integer",
+                ))
             }
             // Enum is open scalar data drawn from a closed domain: coerced as a
             // string here; domain membership is checked at the validation layer
@@ -482,12 +498,12 @@ impl QuillConfig {
                 // render floor defers to validation, a strict write fails now.
                 match mode {
                     Leniency::Render => Ok(value.clone()),
-                    Leniency::Write => Err(CoercionError::Uncoercible {
-                        path: path.to_string(),
-                        value: json_value.to_string(),
-                        target: field_schema.r#type.as_str().to_string(),
-                        reason: "value is not a string".to_string(),
-                    }),
+                    Leniency::Write => Err(CoercionError::uncoercible(
+                        path,
+                        json_value,
+                        field_schema.r#type.as_str(),
+                        "value is not a string",
+                    )),
                 }
             }
             FieldType::PlainText { inline } => {
@@ -506,22 +522,21 @@ impl QuillConfig {
                 let plain_check =
                     |rt: &quillmark_content::Content| -> Result<(), CoercionError> {
                         if !rt.is_plain() {
-                            return Err(CoercionError::Uncoercible {
-                                path: path.to_string(),
-                                value: "<plaintext>".to_string(),
-                                target: "plaintext".to_string(),
-                                reason: "plaintext carries no marks, islands, or block \
-                                     formatting (lists, quotes, headings)"
-                                    .to_string(),
-                            });
+                            return Err(CoercionError::uncoercible(
+                                path,
+                                "<plaintext>",
+                                "plaintext",
+                                "plaintext carries no marks, islands, or block \
+                                     formatting (lists, quotes, headings)",
+                            ));
                         }
                         if inline && !rt.is_inline() {
-                            return Err(CoercionError::Uncoercible {
-                                path: path.to_string(),
-                                value: "<plaintext>".to_string(),
-                                target: "plaintext(inline)".to_string(),
-                                reason: "plaintext(inline) requires a single line".to_string(),
-                            });
+                            return Err(CoercionError::uncoercible(
+                                path,
+                                "<plaintext>",
+                                "plaintext(inline)",
+                                "plaintext(inline) requires a single line",
+                            ));
                         }
                         Ok(())
                     };
@@ -537,11 +552,13 @@ impl QuillConfig {
                 };
                 if json_value.is_object() {
                     let rt = quillmark_content::serial::from_canonical_value(json_value).map_err(
-                        |e| CoercionError::Uncoercible {
-                            path: path.to_string(),
-                            value: "<object>".to_string(),
-                            target: "plaintext".to_string(),
-                            reason: format!("not a valid content object: {e}"),
+                        |e| {
+                            CoercionError::uncoercible(
+                                path,
+                                "<object>",
+                                "plaintext",
+                                format!("not a valid content object: {e}"),
+                            )
                         },
                     )?;
                     plain_check(&rt)?;
@@ -552,12 +569,12 @@ impl QuillConfig {
                 let Some(text) = lenient_string(json_value) else {
                     return match mode {
                         Leniency::Render => Ok(value.clone()),
-                        Leniency::Write => Err(CoercionError::Uncoercible {
-                            path: path.to_string(),
-                            value: json_value.to_string(),
-                            target: "plaintext".to_string(),
-                            reason: "value is not a plaintext string or content".to_string(),
-                        }),
+                        Leniency::Write => Err(CoercionError::uncoercible(
+                            path,
+                            json_value,
+                            "plaintext",
+                            "value is not a plaintext string or content",
+                        )),
                     };
                 };
                 let rt = quillmark_content::from_plaintext(&text);
@@ -582,14 +599,13 @@ impl QuillConfig {
                 let inline_check =
                     |rt: &quillmark_content::Content| -> Result<(), CoercionError> {
                         if inline && !rt.is_inline() {
-                            return Err(CoercionError::Uncoercible {
-                                path: path.to_string(),
-                                value: "<richtext>".to_string(),
-                                target: "richtext(inline)".to_string(),
-                                reason: "richtext(inline) requires a single paragraph line \
-                                     with no list/quote container and no islands"
-                                    .to_string(),
-                            });
+                            return Err(CoercionError::uncoercible(
+                                path,
+                                "<richtext>",
+                                "richtext(inline)",
+                                "richtext(inline) requires a single paragraph line \
+                                     with no list/quote container and no islands",
+                            ));
                         }
                         Ok(())
                     };
@@ -601,18 +617,20 @@ impl QuillConfig {
                 // which the bindings key on.
                 if mode == Leniency::Write {
                     let content = match crate::document::decode_richtext_value(json_value) {
-                        Some(result) => result.map_err(|e| CoercionError::Uncoercible {
-                            path: path.to_string(),
-                            value: "<richtext>".to_string(),
-                            target: "richtext".to_string(),
-                            reason: e.into_message(),
+                        Some(result) => result.map_err(|e| {
+                            CoercionError::uncoercible(
+                                path,
+                                "<richtext>",
+                                "richtext",
+                                e.into_message(),
+                            )
                         })?,
                         None => {
-                            return Err(CoercionError::Uncoercible {
-                                path: path.to_string(),
-                                value: json_value.to_string(),
-                                target: "richtext".to_string(),
-                                reason: format!(
+                            return Err(CoercionError::uncoercible(
+                                path,
+                                json_value,
+                                "richtext",
+                                format!(
                                     "expected a richtext content object or a markdown string, got {}",
                                     match json_value {
                                         serde_json::Value::Bool(_) => "a boolean",
@@ -621,7 +639,7 @@ impl QuillConfig {
                                         _ => "an unsupported value",
                                     }
                                 ),
-                            })
+                            ));
                         }
                     };
                     inline_check(&content)?;
@@ -631,11 +649,13 @@ impl QuillConfig {
                 }
                 if json_value.is_object() {
                     let rt = quillmark_content::serial::from_canonical_value(json_value).map_err(
-                        |e| CoercionError::Uncoercible {
-                            path: path.to_string(),
-                            value: "<object>".to_string(),
-                            target: "richtext".to_string(),
-                            reason: format!("not a valid richtext content: {e}"),
+                        |e| {
+                            CoercionError::uncoercible(
+                                path,
+                                "<object>",
+                                "richtext",
+                                format!("not a valid richtext content: {e}"),
+                            )
                         },
                     )?;
                     inline_check(&rt)?;
@@ -653,12 +673,12 @@ impl QuillConfig {
                     return Ok(value.clone());
                 };
                 let rt = quillmark_content::import::from_markdown(&markdown).map_err(|e| {
-                    CoercionError::Uncoercible {
-                        path: path.to_string(),
-                        value: markdown.clone(),
-                        target: "richtext".to_string(),
-                        reason: format!("markdown import failed: {e}"),
-                    }
+                    CoercionError::uncoercible(
+                        path,
+                        &markdown,
+                        "richtext",
+                        format!("markdown import failed: {e}"),
+                    )
                 })?;
                 inline_check(&rt)?;
                 Ok(QuillValue::from_json(
@@ -684,28 +704,28 @@ impl QuillConfig {
                         if let Some(s) = arr[0].as_str() {
                             s.to_string()
                         } else {
-                            return Err(CoercionError::Uncoercible {
-                                path: path.to_string(),
-                                value: json_value.to_string(),
-                                target: field_schema.r#type.as_str().to_string(),
-                                reason: "value must be a string".to_string(),
-                            });
+                            return Err(CoercionError::uncoercible(
+                                path,
+                                json_value,
+                                field_schema.r#type.as_str(),
+                                "value must be a string",
+                            ));
                         }
                     } else {
-                        return Err(CoercionError::Uncoercible {
-                            path: path.to_string(),
-                            value: json_value.to_string(),
-                            target: field_schema.r#type.as_str().to_string(),
-                            reason: "value must be a single string".to_string(),
-                        });
+                        return Err(CoercionError::uncoercible(
+                            path,
+                            json_value,
+                            field_schema.r#type.as_str(),
+                            "value must be a single string",
+                        ));
                     }
                 } else {
-                    return Err(CoercionError::Uncoercible {
-                        path: path.to_string(),
-                        value: json_value.to_string(),
-                        target: field_schema.r#type.as_str().to_string(),
-                        reason: "value must be a string".to_string(),
-                    });
+                    return Err(CoercionError::uncoercible(
+                        path,
+                        json_value,
+                        field_schema.r#type.as_str(),
+                        "value must be a string",
+                    ));
                 };
 
                 // The two date types share extraction and verbatim storage;
@@ -724,12 +744,12 @@ impl QuillConfig {
                 if valid {
                     Ok(QuillValue::from_json(serde_json::Value::String(text)))
                 } else {
-                    Err(CoercionError::Uncoercible {
-                        path: path.to_string(),
-                        value: text,
-                        target: field_schema.r#type.as_str().to_string(),
-                        reason: reason.to_string(),
-                    })
+                    Err(CoercionError::uncoercible(
+                        path,
+                        text,
+                        field_schema.r#type.as_str(),
+                        reason,
+                    ))
                 }
             }
             FieldType::Object => {
@@ -747,12 +767,12 @@ impl QuillConfig {
                     // a strict write fails now.
                     match mode {
                         Leniency::Render => Ok(value.clone()),
-                        Leniency::Write => Err(CoercionError::Uncoercible {
-                            path: path.to_string(),
-                            value: json_value.to_string(),
-                            target: "object".to_string(),
-                            reason: "value is not an object".to_string(),
-                        }),
+                        Leniency::Write => Err(CoercionError::uncoercible(
+                            path,
+                            json_value,
+                            "object",
+                            "value is not an object",
+                        )),
                     }
                 }
             }
@@ -835,12 +855,12 @@ impl QuillConfig {
                 // floor defers to validation, a strict write fails now.
                 None => match mode {
                     Leniency::Render => Ok(QuillValue::from_json(json_value.clone())),
-                    Leniency::Write => Err(CoercionError::Uncoercible {
-                        path: path.to_string(),
-                        value: json_value.to_string(),
-                        target: "enum".to_string(),
-                        reason: "value is neither a member nor a variant container".to_string(),
-                    }),
+                    Leniency::Write => Err(CoercionError::uncoercible(
+                        path,
+                        json_value,
+                        "enum",
+                        "value is neither a member nor a variant container",
+                    )),
                 },
             };
         };
@@ -861,12 +881,12 @@ impl QuillConfig {
                             out.insert(key.clone(), value.clone());
                         }
                         Leniency::Write => {
-                            return Err(CoercionError::Uncoercible {
-                                path: format!("{path}.{key}"),
-                                value: value.to_string(),
-                                target: "enum".to_string(),
-                                reason: "value is not a string".to_string(),
-                            });
+                            return Err(CoercionError::uncoercible(
+                                &format!("{path}.{key}"),
+                                value,
+                                "enum",
+                                "value is not a string",
+                            ));
                         }
                     },
                 }
@@ -1493,6 +1513,29 @@ impl QuillConfig {
         }
     }
 
+    /// Parse an optional typed sub-section (`quill.ui`, `main.ui`, `main.body`).
+    /// Absent is `None`; present-but-malformed is `None` plus a diagnostic, so a
+    /// typo in the block is reported rather than silently dropping it.
+    fn parse_section<T: serde::de::DeserializeOwned>(
+        value: Option<&serde_json::Value>,
+        label: &str,
+        code: &str,
+        hint: &str,
+        errors: &mut Vec<Diagnostic>,
+    ) -> Option<T> {
+        match serde_json::from_value::<T>(value?.clone()) {
+            Ok(parsed) => Some(parsed),
+            Err(e) => {
+                errors.push(
+                    Diagnostic::new(Severity::Error, format!("Invalid '{label}' block: {e}"))
+                        .with_code(code.to_string())
+                        .with_hint(hint.to_string()),
+                );
+                None
+            }
+        }
+    }
+
     /// Parse fields from a JSON map into `FieldSchema`s (both `main.fields` and
     /// a card kind's `fields`). Declaration order rides the map itself: the
     /// source map preserves key order (serde_json's `preserve_order`) and the
@@ -1798,23 +1841,13 @@ impl QuillConfig {
             .map(|s| s.to_string())
             .unwrap_or_else(|| "Unknown".to_string());
 
-        let ui_section: Option<UiCardSchema> = match quill_section.get("ui").cloned() {
-            None => None,
-            Some(v) => match serde_json::from_value::<UiCardSchema>(v) {
-                Ok(parsed) => Some(parsed),
-                Err(e) => {
-                    errors.push(
-                        Diagnostic::new(
-                            Severity::Error,
-                            format!("Invalid 'quill.ui' block: {}", e),
-                        )
-                        .with_code("quill::invalid_ui".to_string())
-                        .with_hint("Valid keys under 'ui' are: title, groups.".to_string()),
-                    );
-                    None
-                }
-            },
-        };
+        let ui_section: Option<UiCardSchema> = Self::parse_section(
+            quill_section.get("ui"),
+            "quill.ui",
+            "quill::invalid_ui",
+            "Valid keys under 'ui' are: title, groups.",
+            &mut errors,
+        );
 
         // Extract optional backend-specific section (keyed by `quill.backend`).
         let mut backend_config = HashMap::new();
@@ -1881,45 +1914,22 @@ impl QuillConfig {
 
         // Extract main.ui (optional). Fail loudly on malformed UI metadata rather
         // than silently dropping it; see `quill.ui` handling above.
-        let main_ui: Option<UiCardSchema> = match main_obj_opt
-            .and_then(|main_obj| main_obj.get("ui"))
-            .cloned()
-        {
-            None => None,
-            Some(v) => match serde_json::from_value::<UiCardSchema>(v) {
-                Ok(parsed) => Some(parsed),
-                Err(e) => {
-                    errors.push(
-                        Diagnostic::new(Severity::Error, format!("Invalid 'main.ui' block: {}", e))
-                            .with_code("quill::invalid_ui".to_string())
-                            .with_hint("Valid keys under 'ui' are: title, groups.".to_string()),
-                    );
-                    None
-                }
-            },
-        };
+        let main_ui: Option<UiCardSchema> = Self::parse_section(
+            main_obj_opt.and_then(|main_obj| main_obj.get("ui")),
+            "main.ui",
+            "quill::invalid_ui",
+            "Valid keys under 'ui' are: title, groups.",
+            &mut errors,
+        );
 
         // Extract main.body (optional). Fail loudly on malformed body metadata.
-        let main_body: Option<BodyCardSchema> = match main_obj_opt
-            .and_then(|main_obj| main_obj.get("body"))
-            .cloned()
-        {
-            None => None,
-            Some(v) => match serde_json::from_value::<BodyCardSchema>(v) {
-                Ok(parsed) => Some(parsed),
-                Err(e) => {
-                    errors.push(
-                        Diagnostic::new(
-                            Severity::Error,
-                            format!("Invalid 'main.body' block: {}", e),
-                        )
-                        .with_code("quill::invalid_body".to_string())
-                        .with_hint("Valid keys under 'body' are: enabled, example.".to_string()),
-                    );
-                    None
-                }
-            },
-        };
+        let main_body: Option<BodyCardSchema> = Self::parse_section(
+            main_obj_opt.and_then(|main_obj| main_obj.get("body")),
+            "main.body",
+            "quill::invalid_body",
+            "Valid keys under 'body' are: enabled, example.",
+            &mut errors,
+        );
 
         // Extract main.description (optional, authored under `main:` like any
         // other card kind). This is independent of `quill.description`.
@@ -2041,24 +2051,26 @@ impl QuillConfig {
                 None
             }
         };
-        if let Some(d) = warn_example_unused("main", &main.body) {
-            warnings.push(d);
-        }
-        for card in &card_kinds {
-            if let Some(d) = warn_example_unused(&format!("card_kinds.{}", card.name), &card.body) {
+        // Every card the read-only checks below walk, under the label each names
+        // it by. The checks stay one loop apiece: a diagnostic's position in the
+        // vector is check-major, not card-major.
+        let labeled: Vec<(String, &CardSchema)> = std::iter::once(("main".to_string(), &main))
+            .chain(
+                card_kinds
+                    .iter()
+                    .map(|card| (format!("card_kinds.{}", card.name), card)),
+            )
+            .collect();
+
+        for (label, card) in &labeled {
+            if let Some(d) = warn_example_unused(label, &card.body) {
                 warnings.push(d);
             }
         }
 
         // Validate each card's group registry and its fields' group references.
-        Self::validate_card_groups("main", &main, &mut errors, &mut warnings);
-        for card in &card_kinds {
-            Self::validate_card_groups(
-                &format!("card_kinds.{}", card.name),
-                card,
-                &mut errors,
-                &mut warnings,
-            );
+        for (label, card) in &labeled {
+            Self::validate_card_groups(label, card, &mut errors, &mut warnings);
         }
 
         // Error when `body.example` contains a line that the document parser
@@ -2085,13 +2097,8 @@ impl QuillConfig {
                 None
             }
         };
-        if let Some(d) = err_example_contains_fence("main", &main.body) {
-            errors.push(d);
-        }
-        for card in &card_kinds {
-            if let Some(d) =
-                err_example_contains_fence(&format!("card_kinds.{}", card.name), &card.body)
-            {
+        for (label, card) in &labeled {
+            if let Some(d) = err_example_contains_fence(label, &card.body) {
                 errors.push(d);
             }
         }

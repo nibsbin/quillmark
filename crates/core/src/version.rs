@@ -125,18 +125,13 @@ impl FromStr for VersionSelector {
         let parts: Vec<&str> = version_str.split('.').collect();
 
         match parts.len() {
-            3 => {
+            2 | 3 => {
                 let version = Version::from_str(version_str)?;
-                Ok(VersionSelector::Exact(version))
-            }
-            2 => {
-                let major = parts[0].parse::<u32>().map_err(|_| {
-                    format!("Invalid major version '{}': must be a number", parts[0])
-                })?;
-                let minor = parts[1].parse::<u32>().map_err(|_| {
-                    format!("Invalid minor version '{}': must be a number", parts[1])
-                })?;
-                Ok(VersionSelector::Minor(major, minor))
+                Ok(if parts.len() == 3 {
+                    VersionSelector::Exact(version)
+                } else {
+                    VersionSelector::Minor(version.major, version.minor)
+                })
             }
             1 => {
                 let major = version_str.parse::<u32>().map_err(|_| {

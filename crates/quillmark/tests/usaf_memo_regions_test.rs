@@ -7,20 +7,17 @@
 
 use std::collections::HashSet;
 
-use quillmark::{OutputFormat, Quillmark, RenderOptions};
-use quillmark_fixtures::quills_path;
+use quillmark::{OutputFormat, RenderOptions};
+
+mod common;
 
 #[test]
 fn usaf_memo_regions_cover_body_signature_and_cards() {
-    let engine = Quillmark::new();
-    let quill =
-        quillmark::quill_from_path(quills_path("usaf_memo")).expect("usaf_memo should load");
-
     // One card per declared kind, so the indorsement addresses are present.
-    let parsed = quill.seed_document();
+    let (engine, quill, parsed) = common::seeded_memo();
 
     let mut session = engine
-        .open(&quill, &parsed)
+        .open(quill, &parsed)
         .expect("usaf_memo should open a session");
 
     let regions = session.regions();
@@ -47,9 +44,8 @@ fn usaf_memo_regions_cover_body_signature_and_cards() {
         fields.contains("references.0"),
         "each `references` element regions on its own address: {fields:?}"
     );
-    let kinds: Vec<Option<&str>> = parsed.cards().iter().map(|c| c.kind()).collect();
     let translated: HashSet<String> =
-        quillmark_core::regions_to_doc_path(regions.clone(), &kinds)
+        quillmark_core::regions_to_doc_path(regions.clone(), &parsed.card_kinds())
             .into_iter()
             .map(|r| r.field)
             .collect();
@@ -85,7 +81,7 @@ fn usaf_memo_regions_cover_body_signature_and_cards() {
 
     let with_regions = engine
         .render(
-            &quill,
+            quill,
             &parsed,
             &RenderOptions::default().with_output_format(OutputFormat::Pdf).with_regions(true),
         )
@@ -97,7 +93,7 @@ fn usaf_memo_regions_cover_body_signature_and_cards() {
 
     let without_regions = engine
         .render(
-            &quill,
+            quill,
             &parsed,
             &RenderOptions::default().with_output_format(OutputFormat::Pdf),
         )
@@ -115,11 +111,8 @@ fn usaf_memo_regions_cover_body_signature_and_cards() {
 /// recorded window wherever the package finally places them.
 #[test]
 fn usaf_memo_date_region_rides_the_vendored_display() {
-    let engine = Quillmark::new();
-    let quill =
-        quillmark::quill_from_path(quills_path("usaf_memo")).expect("usaf_memo should load");
-    let parsed = quill.seed_document();
-    let mut session = engine.open(&quill, &parsed).expect("open a session");
+    let (engine, quill, parsed) = common::seeded_memo();
+    let mut session = engine.open(quill, &parsed).expect("open a session");
 
     // The seed leaves the date blank: a native `today()` fallback inks no field
     // region, so commit a real date first.
@@ -153,12 +146,9 @@ fn usaf_memo_date_region_rides_the_vendored_display() {
 /// endorser's date is the one memo field a preview cannot route a click to.
 #[test]
 fn a_blank_indorsement_date_regions_through_its_fill_in_widget() {
-    let engine = Quillmark::new();
-    let quill =
-        quillmark::quill_from_path(quills_path("usaf_memo")).expect("usaf_memo should load");
     // The seed leaves the indorsement date blank, which is the fill-in case.
-    let parsed = quill.seed_document();
-    let session = engine.open(&quill, &parsed).expect("open a session");
+    let (engine, quill, parsed) = common::seeded_memo();
+    let session = engine.open(quill, &parsed).expect("open a session");
 
     let regions = session.regions();
     let date = regions
@@ -179,7 +169,7 @@ fn a_blank_indorsement_date_regions_through_its_fill_in_widget() {
 
     let pdf = engine
         .render(
-            &quill,
+            quill,
             &parsed,
             &RenderOptions::default().with_output_format(OutputFormat::Pdf),
         )

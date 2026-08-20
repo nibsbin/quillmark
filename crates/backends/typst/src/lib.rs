@@ -42,34 +42,80 @@ const SUPPORTED_FORMATS: &[OutputFormat] =
 /// recompiles.
 struct TypstSession {
     world: world::QuillWorld,
-    document: typst_layout::PagedDocument,
-    page_count: usize,
-    /// Extracted from each committed compile; converted to spine `FieldSpec`s
-    /// on every render.
-    field_placements: Vec<overlay::FieldPlacement>,
     /// Built once at `open`: the schema never changes for a session's lifetime,
     /// and codegen plus date validation read only these tables.
     schema_meta: SchemaMeta,
-    /// The span scan's classification table for the live compile: generated
-    /// content-block windows then the plate's scalar reference-site windows.
-    /// Swapped transactionally with the document.
-    windows: Vec<overlay::FieldWindow>,
     /// The plate is static for a session's lifetime, so these are computed once
-    /// at `open` and re-appended into `windows` per apply.
+    /// at `open` and re-appended into the compile's windows per apply.
     scalar_windows: Vec<overlay::FieldWindow>,
+    /// Swapped whole, and only once [`recompile`] has succeeded, so on `Err`
+    /// every read keeps serving the last-good compile.
+    live: Compiled,
+}
+
+/// One compile plus everything derived from it. Derived here rather than per
+/// query: a point hit or a region scan is a read of these tables.
+struct Compiled {
+    document: typst_layout::PagedDocument,
+    /// Extracted from each committed compile; converted to spine `FieldSpec`s
+    /// on every render.
+    field_placements: Vec<overlay::FieldPlacement>,
+    /// The placements as regions, the single derivation `regions` and
+    /// `field_at` both read. Empty if the placements fail to resolve; a render
+    /// surfaces the same error.
+    widget_regions: Vec<RenderedRegion>,
+    /// The span scan's classification table: generated content-block windows
+    /// then the plate's scalar reference-site windows.
+    windows: Vec<overlay::FieldWindow>,
     /// Span resolution goes through this snapshot, not the world: a failed
     /// `apply` leaves the *next* injection's text in the world while every read
     /// keeps serving this compile.
     helper_source: typst::syntax::Source,
     /// Diffed against the next compile's to produce `ChangeSet::dirty_pages`.
     page_hashes: Vec<u128>,
-    /// What [`session_warnings`] built for the live compile. The compile half
-    /// swaps on each committed `apply`; the load half rides along unchanged.
+    /// What [`session_warnings`] built for this compile. The compile half swaps
+    /// on each committed `apply`; the load half rides along unchanged.
     warnings: Vec<Diagnostic>,
-    /// [`overlay::unclosed_claims`] for the live document, suppressed by every
+    /// [`overlay::unclosed_claims`] for this document, suppressed by every
     /// region and point query. Computed with the compile rather than per query:
     /// `field_at` cannot derive it from the page prefix it walks.
     unclosed_claims: Vec<usize>,
+}
+
+/// Inject the data, compile, and derive every table a query reads. Nothing a
+/// session serves is touched on the way, so a caller commits the result in one
+/// move or keeps what it had.
+fn recompile(
+    world: &mut world::QuillWorld,
+    data: &serde_json::Value,
+    schema_meta: &SchemaMeta,
+    scalar_windows: &[overlay::FieldWindow],
+) -> Result<Compiled, RenderError> {
+    let mut windows = world
+        .inject_helper_package(data, schema_meta)
+        .map_err(|e| engine_err(e.code(), e.to_string()))?;
+    windows.extend(scalar_windows.iter().cloned());
+
+    let (document, compile_warnings) = compile::compile_document(world)?;
+    let helper_source = helper_source(world)?;
+    let field_placements = overlay::extract(&document)?;
+
+    let unclosed = overlay::unclosed_claims(&document);
+    let hashes = page_hashes(&document);
+    let warnings = session_warnings(world, compile_warnings, &unclosed);
+    let widget_regions = overlay::build_field_specs(&document, &field_placements)
+        .map(|specs| quillmark_pdf::regions_of(&specs))
+        .unwrap_or_default();
+    Ok(Compiled {
+        document,
+        field_placements,
+        widget_regions,
+        windows,
+        helper_source,
+        page_hashes: hashes,
+        warnings,
+        unclosed_claims: unclosed.into_iter().map(|(claim, _)| claim).collect(),
+    })
 }
 
 /// The quill's load warnings, then this compile's own, then one per runaway
@@ -205,59 +251,46 @@ impl SessionHandle for TypstSession {
         }
 
         compile::render_document_pages(
-            &self.document,
+            &self.live.document,
             opts.pages.as_deref(),
             format,
             opts.ppi,
-            &self.field_placements,
+            &self.live.field_placements,
             opts.producer.as_deref(),
         )
     }
 
     fn page_count(&self) -> usize {
-        self.page_count
+        self.live.document.pages().len()
     }
 
-    /// Transactional: the live document, placements, hashes, and compile
-    /// warnings swap together only after the compile *and* placement extraction
-    /// succeed, so on `Err` every read keeps serving the last-good compile.
+    /// Transactional: the live compile swaps in whole only after [`recompile`]
+    /// succeeds, so on `Err` every read keeps serving the last-good one.
     fn update(&mut self, json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> {
         let data = transformed_data(json_data);
-        let mut windows = self
-            .world
-            .inject_helper_package(data.as_ref(), &self.schema_meta)
-            .map_err(|e| engine_err(e.code(), e.to_string()))?;
-        windows.extend(self.scalar_windows.iter().cloned());
+        let compiled = recompile(
+            &mut self.world,
+            data.as_ref(),
+            &self.schema_meta,
+            &self.scalar_windows,
+        )?;
 
-        let (document, compile_warnings) = compile::compile_document(&self.world)?;
-        let helper_source = helper_source(&self.world)?;
-        let field_placements = overlay::extract(&document)?;
-        let new_hashes = page_hashes(&document);
-        let unclosed = overlay::unclosed_claims(&document);
-
-        let dirty_pages = (0..new_hashes.len())
-            .filter(|&i| self.page_hashes.get(i) != Some(&new_hashes[i]))
+        let page_count = compiled.page_hashes.len();
+        let dirty_pages = (0..page_count)
+            .filter(|&i| self.live.page_hashes.get(i) != Some(&compiled.page_hashes[i]))
             .collect();
 
-        self.document = document;
-        self.field_placements = field_placements;
-        self.windows = windows;
-        self.helper_source = helper_source;
-        self.page_count = new_hashes.len();
-        self.page_hashes = new_hashes;
-        self.warnings = session_warnings(&self.world, compile_warnings, &unclosed);
-        self.unclosed_claims = unclosed.into_iter().map(|(claim, _)| claim).collect();
-
-        Ok(ChangeSet::new(self.page_count, dirty_pages))
+        self.live = compiled;
+        Ok(ChangeSet::new(page_count, dirty_pages))
     }
 
     fn warnings(&self) -> &[Diagnostic] {
-        &self.warnings
+        &self.live.warnings
     }
 
     /// Typst points: 1 pt = 1/72 inch.
     fn page_size_pt(&self, page: usize) -> Option<(f32, f32)> {
-        let frame = &self.document.pages().get(page)?.frame;
+        let frame = &self.live.document.pages().get(page)?.frame;
         let size = frame.size();
         Some((size.x.to_pt() as f32, size.y.to_pt() as f32))
     }
@@ -265,14 +298,8 @@ impl SessionHandle for TypstSession {
     /// Non-premultiplied RGBA8 at `scale`× the natural 72 ppi, returned as
     /// `(width_px, height_px, rgba)` with `w * h * 4` row-major bytes.
     fn render_rgba(&self, page: usize, scale: f32) -> Option<(u32, u32, Vec<u8>)> {
-        let p = self.document.pages().get(page)?;
-        let pixmap = typst_render::render(
-            p,
-            &typst_render::RenderOptions {
-                pixel_per_pt: typst::utils::Scalar::new(scale as f64),
-                ..Default::default()
-            },
-        );
+        let p = self.live.document.pages().get(page)?;
+        let pixmap = typst_render::render(p, &compile::render_options(scale));
         let width = pixmap.width();
         let height = pixmap.height();
         let mut rgba = Vec::with_capacity((width as usize) * (height as usize) * 4);
@@ -292,73 +319,46 @@ impl SessionHandle for TypstSession {
     /// repeat it, so consumers group by field. Widget regions are empty if the
     /// placements fail to resolve; a render surfaces the same error.
     fn regions(&self) -> Vec<quillmark_core::RenderedRegion> {
-        let mut regions = self.widget_regions();
-        regions.extend(overlay::scan_content_regions(
-            &self.document,
-            &self.world,
-            &self.helper_source,
-            &self.windows,
-            &self.unclosed_claims,
-        ));
+        let mut regions = self.live.widget_regions.clone();
+        regions.extend(self.scan().regions());
         regions
     }
 
     /// Widget boxes answer first: a widget is a deliberate click target drawing
     /// no spanned ink of its own, so content ink beneath it must not swallow the
     /// click. Among overlapping widgets the later-painted one wins, matching
-    /// `span_scan::field_at`.
+    /// `Scan::field_at`.
     fn field_at(&self, page: usize, x: f32, y: f32) -> Option<String> {
-        self.widget_regions()
-            .into_iter()
+        self.live
+            .widget_regions
+            .iter()
             .rev()
             .find(|r| r.contains(page, x, y))
-            .map(|r| r.field)
-            .or_else(|| {
-                overlay::field_at(
-                    &self.document,
-                    &self.world,
-                    &self.helper_source,
-                    &self.windows,
-                    &self.unclosed_claims,
-                    page,
-                    x,
-                    y,
-                )
-            })
+            .map(|r| r.field.clone())
+            .or_else(|| self.scan().field_at(page, x, y))
     }
 
     /// The fine-grained twin of [`field_at`](Self::field_at). Widgets draw no
     /// spanned content ink, so unlike `field_at` they are not consulted.
     fn position_at(&self, page: usize, x: f32, y: f32) -> Option<ContentHit> {
-        overlay::position_at(
-            &self.document,
-            &self.world,
-            &self.helper_source,
-            &self.windows,
-            page,
-            x,
-            y,
-        )
+        self.scan().position_at(page, x, y)
     }
 
     fn locate(&self, field: &str, pos: usize) -> Option<RenderedRegion> {
-        overlay::locate(
-            &self.document,
-            &self.world,
-            &self.helper_source,
-            &self.windows,
-            field,
-            pos,
-        )
+        self.scan().locate(field, pos)
     }
 }
 
 impl TypstSession {
-    /// The single derivation `regions` and `field_at` both read.
-    fn widget_regions(&self) -> Vec<quillmark_core::RenderedRegion> {
-        overlay::build_field_specs(&self.document, &self.field_placements)
-            .map(|specs| quillmark_pdf::regions_of(&specs))
-            .unwrap_or_default()
+    /// The live compile's tables, as the one context every content query takes.
+    fn scan(&self) -> overlay::Scan<'_> {
+        overlay::Scan {
+            doc: &self.live.document,
+            world: &self.world,
+            helper: &self.live.helper_source,
+            windows: &self.live.windows,
+            unclosed: &self.live.unclosed_claims,
+        }
     }
 }
 
@@ -410,9 +410,6 @@ impl Backend for TypstBackend {
                 .with_source(e.as_ref()),
             )
         })?;
-        let mut windows = world
-            .inject_helper_package(data.as_ref(), &schema_meta)
-            .map_err(|e| engine_err(e.code(), e.to_string()))?;
         // The plate is static for the session: window its scalar sites once.
         let scalar_windows: Vec<overlay::FieldWindow> = {
             use typst::World as _;
@@ -433,26 +430,12 @@ impl Backend for TypstBackend {
                 })
                 .unwrap_or_default()
         };
-        windows.extend(scalar_windows.iter().cloned());
-        let (document, compile_warnings) = compile::compile_document(&world)?;
-        let unclosed = overlay::unclosed_claims(&document);
-        let warnings = session_warnings(&world, compile_warnings, &unclosed);
-        let helper_src = helper_source(&world)?;
-        let page_count = document.pages().len();
-        let field_placements = overlay::extract(&document)?;
-        let hashes = page_hashes(&document);
+        let live = recompile(&mut world, data.as_ref(), &schema_meta, &scalar_windows)?;
         let session = TypstSession {
             world,
-            document,
-            page_count,
-            field_placements,
             schema_meta,
-            windows,
             scalar_windows,
-            helper_source: helper_src,
-            page_hashes: hashes,
-            warnings,
-            unclosed_claims: unclosed.into_iter().map(|(claim, _)| claim).collect(),
+            live,
         };
         Ok(LiveSession::new(
             Box::new(session),
@@ -497,7 +480,7 @@ fn read_plate(source: &Quill) -> Result<String, RenderError> {
 }
 
 /// A single-diagnostic [`RenderError`] carrying `code`.
-fn engine_err(code: &str, message: impl Into<String>) -> RenderError {
+pub(crate) fn engine_err(code: &str, message: impl Into<String>) -> RenderError {
     RenderError::from_diag(
         Diagnostic::new(Severity::Error, message.into()).with_code(code.to_string()),
     )
@@ -578,7 +561,6 @@ impl AddressNode {
 /// because they answer different questions. Lowering reads the schema node
 /// ([`helper::lowering`]); the tree answers which *addresses* a plate may
 /// write, which is the same walk with everything but the steps pruned away.
-#[derive(Default)]
 pub(crate) struct SchemaMeta {
     /// The walk's cursor source: the same recursive projection
     /// `build_transform_schema` produced, kept whole rather than flattened.
@@ -587,6 +569,15 @@ pub(crate) struct SchemaMeta {
     /// [`AddressNode::to_json`] serializes it for the helper either way.
     pub(crate) root: AddressNode,
     pub(crate) cards: BTreeMap<String, AddressNode>,
+    /// Serialized once: the schema is fixed for a session's lifetime, and every
+    /// apply splices this same literal into the generated `lib.typ`.
+    meta_literal: String,
+}
+
+impl Default for SchemaMeta {
+    fn default() -> Self {
+        Self::from_schema_json(&serde_json::Value::Null)
+    }
 }
 
 impl SchemaMeta {
@@ -604,15 +595,18 @@ impl SchemaMeta {
             }
         }
 
-        Self {
+        let mut meta = Self {
             root: AddressNode::from_schema(schema_json),
             cards,
             schema: schema_json.clone(),
-        }
+            meta_literal: String::new(),
+        };
+        meta.meta_literal = helper::lit(&meta.address_json());
+        meta
     }
 
     /// The address tables the helper's `_qm-known-path` validates against.
-    pub(crate) fn address_json(&self) -> serde_json::Value {
+    fn address_json(&self) -> serde_json::Value {
         serde_json::json!({
             "fields": self.root.to_json(),
             "cards": serde_json::Value::Object(
@@ -622,6 +616,12 @@ impl SchemaMeta {
                     .collect(),
             ),
         })
+    }
+
+    /// [`address_json`](Self::address_json) as the Typst literal codegen
+    /// splices into `_qm-meta`.
+    pub(crate) fn meta_literal(&self) -> &str {
+        &self.meta_literal
     }
 
     /// The schema node declaring a top-level field.

@@ -91,7 +91,7 @@ impl Backend for PdfformBackend {
         let field_specs = resolve_field_specs(&bound, json_data);
 
         // Pre-flatten once so the raster paths need not re-flatten per paint.
-        let flat_pdf = flatten_to_pdf(base_pdf.clone(), &field_specs)?;
+        let flat_pdf = Arc::new(flatten_to_pdf(base_pdf.clone(), &field_specs)?);
 
         Ok(LiveSession::new(
             Box::new(PdfformSession {
@@ -131,7 +131,9 @@ struct PdfformSession {
     /// Cached so `page_size_pt` need not reparse.
     page_boxes: Vec<[f32; 4]>,
     /// Values baked as content-stream operators, ready for hayro rasterisation.
-    flat_pdf: Vec<u8>,
+    /// An `Arc` because hayro takes its bytes as one: a render pass shares them
+    /// rather than copying the whole flattened PDF.
+    flat_pdf: Arc<Vec<u8>>,
 }
 
 impl SessionHandle for PdfformSession {
@@ -175,7 +177,7 @@ impl SessionHandle for PdfformSession {
     }
 
     fn render_rgba(&self, page: usize, scale: f32) -> Option<(u32, u32, Vec<u8>)> {
-        let pdf = HayroPdf::new(self.flat_pdf.clone()).ok()?;
+        let pdf = HayroPdf::new(Arc::clone(&self.flat_pdf)).ok()?;
         let p = pdf.pages().get(page)?;
         let cache = RenderCache::new();
         let interp = standard_font_settings();
@@ -199,7 +201,7 @@ impl SessionHandle for PdfformSession {
     /// never changes, so field deltas are the only visible delta.
     fn update(&mut self, json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> {
         let field_specs = resolve_field_specs(&self.bound, json_data);
-        let flat_pdf = flatten_to_pdf(self.base_pdf.clone(), &field_specs)?;
+        let flat_pdf = Arc::new(flatten_to_pdf(self.base_pdf.clone(), &field_specs)?);
 
         let mut dirty_pages: Vec<usize> = self
             .field_specs
@@ -219,13 +221,19 @@ impl SessionHandle for PdfformSession {
 }
 
 impl PdfformSession {
-    fn render_svg(&self) -> Result<RenderResult, RenderError> {
-        let pdf = HayroPdf::new(self.flat_pdf.clone()).map_err(|_| {
+    /// The pre-flattened PDF parsed for a render pass, refused under the
+    /// caller's own per-format error code.
+    fn open_flat(&self, code: &'static str, label: &str) -> Result<HayroPdf, RenderError> {
+        HayroPdf::new(Arc::clone(&self.flat_pdf)).map_err(|_| {
             engine_err(
-                "pdfform::svg_parse_failed",
-                "failed to parse pre-flattened PDF for SVG render",
+                code,
+                format!("failed to parse pre-flattened PDF for {label} render"),
             )
-        })?;
+        })
+    }
+
+    fn render_svg(&self) -> Result<RenderResult, RenderError> {
+        let pdf = self.open_flat("pdfform::svg_parse_failed", "SVG")?;
         let interp = standard_font_settings();
         let svg_settings = SvgRenderSettings {
             bg_color: [255, 255, 255, 255],
@@ -245,12 +253,7 @@ impl PdfformSession {
 
     /// `scale` is device pixels per PDF point (`ppi / 72`).
     fn render_png(&self, scale: f32) -> Result<RenderResult, RenderError> {
-        let pdf = HayroPdf::new(self.flat_pdf.clone()).map_err(|_| {
-            engine_err(
-                "pdfform::png_parse_failed",
-                "failed to parse pre-flattened PDF for PNG render",
-            )
-        })?;
+        let pdf = self.open_flat("pdfform::png_parse_failed", "PNG")?;
         let interp = standard_font_settings();
         let render_settings = scaled_render_settings(scale);
 

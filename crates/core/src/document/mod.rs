@@ -118,7 +118,7 @@ pub use dto::{peek_storage_version, StorageError, StoredDocument, STORAGE_V0_93_
 pub use edit::EditError;
 pub use meta::{is_valid_kind_name, validate_composable_kind, CardKindError};
 pub use payload::{MetaKey, Payload, PayloadItem};
-// Reachable through `PayloadItem::nested_comments`, so nameable from here.
+// Reachable through `PayloadItem`'s `nested_comments` fields, so nameable from here.
 pub use prescan::{CommentPathSegment, NestedComment};
 pub use wire::{CardWire, PayloadItemWire, WireError};
 
@@ -422,6 +422,12 @@ impl Document {
 
     pub fn cards_mut(&mut self) -> &mut [Card] {
         &mut self.cards
+    }
+
+    /// The ordered card kinds, `None` per kindless card: the shape
+    /// [`regions_to_doc_path`](crate::regions_to_doc_path) takes.
+    pub fn card_kinds(&self) -> Vec<Option<&str>> {
+        self.cards.iter().map(|c| c.kind()).collect()
     }
 
     /// A single composable card by index: the immutable twin of

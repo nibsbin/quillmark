@@ -27,15 +27,18 @@ pub const QUILLMARK_PLAIN_KEY: &str = "quillmark:plain";
 /// conventional label.
 pub const QUILLMARK_BLANK_TITLE_KEY: &str = "quillmark:blank_title";
 
-/// The discriminant cell of a variant-bearing enum: the same
-/// `{type: string, enum: ["", …]}` a plain enum projects to. The container is a
-/// mapping and therefore not a cell, so this is where the choice lands.
+/// The `{type: string, enum: ["", …]}` an enum projects to: a plain enum's own
+/// cell, and the discriminant cell of a variant-bearing one. That container is a
+/// mapping and therefore not a cell, so this is where its choice lands.
 fn discriminant_schema(field: &FieldSchema) -> serde_json::Value {
     let mut schema = serde_json::Map::new();
     schema.insert(
         "type".to_string(),
         serde_json::Value::String("string".to_string()),
     );
+    // The model layer keeps `""` out of `values:` (it is not a choice), but this
+    // projection describes what is *wire-valid*, and the blank is: without it a
+    // standard JSON-Schema validator rejects a value the engine accepts.
     schema.insert(
         "enum".to_string(),
         serde_json::Value::Array(
@@ -103,31 +106,8 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
             schema.insert("properties".to_string(), properties.into());
             return serde_json::Value::Object(schema);
         }
-        if let Some(values) = &field.enum_values {
-            schema.insert(
-                "type".to_string(),
-                serde_json::Value::String("string".to_string()),
-            );
-            // The model layer keeps `""` out of `values:` (it is not a choice),
-            // but this projection describes what is *wire-valid*, and the blank
-            // is: without it a standard JSON-Schema validator rejects a value
-            // the engine accepts.
-            schema.insert(
-                "enum".to_string(),
-                serde_json::Value::Array(
-                    std::iter::once(String::new())
-                        .chain(values.iter().cloned())
-                        .map(serde_json::Value::String)
-                        .collect(),
-                ),
-            );
-            if let Some(blank_title) = field.ui.as_ref().and_then(|u| u.blank_title.as_ref()) {
-                schema.insert(
-                    QUILLMARK_BLANK_TITLE_KEY.to_string(),
-                    serde_json::Value::String(blank_title.clone()),
-                );
-            }
-            return serde_json::Value::Object(schema);
+        if field.enum_values.is_some() {
+            return discriminant_schema(field);
         }
         match field.r#type {
             FieldType::String => {
