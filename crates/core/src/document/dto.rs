@@ -14,10 +14,19 @@
 //!   `to_canonical_json`), not a markdown string. Two byte disciplines in one
 //!   envelope: the outer structure is compact `serde_json` in struct +
 //!   payload-insertion order, every `body` subtree is recursively key-sorted.
-//! - **`quillmark/document@0.92.0`**: the oldest wire format still read. The
-//!   unified [`Payload`] item list with a per-field `nested_fills` list and the
-//!   `$seed` item variant, body as a markdown string. Read-only: the body
-//!   cold-imports and the document migrates forward to V0_93_0 on read.
+//! - **`quillmark/document@0.92.0`**: the unified [`Payload`] item list with a
+//!   per-field `nested_fills` list and the `$seed` item variant, body as a
+//!   markdown string. Read-only: the body cold-imports and the document
+//!   migrates forward to V0_93_0 on read.
+//! - **`quillmark/document@0.82.0`**: the same item list without
+//!   `nested_fills` or `$seed`, plus `$id`. The tag names a shape **union**
+//!   rather than one frozen format — `$ext` entered under it unchanged — so
+//!   the reader accepts every shape stamped with it. Read-only, and the one
+//!   **lossy** hop: `$id` has no live counterpart and is dropped.
+//! - **`quillmark/document@0.81.0`**: the oldest wire format still read. The
+//!   pre-unification shape: a separate `sentinel` (the typed `$quill` /
+//!   `$kind`) beside a `frontmatter` item list carrying user fields and
+//!   comments only. Read-only, migrated forward to V0_82_0 on read.
 //!
 //! The canonical design (including the step-by-step procedure for adding
 //! a schema version) is `prose/canon/DOCUMENT_STORAGE.md`.
@@ -77,6 +86,15 @@ pub enum StoredDocument {
     /// migrated forward to V0_93_0 on reconstruction.
     #[serde(rename = "quillmark/document@0.92.0")]
     V0_92_0(DocumentV0_92_0),
+    /// Legacy (V0_82_0) document model: unified payload items without
+    /// `nested_fills` or `$seed`, carrying `$id`. Read-only; migrated forward
+    /// on reconstruction, dropping `$id`.
+    #[serde(rename = "quillmark/document@0.82.0")]
+    V0_82_0(DocumentV0_82_0),
+    /// Legacy (V0_81_0) document model: a separate `sentinel` beside a
+    /// `frontmatter` item list. Read-only; migrated forward on reconstruction.
+    #[serde(rename = "quillmark/document@0.81.0")]
+    V0_81_0(DocumentV0_81_0),
 }
 
 /// Failure while reconstructing a [`Document`] from a [`StoredDocument`].
@@ -389,12 +407,19 @@ impl TryFrom<StoredDocument> for Document {
 
     fn try_from(stored: StoredDocument) -> Result<Self, Self::Error> {
         // Only the newest DTO converts to the live model; older versions migrate
-        // forward. The V0_92 → V0_93 hop cold-imports the body, so it is fallible.
+        // forward (V0_81 → V0_82 → V0_92 → V0_93). The V0_92 → V0_93 hop
+        // cold-imports the body, so every arm below the newest is fallible.
         match stored {
             StoredDocument::V0_93_0(payload) => Document::try_from(payload),
             StoredDocument::V0_92_0(payload) => {
                 Document::try_from(DocumentV0_93_0::try_from(payload)?)
             }
+            StoredDocument::V0_82_0(payload) => Document::try_from(DocumentV0_93_0::try_from(
+                DocumentV0_92_0::from(payload),
+            )?),
+            StoredDocument::V0_81_0(payload) => Document::try_from(DocumentV0_93_0::try_from(
+                DocumentV0_92_0::from(DocumentV0_82_0::from(payload)),
+            )?),
         }
     }
 }
@@ -605,6 +630,329 @@ impl From<CommentPathSegmentV0_92_0> for CommentPathSegment {
     }
 }
 
+// ─── V0_81_0 wire format ──────────────────────────────────────────────────────
+//
+// Read + migrate-forward only. One release wrote this tag, so unlike `@0.82.0`
+// it names one frozen shape. It carries neither `$id` nor `$ext`, so the hop
+// below is lossless.
+
+/// Frozen `0.81.0` representation of a [`Document`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DocumentV0_81_0 {
+    pub main: CardV0_81_0,
+    #[serde(default)]
+    pub cards: Vec<CardV0_81_0>,
+}
+
+/// Frozen `0.81.0` representation of a [`Card`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CardV0_81_0 {
+    pub sentinel: SentinelV0_81_0,
+    #[serde(default)]
+    pub frontmatter: FrontmatterV0_81_0,
+    #[serde(default)]
+    pub body: String,
+}
+
+/// Frozen `0.81.0` representation of a card discriminator (sentinel).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum SentinelV0_81_0 {
+    Main { quill: String },
+    Card { tag: String },
+}
+
+/// Frozen `0.81.0` representation of a card payload (user fields only).
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct FrontmatterV0_81_0 {
+    #[serde(default)]
+    pub items: Vec<FrontmatterItemV0_81_0>,
+    #[serde(default)]
+    pub nested_comments: Vec<NestedCommentV0_81_0>,
+}
+
+/// Frozen `0.81.0` representation of a payload item. The `$` entries live in
+/// the sentinel, and neither `$ext` (`0.83.0`) nor `$seed` (`0.92.0`) existed,
+/// so `Field` and `Comment` are the whole set.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum FrontmatterItemV0_81_0 {
+    Field {
+        key: String,
+        value: serde_json::Value,
+        #[serde(default)]
+        fill: bool,
+    },
+    Comment {
+        text: String,
+        #[serde(default)]
+        inline: bool,
+    },
+}
+
+/// Frozen `0.81.0` representation of a [`NestedComment`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NestedCommentV0_81_0 {
+    pub container_path: Vec<CommentPathSegmentV0_81_0>,
+    pub position: usize,
+    pub text: String,
+    pub inline: bool,
+}
+
+/// Frozen `0.81.0` representation of a [`CommentPathSegment`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum CommentPathSegmentV0_81_0 {
+    Key(String),
+    Index(usize),
+}
+
+// ─── V0_81_0 → V0_82_0 migration ──────────────────────────────────────────────
+//
+// Quill-reference, field-name, and depth validation happen once, further down
+// the chain.
+
+impl From<DocumentV0_81_0> for DocumentV0_82_0 {
+    fn from(d: DocumentV0_81_0) -> Self {
+        DocumentV0_82_0 {
+            main: CardV0_82_0::from(d.main),
+            cards: d.cards.into_iter().map(CardV0_82_0::from).collect(),
+        }
+    }
+}
+
+impl From<CardV0_81_0> for CardV0_82_0 {
+    fn from(c: CardV0_81_0) -> Self {
+        let mut items: Vec<PayloadItemV0_82_0> = Vec::new();
+
+        // The sentinel leaves `$kind: main` implicit; the live model needs it
+        // explicit for the markdown emit to produce a parseable document.
+        match c.sentinel {
+            SentinelV0_81_0::Main { quill } => {
+                items.push(PayloadItemV0_82_0::Quill { value: quill });
+                items.push(PayloadItemV0_82_0::Kind {
+                    value: "main".into(),
+                });
+            }
+            SentinelV0_81_0::Card { tag } => {
+                items.push(PayloadItemV0_82_0::Kind { value: tag });
+            }
+        }
+
+        // Comments migrate as-is, landing after the `$` prelude: V0_81_0
+        // tracks no `$`-line comments to interleave them with.
+        for item in c.frontmatter.items {
+            items.push(match item {
+                FrontmatterItemV0_81_0::Field { key, value, fill } => {
+                    PayloadItemV0_82_0::Field { key, value, fill }
+                }
+                FrontmatterItemV0_81_0::Comment { text, inline } => {
+                    PayloadItemV0_82_0::Comment { text, inline }
+                }
+            });
+        }
+
+        CardV0_82_0 {
+            payload: PayloadV0_82_0 {
+                items,
+                nested_comments: c
+                    .frontmatter
+                    .nested_comments
+                    .into_iter()
+                    .map(NestedCommentV0_82_0::from)
+                    .collect(),
+            },
+            body: c.body,
+        }
+    }
+}
+
+impl From<NestedCommentV0_81_0> for NestedCommentV0_82_0 {
+    fn from(nc: NestedCommentV0_81_0) -> Self {
+        NestedCommentV0_82_0 {
+            container_path: nc
+                .container_path
+                .into_iter()
+                .map(CommentPathSegmentV0_82_0::from)
+                .collect(),
+            position: nc.position,
+            text: nc.text,
+            inline: nc.inline,
+        }
+    }
+}
+
+impl From<CommentPathSegmentV0_81_0> for CommentPathSegmentV0_82_0 {
+    fn from(seg: CommentPathSegmentV0_81_0) -> Self {
+        match seg {
+            CommentPathSegmentV0_81_0::Key(k) => CommentPathSegmentV0_82_0::Key(k),
+            CommentPathSegmentV0_81_0::Index(i) => CommentPathSegmentV0_82_0::Index(i),
+        }
+    }
+}
+
+// ─── V0_82_0 wire format ──────────────────────────────────────────────────────
+//
+// Read + migrate-forward only. The tag names a shape union, not one frozen
+// format: `Ext` entered under it unchanged. Accepting the union is what lets a
+// row from any writer that stamped `@0.82.0` decode here.
+
+/// Frozen `0.82.0` representation of a [`Document`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DocumentV0_82_0 {
+    pub main: CardV0_82_0,
+    #[serde(default)]
+    pub cards: Vec<CardV0_82_0>,
+}
+
+/// Frozen `0.82.0` representation of a [`Card`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CardV0_82_0 {
+    pub payload: PayloadV0_82_0,
+    #[serde(default)]
+    pub body: String,
+}
+
+/// Frozen `0.82.0` representation of a [`Payload`].
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct PayloadV0_82_0 {
+    #[serde(default)]
+    pub items: Vec<PayloadItemV0_82_0>,
+    #[serde(default)]
+    pub nested_comments: Vec<NestedCommentV0_82_0>,
+}
+
+/// Frozen `0.82.0` representation of a unified payload item.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum PayloadItemV0_82_0 {
+    /// `$quill` system metadata: the quill reference string.
+    Quill { value: String },
+    /// `$kind` system metadata.
+    Kind { value: String },
+    /// `$id` system metadata. The live model has no counterpart, so this is
+    /// the one item the forward migration drops.
+    Id { value: String },
+    /// `$ext` system metadata: an opaque mapping carrying out-of-band
+    /// extension data.
+    Ext {
+        value: serde_json::Map<String, serde_json::Value>,
+    },
+    /// A user-defined field.
+    Field {
+        key: String,
+        value: serde_json::Value,
+        #[serde(default)]
+        fill: bool,
+    },
+    /// A YAML comment.
+    Comment {
+        text: String,
+        #[serde(default)]
+        inline: bool,
+    },
+}
+
+/// Frozen `0.82.0` representation of a [`NestedComment`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NestedCommentV0_82_0 {
+    pub container_path: Vec<CommentPathSegmentV0_82_0>,
+    pub position: usize,
+    pub text: String,
+    pub inline: bool,
+}
+
+/// Frozen `0.82.0` representation of a [`CommentPathSegment`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum CommentPathSegmentV0_82_0 {
+    Key(String),
+    Index(usize),
+}
+
+// ─── V0_82_0 → V0_92_0 migration ──────────────────────────────────────────────
+//
+// Lossy by decision: `$id` has no live counterpart, and dropping it is chosen
+// over refusing the row.
+
+impl From<DocumentV0_82_0> for DocumentV0_92_0 {
+    fn from(d: DocumentV0_82_0) -> Self {
+        DocumentV0_92_0 {
+            main: CardV0_92_0::from(d.main),
+            cards: d.cards.into_iter().map(CardV0_92_0::from).collect(),
+        }
+    }
+}
+
+impl From<CardV0_82_0> for CardV0_92_0 {
+    fn from(c: CardV0_82_0) -> Self {
+        CardV0_92_0 {
+            payload: PayloadV0_92_0::from(c.payload),
+            body: c.body,
+        }
+    }
+}
+
+impl From<PayloadV0_82_0> for PayloadV0_92_0 {
+    fn from(p: PayloadV0_82_0) -> Self {
+        PayloadV0_92_0 {
+            items: p
+                .items
+                .into_iter()
+                .filter_map(PayloadItemV0_92_0::from_v0_82_0)
+                .collect(),
+            nested_comments: p
+                .nested_comments
+                .into_iter()
+                .map(NestedCommentV0_92_0::from)
+                .collect(),
+        }
+    }
+}
+
+impl PayloadItemV0_92_0 {
+    /// `None` for `$id`, which has no live counterpart.
+    fn from_v0_82_0(item: PayloadItemV0_82_0) -> Option<Self> {
+        Some(match item {
+            PayloadItemV0_82_0::Id { .. } => return None,
+            PayloadItemV0_82_0::Quill { value } => PayloadItemV0_92_0::Quill { value },
+            PayloadItemV0_82_0::Kind { value } => PayloadItemV0_92_0::Kind { value },
+            PayloadItemV0_82_0::Ext { value } => PayloadItemV0_92_0::Ext { value },
+            PayloadItemV0_82_0::Field { key, value, fill } => PayloadItemV0_92_0::Field {
+                key,
+                value,
+                fill,
+                nested_fills: Vec::new(),
+            },
+            PayloadItemV0_82_0::Comment { text, inline } => {
+                PayloadItemV0_92_0::Comment { text, inline }
+            }
+        })
+    }
+}
+
+impl From<NestedCommentV0_82_0> for NestedCommentV0_92_0 {
+    fn from(nc: NestedCommentV0_82_0) -> Self {
+        NestedCommentV0_92_0 {
+            container_path: nc
+                .container_path
+                .into_iter()
+                .map(CommentPathSegmentV0_92_0::from)
+                .collect(),
+            position: nc.position,
+            text: nc.text,
+            inline: nc.inline,
+        }
+    }
+}
+
+impl From<CommentPathSegmentV0_82_0> for CommentPathSegmentV0_92_0 {
+    fn from(seg: CommentPathSegmentV0_82_0) -> Self {
+        match seg {
+            CommentPathSegmentV0_82_0::Key(k) => CommentPathSegmentV0_92_0::Key(k),
+            CommentPathSegmentV0_82_0::Index(i) => CommentPathSegmentV0_92_0::Index(i),
+        }
+    }
+}
+
 /// Reject a payload no markdown-parsed `Document` could produce: too many
 /// fields or a duplicate user-field key. The markdown parser already
 /// rejects both; this only guards hand-crafted storage DTOs.
@@ -769,17 +1117,185 @@ title: Hi
     }
 
     #[test]
-    fn retired_legacy_schema_tags_are_rejected() {
-        // `@0.81.0` and `@0.82.0` have no reader: rejected, never migrated.
-        for tag in ["quillmark/document@0.81.0", "quillmark/document@0.82.0"] {
-            let json = format!(
-                r#"{{"schema":"{tag}","main":{{"payload":{{"items":[]}},"body":""}},"cards":[]}}"#
-            );
-            assert!(
-                serde_json::from_str::<Document>(&json).is_err(),
-                "expected {tag} to be rejected as an unknown schema"
-            );
-        }
+    fn v0_82_0_payload_loads_via_migration() {
+        let json = r#"{
+            "schema": "quillmark/document@0.82.0",
+            "main": {
+                "payload": {"items": [
+                    {"type": "quill", "value": "usaf_memo@0.1"},
+                    {"type": "kind", "value": "main"},
+                    {"type": "field", "key": "title", "value": "Hello"}
+                ]},
+                "body": "Body."
+            },
+            "cards": []
+        }"#;
+        let doc: Document = serde_json::from_str(json).unwrap();
+        assert_eq!(doc.main().kind(), Some("main"));
+        assert_eq!(
+            doc.main().payload().get("title").unwrap().as_str(),
+            Some("Hello")
+        );
+        let reser = serde_json::to_string(&doc).unwrap();
+        assert_eq!(
+            peek_storage_version(&reser).as_deref(),
+            Some(STORAGE_V0_93_0)
+        );
+    }
+
+    #[test]
+    fn v0_82_0_ext_item_loads() {
+        let json = r#"{
+            "schema": "quillmark/document@0.82.0",
+            "main": {
+                "payload": {"items": [
+                    {"type": "quill", "value": "q@1.0"},
+                    {"type": "kind", "value": "main"},
+                    {"type": "ext", "value": {"editor": {"pinned": true}}}
+                ]},
+                "body": ""
+            },
+            "cards": []
+        }"#;
+        let doc: Document = serde_json::from_str(json).unwrap();
+        assert!(doc.main().ext().is_some());
+    }
+
+    #[test]
+    fn v0_82_0_id_item_is_dropped_not_rejected() {
+        let json = r#"{
+            "schema": "quillmark/document@0.82.0",
+            "main": {
+                "payload": {"items": [
+                    {"type": "quill", "value": "q@1.0"},
+                    {"type": "kind", "value": "main"},
+                    {"type": "id", "value": "card-7"},
+                    {"type": "field", "key": "title", "value": "Hello"}
+                ]},
+                "body": ""
+            },
+            "cards": []
+        }"#;
+        let doc: Document = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            doc.main().payload().get("title").unwrap().as_str(),
+            Some("Hello")
+        );
+        let md = doc.to_markdown();
+        assert!(!md.contains("$id"), "{md}");
+        assert!(!md.contains("card-7"), "{md}");
+        assert_eq!(doc, Document::parse(&md).unwrap().document);
+    }
+
+    #[test]
+    fn v0_82_0_seed_item_is_rejected() {
+        // `$seed` is what the `@0.92.0` bump added: a blob claiming the older
+        // tag cannot legitimately carry one.
+        let json = r#"{
+            "schema": "quillmark/document@0.82.0",
+            "main": {
+                "payload": {"items": [
+                    {"type": "quill", "value": "q@1.0"},
+                    {"type": "kind", "value": "main"},
+                    {"type": "seed", "value": {"indorsement": {"from": "X"}}}
+                ]},
+                "body": ""
+            },
+            "cards": []
+        }"#;
+        assert!(serde_json::from_str::<Document>(json).is_err());
+    }
+
+    #[test]
+    fn v0_81_0_payload_loads_via_migration() {
+        let json = r#"{
+            "schema": "quillmark/document@0.81.0",
+            "main": {
+                "sentinel": {"kind": "main", "quill": "usaf_memo@0.1"},
+                "frontmatter": {
+                    "items": [{"kind": "field", "key": "title", "value": "Hello"}]
+                },
+                "body": "Body."
+            },
+            "cards": []
+        }"#;
+        let doc: Document = serde_json::from_str(json).unwrap();
+        assert_eq!(doc.main().kind(), Some("main"));
+        assert_eq!(doc.quill_reference().to_string(), "usaf_memo@0.1");
+        assert_eq!(
+            doc.main().payload().get("title").unwrap().as_str(),
+            Some("Hello")
+        );
+        let reser = serde_json::to_string(&doc).unwrap();
+        assert_eq!(
+            peek_storage_version(&reser).as_deref(),
+            Some(STORAGE_V0_93_0)
+        );
+    }
+
+    #[test]
+    fn v0_81_0_with_composable_card_migrates() {
+        let json = r#"{
+            "schema": "quillmark/document@0.81.0",
+            "main": {
+                "sentinel": {"kind": "main", "quill": "q@1.0"},
+                "frontmatter": {"items": []},
+                "body": ""
+            },
+            "cards": [
+                {
+                    "sentinel": {"kind": "card", "tag": "indorsement"},
+                    "frontmatter": {"items": [{"kind": "field", "key": "for", "value": "X"}]},
+                    "body": "C body"
+                }
+            ]
+        }"#;
+        let doc: Document = serde_json::from_str(json).unwrap();
+        assert_eq!(doc.cards().len(), 1);
+        assert_eq!(doc.cards()[0].kind(), Some("indorsement"));
+        assert_eq!(
+            doc.cards()[0].payload().get("for").unwrap().as_str(),
+            Some("X")
+        );
+    }
+
+    #[test]
+    fn v0_81_0_comments_and_fill_survive_the_migration() {
+        // The two the sentinel split could drop: comment order against the `$`
+        // prelude, and nested-comment paths, whose absolute payload-level form
+        // V0_81_0 and V0_92_0 share.
+        let json = r#"{
+            "schema": "quillmark/document@0.81.0",
+            "main": {
+                "sentinel": {"kind": "main", "quill": "q@1.0"},
+                "frontmatter": {
+                    "items": [
+                        {"kind": "comment", "text": "a top-level comment"},
+                        {"kind": "field", "key": "subject", "value": "S", "fill": true},
+                        {"kind": "field", "key": "memo_for", "value": ["ORG/SYMBOL"]}
+                    ],
+                    "nested_comments": [
+                        {
+                            "container_path": [{"Key": "memo_for"}],
+                            "position": 0,
+                            "text": "inline note",
+                            "inline": true
+                        }
+                    ]
+                },
+                "body": "Body."
+            },
+            "cards": []
+        }"#;
+        let doc: Document = serde_json::from_str(json).unwrap();
+        let md = doc.to_markdown();
+        assert!(md.contains("# a top-level comment"), "{md}");
+        assert!(md.contains("!must_fill"), "{md}");
+        assert!(md.contains("# inline note"), "{md}");
+
+        // The migration invents nothing the parser would not.
+        let reparsed = Document::parse(&md).unwrap().document;
+        assert_eq!(doc, reparsed);
     }
 
     #[test]
