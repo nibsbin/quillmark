@@ -15,8 +15,7 @@
   This reverses the #929 retirement, whose two premises were both wrong. Rows
   do predate `@0.92.0` — #1327 reports stored `@0.81.0` ones. And `0.82.0` was
   not yanked: every published Quillmark version is live on crates.io, npm, and
-  PyPI. `docs/migrations/0.82-to-0.83.md`, which carried that claim, now
-  carries the correction. Because no yank happened, `@0.82.0` names a shape
+  PyPI. Because no yank happened, `@0.82.0` names a shape
   union rather than a frozen format — every release from `0.83.0` through
   `0.91.0` stamped it — so the restored reader accepts the union (#1327)
 
