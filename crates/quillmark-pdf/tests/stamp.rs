@@ -10,8 +10,7 @@ fn build_base_pdf(n: usize) -> Vec<u8> {
     build_base_pdf_origin(n, [0.0, 0.0, 612.0, 792.0])
 }
 
-/// A schema-bound single-line text field carrying `value`. The spine's real
-/// producers assign the optional fields directly, so the tests do too.
+/// A schema-bound single-line text field carrying `value`.
 fn text_field(name: &str, schema: &str, page: usize, rect: [f32; 4], value: &str) -> FieldSpec {
     let mut spec = FieldSpec::new(
         name.into(),
