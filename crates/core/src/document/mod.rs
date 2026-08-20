@@ -118,7 +118,7 @@ pub use dto::{peek_storage_version, StorageError, StoredDocument, STORAGE_V0_93_
 pub use edit::EditError;
 pub use meta::{is_valid_kind_name, validate_composable_kind, CardKindError};
 pub use payload::{MetaKey, Payload, PayloadItem};
-// Reachable through `PayloadItem::nested_comments`, so nameable from here.
+// Reachable through `PayloadItem`'s `nested_comments` fields, so nameable from here.
 pub use prescan::{CommentPathSegment, NestedComment};
 pub use wire::{CardWire, PayloadItemWire, WireError};
 

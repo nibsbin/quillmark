@@ -12,6 +12,13 @@ mod multibyte_tests;
 mod number_edge_tests;
 mod seed_tests;
 
+/// Parse `src`, failing the test on a parse error and dropping the warnings.
+pub(super) fn parse(src: &str) -> super::Document {
+    super::Document::parse(src)
+        .expect("source should parse")
+        .document
+}
+
 /// Every `.md` reachable from `root`, recursively. Includes bundled quill
 /// `README.md`s, which carry no root card-yaml block and are skipped at parse.
 pub(super) fn collect_md_files(root: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {

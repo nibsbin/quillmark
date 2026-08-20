@@ -175,23 +175,8 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
                     child_count: 0,
                 });
             } else if let Some((key, after_colon)) = split_key(after_dash_trimmed) {
-                let (fill, value_without_tag, had_non_fill_tag, fill_target_err) =
-                    inspect_fill_and_tags(&after_colon, &key);
-                if had_non_fill_tag {
-                    out.warnings.push(
-                        Diagnostic::new(
-                            Severity::Warning,
-                            format!(
-                                "YAML tag on key `{}` is not supported; the tag has been dropped and the value kept",
-                                key
-                            ),
-                        )
-                        .with_code("parse::unsupported_yaml_tag".to_string()),
-                    );
-                }
-                if let Some(err) = fill_target_err {
-                    out.fill_target_errors.push(err);
-                }
+                let (fill, value_without_tag, had_non_fill_tag) =
+                    record_fill_and_tags(&mut out, &after_colon, &key);
                 if fill {
                     let mut key_path = item_path.clone();
                     key_path.push(CommentPathSegment::Key(key.clone()));
@@ -242,24 +227,8 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
             if let Some((key, after_colon)) = split_key(line) {
                 let (value_part, trailing_comment) = split_trailing_comment(&after_colon);
 
-                let (fill, value_without_tag, had_non_fill_tag, fill_target_err) =
-                    inspect_fill_and_tags(&value_part, &key);
-
-                if had_non_fill_tag {
-                    out.warnings.push(
-                        Diagnostic::new(
-                            Severity::Warning,
-                            format!(
-                                "YAML tag on key `{}` is not supported; the tag has been dropped and the value kept",
-                                key
-                            ),
-                        )
-                        .with_code("parse::unsupported_yaml_tag".to_string()),
-                    );
-                }
-                if let Some(err) = fill_target_err {
-                    out.fill_target_errors.push(err);
-                }
+                let (fill, value_without_tag, _) =
+                    record_fill_and_tags(&mut out, &value_part, &key);
 
                 out.items.push(PreItem::Field {
                     key: key.clone(),
@@ -319,23 +288,7 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
 
             let (value_part, trailing_comment) = split_trailing_comment(&after_colon);
 
-            let (fill, value_without_tag, had_non_fill_tag, fill_target_err) =
-                inspect_fill_and_tags(&value_part, &key);
-            if had_non_fill_tag {
-                out.warnings.push(
-                    Diagnostic::new(
-                        Severity::Warning,
-                        format!(
-                            "YAML tag on key `{}` is not supported; the tag has been dropped and the value kept",
-                            key
-                        ),
-                    )
-                    .with_code("parse::unsupported_yaml_tag".to_string()),
-                );
-            }
-            if let Some(err) = fill_target_err {
-                out.fill_target_errors.push(err);
-            }
+            let (fill, value_without_tag, _) = record_fill_and_tags(&mut out, &value_part, &key);
             if fill {
                 out.nested_fills.push(key_path.clone());
             }
@@ -480,9 +433,10 @@ fn has_empty_inline_value(after_colon: &str) -> bool {
     v.trim().is_empty()
 }
 
-/// Split a line into `(key, rest_after_colon)`, or `None` for non-key lines.
-/// Handles `[a-zA-Z_][a-zA-Z0-9_]*` and `$`-prefixed system keys.
-fn split_key(line: &str) -> Option<(String, String)> {
+/// Byte index of the `:` closing `line`'s leading key, or `None` when `line`
+/// does not open with one. A key is `[a-zA-Z_][a-zA-Z0-9_]*`, optionally
+/// `$`-prefixed for system keys.
+pub(super) fn key_end(line: &str) -> Option<usize> {
     let bytes = line.as_bytes();
     if bytes.is_empty() {
         return None;
@@ -501,12 +455,13 @@ fn split_key(line: &str) -> Option<(String, String)> {
     while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
         i += 1;
     }
-    if i >= bytes.len() || bytes[i] != b':' {
-        return None;
-    }
-    let key = line[..i].to_string();
-    let rest = line[i + 1..].to_string();
-    Some((key, rest))
+    (i < bytes.len() && bytes[i] == b':').then_some(i)
+}
+
+/// Split a line into `(key, rest_after_colon)`, or `None` for non-key lines.
+fn split_key(line: &str) -> Option<(String, String)> {
+    let i = key_end(line)?;
+    Some((line[..i].to_string(), line[i + 1..].to_string()))
 }
 
 /// Split `value` into `(value_without_comment, trailing_comment)` following
@@ -675,6 +630,29 @@ fn inspect_fill_and_tags(value: &str, key: &str) -> (bool, String, bool, Option<
     }
 
     (false, value.to_string(), false, None)
+}
+
+/// [`inspect_fill_and_tags`] with its diagnostics recorded onto `out`,
+/// returning `(fill, value_without_tag, had_other_tag)`.
+fn record_fill_and_tags(out: &mut PreScan, value: &str, key: &str) -> (bool, String, bool) {
+    let (fill, value_without_tag, had_non_fill_tag, fill_target_err) =
+        inspect_fill_and_tags(value, key);
+    if had_non_fill_tag {
+        out.warnings.push(
+            Diagnostic::new(
+                Severity::Warning,
+                format!(
+                    "YAML tag on key `{}` is not supported; the tag has been dropped and the value kept",
+                    key
+                ),
+            )
+            .with_code("parse::unsupported_yaml_tag".to_string()),
+        );
+    }
+    if let Some(err) = fill_target_err {
+        out.fill_target_errors.push(err);
+    }
+    (fill, value_without_tag, had_non_fill_tag)
 }
 
 #[cfg(test)]

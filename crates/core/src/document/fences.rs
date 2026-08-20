@@ -150,22 +150,7 @@ fn looks_like_yaml_key_line(line: &str) -> bool {
     if trimmed.is_empty() || trimmed.starts_with('#') {
         return false;
     }
-    let bytes = trimmed.as_bytes();
-    let mut i;
-    if bytes[0] == b'$' {
-        if bytes.len() < 2 || !(bytes[1].is_ascii_alphabetic() || bytes[1] == b'_') {
-            return false;
-        }
-        i = 2;
-    } else if bytes[0].is_ascii_alphabetic() || bytes[0] == b'_' {
-        i = 1;
-    } else {
-        return false;
-    }
-    while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
-        i += 1;
-    }
-    i < bytes.len() && bytes[i] == b':'
+    super::prescan::key_end(trimmed).is_some()
 }
 
 /// A paired `---` block with YAML-key content between the markers, seen after

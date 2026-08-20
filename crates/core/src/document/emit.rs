@@ -139,13 +139,75 @@ fn emit_meta_block(
     out.push(':');
     push_trailer(out, trailer);
     out.push('\n');
-    let path: Vec<CommentPathSegment> = Vec::new();
-    emit_mapping_children(out, value, 2, &path, nested, &[]);
+    emit_mapping_children(
+        out,
+        value,
+        2,
+        EmitCtx {
+            nested,
+            ..EmitCtx::EMPTY
+        },
+    );
 }
 
-/// Fill sets are small, so a linear scan beats building a hash set per field.
-fn path_is_fill(fills: &[Vec<CommentPathSegment>], path: &[CommentPathSegment]) -> bool {
-    fills.iter().any(|p| p.as_slice() == path)
+/// The sidecar tables threaded through the recursive emit: `path` is the
+/// container path the current node sits at, `nested` and `fills` the whole
+/// block's comment and `!must_fill` tables.
+#[derive(Clone, Copy)]
+struct EmitCtx<'a> {
+    path: &'a [CommentPathSegment],
+    nested: &'a [NestedComment],
+    fills: &'a [Vec<CommentPathSegment>],
+}
+
+impl<'a> EmitCtx<'a> {
+    const EMPTY: Self = Self {
+        path: &[],
+        nested: &[],
+        fills: &[],
+    };
+
+    fn at(self, path: &'a [CommentPathSegment]) -> Self {
+        Self { path, ..self }
+    }
+
+    /// Fill sets are small, so a linear scan beats building a hash set per field.
+    fn is_fill(self, path: &[CommentPathSegment]) -> bool {
+        self.fills.iter().any(|p| p.as_slice() == path)
+    }
+}
+
+/// Where a field's key goes: on its own line at an indent, or right after the
+/// `- ` the caller already wrote.
+#[derive(Clone, Copy)]
+enum KeyPos {
+    Line(usize),
+    SeqHead(usize),
+}
+
+impl KeyPos {
+    fn write_key(self, out: &mut String, key: &str) {
+        match self {
+            KeyPos::Line(indent) => {
+                push_indent(out, indent);
+                emit_key_at(out, key, indent);
+            }
+            KeyPos::SeqHead(_) => emit_key(out, key),
+        }
+    }
+
+    fn map_indent(self) -> usize {
+        match self {
+            KeyPos::Line(i) | KeyPos::SeqHead(i) => i + 2,
+        }
+    }
+
+    fn seq_indent(self) -> usize {
+        match self {
+            KeyPos::Line(i) => i + 2,
+            KeyPos::SeqHead(i) => i + 4,
+        }
+    }
 }
 
 fn emit_block(out: &mut String, card: &Card) {
@@ -192,39 +254,36 @@ fn emit_payload_items(out: &mut String, items: &[PayloadItem]) {
                 // spelling. Once projected the cell is a scalar, which is the
                 // shape `!must_fill` emits against.
                 if let Some(markdown) = project_content_field(value.as_json()) {
-                    emit_field(
+                    emit_field_at(
                         out,
                         key,
                         &JsonValue::String(markdown),
-                        0,
+                        KeyPos::Line(0),
                         *fill,
-                        &[],
-                        &[],
-                        &[],
+                        EmitCtx::EMPTY,
                         trailer,
                     );
                     i += if consumed_trailer { 2 } else { 1 };
                     continue;
                 }
-                let path: Vec<CommentPathSegment> = Vec::new();
                 // Nested fill markers; the top-level one rides on `*fill`.
                 let fills = value.fill_paths();
-                emit_field(
+                emit_field_at(
                     out,
                     key,
                     value.as_json(),
-                    0,
+                    KeyPos::Line(0),
                     *fill,
-                    &path,
-                    nested_comments,
-                    &fills,
+                    EmitCtx {
+                        nested: nested_comments,
+                        fills: &fills,
+                        ..EmitCtx::EMPTY
+                    },
                     trailer,
                 );
             }
             PayloadItem::Comment { text, .. } => {
-                out.push_str("# ");
-                out.push_str(text);
-                out.push('\n');
+                push_comment_line(out, 0, text);
                 consumed_trailer = false;
             }
         }
@@ -270,44 +329,32 @@ fn ensure_blank_before_fence(out: &mut String) {
     out.push('\n');
 }
 
-/// Emit own-line nested comments at `position` in `path` (inline comments are
-/// handled by `find_inline_trailer`).
-fn emit_own_line_pending(
-    out: &mut String,
-    path: &[CommentPathSegment],
-    position: usize,
-    indent: usize,
-    nested: &[NestedComment],
-) {
-    for c in nested {
-        if c.position == position && !c.inline && c.container_path.as_slice() == path {
-            push_indent(out, indent);
-            out.push_str("# ");
-            out.push_str(&c.text);
-            out.push('\n');
+/// Emit own-line nested comments at `position` in the context path (inline
+/// comments are handled by `find_inline_trailer`).
+fn emit_own_line_pending(out: &mut String, ctx: EmitCtx<'_>, position: usize, indent: usize) {
+    for c in ctx.nested {
+        if c.position == position && !c.inline && c.container_path.as_slice() == ctx.path {
+            push_comment_line(out, indent, &c.text);
         }
     }
 }
 
-/// Return the inline trailer for `position` in `path`. If multiple inline
-/// comments share the slot, returns the first and emits the rest as own-line.
+/// Return the inline trailer for `position` in the context path. If multiple
+/// inline comments share the slot, returns the first and emits the rest as
+/// own-line.
 fn find_inline_trailer<'a>(
     out: &mut String,
-    path: &[CommentPathSegment],
+    ctx: EmitCtx<'a>,
     position: usize,
     indent: usize,
-    nested: &'a [NestedComment],
 ) -> Option<&'a str> {
     let mut chosen: Option<&str> = None;
-    for c in nested {
-        if c.position == position && c.inline && c.container_path.as_slice() == path {
+    for c in ctx.nested {
+        if c.position == position && c.inline && c.container_path.as_slice() == ctx.path {
             if chosen.is_none() {
                 chosen = Some(c.text.as_str());
             } else {
-                push_indent(out, indent);
-                out.push_str("# ");
-                out.push_str(&c.text);
-                out.push('\n');
+                push_comment_line(out, indent, &c.text);
             }
         }
     }
@@ -315,21 +362,19 @@ fn find_inline_trailer<'a>(
 }
 
 /// Emit orphan inline comments (`position >= container_len`) as own-line.
-fn emit_orphan_inlines(
-    out: &mut String,
-    path: &[CommentPathSegment],
-    container_len: usize,
-    indent: usize,
-    nested: &[NestedComment],
-) {
-    for c in nested {
-        if c.inline && c.position >= container_len && c.container_path.as_slice() == path {
-            push_indent(out, indent);
-            out.push_str("# ");
-            out.push_str(&c.text);
-            out.push('\n');
+fn emit_orphan_inlines(out: &mut String, ctx: EmitCtx<'_>, container_len: usize, indent: usize) {
+    for c in ctx.nested {
+        if c.inline && c.position >= container_len && c.container_path.as_slice() == ctx.path {
+            push_comment_line(out, indent, &c.text);
         }
     }
+}
+
+fn push_comment_line(out: &mut String, indent: usize, text: &str) {
+    push_indent(out, indent);
+    out.push_str("# ");
+    out.push_str(text);
+    out.push('\n');
 }
 
 fn push_trailer(out: &mut String, trailer: Option<&str>) {
@@ -339,28 +384,23 @@ fn push_trailer(out: &mut String, trailer: Option<&str>) {
     }
 }
 
-/// Emit a `key: <value>\n` pair at `indent` spaces.
+/// Emit a `key: <value>\n` pair with the key placed per `pos`.
 ///
-/// `path` is the container path for nested-comment interleaving. Empty objects
-/// emit `key: {}\n`, empty arrays `key: []\n`. When `fill` is `true`:
-/// scalars → `key: !must_fill <value>`, empty seqs → `key: !must_fill []`, null →
-/// `key: !must_fill`, non-empty seqs → `key: !must_fill\n  - …`. Mappings with `fill`
-/// are rejected at parse and never reach this path.
-#[allow(clippy::too_many_arguments)]
-fn emit_field(
+/// Empty objects emit `key: {}\n`, empty arrays `key: []\n`. When `fill` is
+/// `true`: scalars → `key: !must_fill <value>`, empty seqs → `key: !must_fill []`,
+/// null → `key: !must_fill`, non-empty seqs → `key: !must_fill\n  - …`. Mappings
+/// with `fill` are rejected at parse and never reach this path.
+fn emit_field_at(
     out: &mut String,
     key: &str,
     value: &JsonValue,
-    indent: usize,
+    pos: KeyPos,
     fill: bool,
-    path: &[CommentPathSegment],
-    nested: &[NestedComment],
-    fills: &[Vec<CommentPathSegment>],
+    ctx: EmitCtx<'_>,
     inline_trailer: Option<&str>,
 ) {
+    pos.write_key(out, key);
     if fill {
-        push_indent(out, indent);
-        emit_key_at(out, key, indent);
         match value {
             JsonValue::Null => {
                 out.push_str(": !must_fill");
@@ -382,51 +422,49 @@ fn emit_field(
                 out.push_str(": !must_fill");
                 push_trailer(out, inline_trailer);
                 out.push('\n');
-                emit_sequence_children(out, items, indent + 2, path, nested, fills);
+                emit_sequence_children(out, items, pos.seq_indent(), ctx);
             }
-            JsonValue::Object(_) => {
-                out.push_str(": ");
-                emit_scalar(out, value);
-                push_trailer(out, inline_trailer);
-                out.push('\n');
-            }
+            JsonValue::Object(map) => match pos {
+                KeyPos::Line(_) => {
+                    out.push_str(": ");
+                    emit_scalar(out, value);
+                    push_trailer(out, inline_trailer);
+                    out.push('\n');
+                }
+                KeyPos::SeqHead(_) => {
+                    out.push(':');
+                    push_trailer(out, inline_trailer);
+                    out.push('\n');
+                    emit_mapping_children(out, map, pos.map_indent(), ctx);
+                }
+            },
         }
         return;
     }
     match value {
         JsonValue::Object(map) if map.is_empty() => {
-            push_indent(out, indent);
-            emit_key_at(out, key, indent);
             out.push_str(": {}");
             push_trailer(out, inline_trailer);
             out.push('\n');
         }
         JsonValue::Object(map) => {
-            push_indent(out, indent);
-            emit_key_at(out, key, indent);
             out.push(':');
             push_trailer(out, inline_trailer);
             out.push('\n');
-            emit_mapping_children(out, map, indent + 2, path, nested, fills);
+            emit_mapping_children(out, map, pos.map_indent(), ctx);
         }
         JsonValue::Array(items) if items.is_empty() => {
-            push_indent(out, indent);
-            emit_key_at(out, key, indent);
             out.push_str(": []");
             push_trailer(out, inline_trailer);
             out.push('\n');
         }
         JsonValue::Array(items) => {
-            push_indent(out, indent);
-            emit_key_at(out, key, indent);
             out.push(':');
             push_trailer(out, inline_trailer);
             out.push('\n');
-            emit_sequence_children(out, items, indent + 2, path, nested, fills);
+            emit_sequence_children(out, items, pos.seq_indent(), ctx);
         }
         _ => {
-            push_indent(out, indent);
-            emit_key_at(out, key, indent);
             out.push_str(": ");
             emit_scalar(out, value);
             push_trailer(out, inline_trailer);
@@ -439,62 +477,53 @@ fn emit_mapping_children(
     out: &mut String,
     map: &serde_json::Map<String, JsonValue>,
     child_indent: usize,
-    path: &[CommentPathSegment],
-    nested: &[NestedComment],
-    fills: &[Vec<CommentPathSegment>],
+    ctx: EmitCtx<'_>,
 ) {
     for (i, (k, v)) in map.iter().enumerate() {
-        emit_own_line_pending(out, path, i, child_indent, nested);
-        let trailer = find_inline_trailer(out, path, i, child_indent, nested);
-        let mut child_path = path.to_vec();
+        emit_own_line_pending(out, ctx, i, child_indent);
+        let trailer = find_inline_trailer(out, ctx, i, child_indent);
+        let mut child_path = ctx.path.to_vec();
         child_path.push(CommentPathSegment::Key(k.clone()));
-        let child_fill = path_is_fill(fills, &child_path);
-        emit_field(
+        let child_fill = ctx.is_fill(&child_path);
+        emit_field_at(
             out,
             k,
             v,
-            child_indent,
+            KeyPos::Line(child_indent),
             child_fill,
-            &child_path,
-            nested,
-            fills,
+            ctx.at(&child_path),
             trailer,
         );
     }
-    emit_own_line_pending(out, path, map.len(), child_indent, nested);
-    emit_orphan_inlines(out, path, map.len(), child_indent, nested);
+    emit_own_line_pending(out, ctx, map.len(), child_indent);
+    emit_orphan_inlines(out, ctx, map.len(), child_indent);
 }
 
 fn emit_sequence_children(
     out: &mut String,
     items: &[JsonValue],
     base_indent: usize,
-    path: &[CommentPathSegment],
-    nested: &[NestedComment],
-    fills: &[Vec<CommentPathSegment>],
+    ctx: EmitCtx<'_>,
 ) {
     for (i, item) in items.iter().enumerate() {
-        emit_own_line_pending(out, path, i, base_indent, nested);
-        let trailer = find_inline_trailer(out, path, i, base_indent, nested);
-        let mut child_path = path.to_vec();
+        emit_own_line_pending(out, ctx, i, base_indent);
+        let trailer = find_inline_trailer(out, ctx, i, base_indent);
+        let mut child_path = ctx.path.to_vec();
         child_path.push(CommentPathSegment::Index(i));
-        emit_sequence_item(out, item, base_indent, &child_path, nested, fills, trailer);
+        emit_sequence_item(out, item, base_indent, ctx.at(&child_path), trailer);
     }
-    emit_own_line_pending(out, path, items.len(), base_indent, nested);
-    emit_orphan_inlines(out, path, items.len(), base_indent, nested);
+    emit_own_line_pending(out, ctx, items.len(), base_indent);
+    emit_orphan_inlines(out, ctx, items.len(), base_indent);
 }
 
 /// Emit a single `- <value>\n` sequence item. When the item is a mapping,
 /// if both the seq-item trailer and the first key's trailer are present,
 /// the inner one degrades to an own-line comment.
-#[allow(clippy::too_many_arguments)]
 fn emit_sequence_item(
     out: &mut String,
     value: &JsonValue,
     base_indent: usize,
-    path: &[CommentPathSegment],
-    nested: &[NestedComment],
-    fills: &[Vec<CommentPathSegment>],
+    ctx: EmitCtx<'_>,
     inline_trailer: Option<&str>,
 ) {
     match value {
@@ -505,54 +534,48 @@ fn emit_sequence_item(
             out.push('\n');
         }
         JsonValue::Object(map) => {
-            emit_own_line_pending(out, path, 0, base_indent, nested);
+            emit_own_line_pending(out, ctx, 0, base_indent);
 
             let mut first = true;
             for (i, (k, v)) in map.iter().enumerate() {
                 if !first {
-                    emit_own_line_pending(out, path, i, base_indent + 2, nested);
+                    emit_own_line_pending(out, ctx, i, base_indent + 2);
                 }
-                let inner_trailer = find_inline_trailer(out, path, i, base_indent + 2, nested);
-                let mut child_path = path.to_vec();
+                let inner_trailer = find_inline_trailer(out, ctx, i, base_indent + 2);
+                let mut child_path = ctx.path.to_vec();
                 child_path.push(CommentPathSegment::Key(k.clone()));
+                let child_fill = ctx.is_fill(&child_path);
                 if first {
                     let line_trailer = inline_trailer.or(inner_trailer);
                     push_indent(out, base_indent);
                     out.push_str("- ");
-                    emit_field_inline(
+                    emit_field_at(
                         out,
                         k,
                         v,
-                        base_indent + 2,
-                        path_is_fill(fills, &child_path),
-                        &child_path,
-                        nested,
-                        fills,
+                        KeyPos::SeqHead(base_indent),
+                        child_fill,
+                        ctx.at(&child_path),
                         line_trailer,
                     );
                     if let (Some(_), Some(loser)) = (inline_trailer, inner_trailer) {
-                        push_indent(out, base_indent + 2);
-                        out.push_str("# ");
-                        out.push_str(loser);
-                        out.push('\n');
+                        push_comment_line(out, base_indent + 2, loser);
                     }
                     first = false;
                 } else {
-                    emit_field(
+                    emit_field_at(
                         out,
                         k,
                         v,
-                        base_indent + 2,
-                        path_is_fill(fills, &child_path),
-                        &child_path,
-                        nested,
-                        fills,
+                        KeyPos::Line(base_indent + 2),
+                        child_fill,
+                        ctx.at(&child_path),
                         inner_trailer,
                     );
                 }
             }
-            emit_own_line_pending(out, path, map.len(), base_indent + 2, nested);
-            emit_orphan_inlines(out, path, map.len(), base_indent + 2, nested);
+            emit_own_line_pending(out, ctx, map.len(), base_indent + 2);
+            emit_orphan_inlines(out, ctx, map.len(), base_indent + 2);
         }
         JsonValue::Array(inner) if inner.is_empty() => {
             push_indent(out, base_indent);
@@ -565,92 +588,11 @@ fn emit_sequence_item(
             out.push('-');
             push_trailer(out, inline_trailer);
             out.push('\n');
-            emit_sequence_children(out, inner, base_indent + 2, path, nested, fills);
+            emit_sequence_children(out, inner, base_indent + 2, ctx);
         }
         _ => {
             push_indent(out, base_indent);
             out.push_str("- ");
-            emit_scalar(out, value);
-            push_trailer(out, inline_trailer);
-            out.push('\n');
-        }
-    }
-}
-
-/// Emit `key: <value>\n` where the caller already wrote `- ` on the current line.
-#[allow(clippy::too_many_arguments)]
-fn emit_field_inline(
-    out: &mut String,
-    key: &str,
-    value: &JsonValue,
-    child_indent: usize,
-    fill: bool,
-    path: &[CommentPathSegment],
-    nested: &[NestedComment],
-    fills: &[Vec<CommentPathSegment>],
-    inline_trailer: Option<&str>,
-) {
-    if fill {
-        emit_key(out, key);
-        match value {
-            JsonValue::Null => out.push_str(": !must_fill"),
-            JsonValue::Array(items) if items.is_empty() => out.push_str(": !must_fill []"),
-            JsonValue::Array(items) => {
-                out.push_str(": !must_fill");
-                push_trailer(out, inline_trailer);
-                out.push('\n');
-                emit_sequence_children(out, items, child_indent + 2, path, nested, fills);
-                return;
-            }
-            JsonValue::Object(_) => {
-                // `!must_fill` on a mapping is rejected at parse; emit plainly.
-                out.push(':');
-                push_trailer(out, inline_trailer);
-                out.push('\n');
-                if let JsonValue::Object(map) = value {
-                    emit_mapping_children(out, map, child_indent, path, nested, fills);
-                }
-                return;
-            }
-            _ => {
-                out.push_str(": !must_fill ");
-                emit_scalar(out, value);
-            }
-        }
-        push_trailer(out, inline_trailer);
-        out.push('\n');
-        return;
-    }
-    match value {
-        JsonValue::Object(map) if map.is_empty() => {
-            emit_key(out, key);
-            out.push_str(": {}");
-            push_trailer(out, inline_trailer);
-            out.push('\n');
-        }
-        JsonValue::Object(map) => {
-            emit_key(out, key);
-            out.push(':');
-            push_trailer(out, inline_trailer);
-            out.push('\n');
-            emit_mapping_children(out, map, child_indent, path, nested, fills);
-        }
-        JsonValue::Array(items) if items.is_empty() => {
-            emit_key(out, key);
-            out.push_str(": []");
-            push_trailer(out, inline_trailer);
-            out.push('\n');
-        }
-        JsonValue::Array(items) => {
-            emit_key(out, key);
-            out.push(':');
-            push_trailer(out, inline_trailer);
-            out.push('\n');
-            emit_sequence_children(out, items, child_indent + 2, path, nested, fills);
-        }
-        _ => {
-            emit_key(out, key);
-            out.push_str(": ");
             emit_scalar(out, value);
             push_trailer(out, inline_trailer);
             out.push('\n');
@@ -900,19 +842,24 @@ mod tests {
         vec![CommentPathSegment::Key(key.to_string())]
     }
 
+    fn ctx(path: &[CommentPathSegment]) -> EmitCtx<'_> {
+        EmitCtx {
+            path,
+            ..EmitCtx::EMPTY
+        }
+    }
+
     #[test]
     fn empty_object_emitted() {
         let value = QuillValue::from_json(serde_json::json!({}));
         let mut out = String::new();
-        emit_field(
+        emit_field_at(
             &mut out,
             "empty_map",
             value.as_json(),
-            0,
+            KeyPos::Line(0),
             false,
-            &p("empty_map"),
-            &[],
-            &[],
+            ctx(&p("empty_map")),
             None,
         );
         assert_eq!(out, "empty_map: {}\n");
@@ -922,15 +869,13 @@ mod tests {
     fn empty_object_keeps_inline_trailer() {
         let value = QuillValue::from_json(serde_json::json!({}));
         let mut out = String::new();
-        emit_field(
+        emit_field_at(
             &mut out,
             "empty_map",
             value.as_json(),
-            0,
+            KeyPos::Line(0),
             false,
-            &p("empty_map"),
-            &[],
-            &[],
+            ctx(&p("empty_map")),
             Some("orphan"),
         );
         assert_eq!(out, "empty_map: {} # orphan\n");
@@ -940,15 +885,13 @@ mod tests {
     fn empty_array_emitted() {
         let value = QuillValue::from_json(serde_json::json!([]));
         let mut out = String::new();
-        emit_field(
+        emit_field_at(
             &mut out,
             "empty_seq",
             value.as_json(),
-            0,
+            KeyPos::Line(0),
             false,
-            &p("empty_seq"),
-            &[],
-            &[],
+            ctx(&p("empty_seq")),
             None,
         );
         assert_eq!(out, "empty_seq: []\n");
@@ -958,15 +901,13 @@ mod tests {
     fn scalar_field_with_inline_trailer() {
         let value = QuillValue::from_json(serde_json::json!("Hello"));
         let mut out = String::new();
-        emit_field(
+        emit_field_at(
             &mut out,
             "title",
             value.as_json(),
-            0,
+            KeyPos::Line(0),
             false,
-            &p("title"),
-            &[],
-            &[],
+            ctx(&p("title")),
             Some("greeting"),
         );
         assert_eq!(out, "title: Hello # greeting\n");
@@ -976,15 +917,13 @@ mod tests {
     fn container_field_with_inline_trailer_lands_on_key_line() {
         let value = QuillValue::from_json(serde_json::json!({"inner": 1}));
         let mut out = String::new();
-        emit_field(
+        emit_field_at(
             &mut out,
             "outer",
             value.as_json(),
-            0,
+            KeyPos::Line(0),
             false,
-            &p("outer"),
-            &[],
-            &[],
+            ctx(&p("outer")),
             Some("note"),
         );
         assert_eq!(out, "outer: # note\n  inner: 1\n");
@@ -994,15 +933,13 @@ mod tests {
     fn fill_null_emits_bare_tag() {
         let value = QuillValue::from_json(serde_json::Value::Null);
         let mut out = String::new();
-        emit_field(
+        emit_field_at(
             &mut out,
             "recipient",
             value.as_json(),
-            0,
+            KeyPos::Line(0),
             true,
-            &p("recipient"),
-            &[],
-            &[],
+            ctx(&p("recipient")),
             None,
         );
         assert_eq!(out, "recipient: !must_fill\n");
@@ -1012,15 +949,13 @@ mod tests {
     fn fill_string_emits_tag_with_value() {
         let value = QuillValue::from_json(serde_json::json!("placeholder"));
         let mut out = String::new();
-        emit_field(
+        emit_field_at(
             &mut out,
             "dept",
             value.as_json(),
-            0,
+            KeyPos::Line(0),
             true,
-            &p("dept"),
-            &[],
-            &[],
+            ctx(&p("dept")),
             None,
         );
         assert_eq!(out, "dept: !must_fill placeholder\n");
@@ -1030,15 +965,13 @@ mod tests {
     fn fill_with_inline_trailer() {
         let value = QuillValue::from_json(serde_json::json!("placeholder"));
         let mut out = String::new();
-        emit_field(
+        emit_field_at(
             &mut out,
             "dept",
             value.as_json(),
-            0,
+            KeyPos::Line(0),
             true,
-            &p("dept"),
-            &[],
-            &[],
+            ctx(&p("dept")),
             Some("note"),
         );
         assert_eq!(out, "dept: !must_fill placeholder # note\n");

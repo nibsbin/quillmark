@@ -5,8 +5,6 @@
 //! one source-ordered list, so a comment attaches to whichever item precedes it
 //! regardless of which side of the `$` boundary that is.
 
-use std::collections::HashMap;
-
 use crate::error::ParseError;
 use crate::value::QuillValue;
 use crate::Diagnostic;
@@ -57,6 +55,16 @@ fn strip_blank_separator(body: &str) -> &str {
         rest
     } else {
         body
+    }
+}
+
+/// The prose body following `blocks[idx]`: up to the next block's opener, or to
+/// EOF when it is the last one.
+fn body_after(markdown: &str, blocks: &[MetadataBlock], idx: usize) -> String {
+    let start = blocks[idx].end;
+    match blocks.get(idx + 1) {
+        Some(next) => strip_blank_separator(&markdown[start..next.start]).to_string(),
+        None => markdown[start..].to_string(),
     }
 }
 
@@ -197,7 +205,7 @@ pub(super) fn decompose_with_warnings(
     }
 
     // The first block is the document root; the rest are composable cards.
-    let (blocks, warnings) = find_metadata_blocks(markdown)?;
+    let (mut blocks, warnings) = find_metadata_blocks(markdown)?;
 
     if blocks.is_empty() {
         return Err(crate::error::ParseError::MissingQuill(
@@ -239,33 +247,23 @@ pub(super) fn decompose_with_warnings(
     // `set_kind` inserts at the canonical position, so canonical input
     // round-trips byte-equal and non-canonical input converges on first emit
     // (markdown-spec.md §9).
+    let root_block = &mut blocks[0];
     let mut main_payload = build_payload(
-        &root_block.meta_items,
-        &root_block.pre_items,
-        &root_block.pre_nested_comments,
-        &root_block.pre_nested_fills,
-        &root_block.yaml_value,
+        std::mem::take(&mut root_block.meta_items),
+        std::mem::take(&mut root_block.pre_items),
+        std::mem::take(&mut root_block.pre_nested_comments),
+        std::mem::take(&mut root_block.pre_nested_fills),
+        root_block.yaml_value.take(),
     )?;
     if main_payload.kind().is_none() {
         main_payload.set_kind("main");
     }
     let mut warnings = warnings;
-    for w in &root_block.pre_warnings {
+    for w in &blocks[0].pre_warnings {
         warnings.push(w.clone());
     }
 
-    // Global body: root block end to first card block start, or EOF.
-    let body_start = blocks[0].end;
-    let (body_end, body_is_followed_by_fence) = match blocks.get(1) {
-        Some(b) => (b.start, true),
-        None => (markdown.len(), false),
-    };
-    let global_body_raw = &markdown[body_start..body_end];
-    let global_body = if body_is_followed_by_fence {
-        strip_blank_separator(global_body_raw).to_string()
-    } else {
-        global_body_raw.to_string()
-    };
+    let global_body = body_after(markdown, &blocks, 0);
 
     let main = Card::from_parts(main_payload, import_body_or_parse_error(&global_body)?);
 
@@ -312,12 +310,13 @@ pub(super) fn decompose_with_warnings(
             ));
         }
 
+        let block = &mut blocks[idx];
         let card_payload = build_payload(
-            &block.meta_items,
-            &block.pre_items,
-            &block.pre_nested_comments,
-            &block.pre_nested_fills,
-            &block.yaml_value,
+            std::mem::take(&mut block.meta_items),
+            std::mem::take(&mut block.pre_items),
+            std::mem::take(&mut block.pre_nested_comments),
+            std::mem::take(&mut block.pre_nested_fills),
+            block.yaml_value.take(),
         )
         .map_err(|e| match e {
             ParseError::InvalidStructure(msg) => {
@@ -325,23 +324,11 @@ pub(super) fn decompose_with_warnings(
             }
             other => other,
         })?;
-        for w in &block.pre_warnings {
+        for w in &blocks[idx].pre_warnings {
             warnings.push(w.clone());
         }
 
-        let card_body_start = block.end;
-        let has_next_block = idx + 1 < blocks.len();
-        let card_body_end = if has_next_block {
-            blocks[idx + 1].start
-        } else {
-            markdown.len()
-        };
-        let card_body_raw = &markdown[card_body_start..card_body_end];
-        let card_body = if has_next_block {
-            strip_blank_separator(card_body_raw).to_string()
-        } else {
-            card_body_raw.to_string()
-        };
+        let card_body = body_after(markdown, &blocks, idx);
 
         cards.push(Card::from_parts(
             card_payload,
@@ -371,15 +358,23 @@ fn validate_parsed_field(key: &str, value: &serde_json::Value) -> Result<(), Par
     })
 }
 
+/// Take the typed `$` item for `key` out of `typed`, leaving its slot empty.
+fn take_meta_item(typed: &mut [Option<PayloadItem>], key: &str) -> Option<PayloadItem> {
+    typed
+        .iter_mut()
+        .find(|slot| slot.as_ref().and_then(meta_key) == Some(key))?
+        .take()
+}
+
 fn build_payload(
-    meta_items: &[PayloadItem],
-    pre_items: &[PreItem],
-    pre_nested_comments: &[NestedComment],
-    pre_nested_fills: &[Vec<CommentPathSegment>],
-    yaml_value: &Option<serde_json::Value>,
+    meta_items: Vec<PayloadItem>,
+    pre_items: Vec<PreItem>,
+    pre_nested_comments: Vec<NestedComment>,
+    pre_nested_fills: Vec<Vec<CommentPathSegment>>,
+    yaml_value: Option<serde_json::Value>,
 ) -> Result<Payload, ParseError> {
-    let mapping = match yaml_value {
-        Some(serde_json::Value::Object(map)) => map.clone(),
+    let mut mapping = match yaml_value {
+        Some(serde_json::Value::Object(map)) => map,
         Some(serde_json::Value::Null) | None => serde_json::Map::new(),
         Some(_) => {
             return Err(ParseError::InvalidStructure(
@@ -391,52 +386,45 @@ fn build_payload(
     // Typed `$` items, consumed at most once each; leftovers are appended in
     // source order. The assert pins `extract_meta_items` to the closed set, so a
     // regression upstream is loud rather than a silent drop.
-    let mut typed_by_key: HashMap<&'static str, PayloadItem> =
-        HashMap::with_capacity(meta_items.len());
+    let mut typed: Vec<Option<PayloadItem>> = Vec::with_capacity(meta_items.len());
     for m in meta_items {
-        let k = meta_key(m).expect(
+        meta_key(&m).expect(
             "build_payload: meta_items must contain only system variants \
              ($quill/$kind/$ext/$seed); got a Field or Comment",
         );
-        typed_by_key.insert(k, m.clone());
+        typed.push(Some(m));
     }
 
     let mut items: Vec<PayloadItem> = Vec::new();
-    let mut consumed_user_keys: std::collections::HashSet<String> =
-        std::collections::HashSet::new();
 
     for item in pre_items {
         match item {
             PreItem::Comment { text, inline } => {
-                items.push(PayloadItem::Comment {
-                    text: text.clone(),
-                    inline: *inline,
-                });
+                items.push(PayloadItem::Comment { text, inline });
             }
             PreItem::Field { key, fill } => {
                 if key.starts_with('$') {
-                    if let Some(meta) = typed_by_key.remove(key.as_str()) {
+                    if let Some(meta) = take_meta_item(&mut typed, &key) {
                         items.push(meta);
                     }
                     continue;
                 }
-                if let Some(value) = mapping.get(key).cloned() {
-                    if *fill && value.is_object() {
+                if let Some(value) = mapping.shift_remove(&key) {
+                    if fill && value.is_object() {
                         return Err(ParseError::InvalidStructure(format!(
                             "`!must_fill` on key `{}` targets a mapping; `!must_fill` is supported on scalars and sequences only",
                             key
                         )));
                     }
-                    validate_parsed_field(key, &value)?;
+                    validate_parsed_field(&key, &value)?;
                     let mut qv = QuillValue::from_json(value);
-                    apply_nested_fills(key, &mut qv, pre_nested_fills)?;
+                    apply_nested_fills(&key, &mut qv, &pre_nested_fills)?;
                     items.push(PayloadItem::Field {
-                        key: key.clone(),
+                        key,
                         value: qv,
-                        fill: *fill,
+                        fill,
                         nested_comments: Vec::new(),
                     });
-                    consumed_user_keys.insert(key.clone());
                 }
             }
         }
@@ -444,22 +432,14 @@ fn build_payload(
 
     // Drain `$` entries the prescan didn't reach, in source order, so the
     // conversion stays total.
-    for meta in meta_items {
-        let k = meta_key(meta).expect("see invariant above");
-        if typed_by_key.remove(k).is_some() {
-            items.push(meta.clone());
-        }
-    }
+    items.extend(typed.into_iter().flatten());
 
-    for (key, value) in &mapping {
-        if consumed_user_keys.contains(key) {
-            continue;
-        }
-        validate_parsed_field(key, value)?;
-        let mut qv = QuillValue::from_json(value.clone());
-        apply_nested_fills(key, &mut qv, pre_nested_fills)?;
+    for (key, value) in mapping {
+        validate_parsed_field(&key, &value)?;
+        let mut qv = QuillValue::from_json(value);
+        apply_nested_fills(&key, &mut qv, &pre_nested_fills)?;
         items.push(PayloadItem::Field {
-            key: key.clone(),
+            key,
             value: qv,
             fill: false,
             nested_comments: Vec::new(),
@@ -468,7 +448,7 @@ fn build_payload(
 
     Ok(Payload::from_items_with_flat_nested(
         items,
-        pre_nested_comments.to_vec(),
+        pre_nested_comments,
     ))
 }
 
@@ -509,19 +489,7 @@ fn apply_nested_fills(
 /// Render a structural path as a dotted/bracketed string for diagnostics,
 /// e.g. `addr.street` or `recipients[0].name`.
 fn render_path(path: &[CommentPathSegment]) -> String {
-    let mut out = String::new();
-    for seg in path {
-        match seg {
-            CommentPathSegment::Key(k) => {
-                if !out.is_empty() {
-                    out.push('.');
-                }
-                out.push_str(k);
-            }
-            CommentPathSegment::Index(i) => {
-                out.push_str(&format!("[{}]", i));
-            }
-        }
-    }
-    out
+    path.iter()
+        .fold(crate::path::DocPath::new(), |p, seg| p.segment(seg))
+        .to_string()
 }

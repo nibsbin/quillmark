@@ -65,19 +65,11 @@ fn derive_hint(message: &str, content: &str) -> Option<String> {
     if m.contains("alias references unknown anchor")
         || m.contains("anchor") && m.contains("not found")
     {
-        if let Some(field) = first_field_with_unquoted_prefix(content, &['*', '&']) {
-            return Some(format!(
-                "Plain-scalar values cannot start with `*` or `&` (reserved as YAML \
-                 alias/anchor indicators). For markdown emphasis or a literal `*`/`&`, \
-                 wrap the value in single quotes: `{field}: '**bold text**'`"
-            ));
-        }
-        return Some(
-            "Plain-scalar values cannot start with `*` or `&` (reserved as YAML \
-             alias/anchor indicators). For markdown emphasis or a literal `*`/`&`, \
-             wrap the value in single quotes; e.g. `field: '**bold text**'`."
-                .to_string(),
-        );
+        return Some(anchor_alias_hint(
+            content,
+            "For markdown emphasis or a literal `*`/`&`, wrap the value in single quotes",
+            "**bold text**",
+        ));
     }
 
     // An unquoted value containing `:` reads as a nested mapping key.
@@ -150,19 +142,11 @@ fn derive_hint(message: &str, content: &str) -> Option<String> {
     // Anchor-scan failure: the alias case above under different wording
     // ("scanning an anchor or alias" rather than "anchor" + "not found").
     if m.contains("scanning an anchor") || m.contains("scanning an alias") {
-        if let Some(field) = first_field_with_unquoted_prefix(content, &['*', '&']) {
-            return Some(format!(
-                "Plain-scalar values cannot start with `*` or `&` (reserved as YAML \
-                 alias/anchor indicators). Wrap the value in single quotes: \
-                 `{field}: '&literal value'`"
-            ));
-        }
-        return Some(
-            "Plain-scalar values cannot start with `*` or `&` (reserved as YAML \
-             alias/anchor indicators). Wrap the value in single quotes; e.g. \
-             `field: '&literal value'`."
-                .to_string(),
-        );
+        return Some(anchor_alias_hint(
+            content,
+            "Wrap the value in single quotes",
+            "&literal value",
+        ));
     }
 
     // A multi-line double-quoted scalar; block scalars are friendlier.
@@ -185,23 +169,39 @@ fn derive_hint(message: &str, content: &str) -> Option<String> {
     None
 }
 
+/// The alias/anchor hint, naming the offending field when one is recognizable.
+/// `advice` is the sentence before the example; `example` the quoted value shown.
+fn anchor_alias_hint(content: &str, advice: &str, example: &str) -> String {
+    match first_field_with_unquoted_prefix(content, &['*', '&']) {
+        Some(field) => format!(
+            "Plain-scalar values cannot start with `*` or `&` (reserved as YAML \
+             alias/anchor indicators). {advice}: `{field}: '{example}'`"
+        ),
+        None => format!(
+            "Plain-scalar values cannot start with `*` or `&` (reserved as YAML \
+             alias/anchor indicators). {advice}; e.g. `field: '{example}'`."
+        ),
+    }
+}
+
+/// The `key: value` lines of `content` whose key could be a YAML mapping key,
+/// values leading-trimmed. A comment or sequence line surfaces as a key
+/// starting with `#` / `-`, which callers filter as their scan requires.
+fn key_value_lines(content: &str) -> impl Iterator<Item = (&str, &str)> {
+    content.lines().filter_map(|line| {
+        let (key, rest) = line.trim_start().split_once(':')?;
+        (!key.is_empty() && !key.contains(' ')).then(|| (key, rest.trim_start()))
+    })
+}
+
 /// The first `key: <scalar>` line whose scalar starts with one of `prefixes`.
 /// Only the first line of each plain mapping entry is scanned: multi-line values
 /// cannot raise an alias/anchor error.
 fn first_field_with_unquoted_prefix(content: &str, prefixes: &[char]) -> Option<String> {
-    for line in content.lines() {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with('#') {
+    for (key, value) in key_value_lines(content) {
+        if key.starts_with('#') {
             continue;
         }
-        let (key, value) = match trimmed.split_once(':') {
-            Some(parts) => parts,
-            None => continue,
-        };
-        if key.is_empty() || key.contains(' ') {
-            continue;
-        }
-        let value = value.trim_start();
         let Some(first) = value.chars().next() else {
             continue;
         };
@@ -219,19 +219,10 @@ fn first_field_with_unquoted_prefix(content: &str, prefixes: &[char]) -> Option<
 /// The first `key: <value>` line whose unquoted value contains a second `:`,
 /// which is what raises "mapping values are not allowed in this context".
 fn first_field_with_unquoted_colon(content: &str) -> Option<(String, String)> {
-    for line in content.lines() {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with('#') || trimmed.starts_with('-') {
+    for (key, value) in key_value_lines(content) {
+        if key.starts_with('#') || key.starts_with('-') {
             continue;
         }
-        let (key, rest) = match trimmed.split_once(':') {
-            Some(parts) => parts,
-            None => continue,
-        };
-        if key.is_empty() || key.contains(' ') {
-            continue;
-        }
-        let value = rest.trim_start();
         let first = value.chars().next();
         if matches!(first, Some('\'') | Some('"') | Some('|') | Some('>')) {
             continue;
@@ -251,16 +242,7 @@ fn first_field_with_unquoted_colon(content: &str) -> Option<(String, String)> {
 /// The first `key: "...` line whose double-quoted scalar does not close on the
 /// same line: a proxy for a multi-line double-quoted scalar.
 fn first_field_with_unterminated_dquote(content: &str) -> Option<String> {
-    for line in content.lines() {
-        let trimmed = line.trim_start();
-        let (key, rest) = match trimmed.split_once(':') {
-            Some(parts) => parts,
-            None => continue,
-        };
-        if key.is_empty() || key.contains(' ') {
-            continue;
-        }
-        let value = rest.trim_start();
+    for (key, value) in key_value_lines(content) {
         if !value.starts_with('"') {
             continue;
         }

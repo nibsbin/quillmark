@@ -1,10 +1,7 @@
 use serde_json::json;
 
+use crate::document::tests::parse;
 use crate::document::{Document, MetaKey, PayloadItem};
-
-fn parse(src: &str) -> Document {
-    Document::parse(src).expect("source should parse").document
-}
 
 #[test]
 fn ext_with_mapping_value_is_accepted() {
