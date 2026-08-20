@@ -196,7 +196,7 @@ fn round_trip_quill_version_selectors() {
 }
 
 #[test]
-fn empty_map_omitted_from_emit() {
+fn empty_map_emits_inline_braces() {
     use crate::value::QuillValue;
     use indexmap::IndexMap;
 
@@ -219,13 +219,19 @@ fn empty_map_omitted_from_emit() {
 
     let md = doc.to_markdown();
     assert!(
-        !md.contains("empty_obj"),
-        "empty object should be omitted from emit, got:\n{}",
+        md.contains("empty_obj: {}\n"),
+        "empty object should emit as inline braces, got:\n{}",
         md
     );
     assert!(
         md.contains("real_field: hello"),
         "real field should appear in emit, got:\n{}",
+        md
+    );
+    assert_eq!(
+        doc,
+        crate::document::Document::parse(&md).unwrap().document,
+        "empty object must survive the round-trip, got:\n{}",
         md
     );
 }

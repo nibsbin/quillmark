@@ -142,6 +142,61 @@ $ext: {}
 }
 
 #[test]
+fn emptied_ext_namespace_round_trips() {
+    let src = "\
+~~~card-yaml
+$quill: q@1.0
+$kind: main
+$ext:
+  editor:
+    tips:
+      - a tip
+title: Body
+~~~
+
+Body content.
+";
+    let mut doc = parse(src);
+    doc.main_mut()
+        .store_ext_namespace("editor", json!({}))
+        .expect("store empty namespace");
+
+    let emitted = doc.to_markdown();
+    assert!(
+        emitted.contains("$ext:\n  editor: {}\n"),
+        "emptied namespace must keep its key, got:\n{emitted}",
+    );
+    assert_eq!(doc, parse(&emitted));
+}
+
+/// `$ext` is the only slot type-checked, so an inner mapping reading back as
+/// null raises nothing.
+#[test]
+fn empty_mapping_inside_ext_namespace_round_trips() {
+    let src = "\
+~~~card-yaml
+$quill: q@1.0
+$kind: main
+title: Body
+~~~
+";
+    let mut doc = parse(src);
+    doc.main_mut()
+        .store_ext_namespace("editor", json!({ "tips": {} }))
+        .expect("store nested empty mapping");
+
+    let emitted = doc.to_markdown();
+    let reparsed = parse(&emitted);
+    assert_eq!(
+        reparsed.main().ext().expect("ext present")["editor"]["tips"],
+        json!({}),
+        "a nested empty mapping must not read back as null, got:\n{emitted}",
+    );
+    assert_eq!(doc, reparsed);
+    assert_eq!(emitted, reparsed.to_markdown());
+}
+
+#[test]
 fn set_ext_inserts_after_kind_and_before_user_fields() {
     let mut doc = parse(
         "\

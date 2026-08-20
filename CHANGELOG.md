@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- fix: **an empty mapping emits as `{}` rather than losing its key.** `emit_field`
+  dropped an empty-object field entirely, which composes with the block form of
+  its parent into markdown no parser accepts: a `$ext` whose every namespace
+  emptied wrote `$ext:` with no children, and re-parsed as null. That is the
+  `parse::invalid_structure` a `@quillmark/svelte` host hit on save, once a
+  tips-card dismissal had cleared `$ext.editor.tips`. One level down the same
+  rule ran silent: `$ext` is the only slot type-checked, so an inner mapping
+  turned null and the document parsed clean, handing a consumer back a type it
+  never wrote. Plain user fields carried that loss too — `cfg: {opts: {}}`
+  re-parsed as `cfg: null`, and the second emit then differed from the first.
+  Empty mappings now emit `key: {}` at every depth. That is the spelling a
+  sequence item (`- {}`) and a wholly empty `$ext: {}` already used, so an
+  emptied container survives the round-trip as the value a consumer stored.
+
 ## v0.108.1 - 2026-08-19
 
 - fix: **a content cell under `variants:` is readable at its codec.**

@@ -54,16 +54,16 @@ impl Document {
     /// - Multi-line strings: emitted as inline double-quoted scalars with
     ///   `\n` escapes; no `|` / `>` block forms.
     ///
-    /// - **Empty containers.** An empty object omits its key entirely; an empty
-    ///   array emits as `key: []\n`.
+    /// - **Empty containers.** An empty object emits as `key: {}\n`; an empty
+    ///   array emits as `key: []\n`. Neither collapses to a bare `key:`, which
+    ///   reads back as null.
     ///
     /// # What is preserved
     ///
     /// - **YAML comments**: own-line and inline trailing comments round-trip
     ///   at their source position. Comments whose host disappears at emit time
-    ///   (empty-mapping omission, programmatic field removal) degrade to
-    ///   own-line comments at the same indent so the comment text is preserved
-    ///   even when its position shifts.
+    ///   (programmatic field removal) degrade to own-line comments at the same
+    ///   indent so the comment text is preserved even when its position shifts.
     /// - **`!must_fill` tags**: round-trip via the `fill` flag on `PayloadItem::Field`.
     ///
     /// # What is lost
@@ -119,10 +119,8 @@ fn emit_meta_line(out: &mut String, key: &str, value: &str, trailer: Option<&str
     out.push('\n');
 }
 
-/// Emit an out-of-band meta block (`$ext` / `$seed`). An empty map emits inline
-/// as `<key>: {}` so the declaration survives the round-trip. `nested` carries
-/// comments at paths relative to the value tree. Meta maps never carry
-/// `!must_fill`.
+/// Emit an out-of-band meta block (`$ext` / `$seed`). `nested` carries comments
+/// at paths relative to the value tree. Meta maps never carry `!must_fill`.
 fn emit_meta_block(
     out: &mut String,
     key: &str,
@@ -344,8 +342,7 @@ fn push_trailer(out: &mut String, trailer: Option<&str>) {
 /// Emit a `key: <value>\n` pair at `indent` spaces.
 ///
 /// `path` is the container path for nested-comment interleaving. Empty objects
-/// are omitted; their inline trailer degrades to an own-line comment to
-/// preserve the text. Empty arrays emit `key: []\n`. When `fill` is `true`:
+/// emit `key: {}\n`, empty arrays `key: []\n`. When `fill` is `true`:
 /// scalars → `key: !must_fill <value>`, empty seqs → `key: !must_fill []`, null →
 /// `key: !must_fill`, non-empty seqs → `key: !must_fill\n  - …`. Mappings with `fill`
 /// are rejected at parse and never reach this path.
@@ -398,12 +395,11 @@ fn emit_field(
     }
     match value {
         JsonValue::Object(map) if map.is_empty() => {
-            if let Some(t) = inline_trailer {
-                push_indent(out, indent);
-                out.push_str("# ");
-                out.push_str(t);
-                out.push('\n');
-            }
+            push_indent(out, indent);
+            emit_key_at(out, key, indent);
+            out.push_str(": {}");
+            push_trailer(out, inline_trailer);
+            out.push('\n');
         }
         JsonValue::Object(map) => {
             push_indent(out, indent);
@@ -905,7 +901,7 @@ mod tests {
     }
 
     #[test]
-    fn empty_object_omitted() {
+    fn empty_object_emitted() {
         let value = QuillValue::from_json(serde_json::json!({}));
         let mut out = String::new();
         emit_field(
@@ -919,11 +915,11 @@ mod tests {
             &[],
             None,
         );
-        assert_eq!(out, "");
+        assert_eq!(out, "empty_map: {}\n");
     }
 
     #[test]
-    fn empty_object_with_inline_trailer_degrades() {
+    fn empty_object_keeps_inline_trailer() {
         let value = QuillValue::from_json(serde_json::json!({}));
         let mut out = String::new();
         emit_field(
@@ -937,7 +933,7 @@ mod tests {
             &[],
             Some("orphan"),
         );
-        assert_eq!(out, "# orphan\n");
+        assert_eq!(out, "empty_map: {} # orphan\n");
     }
 
     #[test]

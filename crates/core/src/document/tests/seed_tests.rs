@@ -233,6 +233,28 @@ $kind: main
 }
 
 #[test]
+fn empty_seed_overlay_round_trips() {
+    let mut doc = parse(
+        "\
+~~~card-yaml
+$quill: q@1.0
+$kind: main
+~~~
+",
+    );
+    doc.main_mut()
+        .store_seed_overlay("indorsement", json!({}))
+        .unwrap();
+
+    let emitted = doc.to_markdown();
+    assert!(
+        emitted.contains("$seed:\n  indorsement: {}\n"),
+        "empty overlay must keep its key, got:\n{emitted}",
+    );
+    assert_eq!(doc, parse(&emitted));
+}
+
+#[test]
 fn store_seed_overlay_rejects_invalid_and_reserved_kinds() {
     // `$seed` is keyed by composable card-kind, so the writer must reject
     // names that could never name a composable card (unlike free-form `$ext`).
