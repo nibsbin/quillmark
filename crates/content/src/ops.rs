@@ -163,8 +163,8 @@ impl ChangeBundle {
 // dialect.
 
 use crate::serial::{
-    container_from_authored_value, container_to_value, island_from_value, island_to_value,
-    line_kind_from_authored_value, line_kind_to_value, mark_from_authored_value, mark_to_value,
+    container_from_authored_value, container_to_value, island_fields, island_from_value,
+    line_kind_fields, line_kind_from_authored_value, mark_fields, mark_from_authored_value,
     usv_from, ParseError,
 };
 use serde_json::{Map, Value};
@@ -176,11 +176,11 @@ pub fn mark_op_to_value(op: &MarkOp) -> Value {
     match op {
         MarkOp::Add { start, end, kind } => {
             m.insert("op".into(), "add".into());
-            merge_mark(&mut m, *start, *end, kind);
+            m.extend(mark_fields(*start, *end, kind));
         }
         MarkOp::Remove { start, end, kind } => {
             m.insert("op".into(), "remove".into());
-            merge_mark(&mut m, *start, *end, kind);
+            m.extend(mark_fields(*start, *end, kind));
         }
         MarkOp::RemoveAnchor { id } => {
             m.insert("op".into(), "removeAnchor".into());
@@ -188,17 +188,6 @@ pub fn mark_op_to_value(op: &MarkOp) -> Value {
         }
     }
     Value::Object(m)
-}
-
-fn merge_mark(m: &mut Map<String, Value>, start: Usv, end: Usv, kind: &MarkKind) {
-    let mark = Mark {
-        start,
-        end,
-        kind: kind.clone(),
-    };
-    if let Value::Object(fields) = mark_to_value(&mark) {
-        m.extend(fields);
-    }
 }
 
 /// Decode a [`MarkOp`] from its wire object. `add`/`remove` read the mark
@@ -250,9 +239,7 @@ pub fn line_op_to_value(op: &LineOp) -> Value {
         LineOp::SetKind { line, kind } => {
             m.insert("op".into(), "setKind".into());
             m.insert("line".into(), Value::from(*line));
-            if let Value::Object(fields) = line_kind_to_value(kind) {
-                m.extend(fields);
-            }
+            m.extend(line_kind_fields(kind));
         }
         LineOp::SetContainers { line, containers } => {
             m.insert("op".into(), "setContainers".into());
@@ -317,9 +304,7 @@ pub fn island_op_to_value(op: &IslandOp) -> Value {
     if let Some(at) = at {
         m.insert("at".into(), Value::from(at));
     }
-    if let Value::Object(fields) = island_to_value(island) {
-        m.extend(fields);
-    }
+    m.extend(island_fields(island));
     Value::Object(m)
 }
 
@@ -489,7 +474,6 @@ impl Content {
         let delta = sanitized.as_ref();
 
         let old_chars: Vec<char> = self.text.chars().collect();
-        let old_lines = self.lines.clone();
         // `try_apply` retains the untouched remainder implicitly, so a splice
         // may name only the region it changes.
         let new_text = delta
@@ -498,6 +482,7 @@ impl Content {
                 expected: e.expected,
                 actual: e.actual,
             })?;
+        let old_lines = std::mem::take(&mut self.lines);
 
         self.rebase_marks(delta);
         let new_len = new_text.chars().count();
@@ -805,7 +790,7 @@ impl Content {
             .lines
             .get(line_idx)
             .cloned()
-            .unwrap_or_else(default_para_line);
+            .unwrap_or_else(|| Line::new(LineKind::Para));
         let mut new_line = template;
         new_line.continues = false;
         self.lines.insert(line_idx + 1, new_line);
@@ -843,14 +828,6 @@ impl Content {
             });
         }
         Ok(())
-    }
-}
-
-fn default_para_line() -> Line {
-    Line {
-        kind: LineKind::Para,
-        containers: Vec::new(),
-        continues: false,
     }
 }
 
@@ -933,7 +910,7 @@ fn sync_lines_for_delta(old_chars: &[char], old_lines: Vec<Line>, delta: &Delta)
                                 out.push(line);
                                 clone
                             }
-                            None => default_para_line(),
+                            None => Line::new(LineKind::Para),
                         };
                         new_line.continues = false;
                         cur = Some(new_line);

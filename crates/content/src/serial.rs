@@ -212,10 +212,16 @@ fn fold_legacy_attrs<'a>(
     Ok(Cow::Owned(folded))
 }
 
-/// Encode a [`LineKind`] into its canonical `kind` fields (`"para"`,
-/// `{"kind":"heading","level":n}`, …). Public so the op wire ([`crate::ops`])
-/// reuses the exact discriminant a `ContentLine` carries.
+/// Encode a [`LineKind`] into its canonical `kind` object (`{"kind":"para"}`,
+/// `{"kind":"heading","level":n}`, …).
 pub fn line_kind_to_value(kind: &LineKind) -> Value {
+    Value::Object(line_kind_fields(kind))
+}
+
+/// The same fields unwrapped, for the op wire ([`crate::ops`]), which flattens
+/// them beside its own keys and so carries the exact discriminant a
+/// `ContentLine` does.
+pub(crate) fn line_kind_fields(kind: &LineKind) -> Map<String, Value> {
     let mut m = Map::new();
     match kind {
         LineKind::Para => {
@@ -244,7 +250,7 @@ pub fn line_kind_to_value(kind: &LineKind) -> Value {
             m.insert("attrs".into(), attrs.clone());
         }
     }
-    Value::Object(m)
+    m
 }
 
 /// Decode a [`LineKind`] from an object carrying the canonical `kind` fields.
@@ -284,9 +290,7 @@ pub fn line_kind_from_value(v: &Value) -> Result<LineKind, ParseError> {
 }
 
 fn line_to_value(line: &Line) -> Value {
-    let Value::Object(mut m) = line_kind_to_value(&line.kind) else {
-        unreachable!("line_kind_to_value always returns an object")
-    };
+    let mut m = line_kind_fields(&line.kind);
     m.insert(
         "containers".into(),
         Value::Array(line.containers.iter().map(container_to_value).collect()),
@@ -368,13 +372,18 @@ pub fn container_from_value(v: &Value) -> Result<Container, ParseError> {
 }
 
 /// Encode a [`Mark`] (`{start, end, type, …}`) into its canonical wire object.
-/// Public so the op wire ([`crate::ops`]) reuses the exact `type` discriminant a
-/// `ContentMark` carries.
 pub fn mark_to_value(mark: &Mark) -> Value {
+    Value::Object(mark_fields(mark.start, mark.end, &mark.kind))
+}
+
+/// The same fields unwrapped and over a mark's parts, for the op wire
+/// ([`crate::ops`]), which flattens them beside its own keys, carries the exact
+/// `type` discriminant a `ContentMark` does, and holds no [`Mark`].
+pub(crate) fn mark_fields(start: Usv, end: Usv, kind: &MarkKind) -> Map<String, Value> {
     let mut m = Map::new();
-    m.insert("start".into(), Value::from(mark.start));
-    m.insert("end".into(), Value::from(mark.end));
-    match &mark.kind {
+    m.insert("start".into(), Value::from(start));
+    m.insert("end".into(), Value::from(end));
+    match kind {
         MarkKind::Strong => {
             m.insert("type".into(), "strong".into());
         }
@@ -403,7 +412,7 @@ pub fn mark_to_value(mark: &Mark) -> Value {
             m.insert("attrs".into(), attrs.clone());
         }
     }
-    Value::Object(m)
+    m
 }
 
 /// What every mark carries whatever its type.
@@ -803,7 +812,8 @@ pub(crate) fn table_shape_error(props: &Value) -> Option<Invariant> {
             }
         }
     }
-    for (i, (text, _)) in table_cells(props).iter().enumerate() {
+    for (i, cell) in table_cell_values(props).enumerate() {
+        let text = cell.get("text").and_then(Value::as_str).unwrap_or_default();
         if text.contains('\n') || text.contains('\r') {
             return Some(Invariant::TableCellNewline { cell: i });
         }
@@ -812,12 +822,18 @@ pub(crate) fn table_shape_error(props: &Value) -> Option<Invariant> {
 }
 
 pub(crate) fn island_to_value(island: &Island) -> Value {
+    Value::Object(island_fields(island))
+}
+
+/// The same fields unwrapped, for the op wire ([`crate::ops`]), which flattens
+/// them beside its own keys.
+pub(crate) fn island_fields(island: &Island) -> Map<String, Value> {
     let mut m = Map::new();
     m.insert("id".into(), Value::String(island.id.clone()));
     m.insert("type".into(), Value::String(island.island_type.clone()));
     m.insert("props".into(), island.props.clone());
     m.insert("loss".into(), island.loss.as_str().into());
-    Value::Object(m)
+    m
 }
 
 pub(crate) fn island_from_value(v: &Value) -> Result<Island, ParseError> {

@@ -22,7 +22,7 @@ pub(crate) fn is_bidi_char(c: char) -> bool {
 
 /// Removes the Unicode bidi formatting controls, which sit adjacent to `**`/`_`
 /// and defeat delimiter recognition.
-pub fn strip_bidi_formatting(s: &str) -> String {
+fn strip_bidi_formatting(s: &str) -> String {
     if !s.chars().any(is_bidi_char) {
         return s.to_string();
     }
@@ -35,7 +35,7 @@ pub fn strip_bidi_formatting(s: &str) -> String {
 /// CommonMark HTML block type 2 ends with the line containing `-->`, so text on
 /// that line after `-->` would be swallowed. Bare `-->` outside a comment is
 /// left untouched.
-pub fn fix_html_comment_fences(s: &str) -> String {
+fn fix_html_comment_fences(s: &str) -> String {
     if !s.contains("-->") {
         return s.to_string();
     }

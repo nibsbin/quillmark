@@ -130,40 +130,16 @@ impl Node {
     }
 }
 
-/// `true` when `value` nests deeper than `max_depth` container levels.
+/// `true` when a value nests deeper than `max_depth` container levels: the
+/// content crate's guard, re-exported so this crate's boundaries and the content
+/// model reject the identical shape.
 ///
 /// Every path that stores a value into a `Document` bounds nesting at
 /// [`crate::document::limits::MAX_YAML_DEPTH`], so the recursive consumers
 /// (emit, plate-JSON serialization, DTO conversion) are bounded by
-/// construction. The walk is iterative, so the check itself cannot overflow on
-/// the very input it exists to detect.
-///
-/// The unit is **container levels**, not nodes: only arrays/objects are charged
-/// a level and the scalar leaf is never checked, so an empty container at level
-/// `max_depth + 1` is rejected exactly like a full one. The Python binding's
-/// `py_to_json_at` charges levels the same way.
-pub fn json_depth_exceeds(value: &serde_json::Value, max_depth: usize) -> bool {
-    use serde_json::Value;
-    let mut stack: Vec<(&Value, usize)> = vec![(value, 0)];
-    while let Some((v, depth)) = stack.pop() {
-        match v {
-            Value::Array(items) => {
-                if depth + 1 > max_depth {
-                    return true;
-                }
-                stack.extend(items.iter().map(|c| (c, depth + 1)));
-            }
-            Value::Object(map) => {
-                if depth + 1 > max_depth {
-                    return true;
-                }
-                stack.extend(map.values().map(|c| (c, depth + 1)));
-            }
-            _ => {}
-        }
-    }
-    false
-}
+/// construction. The Python binding's `py_to_json_at` charges levels the same
+/// way.
+pub use quillmark_content::model::json_depth_exceeds;
 
 /// Depth-bound an owned `$ext` / `$seed` map against
 /// [`MAX_YAML_DEPTH`](crate::document::limits::MAX_YAML_DEPTH), returning it

@@ -408,6 +408,9 @@ impl MarkKind {
 /// A `serde_json::Value` rendered to a string with object keys recursively
 /// sorted: order-insensitive, so it is a stable comparison/grouping key.
 fn canonical_json_string(v: &JsonValue) -> String {
+    if is_value_key_sorted(v) {
+        return serde_json::to_string(v).unwrap_or_default();
+    }
     serde_json::to_string(&sort_keys_owned(v.clone())).unwrap_or_default()
 }
 
@@ -428,10 +431,13 @@ pub(crate) fn is_value_key_sorted(v: &JsonValue) -> bool {
 /// `true` when `v` nests deeper than `max` container levels: the guard that
 /// keeps the recursive walkers here and `Value`'s own `Drop` inside a bounded
 /// frame count. The walk is iterative, so the check itself cannot overflow on
-/// the adversarially deep input it exists to detect. The unit is **container
-/// levels**, not nodes, matching [`quillmark_core::json_depth_exceeds`], so the
-/// two boundaries reject the identical shape.
-pub(crate) fn json_depth_exceeds(v: &JsonValue, max: usize) -> bool {
+/// the adversarially deep input it exists to detect.
+///
+/// The unit is **container levels**, not nodes: only arrays/objects are charged
+/// a level and a scalar leaf is never checked, so an empty container at level
+/// `max + 1` is rejected exactly like a full one. `quillmark_core` re-exports
+/// this as its own depth guard, so every boundary rejects the identical shape.
+pub fn json_depth_exceeds(v: &JsonValue, max: usize) -> bool {
     // (value, depth) pairs; depth counts container levels entered.
     let mut stack: Vec<(&JsonValue, usize)> = vec![(v, 0)];
     while let Some((v, depth)) = stack.pop() {
@@ -774,6 +780,8 @@ impl Content {
     /// guarantees this; a hand-built content should be run through it in tests.
     pub fn validate(&self) -> Result<(), Invariant> {
         let mut slots = 0usize;
+        let mut newlines = 0usize;
+        let mut len: Usv = 0;
         for c in self.text.chars() {
             if c == '\r' {
                 return Err(Invariant::CarriageReturn);
@@ -784,6 +792,10 @@ impl Content {
             if c == ISLAND_SLOT {
                 slots += 1;
             }
+            if c == '\n' {
+                newlines += 1;
+            }
+            len += 1;
         }
         if slots != self.islands.len() {
             return Err(Invariant::IslandSlotMismatch {
@@ -791,7 +803,7 @@ impl Content {
                 islands: self.islands.len(),
             });
         }
-        let segments = self.segment_count();
+        let segments = newlines + 1;
         if self.lines.len() != segments {
             return Err(Invariant::LineCountMismatch {
                 lines: self.lines.len(),
@@ -801,8 +813,12 @@ impl Content {
         if self.lines.first().is_some_and(|l| l.continues) {
             return Err(Invariant::FirstLineContinues);
         }
-        let len = self.len_usv();
-        let chars: Vec<char> = self.text.chars().collect();
+        // Only the formatting-mark edge test below reads it.
+        let chars: Vec<char> = if self.marks.iter().any(|m| m.kind.is_formatting()) {
+            self.text.chars().collect()
+        } else {
+            Vec::new()
+        };
         // Anchor-id uniqueness is what `RemoveAnchor` presumes.
         let mut seen_anchor_ids = std::collections::HashSet::new();
         for m in &self.marks {
