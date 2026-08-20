@@ -5,9 +5,8 @@
 
 use crate::error::PdfError;
 use crate::reader::{
-    append_incremental_update, assert_overwrite_gen_zero, assert_traditional_xref,
-    assert_unrotated_page, err, find_dict_value, find_startxref, find_trailer_dict,
-    parse_indirect_ref, resolve_page_ids, UpdatedObject,
+    append_incremental_update, assert_overwrite_gen_zero, assert_unrotated_pages, err,
+    find_dict_value, open_trailer, parse_indirect_ref, resolve_page_ids, UpdatedObject,
 };
 use crate::writer::apply_producer_stamp;
 use crate::FieldSpec;
@@ -34,19 +33,13 @@ impl PdfUpdate {
     /// Open `pdf` for an incremental update. The caller then pushes its objects
     /// onto [`objects`](Self::objects) and calls [`finish`](Self::finish).
     pub fn begin(pdf: &[u8], producer: Option<&str>) -> Result<Self, PdfError> {
-        let xref_offset = find_startxref(pdf)?;
-        assert_traditional_xref(pdf, xref_offset)?;
-
-        let trailer = find_trailer_dict(pdf, xref_offset)?;
+        let (xref_offset, trailer, catalog_id) = open_trailer(pdf, CODE_PARSE)?;
         if find_dict_value(trailer, "Encrypt").is_some() {
             return Err(err(
                 "pdf::encrypted",
                 "PDF is encrypted; the stamp spine does not handle encrypted PDFs",
             ));
         }
-        let (catalog_id, _) = find_dict_value(trailer, "Root")
-            .and_then(parse_indirect_ref)
-            .ok_or_else(|| err(CODE_PARSE, "/Root missing or malformed in trailer"))?;
         // The new trailer re-references the catalog as `/Root <id> 0 R`, so a
         // non-zero-generation catalog would be silently corrupted even when only
         // the producer is stamped (catalog not itself overwritten).
@@ -85,6 +78,7 @@ impl PdfUpdate {
         // Both assertions below re-scan the whole byte buffer, so validate each
         // distinct page once rather than pay O(fields × file_size).
         let mut checked = vec![false; page_count];
+        let mut targeted = Vec::new();
         for spec in fields {
             if spec.page >= page_count {
                 return Err(err(
@@ -101,11 +95,12 @@ impl PdfUpdate {
             // A targeted page is overwritten and referenced as gen 0, so a
             // non-zero-generation page would be silently corrupted.
             assert_overwrite_gen_zero(pdf, page_ids[spec.page], "page")?;
-            // Geometry is written in unrotated user space, so a rotated target
-            // page would mis-place every field.
-            assert_unrotated_page(pdf, self.catalog_id, page_ids[spec.page])?;
             checked[spec.page] = true;
+            targeted.push(page_ids[spec.page]);
         }
+        // Geometry is written in unrotated user space, so a rotated target page
+        // would mis-place every field.
+        assert_unrotated_pages(pdf, self.catalog_id, &targeted)?;
         Ok(page_ids)
     }
 

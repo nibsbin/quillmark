@@ -10,23 +10,59 @@ fn build_base_pdf(n: usize) -> Vec<u8> {
     build_base_pdf_origin(n, [0.0, 0.0, 612.0, 792.0])
 }
 
+/// A schema-bound single-line text field carrying `value`. The spine's real
+/// producers assign the optional fields directly, so the tests do too.
+fn text_field(name: &str, schema: &str, page: usize, rect: [f32; 4], value: &str) -> FieldSpec {
+    let mut spec = FieldSpec::new(
+        name.into(),
+        page,
+        rect,
+        FieldType::Text { multiline: false },
+    );
+    spec.schema_field = Some(schema.into());
+    spec.value = Some(value.into());
+    spec
+}
+
 fn all_four_fields() -> Vec<FieldSpec> {
-    vec![
-        FieldSpec::new("FullName".into(), 0, [180.0, 700.0, 520.0, 720.0], FieldType::Text { multiline: false })
-            .with_schema_field("full_name".into())
-            .with_value("Ada Lovelace".into())
-            .with_tooltip("Full legal name".into()),
-        FieldSpec::new("Comments".into(), 0, [180.0, 600.0, 520.0, 680.0], FieldType::Text { multiline: true })
-            .with_schema_field("comments".into()),
-        FieldSpec::new("Agree".into(), 0, [180.0, 560.0, 194.0, 574.0], FieldType::Checkbox)
-            .with_schema_field("agree".into())
-            .with_value(quillmark_pdf::CHECKBOX_ON_STATE.into()),
-        FieldSpec::new("FavoriteColor".into(), 0, [180.0, 520.0, 520.0, 540.0], FieldType::Choice {
-                options: vec!["red".into(), "green".into(), "blue".into()],
-            })
-            .with_schema_field("favorite_color".into())
-            .with_value("green".into()),
-    ]
+    let mut full = text_field(
+        "FullName",
+        "full_name",
+        0,
+        [180.0, 700.0, 520.0, 720.0],
+        "Ada Lovelace",
+    );
+    full.tooltip = Some("Full legal name".into());
+
+    let mut comments = FieldSpec::new(
+        "Comments".into(),
+        0,
+        [180.0, 600.0, 520.0, 680.0],
+        FieldType::Text { multiline: true },
+    );
+    comments.schema_field = Some("comments".into());
+
+    let mut agree = FieldSpec::new(
+        "Agree".into(),
+        0,
+        [180.0, 560.0, 194.0, 574.0],
+        FieldType::Checkbox,
+    );
+    agree.schema_field = Some("agree".into());
+    agree.value = Some(quillmark_pdf::CHECKBOX_ON_STATE.into());
+
+    let mut color = FieldSpec::new(
+        "FavoriteColor".into(),
+        0,
+        [180.0, 520.0, 520.0, 540.0],
+        FieldType::Choice {
+            options: vec!["red".into(), "green".into(), "blue".into()],
+        },
+    );
+    color.schema_field = Some("favorite_color".into());
+    color.value = Some("green".into());
+
+    vec![full, comments, agree, color]
 }
 
 #[test]
@@ -122,8 +158,14 @@ fn stamps_all_four_field_types_into_valid_acroform() {
 #[test]
 fn signature_field_sets_sigflags() {
     let base = build_base_pdf(2);
-    let fields = vec![FieldSpec::new("Signature".into(), 1, [180.0, 100.0, 520.0, 140.0], FieldType::Signature)
-            .with_schema_field("signature".into())];
+    let mut sig = FieldSpec::new(
+        "Signature".into(),
+        1,
+        [180.0, 100.0, 520.0, 140.0],
+        FieldType::Signature,
+    );
+    sig.schema_field = Some("signature".into());
+    let fields = vec![sig];
     let result = stamp(base, &fields, &StampOptions::default()).expect("stamp ok");
 
     let doc = lopdf::Document::load_mem(&result).expect("reparse");
@@ -223,9 +265,13 @@ fn rotated_page_rejected_cleanly() {
     pdf.stream(content_id, &content.finish());
     let base = pdf.finish();
 
-    let fields = vec![FieldSpec::new("FullName".into(), 0, [180.0, 700.0, 520.0, 720.0], FieldType::Text { multiline: false })
-            .with_schema_field("full_name".into())
-            .with_value("Ada".into())];
+    let fields = vec![text_field(
+        "FullName",
+        "full_name",
+        0,
+        [180.0, 700.0, 520.0, 720.0],
+        "Ada",
+    )];
     let err = stamp(base, &fields, &StampOptions::default()).expect_err("rotated page rejected");
     assert_eq!(err.code, "pdf::rotated_page");
 }
@@ -254,9 +300,9 @@ fn implausible_size_errors_cleanly_without_panic() {
 #[test]
 fn field_targeting_missing_page_errors() {
     let base = build_base_pdf(1);
-    let fields = vec![FieldSpec::new("X".into(), 5, [0.0, 0.0, 10.0, 10.0], FieldType::Signature)
-            .with_schema_field("x".into())];
-    let err = stamp(base, &fields, &StampOptions::default()).expect_err("out of range");
+    let mut sig = FieldSpec::new("X".into(), 5, [0.0, 0.0, 10.0, 10.0], FieldType::Signature);
+    sig.schema_field = Some("x".into());
+    let err = stamp(base, &[sig], &StampOptions::default()).expect_err("out of range");
     assert!(err.message.contains("page"), "{}", err.message);
 }
 
@@ -386,9 +432,7 @@ fn nonzero_generation_page_rejected_cleanly() {
     // Same guard, reached via a page node a field targets (object 3).
     let mut base = build_base_pdf(1);
     replace_first(&mut base, b"3 0 obj", b"3 4 obj");
-    let fields = vec![FieldSpec::new("X".into(), 0, [10.0, 10.0, 100.0, 30.0], FieldType::Text { multiline: false })
-            .with_schema_field("x".into())
-            .with_value("hi".into())];
+    let fields = vec![text_field("X", "x", 0, [10.0, 10.0, 100.0, 30.0], "hi")];
     let err = stamp(base, &fields, &StampOptions::default())
         .expect_err("non-zero generation page rejected");
     assert_eq!(err.code, "pdf::nonzero_generation");
@@ -434,9 +478,7 @@ fn nonzero_mediabox_origin_flows_through() {
 #[test]
 fn inline_annots_are_merged_not_replaced() {
     let (base, existing) = build_base_with_inline_annot();
-    let fields = vec![FieldSpec::new("X".into(), 0, [10.0, 10.0, 100.0, 30.0], FieldType::Text { multiline: false })
-            .with_schema_field("x".into())
-            .with_value("hi".into())];
+    let fields = vec![text_field("X", "x", 0, [10.0, 10.0, 100.0, 30.0], "hi")];
     let result = stamp(base, &fields, &StampOptions::default()).expect("stamp ok");
 
     let doc = lopdf::Document::load_mem(&result).expect("reparse");
@@ -494,9 +536,7 @@ fn indirect_annots_rejected_cleanly() {
         out.extend_from_slice(&tampered[end..]);
         tampered = out;
     }
-    let fields = vec![FieldSpec::new("X".into(), 0, [10.0, 10.0, 100.0, 30.0], FieldType::Text { multiline: false })
-            .with_schema_field("x".into())
-            .with_value("hi".into())];
+    let fields = vec![text_field("X", "x", 0, [10.0, 10.0, 100.0, 30.0], "hi")];
     let err =
         stamp(tampered, &fields, &StampOptions::default()).expect_err("indirect /Annots rejected");
     assert_eq!(err.code, "pdf::indirect_annots");

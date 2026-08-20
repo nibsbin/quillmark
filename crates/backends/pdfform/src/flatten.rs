@@ -10,10 +10,10 @@
 //! SVG/PNG raster outputs only; the AcroForm PDF deliverable is stamped.
 
 use quillmark_pdf::{
-    reader::{
-        extract_outer_dict, find_dict_value, find_object_bytes, splice_dict_value, UpdatedObject,
+    reader::{extract_outer_dict, find_dict_value, object_dict, splice_dict_value, UpdatedObject},
+    writer::{
+        alloc_id, append_refs_to_array_key, dict_object, pdf_escape, winansi_encode, OnNonArray,
     },
-    writer::{alloc_id, dict_object, pdf_escape, winansi_encode},
     FieldSpec, FieldType, PdfError, PdfUpdate, CHECKBOX_ON_STATE,
 };
 
@@ -24,7 +24,10 @@ const CODE_PARSE: &str = "pdf::flatten_parse";
 /// Flatten `fields` onto `base` by drawing values as content stream operators.
 /// Backs raster output only, so it stamps no `/Info /Producer`.
 pub fn flatten(base: Vec<u8>, fields: &[FieldSpec]) -> Result<Vec<u8>, PdfError> {
-    if fields.is_empty() {
+    // Nothing to draw is the base itself: an update carrying only the two font
+    // objects would be a revision no page references.
+    let drawable: Vec<&FieldSpec> = fields.iter().filter(|s| has_drawable_value(s)).collect();
+    if drawable.is_empty() {
         return Ok(base);
     }
 
@@ -47,31 +50,24 @@ pub fn flatten(base: Vec<u8>, fields: &[FieldSpec]) -> Result<Vec<u8>, PdfError>
         .push(type1_font_object(zadb_id, typography::CHECK_FONT, None));
 
     let mut fields_by_page: Vec<Vec<&FieldSpec>> = vec![Vec::new(); page_count];
-    for spec in fields {
+    for spec in drawable {
         fields_by_page[spec.page].push(spec);
     }
 
     for (page_idx, page_fields) in fields_by_page.iter().enumerate() {
-        let drawable: Vec<&FieldSpec> = page_fields
-            .iter()
-            .copied()
-            .filter(|s| has_drawable_value(s))
-            .collect();
-        if drawable.is_empty() {
+        if page_fields.is_empty() {
             continue;
         }
 
         let stream_id = alloc_id(&mut up.next_id)?;
         up.objects.push(content_stream_object(
             stream_id,
-            &build_content_stream(&drawable),
+            &build_content_stream(page_fields),
         ));
 
         let page_obj_id = page_ids[page_idx];
-        let (s, e) = find_object_bytes(&pdf, page_obj_id)
-            .ok_or_else(|| PdfError::new(CODE_PARSE, format!("page object {page_obj_id} not found")))?;
-        let pg_dict = extract_outer_dict(&pdf[s..e])
-            .ok_or_else(|| PdfError::new(CODE_PARSE, "page dict not parseable"))?;
+        let what = format!("page object {page_obj_id}");
+        let pg_dict = object_dict(&pdf, page_obj_id, CODE_PARSE, &what)?;
 
         let new_pg = rewrite_page_for_flatten(pg_dict, helv_id, zadb_id, stream_id)?;
         up.objects.push(dict_object(page_obj_id, &new_pg));
@@ -182,52 +178,34 @@ fn rewrite_page_for_flatten(
     zadb_id: u32,
     stream_id: u32,
 ) -> Result<Vec<u8>, PdfError> {
-    let with_stream = add_content_stream(pg_dict, stream_id)?;
-    let with_helv = add_font_resource(&with_stream, "Helv", helv_id)?;
-    add_font_resource(&with_helv, "ZaDb", zadb_id)
+    // A page `/Contents` is legitimately a bare stream reference, so the
+    // flatten stream wraps it rather than refusing it.
+    let with_stream = append_refs_to_array_key(
+        pg_dict,
+        "Contents",
+        &[stream_id],
+        CODE_PARSE,
+        OnNonArray::Wrap,
+    )?;
+    add_font_resources(&with_stream, &[("Helv", helv_id), ("ZaDb", zadb_id)])
 }
 
-fn add_content_stream(pg_dict: &[u8], stream_id: u32) -> Result<Vec<u8>, PdfError> {
-    let ref_str = format!("{stream_id} 0 R");
-    match find_dict_value(pg_dict, "Contents") {
-        None => {
-            let mut out = pg_dict.to_vec();
-            out.extend_from_slice(format!(" /Contents [{ref_str}]").as_bytes());
-            Ok(out)
-        }
-        Some(existing) => {
-            let trimmed = existing.trim_ascii();
-            let new_val = if trimmed.starts_with(b"[") {
-                let end = trimmed
-                    .iter()
-                    .rposition(|&b| b == b']')
-                    .ok_or_else(|| PdfError::new(CODE_PARSE, "/Contents array missing ]"))?;
-                let inner = String::from_utf8_lossy(&trimmed[1..end]);
-                format!("[{} {ref_str}]", inner.trim())
-            } else {
-                format!("[{} {ref_str}]", String::from_utf8_lossy(trimmed).trim())
-            };
-            Ok(splice_dict_value(
-                pg_dict,
-                b"/Contents",
-                existing,
-                new_val.as_bytes(),
-            ))
-        }
-    }
-}
-
-/// Inject `/<name> <font_id> 0 R` into the page's `/Resources /Font` dict,
-/// creating intermediate dicts as needed. An indirect `/Resources` or `/Font`
-/// is an error rather than a skip: a `Tf` name resolves only through the page's
-/// `/Font` subdictionary, so an uninjected name draws nothing.
-fn add_font_resource(pg_dict: &[u8], name: &str, font_id: u32) -> Result<Vec<u8>, PdfError> {
-    let helv_entry = format!("/{name} {font_id} 0 R");
+/// Inject `/<name> <font_id> 0 R` for each of `fonts` into the page's
+/// `/Resources /Font` dict, creating intermediate dicts as needed. An indirect
+/// `/Resources` or `/Font` is an error rather than a skip: a `Tf` name resolves
+/// only through the page's `/Font` subdictionary, so an uninjected name draws
+/// nothing.
+fn add_font_resources(pg_dict: &[u8], fonts: &[(&str, u32)]) -> Result<Vec<u8>, PdfError> {
+    let entries = fonts
+        .iter()
+        .map(|(name, font_id)| format!("/{name} {font_id} 0 R"))
+        .collect::<Vec<_>>()
+        .join(" ");
 
     match find_dict_value(pg_dict, "Resources") {
         None => {
             let mut out = pg_dict.to_vec();
-            out.extend_from_slice(format!(" /Resources << /Font << {helv_entry} >> >>").as_bytes());
+            out.extend_from_slice(format!(" /Resources << /Font << {entries} >> >>").as_bytes());
             Ok(out)
         }
         Some(res_val) => {
@@ -245,7 +223,7 @@ fn add_font_resource(pg_dict: &[u8], name: &str, font_id: u32) -> Result<Vec<u8>
             let new_res_inner: Vec<u8> = match find_dict_value(res_inner, "Font") {
                 None => {
                     let mut out = res_inner.to_vec();
-                    out.extend_from_slice(format!(" /Font << {helv_entry} >>").as_bytes());
+                    out.extend_from_slice(format!(" /Font << {entries} >>").as_bytes());
                     out
                 }
                 Some(font_val) => {
@@ -261,7 +239,7 @@ fn add_font_resource(pg_dict: &[u8], name: &str, font_id: u32) -> Result<Vec<u8>
                     })?;
                     let mut new_font_val = b"<< ".to_vec();
                     new_font_val.extend_from_slice(font_inner);
-                    new_font_val.extend_from_slice(format!(" {helv_entry} >>").as_bytes());
+                    new_font_val.extend_from_slice(format!(" {entries} >>").as_bytes());
 
                     splice_dict_value(res_inner, b"/Font", font_val, &new_font_val)
                 }
@@ -322,14 +300,15 @@ mod tests {
         include_bytes!("../../../fixtures/resources/quills/sample_form/0.1.0/form.pdf");
 
     fn text_field(name: &str, value: &str) -> FieldSpec {
-        FieldSpec::new(
+        let mut spec = FieldSpec::new(
             name.to_string(),
             0,
             [72.0, 700.0, 300.0, 720.0],
             FieldType::Text { multiline: false },
-        )
-        .with_schema_field(name.to_string())
-        .with_value(value.to_string())
+        );
+        spec.schema_field = Some(name.to_string());
+        spec.value = Some(value.to_string());
+        spec
     }
 
     fn checkbox_field(name: &str, checked: bool) -> FieldSpec {
@@ -338,8 +317,8 @@ mod tests {
             0,
             [72.0, 660.0, 90.0, 678.0],
             FieldType::Checkbox,
-        )
-        .with_schema_field(name.to_string());
+        );
+        spec.schema_field = Some(name.to_string());
         spec.value = checked.then(|| CHECKBOX_ON_STATE.to_string());
         spec
     }
@@ -437,6 +416,15 @@ mod tests {
         assert!(
             !contains_window(&unchecked, b"(4) Tj"),
             "unchecked checkbox must not draw the check glyph"
+        );
+    }
+
+    #[test]
+    fn a_form_with_nothing_to_draw_is_returned_unchanged() {
+        assert_eq!(
+            flatten_ok(&[checkbox_field("Agree", false)]),
+            BASE,
+            "no drawable value must append no revision"
         );
     }
 }
