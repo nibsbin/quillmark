@@ -424,6 +424,12 @@ impl Document {
         &mut self.cards
     }
 
+    /// The ordered card kinds, `None` per kindless card: the shape
+    /// [`regions_to_doc_path`](crate::regions_to_doc_path) takes.
+    pub fn card_kinds(&self) -> Vec<Option<&str>> {
+        self.cards.iter().map(|c| c.kind()).collect()
+    }
+
     /// A single composable card by index: the immutable twin of
     /// [`card_mut`](Document::card_mut), so reading one card's payload does not
     /// require materializing every card via [`cards`](Document::cards). `None`

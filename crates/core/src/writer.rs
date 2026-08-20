@@ -52,11 +52,8 @@ impl<'a> TypedWriter<'a> {
     /// [`Card::store_field`](crate::Card::store_field). Other errors are those
     /// of `Card::commit_field`.
     pub fn set(&mut self, name: &str, value: impl Into<QuillValue>) -> Result<(), EditError> {
-        let config = self.config;
-        match config.main.fields.get(name) {
-            Some(schema) => self.doc.main_mut().commit_field(name, value, schema),
-            None => Err(EditError::unknown_field(name)),
-        }
+        let schema = Some(&self.config.main.fields);
+        commit_impl(self.doc.main_mut(), schema, name, value)
     }
 
     /// Write several main-card fields atomically, the typed twin of
@@ -92,10 +89,8 @@ impl<'a> TypedWriter<'a> {
     /// markdown, so a byte-identical revise of a value carrying escapes is a
     /// byte no-op.
     pub fn revise_field(&mut self, name: &str, text: &str) -> Result<Delta, EditError> {
-        match self.config.main.fields.get(name) {
-            Some(schema) => self.doc.main_mut().revise_field_checked(name, text, schema),
-            None => Err(EditError::unknown_field(name)),
-        }
+        let schema = Some(&self.config.main.fields);
+        revise_impl(self.doc.main_mut(), schema, name, text)
     }
 
     /// Build a composable card of `kind`, typed-commit `fields` onto it,
@@ -175,10 +170,7 @@ impl CardWriter<'_> {
     /// unknown) fails with [`EditError::UnknownField`] rather than storing
     /// opaquely.
     pub fn set(&mut self, name: &str, value: impl Into<QuillValue>) -> Result<(), EditError> {
-        match self.schema.and_then(|s| s.fields.get(name)) {
-            Some(schema) => self.card.commit_field(name, value, schema),
-            None => Err(EditError::unknown_field(name)),
-        }
+        commit_impl(self.card, self.schema.map(|s| &s.fields), name, value)
     }
 
     /// Revise this card's body from markdown (edit semantics), returning the
@@ -190,10 +182,7 @@ impl CardWriter<'_> {
     /// The card twin of [`TypedWriter::revise_field`], resolved against the
     /// card's [`CardSchema`].
     pub fn revise_field(&mut self, name: &str, text: &str) -> Result<Delta, EditError> {
-        match self.schema.and_then(|s| s.fields.get(name)) {
-            Some(schema) => self.card.revise_field_checked(name, text, schema),
-            None => Err(EditError::unknown_field(name)),
-        }
+        revise_impl(self.card, self.schema.map(|s| &s.fields), name, text)
     }
 
     /// Write several fields on this card atomically; see
@@ -206,6 +195,35 @@ impl CardWriter<'_> {
         I: IntoIterator<Item = (K, V)>,
     {
         set_all_impl(self.card, self.schema.map(|s| &s.fields), fields)
+    }
+}
+
+/// Typed single-field commit shared by [`TypedWriter::set`] and
+/// [`CardWriter::set`]. A `None` schema is an unknown card kind: every name on
+/// it is undeclared.
+fn commit_impl(
+    card: &mut Card,
+    fields_schema: Option<&IndexMap<String, FieldSchema>>,
+    name: &str,
+    value: impl Into<QuillValue>,
+) -> Result<(), EditError> {
+    match fields_schema.and_then(|m| m.get(name)) {
+        Some(schema) => card.commit_field(name, value, schema),
+        None => Err(EditError::unknown_field(name)),
+    }
+}
+
+/// The anchor-preserving twin of [`commit_impl`], shared by
+/// [`TypedWriter::revise_field`] and [`CardWriter::revise_field`].
+fn revise_impl(
+    card: &mut Card,
+    fields_schema: Option<&IndexMap<String, FieldSchema>>,
+    name: &str,
+    text: &str,
+) -> Result<Delta, EditError> {
+    match fields_schema.and_then(|m| m.get(name)) {
+        Some(schema) => card.revise_field_checked(name, text, schema),
+        None => Err(EditError::unknown_field(name)),
     }
 }
 

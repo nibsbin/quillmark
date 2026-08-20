@@ -8,8 +8,9 @@
 
 #![cfg(feature = "typst")]
 
-use quillmark::{OutputFormat, Quillmark, RenderOptions};
-use quillmark_fixtures::quills_path;
+use quillmark::{OutputFormat, RenderOptions};
+
+mod common;
 
 const PT_PER_IN: f32 = 72.0;
 
@@ -27,15 +28,12 @@ const LONGEST_DATE_PT: f32 = 96.32;
 const DEFAULT_FONT_SIZE_PT: f32 = 12.0;
 
 fn seeded_memo_pdf() -> Vec<u8> {
-    let engine = Quillmark::new();
-    let quill =
-        quillmark::quill_from_path(quills_path("usaf_memo")).expect("usaf_memo should load");
     // One card per declared kind, each blank: the indorsement date is unset,
     // which is the case the widget exists for.
-    let parsed = quill.seed_document();
+    let (engine, quill, parsed) = common::seeded_memo();
     let result = engine
         .render(
-            &quill,
+            quill,
             &parsed,
             &RenderOptions::default().with_output_format(OutputFormat::Pdf),
         )

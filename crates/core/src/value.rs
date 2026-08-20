@@ -205,22 +205,6 @@ impl QuillValue {
         QuillValue { node, json }
     }
 
-    pub fn string(s: impl Into<String>) -> Self {
-        Self::from_json(serde_json::Value::String(s.into()))
-    }
-
-    pub fn integer(n: i64) -> Self {
-        Self::from_json(serde_json::Value::Number(n.into()))
-    }
-
-    pub fn bool(b: bool) -> Self {
-        Self::from_json(serde_json::Value::Bool(b))
-    }
-
-    pub fn null() -> Self {
-        Self::from_json(serde_json::Value::Null)
-    }
-
     /// Whether this value's root node carries the `!must_fill` marker.
     pub fn fill(&self) -> bool {
         self.node.fill
@@ -480,14 +464,14 @@ mod tests {
     #[test]
     fn fill_marker_rides_on_the_node_not_the_json() {
         let filled = || {
-            let mut qv = QuillValue::string("draft");
+            let mut qv = QuillValue::from("draft");
             assert!(qv.set_fill_at(&[]));
             qv
         };
         let qv = filled();
         assert!(qv.fill());
         assert_eq!(qv.as_json(), &serde_json::json!("draft"));
-        assert_ne!(qv, QuillValue::string("draft"), "equality is fill-sensitive");
+        assert_ne!(qv, QuillValue::from("draft"), "equality is fill-sensitive");
         assert_eq!(qv, filled());
     }
 }
