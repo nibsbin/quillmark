@@ -654,13 +654,7 @@ fn resolve_variant_sourced(
     // Coercion normalizes to the container, so the authored discriminant is the
     // `value` key. A bare scalar that bypassed coercion (a serde-built payload)
     // still reads, keeping this total.
-    let authored_member = authored.and_then(|json| match json {
-        serde_json::Value::Object(o) => o.get(VARIANT_DISCRIMINANT_KEY),
-        other => Some(other),
-    });
-    let authored_member = authored_member
-        .filter(|v| !v.is_null())
-        .and_then(|v| v.as_str());
+    let authored_member = FieldSchema::authored_member(authored).and_then(|v| v.as_str());
 
     let (member, source) = match authored_member {
         Some(member) => (member.to_string(), FieldSource::Authored),
@@ -726,15 +720,29 @@ fn rebuild_payload_with_meta(source: &Card, fields: IndexMap<String, QuillValue>
 /// consumer treats any outstanding marker as "not done".
 fn validate_fills(config: &QuillConfig, doc: &Document) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
-    collect_fill_diags(doc.main(), &DocPath::main(), &mut diags);
-    for (index, card) in doc.cards().iter().enumerate() {
-        // A card whose declared `$kind` has no schema drops the kind segment and
-        // stays `cards[<i>]`, matching `validate_typed_document`; a
-        // schema-declared kind qualifies as `cards.<kind>[<i>]`.
-        let kind = card.kind().filter(|k| config.card_kind(k).is_some());
-        collect_fill_diags(card, &DocPath::card(kind, index), &mut diags);
+    for (_, card, path) in schema_cards(config, doc) {
+        collect_fill_diags(card, &path, &mut diags);
     }
     diags
+}
+
+/// Every card of `doc`, the main card first, with the schema its kind resolves
+/// to (`None` for an undeclared kind) and the [`DocPath`] it is reported under.
+///
+/// A card whose declared `$kind` has no schema drops the kind segment and stays
+/// `cards[<i>]`, matching `validate_typed_document`; a schema-declared kind
+/// qualifies as `cards.<kind>[<i>]`.
+fn schema_cards<'a>(
+    config: &'a QuillConfig,
+    doc: &'a Document,
+) -> impl Iterator<Item = (Option<&'a CardSchema>, &'a Card, DocPath)> {
+    std::iter::once((Some(&config.main), doc.main(), DocPath::main())).chain(
+        doc.cards().iter().enumerate().map(move |(index, card)| {
+            let schema = card.kind().and_then(|k| config.card_kind(k));
+            let kind = card.kind().filter(|_| schema.is_some());
+            (schema, card, DocPath::card(kind, index))
+        }),
+    )
 }
 
 /// Append a `validation::must_fill` warning for each marker in `card`'s fields.
@@ -781,17 +789,9 @@ pub(crate) fn fill_warning(path: &DocPath) -> Diagnostic {
 /// must-fill property inside it.
 fn validate_unauthored(config: &QuillConfig, doc: &Document) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
-    collect_unauthored_diags(&config.main, doc.main(), &DocPath::main(), &mut diags);
-    for (index, card) in doc.cards().iter().enumerate() {
-        let Some(schema) = card.kind().and_then(|k| config.card_kind(k)) else {
-            continue;
-        };
-        collect_unauthored_diags(
-            schema,
-            card,
-            &DocPath::card(card.kind(), index),
-            &mut diags,
-        );
+    for (schema, card, path) in schema_cards(config, doc) {
+        let Some(schema) = schema else { continue };
+        collect_unauthored_diags(schema, card, &path, &mut diags);
     }
     diags
 }
@@ -836,27 +836,13 @@ fn collect_unauthored_field(
         let json = value.map(|v| v.as_json());
         let object = json.and_then(|j| j.as_object());
         // Pre-coercion the cell may still be the bare scalar; read either.
-        let authored = match json {
-            Some(serde_json::Value::Object(o)) => o.get(VARIANT_DISCRIMINANT_KEY),
-            other => other,
-        }
-        .filter(|v| !v.is_null());
+        let authored = FieldSchema::authored_member(json);
 
         let discriminant = path.field(VARIANT_DISCRIMINANT_KEY);
         if authored.is_none() && field.must_fill() {
             out.push(unauthored_warning(&discriminant));
         }
-        let member = authored
-            .and_then(|v| v.as_str())
-            .map(str::to_string)
-            .or_else(|| {
-                field
-                    .default
-                    .as_ref()
-                    .and_then(|d| d.as_str())
-                    .map(str::to_string)
-            })
-            .unwrap_or_default();
+        let member = field.selected_member(json);
 
         if let Some(fields) = field.variant_fields(&member) {
             for (name, schema) in fields {
@@ -907,12 +893,9 @@ fn collect_unauthored_field(
 /// human typed until a human clears it.
 fn validate_variants(config: &QuillConfig, doc: &Document) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
-    collect_variant_diags(&config.main, doc.main(), &DocPath::main(), &mut diags);
-    for (index, card) in doc.cards().iter().enumerate() {
-        let Some(schema) = card.kind().and_then(|k| config.card_kind(k)) else {
-            continue;
-        };
-        collect_variant_diags(schema, card, &DocPath::card(card.kind(), index), &mut diags);
+    for (schema, card, path) in schema_cards(config, doc) {
+        let Some(schema) = schema else { continue };
+        collect_variant_diags(schema, card, &path, &mut diags);
     }
     diags
 }
@@ -928,22 +911,13 @@ fn collect_variant_diags(
         if !field.is_variant_bearing() {
             continue;
         }
-        let Some(object) = payload.get(name).and_then(|v| v.as_json().as_object().cloned()) else {
+        let Some(json) = payload.get(name).map(|v| v.as_json()) else {
             continue;
         };
-        let member = object
-            .get(VARIANT_DISCRIMINANT_KEY)
-            .filter(|v| !v.is_null())
-            .and_then(|v| v.as_str())
-            .map(str::to_string)
-            .or_else(|| {
-                field
-                    .default
-                    .as_ref()
-                    .and_then(|d| d.as_str())
-                    .map(str::to_string)
-            })
-            .unwrap_or_default();
+        let Some(object) = json.as_object() else {
+            continue;
+        };
+        let member = field.selected_member(Some(json));
         let live = field.variant_fields(&member);
         for key in object.keys() {
             if key == VARIANT_DISCRIMINANT_KEY || live.is_some_and(|f| f.contains_key(key)) {

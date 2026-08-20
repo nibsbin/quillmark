@@ -50,45 +50,35 @@ impl Quill {
         // so every Quill.yaml error reaches the caller.
         let (config, warnings) = QuillConfig::from_yaml_with_warnings(&quill_yaml_content)?;
 
-        Self::from_config(config, root).map(|quill| (quill, warnings))
+        Ok((Self::from_config(config, root), warnings))
     }
 
     /// Create a Quill from a QuillConfig and file tree.
-    fn from_config(config: QuillConfig, root: FileTreeNode) -> Result<Self, Vec<Diagnostic>> {
+    fn from_config(config: QuillConfig, root: FileTreeNode) -> Self {
         let mut metadata: std::collections::HashMap<String, QuillValue> =
             std::collections::HashMap::new();
 
-        metadata.insert(
-            "backend".to_string(),
-            QuillValue::from_json(serde_json::Value::String(config.backend.clone())),
-        );
-
-        metadata.insert(
-            "description".to_string(),
-            QuillValue::from_json(serde_json::Value::String(config.description.clone())),
-        );
-
-        metadata.insert(
-            "author".to_string(),
-            QuillValue::from_json(serde_json::Value::String(config.author.clone())),
-        );
-
-        metadata.insert(
-            "version".to_string(),
-            QuillValue::from_json(serde_json::Value::String(config.version.clone())),
-        );
+        for (key, value) in [
+            ("backend", &config.backend),
+            ("description", &config.description),
+            ("author", &config.author),
+            ("version", &config.version),
+        ] {
+            metadata.insert(
+                key.to_string(),
+                QuillValue::from_json(serde_json::Value::String(value.clone())),
+            );
+        }
 
         // Expose backend-specific config to metadata under `<backend>_<key>`.
         for (key, value) in &config.backend_config {
             metadata.insert(format!("{}_{}", config.backend, key), value.clone());
         }
 
-        let source = Quill {
+        Quill {
             metadata,
             config,
             files: root,
-        };
-
-        Ok(source)
+        }
     }
 }

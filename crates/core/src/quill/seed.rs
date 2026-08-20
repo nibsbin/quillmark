@@ -169,12 +169,8 @@ fn seed_variant(
 ) -> Option<PayloadItem> {
     let overlay_json = overlaid.map(|v| v.as_json());
     let overlay_object = overlay_json.and_then(|j| j.as_object());
-    let overlay_member = match overlay_json {
-        Some(serde_json::Value::Object(o)) => o.get(VARIANT_DISCRIMINANT_KEY),
-        other => other,
-    }
-    .filter(|v| !v.is_null())
-    .and_then(|v| v.as_str());
+    let overlay_member =
+        crate::quill::FieldSchema::authored_member(overlay_json).and_then(|v| v.as_str());
 
     let member = overlay_member
         .map(str::to_string)

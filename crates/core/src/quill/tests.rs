@@ -136,9 +136,9 @@ fn test_quillignore_integration() {
 
     let quill = load_from_path(quill_dir).unwrap();
 
-    assert!(quill.files().file_exists("plate.typ"));
-    assert!(!quill.files().file_exists("should_ignore.tmp"));
-    assert!(!quill.files().file_exists("target/debug.txt"));
+    assert!(quill.files().get_file("plate.typ").is_some());
+    assert!(quill.files().get_file("should_ignore.tmp").is_none());
+    assert!(quill.files().get_file("target/debug.txt").is_none());
 }
 
 #[test]
@@ -275,7 +275,7 @@ fn test_to_tree_round_trips_from_tree() {
 }
 
 #[test]
-fn test_dir_exists_and_list_apis() {
+fn test_list_directories() {
     let mut root_files = HashMap::new();
 
     root_files.insert(
@@ -334,43 +334,23 @@ fn test_dir_exists_and_list_apis() {
     );
 
     let root = FileTreeNode::Directory { files: root_files };
-    let tree = root.clone();
     let quill = Quill::from_tree(root).unwrap();
 
-    assert!(quill.files().dir_exists("assets"));
-    assert!(quill.files().dir_exists("assets/fonts"));
-    assert!(quill.files().dir_exists("empty"));
-    assert!(!quill.files().dir_exists("nonexistent"));
-    assert!(!quill.files().dir_exists("plate.typ")); // file, not directory
+    let mut root_dirs = quill.files().list_directories("");
+    root_dirs.sort();
+    assert_eq!(
+        root_dirs,
+        vec![PathBuf::from("assets"), PathBuf::from("empty")]
+    );
 
-    assert!(quill.files().file_exists("plate.typ"));
-    assert!(quill.files().file_exists("assets/logo.png"));
-    assert!(quill.files().file_exists("assets/fonts/font.ttf"));
-    assert!(!quill.files().file_exists("assets")); // directory, not file
+    assert_eq!(
+        quill.files().list_directories("assets"),
+        vec![PathBuf::from("assets/fonts")]
+    );
 
-    let root_files_list = tree.list_files("");
-    assert_eq!(root_files_list.len(), 2); // Quill.yaml and plate.typ
-    assert!(root_files_list.contains(&"Quill.yaml".to_string()));
-    assert!(root_files_list.contains(&"plate.typ".to_string()));
-
-    let assets_files_list = tree.list_files("assets");
-    assert_eq!(assets_files_list.len(), 2); // logo.png and icon.svg
-    assert!(assets_files_list.contains(&"logo.png".to_string()));
-    assert!(assets_files_list.contains(&"icon.svg".to_string()));
-
-    let root_subdirs = tree.list_subdirectories("");
-    assert_eq!(root_subdirs.len(), 2); // assets and empty
-    assert!(root_subdirs.contains(&"assets".to_string()));
-    assert!(root_subdirs.contains(&"empty".to_string()));
-
-    let assets_subdirs = tree.list_subdirectories("assets");
-    assert_eq!(assets_subdirs.len(), 1); // fonts
-    assert!(assets_subdirs.contains(&"fonts".to_string()));
-
-    let empty_subdirs = tree.list_subdirectories("empty");
-    assert_eq!(empty_subdirs.len(), 0);
-
-    assert_eq!(quill.files().list_directories("").len(), 2);
+    assert!(quill.files().list_directories("empty").is_empty());
+    assert!(quill.files().list_directories("plate.typ").is_empty()); // file, not directory
+    assert!(quill.files().list_directories("nonexistent").is_empty());
 }
 
 #[test]

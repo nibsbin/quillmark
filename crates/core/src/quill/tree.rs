@@ -78,65 +78,24 @@ impl FileTreeNode {
         }
     }
 
-    /// Check if a file exists at the given path
-    pub fn file_exists<P: AsRef<Path>>(&self, path: P) -> bool {
-        matches!(self.get_node(path), Some(FileTreeNode::File { .. }))
-    }
-
-    /// Check if a directory exists at the given path
-    pub fn dir_exists<P: AsRef<Path>>(&self, path: P) -> bool {
-        matches!(self.get_node(path), Some(FileTreeNode::Directory { .. }))
-    }
-
-    /// List all files in a directory (non-recursive)
-    pub fn list_files<P: AsRef<Path>>(&self, dir_path: P) -> Vec<String> {
-        match self.get_node(dir_path) {
-            Some(FileTreeNode::Directory { files }) => files
-                .iter()
-                .filter_map(|(name, node)| {
-                    if matches!(node, FileTreeNode::File { .. }) {
-                        Some(name.clone())
-                    } else {
-                        None
-                    }
-                })
-                .collect(),
-            _ => Vec::new(),
-        }
-    }
-
-    /// List all subdirectories in a directory (non-recursive)
-    pub fn list_subdirectories<P: AsRef<Path>>(&self, dir_path: P) -> Vec<String> {
-        match self.get_node(dir_path) {
-            Some(FileTreeNode::Directory { files }) => files
-                .iter()
-                .filter_map(|(name, node)| {
-                    if matches!(node, FileTreeNode::Directory { .. }) {
-                        Some(name.clone())
-                    } else {
-                        None
-                    }
-                })
-                .collect(),
-            _ => Vec::new(),
-        }
-    }
-
-    /// List all directories in a directory, as paths joined onto `dir_path`.
-    /// The name twin is [`list_subdirectories`](Self::list_subdirectories);
-    /// results stay relative to the receiver either way.
+    /// List the subdirectories of a directory (non-recursive), as paths joined
+    /// onto `dir_path` and so relative to the receiver.
     pub fn list_directories<P: AsRef<Path>>(&self, dir_path: P) -> Vec<PathBuf> {
         let dir_path = dir_path.as_ref();
-        self.list_subdirectories(dir_path)
-            .iter()
-            .map(|name| {
-                if dir_path == Path::new("") {
-                    PathBuf::from(name)
-                } else {
-                    dir_path.join(name)
-                }
-            })
-            .collect()
+        match self.get_node(dir_path) {
+            Some(FileTreeNode::Directory { files }) => files
+                .iter()
+                .filter(|(_, node)| matches!(node, FileTreeNode::Directory { .. }))
+                .map(|(name, _)| {
+                    if dir_path == Path::new("") {
+                        PathBuf::from(name)
+                    } else {
+                        dir_path.join(name)
+                    }
+                })
+                .collect(),
+            _ => Vec::new(),
+        }
     }
 
     /// Get all files matching a pattern (supports glob-style wildcards).

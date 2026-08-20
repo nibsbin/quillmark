@@ -1,8 +1,6 @@
 use std::collections::BTreeMap;
 
-use indexmap::IndexMap;
-
-use crate::document::Document;
+use crate::document::{Document, Payload};
 use crate::error::{Diagnostic, Severity, diag_args};
 use crate::path::DocPath;
 use crate::quill::formats::{is_valid_date, is_valid_datetime};
@@ -334,15 +332,14 @@ fn yaml_scalar_type(value: &serde_json::Value) -> &'static str {
     }
 }
 
-/// Validate a typed [`Document`] (with `IndexMap` payload + typed `Card` list).
+/// Validate a typed [`Document`] (typed [`Payload`] + typed `Card` list).
 ///
 /// This is the typed entry point used by `QuillConfig::validate_document`.
 pub fn validate_typed_document(
     config: &QuillConfig,
     doc: &Document,
 ) -> Result<(), Vec<ValidationError>> {
-    let main_fields = doc.main().payload().to_index_map();
-    let mut errors = validate_fields_for_card_indexmap(&config.main, &main_fields, &DocPath::main());
+    let mut errors = validate_fields_for_card(&config.main, doc.main().payload(), &DocPath::main());
 
     // Enforce body.enabled on the main card. Whitespace-only bodies are
     // treated as empty: only meaningful prose triggers the diagnostic.
@@ -368,10 +365,9 @@ pub fn validate_typed_document(
         };
 
         let card_path = DocPath::card(Some(&card_name), index);
-        let card_fields = card.payload().to_index_map();
-        errors.extend(validate_fields_for_card_indexmap(
+        errors.extend(validate_fields_for_card(
             card_schema,
-            &card_fields,
+            card.payload(),
             &card_path,
         ));
 
@@ -390,9 +386,9 @@ pub fn validate_typed_document(
     }
 }
 
-fn validate_fields_for_card_indexmap(
+fn validate_fields_for_card(
     card: &CardSchema,
-    fields: &IndexMap<String, QuillValue>,
+    fields: &Payload,
     base: &DocPath,
 ) -> Vec<ValidationError> {
     let mut errors = Vec::new();
@@ -807,6 +803,7 @@ fn expected_type_name(field_type: &FieldType) -> &'static str {
 mod tests {
     use super::*;
     use crate::document::{Card, Document};
+    use indexmap::IndexMap;
     use serde_json::json;
 
     fn config_with(main_fields: &str, cards: &str) -> QuillConfig {
