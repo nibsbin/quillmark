@@ -231,7 +231,7 @@ impl Markers {
     ///
     /// `claims` grows on every open, suppressed or not, so an index addresses
     /// the same call in any walk of one document — including the page prefix
-    /// [`field_at`] walks.
+    /// [`Scan::field_at`] walks.
     fn edge(&mut self, path: &str, close: bool) {
         if !close {
             self.claims.push(path.to_string());
@@ -286,13 +286,14 @@ fn region_marker(elem: &Content) -> Option<(String, bool)> {
     ))
 }
 
-/// Memoizing span → two-tier classifier: the resolve + segment search runs once
-/// per distinct span, not once per glyph.
+/// Memoizing span → two-tier classifier: the tree descent that resolves a span
+/// to its byte range runs once per distinct span, not once per glyph, and both
+/// the classification and the caret path read that one cache.
 struct Classifier<'a> {
     world: &'a QuillWorld,
     helper: &'a Source,
     windows: &'a [FieldWindow],
-    memo: HashMap<Span, Option<(usize, Option<usize>)>>,
+    memo: HashMap<Span, Option<(FileId, Range<usize>)>>,
 }
 
 impl<'a> Classifier<'a> {
@@ -307,8 +308,11 @@ impl<'a> Classifier<'a> {
 
     /// The same unpack `WorldExt::range` performs, with the helper file routed
     /// to the served compile's snapshot instead of the world.
-    fn resolve_range(&self, span: Span) -> Option<(FileId, Range<usize>)> {
-        match DiagSpan::from(span).get() {
+    fn range_of(&mut self, span: Span) -> Option<(FileId, Range<usize>)> {
+        if let Some(cached) = self.memo.get(&span) {
+            return cached.clone();
+        }
+        let resolved = match DiagSpan::from(span).get() {
             DiagSpanKind::Detached => None,
             DiagSpanKind::Number { id, num, sub_range } => {
                 let range = if id == self.helper.id() {
@@ -322,25 +326,21 @@ impl<'a> Classifier<'a> {
                 range.map(|r| (id, r))
             }
             DiagSpanKind::Range { id, range } => Some((id, range)),
-        }
+        };
+        self.memo.insert(span, resolved.clone());
+        resolved
     }
 
     /// Resolves to the innermost segment whose `generated` range contains the
     /// span, or `None` for inter-segment / segment-less ink.
     fn classify_seg(&mut self, span: Span) -> Option<(usize, Option<usize>)> {
-        if let Some(&c) = self.memo.get(&span) {
-            return c;
-        }
-        let c = self.resolve_range(span).and_then(|(file, range)| {
-            self.windows
-                .iter()
-                .position(|win| {
-                    win.file == file && win.range.start <= range.start && range.end <= win.range.end
-                })
-                .map(|i| (i, self.seg_of(i, &range)))
-        });
-        self.memo.insert(span, c);
-        c
+        let (file, range) = self.range_of(span)?;
+        self.windows
+            .iter()
+            .position(|win| {
+                win.file == file && win.range.start <= range.start && range.end <= win.range.end
+            })
+            .map(|i| (i, self.seg_of(i, &range)))
     }
 
     /// Segments are `generated`-ordered and disjoint, so the sole candidate is
@@ -502,55 +502,170 @@ enum Run {
     Done,
 }
 
-/// Each span window's **first placement** and each `field-region` call's whole
-/// claim: one [`RenderedRegion`] per page a run touches, PDF bottom-left rects,
-/// sorted (page, field, key order). A claim in `unclosed` accrues nothing and so
-/// surfaces no region.
-pub(crate) fn scan_content_regions(
-    doc: &PagedDocument,
-    world: &QuillWorld,
-    helper: &Source,
-    windows: &[FieldWindow],
-    unclosed: &[usize],
-) -> Vec<RenderedRegion> {
-    let mut cls = Classifier::new(world, helper, windows);
-    let mut markers = Markers::suppressing(unclosed);
-    let mut hits = Vec::new();
-    for (page, p) in doc.pages().iter().enumerate() {
-        collect_page_hits(&p.frame, page, &mut cls, &mut markers, &mut hits);
+/// One committed compile plus the tables its spans resolve against: the context
+/// every region and point query shares. `unclosed` is supplied rather than
+/// derived per query because whether a claim open at some page ever closes is
+/// knowable only from the pages after it, which a single-page walk never
+/// reaches.
+pub(crate) struct Scan<'a> {
+    pub(crate) doc: &'a PagedDocument,
+    pub(crate) world: &'a QuillWorld,
+    pub(crate) helper: &'a Source,
+    pub(crate) windows: &'a [FieldWindow],
+    pub(crate) unclosed: &'a [usize],
+}
+
+impl<'a> Scan<'a> {
+    fn classifier(&self) -> Classifier<'a> {
+        Classifier::new(self.world, self.helper, self.windows)
     }
 
-    // Claims are only known after the walk, so keys extend the window keys.
-    let mut keys = flatten_keys(windows);
-    keys.extend((0..markers.claims.len()).map(Key::Marker));
-    let boxes = run_scan_machine(&keys, &hits);
-
-    let mut out: Vec<(RenderedRegion, usize)> = Vec::new();
-    for (ki, key) in keys.iter().enumerate() {
-        let (path, span) = match *key {
-            Key::Span(wi, seg) => {
-                let window = &windows[wi];
-                let span = seg.map(|s| {
-                    let c = &window.segments[s].content;
-                    [c.start, c.end]
-                });
-                (window.path.clone(), span)
+    /// `page`'s ink, or every page's when `page` is `None`, plus the marker
+    /// stack the walk ended on. Pages before `page` are walked for their markers
+    /// alone, since a claim opening there may still cover the page wanted;
+    /// skipping their glyphs keeps that lookbehind linear in frame items.
+    fn hits(&self, page: Option<usize>) -> (Vec<Hit>, Markers) {
+        let mut cls = self.classifier();
+        let mut markers = Markers::suppressing(self.unclosed);
+        let mut hits = Vec::new();
+        for (i, p) in self.doc.pages().iter().enumerate() {
+            match page {
+                Some(want) if i < want => scan_markers(&p.frame, &mut markers),
+                Some(want) if i > want => break,
+                _ => collect_page_hits(&p.frame, i, &mut cls, &mut markers, &mut hits),
             }
-            // Geometry with no content address, like a scalar site or a widget.
-            Key::Marker(ci) => (markers.claims[ci].clone(), None),
-        };
-        for (page, b) in &boxes[ki] {
-            let Some(page_h) = doc.pages().get(*page).map(|p| p.frame.size().y.to_pt()) else {
-                continue;
-            };
-            let mut region = RenderedRegion::new(path.clone(), *page, pdf_rect(b, page_h));
-            region.span = span;
-            out.push((region, ki));
         }
+        (hits, markers)
     }
-    // `ki` orders window-major then segment-ascending, a stable tiebreak.
-    out.sort_by(|(a, ai), (b, bi)| (a.page, &a.field, *ai).cmp(&(b.page, &b.field, *bi)));
-    out.into_iter().map(|(r, _)| r).collect()
+
+    /// Each span window's **first placement** and each `field-region` call's
+    /// whole claim: one [`RenderedRegion`] per page a run touches, PDF
+    /// bottom-left rects, sorted (page, field, key order). A claim in `unclosed`
+    /// accrues nothing and so surfaces no region.
+    pub(crate) fn regions(&self) -> Vec<RenderedRegion> {
+        let (hits, markers) = self.hits(None);
+
+        // Claims are only known after the walk, so keys extend the window keys.
+        let mut keys = flatten_keys(self.windows);
+        keys.extend((0..markers.claims.len()).map(Key::Marker));
+        let boxes = run_scan_machine(&keys, &hits);
+
+        let mut out: Vec<(RenderedRegion, usize)> = Vec::new();
+        for (ki, key) in keys.iter().enumerate() {
+            let (path, span) = match *key {
+                Key::Span(wi, seg) => {
+                    let window = &self.windows[wi];
+                    let span = seg.map(|s| {
+                        let c = &window.segments[s].content;
+                        [c.start, c.end]
+                    });
+                    (window.path.clone(), span)
+                }
+                // Geometry with no content address, like a scalar site or a widget.
+                Key::Marker(ci) => (markers.claims[ci].clone(), None),
+            };
+            for (page, b) in &boxes[ki] {
+                let Some(page_h) = self.doc.pages().get(*page).map(|p| p.frame.size().y.to_pt())
+                else {
+                    continue;
+                };
+                let mut region = RenderedRegion::new(path.clone(), *page, pdf_rect(b, page_h));
+                region.span = span;
+                out.push((region, ki));
+            }
+        }
+        // `ki` orders window-major then segment-ascending, a stable tiebreak.
+        out.sort_by(|(a, ai), (b, bi)| (a.page, &a.field, *ai).cmp(&(b.page, &b.field, *bi)));
+        out.into_iter().map(|(r, _)| r).collect()
+    }
+
+    /// The schema field under a point (`x`/`y` in PDF bottom-left points).
+    /// Unlike [`regions`](Self::regions) every placement answers, not just the
+    /// first. Among tracked ink the later-painted item wins; untracked ink never
+    /// occludes.
+    pub(crate) fn field_at(&self, page: usize, x: f32, y: f32) -> Option<String> {
+        let frame = &self.doc.pages().get(page)?.frame;
+        let page_h = frame.size().y.to_pt();
+        let (x, y) = (x as f64, page_h - y as f64);
+
+        let (hits, markers) = self.hits(Some(page));
+
+        hits.iter()
+            .rev()
+            .find(|h| h.rect.is_some_and(|r| r.contains(x, y)))
+            .and_then(|h| h.class.owner())
+            .map(|owner| match owner {
+                Owner::Window(w) => self.windows[w].path.clone(),
+                Owner::Claim(c) => markers.claims[c].clone(),
+            })
+    }
+
+    /// A point (PDF bottom-left points) → content position in a content field.
+    /// Degrades to the segment's content start when the resolved node nests
+    /// inside no single run (a multi-line `#raw` block, or structural ink).
+    pub(crate) fn position_at(&self, page: usize, x: f32, y: f32) -> Option<ContentHit> {
+        if self.windows.is_empty() {
+            return None;
+        }
+        let frame = &self.doc.pages().get(page)?.frame;
+        let page_h = frame.size().y.to_pt();
+        let (px, py) = (x as f64, page_h - y as f64);
+
+        let mut cls = self.classifier();
+        let mut hits = Vec::new();
+        walk_glyphs(frame, page, &mut cls, None, &mut hits);
+
+        // Later-painted wins; ink with no segment has no content position.
+        let hit = hits
+            .iter()
+            .rev()
+            .find(|g| g.seg.is_some() && g.rect.contains(px, py))?;
+        let window = &self.windows[hit.window];
+        let segmap = &window.segments[hit.seg?];
+        let (pos, granularity) = invert_hit(self.helper, segmap, &hit.node, hit.offset);
+        Some(ContentHit::new(window.path.clone(), pos).with_granularity(granularity))
+    }
+
+    /// A content position → caret rect: the box of the frame glyph whose
+    /// resolved node covers `pos`, with `span` collapsed to `[pos, pos]`.
+    pub(crate) fn locate(&self, field: &str, pos: usize) -> Option<RenderedRegion> {
+        if self.windows.is_empty() {
+            return None;
+        }
+        let (wi, window) = self
+            .windows
+            .iter()
+            .enumerate()
+            .find(|(_, w)| w.path == field && !w.segments.is_empty())?;
+        let seg_idx = window
+            .segments
+            .iter()
+            .position(|s| s.content.start <= pos && pos <= s.content.end)?;
+        let target_gen = forward_pos(self.helper, &window.segments[seg_idx], pos);
+
+        let mut cls = self.classifier();
+        let mut hits = Vec::new();
+        for (page, p) in self.doc.pages().iter().enumerate() {
+            walk_glyphs(&p.frame, page, &mut cls, Some((wi, Some(seg_idx))), &mut hits);
+        }
+
+        // A covering glyph always beats a non-covering one, so a caret near a
+        // run edge still resolves; `min_by_key` keeps the first on ties.
+        let g = hits.iter().min_by_key(|g| {
+            let covers = g.node.start <= target_gen && target_gen < g.node.end;
+            let caret = g.node.start + g.offset as usize;
+            (
+                !covers,
+                caret > target_gen,
+                (caret as isize - target_gen as isize).unsigned_abs(),
+            )
+        })?;
+        let page_h = self.doc.pages().get(g.page)?.frame.size().y.to_pt();
+        Some(
+            RenderedRegion::new(field.to_string(), g.page, pdf_rect(&g.rect, page_h))
+                .with_span([pos, pos]),
+        )
+    }
 }
 
 /// Window-major, segment-ascending: the order regions sort by.
@@ -589,21 +704,17 @@ fn run_scan_machine(keys: &[Key], hits: &[Hit]) -> Vec<Vec<(usize, Aabb)>> {
                     if let Some((c, last_page)) = current.take() {
                         state[c] = Run::Suspended { last_page };
                     }
-                    match state[ki] {
-                        _ if matches!(keys[ki], Key::Marker(_)) => {
-                            accrue(&mut boxes[ki], hit);
-                            current = Some((ki, hit.page));
-                        }
-                        Run::NotSeen => {
-                            accrue(&mut boxes[ki], hit);
-                            current = Some((ki, hit.page));
-                        }
-                        Run::Suspended { last_page } if hit.page == last_page + 1 => {
-                            accrue(&mut boxes[ki], hit);
-                            current = Some((ki, hit.page));
-                        }
-                        Run::Suspended { .. } => state[ki] = Run::Done,
-                        Run::Done => {}
+                    let resumes = match state[ki] {
+                        _ if matches!(keys[ki], Key::Marker(_)) => true,
+                        Run::NotSeen => true,
+                        Run::Suspended { last_page } => hit.page == last_page + 1,
+                        Run::Done => false,
+                    };
+                    if resumes {
+                        accrue(&mut boxes[ki], hit);
+                        current = Some((ki, hit.page));
+                    } else {
+                        state[ki] = Run::Done;
                     }
                 }
             }
@@ -635,47 +746,6 @@ fn accrue(boxes: &mut Vec<(usize, Aabb)>, hit: &Hit) {
         Some((page, b)) if *page == hit.page => b.union(rect),
         _ => boxes.push((hit.page, rect)),
     }
-}
-
-/// The schema field under a point (`x`/`y` in PDF bottom-left points). Unlike
-/// [`scan_content_regions`] every placement answers, not just the first. Among
-/// tracked ink the later-painted item wins; untracked ink never occludes.
-///
-/// Earlier pages are walked for their markers alone, so a `field-region` that
-/// opened on a previous page still claims this page's ink. `unclosed` is
-/// supplied rather than derived here because whether a claim open at `page` ever
-/// closes is knowable only from the pages after it, which this walk never
-/// reaches.
-pub(crate) fn field_at(
-    doc: &PagedDocument,
-    world: &QuillWorld,
-    helper: &Source,
-    windows: &[FieldWindow],
-    unclosed: &[usize],
-    page: usize,
-    x: f32,
-    y: f32,
-) -> Option<String> {
-    let frame = &doc.pages().get(page)?.frame;
-    let page_h = frame.size().y.to_pt();
-    let (x, y) = (x as f64, page_h - y as f64);
-
-    let mut cls = Classifier::new(world, helper, windows);
-    let mut markers = Markers::suppressing(unclosed);
-    let mut hits = Vec::new();
-    for earlier in doc.pages().iter().take(page) {
-        scan_markers(&earlier.frame, &mut markers);
-    }
-    collect_page_hits(frame, page, &mut cls, &mut markers, &mut hits);
-
-    hits.iter()
-        .rev()
-        .find(|h| h.rect.is_some_and(|r| r.contains(x, y)))
-        .and_then(|h| h.class.owner())
-        .map(|owner| match owner {
-            Owner::Window(w) => windows[w].path.clone(),
-            Owner::Claim(c) => markers.claims[c].clone(),
-        })
 }
 
 /// The finer counterpart to [`Hit`], carrying the node range and intra-node
@@ -716,7 +786,7 @@ fn walk_glyphs(
         if only.is_some_and(|t| t != (w, seg)) {
             return;
         }
-        if let Some((_, node)) = cls.resolve_range(span) {
+        if let Some((_, node)) = cls.range_of(span) {
             out.push(GlyphHit {
                 page,
                 rect: aabb(),
@@ -727,40 +797,6 @@ fn walk_glyphs(
             });
         }
     });
-}
-
-/// A point (PDF bottom-left points) → content position in a content field.
-/// Degrades to the segment's content start when the resolved node nests inside
-/// no single run (a multi-line `#raw` block, or structural ink).
-pub(crate) fn position_at(
-    doc: &PagedDocument,
-    world: &QuillWorld,
-    helper: &Source,
-    windows: &[FieldWindow],
-    page: usize,
-    x: f32,
-    y: f32,
-) -> Option<ContentHit> {
-    if windows.is_empty() {
-        return None;
-    }
-    let frame = &doc.pages().get(page)?.frame;
-    let page_h = frame.size().y.to_pt();
-    let (px, py) = (x as f64, page_h - y as f64);
-
-    let mut cls = Classifier::new(world, helper, windows);
-    let mut hits = Vec::new();
-    walk_glyphs(frame, page, &mut cls, None, &mut hits);
-
-    // Later-painted wins; ink with no segment has no content position.
-    let hit = hits
-        .iter()
-        .rev()
-        .find(|g| g.seg.is_some() && g.rect.contains(px, py))?;
-    let window = &windows[hit.window];
-    let segmap = &window.segments[hit.seg?];
-    let (pos, granularity) = invert_hit(helper, segmap, &hit.node, hit.offset);
-    Some(ContentHit::new(window.path.clone(), pos).with_granularity(granularity))
 }
 
 /// The content USV offset a glyph's generated position maps to. With no owning
@@ -788,55 +824,6 @@ fn invert_hit(
     let gen_text = &helper.text()[gen_r.clone()];
     let pos = content_r.start + crate::emit::invert_gen_offset(gen_text, *ctx, abs - gen_r.start);
     (pos, HitGranularity::Cluster)
-}
-
-/// A content position → caret rect: the box of the frame glyph whose resolved
-/// node covers `pos`, with `span` collapsed to `[pos, pos]`.
-pub(crate) fn locate(
-    doc: &PagedDocument,
-    world: &QuillWorld,
-    helper: &Source,
-    windows: &[FieldWindow],
-    field: &str,
-    pos: usize,
-) -> Option<RenderedRegion> {
-    if windows.is_empty() {
-        return None;
-    }
-    let (wi, window) = windows
-        .iter()
-        .enumerate()
-        .find(|(_, w)| w.path == field && !w.segments.is_empty())?;
-    let seg_idx = window
-        .segments
-        .iter()
-        .position(|s| s.content.start <= pos && pos <= s.content.end)?;
-    let target_gen = forward_pos(helper, &window.segments[seg_idx], pos);
-
-    let mut cls = Classifier::new(world, helper, windows);
-    let mut hits = Vec::new();
-    for (page, p) in doc.pages().iter().enumerate() {
-        walk_glyphs(&p.frame, page, &mut cls, Some((wi, Some(seg_idx))), &mut hits);
-    }
-
-    // A covering glyph always beats a non-covering one, so a caret near a run
-    // edge still resolves; `min_by_key` keeps the first on ties.
-    let g = hits
-        .iter()
-        .min_by_key(|g| {
-            let covers = g.node.start <= target_gen && target_gen < g.node.end;
-            let caret = g.node.start + g.offset as usize;
-            (
-                !covers,
-                caret > target_gen,
-                (caret as isize - target_gen as isize).unsigned_abs(),
-            )
-        })?;
-    let page_h = doc.pages().get(g.page)?.frame.size().y.to_pt();
-    Some(
-        RenderedRegion::new(field.to_string(), g.page, pdf_rect(&g.rect, page_h))
-            .with_span([pos, pos]),
-    )
 }
 
 /// A position in a structural gap (or at the segment edge) falls back to the
@@ -1423,7 +1410,14 @@ main:
             let helper = world
                 .source(QuillWorld::helper_fid("lib.typ"))
                 .expect("helper source");
-            let regions = scan_content_regions(&doc, &world, &helper, &windows, &[]);
+            let regions = Scan {
+                doc: &doc,
+                world: &world,
+                helper: &helper,
+                windows: &windows,
+                unclosed: &[],
+            }
+            .regions();
             regions
                 .iter()
                 .filter(|r| r.field == "body")
@@ -1946,27 +1940,20 @@ main:
             unclosed_claims(&self.doc).into_iter().map(|(c, _)| c).collect()
         }
 
-        fn regions(&self, unclosed: &[usize]) -> Vec<RenderedRegion> {
-            scan_content_regions(&self.doc, &self.world, &self.helper, &self.windows, unclosed)
-        }
-
-        fn field_at(&self, unclosed: &[usize], page: usize, x: f32, y: f32) -> Option<String> {
-            field_at(
-                &self.doc,
-                &self.world,
-                &self.helper,
-                &self.windows,
+        fn scan<'a>(&'a self, unclosed: &'a [usize]) -> Scan<'a> {
+            Scan {
+                doc: &self.doc,
+                world: &self.world,
+                helper: &self.helper,
+                windows: &self.windows,
                 unclosed,
-                page,
-                x,
-                y,
-            )
+            }
         }
     }
 
     fn probe_regions(plate: &str, data: serde_json::Value) -> Vec<RenderedRegion> {
         let p = probe(plate, data);
-        p.regions(&p.unclosed())
+        p.scan(&p.unclosed()).regions()
     }
 
     fn body(markdown: &str) -> serde_json::Value {
@@ -2133,7 +2120,8 @@ Interleaved plate chrome.
 
         let last = p.doc.pages().len() - 1;
         let runaway = p
-            .regions(&[])
+            .scan(&[])
+            .regions()
             .into_iter()
             .find(|r| r.field == "classification" && r.page == last)
             .expect("unsuppressed, the claim reaches the last page");
@@ -2142,12 +2130,12 @@ Interleaved plate chrome.
             (runaway.rect[1] + runaway.rect[3]) / 2.0,
         );
         assert_eq!(
-            p.field_at(&[], last, cx, cy),
+            p.scan(&[]).field_at(last, cx, cy),
             Some("classification".to_string()),
             "sanity: unsuppressed, that ink routes to the stranded claim"
         );
         assert_eq!(
-            p.field_at(&p.unclosed(), last, cx, cy),
+            p.scan(&p.unclosed()).field_at(last, cx, cy),
             None,
             "suppressed, page chrome under a runaway claim answers to no field"
         );

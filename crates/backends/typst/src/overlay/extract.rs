@@ -14,7 +14,7 @@ use quillmark_core::{Diagnostic, RenderError, Severity};
 
 use quillmark_pdf::{FormFont, TextAlign};
 
-use super::{err, FieldKind, FieldPlacement};
+use super::{engine_err, FieldKind, FieldPlacement};
 
 const FIELD_LABEL: &str = "__qm_field__";
 const CODE_INTERNAL: &str = "typst::overlay_internal";
@@ -22,7 +22,7 @@ const CODE_INTERNAL: &str = "typst::overlay_internal";
 pub(crate) fn extract(doc: &PagedDocument) -> Result<Vec<FieldPlacement>, RenderError> {
     let intro = doc.introspector();
     let label = Label::new(PicoStr::intern(FIELD_LABEL)).ok_or_else(|| {
-        err(
+        engine_err(
             CODE_INTERNAL,
             "FIELD_LABEL must be a non-empty interned string",
         )
@@ -39,12 +39,12 @@ pub(crate) fn extract(doc: &PagedDocument) -> Result<Vec<FieldPlacement>, Render
         let dict = match c.get_by_name("value") {
             Ok(Value::Dict(d)) => d,
             Ok(other) => {
-                return Err(err(
+                return Err(engine_err(
                     CODE_INTERNAL,
                     format!("expected metadata value to be a dict, got {}", other.ty()),
                 ))
             }
-            Err(e) => return Err(err(CODE_INTERNAL, format!("metadata.value missing: {e:?}"))),
+            Err(e) => return Err(engine_err(CODE_INTERNAL, format!("metadata.value missing: {e:?}"))),
         };
         if read_str(&dict, "kind")? != FIELD_LABEL {
             // User attached <__qm_field__> to unrelated metadata; ignore it.
@@ -61,7 +61,7 @@ pub(crate) fn extract(doc: &PagedDocument) -> Result<Vec<FieldPlacement>, Render
         let align = read_align(&dict)?;
         let loc = c
             .location()
-            .ok_or_else(|| err(CODE_INTERNAL, "form-field metadata is not located"))?;
+            .ok_or_else(|| engine_err(CODE_INTERNAL, "form-field metadata is not located"))?;
 
         if let Some(&prior) = by_name.get(&name) {
             return Err(duplicate_field_error(&name, prior, loc));
@@ -70,7 +70,7 @@ pub(crate) fn extract(doc: &PagedDocument) -> Result<Vec<FieldPlacement>, Render
 
         let pos = intro
             .position(loc)
-            .ok_or_else(|| err(CODE_INTERNAL, "form-field metadata has no position"))?;
+            .ok_or_else(|| engine_err(CODE_INTERNAL, "form-field metadata has no position"))?;
         placements.push(FieldPlacement {
             name,
             schema_field,
@@ -111,7 +111,7 @@ fn read_field_kind(
             value: read_value_str(d, "value")?,
         }),
         "signature" => Ok(FieldKind::Signature),
-        other => Err(err(
+        other => Err(engine_err(
             CODE_INTERNAL,
             format!("unknown form-field type {other:?}"),
         )),
@@ -125,7 +125,7 @@ fn read_font(d: &typst::foundations::Dict) -> Result<FormFont, RenderError> {
         "helvetica" => Ok(FormFont::Helvetica),
         "times" => Ok(FormFont::Times),
         "courier" => Ok(FormFont::Courier),
-        other => Err(err(
+        other => Err(engine_err(
             CODE_INTERNAL,
             format!("unknown form-field font {other:?}"),
         )),
@@ -137,7 +137,7 @@ fn read_align(d: &typst::foundations::Dict) -> Result<TextAlign, RenderError> {
         "left" => Ok(TextAlign::Left),
         "center" => Ok(TextAlign::Center),
         "right" => Ok(TextAlign::Right),
-        other => Err(err(
+        other => Err(engine_err(
             CODE_INTERNAL,
             format!("unknown form-field align {other:?}"),
         )),
@@ -154,11 +154,11 @@ fn read_opt_f64(d: &typst::foundations::Dict, key: &str) -> Result<Option<f64>, 
 fn read_str(d: &typst::foundations::Dict, key: &str) -> Result<String, RenderError> {
     match d.get(key) {
         Ok(Value::Str(s)) => Ok(s.to_string()),
-        Ok(other) => Err(err(
+        Ok(other) => Err(engine_err(
             CODE_INTERNAL,
             format!("expected metadata.{key} to be str, got {}", other.ty()),
         )),
-        Err(_) => Err(err(CODE_INTERNAL, format!("metadata.{key} missing"))),
+        Err(_) => Err(engine_err(CODE_INTERNAL, format!("metadata.{key} missing"))),
     }
 }
 
@@ -166,11 +166,11 @@ fn read_f64(d: &typst::foundations::Dict, key: &str) -> Result<f64, RenderError>
     match d.get(key) {
         Ok(Value::Float(f)) => Ok(*f),
         Ok(Value::Int(i)) => Ok(*i as f64),
-        Ok(other) => Err(err(
+        Ok(other) => Err(engine_err(
             CODE_INTERNAL,
             format!("expected metadata.{key} to be float, got {}", other.ty()),
         )),
-        Err(_) => Err(err(CODE_INTERNAL, format!("metadata.{key} missing"))),
+        Err(_) => Err(engine_err(CODE_INTERNAL, format!("metadata.{key} missing"))),
     }
 }
 
@@ -178,7 +178,7 @@ fn read_opt_str(d: &typst::foundations::Dict, key: &str) -> Result<Option<String
     match d.get(key) {
         Ok(Value::Str(s)) => Ok(Some(s.to_string())),
         Ok(Value::None) => Ok(None),
-        Ok(other) => Err(err(
+        Ok(other) => Err(engine_err(
             CODE_INTERNAL,
             format!(
                 "expected metadata.{key} to be str or none, got {}",
@@ -195,7 +195,7 @@ fn read_str_array(d: &typst::foundations::Dict, key: &str) -> Result<Vec<String>
             .iter()
             .map(|v| match v {
                 Value::Str(s) => Ok(s.to_string()),
-                other => Err(err(
+                other => Err(engine_err(
                     CODE_INTERNAL,
                     format!(
                         "expected metadata.{key} elements to be str, got {}",
@@ -205,7 +205,7 @@ fn read_str_array(d: &typst::foundations::Dict, key: &str) -> Result<Vec<String>
             })
             .collect(),
         Ok(Value::None) => Ok(Vec::new()),
-        Ok(other) => Err(err(
+        Ok(other) => Err(engine_err(
             CODE_INTERNAL,
             format!("expected metadata.{key} to be an array, got {}", other.ty()),
         )),
@@ -223,7 +223,7 @@ fn read_value_str(d: &typst::foundations::Dict, key: &str) -> Result<Option<Stri
         Ok(Value::Bool(b)) => b.to_string(),
         Ok(Value::None) | Err(_) => return Ok(None),
         Ok(other) => {
-            return Err(err(
+            return Err(engine_err(
                 CODE_INTERNAL,
                 format!(
                     "expected metadata.{key} to be str/int/float/bool/none, got {}",
@@ -239,7 +239,7 @@ fn read_value_bool(d: &typst::foundations::Dict, key: &str) -> Result<Option<boo
     match d.get(key) {
         Ok(Value::Bool(b)) => Ok(Some(*b)),
         Ok(Value::None) | Err(_) => Ok(None),
-        Ok(other) => Err(err(
+        Ok(other) => Err(engine_err(
             CODE_INTERNAL,
             format!(
                 "expected metadata.{key} to be bool or none, got {}",

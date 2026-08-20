@@ -271,6 +271,8 @@ struct Emit<'a> {
     /// Whether `out` currently ends at a fresh line, tracked so block
     /// separators land consistently.
     end_newline: bool,
+    /// How far [`Self::overlapping_marks`] has walked `rt.marks`.
+    mark_cursor: usize,
 }
 
 impl<'a> Emit<'a> {
@@ -295,7 +297,25 @@ impl<'a> Emit<'a> {
             out: String::new(),
             segments: Vec::new(),
             end_newline: true,
+            mark_cursor: 0,
         }
+    }
+
+    /// The marks that can overlap `[lo, hi)`, as a slice of `rt.marks`.
+    ///
+    /// Segments are emitted in ascending content order, so a mark ending at or
+    /// before `lo` is behind every segment still to come and the cursor drops it
+    /// for good; `normalize_marks` leaves marks ascending by `start`, so the
+    /// first one starting at or after `hi` ends the slice. Both bounds are
+    /// conservative — [`wraps_and_codes`] still clamps and discards — so the
+    /// only effect is not rescanning the whole mark list per segment.
+    fn overlapping_marks(&mut self, lo: usize, hi: usize) -> &'a [Mark] {
+        let marks: &'a [Mark] = &self.rt.marks;
+        while self.mark_cursor < marks.len() && marks[self.mark_cursor].end <= lo {
+            self.mark_cursor += 1;
+        }
+        let rest = &marks[self.mark_cursor..];
+        &rest[..rest.partition_point(|m| m.start < hi)]
     }
 
     /// Leaf blocks terminate with `\n\n`; lists and quotes carry their own
@@ -590,7 +610,7 @@ impl<'a> Emit<'a> {
     ) -> Vec<(Range<usize>, Range<usize>, EscapeCtx)> {
         let mut runs = Vec::new();
 
-        let (mut wraps, codes) = wraps_and_codes(&self.rt.marks, lo, hi);
+        let (mut wraps, codes) = wraps_and_codes(self.overlapping_marks(lo, hi), lo, hi);
         // Atomic code spans can't carry partial styling.
         clip_wraps_to_codes(&mut wraps, &codes);
 
@@ -612,29 +632,13 @@ impl<'a> Emit<'a> {
                 buf.push_str(&markup);
                 return pos + 1;
             }
-            if let Some(&(cs, ce)) = codes.iter().find(|(s, _)| *s == pos) {
-                let content: String = self.chars[cs..ce].iter().collect();
-                buf.push_str("#raw(\"");
-                let rg0 = base + buf.len();
-                buf.push_str(&escape_string(&content));
-                let rg1 = base + buf.len();
-                buf.push_str("\")");
-                runs.push((cs..ce, rg0..rg1, EscapeCtx::StringLit));
-                return ce;
-            }
-            let re = next_boundary(pos, hi, &self.chars, &wraps, &codes);
-            let content: String = self.chars[pos..re].iter().collect();
-            // The neutralizing `\` sits *outside* the run's `generated` window,
-            // so `generated == escape_markup(content)` stays exact.
-            // `buf.is_empty()` gates to the segment's first content: a wrap
-            // already opened here would put the token mid-line.
-            if at_col0 && buf.is_empty() && opens_line_anchor(&content) {
-                buf.push('\\');
-            }
-            let rg0 = base + buf.len();
-            buf.push_str(&escape_markup(&content));
-            let rg1 = base + buf.len();
-            runs.push((pos..re, rg0..rg1, EscapeCtx::Markup));
+            // `buf.is_empty()` gates the line-anchor guard to the segment's
+            // first content: a wrap already opened here would put the token
+            // mid-line.
+            let anchored = at_col0 && buf.is_empty();
+            let (re, (content, g, ctx)) =
+                emit_run(buf, pos, hi, &self.chars, &wraps, &codes, anchored);
+            runs.push((content, (base + g.start)..(base + g.end), ctx));
             re
         });
         self.out.push_str(&buf);
@@ -802,6 +806,40 @@ fn wraps_and_codes(marks: &[Mark], lo: usize, hi: usize) -> (Vec<Wrap>, Vec<(usi
     (wraps, codes)
 }
 
+/// One run of a mark sweep: the atomic `#raw(..)` code span starting at `pos`,
+/// or the plain text up to the next boundary. Returns the position after it plus
+/// its `(content, generated, context)` pair, `generated` indexing `out` itself.
+/// `anchored` arms the line-anchor `\` guard, whose byte sits *outside* the
+/// run's window so `generated == escape_markup(content)` stays exact.
+fn emit_run(
+    out: &mut String,
+    pos: usize,
+    hi: usize,
+    chars: &[char],
+    wraps: &[Wrap],
+    codes: &[(usize, usize)],
+    anchored: bool,
+) -> (usize, (Range<usize>, Range<usize>, EscapeCtx)) {
+    if let Some(&(cs, ce)) = codes.iter().find(|(s, _)| *s == pos) {
+        let content: String = chars[cs..ce].iter().collect();
+        out.push_str("#raw(\"");
+        let g0 = out.len();
+        out.push_str(&escape_string(&content));
+        let g1 = out.len();
+        out.push_str("\")");
+        return (ce, (cs..ce, g0..g1, EscapeCtx::StringLit));
+    }
+    let re = next_boundary(pos, hi, chars, wraps, codes);
+    let content: String = chars[pos..re].iter().collect();
+    if anchored && opens_line_anchor(&content) {
+        out.push('\\');
+    }
+    let g0 = out.len();
+    out.push_str(&escape_markup(&content));
+    let g1 = out.len();
+    (re, (pos..re, g0..g1, EscapeCtx::Markup))
+}
+
 /// A cell is flat inline (no islands, no line breaks), so its markup carries no
 /// source-map runs.
 fn cell_markup(text: &str, marks: &[Mark]) -> String {
@@ -810,17 +848,7 @@ fn cell_markup(text: &str, marks: &[Mark]) -> String {
     clip_wraps_to_codes(&mut wraps, &codes);
     let mut out = String::new();
     sweep_marks(0, chars.len(), &wraps, &mut out, |out, pos| {
-        if let Some(&(cs, ce)) = codes.iter().find(|(s, _)| *s == pos) {
-            let content: String = chars[cs..ce].iter().collect();
-            out.push_str("#raw(\"");
-            out.push_str(&escape_string(&content));
-            out.push_str("\")");
-            return ce;
-        }
-        let re = next_boundary(pos, chars.len(), &chars, &wraps, &codes);
-        let content: String = chars[pos..re].iter().collect();
-        out.push_str(&escape_markup(&content));
-        re
+        emit_run(out, pos, chars.len(), &chars, &wraps, &codes, false).0
     });
     out
 }
