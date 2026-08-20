@@ -2,22 +2,30 @@
 
 ## Unreleased
 
-- fix(core): **storage blobs tagged `@0.81.0` load again.** The `V0_81_0` read
-  shim retired in #929 is restored: a stored document carrying
-  `quillmark/document@0.81.0` migrates forward to the current model on read
-  instead of failing as an unknown schema version. #929 retired it on the basis
-  that nothing persisted on this lineage predates `@0.92.0`; #1327 reports
-  stored rows in that shape, so the premise was wrong. The migration is
-  structural (the sentinel becomes a prelude of typed `$` items, every other
-  item maps 1:1) and targets `V0_92_0` directly, skipping `@0.82.0`. The write
-  path is untouched: re-serializing a migrated row emits `@0.93.0`.
+- fix(core): **storage blobs tagged `@0.81.0` and `@0.82.0` load again.** The
+  two read shims retired in #929 are restored: a stored document carrying
+  either tag migrates forward to the current model on read instead of failing
+  as an unknown schema version. Migrations chain again
+  (`V0_81_0 → V0_82_0 → V0_92_0 → V0_93_0`); the write path is untouched, so
+  re-serializing a migrated row emits `@0.93.0`.
 
-  `@0.82.0` stays unreadable, on two grounds that do not apply to `@0.81.0`:
-  its tag never named one frozen shape (`0.82.0` was yanked, so `0.83.0`
-  extended that DTO in place under the same tag and every release through
-  `0.91.0` wrote it), and it carries the `$id` payload item that `0.100.0`
-  removed from the live model as a hard cutover. Reading it needs a policy
-  decision for `$id`, not just a restored type tree (#1327)
+  The `V0_82_0 → V0_92_0` hop is **lossy in one place**: the `$id` payload item
+  is dropped. `0.100.0` removed `$id` from the live model as a hard cutover, so
+  the alternative is refusing the row. `$id` reached no backend and the engine
+  never read it; a consumer that kept a key there re-establishes it under a
+  `$ext` namespace it owns.
+
+  #929 retired both shims on two premises, both wrong. Nothing persisted on
+  this lineage was said to predate `@0.92.0` — #1327 reports stored `@0.81.0`
+  rows. And `0.82.0` was said to have been yanked — it was not. Every
+  published Quillmark version is live on crates.io, npm, and PyPI; the yank
+  was an intention recorded in the commit that added `$ext` (#630),
+  restated as settled fact in `docs/migrations/0.82-to-0.83.md`, and never
+  carried out. That guide now carries the correction. Because the yank never
+  happened, `@0.82.0` names a shape *union* rather than a frozen format —
+  `0.83.0` added `$ext` in place under the unchanged tag and every release
+  through `0.91.0` wrote it — so the restored reader accepts the union
+  (#1327)
 
 - refactor!: **one definition per mechanism across the rust crates.** A
   whole-codebase simplify pass: the typst session compiles through one

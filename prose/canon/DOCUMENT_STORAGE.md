@@ -78,7 +78,7 @@ document came through the bound door) live on the `Parsed` record, not on
 their `Document` handle as session state and exclude them from `equals` and
 the DTO alike.
 
-### Legacy schemas (V0_92_0, V0_81_0)
+### Legacy schemas (V0_92_0, V0_82_0, V0_81_0)
 
 Documents written before `0.93.0` carry
 `"schema": "quillmark/document@0.92.0"` and store the card `body` as a
@@ -87,23 +87,23 @@ them and migrate forward to V0_93_0 on load; writers do not produce this
 shape. The one hop that can reject is the body cold-import (see
 Byte-stability).
 
+`"schema": "quillmark/document@0.82.0"` is the same unified item list
+without `nested_fills` or `$seed`, plus `$id`. Its tag names a shape
+**union**, not a frozen format: `0.83.0` added `$ext` in place under the
+unchanged tag rather than versioning to `@0.83.0`, and every release through
+`0.91.0` wrote it. The reader accepts the union, which is what lets a row
+from any of those writers load.
+
+That hop is the one **lossy** migration: `$id` is dropped. `0.100.0` removed
+`$id` from the live model as a hard cutover, so the alternative is refusing
+the row entirely. `$id` reached no backend and the engine never read it; a
+consumer that kept a key there re-establishes it under a `$ext` namespace it
+owns.
+
 `"schema": "quillmark/document@0.81.0"` is the oldest tag read: the
 pre-unification shape, a separate `sentinel` beside a `frontmatter` item
-list. It migrates to V0_92_0 in one structural hop, skipping `@0.82.0`.
-
-`@0.82.0` has **no reader**, and is the one tag between two readable ones.
-Two facts disqualify it, both absent from `@0.81.0`:
-
-- Its tag never named one frozen shape. `0.82.0` was yanked, so `0.83.0`
-  extended that DTO in place under the same tag (adding `$ext`) rather than
-  versioning to `@0.83.0`; every release through `0.91.0` wrote it. A reader
-  for it would be a reader for a shape union, not a schema version.
-- It carries the `$id` payload item, which `0.100.0` removed from the live
-  model as a hard cutover. Reading one demands a policy for `$id` — reject,
-  drop, or lift into `$ext` — that the live model has no answer to.
-
-`0.81.0` is the sole release that wrote `@0.81.0`, and that shape predates
-`$id`, so neither applies.
+list. It predates both `$id` and `$ext`, so its hop to V0_82_0 loses
+nothing.
 
 ## Byte-stability
 
@@ -481,12 +481,12 @@ pathologically over-nested legacy body is rejected
 (`StorageError::Malformed`) rather than silently truncated. Only the newest
 DTO converts to the live `Document`; a `0.92.0` blob migrates one hop first.
 
-`0.81.0` is the oldest tag read. Its migration to V0_92_0 is structural: the
-sentinel becomes a prelude of typed `$` items, every other item maps 1:1, and
-the V0_92_0 additions are absent by construction (`nested_fills` empty, no
-`seed`). It targets V0_92_0 directly rather than chaining through `@0.82.0`,
-which has no reader (see "Legacy schemas" for why that tag alone is
-unreadable).
+`0.81.0` is the oldest tag read, and migrations chain
+(`V0_81_0 → V0_82_0 → V0_92_0 → V0_93_0`). The `V0_81_0` hop is structural:
+the sentinel becomes a prelude of typed `$` items and every other item maps
+1:1. The `V0_82_0` hop is lossy in exactly one place — `$id` is dropped (see
+"Legacy schemas") — and the V0_92_0 additions are absent by construction
+(`nested_fills` empty, no `seed`).
 
 ## Adding a Schema Version
 
@@ -543,12 +543,16 @@ A legacy variant may be **retired**: its DTO tree, migration, and tests
 deleted: once a product/release-history call confirms no stored population
 remains in that shape. A row that later surfaces in a retired shape then
 fails as an unknown version, so retirement is reserved for shapes with no
-live rows, and the evidence for "no live rows" is what the call turns on. The
-`@0.81.0` retirement was reversed on a consumer report of stored rows in that
-shape, which restoring a frozen tree and its migration answers. Retirement is
-therefore cheap to undo while the deleted tree remains recoverable from
-history, and the chain need not be contiguous: `@0.82.0` stays retired
-between two readable tags.
+live rows, and the evidence for "no live rows" is what the whole call turns
+on. Registry state is checkable and belongs in that evidence: the `@0.81.0`
+and `@0.82.0` retirement rested on `0.82.0` having been yanked, which was an
+intention recorded in a commit message, restated as fact in a migration
+guide, and never carried out — every published Quillmark version is live on
+crates.io, npm, and PyPI. Both tags are read again.
+
+Retirement is cheap to undo while the deleted tree is recoverable from
+history, which is the argument for retiring when the evidence holds — and for
+sourcing that evidence from the registry rather than from prose.
 
 ## Gotchas
 

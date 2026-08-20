@@ -59,6 +59,7 @@ proptest! {
         for schema in [
             "quillmark/document@0.93.0",
             "quillmark/document@0.92.0",
+            "quillmark/document@0.82.0",
             "quillmark/document@0.81.0",
         ] {
             let blob = json!({ "schema": schema, "main": main, "cards": cards });

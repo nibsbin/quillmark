@@ -18,15 +18,16 @@
 //!   per-field `nested_fills` list and the `$seed` item variant, body as a
 //!   markdown string. Read-only: the body cold-imports and the document
 //!   migrates forward to V0_93_0 on read.
+//! - **`quillmark/document@0.82.0`**: the same unified item list without
+//!   `nested_fills` or `$seed`, plus the `$id` item. Its tag names a shape
+//!   *union*, not a frozen format: `0.83.0` added `$ext` in place under the
+//!   unchanged tag, and every release through `0.91.0` wrote it. Read-only,
+//!   and the one **lossy** hop: `$id` is dropped, having no live counterpart
+//!   since `0.100.0` removed it.
 //! - **`quillmark/document@0.81.0`**: the oldest wire format still read. The
 //!   pre-unification shape: a separate `sentinel` (the typed `$quill` /
 //!   `$kind`) beside a `frontmatter` item list carrying user fields and
-//!   comments only. Read-only, migrated forward to V0_92_0 on read.
-//!
-//!   `@0.82.0` sits between the two and has **no reader**. Its tag never named
-//!   one frozen shape: `0.82.0` was yanked, so the `0.83.0`–`0.91.0` releases
-//!   extended that DTO in place under the same tag. It also carries the `$id`
-//!   item, which the live model no longer has any home for.
+//!   comments only. Read-only, migrated forward to V0_82_0 on read.
 //!
 //! The canonical design (including the step-by-step procedure for adding
 //! a schema version) is `prose/canon/DOCUMENT_STORAGE.md`.
@@ -86,9 +87,13 @@ pub enum StoredDocument {
     /// migrated forward to V0_93_0 on reconstruction.
     #[serde(rename = "quillmark/document@0.92.0")]
     V0_92_0(DocumentV0_92_0),
+    /// Legacy (V0_82_0) document model: unified payload items without
+    /// `nested_fills` or `$seed`, carrying `$id`. Read-only; migrated forward
+    /// on reconstruction, dropping `$id`.
+    #[serde(rename = "quillmark/document@0.82.0")]
+    V0_82_0(DocumentV0_82_0),
     /// Legacy (V0_81_0) document model: a separate `sentinel` beside a
-    /// `frontmatter` item list. Read-only; migrated forward to V0_92_0 on
-    /// reconstruction.
+    /// `frontmatter` item list. Read-only; migrated forward on reconstruction.
     #[serde(rename = "quillmark/document@0.81.0")]
     V0_81_0(DocumentV0_81_0),
 }
@@ -403,15 +408,18 @@ impl TryFrom<StoredDocument> for Document {
 
     fn try_from(stored: StoredDocument) -> Result<Self, Self::Error> {
         // Only the newest DTO converts to the live model; older versions migrate
-        // forward (V0_81 → V0_92 → V0_93). The V0_92 → V0_93 hop cold-imports the
-        // body, so every arm below the newest is fallible.
+        // forward (V0_81 → V0_82 → V0_92 → V0_93). The V0_92 → V0_93 hop
+        // cold-imports the body, so every arm below the newest is fallible.
         match stored {
             StoredDocument::V0_93_0(payload) => Document::try_from(payload),
             StoredDocument::V0_92_0(payload) => {
                 Document::try_from(DocumentV0_93_0::try_from(payload)?)
             }
-            StoredDocument::V0_81_0(payload) => Document::try_from(DocumentV0_93_0::try_from(
+            StoredDocument::V0_82_0(payload) => Document::try_from(DocumentV0_93_0::try_from(
                 DocumentV0_92_0::from(payload),
+            )?),
+            StoredDocument::V0_81_0(payload) => Document::try_from(DocumentV0_93_0::try_from(
+                DocumentV0_92_0::from(DocumentV0_82_0::from(payload)),
             )?),
         }
     }
@@ -627,6 +635,9 @@ impl From<CommentPathSegmentV0_92_0> for CommentPathSegment {
 //
 // Read + migrate-forward only. `0.81.0` is the sole release that wrote this tag,
 // so unlike `@0.82.0` it names one frozen shape.
+//
+// It predates `$id` (`0.82.0`) and `$ext` (`0.83.0`), so the forward hop below
+// loses nothing.
 
 /// Frozen `0.81.0` representation of a [`Document`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -698,39 +709,37 @@ pub enum CommentPathSegmentV0_81_0 {
     Index(usize),
 }
 
-// ─── V0_81_0 → V0_92_0 migration ──────────────────────────────────────────────
+// ─── V0_81_0 → V0_82_0 migration ──────────────────────────────────────────────
 //
-// Purely structural, and it skips the retired `@0.82.0` tree: the sentinel
-// becomes a prelude of typed `$` items, every other item maps 1:1, and the
-// V0_92_0 additions are absent by construction (`nested_fills` empty, no `Seed`).
-// Typed validation — quill reference, field names, depth — happens once, on the
-// V0_92_0 side.
+// Structural: the sentinel becomes a prelude of typed `$` items and every other
+// item maps 1:1. Typed validation — quill reference, field names, depth —
+// happens once, further down the chain.
 
-impl From<DocumentV0_81_0> for DocumentV0_92_0 {
+impl From<DocumentV0_81_0> for DocumentV0_82_0 {
     fn from(d: DocumentV0_81_0) -> Self {
-        DocumentV0_92_0 {
-            main: CardV0_92_0::from(d.main),
-            cards: d.cards.into_iter().map(CardV0_92_0::from).collect(),
+        DocumentV0_82_0 {
+            main: CardV0_82_0::from(d.main),
+            cards: d.cards.into_iter().map(CardV0_82_0::from).collect(),
         }
     }
 }
 
-impl From<CardV0_81_0> for CardV0_92_0 {
+impl From<CardV0_81_0> for CardV0_82_0 {
     fn from(c: CardV0_81_0) -> Self {
-        let mut items: Vec<PayloadItemV0_92_0> = Vec::new();
+        let mut items: Vec<PayloadItemV0_82_0> = Vec::new();
 
         // `Main` implies `$kind: main`, which V0_81_0 left implicit in the
         // sentinel; the reconstructed model carries it so the markdown emit
         // produces a parseable document.
         match c.sentinel {
             SentinelV0_81_0::Main { quill } => {
-                items.push(PayloadItemV0_92_0::Quill { value: quill });
-                items.push(PayloadItemV0_92_0::Kind {
+                items.push(PayloadItemV0_82_0::Quill { value: quill });
+                items.push(PayloadItemV0_82_0::Kind {
                     value: "main".into(),
                 });
             }
             SentinelV0_81_0::Card { tag } => {
-                items.push(PayloadItemV0_92_0::Kind { value: tag });
+                items.push(PayloadItemV0_82_0::Kind { value: tag });
             }
         }
 
@@ -739,27 +748,22 @@ impl From<CardV0_81_0> for CardV0_92_0 {
         for item in c.frontmatter.items {
             items.push(match item {
                 FrontmatterItemV0_81_0::Field { key, value, fill } => {
-                    PayloadItemV0_92_0::Field {
-                        key,
-                        value,
-                        fill,
-                        nested_fills: Vec::new(),
-                    }
+                    PayloadItemV0_82_0::Field { key, value, fill }
                 }
                 FrontmatterItemV0_81_0::Comment { text, inline } => {
-                    PayloadItemV0_92_0::Comment { text, inline }
+                    PayloadItemV0_82_0::Comment { text, inline }
                 }
             });
         }
 
-        CardV0_92_0 {
-            payload: PayloadV0_92_0 {
+        CardV0_82_0 {
+            payload: PayloadV0_82_0 {
                 items,
                 nested_comments: c
                     .frontmatter
                     .nested_comments
                     .into_iter()
-                    .map(NestedCommentV0_92_0::from)
+                    .map(NestedCommentV0_82_0::from)
                     .collect(),
             },
             body: c.body,
@@ -767,8 +771,175 @@ impl From<CardV0_81_0> for CardV0_92_0 {
     }
 }
 
-impl From<NestedCommentV0_81_0> for NestedCommentV0_92_0 {
+impl From<NestedCommentV0_81_0> for NestedCommentV0_82_0 {
     fn from(nc: NestedCommentV0_81_0) -> Self {
+        NestedCommentV0_82_0 {
+            container_path: nc
+                .container_path
+                .into_iter()
+                .map(CommentPathSegmentV0_82_0::from)
+                .collect(),
+            position: nc.position,
+            text: nc.text,
+            inline: nc.inline,
+        }
+    }
+}
+
+impl From<CommentPathSegmentV0_81_0> for CommentPathSegmentV0_82_0 {
+    fn from(seg: CommentPathSegmentV0_81_0) -> Self {
+        match seg {
+            CommentPathSegmentV0_81_0::Key(k) => CommentPathSegmentV0_82_0::Key(k),
+            CommentPathSegmentV0_81_0::Index(i) => CommentPathSegmentV0_82_0::Index(i),
+        }
+    }
+}
+
+// ─── V0_82_0 wire format ──────────────────────────────────────────────────────
+//
+// Read + migrate-forward only. Its tag names a shape *union*, not a frozen
+// format: `0.83.0` added `Ext` in place under the unchanged tag, and every
+// release through `0.91.0` wrote it. Accepting the union is what lets a row
+// from any of those writers load.
+
+/// Frozen `0.82.0` representation of a [`Document`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DocumentV0_82_0 {
+    pub main: CardV0_82_0,
+    #[serde(default)]
+    pub cards: Vec<CardV0_82_0>,
+}
+
+/// Frozen `0.82.0` representation of a [`Card`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CardV0_82_0 {
+    pub payload: PayloadV0_82_0,
+    #[serde(default)]
+    pub body: String,
+}
+
+/// Frozen `0.82.0` representation of a [`Payload`].
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct PayloadV0_82_0 {
+    #[serde(default)]
+    pub items: Vec<PayloadItemV0_82_0>,
+    #[serde(default)]
+    pub nested_comments: Vec<NestedCommentV0_82_0>,
+}
+
+/// Frozen `0.82.0` representation of a unified payload item.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum PayloadItemV0_82_0 {
+    /// `$quill` system metadata: the quill reference string.
+    Quill { value: String },
+    /// `$kind` system metadata.
+    Kind { value: String },
+    /// `$id` system metadata. The live model has no counterpart: `0.100.0`
+    /// removed `$id`, so this is the one item the forward migration drops.
+    Id { value: String },
+    /// `$ext` system metadata. Added by `0.83.0` under this same tag.
+    Ext {
+        value: serde_json::Map<String, serde_json::Value>,
+    },
+    /// A user-defined field.
+    Field {
+        key: String,
+        value: serde_json::Value,
+        #[serde(default)]
+        fill: bool,
+    },
+    /// A YAML comment.
+    Comment {
+        text: String,
+        #[serde(default)]
+        inline: bool,
+    },
+}
+
+/// Frozen `0.82.0` representation of a [`NestedComment`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NestedCommentV0_82_0 {
+    pub container_path: Vec<CommentPathSegmentV0_82_0>,
+    pub position: usize,
+    pub text: String,
+    pub inline: bool,
+}
+
+/// Frozen `0.82.0` representation of a [`CommentPathSegment`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum CommentPathSegmentV0_82_0 {
+    Key(String),
+    Index(usize),
+}
+
+// ─── V0_82_0 → V0_92_0 migration (lossy: `$id` is dropped) ────────────────────
+//
+// Every item maps 1:1 but `Id`, which has no live counterpart since `0.100.0`
+// removed `$id`. Dropping it is the deliberate trade: the alternative is
+// refusing to read the row at all, and `$id` reached no backend and was never
+// read by the engine. A consumer that kept a key there re-establishes it under
+// a `$ext` namespace it owns. The V0_92_0 additions are absent by construction:
+// `nested_fills` empty, no `Seed`.
+
+impl From<DocumentV0_82_0> for DocumentV0_92_0 {
+    fn from(d: DocumentV0_82_0) -> Self {
+        DocumentV0_92_0 {
+            main: CardV0_92_0::from(d.main),
+            cards: d.cards.into_iter().map(CardV0_92_0::from).collect(),
+        }
+    }
+}
+
+impl From<CardV0_82_0> for CardV0_92_0 {
+    fn from(c: CardV0_82_0) -> Self {
+        CardV0_92_0 {
+            payload: PayloadV0_92_0::from(c.payload),
+            body: c.body,
+        }
+    }
+}
+
+impl From<PayloadV0_82_0> for PayloadV0_92_0 {
+    fn from(p: PayloadV0_82_0) -> Self {
+        PayloadV0_92_0 {
+            items: p
+                .items
+                .into_iter()
+                .filter_map(PayloadItemV0_92_0::from_v0_82_0)
+                .collect(),
+            nested_comments: p
+                .nested_comments
+                .into_iter()
+                .map(NestedCommentV0_92_0::from)
+                .collect(),
+        }
+    }
+}
+
+impl PayloadItemV0_92_0 {
+    /// `None` for the `$id` item, which has no live counterpart.
+    fn from_v0_82_0(item: PayloadItemV0_82_0) -> Option<Self> {
+        Some(match item {
+            PayloadItemV0_82_0::Id { .. } => return None,
+            PayloadItemV0_82_0::Quill { value } => PayloadItemV0_92_0::Quill { value },
+            PayloadItemV0_82_0::Kind { value } => PayloadItemV0_92_0::Kind { value },
+            PayloadItemV0_82_0::Ext { value } => PayloadItemV0_92_0::Ext { value },
+            PayloadItemV0_82_0::Field { key, value, fill } => PayloadItemV0_92_0::Field {
+                key,
+                value,
+                fill,
+                nested_fills: Vec::new(),
+            },
+            PayloadItemV0_82_0::Comment { text, inline } => {
+                PayloadItemV0_92_0::Comment { text, inline }
+            }
+        })
+    }
+}
+
+impl From<NestedCommentV0_82_0> for NestedCommentV0_92_0 {
+    fn from(nc: NestedCommentV0_82_0) -> Self {
         NestedCommentV0_92_0 {
             container_path: nc
                 .container_path
@@ -782,11 +953,11 @@ impl From<NestedCommentV0_81_0> for NestedCommentV0_92_0 {
     }
 }
 
-impl From<CommentPathSegmentV0_81_0> for CommentPathSegmentV0_92_0 {
-    fn from(seg: CommentPathSegmentV0_81_0) -> Self {
+impl From<CommentPathSegmentV0_82_0> for CommentPathSegmentV0_92_0 {
+    fn from(seg: CommentPathSegmentV0_82_0) -> Self {
         match seg {
-            CommentPathSegmentV0_81_0::Key(k) => CommentPathSegmentV0_92_0::Key(k),
-            CommentPathSegmentV0_81_0::Index(i) => CommentPathSegmentV0_92_0::Index(i),
+            CommentPathSegmentV0_82_0::Key(k) => CommentPathSegmentV0_92_0::Key(k),
+            CommentPathSegmentV0_82_0::Index(i) => CommentPathSegmentV0_92_0::Index(i),
         }
     }
 }
@@ -955,11 +1126,96 @@ title: Hi
     }
 
     #[test]
-    fn retired_v0_82_0_schema_tag_is_rejected() {
-        // `@0.82.0` has no reader: rejected, never migrated. Its tag never named
-        // one frozen shape (yanked release, extended in place through 0.91.0).
-        let json = r#"{"schema":"quillmark/document@0.82.0",
-            "main":{"payload":{"items":[]},"body":""},"cards":[]}"#;
+    fn v0_82_0_payload_loads_via_migration() {
+        let json = r#"{
+            "schema": "quillmark/document@0.82.0",
+            "main": {
+                "payload": {"items": [
+                    {"type": "quill", "value": "usaf_memo@0.1"},
+                    {"type": "kind", "value": "main"},
+                    {"type": "field", "key": "title", "value": "Hello"}
+                ]},
+                "body": "Body."
+            },
+            "cards": []
+        }"#;
+        let doc: Document = serde_json::from_str(json).unwrap();
+        assert_eq!(doc.main().kind(), Some("main"));
+        assert_eq!(
+            doc.main().payload().get("title").unwrap().as_str(),
+            Some("Hello")
+        );
+        let reser = serde_json::to_string(&doc).unwrap();
+        assert_eq!(
+            peek_storage_version(&reser).as_deref(),
+            Some(STORAGE_V0_93_0)
+        );
+    }
+
+    #[test]
+    fn v0_82_0_ext_item_loads() {
+        // `$ext` was added under the unchanged `@0.82.0` tag by `0.83.0`, so a
+        // row from any writer through `0.91.0` carries it.
+        let json = r#"{
+            "schema": "quillmark/document@0.82.0",
+            "main": {
+                "payload": {"items": [
+                    {"type": "quill", "value": "q@1.0"},
+                    {"type": "kind", "value": "main"},
+                    {"type": "ext", "value": {"editor": {"pinned": true}}}
+                ]},
+                "body": ""
+            },
+            "cards": []
+        }"#;
+        let doc: Document = serde_json::from_str(json).unwrap();
+        assert!(doc.main().ext().is_some());
+    }
+
+    #[test]
+    fn v0_82_0_id_item_is_dropped_not_rejected() {
+        // The one lossy hop. `$id` left the live model in `0.100.0`; a row
+        // carrying it loads without it rather than failing to load at all.
+        let json = r#"{
+            "schema": "quillmark/document@0.82.0",
+            "main": {
+                "payload": {"items": [
+                    {"type": "quill", "value": "q@1.0"},
+                    {"type": "kind", "value": "main"},
+                    {"type": "id", "value": "card-7"},
+                    {"type": "field", "key": "title", "value": "Hello"}
+                ]},
+                "body": ""
+            },
+            "cards": []
+        }"#;
+        let doc: Document = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            doc.main().payload().get("title").unwrap().as_str(),
+            Some("Hello")
+        );
+        let md = doc.to_markdown();
+        assert!(!md.contains("$id"), "{md}");
+        assert!(!md.contains("card-7"), "{md}");
+        assert_eq!(doc, Document::parse(&md).unwrap().document);
+    }
+
+    #[test]
+    fn v0_82_0_seed_item_is_rejected() {
+        // `$seed` is what the `@0.92.0` bump was for; it is not a legal
+        // `@0.82.0` item, so a blob claiming the older tag must not load.
+        let json = r#"{
+            "schema": "quillmark/document@0.82.0",
+            "main": {
+                "payload": {"items": [
+                    {"type": "quill", "value": "q@1.0"},
+                    {"type": "kind", "value": "main"},
+                    {"type": "seed", "value": {"indorsement": {"from": "X"}}}
+                ]},
+                "body": ""
+            },
+            "cards": []
+        }"#;
         assert!(serde_json::from_str::<Document>(json).is_err());
     }
 
