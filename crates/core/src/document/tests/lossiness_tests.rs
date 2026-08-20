@@ -519,35 +519,37 @@ fn orphan_inline_after_remove_degrades_to_own_line() {
 }
 
 #[test]
-fn inline_on_empty_mapping_degrades_to_own_line() {
-    use crate::QuillValue;
-
-    // Construct programmatically since `key: {}` doesn't appear in source.
-    let src = "~~~card-yaml\n$quill: q\n$kind: main\n~~~\n";
-    let mut doc = Document::parse(src).unwrap().document;
-    let _ = doc
-        .main_mut()
-        .payload_mut()
-        .insert("empty", QuillValue::from_json(serde_json::json!({})));
-    {
-        let fm = doc.main_mut().payload_mut();
-        let items = fm.items().to_vec();
-        let mut new_items = items;
-        new_items.push(crate::PayloadItem::comment_inline("notes about empty"));
-        *fm = crate::document::Payload::from_items(new_items);
-    }
+fn inline_on_empty_mapping_rides_on_the_braces() {
+    let src = "~~~card-yaml\n$quill: q\n$kind: main\nempty: {} # notes about empty\n~~~\n";
+    let doc = Document::parse(src).unwrap().document;
 
     let emitted = doc.to_markdown();
     assert!(
-        !emitted.contains("empty:"),
-        "empty mapping must be omitted\nGot:\n{}",
+        emitted.contains("empty: {} # notes about empty\n"),
+        "empty mapping keeps its key and its inline trailer\nGot:\n{}",
         emitted
     );
-    assert!(
-        emitted.contains("# notes about empty"),
-        "inline trailer for an omitted host must degrade to own-line\nGot:\n{}",
-        emitted
+
+    let doc2 = Document::parse(&emitted).unwrap().document;
+    assert_eq!(doc, doc2, "empty mapping must survive the round-trip");
+    assert_eq!(emitted, doc2.to_markdown(), "round-trip must be idempotent");
+}
+
+#[test]
+fn nested_empty_mapping_survives_round_trip() {
+    use crate::QuillValue;
+
+    let src = "~~~card-yaml\n$quill: q\n$kind: main\n~~~\n";
+    let mut doc = Document::parse(src).unwrap().document;
+    let _ = doc.main_mut().payload_mut().insert(
+        "cfg",
+        QuillValue::from_json(serde_json::json!({ "opts": {} })),
     );
+
+    let emitted = doc.to_markdown();
+    let doc2 = Document::parse(&emitted).unwrap().document;
+    assert_eq!(doc, doc2, "nested empty mapping must not become null\nGot:\n{emitted}");
+    assert_eq!(emitted, doc2.to_markdown(), "round-trip must be idempotent");
 }
 
 /// `- key: !must_fill` puts the marker on the dash line, where prescan must

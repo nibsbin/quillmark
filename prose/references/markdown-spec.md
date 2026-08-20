@@ -473,6 +473,10 @@ alias and the `---`-fenced root alias (§3.2.1) both re-emit as bare `~~~`.
 (own-line and inline, including those adjacent to `$` lines) survive the
 round-trip.
 
+**Empty containers.** An empty mapping emits as `key: {}` and an empty
+sequence as `key: []`, at every nesting level and under `$ext` / `$seed`
+alike. Neither collapses to a bare `key:`, which reads back as null.
+
 Programmatically constructed metadata that does not have a source-order
 emits in the canonical key order `$quill`, `$kind`, `$ext`, `$seed`: the
 typed mutators (`set_quill` / `set_kind` / `set_ext` / `set_seed`)
