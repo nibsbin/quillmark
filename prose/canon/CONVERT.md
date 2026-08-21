@@ -43,6 +43,15 @@ Two escapers guard the two Typst contexts; both live in `emit`:
   `\ " \n \r \t` and other control characters as `\u{…}`. Applied to `#link` /
   `#image` URLs, code content, and code-fence language tags.
 
+Both are position-blind. Typst's heading `=`, list `-`/`+`/`N.`, and term `/`
+are special only as a line's first token, each firing on a space after it or on
+the line ending there, so a text run landing in that position — column 0, or a
+list item's body head, which the parser reads as one — takes a single `\`
+prefix. The byte sits outside every source-map run window, so
+`generated == escape_markup(content)` stays exact. Unprefixed, a paragraph
+holding one bare `/` is a term list whose colon is missing, and the compile
+fails.
+
 ## Element mapping
 
 | Content construct | Typst |
