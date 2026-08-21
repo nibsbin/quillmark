@@ -20,6 +20,15 @@
   paragraph beginning `  / x` failed the same way. The line-anchor guard now
   covers every position Typst reads as a line start.
 
+- fix(typst): **text directly after inline code, bold or an image renders when
+  it opens with `(` or `.name`.** Typst reads a `(` directly after a `#…`
+  expression as that call's arguments and a `.` before an identifier as a field
+  access, so the emitter's own `#raw(…)`, `#strong[…]` and `#image(…)` handed
+  the text behind them to Typst as code — `` `x`(y) `` became a call on
+  content, which fails the compile. Such a run now takes the same `\` prefix
+  the line-anchor guard uses. Debug builds parse every emission with Typst's
+  parser, so markup that reaches it as syntax fails a test rather than a render.
+
 ## v0.108.2 - 2026-08-20
 
 - fix(core): **storage blobs tagged `@0.81.0` and `@0.82.0` load again.** Both
