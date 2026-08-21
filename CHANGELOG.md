@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased
+
+- fix(typst): **a paragraph holding one bare `/` renders instead of failing the
+  compile.** Typst's heading `=`, list `-`/`+`/`N.`, and term `/` markers fire
+  on a space after them *or* on the line ending there; the emitter's
+  line-anchor guard tested only for the space, so a run that was one bare
+  marker reached Typst unescaped — `/` as a term list whose colon is missing
+  (`expected colon`), the other four as an empty heading, bullet or enum item.
+  The guard now takes Typst's own test, and covers a list item's body head as
+  well as column 0, that being a line start the parser reads as one.
+
+- fix(typst): **bold text, a table cell or an indented paragraph opening with
+  `-`, `=`, `+`, `/` or `N.` renders as that text.** Typst reads the head of
+  every content block `[…]` as a line start of its own, so the marker in
+  `**/ x**` or in a table cell reached it as a term list whose colon is missing
+  and failed the compile, while `**- x**` drew a bullet list inside the bold.
+  Indentation is trivia and holds that line start open behind it, so a
+  paragraph beginning `  / x` failed the same way. The line-anchor guard now
+  covers every position Typst reads as a line start.
+
+- fix(typst): **text directly after inline code, bold or an image renders when
+  it opens with `(` or `.name`.** Typst reads a `(` directly after a `#…`
+  expression as that call's arguments and a `.` before an identifier as a field
+  access, so the emitter's own `#raw(…)`, `#strong[…]` and `#image(…)` handed
+  the text behind them to Typst as code — `` `x`(y) `` became a call on
+  content, which fails the compile. Such a run now takes the same `\` prefix
+  the line-anchor guard uses. Debug builds parse every emission with Typst's
+  parser, so markup that reaches it as syntax fails a test rather than a render.
+
 ## v0.108.2 - 2026-08-20
 
 - fix(core): **storage blobs tagged `@0.81.0` and `@0.82.0` load again.** Both
