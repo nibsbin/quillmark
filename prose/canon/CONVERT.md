@@ -45,12 +45,18 @@ Two escapers guard the two Typst contexts; both live in `emit`:
 
 Both are position-blind. Typst's heading `=`, list `-`/`+`/`N.`, and term `/`
 are special only as a line's first token, each firing on a space after it or on
-the line ending there, so a text run landing in that position — column 0, or a
-list item's body head, which the parser reads as one — takes a single `\`
-prefix. The byte sits outside every source-map run window, so
+the line ending there, so a text run landing in that position takes a single
+`\` prefix. The byte sits outside every source-map run window, so
 `generated == escape_markup(content)` stays exact. Unprefixed, a paragraph
 holding one bare `/` is a term list whose colon is missing, and the compile
 fails.
+
+That position is Typst's `at_start`, and it is four places: column 0, a list
+item's body head, the head of every content block `[…]` the emitter opens — one
+per wrap, one per table cell — and the spaces or tabs behind any of them, which
+Typst reads as trivia. A heading's body is none of them. The guard lands on the
+marker rather than ahead of the indentation: `\` before a space is Typst's
+linebreak, not an escape.
 
 ## Element mapping
 

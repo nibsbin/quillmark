@@ -11,6 +11,15 @@
   The guard now takes Typst's own test, and covers a list item's body head as
   well as column 0, that being a line start the parser reads as one.
 
+- fix(typst): **bold text, a table cell or an indented paragraph opening with
+  `-`, `=`, `+`, `/` or `N.` renders as that text.** Typst reads the head of
+  every content block `[…]` as a line start of its own, so the marker in
+  `**/ x**` or in a table cell reached it as a term list whose colon is missing
+  and failed the compile, while `**- x**` drew a bullet list inside the bold.
+  Indentation is trivia and holds that line start open behind it, so a
+  paragraph beginning `  / x` failed the same way. The line-anchor guard now
+  covers every position Typst reads as a line start.
+
 ## v0.108.2 - 2026-08-20
 
 - fix(core): **storage blobs tagged `@0.81.0` and `@0.82.0` load again.** Both

@@ -13,12 +13,18 @@
 //! **Line-anchored text.** [`escape_markup`](crate::emit::escape_markup)
 //! neutralizes inline markup but is
 //! position-blind; Typst's heading `=`, list `-`/`+`/`N.`, and term `/` are only
-//! special as the first token of a source line, and each fires on a space after it
-//! or on the line ending there. Text opening with one lands at column 0 and would
-//! render as that block — a lone `/` as a term list whose colon is missing, which
-//! is a parse error — so the emitter prefixes a single `\` there
-//! (`opens_line_anchor`). Styling-only: `#`, `[`, `$` are already
-//! escaped, so this is no code-execution vector.
+//! special as the first token of a markup line, and each fires on a space after it
+//! or on the line ending there. Text opening with one there would render as that
+//! block — a lone `/` as a term list whose colon is missing, which is a parse
+//! error — so the emitter prefixes a single `\` (`opens_line_anchor`).
+//!
+//! That position is Typst's `at_start`, and it is four places, not one: column 0
+//! with indentation ahead of it not counting, a list item's body head, the head
+//! of every content block `[…]` the emitter opens (each wrap, each table cell),
+//! and the run of spaces or tabs behind any of them, which Typst reads as trivia.
+//! A heading's body is none of them. `at_line_anchor` answers the first two,
+//! `sweep_marks` carries the third, `emit_run` the fourth. Styling-only:
+//! `#`, `[`, `$` are already escaped, so this is no code-execution vector.
 //!
 //! **The 2→4 escape coupling.** Each run records only its `(content, generated)`
 //! pair; per-char spans are *recomputed* by a scan treating `//`→`\/\/` as a
@@ -79,7 +85,9 @@ pub fn escape_string(s: &str) -> String {
 /// `1.item` are inert and a paragraph holding one bare `/` is a slash rather
 /// than a term list whose colon is missing. The run ends at a mark, an island,
 /// or the line, and everything the emitter opens there starts `#`, so the end
-/// case escapes one line-final marker and never a token mid-line.
+/// case escapes one line-final marker and never a token mid-line. `s` starts at
+/// the marker: [`emit_run`] cuts a run's leading trivia away, so a space here is
+/// prose rather than an indented marker.
 fn opens_line_anchor(s: &str) -> bool {
     let b = s.as_bytes();
     let clear = |n: usize| s[n..].chars().next().is_none_or(char::is_whitespace);
@@ -605,7 +613,7 @@ impl<'a> Emit<'a> {
         });
     }
 
-    /// Is the emitter where Typst's line-anchored syntax is live: column 0 of a
+    /// Does the segment about to open sit at a line anchor: column 0 of a
     /// generated source line, indentation ahead of it not counting, or the head of a
     /// list item's body, which the parser reads as a line start of its own. A
     /// heading's body is not one, and neither is any position prose has reached.
@@ -640,27 +648,23 @@ impl<'a> Emit<'a> {
         // The scratch buffer's bytes land at `base` once appended, so each run's
         // generated span is `base + buf.len()`, absolute into `self.out`.
         let base = self.out.len();
-        let at_col0 = self.at_line_anchor();
+        let at_anchor = self.at_line_anchor();
         let mut buf = String::new();
-        sweep_marks(lo, hi, &wraps, &mut buf, |buf, pos| {
+        sweep_marks(lo, hi, &wraps, &mut buf, at_anchor, |buf, pos, anchored| {
             let c = self.chars[pos];
             if c == '\n' {
                 buf.push_str("#linebreak()");
-                return pos + 1;
+                return (pos + 1, false);
             }
             if c == ISLAND_SLOT {
                 let markup = self.island_markup(pos);
                 buf.push_str(&markup);
-                return pos + 1;
+                return (pos + 1, false);
             }
-            // `buf.is_empty()` gates the line-anchor guard to the segment's
-            // first content: a wrap already opened here would put the token
-            // mid-line.
-            let anchored = at_col0 && buf.is_empty();
-            let (re, (content, g, ctx)) =
+            let (re, still_anchored, (content, g, ctx)) =
                 emit_run(buf, pos, hi, &self.chars, &wraps, &codes, anchored);
             runs.push((content, (base + g.start)..(base + g.end), ctx));
-            re
+            (re, still_anchored)
         });
         self.out.push_str(&buf);
         runs
@@ -711,16 +715,20 @@ fn clip_wraps_to_codes(wraps: &mut Vec<Wrap>, codes: &[(usize, usize)]) {
 
 /// The mark boundary sweep, shared by prose inline emission and table-cell
 /// rendering: opens `wraps` (longer span first, then kind-ord) and
-/// closes-and-reopens deeper survivors at overlaps. `emit_run(out, pos)` writes
-/// the content at `pos` and returns the next position. `wraps` must already be
-/// clipped against the code spans ([`clip_wraps_to_codes`]), so no wrap `end`
-/// hides inside a span the callback's cursor jumps over.
+/// closes-and-reopens deeper survivors at overlaps. `emit_run(out, pos,
+/// anchored)` writes the content at `pos` and returns the next position and
+/// whether the line anchor outlives what it wrote. Every wrap `open` ends `[`,
+/// and a content block's head is a line start of Typst's own, so the anchor
+/// rearms at each one. `wraps` must already be clipped against the code spans
+/// ([`clip_wraps_to_codes`]), so no wrap `end` hides inside a span the
+/// callback's cursor jumps over.
 fn sweep_marks(
     lo: usize,
     hi: usize,
     wraps: &[Wrap],
     out: &mut String,
-    mut emit_run: impl FnMut(&mut String, usize) -> usize,
+    mut anchored: bool,
+    mut emit_run: impl FnMut(&mut String, usize, bool) -> (usize, bool),
 ) {
     // Open marks, outermost first. Storing the index (not `(end, ord)`) keeps
     // each mark's identity, so a reopened mark re-emits its OWN delimiter: two
@@ -734,12 +742,14 @@ fn sweep_marks(
             while stack.len() > idx {
                 let wi = stack.pop().unwrap();
                 out.push(']');
+                anchored = false;
                 if wraps[wi].end != pos {
                     reopen.push(wi);
                 }
             }
             for wi in reopen.into_iter().rev() {
                 out.push_str(&wraps[wi].open);
+                anchored = true;
                 stack.push(wi);
             }
         }
@@ -750,9 +760,12 @@ fn sweep_marks(
         opening.sort_by(|&a, &b| wraps[b].end.cmp(&wraps[a].end).then(wraps[a].ord.cmp(&wraps[b].ord)));
         for wi in opening {
             out.push_str(&wraps[wi].open);
+            anchored = true;
             stack.push(wi);
         }
-        pos = emit_run(out, pos);
+        let (next, still_anchored) = emit_run(out, pos, anchored);
+        anchored = still_anchored;
+        pos = next;
     }
     // The codegen embeds this markup in a `#let _qm = [ .. ]` block that one
     // unclosed `[` would break, failing the whole helper file's parse. Clipping
@@ -828,10 +841,16 @@ fn wraps_and_codes(marks: &[Mark], lo: usize, hi: usize) -> (Vec<Wrap>, Vec<(usi
 }
 
 /// One run of a mark sweep: the atomic `#raw(..)` code span starting at `pos`,
-/// or the plain text up to the next boundary. Returns the position after it plus
-/// its `(content, generated, context)` pair, `generated` indexing `out` itself.
-/// `anchored` arms the line-anchor `\` guard, whose byte sits *outside* the
-/// run's window so `generated == escape_markup(content)` stays exact.
+/// or the plain text up to the next boundary. Returns the position after it,
+/// whether the line anchor survives it, and its `(content, generated, context)`
+/// pair, `generated` indexing `out` itself. `anchored` arms the line-anchor `\`
+/// guard, whose byte sits *outside* the run's window so
+/// `generated == escape_markup(content)` stays exact.
+///
+/// Under the guard a run opening with spaces or tabs stops at the first
+/// character that is neither: Typst reads them as trivia and holds the anchor
+/// open behind them, while `\` before a space is its linebreak rather than an
+/// escape, so the guard byte has to land on the marker itself.
 fn emit_run(
     out: &mut String,
     pos: usize,
@@ -840,7 +859,7 @@ fn emit_run(
     wraps: &[Wrap],
     codes: &[(usize, usize)],
     anchored: bool,
-) -> (usize, (Range<usize>, Range<usize>, EscapeCtx)) {
+) -> (usize, bool, (Range<usize>, Range<usize>, EscapeCtx)) {
     if let Some(&(cs, ce)) = codes.iter().find(|(s, _)| *s == pos) {
         let content: String = chars[cs..ce].iter().collect();
         out.push_str("#raw(\"");
@@ -848,9 +867,13 @@ fn emit_run(
         out.push_str(&escape_string(&content));
         let g1 = out.len();
         out.push_str("\")");
-        return (ce, (cs..ce, g0..g1, EscapeCtx::StringLit));
+        return (ce, false, (cs..ce, g0..g1, EscapeCtx::StringLit));
     }
-    let re = next_boundary(pos, hi, chars, wraps, codes);
+    let mut re = next_boundary(pos, hi, chars, wraps, codes);
+    let trivia = |c: char| c == ' ' || c == '\t';
+    if anchored && trivia(chars[pos]) {
+        re = (pos..re).find(|&p| !trivia(chars[p])).unwrap_or(re);
+    }
     let content: String = chars[pos..re].iter().collect();
     if anchored && opens_line_anchor(&content) {
         out.push('\\');
@@ -858,18 +881,25 @@ fn emit_run(
     let g0 = out.len();
     out.push_str(&escape_markup(&content));
     let g1 = out.len();
-    (re, (pos..re, g0..g1, EscapeCtx::Markup))
+    (
+        re,
+        anchored && content.chars().all(trivia),
+        (pos..re, g0..g1, EscapeCtx::Markup),
+    )
 }
 
 /// A cell is flat inline (no islands, no line breaks), so its markup carries no
-/// source-map runs.
+/// source-map runs. It opens at the head of the `[…]` [`table_markup`] wraps it
+/// in, which is a line anchor.
 fn cell_markup(text: &str, marks: &[Mark]) -> String {
     let chars: Vec<char> = text.chars().collect();
     let (mut wraps, codes) = wraps_and_codes(marks, 0, chars.len());
     clip_wraps_to_codes(&mut wraps, &codes);
     let mut out = String::new();
-    sweep_marks(0, chars.len(), &wraps, &mut out, |out, pos| {
-        emit_run(out, pos, chars.len(), &chars, &wraps, &codes, false).0
+    sweep_marks(0, chars.len(), &wraps, &mut out, true, |out, pos, anchored| {
+        let (re, still_anchored, _) =
+            emit_run(out, pos, chars.len(), &chars, &wraps, &codes, anchored);
+        (re, still_anchored)
     });
     out
 }
@@ -1567,8 +1597,7 @@ mod tests {
     }
 
     /// The source map stays exact because the `\` sits outside every run's
-    /// `generated` window. A wrap opening at the start puts the token mid-line,
-    /// so no `\` is added there.
+    /// `generated` window.
     #[test]
     fn line_anchor_paragraph_prefixes_backslash() {
         // Bare paragraph starts → escaped.
@@ -1586,13 +1615,17 @@ mod tests {
         // Non-trigger prose is untouched.
         assert_eq!(emit_marked("hello = x", vec![]), "hello = x\n\n");
         assert_eq!(emit_marked("=x no space", vec![]), "=x no space\n\n");
-        // A wrap at the start neutralizes the line-anchor already → no `\`.
+        // A wrap opens a content block, whose head is a line start of Typst's own.
         assert_eq!(
-            emit_marked(
-                "= x",
-                vec![Mark::new(0, 3, MarkKind::Strong)],
-            ),
-            "#strong[= x]\n\n",
+            emit_marked("= x", vec![Mark::new(0, 3, MarkKind::Strong)]),
+            "#strong[\\= x]\n\n",
+        );
+        // Indentation is trivia and holds the anchor open behind it, so the guard
+        // lands on the marker: before the space it would be Typst's linebreak.
+        assert_eq!(emit_marked("  = x", vec![]), "  \\= x\n\n");
+        assert_eq!(
+            emit_marked("  = x", vec![Mark::new(0, 5, MarkKind::Emph)]),
+            "#emph[  \\= x]\n\n",
         );
 
         // Source-map integrity: every run's generated slice equals the escape of
@@ -1611,6 +1644,69 @@ mod tests {
                 };
                 assert_eq!(&ec.markup[generated.clone()], expect, "run slices to its escape");
             }
+        }
+    }
+
+    /// Typst's own parser over the emitter's output: the block-level nodes it
+    /// finds are exactly the ones the content asked for. Every marker case here
+    /// rendered as a block, or failed the compile, before the guard reached its
+    /// position.
+    #[test]
+    fn typst_reads_only_the_blocks_the_content_asked_for() {
+        use typst::syntax::{parse, SyntaxKind, SyntaxNode};
+
+        fn blocks(n: &SyntaxNode, out: &mut Vec<SyntaxKind>) {
+            if matches!(
+                n.kind(),
+                SyntaxKind::Heading
+                    | SyntaxKind::ListItem
+                    | SyntaxKind::EnumItem
+                    | SyntaxKind::TermItem
+            ) {
+                out.push(n.kind());
+            }
+            for c in n.children() {
+                blocks(c, out);
+            }
+        }
+        let found = |markup: &str| {
+            let mut v = Vec::new();
+            blocks(&parse(markup), &mut v);
+            v
+        };
+
+        let all = |text: &str, kind| vec![Mark::new(0, text.chars().count(), kind)];
+        for (markup, want) in [
+            // Column 0, with the marker ending the run or the line.
+            (emit_marked("/ t", vec![]), vec![]),
+            (emit_marked("/", vec![]), vec![]),
+            (emit_marked("=", vec![]), vec![]),
+            // Behind indentation, which Typst reads as trivia.
+            (emit_marked("  / t", vec![]), vec![]),
+            (emit_marked("\t- b", vec![]), vec![]),
+            // A wrap's content block.
+            (emit_marked("/ t", all("/ t", MarkKind::Strong)), vec![]),
+            (emit_marked("= h", all("= h", MarkKind::Strong)), vec![]),
+            (emit_marked("  - b", all("  - b", MarkKind::Emph)), vec![]),
+            (emit_marked("1. n", all("1. n", MarkKind::Strike)), vec![]),
+            // A table cell's.
+            (
+                emit("| / t | = h |\n| --- | --- |\n| - b | 1. n |").markup,
+                vec![],
+            ),
+            // A list item's body head, whose own item is the one block here.
+            (emit("- /").markup, vec![SyntaxKind::ListItem]),
+            // Real blocks still reach Typst as blocks.
+            (
+                emit("# h\n\n- a\n- b").markup,
+                vec![
+                    SyntaxKind::Heading,
+                    SyntaxKind::ListItem,
+                    SyntaxKind::ListItem,
+                ],
+            ),
+        ] {
+            assert_eq!(found(&markup), want, "for {markup:?}");
         }
     }
 }
