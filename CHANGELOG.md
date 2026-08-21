@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.108.3 - 2026-08-21
 
 - fix(typst): **a paragraph holding one bare `/` renders instead of failing the
   compile.** Typst's heading `=`, list `-`/`+`/`N.`, and term `/` markers fire
@@ -28,6 +28,13 @@
   content, which fails the compile. Such a run now takes the same `\` prefix
   the line-anchor guard uses. Debug builds parse every emission with Typst's
   parser, so markup that reaches it as syntax fails a test rather than a render.
+
+<!-- seed: commits since v0.108.2, confirm the entries above cover them, then delete this comment
+- fix(typst): stop a `#…` expression running on into the text behind it
+- fix(typst): guard the line anchor at every position Typst reads as one
+- fix(typst): escape a line-anchor marker that ends its run
+-->
+
 
 ## v0.108.2 - 2026-08-20
 
@@ -81,27 +88,6 @@
   Empty mappings now emit `key: {}` at every depth. That is the spelling a
   sequence item (`- {}`) and a wholly empty `$ext: {}` already used, so an
   emptied container survives the round-trip as the value a consumer stored.
-
-<!-- seed: commits since v0.108.1, confirm the entries above cover them, then delete this comment
-- docs(canon): record that @0.81.0 is the oldest tag that exists
-- docs: leave the applied migration guide untouched
-- docs: dense-prose pass on the DTO backfill
-- test(core): drop the vacuous V0_81_0 body-import test
-- fix(core): restore the V0_82_0 read shim; 0.82.0 was never yanked (#1327)
-- chore(deps): bump the cargo group with 2 updates
-- chore(deps): bump taiki-e/install-action in the actions group
-- fix(core): restore the V0_81_0 storage read shim (#1327)
-- docs: changelog entry for the simplify sweep
-- refactor(core)!: apply simplify-review cleanups to the session seam
-- docs(pdf): trim test helper doc to its contract
-- refactor(core/document): apply simplify-review cleanups
-- refactor(pdf): apply simplify-review cleanups
-- refactor(typst): apply simplify-review cleanups
-- refactor(core/quill): apply simplify-review cleanups
-- refactor(content): apply simplify-review cleanups
-- fix: an empty mapping emits as `{}` rather than losing its key
--->
-
 
 ## v0.108.1 - 2026-08-19
 
