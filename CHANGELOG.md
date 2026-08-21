@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- fix(typst): **a paragraph holding one bare `/` renders instead of failing the
+  compile.** Typst's heading `=`, list `-`/`+`/`N.`, and term `/` markers fire
+  on a space after them *or* on the line ending there; the emitter's
+  line-anchor guard tested only for the space, so a run that was one bare
+  marker reached Typst unescaped — `/` as a term list whose colon is missing
+  (`expected colon`), the other four as an empty heading, bullet or enum item.
+  The guard now takes Typst's own test, and covers a list item's body head as
+  well as column 0, that being a line start the parser reads as one.
+
 ## v0.108.2 - 2026-08-20
 
 - fix(core): **storage blobs tagged `@0.81.0` and `@0.82.0` load again.** Both

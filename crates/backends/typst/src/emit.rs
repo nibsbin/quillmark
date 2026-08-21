@@ -12,10 +12,12 @@
 //!
 //! **Line-anchored text.** [`escape_markup`](crate::emit::escape_markup)
 //! neutralizes inline markup but is
-//! position-blind; Typst's heading `= `, list `- `/`+ `/`N. `, and term `/ ` are
-//! only special as the first token of a source line. Text opening with one lands
-//! at column 0 and would render as that block, so the emitter prefixes a single
-//! `\` there (`opens_line_anchor`). Styling-only: `#`, `[`, `$` are already
+//! position-blind; Typst's heading `=`, list `-`/`+`/`N.`, and term `/` are only
+//! special as the first token of a source line, and each fires on a space after it
+//! or on the line ending there. Text opening with one lands at column 0 and would
+//! render as that block — a lone `/` as a term list whose colon is missing, which
+//! is a parse error — so the emitter prefixes a single `\` there
+//! (`opens_line_anchor`). Styling-only: `#`, `[`, `$` are already
 //! escaped, so this is no code-execution vector.
 //!
 //! **The 2→4 escape coupling.** Each run records only its `(content, generated)`
@@ -72,19 +74,21 @@ pub fn escape_string(s: &str) -> String {
 }
 
 /// Does `s` open a line-anchored Typst block: heading `= `, bullet `- `, enum
-/// `+ `/`N. `, term `/ `? The trailing space is required, so `=foo`, `-5`,
-/// `and/or`, `1.item` are inert and ordinary prose is untouched.
+/// `+ `/`N. `, term `/ `? The marker token is followed by whitespace or ends the
+/// run, which is Typst's own test (`space_or_end`), so `=foo`, `-5`, `and/or`,
+/// `1.item` are inert and a paragraph holding one bare `/` is a slash rather
+/// than a term list whose colon is missing. The run ends at a mark, an island,
+/// or the line, and everything the emitter opens there starts `#`, so the end
+/// case escapes one line-final marker and never a token mid-line.
 fn opens_line_anchor(s: &str) -> bool {
     let b = s.as_bytes();
+    let clear = |n: usize| s[n..].chars().next().is_none_or(char::is_whitespace);
     match b.first().copied() {
-        Some(b'=') => {
-            let n = b.iter().take_while(|&&c| c == b'=').count();
-            b.get(n) == Some(&b' ')
-        }
-        Some(b'-') | Some(b'+') | Some(b'/') => b.get(1) == Some(&b' '),
+        Some(b'=') => clear(b.iter().take_while(|&&c| c == b'=').count()),
+        Some(b'-') | Some(b'+') | Some(b'/') => clear(1),
         Some(c) if c.is_ascii_digit() => {
             let n = b.iter().take_while(|&&c| c.is_ascii_digit()).count();
-            b.get(n) == Some(&b'.') && b.get(n + 1) == Some(&b' ')
+            b.get(n) == Some(&b'.') && clear(n + 1)
         }
         _ => false,
     }
@@ -601,6 +605,25 @@ impl<'a> Emit<'a> {
         });
     }
 
+    /// Is the emitter where Typst's line-anchored syntax is live: column 0 of a
+    /// generated source line, indentation ahead of it not counting, or the head of a
+    /// list item's body, which the parser reads as a line start of its own. A
+    /// heading's body is not one, and neither is any position prose has reached.
+    fn at_line_anchor(&self) -> bool {
+        let head = |s: &str| {
+            let s = s.trim_end_matches([' ', '\t']);
+            s.is_empty() || s.ends_with('\n')
+        };
+        head(&self.out)
+            || ["- ", "+ "]
+                .iter()
+                .any(|m| self.out.strip_suffix(m).is_some_and(head))
+            || self.out.strip_suffix(". ").is_some_and(|s| {
+                let before = s.trim_end_matches(|c: char| c.is_ascii_digit());
+                before.len() < s.len() && head(before)
+            })
+    }
+
     /// Wrapping marks nest via a close-and-reopen boundary sweep; `code` marks
     /// render atomically as `#raw("…")`; interior `\n`s become `#linebreak()`.
     fn emit_inline(
@@ -617,9 +640,7 @@ impl<'a> Emit<'a> {
         // The scratch buffer's bytes land at `base` once appended, so each run's
         // generated span is `base + buf.len()`, absolute into `self.out`.
         let base = self.out.len();
-        // Typst's line-anchored syntax is active only at column 0 of a
-        // generated source line.
-        let at_col0 = self.out.trim_end_matches([' ', '\t']).ends_with('\n') || self.out.is_empty();
+        let at_col0 = self.at_line_anchor();
         let mut buf = String::new();
         sweep_marks(lo, hi, &wraps, &mut buf, |buf, pos| {
             let c = self.chars[pos];
@@ -1530,11 +1551,16 @@ mod tests {
 
     #[test]
     fn line_anchor_predicate() {
-        for yes in ["= h", "== h", "- b", "+ n", "/ term: d", "1. i", "42. i"] {
+        for yes in [
+            "= h", "== h", "- b", "+ n", "/ term: d", "1. i", "42. i",
+            // Nothing after the marker: Typst reads the line's end as the space
+            // it wants, so a run that is one bare marker opens a block too.
+            "=", "==", "-", "+", "/", "1.", "42.",
+        ] {
             assert!(opens_line_anchor(yes), "{yes:?} should trigger");
         }
         for no in [
-            "=foo", "==foo", "-5 degrees", "and/or", "1.item", "1) i", "hi", "", " = x",
+            "=foo", "==foo", "-5 degrees", "and/or", "1.item", "1) i", "hi", "", " = x", "1",
         ] {
             assert!(!opens_line_anchor(no), "{no:?} should not trigger");
         }
@@ -1551,6 +1577,12 @@ mod tests {
         assert_eq!(emit_marked("+ x", vec![]), "\\+ x\n\n");
         assert_eq!(emit_marked("/ t: d", vec![]), "\\/ t: d\n\n");
         assert_eq!(emit_marked("1. x", vec![]), "\\1. x\n\n");
+        // A paragraph that is one bare marker: the same escape, on the marker Typst
+        // reads off the line's end. Unescaped, `/` alone is a term list missing its
+        // colon and the compile fails outright.
+        assert_eq!(emit_marked("/", vec![]), "\\/\n\n");
+        assert_eq!(emit_marked("=", vec![]), "\\=\n\n");
+        assert_eq!(emit_marked("-", vec![]), "\\-\n\n");
         // Non-trigger prose is untouched.
         assert_eq!(emit_marked("hello = x", vec![]), "hello = x\n\n");
         assert_eq!(emit_marked("=x no space", vec![]), "=x no space\n\n");
