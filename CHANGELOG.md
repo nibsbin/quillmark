@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- perf(pdf): **filling a PDF form no longer slows down with the size of its
+  background or its page count.** Reading one object from the base walks every
+  byte of it — the live copy is the last revision, so a scan cannot stop early
+  — and nothing memoized that, so a stamp or flatten pass paid O(pages) whole-
+  file scans and the live-edit path repaid them on every keystroke. The base's
+  object offsets are now collected in one pass and each read is a lookup: a
+  20-page 300 KB form stamps in 0.7 ms rather than 37 ms, flat in page count.
+
 ## v0.108.3 - 2026-08-21
 
 - fix(typst): **a paragraph holding one bare `/` renders instead of failing the
