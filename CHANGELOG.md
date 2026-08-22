@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **breaking** content: the op wire is a reading direction. `mark_op_to_value`,
+  `line_op_to_value` and `island_op_to_value` are removed from
+  `quillmark-content` — an op bundle is authored on the JS/Python side and
+  reaches Rust through `change_bundle_from_value`, so nothing in the workspace
+  ever emitted one and every wire change was made twice, once in code no product
+  path executes. The decoders are unchanged. Their round-trip tests become
+  decoder tests over literal JSON, which is what the wire actually is: an
+  encoder agreeing with its own reader never proved the shape a binding sends.
+
 ## v0.108.3 - 2026-08-21
 
 - fix(typst): **a paragraph holding one bare `/` renders instead of failing the
