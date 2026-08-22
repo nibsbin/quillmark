@@ -59,6 +59,36 @@ pub(crate) fn decode_richtext_value(
     }
 }
 
+/// Why a richtext value did not become stored content, classified so each layer
+/// words the failure in its own error vocabulary.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum RichtextValueError {
+    /// An accepted encoding that failed to decode.
+    Decode(RichtextDecodeError),
+    /// Neither a canonical content object nor a markdown string.
+    Unshaped,
+    /// `inline` is declared and the content spans more than one paragraph.
+    NotInline,
+}
+
+/// The contract for a richtext value that must *become* stored content: decode
+/// either accepted encoding, enforce `inline`, canonicalize. The strict typed
+/// write and the schema-literal companion cache share it and differ only in the
+/// diagnostic they render from the error.
+pub(crate) fn canonical_richtext_value(
+    value: &serde_json::Value,
+    inline: bool,
+) -> Result<serde_json::Value, RichtextValueError> {
+    let content = match decode_richtext_value(value) {
+        Some(result) => result.map_err(RichtextValueError::Decode)?,
+        None => return Err(RichtextValueError::Unshaped),
+    };
+    if inline && !content.is_inline() {
+        return Err(RichtextValueError::NotInline);
+    }
+    Ok(quillmark_content::serial::to_canonical_value(&content))
+}
+
 /// The plaintext twin of [`decode_richtext_value`]: a string imports verbatim
 /// (never as markdown, so `*hi*` stays four plain characters), so only the
 /// object branch can fail.
