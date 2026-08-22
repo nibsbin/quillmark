@@ -978,6 +978,7 @@ fn validate_dto_payload(payload: &Payload) -> Result<(), StorageError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::document::Codec;
 
     fn sample() -> Document {
         Document::parse(
@@ -1039,7 +1040,7 @@ This body and the metadata above are an indorsement card.
         let stored = serde_json::to_string(&doc).unwrap();
         let restored: Document = serde_json::from_str(&stored).unwrap();
         assert_eq!(doc, restored, "content field must survive storage round-trip");
-        let read = restored.main().field_richtext("intro").unwrap().unwrap();
+        let read = restored.main().field_content("intro", Codec::Richtext).unwrap().unwrap();
         assert!(
             read.marks.iter().any(|m| matches!(m.kind, MarkKind::Underline)),
             "underline (content-only) must survive the DTO carrier"

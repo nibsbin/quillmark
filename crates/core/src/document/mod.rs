@@ -23,82 +23,104 @@ pub(crate) fn import_body(md: &str) -> Result<Content, ImportError> {
     }
 }
 
-/// Which encoding a `decode_richtext_value` failure came from, so a call site
+/// Which encoding a [`Codec::decode_value`] failure came from, so a call site
 /// can prefix its diagnostic per encoding.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
-pub(crate) enum RichtextDecodeError {
+pub(crate) enum ContentDecodeError {
     NotContent(String),
     BadMarkdown(String),
 }
 
-impl RichtextDecodeError {
+impl ContentDecodeError {
     pub(crate) fn into_message(self) -> String {
         match self {
-            RichtextDecodeError::NotContent(m) | RichtextDecodeError::BadMarkdown(m) => m,
+            ContentDecodeError::NotContent(m) | ContentDecodeError::BadMarkdown(m) => m,
         }
     }
 }
 
-/// Decode a JSON value in either accepted richtext encoding: a canonical content
-/// object, or an authored markdown string. `None` when the value is neither an
-/// object nor a string; the call site handles those shapes and maps the error
-/// into its own type.
-pub(crate) fn decode_richtext_value(
-    value: &serde_json::Value,
-) -> Option<Result<Content, RichtextDecodeError>> {
-    match value {
-        serde_json::Value::Object(_) => Some(
-            quillmark_content::serial::from_canonical_value(value)
-                .map_err(|e| RichtextDecodeError::NotContent(e.to_string())),
-        ),
-        serde_json::Value::String(md) => {
-            Some(import_body(md).map_err(|e| RichtextDecodeError::BadMarkdown(e.to_string())))
+/// A content codec: which authored string a [`Content`] field accepts, and which
+/// text a stored content projects back to. Both codecs also accept a canonical
+/// content object, so a codec is exactly the string end of the round trip. The
+/// declared type names one (`reader::content_codec`), and every schema-bound
+/// content read and projection runs the codec it names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Codec {
+    /// A string is markdown, and a content projects back to markdown — lossy,
+    /// content-only marks not surviving.
+    Richtext,
+    /// A string is literal text (`*hi*` stays four characters), and a content
+    /// projects back verbatim.
+    Plaintext,
+}
+
+impl Codec {
+    /// The schema keyword declaring this codec, carried verbatim on
+    /// [`EditError::FieldDecode`].
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Codec::Richtext => edit::CODEC_RICHTEXT,
+            Codec::Plaintext => edit::CODEC_PLAINTEXT,
         }
-        _ => None,
     }
-}
 
-/// The plaintext twin of [`decode_richtext_value`]: a string imports verbatim
-/// (never as markdown, so `*hi*` stays four plain characters), so only the
-/// object branch can fail.
-pub(crate) fn decode_plaintext_value(
-    value: &serde_json::Value,
-) -> Option<Result<Content, String>> {
-    match value {
-        serde_json::Value::Object(_) => {
-            Some(quillmark_content::serial::from_canonical_value(value).map_err(|e| e.to_string()))
+    /// How this codec reads a stored string, for the shape-mismatch message.
+    fn string_form(self) -> &'static str {
+        match self {
+            Codec::Richtext => "a markdown string",
+            Codec::Plaintext => "a string",
         }
-        serde_json::Value::String(s) => Some(Ok(quillmark_content::from_plaintext(s))),
-        _ => None,
     }
-}
 
-/// [`decode_richtext_value`] closed over the shapes a stored field can hold: a
-/// null is the empty content (null ≡ absent), and anything neither object nor
-/// string is a decode failure.
-pub(crate) fn decode_richtext_field(
-    value: &serde_json::Value,
-) -> Result<Content, RichtextDecodeError> {
-    match decode_richtext_value(value) {
-        Some(result) => result,
-        None if value.is_null() => Ok(Content::empty()),
-        None => Err(RichtextDecodeError::NotContent(
-            "expected a richtext content object or a markdown string".to_string(),
-        )),
+    /// Decode a JSON value in either accepted encoding: a canonical content
+    /// object, or an authored string read this codec's way. `None` when the value
+    /// is neither an object nor a string; the call site handles those shapes and
+    /// maps the error into its own type.
+    pub(crate) fn decode_value(
+        self,
+        value: &serde_json::Value,
+    ) -> Option<Result<Content, ContentDecodeError>> {
+        match value {
+            serde_json::Value::Object(_) => Some(
+                quillmark_content::serial::from_canonical_value(value)
+                    .map_err(|e| ContentDecodeError::NotContent(e.to_string())),
+            ),
+            serde_json::Value::String(s) => Some(match self {
+                Codec::Richtext => {
+                    import_body(s).map_err(|e| ContentDecodeError::BadMarkdown(e.to_string()))
+                }
+                Codec::Plaintext => Ok(quillmark_content::from_plaintext(s)),
+            }),
+            _ => None,
+        }
     }
-}
 
-/// The plaintext twin of [`decode_richtext_field`].
-pub(crate) fn decode_plaintext_field(
-    value: &serde_json::Value,
-) -> Result<Content, RichtextDecodeError> {
-    match decode_plaintext_value(value) {
-        Some(result) => result.map_err(RichtextDecodeError::NotContent),
-        None if value.is_null() => Ok(Content::empty()),
-        None => Err(RichtextDecodeError::NotContent(
-            "expected a plaintext content object or a string".to_string(),
-        )),
+    /// [`decode_value`](Self::decode_value) closed over the shapes a stored field
+    /// can hold: a null is the empty content (null ≡ absent), and anything
+    /// neither object nor string is a decode failure.
+    pub(crate) fn decode_field(
+        self,
+        value: &serde_json::Value,
+    ) -> Result<Content, ContentDecodeError> {
+        match self.decode_value(value) {
+            Some(result) => result,
+            None if value.is_null() => Ok(Content::empty()),
+            None => Err(ContentDecodeError::NotContent(format!(
+                "expected a {} content object or {}",
+                self.name(),
+                self.string_form()
+            ))),
+        }
+    }
+
+    /// Project a content back to this codec's text: the inverse of its string
+    /// encoding.
+    pub(crate) fn project(self, content: &Content) -> String {
+        match self {
+            Codec::Richtext => quillmark_content::export::to_markdown(content),
+            Codec::Plaintext => quillmark_content::export::to_plaintext(content),
+        }
     }
 }
 
@@ -222,61 +244,35 @@ impl Card {
         &mut self.body
     }
 
-    /// Read a richtext-valued user field back as a [`Content`]: the field-level
-    /// twin of [`Card::body`]. `None` when absent, `Some(Err(_))` when present
-    /// but neither a content object nor importable markdown. A `Document`
-    /// carries no schema, so the caller names a field it knows is richtext.
-    pub(crate) fn field_richtext(&self, name: &str) -> Option<Result<Content, RichtextDecodeError>> {
-        Some(crate::document::decode_richtext_field(
-            self.payload.get(name)?.as_json(),
-        ))
-    }
-
-    /// The markdown projection of a richtext-valued field (`export ∘ decode`),
-    /// carrying [`field_richtext`](Card::field_richtext)'s `None`/`Ok`/`Err`.
-    pub(crate) fn field_markdown(&self, name: &str) -> Option<Result<String, RichtextDecodeError>> {
-        Some(self.field_richtext(name)?.map(|rt| quillmark_content::export::to_markdown(&rt)))
-    }
-
-    /// Read a plaintext-valued user field back as a [`Content`] content: the
-    /// literal-codec twin of [`field_richtext`](Card::field_richtext). A stored
-    /// string imports verbatim (`*hi*` is four characters, not emphasis), an
-    /// already-canonical content decodes losslessly: the same dispatch coercion
-    /// and validation run for a `plaintext` field, so the read and the render
-    /// agree on the codec.
+    /// Read a content-valued user field back through `codec`: the field-level
+    /// twin of [`Card::body`].
     ///
     /// - `None`: the field is absent.
-    /// - `Some(Ok(rt))`: decoded content.
-    /// - `Some(Err(_))`: the field is present but neither a content object nor a
-    ///   string (e.g. a bare number a `store_field` wrote).
+    /// - `Some(Ok(content))`: decoded content, from either of the codec's
+    ///   encodings — a stored string and an already-canonical content object read
+    ///   back the same.
+    /// - `Some(Err(_))`: the field is present but decodes under neither (e.g. a
+    ///   bare number an opaque `store_field` wrote).
     ///
-    /// A `Document` carries no schema, so the caller names a field it knows is
-    /// plaintext; the schema-bound door is
+    /// A `Document` carries no schema, so the caller names the codec the field is
+    /// declared at; the schema-bound door is
     /// [`TypedReader::get_content`](crate::TypedReader::get_content).
-    pub(crate) fn field_plaintext_content(
+    pub(crate) fn field_content(
         &self,
         name: &str,
-    ) -> Option<Result<Content, RichtextDecodeError>> {
-        Some(crate::document::decode_plaintext_field(
-            self.payload.get(name)?.as_json(),
-        ))
+        codec: Codec,
+    ) -> Option<Result<Content, ContentDecodeError>> {
+        Some(codec.decode_field(self.payload.get(name)?.as_json()))
     }
 
-    /// The plaintext projection of a content-valued field (`to_plaintext ∘
-    /// decode`), the literal-codec twin of [`field_markdown`](Card::field_markdown),
-    /// for a `plaintext`-typed field: marks are never interpreted, so the text is
-    /// verbatim both ways. Carries
-    /// [`field_plaintext_content`](Card::field_plaintext_content)'s `Ok`/`Err`
-    /// decode outcome:
-    ///
-    /// - `None`: the field is absent.
-    /// - `Some(Ok(text))`: the projected literal text.
-    /// - `Some(Err(_))`: the field is present but does not decode as content.
-    pub(crate) fn field_plaintext(&self, name: &str) -> Option<Result<String, RichtextDecodeError>> {
-        Some(
-            self.field_plaintext_content(name)?
-                .map(|rt| quillmark_content::export::to_plaintext(&rt)),
-        )
+    /// The text projection of a content-valued field (`project ∘ decode`),
+    /// carrying [`field_content`](Card::field_content)'s `None`/`Ok`/`Err`.
+    pub(crate) fn field_text(
+        &self,
+        name: &str,
+        codec: Codec,
+    ) -> Option<Result<String, ContentDecodeError>> {
+        Some(self.field_content(name, codec)?.map(|c| codec.project(&c)))
     }
 }
 

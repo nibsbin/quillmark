@@ -559,8 +559,9 @@ fn validate_value(
     if type_valid {
         match field.r#type {
             FieldType::RichText { inline: true } => {
-                let parsed =
-                    crate::document::decode_richtext_value(value.as_json()).and_then(Result::ok);
+                let parsed = crate::document::Codec::Richtext
+                    .decode_value(value.as_json())
+                    .and_then(Result::ok);
                 if let Some(rt) = parsed {
                     if !rt.is_inline() {
                         errors.push(ValidationError::NotInline {
@@ -575,7 +576,8 @@ fn validate_value(
                 // a canonical content object. The plain constraint is primary;
                 // the single-line constraint applies only when `inline`. A decode
                 // error is another layer's to report (swallowed via `.ok()`).
-                if let Some(rt) = crate::document::decode_plaintext_value(value.as_json())
+                if let Some(rt) = crate::document::Codec::Plaintext
+                    .decode_value(value.as_json())
                     .and_then(Result::ok)
                 {
                     if !rt.is_plain() {

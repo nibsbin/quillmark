@@ -269,6 +269,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::document::Codec;
     use crate::document::{Card, Document};
     use crate::version::QuillReference;
     use std::str::FromStr;
@@ -313,7 +314,7 @@ card_kinds:
             doc.main().payload().get("qty").unwrap().as_json(),
             &serde_json::json!(3)
         );
-        assert_eq!(doc.main().field_markdown("subject").unwrap().unwrap(), "Hello");
+        assert_eq!(doc.main().field_text("subject", Codec::Richtext).unwrap().unwrap(), "Hello");
     }
 
     #[test]
@@ -355,7 +356,7 @@ card_kinds:
             .unwrap();
         assert_eq!(doc.cards().len(), 1);
         assert_eq!(doc.cards()[0].kind(), Some("note"));
-        assert_eq!(doc.cards()[0].field_markdown("body").unwrap().unwrap(), "**hi**");
+        assert_eq!(doc.cards()[0].field_text("body", Codec::Richtext).unwrap().unwrap(), "**hi**");
         assert_eq!(doc.cards()[0].body_markdown(), "card body");
     }
 
@@ -372,7 +373,7 @@ card_kinds:
         let bodies: Vec<String> = doc
             .cards()
             .iter()
-            .map(|c| c.field_markdown("body").unwrap().unwrap())
+            .map(|c| c.field_text("body", Codec::Richtext).unwrap().unwrap())
             .collect();
         assert_eq!(bodies, ["a", "b", "c"]);
 
@@ -389,7 +390,7 @@ card_kinds:
         {
             let mut ed = TypedWriter::new(&config, &mut doc);
             let removed = ed.remove_card(1).unwrap();
-            assert_eq!(removed.field_markdown("body").unwrap().unwrap(), "b");
+            assert_eq!(removed.field_text("body", Codec::Richtext).unwrap().unwrap(), "b");
             assert!(ed.remove_card(5).is_none());
         }
         assert_eq!(doc.cards().len(), 2);
@@ -420,7 +421,7 @@ card_kinds:
         let err = card_ed.set("stray", "v").unwrap_err();
         assert_eq!(err.code(), "edit::unknown_field");
 
-        assert_eq!(doc.cards()[0].field_markdown("body").unwrap().unwrap(), "**hi**");
+        assert_eq!(doc.cards()[0].field_text("body", Codec::Richtext).unwrap().unwrap(), "**hi**");
 
         let mut ed = TypedWriter::new(&config, &mut doc);
         assert!(matches!(
@@ -435,7 +436,7 @@ card_kinds:
         let mut doc = blank_doc();
         let mut ed = TypedWriter::new(&config, &mut doc);
         let _delta = ed.revise_field("subject", "Hello").unwrap();
-        assert_eq!(doc.main().field_markdown("subject").unwrap().unwrap(), "Hello");
+        assert_eq!(doc.main().field_text("subject", Codec::Richtext).unwrap().unwrap(), "Hello");
 
         let mut ed = TypedWriter::new(&config, &mut doc);
         assert_eq!(
@@ -445,7 +446,7 @@ card_kinds:
         // `richtext(inline)` rejects a multi-block result.
         let err = ed.revise_field("subject", "a\n\nb").unwrap_err();
         assert_eq!(err.code(), "edit::field_not_inline");
-        assert_eq!(doc.main().field_markdown("subject").unwrap().unwrap(), "Hello");
+        assert_eq!(doc.main().field_text("subject", Codec::Richtext).unwrap().unwrap(), "Hello");
     }
 
     #[test]
@@ -456,7 +457,7 @@ card_kinds:
 
         let mut ed = TypedWriter::new(&config, &mut doc);
         ed.card(0).unwrap().revise_field("body", "**hi**").unwrap();
-        assert_eq!(doc.cards()[0].field_markdown("body").unwrap().unwrap(), "**hi**");
+        assert_eq!(doc.cards()[0].field_text("body", Codec::Richtext).unwrap().unwrap(), "**hi**");
 
         let mut ed = TypedWriter::new(&config, &mut doc);
         assert_eq!(

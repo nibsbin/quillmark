@@ -18,7 +18,7 @@ use quillmark_content::{ApplyError, ChangeBundle, Content, Delta};
 use crate::document::meta::{validate_composable_kind, CardKindError};
 use crate::error::diag_args;
 use crate::document::payload::MetaKey;
-use crate::document::{Card, Document, Payload, RichtextDecodeError};
+use crate::document::{Card, Codec, ContentDecodeError, Document, Payload};
 use crate::quill::{CoercionError, FieldSchema, FieldType, Leniency, QuillConfig};
 use crate::value::{PathSegment, QuillValue};
 use crate::version::QuillReference;
@@ -313,12 +313,19 @@ fn check_kind(kind: &str) -> Result<(), EditError> {
     })
 }
 
-/// A decode failure on the field itself, under the codec that ran.
-fn field_decode(name: &str, codec: &str, e: RichtextDecodeError) -> EditError {
+/// A decode failure at an address, under the codec that ran. The one
+/// [`EditError::FieldDecode`] constructor for a codec outcome, shared with the
+/// schema-bound reads in [`reader`](crate::reader).
+pub(crate) fn field_decode(
+    name: &str,
+    at: &[PathSegment],
+    codec: Codec,
+    e: ContentDecodeError,
+) -> EditError {
     EditError::FieldDecode {
         field: name.to_string(),
-        at: Vec::new(),
-        codec: codec.to_string(),
+        at: at.to_vec(),
+        codec: codec.name().to_string(),
         message: e.into_message(),
     }
 }
@@ -786,9 +793,9 @@ impl Card {
         if !is_valid_field_name(name) {
             return Err(EditError::InvalidFieldName(name.to_string()));
         }
-        let base = match self.field_richtext(name) {
+        let base = match self.field_content(name, Codec::Richtext) {
             Some(Ok(rt)) => rt,
-            Some(Err(e)) => return Err(field_decode(name, CODEC_RICHTEXT, e)),
+            Some(Err(e)) => return Err(field_decode(name, &[], Codec::Richtext, e)),
             None => Content::empty(),
         };
         diff_import(&base, &body.into()).map_err(EditError::Import)
@@ -871,9 +878,9 @@ impl Card {
         if !is_valid_field_name(name) {
             return Err(EditError::InvalidFieldName(name.to_string()));
         }
-        let base = match self.field_plaintext_content(name) {
-            Some(Ok(rt)) => quillmark_content::export::to_plaintext(&rt),
-            Some(Err(e)) => return Err(field_decode(name, CODEC_PLAINTEXT, e)),
+        let base = match self.field_text(name, Codec::Plaintext) {
+            Some(Ok(text)) => text,
+            Some(Err(e)) => return Err(field_decode(name, &[], Codec::Plaintext, e)),
             None => String::new(),
         };
         // The strict write is the codec: it runs the `from_plaintext` boundary
@@ -923,9 +930,9 @@ impl Card {
         name: &str,
         bundle: &ChangeBundle,
     ) -> Result<(), EditError> {
-        let mut content = match self.field_richtext(name) {
+        let mut content = match self.field_content(name, Codec::Richtext) {
             Some(Ok(rt)) => rt,
-            Some(Err(e)) => return Err(field_decode(name, CODEC_RICHTEXT, e)),
+            Some(Err(e)) => return Err(field_decode(name, &[], Codec::Richtext, e)),
             // Only this arm creates; the `Some` arms resolved an existing field.
             None => {
                 if !is_valid_field_name(name) {
