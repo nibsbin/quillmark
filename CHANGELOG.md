@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- refactor(pdfform): **a session holds its flattened PDF parsed, not as bytes
+  each render path reparses.** Flatten and parse now happen together in `open`
+  and `update`, the two places `field_specs` are set, so the derived flat PDF
+  moves only with the specs it comes from and `render_svg`/`render_png`/
+  `render_rgba` paint parsed pages. A malformed flatten now surfaces from the
+  call that produced it under one code, `pdfform::flat_parse_failed`, replacing
+  the per-format `pdfform::svg_parse_failed` and `pdfform::png_parse_failed`
+  raised at render time (neither documented, and both reachable only through a
+  bug in this crate's own flatten).
+
 ## v0.108.3 - 2026-08-21
 
 - fix(typst): **a paragraph holding one bare `/` renders instead of failing the
