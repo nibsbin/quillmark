@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- perf(content): **canonical serialization stops rebuilding the tree it just
+  built.** `to_canonical_value` normalized a copy — which already recursively
+  key-sorts every opaque bag reachable from it (island `props`, an unknown's
+  `attrs`) — and then ran a whole-tree `sort_keys_owned` over the encoded
+  result, re-collecting and re-allocating every object and array in the document
+  to reorder the handful of fixed keys the encoders insert themselves. The
+  encoders now emit those keys in ascending order and the terminal pass is
+  `canonicalize_keys`, which scans and returns when the tree is already
+  canonical. Canonical bytes are unchanged, byte for byte; a tree that somehow
+  arrives unsorted is still repaired rather than shipped.
+
+  The public `container_to_value`, `island_to_value` and `mark_to_value` now
+  emit their own keys in a different order. An unknown's `attrs` bag is
+  untouched, as in 0.99, and nothing hashes the op wire.
+
 ## v0.108.3 - 2026-08-21
 
 - fix(typst): **a paragraph holding one bare `/` renders instead of failing the
