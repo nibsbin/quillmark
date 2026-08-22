@@ -493,9 +493,8 @@ impl Content {
         });
 
         self.text = new_text;
-        self.lines = sync_lines_for_delta(&old_chars, old_lines, delta);
         let old_islands = std::mem::take(&mut self.islands);
-        self.islands = sync_islands_for_delta(&old_chars, old_islands, delta);
+        (self.lines, self.islands) = sync_for_delta(&old_chars, old_lines, old_islands, delta);
         if self.lines.len() != self.segment_count() {
             return Err(ApplyError::LineCountMismatch {
                 lines: self.lines.len(),
@@ -861,53 +860,66 @@ fn sanitize_inserts(delta: &Delta) -> Cow<'_, Delta> {
     Cow::Owned(Delta { ops })
 }
 
-/// Walk `delta` over `old_chars` and mirror `\n` insert/delete in `lines`, in
-/// one forward pass rather than per-`\n` mid-`Vec` `remove`/`insert`.
+/// Walk `delta` over `old_chars` once, mirroring both structures the base chars
+/// index: `\n` insert/delete in `lines`, and a deleted [`ISLAND_SLOT`] dropping
+/// its island. A `Retain`/`Delete` reaching past the end of the base names no
+/// char.
 ///
-/// The cursor sits *in* a line, `cur`; downstream of it is always the untouched
-/// original suffix (`rest`). `cur == None` is the past-the-end state on a
-/// malformed content (more `\n` than lines), where a split clones a default
-/// line.
-fn sync_lines_for_delta(old_chars: &[char], old_lines: Vec<Line>, delta: &Delta) -> Vec<Line> {
-    let cap = old_lines.len();
+/// The line cursor sits *in* a line, `cur`; downstream of it is always the
+/// untouched original suffix (`rest`), so lines are emitted in order rather than
+/// by per-`\n` mid-`Vec` `remove`/`insert`. `cur == None` is the past-the-end
+/// state on a malformed content (more `\n` than lines), where a split clones a
+/// default line.
+///
+/// Islands are stored in slot order, so the Nth slot the walk passes backs the
+/// Nth island.
+fn sync_for_delta(
+    old_chars: &[char],
+    old_lines: Vec<Line>,
+    old_islands: Vec<Island>,
+    delta: &Delta,
+) -> (Vec<Line>, Vec<Island>) {
     let mut rest = old_lines.into_iter();
-    let mut out: Vec<Line> = Vec::with_capacity(cap);
+    let mut lines: Vec<Line> = Vec::with_capacity(rest.len());
     let mut cur: Option<Line> = rest.next();
+    let mut keep = vec![true; old_islands.len()];
+    let mut slot = 0usize;
     let mut old = 0usize;
 
     for op in &delta.ops {
         match op {
-            Op::Retain(n) => {
-                for _ in 0..*n {
-                    if old >= old_chars.len() {
-                        break;
+            Op::Retain(n) | Op::Delete(n) => {
+                let deleted = matches!(op, Op::Delete(_));
+                let end = old.saturating_add(*n).min(old_chars.len());
+                for &c in &old_chars[old..end] {
+                    match c {
+                        // A deleted '\n' merges the next original into `cur`.
+                        '\n' if deleted => {
+                            rest.next();
+                        }
+                        '\n' => {
+                            lines.extend(cur.take());
+                            cur = rest.next();
+                        }
+                        ISLAND_SLOT => {
+                            if deleted && let Some(k) = keep.get_mut(slot) {
+                                *k = false;
+                            }
+                            slot += 1;
+                        }
+                        _ => {}
                     }
-                    if old_chars[old] == '\n' {
-                        out.extend(cur.take());
-                        cur = rest.next();
-                    }
-                    old += 1;
                 }
+                old = end;
             }
-            Op::Delete(n) => {
-                for _ in 0..*n {
-                    if old >= old_chars.len() {
-                        break;
-                    }
-                    // A deleted '\n' merges the next original into `cur`.
-                    if old_chars[old] == '\n' {
-                        rest.next();
-                    }
-                    old += 1;
-                }
-            }
+            // A raw ISLAND_SLOT insert is rejected before this walk.
             Op::Insert(s) => {
                 for c in s.chars() {
                     if c == '\n' {
                         let mut new_line = match cur.take() {
                             Some(line) => {
                                 let clone = line.clone();
-                                out.push(line);
+                                lines.push(line);
                                 clone
                             }
                             None => Line::new(LineKind::Para),
@@ -920,59 +932,14 @@ fn sync_lines_for_delta(old_chars: &[char], old_lines: Vec<Line>, delta: &Delta)
         }
     }
 
-    out.extend(cur);
-    out.extend(rest);
-    out
-}
-
-/// Drop any island whose [`ISLAND_SLOT`] char `delta` deletes. Islands are
-/// stored in slot order, so the Nth slot backs the Nth island.
-fn sync_islands_for_delta(
-    old_chars: &[char],
-    old_islands: Vec<Island>,
-    delta: &Delta,
-) -> Vec<Island> {
-    let mut keep = vec![true; old_islands.len()];
-    let mut old = 0usize;
-    let mut slot_idx = 0usize;
-
-    for op in &delta.ops {
-        match op {
-            Op::Retain(n) => {
-                for _ in 0..*n {
-                    if old >= old_chars.len() {
-                        break;
-                    }
-                    if old_chars[old] == ISLAND_SLOT {
-                        slot_idx += 1;
-                    }
-                    old += 1;
-                }
-            }
-            Op::Delete(n) => {
-                for _ in 0..*n {
-                    if old >= old_chars.len() {
-                        break;
-                    }
-                    if old_chars[old] == ISLAND_SLOT {
-                        if let Some(k) = keep.get_mut(slot_idx) {
-                            *k = false;
-                        }
-                        slot_idx += 1;
-                    }
-                    old += 1;
-                }
-            }
-            // A raw ISLAND_SLOT insert is rejected before this walk.
-            Op::Insert(_) => {}
-        }
-    }
-
-    old_islands
+    lines.extend(cur);
+    lines.extend(rest);
+    let islands = old_islands
         .into_iter()
         .zip(keep)
         .filter_map(|(island, keep)| keep.then_some(island))
-        .collect()
+        .collect();
+    (lines, islands)
 }
 
 fn newline_at_line_boundary(text: &str, line: usize) -> Result<Usv, ApplyError> {
@@ -1854,6 +1821,11 @@ mod tests {
         }
     }
 
+    /// [`sync_for_delta`] on island-free content.
+    fn sync_lines(old_chars: &[char], old_lines: Vec<Line>, delta: &Delta) -> Vec<Line> {
+        sync_for_delta(old_chars, old_lines, Vec::new(), delta).0
+    }
+
     /// `(tag, continues)` per line: a heading's level, 0 for `Para` (the default
     /// line), 255 for anything else.
     fn tags(lines: &[Line]) -> Vec<(u8, bool)> {
@@ -1880,7 +1852,7 @@ mod tests {
         let d = Delta {
             ops: vec![Op::Retain(3), Op::Insert("\n".into()), Op::Retain(1)],
         };
-        let out = sync_lines_for_delta(&old_chars, lines, &d);
+        let out = sync_lines(&old_chars, lines, &d);
         assert_eq!(out.len(), 3);
         assert_eq!(out[1], l1, "first half is the untouched original line");
         assert_eq!(out[2].kind, LineKind::Heading { level: 5 });
@@ -1895,8 +1867,26 @@ mod tests {
         let d = Delta {
             ops: vec![Op::Retain(1), Op::Delete(1), Op::Retain(3)],
         };
-        let out = sync_lines_for_delta(&old_chars, lines, &d);
+        let out = sync_lines(&old_chars, lines, &d);
         assert_eq!(tags(&out), vec![(1, false), (3, false)]);
+    }
+
+    #[test]
+    fn sync_walks_lines_and_islands_off_one_cursor() {
+        // One delete run crosses a slot and then a '\n'; the retain behind it
+        // has to land on slot 1, and the merged line has to be line 1's.
+        let old_chars: Vec<char> = format!("{ISLAND_SLOT}\n{ISLAND_SLOT}").chars().collect();
+        let d = Delta {
+            ops: vec![Op::Delete(2), Op::Retain(1)],
+        };
+        let (lines, islands) = sync_for_delta(
+            &old_chars,
+            vec![tag_line(1, false), tag_line(2, false)],
+            vec![island("first"), island("second")],
+            &d,
+        );
+        assert_eq!(tags(&lines), vec![(1, false)]);
+        assert_eq!(islands.iter().map(|i| &i.id).collect::<Vec<_>>(), ["second"]);
     }
 
     #[test]
@@ -1907,7 +1897,7 @@ mod tests {
         let d = Delta {
             ops: vec![Op::Retain(1), Op::Delete(1)],
         };
-        let out = sync_lines_for_delta(&old_chars, lines, &d);
+        let out = sync_lines(&old_chars, lines, &d);
         assert_eq!(tags(&out), vec![(1, false)]);
     }
 
@@ -1918,7 +1908,7 @@ mod tests {
         let d = Delta {
             ops: vec![Op::Retain(99)],
         };
-        assert_eq!(sync_lines_for_delta(&old_chars, lines.clone(), &d), lines);
+        assert_eq!(sync_lines(&old_chars, lines.clone(), &d), lines);
     }
 
     #[test]
@@ -2005,7 +1995,7 @@ mod tests {
         let d = Delta {
             ops: vec![Op::Delete(old_chars.len())],
         };
-        let out = sync_lines_for_delta(&old_chars, lines, &d);
+        let out = sync_lines(&old_chars, lines, &d);
         assert_eq!(tags(&out), vec![(0, false)], "only the first line survives");
     }
 
@@ -2018,7 +2008,7 @@ mod tests {
         let d = Delta {
             ops: vec![Op::Retain(2), Op::Insert("\n".into())],
         };
-        let out = sync_lines_for_delta(&old_chars, lines, &d);
+        let out = sync_lines(&old_chars, lines, &d);
         assert_eq!(out.len(), 2);
         assert_eq!(tags(&out)[0], (1, false));
         assert_eq!(out[1].kind, LineKind::Para);
