@@ -87,9 +87,39 @@ node_modules/
 .git/
 "#;
     let ignore = QuillIgnore::from_content(ignore_content);
-    assert_eq!(ignore.patterns.len(), 4);
-    assert!(ignore.patterns.contains(&"*.tmp".to_string()));
-    assert!(ignore.patterns.contains(&"target/".to_string()));
+    assert!(ignore.is_ignored("scratch.tmp"));
+    assert!(ignore.is_ignored("target/debug"));
+    assert!(!ignore.is_ignored("# This is a comment"));
+    // A blank line is not a rule that swallows everything.
+    assert!(!ignore.is_ignored("plate.typ"));
+}
+
+#[test]
+fn test_quillignore_multiple_wildcards() {
+    let ignore = QuillIgnore::new(vec![
+        "**/*.tmp".to_string(),
+        "*.sublime-*".to_string(),
+        "a*b*c".to_string(),
+    ]);
+
+    assert!(ignore.is_ignored("scratch.tmp"));
+    assert!(ignore.is_ignored("deep/nested/scratch.tmp"));
+    assert!(!ignore.is_ignored("scratch.txt"));
+
+    assert!(ignore.is_ignored("quill.sublime-project"));
+    assert!(ignore.is_ignored("editor/quill.sublime-workspace"));
+
+    assert!(ignore.is_ignored("axbxc"));
+    assert!(!ignore.is_ignored("axbx"));
+}
+
+#[test]
+fn test_quillignore_wildcard_does_not_cross_slash() {
+    let ignore = QuillIgnore::new(vec!["assets/*.png".to_string()]);
+
+    assert!(ignore.is_ignored("assets/logo.png"));
+    assert!(!ignore.is_ignored("assets/icons/logo.png"));
+    assert!(!ignore.is_ignored("vendor/assets/logo.png"));
 }
 
 #[test]
