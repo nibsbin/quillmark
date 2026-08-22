@@ -18,8 +18,8 @@ use form::FormSpec;
 use quillmark_core::quill::QuillConfig;
 use quillmark_core::session::SessionHandle;
 use quillmark_core::{
-    Artifact, Backend, ChangeSet, Diagnostic, LiveSession, OutputFormat, Quill, RenderError,
-    RenderOptions, RenderResult, RenderedRegion, Severity,
+    Artifact, Backend, ChangeSet, LiveSession, OutputFormat, Quill, RenderError, RenderOptions,
+    RenderResult, RenderedRegion,
 };
 use quillmark_pdf::regions_of;
 use quillmark_pdf::{stamp, FieldSpec, StampOptions};
@@ -65,28 +65,28 @@ impl Backend for PdfformBackend {
         let base_pdf = files
             .get_file(FORM_PDF)
             .ok_or_else(|| {
-                engine_err(
+                RenderError::coded(
                     "pdfform::missing_form_pdf",
                     format!("pdfform quill is missing its `{FORM_PDF}` background"),
                 )
             })?
             .to_vec();
         let form_json = files.get_file(FORM_JSON).ok_or_else(|| {
-            engine_err(
+            RenderError::coded(
                 "pdfform::missing_form_json",
                 format!("pdfform quill is missing its `{FORM_JSON}` field spec"),
             )
         })?;
 
-        let spec =
-            FormSpec::parse(form_json).map_err(|e| engine_err(e.code(), e.to_string()))?;
+        let spec = FormSpec::parse(form_json)
+            .map_err(|e| RenderError::coded(e.code(), e.to_string()))?;
 
         // Page boxes drive the top-left → bottom-left flip (honouring a
         // non-zero page origin), and reading them surfaces a malformed base early.
         let page_boxes = quillmark_pdf::page_media_boxes(&base_pdf)?;
 
         let bound = bind::bind_widgets(&spec, source.config(), &page_boxes)
-            .map_err(|e| engine_err(e.code(), e.to_string()))?;
+            .map_err(|e| RenderError::coded(e.code(), e.to_string()))?;
 
         let field_specs = resolve_field_specs(&bound, json_data);
 
@@ -225,7 +225,7 @@ impl PdfformSession {
     /// caller's own per-format error code.
     fn open_flat(&self, code: &'static str, label: &str) -> Result<HayroPdf, RenderError> {
         HayroPdf::new(Arc::clone(&self.flat_pdf)).map_err(|_| {
-            engine_err(
+            RenderError::coded(
                 code,
                 format!("failed to parse pre-flattened PDF for {label} render"),
             )
@@ -262,7 +262,7 @@ impl PdfformSession {
             let cache = RenderCache::new();
             let pixmap = hayro_render(page, &cache, &interp, &render_settings);
             let png = pixmap.into_png().map_err(|e| {
-                engine_err(
+                RenderError::coded(
                     "pdfform::png_encoding",
                     format!("failed to encode page as PNG: {e}"),
                 )
@@ -301,10 +301,4 @@ fn standard_font_settings() -> InterpreterSettings {
 /// Owned by the backend, never defaulted from the leaf spine's version.
 fn default_producer() -> String {
     format!("Quillmark {}", env!("CARGO_PKG_VERSION"))
-}
-
-fn engine_err(code: &str, message: impl Into<String>) -> RenderError {
-    RenderError::from_diag(
-        Diagnostic::new(Severity::Error, message.into()).with_code(code.to_string()),
-    )
 }

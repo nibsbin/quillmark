@@ -93,7 +93,7 @@ fn recompile(
 ) -> Result<Compiled, RenderError> {
     let mut windows = world
         .inject_helper_package(data, schema_meta)
-        .map_err(|e| engine_err(e.code(), e.to_string()))?;
+        .map_err(|e| RenderError::coded(e.code(), e.to_string()))?;
     windows.extend(scalar_windows.iter().cloned());
 
     let (document, compile_warnings) = compile::compile_document(world)?;
@@ -369,7 +369,7 @@ fn helper_source(world: &world::QuillWorld) -> Result<typst::syntax::Source, Ren
     world
         .source(world::QuillWorld::helper_fid("lib.typ"))
         .map_err(|e| {
-            engine_err(
+            RenderError::coded(
                 "typst::helper_source",
                 format!("helper lib.typ unreadable: {e}"),
             )
@@ -465,25 +465,18 @@ fn read_plate(source: &Quill) -> Result<String, RenderError> {
     };
 
     let bytes = source.files().get_file(plate_file).ok_or_else(|| {
-        engine_err(
+        RenderError::coded(
             "typst::plate_missing",
             format!("plate file '{plate_file}' not found in the quill's file tree"),
         )
     })?;
 
     String::from_utf8(bytes.to_vec()).map_err(|e| {
-        engine_err(
+        RenderError::coded(
             "typst::invalid_utf8",
             format!("plate file '{plate_file}' is not valid UTF-8: {e}"),
         )
     })
-}
-
-/// A single-diagnostic [`RenderError`] carrying `code`.
-pub(crate) fn engine_err(code: &str, message: impl Into<String>) -> RenderError {
-    RenderError::from_diag(
-        Diagnostic::new(Severity::Error, message.into()).with_code(code.to_string()),
-    )
 }
 
 /// The steps a schema address may take out of one node, and nothing else: the

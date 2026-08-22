@@ -21,9 +21,6 @@ impl PdfError {
 
 impl From<PdfError> for quillmark_core::RenderError {
     fn from(e: PdfError) -> Self {
-        quillmark_core::RenderError::from_diag(
-            quillmark_core::Diagnostic::new(quillmark_core::Severity::Error, e.message)
-                .with_code(e.code.to_string()),
-        )
+        quillmark_core::RenderError::coded(e.code, e.message)
     }
 }
