@@ -268,24 +268,25 @@ fn append_scalar(items: &mut Vec<PayloadItem>, field: &FieldSchema) {
     items.push(PayloadItem::comment_inline(type_expression(field)));
 }
 
-/// Build the per-property body of a defaultless typed container: the value
-/// mapping (each property at its own cell, in declaration order), the nested
-/// comments (description + `# e.g.` + inline type annotation, addressed by
-/// `container_path`/slot), and the nested fill paths. `prefix` is the container
+/// Build the per-property body of a defaultless typed container into `map`:
+/// each property at its own cell in declaration order, plus the nested comments
+/// (description + `# e.g.` + inline type annotation, addressed by
+/// `container_path`/slot) and the nested fill paths. `prefix` is the container
 /// path of the mapping relative to the field value (`[]` for a typed dict,
 /// `[Index(0)]` for a typed table's synthetic row).
+///
+/// A property's slot is where it lands in `map`, so a caller seating its own
+/// cell first (a variant's discriminant) shifts the rest by handing over a
+/// mapping that already holds it.
 fn build_property_mapping(
+    map: &mut JsonMap<String, JsonValue>,
     props: &IndexMap<String, Box<FieldSchema>>,
     prefix: &[PathSegment],
-) -> (
-    JsonMap<String, JsonValue>,
-    Vec<NestedComment>,
-    Vec<Vec<PathSegment>>,
-) {
-    let mut map = JsonMap::new();
+) -> (Vec<NestedComment>, Vec<Vec<PathSegment>>) {
     let mut nested = Vec::new();
     let mut fills = Vec::new();
-    for (slot, prop) in props.values().map(|b| b.as_ref()).enumerate() {
+    for prop in props.values().map(|b| b.as_ref()) {
+        let slot = map.len();
         if let Some(desc) = collapse_opt(&prop.description) {
             nested.push(NestedComment {
                 container_path: prefix.to_vec(),
@@ -318,7 +319,7 @@ fn build_property_mapping(
             inline: true,
         });
     }
-    (map, nested, fills)
+    (nested, fills)
 }
 
 /// One property's contribution to its parent's mapping: its value, and the
@@ -348,7 +349,8 @@ fn container_cell(
     path: &[PathSegment],
 ) -> (JsonValue, Vec<NestedComment>, Vec<Vec<PathSegment>>) {
     if let Some(props) = typed_dict_props(field) {
-        let (map, nested, fills) = build_property_mapping(props, path);
+        let mut map = JsonMap::new();
+        let (nested, fills) = build_property_mapping(&mut map, props, path);
         return (JsonValue::Object(map), nested, fills);
     }
 
@@ -364,7 +366,8 @@ fn container_cell(
         None => {
             let mut row_path = path.to_vec();
             row_path.push(PathSegment::Index(0));
-            let (row, nested, fills) = build_property_mapping(row_props, &row_path);
+            let mut row = JsonMap::new();
+            let (nested, fills) = build_property_mapping(&mut row, row_props, &row_path);
             (
                 JsonValue::Array(vec![JsonValue::Object(row)]),
                 nested,
@@ -401,7 +404,6 @@ fn append_variant(items: &mut Vec<PayloadItem>, field: &FieldSchema) {
 
     let member = scalar_value(field);
     let mut map = JsonMap::new();
-    let mut nested = Vec::new();
     let mut fills = Vec::new();
     map.insert(
         VARIANT_DISCRIMINANT_KEY.to_string(),
@@ -416,42 +418,18 @@ fn append_variant(items: &mut Vec<PayloadItem>, field: &FieldSchema) {
         fills.push(vec![PathSegment::Key(VARIANT_DISCRIMINANT_KEY.to_string())]);
     }
 
+    // A cell is a field of the container, so it expands as one: the mapping
+    // already holding the discriminant is what seats the live world one slot
+    // past it.
     let live = member.as_str().and_then(|m| field.variant_fields(m));
-    if let Some(fields) = live {
-        for (slot, prop) in fields.values().map(|b| b.as_ref()).enumerate() {
-            // Slot 0 is the discriminant, so every variant field sits one past it.
-            let position = slot + 1;
-            if let Some(desc) = collapse_opt(&prop.description) {
-                nested.push(NestedComment {
-                    container_path: Vec::new(),
-                    position,
-                    text: desc,
-                    inline: false,
-                });
-            }
-            if prop.default.is_some() {
-                if let Some(eg) = prop.example.as_ref() {
-                    nested.push(NestedComment {
-                        container_path: Vec::new(),
-                        position,
-                        text: format!("e.g. {}", eg_hint(eg)),
-                        inline: false,
-                    });
-                }
-            }
-            let (json, fill) = scalar_cell(prop);
-            map.insert(prop.name.clone(), json);
-            if fill {
-                fills.push(vec![PathSegment::Key(prop.name.clone())]);
-            }
-            nested.push(NestedComment {
-                container_path: Vec::new(),
-                position,
-                text: type_expression(prop),
-                inline: true,
-            });
+    let nested = match live {
+        Some(fields) => {
+            let (nested, sub_fills) = build_property_mapping(&mut map, fields, &[]);
+            fills.extend(sub_fills);
+            nested
         }
-    }
+        None => Vec::new(),
+    };
 
     push_container_field(
         items,

@@ -608,6 +608,84 @@ fn the_blueprint_emits_the_default_worlds_cells_and_round_trips() {
     assert!(value.get("controlled_by").is_some());
 }
 
+/// A cell holds a container like any field, so the blueprint expands one per
+/// property. A flattened cell would hand the author a scalar slot where the
+/// schema wants a mapping, drop every property's own description and `default:`,
+/// and stamp the marker on a path the obligation predicate never addresses.
+#[test]
+fn the_blueprint_expands_a_container_cell_per_property() {
+    const YAML: &str = r#"
+quill:
+  name: variant_container
+  version: "0.1.0"
+  backend: typst
+  description: variant container probe
+
+typst:
+  plate_file: plate.typ
+
+main:
+  fields:
+    classification:
+      type: enum
+      values: [UNCLASSIFIED, CUI]
+      default: CUI
+      variants:
+        CUI:
+          controlled_by:
+            type: object
+            description: Controlling office.
+            properties:
+              office: { type: string, description: Office symbol. }
+              phone: { type: string, default: "" }
+          citations:
+            type: array
+            items:
+              type: object
+              properties:
+                src: { type: string }
+"#;
+    let bp = QuillConfig::from_yaml(YAML).expect("loads").blueprint();
+    assert!(
+        bp.contains(concat!(
+            "  # Controlling office.\n",
+            "  controlled_by: # object\n",
+            "    # Office symbol.\n",
+            "    office: !must_fill # string\n",
+            "    phone: \"\" # string\n",
+            "  citations: # array<object>\n",
+            "    - src: !must_fill # string\n",
+        )),
+        "{bp}"
+    );
+
+    // The marked cells are the cells the schema-side predicate warns at: a
+    // container is a namespace on both surfaces, never a cell on either.
+    let document = Document::parse(&bp).expect("the blueprint parses").document;
+    let warned: Vec<String> = quill_from_yaml(YAML)
+        .validate(&document)
+        .into_iter()
+        .filter(|d| d.code.as_deref() == Some("validation::must_fill"))
+        .filter_map(|d| d.path)
+        .collect();
+    assert!(
+        warned.contains(&"main.classification.controlled_by.office".to_string())
+            && warned.contains(&"main.classification.citations[0].src".to_string()),
+        "{warned:?}"
+    );
+    assert!(
+        !warned
+            .iter()
+            .any(|p| p == "main.classification.controlled_by"),
+        "{warned:?}"
+    );
+
+    let reparsed = Document::parse(&document.to_markdown())
+        .expect("re-emit parses")
+        .document;
+    assert_eq!(document, reparsed, "the expansion round-trips");
+}
+
 /// Which world is live decides which fields are even candidates, so the
 /// discriminant must resolve before the field set is walked.
 #[test]
