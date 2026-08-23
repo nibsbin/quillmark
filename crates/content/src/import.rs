@@ -200,6 +200,9 @@ struct Builder {
     /// quote, an empty `- ` item) can still get one.
     container_marks: Vec<usize>,
     list_stack: Vec<ListInfo>,
+    /// The list that closed most recently, so an immediately adjacent sibling of
+    /// the same shape continues its item numbering instead of restarting.
+    last_closed_list: Option<ClosedList>,
     // code block
     code_lang: Option<String>,
     in_code: bool,
@@ -218,6 +221,18 @@ struct ListInfo {
     start: u64,
     /// 0-based index of the next item: becomes the item's `ordinal`.
     count: u64,
+}
+
+/// A closed list, kept only long enough for the next `Tag::List` to ask whether
+/// it is that list's adjacent sibling: same nesting depth, same shape, and no
+/// line emitted in between.
+#[derive(Clone)]
+struct ClosedList {
+    depth: usize,
+    ordered: bool,
+    start: u64,
+    count: u64,
+    emitted: usize,
 }
 
 struct TableAcc {
@@ -261,6 +276,7 @@ impl Builder {
             containers: Vec::new(),
             container_marks: Vec::new(),
             list_stack: Vec::new(),
+            last_closed_list: None,
             code_lang: None,
             in_code: false,
             code_opened: false,
@@ -481,10 +497,26 @@ impl Builder {
             }
             Tag::List(start) => {
                 self.pending = None; // nested list content sets its own
+                let ordered = start.is_some();
+                let start = start.unwrap_or(1);
+                // Two lists markdown spells apart (a `<!-- -->` between them)
+                // are one list here: the flat encoding holds no boundary
+                // between adjacent same-shape runs, so the merge happens where
+                // the two item counters can still be joined.
+                let count = self
+                    .last_closed_list
+                    .take()
+                    .filter(|c| {
+                        c.depth == self.list_stack.len()
+                            && c.ordered == ordered
+                            && c.start == start
+                            && c.emitted == self.emitted()
+                    })
+                    .map_or(0, |c| c.count);
                 self.list_stack.push(ListInfo {
-                    ordered: start.is_some(),
-                    start: start.unwrap_or(1),
-                    count: 0,
+                    ordered,
+                    start,
+                    count,
                 });
             }
             Tag::Item => {
@@ -573,7 +605,15 @@ impl Builder {
                 self.code_lang = None;
             }
             TagEnd::List(_) => {
-                self.list_stack.pop();
+                if let Some(info) = self.list_stack.pop() {
+                    self.last_closed_list = Some(ClosedList {
+                        depth: self.list_stack.len(),
+                        ordered: info.ordered,
+                        start: info.start,
+                        count: info.count,
+                        emitted: self.emitted(),
+                    });
+                }
             }
             TagEnd::Item => {
                 let mark = self.container_marks.pop().unwrap_or(0);

@@ -689,6 +689,7 @@ impl Content {
     /// props and unknown-mark attrs, then sort marks canonically. Idempotent:
     /// the fixed point the canonical serialization commits to.
     pub fn normalize(&mut self) {
+        renumber_list_ordinals(&mut self.lines);
         // A splice writes text, never kinds: typing into a table line leaves it
         // `Island` over prose, joining a fence to an image line leaves it `Code`
         // over a slot, and export reads the kind and not the text, so the
@@ -933,6 +934,60 @@ impl Content {
 /// same-kind formatting marks union when adjacent *or* overlapping, different
 /// kinds overlap freely (never split into runs), and identity/unknown marks
 /// never merge. Zero-width formatting is dropped; zero-width anchors survive.
+/// A container's run identity: everything but which item it is. Two adjacent
+/// lines sit in the same container instance iff their keys match at every depth.
+fn container_key(c: &Container) -> Container {
+    match c {
+        Container::ListItem { ordered, start, .. } => Container::ListItem {
+            ordered: *ordered,
+            start: *start,
+            ordinal: 0,
+        },
+        other => other.clone(),
+    }
+}
+
+fn raw_ordinal(c: &Container) -> u64 {
+    match c {
+        Container::ListItem { ordinal, .. } => *ordinal,
+        _ => 0,
+    }
+}
+
+/// Rewrite every `ListItem::ordinal` to its canonical value: 0 at the item a run
+/// opens with, +1 at each ordinal *change* within the run, unchanged where the
+/// stored ordinal repeats (one item continuing across its paragraphs). A stored
+/// `[0, 5]` and a stored `[0, 1]` are the same two items; a stored `[0, 1, 0]`
+/// is three, its decrease carrying no boundary a run can hold.
+fn renumber_list_ordinals(lines: &mut [Line]) {
+    // Per depth: the run's key, the ordinal being handed out, and the stored
+    // ordinal that earned it.
+    let mut state: Vec<(Container, u64, u64)> = Vec::new();
+    for line in lines.iter_mut() {
+        let depth_len = line.containers.len();
+        let mut opened_above = false;
+        for d in 0..depth_len {
+            let key = container_key(&line.containers[d]);
+            let raw = raw_ordinal(&line.containers[d]);
+            let continues = !opened_above && state.get(d).is_some_and(|(k, _, _)| *k == key);
+            if continues {
+                if raw != state[d].2 {
+                    state[d].1 += 1;
+                    state[d].2 = raw;
+                }
+            } else {
+                state.truncate(d);
+                state.push((key, 0, raw));
+                opened_above = true;
+            }
+            if let Container::ListItem { ordinal, .. } = &mut line.containers[d] {
+                *ordinal = state[d].1;
+            }
+        }
+        state.truncate(depth_len);
+    }
+}
+
 pub(crate) fn normalize_marks(marks: Vec<Mark>) -> Vec<Mark> {
     use std::collections::BTreeMap;
 
