@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- fix(core): **a `.quillignore` pattern holding more than one `*` ignores what
+  it names.** The matcher handled exactly one wildcard and returned no match
+  for the rest, so `**/*.tmp` and `*.sublime-*` were dead lines. Patterns now
+  compile once through `glob::Pattern`, matched against the whole path and the
+  basename. Two readings tighten to gitignore's: `*` stops at `/`, and a
+  pattern spelling out a `/` anchors at the bundle root rather than matching
+  any path that opens and closes with its halves. A pattern free of `*`, `?`
+  and `[` stays a literal name, so a file named `Cinzel[wght].ttf` is still
+  ignored by writing it out.
+
 ## v0.108.3 - 2026-08-21
 
 - fix(typst): **a paragraph holding one bare `/` renders instead of failing the

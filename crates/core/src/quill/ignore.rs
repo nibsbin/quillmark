@@ -1,10 +1,33 @@
 //! .quillignore parsing and path matching.
 use std::path::Path;
 
-/// Simple gitignore-style pattern matcher for .quillignore
+use glob::{MatchOptions, Pattern};
+
+/// `*` stops at a path separator, so a pattern spans one path segment unless it
+/// spells the separators out — the gitignore reading of a `.quillignore` line.
+const MATCH: MatchOptions = MatchOptions {
+    case_sensitive: true,
+    require_literal_separator: true,
+    require_literal_leading_dot: false,
+};
+
+/// Gitignore-style pattern matcher for .quillignore
 #[derive(Debug, Clone)]
 pub struct QuillIgnore {
-    pub(crate) patterns: Vec<String>,
+    rules: Vec<Rule>,
+}
+
+/// One `.quillignore` line, parsed once at construction.
+#[derive(Debug, Clone)]
+enum Rule {
+    /// `dir/`: the entry itself and everything beneath it.
+    Dir(String),
+    /// A literal name: the whole path, or the basename at any depth.
+    Name(String),
+    /// A glob, matched against the whole path and against the basename, so a
+    /// slash-free pattern applies at any depth and a slashed one is anchored
+    /// at the bundle root. As in gitignore, `*` does not cross `/`.
+    Glob(Pattern),
 }
 
 impl Default for QuillIgnore {
@@ -24,65 +47,60 @@ impl Default for QuillIgnore {
 impl QuillIgnore {
     /// Create a new QuillIgnore from pattern strings
     pub fn new(patterns: Vec<String>) -> Self {
-        Self { patterns }
+        Self {
+            rules: patterns.into_iter().map(Rule::parse).collect(),
+        }
     }
 
     /// Parse .quillignore content into patterns
     pub fn from_content(content: &str) -> Self {
-        let patterns = content
-            .lines()
-            .map(|line| line.trim())
-            .filter(|line| !line.is_empty() && !line.starts_with('#'))
-            .map(|line| line.to_string())
-            .collect();
-        Self::new(patterns)
+        Self::new(
+            content
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty() && !line.starts_with('#'))
+                .map(str::to_string)
+                .collect(),
+        )
     }
 
     /// Check if a path should be ignored
     pub fn is_ignored<P: AsRef<Path>>(&self, path: P) -> bool {
-        let path = path.as_ref();
-        let path_str = path.to_string_lossy();
+        let path = path
+            .as_ref()
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/");
+        let basename = path.rsplit_once('/').map_or(path.as_str(), |(_, name)| name);
+        self.rules.iter().any(|rule| rule.matches(&path, basename))
+    }
+}
 
-        for pattern in &self.patterns {
-            if self.matches_pattern(pattern, &path_str) {
-                return true;
-            }
+impl Rule {
+    fn parse(pattern: String) -> Self {
+        if let Some(prefix) = pattern.strip_suffix('/') {
+            return Rule::Dir(prefix.to_string());
         }
-        false
+        if !pattern.contains(['*', '?', '[']) {
+            return Rule::Name(pattern);
+        }
+        match Pattern::new(&pattern) {
+            Ok(glob) => Rule::Glob(glob),
+            // An unparseable glob still matches the name it spells out.
+            Err(_) => Rule::Name(pattern),
+        }
     }
 
-    /// Simple pattern matching (supports * wildcard and directory patterns)
-    fn matches_pattern(&self, pattern: &str, path: &str) -> bool {
-        // Handle directory patterns
-        if let Some(pattern_prefix) = pattern.strip_suffix('/') {
-            return path.starts_with(pattern_prefix)
-                && (path.len() == pattern_prefix.len()
-                    || path.chars().nth(pattern_prefix.len()) == Some('/'));
-        }
-
-        // Handle exact matches
-        if !pattern.contains('*') {
-            return path == pattern || path.ends_with(&format!("/{}", pattern));
-        }
-
-        // Simple wildcard matching
-        if pattern == "*" {
-            return true;
-        }
-
-        // Handle patterns with wildcards
-        let pattern_parts: Vec<&str> = pattern.split('*').collect();
-        if pattern_parts.len() == 2 {
-            let (prefix, suffix) = (pattern_parts[0], pattern_parts[1]);
-            if prefix.is_empty() {
-                return path.ends_with(suffix);
-            } else if suffix.is_empty() {
-                return path.starts_with(prefix);
-            } else {
-                return path.starts_with(prefix) && path.ends_with(suffix);
+    fn matches(&self, path: &str, basename: &str) -> bool {
+        match self {
+            Rule::Dir(prefix) => path
+                .strip_prefix(prefix.as_str())
+                .is_some_and(|rest| rest.is_empty() || rest.starts_with('/')),
+            Rule::Name(name) => path == name || basename == name,
+            Rule::Glob(glob) => {
+                glob.matches_with(path, MATCH) || glob.matches_with(basename, MATCH)
             }
         }
-
-        false
     }
 }

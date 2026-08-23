@@ -142,4 +142,19 @@ mod tests {
         assert!(tree.get_file("leak.txt").is_none());
         assert_eq!(tree.get_file("real.txt"), Some(&b"ok"[..]));
     }
+
+    #[test]
+    fn load_dir_honours_multi_wildcard_ignore_patterns() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        std::fs::write(root.join(".quillignore"), "**/*.tmp\n").unwrap();
+        std::fs::create_dir(root.join("nested")).unwrap();
+        std::fs::write(root.join("nested/scratch.tmp"), b"drop").unwrap();
+        std::fs::write(root.join("nested/plate.typ"), b"keep").unwrap();
+
+        let tree = load_tree_from_path(root).unwrap();
+        assert!(tree.get_file("nested/scratch.tmp").is_none());
+        assert_eq!(tree.get_file("nested/plate.typ"), Some(&b"keep"[..]));
+    }
 }
