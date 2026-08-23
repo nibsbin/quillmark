@@ -226,6 +226,19 @@ blank line for quotes. An `Unknown` container has no Markdown syntax at all, so
 that one boundary lives in storage only — the same place its `tag` and `attrs`
 already live.
 
+**A new container owes its projections a separator.** `instance` makes the
+boundary storable; it does not make it *writable*. A container whose Markdown
+spelling cannot separate two adjacent instances has a boundary in storage that
+the projection drops, so `from_markdown(to_markdown(rt)) == rt` fails on
+re-import — the model reads one container where it stored two. Spell the
+separator when the container is specced, not after: a container defined on
+CommonMark §5.1's terms (a per-line marker, blank-line terminated, as
+`Container::Quote` is) gets one for free, because the blank line already ends
+it. One defined on §5.2/§5.3's terms (a list, which a blank line leaves open)
+does not, and needs the marker alternation `Container::ListItem` uses. The same
+obligation falls on the Typst lowering: two adjacent instances must not lower
+into one another's markup.
+
 Unknown *keys* survive in designated carriers only, and the boundary is worth
 stating because it is not the discriminator boundary:
 
