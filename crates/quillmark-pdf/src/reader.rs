@@ -12,7 +12,7 @@
 //! branches. `hayro-syntax` is read-only and exposes no byte spans, so it cannot
 //! drive a byte-splice append; hence this bespoke scanner.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::error::PdfError;
 
@@ -163,29 +163,108 @@ pub(crate) fn append_incremental_update(
     Ok(pdf)
 }
 
-/// Locate object `id` and return `(obj_start, endobj_end)`.
+/// A base PDF and the offset of every indirect object header in it, collected in
+/// one forward pass. Every read of an object goes through this.
 ///
-/// Matches `<id> <generation> obj` at a token boundary, so `19 0 obj` is not
+/// A per-object scan cannot stop early — a base carrying prior incremental
+/// updates serializes an id more than once and the live copy is the last — so
+/// reading one object without an index walks the whole buffer, and a stamp or
+/// flatten pass reads O(pages) objects.
+///
+/// A header is `<id> <generation> obj` at a token boundary, so `19 0 obj` is not
 /// found inside `519 0 obj`, at any generation (re-saved PDFs carry non-zero
-/// ones). A base with prior incremental updates can serialize an id more than
-/// once; the live copy is the last, so this returns the last match.
-pub fn find_object_bytes(pdf: &[u8], id: u32) -> Option<(usize, usize)> {
-    let prefix = format!("{id} ");
-    let p = prefix.as_bytes();
-    let mut last_start = None;
-    let mut i = 0;
-    while i + p.len() <= pdf.len() {
-        if (i == 0 || matches!(pdf[i - 1], b'\n' | b'\r' | b' '))
-            && pdf[i..].starts_with(p)
-            && is_obj_header_tail(&pdf[i + p.len()..])
-        {
-            last_start = Some(i);
+/// ones). A later occurrence overwrites an earlier one, so a lookup answers with
+/// the live copy.
+pub struct ObjectIndex<'a> {
+    pdf: &'a [u8],
+    starts: HashMap<u32, usize>,
+}
+
+impl<'a> ObjectIndex<'a> {
+    pub fn new(pdf: &'a [u8]) -> Self {
+        let mut starts = HashMap::new();
+        for i in 0..pdf.len() {
+            if !pdf[i].is_ascii_digit() || !(i == 0 || matches!(pdf[i - 1], b'\n' | b'\r' | b' ')) {
+                continue;
+            }
+            if let Some(id) = obj_header_id(&pdf[i..]) {
+                starts.insert(id, i);
+            }
         }
-        i += 1;
+        Self { pdf, starts }
     }
-    let start = last_start?;
-    let end = find_endobj_end(pdf, start + p.len())?;
-    Some((start, end))
+
+    /// The indexed bytes, for the scans that read no object.
+    pub fn bytes(&self) -> &'a [u8] {
+        self.pdf
+    }
+
+    /// `(obj_start, endobj_end)` of object `id`.
+    pub fn object_bytes(&self, id: u32) -> Option<(usize, usize)> {
+        let start = *self.starts.get(&id)?;
+        Some((start, find_endobj_end(self.pdf, start)?))
+    }
+
+    /// The inner dict bytes of object `id`. `what` names the object in both
+    /// failure messages — `"{what} not found"` and `"{what} dict not
+    /// parseable"` — under the caller's error `code`; an Option-returning caller
+    /// calls `.ok()`.
+    pub fn dict(&self, id: u32, code: &'static str, what: &str) -> Result<&'a [u8], PdfError> {
+        let (s, e) = self
+            .object_bytes(id)
+            .ok_or_else(|| err(code, format!("{what} not found")))?;
+        extract_outer_dict(&self.pdf[s..e])
+            .ok_or_else(|| err(code, format!("{what} dict not parseable")))
+    }
+
+    /// The generation in object `id`'s header, or `None` when the object is
+    /// absent or its generation malformed.
+    fn generation(&self, id: u32) -> Option<u16> {
+        let start = *self.starts.get(&id)?;
+        let header = &self.pdf[start..];
+        let id_digits = header.iter().take_while(|b| b.is_ascii_digit()).count();
+        // Past the id and the one space a header writes after it.
+        let rest = &header[id_digits + 1..];
+        let n = rest.iter().take_while(|b| b.is_ascii_digit()).count();
+        std::str::from_utf8(&rest[..n]).ok()?.parse().ok()
+    }
+
+    /// Reject overwriting a base object that lives at a non-zero generation.
+    ///
+    /// The update writer re-emits overwritten objects at generation 0 and
+    /// references them as generation 0, while the reader accepts a header at any
+    /// generation. A base whose catalog / page / `/Info` sits at a non-zero
+    /// generation therefore parses fine yet would produce a malformed update: the
+    /// new `/Root` points at generation 0 while the prior xref resolves the true
+    /// generation.
+    ///
+    /// `None` (object absent) is left for the caller's not-found error path.
+    pub(crate) fn assert_overwrite_gen_zero(&self, id: u32, what: &str) -> Result<(), PdfError> {
+        match self.generation(id) {
+            Some(0) | None => Ok(()),
+            Some(generation) => Err(err(
+                "pdf::nonzero_generation",
+                format!(
+                    "{what} object {id} is at generation {generation}; the stamp spine re-emits \
+                     overwritten objects at generation 0 and cannot preserve a non-zero generation"
+                ),
+            )),
+        }
+    }
+}
+
+/// The object id of the `<id> <generation> obj` header at the start of `rest`,
+/// when there is one. An id written with a leading zero is not one: the index
+/// matches the exact decimal form a reference to the object is written in.
+fn obj_header_id(rest: &[u8]) -> Option<u32> {
+    let digits = rest.iter().take_while(|b| b.is_ascii_digit()).count();
+    if (digits > 1 && rest[0] == b'0')
+        || rest.get(digits) != Some(&b' ')
+        || !is_obj_header_tail(&rest[digits + 1..])
+    {
+        return None;
+    }
+    std::str::from_utf8(&rest[..digits]).ok()?.parse().ok()
 }
 
 /// The index just past the `endobj` closing the body at `from`. Literal
@@ -205,38 +284,6 @@ fn find_endobj_end(pdf: &[u8], from: usize) -> Option<usize> {
         i += 1;
     }
     None
-}
-
-/// The generation in object `id`'s header, or `None` when it is absent or
-/// malformed. Reads the live copy, matching [`find_object_bytes`].
-pub(crate) fn object_generation(pdf: &[u8], id: u32) -> Option<u16> {
-    let (start, _) = find_object_bytes(pdf, id)?;
-    let after_id = start + format!("{id} ").len();
-    let rest = &pdf[after_id..];
-    let n = rest.iter().take_while(|b| b.is_ascii_digit()).count();
-    std::str::from_utf8(&rest[..n]).ok()?.parse().ok()
-}
-
-/// Reject overwriting a base object that lives at a non-zero generation.
-///
-/// The update writer re-emits overwritten objects at generation 0 and references
-/// them as generation 0, while the reader accepts a header at any generation. A
-/// base whose catalog / page / `/Info` sits at a non-zero generation therefore
-/// parses fine yet would produce a malformed update: the new `/Root` points at
-/// generation 0 while the prior xref resolves the true generation.
-///
-/// `None` (object absent) is left for the caller's not-found error path.
-pub(crate) fn assert_overwrite_gen_zero(pdf: &[u8], id: u32, what: &str) -> Result<(), PdfError> {
-    match object_generation(pdf, id) {
-        Some(0) | None => Ok(()),
-        Some(generation) => Err(err(
-            "pdf::nonzero_generation",
-            format!(
-                "{what} object {id} is at generation {generation}; the stamp spine re-emits \
-                 overwritten objects at generation 0 and cannot preserve a non-zero generation"
-            ),
-        )),
-    }
 }
 
 /// Whether the bytes after an `<id> ` prefix continue as `<generation> obj`.
@@ -538,19 +585,6 @@ fn skip_ws(s: &[u8]) -> &[u8] {
     &s[ws_end(s, 0)..]
 }
 
-/// The inner dict bytes of object `id`. `what` names the object in both failure
-/// messages — `"{what} not found"` and `"{what} dict not parseable"` — under
-/// the caller's error `code`; an Option-returning caller calls `.ok()`.
-pub fn object_dict<'a>(
-    pdf: &'a [u8],
-    id: u32,
-    code: &'static str,
-    what: &str,
-) -> Result<&'a [u8], PdfError> {
-    let (s, e) = find_object_bytes(pdf, id).ok_or_else(|| err(code, format!("{what} not found")))?;
-    extract_outer_dict(&pdf[s..e]).ok_or_else(|| err(code, format!("{what} dict not parseable")))
-}
-
 /// Open the base's trailer: the xref offset, the trailer dict, and the catalog
 /// (`/Root`) object id, after refusing an xref stream. `code` carries the
 /// caller's error code for a missing or malformed `/Root`.
@@ -569,15 +603,14 @@ pub(crate) fn open_trailer<'a>(
 
 /// Flatten the catalog's `/Pages` tree into page object ids in document order.
 /// The walk is capped to prevent runaway on a pathological PDF.
-pub(crate) fn resolve_page_ids(pdf: &[u8], catalog_id: u32) -> Result<Vec<u32>, PdfError> {
-    let root_pages_id = root_pages_id(pdf, catalog_id)?;
+pub(crate) fn resolve_page_ids(idx: &ObjectIndex, catalog_id: u32) -> Result<Vec<u32>, PdfError> {
+    let root_pages_id = root_pages_id(idx, catalog_id)?;
 
     const MAX_NODES: usize = 100_000;
     let mut out = Vec::new();
     let mut stack = vec![root_pages_id];
-    // A node reached twice is a cyclic or shared-node `/Pages` tree, and an
-    // amplification vector: every visit re-scans the whole file, so a tiny
-    // `/Kids` self-cycle would drive MAX_NODES full-file scans without this.
+    // A node reached twice is a cyclic or shared-node `/Pages` tree: a `/Kids`
+    // self-cycle would otherwise walk until MAX_NODES.
     let mut seen: HashSet<u32> = HashSet::new();
     while let Some(node_id) = stack.pop() {
         if !seen.insert(node_id) {
@@ -589,7 +622,7 @@ pub(crate) fn resolve_page_ids(pdf: &[u8], catalog_id: u32) -> Result<Vec<u32>, 
         if seen.len() > MAX_NODES {
             return Err(err(CODE_PARSE, "page tree exceeds 100 000 nodes"));
         }
-        let dict = object_dict(pdf, node_id, CODE_PARSE, &format!("page node {node_id}"))?;
+        let dict = idx.dict(node_id, CODE_PARSE, &format!("page node {node_id}"))?;
         let typ = find_dict_value(dict, "Type")
             .map(|b| String::from_utf8_lossy(b.trim_ascii()).into_owned())
             .unwrap_or_default();
@@ -610,8 +643,8 @@ pub(crate) fn resolve_page_ids(pdf: &[u8], catalog_id: u32) -> Result<Vec<u32>, 
 }
 
 /// The catalog's root `/Pages` node id.
-fn root_pages_id(pdf: &[u8], catalog_id: u32) -> Result<u32, PdfError> {
-    let cat_dict = object_dict(pdf, catalog_id, CODE_PARSE, "catalog")?;
+fn root_pages_id(idx: &ObjectIndex, catalog_id: u32) -> Result<u32, PdfError> {
+    let cat_dict = idx.dict(catalog_id, CODE_PARSE, "catalog")?;
     find_dict_value(cat_dict, "Pages")
         .and_then(parse_indirect_ref)
         .map(|(id, _)| id)
@@ -622,16 +655,13 @@ fn root_pages_id(pdf: &[u8], catalog_id: u32) -> Result<u32, PdfError> {
 /// from the root `/Pages`. The stamp and flatten paths write geometry in
 /// unrotated user space and do not compensate, so a rotated base page would
 /// display every widget away from its intended box.
-///
-/// The inherited value is resolved once for the whole batch: reading it costs a
-/// full-file scan per page otherwise.
 pub(crate) fn assert_unrotated_pages(
-    pdf: &[u8],
+    idx: &ObjectIndex,
     catalog_id: u32,
     page_ids: &[u32],
 ) -> Result<(), PdfError> {
     let read_rotate = |id: u32| -> Option<i64> {
-        let dict = object_dict(pdf, id, CODE_PARSE, "page").ok()?;
+        let dict = idx.dict(id, CODE_PARSE, "page").ok()?;
         let raw = find_dict_value(dict, "Rotate")?;
         std::str::from_utf8(raw.trim_ascii())
             .ok()?
@@ -639,7 +669,7 @@ pub(crate) fn assert_unrotated_pages(
             .parse::<i64>()
             .ok()
     };
-    let inherited = root_pages_id(pdf, catalog_id).ok().and_then(read_rotate);
+    let inherited = root_pages_id(idx, catalog_id).ok().and_then(read_rotate);
     for &page_id in page_ids {
         let rotate = read_rotate(page_id).or(inherited).unwrap_or(0);
         if rotate.rem_euclid(360) != 0 {
@@ -719,11 +749,12 @@ fn normalize_rect(mb: [f32; 4]) -> [f32; 4] {
 pub(crate) fn page_media_boxes(pdf: &[u8]) -> Result<Vec<[f32; 4]>, PdfError> {
     let (_, _, catalog_id) = open_trailer(pdf, CODE_PARSE)?;
 
-    let inherited = root_pages_media_box(pdf, catalog_id);
-    let page_ids = resolve_page_ids(pdf, catalog_id)?;
+    let idx = ObjectIndex::new(pdf);
+    let inherited = root_pages_media_box(&idx, catalog_id);
+    let page_ids = resolve_page_ids(&idx, catalog_id)?;
     let mut out = Vec::with_capacity(page_ids.len());
     for id in page_ids {
-        let dict = object_dict(pdf, id, CODE_PARSE, &format!("page node {id}"))?;
+        let dict = idx.dict(id, CODE_PARSE, &format!("page node {id}"))?;
         let mb = find_dict_value(dict, "MediaBox")
             .and_then(parse_rect_array)
             .or(inherited)
@@ -734,9 +765,9 @@ pub(crate) fn page_media_boxes(pdf: &[u8]) -> Result<Vec<[f32; 4]>, PdfError> {
 }
 
 /// The root `/Pages` node's `/MediaBox`, if present: the value pages inherit.
-fn root_pages_media_box(pdf: &[u8], catalog_id: u32) -> Option<[f32; 4]> {
-    let pages_id = root_pages_id(pdf, catalog_id).ok()?;
-    let dict = object_dict(pdf, pages_id, CODE_PARSE, "root /Pages node").ok()?;
+fn root_pages_media_box(idx: &ObjectIndex, catalog_id: u32) -> Option<[f32; 4]> {
+    let pages_id = root_pages_id(idx, catalog_id).ok()?;
+    let dict = idx.dict(pages_id, CODE_PARSE, "root /Pages node").ok()?;
     find_dict_value(dict, "MediaBox").and_then(parse_rect_array)
 }
 
@@ -776,7 +807,8 @@ mod tests {
     #[test]
     fn endobj_inside_comment_does_not_truncate_object() {
         let pdf = b"%PDF\n3 0 obj\n<< /A 1 >> %endobj in a comment\n/B 2 >>\nendobj\n";
-        let (s, e) = find_object_bytes(pdf, 3).expect("found object 3");
+        let idx = ObjectIndex::new(pdf);
+        let (s, e) = idx.object_bytes(3).expect("found object 3");
         assert_eq!(&pdf[e - 6..e], b"endobj");
         assert!(&pdf[s..e].ends_with(b"/B 2 >>\nendobj"));
     }
@@ -846,25 +878,50 @@ mod tests {
     #[test]
     fn find_object_at_token_boundary() {
         let pdf = b"%PDF\n519 0 obj\n<< /A 1 >>\nendobj\n19 0 obj\n<< /B 2 >>\nendobj\n";
-        let (s, e) = find_object_bytes(pdf, 19).expect("found object 19");
+        let idx = ObjectIndex::new(pdf);
+        let (s, e) = idx.object_bytes(19).expect("found object 19");
         assert_eq!(&pdf[s..e], b"19 0 obj\n<< /B 2 >>\nendobj");
+    }
+
+    #[test]
+    fn index_resolves_every_object_from_one_pass() {
+        let pdf = b"%PDF\n1 0 obj\n<< /A 1 >>\nendobj\n2 0 obj\n<< /B 2 >>\nendobj\n\
+                    3 0 obj\n<< /C 3 >>\nendobj\n";
+        let idx = ObjectIndex::new(pdf);
+        for (id, body) in [(1u32, &b"/A 1"[..]), (2, b"/B 2"), (3, b"/C 3")] {
+            assert_eq!(idx.dict(id, CODE_PARSE, "obj").unwrap().trim_ascii(), body);
+        }
+        assert!(idx.object_bytes(4).is_none());
+    }
+
+    #[test]
+    fn index_ignores_a_leading_zero_id_header() {
+        // `019` is not how a `19 0 R` reference writes the id, so it is not
+        // object 19 and does not supersede the real one.
+        let pdf = b"%PDF\n19 0 obj\n<< /V (real) >>\nendobj\n019 0 obj\n<< /V (decoy) >>\nendobj\n";
+        let dict = ObjectIndex::new(pdf).dict(19, CODE_PARSE, "obj").unwrap();
+        assert_eq!(find_dict_value(dict, "V").unwrap().trim_ascii(), b"(real)");
     }
 
     #[test]
     fn object_generation_reads_header_gen() {
         let pdf = b"%PDF\n7 2 obj\n<< /C 3 >>\nendobj\n4 0 obj\n<< /D 1 >>\nendobj\n";
-        assert_eq!(object_generation(pdf, 7), Some(2));
-        assert_eq!(object_generation(pdf, 4), Some(0));
-        assert_eq!(object_generation(pdf, 99), None);
+        let idx = ObjectIndex::new(pdf);
+        assert_eq!(idx.generation(7), Some(2));
+        assert_eq!(idx.generation(4), Some(0));
+        assert_eq!(idx.generation(99), None);
     }
 
     #[test]
     fn assert_overwrite_gen_zero_rejects_nonzero() {
         let pdf = b"%PDF\n7 2 obj\n<< /C 3 >>\nendobj\n4 0 obj\n<< /D 1 >>\nendobj\n";
-        assert!(assert_overwrite_gen_zero(pdf, 4, "x").is_ok());
+        let idx = ObjectIndex::new(pdf);
+        assert!(idx.assert_overwrite_gen_zero(4, "x").is_ok());
         // Absent is accepted: the caller owns the not-found path.
-        assert!(assert_overwrite_gen_zero(pdf, 99, "x").is_ok());
-        let e = assert_overwrite_gen_zero(pdf, 7, "catalog").expect_err("generation 2 rejected");
+        assert!(idx.assert_overwrite_gen_zero(99, "x").is_ok());
+        let e = idx
+            .assert_overwrite_gen_zero(7, "catalog")
+            .expect_err("generation 2 rejected");
         assert_eq!(e.code, "pdf::nonzero_generation");
         assert!(e.message.contains("generation 2"), "{}", e.message);
     }
@@ -873,14 +930,16 @@ mod tests {
     fn find_object_returns_last_revision() {
         // Same id serialized twice, as an incremental update writes it.
         let pdf = b"%PDF\n4 0 obj\n<< /V (old) >>\nendobj\n4 0 obj\n<< /V (new) >>\nendobj\n";
-        let (s, e) = find_object_bytes(pdf, 4).expect("found object 4");
+        let idx = ObjectIndex::new(pdf);
+        let (s, e) = idx.object_bytes(4).expect("found object 4");
         assert_eq!(&pdf[s..e], b"4 0 obj\n<< /V (new) >>\nendobj");
     }
 
     #[test]
     fn endobj_inside_string_does_not_truncate_object() {
         let pdf = b"%PDF\n3 0 obj\n<< /Title (My endobj report) /Author (X) >>\nendobj\n";
-        let (s, e) = find_object_bytes(pdf, 3).expect("found object 3");
+        let idx = ObjectIndex::new(pdf);
+        let (s, e) = idx.object_bytes(3).expect("found object 3");
         assert_eq!(
             &pdf[s..e],
             b"3 0 obj\n<< /Title (My endobj report) /Author (X) >>\nendobj"
@@ -894,7 +953,7 @@ mod tests {
     fn page_tree_cycle_is_rejected() {
         let pdf = b"%PDF\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
                     2 0 obj\n<< /Type /Pages /Kids [2 0 R] /Count 1 >>\nendobj\n";
-        let e = resolve_page_ids(pdf, 1).expect_err("cycle rejected");
+        let e = resolve_page_ids(&ObjectIndex::new(pdf), 1).expect_err("cycle rejected");
         assert_eq!(e.code, CODE_PARSE);
         assert!(e.message.contains("revisits"), "{}", e.message);
     }
@@ -905,11 +964,12 @@ mod tests {
         let pdf = b"%PDF\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
                     2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 /Rotate 90 >>\nendobj\n\
                     3 0 obj\n<< /Type /Page /Parent 2 0 R >>\nendobj\n";
-        let e = assert_unrotated_pages(pdf, 1, &[3]).expect_err("rotated page rejected");
+        let e = assert_unrotated_pages(&ObjectIndex::new(pdf), 1, &[3])
+            .expect_err("rotated page rejected");
         assert_eq!(e.code, "pdf::rotated_page");
         let flat = b"%PDF\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
                      2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n\
                      3 0 obj\n<< /Type /Page /Parent 2 0 R >>\nendobj\n";
-        assert!(assert_unrotated_pages(flat, 1, &[3]).is_ok());
+        assert!(assert_unrotated_pages(&ObjectIndex::new(flat), 1, &[3]).is_ok());
     }
 }

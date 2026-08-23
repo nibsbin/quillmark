@@ -1,5 +1,76 @@
 # Changelog
 
+## Unreleased
+
+- fix(blueprint): **a variant's `object` or `array<object>` cell expands per
+  property.** The cell went through the scalar path, so it rendered as
+  `controlled_by: !must_fill # object` — a null where the schema wants a
+  mapping, with every property's description, `default:` and type annotation
+  dropped, and the marker on a path the obligation predicate never warns at.
+  A cell is a field of its container and now expands as one, like every other
+  surface already did.
+- fix(core): **a `.quillignore` pattern holding more than one `*` ignores what
+  it names.** The matcher handled exactly one wildcard and returned no match
+  for the rest, so `**/*.tmp` and `*.sublime-*` were dead lines. Patterns now
+  compile once through `glob::Pattern`, matched against the whole path and the
+  basename. Two readings tighten to gitignore's: `*` stops at `/`, and a
+  pattern spelling out a `/` anchors at the bundle root rather than matching
+  any path that opens and closes with its halves. A line always ignores the
+  name it spells out as well: `[` opens a character class and is an ordinary
+  character in a filename, so `Cinzel[wght].ttf` ignores both the variable font
+  of that name and the class it describes.
+- refactor: **`RenderError::coded(code, message)` is the one constructor for a
+  single-error-diagnostic failure.** Nine sites across five crates spelled
+  `from_diag(Diagnostic::new(Severity::Error, msg).with_code(code))` by hand,
+  two of them as a per-crate `engine_err` helper the backends each carried
+  their own copy of. Additive to `quillmark-core`'s public API; no code, message
+  or shape changes.
+- refactor(pdfform): **a session holds its flattened PDF parsed, not as bytes
+  each render path reparses.** Flatten and parse now happen together in `open`
+  and `update`, the two places `field_specs` are set, so the derived flat PDF
+  moves only with the specs it comes from and `render_svg`/`render_png`/
+  `render_rgba` paint parsed pages. A malformed flatten now surfaces from the
+  call that produced it under one code, `pdfform::flat_parse_failed`, replacing
+  the per-format `pdfform::svg_parse_failed` and `pdfform::png_parse_failed`
+  raised at render time (neither documented, and both reachable only through a
+  bug in this crate's own flatten). Opening a session fails on that bug now,
+  including for a caller that only ever renders the AcroForm PDF, which is
+  stamped from the base and reads nothing flattened.
+- perf(pdf): **filling a PDF form no longer slows down with the size of its
+  background or its page count.** Reading one object from the base walks every
+  byte of it — the live copy is the last revision, so a scan cannot stop early
+  — and nothing memoized that, so a stamp or flatten pass paid O(pages) whole-
+  file scans and the live-edit path repaid them on every keystroke. The base's
+  object offsets are now collected in one pass and each read is a lookup: a
+  20-page 300 KB form stamps in 0.7 ms rather than 37 ms, flat in page count.
+
+  **breaking** in `quillmark-pdf`: `PdfUpdate::begin` and
+  `PdfUpdate::resolve_pages` take the `&ObjectIndex` the caller builds over the
+  base rather than its bytes, and `reader::find_object_bytes` /
+  `reader::object_dict` become `ObjectIndex::object_bytes` / `ObjectIndex::dict`.
+- **breaking** content: the op wire is a reading direction. `mark_op_to_value`,
+  `line_op_to_value` and `island_op_to_value` are removed from
+  `quillmark-content` — an op bundle is authored on the JS/Python side and
+  reaches Rust through `change_bundle_from_value`, so nothing in the workspace
+  ever emitted one and every wire change was made twice, once in code no product
+  path executes. The decoders are unchanged. Their round-trip tests become
+  decoder tests over literal JSON, which is what the wire actually is: an
+  encoder agreeing with its own reader never proved the shape a binding sends.
+- perf(content): **canonical serialization stops rebuilding the tree it just
+  built.** `to_canonical_value` normalized a copy — which already recursively
+  key-sorts every opaque bag reachable from it (island `props`, an unknown's
+  `attrs`) — and then ran a whole-tree `sort_keys_owned` over the encoded
+  result, re-collecting and re-allocating every object and array in the document
+  to reorder the handful of fixed keys the encoders insert themselves. The
+  encoders now emit those keys in ascending order and the terminal pass is
+  `canonicalize_keys`, which scans and returns when the tree is already
+  canonical. Canonical bytes are unchanged, byte for byte; a tree that somehow
+  arrives unsorted is still repaired rather than shipped.
+
+  The public `container_to_value` and `mark_to_value`, and the crate-internal
+  `island_to_value`, now emit their own keys in a different order. An unknown's `attrs` bag is
+  untouched, as in 0.99, and nothing hashes the op wire.
+
 ## v0.108.3 - 2026-08-21
 
 - fix(typst): **a paragraph holding one bare `/` renders instead of failing the

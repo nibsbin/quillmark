@@ -1,7 +1,6 @@
 use crate::quill::QuillConfig;
 use crate::{
     ContentHit, Diagnostic, Document, RenderError, RenderOptions, RenderResult, RenderedRegion,
-    Severity,
 };
 pub use quillmark_content::{ApplyError, Assoc, ChangeBundle, Delta, IslandOp, LineOp, MarkOp, Op};
 use std::sync::OnceLock;
@@ -40,12 +39,9 @@ pub trait SessionHandle: Send + Sync + 'static {
     /// keeps serving it. The returned [`ChangeSet`] reports the pages the edit
     /// visibly changed. Default: update is unsupported.
     fn update(&mut self, _json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> {
-        Err(RenderError::from_diag(
-            Diagnostic::new(
-                Severity::Error,
-                "this backend's session does not support update".to_string(),
-            )
-            .with_code("backend::update_unsupported".to_string()),
+        Err(RenderError::coded(
+            "backend::update_unsupported",
+            "this backend's session does not support update",
         ))
     }
 
@@ -315,6 +311,7 @@ impl LiveSession {
 mod tests {
     use super::*;
     use crate::version::QuillReference;
+    use crate::Severity;
     use std::str::FromStr;
 
     const QUILL_YAML: &str = "\

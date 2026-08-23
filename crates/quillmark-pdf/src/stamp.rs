@@ -21,7 +21,7 @@ use pdf_writer::{Chunk, Finish, Name, Rect, Ref, Str, TextStr};
 use quillmark_core::RenderedRegion;
 
 use crate::error::PdfError;
-use crate::reader::{err, object_dict, parse_indirect_ref, UpdatedObject};
+use crate::reader::{err, parse_indirect_ref, ObjectIndex, UpdatedObject};
 use crate::update::PdfUpdate;
 use crate::writer::{alloc_id, append_refs_to_array_key, dict_object, OnNonArray};
 use crate::{FieldSpec, FieldType, FormFont, TextAlign};
@@ -103,10 +103,11 @@ pub fn stamp(
     }
 
     let pdf = base;
-    let mut up = PdfUpdate::begin(&pdf, opts.producer.as_deref())?;
+    let idx = ObjectIndex::new(&pdf);
+    let mut up = PdfUpdate::begin(&idx, opts.producer.as_deref())?;
 
     if !fields.is_empty() {
-        let page_ids = up.resolve_pages(&pdf, fields)?;
+        let page_ids = up.resolve_pages(&idx, fields)?;
         let page_count = page_ids.len();
 
         let fonts = fonts_used(fields);
@@ -173,7 +174,7 @@ pub fn stamp(
 
         // A widget is fillable only if reachable both ways: the catalog's
         // `/AcroForm /Fields` (added here) and the page's `/Annots` (below).
-        let cat_dict = object_dict(&pdf, up.catalog_id, CODE_PARSE, "catalog")?;
+        let cat_dict = idx.dict(up.catalog_id, CODE_PARSE, "catalog")?;
         let mut cat_inner = cat_dict.to_vec();
         cat_inner.extend_from_slice(format!(" /AcroForm {acroform_id} 0 R").as_bytes());
         up.objects.push(dict_object(up.catalog_id, &cat_inner));
@@ -184,7 +185,7 @@ pub fn stamp(
             }
             let page_obj_id = page_ids[page_idx];
             let what = format!("page node {page_obj_id}");
-            let pg_dict = object_dict(&pdf, page_obj_id, CODE_PARSE, &what)?;
+            let pg_dict = idx.dict(page_obj_id, CODE_PARSE, &what)?;
             up.objects.push(dict_object(
                 page_obj_id,
                 &rewrite_page_with_annots(pg_dict, widget_refs)?,

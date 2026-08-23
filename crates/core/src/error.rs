@@ -454,6 +454,15 @@ impl RenderError {
         Self { diags: vec![diag] }
     }
 
+    /// A failure carrying one error diagnostic under `code`, the shape most
+    /// engine-side refusals take. A diagnostic needing a hint, a path or args
+    /// builds one and goes through [`from_diag`](Self::from_diag).
+    pub fn coded(code: &str, message: impl Into<String>) -> Self {
+        Self::from_diag(
+            Diagnostic::new(Severity::Error, message.into()).with_code(code.to_string()),
+        )
+    }
+
     pub fn diagnostics(&self) -> &[Diagnostic] {
         &self.diags
     }

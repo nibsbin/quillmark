@@ -11,7 +11,7 @@ use typst_svg::SvgOptions;
 use crate::error_mapping::map_typst_errors;
 use crate::overlay;
 use crate::world::QuillWorld;
-use quillmark_core::{Artifact, Diagnostic, OutputFormat, RenderError, RenderResult, Severity};
+use quillmark_core::{Artifact, Diagnostic, OutputFormat, RenderError, RenderResult};
 use quillmark_pdf::{stamp, StampOptions};
 
 pub(crate) fn render_options(pixel_per_pt: f32) -> RenderOptions {
@@ -54,12 +54,9 @@ pub(crate) fn render_document_pages(
     producer: Option<&str>,
 ) -> Result<RenderResult, RenderError> {
     if format == OutputFormat::Pdf && pages.is_some() {
-        return Err(RenderError::from_diag(
-            Diagnostic::new(
-                Severity::Error,
-                "PDF does not support page selection; pass null/None to render the full document, or use PNG/SVG".to_string(),
-            )
-            .with_code("typst::pdf_page_selection_not_supported".to_string()),
+        return Err(RenderError::coded(
+            "typst::pdf_page_selection_not_supported",
+            "PDF does not support page selection; pass null/None to render the full document, or use PNG/SVG",
         ));
     }
 
@@ -69,15 +66,11 @@ pub(crate) fn render_document_pages(
             let out_of_bounds: Vec<usize> =
                 slice.iter().copied().filter(|&i| i >= page_count).collect();
             if !out_of_bounds.is_empty() {
-                return Err(RenderError::from_diag(
-                    Diagnostic::new(
-                        Severity::Error,
-                        format!(
-                            "Page index out of bounds (page_count={}); offending indices: {:?}. Check `LiveSession.pageCount` before requesting pages.",
-                            page_count, out_of_bounds
-                        ),
-                    )
-                    .with_code("typst::page_index_out_of_bounds".to_string()),
+                return Err(RenderError::coded(
+                    "typst::page_index_out_of_bounds",
+                    format!(
+                        "Page index out of bounds (page_count={page_count}); offending indices: {out_of_bounds:?}. Check `LiveSession.pageCount` before requesting pages."
+                    ),
                 ));
             }
             slice.to_vec()
@@ -106,10 +99,7 @@ pub(crate) fn render_document_pages(
             for idx in selected_indices {
                 let pixmap = typst_render::render(&document.pages()[idx], &opts);
                 let png_data = pixmap.encode_png().map_err(|e| {
-                    RenderError::from_diag(
-                        Diagnostic::new(Severity::Error, format!("PNG encoding failed: {}", e))
-                            .with_code("typst::png_encoding".to_string()),
-                    )
+                    RenderError::coded("typst::png_encoding", format!("PNG encoding failed: {e}"))
                 })?;
                 artifacts.push(Artifact::new(png_data, OutputFormat::Png));
             }
@@ -117,9 +107,9 @@ pub(crate) fn render_document_pages(
         }
         OutputFormat::Pdf => {
             let pdf = typst_pdf::pdf(document, &PdfOptions::default()).map_err(|e| {
-                RenderError::from_diag(
-                    Diagnostic::new(Severity::Error, format!("PDF generation failed: {:?}", e))
-                        .with_code("typst::pdf_generation".to_string()),
+                RenderError::coded(
+                    "typst::pdf_generation",
+                    format!("PDF generation failed: {e:?}"),
                 )
             })?;
             let field_specs = overlay::build_field_specs(document, field_placements)?;

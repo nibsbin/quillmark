@@ -18,7 +18,7 @@
 //! The seam encoding and the storage encoding are the *same* canonical form.
 
 use crate::model::{
-    sort_keys_owned, Container, Invariant, Island, Line, LineKind, Loss, Mark,
+    canonicalize_keys, Container, Invariant, Island, Line, LineKind, Loss, Mark,
     MarkKind, Content, Usv,
 };
 use serde_json::{Map, Value};
@@ -50,9 +50,10 @@ impl std::error::Error for ParseError {}
 
 impl Content {
     /// Serialize to canonical JSON bytes. Normalizes a copy first, so the output
-    /// is canonical regardless of the caller's mark/island order, and sorts every
-    /// object key recursively, so the bytes do **not** depend on `serde_json`'s
-    /// `preserve_order` feature in the consumer's crate graph.
+    /// is canonical regardless of the caller's mark/island order, and every
+    /// object key comes out in ascending order at every depth, so the bytes do
+    /// **not** depend on `serde_json`'s `preserve_order` feature in the
+    /// consumer's crate graph.
     pub fn to_canonical_json(&self) -> String {
         to_canonical_value(self).to_string()
     }
@@ -67,7 +68,10 @@ impl Content {
 
     fn to_value(&self) -> Value {
         let mut root = Map::new();
-        root.insert("text".into(), Value::String(self.text.clone()));
+        root.insert(
+            "islands".into(),
+            Value::Array(self.islands.iter().map(island_to_value).collect()),
+        );
         root.insert(
             "lines".into(),
             Value::Array(self.lines.iter().map(line_to_value).collect()),
@@ -76,10 +80,7 @@ impl Content {
             "marks".into(),
             Value::Array(self.marks.iter().map(mark_to_value).collect()),
         );
-        root.insert(
-            "islands".into(),
-            Value::Array(self.islands.iter().map(island_to_value).collect()),
-        );
+        root.insert("text".into(), Value::String(self.text.clone()));
         Value::Object(root)
     }
 
@@ -119,7 +120,22 @@ impl Content {
 pub fn to_canonical_value(rt: &Content) -> Value {
     let mut rt = rt.clone();
     rt.normalize();
-    sort_keys_owned(rt.to_value())
+    let mut v = rt.to_value();
+    // Scans and returns: the encoders emit their fixed keys in ascending order,
+    // and every opaque bag under them was canonicalized by `normalize`. A key
+    // inserted out of order is still repaired here, so the freeze holds without
+    // the encoders having to be trusted for it.
+    canonicalize_keys(&mut v);
+    v
+}
+
+/// One map's own keys in ascending order, its values untouched. Shallow because
+/// every value below is a scalar, an array of encoder objects that sorted
+/// themselves, or a bag [`Content::normalize`] already canonicalized.
+fn sort_own_keys(m: Map<String, Value>) -> Map<String, Value> {
+    let mut entries: Vec<(String, Value)> = m.into_iter().collect();
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+    entries.into_iter().collect()
 }
 
 /// Parse the canonical content form from a structural [`Value`], normalize, and
@@ -218,10 +234,9 @@ pub fn line_kind_to_value(kind: &LineKind) -> Value {
     Value::Object(line_kind_fields(kind))
 }
 
-/// The same fields unwrapped, for the op wire ([`crate::ops`]), which flattens
-/// them beside its own keys and so carries the exact discriminant a
-/// `ContentLine` does.
-pub(crate) fn line_kind_fields(kind: &LineKind) -> Map<String, Value> {
+/// The same fields unwrapped, for [`line_to_value`], which flattens them beside
+/// a line's own keys.
+fn line_kind_fields(kind: &LineKind) -> Map<String, Value> {
     let mut m = Map::new();
     match kind {
         LineKind::Para => {
@@ -300,7 +315,10 @@ fn line_to_value(line: &Line) -> Value {
     if line.continues {
         m.insert("continues".into(), Value::Bool(true));
     }
-    Value::Object(m)
+    // `line_kind_fields` merges `kind` in ahead of `containers`/`continues`,
+    // which sort before it, so this one encoder cannot settle its order at the
+    // insert.
+    Value::Object(sort_own_keys(m))
 }
 
 fn line_from_value(v: &Value) -> Result<Line, ParseError> {
@@ -321,8 +339,7 @@ fn line_from_value(v: &Value) -> Result<Line, ParseError> {
     })
 }
 
-/// Encode a [`Container`] into its canonical wire object. Public so the op wire
-/// ([`crate::ops`]) reuses the same container shape a `ContentLine` carries.
+/// Encode a [`Container`] into its canonical wire object.
 pub fn container_to_value(c: &Container) -> Value {
     let mut m = Map::new();
     match c {
@@ -333,15 +350,15 @@ pub fn container_to_value(c: &Container) -> Value {
         } => {
             m.insert("container".into(), "list_item".into());
             m.insert("ordered".into(), Value::Bool(*ordered));
-            m.insert("start".into(), Value::from(*start));
             m.insert("ordinal".into(), Value::from(*ordinal));
+            m.insert("start".into(), Value::from(*start));
         }
         Container::Quote => {
             m.insert("container".into(), "quote".into());
         }
         Container::Unknown { tag, attrs } => {
-            m.insert("container".into(), Value::String(tag.clone()));
             m.insert("attrs".into(), attrs.clone());
+            m.insert("container".into(), Value::String(tag.clone()));
         }
     }
     Value::Object(m)
@@ -371,19 +388,12 @@ pub fn container_from_value(v: &Value) -> Result<Container, ParseError> {
     }
 }
 
-/// Encode a [`Mark`] (`{start, end, type, …}`) into its canonical wire object.
+/// Encode a [`Mark`] (`start`, `end`, `type`, …) into its canonical wire object.
 pub fn mark_to_value(mark: &Mark) -> Value {
-    Value::Object(mark_fields(mark.start, mark.end, &mark.kind))
-}
-
-/// The same fields unwrapped and over a mark's parts, for the op wire
-/// ([`crate::ops`]), which flattens them beside its own keys, carries the exact
-/// `type` discriminant a `ContentMark` does, and holds no [`Mark`].
-pub(crate) fn mark_fields(start: Usv, end: Usv, kind: &MarkKind) -> Map<String, Value> {
     let mut m = Map::new();
-    m.insert("start".into(), Value::from(start));
-    m.insert("end".into(), Value::from(end));
-    match kind {
+    m.insert("start".into(), Value::from(mark.start));
+    m.insert("end".into(), Value::from(mark.end));
+    match &mark.kind {
         MarkKind::Strong => {
             m.insert("type".into(), "strong".into());
         }
@@ -412,7 +422,10 @@ pub(crate) fn mark_fields(start: Usv, end: Usv, kind: &MarkKind) -> Map<String, 
             m.insert("attrs".into(), attrs.clone());
         }
     }
-    m
+    // A kind's own keys do not all sort after `start`/`end` — `attrs` precedes
+    // both, `id` falls between them — so this one encoder cannot settle its
+    // order at the insert.
+    Value::Object(sort_own_keys(m))
 }
 
 /// What every mark carries whatever its type.
@@ -654,15 +667,14 @@ pub fn parse_cell(v: &Value) -> (String, Vec<Mark>) {
     (text, marks)
 }
 
-/// Build a table-cell object `{text, marks}`. Key order is fixed by the
-/// recursive key-sort in [`Content::normalize`], not here.
+/// Build a table-cell object `{marks, text}`.
 pub(crate) fn cell_to_value(text: &str, marks: &[Mark]) -> Value {
     let mut m = Map::new();
-    m.insert("text".into(), Value::String(text.to_string()));
     m.insert(
         "marks".into(),
         Value::Array(marks.iter().map(mark_to_value).collect()),
     );
+    m.insert("text".into(), Value::String(text.to_string()));
     Value::Object(m)
 }
 
@@ -822,18 +834,12 @@ pub(crate) fn table_shape_error(props: &Value) -> Option<Invariant> {
 }
 
 pub(crate) fn island_to_value(island: &Island) -> Value {
-    Value::Object(island_fields(island))
-}
-
-/// The same fields unwrapped, for the op wire ([`crate::ops`]), which flattens
-/// them beside its own keys.
-pub(crate) fn island_fields(island: &Island) -> Map<String, Value> {
     let mut m = Map::new();
     m.insert("id".into(), Value::String(island.id.clone()));
-    m.insert("type".into(), Value::String(island.island_type.clone()));
-    m.insert("props".into(), island.props.clone());
     m.insert("loss".into(), island.loss.as_str().into());
-    m
+    m.insert("props".into(), island.props.clone());
+    m.insert("type".into(), Value::String(island.island_type.clone()));
+    Value::Object(m)
 }
 
 pub(crate) fn island_from_value(v: &Value) -> Result<Island, ParseError> {
@@ -1060,6 +1066,133 @@ mod tests {
         let mut two = one.clone();
         two.islands[0].props = serde_json::json!({"a": 2, "b": 1}); // keys reversed
         assert_eq!(one.to_canonical_json(), two.to_canonical_json());
+    }
+
+    /// Every encoder emits its own keys in ascending order, so
+    /// [`to_canonical_value`]'s backstop scans and returns instead of rebuilding
+    /// the tree. A key inserted out of order still serializes canonically — the
+    /// backstop repairs it — so nothing else notices the regression.
+    #[test]
+    fn encoders_emit_keys_in_ascending_order() {
+        use crate::model::is_value_key_sorted;
+        let bag = || serde_json::json!({"a": 1, "b": 2});
+        let sorted = |v: &Value| is_value_key_sorted(v);
+
+        let kinds = [
+            MarkKind::Strong,
+            MarkKind::Emph,
+            MarkKind::Underline,
+            MarkKind::Strike,
+            MarkKind::Code,
+            MarkKind::Link { url: "u".into() },
+            MarkKind::Anchor { id: "a".into() },
+            MarkKind::Unknown {
+                tag: "kbd".into(),
+                attrs: bag(),
+            },
+        ];
+        let marks: Vec<Mark> = kinds
+            .iter()
+            .map(|kind| Mark {
+                start: 0,
+                end: 1,
+                kind: kind.clone(),
+            })
+            .collect();
+        for m in &marks {
+            assert!(sorted(&mark_to_value(m)), "mark {:?}", m.kind);
+        }
+        assert!(sorted(&cell_to_value("t", &marks)));
+
+        let containers = vec![
+            Container::ListItem {
+                ordered: true,
+                start: 3,
+                ordinal: 1,
+            },
+            Container::Quote,
+            Container::Unknown {
+                tag: "indent".into(),
+                attrs: bag(),
+            },
+        ];
+        for c in &containers {
+            assert!(sorted(&container_to_value(c)), "container {c:?}");
+        }
+
+        let line_kinds = [
+            LineKind::Para,
+            LineKind::Heading { level: 2 },
+            LineKind::Code {
+                lang: Some("rust".into()),
+            },
+            LineKind::Code { lang: None },
+            LineKind::Island,
+            LineKind::Rule,
+            LineKind::Unknown {
+                tag: "callout".into(),
+                attrs: bag(),
+            },
+        ];
+        for kind in line_kinds {
+            for continues in [false, true] {
+                let line = Line {
+                    kind: kind.clone(),
+                    containers: containers.clone(),
+                    continues,
+                };
+                assert!(sorted(&line_to_value(&line)), "line {:?}", line.kind);
+            }
+        }
+
+        for island_type in ["table", "image", "widget"] {
+            let island = Island {
+                id: "i1".into(),
+                island_type: island_type.into(),
+                props: bag(),
+                loss: Loss::LOSSLESS,
+            };
+            assert!(sorted(&island_to_value(&island)), "island {island_type}");
+        }
+    }
+
+    /// The whole assembled tree, table cells and all: what the backstop actually
+    /// scans.
+    #[test]
+    fn the_canonical_tree_needs_no_repair() {
+        use crate::model::is_value_key_sorted;
+        let mut rt = Content::empty();
+        rt.text = "hi\n\u{FFFC}".into();
+        rt.lines = vec![
+            Line {
+                kind: LineKind::Heading { level: 2 },
+                containers: vec![Container::Quote],
+                continues: false,
+            },
+            Line {
+                kind: LineKind::Island,
+                containers: vec![],
+                continues: false,
+            },
+        ];
+        rt.marks = vec![Mark {
+            start: 0,
+            end: 2,
+            kind: MarkKind::Link { url: "u".into() },
+        }];
+        rt.islands = vec![Island {
+            id: "i1".into(),
+            island_type: "table".into(),
+            props: serde_json::json!({
+                "header": [{"text": "h", "marks": [{"start": 0, "end": 1, "type": "emph"}]}],
+                "rows": [[{"text": "r", "marks": []}]],
+                "aligns": ["none"],
+            }),
+            loss: Loss::LOSSLESS,
+        }];
+        rt.normalize();
+        assert_eq!(rt.validate(), Ok(()));
+        assert!(is_value_key_sorted(&rt.to_value()));
     }
 
     #[test]

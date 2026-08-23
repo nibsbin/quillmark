@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::path::{Path, PathBuf};
 
-use quillmark_core::{Diagnostic, FileTreeNode, Quill, QuillIgnore, RenderError, Severity};
+use quillmark_core::{Diagnostic, FileTreeNode, Quill, QuillIgnore, RenderError};
 
 /// Load a quill from a filesystem directory. Honours a root `.quillignore`,
 /// else a default ignore set.
@@ -22,10 +22,7 @@ pub fn quill_from_path_with_warnings<P: AsRef<Path>>(
     path: P,
 ) -> Result<(Quill, Vec<Diagnostic>), RenderError> {
     let tree = load_tree_from_path(path.as_ref()).map_err(|e| {
-        RenderError::from_diag(
-            Diagnostic::new(Severity::Error, format!("Failed to load quill: {}", e))
-                .with_code("quill::load_failed".to_string()),
-        )
+        RenderError::coded("quill::load_failed", format!("Failed to load quill: {e}"))
     })?;
     Quill::from_tree_with_warnings(tree).map_err(RenderError::new)
 }
@@ -141,5 +138,20 @@ mod tests {
         let tree = load_tree_from_path(root).unwrap();
         assert!(tree.get_file("leak.txt").is_none());
         assert_eq!(tree.get_file("real.txt"), Some(&b"ok"[..]));
+    }
+
+    #[test]
+    fn load_dir_honours_multi_wildcard_ignore_patterns() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        std::fs::write(root.join(".quillignore"), "**/*.tmp\n").unwrap();
+        std::fs::create_dir(root.join("nested")).unwrap();
+        std::fs::write(root.join("nested/scratch.tmp"), b"drop").unwrap();
+        std::fs::write(root.join("nested/plate.typ"), b"keep").unwrap();
+
+        let tree = load_tree_from_path(root).unwrap();
+        assert!(tree.get_file("nested/scratch.tmp").is_none());
+        assert_eq!(tree.get_file("nested/plate.typ"), Some(&b"keep"[..]));
     }
 }

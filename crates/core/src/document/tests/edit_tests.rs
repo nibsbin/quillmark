@@ -1,7 +1,7 @@
 
 use crate::document::edit::{is_valid_field_name, EditError};
 use crate::document::meta::is_valid_kind_name;
-use crate::document::{Card, Document};
+use crate::document::{Card, Codec, Document};
 use crate::value::QuillValue;
 use crate::version::QuillReference;
 use std::str::FromStr;
@@ -338,7 +338,7 @@ fn test_overwrite_field_sets_directly() {
 
     let mut card = Card::new("note").unwrap();
     card.overwrite_field("intro", content.clone()).unwrap();
-    let read = card.field_richtext("intro").unwrap().unwrap();
+    let read = card.field_content("intro", Codec::Richtext).unwrap().unwrap();
     assert_eq!(read, content);
     assert!(read.marks.iter().any(|m| matches!(m.kind, MarkKind::Underline)));
 
@@ -358,14 +358,14 @@ fn test_revise_field_diff_imports_and_returns_delta() {
     let delta = card.revise_field("intro", "hello target world").unwrap();
     assert!(!delta.ops.is_empty());
 
-    let mut base = card.field_richtext("intro").unwrap().unwrap();
+    let mut base = card.field_content("intro", Codec::Richtext).unwrap().unwrap();
     // 6..12 is "target".
     base.marks
         .push(Mark::new(6, 12, MarkKind::Anchor { id: "c1".into() }));
     base.normalize();
     card.overwrite_field("intro", base).unwrap();
     card.revise_field("intro", "why keep the target here").unwrap();
-    let read = card.field_richtext("intro").unwrap().unwrap();
+    let read = card.field_content("intro", Codec::Richtext).unwrap().unwrap();
     assert!(read
         .marks
         .iter()
@@ -396,7 +396,7 @@ fn test_revise_field_checked_preserves_anchors_and_enforces_inline() {
         .unwrap();
     assert!(!delta.ops.is_empty());
 
-    let mut base = card.field_richtext("subject").unwrap().unwrap();
+    let mut base = card.field_content("subject", Codec::Richtext).unwrap().unwrap();
     // 6..12 is "target".
     base.marks
         .push(Mark::new(6, 12, MarkKind::Anchor { id: "c1".into() }));
@@ -404,7 +404,7 @@ fn test_revise_field_checked_preserves_anchors_and_enforces_inline() {
     card.overwrite_field("subject", base).unwrap();
     card.revise_field_checked("subject", "why keep the target here", &inline)
         .unwrap();
-    let read = card.field_richtext("subject").unwrap().unwrap();
+    let read = card.field_content("subject", Codec::Richtext).unwrap().unwrap();
     assert!(
         read.marks
             .iter()
@@ -412,19 +412,19 @@ fn test_revise_field_checked_preserves_anchors_and_enforces_inline() {
         "anchor should rebase onto surviving text, unlike the cold commit_field"
     );
 
-    let before = card.field_markdown("subject").unwrap().unwrap();
+    let before = card.field_text("subject", Codec::Richtext).unwrap().unwrap();
     let err = card
         .revise_field_checked("subject", "line one\n\nline two", &inline)
         .unwrap_err();
     assert_eq!(err.code(), "edit::field_not_inline");
-    assert_eq!(card.field_markdown("subject").unwrap().unwrap(), before);
+    assert_eq!(card.field_text("subject", Codec::Richtext).unwrap().unwrap(), before);
 
     let block = FieldSchema::new("body".to_string(), FieldType::RichText { inline: false }, None);
     let d = card
         .revise_field_checked("body", "para one\n\npara two", &block)
         .unwrap();
     assert!(!d.ops.is_empty());
-    assert!(card.field_markdown("body").unwrap().unwrap().contains("para two"));
+    assert!(card.field_text("body", Codec::Richtext).unwrap().unwrap().contains("para two"));
 }
 
 #[test]
@@ -440,7 +440,7 @@ fn test_commit_field_richtext_content_object_reads_back() {
     commit_richtext(&mut card, "intro", &json, false).unwrap();
 
     assert!(card.payload().get("intro").unwrap().as_json().is_object());
-    let read = card.field_richtext("intro").unwrap().unwrap();
+    let read = card.field_content("intro", Codec::Richtext).unwrap().unwrap();
     assert_eq!(read, content);
     assert!(read.marks.iter().any(|m| matches!(m.kind, MarkKind::Underline)));
 }
@@ -450,11 +450,11 @@ fn test_commit_field_richtext_markdown_null_and_rejects_bad() {
     let mut card = Card::new("note").unwrap();
 
     commit_richtext(&mut card, "intro", &serde_json::json!("**bold** intro"), false).unwrap();
-    assert_eq!(card.field_markdown("intro").unwrap().unwrap(), "**bold** intro");
+    assert_eq!(card.field_text("intro", Codec::Richtext).unwrap().unwrap(), "**bold** intro");
 
     commit_richtext(&mut card, "intro", &serde_json::Value::Null, false).unwrap();
     assert!(card.payload().get("intro").unwrap().as_json().is_null());
-    assert!(card.field_richtext("intro").unwrap().unwrap().is_blank());
+    assert!(card.field_content("intro", Codec::Richtext).unwrap().unwrap().is_blank());
 
     assert_eq!(
         commit_richtext(&mut card, "intro", &serde_json::json!({ "not": "a content" }), false)
@@ -475,7 +475,7 @@ fn test_commit_field_richtext_inline_enforced_at_write() {
     let mut card = Card::new("note").unwrap();
 
     commit_richtext(&mut card, "title", &serde_json::json!("A single line"), true).unwrap();
-    assert_eq!(card.field_markdown("title").unwrap().unwrap(), "A single line");
+    assert_eq!(card.field_text("title", Codec::Richtext).unwrap().unwrap(), "A single line");
 
     let err = commit_richtext(
         &mut card,
@@ -485,7 +485,7 @@ fn test_commit_field_richtext_inline_enforced_at_write() {
     )
     .unwrap_err();
     assert_eq!(err.code(), "edit::field_not_inline");
-    assert_eq!(card.field_markdown("title").unwrap().unwrap(), "A single line");
+    assert_eq!(card.field_text("title", Codec::Richtext).unwrap().unwrap(), "A single line");
 }
 
 #[test]
@@ -577,14 +577,14 @@ fn test_commit_field_rejects_bad_name() {
 }
 
 #[test]
-fn test_field_richtext_absent_and_non_richtext() {
+fn test_field_content_absent_and_non_content() {
     let mut card = Card::new("note").unwrap();
-    assert!(card.field_richtext("missing").is_none());
-    assert!(card.field_markdown("missing").is_none());
+    assert!(card.field_content("missing", Codec::Richtext).is_none());
+    assert!(card.field_text("missing", Codec::Richtext).is_none());
 
     card.store_field("count", 3).unwrap();
-    assert!(card.field_richtext("count").unwrap().is_err());
-    assert!(card.field_markdown("count").unwrap().is_err());
+    assert!(card.field_content("count", Codec::Richtext).unwrap().is_err());
+    assert!(card.field_text("count", Codec::Richtext).unwrap().is_err());
 }
 
 #[test]
@@ -764,7 +764,7 @@ fn test_apply_field_change_splices_and_persists() {
     .unwrap();
 
     assert!(card.payload().get("intro").unwrap().as_json().is_object());
-    let rt = card.field_richtext("intro").unwrap().unwrap();
+    let rt = card.field_content("intro", Codec::Richtext).unwrap().unwrap();
     assert_eq!(rt.text, "abXc");
     assert!(rt.marks.iter().any(|m| matches!(m.kind, MarkKind::Strong)));
 }
@@ -788,7 +788,7 @@ fn test_apply_field_change_treats_an_absent_field_as_empty() {
     let mut card = Card::new("note").unwrap();
     card.apply_field_change("intro", &ChangeBundle::default())
         .expect("a zero-base bundle lands on the empty content");
-    assert_eq!(card.field_markdown("intro").unwrap().unwrap(), "");
+    assert_eq!(card.field_text("intro", Codec::Richtext).unwrap().unwrap(), "");
 
     let stale = ChangeBundle {
         delta: quillmark_content::Delta {

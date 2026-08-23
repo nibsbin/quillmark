@@ -87,9 +87,53 @@ node_modules/
 .git/
 "#;
     let ignore = QuillIgnore::from_content(ignore_content);
-    assert_eq!(ignore.patterns.len(), 4);
-    assert!(ignore.patterns.contains(&"*.tmp".to_string()));
-    assert!(ignore.patterns.contains(&"target/".to_string()));
+    assert!(ignore.is_ignored("scratch.tmp"));
+    assert!(ignore.is_ignored("target/debug"));
+    assert!(!ignore.is_ignored("# This is a comment"));
+    // A blank line is not a rule that swallows everything.
+    assert!(!ignore.is_ignored("plate.typ"));
+}
+
+#[test]
+fn test_quillignore_multiple_wildcards() {
+    let ignore = QuillIgnore::new(vec![
+        "**/*.tmp".to_string(),
+        "*.sublime-*".to_string(),
+        "a*b*c".to_string(),
+    ]);
+
+    assert!(ignore.is_ignored("scratch.tmp"));
+    assert!(ignore.is_ignored("deep/nested/scratch.tmp"));
+    assert!(!ignore.is_ignored("scratch.txt"));
+
+    assert!(ignore.is_ignored("quill.sublime-project"));
+    assert!(ignore.is_ignored("editor/quill.sublime-workspace"));
+
+    assert!(ignore.is_ignored("axbxc"));
+    assert!(!ignore.is_ignored("axbx"));
+}
+
+#[test]
+fn test_quillignore_wildcard_does_not_cross_slash() {
+    let ignore = QuillIgnore::new(vec!["assets/*.png".to_string()]);
+
+    assert!(ignore.is_ignored("assets/logo.png"));
+    assert!(!ignore.is_ignored("assets/icons/logo.png"));
+    assert!(!ignore.is_ignored("vendor/assets/logo.png"));
+}
+
+/// `[` opens a glob character class and is an ordinary character in a filename,
+/// so a line spelling one out ignores the file it names as well as the class it
+/// describes. The variable font in the usaf_memo fixture is spelled this way.
+#[test]
+fn test_quillignore_bracketed_name_ignores_the_file_it_spells() {
+    let ignore = QuillIgnore::new(vec!["Cinzel[wght].ttf".to_string()]);
+
+    assert!(ignore.is_ignored("Cinzel[wght].ttf"));
+    assert!(ignore.is_ignored("fonts/Cinzel/Cinzel[wght].ttf"));
+    // The character-class reading survives alongside it.
+    assert!(ignore.is_ignored("Cinzelw.ttf"));
+    assert!(!ignore.is_ignored("Cinzel.ttf"));
 }
 
 #[test]
@@ -2355,6 +2399,21 @@ fn inline_richtext_example_over_one_para_is_a_load_error() {
         err.iter()
             .any(|d| d.code.as_deref() == Some("validation::not_inline")),
         "a two-paragraph inline example should fail load with validation::not_inline, got: {err:?}"
+    );
+}
+
+/// A richtext literal is authored as markdown or as a canonical content object;
+/// a bare scalar is neither, and the load error says so rather than importing
+/// the scalar's text.
+#[test]
+fn a_bare_scalar_richtext_example_is_a_load_error() {
+    let err = quill_with_field("    tag:\n      type: richtext\n      example: 47\n").unwrap_err();
+    assert!(
+        err.iter().any(|d| {
+            d.code.as_deref() == Some("quill::richtext_example_import")
+                && d.message.contains("expected a markdown string")
+        }),
+        "a numeric richtext example should fail load naming the encoding, got: {err:?}"
     );
 }
 

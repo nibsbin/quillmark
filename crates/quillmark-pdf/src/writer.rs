@@ -3,9 +3,7 @@
 //! `/Producer` stamp.
 
 use crate::error::PdfError;
-use crate::reader::{
-    assert_overwrite_gen_zero, err, find_dict_value, object_dict, splice_dict_value, UpdatedObject,
-};
+use crate::reader::{err, find_dict_value, splice_dict_value, ObjectIndex, UpdatedObject};
 
 const CODE_PARSE: &str = "pdf::write";
 
@@ -133,7 +131,7 @@ pub(crate) fn upsert_producer(info_dict: &[u8], literal: &[u8]) -> Vec<u8> {
 /// `/Info` onto `objects`. Returns `Some(info_id)` when a new `/Info` was
 /// allocated, which the caller threads into the trailer.
 pub(crate) fn apply_producer_stamp(
-    pdf: &[u8],
+    idx: &ObjectIndex,
     info_ref: Option<(u32, u16)>,
     producer: &str,
     next_id: &mut u32,
@@ -144,9 +142,9 @@ pub(crate) fn apply_producer_stamp(
         Some((info_id, _)) => {
             // Overwritten in place at generation 0; a non-zero-generation
             // `/Info` would be silently corrupted.
-            assert_overwrite_gen_zero(pdf, info_id, "/Info")?;
+            idx.assert_overwrite_gen_zero(info_id, "/Info")?;
             let what = format!("/Info object {info_id}");
-            let info_dict = object_dict(pdf, info_id, CODE_PARSE, &what)?;
+            let info_dict = idx.dict(info_id, CODE_PARSE, &what)?;
             objects.push(dict_object(info_id, &upsert_producer(info_dict, &literal)));
             Ok(None)
         }

@@ -157,40 +157,20 @@ impl ChangeBundle {
     }
 }
 
-// The op converters below reuse `serial`'s hand-written encoding for
-// `MarkKind` / `LineKind` / `Container`, so an `applyChange` bundle speaks the
-// same shapes the content read surface does rather than a second serde-derived
-// dialect.
+// The op readers below reuse `serial`'s hand-written readers for `MarkKind` /
+// `LineKind` / `Container`, so an `applyChange` bundle speaks the same shapes
+// the content read surface does rather than a second serde-derived dialect.
+// The wire is a reading direction: bundles are authored on the JS/Python side,
+// and no encoder answers these.
 
 use crate::serial::{
-    container_from_authored_value, container_to_value, island_fields, island_from_value,
-    line_kind_fields, line_kind_from_authored_value, mark_fields, mark_from_authored_value,
-    usv_from, ParseError,
+    container_from_authored_value, island_from_value, line_kind_from_authored_value,
+    mark_from_authored_value, usv_from, ParseError,
 };
-use serde_json::{Map, Value};
+use serde_json::Value;
 
-/// Encode a [`MarkOp`] to its wire object. `Add`/`Remove` carry the mark
-/// vocabulary (`{op, start, end, type, …}`); `RemoveAnchor` is `{op, id}`.
-pub fn mark_op_to_value(op: &MarkOp) -> Value {
-    let mut m = Map::new();
-    match op {
-        MarkOp::Add { start, end, kind } => {
-            m.insert("op".into(), "add".into());
-            m.extend(mark_fields(*start, *end, kind));
-        }
-        MarkOp::Remove { start, end, kind } => {
-            m.insert("op".into(), "remove".into());
-            m.extend(mark_fields(*start, *end, kind));
-        }
-        MarkOp::RemoveAnchor { id } => {
-            m.insert("op".into(), "removeAnchor".into());
-            m.insert("id".into(), Value::String(id.clone()));
-        }
-    }
-    Value::Object(m)
-}
-
-/// Decode a [`MarkOp`] from its wire object. `add`/`remove` read the mark
+/// Decode a [`MarkOp`] from its wire object (`{op, start, end, type, …}` for
+/// `add`/`remove`, `{op, id}` for `removeAnchor`). `add`/`remove` read the mark
 /// vocabulary on the authored lane, which refuses `attrs` beside a built-in
 /// `type` rather than resolving to the built-in and dropping them.
 pub fn mark_op_from_value(v: &Value) -> Result<MarkOp, ParseError> {
@@ -223,42 +203,8 @@ pub fn mark_op_from_value(v: &Value) -> Result<MarkOp, ParseError> {
     }
 }
 
-/// Encode a [`LineOp`] to its wire object. `SetKind` flattens the line-kind
-/// discriminant (`kind`/`level`/`lang`) alongside `op`/`line`.
-pub fn line_op_to_value(op: &LineOp) -> Value {
-    let mut m = Map::new();
-    match op {
-        LineOp::Split { at } => {
-            m.insert("op".into(), "split".into());
-            m.insert("at".into(), Value::from(*at));
-        }
-        LineOp::Join { line } => {
-            m.insert("op".into(), "join".into());
-            m.insert("line".into(), Value::from(*line));
-        }
-        LineOp::SetKind { line, kind } => {
-            m.insert("op".into(), "setKind".into());
-            m.insert("line".into(), Value::from(*line));
-            m.extend(line_kind_fields(kind));
-        }
-        LineOp::SetContainers { line, containers } => {
-            m.insert("op".into(), "setContainers".into());
-            m.insert("line".into(), Value::from(*line));
-            m.insert(
-                "containers".into(),
-                Value::Array(containers.iter().map(container_to_value).collect()),
-            );
-        }
-        LineOp::SetContinues { line, continues } => {
-            m.insert("op".into(), "setContinues".into());
-            m.insert("line".into(), Value::from(*line));
-            m.insert("continues".into(), Value::Bool(*continues));
-        }
-    }
-    Value::Object(m)
-}
-
-/// Decode a [`LineOp`] from its wire object.
+/// Decode a [`LineOp`] from its wire object. `setKind` carries the line-kind
+/// discriminant (`kind`/`level`/`lang`) flattened alongside `op`/`line`.
 pub fn line_op_from_value(v: &Value) -> Result<LineOp, ParseError> {
     let o = v.as_object().ok_or(ParseError::Shape("line op"))?;
     let line = || usv_from(o.get("line"), "line op line");
@@ -292,23 +238,8 @@ pub fn line_op_from_value(v: &Value) -> Result<LineOp, ParseError> {
     }
 }
 
-/// Encode an [`IslandOp`] to its wire object. Both arms flatten the island
-/// vocabulary (`{id, type, props, loss}`) alongside `op`.
-pub fn island_op_to_value(op: &IslandOp) -> Value {
-    let (verb, at, island) = match op {
-        IslandOp::Set { island } => ("set", None, island),
-        IslandOp::Insert { at, island } => ("insert", Some(*at), island),
-    };
-    let mut m = Map::new();
-    m.insert("op".into(), verb.into());
-    if let Some(at) = at {
-        m.insert("at".into(), Value::from(at));
-    }
-    m.extend(island_fields(island));
-    Value::Object(m)
-}
-
-/// Decode an [`IslandOp`] from its wire object.
+/// Decode an [`IslandOp`] from its wire object. Both arms carry the island
+/// vocabulary (`{id, type, props, loss}`) flattened alongside `op`.
 pub fn island_op_from_value(v: &Value) -> Result<IslandOp, ParseError> {
     let o = v.as_object().ok_or(ParseError::Shape("island op"))?;
     let island = || island_from_value(v);
@@ -493,9 +424,8 @@ impl Content {
         });
 
         self.text = new_text;
-        self.lines = sync_lines_for_delta(&old_chars, old_lines, delta);
         let old_islands = std::mem::take(&mut self.islands);
-        self.islands = sync_islands_for_delta(&old_chars, old_islands, delta);
+        (self.lines, self.islands) = sync_for_delta(&old_chars, old_lines, old_islands, delta);
         if self.lines.len() != self.segment_count() {
             return Err(ApplyError::LineCountMismatch {
                 lines: self.lines.len(),
@@ -861,53 +791,66 @@ fn sanitize_inserts(delta: &Delta) -> Cow<'_, Delta> {
     Cow::Owned(Delta { ops })
 }
 
-/// Walk `delta` over `old_chars` and mirror `\n` insert/delete in `lines`, in
-/// one forward pass rather than per-`\n` mid-`Vec` `remove`/`insert`.
+/// Walk `delta` over `old_chars` once, mirroring both structures the base chars
+/// index: `\n` insert/delete in `lines`, and a deleted [`ISLAND_SLOT`] dropping
+/// its island. A `Retain`/`Delete` reaching past the end of the base names no
+/// char.
 ///
-/// The cursor sits *in* a line, `cur`; downstream of it is always the untouched
-/// original suffix (`rest`). `cur == None` is the past-the-end state on a
-/// malformed content (more `\n` than lines), where a split clones a default
-/// line.
-fn sync_lines_for_delta(old_chars: &[char], old_lines: Vec<Line>, delta: &Delta) -> Vec<Line> {
-    let cap = old_lines.len();
+/// The line cursor sits *in* a line, `cur`; downstream of it is always the
+/// untouched original suffix (`rest`), so lines are emitted in order rather than
+/// by per-`\n` mid-`Vec` `remove`/`insert`. `cur == None` is the past-the-end
+/// state on a malformed content (more `\n` than lines), where a split clones a
+/// default line.
+///
+/// Islands are stored in slot order, so the Nth slot the walk passes backs the
+/// Nth island.
+fn sync_for_delta(
+    old_chars: &[char],
+    old_lines: Vec<Line>,
+    old_islands: Vec<Island>,
+    delta: &Delta,
+) -> (Vec<Line>, Vec<Island>) {
     let mut rest = old_lines.into_iter();
-    let mut out: Vec<Line> = Vec::with_capacity(cap);
+    let mut lines: Vec<Line> = Vec::with_capacity(rest.len());
     let mut cur: Option<Line> = rest.next();
+    let mut keep = vec![true; old_islands.len()];
+    let mut slot = 0usize;
     let mut old = 0usize;
 
     for op in &delta.ops {
         match op {
-            Op::Retain(n) => {
-                for _ in 0..*n {
-                    if old >= old_chars.len() {
-                        break;
+            Op::Retain(n) | Op::Delete(n) => {
+                let deleted = matches!(op, Op::Delete(_));
+                let end = old.saturating_add(*n).min(old_chars.len());
+                for &c in &old_chars[old..end] {
+                    match c {
+                        // A deleted '\n' merges the next original into `cur`.
+                        '\n' if deleted => {
+                            rest.next();
+                        }
+                        '\n' => {
+                            lines.extend(cur.take());
+                            cur = rest.next();
+                        }
+                        ISLAND_SLOT => {
+                            if deleted && let Some(k) = keep.get_mut(slot) {
+                                *k = false;
+                            }
+                            slot += 1;
+                        }
+                        _ => {}
                     }
-                    if old_chars[old] == '\n' {
-                        out.extend(cur.take());
-                        cur = rest.next();
-                    }
-                    old += 1;
                 }
+                old = end;
             }
-            Op::Delete(n) => {
-                for _ in 0..*n {
-                    if old >= old_chars.len() {
-                        break;
-                    }
-                    // A deleted '\n' merges the next original into `cur`.
-                    if old_chars[old] == '\n' {
-                        rest.next();
-                    }
-                    old += 1;
-                }
-            }
+            // A raw ISLAND_SLOT insert is rejected before this walk.
             Op::Insert(s) => {
                 for c in s.chars() {
                     if c == '\n' {
                         let mut new_line = match cur.take() {
                             Some(line) => {
                                 let clone = line.clone();
-                                out.push(line);
+                                lines.push(line);
                                 clone
                             }
                             None => Line::new(LineKind::Para),
@@ -920,59 +863,14 @@ fn sync_lines_for_delta(old_chars: &[char], old_lines: Vec<Line>, delta: &Delta)
         }
     }
 
-    out.extend(cur);
-    out.extend(rest);
-    out
-}
-
-/// Drop any island whose [`ISLAND_SLOT`] char `delta` deletes. Islands are
-/// stored in slot order, so the Nth slot backs the Nth island.
-fn sync_islands_for_delta(
-    old_chars: &[char],
-    old_islands: Vec<Island>,
-    delta: &Delta,
-) -> Vec<Island> {
-    let mut keep = vec![true; old_islands.len()];
-    let mut old = 0usize;
-    let mut slot_idx = 0usize;
-
-    for op in &delta.ops {
-        match op {
-            Op::Retain(n) => {
-                for _ in 0..*n {
-                    if old >= old_chars.len() {
-                        break;
-                    }
-                    if old_chars[old] == ISLAND_SLOT {
-                        slot_idx += 1;
-                    }
-                    old += 1;
-                }
-            }
-            Op::Delete(n) => {
-                for _ in 0..*n {
-                    if old >= old_chars.len() {
-                        break;
-                    }
-                    if old_chars[old] == ISLAND_SLOT {
-                        if let Some(k) = keep.get_mut(slot_idx) {
-                            *k = false;
-                        }
-                        slot_idx += 1;
-                    }
-                    old += 1;
-                }
-            }
-            // A raw ISLAND_SLOT insert is rejected before this walk.
-            Op::Insert(_) => {}
-        }
-    }
-
-    old_islands
+    lines.extend(cur);
+    lines.extend(rest);
+    let islands = old_islands
         .into_iter()
         .zip(keep)
         .filter_map(|(island, keep)| keep.then_some(island))
-        .collect()
+        .collect();
+    (lines, islands)
 }
 
 fn newline_at_line_boundary(text: &str, line: usize) -> Result<Usv, ApplyError> {
@@ -998,72 +896,117 @@ mod tests {
     use crate::import::from_markdown;
 
     #[test]
-    fn mark_op_wire_round_trips_each_variant() {
-        let ops = vec![
-            MarkOp::Add {
-                start: 0,
-                end: 3,
-                kind: MarkKind::Strong,
-            },
-            MarkOp::Add {
-                start: 1,
-                end: 2,
-                kind: MarkKind::Link {
-                    url: "https://x".into(),
+    fn mark_op_wire_decodes_each_variant() {
+        let cases = vec![
+            (
+                serde_json::json!({"op": "add", "start": 0, "end": 3, "type": "strong"}),
+                MarkOp::Add {
+                    start: 0,
+                    end: 3,
+                    kind: MarkKind::Strong,
                 },
-            },
-            MarkOp::Remove {
-                start: 4,
-                end: 6,
-                kind: MarkKind::Anchor { id: "c1".into() },
-            },
-            MarkOp::RemoveAnchor { id: "c2".into() },
+            ),
+            (
+                serde_json::json!({
+                    "op": "add", "start": 1, "end": 2, "type": "link", "url": "https://x",
+                }),
+                MarkOp::Add {
+                    start: 1,
+                    end: 2,
+                    kind: MarkKind::Link {
+                        url: "https://x".into(),
+                    },
+                },
+            ),
+            (
+                serde_json::json!({
+                    "op": "remove", "start": 4, "end": 6, "type": "anchor", "id": "c1",
+                }),
+                MarkOp::Remove {
+                    start: 4,
+                    end: 6,
+                    kind: MarkKind::Anchor { id: "c1".into() },
+                },
+            ),
+            (
+                serde_json::json!({"op": "removeAnchor", "id": "c2"}),
+                MarkOp::RemoveAnchor { id: "c2".into() },
+            ),
         ];
-        for op in ops {
-            let v = mark_op_to_value(&op);
-            assert_eq!(mark_op_from_value(&v).unwrap(), op, "round-trip: {v}");
+        for (v, op) in cases {
+            assert_eq!(mark_op_from_value(&v).unwrap(), op, "decode: {v}");
         }
     }
 
     #[test]
-    fn line_op_wire_round_trips_each_variant() {
-        let ops = vec![
-            LineOp::Split { at: 5 },
-            LineOp::Join { line: 1 },
-            LineOp::SetKind {
-                line: 0,
-                kind: LineKind::Heading { level: 2 },
-            },
-            LineOp::SetContainers {
-                line: 2,
-                containers: vec![Container::Quote],
-            },
-            LineOp::SetKind {
-                line: 0,
-                kind: LineKind::Unknown {
-                    tag: "callout".into(),
-                    attrs: serde_json::json!({"variant": "warn"}),
+    fn line_op_wire_decodes_each_variant() {
+        let cases = vec![
+            (
+                serde_json::json!({"op": "split", "at": 5}),
+                LineOp::Split { at: 5 },
+            ),
+            (
+                serde_json::json!({"op": "join", "line": 1}),
+                LineOp::Join { line: 1 },
+            ),
+            (
+                serde_json::json!({"op": "setKind", "line": 0, "kind": "heading", "level": 2}),
+                LineOp::SetKind {
+                    line: 0,
+                    kind: LineKind::Heading { level: 2 },
                 },
-            },
-            LineOp::SetContainers {
-                line: 2,
-                containers: vec![Container::Unknown {
-                    tag: "indent".into(),
-                    attrs: serde_json::json!({"depth": 2}),
-                }],
-            },
-            LineOp::SetContinues {
-                line: 1,
-                continues: true,
-            },
-            LineOp::SetContinues {
-                line: 3,
-                continues: false,
-            },
+            ),
+            (
+                serde_json::json!({
+                    "op": "setContainers", "line": 2, "containers": [{"container": "quote"}],
+                }),
+                LineOp::SetContainers {
+                    line: 2,
+                    containers: vec![Container::Quote],
+                },
+            ),
+            (
+                serde_json::json!({
+                    "op": "setKind", "line": 0, "kind": "callout", "attrs": {"variant": "warn"},
+                }),
+                LineOp::SetKind {
+                    line: 0,
+                    kind: LineKind::Unknown {
+                        tag: "callout".into(),
+                        attrs: serde_json::json!({"variant": "warn"}),
+                    },
+                },
+            ),
+            (
+                serde_json::json!({
+                    "op": "setContainers", "line": 2,
+                    "containers": [{"container": "indent", "attrs": {"depth": 2}}],
+                }),
+                LineOp::SetContainers {
+                    line: 2,
+                    containers: vec![Container::Unknown {
+                        tag: "indent".into(),
+                        attrs: serde_json::json!({"depth": 2}),
+                    }],
+                },
+            ),
+            (
+                serde_json::json!({"op": "setContinues", "line": 1, "continues": true}),
+                LineOp::SetContinues {
+                    line: 1,
+                    continues: true,
+                },
+            ),
+            (
+                serde_json::json!({"op": "setContinues", "line": 3, "continues": false}),
+                LineOp::SetContinues {
+                    line: 3,
+                    continues: false,
+                },
+            ),
         ];
-        for op in ops {
-            let v = line_op_to_value(&op);
-            assert_eq!(line_op_from_value(&v).unwrap(), op, "round-trip: {v}");
+        for (v, op) in cases {
+            assert_eq!(line_op_from_value(&v).unwrap(), op, "decode: {v}");
         }
     }
 
@@ -1480,19 +1423,30 @@ mod tests {
     }
 
     #[test]
-    fn island_op_wire_round_trips_each_variant() {
+    fn island_op_wire_decodes_each_variant() {
         let island = Island::new("isl-0".into(), "table".into())
             .with_props(table_props("H", "a"))
             .with_loss(crate::model::Loss::DEGRADED);
-        let ops = vec![
-            IslandOp::Set {
-                island: island.clone(),
-            },
-            IslandOp::Insert { at: 7, island },
+        let cases = vec![
+            (
+                serde_json::json!({
+                    "op": "set", "id": "isl-0", "type": "table",
+                    "props": table_props("H", "a"), "loss": "degraded",
+                }),
+                IslandOp::Set {
+                    island: island.clone(),
+                },
+            ),
+            (
+                serde_json::json!({
+                    "op": "insert", "at": 7, "id": "isl-0", "type": "table",
+                    "props": table_props("H", "a"), "loss": "degraded",
+                }),
+                IslandOp::Insert { at: 7, island },
+            ),
         ];
-        for op in ops {
-            let v = island_op_to_value(&op);
-            assert_eq!(island_op_from_value(&v).unwrap(), op, "round-trip: {v}");
+        for (v, op) in cases {
+            assert_eq!(island_op_from_value(&v).unwrap(), op, "decode: {v}");
         }
     }
 
@@ -1854,6 +1808,11 @@ mod tests {
         }
     }
 
+    /// [`sync_for_delta`] on island-free content.
+    fn sync_lines(old_chars: &[char], old_lines: Vec<Line>, delta: &Delta) -> Vec<Line> {
+        sync_for_delta(old_chars, old_lines, Vec::new(), delta).0
+    }
+
     /// `(tag, continues)` per line: a heading's level, 0 for `Para` (the default
     /// line), 255 for anything else.
     fn tags(lines: &[Line]) -> Vec<(u8, bool)> {
@@ -1880,7 +1839,7 @@ mod tests {
         let d = Delta {
             ops: vec![Op::Retain(3), Op::Insert("\n".into()), Op::Retain(1)],
         };
-        let out = sync_lines_for_delta(&old_chars, lines, &d);
+        let out = sync_lines(&old_chars, lines, &d);
         assert_eq!(out.len(), 3);
         assert_eq!(out[1], l1, "first half is the untouched original line");
         assert_eq!(out[2].kind, LineKind::Heading { level: 5 });
@@ -1895,8 +1854,26 @@ mod tests {
         let d = Delta {
             ops: vec![Op::Retain(1), Op::Delete(1), Op::Retain(3)],
         };
-        let out = sync_lines_for_delta(&old_chars, lines, &d);
+        let out = sync_lines(&old_chars, lines, &d);
         assert_eq!(tags(&out), vec![(1, false), (3, false)]);
+    }
+
+    #[test]
+    fn sync_walks_lines_and_islands_off_one_cursor() {
+        // One delete run crosses a slot and then a '\n'; the retain behind it
+        // has to land on slot 1, and the merged line has to be line 1's.
+        let old_chars: Vec<char> = format!("{ISLAND_SLOT}\n{ISLAND_SLOT}").chars().collect();
+        let d = Delta {
+            ops: vec![Op::Delete(2), Op::Retain(1)],
+        };
+        let (lines, islands) = sync_for_delta(
+            &old_chars,
+            vec![tag_line(1, false), tag_line(2, false)],
+            vec![island("first"), island("second")],
+            &d,
+        );
+        assert_eq!(tags(&lines), vec![(1, false)]);
+        assert_eq!(islands.iter().map(|i| &i.id).collect::<Vec<_>>(), ["second"]);
     }
 
     #[test]
@@ -1907,7 +1884,7 @@ mod tests {
         let d = Delta {
             ops: vec![Op::Retain(1), Op::Delete(1)],
         };
-        let out = sync_lines_for_delta(&old_chars, lines, &d);
+        let out = sync_lines(&old_chars, lines, &d);
         assert_eq!(tags(&out), vec![(1, false)]);
     }
 
@@ -1918,7 +1895,7 @@ mod tests {
         let d = Delta {
             ops: vec![Op::Retain(99)],
         };
-        assert_eq!(sync_lines_for_delta(&old_chars, lines.clone(), &d), lines);
+        assert_eq!(sync_lines(&old_chars, lines.clone(), &d), lines);
     }
 
     #[test]
@@ -2005,7 +1982,7 @@ mod tests {
         let d = Delta {
             ops: vec![Op::Delete(old_chars.len())],
         };
-        let out = sync_lines_for_delta(&old_chars, lines, &d);
+        let out = sync_lines(&old_chars, lines, &d);
         assert_eq!(tags(&out), vec![(0, false)], "only the first line survives");
     }
 
@@ -2018,7 +1995,7 @@ mod tests {
         let d = Delta {
             ops: vec![Op::Retain(2), Op::Insert("\n".into())],
         };
-        let out = sync_lines_for_delta(&old_chars, lines, &d);
+        let out = sync_lines(&old_chars, lines, &d);
         assert_eq!(out.len(), 2);
         assert_eq!(tags(&out)[0], (1, false));
         assert_eq!(out[1].kind, LineKind::Para);
