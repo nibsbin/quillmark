@@ -122,6 +122,20 @@ fn test_quillignore_wildcard_does_not_cross_slash() {
     assert!(!ignore.is_ignored("vendor/assets/logo.png"));
 }
 
+/// `[` opens a glob character class and is an ordinary character in a filename,
+/// so a line spelling one out ignores the file it names as well as the class it
+/// describes. The variable font in the usaf_memo fixture is spelled this way.
+#[test]
+fn test_quillignore_bracketed_name_ignores_the_file_it_spells() {
+    let ignore = QuillIgnore::new(vec!["Cinzel[wght].ttf".to_string()]);
+
+    assert!(ignore.is_ignored("Cinzel[wght].ttf"));
+    assert!(ignore.is_ignored("fonts/Cinzel/Cinzel[wght].ttf"));
+    // The character-class reading survives alongside it.
+    assert!(ignore.is_ignored("Cinzelw.ttf"));
+    assert!(!ignore.is_ignored("Cinzel.ttf"));
+}
+
 #[test]
 fn test_quillignore_matching() {
     let ignore = QuillIgnore::new(vec![

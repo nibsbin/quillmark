@@ -15,9 +15,10 @@
   compile once through `glob::Pattern`, matched against the whole path and the
   basename. Two readings tighten to gitignore's: `*` stops at `/`, and a
   pattern spelling out a `/` anchors at the bundle root rather than matching
-  any path that opens and closes with its halves. A pattern free of `*`, `?`
-  and `[` stays a literal name, so a file named `Cinzel[wght].ttf` is still
-  ignored by writing it out.
+  any path that opens and closes with its halves. A line always ignores the
+  name it spells out as well: `[` opens a character class and is an ordinary
+  character in a filename, so `Cinzel[wght].ttf` ignores both the variable font
+  of that name and the class it describes.
 - refactor: **`RenderError::coded(code, message)` is the one constructor for a
   single-error-diagnostic failure.** Nine sites across five crates spelled
   `from_diag(Diagnostic::new(Severity::Error, msg).with_code(code))` by hand,
@@ -32,7 +33,9 @@
   call that produced it under one code, `pdfform::flat_parse_failed`, replacing
   the per-format `pdfform::svg_parse_failed` and `pdfform::png_parse_failed`
   raised at render time (neither documented, and both reachable only through a
-  bug in this crate's own flatten).
+  bug in this crate's own flatten). Opening a session fails on that bug now,
+  including for a caller that only ever renders the AcroForm PDF, which is
+  stamped from the base and reads nothing flattened.
 - perf(pdf): **filling a PDF form no longer slows down with the size of its
   background or its page count.** Reading one object from the base walks every
   byte of it — the live copy is the last revision, so a scan cannot stop early
@@ -64,8 +67,8 @@
   canonical. Canonical bytes are unchanged, byte for byte; a tree that somehow
   arrives unsorted is still repaired rather than shipped.
 
-  The public `container_to_value`, `island_to_value` and `mark_to_value` now
-  emit their own keys in a different order. An unknown's `attrs` bag is
+  The public `container_to_value` and `mark_to_value`, and the crate-internal
+  `island_to_value`, now emit their own keys in a different order. An unknown's `attrs` bag is
   untouched, as in 0.99, and nothing hashes the op wire.
 
 ## v0.108.3 - 2026-08-21

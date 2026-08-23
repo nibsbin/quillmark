@@ -27,7 +27,12 @@ enum Rule {
     /// A glob, matched against the whole path and against the basename, so a
     /// slash-free pattern applies at any depth and a slashed one is anchored
     /// at the bundle root. As in gitignore, `*` does not cross `/`.
-    Glob(Pattern),
+    ///
+    /// The line it was written as matches too: `[` opens a character class and
+    /// is also an ordinary character in a filename, so `Cinzel[wght].ttf` names
+    /// both a glob over `Cinzelw.ttf`/`Cinzelg.ttf`/… and the variable font
+    /// sitting in the usaf_memo fixture. Both readings ignore.
+    Glob(Pattern, String),
 }
 
 impl Default for QuillIgnore {
@@ -86,7 +91,7 @@ impl Rule {
             return Rule::Name(pattern);
         }
         match Pattern::new(&pattern) {
-            Ok(glob) => Rule::Glob(glob),
+            Ok(glob) => Rule::Glob(glob, pattern),
             // An unparseable glob still matches the name it spells out.
             Err(_) => Rule::Name(pattern),
         }
@@ -98,8 +103,11 @@ impl Rule {
                 .strip_prefix(prefix.as_str())
                 .is_some_and(|rest| rest.is_empty() || rest.starts_with('/')),
             Rule::Name(name) => path == name || basename == name,
-            Rule::Glob(glob) => {
-                glob.matches_with(path, MATCH) || glob.matches_with(basename, MATCH)
+            Rule::Glob(glob, raw) => {
+                path == raw
+                    || basename == raw
+                    || glob.matches_with(path, MATCH)
+                    || glob.matches_with(basename, MATCH)
             }
         }
     }
