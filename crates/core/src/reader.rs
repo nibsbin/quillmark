@@ -37,8 +37,8 @@
 use indexmap::IndexMap;
 use quillmark_content::Content;
 
-use crate::document::edit::{CODEC_PLAINTEXT, CODEC_RICHTEXT};
-use crate::document::{Card, Document, EditError, RichtextDecodeError};
+use crate::document::edit::field_decode;
+use crate::document::{Card, Codec, Document, EditError};
 use crate::quill::{CardSchema, FieldSchema, FieldType, QuillConfig};
 use crate::value::{PathSegment, QuillValue};
 
@@ -208,23 +208,16 @@ fn read_field(
     let schema = fields_schema
         .and_then(|m| m.get(name))
         .ok_or_else(|| EditError::unknown_field(name))?;
-    match schema.r#type {
-        FieldType::RichText { .. } => project(
-            card.field_markdown(name),
-            name,
-            CODEC_RICHTEXT,
-            ReadValue::Markdown,
-        ),
-        FieldType::PlainText { .. } => project(
-            card.field_plaintext(name),
-            name,
-            CODEC_PLAINTEXT,
-            ReadValue::Plaintext,
-        ),
-        _ => Ok(card
-            .payload()
-            .get(name)
-            .map(|v| ReadValue::Value(v.clone()))),
+    let Some(codec) = content_codec(&schema.r#type) else {
+        return Ok(card.payload().get(name).map(|v| ReadValue::Value(v.clone())));
+    };
+    match card.field_text(name, codec) {
+        None => Ok(None),
+        Some(Ok(text)) => Ok(Some(match codec {
+            Codec::Richtext => ReadValue::Markdown(text),
+            Codec::Plaintext => ReadValue::Plaintext(text),
+        })),
+        Some(Err(e)) => Err(field_decode(name, &[], codec, e)),
     }
 }
 
@@ -246,7 +239,7 @@ fn read_content(
     let leaf = schema_at(field, name, at)?;
     // The codec rides out of the dispatch: it is the declared type's, not the
     // stored shape's.
-    let (decode, codec) = content_codec(&leaf.r#type).ok_or_else(|| EditError::FieldNotContent {
+    let codec = content_codec(&leaf.r#type).ok_or_else(|| EditError::FieldNotContent {
         field: name.to_string(),
         at: at.to_vec(),
         declared: leaf.r#type.as_str().to_string(),
@@ -254,28 +247,20 @@ fn read_content(
     let Some(value) = card.payload().get(name).and_then(|v| value_at(v.as_json(), at)) else {
         return Ok(None);
     };
-    decode(value).map(Some).map_err(|e| EditError::FieldDecode {
-        field: name.to_string(),
-        at: at.to_vec(),
-        codec: codec.to_string(),
-        message: e.into_message(),
-    })
+    codec
+        .decode_field(value)
+        .map(Some)
+        .map_err(|e| field_decode(name, at, codec, e))
 }
 
-type ContentCodec = (
-    fn(&serde_json::Value) -> Result<Content, RichtextDecodeError>,
-    &'static str,
-);
-
 /// The one declared-type → codec dispatch: `None` for a type that is no content
-/// leaf. Every schema-bound [`Content`] read routes through this, so a codec
-/// change reaches the whole-field and the nested read by construction.
-fn content_codec(r#type: &FieldType) -> Option<ContentCodec> {
+/// leaf. Every schema-bound content read routes through this — the whole field,
+/// a nested leaf, and [`get`](TypedReader::get)'s text projection alike — so a
+/// codec change reaches all three by construction.
+fn content_codec(r#type: &FieldType) -> Option<Codec> {
     match r#type {
-        FieldType::RichText { .. } => Some((crate::document::decode_richtext_field, CODEC_RICHTEXT)),
-        FieldType::PlainText { .. } => {
-            Some((crate::document::decode_plaintext_field, CODEC_PLAINTEXT))
-        }
+        FieldType::RichText { .. } => Some(Codec::Richtext),
+        FieldType::PlainText { .. } => Some(Codec::Plaintext),
         _ => None,
     }
 }
@@ -336,28 +321,10 @@ fn value_at<'a>(value: &'a serde_json::Value, at: &[PathSegment]) -> Option<&'a 
     Some(cursor)
 }
 
-/// Lift a codec projection into a [`ReadValue`].
-fn project(
-    projection: Option<Result<String, RichtextDecodeError>>,
-    name: &str,
-    codec: &str,
-    wrap: fn(String) -> ReadValue,
-) -> Result<Option<ReadValue>, EditError> {
-    match projection {
-        None => Ok(None),
-        Some(Ok(text)) => Ok(Some(wrap(text))),
-        Some(Err(e)) => Err(EditError::FieldDecode {
-            field: name.to_string(),
-            at: Vec::new(),
-            codec: codec.to_string(),
-            message: e.into_message(),
-        }),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::document::edit::CODEC_RICHTEXT;
     use crate::document::Document;
     use crate::version::QuillReference;
     use std::str::FromStr;

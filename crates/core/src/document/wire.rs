@@ -295,7 +295,7 @@ fn body_from_wire(body: &JsonValue) -> Result<Content, WireError> {
         key: "$body".to_string(),
         reason,
     };
-    match super::decode_richtext_value(body) {
+    match super::Codec::Richtext.decode_value(body) {
         Some(result) => result.map_err(|e| invalid(e.into_message())),
         None => match body {
             JsonValue::Null => Ok(Content::empty()),
@@ -333,6 +333,7 @@ fn validate_wire_field(key: &str, value: &JsonValue) -> Result<(), WireError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::document::Codec;
     use serde_json::json;
 
     /// Nested `!must_fill` markers inside a field value survive Card → wire →
@@ -390,7 +391,7 @@ mod tests {
 
         let back = Card::try_from(wire).expect("wire → card");
         assert_eq!(back, card, "content field must survive Card → wire → Card");
-        let read = back.field_richtext("intro").unwrap().unwrap();
+        let read = back.field_content("intro", Codec::Richtext).unwrap().unwrap();
         assert!(read.marks.iter().any(|m| matches!(m.kind, MarkKind::Underline)));
     }
 

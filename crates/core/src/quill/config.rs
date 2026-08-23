@@ -303,7 +303,7 @@ impl QuillConfig {
     ///
     /// Validation keeps its own read-only dispatch (`validation::validate_value`),
     /// synced with this via the shared helpers `scalar_as_string` /
-    /// `decode_richtext_value`.
+    /// `Codec::Richtext.decode_value`.
     pub(crate) fn conform_value(
         value: &QuillValue,
         field_schema: &super::FieldSchema,
@@ -592,7 +592,7 @@ impl QuillConfig {
                 // lockstep with the validation-layer `validation::not_inline` check.
                 //
                 // This is the deliberately-lenient sibling of
-                // `document::decode_richtext_value` (used by the strict wire /
+                // `document::Codec::Richtext.decode_value` (used by the strict wire /
                 // literal / validation sites): the string branch below reduces a
                 // bare scalar or length-1 array to text before importing, which
                 // the strict decoder must not do, so it stays open-coded here.
@@ -609,14 +609,14 @@ impl QuillConfig {
                         }
                         Ok(())
                     };
-                // A strict write uses `decode_richtext_value` semantics: a
+                // A strict write uses `Codec::Richtext.decode_value` semantics: a
                 // canonical content object or a markdown string, nothing else. No
                 // scalar→string reduction (the render floor's lenient cascade
                 // below): a bare scalar for a richtext field fails the write. The
                 // messages mirror `Card::commit_field`'s richtext error variants,
                 // which the bindings key on.
                 if mode == Leniency::Write {
-                    let content = match crate::document::decode_richtext_value(json_value) {
+                    let content = match crate::document::Codec::Richtext.decode_value(json_value) {
                         Some(result) => result.map_err(|e| {
                             CoercionError::uncoercible(
                                 path,
@@ -2282,14 +2282,14 @@ fn literal_content(
     }
     match &field.r#type {
         FieldType::RichText { inline } => {
-            let rt = match crate::document::decode_richtext_value(json) {
+            let rt = match crate::document::Codec::Richtext.decode_value(json) {
                 Some(Ok(rt)) => rt,
                 Some(Err(e)) => {
                     let reason = match e {
-                        crate::document::RichtextDecodeError::BadMarkdown(m) => {
+                        crate::document::ContentDecodeError::BadMarkdown(m) => {
                             format!("markdown import failed: {m}")
                         }
-                        crate::document::RichtextDecodeError::NotContent(m) => {
+                        crate::document::ContentDecodeError::NotContent(m) => {
                             format!("not a valid richtext content: {m}")
                         }
                     };
@@ -2314,12 +2314,12 @@ fn literal_content(
             // verbatim (never markdown), so the cached content is plain by
             // construction; a content-object literal is revalidated. Shares the
             // one object-vs-string dispatch with the validation shape check.
-            let rt = match crate::document::decode_plaintext_value(json) {
+            let rt = match crate::document::Codec::Plaintext.decode_value(json) {
                 Some(Ok(rt)) => rt,
                 Some(Err(e)) => {
                     return Err(richtext_literal_error(
                         label,
-                        &format!("not a valid richtext content: {e}"),
+                        &format!("not a valid richtext content: {}", e.into_message()),
                     ))
                 }
                 None => {
