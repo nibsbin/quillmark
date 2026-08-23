@@ -43,7 +43,9 @@
     The open-set promise that a container this build does not know survives
     untouched is now total rather than holding up to an adjacency quotient.
 
-  `ordinal` is canonicalized alongside it, to a gapless 0-based index within
+  An item boundary is a parent boundary: two inner lists under two outer list
+  items are two lists, so an inner run restarts its `ordinal` and needs no
+  discriminator. `ordinal` is canonicalized alongside it, to a gapless 0-based index within
   its run, so `[5, 9]` and `[0, 1]` stop being two spellings of the same two
   items. `instance` is written to the wire only when non-zero, so a stored row
   that needs no discriminator — nearly all of them — keeps its exact bytes and

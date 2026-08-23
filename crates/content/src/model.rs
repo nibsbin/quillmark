@@ -1123,6 +1123,13 @@ fn canonicalize_containers(lines: &mut [Line]) {
                 if raw_ordinal != run.raw_ordinal {
                     run.ordinal += 1;
                     run.raw_ordinal = raw_ordinal;
+                    // The run continues but the *item* changed, and an item is
+                    // a parent: everything below is inside a different one, so
+                    // it neither continues its predecessor nor has an adjacent
+                    // sibling to be told apart from. Two inner lists under two
+                    // outer items are two lists however alike they look.
+                    state.truncate(d + 1);
+                    opened_above = true;
                 }
             } else {
                 // The run being replaced is this one's adjacent predecessor,
@@ -1566,6 +1573,51 @@ mod tests {
             canon(vec![li(0, 1), li(0, 2), li(0, 3)]),
             vec![(0, 0), (0, 1), (0, 0)]
         );
+        // An *item* boundary is a parent boundary: two inner lists under two
+        // outer items are two lists, so the inner ordinal restarts and the
+        // inner discriminator resets. Without this the second item's inner run
+        // continues the first's, and the two project to one markdown.
+        let outer = |ordinal| Container::ListItem {
+            ordered: false,
+            start: 1,
+            ordinal,
+            instance: 0,
+        };
+        let inner = |ordinal| Container::ListItem {
+            ordered: true,
+            start: 1,
+            ordinal,
+            instance: 0,
+        };
+        let nested = |a: Container, b: Container| {
+            let mut rt = Content::new(
+                "x\ny".to_string(),
+                vec![
+                    Line::new(LineKind::Para).with_containers(vec![outer(0), a]),
+                    Line::new(LineKind::Para).with_containers(vec![outer(1), b]),
+                ],
+            );
+            rt.normalize();
+            rt.lines
+                .iter()
+                .map(|l| match &l.containers[1] {
+                    Container::ListItem {
+                        ordinal, instance, ..
+                    } => (*ordinal, *instance),
+                    other => (0, other.instance()),
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(nested(inner(5), inner(7)), vec![(0, 0), (0, 0)]);
+        assert_eq!(
+            nested(
+                Container::Quote { instance: 3 },
+                Container::Quote { instance: 8 }
+            ),
+            vec![(0, 0), (0, 0)],
+            "an inner quote under the next item needs no discriminator"
+        );
+
         // A different container kind between them is already a boundary, so
         // the discriminator resets.
         assert_eq!(
