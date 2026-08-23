@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- fix(blueprint): **a variant's `object` or `array<object>` cell expands per
+  property.** The cell went through the scalar path, so it rendered as
+  `controlled_by: !must_fill # object` — a null where the schema wants a
+  mapping, with every property's description, `default:` and type annotation
+  dropped, and the marker on a path the obligation predicate never warns at.
+  A cell is a field of its container and now expands as one, like every other
+  surface already did.
 - fix(core): **a `.quillignore` pattern holding more than one `*` ignores what
   it names.** The matcher handled exactly one wildcard and returned no match
   for the rest, so `**/*.tmp` and `*.sublime-*` were dead lines. Patterns now
@@ -33,6 +40,11 @@
   file scans and the live-edit path repaid them on every keystroke. The base's
   object offsets are now collected in one pass and each read is a lookup: a
   20-page 300 KB form stamps in 0.7 ms rather than 37 ms, flat in page count.
+
+  **breaking** in `quillmark-pdf`: `PdfUpdate::begin` and
+  `PdfUpdate::resolve_pages` take the `&ObjectIndex` the caller builds over the
+  base rather than its bytes, and `reader::find_object_bytes` /
+  `reader::object_dict` become `ObjectIndex::object_bytes` / `ObjectIndex::dict`.
 - **breaking** content: the op wire is a reading direction. `mark_op_to_value`,
   `line_op_to_value` and `island_op_to_value` are removed from
   `quillmark-content` — an op bundle is authored on the JS/Python side and
