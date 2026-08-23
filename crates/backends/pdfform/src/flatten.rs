@@ -10,7 +10,7 @@
 //! SVG/PNG raster outputs only; the AcroForm PDF deliverable is stamped.
 
 use quillmark_pdf::{
-    reader::{extract_outer_dict, find_dict_value, object_dict, splice_dict_value, UpdatedObject},
+    reader::{extract_outer_dict, find_dict_value, splice_dict_value, ObjectIndex, UpdatedObject},
     writer::{
         alloc_id, append_refs_to_array_key, dict_object, pdf_escape, winansi_encode, OnNonArray,
     },
@@ -32,9 +32,10 @@ pub fn flatten(base: Vec<u8>, fields: &[FieldSpec]) -> Result<Vec<u8>, PdfError>
     }
 
     let pdf = base;
-    let mut up = PdfUpdate::begin(&pdf, None)?;
+    let idx = ObjectIndex::new(&pdf);
+    let mut up = PdfUpdate::begin(&idx, None)?;
 
-    let page_ids = up.resolve_pages(&pdf, fields)?;
+    let page_ids = up.resolve_pages(&idx, fields)?;
     let page_count = page_ids.len();
 
     // Helvetica and ZapfDingbats are among the 14 standard PDF fonts every
@@ -67,7 +68,7 @@ pub fn flatten(base: Vec<u8>, fields: &[FieldSpec]) -> Result<Vec<u8>, PdfError>
 
         let page_obj_id = page_ids[page_idx];
         let what = format!("page object {page_obj_id}");
-        let pg_dict = object_dict(&pdf, page_obj_id, CODE_PARSE, &what)?;
+        let pg_dict = idx.dict(page_obj_id, CODE_PARSE, &what)?;
 
         let new_pg = rewrite_page_for_flatten(pg_dict, helv_id, zadb_id, stream_id)?;
         up.objects.push(dict_object(page_obj_id, &new_pg));

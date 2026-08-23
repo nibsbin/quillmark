@@ -14,7 +14,9 @@
 use std::sync::LazyLock;
 
 use proptest::prelude::*;
-use quillmark_pdf::{page_media_boxes, stamp, FieldSpec, FieldType, PdfUpdate, StampOptions};
+use quillmark_pdf::{
+    page_media_boxes, reader::ObjectIndex, stamp, FieldSpec, FieldType, PdfUpdate, StampOptions,
+};
 
 /// A real AcroForm the spine accepts, so a mutant of it exercises parse paths a
 /// random buffer never reaches. Read once: thousands of cases mutate a copy.
@@ -44,8 +46,9 @@ fn every_field_kind() -> Vec<FieldSpec> {
 /// Drive every byte-taking entry point once; completing at all is the property.
 fn exercise(pdf: &[u8]) {
     let _ = page_media_boxes(pdf);
-    let _ = PdfUpdate::begin(pdf, None);
-    let _ = PdfUpdate::begin(pdf, Some("quillmark-fuzz"));
+    let idx = ObjectIndex::new(pdf);
+    let _ = PdfUpdate::begin(&idx, None);
+    let _ = PdfUpdate::begin(&idx, Some("quillmark-fuzz"));
     let _ = stamp(pdf.to_vec(), &[], &StampOptions::default());
     let _ = stamp(
         pdf.to_vec(),
