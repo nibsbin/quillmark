@@ -591,11 +591,12 @@ impl QuillConfig {
                 // surface, so multi-block content is a coercion error here, in
                 // lockstep with the validation-layer `validation::not_inline` check.
                 //
-                // This is the deliberately-lenient sibling of
-                // `document::Codec::Richtext.decode_value` (used by the strict wire /
-                // literal / validation sites): the string branch below reduces a
-                // bare scalar or length-1 array to text before importing, which
-                // the strict decoder must not do, so it stays open-coded here.
+                // This is the deliberately-lenient sibling of the strict
+                // decoders: `document::canonical_richtext_value` at the write
+                // and literal sites, `Codec::Richtext.decode_value` at the wire
+                // and validation sites. The string branch below reduces a bare
+                // scalar or length-1 array to text before importing, which a
+                // strict decoder must not do, so it stays open-coded here.
                 let inline_err = || {
                     CoercionError::uncoercible(
                         path,
@@ -612,12 +613,8 @@ impl QuillConfig {
                         }
                         Ok(())
                     };
-                // A strict write is `document::canonical_richtext_value`: a
-                // canonical content object or a markdown string, nothing else. No
-                // scalar→string reduction (the render floor's lenient cascade
-                // below): a bare scalar for a richtext field fails the write. The
-                // messages mirror `Card::commit_field`'s richtext error variants,
-                // which the bindings key on.
+                // The messages mirror `Card::commit_field`'s richtext error
+                // variants, which the bindings key on.
                 if mode == Leniency::Write {
                     use crate::document::RichtextValueError as E;
                     return crate::document::canonical_richtext_value(json_value, inline)

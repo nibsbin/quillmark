@@ -315,8 +315,9 @@ fn line_to_value(line: &Line) -> Value {
     if line.continues {
         m.insert("continues".into(), Value::Bool(true));
     }
-    // `line_kind_fields` merges its keys ahead of `containers`/`continues`, so
-    // the canonical order is settled here rather than at each insert.
+    // `line_kind_fields` merges `kind` in ahead of `containers`/`continues`,
+    // which sort before it, so this one encoder cannot settle its order at the
+    // insert.
     Value::Object(sort_own_keys(m))
 }
 
@@ -421,8 +422,9 @@ pub fn mark_to_value(mark: &Mark) -> Value {
             m.insert("attrs".into(), attrs.clone());
         }
     }
-    // A kind's keys interleave with `start`/`end` in ascending order, so this
-    // encoder settles its order here rather than at each insert.
+    // A kind's own keys do not all sort after `start`/`end` — `attrs` precedes
+    // both, `id` falls between them — so this one encoder cannot settle its
+    // order at the insert.
     Value::Object(sort_own_keys(m))
 }
 
