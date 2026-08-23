@@ -31,7 +31,9 @@ It exists so no public signature names `serde-saphyr`. A third-party error type 
 Two surfaces return one directly (`QuillValue::from_yaml_str`, `QuillConfig::schema_yaml`); `QuillConfig::from_yaml_with_warnings` converts through it to `quill::yaml_parse_error`. The card-yaml path does not travel this way: it becomes `ParseError::YamlErrorWithLocation`, which additionally knows the enclosing block.
 
 **`RenderError`**: the main rendering error, a struct carrying a non-empty
-`Vec<Diagnostic>` (`RenderError::new` / `from_diag`; `diagnostics()` borrows,
+`Vec<Diagnostic>` (`RenderError::new` / `from_diag` / `coded(code, message)`
+for the one-error-diagnostic case every engine-side refusal takes;
+`diagnostics()` borrows,
 `into_diagnostics()` consumes). There is no failure taxonomy beyond the
 diagnostics themselves: the machine-routable identity of a failure is each
 diagnostic's namespaced `code` (`parse::*`, `validation::*`, `quill::*`,

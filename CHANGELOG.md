@@ -11,6 +11,12 @@
   any path that opens and closes with its halves. A pattern free of `*`, `?`
   and `[` stays a literal name, so a file named `Cinzel[wght].ttf` is still
   ignored by writing it out.
+- refactor: **`RenderError::coded(code, message)` is the one constructor for a
+  single-error-diagnostic failure.** Nine sites across five crates spelled
+  `from_diag(Diagnostic::new(Severity::Error, msg).with_code(code))` by hand,
+  two of them as a per-crate `engine_err` helper the backends each carried
+  their own copy of. Additive to `quillmark-core`'s public API; no code, message
+  or shape changes.
 
 ## v0.108.3 - 2026-08-21
 

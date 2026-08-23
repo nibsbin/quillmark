@@ -6,8 +6,6 @@ use quillmark_core::RenderError;
 use quillmark_pdf::{FieldSpec, FieldType, FormFont, TextAlign, CHECKBOX_ON_STATE};
 use typst_layout::PagedDocument;
 
-use crate::engine_err;
-
 mod extract;
 mod span_scan;
 
@@ -68,7 +66,7 @@ pub(crate) fn build_field_specs(
         .iter()
         .map(|p| {
             let page_h = *page_heights.get(p.page).ok_or_else(|| {
-                engine_err(
+                RenderError::coded(
                     "typst::form_field_page_out_of_range",
                     format!(
                         "form-field {:?} targets page {} but the document has {} page(s)",
