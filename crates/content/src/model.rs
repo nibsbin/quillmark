@@ -954,11 +954,13 @@ fn raw_ordinal(c: &Container) -> u64 {
     }
 }
 
-/// Rewrite every `ListItem::ordinal` to its canonical value: 0 at the item a run
-/// opens with, +1 at each ordinal *change* within the run, unchanged where the
-/// stored ordinal repeats (one item continuing across its paragraphs). A stored
-/// `[0, 5]` and a stored `[0, 1]` are the same two items; a stored `[0, 1, 0]`
-/// is three, its decrease carrying no boundary a run can hold.
+/// Rewrite every `ListItem::ordinal` to its canonical value. Within one list a
+/// repeat continues an item across its paragraphs and an increase opens the next,
+/// so a stored `[0, 5]` and a stored `[0, 1]` are the same two items and a stored
+/// `[3, 3, 7]` is two, the first spanning two paragraphs. A *decrease* opens the
+/// next list, and the new list restarts at 0 — except where the list before it
+/// ended on ordinal 0, which leaves nothing below to restart to: there the two
+/// merge, the one shape the flat encoding cannot hold apart.
 fn renumber_list_ordinals(lines: &mut [Line]) {
     // Per depth: the run's key, the ordinal being handed out, and the stored
     // ordinal that earned it.
@@ -971,8 +973,14 @@ fn renumber_list_ordinals(lines: &mut [Line]) {
             let raw = raw_ordinal(&line.containers[d]);
             let continues = !opened_above && state.get(d).is_some_and(|(k, _, _)| *k == key);
             if continues {
-                if raw != state[d].2 {
-                    state[d].1 += 1;
+                let (_, issued, prev_raw) = state[d];
+                if raw > prev_raw {
+                    state[d].1 = issued + 1;
+                    state[d].2 = raw;
+                } else if raw < prev_raw {
+                    // The next list: restart, or join it where a 0 leaves no
+                    // room below.
+                    state[d].1 = if issued == 0 { 1 } else { 0 };
                     state[d].2 = raw;
                 }
             } else {

@@ -499,15 +499,16 @@ impl Builder {
                 self.pending = None; // nested list content sets its own
                 let ordered = start.is_some();
                 let start = start.unwrap_or(1);
-                // Two lists markdown spells apart (a `<!-- -->` between them)
-                // are one list here: the flat encoding holds no boundary
-                // between adjacent same-shape runs, so the merge happens where
-                // the two item counters can still be joined.
+                // Restarting at 0 is what spells the boundary, and a sibling
+                // that closed on one item leaves no ordinal below its own to
+                // restart to. Only that list merges; a longer one keeps the
+                // decrease its own numbering can carry.
                 let count = self
                     .last_closed_list
                     .take()
                     .filter(|c| {
-                        c.depth == self.list_stack.len()
+                        c.count == 1
+                            && c.depth == self.list_stack.len()
                             && c.ordered == ordered
                             && c.start == start
                             && c.emitted == self.emitted()
