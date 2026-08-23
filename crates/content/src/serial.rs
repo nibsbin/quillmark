@@ -218,10 +218,9 @@ pub fn line_kind_to_value(kind: &LineKind) -> Value {
     Value::Object(line_kind_fields(kind))
 }
 
-/// The same fields unwrapped, for the op wire ([`crate::ops`]), which flattens
-/// them beside its own keys and so carries the exact discriminant a
-/// `ContentLine` does.
-pub(crate) fn line_kind_fields(kind: &LineKind) -> Map<String, Value> {
+/// The same fields unwrapped, for [`line_to_value`], which flattens them beside
+/// a line's own keys.
+fn line_kind_fields(kind: &LineKind) -> Map<String, Value> {
     let mut m = Map::new();
     match kind {
         LineKind::Para => {
@@ -321,8 +320,7 @@ fn line_from_value(v: &Value) -> Result<Line, ParseError> {
     })
 }
 
-/// Encode a [`Container`] into its canonical wire object. Public so the op wire
-/// ([`crate::ops`]) reuses the same container shape a `ContentLine` carries.
+/// Encode a [`Container`] into its canonical wire object.
 pub fn container_to_value(c: &Container) -> Value {
     let mut m = Map::new();
     match c {
@@ -373,17 +371,10 @@ pub fn container_from_value(v: &Value) -> Result<Container, ParseError> {
 
 /// Encode a [`Mark`] (`{start, end, type, …}`) into its canonical wire object.
 pub fn mark_to_value(mark: &Mark) -> Value {
-    Value::Object(mark_fields(mark.start, mark.end, &mark.kind))
-}
-
-/// The same fields unwrapped and over a mark's parts, for the op wire
-/// ([`crate::ops`]), which flattens them beside its own keys, carries the exact
-/// `type` discriminant a `ContentMark` does, and holds no [`Mark`].
-pub(crate) fn mark_fields(start: Usv, end: Usv, kind: &MarkKind) -> Map<String, Value> {
     let mut m = Map::new();
-    m.insert("start".into(), Value::from(start));
-    m.insert("end".into(), Value::from(end));
-    match kind {
+    m.insert("start".into(), Value::from(mark.start));
+    m.insert("end".into(), Value::from(mark.end));
+    match &mark.kind {
         MarkKind::Strong => {
             m.insert("type".into(), "strong".into());
         }
@@ -412,7 +403,7 @@ pub(crate) fn mark_fields(start: Usv, end: Usv, kind: &MarkKind) -> Map<String, 
             m.insert("attrs".into(), attrs.clone());
         }
     }
-    m
+    Value::Object(m)
 }
 
 /// What every mark carries whatever its type.
@@ -822,18 +813,12 @@ pub(crate) fn table_shape_error(props: &Value) -> Option<Invariant> {
 }
 
 pub(crate) fn island_to_value(island: &Island) -> Value {
-    Value::Object(island_fields(island))
-}
-
-/// The same fields unwrapped, for the op wire ([`crate::ops`]), which flattens
-/// them beside its own keys.
-pub(crate) fn island_fields(island: &Island) -> Map<String, Value> {
     let mut m = Map::new();
     m.insert("id".into(), Value::String(island.id.clone()));
     m.insert("type".into(), Value::String(island.island_type.clone()));
     m.insert("props".into(), island.props.clone());
     m.insert("loss".into(), island.loss.as_str().into());
-    m
+    Value::Object(m)
 }
 
 pub(crate) fn island_from_value(v: &Value) -> Result<Island, ParseError> {
