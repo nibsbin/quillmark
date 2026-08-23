@@ -439,8 +439,9 @@ impl<'a> Emit<'a> {
         j
     }
 
-    /// Different-shape adjacent lists stay separate; same-shape ones already
-    /// merged at import.
+    /// A run ends where the shape changes, and where `ordinal` decreases: a
+    /// decrease is the next list opening, the boundary the flat encoding has to
+    /// carry. Equal ordinals continue one item across its paragraphs.
     fn list_run_end(
         &self,
         range: Range<usize>,
@@ -449,14 +450,21 @@ impl<'a> Emit<'a> {
         start: u64,
         i: usize,
     ) -> usize {
+        let mut prev = match self.rt.lines[i].containers.get(depth) {
+            Some(Container::ListItem { ordinal, .. }) => *ordinal,
+            _ => 0,
+        };
         let mut j = i + 1;
         while j < range.end {
             match self.rt.lines[j].containers.get(depth) {
                 Some(Container::ListItem {
                     ordered: o,
                     start: s,
-                    ..
-                }) if *o == ordered && *s == start => j += 1,
+                    ordinal,
+                }) if *o == ordered && *s == start && *ordinal >= prev => {
+                    prev = *ordinal;
+                    j += 1;
+                }
                 _ => break,
             }
         }
@@ -519,7 +527,7 @@ impl<'a> Emit<'a> {
         let indent = "  ".repeat(depth);
         self.out.push_str(&indent);
         if ordered {
-            if first && start != 1 {
+            if first {
                 self.out.push_str(&format!("{}. ", start));
             } else {
                 self.out.push_str("+ ");
