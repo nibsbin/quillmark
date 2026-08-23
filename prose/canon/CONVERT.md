@@ -84,7 +84,7 @@ is a lowering bug, never a document's.
 | `MarkKind::Link{url}` | `#link("url")[…]` (`escape_string` on the url) |
 | `MarkKind::Anchor` / `Unknown` | nothing |
 | `Container::ListItem` (bullet) | `- ` |
-| `Container::ListItem` (ordered) | `+ ` auto-numbered; first item emits `N. ` when the list starts at `N ≠ 1` |
+| `Container::ListItem` (ordered) | `+ ` auto-numbered; the run's first item emits `N. `, which restarts Typst's running counter so an adjacent list numbers from its own `start` |
 | `Container::Quote` | `#quote(block: true)[…]` |
 | `Container::Unknown` (open set) | nothing: transparent; its run lowers at the enclosing level, one block, no wrapper |
 | `image` island | `#image("url", alt: "…")`; `alt:` omitted when empty |

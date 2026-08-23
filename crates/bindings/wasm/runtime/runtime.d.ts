@@ -245,6 +245,7 @@ export declare function isListItemContainer(
 	ordered: boolean;
 	start: number;
 	ordinal: number;
+	instance?: number;
 };
 
 // The guards above answer "is this arm X". These four answer "is this a value

@@ -347,19 +347,27 @@ pub fn container_to_value(c: &Container) -> Value {
             ordered,
             start,
             ordinal,
+            ..
         } => {
             m.insert("container".into(), "list_item".into());
             m.insert("ordered".into(), Value::Bool(*ordered));
             m.insert("ordinal".into(), Value::from(*ordinal));
             m.insert("start".into(), Value::from(*start));
         }
-        Container::Quote => {
+        Container::Quote { .. } => {
             m.insert("container".into(), "quote".into());
         }
-        Container::Unknown { tag, attrs } => {
+        Container::Unknown { tag, attrs, .. } => {
             m.insert("attrs".into(), attrs.clone());
             m.insert("container".into(), Value::String(tag.clone()));
         }
+    }
+    // Written only where it is doing work. `normalize` leaves it 0 on every
+    // path with no adjacent same-shape sibling to be told apart from, which is
+    // nearly all of them, so the common row carries no key and the encoding
+    // stays byte-identical to one written before the field existed.
+    if c.instance() != 0 {
+        m.insert("instance".into(), Value::from(c.instance()));
     }
     Value::Object(m)
 }
@@ -372,18 +380,21 @@ pub fn container_from_value(v: &Value) -> Result<Container, ParseError> {
         .and_then(Value::as_str)
         .ok_or(ParseError::Shape("container kind"))?;
     let o = fold_legacy_attrs(o, tag, Content::RESERVED_CONTAINERS, "container attrs")?;
+    let instance = o.get("instance").and_then(Value::as_u64).unwrap_or(0);
     match tag {
         "list_item" => Ok(Container::ListItem {
             ordered: o.get("ordered").and_then(Value::as_bool).unwrap_or(false),
             start: o.get("start").and_then(Value::as_u64).unwrap_or(1),
             ordinal: o.get("ordinal").and_then(Value::as_u64).unwrap_or(0),
+            instance,
         }),
-        "quote" => Ok(Container::Quote),
+        "quote" => Ok(Container::Quote { instance }),
         // An unrecognized container round-trips opaque and projects
         // transparently.
         other => Ok(Container::Unknown {
             tag: other.to_string(),
             attrs: bag_from_wire(&o, "attrs", "container attrs")?,
+            instance,
         }),
     }
 }
@@ -867,6 +878,32 @@ pub(crate) fn island_from_value(v: &Value) -> Result<Island, ParseError> {
 
 #[cfg(test)]
 mod tests {
+
+    /// `instance` is written only where it is doing work, so a row stored
+    /// before the field existed decodes, re-encodes, and content-hashes exactly
+    /// as it did: the discriminator costs bytes only in the documents that
+    /// carry an adjacent same-shape sibling.
+    #[test]
+    fn instance_is_absent_from_the_wire_until_it_is_needed() {
+        let plain = r#"{"islands":[],"lines":[{"containers":[{"container":"list_item","ordered":false,"ordinal":0,"start":1}],"kind":"para"},{"containers":[{"container":"list_item","ordered":false,"ordinal":1,"start":1}],"kind":"para"}],"marks":[],"text":"a\nb"}"#;
+        let rt = Content::from_canonical_json(plain).expect("decodes");
+        assert_eq!(rt.to_canonical_json(), plain, "byte layout moved");
+        assert!(rt.lines.iter().all(|l| l.containers[0].instance() == 0));
+
+        // Two adjacent one-item lists: the one shape that spends the key.
+        let two = r#"{"islands":[],"lines":[{"containers":[{"container":"list_item","ordered":false,"ordinal":0,"start":1}],"kind":"para"},{"containers":[{"container":"list_item","instance":1,"ordered":false,"ordinal":0,"start":1}],"kind":"para"}],"marks":[],"text":"a\nb"}"#;
+        let rt = Content::from_canonical_json(two).expect("decodes");
+        assert_eq!(rt.to_canonical_json(), two);
+        assert_eq!(rt.lines[1].containers[0].instance(), 1);
+
+        // Any distinct value a producer picks reads as the same two runs and
+        // rests on the canonical pair.
+        let raw = two.replace(r#""instance":1"#, r#""instance":37"#);
+        let rt2 = Content::from_canonical_json(&raw).expect("decodes");
+        assert_eq!(rt2, rt);
+        assert_eq!(rt2.to_canonical_json(), two);
+    }
+
     use super::*;
     use crate::model::{Fidelity, Line, LineKind};
 
@@ -1109,11 +1146,13 @@ mod tests {
                 ordered: true,
                 start: 3,
                 ordinal: 1,
+                instance: 0,
             },
-            Container::Quote,
+            Container::Quote { instance: 0 },
             Container::Unknown {
                 tag: "indent".into(),
                 attrs: bag(),
+                instance: 0,
             },
         ];
         for c in &containers {
@@ -1166,7 +1205,7 @@ mod tests {
         rt.lines = vec![
             Line {
                 kind: LineKind::Heading { level: 2 },
-                containers: vec![Container::Quote],
+                containers: vec![Container::Quote { instance: 0 }],
                 continues: false,
             },
             Line {
@@ -1281,6 +1320,7 @@ mod tests {
             vec![Container::Unknown {
                 tag: "indent".into(),
                 attrs: serde_json::json!({"depth": 2}),
+                instance: 0,
             }]
         );
         assert_eq!(rt.to_canonical_json(), json);
@@ -1325,6 +1365,7 @@ mod tests {
         rt.lines[0].containers = vec![Container::Unknown {
             tag: "quote".into(),
             attrs: serde_json::json!({}),
+            instance: 0,
         }];
         assert_eq!(
             rt.validate(),
@@ -1410,6 +1451,7 @@ mod tests {
         one.lines[0].containers = vec![Container::Unknown {
             tag: "indent".into(),
             attrs: serde_json::json!({"y": 1, "x": 2}),
+            instance: 0,
         }];
         let mut two = one.clone();
         two.lines[0].kind = LineKind::Unknown {
@@ -1419,6 +1461,7 @@ mod tests {
         two.lines[0].containers = vec![Container::Unknown {
             tag: "indent".into(),
             attrs: serde_json::json!({"x": 2, "y": 1}),
+            instance: 0,
         }];
         assert_eq!(one.to_canonical_json(), two.to_canonical_json());
         one.normalize();
@@ -1474,6 +1517,7 @@ mod tests {
                 ordered: true,
                 start: 3,
                 ordinal: 1,
+                instance: 0,
             }
         );
         let link = serde_json::json!({"start": 0, "end": 1, "type": "link", "attrs": {"url": "u"}});

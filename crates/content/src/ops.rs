@@ -962,7 +962,7 @@ mod tests {
                 }),
                 LineOp::SetContainers {
                     line: 2,
-                    containers: vec![Container::Quote],
+                    containers: vec![Container::Quote { instance: 0 }],
                 },
             ),
             (
@@ -987,6 +987,7 @@ mod tests {
                     containers: vec![Container::Unknown {
                         tag: "indent".into(),
                         attrs: serde_json::json!({"depth": 2}),
+                        instance: 0,
                     }],
                 },
             ),
@@ -1260,7 +1261,7 @@ mod tests {
     #[test]
     fn line_op_set_containers_is_depth_capped() {
         let mut rt = from_markdown("hi").unwrap();
-        let deep = vec![Container::Quote; crate::MAX_NESTING_DEPTH + 1];
+        let deep = vec![Container::Quote { instance: 0 }; crate::MAX_NESTING_DEPTH + 1];
         assert_eq!(
             rt.apply_line_ops(&[LineOp::SetContainers {
                 line: 0,
@@ -1831,7 +1832,7 @@ mod tests {
         let old_chars: Vec<char> = "a\nbc".chars().collect();
         let l1 = Line {
             kind: LineKind::Heading { level: 5 },
-            containers: vec![Container::Quote],
+            containers: vec![Container::Quote { instance: 0 }],
             continues: true,
         };
         let lines = vec![tag_line(1, false), l1.clone()];
@@ -1843,7 +1844,7 @@ mod tests {
         assert_eq!(out.len(), 3);
         assert_eq!(out[1], l1, "first half is the untouched original line");
         assert_eq!(out[2].kind, LineKind::Heading { level: 5 });
-        assert_eq!(out[2].containers, vec![Container::Quote]);
+        assert_eq!(out[2].containers, vec![Container::Quote { instance: 0 }]);
         assert!(!out[2].continues, "the split clone starts a new block");
     }
 
