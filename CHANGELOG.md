@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- fix(content): **a `continues` line that crosses a container boundary no longer
+  survives.** A within-block break lives inside one container, and `LineOp::Join`
+  mints the crossing shape whenever it merges two lines of differing paths — the
+  line after the seam keeps continuing across it. Both projections already read
+  the flag as dead there (`export::emit_block` and `emit::segment_end` each
+  require the depth to match before absorbing a continuation), so `normalize`
+  now clears it, which states what was already true and changes nothing
+  observable. `Content::validate` gains `Invariant::ContinuesAcrossContainers`
+  to catch a hand-built content that skipped `normalize`, and
+  `LineOp::SetContinues` refuses the *deliberate* crossing up front with
+  `ApplyError::ContinuesAcrossContainers` — the same repair-or-refuse split the
+  line-kind rule already makes. This was the one relational line invariant
+  nothing checked: `validate` is otherwise strictly per-line, while every
+  container rule is a property of a line pair.
+
 - fix(content): **two adjacent containers of one shape are no longer read as
   one.** Container identity is the container path plus contiguity, and the path
   carried nothing to tell one instance from the next, so two adjacent runs of

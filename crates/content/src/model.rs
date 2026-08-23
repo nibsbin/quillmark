@@ -633,6 +633,12 @@ pub enum Invariant {
     BadHeadingLevel(u8),
     /// The first line has `continues: true` (nothing precedes it to continue).
     FirstLineContinues,
+    /// A line has `continues: true` but sits in a different container path than
+    /// the line before it, so the block it claims to continue is not the block
+    /// above. `normalize` clears the flag; this catches a hand-built content
+    /// that skipped it, the same pairing as
+    /// [`LineKindMismatch`](Invariant::LineKindMismatch).
+    ContinuesAcrossContainers { line: usize },
     /// An [`MarkKind::Unknown`] reused a reserved built-in `type` name.
     ReservedUnknownTag(String),
     /// A [`LineKind::Unknown`] reused a reserved built-in `kind` name: its
@@ -800,6 +806,20 @@ impl Content {
     /// serialization commits to.
     pub fn normalize(&mut self) {
         canonicalize_containers(&mut self.lines);
+        // A `continues` line whose container path differs from the line above
+        // claims to continue a block it is not in. `Join` mints these by
+        // merging two lines of differing paths, leaving the *next* line
+        // continuing across the seam. Both projections already read the flag as
+        // dead there — `export::emit_block` and `emit::segment_end` both
+        // require the depth to match before they absorb a continuation — so
+        // clearing it changes nothing observable and states what is already
+        // true. Same treatment, and the same reason, as the line-kind demotion
+        // below; a *deliberate* one is refused up front by the op channel.
+        for i in 1..self.lines.len() {
+            if self.lines[i].continues && self.lines[i].containers != self.lines[i - 1].containers {
+                self.lines[i].continues = false;
+            }
+        }
         // A splice writes text, never kinds: typing into a table line leaves it
         // `Island` over prose, joining a fence to an image line leaves it `Code`
         // over a slot, and export reads the kind and not the text, so the
@@ -923,6 +943,16 @@ impl Content {
         }
         if self.lines.first().is_some_and(|l| l.continues) {
             return Err(Invariant::FirstLineContinues);
+        }
+        // The one relational line invariant `validate` carries. Every other
+        // container rule is a property of a line pair too, and `normalize`
+        // settles each: a non-canonical `ordinal` renumbers, a run opening
+        // under a fresh parent re-reads, this flag clears. What is left here is
+        // the assertion that it ran.
+        for (i, pair) in self.lines.windows(2).enumerate() {
+            if pair[1].continues && pair[1].containers != pair[0].containers {
+                return Err(Invariant::ContinuesAcrossContainers { line: i + 1 });
+            }
         }
         // Only the formatting-mark edge test below reads it.
         let chars: Vec<char> = if self.marks.iter().any(|m| m.kind.is_formatting()) {
@@ -1573,6 +1603,67 @@ mod tests {
             );
             assert_eq!(once, twice);
         }
+    }
+
+    /// A within-block break lives inside one container. `Join` mints the
+    /// crossing shape by merging two lines of differing paths, which leaves the
+    /// *next* line continuing across the seam; `normalize` clears it, and
+    /// `validate` asserts that it ran.
+    #[test]
+    fn continues_across_a_container_boundary_is_cleared() {
+        let mut rt = Content::new(
+            "a\nb".to_string(),
+            vec![
+                Line::new(LineKind::Para),
+                Line::new(LineKind::Para)
+                    .with_containers(vec![Container::Quote { instance: 0 }])
+                    .with_continues(true),
+            ],
+        );
+        assert_eq!(
+            rt.validate(),
+            Err(Invariant::ContinuesAcrossContainers { line: 1 }),
+            "a hand-built content that skipped normalize is caught"
+        );
+        rt.normalize();
+        assert!(!rt.lines[1].continues, "normalize clears it");
+        assert_eq!(rt.validate(), Ok(()));
+
+        // Equal-length but different containers is the same crossing: two list
+        // items are two blocks, and a hard break does not span them.
+        let li = |ordinal| {
+            vec![Container::ListItem {
+                ordered: false,
+                start: 1,
+                ordinal,
+                instance: 0,
+            }]
+        };
+        let mut rt = Content::new(
+            "a\nb".to_string(),
+            vec![
+                Line::new(LineKind::Para).with_containers(li(0)),
+                Line::new(LineKind::Para)
+                    .with_containers(li(1))
+                    .with_continues(true),
+            ],
+        );
+        rt.normalize();
+        assert!(!rt.lines[1].continues);
+
+        // The within-container break is untouched: same path, flag kept.
+        let mut rt = Content::new(
+            "a\nb".to_string(),
+            vec![
+                Line::new(LineKind::Para).with_containers(li(0)),
+                Line::new(LineKind::Para)
+                    .with_containers(li(0))
+                    .with_continues(true),
+            ],
+        );
+        rt.normalize();
+        assert!(rt.lines[1].continues, "a hard break inside one item survives");
+        assert_eq!(rt.validate(), Ok(()));
     }
 
     #[test]

@@ -12,3 +12,6 @@ cc ff90f800ae8fe6d16e7adb6f38ebcf558488cade231db13d3705afc542faa985 # shrinks to
 cc 5e333ee554d5dea4ec07af36bca02d4e0494549dee880518d7fc5448d81a06d9 # shrinks to md = "# 0. **a**"
 cc 2982cbd9e43f39a2e5cd52a6c20fa4f7f521a65d08764f324d12f768952482a3 # shrinks to md = "| 0 | a |\n| --- | --- |\n| 1 | 2 |\n\n```\na\n```", ins = "a", pos_seed = 616, del_seed = 0, is_delete = false
 cc 2f2838066b598c521a9479d14f0330b1e2cc8988eca221f661b86a6292116257 # shrinks to md = "| a | a |\n| --- | --- |\n| 1 | 2 |", a_seed = 0, b_seed = 0, ins = "a", pos_seed = 0, del_seed = 0, is_delete = false
+cc 200bd7de24162bf4a4b55e632874ab73de96542bb5a763db8fa55dc7317ad079 # shrinks to md = "- ***\n\n  ~~a~~ **00aaa** **a**\n\na0 a\\\na0a0a", a_seed = 0, b_seed = 0, ins = "", pos_seed = 2950, del_seed = 1509, is_delete = true
+cc 4ad60b5a038ffad5e71d6e6d7130158889929223283b33104a4dfeb7012030d3 # shrinks to md = "- a\n- 0\n- 0\n\n```\na\na\n```\n\n- # 0\n\n  0", pos_seed = 0, line_seed = 51, which = 1
+cc e8e7f7b4f04d8b3a756ab61531f0168e49bd8a3fc3d48c1fb1400691706e42a7 # shrinks to md = "1. [a0a0](<ex.com/aa>) **0** a>_你0 `a0aa0`\n2. <u>aa00a</u>\n\n```\n0a00\n```\n\na\\\naa0a 0aa0 a\\\n00aa\n\n**00aaa** ![a](<ex.com/a&>) ![a](<ex.com/aa>)", ins = "", pos_seed = 1598, del_seed = 241, is_delete = true
