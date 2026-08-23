@@ -596,37 +596,40 @@ impl QuillConfig {
                 // literal / validation sites): the string branch below reduces a
                 // bare scalar or length-1 array to text before importing, which
                 // the strict decoder must not do, so it stays open-coded here.
+                let inline_err = || {
+                    CoercionError::uncoercible(
+                        path,
+                        "<richtext>",
+                        "richtext(inline)",
+                        "richtext(inline) requires a single paragraph line \
+                             with no list/quote container and no islands",
+                    )
+                };
                 let inline_check =
                     |rt: &quillmark_content::Content| -> Result<(), CoercionError> {
                         if inline && !rt.is_inline() {
-                            return Err(CoercionError::uncoercible(
-                                path,
-                                "<richtext>",
-                                "richtext(inline)",
-                                "richtext(inline) requires a single paragraph line \
-                                     with no list/quote container and no islands",
-                            ));
+                            return Err(inline_err());
                         }
                         Ok(())
                     };
-                // A strict write uses `Codec::Richtext.decode_value` semantics: a
+                // A strict write is `document::canonical_richtext_value`: a
                 // canonical content object or a markdown string, nothing else. No
                 // scalar→string reduction (the render floor's lenient cascade
                 // below): a bare scalar for a richtext field fails the write. The
                 // messages mirror `Card::commit_field`'s richtext error variants,
                 // which the bindings key on.
                 if mode == Leniency::Write {
-                    let content = match crate::document::Codec::Richtext.decode_value(json_value) {
-                        Some(result) => result.map_err(|e| {
-                            CoercionError::uncoercible(
+                    use crate::document::RichtextValueError as E;
+                    return crate::document::canonical_richtext_value(json_value, inline)
+                        .map(QuillValue::from_json)
+                        .map_err(|e| match e {
+                            E::Decode(e) => CoercionError::uncoercible(
                                 path,
                                 "<richtext>",
                                 "richtext",
                                 e.into_message(),
-                            )
-                        })?,
-                        None => {
-                            return Err(CoercionError::uncoercible(
+                            ),
+                            E::Unshaped => CoercionError::uncoercible(
                                 path,
                                 json_value,
                                 "richtext",
@@ -639,13 +642,9 @@ impl QuillConfig {
                                         _ => "an unsupported value",
                                     }
                                 ),
-                            ));
-                        }
-                    };
-                    inline_check(&content)?;
-                    return Ok(QuillValue::from_json(
-                        quillmark_content::serial::to_canonical_value(&content),
-                    ));
+                            ),
+                            E::NotInline => inline_err(),
+                        });
                 }
                 if json_value.is_object() {
                     let rt = quillmark_content::serial::from_canonical_value(json_value).map_err(
@@ -2282,32 +2281,22 @@ fn literal_content(
     }
     match &field.r#type {
         FieldType::RichText { inline } => {
-            let rt = match crate::document::Codec::Richtext.decode_value(json) {
-                Some(Ok(rt)) => rt,
-                Some(Err(e)) => {
-                    let reason = match e {
-                        crate::document::ContentDecodeError::BadMarkdown(m) => {
-                            format!("markdown import failed: {m}")
-                        }
-                        crate::document::ContentDecodeError::NotContent(m) => {
-                            format!("not a valid richtext content: {m}")
-                        }
-                    };
-                    return Err(richtext_literal_error(label, &reason));
-                }
-                None => {
-                    return Err(richtext_literal_error(
+            use crate::document::{ContentDecodeError as D, RichtextValueError as E};
+            crate::document::canonical_richtext_value(json, *inline)
+                .map(|content| Some(QuillValue::from_json(content)))
+                .map_err(|e| match e {
+                    E::Decode(D::BadMarkdown(m)) => {
+                        richtext_literal_error(label, &format!("markdown import failed: {m}"))
+                    }
+                    E::Decode(D::NotContent(m)) => {
+                        richtext_literal_error(label, &format!("not a valid richtext content: {m}"))
+                    }
+                    E::Unshaped => richtext_literal_error(
                         label,
                         "expected a markdown string (richtext literals are authored as markdown)",
-                    ));
-                }
-            };
-            if *inline && !rt.is_inline() {
-                return Err(richtext_inline_error(label));
-            }
-            Ok(Some(QuillValue::from_json(
-                quillmark_content::serial::to_canonical_value(&rt),
-            )))
+                    ),
+                    E::NotInline => richtext_inline_error(label),
+                })
         }
         FieldType::PlainText { inline } => {
             // Plaintext literals are authored as literal strings and imported

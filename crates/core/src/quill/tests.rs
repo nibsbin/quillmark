@@ -2388,6 +2388,21 @@ fn inline_richtext_example_over_one_para_is_a_load_error() {
     );
 }
 
+/// A richtext literal is authored as markdown or as a canonical content object;
+/// a bare scalar is neither, and the load error says so rather than importing
+/// the scalar's text.
+#[test]
+fn a_bare_scalar_richtext_example_is_a_load_error() {
+    let err = quill_with_field("    tag:\n      type: richtext\n      example: 47\n").unwrap_err();
+    assert!(
+        err.iter().any(|d| {
+            d.code.as_deref() == Some("quill::richtext_example_import")
+                && d.message.contains("expected a markdown string")
+        }),
+        "a numeric richtext example should fail load naming the encoding, got: {err:?}"
+    );
+}
+
 #[test]
 fn inline_richtext_single_line_example_loads_and_caches_content() {
     let config = quill_with_field(
