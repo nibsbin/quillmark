@@ -227,7 +227,13 @@ why the round-trip above is a *total* promise rather than one holding up to an
 adjacency quotient. `Content::normalize` canonicalizes it to `0`, flipping to
 `1` only where the adjacent preceding sibling run would otherwise weld, so a
 document needing no discriminator carries none and its stored bytes are the
-bytes it had before the field existed (§ Byte-stability). The Markdown
+bytes it had before the field existed (§ Byte-stability). That is why the key
+is additive within `@0.93.0` rather than a schema-version event: no blob
+written before it moves. The cost is in the other direction, and only for a
+document that spends the key — a build predating the field ignores it and reads
+the two runs welded, so a row written here and re-saved there loses the
+boundary. A container field added later inherits that trade, since a reader is
+frozen at the vocabulary it shipped with. The Markdown
 projection spells the same boundary with the idiom CommonMark already reads: a
 change of bullet char (`-`/`+`) or of ordered delimiter (`.`/`)`) for lists, the
 blank line for quotes. An `Unknown` container has no Markdown syntax at all, so

@@ -30,6 +30,7 @@ mod update;
 pub mod writer;
 
 pub use error::PdfError;
+pub use reader::ObjectIndex;
 pub use stamp::{regions_of, stamp, StampOptions, CHECKBOX_ON_STATE};
 pub use update::PdfUpdate;
 

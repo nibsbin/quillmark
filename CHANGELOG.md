@@ -2,6 +2,57 @@
 
 ## Unreleased
 
+- **breaking** content: **`Normalized` is the precondition the projections
+  require, and every codec returns one.** A projection over a container tree
+  owes totality, and `Content` alone does not say whether `normalize` has run —
+  so `to_markdown` and `emit_content` each trusted a canonical shape their
+  signature did not ask for. `Content::into_normalized` is the mint (infallible:
+  canonicalizing is total, and the codecs go on calling `validate` after it),
+  `Normalized::into_content` the way back out, and the token derefs to
+  `&Content`, so **a read-only consumer needs no change** — `.text`, `.lines`,
+  `.marks`, `.islands`, `validate()`, `is_inline()` all reach through. What
+  moves is the signatures a caller names or a value it mutates:
+
+  | Crate | 0.108 | 0.109 |
+  |---|---|---|
+  | `quillmark-content` | `from_markdown` / `from_plaintext` / `from_canonical_json` / `serial::from_canonical_value` / `serial::from_authored_value` → `Content` | → `Normalized` |
+  | | `to_markdown(&Content)` | `to_markdown(&Normalized)` |
+  | | `Content::to_canonical_json` | `Normalized::to_canonical_json` |
+  | | `serial::to_canonical_value(&Content)` | `(&Normalized)` |
+  | `quillmark-typst` | `emit::emit_content(&Content)` | `(&Normalized)` |
+  | `quillmark-core` | `Card::body() -> &Content` | `-> &Normalized` |
+  | | `Card::overwrite_body(Content)` / `overwrite_field(_, Content)` | `impl Into<Normalized>` — a `Content` still passes |
+  | | `TypedReader::get_content{,_at}` / `CardReader::get_content{,_at}` → `Option<Content>` | `Option<Normalized>` |
+
+  A consumer that *mutates* a decoded content takes the round trip, which is
+  what the codecs used to run for it silently:
+
+  ```rust
+  // 0.108
+  let mut rt = from_markdown(md)?;
+  rt.marks.push(mark);
+  rt.normalize();
+
+  // 0.109
+  let mut rt = from_markdown(md)?.into_content();
+  rt.marks.push(mark);
+  let rt = rt.into_normalized();
+  ```
+
+  The op channel needs none of that: `apply_text_delta`, `apply_mark_ops`,
+  `apply_line_ops`, `apply_island_ops` and `apply_field_change` are forwarded on
+  `Normalized` and re-establish the invariant on the error path as well as the
+  success one. `to_plaintext` still takes `&Content` and reads a token through
+  the deref, projecting `text` alone with no walk to make total.
+
+- feat(content): **`quillmark_content::traverse` is where the container walks
+  live**, `runs` (adjacent lines sharing one container instance at a depth),
+  `items` (adjacent lines whose whole container is equal) and `segment` (a line
+  plus the continuations at its own nesting). Five call sites across three
+  crates had spelled these by hand, each with its own idea of when a run ends;
+  `Span` and the walks are public so a consumer reading `Content.lines` groups
+  them the way both projections and the quill census do.
+
 - perf(content): **`serial::to_canonical_value` and `to_canonical_json` take a
   `Normalized`.**
   Both cloned the whole content and normalized the copy on every call, on a
@@ -82,7 +133,10 @@
   - Two adjacent ordered lists typeset with their own numbering. They reached
     the Typst emitter as one run and `+` markers numbered the second list on
     from the first, so `1. 2.` / `1. 2.` rendered **1 2 3 4**. The run's first
-    item now states its number, which resets Typst's running counter.
+    item now states its number, which resets Typst's running counter. Every
+    ordered run's first item therefore lowers as `N. ` where a run starting at
+    1 lowered as `+ `; the page is identical, the generated markup is not, so
+    anything diffing or golden-comparing Typst source sees it.
   - `1. a` beside a list starting at `3` keeps that `start` through the
     Markdown projection. CommonMark reads only a list's first number, so
     `1. a\n\n3. b` re-imported as one list of two items and the `start` was
@@ -90,9 +144,12 @@
     lists now alternate their marker (`-`/`+`, `.`/`)`), which is how
     CommonMark itself spells two lists apart, so the boundary survives the
     projection with no comment marker in the authored file.
-  - Adjacent `Unknown` containers of equal `(tag, attrs)` round-trip as two.
-    The open-set promise that a container this build does not know survives
-    untouched is now total rather than holding up to an adjacency quotient.
+  - Adjacent `Unknown` containers of equal `(tag, attrs)` round-trip as two
+    **through storage**, the lane they have: an unknown container has no
+    Markdown syntax to alternate, so it projects transparently there as it
+    always did. The open-set promise that a container this build does not know
+    survives untouched is now total rather than holding up to an adjacency
+    quotient.
 
   An item boundary is a parent boundary: two inner lists under two outer list
   items are two lists, so an inner run restarts its `ordinal` and needs no
@@ -104,6 +161,19 @@
   exhaustively: `Quote` is now a struct variant, and `ListItem`/`Unknown` carry
   the extra field. On the TypeScript surface `instance` is optional; a consumer
   that never writes adjacent same-shape siblings needs no change.
+
+  The block census counts what the projections see, so two adjacent runs of one
+  shape now count two where they counted one: a quill declining `list` or
+  `quote` reports the construct at a document that has two of them where it
+  reported one, and `plate::unsupported_construct` moves with it.
+
+  A blob written here carries `instance` only where a document holds adjacent
+  same-shape siblings, and a reader that predates the field ignores the key —
+  so such a blob loads on 0.108 with the two runs welded, and re-saving there
+  drops the boundary for good. The `@0.93.0` tag is unchanged because every
+  blob written before this release re-encodes byte for byte; the forward
+  direction is the one that costs, and only for the documents that spend the
+  key.
 
 - fix(blueprint): **a variant's `object` or `array<object>` cell expands per
   property.** The cell went through the scalar path, so it rendered as
@@ -118,7 +188,11 @@
   compile once through `glob::Pattern`, matched against the whole path and the
   basename. Two readings tighten to gitignore's: `*` stops at `/`, and a
   pattern spelling out a `/` anchors at the bundle root rather than matching
-  any path that opens and closes with its halves. A line always ignores the
+  any path that opens and closes with its halves. Both narrow what a line
+  ignores, so a bundle can gain a file it used to drop: `assets/*` covers
+  `assets/logo.png` and no longer `assets/icons/logo.png`, which `assets/**`
+  or the directory line `assets/` covers. No in-tree quill spells either shape.
+  A line always ignores the
   name it spells out as well: `[` opens a character class and is an ordinary
   character in a filename, so `Cinzel[wght].ttf` ignores both the variable font
   of that name and the class it describes.

@@ -122,9 +122,9 @@ fn resolve_field_specs(bound: &[BoundWidget], json_data: &serde_json::Value) -> 
         .collect()
 }
 
-/// Values baked as content-stream operators, then parsed for hayro. Both halves
-/// live here so the render paths hold parsed pages rather than bytes to reparse:
-/// the flat PDF is derived from `field_specs` alone and moves only with them.
+/// Bake `field_specs` into the base as content-stream operators, then parse the
+/// result for hayro. Both halves happen here so the two places `field_specs`
+/// are set are the two places the derived PDF moves.
 ///
 /// A parse failure is this crate flattening to something malformed, never a
 /// property of the output format asking for it.
@@ -144,6 +144,8 @@ struct PdfformSession {
     field_specs: Vec<FieldSpec>,
     /// Cached so `page_size_pt` need not reparse.
     page_boxes: Vec<[f32; 4]>,
+    /// The base with `field_specs` baked in, parsed: the render paths hold
+    /// pages rather than bytes to reparse per paint.
     flat: HayroPdf,
 }
 
