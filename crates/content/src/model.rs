@@ -180,17 +180,16 @@ impl Container {
     ///
     /// A producer writes it against [`same_run`](Self::same_run): two adjacent
     /// runs of one shape need distinct values, whatever they are, or they
-    /// arrive as one container. [`Content::normalize`] then collapses them to
-    /// the canonical pair — **0, flipping to 1 only where the projection would
-    /// otherwise [weld](Self::same_weld) the two** — so a document that needs
-    /// no discriminator carries none, and one that needs it alternates
+    /// arrive as one container. [`Content::normalize`] collapses those to the
+    /// canonical pair — **0, flipping to 1 only where the projection would
+    /// otherwise [weld](Self::same_weld) the two** — so a document needing no
+    /// discriminator carries none and one that needs it alternates
     /// `0, 1, 0, 1`. Non-adjacent runs never collide, so two values suffice.
     ///
-    /// The two rules answer different questions, and a pair can fall either way
-    /// between them: `1. a` beside `3. b` differs by `start`, so `same_run`
-    /// separates the runs and a producer writes no discriminator, while
-    /// Markdown reads only a list's first number and would weld them — so the
-    /// canonical form spends one anyway.
+    /// The two rules answer different questions, and a pair can fall between
+    /// them. `1. a` beside `3. b` differs by `start`, so `same_run` separates
+    /// the runs and a producer writes nothing. Markdown reads only a list's
+    /// first number, so the canonical form spends a discriminator anyway.
     pub fn instance(&self) -> u64 {
         match self {
             Container::ListItem { instance, .. }
@@ -221,9 +220,9 @@ impl Container {
     ///
     /// The **identity** rule, read and written alike: two adjacent lines sit in
     /// one container instance iff this holds *and* their
-    /// [`instance`](Self::instance)s are equal, which is what
-    /// [`crate::traverse::runs`] applies and what a producer separates its runs
-    /// against. Whether the *projection* can then tell them apart is
+    /// [`instance`](Self::instance)s are equal. [`crate::traverse::runs`]
+    /// applies it, and a producer separates its runs against it. Whether the
+    /// *projection* can then tell two runs apart is
     /// [`same_weld`](Self::same_weld).
     pub fn same_run(&self, other: &Container) -> bool {
         match (self, other) {

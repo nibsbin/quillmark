@@ -321,9 +321,9 @@ declare const annotated: RuntimeQuill;
 void annotated;
 
 // The container write lane. `instance` decides whether two adjacent runs weld,
-// nothing reports an omission at runtime, and a `setContainers` op is host-built
-// by definition — so the op's element type requires the field where `Content`,
-// which is a read shape too, leaves it optional.
+// and nothing reports an omission at runtime. A `setContainers` op is host-built
+// by definition, so its element type requires the field — where `Content`,
+// being a read shape too, leaves it optional.
 import type {
 	ContentContainerInput,
 	assignInstances

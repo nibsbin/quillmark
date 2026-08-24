@@ -141,11 +141,11 @@ fn triples_over_the_list_and_quote_alphabet_are_fixed_points() {
     assert_eq!(broken, 0);
 }
 
-/// Identity and projection are separate rules, and a list pair differing only
-/// in `start` falls between them: `same_run` counts `start`, so the two runs
-/// arrive apart with no discriminator written, while Markdown reads only a
-/// list's first number — so the canonical form spends one to stay a fixed
-/// point. The alphabet above holds `start` at 1, which is the axis it misses.
+/// Identity and projection are separate rules, and a `start`-only difference
+/// falls between them. `same_run` counts `start`, so the two runs arrive apart
+/// with no discriminator written; Markdown reads only a list's first number, so
+/// the canonical form spends one to stay a fixed point. The alphabet above
+/// holds `start` at 1, the axis it misses.
 #[test]
 fn a_start_only_difference_separates_the_runs_and_still_costs_a_discriminator() {
     let one = Container::ListItem {

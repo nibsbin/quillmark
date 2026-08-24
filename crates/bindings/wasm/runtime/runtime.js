@@ -513,17 +513,15 @@ export function isUnknownIsland(island) {
 // ── Container run boundaries ────────────────────────────────────────────────
 // `ContentContainer.instance` is what keeps two adjacent runs of one shape
 // apart, and only a writer knows where a boundary is: the flat `containers`
-// form cannot tell a list that ends beside another from one list of two items,
-// so an omitted discriminator welds them silently. A codec flattening a tree
-// has the boundary and stamps it here.
+// form cannot tell a list ending beside another from one list of two items, so
+// an omitted discriminator welds them and nothing reports it.
 //
-// WELD_KEYS is the rule `Container::same_weld` owns upstream — which fields two
-// adjacent runs must share for the MARKDOWN PROJECTION to read them as one, and
-// therefore for the canonical form to have to spend a discriminator. Coarser
-// than sameness for a list: CommonMark reads only a list's first number, so
-// `start` cannot carry the boundary and `1. a` beside `3. b` needs the
-// discriminator too. `tests/known_names_drift.rs` pins it against the Rust
-// predicate.
+// WELD_KEYS is the rule `Container::same_weld` owns upstream: which fields two
+// adjacent runs must share for the markdown projection to read them as one, and
+// therefore for the canonical form to have to spend a discriminator. `start` is
+// not among them, since CommonMark reads only a list's first number. A table
+// rather than a switch, so `tests/known_names_drift.rs` can pin it against the
+// Rust predicate.
 
 const WELD_KEYS = { list_item: ['ordered'], quote: [] };
 
@@ -544,10 +542,10 @@ function sameJson(a, b) {
  * @returns {boolean}
  */
 export function weldsWith(a, b) {
-	// A malformed value is not a container that welds with anything, the posture
-	// the membership guards take: answer, do not throw.
+	// A malformed value welds with nothing. The membership guards' posture:
+	// answer rather than throw.
 	if (typeof a?.container !== 'string' || a.container !== b?.container) return false;
-	// `hasOwn`, so a tag colliding with an Object.prototype member reaches the
+	// `hasOwn`, so a tag colliding with an `Object.prototype` member reaches the
 	// unknown branch rather than a function.
 	if (!Object.hasOwn(WELD_KEYS, a.container)) return sameJson(a.attrs, b.attrs);
 	return WELD_KEYS[a.container].every((k) => a[k] === b[k]);

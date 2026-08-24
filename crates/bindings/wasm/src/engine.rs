@@ -230,16 +230,16 @@ export type ContentLineKind =
  *
  * **A writer owes it.** Give adjacent sibling runs of one shape distinct
  * values, or they arrive as one: a second list's items come back as
- * continuation paragraphs of the first, markers gone. Nothing reports that —
- * the flat form cannot tell a boundary you meant from one you did not — so a
+ * continuation paragraphs of the first, markers gone. Nothing reports that,
+ * since the flat form cannot tell a boundary you meant from one you did not. A
  * codec flattening a tree stamps the field with `assignInstances` from
  * `@quillmark/wasm/runtime` rather than by hand. Any distinct pair of values
  * works; a write is canonicalized to `0`/`1`.
  *
  * Reading is not the mirror of writing. The field is absent where it is `0`,
- * and it appears on pairs no writer had to spell: `1.` beside a list starting
- * at `3` differs by `start`, so those runs arrive apart with nothing written,
- * and the canonical form still spends a discriminator because Markdown reads
+ * and it appears on pairs no writer had to spell. `1.` beside a list starting
+ * at `3` differs by `start`, so those runs arrive apart with nothing written —
+ * and the canonical form spends a discriminator anyway, because Markdown reads
  * only a list's first number. */
 export type ContentContainer =
     | { container: "list_item"; ordered: boolean; start: number; ordinal: number; instance?: number }
@@ -247,10 +247,10 @@ export type ContentContainer =
     | { container: string; attrs: unknown; instance?: number };
 
 /** A container path on a lane that only ever carries host-built values:
- * `ContentContainer` with `instance` spelled out rather than defaulted, so the
+ * `ContentContainer` with `instance` spelled out rather than defaulted. The
  * field that decides whether two adjacent runs weld cannot be omitted by
- * accident. `assignInstances` returns this shape. A path copied off a line
- * carries its own instance through — `{ ...c, instance: c.instance ?? 0 }`.
+ * accident here. `assignInstances` returns this shape, and a path copied off a
+ * line carries its own instance through — `{ ...c, instance: c.instance ?? 0 }`.
  *
  * `Content` itself keeps the optional field: it is a read shape as much as a
  * write one, and the wire omits a zero. */

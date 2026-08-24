@@ -96,9 +96,9 @@ fn ts_unions_name_every_built_in() {
 
 /// `weldsWith` in `runtime.js` re-spells the rule `Container::same_weld` owns:
 /// which fields two adjacent runs must share for the Markdown projection to
-/// read them as one, and therefore for a writer to owe a discriminator. The
-/// Rust half here is read off the predicate rather than restated, so a change to
-/// the rule fails here instead of welding two runs at every JS consumer.
+/// read them as one. The Rust half here is read off the predicate rather than
+/// restated, so a change to the rule fails here instead of welding two runs at
+/// every JS consumer.
 #[test]
 fn js_weld_keys_match_the_rust_weld_rule() {
     fn body() -> &'static str {
