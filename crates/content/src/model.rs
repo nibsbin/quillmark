@@ -687,6 +687,13 @@ pub enum Invariant {
     /// that skipped it, the same pairing as
     /// [`LineKindMismatch`](Invariant::LineKindMismatch).
     ContinuesAcrossContainers { line: usize },
+    /// A line has `continues: true` but a different [`LineKind`] than the line
+    /// before it. Every projection reads a block's role off its head alone, so
+    /// the kind this line carries is one nothing renders. `normalize` takes the
+    /// head's;
+    /// [`ContinuesAcrossContainers`](Invariant::ContinuesAcrossContainers) is
+    /// the same rule on the container axis.
+    ContinuesAcrossKinds { line: usize },
     /// An [`MarkKind::Unknown`] reused a reserved built-in `type` name.
     ReservedUnknownTag(String),
     /// A [`LineKind::Unknown`] reused a reserved built-in `kind` name: its
@@ -698,6 +705,10 @@ pub enum Invariant {
     /// A formatting mark edge sits on a `\n` (normalization should have trimmed
     /// it): a hand-built content that skipped `normalize`.
     MarkEdgeOnNewline { at: Usv },
+    /// A formatting mark covers a [`LineKind::Code`] line's text, which the
+    /// markdown fence, the Typst `#raw` and the editor's `code_block` all emit
+    /// verbatim: a range no projection can carry. `normalize` clips it off.
+    FormattingOverCode { at: Usv },
     /// A table island's `aligns` length differs from its column count (the
     /// header width). `normalize` syncs `aligns` to the column count.
     TableAlignsMismatch { aligns: usize, cols: usize },
@@ -894,6 +905,26 @@ impl Content {
                 }
             }
         }
+        // A continuation's `kind` is its head's, `lang` included. Every
+        // projection reads a segment's role off the line that opens it —
+        // `export::emit_leaf_block`, the Typst `emit_segment`, the editor's
+        // fold — so a continuation carrying a kind of its own carries a value
+        // nothing renders. Where the head's kind contradicts the continuation's
+        // *own* text the flag goes instead: a line the head cannot absorb is no
+        // continuation of it. Runs after the demotion above, so the kind
+        // inherited is one its head keeps.
+        let segs: Vec<&str> = self.text.split('\n').collect();
+        for i in 1..self.lines.len() {
+            if !self.lines[i].continues || self.lines[i].kind == self.lines[i - 1].kind {
+                continue;
+            }
+            let head = self.lines[i - 1].kind.clone();
+            if line_kind_mismatch(&head, segs.get(i).copied().unwrap_or_default()).is_some() {
+                self.lines[i].continues = false;
+            } else {
+                self.lines[i].kind = head;
+            }
+        }
         // A table island's props are repaired (padded to one column count, cell
         // `\n` rewritten to a space, cell marks canonicalized) before the key
         // sort, so equal cells serialize to equal bytes and `validate` holds.
@@ -905,6 +936,22 @@ impl Content {
             if let MarkKind::Unknown { attrs, .. } = &mut mark.kind {
                 canonicalize_keys(attrs);
             }
+        }
+        // A formatting mark over a code line's text has no reader: the markdown
+        // fence and the Typst `#raw` emit the segment verbatim, and the
+        // editor's `code_block` declares `marks: ''`. Clip it away — a mark
+        // spanning a fence keeps its prose sides, one wholly inside keeps
+        // nothing — so what is stored is what some projection carries. Runs
+        // after the kind passes, which decide which lines are code, and before
+        // the edge trim, which takes the cut edges off the fence's `\n`s.
+        if self.marks.iter().any(|m| m.kind.is_formatting())
+            && self
+                .lines
+                .iter()
+                .any(|l| matches!(l.kind, LineKind::Code { .. }))
+        {
+            let code = code_ranges(&self.text, &self.lines);
+            self.marks = clip_formatting(std::mem::take(&mut self.marks), &code);
         }
         // A formatting mark's edges never sit on a line boundary: markdown can't
         // bold a `\n`, so two producers that disagree only about whether the
@@ -999,19 +1046,29 @@ impl Content {
         if self.lines.first().is_some_and(|l| l.continues) {
             return Err(Invariant::FirstLineContinues);
         }
-        // The one relational line invariant `validate` carries. Every other
-        // container rule is a property of a line pair too, and `normalize`
-        // settles each: a non-canonical `ordinal` renumbers, a run opening
-        // under a fresh parent re-reads, this flag clears. What is left here is
-        // the assertion that it ran.
+        // The two relational line invariants `validate` carries, both about a
+        // continuation and the head it claims. Every other container rule is a
+        // property of a line pair too, and `normalize` settles each: a
+        // non-canonical `ordinal` renumbers, a run opening under a fresh parent
+        // re-reads, this flag clears, a continuation's kind takes its head's.
+        // What is left here is the assertion that it ran.
         for (i, pair) in self.lines.windows(2).enumerate() {
             if pair[1].continues && pair[1].containers != pair[0].containers {
                 return Err(Invariant::ContinuesAcrossContainers { line: i + 1 });
             }
+            if pair[1].continues && pair[1].kind != pair[0].kind {
+                return Err(Invariant::ContinuesAcrossKinds { line: i + 1 });
+            }
         }
-        // Only the formatting-mark edge test below reads it.
-        let chars: Vec<char> = if self.marks.iter().any(|m| m.kind.is_formatting()) {
+        // Only the formatting-mark tests below read these two.
+        let formatting = self.marks.iter().any(|m| m.kind.is_formatting());
+        let chars: Vec<char> = if formatting {
             self.text.chars().collect()
+        } else {
+            Vec::new()
+        };
+        let code = if formatting {
+            code_ranges(&self.text, &self.lines)
         } else {
             Vec::new()
         };
@@ -1034,6 +1091,13 @@ impl Content {
                 }
                 if m.end > m.start && chars.get(m.end - 1) == Some(&'\n') {
                     return Err(Invariant::MarkEdgeOnNewline { at: m.end - 1 });
+                }
+            }
+            if m.kind.is_formatting() {
+                if let Some(&(s, _)) = code.iter().find(|(s, e)| *s < m.end && m.start < *e) {
+                    return Err(Invariant::FormattingOverCode {
+                        at: m.start.max(s),
+                    });
                 }
             }
             match &m.kind {
@@ -1213,6 +1277,52 @@ fn canonicalize_containers(lines: &mut [Line]) {
     }
 }
 
+/// The USV ranges the [`LineKind::Code`] lines' text occupies, ascending and
+/// disjoint: a `\n` boundary belongs to no segment, so two adjacent code lines
+/// are two ranges. Empty segments carry no range.
+pub(crate) fn code_ranges(text: &str, lines: &[Line]) -> Vec<(Usv, Usv)> {
+    let mut out = Vec::new();
+    let mut at: Usv = 0;
+    for (line, seg) in lines.iter().zip(text.split('\n')) {
+        let len = seg.chars().count();
+        if len > 0 && matches!(line.kind, LineKind::Code { .. }) {
+            out.push((at, at + len));
+        }
+        at += len + 1;
+    }
+    out
+}
+
+/// Every formatting mark minus `code`, identity marks passed through. A mark
+/// wholly inside a fence yields no piece at all; one spanning it yields its two
+/// prose sides.
+pub(crate) fn clip_formatting(marks: Vec<Mark>, code: &[(Usv, Usv)]) -> Vec<Mark> {
+    let mut out = Vec::with_capacity(marks.len());
+    for m in marks {
+        if !m.kind.is_formatting() {
+            out.push(m);
+            continue;
+        }
+        let mut cursor = m.start;
+        for &(s, e) in code {
+            if e <= cursor || s >= m.end {
+                continue;
+            }
+            if s > cursor {
+                out.push(Mark::new(cursor, s, m.kind.clone()));
+            }
+            cursor = e;
+            if cursor >= m.end {
+                break;
+            }
+        }
+        if cursor < m.end {
+            out.push(Mark::new(cursor, m.end, m.kind));
+        }
+    }
+    out
+}
+
 pub(crate) fn normalize_marks(marks: Vec<Mark>) -> Vec<Mark> {
     use std::collections::BTreeMap;
 
@@ -1389,6 +1499,101 @@ mod tests {
         }];
         rt.normalize();
         assert_eq!(rt.lines[0].kind, LineKind::Island);
+        assert_eq!(rt.validate(), Ok(()));
+    }
+
+    /// `normalize` writes the head's kind onto a continuation, `lang` included,
+    /// and `validate` asserts that ran.
+    #[test]
+    fn normalize_gives_a_continuation_its_head_s_kind() {
+        let code = |lang: Option<&str>| LineKind::Code {
+            lang: lang.map(str::to_string),
+        };
+        let mut rt = Content::new(
+            "a\nb\nc".into(),
+            vec![
+                Line::new(code(Some("rust"))),
+                Line::new(LineKind::Para).with_continues(true),
+                Line::new(code(Some("typ"))).with_continues(true),
+            ],
+        );
+        assert_eq!(
+            rt.validate(),
+            Err(Invariant::ContinuesAcrossKinds { line: 1 })
+        );
+        rt.normalize();
+        assert!(rt.lines.iter().all(|l| l.kind == code(Some("rust"))));
+        assert_eq!(rt.validate(), Ok(()));
+
+        // A head whose kind the continuation's own text contradicts absorbs
+        // nothing: the flag goes instead of the kind.
+        let mut rt = Content::new(
+            format!("code\n{ISLAND_SLOT}"),
+            vec![
+                Line::new(code(None)),
+                Line::new(LineKind::Island).with_continues(true),
+            ],
+        );
+        rt.islands = vec![Island {
+            id: "isl-0".into(),
+            island_type: "image".into(),
+            props: serde_json::json!({"alt": "x", "url": "y.png"}),
+            loss: Loss::LOSSLESS,
+        }];
+        rt.normalize();
+        assert!(!rt.lines[1].continues);
+        assert_eq!(rt.lines[1].kind, LineKind::Island);
+        assert_eq!(rt.validate(), Ok(()));
+    }
+
+    /// A demoted head is demoted before it is inherited, so one pass reaches the
+    /// fixed point.
+    #[test]
+    fn continuation_inheritance_is_idempotent_over_a_demoted_head() {
+        let mut rt = Content::new(
+            "text on a rule line\n".into(),
+            vec![
+                Line::new(LineKind::Rule),
+                Line::new(LineKind::Heading { level: 2 }).with_continues(true),
+            ],
+        );
+        rt.normalize();
+        let once = rt.lines.clone();
+        rt.normalize();
+        assert_eq!(rt.lines, once);
+        assert_eq!(rt.lines[0].kind, LineKind::Para);
+        assert_eq!(rt.lines[1].kind, LineKind::Para);
+        assert_eq!(rt.validate(), Ok(()));
+    }
+
+    /// A formatting mark over a fence is a range no projection carries: the
+    /// prose sides survive the clip, the code middle does not.
+    #[test]
+    fn normalize_clips_formatting_off_code_text() {
+        let fence = || LineKind::Code { lang: None };
+        let mut rt = Content::new(
+            "pre\ncode\npost".into(),
+            vec![
+                Line::new(LineKind::Para),
+                Line::new(fence()),
+                Line::new(LineKind::Para),
+            ],
+        );
+        rt.marks = vec![f(0, 13, MarkKind::Strong), f(5, 7, MarkKind::Emph)];
+        assert_eq!(rt.validate(), Err(Invariant::FormattingOverCode { at: 4 }));
+        rt.normalize();
+        assert_eq!(
+            rt.marks,
+            vec![f(0, 3, MarkKind::Strong), f(9, 13, MarkKind::Strong)],
+            "the emph was wholly inside the fence"
+        );
+        assert_eq!(rt.validate(), Ok(()));
+
+        // An anchor is identity, not formatting: a comment on a code line holds.
+        let mut rt = Content::new("code".into(), vec![Line::new(fence())]);
+        rt.marks = vec![f(2, 2, MarkKind::Anchor { id: "c1".into() })];
+        rt.normalize();
+        assert_eq!(rt.marks.len(), 1);
         assert_eq!(rt.validate(), Ok(()));
     }
 

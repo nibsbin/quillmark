@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+- fix(content): **a continuation's line kind is its head's.** Every projection
+  reads a block's role off the line that opens it — `export::emit_leaf_block`,
+  the Typst `emit_segment`, the editor's fold — so a `continues` line carrying a
+  `kind` of its own carried a value nothing renders, down to a `lang` that
+  disagreed along one fence. `normalize` now writes the head's kind onto it, and
+  drops the flag instead where the head's kind contradicts the continuation's
+  own text, a line the head cannot absorb being no continuation of it.
+  `Content::validate` gains `Invariant::ContinuesAcrossKinds` and
+  `LineOp::SetContinues` refuses the deliberate mismatch with
+  `ApplyError::ContinuesAcrossKinds`: the container rule beside it, on the role
+  axis.
+
+- fix(content): **a formatting mark no longer reaches into a code line.** The
+  Markdown fence emits its lines verbatim, the Typst lowering puts them in one
+  `#raw` string literal, and the editor's `code_block` declares `marks: ''`, so
+  a `Strong` over a code line was a range no projection could carry — stored,
+  read back, and removed by the first edit anywhere in the field. `normalize`
+  clips it: a mark spanning a fence keeps its prose sides, one wholly inside
+  keeps nothing. Identity marks are untouched, an anchor on a code line being a
+  comment thread the editor draws as a decoration. `Content::validate` gains
+  `Invariant::FormattingOverCode` and `MarkOp::Add` refuses the deliberate write
+  with `ApplyError::FormattingOverCode`.
+
 ## v0.109.0 - 2026-08-24
 
 - **breaking** content: **`Normalized` is the precondition the projections

@@ -31,6 +31,12 @@ tree over `lines`; the inline pass sweeps `marks` and islands within each line.
 A **segment** is a maximal run of lines joined by `Line::continues`: one
 paragraph, one heading, one whole code fence, one island line. It is what
 "paragraph-level" means against the content, and the unit a region keys on.
+Its role is its **head** line's: this walk, the Markdown export and the
+editor's fold each read `kind` off the line that opens the segment and off no
+other, down to the `lang` one fence carries. So a continuation's `kind` is the
+head's by construction — `Content::normalize` writes it there, dropping the
+flag instead where the head's kind contradicts the continuation's own text, and
+`Invariant::ContinuesAcrossKinds` asserts that ran.
 
 ## Escape functions
 
@@ -103,6 +109,15 @@ block-level discipline.
 **Every generated line opens at the enclosing list depth**, two spaces per item.
 Typst ends a list at a block written to column 0, so one emitter rule indents
 leaves and containers alike: what the content nests, the markup nests.
+
+**A fence's text carries no formatting.** `#raw` takes one string literal, the
+Markdown fence emits its lines verbatim, and the editor's `code_block` declares
+`marks: ''`, so a `Strong` over a code line is a range with no reader anywhere.
+`Content::normalize` clips one off: a mark spanning a fence keeps its prose
+sides, one wholly inside keeps nothing, and `Invariant::FormattingOverCode`
+asserts that ran. An identity mark is untouched: an anchor on a code line is a
+comment thread the editor draws as a decoration, and this lowering emits nothing
+for one anywhere.
 
 Anchor and unknown marks emit nothing; unknown island types emit nothing
 (parallel to the HTML rule at import). An unknown line kind lowers as a

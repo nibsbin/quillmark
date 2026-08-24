@@ -331,6 +331,14 @@ pub enum ApplyError {
     /// its container path differs from the previous line's, and a within-block
     /// break lives inside one container.
     ContinuesAcrossContainers { line: usize },
+    /// [`LineOp::SetContinues`] would continue a block with a line of another
+    /// [`LineKind`]: every projection reads a block's role off its head, so the
+    /// continuation's own kind would be a value nothing renders.
+    ContinuesAcrossKinds { line: usize },
+    /// A [`MarkOp::Add`] of a formatting mark reaching into a
+    /// [`LineKind::Code`] line's text, which every projection emits verbatim.
+    /// `at` is the first covered code position.
+    FormattingOverCode { at: Usv },
     /// The text delta's expected base length disagreed with the content:
     /// it was built against a different revision.
     DeltaBaseMismatch {
@@ -480,6 +488,17 @@ impl Content {
                             end: *end,
                             len,
                         });
+                    }
+                    // A fence emits its text verbatim in every projection, so a
+                    // formatting range inside one is a write with no reader.
+                    // The incidental crossing — a splice or a `SetKind` that
+                    // moves a fence under a live mark — is `normalize`'s to
+                    // clip.
+                    if kind.is_formatting() {
+                        let code = crate::model::code_ranges(&self.text, &self.lines);
+                        if let Some(&(s, _)) = code.iter().find(|(s, e)| *s < *end && *start < *e) {
+                            return Err(ApplyError::FormattingOverCode { at: (*start).max(s) });
+                        }
                     }
                     if let MarkKind::Anchor { id } = kind {
                         if id.is_empty() {
@@ -660,6 +679,18 @@ impl Content {
                             .is_some_and(|(l, prev)| l.containers != prev.containers)
                     {
                         return Err(ApplyError::ContinuesAcrossContainers { line: *line });
+                    }
+                    // And the same refusal for the role: a block's kind is its
+                    // head's, so continuing one with a line of another kind
+                    // asks for a reading no projection has.
+                    if *continues
+                        && self
+                            .lines
+                            .get(*line)
+                            .zip(self.lines.get(line.wrapping_sub(1)))
+                            .is_some_and(|(l, prev)| l.kind != prev.kind)
+                    {
+                        return Err(ApplyError::ContinuesAcrossKinds { line: *line });
                     }
                     let l = self.line_mut(*line)?;
                     l.continues = *continues;
@@ -1342,6 +1373,72 @@ mod tests {
             Ok(())
         );
         assert!(rt.lines[1].continues);
+    }
+
+    /// The role half of the same pairing. The incidental crossing — a `SetKind`
+    /// under a live `continues` — is `normalize`'s.
+    #[test]
+    fn set_continues_across_a_line_kind_is_refused() {
+        let mut rt = from_markdown("```\ncode\n```\n\npara").unwrap();
+        let para = rt
+            .lines
+            .iter()
+            .position(|l| l.kind == LineKind::Para)
+            .expect("the paragraph is there");
+        assert_eq!(
+            rt.apply_line_ops(&[LineOp::SetContinues {
+                line: para,
+                continues: true
+            }]),
+            Err(ApplyError::ContinuesAcrossKinds { line: para })
+        );
+
+        let mut rt = from_markdown("a\\\nb").unwrap();
+        assert!(rt.lines[1].continues);
+        assert!(rt
+            .apply_line_ops(&[LineOp::SetKind {
+                line: 0,
+                kind: LineKind::Heading { level: 2 },
+            }])
+            .is_ok());
+        assert_eq!(rt.lines[1].kind, LineKind::Heading { level: 2 });
+        assert_eq!(rt.validate(), Ok(()));
+    }
+
+    /// A formatting mark inside a fence has no reader, so the deliberate write
+    /// is refused; the incidental one — a `SetKind` fencing marked prose — is
+    /// clipped by `normalize`.
+    #[test]
+    fn mark_op_add_over_code_text_is_refused() {
+        let mut rt = from_markdown("```\ncode\n```").unwrap();
+        assert_eq!(
+            rt.apply_mark_ops(&[MarkOp::Add {
+                start: 1,
+                end: 3,
+                kind: MarkKind::Strong,
+            }]),
+            Err(ApplyError::FormattingOverCode { at: 1 })
+        );
+        assert_eq!(
+            rt.apply_mark_ops(&[MarkOp::Add {
+                start: 1,
+                end: 3,
+                kind: MarkKind::Anchor { id: "c1".into() },
+            }]),
+            Ok(()),
+            "an anchor is identity, and a comment on a code line holds"
+        );
+
+        let mut rt = from_markdown("**bold**").unwrap();
+        assert_eq!(rt.marks.len(), 1);
+        assert!(rt
+            .apply_line_ops(&[LineOp::SetKind {
+                line: 0,
+                kind: LineKind::Code { lang: None },
+            }])
+            .is_ok());
+        assert!(rt.marks.is_empty());
+        assert_eq!(rt.validate(), Ok(()));
     }
 
     /// A `Join` merging two lines of differing paths leaves the line after the
