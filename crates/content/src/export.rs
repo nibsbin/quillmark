@@ -26,7 +26,7 @@
 //! adversarial delimiter/break placement.
 
 use crate::island::KnownIslandType;
-use crate::model::{Container, Island, LineKind, Mark, MarkKind, Content, ISLAND_SLOT};
+use crate::model::{Container, Island, LineKind, Mark, MarkKind, Content, Normalized, ISLAND_SLOT};
 
 /// Render a content to markdown. An island projects by **type**: a type this
 /// build knows emits its markdown, any other a placeholder comment.
@@ -35,7 +35,7 @@ use crate::model::{Container, Island, LineKind, Mark, MarkKind, Content, ISLAND_
 /// *describes* fidelity for a consumer to surface, while the type decides
 /// whether a projection exists at all. So a known type stamped with a loss class
 /// this build lacks still emits its table.
-pub fn to_markdown(rt: &Content) -> String {
+pub fn to_markdown(rt: &Normalized) -> String {
     let segments = line_segments(rt);
     let ctx = Ctx {
         rt,
@@ -150,19 +150,13 @@ fn emit_block(ctx: &Ctx, range: std::ops::Range<usize>, depth: usize, out: &mut 
     while i < range.end {
         let line = &lines[i];
         if line.containers.len() > depth {
-            // A nested container starts here; gather its run and recurse.
-            let key = &line.containers[depth];
-            let mut j = i + 1;
-            while j < range.end
-                && lines[j].containers.len() > depth
-                && &lines[j].containers[depth] == key
-            {
-                j += 1;
-            }
+            let item = crate::traverse::items(lines, i..range.end, depth)
+                .next()
+                .expect("a line with a container at `depth` opens an item");
             block_separator(out, first_block);
-            emit_container(ctx, key, i..j, depth, out);
+            emit_container(ctx, item.container, item.range.clone(), depth, out);
             first_block = false;
-            i = j;
+            i = item.range.end;
         } else {
             // A leaf block: this line (continues == false) plus every following
             // line that continues it (a hard-break run, or a code fence's lines).
@@ -994,7 +988,7 @@ mod tests {
     /// export∘import is the identity on the content.
     /// A content built by hand, as a client writing `Content` directly builds
     /// one, normalized the way every write lane normalizes it.
-    fn stored(text: &str, containers: Vec<Vec<Container>>) -> Content {
+    fn stored(text: &str, containers: Vec<Vec<Container>>) -> Normalized {
         let lines = containers
             .into_iter()
             .map(|c| {
@@ -1003,8 +997,7 @@ mod tests {
                 l
             })
             .collect();
-        let mut rt = Content::new(text.to_string(), lines);
-        rt.normalize();
+        let rt = Content::new(text.to_string(), lines).into_normalized();
         rt.validate().expect("stored content validates");
         rt
     }
@@ -1033,7 +1026,7 @@ mod tests {
     /// a client writing `Content` directly is the lane that mints them.
     #[test]
     fn adjacent_sibling_containers_project_and_return() {
-        let cases: &[(Content, &str)] = &[
+        let cases: &[(Normalized, &str)] = &[
             // Two one-item lists: the shape that used to come back as one item
             // with an unnumbered continuation paragraph.
             (stored("a\nb", vec![li(0, 0), li(0, 1)]), "- a\n\n+ b"),
@@ -1081,14 +1074,16 @@ mod tests {
     /// the item with it — which is why the second bullet is `+`.
     #[test]
     fn alternate_markers_do_not_collide_with_a_rule() {
-        let mut rt = stored("a\n\nb", vec![li(0, 0), li(0, 1), li(1, 1)]);
+        let mut rt = stored("a\n\nb", vec![li(0, 0), li(0, 1), li(1, 1)]).into_content();
         rt.lines[1].kind = LineKind::Rule;
+        let rt = rt.into_normalized();
         rt.validate().expect("validates");
         assert_eq!(to_markdown(&rt), "- a\n\n+ ***\n\n+ b");
         assert_eq!(from_markdown(&to_markdown(&rt)).unwrap(), rt);
 
-        let mut rt = stored("a\n\nb", vec![oli(0, 0), oli(0, 1), oli(1, 1)]);
+        let mut rt = stored("a\n\nb", vec![oli(0, 0), oli(0, 1), oli(1, 1)]).into_content();
         rt.lines[1].kind = LineKind::Rule;
+        let rt = rt.into_normalized();
         assert_eq!(to_markdown(&rt), "1. a\n\n1) ***\n\n2) b");
         assert_eq!(from_markdown(&to_markdown(&rt)).unwrap(), rt);
     }
@@ -1129,9 +1124,9 @@ mod tests {
     /// splits around the slot, keeping both the text and the island.
     #[test]
     fn code_mark_over_island_slot_keeps_the_island() {
-        let mut rt = from_markdown("a ![x](y.png) b").unwrap();
+        let mut rt = from_markdown("a ![x](y.png) b").unwrap().into_content();
         rt.marks.push(Mark { start: 0, end: 5, kind: MarkKind::Code });
-        rt.normalize();
+        let rt = rt.into_normalized();
         assert_eq!(rt.validate(), Ok(()));
         let md = to_markdown(&rt);
         assert_eq!(md, "`a `![x](y.png)` b`");
@@ -1142,7 +1137,7 @@ mod tests {
 
     #[test]
     fn unknown_block_vocabulary_projects_as_prose() {
-        let mut rt = Content {
+        let rt = Content {
             text: "heads up\nstill inside".into(),
             lines: vec![
                 Line {
@@ -1170,13 +1165,14 @@ mod tests {
             marks: vec![Mark { start: 0, end: 5, kind: MarkKind::Strong }],
             islands: vec![],
         };
-        rt.normalize();
+        let rt = rt.into_normalized();
         assert_eq!(rt.validate(), Ok(()));
         assert_eq!(to_markdown(&rt), "**heads** up\n\nstill inside");
         // An unknown container inside a known one adds no prefix of its own.
+        let mut rt = rt.into_content();
         rt.lines[0].containers.insert(0, Container::Quote { instance: 0 });
         rt.lines[1].containers.insert(0, Container::Quote { instance: 0 });
-        assert_eq!(to_markdown(&rt), "> **heads** up\n>\n> still inside");
+        assert_eq!(to_markdown(&rt.into_normalized()), "> **heads** up\n>\n> still inside");
     }
 
     #[test]
@@ -1186,7 +1182,7 @@ mod tests {
             vec![Mark { start: 0, end: 4, kind: MarkKind::Strong }],
         );
         assert_eq!(to_plaintext(&rt), "bold text");
-        let mut rt = Content {
+        let rt = Content {
             text: format!("see {ISLAND_SLOT} here"),
             lines: vec![Line { kind: LineKind::Para, containers: vec![], continues: false }],
             marks: vec![],
@@ -1196,15 +1192,15 @@ mod tests {
                 props: serde_json::Value::Null,
                 loss: Loss::UNREPRESENTABLE,
             }],
-        };
-        rt.normalize();
+        }
+        .into_normalized();
         assert_eq!(to_plaintext(&rt), "see  here");
     }
 
     /// A single-paragraph content with hand-placed `marks`: the free-overlap
     /// shapes an editor produces but markdown import never does.
-    fn marked(text: &str, marks: Vec<Mark>) -> Content {
-        let mut rt = Content {
+    fn marked(text: &str, marks: Vec<Mark>) -> Normalized {
+        let rt = Content {
             text: text.to_string(),
             lines: vec![Line {
                 kind: LineKind::Para,
@@ -1213,8 +1209,8 @@ mod tests {
             }],
             marks,
             islands: vec![],
-        };
-        rt.normalize();
+        }
+        .into_normalized();
         assert_eq!(rt.validate(), Ok(()), "content invariants");
         rt
     }
@@ -1299,8 +1295,9 @@ mod tests {
 
     #[test]
     fn leading_ordered_marker_escaped() {
-        let mut rt = from_markdown("x").unwrap();
+        let mut rt = from_markdown("x").unwrap().into_content();
         rt.text = "1. not a list".into();
+        let rt = rt.into_normalized();
         let md = to_markdown(&rt);
         let back = from_markdown(&md).unwrap();
         assert_eq!(back.lines[0].kind, LineKind::Para);
@@ -1341,13 +1338,13 @@ mod tests {
 
     #[test]
     fn anchor_marks_omitted_but_text_survives() {
-        let mut rt = from_markdown("comment target here").unwrap();
+        let mut rt = from_markdown("comment target here").unwrap().into_content();
         rt.marks.push(Mark {
             start: 8,
             end: 14,
             kind: MarkKind::Anchor { id: "c1".into() },
         });
-        rt.normalize();
+        let rt = rt.into_normalized();
         let md = to_markdown(&rt);
         let rt2 = from_markdown(&md).unwrap();
         assert_eq!(rt2.text, "comment target here");

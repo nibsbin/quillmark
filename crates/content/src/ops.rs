@@ -906,6 +906,47 @@ fn newline_at_line_boundary(text: &str, line: usize) -> Result<Usv, ApplyError> 
     })
 }
 
+/// The mutations that re-establish the invariant, forwarded.
+///
+/// Each normalizes before it returns, on an error too: an op list that fails
+/// partway leaves its earlier ops applied. So the token states that the value
+/// is canonical, not that the edit landed.
+///
+/// Any other edit takes [`into_content`](crate::model::Normalized::into_content).
+impl crate::model::Normalized {
+    fn seal(&mut self, applied: Result<(), ApplyError>) -> Result<(), ApplyError> {
+        if applied.is_err() {
+            self.as_content_mut().normalize();
+        }
+        applied
+    }
+
+    pub fn apply_text_delta(&mut self, delta: &Delta) -> Result<(), ApplyError> {
+        let applied = self.as_content_mut().apply_text_delta(delta);
+        self.seal(applied)
+    }
+
+    pub fn apply_mark_ops(&mut self, ops: &[MarkOp]) -> Result<(), ApplyError> {
+        let applied = self.as_content_mut().apply_mark_ops(ops);
+        self.seal(applied)
+    }
+
+    pub fn apply_island_ops(&mut self, ops: &[IslandOp]) -> Result<(), ApplyError> {
+        let applied = self.as_content_mut().apply_island_ops(ops);
+        self.seal(applied)
+    }
+
+    pub fn apply_line_ops(&mut self, ops: &[LineOp]) -> Result<(), ApplyError> {
+        let applied = self.as_content_mut().apply_line_ops(ops);
+        self.seal(applied)
+    }
+
+    pub fn apply_field_change(&mut self, bundle: &ChangeBundle) -> Result<(), ApplyError> {
+        let applied = self.as_content_mut().apply_field_change(bundle);
+        self.seal(applied)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1071,13 +1112,13 @@ mod tests {
 
     #[test]
     fn apply_text_delta_rebases_marks() {
-        let mut rt = from_markdown("hello").unwrap();
+        let mut rt = from_markdown("hello").unwrap().into_content();
         rt.marks.push(Mark {
             start: 1,
             end: 4,
             kind: MarkKind::Strong,
         });
-        rt.normalize();
+        let mut rt = rt.into_normalized();
         let d = diff("hello", "hXello");
         rt.apply_text_delta(&d).unwrap();
         let strong = rt
@@ -1183,7 +1224,7 @@ mod tests {
 
     #[test]
     fn apply_mark_ops_remove_non_formatting_drops_whole() {
-        let mut rt = from_markdown("abcdef").unwrap();
+        let mut rt = from_markdown("abcdef").unwrap().into_content();
         rt.marks.push(Mark {
             start: 0,
             end: 6,
@@ -1192,7 +1233,7 @@ mod tests {
                 attrs: serde_json::json!({}),
             },
         });
-        rt.normalize();
+        let mut rt = rt.into_normalized();
         rt.apply_mark_ops(&[MarkOp::Remove {
             start: 2,
             end: 4,
@@ -1985,14 +2026,14 @@ mod tests {
 
     #[test]
     fn join_line_rebases_marks_to_final_text_coordinates() {
-        let mut rt = from_markdown("ab").unwrap();
+        let mut rt = from_markdown("ab").unwrap().into_content();
         rt.apply_text_delta(&diff("ab", "ab\ncd")).unwrap();
         rt.marks.push(Mark {
             start: 2,
             end: 4,
             kind: MarkKind::Strong,
         });
-        rt.normalize();
+        let mut rt = rt.into_normalized();
         rt.apply_line_ops(&[LineOp::Join { line: 0 }]).unwrap();
         assert_eq!(rt.text, "abcd");
         let strong: Vec<_> = rt

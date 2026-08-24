@@ -762,12 +762,12 @@ mod tests {
         // colon, so an unescaped one fails the compile rather than the count.
         use quillmark_content::model::{Container, Line, LineKind, Content};
         let para = |_: usize| Line::new(LineKind::Para);
-        let mut rt = Content::new(
+        let rt = Content::new(
             "= Heading\n- bullet\n+ numbered\n1. dotted\n/ term: desc\n=\n-\n+\n1.\n/"
                 .to_string(),
             (0..10).map(para).collect(),
         );
-        rt.normalize();
+        let rt = rt.into_normalized();
         assert_eq!(rt.validate(), Ok(()), "content invariants");
         assert_eq!(counts(&rt), [0, 0, 0, 0], "paragraph text stays literal");
 
@@ -782,11 +782,11 @@ mod tests {
                 instance: 0,
             }])
         };
-        let mut rt = Content::new(
+        let rt = Content::new(
             "=\n-\n+\n1.\n/".to_string(),
             (0..5).map(item).collect(),
         );
-        rt.normalize();
+        let rt = rt.into_normalized();
         assert_eq!(rt.validate(), Ok(()), "content invariants");
         assert_eq!(counts(&rt), [0, 1, 0, 0], "item text stays literal");
     }

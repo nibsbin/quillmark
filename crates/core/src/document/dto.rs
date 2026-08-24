@@ -39,7 +39,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-use quillmark_content::Content;
+use quillmark_content::Normalized;
 
 use super::meta::validate_composable_kind;
 use super::payload::{MetaKey, Payload, PayloadItem};
@@ -167,7 +167,7 @@ pub type PayloadV0_93_0 = PayloadV0_92_0;
 /// The serializer normalizes a copy regardless of its input, so a hand-built
 /// value cannot leak non-canonical bytes.
 #[derive(Debug, Clone, PartialEq)]
-pub struct CanonicalContent(pub Content);
+pub struct CanonicalContent(pub Normalized);
 
 impl Serialize for CanonicalContent {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -1024,9 +1024,9 @@ This body and the metadata above are an indorsement card.
         use quillmark_content::model::{Mark, MarkKind};
 
         let mut doc = sample();
-        let mut content = quillmark_content::import::from_markdown("underlined intro").unwrap();
+        let mut content = quillmark_content::import::from_markdown("underlined intro").unwrap().into_content();
         content.marks.push(Mark::new(0, 10, MarkKind::Underline));
-        content.normalize();
+        let content = content.into_normalized();
         let json = quillmark_content::serial::to_canonical_value(&content);
         let schema = crate::quill::FieldSchema::new(
             "intro".to_string(),

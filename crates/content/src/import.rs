@@ -24,7 +24,7 @@
 //! - **Thematic breaks are `Rule` lines** carrying no text.
 
 use crate::model::{
-    Container, Island, Line, LineKind, Loss, Mark, MarkKind, Content, ISLAND_SLOT,
+    Container, Island, Line, LineKind, Loss, Mark, MarkKind, Content, Normalized, ISLAND_SLOT,
 };
 use crate::island::KnownIslandType;
 use crate::normalize::normalize_markdown;
@@ -62,7 +62,7 @@ impl std::fmt::Display for ImportError {
 impl std::error::Error for ImportError {}
 
 /// Import markdown into a normalized, validated [`Content`] content.
-pub fn from_markdown(markdown: &str) -> Result<Content, ImportError> {
+pub fn from_markdown(markdown: &str) -> Result<Normalized, ImportError> {
     let normalized = normalize_markdown(markdown);
     let mut options = Options::empty();
     options.insert(Options::ENABLE_STRIKETHROUGH);
@@ -71,9 +71,7 @@ pub fn from_markdown(markdown: &str) -> Result<Content, ImportError> {
 
     let mut b = Builder::new();
     b.run(fixer)?;
-    let mut rt = b.finish();
-    rt.normalize();
-    Ok(rt)
+    Ok(b.finish().into_normalized())
 }
 
 /// Import plain text (literal) into a [`Content`]: the literal-codec sibling of
@@ -86,7 +84,7 @@ pub fn from_markdown(markdown: &str) -> Result<Content, ImportError> {
 /// segments is a within-paragraph break ([`Line::continues`] `true`); a blank
 /// line is a paragraph boundary. The text is stored verbatim, so the round trip
 /// is byte-exact however structure is later re-derived.
-pub fn from_plaintext(s: &str) -> Content {
+pub fn from_plaintext(s: &str) -> Normalized {
     // Boundary cleanup so the content invariants hold; clean plaintext passes
     // through untouched.
     let text: String = s
@@ -111,6 +109,7 @@ pub fn from_plaintext(s: &str) -> Content {
         marks: Vec::new(),
         islands: Vec::new(),
     }
+    .into_normalized()
 }
 
 /// A flat inline accumulator: `text` plus `marks` over local USV offsets, with
@@ -896,13 +895,13 @@ mod tests {
     use super::*;
     use crate::model::LineKind;
 
-    fn imp(md: &str) -> Content {
+    fn imp(md: &str) -> Normalized {
         let rt = from_markdown(md).unwrap();
         assert_eq!(rt.validate(), Ok(()), "invariants for {md:?}");
         rt
     }
 
-    fn imp_plain(s: &str) -> Content {
+    fn imp_plain(s: &str) -> Normalized {
         let rt = from_plaintext(s);
         assert_eq!(rt.validate(), Ok(()), "invariants for {s:?}");
         rt
@@ -1234,13 +1233,8 @@ mod tests {
         ];
         for (md, runs) in cases {
             let rt = imp(md);
-            let mut seen: Vec<_> = rt
-                .lines
-                .iter()
-                .map(|l| (l.containers[0].run_key(), l.containers[0].instance()))
-                .collect();
-            seen.dedup();
-            assert_eq!(seen.len(), *runs, "{md:?} -> {:?}", rt.lines);
+            let seen = crate::traverse::runs(&rt.lines, 0..rt.lines.len(), 0).count();
+            assert_eq!(seen, *runs, "{md:?} -> {:?}", rt.lines);
             let rt2 = from_markdown(&crate::export::to_markdown(&rt)).unwrap();
             assert_eq!(rt, rt2, "{md:?} is not a fixed point");
         }

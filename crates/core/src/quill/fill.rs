@@ -74,7 +74,7 @@ pub fn blank(field: &FieldSchema) -> QuillValue {
         // richtext or plaintext field with a content the backend can lower. The
         // empty content is single-`Para`, so it satisfies `inline` and is `plain`.
         FieldType::RichText { .. } | FieldType::PlainText { .. } => {
-            quillmark_content::serial::to_canonical_value(&quillmark_content::Content::empty())
+            quillmark_content::serial::to_canonical_value(&quillmark_content::Normalized::empty())
         }
         // String / Date / DateTime: `""` is the schema-valid blank for all three
         // (an empty string lowers to `none`, the absent-date sentinel).

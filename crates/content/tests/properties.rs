@@ -184,8 +184,9 @@ proptest! {
             Mark::new(s1, e1, ov_kind(k1i)),
             Mark::new(s2, e2, ov_kind(k2i)),
         ];
-        let mut rt = Content::new(text.clone(), vec![Line::new(LineKind::Para)]).with_marks(marks);
-        rt.normalize();
+        let rt = Content::new(text.clone(), vec![Line::new(LineKind::Para)])
+            .with_marks(marks)
+            .into_normalized();
         prop_assert_eq!(rt.validate(), Ok(()), "hand-built content invalid");
 
         let md = to_markdown(&rt);
@@ -230,8 +231,7 @@ proptest! {
             .chain(std::iter::once('a'))
             .collect();
         let n = text.chars().count();
-        let mut rt = Content::new(text.clone(), vec![Line::new(LineKind::Para)]);
-        rt.normalize();
+        let mut rt = Content::new(text.clone(), vec![Line::new(LineKind::Para)]).into_normalized();
         prop_assume!(rt.validate().is_ok());
         prop_assume!(rt.len_usv() == n);
         // Require the mark-free text to be a fixed point already, so a later
@@ -273,12 +273,12 @@ proptest! {
         // Import trims alt, so match that to stay in the fixed-point domain.
         let alt = alt.trim().to_string();
         let text = "lnk\u{FFFC}".to_string(); // link over "lnk", image slot after
-        let mut rt = Content::new(text, vec![Line::new(LineKind::Para)])
+        let rt = Content::new(text, vec![Line::new(LineKind::Para)])
             .with_marks(vec![Mark::new(0, 3, MarkKind::Link { url: link_url })])
             // The id import mints for the first island, so re-import compares equal.
             .with_islands(vec![Island::new("isl-0".into(), "image".into())
-                .with_props(json!({ "alt": alt, "url": img_url }))]);
-        rt.normalize();
+                .with_props(json!({ "alt": alt, "url": img_url }))])
+            .into_normalized();
         prop_assert_eq!(rt.validate(), Ok(()), "hand-built content invalid");
         let md = to_markdown(&rt);
         let rt2 = from_markdown(&md).unwrap();
@@ -299,7 +299,7 @@ proptest! {
     #[test]
     fn canonical_json_order_insensitive(md in document()) {
         let rt = from_markdown(&md).unwrap();
-        let mut shuffled = rt.clone();
+        let mut shuffled = rt.clone().into_content();
         shuffled.marks.reverse();
         prop_assert_eq!(rt.to_canonical_json(), shuffled.to_canonical_json());
     }
@@ -309,12 +309,12 @@ proptest! {
     #[test]
     fn diff_import_preserves_surviving_anchor(a in "[a-z]{3,8}", b in "[a-z]{3,8}") {
         let base_md = format!("keep {a} here");
-        let mut base = from_markdown(&base_md).unwrap();
+        let mut base = from_markdown(&base_md).unwrap().into_content();
         let start = 5;
         let end = 5 + a.chars().count();
         prop_assert_eq!(&base.text[start..end], a.as_str());
         base.marks.push(Mark::new(start, end, MarkKind::Anchor { id: "c1".into() }));
-        base.normalize();
+        let base = base.into_normalized();
 
         let new_md = format!("{b} keep {a} here");
         let (new_rt, _delta) = diff_import(&base, &new_md).unwrap();
@@ -395,12 +395,12 @@ proptest! {
         is_delete in any::<bool>(),
     ) {
         const ID: &str = "anchor-\u{1f4a1}-42";
-        let mut rt = from_markdown(&md).unwrap();
+        let mut rt = from_markdown(&md).unwrap().into_content();
         let len = rt.len_usv();
         let a = a_seed % (len + 1);
         let b = b_seed % (len + 1);
         rt.marks.push(Mark::new(a.min(b), a.max(b), MarkKind::Anchor { id: ID.into() }));
-        rt.normalize();
+        let mut rt = rt.into_normalized();
         prop_assert_eq!(rt.validate(), Ok(()), "seeded content invalid for {:?}", md);
 
         let len = rt.len_usv();
@@ -577,8 +577,7 @@ proptest! {
             .max(row_cells.iter().map(Vec::len).max().unwrap_or(0));
         prop_assume!(cols >= 1);
 
-        let mut rt = table_content(aligns.clone(), header_cells, row_cells);
-        rt.normalize();
+        let rt = table_content(aligns.clone(), header_cells, row_cells).into_normalized();
         prop_assert_eq!(rt.validate(), Ok(()), "normalized table invalid");
 
         let props = &rt.islands[0].props;

@@ -2739,8 +2739,8 @@ fn inline_plaintext_rejects_multiline_document_value() {
 #[test]
 fn plaintext_wire_content_with_marks_is_rejected_not_stripped() {
     let config = quill_with_field("    subject:\n      type: plaintext\n").expect("loads");
-    let mut rt = quillmark_content::from_markdown("a **bold** word").unwrap();
-    rt.normalize();
+    let rt = quillmark_content::from_markdown("a **bold** word").unwrap().into_content();
+    let rt = rt.into_normalized();
     let mut fields: indexmap::IndexMap<String, QuillValue> = indexmap::IndexMap::new();
     fields.insert(
         "subject".to_string(),

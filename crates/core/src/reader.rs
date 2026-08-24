@@ -35,7 +35,7 @@
 //! those surfaces construct one per call from the quill handle.
 
 use indexmap::IndexMap;
-use quillmark_content::Content;
+use quillmark_content::Normalized;
 
 use crate::document::edit::field_decode;
 use crate::document::{Card, Codec, Document, EditError};
@@ -84,23 +84,23 @@ impl<'a> TypedReader<'a> {
         read_field(self.doc.main(), Some(&self.config.main.fields), name)
     }
 
-    /// Read a main-card content field as its [`Content`], decoded through the
-    /// codec its declared type names: the [`Content`] twin of [`get`](Self::get).
+    /// Read a main-card content field as its [`Content`](quillmark_content::Content), decoded through the
+    /// codec its declared type names: the [`Content`](quillmark_content::Content) twin of [`get`](Self::get).
     /// Total over the storage form, so a canonical content object and an
-    /// authored string both read back as a [`Content`].
+    /// authored string both read back as a [`Content`](quillmark_content::Content).
     ///
     /// `Ok(None)` when the field is absent;
     /// [`EditError::UnknownField`] for a name the schema does not declare;
     /// [`EditError::FieldNotContent`] for a declared type that is not a content
-    /// leaf (an `integer` has no [`Content`] even when it holds a string, and an
-    /// `array<richtext>` carries content without having one [`Content`]);
+    /// leaf (an `integer` has no [`Content`](quillmark_content::Content) even when it holds a string, and an
+    /// `array<richtext>` carries content without having one [`Content`](quillmark_content::Content));
     /// [`EditError::FieldDecode`] when the stored value decodes under
     /// neither encoding.
-    pub fn get_content(&self, name: &str) -> Result<Option<Content>, EditError> {
+    pub fn get_content(&self, name: &str) -> Result<Option<Normalized>, EditError> {
         self.get_content_at(name, &[])
     }
 
-    /// Read the [`Content`] *nested inside* a composite field at `at`: an
+    /// Read the [`Content`](quillmark_content::Content) *nested inside* a composite field at `at`: an
     /// `array<richtext>` element, an `object`'s content property, a leaf under
     /// both (`cells[1].notes`), or a variant's cell.
     /// [`get_content`](Self::get_content) is the empty path.
@@ -128,7 +128,7 @@ impl<'a> TypedReader<'a> {
         &self,
         name: &str,
         at: &[PathSegment],
-    ) -> Result<Option<Content>, EditError> {
+    ) -> Result<Option<Normalized>, EditError> {
         read_content(self.doc.main(), Some(&self.config.main.fields), name, at)
     }
 
@@ -176,9 +176,9 @@ impl CardReader<'_> {
         read_field(self.card, self.schema.map(|s| &s.fields), name)
     }
 
-    /// Read a content field on this card as its [`Content`]: the card twin
+    /// Read a content field on this card as its [`Content`](quillmark_content::Content): the card twin
     /// of [`TypedReader::get_content`], carrying the same outcomes.
-    pub fn get_content(&self, name: &str) -> Result<Option<Content>, EditError> {
+    pub fn get_content(&self, name: &str) -> Result<Option<Normalized>, EditError> {
         self.get_content_at(name, &[])
     }
 
@@ -188,7 +188,7 @@ impl CardReader<'_> {
         &self,
         name: &str,
         at: &[PathSegment],
-    ) -> Result<Option<Content>, EditError> {
+    ) -> Result<Option<Normalized>, EditError> {
         read_content(self.card, self.schema.map(|s| &s.fields), name, at)
     }
 
@@ -221,18 +221,18 @@ fn read_field(
     }
 }
 
-/// The shared [`Content`] dispatch behind every `get_content` /
+/// The shared [`Content`](quillmark_content::Content) dispatch behind every `get_content` /
 /// `get_content_at`, the whole-field read being the empty `at`.
 /// [`EditError::FieldNotContent`] is answered from the schema before the payload
-/// is read: whether an address has a [`Content`] is a declared-type fact, so a
+/// is read: whether an address has a [`Content`](quillmark_content::Content) is a declared-type fact, so a
 /// `string` holding markdown-looking text is not content, and an
-/// `array<richtext>` has no single [`Content`] while each of its elements does.
+/// `array<richtext>` has no single [`Content`](quillmark_content::Content) while each of its elements does.
 fn read_content(
     card: &Card,
     fields_schema: Option<&IndexMap<String, FieldSchema>>,
     name: &str,
     at: &[PathSegment],
-) -> Result<Option<Content>, EditError> {
+) -> Result<Option<Normalized>, EditError> {
     let field = fields_schema
         .and_then(|m| m.get(name))
         .ok_or_else(|| EditError::unknown_field(name))?;

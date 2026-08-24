@@ -16,6 +16,7 @@ pub mod model;
 pub mod normalize;
 pub mod ops;
 pub mod serial;
+pub mod traverse;
 pub mod usv;
 
 pub use delta::{diff_import, Assoc, Delta, Op};
@@ -32,6 +33,8 @@ pub use ops::{
     ApplyError, ChangeBundle, IslandOp, LineOp, MarkOp,
 };
 pub use serial::ParseError;
+pub use model::Normalized;
+pub use traverse::{items, runs, Span};
 
 /// Maximum container nesting depth the markdown codecs accept before erroring.
 /// The import guard ([`import::from_markdown`]) and the typst backend's markup

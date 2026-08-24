@@ -1044,7 +1044,7 @@ card_kinds:
         let mut main = Payload::new();
         main.set_quill("fills_test@1.0.0".parse().unwrap());
         main.set_kind("main");
-        let main = Card::from_parts(main, quillmark_content::Content::empty());
+        let main = Card::from_parts(main, quillmark_content::Normalized::empty());
 
         let mut unknown = Card::new("mystery").unwrap();
         unknown
@@ -1052,7 +1052,7 @@ card_kinds:
             .unwrap();
 
         let mut kindless =
-            Card::from_parts(Payload::new(), quillmark_content::Content::empty());
+            Card::from_parts(Payload::new(), quillmark_content::Normalized::empty());
         kindless
             .store_fill("memo", QuillValue::from_json(json!(null)))
             .unwrap();

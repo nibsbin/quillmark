@@ -16,7 +16,7 @@ this page documents how the backend lowers the content it produces.
 ## Pipeline
 
 ```
-emit_content(&Content) -> Result<Emission, EmitError>
+emit_content(&Normalized) -> Result<Emission, EmitError>
   ├─ block walk    lines → headings, paragraphs, code fences, lists, quotes, islands
   ├─ mark sweep    anchored marks → nested #strong[…] / #emph[…] / #link(…)[…] / …
   └─ source map    per-segment (content ↔ gen) windows + one (content, gen) pair per run

@@ -767,7 +767,7 @@ mod tests {
         payload.set_kind("main");
         let mut card = crate::document::Card::from_parts(
             payload,
-            quillmark_content::Content::empty(),
+            quillmark_content::Normalized::empty(),
         );
         let content = quillmark_content::import::from_markdown("Q3 results").expect("content");
         card.store_fill(

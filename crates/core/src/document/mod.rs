@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 use quillmark_content::import::{from_markdown as import_markdown, ImportError};
-use quillmark_content::Content;
+use quillmark_content::Normalized;
 
 use crate::error::ParseError;
 use crate::version::QuillReference;
@@ -15,9 +15,9 @@ use crate::Diagnostic;
 
 /// The single markdown→content boundary for card bodies: every path that starts
 /// from an authored markdown string routes through here.
-pub(crate) fn import_body(md: &str) -> Result<Content, ImportError> {
+pub(crate) fn import_body(md: &str) -> Result<Normalized, ImportError> {
     if md.is_empty() {
-        Ok(Content::empty())
+        Ok(Normalized::empty())
     } else {
         import_markdown(md)
     }
@@ -80,7 +80,7 @@ impl Codec {
     pub(crate) fn decode_value(
         self,
         value: &serde_json::Value,
-    ) -> Option<Result<Content, ContentDecodeError>> {
+    ) -> Option<Result<Normalized, ContentDecodeError>> {
         match value {
             serde_json::Value::Object(_) => Some(
                 quillmark_content::serial::from_canonical_value(value)
@@ -102,10 +102,10 @@ impl Codec {
     pub(crate) fn decode_field(
         self,
         value: &serde_json::Value,
-    ) -> Result<Content, ContentDecodeError> {
+    ) -> Result<Normalized, ContentDecodeError> {
         match self.decode_value(value) {
             Some(result) => result,
-            None if value.is_null() => Ok(Content::empty()),
+            None if value.is_null() => Ok(Normalized::empty()),
             None => Err(ContentDecodeError::NotContent(format!(
                 "expected a {} content object or {}",
                 self.name(),
@@ -116,7 +116,7 @@ impl Codec {
 
     /// Project a content back to this codec's text: the inverse of its string
     /// encoding.
-    pub(crate) fn project(self, content: &Content) -> String {
+    pub(crate) fn project(self, content: &Normalized) -> String {
         match self {
             Codec::Richtext => quillmark_content::export::to_markdown(content),
             Codec::Plaintext => quillmark_content::export::to_plaintext(content),
@@ -216,18 +216,18 @@ pub struct Parsed {
 }
 
 /// A single card-yaml block (root or composable). `body` is the content
-/// ([`Content`]) form of the prose after the closing fence: the empty content
+/// ([`Content`](quillmark_content::Content)) form of the prose after the closing fence: the empty content
 /// when none follows; check `card.body().is_blank()`. Markdown is a projection:
 /// [`Card::body_markdown`] re-emits it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Card {
     payload: Payload,
-    body: Content,
+    body: Normalized,
 }
 
 impl Card {
     /// Create a `Card` from its parts without validation.
-    pub(crate) fn from_parts(payload: Payload, body: Content) -> Self {
+    pub(crate) fn from_parts(payload: Payload, body: Normalized) -> Self {
         Self { payload, body }
     }
 
@@ -257,9 +257,9 @@ impl Card {
         &mut self.payload
     }
 
-    /// The card body as a [`Content`]: the canonical content model. For the
+    /// The card body as a [`Content`](quillmark_content::Content): the canonical content model. For the
     /// markdown projection use [`Card::body_markdown`].
-    pub fn body(&self) -> &Content {
+    pub fn body(&self) -> &Normalized {
         &self.body
     }
 
@@ -270,7 +270,7 @@ impl Card {
         quillmark_content::export::to_markdown(&self.body)
     }
 
-    pub(crate) fn body_mut(&mut self) -> &mut Content {
+    pub(crate) fn body_mut(&mut self) -> &mut Normalized {
         &mut self.body
     }
 
@@ -291,7 +291,7 @@ impl Card {
         &self,
         name: &str,
         codec: Codec,
-    ) -> Option<Result<Content, ContentDecodeError>> {
+    ) -> Option<Result<Normalized, ContentDecodeError>> {
         Some(codec.decode_field(self.payload.get(name)?.as_json()))
     }
 
@@ -387,7 +387,7 @@ impl Document {
         // it in); match that shape so a blank document round-trips equal.
         payload.set_kind("main");
         Self {
-            main: Card::from_parts(payload, Content::empty()),
+            main: Card::from_parts(payload, Normalized::empty()),
             cards: Vec::new(),
         }
     }

@@ -19,7 +19,7 @@
 
 use crate::model::{
     canonicalize_keys, Container, Invariant, Island, Line, LineKind, Loss, Mark,
-    MarkKind, Content, Usv,
+    MarkKind, Content, Normalized, Usv,
 };
 use serde_json::{Map, Value};
 use std::borrow::Cow;
@@ -61,7 +61,7 @@ impl Content {
     /// Parse canonical JSON, normalize, and validate. Returns
     /// [`ParseError::Invalid`] for a content that violates its invariants, so
     /// storage cannot silently round-trip a malformed value.
-    pub fn from_canonical_json(s: &str) -> Result<Content, ParseError> {
+    pub fn from_canonical_json(s: &str) -> Result<Normalized, ParseError> {
         let v: Value = serde_json::from_str(s).map_err(|e| ParseError::Json(e.to_string()))?;
         from_canonical_value(&v)
     }
@@ -141,9 +141,8 @@ fn sort_own_keys(m: Map<String, Value>) -> Map<String, Value> {
 /// Parse the canonical content form from a structural [`Value`], normalize, and
 /// validate: the [`Value`]-input counterpart to
 /// [`Content::from_canonical_json`].
-pub fn from_canonical_value(v: &Value) -> Result<Content, ParseError> {
-    let mut rt = Content::from_value(v)?;
-    rt.normalize();
+pub fn from_canonical_value(v: &Value) -> Result<Normalized, ParseError> {
+    let rt = Content::from_value(v)?.into_normalized();
     rt.validate().map_err(ParseError::Invalid)?;
     Ok(rt)
 }
@@ -557,7 +556,7 @@ pub(crate) fn reject_unreadable_mark(v: &Value) -> Result<(), ParseError> {
 /// `install` input, not a blob read back from storage. Same decode, plus the
 /// reserved-name rule on every axis [`Content::validate`] checks: line kinds,
 /// containers, prose marks, and table-cell marks.
-pub fn from_authored_value(v: &Value) -> Result<Content, ParseError> {
+pub fn from_authored_value(v: &Value) -> Result<Normalized, ParseError> {
     reject_reserved_attrs_deep(v)?;
     from_canonical_value(v)
 }

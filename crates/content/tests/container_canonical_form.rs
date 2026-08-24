@@ -14,7 +14,7 @@
 //!    a distinction it cannot write down — the exact defect class #1359 is
 //!    about, caught on the lane that mints it rather than on an import.
 
-use quillmark_content::model::{Container, Content, Line, LineKind};
+use quillmark_content::model::{Container, Content, Line, LineKind, Normalized};
 use quillmark_content::{from_markdown, to_markdown};
 
 /// Containers a hand-built path can hold. `Unknown` is excluded from the
@@ -58,7 +58,7 @@ fn paths(unknown: bool) -> Vec<Vec<Container>> {
     out
 }
 
-fn build(paths: &[&Vec<Container>]) -> Content {
+fn build(paths: &[&Vec<Container>]) -> Normalized {
     let text = (0..paths.len())
         .map(|i| ((b'a' + i as u8) as char).to_string())
         .collect::<Vec<_>>()
@@ -67,9 +67,7 @@ fn build(paths: &[&Vec<Container>]) -> Content {
         .iter()
         .map(|p| Line::new(LineKind::Para).with_containers((*p).clone()))
         .collect();
-    let mut rt = Content::new(text, lines);
-    rt.normalize();
-    rt
+    Content::new(text, lines).into_normalized()
 }
 
 #[test]
@@ -80,8 +78,7 @@ fn normalize_is_idempotent_over_every_two_line_path_pair() {
         for b in &ps {
             let rt = build(&[a, b]);
             assert_eq!(rt.validate(), Ok(()), "invalid after normalize: {rt:?}");
-            let mut again = rt.clone();
-            again.normalize();
+            let again = rt.clone().into_content().into_normalized();
             assert_eq!(again, rt, "normalize not idempotent for {a:?} then {b:?}");
             n += 1;
         }
@@ -131,8 +128,7 @@ fn triples_over_the_list_and_quote_alphabet_are_fixed_points() {
         for b in ps.iter().step_by(3) {
             for c in ps.iter().step_by(5) {
                 let rt = build(&[a, b, c]);
-                let mut again = rt.clone();
-                again.normalize();
+                let again = rt.clone().into_content().into_normalized();
                 assert_eq!(again, rt, "not idempotent: {a:?} {b:?} {c:?}");
                 if from_markdown(&to_markdown(&rt)).unwrap() != rt {
                     broken += 1;
