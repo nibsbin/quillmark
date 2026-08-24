@@ -312,14 +312,14 @@ impl Builder {
         self.inline.push_text(s);
     }
 
-    /// Lines emitted so far, counting the line currently open. A container that
-    /// closes with this unchanged from when it opened produced nothing.
     /// A container-instance value nothing else in this import holds.
     fn mint_instance(&mut self) -> u64 {
         self.next_instance += 1;
         self.next_instance
     }
 
+    /// Lines emitted so far, counting the line currently open. A container that
+    /// closes with this unchanged from when it opened produced nothing.
     fn emitted(&self) -> usize {
         self.lines.len() + usize::from(self.cur.is_some())
     }

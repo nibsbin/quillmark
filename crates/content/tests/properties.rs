@@ -108,6 +108,17 @@ fn block() -> impl Strategy<Value = String> {
         prose().prop_map(|p| format!("1. ***\n\n   {p}")),
         prose().prop_map(|p| format!("- {p}\n\n  ***")),
         prose().prop_map(|p| format!("> {p}")),
+        // Two adjacent sibling lists, in each spelling CommonMark reads as a
+        // boundary: a bullet-char change, an ordered-delimiter change, and the
+        // comment separator, which is the only one that carries a differing
+        // `start`. Adjacent *quotes* need no arm — `document()` joins blocks
+        // with a blank line, which already ends one.
+        (prose(), prose()).prop_map(|(a, b)| format!("- {a}\n\n+ {b}")),
+        (prose(), prose()).prop_map(|(a, b)| format!("1. {a}\n\n1) {b}")),
+        (prose(), prose()).prop_map(|(a, b)| format!("- {a}\n\n<!-- -->\n\n- {b}")),
+        (prose(), prose(), 2u64..9).prop_map(|(a, b, start)| format!(
+            "1. {a}\n\n<!-- -->\n\n{start}. {b}"
+        )),
         prop::collection::vec(clean_word(), 1..4)
             .prop_map(|ls| format!("```\n{}\n```", ls.join("\n"))),
         (clean_word(), clean_word())
