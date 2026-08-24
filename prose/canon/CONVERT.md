@@ -100,6 +100,10 @@ an escaped source slice.
 divergence from a flat inline pass; a quote's inner blocks lower under the
 block-level discipline.
 
+**Every generated line opens at the enclosing list depth**, two spaces per item.
+Typst ends a list at a block written to column 0, so one emitter rule indents
+leaves and containers alike: what the content nests, the markup nests.
+
 Anchor and unknown marks emit nothing; unknown island types emit nothing
 (parallel to the HTML rule at import). An unknown line kind lowers as a
 paragraph and an unknown container as nothing at all: every content vocabulary
