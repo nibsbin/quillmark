@@ -150,19 +150,13 @@ fn emit_block(ctx: &Ctx, range: std::ops::Range<usize>, depth: usize, out: &mut 
     while i < range.end {
         let line = &lines[i];
         if line.containers.len() > depth {
-            // A nested container starts here; gather its run and recurse.
-            let key = &line.containers[depth];
-            let mut j = i + 1;
-            while j < range.end
-                && lines[j].containers.len() > depth
-                && &lines[j].containers[depth] == key
-            {
-                j += 1;
-            }
+            let item = crate::traverse::items(lines, i..range.end, depth)
+                .next()
+                .expect("a line with a container at `depth` opens an item");
             block_separator(out, first_block);
-            emit_container(ctx, key, i..j, depth, out);
+            emit_container(ctx, item.container, item.range.clone(), depth, out);
             first_block = false;
-            i = j;
+            i = item.range.end;
         } else {
             // A leaf block: this line (continues == false) plus every following
             // line that continues it (a hard-break run, or a code fence's lines).

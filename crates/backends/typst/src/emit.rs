@@ -387,54 +387,33 @@ impl<'a> Emit<'a> {
     /// `None` for a leaf, leaving the caller to emit it under its own
     /// discipline (top-level terminated vs list item body).
     fn try_emit_container(&mut self, range: Range<usize>, depth: usize, i: usize) -> Option<usize> {
-        match self.rt.lines[i].containers.get(depth).cloned() {
-            Some(key @ Container::ListItem { ordered, start, .. }) => {
-                let j = self.container_run_end(range.clone(), depth, &key, i);
-                self.emit_list(i..j, depth, ordered, start);
+        let rt = self.rt;
+        // A leaf first: `runs` skips a line carrying no container at `depth`,
+        // so without this the run *after* the leaf would swallow it.
+        rt.lines[i].containers.get(depth)?;
+        let run = quillmark_content::traverse::runs(&rt.lines, i..range.end, depth)
+            .next()
+            .expect("a line with a container at `depth` opens a run");
+        let j = run.range.end;
+        match run.container {
+            Container::ListItem { ordered, start, .. } => {
+                self.emit_list(i..j, depth, *ordered, *start);
                 Some(j)
             }
-            Some(key @ Container::Quote { .. }) => {
-                let j = self.container_run_end(range.clone(), depth, &key, i);
+            Container::Quote { .. } => {
                 self.emit_quote(i..j, depth);
                 Some(j)
             }
             // Open set: a container this build does not know is **transparent**,
             // its run lowers at the next depth with no wrapper markup, so the
-            // blocks inside it render where they would without it. Consuming the
-            // whole run here (rather than falling through to the leaf path) keeps
-            // its lines grouped as one block instead of splitting them.
-            Some(key @ Container::Unknown { .. }) => {
-                let j = self.container_run_end(range.clone(), depth, &key, i);
+            // blocks inside it render where they would without it. Consuming
+            // the whole run here keeps its lines grouped as one block instead
+            // of splitting them.
+            _ => {
                 self.emit_block_level(i..j, depth + 1);
                 Some(j)
             }
-            _ => None,
         }
-    }
-
-    /// One container instance's run: the lines whose container at `depth` has
-    /// the same run key (shape without `ordinal`) *and* the same `instance`.
-    ///
-    /// One rule for every container kind. A list's items differ only in
-    /// `ordinal`, which the run key masks, so they group; an adjacent list of
-    /// identical shape carries the other `instance`, so it does not.
-    fn container_run_end(
-        &self,
-        range: Range<usize>,
-        depth: usize,
-        key: &Container,
-        i: usize,
-    ) -> usize {
-        let mut j = i + 1;
-        while j < range.end
-            && self.rt.lines[j]
-                .containers
-                .get(depth)
-                .is_some_and(|c| c.same_run(key) && c.instance() == key.instance())
-        {
-            j += 1;
-        }
-        j
     }
 
     fn segment_end(&self, range: Range<usize>, depth: usize, i: usize) -> usize {
@@ -471,19 +450,13 @@ impl<'a> Emit<'a> {
         let outermost = !self.rt.lines[range.start].containers[..depth]
             .iter()
             .any(|c| matches!(c, Container::ListItem { .. }));
-        let mut k = range.start;
-        while k < range.end {
-            let key = self.rt.lines[k].containers[depth].clone();
-            let mut m = k + 1;
-            while m < range.end && self.rt.lines[m].containers.get(depth) == Some(&key) {
-                m += 1;
-            }
-            let ordinal = match &key {
+        let rt = self.rt;
+        for item in quillmark_content::traverse::items(&rt.lines, range.clone(), depth) {
+            let ordinal = match item.container {
                 Container::ListItem { ordinal, .. } => *ordinal,
                 _ => 0,
             };
-            self.emit_item(k..m, depth, ordered, start, ordinal == 0);
-            k = m;
+            self.emit_item(item.range, depth, ordered, start, ordinal == 0);
         }
         if outermost {
             self.out.push('\n');
@@ -1038,6 +1011,16 @@ mod tests {
         let rt = from_markdown(md).expect("import");
         assert_eq!(rt.validate(), Ok(()), "content invariants for {md:?}");
         emit_content(&rt).expect("emit")
+    }
+
+    #[test]
+    fn a_leaf_before_a_container_run_is_its_own_block() {
+        let out = emit("a\n\n> b").markup;
+        assert!(out.contains('a'), "leaf lost: {out:?}");
+        assert!(
+            out.find('a').unwrap() < out.find("quote").unwrap(),
+            "leaf swallowed into the quote: {out:?}"
+        );
     }
 
     /// The sample set [`runs_map_content_to_generated_bytes`] scans.

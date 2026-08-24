@@ -208,9 +208,10 @@ impl Container {
         }
     }
 
-    /// Whether these two share a [`run_key`](Self::run_key), without building
-    /// one: an `Unknown`'s key holds its whole `attrs`, and both the emitters
-    /// and `normalize` ask this once per line.
+    /// Whether these two are the same container shape, `ordinal` and `instance`
+    /// aside. Two adjacent lines sit in the same container instance iff this
+    /// holds *and* their [`instance`](Self::instance)s are equal, which is what
+    /// [`crate::traverse::runs`] applies for every consumer.
     pub fn same_run(&self, other: &Container) -> bool {
         match (self, other) {
             (
@@ -248,27 +249,6 @@ impl Container {
                 a == b
             }
             _ => self.same_run(other),
-        }
-    }
-
-    /// This container's **run key**: its shape with `ordinal` and `instance`
-    /// masked off. Two adjacent lines sit in the same container instance iff
-    /// their run keys *and* instances match; the two emitters and
-    /// `quill::support::census` all group on that pair.
-    pub fn run_key(&self) -> Container {
-        match self {
-            Container::ListItem { ordered, start, .. } => Container::ListItem {
-                ordered: *ordered,
-                start: *start,
-                ordinal: 0,
-                instance: 0,
-            },
-            Container::Quote { .. } => Container::Quote { instance: 0 },
-            Container::Unknown { tag, attrs, .. } => Container::Unknown {
-                tag: tag.clone(),
-                attrs: attrs.clone(),
-                instance: 0,
-            },
         }
     }
 }

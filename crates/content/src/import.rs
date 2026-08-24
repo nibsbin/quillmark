@@ -1234,13 +1234,8 @@ mod tests {
         ];
         for (md, runs) in cases {
             let rt = imp(md);
-            let mut seen: Vec<_> = rt
-                .lines
-                .iter()
-                .map(|l| (l.containers[0].run_key(), l.containers[0].instance()))
-                .collect();
-            seen.dedup();
-            assert_eq!(seen.len(), *runs, "{md:?} -> {:?}", rt.lines);
+            let seen = crate::traverse::runs(&rt.lines, 0..rt.lines.len(), 0).count();
+            assert_eq!(seen, *runs, "{md:?} -> {:?}", rt.lines);
             let rt2 = from_markdown(&crate::export::to_markdown(&rt)).unwrap();
             assert_eq!(rt, rt2, "{md:?} is not a fixed point");
         }

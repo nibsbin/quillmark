@@ -113,10 +113,12 @@ fn plural(construct: BlockConstruct, count: usize) -> String {
 ///
 /// A container counts once per contiguous **run**, not once per line or per
 /// item: a three-item list is one list, and a multi-paragraph quote is one
-/// quote. A run opens where the previous line carried no like container at that
-/// depth — like meaning same run key *and* same `Container::instance`, so a
-/// sibling item (differing only by `ordinal`) continues its list rather than
-/// opening another, while an adjacent list of identical shape opens its own.
+/// quote. `quillmark_content::traverse` decides where a run opens, so a sibling
+/// item (differing only by `ordinal`) continues its list rather than opening
+/// another, while an adjacent list of identical shape opens its own.
+///
+/// Runs nest by *item*, an item being a parent: a quote in each of two list
+/// items is two quotes, however alike the two paths look.
 ///
 /// A leaf block counts per block: a rule and a heading are one line each, and a
 /// code fence is counted at the line that opens it.
@@ -127,21 +129,38 @@ fn plural(construct: BlockConstruct, count: usize) -> String {
 /// not typeset either.
 fn census(body: &Content) -> BTreeMap<BlockConstruct, usize> {
     use quillmark_content::model::Container;
+    use quillmark_content::traverse::{items, runs};
 
-    /// A container's identity for run purposes: everything but which item.
-    fn shape(container: &Container) -> Option<(BlockConstruct, Container, u64)> {
-        let construct = match container {
-            Container::ListItem { .. } => BlockConstruct::List,
-            Container::Quote { .. } => BlockConstruct::Quote,
+    fn construct(container: &Container) -> Option<BlockConstruct> {
+        match container {
+            Container::ListItem { .. } => Some(BlockConstruct::List),
+            Container::Quote { .. } => Some(BlockConstruct::Quote),
             // The open set: a container this build does not know names no
             // construct to decline.
-            _ => return None,
-        };
-        Some((construct, container.run_key(), container.instance()))
+            _ => None,
+        }
+    }
+
+    /// Count the runs at `depth` within `range`, then recurse per *item*: an
+    /// item is a parent, so two like runs under two items are two runs.
+    fn count(
+        lines: &[quillmark_content::model::Line],
+        range: std::ops::Range<usize>,
+        depth: usize,
+        counts: &mut BTreeMap<BlockConstruct, usize>,
+    ) {
+        for run in runs(lines, range, depth) {
+            if let Some(construct) = construct(run.container) {
+                *counts.entry(construct).or_insert(0) += 1;
+            }
+            for item in items(lines, run.range, depth) {
+                count(lines, item.range, depth + 1, counts);
+            }
+        }
     }
 
     let mut counts: BTreeMap<BlockConstruct, usize> = BTreeMap::new();
-    let mut prev: Vec<Option<(BlockConstruct, Container, u64)>> = Vec::new();
+    count(&body.lines, 0..body.lines.len(), 0, &mut counts);
 
     for island in &body.islands {
         match KnownIslandType::parse(&island.island_type) {
@@ -154,18 +173,8 @@ fn census(body: &Content) -> BTreeMap<BlockConstruct, usize> {
     }
 
     for line in &body.lines {
-        let here: Vec<_> = line.containers.iter().map(shape).collect();
-        for (depth, shape) in here.iter().enumerate() {
-            let Some((construct, _, _)) = shape else {
-                continue;
-            };
-            if prev.get(depth) != Some(shape) {
-                *counts.entry(*construct).or_insert(0) += 1;
-            }
-        }
-        prev = here;
-
-        // Islands are already counted; every other block kind counts here.
+        // Islands and containers are already counted; every other block kind
+        // counts here.
         let construct = match &line.kind {
             LineKind::Heading { .. } => Some(BlockConstruct::Heading),
             LineKind::Rule => Some(BlockConstruct::Rule),
@@ -177,4 +186,38 @@ fn census(body: &Content) -> BTreeMap<BlockConstruct, usize> {
         }
     }
     counts
+}
+
+#[cfg(test)]
+mod census_tests {
+    use super::*;
+
+    fn count(md: &str, construct: BlockConstruct) -> usize {
+        let body = quillmark_content::from_markdown(md).unwrap();
+        census(&body).get(&construct).copied().unwrap_or(0)
+    }
+
+    #[test]
+    fn a_run_counts_once_however_many_lines_or_items_it_spans() {
+        assert_eq!(count("- a\n- b\n- c", BlockConstruct::List), 1);
+        assert_eq!(count("> a\n>\n> b", BlockConstruct::Quote), 1);
+    }
+
+    #[test]
+    fn two_adjacent_runs_of_one_shape_count_twice() {
+        assert_eq!(count("- a\n\n+ b", BlockConstruct::List), 2);
+        assert_eq!(count("> a\n\n<!-- -->\n\n> b", BlockConstruct::Quote), 2);
+    }
+
+    #[test]
+    fn an_item_bounds_what_nests_inside_it() {
+        assert_eq!(count("- > a\n\n- > b", BlockConstruct::Quote), 2);
+        assert_eq!(count("- > a\n\n- > b", BlockConstruct::List), 1);
+        assert_eq!(count("- - a\n\n- - b", BlockConstruct::List), 3);
+    }
+
+    #[test]
+    fn a_run_bounds_what_nests_inside_it() {
+        assert_eq!(count("> - a\n\n<!-- -->\n\n> - b", BlockConstruct::List), 2);
+    }
 }
