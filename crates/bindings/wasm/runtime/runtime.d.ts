@@ -130,6 +130,7 @@ export type {
 	ContentLine,
 	ContentLineKind,
 	ContentContainer,
+	ContentContainerInput,
 	ContentMark,
 	ContentIsland,
 	TableProps,
@@ -204,7 +205,8 @@ import type {
 	ImageProps,
 	ContentMark,
 	ContentLine,
-	ContentContainer
+	ContentContainer,
+	ContentContainerInput
 } from '../core/wasm.js';
 
 /** Narrow a {@link ContentIsland} to the pinned `table` arm (`props: TableProps`). */
@@ -277,6 +279,47 @@ export declare function isUnknownMark(
 export declare function isUnknownIsland(
 	island: ContentIsland
 ): island is ContentIsland & { type: string; props: unknown };
+
+// `ContentContainer.instance` is the one field a WRITER owes and no checker
+// asks for: adjacent runs of one shape that share it arrive welded, and the
+// flat `containers` form cannot tell that from one container spanning two
+// paragraphs, so nothing reports it. These two carry the rule a codec would
+// otherwise re-derive.
+
+/**
+ * Whether the Markdown projection would read two adjacent runs of these shapes
+ * as one, so the canonical form has to spend an `instance` to keep them apart.
+ *
+ * Coarser than equality for a list: CommonMark reads only a list's first
+ * number, so `1. a` beside `3. b` re-imports as one list and welds despite the
+ * differing `start`. Use it when a traversal cannot hand its siblings to
+ * {@link assignInstances}; `ordinal` and `instance` are not read.
+ */
+export declare function weldsWith(a: ContentContainer, b: ContentContainer): boolean;
+
+/**
+ * Stamp `instance` across one parent's blocks at one depth, in document order,
+ * returning containers ready to write.
+ *
+ * One entry per container RUN — a list, not a list item — and `null` for a
+ * block that carries no container at this depth (a bare paragraph between two
+ * lists, which separates them on its own). Every line of a run then carries
+ * that run's returned container, `ordinal` varying per item and `instance`
+ * held.
+ *
+ * The output is already canonical, so what a document reads back is what it
+ * wrote.
+ *
+ * ```js
+ * const [outer, , inner] = assignInstances([listA, null, listB]);
+ * // outer.instance === 0, inner.instance === 0 — the paragraph parts them
+ * const [a, b] = assignInstances([listA, listB]);
+ * // a.instance === 0, b.instance === 1 — adjacent, one shape
+ * ```
+ */
+export declare function assignInstances(
+	runs: (ContentContainer | null)[]
+): (ContentContainerInput | null)[];
 
 // The backend-neutral render contract, defined here rather than re-exported from
 // one private backend because no single backend owns the canonical API's types.

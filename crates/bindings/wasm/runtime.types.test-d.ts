@@ -319,3 +319,37 @@ void fromMarkdown;
 // only obtaining a value does.
 declare const annotated: RuntimeQuill;
 void annotated;
+
+// The container write lane. `instance` decides whether two adjacent runs weld,
+// nothing reports an omission at runtime, and a `setContainers` op is host-built
+// by definition — so the op's element type requires the field where `Content`,
+// which is a read shape too, leaves it optional.
+import type {
+	ContentContainerInput,
+	assignInstances
+} from '../../../pkg/runtime/runtime.d.ts';
+
+const writeShapeReads: ContentContainer = {} as ContentContainerInput;
+void writeShapeReads;
+
+// @ts-expect-error a read shape may omit `instance`; a written one may not.
+const readShapeWrites: ContentContainerInput = {} as ContentContainer;
+void readShapeWrites;
+
+// @ts-expect-error the field is the whole point of the type.
+const unstamped: ContentContainerInput = { container: 'quote' };
+void unstamped;
+
+const looseOp: Extract<LineOp, { op: 'setContainers' }> = {
+	op: 'setContainers',
+	line: 0,
+	// @ts-expect-error the op carries written containers, which spell `instance` out.
+	containers: [{ container: 'quote' }]
+};
+void looseOp;
+
+// What `assignInstances` returns is what the op takes, nulls dropped.
+const stampedFeedsTheOp: Extract<LineOp, { op: 'setContainers' }>['containers'] = [] as NonNullable<
+	ReturnType<typeof assignInstances>[number]
+>[];
+void stampedFeedsTheOp;

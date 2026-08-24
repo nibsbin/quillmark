@@ -43,12 +43,16 @@ describe('@quillmark/wasm/runtime: the static surface, before init', () => {
     expect(CLASSES.length).toBeGreaterThan(0)
   })
 
+  // What this asserts is that the call needs no wasm instance, not that the
+  // argument is tolerated: `{}` is one every guard and `isQuillmarkError` takes,
+  // and an export taking another shape names it here.
+  const PROBE = { weldsWith: [{}, {}], assignInstances: [[]] }
+
   it('answers every non-class export without an instance', () => {
     for (const name of EXEMPT.filter((n) => !CLASSES.includes(n))) {
       const value = runtime[name]
-      // `{}` is an argument every guard and `isQuillmarkError` takes: they are
-      // pure JS over plain objects, which is why they are exempt at all.
-      if (typeof value === 'function') expect(() => value({}), name).not.toThrow()
+      if (typeof value === 'function')
+        expect(() => value(...(PROBE[name] ?? [{}])), name).not.toThrow()
       else if (value !== null && typeof value === 'object')
         expect(Object.isFrozen(value), name).toBe(true)
     }
