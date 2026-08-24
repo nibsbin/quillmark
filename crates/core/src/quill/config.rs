@@ -540,7 +540,7 @@ impl QuillConfig {
                         }
                         Ok(())
                     };
-                let commit = |rt: &quillmark_content::Content| -> QuillValue {
+                let commit = |rt: &quillmark_content::Normalized| -> QuillValue {
                     match mode {
                         Leniency::Render => QuillValue::from_json(
                             quillmark_content::serial::to_canonical_value(rt),

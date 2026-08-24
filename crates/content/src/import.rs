@@ -1297,7 +1297,10 @@ mod tests {
             }],
             islands: vec![],
         };
-        assert_eq!(imported.to_canonical_json(), editor.to_canonical_json());
+        assert_eq!(
+            imported.to_canonical_json(),
+            editor.into_normalized().to_canonical_json()
+        );
     }
 
     #[test]

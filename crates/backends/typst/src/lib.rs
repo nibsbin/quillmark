@@ -733,7 +733,7 @@ mod tests {
             );
             Quill::from_tree(FileTreeNode::Directory { files }).expect("quill")
         };
-        let counts = |rt: &Content| {
+        let counts = |rt: &quillmark_content::Normalized| {
             let json =
                 serde_json::json!({ "body": quillmark_content::serial::to_canonical_value(rt) });
             let q = quill();

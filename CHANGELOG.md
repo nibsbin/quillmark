@@ -2,6 +2,57 @@
 
 ## Unreleased
 
+- perf(content): **`serial::to_canonical_value` and `to_canonical_json` take a
+  `Normalized`.**
+  Both cloned the whole content and normalized the copy on every call, on a
+  lane whose callers — the codecs, `Card::body`, the storage DTO — were already
+  holding the canonical form. The token now carries that, so the serialize path
+  spends an encode instead of a deep clone plus a repair pass. `to_canonical_json`
+  moves from `Content` to `Normalized` with it; a caller holding a raw `Content`
+  mints first, which is what the old body did for them silently.
+
+- fix(core): **a document body that `validate` refuses is refused on write, not
+  discovered on read.** `CanonicalContent`'s `Deserialize` parsed, normalized and
+  validated; its `Serialize` validated nothing, and `Card::overwrite_body` takes a
+  caller's content on the canonical-form token alone. A store could therefore
+  accept bytes it could not read back. The serializer now validates too and fails
+  with the invariant, at the boundary that cares and while the caller still holds
+  the value that produced it.
+
+- refactor(content): **the leaf-segment walk is one loop, not two.** `traverse`
+  gains `segment` — the block-opening line plus every following one that
+  continues it at the same nesting — and `export::emit_block` and the Typst
+  emitter's `segment_end` both call it. The fifth duplicated traversal, the one
+  #1364 did not list.
+
+- fix(content): **`to_markdown` no longer aborts the process on a deeply nested
+  content.** `Normalized` states that `normalize` has run, and `normalize`
+  repairs where `validate` rejects: nothing about canonicalization brings a
+  container path under `MAX_NESTING_DEPTH`, so a hand-built `Content` mints a
+  token that `validate` refuses. `export::emit_block` recursed one frame per
+  container level and overflowed the stack a few thousand levels down — a
+  SIGABRT no caller can catch, against a Typst emitter that checks the depth up
+  front and returns `EmitError::NestingTooDeep` for the same input. The walk is
+  now an explicit frame stack, as `json_depth_exceeds` and the quill census
+  already are, so the projection is total over every token its signature
+  accepts. `Normalized`'s docs settle the half the newtype does not close: the
+  token promises canonical, not valid — the mint stays infallible, the codecs go
+  on calling `validate` after it, and a projection that takes one owes totality
+  rather than trust. Only a Rust embedder hand-building a `Content` reaches the
+  shape; every decode lane (`from_markdown`, `from_canonical_value`, storage,
+  WASM, Python) rejects the depth already.
+
+- fix(typst): **a container inside a list item no longer terminates the list.**
+  The item's continuation indent reached its leaf path only, so a quote inside
+  an item opened at column 0 — where Typst ends the enclosing list. The item's
+  later blocks came back as top-level paragraphs and the next item started a
+  fresh list, which renumbers an ordered one from the quote on. A fence and a
+  nested list escaped it by reaching that indented leaf path; a transparent
+  unknown container did not, and neither would any container added later.
+  Indentation is now the walk's rather than each construct's: one rule opens
+  every block, leaf and container alike, at the enclosing list depth, so what
+  the content nests, the markup nests.
+
 - fix(content): **a `continues` line that crosses a container boundary no longer
   survives.** A within-block break lives inside one container, and `LineOp::Join`
   mints the crossing shape whenever it merges two lines of differing paths — the

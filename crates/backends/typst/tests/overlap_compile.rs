@@ -18,7 +18,7 @@ fn overlap_content() -> serde_json::Value {
         Mark::new(2, 6, MarkKind::Code),
     ]);
     // No cross-kind overlap invariant exists, so normalize/validate keep it.
-    quillmark_content::serial::to_canonical_value(&rt)
+    quillmark_content::serial::to_canonical_value(&rt.into_normalized())
 }
 
 const YAML: &str = r#"

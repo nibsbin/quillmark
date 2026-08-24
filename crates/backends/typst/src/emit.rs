@@ -322,6 +322,13 @@ struct Emit<'a> {
     /// Whether `out` currently ends at a fresh line, tracked so block
     /// separators land consistently.
     end_newline: bool,
+    /// The prefix every generated line opens with: two spaces per enclosing
+    /// list item. Typst ends a list at a block written to column 0, so leaves
+    /// and containers alike open through [`Self::open_line`].
+    indent: String,
+    /// Whether the next block opens where `out` already sits: a list item's
+    /// body head, off its marker.
+    head_inline: bool,
     /// How far [`Self::overlapping_marks`] has walked `rt.marks`.
     mark_cursor: usize,
 }
@@ -348,6 +355,8 @@ impl<'a> Emit<'a> {
             out: String::new(),
             segments: Vec::new(),
             end_newline: true,
+            indent: String::new(),
+            head_inline: false,
             mark_cursor: 0,
         }
     }
@@ -417,14 +426,21 @@ impl<'a> Emit<'a> {
     }
 
     fn segment_end(&self, range: Range<usize>, depth: usize, i: usize) -> usize {
-        let mut j = i + 1;
-        while j < range.end
-            && self.rt.lines[j].containers.len() == depth
-            && self.rt.lines[j].continues
-        {
-            j += 1;
+        quillmark_content::traverse::segment(&self.rt.lines, i..range.end, depth).end
+    }
+
+    /// Opens a block's line at [`Self::indent`], ending the current one if
+    /// prose has reached it. A list item's body head is already such a
+    /// position, so the first block there opens in place.
+    fn open_line(&mut self) {
+        if std::mem::take(&mut self.head_inline) {
+            return;
         }
-        j
+        if !self.end_newline {
+            self.out.push('\n');
+        }
+        self.out.push_str(&self.indent);
+        self.end_newline = true;
     }
 
     /// An empty paragraph emits nothing; every other block (an empty heading or
@@ -436,6 +452,7 @@ impl<'a> Emit<'a> {
         if first.kind.projects_as_para() && lo == hi {
             return;
         }
+        self.open_line();
         self.emit_segment(range);
         self.out.push_str("\n\n");
         self.end_newline = true;
@@ -443,10 +460,6 @@ impl<'a> Emit<'a> {
 
     /// The trailing `\n` goes on only when this is the outermost list.
     fn emit_list(&mut self, range: Range<usize>, depth: usize, ordered: bool, start: u64) {
-        if !self.end_newline {
-            self.out.push('\n');
-            self.end_newline = true;
-        }
         let outermost = !self.rt.lines[range.start].containers[..depth]
             .iter()
             .any(|c| matches!(c, Container::ListItem { .. }));
@@ -474,8 +487,7 @@ impl<'a> Emit<'a> {
         start: u64,
         first: bool,
     ) {
-        let indent = "  ".repeat(depth);
-        self.out.push_str(&indent);
+        self.open_line();
         if ordered {
             // Typst runs one counter across adjacent `+` items
             // (`typst-layout::lists` takes `item.number.unwrap_or(number)`), so
@@ -490,7 +502,11 @@ impl<'a> Emit<'a> {
             self.out.push_str("- ");
         }
         self.end_newline = false;
+        self.head_inline = true;
+        self.indent.push_str("  ");
         self.emit_item_body(range, depth + 1);
+        self.indent.truncate(self.indent.len() - 2);
+        self.head_inline = false;
         if !self.end_newline {
             self.out.push('\n');
             self.end_newline = true;
@@ -498,43 +514,49 @@ impl<'a> Emit<'a> {
     }
 
     /// The first block flows straight off the marker; each later block is
-    /// preceded by a blank line and the `2×content_depth` continuation indent.
+    /// preceded by a blank line.
     fn emit_item_body(&mut self, range: Range<usize>, content_depth: usize) {
-        let cont_indent = "  ".repeat(content_depth);
         let mut first_block = true;
         let mut i = range.start;
         while i < range.end {
+            if !first_block {
+                self.blank_line();
+            }
+            first_block = false;
             if let Some(j) = self.try_emit_container(range.clone(), content_depth, i) {
                 i = j;
-                first_block = false;
                 continue;
             }
             let j = self.segment_end(range.clone(), content_depth, i);
-            if !first_block {
-                // The previous block left one `\n`; a second plus the indent
-                // makes the blank line.
-                self.out.push('\n');
-                self.out.push_str(&cont_indent);
-                self.end_newline = false;
-            }
+            self.open_line();
             self.emit_segment(i..j);
             if !self.end_newline {
                 self.out.push('\n');
                 self.end_newline = true;
             }
             i = j;
-            first_block = false;
+        }
+    }
+
+    /// Separates two blocks of one list item, unless the block just emitted
+    /// closed on a blank line of its own.
+    fn blank_line(&mut self) {
+        if !self.end_newline {
+            self.out.push('\n');
+            self.end_newline = true;
+        }
+        if !self.out.ends_with("\n\n") {
+            self.out.push('\n');
         }
     }
 
     /// `#quote(block: true)[…]`: quotes render structurally, not flattened.
     fn emit_quote(&mut self, range: Range<usize>, depth: usize) {
-        if !self.end_newline {
-            self.out.push('\n');
-        }
+        self.open_line();
         self.out.push_str("#quote(block: true)[\n");
         self.end_newline = true;
         self.emit_block_level(range, depth + 1);
+        self.open_line();
         self.out.push(']');
         self.out.push_str("\n\n");
         self.end_newline = true;
@@ -1006,6 +1028,7 @@ fn table_markup(props: &serde_json::Value) -> String {
 mod tests {
     use super::*;
     use quillmark_content::import::from_markdown;
+    use typst::syntax::SyntaxKind;
 
     fn emit(md: &str) -> Emission {
         let rt = from_markdown(md).expect("import");
@@ -1197,6 +1220,79 @@ mod tests {
                 "non-inline {md:?} must fall back to block lowering"
             );
         }
+    }
+
+    /// The blocks Typst's own parser reads as `kind` at the markup's top level,
+    /// as source text. What a list contains is the parser's call: a container
+    /// written to column 0 ends the list, and the item it belonged to comes
+    /// back without it.
+    fn top_level(markup: &str, kind: SyntaxKind) -> Vec<String> {
+        typst::syntax::parse(markup)
+            .children()
+            .filter(|n| n.kind() == kind)
+            .map(|n| n.full_text().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn a_quote_in_an_item_stays_in_the_item() {
+        let out = emit("- Alpha\n\n  > quoted\n\n  Beta\n\n- Gamma").markup;
+        let items = top_level(&out, SyntaxKind::ListItem);
+        assert_eq!(items.len(), 2, "the list broke apart: {out:?}");
+        assert!(
+            items[0].contains("quoted") && items[0].contains("Beta"),
+            "the quote or the block after it left the item: {out:?}"
+        );
+    }
+
+    #[test]
+    fn a_quote_in_an_ordered_item_does_not_restart_the_numbering() {
+        let out = emit("1. Alpha\n\n   > quoted\n\n   Beta\n\n2. Gamma").markup;
+        let items = top_level(&out, SyntaxKind::EnumItem);
+        assert_eq!(items.len(), 2, "the list broke apart: {out:?}");
+        assert!(
+            items[0].contains("quoted") && items[0].contains("Beta"),
+            "the quote or the block after it left the item: {out:?}"
+        );
+        assert!(
+            !items[1].starts_with("1."),
+            "the second item restated the start: {out:?}"
+        );
+    }
+
+    /// A container this build does not know lowers transparently: no wrapper
+    /// markup, and no move out of the item either.
+    #[test]
+    fn an_unknown_container_in_an_item_stays_in_the_item() {
+        use quillmark_content::model::Line;
+        let item = || Container::ListItem {
+            ordered: false,
+            start: 1,
+            ordinal: 0,
+            instance: 0,
+        };
+        let roster = Container::Unknown {
+            tag: "roster".to_string(),
+            attrs: serde_json::Value::Null,
+            instance: 0,
+        };
+        let rt = Content::new(
+            "Alpha\nRoster\nBeta".to_string(),
+            vec![
+                Line::new(LineKind::Para).with_containers(vec![item()]),
+                Line::new(LineKind::Para).with_containers(vec![item(), roster]),
+                Line::new(LineKind::Para).with_containers(vec![item()]),
+            ],
+        )
+        .into_normalized();
+        assert_eq!(rt.validate(), Ok(()));
+        let out = emit_content(&rt).unwrap().markup;
+        let items = top_level(&out, SyntaxKind::ListItem);
+        assert_eq!(items.len(), 1, "the item broke apart: {out:?}");
+        assert!(
+            items[0].contains("Roster") && items[0].contains("Beta"),
+            "the container or the block after it left the item: {out:?}"
+        );
     }
 
     // ---- intentional divergence: block quotes render ----

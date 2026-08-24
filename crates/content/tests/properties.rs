@@ -301,7 +301,10 @@ proptest! {
         let rt = from_markdown(&md).unwrap();
         let mut shuffled = rt.clone().into_content();
         shuffled.marks.reverse();
-        prop_assert_eq!(rt.to_canonical_json(), shuffled.to_canonical_json());
+        prop_assert_eq!(
+            rt.to_canonical_json(),
+            shuffled.into_normalized().to_canonical_json()
+        );
     }
 
     /// Property 3: an anchor over text that survives a rewrite is carried

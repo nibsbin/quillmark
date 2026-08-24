@@ -140,34 +140,71 @@ pub fn line_segments(rt: &Content) -> Vec<Segment> {
     segs
 }
 
+/// One open level of the block walk: `at` is the next line of `range` to emit,
+/// `buf` the markdown emitted for the level so far, and `container` the one
+/// whose syntax prefixes `buf` when the level closes (`None` at the root).
+struct Frame<'a> {
+    container: Option<&'a Container>,
+    at: usize,
+    range: std::ops::Range<usize>,
+    depth: usize,
+    first_block: bool,
+    buf: String,
+}
+
+impl<'a> Frame<'a> {
+    fn open(container: Option<&'a Container>, range: std::ops::Range<usize>, depth: usize) -> Self {
+        Frame {
+            container,
+            at: range.start,
+            range,
+            depth,
+            first_block: true,
+            buf: String::new(),
+        }
+    }
+}
+
 /// Emit the lines in `range`, all sharing the container prefix of length
 /// `depth`. Leaf lines (containers.len() == depth) render at this level;
-/// deeper lines are grouped by their `depth`-th container and recursed into.
+/// deeper lines are grouped by their `depth`-th container and open a level of
+/// their own, which [`close_container`] prefixes on the way back out.
+///
+/// A frame stack, not recursion, for the reason [`Normalized`] states: the
+/// token says canonical, not valid, so a container path reaching here nests
+/// past [`MAX_NESTING_DEPTH`](crate::MAX_NESTING_DEPTH) freely, and a call
+/// frame per level aborts the process where this returns a projection.
 fn emit_block(ctx: &Ctx, range: std::ops::Range<usize>, depth: usize, out: &mut String) {
     let lines = &ctx.rt.lines;
-    let mut i = range.start;
-    let mut first_block = true;
-    while i < range.end {
-        let line = &lines[i];
-        if line.containers.len() > depth {
-            let item = crate::traverse::items(lines, i..range.end, depth)
-                .next()
-                .expect("a line with a container at `depth` opens an item");
-            block_separator(out, first_block);
-            emit_container(ctx, item.container, item.range.clone(), depth, out);
-            first_block = false;
-            i = item.range.end;
-        } else {
-            // A leaf block: this line (continues == false) plus every following
-            // line that continues it (a hard-break run, or a code fence's lines).
-            let mut j = i + 1;
-            while j < range.end && lines[j].containers.len() == depth && lines[j].continues {
-                j += 1;
+    let mut stack = vec![Frame::open(None, range, depth)];
+    while let Some(frame) = stack.last_mut() {
+        if frame.at < frame.range.end {
+            let i = frame.at;
+            block_separator(&mut frame.buf, frame.first_block);
+            frame.first_block = false;
+            if lines[i].containers.len() > frame.depth {
+                let item = crate::traverse::items(lines, i..frame.range.end, frame.depth)
+                    .next()
+                    .expect("a line with a container at `depth` opens an item");
+                frame.at = item.range.end;
+                let child = Frame::open(Some(item.container), item.range, frame.depth + 1);
+                stack.push(child);
+            } else {
+                let seg = crate::traverse::segment(lines, i..frame.range.end, frame.depth);
+                frame.at = seg.end;
+                emit_leaf_block(ctx, seg, &mut frame.buf);
             }
-            block_separator(out, first_block);
-            emit_leaf_block(ctx, i..j, out);
-            first_block = false;
-            i = j;
+            continue;
+        }
+        let done = stack.pop().expect("`last_mut` just yielded this frame");
+        match stack.last_mut() {
+            Some(parent) => {
+                let key = done
+                    .container
+                    .expect("only the root frame opens without a container");
+                close_container(key, &done.buf, &mut parent.buf);
+            }
+            None => out.push_str(&done.buf),
         }
     }
 }
@@ -181,19 +218,9 @@ fn block_separator(out: &mut String, first_block: bool) {
     }
 }
 
-/// Emit a container run (a list item's block, or a quote's block) by prefixing
-/// each produced line. The inner blocks are emitted into a scratch buffer, then
-/// each of its lines is prefixed.
-fn emit_container(
-    ctx: &Ctx,
-    key: &Container,
-    range: std::ops::Range<usize>,
-    depth: usize,
-    out: &mut String,
-) {
-    let mut inner = String::new();
-    emit_block(ctx, range, depth + 1, &mut inner);
-
+/// Close a container level: prefix each line of `inner`, the block emitted for
+/// it, with the container's markdown syntax.
+fn close_container(key: &Container, inner: &str, out: &mut String) {
     match key {
         Container::ListItem {
             ordered,
@@ -227,16 +254,16 @@ fn emit_container(
                 "+ ".to_string()
             };
             let indent = " ".repeat(marker.len());
-            prefix_lines(&inner, &marker, &indent, out);
+            prefix_lines(inner, &marker, &indent, out);
         }
         Container::Quote { .. } => {
             // `> ` on content lines, `>` on blank lines so paragraphs stay in
             // one quote on re-import.
-            prefix_quote(&inner, out);
+            prefix_quote(inner, out);
         }
         // A container this build does not know has no markdown syntax to prefix
         // with, so it projects transparently and survives via storage.
-        Container::Unknown { .. } => out.push_str(&inner),
+        Container::Unknown { .. } => out.push_str(inner),
     }
 }
 
@@ -1000,6 +1027,20 @@ mod tests {
         let rt = Content::new(text.to_string(), lines).into_normalized();
         rt.validate().expect("stored content validates");
         rt
+    }
+
+    /// The lane [`Normalized`] does not close: a Rust embedder hand-builds a
+    /// content nested past `MAX_NESTING_DEPTH`, which `normalize` cannot repair
+    /// and no mint rejects. `DEPTH` clears the few-thousand-frame ceiling a
+    /// test thread's stack holds.
+    #[test]
+    fn nesting_past_what_validate_allows_projects_rather_than_overflowing() {
+        const DEPTH: usize = 10_000;
+        let mut line = Line::new(LineKind::Para);
+        line.containers = vec![Container::Quote { instance: 0 }; DEPTH];
+        let rt = Content::new("x".to_string(), vec![line]).into_normalized();
+        assert!(rt.validate().is_err(), "the shape `validate` refuses");
+        assert_eq!(to_markdown(&rt), format!("{}x", "> ".repeat(DEPTH)));
     }
 
     fn li(ordinal: u64, instance: u64) -> Vec<Container> {
