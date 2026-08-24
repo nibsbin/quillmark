@@ -327,6 +327,10 @@ pub enum ApplyError {
     /// nothing before it to continue. Refused because `normalize` does not
     /// repair it.
     FirstLineContinues,
+    /// [`LineOp::SetContinues`] would make a line continue a block it is not in:
+    /// its container path differs from the previous line's, and a within-block
+    /// break lives inside one container.
+    ContinuesAcrossContainers { line: usize },
     /// The text delta's expected base length disagreed with the content:
     /// it was built against a different revision.
     DeltaBaseMismatch {
@@ -643,6 +647,19 @@ impl Content {
                 LineOp::SetContinues { line, continues } => {
                     if *line == 0 && *continues {
                         return Err(ApplyError::FirstLineContinues);
+                    }
+                    // The same refusal one line further on: nothing precedes
+                    // line 0 to continue, and the line before *this* one is a
+                    // block in a different container, which is no more
+                    // continuable.
+                    if *continues
+                        && self
+                            .lines
+                            .get(*line)
+                            .zip(self.lines.get(line.wrapping_sub(1)))
+                            .is_some_and(|(l, prev)| l.containers != prev.containers)
+                    {
+                        return Err(ApplyError::ContinuesAcrossContainers { line: *line });
                     }
                     let l = self.line_mut(*line)?;
                     l.continues = *continues;
@@ -962,7 +979,7 @@ mod tests {
                 }),
                 LineOp::SetContainers {
                     line: 2,
-                    containers: vec![Container::Quote],
+                    containers: vec![Container::Quote { instance: 0 }],
                 },
             ),
             (
@@ -987,6 +1004,7 @@ mod tests {
                     containers: vec![Container::Unknown {
                         tag: "indent".into(),
                         attrs: serde_json::json!({"depth": 2}),
+                        instance: 0,
                     }],
                 },
             ),
@@ -1257,10 +1275,54 @@ mod tests {
         assert_eq!(tbl.lines[0].kind, LineKind::Island);
     }
 
+    /// The deliberate crossing is refused up front, where the incidental one
+    /// (a `Join` across two paths) is repaired by `normalize`: the same split
+    /// the line-kind rule makes.
+    #[test]
+    fn set_continues_across_a_container_boundary_is_refused() {
+        let mut rt = from_markdown("- a\n\npara").unwrap();
+        assert_ne!(rt.lines[0].containers, rt.lines[1].containers);
+        assert_eq!(
+            rt.apply_line_ops(&[LineOp::SetContinues {
+                line: 1,
+                continues: true
+            }]),
+            Err(ApplyError::ContinuesAcrossContainers { line: 1 })
+        );
+
+        // Inside one container it is an ordinary hard break.
+        let mut rt = from_markdown("- a\n\n  b").unwrap();
+        assert_eq!(rt.lines[0].containers, rt.lines[1].containers);
+        assert_eq!(
+            rt.apply_line_ops(&[LineOp::SetContinues {
+                line: 1,
+                continues: true
+            }]),
+            Ok(())
+        );
+        assert!(rt.lines[1].continues);
+    }
+
+    /// A `Join` merging two lines of differing paths leaves the line after the
+    /// seam continuing across it. The op is accepted and the content is still
+    /// storable, which is what putting the repair in `normalize` rather than
+    /// `validate` buys.
+    #[test]
+    fn join_across_two_paths_leaves_a_valid_content() {
+        let mut rt = from_markdown("- a\n\npara\\\nbroken").unwrap();
+        let seam = rt
+            .lines
+            .iter()
+            .position(|l| l.continues)
+            .expect("the hard break is there");
+        assert!(rt.apply_line_ops(&[LineOp::Join { line: seam - 2 }]).is_ok());
+        assert_eq!(rt.validate(), Ok(()), "the join left a storable content");
+    }
+
     #[test]
     fn line_op_set_containers_is_depth_capped() {
         let mut rt = from_markdown("hi").unwrap();
-        let deep = vec![Container::Quote; crate::MAX_NESTING_DEPTH + 1];
+        let deep = vec![Container::Quote { instance: 0 }; crate::MAX_NESTING_DEPTH + 1];
         assert_eq!(
             rt.apply_line_ops(&[LineOp::SetContainers {
                 line: 0,
@@ -1831,7 +1893,7 @@ mod tests {
         let old_chars: Vec<char> = "a\nbc".chars().collect();
         let l1 = Line {
             kind: LineKind::Heading { level: 5 },
-            containers: vec![Container::Quote],
+            containers: vec![Container::Quote { instance: 0 }],
             continues: true,
         };
         let lines = vec![tag_line(1, false), l1.clone()];
@@ -1843,7 +1905,7 @@ mod tests {
         assert_eq!(out.len(), 3);
         assert_eq!(out[1], l1, "first half is the untouched original line");
         assert_eq!(out[2].kind, LineKind::Heading { level: 5 });
-        assert_eq!(out[2].containers, vec![Container::Quote]);
+        assert_eq!(out[2].containers, vec![Container::Quote { instance: 0 }]);
         assert!(!out[2].continues, "the split clone starts a new block");
     }
 

@@ -388,13 +388,13 @@ impl<'a> Emit<'a> {
     /// discipline (top-level terminated vs list item body).
     fn try_emit_container(&mut self, range: Range<usize>, depth: usize, i: usize) -> Option<usize> {
         match self.rt.lines[i].containers.get(depth).cloned() {
-            Some(Container::ListItem { ordered, start, .. }) => {
-                let j = self.list_run_end(range.clone(), depth, ordered, start, i);
+            Some(key @ Container::ListItem { ordered, start, .. }) => {
+                let j = self.container_run_end(range.clone(), depth, &key, i);
                 self.emit_list(i..j, depth, ordered, start);
                 Some(j)
             }
-            Some(Container::Quote) => {
-                let j = self.container_run_end(range.clone(), depth, &Container::Quote, i);
+            Some(key @ Container::Quote { .. }) => {
+                let j = self.container_run_end(range.clone(), depth, &key, i);
                 self.emit_quote(i..j, depth);
                 Some(j)
             }
@@ -412,8 +412,12 @@ impl<'a> Emit<'a> {
         }
     }
 
-    /// Whole-container equality, what a container with no shape of its own
-    /// (`Quote`, an unknown) needs; [`Self::list_run_end`] is the list sibling.
+    /// One container instance's run: the lines whose container at `depth` has
+    /// the same run key (shape without `ordinal`) *and* the same `instance`.
+    ///
+    /// One rule for every container kind. A list's items differ only in
+    /// `ordinal`, which the run key masks, so they group; an adjacent list of
+    /// identical shape carries the other `instance`, so it does not.
     fn container_run_end(
         &self,
         range: Range<usize>,
@@ -422,7 +426,12 @@ impl<'a> Emit<'a> {
         i: usize,
     ) -> usize {
         let mut j = i + 1;
-        while j < range.end && self.rt.lines[j].containers.get(depth) == Some(key) {
+        while j < range.end
+            && self.rt.lines[j]
+                .containers
+                .get(depth)
+                .is_some_and(|c| c.same_run(key) && c.instance() == key.instance())
+        {
             j += 1;
         }
         j
@@ -435,30 +444,6 @@ impl<'a> Emit<'a> {
             && self.rt.lines[j].continues
         {
             j += 1;
-        }
-        j
-    }
-
-    /// Different-shape adjacent lists stay separate; same-shape ones already
-    /// merged at import.
-    fn list_run_end(
-        &self,
-        range: Range<usize>,
-        depth: usize,
-        ordered: bool,
-        start: u64,
-        i: usize,
-    ) -> usize {
-        let mut j = i + 1;
-        while j < range.end {
-            match self.rt.lines[j].containers.get(depth) {
-                Some(Container::ListItem {
-                    ordered: o,
-                    start: s,
-                    ..
-                }) if *o == ordered && *s == start => j += 1,
-                _ => break,
-            }
         }
         j
     }
@@ -519,7 +504,11 @@ impl<'a> Emit<'a> {
         let indent = "  ".repeat(depth);
         self.out.push_str(&indent);
         if ordered {
-            if first && start != 1 {
+            // Typst runs one counter across adjacent `+` items
+            // (`typst-layout::lists` takes `item.number.unwrap_or(number)`), so
+            // two adjacent lists would number 1 2 3 4. Stating the first item's
+            // number resets it, which is the whole boundary in the projection.
+            if first {
                 self.out.push_str(&format!("{}. ", start));
             } else {
                 self.out.push_str("+ ");
@@ -1455,6 +1444,7 @@ mod tests {
         let indent = || Container::Unknown {
             tag: "indent".to_string(),
             attrs: serde_json::Value::Null,
+            instance: 0,
         };
         let mut rt = Content::new(
             "heads up\nsecond".to_string(),
@@ -1477,8 +1467,8 @@ mod tests {
             "heads up#linebreak()second\n\n"
         );
         // Inside a known container the known wrapper still renders.
-        rt.lines[0].containers.insert(0, Container::Quote);
-        rt.lines[1].containers.insert(0, Container::Quote);
+        rt.lines[0].containers.insert(0, Container::Quote { instance: 0 });
+        rt.lines[1].containers.insert(0, Container::Quote { instance: 0 });
         assert_eq!(
             emit_content(&rt).unwrap().markup,
             "#quote(block: true)[\nheads up#linebreak()second\n\n]\n\n"

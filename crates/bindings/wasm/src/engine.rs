@@ -221,11 +221,18 @@ export type ContentLineKind =
 
 /** An ancestor block a line nests inside, outermost first. Open like
  * `ContentLine.kind`: an unrecognized container round-trips with opaque `attrs`
- * and renders transparently (its lines sit at the enclosing level). */
+ * and renders transparently (its lines sit at the enclosing level).
+ *
+ * Two adjacent lines sit in the same container iff their whole path matches.
+ * `instance` is what tells one container from an adjacent sibling of identical
+ * shape — two consecutive quotes, or two consecutive lists — which contiguity
+ * alone reads as one. Omit it (or write `0`) unless a path immediately above or
+ * below is otherwise identical; a write is canonicalized to `0`/`1` on the way
+ * in, so any distinct pair of values works. */
 export type ContentContainer =
-    | { container: "list_item"; ordered: boolean; start: number; ordinal: number }
-    | { container: "quote" }
-    | { container: string; attrs: unknown };
+    | { container: "list_item"; ordered: boolean; start: number; ordinal: number; instance?: number }
+    | { container: "quote"; instance?: number }
+    | { container: string; attrs: unknown; instance?: number };
 
 /** A mark over char range `[start, end)` into `Content.text`. The open `type`
  * arm blocks discriminant narrowing, so read a payload-carrying arm behind its

@@ -2,6 +2,58 @@
 
 ## Unreleased
 
+- fix(content): **a `continues` line that crosses a container boundary no longer
+  survives.** A within-block break lives inside one container, and `LineOp::Join`
+  mints the crossing shape whenever it merges two lines of differing paths — the
+  line after the seam keeps continuing across it. Both projections already read
+  the flag as dead there (`export::emit_block` and `emit::segment_end` each
+  require the depth to match before absorbing a continuation), so `normalize`
+  now clears it, which states what was already true and changes nothing
+  observable. `Content::validate` gains `Invariant::ContinuesAcrossContainers`
+  to catch a hand-built content that skipped `normalize`, and
+  `LineOp::SetContinues` refuses the *deliberate* crossing up front with
+  `ApplyError::ContinuesAcrossContainers` — the same repair-or-refuse split the
+  line-kind rule already makes. This was the one relational line invariant
+  nothing checked: `validate` is otherwise strictly per-line, while every
+  container rule is a property of a line pair.
+
+- fix(content): **two adjacent containers of one shape are no longer read as
+  one.** Container identity is the container path plus contiguity, and the path
+  carried nothing to tell one instance from the next, so two adjacent runs of
+  equal shape welded: `[Quote], [Quote]` read as a single two-paragraph quote,
+  and two one-item lists as a single item whose second line came back as an
+  unnumbered continuation paragraph — the marker gone. `Container` now carries
+  an `instance` discriminator on every arm, `Content::normalize` canonicalizes
+  it to `0` (flipping to `1` only where the adjacent preceding run would
+  otherwise weld), and the two projections read it. Four defects close with it:
+  - `from_markdown("- a\n\n<!-- -->\n\n- b")` — the CommonMark idiom for
+    spelling two lists apart — no longer destroys the second list's marker.
+  - Two adjacent ordered lists typeset with their own numbering. They reached
+    the Typst emitter as one run and `+` markers numbered the second list on
+    from the first, so `1. 2.` / `1. 2.` rendered **1 2 3 4**. The run's first
+    item now states its number, which resets Typst's running counter.
+  - `1. a` beside a list starting at `3` keeps that `start` through the
+    Markdown projection. CommonMark reads only a list's first number, so
+    `1. a\n\n3. b` re-imported as one list of two items and the `start` was
+    lost — breaking the round-trip fixed point `export` documents. Adjacent
+    lists now alternate their marker (`-`/`+`, `.`/`)`), which is how
+    CommonMark itself spells two lists apart, so the boundary survives the
+    projection with no comment marker in the authored file.
+  - Adjacent `Unknown` containers of equal `(tag, attrs)` round-trip as two.
+    The open-set promise that a container this build does not know survives
+    untouched is now total rather than holding up to an adjacency quotient.
+
+  An item boundary is a parent boundary: two inner lists under two outer list
+  items are two lists, so an inner run restarts its `ordinal` and needs no
+  discriminator. `ordinal` is canonicalized alongside it, to a gapless 0-based index within
+  its run, so `[5, 9]` and `[0, 1]` stop being two spellings of the same two
+  items. `instance` is written to the wire only when non-zero, so a stored row
+  that needs no discriminator — nearly all of them — keeps its exact bytes and
+  its content hash. **Breaking for Rust consumers** that match `Container`
+  exhaustively: `Quote` is now a struct variant, and `ListItem`/`Unknown` carry
+  the extra field. On the TypeScript surface `instance` is optional; a consumer
+  that never writes adjacent same-shape siblings needs no change.
+
 - fix(blueprint): **a variant's `object` or `array<object>` cell expands per
   property.** The cell went through the scalar path, so it rendered as
   `controlled_by: !must_fill # object` — a null where the schema wants a

@@ -454,7 +454,7 @@ export function isCodeLine(line) {
 
 /**
  * @param {import('../core/wasm.js').ContentContainer} container
- * @returns {container is import('../core/wasm.js').ContentContainer & { container: 'list_item'; ordered: boolean; start: number; ordinal: number }}
+ * @returns {container is import('../core/wasm.js').ContentContainer & { container: 'list_item'; ordered: boolean; start: number; ordinal: number; instance?: number }}
  */
 export function isListItemContainer(container) {
 	return container.container === 'list_item';

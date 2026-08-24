@@ -205,20 +205,37 @@ fn emit_container(
             ordered,
             start,
             ordinal,
+            instance,
         } => {
+            // CommonMark starts a new list at a change of bullet char or of
+            // ordered delimiter, and stores neither, so the marker is where the
+            // `instance` alternation lands: it spells two adjacent lists apart
+            // in the projection exactly as `instance` does in the model.
+            //
+            // `+` rather than `*` for the second bullet: `* ***` is four
+            // asterisks separated by spaces, which reads as a thematic break
+            // and would take the item with it (see
+            // `rule_opening_a_list_item_keeps_its_item`).
             let marker = if *ordered {
                 // `start`/`ordinal` are unbounded `u64` and `validate` does not
                 // ceiling them, so a corrupt/adversarial content can drive the
                 // sum past `u64::MAX`; saturate rather than panic (or wrap under
                 // release overflow-checks) on the render path.
-                format!("{}. ", start.saturating_add(*ordinal))
-            } else {
+                let n = start.saturating_add(*ordinal);
+                if instance % 2 == 0 {
+                    format!("{n}. ")
+                } else {
+                    format!("{n}) ")
+                }
+            } else if instance % 2 == 0 {
                 "- ".to_string()
+            } else {
+                "+ ".to_string()
             };
             let indent = " ".repeat(marker.len());
             prefix_lines(&inner, &marker, &indent, out);
         }
-        Container::Quote => {
+        Container::Quote { .. } => {
             // `> ` on content lines, `>` on blank lines so paragraphs stay in
             // one quote on re-import.
             prefix_quote(&inner, out);
@@ -975,6 +992,117 @@ mod tests {
     use crate::model::{Line, Loss, Mark};
 
     /// export∘import is the identity on the content.
+    /// A content built by hand, as a client writing `Content` directly builds
+    /// one, normalized the way every write lane normalizes it.
+    fn stored(text: &str, containers: Vec<Vec<Container>>) -> Content {
+        let lines = containers
+            .into_iter()
+            .map(|c| {
+                let mut l = crate::model::Line::new(LineKind::Para);
+                l.containers = c;
+                l
+            })
+            .collect();
+        let mut rt = Content::new(text.to_string(), lines);
+        rt.normalize();
+        rt.validate().expect("stored content validates");
+        rt
+    }
+
+    fn li(ordinal: u64, instance: u64) -> Vec<Container> {
+        vec![Container::ListItem {
+            ordered: false,
+            start: 1,
+            ordinal,
+            instance,
+        }]
+    }
+
+    fn oli(ordinal: u64, instance: u64) -> Vec<Container> {
+        vec![Container::ListItem {
+            ordered: true,
+            start: 1,
+            ordinal,
+            instance,
+        }]
+    }
+
+    /// The shapes #1357 recorded as inexpressible, now spelled by `instance`
+    /// and carried through markdown by the marker alternation CommonMark
+    /// already reads. Each is checked *from storage*, not from an import, since
+    /// a client writing `Content` directly is the lane that mints them.
+    #[test]
+    fn adjacent_sibling_containers_project_and_return() {
+        let cases: &[(Content, &str)] = &[
+            // Two one-item lists: the shape that used to come back as one item
+            // with an unnumbered continuation paragraph.
+            (stored("a\nb", vec![li(0, 0), li(0, 1)]), "- a\n\n+ b"),
+            // Which is still distinct from one item spanning two paragraphs.
+            (stored("a\nb", vec![li(0, 0), li(0, 0)]), "- a\n\n  b"),
+            // A one-item list then a longer one: no ordinal below 0 to restart
+            // to, so nothing but `instance` can hold this apart.
+            (
+                stored("a\nb\nc", vec![li(0, 0), li(0, 1), li(1, 1)]),
+                "- a\n\n+ b\n\n+ c",
+            ),
+            // Two adjacent quotes, which markdown spells with the blank line.
+            (
+                stored(
+                    "a\nb",
+                    vec![
+                        vec![Container::Quote { instance: 0 }],
+                        vec![Container::Quote { instance: 1 }],
+                    ],
+                ),
+                "> a\n\n> b",
+            ),
+            // Still distinct from one quote of two paragraphs.
+            (
+                stored(
+                    "a\nb",
+                    vec![
+                        vec![Container::Quote { instance: 0 }],
+                        vec![Container::Quote { instance: 0 }],
+                    ],
+                ),
+                "> a\n>\n> b",
+            ),
+        ];
+        for (rt, expected) in cases {
+            let md = to_markdown(rt);
+            assert_eq!(&md, expected);
+            assert_eq!(&from_markdown(&md).unwrap(), rt, "{md:?} did not return");
+        }
+    }
+
+    /// The alternate markers meet the rule collision the primary ones already
+    /// dodge. `+ ***` is a list item holding a thematic break; `* ***` would be
+    /// four asterisks separated by spaces, which is a break outright and takes
+    /// the item with it — which is why the second bullet is `+`.
+    #[test]
+    fn alternate_markers_do_not_collide_with_a_rule() {
+        let mut rt = stored("a\n\nb", vec![li(0, 0), li(0, 1), li(1, 1)]);
+        rt.lines[1].kind = LineKind::Rule;
+        rt.validate().expect("validates");
+        assert_eq!(to_markdown(&rt), "- a\n\n+ ***\n\n+ b");
+        assert_eq!(from_markdown(&to_markdown(&rt)).unwrap(), rt);
+
+        let mut rt = stored("a\n\nb", vec![oli(0, 0), oli(0, 1), oli(1, 1)]);
+        rt.lines[1].kind = LineKind::Rule;
+        assert_eq!(to_markdown(&rt), "1. a\n\n1) ***\n\n2) b");
+        assert_eq!(from_markdown(&to_markdown(&rt)).unwrap(), rt);
+    }
+
+    /// Two ordered lists whose `start` differs: CommonMark reads only a list's
+    /// *first* number, so without a marker change the second list's `start`
+    /// re-imports as the first list's second item.
+    #[test]
+    fn adjacent_ordered_lists_keep_their_start() {
+        let rt = from_markdown("1. a\n\n<!-- -->\n\n3. b").unwrap();
+        assert_eq!(to_markdown(&rt), "1. a\n\n3) b");
+        round_trips("1. a\n\n<!-- -->\n\n3. b");
+    }
+
     fn round_trips(md: &str) {
         let rt = from_markdown(md).unwrap();
         let md2 = to_markdown(&rt);
@@ -1025,6 +1153,7 @@ mod tests {
                     containers: vec![Container::Unknown {
                         tag: "indent".into(),
                         attrs: serde_json::Value::Null,
+                        instance: 0,
                     }],
                     continues: false,
                 },
@@ -1033,6 +1162,7 @@ mod tests {
                     containers: vec![Container::Unknown {
                         tag: "indent".into(),
                         attrs: serde_json::Value::Null,
+                        instance: 0,
                     }],
                     continues: false,
                 },
@@ -1044,8 +1174,8 @@ mod tests {
         assert_eq!(rt.validate(), Ok(()));
         assert_eq!(to_markdown(&rt), "**heads** up\n\nstill inside");
         // An unknown container inside a known one adds no prefix of its own.
-        rt.lines[0].containers.insert(0, Container::Quote);
-        rt.lines[1].containers.insert(0, Container::Quote);
+        rt.lines[0].containers.insert(0, Container::Quote { instance: 0 });
+        rt.lines[1].containers.insert(0, Container::Quote { instance: 0 });
         assert_eq!(to_markdown(&rt), "> **heads** up\n>\n> still inside");
     }
 

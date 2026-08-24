@@ -141,27 +141,136 @@ impl LineKind {
 pub enum Container {
     /// A list item. `ordered` distinguishes `1.` from `-`; `start` is the list's
     /// first number (1 by default); `ordinal` is this item's 0-based index in
-    /// its list. Two *adjacent* lines belong to the same item iff their whole
-    /// container path (ordinals included) is equal. Identity is path **plus
-    /// contiguity**: two sibling inner lists under one outer item can produce
-    /// equal first-item paths, distinguished only by the non-adjacency of their
-    /// runs.
+    /// its list; `instance` tells this list from an adjacent one of the same
+    /// shape (see [`Container::instance`]).
+    ///
+    /// Two *adjacent* lines belong to the same item iff their whole container
+    /// path is equal. Identity is path **plus contiguity**: two sibling inner
+    /// lists under one outer item can produce equal first-item paths,
+    /// distinguished only by the non-adjacency of their runs.
     ListItem {
         ordered: bool,
         start: u64,
         ordinal: u64,
+        instance: u64,
     },
-    /// A block quote. Adjacent lines sharing `[Quote]` are one multi-paragraph
-    /// quote; two adjacent separate quotes are not distinguished (they merge on
-    /// round-trip: a documented canonicalization).
-    Quote,
+    /// A block quote. Adjacent lines sharing one `Quote` are one
+    /// multi-paragraph quote; two adjacent quotes differ in `instance`.
+    Quote { instance: u64 },
     /// Open-set escape hatch: a container this build does not know, kept in the
     /// path so it round-trips, transparent to both projections. Two adjacent
-    /// lines sit in the same one iff their whole `(tag, attrs)` is equal.
+    /// lines sit in the same one iff their whole `(tag, attrs, instance)` is
+    /// equal.
     Unknown {
         tag: String,
         attrs: JsonValue,
+        instance: u64,
     },
+}
+
+impl Container {
+    /// Which instance of its shape this container is, among a run of adjacent
+    /// siblings that would otherwise be indistinguishable.
+    ///
+    /// Container identity is path plus contiguity, so two adjacent runs of
+    /// equal shape read as one: `[Quote], [Quote]` is one quote, and two
+    /// one-item lists are one item spanning two paragraphs. `instance` is the
+    /// one field that exists to break that tie, and it is the whole reason the
+    /// encoding is complete rather than a quotient.
+    ///
+    /// [`Content::normalize`] canonicalizes it to **0, flipping to 1 only where
+    /// the adjacent preceding sibling run would otherwise weld with this one**,
+    /// so a document that needs no discriminator carries none, and one that
+    /// needs it alternates `0, 1, 0, 1`. Non-adjacent runs never collide, so
+    /// two values suffice. A producer may mint any distinct values it likes;
+    /// normalize collapses them to the canonical pair.
+    pub fn instance(&self) -> u64 {
+        match self {
+            Container::ListItem { instance, .. }
+            | Container::Quote { instance }
+            | Container::Unknown { instance, .. } => *instance,
+        }
+    }
+
+    /// This container with `instance` replaced.
+    #[cfg(test)]
+    pub(crate) fn with_instance(&self, n: u64) -> Container {
+        let mut c = self.clone();
+        c.set_instance(n);
+        c
+    }
+
+    fn set_instance(&mut self, n: u64) {
+        match self {
+            Container::ListItem { instance, .. }
+            | Container::Quote { instance }
+            | Container::Unknown { instance, .. } => *instance = n,
+        }
+    }
+
+    /// Whether these two share a [`run_key`](Self::run_key), without building
+    /// one: an `Unknown`'s key holds its whole `attrs`, and both the emitters
+    /// and `normalize` ask this once per line.
+    pub fn same_run(&self, other: &Container) -> bool {
+        match (self, other) {
+            (
+                Container::ListItem {
+                    ordered: a, start: b, ..
+                },
+                Container::ListItem {
+                    ordered: c, start: d, ..
+                },
+            ) => a == c && b == d,
+            (Container::Quote { .. }, Container::Quote { .. }) => true,
+            (
+                Container::Unknown {
+                    tag: a, attrs: b, ..
+                },
+                Container::Unknown {
+                    tag: c, attrs: d, ..
+                },
+            ) => a == c && b == d,
+            _ => false,
+        }
+    }
+
+    /// Whether two adjacent runs of these shapes would weld — that is, whether
+    /// the second needs a fresh `instance` to be readable as its own container.
+    ///
+    /// Coarser than [`same_run`](Self::same_run) for lists, because `start` is
+    /// invisible in Markdown: CommonMark reads only a list's *first* number, so
+    /// `1. a` beside `3. b` re-imports as one list of two items and the second
+    /// list's `start` is lost. Comparing `ordered` alone mints the
+    /// discriminator there too, and the marker alternation carries it.
+    fn same_weld(&self, other: &Container) -> bool {
+        match (self, other) {
+            (Container::ListItem { ordered: a, .. }, Container::ListItem { ordered: b, .. }) => {
+                a == b
+            }
+            _ => self.same_run(other),
+        }
+    }
+
+    /// This container's **run key**: its shape with `ordinal` and `instance`
+    /// masked off. Two adjacent lines sit in the same container instance iff
+    /// their run keys *and* instances match; the two emitters and
+    /// `quill::support::census` all group on that pair.
+    pub fn run_key(&self) -> Container {
+        match self {
+            Container::ListItem { ordered, start, .. } => Container::ListItem {
+                ordered: *ordered,
+                start: *start,
+                ordinal: 0,
+                instance: 0,
+            },
+            Container::Quote { .. } => Container::Quote { instance: 0 },
+            Container::Unknown { tag, attrs, .. } => Container::Unknown {
+                tag: tag.clone(),
+                attrs: attrs.clone(),
+                instance: 0,
+            },
+        }
+    }
 }
 
 /// A mark over a char range `[start, end)`. `start == end` (zero-width) is legal
@@ -524,6 +633,12 @@ pub enum Invariant {
     BadHeadingLevel(u8),
     /// The first line has `continues: true` (nothing precedes it to continue).
     FirstLineContinues,
+    /// A line has `continues: true` but sits in a different container path than
+    /// the line before it, so the block it claims to continue is not the block
+    /// above. `normalize` clears the flag; this catches a hand-built content
+    /// that skipped it, the same pairing as
+    /// [`LineKindMismatch`](Invariant::LineKindMismatch).
+    ContinuesAcrossContainers { line: usize },
     /// An [`MarkKind::Unknown`] reused a reserved built-in `type` name.
     ReservedUnknownTag(String),
     /// A [`LineKind::Unknown`] reused a reserved built-in `kind` name: its
@@ -684,11 +799,27 @@ impl Content {
         self.text.chars().filter(|c| *c == '\n').count() + 1
     }
 
-    /// Normalize marks in place: drop zero-width formatting, union same-kind
-    /// formatting that is adjacent or overlapping, recursively key-sort island
-    /// props and unknown-mark attrs, then sort marks canonically. Idempotent:
-    /// the fixed point the canonical serialization commits to.
+    /// Normalize in place: canonicalize container `ordinal`/`instance`, drop
+    /// zero-width formatting, union same-kind formatting that is adjacent or
+    /// overlapping, recursively key-sort island props and unknown-mark attrs,
+    /// then sort marks canonically. Idempotent: the fixed point the canonical
+    /// serialization commits to.
     pub fn normalize(&mut self) {
+        canonicalize_containers(&mut self.lines);
+        // A `continues` line whose container path differs from the line above
+        // claims to continue a block it is not in. `Join` mints these by
+        // merging two lines of differing paths, leaving the *next* line
+        // continuing across the seam. Both projections already read the flag as
+        // dead there — `export::emit_block` and `emit::segment_end` both
+        // require the depth to match before they absorb a continuation — so
+        // clearing it changes nothing observable and states what is already
+        // true. Same treatment, and the same reason, as the line-kind demotion
+        // below; a *deliberate* one is refused up front by the op channel.
+        for i in 1..self.lines.len() {
+            if self.lines[i].continues && self.lines[i].containers != self.lines[i - 1].containers {
+                self.lines[i].continues = false;
+            }
+        }
         // A splice writes text, never kinds: typing into a table line leaves it
         // `Island` over prose, joining a fence to an image line leaves it `Code`
         // over a slot, and export reads the kind and not the text, so the
@@ -813,6 +944,16 @@ impl Content {
         if self.lines.first().is_some_and(|l| l.continues) {
             return Err(Invariant::FirstLineContinues);
         }
+        // The one relational line invariant `validate` carries. Every other
+        // container rule is a property of a line pair too, and `normalize`
+        // settles each: a non-canonical `ordinal` renumbers, a run opening
+        // under a fresh parent re-reads, this flag clears. What is left here is
+        // the assertion that it ran.
+        for (i, pair) in self.lines.windows(2).enumerate() {
+            if pair[1].continues && pair[1].containers != pair[0].containers {
+                return Err(Invariant::ContinuesAcrossContainers { line: i + 1 });
+            }
+        }
         // Only the formatting-mark edge test below reads it.
         let chars: Vec<char> = if self.marks.iter().any(|m| m.kind.is_formatting()) {
             self.text.chars().collect()
@@ -870,7 +1011,7 @@ impl Content {
                 _ => {}
             }
             for c in &line.containers {
-                if let Container::Unknown { tag, attrs } = c {
+                if let Container::Unknown { tag, attrs, .. } = c {
                     if Self::RESERVED_CONTAINERS.contains(&tag.as_str()) {
                         return Err(Invariant::ReservedUnknownContainer(tag.clone()));
                     }
@@ -933,6 +1074,90 @@ impl Content {
 /// same-kind formatting marks union when adjacent *or* overlapping, different
 /// kinds overlap freely (never split into runs), and identity/unknown marks
 /// never merge. Zero-width formatting is dropped; zero-width anchors survive.
+/// One open container run, while [`canonicalize_containers`] walks past it.
+struct Run {
+    /// The container **as stored** at the line that opened this run, which is
+    /// what decides where the input's runs begin: a producer's own `instance`
+    /// values separate its runs whatever they are, and only their canonical
+    /// spelling is this pass's business. Cloned once per run, not per line.
+    raw: Container,
+    instance: u64,
+    ordinal: u64,
+    raw_ordinal: u64,
+}
+
+/// Canonicalize every container path: `instance` to the minimal discriminator
+/// the adjacency needs, `ordinal` to a gapless 0-based index.
+///
+/// Both are derived from *run structure*, which the stored path already spells:
+/// a run opens where the stored run key or the stored `instance` changes, and
+/// within one list item `ordinal` repeating continues that item across its
+/// paragraphs while any change opens the next. So `[5, 9]` and `[0, 1]` are the
+/// same two items, `[3, 3, 7]` is two items the first of which spans two
+/// paragraphs, and a producer's `instance: 7, 9` pair reads as the same two
+/// runs as `0, 1`.
+///
+/// `instance` resets to 0 wherever the preceding sibling run could not weld
+/// with this one anyway — a different container kind, an intervening block, a
+/// fresh parent — so it stays 0 in every document that needs no discriminator.
+fn canonicalize_containers(lines: &mut [Line]) {
+    let mut state: Vec<Run> = Vec::new();
+    for line in lines.iter_mut() {
+        let depth_len = line.containers.len();
+        // Once a depth opens a new run, every depth below it is under a fresh
+        // parent, so nothing there can be continuing a run and nothing there
+        // has an adjacent predecessor to be told apart from.
+        let mut opened_above = false;
+        for d in 0..depth_len {
+            let here = &line.containers[d];
+            let raw_ordinal = match here {
+                Container::ListItem { ordinal, .. } => *ordinal,
+                _ => 0,
+            };
+            let continues = !opened_above
+                && state
+                    .get(d)
+                    .is_some_and(|r| r.raw.same_run(here) && r.raw.instance() == here.instance());
+            if continues {
+                let run = &mut state[d];
+                if raw_ordinal != run.raw_ordinal {
+                    run.ordinal += 1;
+                    run.raw_ordinal = raw_ordinal;
+                    // The run continues but the *item* changed, and an item is
+                    // a parent: everything below is inside a different one, so
+                    // it neither continues its predecessor nor has an adjacent
+                    // sibling to be told apart from. Two inner lists under two
+                    // outer items are two lists however alike they look.
+                    state.truncate(d + 1);
+                    opened_above = true;
+                }
+            } else {
+                // The run being replaced is this one's adjacent predecessor,
+                // and only then: a fresh parent above leaves none.
+                let instance = match state.get(d) {
+                    Some(prev) if !opened_above && prev.raw.same_weld(here) => 1 - prev.instance,
+                    _ => 0,
+                };
+                let raw = here.clone();
+                state.truncate(d);
+                state.push(Run {
+                    raw,
+                    instance,
+                    ordinal: 0,
+                    raw_ordinal,
+                });
+                opened_above = true;
+            }
+            let (ordinal, instance) = (state[d].ordinal, state[d].instance);
+            if let Container::ListItem { ordinal: o, .. } = &mut line.containers[d] {
+                *o = ordinal;
+            }
+            line.containers[d].set_instance(instance);
+        }
+        state.truncate(depth_len);
+    }
+}
+
 pub(crate) fn normalize_marks(marks: Vec<Mark>) -> Vec<Mark> {
     use std::collections::BTreeMap;
 
@@ -1115,9 +1340,9 @@ mod tests {
     #[test]
     fn container_nesting_is_capped() {
         let mut rt = tagged("hi", LineKind::Para);
-        rt.lines[0].containers = vec![Container::Quote; crate::MAX_NESTING_DEPTH];
+        rt.lines[0].containers = vec![Container::Quote { instance: 0 }; crate::MAX_NESTING_DEPTH];
         assert_eq!(rt.validate(), Ok(()));
-        rt.lines[0].containers.push(Container::Quote);
+        rt.lines[0].containers.push(Container::Quote { instance: 0 });
         assert_eq!(
             rt.validate(),
             Err(Invariant::NestingTooDeep {
@@ -1160,6 +1385,7 @@ mod tests {
         rt.lines[0].containers = vec![Container::Unknown {
             tag: "indent".into(),
             attrs: nested(crate::MAX_JSON_DEPTH + 1),
+            instance: 0,
         }];
         assert_eq!(rt.validate(), too_deep("container attrs"));
 
@@ -1287,6 +1513,209 @@ mod tests {
                 segments: 2
             })
         );
+    }
+
+    fn li(ordinal: u64, instance: u64) -> Container {
+        Container::ListItem {
+            ordered: false,
+            start: 1,
+            ordinal,
+            instance,
+        }
+    }
+
+    fn canon(cs: Vec<Container>) -> Vec<(u64, u64)> {
+        let text = vec!["x"; cs.len()].join("\n");
+        let lines = cs
+            .into_iter()
+            .map(|c| {
+                let mut l = Line::new(LineKind::Para);
+                l.containers = vec![c];
+                l
+            })
+            .collect();
+        let mut rt = Content::new(text, lines);
+        rt.normalize();
+        rt.validate().expect("canonical content validates");
+        rt.lines
+            .iter()
+            .map(|l| match &l.containers[0] {
+                Container::ListItem {
+                    ordinal, instance, ..
+                } => (*ordinal, *instance),
+                other => (0, other.instance()),
+            })
+            .collect()
+    }
+
+    /// `ordinal` is a gapless index within a run and `instance` the minimal
+    /// discriminator the adjacency needs; both are read off run structure, so
+    /// a producer's arbitrary values collapse to one spelling.
+    #[test]
+    fn normalize_canonicalizes_container_paths() {
+        // A repeat continues one item across its paragraphs; any change opens
+        // the next item, whatever the stored numbers.
+        assert_eq!(canon(vec![li(5, 0), li(9, 0)]), vec![(0, 0), (1, 0)]);
+        assert_eq!(
+            canon(vec![li(3, 0), li(3, 0), li(7, 0)]),
+            vec![(0, 0), (0, 0), (1, 0)]
+        );
+        // A differing `instance` opens the next *list*, and canonicalizes to
+        // the 0/1 alternation however the producer spelled it.
+        assert_eq!(canon(vec![li(0, 0), li(0, 4)]), vec![(0, 0), (0, 1)]);
+        assert_eq!(
+            canon(vec![li(0, 7), li(1, 7), li(0, 2)]),
+            vec![(0, 0), (1, 0), (0, 1)]
+        );
+        // Three adjacent lists alternate rather than climbing: non-adjacent
+        // runs never collide, so two values suffice.
+        assert_eq!(
+            canon(vec![li(0, 1), li(0, 2), li(0, 3)]),
+            vec![(0, 0), (0, 1), (0, 0)]
+        );
+        // An *item* boundary is a parent boundary: two inner lists under two
+        // outer items are two lists, so the inner ordinal restarts and the
+        // inner discriminator resets. Without this the second item's inner run
+        // continues the first's, and the two project to one markdown.
+        let outer = |ordinal| Container::ListItem {
+            ordered: false,
+            start: 1,
+            ordinal,
+            instance: 0,
+        };
+        let inner = |ordinal| Container::ListItem {
+            ordered: true,
+            start: 1,
+            ordinal,
+            instance: 0,
+        };
+        let nested = |a: Container, b: Container| {
+            let mut rt = Content::new(
+                "x\ny".to_string(),
+                vec![
+                    Line::new(LineKind::Para).with_containers(vec![outer(0), a]),
+                    Line::new(LineKind::Para).with_containers(vec![outer(1), b]),
+                ],
+            );
+            rt.normalize();
+            rt.lines
+                .iter()
+                .map(|l| match &l.containers[1] {
+                    Container::ListItem {
+                        ordinal, instance, ..
+                    } => (*ordinal, *instance),
+                    other => (0, other.instance()),
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(nested(inner(5), inner(7)), vec![(0, 0), (0, 0)]);
+        assert_eq!(
+            nested(
+                Container::Quote { instance: 3 },
+                Container::Quote { instance: 8 }
+            ),
+            vec![(0, 0), (0, 0)],
+            "an inner quote under the next item needs no discriminator"
+        );
+
+        // A different container kind between them is already a boundary, so
+        // the discriminator resets.
+        assert_eq!(
+            canon(vec![
+                li(0, 9),
+                Container::Quote { instance: 4 },
+                li(0, 3)
+            ]),
+            vec![(0, 0), (0, 0), (0, 0)]
+        );
+    }
+
+    #[test]
+    fn normalize_of_container_paths_is_idempotent() {
+        for case in [
+            vec![li(5, 0), li(9, 3)],
+            vec![li(0, 1), li(0, 2), li(0, 3)],
+            vec![li(3, 0), li(3, 0), li(7, 8)],
+            vec![Container::Quote { instance: 2 }, Container::Quote { instance: 9 }],
+        ] {
+            let once = canon(case.clone());
+            let twice = canon(
+                case.into_iter()
+                    .zip(&once)
+                    .map(|(c, (ordinal, instance))| match c {
+                        Container::ListItem { ordered, start, .. } => Container::ListItem {
+                            ordered,
+                            start,
+                            ordinal: *ordinal,
+                            instance: *instance,
+                        },
+                        other => other.with_instance(*instance),
+                    })
+                    .collect(),
+            );
+            assert_eq!(once, twice);
+        }
+    }
+
+    /// A within-block break lives inside one container. `Join` mints the
+    /// crossing shape by merging two lines of differing paths, which leaves the
+    /// *next* line continuing across the seam; `normalize` clears it, and
+    /// `validate` asserts that it ran.
+    #[test]
+    fn continues_across_a_container_boundary_is_cleared() {
+        let mut rt = Content::new(
+            "a\nb".to_string(),
+            vec![
+                Line::new(LineKind::Para),
+                Line::new(LineKind::Para)
+                    .with_containers(vec![Container::Quote { instance: 0 }])
+                    .with_continues(true),
+            ],
+        );
+        assert_eq!(
+            rt.validate(),
+            Err(Invariant::ContinuesAcrossContainers { line: 1 }),
+            "a hand-built content that skipped normalize is caught"
+        );
+        rt.normalize();
+        assert!(!rt.lines[1].continues, "normalize clears it");
+        assert_eq!(rt.validate(), Ok(()));
+
+        // Equal-length but different containers is the same crossing: two list
+        // items are two blocks, and a hard break does not span them.
+        let li = |ordinal| {
+            vec![Container::ListItem {
+                ordered: false,
+                start: 1,
+                ordinal,
+                instance: 0,
+            }]
+        };
+        let mut rt = Content::new(
+            "a\nb".to_string(),
+            vec![
+                Line::new(LineKind::Para).with_containers(li(0)),
+                Line::new(LineKind::Para)
+                    .with_containers(li(1))
+                    .with_continues(true),
+            ],
+        );
+        rt.normalize();
+        assert!(!rt.lines[1].continues);
+
+        // The within-container break is untouched: same path, flag kept.
+        let mut rt = Content::new(
+            "a\nb".to_string(),
+            vec![
+                Line::new(LineKind::Para).with_containers(li(0)),
+                Line::new(LineKind::Para)
+                    .with_containers(li(0))
+                    .with_continues(true),
+            ],
+        );
+        rt.normalize();
+        assert!(rt.lines[1].continues, "a hard break inside one item survives");
+        assert_eq!(rt.validate(), Ok(()));
     }
 
     #[test]

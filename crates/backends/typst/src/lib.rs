@@ -779,6 +779,7 @@ mod tests {
                 ordered: false,
                 start: 1,
                 ordinal,
+                instance: 0,
             }])
         };
         let mut rt = Content::new(

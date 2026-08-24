@@ -114,10 +114,9 @@ fn plural(construct: BlockConstruct, count: usize) -> String {
 /// A container counts once per contiguous **run**, not once per line or per
 /// item: a three-item list is one list, and a multi-paragraph quote is one
 /// quote. A run opens where the previous line carried no like container at that
-/// depth — like meaning same shape, so a sibling item (differing only by
-/// `ordinal`) continues its list rather than opening another. Two adjacent
-/// lists of identical shape therefore count as one, the same non-distinction
-/// the model itself documents for adjacent quotes.
+/// depth — like meaning same run key *and* same `Container::instance`, so a
+/// sibling item (differing only by `ordinal`) continues its list rather than
+/// opening another, while an adjacent list of identical shape opens its own.
 ///
 /// A leaf block counts per block: a rule and a heading are one line each, and a
 /// code fence is counted at the line that opens it.
@@ -130,20 +129,19 @@ fn census(body: &Content) -> BTreeMap<BlockConstruct, usize> {
     use quillmark_content::model::Container;
 
     /// A container's identity for run purposes: everything but which item.
-    fn shape(container: &Container) -> Option<(BlockConstruct, bool, u64)> {
-        match container {
-            Container::ListItem { ordered, start, .. } => {
-                Some((BlockConstruct::List, *ordered, *start))
-            }
-            Container::Quote => Some((BlockConstruct::Quote, false, 0)),
+    fn shape(container: &Container) -> Option<(BlockConstruct, Container, u64)> {
+        let construct = match container {
+            Container::ListItem { .. } => BlockConstruct::List,
+            Container::Quote { .. } => BlockConstruct::Quote,
             // The open set: a container this build does not know names no
             // construct to decline.
-            _ => None,
-        }
+            _ => return None,
+        };
+        Some((construct, container.run_key(), container.instance()))
     }
 
     let mut counts: BTreeMap<BlockConstruct, usize> = BTreeMap::new();
-    let mut prev: Vec<Option<(BlockConstruct, bool, u64)>> = Vec::new();
+    let mut prev: Vec<Option<(BlockConstruct, Container, u64)>> = Vec::new();
 
     for island in &body.islands {
         match KnownIslandType::parse(&island.island_type) {

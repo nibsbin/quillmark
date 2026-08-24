@@ -209,6 +209,36 @@ mark axis' terms, not one step behind it, and both island axes carry their raw
 string rather than rewriting it: a reader that merely opens a document must not
 move its content hash (§ Byte-stability).
 
+**Container identity is path plus contiguity, and `instance` is what completes
+it.** Two adjacent lines sit in the same container iff their whole container
+path is equal, so without a discriminator two adjacent runs of one shape read as
+one: `[Quote], [Quote]` would be a single two-paragraph quote, and two one-item
+lists a single item with an unnumbered continuation paragraph. `instance` is the
+field that breaks that tie, on every container arm including `Unknown`, which is
+why the round-trip above is a *total* promise rather than one holding up to an
+adjacency quotient. `Content::normalize` canonicalizes it to `0`, flipping to
+`1` only where the adjacent preceding sibling run would otherwise weld, so a
+document needing no discriminator carries none and its stored bytes are the
+bytes it had before the field existed (§ Byte-stability). The Markdown
+projection spells the same boundary with the idiom CommonMark already reads: a
+change of bullet char (`-`/`+`) or of ordered delimiter (`.`/`)`) for lists, the
+blank line for quotes. An `Unknown` container has no Markdown syntax at all, so
+that one boundary lives in storage only — the same place its `tag` and `attrs`
+already live.
+
+**A new container owes its projections a separator.** `instance` makes the
+boundary storable; it does not make it *writable*. A container whose Markdown
+spelling cannot separate two adjacent instances has a boundary in storage that
+the projection drops, so `from_markdown(to_markdown(rt)) == rt` fails on
+re-import — the model reads one container where it stored two. Spell the
+separator when the container is specced, not after: a container defined on
+CommonMark §5.1's terms (a per-line marker, blank-line terminated, as
+`Container::Quote` is) gets one for free, because the blank line already ends
+it. One defined on §5.2/§5.3's terms (a list, which a blank line leaves open)
+does not, and needs the marker alternation `Container::ListItem` uses. The same
+obligation falls on the Typst lowering: two adjacent instances must not lower
+into one another's markup.
+
 Unknown *keys* survive in designated carriers only, and the boundary is worth
 stating because it is not the discriminator boundary:
 

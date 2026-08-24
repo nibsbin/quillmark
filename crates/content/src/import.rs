@@ -11,10 +11,9 @@
 //! - **Soft breaks → space; hard breaks → a `continues` line**, kept distinct
 //!   from a paragraph boundary. A hard break inside a heading is a space, ATX
 //!   headings being unable to carry one.
-//! - **Adjacent sibling lists of the same shape merge.** Item identity is
-//!   positional `ordinal`, not a minted list instance, so two consecutive lists
-//!   whose items share an `ordinal` are indistinguishable from one list.
-//!   Adjacent block quotes likewise merge.
+//! - **Adjacent sibling containers keep their boundary.** Two consecutive lists
+//!   of one shape, and two consecutive block quotes, are told apart by
+//!   `Container::instance`, minted here and canonicalized by `normalize`.
 //! - **Empty blocks and containers keep their line**, so the structure survives
 //!   rather than vanishing.
 //! - **Island ids are minted sequentially** (`isl-0`, `isl-1`, …), so import is
@@ -200,6 +199,10 @@ struct Builder {
     /// quote, an empty `- ` item) can still get one.
     container_marks: Vec<usize>,
     list_stack: Vec<ListInfo>,
+    /// Bumped at every container open, so two adjacent runs of one shape never
+    /// carry the same `instance`. Only distinctness matters: `normalize`
+    /// rewrites these to the canonical `0`/`1` alternation.
+    next_instance: u64,
     // code block
     code_lang: Option<String>,
     in_code: bool,
@@ -218,6 +221,9 @@ struct ListInfo {
     start: u64,
     /// 0-based index of the next item: becomes the item's `ordinal`.
     count: u64,
+    /// Shared by every item of this list, so the items of one list group and
+    /// an adjacent list of the same shape does not join them.
+    instance: u64,
 }
 
 struct TableAcc {
@@ -261,6 +267,7 @@ impl Builder {
             containers: Vec::new(),
             container_marks: Vec::new(),
             list_stack: Vec::new(),
+            next_instance: 0,
             code_lang: None,
             in_code: false,
             code_opened: false,
@@ -308,6 +315,12 @@ impl Builder {
 
     /// Lines emitted so far, counting the line currently open. A container that
     /// closes with this unchanged from when it opened produced nothing.
+    /// A container-instance value nothing else in this import holds.
+    fn mint_instance(&mut self) -> u64 {
+        self.next_instance += 1;
+        self.next_instance
+    }
+
     fn emitted(&self) -> usize {
         self.lines.len() + usize::from(self.cur.is_some())
     }
@@ -481,10 +494,12 @@ impl Builder {
             }
             Tag::List(start) => {
                 self.pending = None; // nested list content sets its own
+                let instance = self.mint_instance();
                 self.list_stack.push(ListInfo {
                     ordered: start.is_some(),
                     start: start.unwrap_or(1),
                     count: 0,
+                    instance,
                 });
             }
             Tag::Item => {
@@ -500,12 +515,14 @@ impl Builder {
                             ordered: info.ordered,
                             start: info.start,
                             ordinal,
+                            instance: info.instance,
                         }
                     }
                     None => Container::ListItem {
                         ordered: false,
                         start: 1,
                         ordinal: 0,
+                        instance: 0,
                     },
                 };
                 self.containers.push(container);
@@ -514,7 +531,8 @@ impl Builder {
             Tag::BlockQuote(_) => {
                 self.pending = None; // quote content sets its own
                 self.container_marks.push(self.emitted());
-                self.containers.push(Container::Quote);
+                let instance = self.mint_instance();
+                self.containers.push(Container::Quote { instance });
                 self.check_depth()?;
             }
             Tag::Table(aligns) => {
@@ -1053,7 +1071,8 @@ mod tests {
             vec![Container::ListItem {
                 ordered: false,
                 start: 1,
-                ordinal: 0
+                ordinal: 0,
+                instance: 0,
             }]
         );
         assert_eq!(
@@ -1061,7 +1080,8 @@ mod tests {
             vec![Container::ListItem {
                 ordered: false,
                 start: 1,
-                ordinal: 1
+                ordinal: 1,
+                instance: 0,
             }]
         );
     }
@@ -1074,7 +1094,8 @@ mod tests {
             vec![Container::ListItem {
                 ordered: true,
                 start: 3,
-                ordinal: 0
+                ordinal: 0,
+                instance: 0,
             }]
         );
         assert_eq!(
@@ -1082,7 +1103,8 @@ mod tests {
             vec![Container::ListItem {
                 ordered: true,
                 start: 3,
-                ordinal: 1
+                ordinal: 1,
+                instance: 0,
             }]
         );
     }
@@ -1097,7 +1119,8 @@ mod tests {
             vec![Container::ListItem {
                 ordered: false,
                 start: 1,
-                ordinal: 0
+                ordinal: 0,
+                instance: 0,
             }]
         );
     }
@@ -1106,7 +1129,7 @@ mod tests {
     fn blockquote_container() {
         let rt = imp("> quoted");
         assert_eq!(rt.text, "quoted");
-        assert_eq!(rt.lines[0].containers, vec![Container::Quote]);
+        assert_eq!(rt.lines[0].containers, vec![Container::Quote { instance: 0 }]);
     }
 
     #[test]
@@ -1188,16 +1211,55 @@ mod tests {
     fn empty_blockquote_keeps_its_line() {
         let rt = imp("> ");
         assert_eq!(rt.lines.len(), 1);
-        assert_eq!(rt.lines[0].containers, vec![Container::Quote]);
+        assert_eq!(rt.lines[0].containers, vec![Container::Quote { instance: 0 }]);
     }
 
+    /// Every way markdown spells two adjacent sibling containers apart — a
+    /// bullet-char change, an ordered-delimiter change, an HTML comment between
+    /// them, a blank line between quotes — reaches the model as two runs
+    /// carrying different `instance`, and survives the round trip as two.
     #[test]
-    fn adjacent_sibling_lists_merge_is_stable() {
-        // Two sibling bullet lists collapse to one: distinct markdown, one
-        // content, and the content is still a fixed point.
-        let rt = imp("* a\n\n+ b");
-        let rt2 = from_markdown(&crate::export::to_markdown(&rt)).unwrap();
-        assert_eq!(rt, rt2, "merged sibling lists still round-trip");
+    fn adjacent_sibling_containers_keep_their_boundary() {
+        let cases: &[(&str, usize)] = &[
+            ("* a\n\n+ b", 2),
+            ("- a\n\n<!-- -->\n\n- b", 2),
+            ("1. a\n\n1) b", 2),
+            ("1. a\n\n<!-- -->\n\n3. b", 2),
+            ("> a\n\n> b", 2),
+            // Three in a row: the discriminator alternates rather than climbing.
+            ("- a\n\n<!-- -->\n\n- b\n\n<!-- -->\n\n- c", 3),
+            // The non-boundaries, pinned against a rule that splits too eagerly.
+            ("- a\n- b", 1),
+            ("> a\n>\n> b", 1),
+        ];
+        for (md, runs) in cases {
+            let rt = imp(md);
+            let mut seen: Vec<_> = rt
+                .lines
+                .iter()
+                .map(|l| (l.containers[0].run_key(), l.containers[0].instance()))
+                .collect();
+            seen.dedup();
+            assert_eq!(seen.len(), *runs, "{md:?} -> {:?}", rt.lines);
+            let rt2 = from_markdown(&crate::export::to_markdown(&rt)).unwrap();
+            assert_eq!(rt, rt2, "{md:?} is not a fixed point");
+        }
+    }
+
+    /// The canonical `instance` is 0 wherever nothing adjacent needs telling
+    /// apart, so an ordinary document carries no discriminator at all.
+    #[test]
+    fn instance_stays_zero_without_an_adjacent_sibling() {
+        for md in ["- a\n- b\n- c", "> a\n>\n> b", "1. a\n2. b", "- a\n\npara\n\n- b"] {
+            let rt = imp(md);
+            assert!(
+                rt.lines
+                    .iter()
+                    .all(|l| l.containers.iter().all(|c| c.instance() == 0)),
+                "{md:?} minted a discriminator it does not need: {:?}",
+                rt.lines
+            );
+        }
     }
 
     #[test]
