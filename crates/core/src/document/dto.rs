@@ -158,18 +158,16 @@ pub type PayloadV0_93_0 = PayloadV0_92_0;
 /// frozen canonical serializer (`quillmark_content::serial`) rather than a
 /// hand-mirrored DTO tree that could drift from it:
 ///
-/// - `Serialize` emits the recursively key-sorted structure byte-identical to
-///   `to_canonical_json()` as a **nested JSON object**, never an escaped string,
-///   independent of `preserve_order`.
+/// - `Serialize` validates, then emits the recursively key-sorted structure
+///   byte-identical to `to_canonical_json()` as a **nested JSON object**, never
+///   an escaped string, independent of `preserve_order`.
 /// - `Deserialize` parses, normalizes, and validates, so an invalid content is
 ///   rejected at load rather than silently round-tripped.
 ///
-/// **Both directions validate.** [`Normalized`] is the canonical-form token,
-/// not a validity one — `normalize` repairs where `validate` rejects, and
-/// `overwrite_body` takes a caller's content on that token alone. Checking only
-/// on the way in would let a store accept bytes it cannot read back; the write
-/// refuses them instead, at the boundary that cares and while a caller still
-/// holds the value that produced them.
+/// Both directions check because [`Normalized`] is the canonical-form token and
+/// not a validity one: `normalize` repairs where `validate` rejects, and
+/// `Card::overwrite_body` takes a caller's content on that token alone. A store
+/// that checked only on load would accept bytes it cannot read back.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CanonicalContent(pub Normalized);
 
@@ -1024,9 +1022,8 @@ This body and the metadata above are an indorsement card.
         assert_eq!(doc.to_markdown(), restored.to_markdown());
     }
 
-    /// A store must not accept bytes it cannot read back. `overwrite_body` takes
-    /// a caller's content on the canonical-form token alone, so an invalid shape
-    /// reaches the DTO, and the serializer is where it stops.
+    /// `overwrite_body` takes a caller's content on the canonical-form token
+    /// alone, so an invalid shape reaches the DTO.
     #[test]
     fn an_unreadable_body_is_refused_on_write() {
         use quillmark_content::model::{Container, Content, Line, LineKind};

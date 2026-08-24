@@ -140,9 +140,9 @@ pub fn line_segments(rt: &Content) -> Vec<Segment> {
     segs
 }
 
-/// One open level of the block walk: the lines of `range` at `depth` not yet
-/// emitted, the markdown emitted for them so far, and the container whose
-/// syntax prefixes that once the level closes (`None` at the root).
+/// One open level of the block walk: `at` is the next line of `range` to emit,
+/// `buf` the markdown emitted for the level so far, and `container` the one
+/// whose syntax prefixes `buf` when the level closes (`None` at the root).
 struct Frame<'a> {
     container: Option<&'a Container>,
     at: usize,
@@ -170,10 +170,10 @@ impl<'a> Frame<'a> {
 /// deeper lines are grouped by their `depth`-th container and open a level of
 /// their own, which [`close_container`] prefixes on the way back out.
 ///
-/// A frame stack rather than recursion, for the reason [`Normalized`] states:
-/// the token says canonical, not valid, so a container path reaching here can
-/// nest past [`MAX_NESTING_DEPTH`](crate::MAX_NESTING_DEPTH), and a call frame
-/// per level would abort the process where this returns a projection.
+/// A frame stack, not recursion, for the reason [`Normalized`] states: the
+/// token says canonical, not valid, so a container path reaching here nests
+/// past [`MAX_NESTING_DEPTH`](crate::MAX_NESTING_DEPTH) freely, and a call
+/// frame per level aborts the process where this returns a projection.
 fn emit_block(ctx: &Ctx, range: std::ops::Range<usize>, depth: usize, out: &mut String) {
     let lines = &ctx.rt.lines;
     let mut stack = vec![Frame::open(None, range, depth)];
@@ -1031,9 +1031,8 @@ mod tests {
 
     /// The lane [`Normalized`] does not close: a Rust embedder hand-builds a
     /// content nested past `MAX_NESTING_DEPTH`, which `normalize` cannot repair
-    /// and no mint rejects (`validate` below is the proof of the depth). `DEPTH`
-    /// clears the few-thousand-frame ceiling a recursive walk dies at on a test
-    /// thread's stack.
+    /// and no mint rejects. `DEPTH` clears the few-thousand-frame ceiling a
+    /// test thread's stack holds.
     #[test]
     fn nesting_past_what_validate_allows_projects_rather_than_overflowing() {
         const DEPTH: usize = 10_000;

@@ -55,8 +55,7 @@ impl Normalized {
     ///
     /// On [`Normalized`] for the reason that token exists: canonical bytes need
     /// canonical input, and the mint is where a caller's mark/island order
-    /// settles. Normalizing a copy here would spend a deep clone on every
-    /// serialize, and the lane that decoded this has already paid for it.
+    /// settles.
     pub fn to_canonical_json(&self) -> String {
         to_canonical_value(self).to_string()
     }

@@ -1,6 +1,5 @@
-//! The loops that group adjacent lines: by container ([`runs`], [`items`],
-//! applying the rule [`Container::same_run`] states) and by continuation
-//! ([`segment`]).
+//! The loops that group adjacent lines: by container, applying the rule
+//! [`Container::same_run`] states, and by continuation.
 
 use crate::model::{Container, Line};
 use std::ops::Range;
@@ -53,10 +52,9 @@ pub fn items(lines: &[Line], range: Range<usize>, depth: usize) -> Spans<'_> {
 /// that continues it — a paragraph's hard-break run, or a code fence's lines —
 /// bounded by `range`.
 ///
-/// A continuation counts only at the same nesting, so a `continues` line whose
+/// A continuation counts only at the same nesting: a `continues` line whose
 /// container path differs ends the segment rather than joining across the
-/// boundary. [`Content::normalize`](crate::model::Content::normalize) clears
-/// that flag, and this is the reading that made clearing it unobservable.
+/// boundary.
 pub fn segment(lines: &[Line], range: Range<usize>, depth: usize) -> Range<usize> {
     let end = range.end.min(lines.len());
     let mut j = (range.start + 1).min(end);

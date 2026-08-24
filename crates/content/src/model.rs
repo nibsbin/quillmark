@@ -266,21 +266,20 @@ impl Container {
 ///
 /// ## Canonical, not valid
 ///
-/// [`validate`](Content::validate) rejects a strictly different set: nothing
+/// [`validate`](Content::validate) rejects a different set: nothing
 /// normalization does brings a container path under
 /// [`MAX_NESTING_DEPTH`](crate::MAX_NESTING_DEPTH), so a token can hold a
-/// content `validate` refuses. The mint stays infallible on that split —
-/// canonicalizing is total, checking is a separate question, and the codecs are
-/// the ones who answer it, calling `validate` after minting. Every other
-/// producer is a Rust embedder hand-building a [`Content`], and this token does
-/// not speak for them.
+/// content `validate` refuses. The mint stays infallible on that split, since
+/// canonicalizing is total and checking is a separate question. The codecs ask
+/// it, calling `validate` after minting; every other producer is a Rust
+/// embedder hand-building a [`Content`], and this token does not speak for them.
 ///
 /// A projection taking one may therefore assume only what the mint establishes,
-/// and must be **total over any token**: [`to_markdown`](crate::to_markdown)
+/// and must be **total over any token**. [`to_markdown`](crate::to_markdown)
 /// walks containers on an explicit stack rather than a call frame per level,
-/// and `emit_content` checks the depth and returns an error. Neither may trust a
-/// bound only `validate` enforces — an unguarded recursion here aborts the
-/// process, which no `Result` can catch.
+/// and `emit_content` checks the depth and returns an error. Neither trusts a
+/// bound only `validate` enforces: an unguarded recursion aborts the process,
+/// which no `Result` can catch.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Normalized(Content);
 
@@ -626,13 +625,12 @@ pub(crate) fn check_json_depth(v: &JsonValue, what: &'static str) -> Result<(), 
 /// Put `v` in canonical key order, rebuilding it only when a key is out of
 /// order, so an untouched tree pays the scan and skips the deep clone.
 ///
-/// Both walks below recurse, where the container walks do not, and the split is
-/// the shape of what each descends. A container path is flat memory at any
-/// depth, so nothing but the walk bounds it. A [`JsonValue`] deep enough to
-/// overflow these is deep enough to overflow its own `Drop` in the frame that
-/// built it, so an iterative walk here would tour a value nobody can release.
-/// The bound belongs where such a value enters: `bag_from_wire` before the
-/// decode clone, [`check_json_depth`] in [`Content::validate`].
+/// Both walks below recurse, where the container walks do not: a container path
+/// is flat memory at any depth, so nothing but the walk bounds it, while a
+/// [`JsonValue`] deep enough to overflow these overflows its own `Drop` in the
+/// frame that built it. The bound belongs where such a value enters —
+/// `bag_from_wire` before the decode clone, [`check_json_depth`] in
+/// [`Content::validate`].
 pub(crate) fn canonicalize_keys(v: &mut JsonValue) {
     if !is_value_key_sorted(v) {
         *v = sort_keys_owned(std::mem::take(v));
