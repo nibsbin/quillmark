@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- fix(content): **`to_markdown` no longer aborts the process on a deeply nested
+  content.** `Normalized` states that `normalize` has run, and `normalize`
+  repairs where `validate` rejects: nothing about canonicalization brings a
+  container path under `MAX_NESTING_DEPTH`, so a hand-built `Content` mints a
+  token that `validate` refuses. `export::emit_block` recursed one frame per
+  container level and overflowed the stack a few thousand levels down — a
+  SIGABRT no caller can catch, against a Typst emitter that checks the depth up
+  front and returns `EmitError::NestingTooDeep` for the same input. The walk is
+  now an explicit frame stack, as `json_depth_exceeds` and the quill census
+  already are, so the projection is total over every token its signature
+  accepts. `Normalized`'s docs settle the half the newtype does not close: the
+  token promises canonical, not valid — the mint stays infallible, the codecs go
+  on calling `validate` after it, and a projection that takes one owes totality
+  rather than trust. Only a Rust embedder hand-building a `Content` reaches the
+  shape; every decode lane (`from_markdown`, `from_canonical_value`, storage,
+  WASM, Python) rejects the depth already.
+
 - fix(content): **a `continues` line that crosses a container boundary no longer
   survives.** A within-block break lives inside one container, and `LineOp::Join`
   mints the crossing shape whenever it merges two lines of differing paths — the

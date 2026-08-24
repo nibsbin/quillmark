@@ -263,6 +263,24 @@ impl Container {
 ///
 /// `normalize` **repairs** rather than rejects, so this states that the value is
 /// canonical, not that its producer meant it.
+///
+/// ## Canonical, not valid
+///
+/// [`validate`](Content::validate) rejects a strictly different set: nothing
+/// normalization does brings a container path under
+/// [`MAX_NESTING_DEPTH`](crate::MAX_NESTING_DEPTH), so a token can hold a
+/// content `validate` refuses. The mint stays infallible on that split —
+/// canonicalizing is total, checking is a separate question, and the codecs are
+/// the ones who answer it, calling `validate` after minting. Every other
+/// producer is a Rust embedder hand-building a [`Content`], and this token does
+/// not speak for them.
+///
+/// A projection taking one may therefore assume only what the mint establishes,
+/// and must be **total over any token**: [`to_markdown`](crate::to_markdown)
+/// walks containers on an explicit stack rather than a call frame per level,
+/// and `emit_content` checks the depth and returns an error. Neither may trust a
+/// bound only `validate` enforces — an unguarded recursion here aborts the
+/// process, which no `Result` can catch.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Normalized(Content);
 
