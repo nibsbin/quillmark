@@ -3,14 +3,15 @@
 ## Unreleased
 
 - fix(typst): **a container inside a list item no longer terminates the list.**
-  The item's continuation indent was applied on the leaf path only, so a fence
-  or a nested list nested while a quote — and any container added later, which
-  lowers transparently — opened at column 0, where Typst ends the enclosing
-  list: the item's remaining blocks came back as top-level paragraphs and the
-  next item started a fresh list, renumbering an ordered one from the quote on.
-  The emitter now opens every block, leaf and container alike, through one
-  indented-line rule carried on the walk, so what the content nests, the markup
-  nests.
+  The item's continuation indent reached its leaf path only, so a quote inside
+  an item opened at column 0 — where Typst ends the enclosing list. The item's
+  later blocks came back as top-level paragraphs and the next item started a
+  fresh list, which renumbers an ordered one from the quote on. A fence and a
+  nested list escaped it by reaching that indented leaf path; a transparent
+  unknown container did not, and neither would any container added later.
+  Indentation is now the walk's rather than each construct's: one rule opens
+  every block, leaf and container alike, at the enclosing list depth, so what
+  the content nests, the markup nests.
 
 - fix(content): **a `continues` line that crosses a container boundary no longer
   survives.** A within-block break lives inside one container, and `LineOp::Join`

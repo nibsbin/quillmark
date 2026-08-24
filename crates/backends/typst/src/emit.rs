@@ -324,11 +324,10 @@ struct Emit<'a> {
     end_newline: bool,
     /// The prefix every generated line opens with: two spaces per enclosing
     /// list item. Typst ends a list at a block written to column 0, so leaves
-    /// and containers alike open through [`Self::open_line`] instead of each
-    /// path indenting on its own.
+    /// and containers alike open through [`Self::open_line`].
     indent: String,
-    /// Whether the next block opens where `out` already sits — a list item's
-    /// body head, off its marker — rather than on a line of its own.
+    /// Whether the next block opens where `out` already sits: a list item's
+    /// body head, off its marker.
     head_inline: bool,
     /// How far [`Self::overlapping_marks`] has walked `rt.marks`.
     mark_cursor: usize,
@@ -437,9 +436,9 @@ impl<'a> Emit<'a> {
         j
     }
 
-    /// Opens the line a block is about to be written on, at [`Self::indent`],
-    /// ending the current one if prose has reached it. A list item's body head
-    /// is already such a position, so the first block there opens in place.
+    /// Opens a block's line at [`Self::indent`], ending the current one if
+    /// prose has reached it. A list item's body head is already such a
+    /// position, so the first block there opens in place.
     fn open_line(&mut self) {
         if std::mem::take(&mut self.head_inline) {
             return;
@@ -522,8 +521,7 @@ impl<'a> Emit<'a> {
     }
 
     /// The first block flows straight off the marker; each later block is
-    /// preceded by a blank line. Its content sits one level deeper than the
-    /// marker, which [`Self::indent`] carries.
+    /// preceded by a blank line.
     fn emit_item_body(&mut self, range: Range<usize>, content_depth: usize) {
         let mut first_block = true;
         let mut i = range.start;
@@ -548,7 +546,7 @@ impl<'a> Emit<'a> {
     }
 
     /// Separates two blocks of one list item, unless the block just emitted
-    /// closed on one already.
+    /// closed on a blank line of its own.
     fn blank_line(&mut self) {
         if !self.end_newline {
             self.out.push('\n');
@@ -1232,9 +1230,9 @@ mod tests {
     }
 
     /// The blocks Typst's own parser reads as `kind` at the markup's top level,
-    /// as source text. What a list *contains* is the parser's call, not a
-    /// substring's: a container written to column 0 ends the list, and the item
-    /// it belonged to comes back without it.
+    /// as source text. What a list contains is the parser's call: a container
+    /// written to column 0 ends the list, and the item it belonged to comes
+    /// back without it.
     fn top_level(markup: &str, kind: SyntaxKind) -> Vec<String> {
         typst::syntax::parse(markup)
             .children()
@@ -1243,8 +1241,6 @@ mod tests {
             .collect()
     }
 
-    /// A quote inside a list item is the item's, and the item after it is the
-    /// list's second, not a new list's first.
     #[test]
     fn a_quote_in_an_item_stays_in_the_item() {
         let out = emit("- Alpha\n\n  > quoted\n\n  Beta\n\n- Gamma").markup;
@@ -1256,8 +1252,6 @@ mod tests {
         );
     }
 
-    /// The downstream symptom of the same defect: an ordered list renumbers
-    /// from the quote on, because everything after it is a fresh list.
     #[test]
     fn a_quote_in_an_ordered_item_does_not_restart_the_numbering() {
         let out = emit("1. Alpha\n\n   > quoted\n\n   Beta\n\n2. Gamma").markup;
@@ -1273,8 +1267,8 @@ mod tests {
         );
     }
 
-    /// A container this build does not know lowers transparently — and inside
-    /// an item that still has to be inside the item.
+    /// A container this build does not know lowers transparently: no wrapper
+    /// markup, and no move out of the item either.
     #[test]
     fn an_unknown_container_in_an_item_stays_in_the_item() {
         use quillmark_content::model::Line;
