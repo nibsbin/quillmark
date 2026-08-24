@@ -510,6 +510,64 @@ export function isUnknownIsland(island) {
 	return typeof island?.type === 'string' && !KNOWN_ISLAND_TYPES.has(island.type);
 }
 
+// ── Container run boundaries ────────────────────────────────────────────────
+// `ContentContainer.instance` is what keeps two adjacent runs of one shape
+// apart, and only a writer knows where a boundary is: the flat `containers`
+// form cannot tell a list ending beside another from one list of two items, so
+// an omitted discriminator welds them and nothing reports it.
+//
+// WELD_KEYS is the rule `Container::same_weld` owns upstream: which fields two
+// adjacent runs must share for the markdown projection to read them as one, and
+// therefore for the canonical form to have to spend a discriminator. `start` is
+// not among them, since CommonMark reads only a list's first number. A table
+// rather than a switch, so `tests/known_names_drift.rs` can pin it against the
+// Rust predicate.
+
+const WELD_KEYS = { list_item: ['ordered'], quote: [] };
+
+function sameJson(a, b) {
+	if (a === b) return true;
+	if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+	if (Array.isArray(a) !== Array.isArray(b)) return false;
+	const ka = Object.keys(a);
+	return (
+		ka.length === Object.keys(b).length &&
+		ka.every((k) => Object.hasOwn(b, k) && sameJson(a[k], b[k]))
+	);
+}
+
+/**
+ * @param {import('../core/wasm.js').ContentContainer} a
+ * @param {import('../core/wasm.js').ContentContainer} b
+ * @returns {boolean}
+ */
+function weldsWith(a, b) {
+	// A malformed value welds with nothing. The membership guards' posture:
+	// answer rather than throw.
+	if (typeof a?.container !== 'string' || a.container !== b?.container) return false;
+	// `hasOwn`, so a tag colliding with an `Object.prototype` member reaches the
+	// unknown branch rather than a function.
+	if (!Object.hasOwn(WELD_KEYS, a.container)) return sameJson(a.attrs, b.attrs);
+	return WELD_KEYS[a.container].every((k) => a[k] === b[k]);
+}
+
+/**
+ * @param {(import('../core/wasm.js').ContentContainer | null)[]} runs
+ * @returns {(import('../core/wasm.js').ContentContainerInput | null)[]}
+ */
+export function assignInstances(runs) {
+	let prev = null;
+	return runs.map((run) => {
+		if (run == null) {
+			prev = null;
+			return null;
+		}
+		const instance = prev && weldsWith(prev, run) ? 1 - prev.instance : 0;
+		prev = { ...run, instance };
+		return prev;
+	});
+}
+
 /**
  * Build a `load` thunk: dynamic-import a backend build, then instantiate it.
  *

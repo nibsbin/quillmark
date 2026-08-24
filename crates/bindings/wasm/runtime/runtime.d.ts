@@ -130,6 +130,7 @@ export type {
 	ContentLine,
 	ContentLineKind,
 	ContentContainer,
+	ContentContainerInput,
 	ContentMark,
 	ContentIsland,
 	TableProps,
@@ -204,7 +205,8 @@ import type {
 	ImageProps,
 	ContentMark,
 	ContentLine,
-	ContentContainer
+	ContentContainer,
+	ContentContainerInput
 } from '../core/wasm.js';
 
 /** Narrow a {@link ContentIsland} to the pinned `table` arm (`props: TableProps`). */
@@ -277,6 +279,41 @@ export declare function isUnknownMark(
 export declare function isUnknownIsland(
 	island: ContentIsland
 ): island is ContentIsland & { type: string; props: unknown };
+
+// `ContentContainer.instance` is a field a writer owes and, outside
+// `ContentContainerInput`, no checker asks for. Adjacent runs of one shape that
+// share it arrive welded. Nothing reports that: the flat `containers` form
+// cannot tell it from one container spanning two paragraphs. This carries the
+// rule a codec would otherwise re-derive.
+
+/**
+ * Stamp `instance` across one parent's blocks at one depth, in document order,
+ * returning containers ready to write.
+ *
+ * One entry per container RUN — a list, not a list item — and `null` for a
+ * block carrying no container at this depth. A bare paragraph between two lists
+ * is such a block, and separates them on its own. Every line of a run then
+ * carries that run's returned container, `ordinal` varying per item and
+ * `instance` held.
+ *
+ * The `instance` it stamps is canonical, so a document reads back the value it
+ * was written. `ordinal` stays the caller's, and a write is renumbered to a
+ * gapless index within its run.
+ *
+ * Which fields decide a weld is coarser than equality for a list: CommonMark
+ * reads only a list's first number, so `1. a` beside `3. b` welds despite the
+ * differing `start`.
+ *
+ * ```js
+ * const [outer, , inner] = assignInstances([listA, null, listB]);
+ * // outer.instance === 0, inner.instance === 0 — the paragraph parts them
+ * const [a, b] = assignInstances([listA, listB]);
+ * // a.instance === 0, b.instance === 1 — adjacent, one shape
+ * ```
+ */
+export declare function assignInstances(
+	runs: (ContentContainer | null)[]
+): (ContentContainerInput | null)[];
 
 // The backend-neutral render contract, defined here rather than re-exported from
 // one private backend because no single backend owns the canonical API's types.

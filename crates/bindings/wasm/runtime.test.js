@@ -19,6 +19,7 @@ import {
   isUnknownContainer,
   isUnknownMark,
   isUnknownIsland,
+  assignInstances,
   init,
 } from '@quillmark-wasm/runtime'
 // The namespace too: the bind set below is derived from the exports rather than
@@ -42,7 +43,7 @@ import {
 // door to the core surface. This also instantiates the core build the `CoreQuill`
 // identity pin below imports directly (same resolved file, same module
 // instance).
-const { Quill, Document, exportMarkdown, parseDocPath } = await init()
+const { Quill, Document, importMarkdown, exportMarkdown, parseDocPath } = await init()
 
 const TEST_PLATE = `#import "@local/quillmark-helper:0.1.0": data
 #let title = data.title
@@ -625,6 +626,60 @@ describe('@quillmark/wasm/runtime: open-set membership guards', () => {
     for (const bad of [{}, { kind: 7 }, null, undefined]) {
       expect(isUnknownLine(bad)).toBe(false)
     }
+  })
+})
+
+describe('@quillmark/wasm/runtime: container run boundaries', () => {
+  const LIST = { container: 'list_item', ordered: false, start: 1, ordinal: 0 }
+  const QUOTE = { container: 'quote' }
+  const content = (a, b) => ({
+    text: 'a\nb',
+    lines: [
+      { kind: 'para', containers: [a] },
+      { kind: 'para', containers: [b] },
+    ],
+    marks: [],
+    islands: [],
+  })
+
+  // A stamped `1` is the helper saying these two would weld.
+  const stamp = (a, b) => assignInstances([a, b]).map((c) => c.instance)
+
+  it('stamps on what the markdown projection can carry, not on equality', () => {
+    // `start` differs and they still weld: CommonMark reads only a list's first
+    // number, so the projection cannot carry the second one.
+    expect(stamp(LIST, { ...LIST, start: 3 })).toEqual([0, 1])
+    expect(stamp(LIST, { ...LIST, ordinal: 4 })).toEqual([0, 1])
+    expect(stamp(QUOTE, QUOTE)).toEqual([0, 1])
+    // A shape the projection can tell apart needs no discriminator.
+    expect(stamp(LIST, { ...LIST, ordered: true })).toEqual([0, 0])
+
+    // An unknown container's boundary lives in storage, and its whole `attrs`
+    // is its shape.
+    const indent = (n) => ({ container: 'indent', attrs: { n } })
+    expect(stamp(indent(1), indent(1))).toEqual([0, 1])
+    expect(stamp(indent(1), indent(2))).toEqual([0, 0])
+  })
+
+  it('alternates only across runs that would weld', () => {
+    expect(assignInstances([LIST, LIST, LIST]).map((c) => c.instance)).toEqual([0, 1, 0])
+    expect(assignInstances([LIST, QUOTE, LIST]).map((c) => c.instance)).toEqual([0, 0, 0])
+    // A block carrying no container at this depth parts the runs on its own.
+    expect(assignInstances([LIST, null, LIST]).map((c) => c && c.instance)).toEqual([0, null, 0])
+    expect(assignInstances([]).length).toBe(0)
+  })
+
+  it('is what keeps a flattened tree from welding two lists into one item', () => {
+    const [a, b] = assignInstances([LIST, LIST])
+    const stamped = importMarkdown(exportMarkdown(content(a, b)))
+    expect(stamped.lines.map((l) => l.containers[0].instance ?? 0)).toEqual([0, 1])
+    expect(stamped.lines.map((l) => l.containers[0].ordinal)).toEqual([0, 0])
+
+    // The same paths without the discriminator: one item spanning two
+    // paragraphs, the second marker gone, and no error anywhere.
+    const welded = importMarkdown(exportMarkdown(content(LIST, LIST)))
+    expect(welded.lines.map((l) => l.containers[0].instance ?? 0)).toEqual([0, 0])
+    expect(welded.lines.map((l) => l.containers[0].ordinal)).toEqual([0, 0])
   })
 })
 

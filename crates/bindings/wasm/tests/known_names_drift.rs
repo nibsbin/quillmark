@@ -5,7 +5,7 @@
 //! then round-trips it through its unknown carrier, dropping the payload.
 
 use quillmark_content::island::KnownIslandType;
-use quillmark_content::{Content, Fidelity};
+use quillmark_content::{Container, Content, Fidelity};
 use quillmark_core::quill::VARIANT_DISCRIMINANT_KEY;
 
 const RUNTIME_JS: &str = include_str!("../runtime/runtime.js");
@@ -91,5 +91,86 @@ fn ts_unions_name_every_built_in() {
                 "a TS union in engine.rs is missing the `{name}` arm"
             );
         }
+    }
+}
+
+/// `weldsWith` in `runtime.js` re-spells the rule `Container::same_weld` owns:
+/// which fields two adjacent runs must share for the Markdown projection to
+/// read them as one. The Rust half here is read off the predicate rather than
+/// restated, so a change to the rule fails here instead of welding two runs at
+/// every JS consumer.
+#[test]
+fn js_weld_keys_match_the_rust_weld_rule() {
+    fn body() -> &'static str {
+        const DECL: &str = "const WELD_KEYS = {";
+        let start = RUNTIME_JS
+            .find(DECL)
+            .expect("runtime.js has no `const WELD_KEYS = {…`")
+            + DECL.len();
+        let rest = &RUNTIME_JS[start..];
+        &rest[..rest.find('}').expect("unterminated WELD_KEYS literal")]
+    }
+
+    fn keys(tag: &str) -> Vec<String> {
+        let decl = format!("{tag}: [");
+        let start = body()
+            .find(&decl)
+            .unwrap_or_else(|| panic!("WELD_KEYS has no `{tag}`"))
+            + decl.len();
+        let rest = &body()[start..];
+        rest[..rest.find(']').expect("unterminated key list")]
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(|s| s.trim_matches('\'').to_string())
+            .collect()
+    }
+
+    let tags: Vec<String> = body()
+        .split(']')
+        .filter_map(|chunk| chunk.split_once(':'))
+        .map(|(tag, _)| tag.trim().trim_start_matches(',').trim().to_string())
+        .filter(|t| !t.is_empty())
+        .collect();
+    // A built-in arriving without an entry would fall through to the unknown
+    // branch, which compares an `attrs` a known arm does not carry.
+    assert_eq!(tags, Content::RESERVED_CONTAINERS);
+
+    let li = |ordered, start, ordinal, instance| Container::ListItem {
+        ordered,
+        start,
+        ordinal,
+        instance,
+    };
+    let base = li(false, 1, 0, 0);
+    let reacts: Vec<&str> = [
+        ("ordered", li(true, 1, 0, 0)),
+        ("start", li(false, 3, 0, 0)),
+        ("ordinal", li(false, 1, 1, 0)),
+        ("instance", li(false, 1, 0, 1)),
+    ]
+    .into_iter()
+    .filter(|(_, other)| !base.same_weld(other))
+    .map(|(name, _)| name)
+    .collect();
+    assert_eq!(keys("list_item"), reacts);
+
+    assert!(keys("quote").is_empty());
+    assert!(Container::Quote { instance: 0 }.same_weld(&Container::Quote { instance: 1 }));
+
+    // A tag outside the table takes the JS `sameJson(attrs)` branch, which is
+    // the run rule spelled in JS — so it holds only while `same_weld` delegates
+    // there for an unknown container.
+    let unknown = |tag: &str, n| Container::Unknown {
+        tag: tag.into(),
+        attrs: serde_json::json!({ "n": n }),
+        instance: 0,
+    };
+    for (a, b) in [
+        (unknown("x", 1), unknown("x", 2)),
+        (unknown("x", 1), unknown("y", 1)),
+        (unknown("x", 1), unknown("x", 1)),
+    ] {
+        assert_eq!(a.same_weld(&b), a.same_run(&b));
     }
 }

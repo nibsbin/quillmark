@@ -140,3 +140,63 @@ fn triples_over_the_list_and_quote_alphabet_are_fixed_points() {
     eprintln!("  triples checked: {n}, broken: {broken}");
     assert_eq!(broken, 0);
 }
+
+/// Identity and projection are separate rules, and a `start`-only difference
+/// falls between them. `same_run` counts `start`, so the two runs arrive apart
+/// with no discriminator written; Markdown reads only a list's first number, so
+/// the canonical form spends one to stay a fixed point. The alphabet above
+/// holds `start` at 1, the axis it misses.
+#[test]
+fn a_start_only_difference_separates_the_runs_and_still_costs_a_discriminator() {
+    let one = Container::ListItem {
+        ordered: true,
+        start: 1,
+        ordinal: 0,
+        instance: 0,
+    };
+    let three = Container::ListItem {
+        ordered: true,
+        start: 3,
+        ordinal: 0,
+        instance: 0,
+    };
+    assert!(!one.same_run(&three), "start is part of the shape");
+    assert!(one.same_weld(&three), "markdown cannot carry the second start");
+
+    let rt = build(&[&vec![one], &vec![three]]);
+    assert_eq!(rt.lines[1].containers[0].instance(), 1);
+    assert_eq!(from_markdown(&to_markdown(&rt)).expect("re-imports"), rt);
+}
+
+/// The projection rule is coarser than the identity rule, never finer: two runs
+/// the walks read as one can never need a discriminator to stay apart. Three
+/// doc comments and the migration guide state it; this holds it. `start` is the
+/// axis the two differ on, so the space here carries both.
+#[test]
+fn same_run_implies_same_weld() {
+    let mut space = alphabet(true);
+    for c in alphabet(true) {
+        if let Container::ListItem {
+            ordered,
+            ordinal,
+            instance,
+            ..
+        } = c
+        {
+            space.push(Container::ListItem {
+                ordered,
+                start: 3,
+                ordinal,
+                instance,
+            });
+        }
+    }
+    for a in &space {
+        for b in &space {
+            assert!(
+                !a.same_run(b) || a.same_weld(b),
+                "the identity rule joins a pair the projection parts: {a:?} / {b:?}"
+            );
+        }
+    }
+}

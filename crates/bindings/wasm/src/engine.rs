@@ -223,16 +223,41 @@ export type ContentLineKind =
  * `ContentLine.kind`: an unrecognized container round-trips with opaque `attrs`
  * and renders transparently (its lines sit at the enclosing level).
  *
- * Two adjacent lines sit in the same container iff their whole path matches.
+ * Two adjacent lines sit in the same container iff their whole path matches, so
  * `instance` is what tells one container from an adjacent sibling of identical
- * shape — two consecutive quotes, or two consecutive lists — which contiguity
- * alone reads as one. Omit it (or write `0`) unless a path immediately above or
- * below is otherwise identical; a write is canonicalized to `0`/`1` on the way
- * in, so any distinct pair of values works. */
+ * shape — two consecutive quotes, two consecutive lists — which contiguity
+ * alone reads as one.
+ *
+ * **A writer owes it.** Give adjacent sibling runs of one shape distinct
+ * values, or they arrive as one: a second list's items come back as
+ * continuation paragraphs of the first, markers gone. Nothing reports that,
+ * since the flat form cannot tell a boundary you meant from one you did not. A
+ * codec flattening a tree stamps the field with `assignInstances` from
+ * `@quillmark/wasm/runtime` rather than by hand. Any distinct pair of values
+ * works; a write is canonicalized to `0`/`1`.
+ *
+ * Reading is not the mirror of writing. The field is absent where it is `0`,
+ * and it appears on pairs no writer had to spell. `1.` beside a list starting
+ * at `3` differs by `start`, so those runs arrive apart with nothing written —
+ * and the canonical form spends a discriminator anyway, because Markdown reads
+ * only a list's first number. */
 export type ContentContainer =
     | { container: "list_item"; ordered: boolean; start: number; ordinal: number; instance?: number }
     | { container: "quote"; instance?: number }
     | { container: string; attrs: unknown; instance?: number };
+
+/** A container path on a lane that only ever carries host-built values:
+ * `ContentContainer` with `instance` spelled out rather than defaulted. The
+ * field that decides whether two adjacent runs weld cannot be omitted by
+ * accident here. `assignInstances` returns this shape, and a path copied off a
+ * line carries its own instance through — `{ ...c, instance: c.instance ?? 0 }`.
+ *
+ * `Content` itself keeps the optional field: it is a read shape as much as a
+ * write one, and the wire omits a zero. */
+export type ContentContainerInput =
+    | { container: "list_item"; ordered: boolean; start: number; ordinal: number; instance: number }
+    | { container: "quote"; instance: number }
+    | { container: string; attrs: unknown; instance: number };
 
 /** A mark over char range `[start, end)` into `Content.text`. The open `type`
  * arm blocks discriminant narrowing, so read a payload-carrying arm behind its
@@ -359,7 +384,7 @@ export type LineOp =
     | { op: "split"; at: number }
     | { op: "join"; line: number }
     | ({ op: "setKind"; line: number } & ContentLineKind)
-    | { op: "setContainers"; line: number; containers: ContentContainer[] }
+    | { op: "setContainers"; line: number; containers: ContentContainerInput[] }
     | { op: "setContinues"; line: number; continues: boolean };
 
 /**
