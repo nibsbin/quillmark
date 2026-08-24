@@ -24,14 +24,16 @@ main:
       description: an unrelated scalar
 "#;
 
-fn open(plate: &str) -> quillmark_core::LiveSession {
+fn compile(plate: &str) -> Result<quillmark_core::LiveSession, quillmark_core::RenderError> {
     let source = common::quill_with_plate(YAML, plate);
-    TypstBackend
-        .open(
-            &source,
-            &serde_json::json!({ "classification": "SECRET", "subject": "Widgets" }),
-        )
-        .expect("open")
+    TypstBackend.open(
+        &source,
+        &serde_json::json!({ "classification": "SECRET", "subject": "Widgets" }),
+    )
+}
+
+fn open(plate: &str) -> quillmark_core::LiveSession {
+    compile(plate).expect("open")
 }
 
 #[test]
@@ -74,6 +76,47 @@ fn a_claim_does_not_displace_a_nested_scalar_site() {
             regions.iter().any(|r| r.field == field),
             "{field:?} keeps a region of its own: {regions:?}"
         );
+    }
+}
+
+#[test]
+fn a_claim_lays_its_body_out_where_the_body_alone_would_land() {
+    // 0.01pt sits between the two scales in play: one stray space in the
+    // inline flow costs 2.715pt at this body size, while shaping `AAABBBCCC`
+    // as three runs instead of one costs float noise near 1e-14pt.
+    let plate = r#"
+#import "@local/quillmark-helper:0.1.0": field-region
+#set page(width: 400pt, height: 200pt, margin: 40pt)
+#let same(what, bare, got) = assert(calc.abs(got - bare) < 0.01pt,
+  message: what + " moved: " + repr(bare) + " -> " + repr(got))
+#context {
+  let bare = measure[AAABBBCCC]
+  let claimed = measure[AAA#field-region("subject")[BBB]CCC]
+  same("width", bare.width, claimed.width)
+  same("height", bare.height, claimed.height)
+}
+"#;
+    if let Err(err) = compile(plate) {
+        panic!("{err}");
+    }
+}
+
+/// The same marker shape as `field-region`'s, neutral only because a `box`
+/// follows it rather than text.
+#[test]
+fn a_widget_lays_out_where_its_box_alone_would_land() {
+    let plate = r#"
+#import "@local/quillmark-helper:0.1.0": form-field
+#set page(width: 400pt, height: 200pt, margin: 40pt)
+#context {
+  let bare = measure[AAA#box(width: 20pt, height: 8pt)CCC].width
+  let widget = measure[AAA#form-field("F", width: 20pt, height: 8pt)CCC].width
+  assert(calc.abs(widget - bare) < 0.01pt,
+    message: "the widget moved the line: " + repr(bare) + " -> " + repr(widget))
+}
+"#;
+    if let Err(err) = compile(plate) {
+        panic!("{err}");
     }
 }
 
