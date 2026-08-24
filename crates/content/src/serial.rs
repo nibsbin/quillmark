@@ -48,16 +48,21 @@ impl std::fmt::Display for ParseError {
 }
 impl std::error::Error for ParseError {}
 
-impl Content {
-    /// Serialize to canonical JSON bytes. Normalizes a copy first, so the output
-    /// is canonical regardless of the caller's mark/island order, and every
-    /// object key comes out in ascending order at every depth, so the bytes do
-    /// **not** depend on `serde_json`'s `preserve_order` feature in the
-    /// consumer's crate graph.
+impl Normalized {
+    /// Serialize to canonical JSON bytes. Every object key comes out in
+    /// ascending order at every depth, so the bytes do **not** depend on
+    /// `serde_json`'s `preserve_order` feature in the consumer's crate graph.
+    ///
+    /// On [`Normalized`] for the reason that token exists: canonical bytes need
+    /// canonical input, and the mint is where a caller's mark/island order
+    /// settles. Normalizing a copy here would spend a deep clone on every
+    /// serialize, and the lane that decoded this has already paid for it.
     pub fn to_canonical_json(&self) -> String {
         to_canonical_value(self).to_string()
     }
+}
 
+impl Content {
     /// Parse canonical JSON, normalize, and validate. Returns
     /// [`ParseError::Invalid`] for a content that violates its invariants, so
     /// storage cannot silently round-trip a malformed value.
@@ -113,16 +118,14 @@ impl Content {
 }
 
 /// The canonical content form as a structural [`Value`]: the recursively
-/// key-sorted tree [`Content::to_canonical_json`] renders to bytes. A storage
+/// key-sorted tree [`Normalized::to_canonical_json`] renders to bytes. A storage
 /// layer embeds this as a nested object rather than an escaped string;
 /// serializing it with `serde_json` is byte-identical to that JSON, independent
 /// of the consumer's `preserve_order` feature.
-pub fn to_canonical_value(rt: &Content) -> Value {
-    let mut rt = rt.clone();
-    rt.normalize();
+pub fn to_canonical_value(rt: &Normalized) -> Value {
     let mut v = rt.to_value();
     // Scans and returns: the encoders emit their fixed keys in ascending order,
-    // and every opaque bag under them was canonicalized by `normalize`. A key
+    // and every opaque bag under them was canonicalized by the mint. A key
     // inserted out of order is still repaired here, so the freeze holds without
     // the encoders having to be trusted for it.
     canonicalize_keys(&mut v);
@@ -1101,7 +1104,10 @@ mod tests {
         }];
         let mut two = one.clone();
         two.islands[0].props = serde_json::json!({"a": 2, "b": 1}); // keys reversed
-        assert_eq!(one.to_canonical_json(), two.to_canonical_json());
+        assert_eq!(
+            one.into_normalized().to_canonical_json(),
+            two.into_normalized().to_canonical_json()
+        );
     }
 
     /// Every encoder emits its own keys in ascending order, so
@@ -1236,7 +1242,7 @@ mod tests {
     #[test]
     fn golden_bytes_are_feature_independent() {
         // If this string changes, the freeze changed: bump the schema version.
-        let rt = sample();
+        let rt = sample().into_normalized();
         assert_eq!(
             rt.to_canonical_json(),
             r#"{"islands":[],"lines":[{"containers":[],"kind":"para"}],"marks":[{"end":5,"start":0,"type":"emph"},{"end":11,"start":6,"type":"strong"}],"text":"hello world"}"#
@@ -1462,7 +1468,10 @@ mod tests {
             attrs: serde_json::json!({"x": 2, "y": 1}),
             instance: 0,
         }];
-        assert_eq!(one.to_canonical_json(), two.to_canonical_json());
+        assert_eq!(
+            one.clone().into_normalized().to_canonical_json(),
+            two.clone().into_normalized().to_canonical_json()
+        );
         one.normalize();
         two.normalize();
         assert_eq!(one, two, "normalize canonicalizes the live model too");
@@ -1480,6 +1489,7 @@ mod tests {
                 attrs: serde_json::json!({"color": "yellow"}),
             },
         }];
+        let rt = rt.into_normalized();
         let json = rt.to_canonical_json();
         let back = Content::from_canonical_json(&json).unwrap();
         assert_eq!(back.marks[0].kind, rt.marks[0].kind);

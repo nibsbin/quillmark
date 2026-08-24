@@ -1,4 +1,6 @@
-//! The one loop that applies the grouping rule [`Container::same_run`] states.
+//! The loops that group adjacent lines: by container ([`runs`], [`items`],
+//! applying the rule [`Container::same_run`] states) and by continuation
+//! ([`segment`]).
 
 use crate::model::{Container, Line};
 use std::ops::Range;
@@ -45,6 +47,23 @@ pub fn items(lines: &[Line], range: Range<usize>, depth: usize) -> Spans<'_> {
         depth,
         same: |a, b| a == b,
     }
+}
+
+/// The segment opening at `range.start`: that line plus every following one
+/// that continues it — a paragraph's hard-break run, or a code fence's lines —
+/// bounded by `range`.
+///
+/// A continuation counts only at the same nesting, so a `continues` line whose
+/// container path differs ends the segment rather than joining across the
+/// boundary. [`Content::normalize`](crate::model::Content::normalize) clears
+/// that flag, and this is the reading that made clearing it unobservable.
+pub fn segment(lines: &[Line], range: Range<usize>, depth: usize) -> Range<usize> {
+    let end = range.end.min(lines.len());
+    let mut j = (range.start + 1).min(end);
+    while j < end && lines[j].containers.len() == depth && lines[j].continues {
+        j += 1;
+    }
+    range.start..j
 }
 
 /// Iterator over [`runs`] or [`items`].
@@ -148,9 +167,31 @@ mod tests {
         assert_eq!(per_item, vec![0..1, 1..2]);
     }
 
+    fn seg(paths: &[Vec<Container>], continues: &[bool], depth: usize) -> Range<usize> {
+        let mut rt = content(paths);
+        for (line, &c) in rt.lines.iter_mut().zip(continues) {
+            line.continues = c;
+        }
+        segment(&rt.lines, 0..rt.lines.len(), depth)
+    }
+
+    #[test]
+    fn a_segment_takes_the_continuations_at_its_own_depth() {
+        assert_eq!(seg(&[vec![], vec![], vec![]], &[false, true, true], 0), 0..3);
+        assert_eq!(seg(&[vec![], vec![], vec![]], &[false, true, false], 0), 0..2);
+    }
+
+    #[test]
+    fn a_continuation_at_another_depth_ends_the_segment() {
+        let paths = &[vec![], vec![li(0, 0)]];
+        assert_eq!(seg(paths, &[false, true], 0), 0..1);
+    }
+
     #[test]
     fn a_range_end_past_the_last_line_is_clamped() {
         let rt = content(&[vec![li(0, 0)]]);
         assert_eq!(spans(runs(&rt.lines, 0..99, 0)), vec![0..1]);
+        assert_eq!(segment(&rt.lines, 0..99, 0), 0..1);
+        assert_eq!(segment(&[], 0..99, 0), 0..0);
     }
 }

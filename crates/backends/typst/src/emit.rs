@@ -417,14 +417,7 @@ impl<'a> Emit<'a> {
     }
 
     fn segment_end(&self, range: Range<usize>, depth: usize, i: usize) -> usize {
-        let mut j = i + 1;
-        while j < range.end
-            && self.rt.lines[j].containers.len() == depth
-            && self.rt.lines[j].continues
-        {
-            j += 1;
-        }
-        j
+        quillmark_content::traverse::segment(&self.rt.lines, i..range.end, depth).end
     }
 
     /// An empty paragraph emits nothing; every other block (an empty heading or

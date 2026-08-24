@@ -164,8 +164,12 @@ pub type PayloadV0_93_0 = PayloadV0_92_0;
 /// - `Deserialize` parses, normalizes, and validates, so an invalid content is
 ///   rejected at load rather than silently round-tripped.
 ///
-/// The serializer normalizes a copy regardless of its input, so a hand-built
-/// value cannot leak non-canonical bytes.
+/// **Both directions validate.** [`Normalized`] is the canonical-form token,
+/// not a validity one — `normalize` repairs where `validate` rejects, and
+/// `overwrite_body` takes a caller's content on that token alone. Checking only
+/// on the way in would let a store accept bytes it cannot read back; the write
+/// refuses them instead, at the boundary that cares and while a caller still
+/// holds the value that produced them.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CanonicalContent(pub Normalized);
 
@@ -174,6 +178,9 @@ impl Serialize for CanonicalContent {
     where
         S: serde::Serializer,
     {
+        self.0
+            .validate()
+            .map_err(|inv| serde::ser::Error::custom(format!("content invariant: {inv:?}")))?;
         quillmark_content::serial::to_canonical_value(&self.0).serialize(serializer)
     }
 }
@@ -1015,6 +1022,23 @@ This body and the metadata above are an indorsement card.
         let restored: Document = serde_json::from_str(&json).unwrap();
         assert_eq!(doc, restored);
         assert_eq!(doc.to_markdown(), restored.to_markdown());
+    }
+
+    /// A store must not accept bytes it cannot read back. `overwrite_body` takes
+    /// a caller's content on the canonical-form token alone, so an invalid shape
+    /// reaches the DTO, and the serializer is where it stops.
+    #[test]
+    fn an_unreadable_body_is_refused_on_write() {
+        use quillmark_content::model::{Container, Content, Line, LineKind};
+
+        let mut doc = sample();
+        let mut line = Line::new(LineKind::Para);
+        line.containers =
+            vec![Container::Quote { instance: 0 }; quillmark_content::MAX_NESTING_DEPTH + 1];
+        doc.main_mut()
+            .overwrite_body(Content::new("x".to_string(), vec![line]));
+        let err = serde_json::to_string(&doc).expect_err("write refuses what load would reject");
+        assert!(err.to_string().contains("NestingTooDeep"), "{err}");
     }
 
     #[test]

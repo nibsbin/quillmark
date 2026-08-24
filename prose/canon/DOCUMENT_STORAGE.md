@@ -126,6 +126,15 @@ consumer crate graph that lacks the feature. Sortedness is semantic
 serializer commits to one bit pattern); insertion order is semantic
 *outside* it (payload item order is source order, and matters).
 
+**Both directions validate.** `CanonicalContent`'s `Deserialize` parses,
+normalizes and validates, and its `Serialize` validates too. The token a
+body rests on (`Normalized`) states that `Content::normalize` has run, which
+is a weaker claim than validity — `normalize` repairs where `validate`
+rejects, and `Card::overwrite_body` takes a caller's content on that token
+alone. Checking only on load would let a store accept bytes it could not
+read back; the write refuses them instead, as a serializer error, while the
+caller still holds the value that produced them.
+
 The guarantee follows from: struct field order is fixed in the frozen
 DTO tree; `Vec` fields preserve order by definition; the two disciplines
 above each hold at their respective level. No whitespace normalization is

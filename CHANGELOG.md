@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- perf(content): **`serial::to_canonical_value` and `to_canonical_json` take a
+  `Normalized`.**
+  Both cloned the whole content and normalized the copy on every call, on a
+  lane whose callers — the codecs, `Card::body`, the storage DTO — were already
+  holding the canonical form. The token now carries that, so the serialize path
+  spends an encode instead of a deep clone plus a repair pass. `to_canonical_json`
+  moves from `Content` to `Normalized` with it; a caller holding a raw `Content`
+  mints first, which is what the old body did for them silently.
+
+- fix(core): **a document body that `validate` refuses is refused on write, not
+  discovered on read.** `CanonicalContent`'s `Deserialize` parsed, normalized and
+  validated; its `Serialize` validated nothing, and `Card::overwrite_body` takes a
+  caller's content on the canonical-form token alone. A store could therefore
+  accept bytes it could not read back. The serializer now validates too and fails
+  with the invariant, at the boundary that cares and while the caller still holds
+  the value that produced it.
+
+- refactor(content): **the leaf-segment walk is one loop, not two.** `traverse`
+  gains `segment` — the block-opening line plus every following one that
+  continues it at the same nesting — and `export::emit_block` and the Typst
+  emitter's `segment_end` both call it. The fifth duplicated traversal, the one
+  #1364 did not list.
+
 - fix(content): **`to_markdown` no longer aborts the process on a deeply nested
   content.** `Normalized` states that `normalize` has run, and `normalize`
   repairs where `validate` rejects: nothing about canonicalization brings a

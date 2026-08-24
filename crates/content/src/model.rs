@@ -625,6 +625,14 @@ pub(crate) fn check_json_depth(v: &JsonValue, what: &'static str) -> Result<(), 
 
 /// Put `v` in canonical key order, rebuilding it only when a key is out of
 /// order, so an untouched tree pays the scan and skips the deep clone.
+///
+/// Both walks below recurse, where the container walks do not, and the split is
+/// the shape of what each descends. A container path is flat memory at any
+/// depth, so nothing but the walk bounds it. A [`JsonValue`] deep enough to
+/// overflow these is deep enough to overflow its own `Drop` in the frame that
+/// built it, so an iterative walk here would tour a value nobody can release.
+/// The bound belongs where such a value enters: `bag_from_wire` before the
+/// decode clone, [`check_json_depth`] in [`Content::validate`].
 pub(crate) fn canonicalize_keys(v: &mut JsonValue) {
     if !is_value_key_sorted(v) {
         *v = sort_keys_owned(std::mem::take(v));
@@ -1822,10 +1830,11 @@ mod tests {
             {"start": 2, "end": 4, "type": "strong"}
         ]));
         b.normalize();
-        assert_eq!(a.to_canonical_json(), b.to_canonical_json());
-        let once = a.to_canonical_json();
+        let canon = |rt: &Content| rt.clone().into_normalized().to_canonical_json();
+        assert_eq!(canon(&a), canon(&b));
+        let once = canon(&a);
         a.normalize();
-        assert_eq!(a.to_canonical_json(), once);
+        assert_eq!(canon(&a), once);
     }
 
     /// A cell is canonicalized in place, so a key this build does not recognize
@@ -1841,7 +1850,10 @@ mod tests {
         rt.normalize();
         assert_eq!(rt.islands[0].props["header"][0]["colspan"], 2);
         assert!(rt.islands[0].props["rows"][0][1].get("colspan").is_none());
-        assert!(rt.to_canonical_json().contains(r#""colspan":2"#));
+        assert!(rt
+            .into_normalized()
+            .to_canonical_json()
+            .contains(r#""colspan":2"#));
     }
 
     #[test]
@@ -1957,9 +1969,10 @@ mod tests {
         assert_eq!(props["header"][1]["text"], serde_json::json!(""));
         assert_eq!(props["rows"][1][0]["text"], serde_json::json!("d e"));
 
-        let once = rt.to_canonical_json();
+        let canon = |rt: &Content| rt.clone().into_normalized().to_canonical_json();
+        let once = canon(&rt);
         rt.normalize();
-        assert_eq!(rt.to_canonical_json(), once);
+        assert_eq!(canon(&rt), once);
     }
 
     #[test]

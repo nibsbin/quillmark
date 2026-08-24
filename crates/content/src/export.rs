@@ -190,18 +190,9 @@ fn emit_block(ctx: &Ctx, range: std::ops::Range<usize>, depth: usize, out: &mut 
                 let child = Frame::open(Some(item.container), item.range, frame.depth + 1);
                 stack.push(child);
             } else {
-                // A leaf block: this line (continues == false) plus every
-                // following line that continues it (a hard-break run, or a code
-                // fence's lines).
-                let mut j = i + 1;
-                while j < frame.range.end
-                    && lines[j].containers.len() == frame.depth
-                    && lines[j].continues
-                {
-                    j += 1;
-                }
-                frame.at = j;
-                emit_leaf_block(ctx, i..j, &mut frame.buf);
+                let seg = crate::traverse::segment(lines, i..frame.range.end, frame.depth);
+                frame.at = seg.end;
+                emit_leaf_block(ctx, seg, &mut frame.buf);
             }
             continue;
         }

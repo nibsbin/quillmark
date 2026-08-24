@@ -34,7 +34,7 @@ pub use ops::{
 };
 pub use serial::ParseError;
 pub use model::Normalized;
-pub use traverse::{items, runs, Span};
+pub use traverse::{items, runs, segment, Span};
 
 /// Maximum container nesting depth the markdown codecs accept before erroring.
 /// The import guard ([`import::from_markdown`]) and the typst backend's markup
