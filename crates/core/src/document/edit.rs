@@ -13,7 +13,7 @@ use unicode_normalization::UnicodeNormalization;
 
 use quillmark_content::delta::diff_import;
 use quillmark_content::import::ImportError;
-use quillmark_content::{ApplyError, ChangeBundle, Content, Delta};
+use quillmark_content::{ApplyError, ChangeBundle, Delta, Normalized};
 
 use crate::document::meta::{validate_composable_kind, CardKindError};
 use crate::error::diag_args;
@@ -501,7 +501,7 @@ impl Card {
         payload.set_kind(kind);
         Ok(Card::from_parts(
             payload,
-            quillmark_content::Content::empty(),
+            quillmark_content::Normalized::empty(),
         ))
     }
 
@@ -692,33 +692,38 @@ impl Card {
     }
 
     /// Overwrite the body with a pre-built [`Content`]: value semantics, no
-    /// markdown import, no diff, no schema check, infallible. Anchor fate across
+    /// markdown import, no diff, no schema check, infallible. A raw `Content`
+    /// normalizes on the way in, so what lands is canonical. Anchor fate across
     /// the content lane: **overwrite destroys, [`revise_body`](Self::revise_body)
     /// rebases, [`apply_body_change`](Self::apply_body_change) preserves.**
-    pub fn overwrite_body(&mut self, content: Content) {
-        self.body = content;
+    pub fn overwrite_body(&mut self, content: impl Into<Normalized>) {
+        self.body = content.into();
     }
 
     /// Overwrite a content field's value with a pre-built [`Content`]: the
     /// field-level twin of [`overwrite_body`](Self::overwrite_body). Stores the
-    /// canonical content JSON verbatim (identity and content-only marks intact),
-    /// no diff, no schema check. The previous value's anchors are gone. Returns
+    /// canonical content JSON (identity and content-only marks intact), no diff,
+    /// no schema check. The previous value's anchors are gone. Returns
     /// [`EditError::InvalidFieldName`] for a malformed name.
     ///
     /// Richtext codec: a `plaintext` field rests as its literal string, so an
     /// object landed here departs that field's resting form until the next bound
     /// load ([`Quill::conform`](crate::Quill::conform)) converges it.
-    pub fn overwrite_field(&mut self, name: &str, content: Content) -> Result<(), EditError> {
+    pub fn overwrite_field(
+        &mut self,
+        name: &str,
+        content: impl Into<Normalized>,
+    ) -> Result<(), EditError> {
         if !is_valid_field_name(name) {
             return Err(EditError::InvalidFieldName(name.to_string()));
         }
-        self.store_field_content(name, &content);
+        self.store_field_content(name, &content.into());
         Ok(())
     }
 
     /// Assumes `name` is already validated: every caller checks it or resolves an
     /// existing field first.
-    fn store_field_content(&mut self, name: &str, content: &Content) {
+    fn store_field_content(&mut self, name: &str, content: &Normalized) {
         let canonical = quillmark_content::serial::to_canonical_value(content);
         self.payload_mut()
             .insert_unchecked(name.to_string(), QuillValue::from_json(canonical));
@@ -789,14 +794,14 @@ impl Card {
         &self,
         name: &str,
         body: impl Into<String>,
-    ) -> Result<(Content, Delta), EditError> {
+    ) -> Result<(Normalized, Delta), EditError> {
         if !is_valid_field_name(name) {
             return Err(EditError::InvalidFieldName(name.to_string()));
         }
         let base = match self.field_content(name, Codec::Richtext) {
             Some(Ok(rt)) => rt,
             Some(Err(e)) => return Err(field_decode(name, &[], Codec::Richtext, e)),
-            None => Content::empty(),
+            None => Normalized::empty(),
         };
         diff_import(&base, &body.into()).map_err(EditError::Import)
     }
@@ -938,7 +943,7 @@ impl Card {
                 if !is_valid_field_name(name) {
                     return Err(EditError::InvalidFieldName(name.to_string()));
                 }
-                Content::empty()
+                Normalized::empty()
             }
         };
         content

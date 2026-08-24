@@ -99,7 +99,7 @@ fn build_main_card(card: &CardSchema, quill_ref: &str, description: Option<&str>
         // re-emits it via `to_markdown`. The empty-content fallback is defensive:
         // a placeholder or a load-validated example never over-nests.
         crate::document::import_body(&body_text(card, "main"))
-            .unwrap_or_else(|_| quillmark_content::Content::empty()),
+            .unwrap_or_else(|_| quillmark_content::Normalized::empty()),
     )
 }
 
@@ -119,7 +119,7 @@ fn build_card(card: &CardSchema) -> Card {
     Card::from_parts(
         Payload::from_items(items),
         crate::document::import_body(&body_text(card, &card.name))
-            .unwrap_or_else(|_| quillmark_content::Content::empty()),
+            .unwrap_or_else(|_| quillmark_content::Normalized::empty()),
     )
 }
 

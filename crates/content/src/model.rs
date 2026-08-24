@@ -253,6 +253,50 @@ impl Container {
     }
 }
 
+/// A [`Content`] that [`Content::normalize`] has run on: the precondition both
+/// projections carry, held as a value rather than as a call-site convention.
+///
+/// Minted only by [`Content::into_normalized`], which the codecs decode
+/// through. Reads borrow through to the [`Content`]; the mutations that
+/// re-establish the invariant are forwarded, and any other one takes
+/// [`into_content`](Self::into_content) and mints again.
+///
+/// `normalize` **repairs** rather than rejects, so this states that the value is
+/// canonical, not that its producer meant it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Normalized(Content);
+
+impl Normalized {
+    /// [`Content::empty`], which is already canonical.
+    pub fn empty() -> Normalized {
+        Normalized(Content::empty())
+    }
+
+    pub fn into_content(self) -> Content {
+        self.0
+    }
+
+    /// The wrapped content, mutably. Every caller must leave it normalized;
+    /// the forwarded `apply_*` in [`crate::ops`] are the ones that do.
+    pub(crate) fn as_content_mut(&mut self) -> &mut Content {
+        &mut self.0
+    }
+}
+
+impl From<Content> for Normalized {
+    fn from(rt: Content) -> Normalized {
+        rt.into_normalized()
+    }
+}
+
+impl std::ops::Deref for Normalized {
+    type Target = Content;
+
+    fn deref(&self) -> &Content {
+        &self.0
+    }
+}
+
 /// A mark over a char range `[start, end)`. `start == end` (zero-width) is legal
 /// only for [`MarkKind::Anchor`]; normalization drops zero-width formatting.
 #[derive(Debug, Clone, PartialEq)]
@@ -719,6 +763,13 @@ impl Content {
             marks: Vec::new(),
             islands: Vec::new(),
         }
+    }
+
+    /// Normalize and seal. With [`Normalized::empty`], the only mint there is:
+    /// the codecs reach [`Normalized`] through here.
+    pub fn into_normalized(mut self) -> Normalized {
+        self.normalize();
+        Normalized(self)
     }
 
     pub fn with_marks(mut self, marks: Vec<Mark>) -> Self {

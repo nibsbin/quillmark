@@ -214,7 +214,7 @@ fn empty_map_emits_inline_braces() {
     let mut p = Payload::from_index_map(payload);
     p.set_quill("test".parse().unwrap());
     p.set_kind("main");
-    let main = Card::from_parts(p, quillmark_content::Content::empty());
+    let main = Card::from_parts(p, quillmark_content::Normalized::empty());
     let doc = crate::document::Document::from_main_and_cards(main, vec![]);
 
     let md = doc.to_markdown();
@@ -255,7 +255,7 @@ fn nested_map_keys_with_structural_chars_emit_valid_yaml() {
     let mut p = Payload::from_index_map(payload);
     p.set_quill("test".parse().unwrap());
     p.set_kind("main");
-    let main = Card::from_parts(p, quillmark_content::Content::empty());
+    let main = Card::from_parts(p, quillmark_content::Normalized::empty());
     let doc = Document::from_main_and_cards(main, vec![]);
 
     let md = doc.to_markdown();

@@ -33,6 +33,7 @@ pub use ops::{
     ApplyError, ChangeBundle, IslandOp, LineOp, MarkOp,
 };
 pub use serial::ParseError;
+pub use model::Normalized;
 pub use traverse::{items, runs, Span};
 
 /// Maximum container nesting depth the markdown codecs accept before erroring.

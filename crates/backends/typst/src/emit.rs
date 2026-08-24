@@ -39,7 +39,7 @@
 
 use quillmark_core::error::MAX_NESTING_DEPTH;
 use quillmark_content::island::KnownIslandType;
-use quillmark_content::model::{Container, LineKind, Mark, MarkKind, Content, ISLAND_SLOT};
+use quillmark_content::model::{Container, LineKind, Mark, MarkKind, Content, Normalized, ISLAND_SLOT};
 use std::ops::Range;
 
 /// Neutralizes every markup-special character so document text cannot inject
@@ -272,7 +272,7 @@ impl EmitError {
     }
 }
 
-pub fn emit_content(rt: &Content) -> Result<Emission, EmitError> {
+pub fn emit_content(rt: &Normalized) -> Result<Emission, EmitError> {
     let max_depth = rt
         .lines
         .iter()
@@ -297,7 +297,7 @@ pub fn emit_content(rt: &Content) -> Result<Emission, EmitError> {
 /// Anything not [`is_inline`] falls back to [`emit_content`].
 ///
 /// [`is_inline`]: quillmark_content::Content::is_inline
-pub(crate) fn emit_content_inline(rt: &Content) -> Result<Emission, EmitError> {
+pub(crate) fn emit_content_inline(rt: &Normalized) -> Result<Emission, EmitError> {
     if !rt.is_inline() {
         return emit_content(rt);
     }
@@ -1406,12 +1406,12 @@ mod tests {
     #[test]
     fn overlapping_marks_close_and_reopen() {
         use quillmark_content::model::{Line, Mark};
-        let mut rt = Content::new("abcdef".to_string(), vec![Line::new(LineKind::Para)])
+        let rt = Content::new("abcdef".to_string(), vec![Line::new(LineKind::Para)])
             .with_marks(vec![
                 Mark::new(0, 4, MarkKind::Strong),
                 Mark::new(2, 6, MarkKind::Emph),
             ]);
-        rt.normalize();
+        let rt = rt.into_normalized();
         assert_eq!(rt.validate(), Ok(()));
         let out = emit_content(&rt).unwrap().markup;
         assert_eq!(out, "#strong[ab#emph[cd]]#emph[ef]\n\n");
@@ -1429,7 +1429,7 @@ mod tests {
             attrs: serde_json::Value::Null,
             instance: 0,
         };
-        let mut rt = Content::new(
+        let rt = Content::new(
             "heads up\nsecond".to_string(),
             vec![
                 Line::new(LineKind::Unknown {
@@ -1442,7 +1442,7 @@ mod tests {
                     .with_continues(true),
             ],
         );
-        rt.normalize();
+        let rt = rt.into_normalized();
         assert_eq!(rt.validate(), Ok(()));
         // One block (the `continues` join is a hard break), no wrapper.
         assert_eq!(
@@ -1450,8 +1450,10 @@ mod tests {
             "heads up#linebreak()second\n\n"
         );
         // Inside a known container the known wrapper still renders.
+        let mut rt = rt.into_content();
         rt.lines[0].containers.insert(0, Container::Quote { instance: 0 });
         rt.lines[1].containers.insert(0, Container::Quote { instance: 0 });
+        let rt = rt.into_normalized();
         assert_eq!(
             emit_content(&rt).unwrap().markup,
             "#quote(block: true)[\nheads up#linebreak()second\n\n]\n\n"
@@ -1461,9 +1463,9 @@ mod tests {
     /// Hand-placed `marks` reach the free-overlap shapes import never produces.
     fn emit_marked(text: &str, marks: Vec<Mark>) -> String {
         use quillmark_content::model::Line;
-        let mut rt =
+        let rt =
             Content::new(text.to_string(), vec![Line::new(LineKind::Para)]).with_marks(marks);
-        rt.normalize();
+        let rt = rt.into_normalized();
         assert_eq!(rt.validate(), Ok(()), "content invariants");
         emit_content(&rt).unwrap().markup
     }
@@ -1657,8 +1659,8 @@ mod tests {
         // Source-map integrity: every run's generated slice equals the escape of
         // its content, and the leading `\` is not inside any run.
         use quillmark_content::model::Line;
-        let mut rt = Content::new("= x".to_string(), vec![Line::new(LineKind::Para)]);
-        rt.normalize();
+        let rt = Content::new("= x".to_string(), vec![Line::new(LineKind::Para)]);
+        let rt = rt.into_normalized();
         let ec = emit_content(&rt).unwrap();
         let chars: Vec<char> = rt.text.chars().collect();
         for seg in &ec.segments {

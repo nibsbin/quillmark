@@ -22,7 +22,7 @@ use super::payload::{MetaKey, Payload, PayloadItem};
 use super::Card;
 use crate::value::{PathSegment, QuillValue};
 use crate::version::QuillReference;
-use quillmark_content::Content;
+use quillmark_content::Normalized;
 
 /// One entry in a [`CardWire`]'s `payload_items`: a user field or a comment.
 /// The `$` system entries are hoisted onto [`CardWire`] itself, never here.
@@ -290,7 +290,7 @@ impl TryFrom<CardWire> for Card {
 /// re-serialized card) is deserialized and validated; a **markdown string** (an
 /// LLM / markdown writer) is imported. `null`/absent is the empty content; any
 /// other shape is an invalid `$body`.
-fn body_from_wire(body: &JsonValue) -> Result<Content, WireError> {
+fn body_from_wire(body: &JsonValue) -> Result<Normalized, WireError> {
     let invalid = |reason: String| WireError::InvalidField {
         key: "$body".to_string(),
         reason,
@@ -298,7 +298,7 @@ fn body_from_wire(body: &JsonValue) -> Result<Content, WireError> {
     match super::Codec::Richtext.decode_value(body) {
         Some(result) => result.map_err(|e| invalid(e.into_message())),
         None => match body {
-            JsonValue::Null => Ok(Content::empty()),
+            JsonValue::Null => Ok(Normalized::empty()),
             other => Err(invalid(format!(
                 "expected a richtext content object or a markdown string, got {}",
                 match other {
@@ -348,7 +348,7 @@ mod tests {
             fill: false,
             nested_comments: Vec::new(),
         }]);
-        let card = Card::from_parts(payload, quillmark_content::Content::empty());
+        let card = Card::from_parts(payload, quillmark_content::Normalized::empty());
 
         let wire = CardWire::from(&card);
         let as_json = serde_json::to_value(&wire).unwrap();
@@ -373,9 +373,9 @@ mod tests {
         use quillmark_content::model::{Mark, MarkKind};
 
         let mut card = Card::new("note").unwrap();
-        let mut content = quillmark_content::import::from_markdown("underlined intro").unwrap();
+        let mut content = quillmark_content::import::from_markdown("underlined intro").unwrap().into_content();
         content.marks.push(Mark::new(0, 10, MarkKind::Underline));
-        content.normalize();
+        let content = content.into_normalized();
         let json = quillmark_content::serial::to_canonical_value(&content);
         let schema = crate::quill::FieldSchema::new(
             "intro".to_string(),
@@ -425,7 +425,7 @@ mod tests {
         let mut payload = Payload::from_index_map(Default::default());
         payload.set_quill("memo@1.2.3".parse().unwrap());
         payload.set_kind("main");
-        let card = Card::from_parts(payload, quillmark_content::Content::empty());
+        let card = Card::from_parts(payload, quillmark_content::Normalized::empty());
 
         let wire = CardWire::from(&card);
         assert_eq!(wire.quill.as_deref(), Some("memo@1.2.3"));

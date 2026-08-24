@@ -12,11 +12,11 @@ use crate::Diagnostic;
 use super::fences::find_metadata_blocks;
 use super::meta::{extract_meta_items, meta_key};
 use super::payload::{Payload, PayloadItem};
-use quillmark_content::Content;
+use quillmark_content::Normalized;
 
 /// The parse-time half of the markdown→content boundary
 /// ([`super::import_body`]): an over-nesting failure becomes a [`ParseError`].
-fn import_body_or_parse_error(md: &str) -> Result<Content, ParseError> {
+fn import_body_or_parse_error(md: &str) -> Result<Normalized, ParseError> {
     super::import_body(md).map_err(|e| ParseError::BodyImport(e.to_string()))
 }
 use super::prescan::{prescan_fence_content, CommentPathSegment, NestedComment, PreItem};

@@ -4,7 +4,7 @@
 //! `!must_fill` marker, so seeding and the blueprint stamp the same cells and a
 //! fresh seed reads as incomplete exactly where a blank document does.
 
-use quillmark_content::Content;
+use quillmark_content::Normalized;
 
 use super::Quill;
 use crate::quill::{CardSchema, FieldType, VARIANT_DISCRIMINANT_KEY};
@@ -29,7 +29,7 @@ use crate::{Card, Document, Payload, QuillReference, QuillValue, SeedOverlay};
 /// is what makes the two agree; a schema-aware writer that left non-canonical
 /// rest would recreate the construction-dependent divergence internally, moving
 /// a hash on a seed → store → load → conform cycle nobody edited.
-fn seed_parts(schema: &CardSchema, overlay: Option<&SeedOverlay>) -> (Payload, Content) {
+fn seed_parts(schema: &CardSchema, overlay: Option<&SeedOverlay>) -> (Payload, Normalized) {
     // Drive by `schema.fields` (declaration order), so the result is in
     // declaration order natively: no merge-then-sort. An overlay key naming no
     // schema field is skipped: it is never iterated here.
@@ -65,18 +65,18 @@ fn seed_parts(schema: &CardSchema, overlay: Option<&SeedOverlay>) -> (Payload, C
     // when bodies are enabled for the kind.
     let body = if schema.body_enabled() {
         if let Some(overlay_body) = overlay.and_then(|o| o.body.clone()) {
-            crate::document::import_body(&overlay_body).unwrap_or_else(|_| Content::empty())
+            crate::document::import_body(&overlay_body).unwrap_or_else(|_| Normalized::empty())
         } else if let Some(content) = schema.body.as_ref().and_then(|b| b.example_content.as_ref()) {
             quillmark_content::serial::from_canonical_value(content.as_json())
-                .unwrap_or_else(|_| Content::empty())
+                .unwrap_or_else(|_| Normalized::empty())
         } else if let Some(example) = schema.body.as_ref().and_then(|b| b.example.as_ref()) {
             // Fallback for a schema built outside the loader (no cached content).
-            crate::document::import_body(example).unwrap_or_else(|_| Content::empty())
+            crate::document::import_body(example).unwrap_or_else(|_| Normalized::empty())
         } else {
-            Content::empty()
+            Normalized::empty()
         }
     } else {
-        Content::empty()
+        Normalized::empty()
     };
 
     (Payload::from_items(items), body)

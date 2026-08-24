@@ -35,7 +35,7 @@
 //! those surfaces construct one per call from the quill handle.
 
 use indexmap::IndexMap;
-use quillmark_content::Content;
+use quillmark_content::Normalized;
 
 use crate::document::edit::field_decode;
 use crate::document::{Card, Codec, Document, EditError};
@@ -96,7 +96,7 @@ impl<'a> TypedReader<'a> {
     /// `array<richtext>` carries content without having one [`Content`]);
     /// [`EditError::FieldDecode`] when the stored value decodes under
     /// neither encoding.
-    pub fn get_content(&self, name: &str) -> Result<Option<Content>, EditError> {
+    pub fn get_content(&self, name: &str) -> Result<Option<Normalized>, EditError> {
         self.get_content_at(name, &[])
     }
 
@@ -128,7 +128,7 @@ impl<'a> TypedReader<'a> {
         &self,
         name: &str,
         at: &[PathSegment],
-    ) -> Result<Option<Content>, EditError> {
+    ) -> Result<Option<Normalized>, EditError> {
         read_content(self.doc.main(), Some(&self.config.main.fields), name, at)
     }
 
@@ -178,7 +178,7 @@ impl CardReader<'_> {
 
     /// Read a content field on this card as its [`Content`]: the card twin
     /// of [`TypedReader::get_content`], carrying the same outcomes.
-    pub fn get_content(&self, name: &str) -> Result<Option<Content>, EditError> {
+    pub fn get_content(&self, name: &str) -> Result<Option<Normalized>, EditError> {
         self.get_content_at(name, &[])
     }
 
@@ -188,7 +188,7 @@ impl CardReader<'_> {
         &self,
         name: &str,
         at: &[PathSegment],
-    ) -> Result<Option<Content>, EditError> {
+    ) -> Result<Option<Normalized>, EditError> {
         read_content(self.card, self.schema.map(|s| &s.fields), name, at)
     }
 
@@ -232,7 +232,7 @@ fn read_content(
     fields_schema: Option<&IndexMap<String, FieldSchema>>,
     name: &str,
     at: &[PathSegment],
-) -> Result<Option<Content>, EditError> {
+) -> Result<Option<Normalized>, EditError> {
     let field = fields_schema
         .and_then(|m| m.get(name))
         .ok_or_else(|| EditError::unknown_field(name))?;

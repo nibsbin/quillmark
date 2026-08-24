@@ -314,9 +314,9 @@ fn test_replace_body_reports_import_error() {
 fn test_overwrite_body_sets_directly() {
     use quillmark_content::model::{Mark, MarkKind};
 
-    let mut content = quillmark_content::import::from_markdown("underlined body").unwrap();
+    let mut content = quillmark_content::import::from_markdown("underlined body").unwrap().into_content();
     content.marks.push(Mark::new(0, 10, MarkKind::Underline));
-    content.normalize();
+    let content = content.into_normalized();
 
     let mut card = Card::new("note").unwrap();
     card.overwrite_body(content.clone());
@@ -332,9 +332,9 @@ fn test_overwrite_body_sets_directly() {
 fn test_overwrite_field_sets_directly() {
     use quillmark_content::model::{Mark, MarkKind};
 
-    let mut content = quillmark_content::import::from_markdown("underlined intro").unwrap();
+    let mut content = quillmark_content::import::from_markdown("underlined intro").unwrap().into_content();
     content.marks.push(Mark::new(0, 10, MarkKind::Underline));
-    content.normalize();
+    let content = content.into_normalized();
 
     let mut card = Card::new("note").unwrap();
     card.overwrite_field("intro", content.clone()).unwrap();
@@ -343,7 +343,7 @@ fn test_overwrite_field_sets_directly() {
     assert!(read.marks.iter().any(|m| matches!(m.kind, MarkKind::Underline)));
 
     assert_eq!(
-        card.overwrite_field("$bad", quillmark_content::Content::empty())
+        card.overwrite_field("$bad", quillmark_content::Normalized::empty())
             .unwrap_err()
             .code(),
         "edit::invalid_field_name"
@@ -358,11 +358,15 @@ fn test_revise_field_diff_imports_and_returns_delta() {
     let delta = card.revise_field("intro", "hello target world").unwrap();
     assert!(!delta.ops.is_empty());
 
-    let mut base = card.field_content("intro", Codec::Richtext).unwrap().unwrap();
+    let mut base = card
+        .field_content("intro", Codec::Richtext)
+        .unwrap()
+        .unwrap()
+        .into_content();
     // 6..12 is "target".
     base.marks
         .push(Mark::new(6, 12, MarkKind::Anchor { id: "c1".into() }));
-    base.normalize();
+    let base = base.into_normalized();
     card.overwrite_field("intro", base).unwrap();
     card.revise_field("intro", "why keep the target here").unwrap();
     let read = card.field_content("intro", Codec::Richtext).unwrap().unwrap();
@@ -396,11 +400,15 @@ fn test_revise_field_checked_preserves_anchors_and_enforces_inline() {
         .unwrap();
     assert!(!delta.ops.is_empty());
 
-    let mut base = card.field_content("subject", Codec::Richtext).unwrap().unwrap();
+    let mut base = card
+        .field_content("subject", Codec::Richtext)
+        .unwrap()
+        .unwrap()
+        .into_content();
     // 6..12 is "target".
     base.marks
         .push(Mark::new(6, 12, MarkKind::Anchor { id: "c1".into() }));
-    base.normalize();
+    let base = base.into_normalized();
     card.overwrite_field("subject", base).unwrap();
     card.revise_field_checked("subject", "why keep the target here", &inline)
         .unwrap();
@@ -431,9 +439,9 @@ fn test_revise_field_checked_preserves_anchors_and_enforces_inline() {
 fn test_commit_field_richtext_content_object_reads_back() {
     use quillmark_content::model::{Mark, MarkKind};
 
-    let mut content = quillmark_content::import::from_markdown("underlined intro").unwrap();
+    let mut content = quillmark_content::import::from_markdown("underlined intro").unwrap().into_content();
     content.marks.push(Mark::new(0, 10, MarkKind::Underline));
-    content.normalize();
+    let content = content.into_normalized();
     let json = quillmark_content::serial::to_canonical_value(&content);
 
     let mut card = Card::new("note").unwrap();
@@ -670,10 +678,10 @@ fn test_revise_body_returns_delta_and_updates_body() {
 fn test_revise_body_rebases_anchor() {
     use quillmark_content::model::{Mark, MarkKind};
 
-    let mut base = quillmark_content::import::from_markdown("keep the target word").unwrap();
+    let mut base = quillmark_content::import::from_markdown("keep the target word").unwrap().into_content();
     // Anchor over "target" (chars 9..15).
     base.marks.push(Mark::new(9, 15, MarkKind::Anchor { id: "c1".into() }));
-    base.normalize();
+    let base = base.into_normalized();
     let mut card = Card::new("note").unwrap();
     card.overwrite_body(base);
 

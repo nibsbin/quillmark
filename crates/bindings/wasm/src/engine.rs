@@ -1945,14 +1945,17 @@ impl Addr {
 /// string. The **storage** lane: content read back out of a document must keep
 /// opening whatever it was written as. Host-authored content goes through
 /// [`js_to_authored_content`].
-fn js_to_content(value: JsValue, ctx: &str) -> Result<quillmark_core::Content, JsValue> {
+fn js_to_content(value: JsValue, ctx: &str) -> Result<quillmark_content::Normalized, JsValue> {
     js_to_content_with(value, ctx, quillmark_content::serial::from_canonical_value)
 }
 
 /// [`js_to_content`] on the **authored** lane. The host is writing this content
 /// now, so `attrs` beside a built-in discriminator is a stale copy of the
 /// built-in list, and is reported instead of silently dropped.
-fn js_to_authored_content(value: JsValue, ctx: &str) -> Result<quillmark_core::Content, JsValue> {
+fn js_to_authored_content(
+    value: JsValue,
+    ctx: &str,
+) -> Result<quillmark_content::Normalized, JsValue> {
     js_to_content_with(value, ctx, quillmark_content::serial::from_authored_value)
 }
 
@@ -1961,8 +1964,8 @@ fn js_to_content_with(
     ctx: &str,
     read: fn(
         &serde_json::Value,
-    ) -> Result<quillmark_core::Content, quillmark_content::serial::ParseError>,
-) -> Result<quillmark_core::Content, JsValue> {
+    ) -> Result<quillmark_content::Normalized, quillmark_content::serial::ParseError>,
+) -> Result<quillmark_content::Normalized, JsValue> {
     let json = js_value_to_json(value, ctx)?;
     if !json.is_object() {
         return Err(WasmError::from(format!(
