@@ -211,7 +211,7 @@ impl Container {
     /// Whether these two are the same container shape, `ordinal` and `instance`
     /// aside. Two adjacent lines sit in the same container instance iff this
     /// holds *and* their [`instance`](Self::instance)s are equal, which is what
-    /// [`crate::traverse::runs`] applies for every consumer.
+    /// [`crate::traverse::runs`] applies.
     pub fn same_run(&self, other: &Container) -> bool {
         match (self, other) {
             (
@@ -254,7 +254,7 @@ impl Container {
 }
 
 /// A [`Content`] that [`Content::normalize`] has run on: the precondition both
-/// projections carry, held as a value rather than as a call-site convention.
+/// projections carry.
 ///
 /// Minted only by [`Content::into_normalized`], which the codecs decode
 /// through. Reads borrow through to the [`Content`]; the mutations that
@@ -276,8 +276,8 @@ impl Normalized {
         self.0
     }
 
-    /// The wrapped content, mutably. Every caller must leave it normalized;
-    /// the forwarded `apply_*` in [`crate::ops`] are the ones that do.
+    /// Every caller must leave this normalized; the forwarded `apply_*` in
+    /// [`crate::ops`] are the ones that do.
     pub(crate) fn as_content_mut(&mut self) -> &mut Content {
         &mut self.0
     }
@@ -765,8 +765,8 @@ impl Content {
         }
     }
 
-    /// Normalize and seal. With [`Normalized::empty`], the only mint there is:
-    /// the codecs reach [`Normalized`] through here.
+    /// Normalize and seal. With [`Normalized::empty`], the only mint for
+    /// [`Normalized`]; the codecs decode through here.
     pub fn into_normalized(mut self) -> Normalized {
         self.normalize();
         Normalized(self)

@@ -1,5 +1,4 @@
-//! Container-run and item traversal: the one loop that applies the grouping
-//! rule [`Container::same_run`] states.
+//! The one loop that applies the grouping rule [`Container::same_run`] states.
 
 use crate::model::{Container, Line};
 use std::ops::Range;
@@ -20,7 +19,7 @@ pub struct Span<'a> {
 ///
 /// Container identity is path plus contiguity, so `range` must be one parent's
 /// span: over a range spanning two parents, two like runs under them read as
-/// one. [`items`] is what bounds a parent, an item being a parent.
+/// one. An [`items`] span is the parent bound to descend through.
 pub fn runs(lines: &[Line], range: Range<usize>, depth: usize) -> Spans<'_> {
     Spans {
         lines,
