@@ -5,12 +5,11 @@
 - fix(typst): **a `field-region` claim around inline content no longer widens
   the line.** Each of the helper's two bracketing markers was written
   `#metadata(..) <__qm_region__>`, and the space before the label survived into
-  the inline flow — 2.715pt per marker at a 12pt body size, so claiming a date
-  or any mid-paragraph composition moved the text around it by 5.43pt against
-  the doc comment's layout-neutral contract. `form-field`'s marker carries the
-  same shape and pays nothing today only because a `box` follows it rather than
-  text; it is tightened alongside. Both are held to the contract by a
-  measurement now.
+  the inline flow. It cost 2.715pt per marker at a 12pt body size, so a claim
+  on a date or any mid-paragraph composition shifted the text around it by
+  5.43pt, against the layout-neutral contract the helper documents.
+  `form-field`'s marker carries the same shape and drops the space too, rather
+  than keep depending on the `box` that follows it.
 
 ## v0.109.0 - 2026-08-24
 

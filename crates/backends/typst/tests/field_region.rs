@@ -79,14 +79,11 @@ fn a_claim_does_not_displace_a_nested_scalar_site() {
     }
 }
 
-/// The layout-neutral contract, which nothing but a measurement holds the
-/// helper to: a marker leaving a space in the inline flow moves the text
-/// around every claim that brackets inline content.
 #[test]
 fn a_claim_lays_its_body_out_where_the_body_alone_would_land() {
-    // The tolerance separates the two scales in play: a stray space costs
-    // 2.715pt at this body size, while shaping `AAABBBCCC` as three runs
-    // instead of one costs float noise near 1e-14pt.
+    // 0.01pt sits between the two scales in play: one stray space in the
+    // inline flow costs 2.715pt at this body size, while shaping `AAABBBCCC`
+    // as three runs instead of one costs float noise near 1e-14pt.
     let plate = r#"
 #import "@local/quillmark-helper:0.1.0": field-region
 #set page(width: 400pt, height: 200pt, margin: 40pt)
@@ -104,8 +101,8 @@ fn a_claim_lays_its_body_out_where_the_body_alone_would_land() {
     }
 }
 
-/// `form-field`'s marker carries the same shape, and pays nothing today only
-/// because a `box` follows it where `field-region`'s is followed by text.
+/// The same marker shape as `field-region`'s, neutral only because a `box`
+/// follows it rather than text.
 #[test]
 fn a_widget_lays_out_where_its_box_alone_would_land() {
     let plate = r#"
