@@ -19,7 +19,6 @@ import {
   isUnknownContainer,
   isUnknownMark,
   isUnknownIsland,
-  weldsWith,
   assignInstances,
   init,
 } from '@quillmark-wasm/runtime'
@@ -643,18 +642,23 @@ describe('@quillmark/wasm/runtime: container run boundaries', () => {
     islands: [],
   })
 
-  it('welds on what the markdown projection can carry, not on equality', () => {
+  // A stamped `1` is the helper saying these two would weld.
+  const stamp = (a, b) => assignInstances([a, b]).map((c) => c.instance)
+
+  it('stamps on what the markdown projection can carry, not on equality', () => {
     // `start` differs and they still weld: CommonMark reads only a list's first
     // number, so the projection cannot carry the second one.
-    expect(weldsWith(LIST, { ...LIST, start: 3 })).toBe(true)
-    expect(weldsWith(LIST, { ...LIST, ordinal: 4, instance: 1 })).toBe(true)
-    expect(weldsWith(LIST, { ...LIST, ordered: true })).toBe(false)
-    expect(weldsWith(LIST, QUOTE)).toBe(false)
-    expect(weldsWith(QUOTE, QUOTE)).toBe(true)
+    expect(stamp(LIST, { ...LIST, start: 3 })).toEqual([0, 1])
+    expect(stamp(LIST, { ...LIST, ordinal: 4 })).toEqual([0, 1])
+    expect(stamp(QUOTE, QUOTE)).toEqual([0, 1])
+    // A shape the projection can tell apart needs no discriminator.
+    expect(stamp(LIST, { ...LIST, ordered: true })).toEqual([0, 0])
 
+    // An unknown container's boundary lives in storage, and its whole `attrs`
+    // is its shape.
     const indent = (n) => ({ container: 'indent', attrs: { n } })
-    expect(weldsWith(indent(1), indent(1))).toBe(true)
-    expect(weldsWith(indent(1), indent(2))).toBe(false)
+    expect(stamp(indent(1), indent(1))).toEqual([0, 1])
+    expect(stamp(indent(1), indent(2))).toEqual([0, 0])
   })
 
   it('alternates only across runs that would weld', () => {

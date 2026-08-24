@@ -541,7 +541,7 @@ function sameJson(a, b) {
  * @param {import('../core/wasm.js').ContentContainer} b
  * @returns {boolean}
  */
-export function weldsWith(a, b) {
+function weldsWith(a, b) {
 	// A malformed value welds with nothing. The membership guards' posture:
 	// answer rather than throw.
 	if (typeof a?.container !== 'string' || a.container !== b?.container) return false;

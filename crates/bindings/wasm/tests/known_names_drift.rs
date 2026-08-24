@@ -157,4 +157,20 @@ fn js_weld_keys_match_the_rust_weld_rule() {
 
     assert!(keys("quote").is_empty());
     assert!(Container::Quote { instance: 0 }.same_weld(&Container::Quote { instance: 1 }));
+
+    // A tag outside the table takes the JS `sameJson(attrs)` branch, which is
+    // the run rule spelled in JS — so it holds only while `same_weld` delegates
+    // there for an unknown container.
+    let unknown = |tag: &str, n| Container::Unknown {
+        tag: tag.into(),
+        attrs: serde_json::json!({ "n": n }),
+        instance: 0,
+    };
+    for (a, b) in [
+        (unknown("x", 1), unknown("x", 2)),
+        (unknown("x", 1), unknown("y", 1)),
+        (unknown("x", 1), unknown("x", 1)),
+    ] {
+        assert_eq!(a.same_weld(&b), a.same_run(&b));
+    }
 }

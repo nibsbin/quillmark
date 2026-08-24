@@ -46,7 +46,7 @@ describe('@quillmark/wasm/runtime: the static surface, before init', () => {
   // What this asserts is that the call needs no wasm instance, not that the
   // argument is tolerated. `{}` is one every guard and `isQuillmarkError` takes;
   // an export taking another shape names it here.
-  const PROBE = { weldsWith: [{}, {}], assignInstances: [[]] }
+  const PROBE = { assignInstances: [[]] }
 
   it('answers every non-class export without an instance', () => {
     for (const name of EXEMPT.filter((n) => !CLASSES.includes(n))) {

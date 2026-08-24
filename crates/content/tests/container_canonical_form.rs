@@ -167,3 +167,36 @@ fn a_start_only_difference_separates_the_runs_and_still_costs_a_discriminator() 
     assert_eq!(rt.lines[1].containers[0].instance(), 1);
     assert_eq!(from_markdown(&to_markdown(&rt)).expect("re-imports"), rt);
 }
+
+/// The projection rule is coarser than the identity rule, never finer: two runs
+/// the walks read as one can never need a discriminator to stay apart. Three
+/// doc comments and the migration guide state it; this holds it. `start` is the
+/// axis the two differ on, so the space here carries both.
+#[test]
+fn same_run_implies_same_weld() {
+    let mut space = alphabet(true);
+    for c in alphabet(true) {
+        if let Container::ListItem {
+            ordered,
+            ordinal,
+            instance,
+            ..
+        } = c
+        {
+            space.push(Container::ListItem {
+                ordered,
+                start: 3,
+                ordinal,
+                instance,
+            });
+        }
+    }
+    for a in &space {
+        for b in &space {
+            assert!(
+                !a.same_run(b) || a.same_weld(b),
+                "the identity rule joins a pair the projection parts: {a:?} / {b:?}"
+            );
+        }
+    }
+}

@@ -283,19 +283,8 @@ export declare function isUnknownIsland(
 // `ContentContainer.instance` is a field a writer owes and, outside
 // `ContentContainerInput`, no checker asks for. Adjacent runs of one shape that
 // share it arrive welded. Nothing reports that: the flat `containers` form
-// cannot tell it from one container spanning two paragraphs. These two carry
-// the rule a codec would otherwise re-derive.
-
-/**
- * Whether the Markdown projection would read two adjacent runs of these shapes
- * as one, so the canonical form has to spend an `instance` to keep them apart.
- *
- * Coarser than equality for a list: CommonMark reads only a list's first
- * number, so `1. a` beside `3. b` re-imports as one list and welds despite the
- * differing `start`. `ordinal` and `instance` are not read. Use it when a
- * traversal cannot hand its siblings to {@link assignInstances}.
- */
-export declare function weldsWith(a: ContentContainer, b: ContentContainer): boolean;
+// cannot tell it from one container spanning two paragraphs. This carries the
+// rule a codec would otherwise re-derive.
 
 /**
  * Stamp `instance` across one parent's blocks at one depth, in document order,
@@ -307,8 +296,13 @@ export declare function weldsWith(a: ContentContainer, b: ContentContainer): boo
  * carries that run's returned container, `ordinal` varying per item and
  * `instance` held.
  *
- * The output is already canonical, so what a document reads back is what it
- * wrote.
+ * The `instance` it stamps is canonical, so a document reads back the value it
+ * was written. `ordinal` stays the caller's, and a write is renumbered to a
+ * gapless index within its run.
+ *
+ * Which fields decide a weld is coarser than equality for a list: CommonMark
+ * reads only a list's first number, so `1. a` beside `3. b` welds despite the
+ * differing `start`.
  *
  * ```js
  * const [outer, , inner] = assignInstances([listA, null, listB]);
