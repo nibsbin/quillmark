@@ -906,28 +906,44 @@ fn newline_at_line_boundary(text: &str, line: usize) -> Result<Usv, ApplyError> 
     })
 }
 
-/// The mutations that re-establish the invariant, forwarded: each normalizes
-/// before it returns, so the token survives. Any other edit takes
-/// [`Normalized::into_content`].
+/// The mutations that re-establish the invariant, forwarded.
+///
+/// Each normalizes before it returns, on an error too: an op list that fails
+/// partway leaves its earlier ops applied. So the token states that the value
+/// is canonical, not that the edit landed.
+///
+/// Any other edit takes [`into_content`](crate::model::Normalized::into_content).
 impl crate::model::Normalized {
+    fn seal(&mut self, applied: Result<(), ApplyError>) -> Result<(), ApplyError> {
+        if applied.is_err() {
+            self.as_content_mut().normalize();
+        }
+        applied
+    }
+
     pub fn apply_text_delta(&mut self, delta: &Delta) -> Result<(), ApplyError> {
-        self.as_content_mut().apply_text_delta(delta)
+        let applied = self.as_content_mut().apply_text_delta(delta);
+        self.seal(applied)
     }
 
     pub fn apply_mark_ops(&mut self, ops: &[MarkOp]) -> Result<(), ApplyError> {
-        self.as_content_mut().apply_mark_ops(ops)
+        let applied = self.as_content_mut().apply_mark_ops(ops);
+        self.seal(applied)
     }
 
     pub fn apply_island_ops(&mut self, ops: &[IslandOp]) -> Result<(), ApplyError> {
-        self.as_content_mut().apply_island_ops(ops)
+        let applied = self.as_content_mut().apply_island_ops(ops);
+        self.seal(applied)
     }
 
     pub fn apply_line_ops(&mut self, ops: &[LineOp]) -> Result<(), ApplyError> {
-        self.as_content_mut().apply_line_ops(ops)
+        let applied = self.as_content_mut().apply_line_ops(ops);
+        self.seal(applied)
     }
 
     pub fn apply_field_change(&mut self, bundle: &ChangeBundle) -> Result<(), ApplyError> {
-        self.as_content_mut().apply_field_change(bundle)
+        let applied = self.as_content_mut().apply_field_change(bundle);
+        self.seal(applied)
     }
 }
 

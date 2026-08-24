@@ -691,7 +691,7 @@ impl Card {
         self.remove_meta_namespace(MetaKey::Seed, card_kind)
     }
 
-    /// Overwrite the body with a pre-built [`Content`]: value semantics, no
+    /// Overwrite the body with a pre-built [`Content`](quillmark_content::Content): value semantics, no
     /// markdown import, no diff, no schema check, infallible. A raw `Content`
     /// normalizes on the way in, so what lands is canonical. Anchor fate across
     /// the content lane: **overwrite destroys, [`revise_body`](Self::revise_body)
@@ -700,7 +700,7 @@ impl Card {
         self.body = content.into();
     }
 
-    /// Overwrite a content field's value with a pre-built [`Content`]: the
+    /// Overwrite a content field's value with a pre-built [`Content`](quillmark_content::Content): the
     /// field-level twin of [`overwrite_body`](Self::overwrite_body). Stores the
     /// canonical content JSON (identity and content-only marks intact), no diff,
     /// no schema check. The previous value's anchors are gone. Returns

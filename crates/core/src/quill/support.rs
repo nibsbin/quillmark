@@ -141,26 +141,28 @@ fn census(body: &Content) -> BTreeMap<BlockConstruct, usize> {
         }
     }
 
-    /// Count the runs at `depth` within `range`, then recurse per *item*: an
-    /// item is a parent, so two like runs under two items are two runs.
+    /// A worklist, not recursion: nothing validates `body`'s nesting depth
+    /// before this walk.
     fn count(
         lines: &[quillmark_content::model::Line],
         range: std::ops::Range<usize>,
-        depth: usize,
         counts: &mut BTreeMap<BlockConstruct, usize>,
     ) {
-        for run in runs(lines, range, depth) {
-            if let Some(construct) = construct(run.container) {
-                *counts.entry(construct).or_insert(0) += 1;
-            }
-            for item in items(lines, run.range, depth) {
-                count(lines, item.range, depth + 1, counts);
+        let mut work = vec![(range, 0)];
+        while let Some((range, depth)) = work.pop() {
+            for run in runs(lines, range, depth) {
+                if let Some(construct) = construct(run.container) {
+                    *counts.entry(construct).or_insert(0) += 1;
+                }
+                for item in items(lines, run.range, depth) {
+                    work.push((item.range, depth + 1));
+                }
             }
         }
     }
 
     let mut counts: BTreeMap<BlockConstruct, usize> = BTreeMap::new();
-    count(&body.lines, 0..body.lines.len(), 0, &mut counts);
+    count(&body.lines, 0..body.lines.len(), &mut counts);
 
     for island in &body.islands {
         match KnownIslandType::parse(&island.island_type) {
@@ -214,6 +216,17 @@ mod census_tests {
         assert_eq!(count("- > a\n\n- > b", BlockConstruct::Quote), 2);
         assert_eq!(count("- > a\n\n- > b", BlockConstruct::List), 1);
         assert_eq!(count("- - a\n\n- - b", BlockConstruct::List), 3);
+    }
+
+    /// `overwrite_body` never validates, so the walk sees whatever depth a
+    /// client built.
+    #[test]
+    fn unvalidated_depth_does_not_overflow_the_stack() {
+        use quillmark_content::model::{Container, Content, Line, LineKind};
+        let mut line = Line::new(LineKind::Para);
+        line.containers = vec![Container::Quote { instance: 0 }; 200_000];
+        let body = Content::new("x".to_string(), vec![line]);
+        assert_eq!(census(&body).get(&BlockConstruct::Quote), Some(&200_000));
     }
 
     #[test]

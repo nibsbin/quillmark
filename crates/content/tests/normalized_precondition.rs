@@ -1,5 +1,6 @@
-//! The projections take a [`Normalized`], so the shapes #1364 measured as
-//! validating-but-lying cannot reach them.
+//! A content that `validate` accepts can still project to markdown that
+//! re-imports as a different content. The projections take a [`Normalized`],
+//! so those shapes cannot reach them.
 
 use quillmark_content::model::{Container, Content, Line, LineKind};
 use quillmark_content::{from_markdown, to_markdown};
@@ -51,4 +52,26 @@ fn an_off_by_one_ordinal_pair_renumbers_before_it_renders() {
 fn re_minting_a_token_changes_nothing() {
     let rt = built(vec![li(false, 0, 2), li(false, 1, 2)]).into_normalized();
     assert_eq!(rt.clone().into_content().into_normalized(), rt);
+}
+
+/// The other mint: what it hands out is what `normalize` would produce.
+#[test]
+fn the_empty_mint_is_canonical() {
+    assert_eq!(Content::empty().into_normalized(), quillmark_content::Normalized::empty());
+}
+
+/// An op list that fails partway leaves its earlier ops applied; the token
+/// still holds a canonical value.
+#[test]
+fn a_failed_op_list_leaves_the_token_canonical() {
+    use quillmark_content::model::MarkKind;
+    use quillmark_content::MarkOp;
+
+    let mut rt = from_markdown("**a**b").unwrap();
+    let ops = [
+        MarkOp::Add { start: 0, end: 2, kind: MarkKind::Strong },
+        MarkOp::Add { start: 0, end: 99, kind: MarkKind::Strong },
+    ];
+    assert!(rt.apply_mark_ops(&ops).is_err());
+    assert_eq!((*rt).clone().into_normalized(), rt);
 }

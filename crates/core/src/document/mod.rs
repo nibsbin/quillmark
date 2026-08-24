@@ -216,7 +216,7 @@ pub struct Parsed {
 }
 
 /// A single card-yaml block (root or composable). `body` is the content
-/// ([`Content`]) form of the prose after the closing fence: the empty content
+/// ([`Content`](quillmark_content::Content)) form of the prose after the closing fence: the empty content
 /// when none follows; check `card.body().is_blank()`. Markdown is a projection:
 /// [`Card::body_markdown`] re-emits it.
 #[derive(Debug, Clone, PartialEq)]
@@ -257,7 +257,7 @@ impl Card {
         &mut self.payload
     }
 
-    /// The card body as a [`Content`]: the canonical content model. For the
+    /// The card body as a [`Content`](quillmark_content::Content): the canonical content model. For the
     /// markdown projection use [`Card::body_markdown`].
     pub fn body(&self) -> &Normalized {
         &self.body
