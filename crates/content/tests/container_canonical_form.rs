@@ -140,3 +140,30 @@ fn triples_over_the_list_and_quote_alphabet_are_fixed_points() {
     eprintln!("  triples checked: {n}, broken: {broken}");
     assert_eq!(broken, 0);
 }
+
+/// Identity and projection are separate rules, and a list pair differing only
+/// in `start` falls between them: `same_run` counts `start`, so the two runs
+/// arrive apart with no discriminator written, while Markdown reads only a
+/// list's first number — so the canonical form spends one to stay a fixed
+/// point. The alphabet above holds `start` at 1, which is the axis it misses.
+#[test]
+fn a_start_only_difference_separates_the_runs_and_still_costs_a_discriminator() {
+    let one = Container::ListItem {
+        ordered: true,
+        start: 1,
+        ordinal: 0,
+        instance: 0,
+    };
+    let three = Container::ListItem {
+        ordered: true,
+        start: 3,
+        ordinal: 0,
+        instance: 0,
+    };
+    assert!(!one.same_run(&three), "start is part of the shape");
+    assert!(one.same_weld(&three), "markdown cannot carry the second start");
+
+    let rt = build(&[&vec![one], &vec![three]]);
+    assert_eq!(rt.lines[1].containers[0].instance(), 1);
+    assert_eq!(from_markdown(&to_markdown(&rt)).expect("re-imports"), rt);
+}

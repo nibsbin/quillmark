@@ -178,12 +178,19 @@ impl Container {
     /// one field that exists to break that tie, and it is the whole reason the
     /// encoding is complete rather than a quotient.
     ///
-    /// [`Content::normalize`] canonicalizes it to **0, flipping to 1 only where
-    /// the adjacent preceding sibling run would otherwise weld with this one**,
-    /// so a document that needs no discriminator carries none, and one that
-    /// needs it alternates `0, 1, 0, 1`. Non-adjacent runs never collide, so
-    /// two values suffice. A producer may mint any distinct values it likes;
-    /// normalize collapses them to the canonical pair.
+    /// A producer writes it against [`same_run`](Self::same_run): two adjacent
+    /// runs of one shape need distinct values, whatever they are, or they
+    /// arrive as one container. [`Content::normalize`] then collapses them to
+    /// the canonical pair — **0, flipping to 1 only where the projection would
+    /// otherwise [weld](Self::same_weld) the two** — so a document that needs
+    /// no discriminator carries none, and one that needs it alternates
+    /// `0, 1, 0, 1`. Non-adjacent runs never collide, so two values suffice.
+    ///
+    /// The two rules answer different questions, and a pair can fall either way
+    /// between them: `1. a` beside `3. b` differs by `start`, so `same_run`
+    /// separates the runs and a producer writes no discriminator, while
+    /// Markdown reads only a list's first number and would weld them — so the
+    /// canonical form spends one anyway.
     pub fn instance(&self) -> u64 {
         match self {
             Container::ListItem { instance, .. }
@@ -209,9 +216,15 @@ impl Container {
     }
 
     /// Whether these two are the same container shape, `ordinal` and `instance`
-    /// aside. Two adjacent lines sit in the same container instance iff this
-    /// holds *and* their [`instance`](Self::instance)s are equal, which is what
-    /// [`crate::traverse::runs`] applies.
+    /// aside — `start` counts, so a list starting at 1 and one starting at 3
+    /// are two shapes.
+    ///
+    /// The **identity** rule, read and written alike: two adjacent lines sit in
+    /// one container instance iff this holds *and* their
+    /// [`instance`](Self::instance)s are equal, which is what
+    /// [`crate::traverse::runs`] applies and what a producer separates its runs
+    /// against. Whether the *projection* can then tell them apart is
+    /// [`same_weld`](Self::same_weld).
     pub fn same_run(&self, other: &Container) -> bool {
         match (self, other) {
             (
@@ -235,15 +248,18 @@ impl Container {
         }
     }
 
-    /// Whether two adjacent runs of these shapes would weld — that is, whether
-    /// the second needs a fresh `instance` to be readable as its own container.
+    /// Whether the Markdown projection would read two adjacent runs of these
+    /// shapes as one — that is, whether the canonical form must spend an
+    /// [`instance`](Self::instance) to keep them apart.
+    /// [`Content::normalize`] mints against this;
+    /// [`same_run`](Self::same_run) is what a producer writes against.
     ///
-    /// Coarser than [`same_run`](Self::same_run) for lists, because `start` is
-    /// invisible in Markdown: CommonMark reads only a list's *first* number, so
-    /// `1. a` beside `3. b` re-imports as one list of two items and the second
-    /// list's `start` is lost. Comparing `ordered` alone mints the
-    /// discriminator there too, and the marker alternation carries it.
-    fn same_weld(&self, other: &Container) -> bool {
+    /// Coarser than `same_run` for lists, because `start` is invisible in
+    /// Markdown: CommonMark reads only a list's *first* number, so `1. a`
+    /// beside `3. b` re-imports as one list of two items and the second list's
+    /// `start` is lost. Comparing `ordered` alone mints the discriminator
+    /// there too, and the marker alternation carries it.
+    pub fn same_weld(&self, other: &Container) -> bool {
         match (self, other) {
             (Container::ListItem { ordered: a, .. }, Container::ListItem { ordered: b, .. }) => {
                 a == b
