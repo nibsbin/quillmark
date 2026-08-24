@@ -159,8 +159,18 @@
   that needs no discriminator — nearly all of them — keeps its exact bytes and
   its content hash. **Breaking for Rust consumers** that match `Container`
   exhaustively: `Quote` is now a struct variant, and `ListItem`/`Unknown` carry
-  the extra field. On the TypeScript surface `instance` is optional; a consumer
-  that never writes adjacent same-shape siblings needs no change.
+  the extra field.
+
+  On the TypeScript surface `instance` is optional — the wire omits a zero, so a
+  read shape cannot require it — and nothing there stops compiling. A consumer
+  that only reads needs no change. **A consumer that writes container paths owes
+  the field**, which is every codec flattening a tree: two `bullet_list` nodes in
+  a row are adjacent same-shape siblings, and omitting the discriminator lands
+  them welded. Such a host keeps producing exactly what it produced on 0.108, so
+  the four defects above stay open for it until its codec stamps the
+  discriminator. Nothing reports the omission — two adjacent lines with equal
+  paths are one container, which is also how a two-paragraph quote is spelled, so
+  the model cannot tell a boundary a writer meant from one it did not.
 
   The block census counts what the projections see, so two adjacent runs of one
   shape now count two where they counted one: a quill declining `list` or
@@ -170,10 +180,13 @@
   A blob written here carries `instance` only where a document holds adjacent
   same-shape siblings, and a reader that predates the field ignores the key —
   so such a blob loads on 0.108 with the two runs welded, and re-saving there
-  drops the boundary for good. The `@0.93.0` tag is unchanged because every
-  blob written before this release re-encodes byte for byte; the forward
-  direction is the one that costs, and only for the documents that spend the
-  key.
+  drops the boundary for good. A 0.109 host whose codec drops the key on
+  write-back loses it the same way, with no version skew involved: the
+  boundary is written by whatever produced the row — `from_markdown`, the CLI,
+  any Rust caller — and survives only as far as the next writer that carries it.
+  The `@0.93.0` tag is unchanged because every blob written before this release
+  re-encodes byte for byte; the forward direction is the one that costs, and
+  only for the documents that spend the key.
 
 - fix(blueprint): **a variant's `object` or `array<object>` cell expands per
   property.** The cell went through the scalar path, so it rendered as
