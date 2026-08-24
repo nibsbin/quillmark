@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.109.1 - 2026-08-24
 
 - fix(typst): **a `field-region` claim around inline content no longer widens
   the line.** Each of the helper's two bracketing markers was written
@@ -10,6 +10,17 @@
   5.43pt, against the layout-neutral contract the helper documents.
   `form-field`'s marker carries the same shape and drops the space too, rather
   than keep depending on the `box` that follows it.
+
+<!-- seed: commits since v0.109.0, confirm the entries above cover them, then delete this comment
+- docs: dense-prose pass over the branch
+- fix(typst): a marker's label is not a space in the inline flow
+- refactor(wasm): keep the weld rule internal, and pin what states it
+- docs: dense-prose pass over the branch
+- docs: classify 0.109's container break by consumer role
+- feat(wasm)!: make a written container path spell its instance
+- feat(content): name the rule a container's discriminator is minted against
+-->
+
 
 ## v0.109.0 - 2026-08-24
 
@@ -271,25 +282,6 @@
   The public `container_to_value` and `mark_to_value`, and the crate-internal
   `island_to_value`, now emit their own keys in a different order. An unknown's `attrs` bag is
   untouched, as in 0.99, and nothing hashes the op wire.
-
-<!-- seed: commits since v0.108.3, confirm the entries above cover them, then delete this comment
-- docs: the 0.108 → 0.109 release record, and two misattached doc comments
-- docs: dense-prose pass over the branch
-- docs: dense-prose pass over the branch
-- fix: close the rest of the normalized-is-not-validated gap
-- fix(typst): open every block at the enclosing list indent
-- fix(content): walk export's block tree on a frame stack
-- docs: dense-prose pass over the branch
-- fix: hold the token's guarantee on error paths, and walk census iteratively
-- feat(content): make "normalized" a type the projections require
-- refactor: consume the shared container traversal
-- feat(content): one traversal for container runs and items
-- fix(content): an item boundary is a parent boundary
-- fix(content): clear a `continues` that crosses a container boundary
-- fix(content): give a container the instance its identity was missing
-- Bulk PR integration: #1347–#1356 (#1358)
--->
-
 
 ## v0.108.3 - 2026-08-21
 
