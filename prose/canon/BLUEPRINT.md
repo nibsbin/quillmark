@@ -67,12 +67,13 @@ follow:
 
 | Slot | Form | Carries |
 |---|---|---|
-| **Leading `# …` lines** above a field | `# <prose>` or `# e.g. <value>` | description (single-line prose) and an illustrative example |
+| **Leading `# …` lines** above a field | `# <prose>`, `# e.g. <value>`, `# when <MEMBER>: <fields>` | description (single-line prose), an illustrative example, and the field set a variant member brings into play |
 | **Inline `# …`** at end of the value line | `# <type>[<format>]` | structural metadata: the field's type and an optional format refinement |
 
-The two slots have disjoint purposes: leading is prose, inline is
-structural. No colon-separated `key: value` annotation syntax appears in
-either slot, so neither pattern collides with YAML key/value parsing.
+The two slots divide by purpose: leading is prose, inline is structural. The
+one crossing is `# when <MEMBER>: <fields>`: an unselected member owns no
+cells, so the leading slot is the only place left to name them (see "Enum
+variants").
 
 ### Leading lines: order
 
@@ -89,6 +90,8 @@ Per field, in order:
    one exception is `richtext`, which never inlines its example as the value: a
    defaultless richtext field with an `example:` therefore keeps the `# e.g.`
    line (see "Richtext fields").
+3. `# when <MEMBER>: <fields>`: one line per member owning a field set, on a
+   variant-bearing `enum` only (see "Enum variants").
 
 That's it. There is no leading `# required`, `# enum:`, `# default:`, or
 `# type:`: those collapse into the inline.
