@@ -70,7 +70,7 @@ impl Content {
         from_canonical_value(&v)
     }
 
-    fn to_value(&self) -> Value {
+    fn to_value(&self, zero: ZeroInstance) -> Value {
         let mut root = Map::new();
         root.insert(
             "islands".into(),
@@ -78,7 +78,7 @@ impl Content {
         );
         root.insert(
             "lines".into(),
-            Value::Array(self.lines.iter().map(line_to_value).collect()),
+            Value::Array(self.lines.iter().map(|l| line_to_value(l, zero)).collect()),
         );
         root.insert(
             "marks".into(),
@@ -116,13 +116,48 @@ impl Content {
     }
 }
 
-/// The canonical content form as a structural [`Value`]: the recursively
+/// Whether a zero `Container::instance` gets a key.
+///
+/// The two forms decode identically; they differ in what a reader is shown.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ZeroInstance {
+    /// Storage: the key appears only where it is doing work, so a row written
+    /// before the field existed re-encodes byte for byte.
+    Omit,
+    /// The seam: every container spells it, so a host reads back a container
+    /// path it can hand straight to a write.
+    Spell,
+}
+
+/// The **storage** canonical form as a structural [`Value`]: the recursively
 /// key-sorted tree [`Normalized::to_canonical_json`] renders to bytes. A storage
 /// layer embeds this as a nested object rather than an escaped string;
 /// serializing it with `serde_json` is byte-identical to that JSON, independent
 /// of the consumer's `preserve_order` feature.
+///
+/// [`to_seam_value`] is the same tree for a language binding, differing only in
+/// a zero `instance`.
 pub fn to_canonical_value(rt: &Normalized) -> Value {
-    let mut v = rt.to_value();
+    to_value_with(rt, ZeroInstance::Omit)
+}
+
+/// The **seam** form as a structural [`Value`]: [`to_canonical_value`] with
+/// every `Container::instance` spelled, zero included.
+///
+/// A host's read is also its write input — `overwrite(addr, reader.getContent(…))`,
+/// `insertCard(removeCard(0))` — and the discriminator that keeps two adjacent
+/// same-shape runs apart is a field the host owes on the way back in. Spelling it
+/// on the way out is what lets a binding's read type require it, and what puts the
+/// field in front of the codec author who needs it. Storage keeps [`Omit`] so
+/// stored bytes stay put.
+///
+/// [`Omit`]: ZeroInstance::Omit
+pub fn to_seam_value(rt: &Normalized) -> Value {
+    to_value_with(rt, ZeroInstance::Spell)
+}
+
+fn to_value_with(rt: &Normalized, zero: ZeroInstance) -> Value {
+    let mut v = rt.to_value(zero);
     // Scans and returns: the encoders emit their fixed keys in ascending order,
     // and every opaque bag under them was canonicalized by the mint. A key
     // inserted out of order is still repaired here, so the freeze holds without
@@ -305,11 +340,16 @@ pub fn line_kind_from_value(v: &Value) -> Result<LineKind, ParseError> {
     }
 }
 
-fn line_to_value(line: &Line) -> Value {
+fn line_to_value(line: &Line, zero: ZeroInstance) -> Value {
     let mut m = line_kind_fields(&line.kind);
     m.insert(
         "containers".into(),
-        Value::Array(line.containers.iter().map(container_to_value).collect()),
+        Value::Array(
+            line.containers
+                .iter()
+                .map(|c| container_to_value_with(c, zero))
+                .collect(),
+        ),
     );
     // Omitted when false: presence is a pure function of the value, so the
     // encoding stays deterministic.
@@ -340,8 +380,12 @@ fn line_from_value(v: &Value) -> Result<Line, ParseError> {
     })
 }
 
-/// Encode a [`Container`] into its canonical wire object.
+/// Encode a [`Container`] into its storage wire object.
 pub fn container_to_value(c: &Container) -> Value {
+    container_to_value_with(c, ZeroInstance::Omit)
+}
+
+fn container_to_value_with(c: &Container, zero: ZeroInstance) -> Value {
     let mut m = Map::new();
     match c {
         Container::ListItem {
@@ -363,14 +407,12 @@ pub fn container_to_value(c: &Container) -> Value {
             m.insert("container".into(), Value::String(tag.clone()));
         }
     }
-    // Written only where it is doing work. `normalize` leaves it 0 on every
-    // path with no adjacent same-shape sibling to be told apart from, which is
-    // nearly all of them, so the common row carries no key and the encoding
-    // stays byte-identical to one written before the field existed.
-    if c.instance() != 0 {
+    if c.instance() != 0 || zero == ZeroInstance::Spell {
         m.insert("instance".into(), Value::from(c.instance()));
     }
-    Value::Object(m)
+    // `instance` sorts between `container` and the arm's own keys, so this one
+    // encoder cannot settle its order at the insert either.
+    Value::Object(sort_own_keys(m))
 }
 
 /// Decode a [`Container`] from its canonical wire object.
@@ -905,6 +947,20 @@ mod tests {
         assert_eq!(rt2.to_canonical_json(), two);
     }
 
+    /// The seam spells the key storage omits, so a binding's read type requires
+    /// it and a host hands a read straight back to a write. One value, two
+    /// forms: each decodes to the other's content.
+    #[test]
+    fn the_seam_spells_a_zero_instance_storage_omits() {
+        let storage = r#"{"islands":[],"lines":[{"containers":[{"container":"quote"}],"kind":"para"}],"marks":[],"text":"a"}"#;
+        let seam = r#"{"islands":[],"lines":[{"containers":[{"container":"quote","instance":0}],"kind":"para"}],"marks":[],"text":"a"}"#;
+
+        let rt = Content::from_canonical_json(storage).expect("decodes");
+        assert_eq!(rt.to_canonical_json(), storage);
+        assert_eq!(to_seam_value(&rt).to_string(), seam);
+        assert_eq!(Content::from_canonical_json(seam).expect("decodes"), rt);
+    }
+
     use super::*;
     use crate::model::{Fidelity, Line, LineKind};
 
@@ -1184,7 +1240,13 @@ mod tests {
                     containers: containers.clone(),
                     continues,
                 };
-                assert!(sorted(&line_to_value(&line)), "line {:?}", line.kind);
+                for zero in [ZeroInstance::Omit, ZeroInstance::Spell] {
+                    assert!(
+                        sorted(&line_to_value(&line, zero)),
+                        "line {:?} ({zero:?})",
+                        line.kind
+                    );
+                }
             }
         }
 
@@ -1235,7 +1297,9 @@ mod tests {
         }];
         rt.normalize();
         assert_eq!(rt.validate(), Ok(()));
-        assert!(is_value_key_sorted(&rt.to_value()));
+        for zero in [ZeroInstance::Omit, ZeroInstance::Spell] {
+            assert!(is_value_key_sorted(&rt.to_value(zero)), "{zero:?}");
+        }
     }
 
     #[test]

@@ -48,6 +48,17 @@ def test_body_is_content_dict(taro_md):
     assert "nutty" in doc.body["text"]
 
 
+def test_body_spells_every_container_instance():
+    """The seam form: `instance` decides whether two adjacent same-shape runs
+    weld, and it is a field a writer owes. Storage omits a zero; a read hands
+    back a container path a write can take, so it spells one."""
+    md = "~~~card-yaml\n$quill: taro\n$kind: main\n~~~\n\n> a\n\n- b\n"
+    doc = Document.from_markdown(md)
+    containers = [c for line in doc.body["lines"] for c in line["containers"]]
+    assert [c["container"] for c in containers] == ["quote", "list_item"]
+    assert [c["instance"] for c in containers] == [0, 0]
+
+
 def test_body_empty_when_absent():
     md = "~~~card-yaml\n$quill: taro\n$kind: main\nauthor: Test\ntitle: Test\nice_cream: Vanilla\n~~~\n"
     doc = Document.from_markdown(md)

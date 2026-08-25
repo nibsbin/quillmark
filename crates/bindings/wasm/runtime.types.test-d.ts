@@ -321,23 +321,14 @@ declare const annotated: RuntimeQuill;
 void annotated;
 
 // The container write lane. `instance` decides whether two adjacent runs weld,
-// and nothing reports an omission at runtime. A `setContainers` op is host-built
-// by definition, so its element type requires the field — where `Content`,
-// being a read shape too, leaves it optional.
-import type {
-	ContentContainerInput,
-	assignInstances
-} from '../../../pkg/runtime/runtime.d.ts';
-
-const writeShapeReads: ContentContainer = {} as ContentContainerInput;
-void writeShapeReads;
-
-// @ts-expect-error a read shape may omit `instance`; a written one may not.
-const readShapeWrites: ContentContainerInput = {} as ContentContainer;
-void readShapeWrites;
+// and nothing reports an omission at runtime. The seam spells it on every read,
+// so the one container type requires it and every write lane reports an
+// omission — the op, and the whole-`Content` lane a document-shaped codec
+// writes through.
+import type { assignInstances } from '../../../pkg/runtime/runtime.d.ts';
 
 // @ts-expect-error the field is the whole point of the type.
-const unstamped: ContentContainerInput = { container: 'quote' };
+const unstamped: ContentContainer = { container: 'quote' };
 void unstamped;
 
 const looseOp: Extract<LineOp, { op: 'setContainers' }> = {
@@ -347,6 +338,37 @@ const looseOp: Extract<LineOp, { op: 'setContainers' }> = {
 	containers: [{ container: 'quote' }]
 };
 void looseOp;
+
+// `overwrite` and `CardInput.body` take a whole `Content`, the lane a codec
+// flattening a tree most likely writes through. Requiring the field on the read
+// shape is what reaches it.
+const looseBody: CardInput = {
+	kind: 'note',
+	body: {
+		text: 'a',
+		lines: [
+			{
+				kind: 'para',
+				// @ts-expect-error a hand-built container spells `instance` out.
+				containers: [{ container: 'quote' }]
+			}
+		],
+		marks: [],
+		islands: []
+	}
+};
+void looseBody;
+
+const stampedBody: CardInput = {
+	kind: 'note',
+	body: {
+		text: 'a',
+		lines: [{ kind: 'para', containers: [{ container: 'quote', instance: 0 }] }],
+		marks: [],
+		islands: []
+	}
+};
+void stampedBody;
 
 // What `assignInstances` returns is what the op takes, nulls dropped.
 const stampedFeedsTheOp: Extract<LineOp, { op: 'setContainers' }>['containers'] = [] as NonNullable<

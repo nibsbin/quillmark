@@ -633,6 +633,20 @@ describe('Content codec: importMarkdown / exportMarkdown / rebase / mapPos', () 
     expect(exportMarkdown(rt)).toBe('A **bold** line.')
   })
 
+  it('spells every container instance on a read, so a read is a write input', () => {
+    // Storage omits a zero, the seam spells it. Requiring the field on the read
+    // type is what reaches `overwrite` and `CardInput.body`, and that is honest
+    // only while every `Content`-typed lane spells it.
+    const spelled = (rt) => rt.lines.flatMap((l) => l.containers).map((c) => c.instance)
+
+    expect(spelled(importMarkdown('> a\n\n- b'))).toEqual([0, 0])
+    expect(spelled(rebase(importMarkdown('> a'), '> a\n\n- b').content)).toEqual([0, 0])
+
+    const doc = Document.fromMarkdown('~~~card-yaml\n$quill: commit_test\n~~~\n\n> a\n\n- b')
+    expect(spelled(doc.main.body)).toEqual([0, 0])
+    expect(spelled(doc.getStored({}))).toEqual([0, 0])
+  })
+
   it('rebase computes a content + delta and mapPos maps a position through it', () => {
     const base = importMarkdown('hello world')
     const { content, delta } = rebase(base, 'hello brave world')

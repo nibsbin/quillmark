@@ -268,3 +268,31 @@ fn nested_map_keys_with_structural_chars_emit_valid_yaml() {
     assert_eq!(cfg["n"], serde_json::json!(3));
     assert_eq!(cfg["needs # comment"], serde_json::json!(4));
 }
+
+/// A richtext field stored verbatim off the seam projects to markdown like one
+/// committed through the typed write. `store_field` keeps what it is handed, so
+/// the two canonical forms both rest here, and the projection guard is byte
+/// identity against one of them.
+#[test]
+fn a_seam_form_field_projects_to_markdown_like_a_stored_one() {
+    use crate::document::{Card, Payload};
+    use crate::value::QuillValue;
+    use indexmap::IndexMap;
+
+    let content = quillmark_content::from_markdown("> quoted").unwrap();
+    let storage = quillmark_content::serial::to_canonical_value(&content);
+    let seam = quillmark_content::serial::to_seam_value(&content);
+    assert_ne!(storage, seam, "the forms must differ for this to test anything");
+
+    let mut payload: IndexMap<String, QuillValue> = IndexMap::new();
+    payload.insert("stored".to_string(), QuillValue::from_json(storage));
+    payload.insert("read_back".to_string(), QuillValue::from_json(seam));
+    let mut p = Payload::from_index_map(payload);
+    p.set_quill("test".parse().unwrap());
+    p.set_kind("main");
+    let main = Card::from_parts(p, quillmark_content::Normalized::empty());
+
+    let md = Document::from_main_and_cards(main, vec![]).to_markdown();
+    assert!(md.contains(r#"stored: "> quoted""#), "got:\n{md}");
+    assert!(md.contains(r#"read_back: "> quoted""#), "got:\n{md}");
+}

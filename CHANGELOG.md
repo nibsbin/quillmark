@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+- **breaking** wasm: **the seam spells a container's `instance`, so the read
+  type can require it and every write lane reports an omission.** 0.109 gave
+  `Container` the discriminator that tells one container from an adjacent
+  sibling of identical shape, and left it an obligation no checker asked for;
+  the op lane got a requirement, the whole-`Content` lane — `overwrite`,
+  `CardInput.body`, the one a codec flattening a tree writes through — did not.
+  It could not: one encoder served storage and the bindings, writing the key
+  only where it was non-zero, and a field a read may omit is a field a write
+  cannot require. `serial::to_seam_value` is that encoder with every `instance`
+  spelled, and the bindings take it on every lane typed `Content`
+  (`reader.getContent{,At}`, `getStored` on a body, `importMarkdown`, `rebase`,
+  and the card wire behind `document.main` / `cards` / `card(i)` / `removeCard`
+  / `makeCard` / `seedMain` / `seedCard`). `ContentContainer.instance` becomes
+  required, `ContentContainerInput` is deleted, and `LineOp.setContainers` takes
+  `ContentContainer` — a net-smaller surface than 0.109's. The break is every
+  hand-built container literal, which is the one a type checker does report.
+  A checker still cannot report a `0` stamped on every run, which is the write
+  that welds them: `assignInstances` is the rule, not the type. Storage keeps
+  the omission and stored blobs re-encode byte for byte; so do the render lanes,
+  and so does what the seam types `unknown` (`getStored` on a field,
+  `PayloadItem.value`), which answers with the stored bytes verbatim. Content
+  parsed from a stored document is the one shape that needs a cast.
+  [Guide](docs/migrations/0.109-to-0.110.md)
+
 ## v0.109.1 - 2026-08-24
 
 - fix(typst): **a `field-region` claim around inline content no longer widens

@@ -118,6 +118,12 @@ pub struct CardWire {
     /// when absent. A markdown string is also accepted on input (imported), so an
     /// LLM/markdown writer can hand a string here.
     ///
+    /// The **seam** form (`serial::to_seam_value`): this wire is a binding read
+    /// that is also a binding write input, so every `Container::instance` is
+    /// spelled and the read type can require it. `payload_items` carries stored
+    /// values verbatim and stays in the storage form; that half is typed
+    /// `unknown` at the binding for the same reason.
+    ///
     /// No `body_markdown` projection rides this wire: delimiter safety makes
     /// `to_markdown` re-parse every rendered line, so the `exportMarkdown(body)`
     /// codec at the binding boundary does it on demand instead.
@@ -176,7 +182,7 @@ impl From<&Card> for CardWire {
             ext: None,
             seed: None,
             payload_items: Vec::new(),
-            body: quillmark_content::serial::to_canonical_value(card.body()),
+            body: quillmark_content::serial::to_seam_value(card.body()),
         };
         for item in card.payload().items() {
             match item {
