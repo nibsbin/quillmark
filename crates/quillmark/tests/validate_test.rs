@@ -154,9 +154,6 @@ fn lenient_doc(fields: &str) -> Document {
 #[test]
 fn validate_accepts_every_value_the_render_floor_adopts() {
     let quill = quill_from_yaml(LENIENT);
-    // Row by row: a bare scalar for an array, a number for a boolean, numeric
-    // strings for integer/number, a bare scalar and a length-1 array for a
-    // string, a length-1 array for a date, a bare scalar for content.
     let doc = lenient_doc(
         "caption: DEPARTMENT OF THE AIR FORCE\n\
          verified: 1\n\
@@ -184,8 +181,7 @@ fn validate_accepts_every_value_the_render_floor_adopts() {
 #[test]
 fn validate_refuses_what_the_render_floor_refuses() {
     let quill = quill_from_yaml(LENIENT);
-    // A non-numeric string, a word that is not a boolean, and an object where
-    // the type cannot stringify one: no floor adopts these, so each is fatal.
+    // No floor adopts these.
     for (field, value) in [
         ("count", "not-a-number"),
         ("ratio", "not-a-number"),
@@ -256,8 +252,7 @@ main:
 #[test]
 fn validate_checks_the_enum_domain_of_a_scalar_the_floor_stringifies() {
     let quill = quill_from_yaml(LENIENT);
-    // `5` reaches the render floor as the string `"5"`, which is out of domain:
-    // the value error the floor's own validation raises, raised here too.
+    // `5` reaches the render floor as the string `"5"`, which is out of domain.
     let doc = lenient_doc("grade: 5\n");
 
     let diags = quill.validate(&doc);
@@ -295,8 +290,8 @@ main:
             type: string
 "#,
     );
-    // The bare scalar is the spelling of a world with nothing filled in. The
-    // floor normalizes it into `{value: …}`; the diagnostic names the field.
+    // The floor normalizes the bare scalar into `{value: …}`; the diagnostic
+    // names the field the author wrote, not the key the floor minted.
     let md = "~~~card-yaml\n$quill: variants\n$kind: main\nclassification: bogus\n~~~\n";
     let doc = Document::parse(md).unwrap().document;
 

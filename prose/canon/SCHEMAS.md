@@ -201,11 +201,14 @@ Scalar → content is the lossy direction: the stored string enters the codec's 
 
 **Coercion is the type predicate; validation reads its result.** `validate_value`
 conforms each document value through `conform_value` at `Leniency::Render`
-before judging it, so a type has one predicate rather than a write-side and a
-read-side pair to keep in step, and **a fatal `validation::*` diagnostic means
-the document does not render**. The value a document rests at is a separate
-question from the value the floor builds: `letterhead_caption: HEADQUARTERS`
-rests as the authored scalar and is valid, because the floor wraps it.
+before judging it, so a type has one predicate. **A fatal `validation::*`
+diagnostic means the document does not render.**
+
+The value a document rests at is a separate question from the value the floor
+builds. `letterhead_caption: HEADQUARTERS` rests as the authored scalar and is
+valid, because the floor wraps it: a bare scalar is a spelling of a one-element
+list, and the schema is what disambiguates it. Landing a document at a canonical
+resting form is `Quill::conform`'s job, not validation's.
 
 Conforming runs per node, so an element the floor refuses does not mistype its
 siblings: `counts: [true, "abc"]` under `integer` items is one mismatch, at

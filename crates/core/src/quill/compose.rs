@@ -220,11 +220,10 @@ impl Quill {
     /// blockers.
     ///
     /// **A blocker here means the document does not render.** Values are judged
-    /// in the form the render floor builds from them, so a bare scalar for an
-    /// `array`, `"3"` for an `integer`, or a length-1 array for a `string` are
-    /// valid: what an author may write is one question, answered by the floor
-    /// (`conform_value` at `Leniency::Render`), and every surface asks it. The
-    /// leniencies are listed under `prose/canon/SCHEMAS.md` §"Type coercion".
+    /// in the form the render floor builds from them (`conform_value` at
+    /// `Leniency::Render`), so a bare scalar for an `array`, `"3"` for an
+    /// `integer`, and a length-1 array for a `string` are valid. The leniencies
+    /// are listed under `prose/canon/SCHEMAS.md` §"Type coercion".
     ///
     /// `validation::must_fill` has **two triggers**, covering disjoint failures
     /// under one code: a `!must_fill` marker the document carries

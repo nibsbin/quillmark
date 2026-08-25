@@ -91,8 +91,7 @@ families:
   surface; the render pipeline blank-fills instead of warning on incomplete
   documents. A **fatal** row here means the document does not render: values
   are judged in the form the render floor builds from them
-  ([SCHEMAS.md](SCHEMAS.md) § "Type coercion"), so this surface and the render
-  door give one verdict.
+  ([SCHEMAS.md](SCHEMAS.md) § "Type coercion").
 - **`plate::unsupported_construct`: declined-construct warnings.** A quill
   names, per body (`BodyCardSchema.unsupported`), the block constructs its
   plate does not typeset; `Quill::unsupported_constructs` walks a document's

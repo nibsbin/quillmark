@@ -428,16 +428,12 @@ enum ValueContext {
 /// recursing into array elements / object properties. `ctx` selects the few
 /// document-only behaviors (see [`ValueContext`]).
 ///
-/// A document value is judged in the form the render floor would build from it,
-/// not as authored: `conform_value` at `Leniency::Render` runs first and its
-/// result is the subject of every check below. Validity is therefore
-/// renderability, and `Quill::validate` cannot refuse a document `compile_data`
-/// accepts. A value the floor itself refuses is judged as authored, where the
-/// type check reports it; conforming per node rather than per field keeps one
-/// refused element from mistyping its siblings.
-///
-/// A variant-bearing field is peeled before this, as `conform_value` peels it,
-/// so its bare-scalar spelling reports at its own path.
+/// A document value is judged in the form the render floor builds from it, not
+/// as authored: `conform_value` at `Leniency::Render` runs first. Validity is
+/// therefore renderability — `Quill::validate` cannot refuse a document
+/// `compile_data` accepts. A value the floor refuses is judged as authored,
+/// where the type check reports it. Conforming runs per node rather than per
+/// field, so one refused element does not mistype its siblings.
 ///
 /// Schema literals are judged as written: an `example:`/`default:` is the
 /// blueprint's own text, and coercing it would let the blueprint emit a
@@ -455,11 +451,10 @@ fn validate_value(
         return vec![];
     }
 
-    // Peeled before conforming, as `conform_value` peels it: the floor would
-    // normalize the bare scalar (`classification: CUI`) into its container, and
-    // the domain violation would then report at `<path>.value`, a key the author
-    // never wrote. `validate_variant` reads both shapes and conforms each live
-    // cell through the recursion below.
+    // Peeled before conforming, as `conform_value` peels it: the floor turns the
+    // bare scalar (`classification: CUI`) into its container, which would move a
+    // domain violation to `<path>.value`, a key the author never wrote.
+    // `validate_variant` reads both shapes and conforms each live cell.
     if field.is_variant_bearing() {
         return validate_variant(field, value, path, ctx);
     }

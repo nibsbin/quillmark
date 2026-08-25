@@ -7,9 +7,10 @@
   the render door validated the *coerced* one, so five of seven types had values
   that rendered and were fatally `validation::type_mismatch` at once — a bare
   scalar for an `array`, `"3"` for an `integer`, `1` for a `boolean`, a
-  length-1 array for a `string` or `date`. `airmark`'s `usaf_memo@0.2` starter
-  template wrote `letterhead_caption` as a bare scalar, and every document
-  seeded from it audited as fatally invalid while rendering correctly.
+  length-1 array for a `string` or `date`. `airmark`'s `usaf_memo@0.2` declares
+  `letterhead_caption` as an `array`, and the bare scalar a starter template
+  spells it with — a valid spelling of a one-element list — audited as fatally
+  invalid across every document seeded from it, each rendering correctly.
 
   `validate_value` now conforms each document value through `conform_value` at
   `Leniency::Render` before judging it, so a type has one predicate and **a
