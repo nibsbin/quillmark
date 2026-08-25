@@ -198,6 +198,29 @@ Scalar → content is the lossy direction: the stored string enters the codec's 
 - Returns `Result<IndexMap<String, QuillValue>, CoercionError>`
 - Coerces top-level fields and per-card fields to their declared types
 - Fails fast (`Err`) on the first value that cannot be coerced
+
+**Coercion is the type predicate; validation reads its result.** `validate_value`
+conforms each document value through `conform_value` at `Leniency::Render`
+before judging it, so a type has one predicate rather than a write-side and a
+read-side pair to keep in step, and **a fatal `validation::*` diagnostic means
+the document does not render**. The value a document rests at is a separate
+question from the value the floor builds: `letterhead_caption: HEADQUARTERS`
+rests as the authored scalar and is valid, because the floor wraps it.
+
+Conforming runs per node, so an element the floor refuses does not mistype its
+siblings: `counts: [true, "abc"]` under `integer` items is one mismatch, at
+`counts[1]`. A value the floor refuses outright is judged as authored, where the
+type check reports it.
+
+Validation adds the arbitration coercion cannot carry — the enum domain, the
+datetime grammar, indexed element paths, the inline/plain content shapes — over
+the value the floor built. A scalar the floor stringifies into an enum field is
+therefore domain-checked on that string: `grade: 5` is `enum_violation`, not
+`type_mismatch`.
+
+Schema literals (`example:`, `default:`) are judged as written, uncoerced: the
+blueprint would otherwise emit a spelling it then teaches authors to write.
+
 Coercion rules per type:
 
 | Type | Rule |

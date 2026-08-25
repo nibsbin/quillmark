@@ -111,3 +111,199 @@ fn validate_warns_on_must_fill_marker() {
          got paths: {marked:?}"
     );
 }
+
+/// The render floor's leniencies, one per row of the type table. A value the
+/// floor adopts is valid; `validate` and the render door give one verdict.
+const LENIENT: &str = r#"
+quill:
+  name: lenient
+  version: "1.0"
+  backend: typst
+  description: Render-floor leniencies
+
+main:
+  fields:
+    caption:
+      type: array
+      items:
+        type: string
+    verified:
+      type: boolean
+    count:
+      type: integer
+    ratio:
+      type: number
+    heading:
+      type: string
+    grade:
+      type: enum
+      values: [alpha, beta]
+    signed_on:
+      type: date
+    prose:
+      type: richtext
+    literal:
+      type: plaintext
+"#;
+
+fn lenient_doc(fields: &str) -> Document {
+    let md = format!("~~~card-yaml\n$quill: lenient\n$kind: main\n{fields}~~~\n");
+    Document::parse(&md).unwrap().document
+}
+
+#[test]
+fn validate_accepts_every_value_the_render_floor_adopts() {
+    let quill = quill_from_yaml(LENIENT);
+    // Row by row: a bare scalar for an array, a number for a boolean, numeric
+    // strings for integer/number, a bare scalar and a length-1 array for a
+    // string, a length-1 array for a date, a bare scalar for content.
+    let doc = lenient_doc(
+        "caption: DEPARTMENT OF THE AIR FORCE\n\
+         verified: 1\n\
+         count: \"3\"\n\
+         ratio: \"1.5\"\n\
+         heading: [ONE LINE]\n\
+         grade: alpha\n\
+         signed_on: [\"2026-08-25\"]\n\
+         prose: 7\n\
+         literal: true\n",
+    );
+
+    let diags = quill.validate(&doc);
+    assert!(
+        diags.is_empty(),
+        "every value here is one the render floor adopts; got: {:?}",
+        diags
+            .iter()
+            .map(|d| (&d.code, &d.path))
+            .collect::<Vec<_>>()
+    );
+    assert!(quill.dry_run(&doc).is_ok(), "and the render door agrees");
+}
+
+#[test]
+fn validate_refuses_what_the_render_floor_refuses() {
+    let quill = quill_from_yaml(LENIENT);
+    // A non-numeric string, a word that is not a boolean, and an object where
+    // the type cannot stringify one: no floor adopts these, so each is fatal.
+    for (field, value) in [
+        ("count", "not-a-number"),
+        ("ratio", "not-a-number"),
+        ("verified", "yes"),
+    ] {
+        let doc = lenient_doc(&format!("{field}: \"{value}\"\n"));
+        let diags = quill.validate(&doc);
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.code.as_deref() == Some("validation::type_mismatch")
+                    && d.path.as_deref() == Some(&format!("main.{field}")[..])),
+            "`{field}: {value}` should be a type_mismatch; got: {:?}",
+            diags.iter().map(|d| &d.code).collect::<Vec<_>>()
+        );
+        assert!(
+            quill.dry_run(&doc).is_err(),
+            "`{field}: {value}` does not render either"
+        );
+    }
+
+    let doc = lenient_doc("heading:\n  a: 1\n");
+    assert!(
+        quill
+            .validate(&doc)
+            .iter()
+            .any(|d| d.code.as_deref() == Some("validation::type_mismatch")
+                && d.path.as_deref() == Some("main.heading")),
+        "an object is not a string the floor can build"
+    );
+    assert!(quill.dry_run(&doc).is_err());
+}
+
+#[test]
+fn validate_reports_a_refused_element_without_mistyping_its_siblings() {
+    let quill = quill_from_yaml(
+        r#"
+quill:
+  name: elems
+  version: "1.0"
+  backend: typst
+  description: element-wise conformance
+main:
+  fields:
+    counts:
+      type: array
+      items:
+        type: integer
+"#,
+    );
+    // `true` is a value the floor adopts for an integer; `"abc"` is not.
+    let md = "~~~card-yaml\n$quill: elems\n$kind: main\ncounts: [true, \"abc\"]\n~~~\n";
+    let doc = Document::parse(md).unwrap().document;
+
+    let mismatched: Vec<_> = quill
+        .validate(&doc)
+        .into_iter()
+        .filter(|d| d.code.as_deref() == Some("validation::type_mismatch"))
+        .filter_map(|d| d.path)
+        .collect();
+    assert_eq!(
+        mismatched,
+        vec!["main.counts[1]".to_string()],
+        "only the element the floor refused is a mismatch"
+    );
+}
+
+#[test]
+fn validate_checks_the_enum_domain_of_a_scalar_the_floor_stringifies() {
+    let quill = quill_from_yaml(LENIENT);
+    // `5` reaches the render floor as the string `"5"`, which is out of domain:
+    // the value error the floor's own validation raises, raised here too.
+    let doc = lenient_doc("grade: 5\n");
+
+    let diags = quill.validate(&doc);
+    let diag = diags
+        .iter()
+        .find(|d| d.code.as_deref() == Some("validation::enum_violation"))
+        .unwrap_or_else(|| {
+            panic!(
+                "expected enum_violation; got: {:?}",
+                diags.iter().map(|d| &d.code).collect::<Vec<_>>()
+            )
+        });
+    assert_eq!(diag.path.as_deref(), Some("main.grade"));
+    assert!(quill.dry_run(&doc).is_err());
+}
+
+#[test]
+fn validate_reports_a_bare_variant_scalar_at_the_path_its_author_wrote() {
+    let quill = quill_from_yaml(
+        r#"
+quill:
+  name: variants
+  version: "1.0"
+  backend: typst
+  description: variant-bearing enum
+main:
+  fields:
+    classification:
+      type: enum
+      values: [cui, secret]
+      default: ""
+      variants:
+        cui:
+          caveat:
+            type: string
+"#,
+    );
+    // The bare scalar is the spelling of a world with nothing filled in. The
+    // floor normalizes it into `{value: …}`; the diagnostic names the field.
+    let md = "~~~card-yaml\n$quill: variants\n$kind: main\nclassification: bogus\n~~~\n";
+    let doc = Document::parse(md).unwrap().document;
+
+    let diag = quill
+        .validate(&doc)
+        .into_iter()
+        .find(|d| d.code.as_deref() == Some("validation::enum_violation"))
+        .expect("expected an enum_violation");
+    assert_eq!(diag.path.as_deref(), Some("main.classification"));
+}

@@ -82,12 +82,17 @@ families:
   is repairable. The walk is stateless, so a repeat conform re-emits the
   identical set. Its scope is the content fields: a field whose type tree bears
   no content leaf never enters the walk, so a scalar the strict write would
-  refuse raises no `conform::*` warning and reaches `validation::*` instead.
+  refuse raises no `conform::*` warning. It reaches `validation::*` only if the
+  *render floor* also refuses it (`validation::type_mismatch`); the floor is
+  more lenient than the write, and what it adopts is valid.
 - **Validation warnings**: `Quill::validate(doc)` returns every
   `validation::*` diagnostic, mixing severities; `validation::must_fill` and
   the `$seed` checks are the non-fatal ones. This is the editor-facing
   surface; the render pipeline blank-fills instead of warning on incomplete
-  documents.
+  documents. A **fatal** row here means the document does not render: values
+  are judged in the form the render floor builds from them
+  ([SCHEMAS.md](SCHEMAS.md) § "Type coercion"), so this surface and the render
+  door give one verdict.
 - **`plate::unsupported_construct`: declined-construct warnings.** A quill
   names, per body (`BodyCardSchema.unsupported`), the block constructs its
   plate does not typeset; `Quill::unsupported_constructs` walks a document's
@@ -340,7 +345,7 @@ Three outcomes, and the wire tells them apart only with this table in hand, sinc
 
 `parse::missing_quill` looks code-determined and is not: it picks one of three sentences by re-reading the source, and no field records which.
 
-Every `conform::*` row is reachable only through the content-field walk, so the family is narrower than its `edit::*` twin. `conform::field_coercion_failed` fires for a scalar nested inside a content-bearing field: an `array` of `richtext`, an `object` with a `richtext` property. A top-level scalar never reaches it, and its refusal surfaces as `validation::format_violation` or `validation::type_mismatch`.
+Every `conform::*` row is reachable only through the content-field walk, so the family is narrower than its `edit::*` twin. `conform::field_coercion_failed` fires for a scalar nested inside a content-bearing field: an `array` of `richtext`, an `object` with a `richtext` property. A top-level scalar never reaches it: it surfaces as `validation::format_violation` or `validation::type_mismatch` where the render floor refuses it too, and nowhere where the floor adopts it.
 
 ### Scope
 

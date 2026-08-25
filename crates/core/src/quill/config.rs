@@ -301,9 +301,12 @@ impl QuillConfig {
     /// `Write` is the strict typed-write commit driving
     /// [`Card::commit_field`](crate::document::Card::commit_field).
     ///
-    /// Validation keeps its own read-only dispatch (`validation::validate_value`),
-    /// synced with this via the shared helpers `scalar_as_string` /
-    /// `Codec::Richtext.decode_value`.
+    /// The **one** per-type dispatch: `validation::validate_value` conforms a
+    /// document value through here at `Render` before judging it, so a type has
+    /// one predicate rather than a write-side and a read-side pair to keep in
+    /// step. What validation adds is the arbitration this cannot carry — the
+    /// enum domain, the datetime grammar, indexed element paths — over the value
+    /// the floor built.
     pub(crate) fn conform_value(
         value: &QuillValue,
         field_schema: &super::FieldSchema,
