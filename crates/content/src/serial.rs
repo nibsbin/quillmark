@@ -116,9 +116,8 @@ impl Content {
     }
 }
 
-/// Whether a zero `Container::instance` gets a key.
-///
-/// The two forms decode identically; they differ in what a reader is shown.
+/// Whether a zero `Container::instance` gets a key. The two forms decode
+/// identically.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum ZeroInstance {
     /// Storage: the key appears only where it is doing work, so a row written
@@ -144,12 +143,11 @@ pub fn to_canonical_value(rt: &Normalized) -> Value {
 /// The **seam** form as a structural [`Value`]: [`to_canonical_value`] with
 /// every `Container::instance` spelled, zero included.
 ///
-/// A host's read is also its write input — `overwrite(addr, reader.getContent(…))`,
-/// `insertCard(removeCard(0))` — and the discriminator that keeps two adjacent
-/// same-shape runs apart is a field the host owes on the way back in. Spelling it
-/// on the way out is what lets a binding's read type require it, and what puts the
-/// field in front of the codec author who needs it. Storage keeps [`Omit`] so
-/// stored bytes stay put.
+/// A binding's read is also its write input — `overwrite(addr, reader.getContent(…))`,
+/// `insertCard(removeCard(0))`. The discriminator that keeps two adjacent
+/// same-shape runs apart is a field the host owes on the way back in, and a
+/// field the read may omit is one the read type cannot require. Storage keeps
+/// [`Omit`], so stored bytes stay put.
 ///
 /// [`Omit`]: ZeroInstance::Omit
 pub fn to_seam_value(rt: &Normalized) -> Value {
@@ -947,9 +945,7 @@ mod tests {
         assert_eq!(rt2.to_canonical_json(), two);
     }
 
-    /// The seam spells the key storage omits, so a binding's read type requires
-    /// it and a host hands a read straight back to a write. One value, two
-    /// forms: each decodes to the other's content.
+    /// One value, two forms: each decodes to the other's content.
     #[test]
     fn the_seam_spells_a_zero_instance_storage_omits() {
         let storage = r#"{"islands":[],"lines":[{"containers":[{"container":"quote"}],"kind":"para"}],"marks":[],"text":"a"}"#;

@@ -244,7 +244,7 @@ The omission is storage's alone. A binding read is also a binding write input,
 so the seam encoder (`serial::to_seam_value`) spells the field on every
 container, which is what lets a binding's read type require it
 ([BINDINGS.md](BINDINGS.md)). The two forms decode to one value; only storage
-buys byte-stability with the omission, and only storage needs it.
+buys byte-stability with the omission.
 
 **A new container owes its projections a separator.** `instance` makes the
 boundary storable; it does not make it *writable*. A container whose Markdown

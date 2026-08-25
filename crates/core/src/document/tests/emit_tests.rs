@@ -269,10 +269,8 @@ fn nested_map_keys_with_structural_chars_emit_valid_yaml() {
     assert_eq!(cfg["needs # comment"], serde_json::json!(4));
 }
 
-/// A richtext field stored verbatim off the seam projects to markdown like one
-/// committed through the typed write. `store_field` keeps what it is handed, so
-/// the two canonical forms both rest here, and the projection guard is byte
-/// identity against one of them.
+/// `store_field` keeps what it is handed, so both canonical forms rest here and
+/// the projection guard is byte identity against either.
 #[test]
 fn a_seam_form_field_projects_to_markdown_like_a_stored_one() {
     use crate::document::{Card, Payload};

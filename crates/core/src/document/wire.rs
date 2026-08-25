@@ -120,9 +120,9 @@ pub struct CardWire {
     ///
     /// The **seam** form (`serial::to_seam_value`): this wire is a binding read
     /// that is also a binding write input, so every `Container::instance` is
-    /// spelled and the read type can require it. `payload_items` carries stored
-    /// values verbatim and stays in the storage form; that half is typed
-    /// `unknown` at the binding for the same reason.
+    /// spelled and the read type can require it. `payload_items` stays in the
+    /// storage form: verbatim is its contract, and is why the binding types it
+    /// `unknown`.
     ///
     /// No `body_markdown` projection rides this wire: delimiter safety makes
     /// `to_markdown` re-parse every rendered line, so the `exportMarkdown(body)`

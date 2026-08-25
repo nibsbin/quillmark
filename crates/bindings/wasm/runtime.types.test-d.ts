@@ -322,9 +322,8 @@ void annotated;
 
 // The container write lane. `instance` decides whether two adjacent runs weld,
 // and nothing reports an omission at runtime. The seam spells it on every read,
-// so the one container type requires it and every write lane reports an
-// omission — the op, and the whole-`Content` lane a document-shaped codec
-// writes through.
+// so the one container type requires it: the op lane and the whole-`Content`
+// lane a document-shaped codec writes through both report an omission.
 import type { assignInstances } from '../../../pkg/runtime/runtime.d.ts';
 
 // @ts-expect-error the field is the whole point of the type.

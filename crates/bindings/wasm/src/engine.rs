@@ -237,7 +237,7 @@ export type ContentLineKind =
  * distinct pair works; a write is canonicalized to `0`/`1`.
  *
  * Reading is not the mirror of writing. Every read spells the field, the `0` on
- * a container with nothing to be told apart from included, and it carries a
+ * a container with nothing to be told apart from included. A read also carries a
  * discriminator on pairs no writer had to spell: `1.` beside a list starting at
  * `3` differs by `start`, so those runs arrive apart with nothing written, and
  * the canonical form spends one anyway because Markdown reads only a list's

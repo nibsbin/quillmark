@@ -301,9 +301,9 @@ fn emit_payload_items(out: &mut String, items: &[PayloadItem]) {
 ///
 /// The guard requires the object to serialize back to a **byte-identical**
 /// canonical content, so a user object that merely resembles one stays
-/// structural. Either canonical form counts: `store_field` writes what it is
+/// structural. Either canonical form counts. `store_field` writes what it is
 /// given verbatim, so a content read off the seam rests here spelling its zero
-/// `instance`s, while a typed commit rests in the storage form. The comparison
+/// `instance`s; a typed commit rests in the storage form. The comparison
 /// is on the serialized *strings*: under `serde_json/preserve_order`, `Value`'s
 /// `PartialEq` is order-independent, so a `Value` guard would also project a
 /// content-canonical object whose keys are in non-canonical order.
