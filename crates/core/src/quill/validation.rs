@@ -427,6 +427,17 @@ enum ValueContext {
 /// `path`, checking type compatibility, enum membership, datetime format, and
 /// recursing into array elements / object properties. `ctx` selects the few
 /// document-only behaviors (see [`ValueContext`]).
+///
+/// A document value is judged in the form the render floor builds from it, not
+/// as authored: `conform_value` at `Leniency::Render` runs first. Validity is
+/// therefore renderability — `Quill::validate` cannot refuse a document
+/// `compile_data` accepts. A value the floor refuses is judged as authored,
+/// where the type check reports it. Conforming runs per node rather than per
+/// field, so one refused element does not mistype its siblings.
+///
+/// Schema literals are judged as written: an `example:`/`default:` is the
+/// blueprint's own text, and coercing it would let the blueprint emit a
+/// spelling it then teaches authors to write.
 fn validate_value(
     field: &FieldSchema,
     value: &QuillValue,
@@ -440,35 +451,38 @@ fn validate_value(
         return vec![];
     }
 
+    // Peeled before conforming, as `conform_value` peels it: the floor turns the
+    // bare scalar (`classification: CUI`) into its container, which would move a
+    // domain violation to `<path>.value`, a key the author never wrote.
+    // `validate_variant` reads both shapes and conforms each live cell.
     if field.is_variant_bearing() {
         return validate_variant(field, value, path, ctx);
     }
 
+    let conformed = match ctx {
+        ValueContext::Document => super::QuillConfig::conform_value(
+            value,
+            field,
+            &path.to_string(),
+            super::config::Leniency::Render,
+        )
+        .ok(),
+        ValueContext::SchemaLiteral => None,
+    };
+    let value = conformed.as_ref().unwrap_or(value);
+
     let mut errors = Vec::new();
 
     let type_valid = match field.r#type {
-        // In a document a bare bool/number is type-valid as a string (the
-        // coercion layer adopts it): in lockstep with `conform_value`
-        // via `scalar_as_string`. Schema literals stay strict so the blueprint
-        // keeps quoting ambiguous string literals.
         // Enum is string-valued data (domain membership is checked separately
         // below), so it is type-valid exactly where a string is.
-        FieldType::String | FieldType::Enum => {
-            value.as_str().is_some()
-                || (ctx == ValueContext::Document
-                    && super::config::scalar_as_string(value.as_json()).is_some())
-        }
-        // Post-coercion (Document) a richtext/plaintext value is a canonical
-        // content object; an authored `default`/`example` (Schema) is a string
-        // (markdown for richtext, literal for plaintext). Accept both shapes:
-        // the content's own invariants were enforced at coercion, and a bare
-        // scalar still stringifies. The plaintext-specific plain constraint is
+        FieldType::String | FieldType::Enum => value.as_str().is_some(),
+        // A conformed richtext/plaintext value is a canonical content object;
+        // an authored `default`/`example` is a string (markdown for richtext,
+        // literal for plaintext). The plaintext-specific plain constraint is
         // checked in the shape pass below, parallel to the inline check.
         FieldType::RichText { .. } | FieldType::PlainText { .. } => {
-            value.as_json().is_object()
-                || value.as_str().is_some()
-                || (ctx == ValueContext::Document
-                    && super::config::scalar_as_string(value.as_json()).is_some())
+            value.as_json().is_object() || value.as_str().is_some()
         }
         FieldType::Integer => {
             let json = value.as_json();
@@ -644,10 +658,11 @@ fn validate_value(
 /// downstream reads it (`Quill::validate` reports it as
 /// `validation::out_of_variant`, a warning).
 ///
-/// Both authored shapes reach here, because validation runs before coercion: the
-/// bare scalar (`classification: CUI`) and the container. The scalar is checked
-/// as the discriminant it stands for, at the container's own path — the path an
-/// author who wrote a scalar can act on.
+/// Both authored shapes reach here: the container, and the bare scalar
+/// (`classification: CUI`) a schema literal rests in and a document value the
+/// floor refused falls back to. The scalar is checked as the discriminant it
+/// stands for, at the container's own path — the path an author who wrote a
+/// scalar can act on.
 fn validate_variant(
     field: &FieldSchema,
     value: &QuillValue,

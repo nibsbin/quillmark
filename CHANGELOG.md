@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+- fix(core): **`Quill::validate` refuses only what the render floor refuses.**
+  Validation ran its own read-side type dispatch over the authored value while
+  the render door validated the *coerced* one, so five of seven types had values
+  that rendered and were fatally `validation::type_mismatch` at once — a bare
+  scalar for an `array`, `"3"` for an `integer`, `1` for a `boolean`, a
+  length-1 array for a `string` or `date`. `airmark`'s `usaf_memo@0.2` declares
+  `letterhead_caption` as an `array`, and the bare scalar a starter template
+  spells it with — a valid spelling of a one-element list — audited as fatally
+  invalid across every document seeded from it, each rendering correctly.
+
+  `validate_value` now conforms each document value through `conform_value` at
+  `Leniency::Render` before judging it, so a type has one predicate and **a
+  fatal `validation::*` diagnostic means the document does not render**.
+  Conforming runs per node, so one refused element no longer mistypes its
+  siblings: `counts: [true, "abc"]` under `integer` items is one mismatch, at
+  `counts[1]`. Two consequences for a consumer routing on codes: a value the
+  floor adopts raises nothing where it previously raised
+  `validation::type_mismatch`, and a bare scalar the floor stringifies into an
+  `enum` field is now domain-checked on that string, so `grade: 5` against
+  `values: [alpha, beta]` is `validation::enum_violation` where it was
+  previously silent — the diagnostic the render door already raised. Schema
+  literals (`example:`, `default:`) stay strict.
+
 ## v0.109.1 - 2026-08-24
 
 - fix(typst): **a `field-region` claim around inline content no longer widens
