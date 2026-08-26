@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.110.0 - 2026-08-26
 
 - **breaking** wasm: **the seam spells a container's `instance`, so the read
   type can require it and every write lane reports an omission.** 0.109 gave
@@ -48,6 +48,15 @@
   previously silent — the diagnostic the render door already raised. Schema
   literals (`example:`, `default:`) stay strict.
 
+<!-- seed: commits since v0.109.1, confirm the entries above cover them, then delete this comment
+- fix(ci): the canon line budget, and a doc link into a private item
+- docs: dense-prose pass over the branch
+- docs: dense-prose pass over the branch, and register the guide
+- feat(wasm)!: the seam spells a container's instance, so the type can require it
+- fix(core): validate refuses only what the render floor refuses
+-->
+
+
 ## v0.109.1 - 2026-08-24
 
 - fix(typst): **a `field-region` claim around inline content no longer widens
@@ -58,17 +67,6 @@
   5.43pt, against the layout-neutral contract the helper documents.
   `form-field`'s marker carries the same shape and drops the space too, rather
   than keep depending on the `box` that follows it.
-
-<!-- seed: commits since v0.109.0, confirm the entries above cover them, then delete this comment
-- docs: dense-prose pass over the branch
-- fix(typst): a marker's label is not a space in the inline flow
-- refactor(wasm): keep the weld rule internal, and pin what states it
-- docs: dense-prose pass over the branch
-- docs: classify 0.109's container break by consumer role
-- feat(wasm)!: make a written container path spell its instance
-- feat(content): name the rule a container's discriminator is minted against
--->
-
 
 ## v0.109.0 - 2026-08-24
 
