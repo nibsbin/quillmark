@@ -146,10 +146,8 @@ pub fn to_canonical_value(rt: &Normalized) -> Value {
 /// A binding's read is also its write input — `overwrite(addr, reader.getContent(…))`,
 /// `insertCard(removeCard(0))`. The discriminator that keeps two adjacent
 /// same-shape runs apart is a field the host owes on the way back in, and a
-/// field the read may omit is one the read type cannot require. Storage keeps
-/// [`Omit`], so stored bytes stay put.
-///
-/// [`Omit`]: ZeroInstance::Omit
+/// field the read may omit is one the read type cannot require.
+/// [`to_canonical_value`] keeps the omission, so stored bytes stay put.
 pub fn to_seam_value(rt: &Normalized) -> Value {
     to_value_with(rt, ZeroInstance::Spell)
 }
