@@ -295,15 +295,16 @@ impl QuillConfig {
         super::validation::validate_typed_document(self, doc)
     }
 
-    /// The one write-side per-type dispatch: given a value, a field's schema,
-    /// and a [`Leniency`] mode, validate/normalize the value to the canonical
-    /// form the type stores. `Render` is the render floor's forgiving coercion;
-    /// `Write` is the strict typed-write commit driving
+    /// The one per-type dispatch: given a value, a field's schema, and a
+    /// [`Leniency`] mode, validate/normalize the value to the canonical form the
+    /// type stores. `Render` is the render floor's forgiving coercion; `Write`
+    /// is the strict typed-write commit driving
     /// [`Card::commit_field`](crate::document::Card::commit_field).
     ///
-    /// Validation keeps its own read-only dispatch (`validation::validate_value`),
-    /// synced with this via the shared helpers `scalar_as_string` /
-    /// `Codec::Richtext.decode_value`.
+    /// `validation::validate_value` conforms a document value through here at
+    /// `Render` before judging it, so a type has one predicate. What validation
+    /// adds is the arbitration this cannot carry — the enum domain, the datetime
+    /// grammar, indexed element paths — over the value the floor built.
     pub(crate) fn conform_value(
         value: &QuillValue,
         field_schema: &super::FieldSchema,
