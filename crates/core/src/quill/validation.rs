@@ -469,6 +469,7 @@ fn validate_value(
         .ok(),
         ValueContext::SchemaLiteral => None,
     };
+    let refused = ctx == ValueContext::Document && conformed.is_none();
     let value = conformed.as_ref().unwrap_or(value);
 
     let mut errors = Vec::new();
@@ -614,7 +615,14 @@ fn validate_value(
     let format_error_already_reported =
         matches!(field.r#type, FieldType::Date | FieldType::DateTime) && value.as_str().is_some();
 
-    if !type_valid && !format_error_already_reported {
+    // A value the floor refused renders nowhere, so it cannot validate clean.
+    // The checks above name the fault wherever they can reach it — a refused
+    // element at its own index, a mis-shaped content — and the refusal stands in
+    // where none did. An object that is not a content object is the case: it is
+    // type-valid for `richtext`, and the shape pass swallows its decode error.
+    let refusal_unreported = refused && errors.is_empty();
+
+    if (!type_valid && !format_error_already_reported) || refusal_unreported {
         errors.push(ValidationError::TypeMismatch {
             path: path.to_string(),
             expected: expected_type_name(&field.r#type).to_string(),

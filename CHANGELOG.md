@@ -25,6 +25,13 @@
   previously silent — the diagnostic the render door already raised. Schema
   literals (`example:`, `default:`) stay strict.
 
+  The same pass closes the opposite direction, where a `richtext`/`plaintext`
+  field holding an object that is not a content object validated clean and
+  refused to render: the object is type-valid for the declared type and the
+  shape pass swallows its decode error, so nothing spoke. A value the floor
+  refuses now cannot validate silently — where no check reaches the fault, the
+  refusal itself reports as `validation::type_mismatch`.
+
 ## v0.109.1 - 2026-08-24
 
 - fix(typst): **a `field-region` claim around inline content no longer widens

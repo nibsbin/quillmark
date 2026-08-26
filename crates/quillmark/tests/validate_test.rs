@@ -302,3 +302,67 @@ main:
         .expect("expected an enum_violation");
     assert_eq!(diag.path.as_deref(), Some("main.classification"));
 }
+
+/// One declaration per field type, each in its own quill.
+const EVERY_TYPE: &[(&str, &str)] = &[
+    ("f_array", "type: array\n      items:\n        type: string"),
+    ("f_arrayint", "type: array\n      items:\n        type: integer"),
+    ("f_bool", "type: boolean"),
+    ("f_int", "type: integer"),
+    ("f_num", "type: number"),
+    ("f_str", "type: string"),
+    ("f_enum", "type: enum\n      values: [alpha, beta]"),
+    ("f_date", "type: date"),
+    ("f_datetime", "type: datetime"),
+    ("f_rich", "type: richtext"),
+    ("f_richinl", "type: richtext\n      inline: true"),
+    ("f_plain", "type: plaintext"),
+    ("f_plaininl", "type: plaintext\n      inline: true"),
+    ("f_obj", "type: object\n      properties:\n        p:\n          type: integer"),
+];
+
+/// Every shape a YAML payload can carry, canonical and lenient spellings alike.
+const EVERY_SHAPE: &[&str] = &[
+    "1", "0", "-5", "3.5", "\"3\"", "\"3.5\"", "\"abc\"", "\"\"", "true", "false",
+    "\"true\"", "\"TRUE\"", "\"yes\"", "alpha", "\"alpha\"", "bogus", "[]", "[a]",
+    "[a, b]", "[1]", "[true, \"abc\"]", "[[a]]", "{p: 1}", "{p: \"x\"}", "{}",
+    "\"2026-08-25\"", "[\"2026-08-25\"]", "\"2026-08-25T10:00:00Z\"", "\"not-a-date\"",
+    "\"a *b* c\"", "\"line1\\n\\nline2\"", "\"- item\"", "\"# head\"", "null", "~",
+];
+
+/// The property the two surfaces owe each other: a fatal diagnostic and a
+/// refused render are the same event. Guards both directions — a value the
+/// floor adopts never blocks, and a value it refuses never validates silently.
+#[test]
+fn a_fatal_diagnostic_and_a_refused_render_are_the_same_event() {
+    let mut divergences: Vec<String> = Vec::new();
+
+    for (field, decl) in EVERY_TYPE {
+        let quill = quill_from_yaml(&format!(
+            "quill:\n  name: probe\n  version: \"1.0\"\n  backend: typst\n  \
+             description: p\nmain:\n  fields:\n    {field}:\n      {decl}\n"
+        ));
+        for shape in EVERY_SHAPE {
+            let md =
+                format!("~~~card-yaml\n$quill: probe\n$kind: main\n{field}: {shape}\n~~~\n");
+            let Ok(parsed) = Document::parse(&md) else { continue };
+            let doc = parsed.document;
+
+            let fatal = quill
+                .validate(&doc)
+                .iter()
+                .any(|d| d.severity == quillmark::Severity::Error);
+            let renders = quill.dry_run(&doc).is_ok();
+            if fatal == renders {
+                divergences.push(format!("  {field} = {shape} -> fatal={fatal} renders={renders}"));
+            }
+        }
+    }
+
+    assert!(
+        divergences.is_empty(),
+        "{} (type, value) pair(s) where validate and the render door disagree:\n{}",
+        divergences.len(),
+        divergences.join("\n")
+    );
+}
