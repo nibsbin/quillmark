@@ -486,6 +486,20 @@ card_kinds:
     expect(empty.getContent('subject')).toBeUndefined()
   })
 
+  // A read is also a write input, so what it hands back has to be legal to hand
+  // straight back in. `instance` is the field a writer owes, and storage omits a
+  // zero; every `Content`-typed lane spells it.
+  it('a Content read spells every container instance', () => {
+    const quill = buildQuill()
+    const doc = Document.fromMarkdown(
+      "~~~card-yaml\n$quill: view_test\nparagraphs: ['> a']\n~~~\n\n> a\n\n- b"
+    )
+    const v = quill.reader(doc)
+    const spelled = (rt) => rt.lines.flatMap((l) => l.containers).map((c) => c.instance)
+    expect(spelled(v.getContent({}))).toEqual([0, 0])
+    expect(spelled(v.getContentAt('paragraphs', [0]))).toEqual([0])
+  })
+
   // getContentAt is that read one axis in: an element's codec is a schema fact,
   // so naming the element is what keeps the judgement out of the consumer.
   it('getContentAt reads an element the same from either resting form', () => {
@@ -672,13 +686,13 @@ describe('@quillmark/wasm/runtime: container run boundaries', () => {
   it('is what keeps a flattened tree from welding two lists into one item', () => {
     const [a, b] = assignInstances([LIST, LIST])
     const stamped = importMarkdown(exportMarkdown(content(a, b)))
-    expect(stamped.lines.map((l) => l.containers[0].instance ?? 0)).toEqual([0, 1])
+    expect(stamped.lines.map((l) => l.containers[0].instance)).toEqual([0, 1])
     expect(stamped.lines.map((l) => l.containers[0].ordinal)).toEqual([0, 0])
 
     // The same paths without the discriminator: one item spanning two
     // paragraphs, the second marker gone, and no error anywhere.
     const welded = importMarkdown(exportMarkdown(content(LIST, LIST)))
-    expect(welded.lines.map((l) => l.containers[0].instance ?? 0)).toEqual([0, 0])
+    expect(welded.lines.map((l) => l.containers[0].instance)).toEqual([0, 0])
     expect(welded.lines.map((l) => l.containers[0].ordinal)).toEqual([0, 0])
   })
 })

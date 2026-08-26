@@ -130,7 +130,6 @@ export type {
 	ContentLine,
 	ContentLineKind,
 	ContentContainer,
-	ContentContainerInput,
 	ContentMark,
 	ContentIsland,
 	TableProps,
@@ -205,8 +204,7 @@ import type {
 	ImageProps,
 	ContentMark,
 	ContentLine,
-	ContentContainer,
-	ContentContainerInput
+	ContentContainer
 } from '../core/wasm.js';
 
 /** Narrow a {@link ContentIsland} to the pinned `table` arm (`props: TableProps`). */
@@ -247,7 +245,7 @@ export declare function isListItemContainer(
 	ordered: boolean;
 	start: number;
 	ordinal: number;
-	instance?: number;
+	instance: number;
 };
 
 // The guards above answer "is this arm X". These four answer "is this a value
@@ -280,11 +278,11 @@ export declare function isUnknownIsland(
 	island: ContentIsland
 ): island is ContentIsland & { type: string; props: unknown };
 
-// `ContentContainer.instance` is a field a writer owes and, outside
-// `ContentContainerInput`, no checker asks for. Adjacent runs of one shape that
-// share it arrive welded. Nothing reports that: the flat `containers` form
-// cannot tell it from one container spanning two paragraphs. This carries the
-// rule a codec would otherwise re-derive.
+// `ContentContainer.instance` is required, so a checker reports an omission; it
+// cannot report a `0` stamped on every run, which is the same write. Adjacent
+// runs of one shape sharing a value arrive welded, and nothing reports that
+// either: the flat `containers` form cannot tell it from one container spanning
+// two paragraphs. This carries the rule a codec would otherwise re-derive.
 
 /**
  * Stamp `instance` across one parent's blocks at one depth, in document order,
@@ -313,7 +311,7 @@ export declare function isUnknownIsland(
  */
 export declare function assignInstances(
 	runs: (ContentContainer | null)[]
-): (ContentContainerInput | null)[];
+): (ContentContainer | null)[];
 
 // The backend-neutral render contract, defined here rather than re-exported from
 // one private backend because no single backend owns the canonical API's types.

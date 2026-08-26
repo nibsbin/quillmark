@@ -553,7 +553,7 @@ function weldsWith(a, b) {
 
 /**
  * @param {(import('../core/wasm.js').ContentContainer | null)[]} runs
- * @returns {(import('../core/wasm.js').ContentContainerInput | null)[]}
+ * @returns {(import('../core/wasm.js').ContentContainer | null)[]}
  */
 export function assignInstances(runs) {
 	let prev = null;
