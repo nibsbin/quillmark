@@ -48,15 +48,6 @@
   previously silent — the diagnostic the render door already raised. Schema
   literals (`example:`, `default:`) stay strict.
 
-<!-- seed: commits since v0.109.1, confirm the entries above cover them, then delete this comment
-- fix(ci): the canon line budget, and a doc link into a private item
-- docs: dense-prose pass over the branch
-- docs: dense-prose pass over the branch, and register the guide
-- feat(wasm)!: the seam spells a container's instance, so the type can require it
-- fix(core): validate refuses only what the render floor refuses
--->
-
-
 ## v0.109.1 - 2026-08-24
 
 - fix(typst): **a `field-region` claim around inline content no longer widens
