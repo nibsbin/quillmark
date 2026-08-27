@@ -11,8 +11,8 @@ pub enum OutputFormat {
 }
 
 impl OutputFormat {
-    /// Every output format, in a stable order. Bindings enumerate this for
-    /// choice lists and error messages instead of hand-listing the variants.
+    /// Every output format, in a stable order: the choice list
+    /// [`ParseOutputFormatError`] names, and the round-trip test's domain.
     ///
     /// A slice, not an array: an array's length is part of its type, so a
     /// fourth format would break every caller that names this type.

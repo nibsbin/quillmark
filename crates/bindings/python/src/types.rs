@@ -462,7 +462,7 @@ impl PyDocument {
         json_to_py(py, &wire.body)
     }
 
-    /// Main (entry) card as a dict with `kind`, `quill`, `id`, `payload_items`,
+    /// Main (entry) card as a dict with `kind`, `quill`, `payload_items`,
     /// `ext`, `seed`, and `body`.
     #[getter]
     fn main<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {

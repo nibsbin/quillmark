@@ -20,6 +20,7 @@ use quillmark_pdf::{
 use crate::typography;
 
 const CODE_PARSE: &str = "pdf::flatten_parse";
+const CODE_BAD_RECT: &str = "pdf::bad_rect";
 
 /// Flatten `fields` onto `base` by drawing values as content stream operators.
 /// Backs raster output only, so it stamps no `/Info /Producer`.
@@ -29,6 +30,21 @@ pub fn flatten(base: Vec<u8>, fields: &[FieldSpec]) -> Result<Vec<u8>, PdfError>
     let drawable: Vec<&FieldSpec> = fields.iter().filter(|s| has_drawable_value(s)).collect();
     if drawable.is_empty() {
         return Ok(base);
+    }
+
+    // `push_f32` formats a non-finite float as the literal `NaN`/`inf`, which no
+    // PDF number grammar admits: the drawn stream would be unparseable. Refused
+    // here, matching `stamp`'s guard on the same field geometry.
+    for spec in &drawable {
+        if !spec.rect.iter().all(|v| v.is_finite()) {
+            return Err(PdfError::new(
+                CODE_BAD_RECT,
+                format!(
+                    "field `{}` has a non-finite /Rect: {:?}",
+                    spec.name, spec.rect
+                ),
+            ));
+        }
     }
 
     let pdf = base;

@@ -206,6 +206,16 @@ impl QuillConfig {
         self.card_kinds.iter().find(|card| card.name == name)
     }
 
+    /// The `$quill` reference a main card carries, as `name@version`. Falls
+    /// back to a versionless reference when the pair is unparseable, which
+    /// [`Self::new`] admits: both emitters read it here so neither panics on a
+    /// config the loader never saw.
+    pub(crate) fn main_reference(&self) -> crate::QuillReference {
+        format!("{}@{}", self.name, self.version)
+            .parse()
+            .unwrap_or_else(|_| crate::QuillReference::latest(self.name.clone()))
+    }
+
     /// Full schema including `ui` hints.
     ///
     /// Describes the user-fillable fields of the main card and each named
@@ -683,9 +693,6 @@ impl QuillConfig {
                 ))
             }
             FieldType::Date | FieldType::DateTime => {
-                if json_value.is_null() {
-                    return Ok(QuillValue::from_json(serde_json::Value::Null));
-                }
                 let text = if let Some(s) = json_value.as_str() {
                     // The blank is a value: it survives coercion so the ladder
                     // sees a *present* cell and lets it outrank a `default:`,

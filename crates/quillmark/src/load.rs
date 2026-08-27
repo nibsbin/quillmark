@@ -39,6 +39,14 @@ pub fn tree_from_path<P: AsRef<Path>>(
 fn load_tree_from_path(path: &Path) -> Result<FileTreeNode, Box<dyn StdError + Send + Sync>> {
     use std::fs;
 
+    // The root is the one directory whose absence is the caller's mistake
+    // rather than a walk detail: without this, a typo'd path walks to an empty
+    // tree and surfaces as `Quill.yaml not found in file tree`, pointing at the
+    // bundle's contents instead of the path.
+    if !path.is_dir() {
+        return Err(format!("Quill directory not found: {}", path.display()).into());
+    }
+
     let quillignore_path = path.join(".quillignore");
     let ignore = if quillignore_path.exists() {
         let content = fs::read_to_string(&quillignore_path)
@@ -61,12 +69,6 @@ fn load_dir(
     ignore: &QuillIgnore,
 ) -> Result<FileTreeNode, Box<dyn StdError + Send + Sync>> {
     use std::fs;
-
-    if !current_dir.exists() {
-        return Ok(FileTreeNode::Directory {
-            files: HashMap::new(),
-        });
-    }
 
     let mut files = HashMap::new();
     for entry in fs::read_dir(current_dir)? {

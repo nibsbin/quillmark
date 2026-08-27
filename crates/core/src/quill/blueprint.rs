@@ -12,6 +12,7 @@ use crate::document::emit::{saphyr_emit_flow, saphyr_emit_scalar};
 use crate::document::prescan::NestedComment;
 use crate::document::{Card, Document, Payload, PayloadItem};
 use crate::value::{PathSegment, QuillValue};
+use crate::QuillReference;
 use serde_json::{Map as JsonMap, Value as JsonValue};
 
 impl QuillConfig {
@@ -39,11 +40,7 @@ impl QuillConfig {
             .filter(|s| !s.is_empty())
             .or_else(|| Some(self.description.as_str()).filter(|s| !s.is_empty()));
 
-        let main = build_main_card(
-            &self.main,
-            &format!("{}@{}", self.name, self.version),
-            main_desc,
-        );
+        let main = build_main_card(&self.main, self.main_reference(), main_desc);
         let cards = self.card_kinds.iter().map(build_card).collect();
 
         Document::from_main_and_cards(main, cards).to_markdown()
@@ -77,10 +74,7 @@ fn body_text(card: &CardSchema, fallback_kind: &str) -> String {
 
 /// Build the root card: `$quill` (with the `# keep verbatim` inline reminder),
 /// `$kind: main`, the optional description own-line comment, then the fields.
-fn build_main_card(card: &CardSchema, quill_ref: &str, description: Option<&str>) -> Card {
-    let reference = quill_ref
-        .parse()
-        .expect("quill name@version is always a valid QuillReference");
+fn build_main_card(card: &CardSchema, reference: QuillReference, description: Option<&str>) -> Card {
     let mut items = vec![
         PayloadItem::Quill { reference },
         PayloadItem::comment_inline("keep verbatim"),
@@ -525,6 +519,20 @@ mod tests {
 
     fn cfg(yaml: &str) -> QuillConfig {
         QuillConfig::from_yaml(yaml).expect("valid yaml")
+    }
+
+    /// `QuillConfig::new` documents itself as bypassing the loader's validation,
+    /// so the blueprint meets a name/version pair `QuillReference` refuses. It
+    /// falls back to the versionless reference, as seeding does.
+    #[test]
+    fn a_reference_the_grammar_refuses_falls_back_rather_than_panicking() {
+        let config = QuillConfig::new(
+            "My Quill".into(),
+            "typst".into(),
+            "1".into(),
+            crate::quill::CardSchema::new("main".into(), indexmap::IndexMap::new()),
+        );
+        assert!(config.blueprint().contains("$quill: My Quill"));
     }
 
     /// Marker, annotation and description reach a leaf at whatever depth it is

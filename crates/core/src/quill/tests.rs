@@ -2754,6 +2754,23 @@ fn plaintext_wire_content_with_marks_is_rejected_not_stripped() {
 }
 
 #[test]
+fn inline_survives_the_declaration_wire_for_both_content_types() {
+    for ty in ["richtext", "plaintext"] {
+        let config = quill_with_field(&format!(
+            "    subject:\n      type: {ty}\n      inline: true\n"
+        ))
+        .expect("loads");
+        let field = config.main.fields.get("subject").unwrap();
+        let wire = serde_json::to_value(field).expect("serializes");
+        assert_eq!(
+            wire["inline"],
+            serde_json::json!(true),
+            "{ty} lost `inline: true` on the wire: {wire}"
+        );
+    }
+}
+
+#[test]
 fn plaintext_transform_schema_carries_media_type_and_plain_annotation() {
     let config = quill_with_field("    subject:\n      type: plaintext\n      inline: true\n")
         .expect("loads");

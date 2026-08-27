@@ -2,7 +2,8 @@
 //! with pdf-writer, stamp it, reparse with lopdf. Technique A bakes no `/AP`, so
 //! values land in `/V` and the viewer synthesizes appearances.
 
-use pdf_writer::{Content, Pdf, Rect, Ref};
+use pdf_writer::writers::Form;
+use pdf_writer::{Content, Finish, Name, Pdf, Rect, Ref};
 use quillmark_pdf::{regions_of, stamp, FieldSpec, FieldType, StampOptions};
 
 /// An `n`-page US-Letter base satisfying the spine's input contract.
@@ -602,4 +603,81 @@ fn a_nonsense_font_size_falls_back_to_auto_rather_than_forging_a_da() {
             assert!(!text.contains(token), "{bad} leaked {token:?} into the PDF");
         }
     }
+}
+
+/// `rect` is public on the same terms as `font_size`, and pdf-writer prints a
+/// non-finite float verbatim: `inf`/`NaN` in a `/Rect` is a token no PDF number
+/// grammar admits, so the spine refuses rather than emitting a corrupt file.
+#[test]
+fn a_non_finite_rect_is_refused_rather_than_written() {
+    for bad in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+        let fields = vec![text_field("X", "x", 0, [10.0, bad, 100.0, 30.0], "hi")];
+        let err = stamp(build_base_pdf(1), &fields, &StampOptions::default())
+            .expect_err("non-finite rect rejected");
+        assert_eq!(err.code, "pdf::bad_rect", "{bad}");
+    }
+}
+
+/// Appending a second `/AcroForm` to a catalog that already has one is undefined
+/// per spec and parser-dependent in practice, and the old form's widgets stay
+/// live in the preserved page `/Annots`. Refused, like every other input-contract
+/// violation on this path.
+#[test]
+fn a_base_that_already_carries_an_acroform_is_refused() {
+    let mut pdf = Pdf::new();
+    let catalog_id = Ref::new(1);
+    let page_tree_id = Ref::new(2);
+    let page_id = Ref::new(3);
+    let content_id = Ref::new(4);
+    let acroform_id = Ref::new(5);
+    {
+        let mut cat = pdf.catalog(catalog_id);
+        cat.pages(page_tree_id);
+        cat.pair(Name(b"AcroForm"), acroform_id);
+    }
+    let rect = Rect::new(0.0, 0.0, 612.0, 792.0);
+    pdf.pages(page_tree_id)
+        .kids([page_id])
+        .count(1)
+        .media_box(rect);
+    pdf.page(page_id)
+        .parent(page_tree_id)
+        .media_box(rect)
+        .contents(content_id);
+    pdf.stream(content_id, &Content::new().finish());
+    pdf.indirect(acroform_id).start::<Form>().fields([]).finish();
+
+    let fields = vec![text_field("X", "x", 0, [10.0, 10.0, 100.0, 30.0], "hi")];
+    let err = stamp(pdf.finish(), &fields, &StampOptions::default())
+        .expect_err("pre-existing /AcroForm rejected");
+    assert_eq!(err.code, "pdf::existing_acroform");
+}
+
+/// Only `Text` and `Choice` widgets write a `/DA`, so a checkbox's `font` names
+/// nothing: registering it would emit an unreferenced Type1 object and a dead
+/// `/DR /Font` entry into every stamped PDF.
+#[test]
+fn a_checkbox_font_registers_no_font_object() {
+    let mut agree = FieldSpec::new(
+        "Agree".into(),
+        0,
+        [180.0, 560.0, 194.0, 574.0],
+        FieldType::Checkbox,
+    );
+    agree.font = quillmark_pdf::FormFont::Times;
+    let out = stamp(build_base_pdf(1), &[agree], &StampOptions::default()).expect("stamp ok");
+    let text = String::from_utf8_lossy(&out);
+    assert!(
+        !text.contains("Times-Roman") && !text.contains("/TiRo"),
+        "a checkbox's inert font reached the output"
+    );
+
+    let mut typed = text_field("X", "x", 0, [10.0, 10.0, 100.0, 30.0], "hi");
+    typed.font = quillmark_pdf::FormFont::Times;
+    let out = stamp(build_base_pdf(1), &[typed], &StampOptions::default()).expect("stamp ok");
+    let text = String::from_utf8_lossy(&out);
+    assert!(
+        text.contains("Times-Roman") && text.contains("/TiRo"),
+        "a text widget's font is still registered"
+    );
 }

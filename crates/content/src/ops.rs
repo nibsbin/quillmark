@@ -374,6 +374,13 @@ pub enum ApplyError {
         depth: usize,
         max: usize,
     },
+    /// A [`LineOp::SetKind`] naming a heading level outside `1..=6`. Refused
+    /// because `normalize` does not repair it: the level reaches export as that
+    /// many `#`, which CommonMark reads back as a literal-hash paragraph.
+    BadHeadingLevel {
+        line: usize,
+        level: u8,
+    },
 }
 
 impl Content {
@@ -625,6 +632,14 @@ impl Content {
                         return Err(ApplyError::LineKindMismatch {
                             line: *line,
                             mismatch,
+                        });
+                    }
+                    if let LineKind::Heading { level } = kind
+                        && !(1..=6).contains(level)
+                    {
+                        return Err(ApplyError::BadHeadingLevel {
+                            line: *line,
+                            level: *level,
                         });
                     }
                     let line = self.line_mut(*line)?;
@@ -1376,6 +1391,25 @@ mod tests {
             })
         );
         assert!(rt.lines[0].containers.is_empty());
+    }
+
+    #[test]
+    fn line_op_set_kind_range_checks_the_heading_level() {
+        let mut rt = from_markdown("t").unwrap();
+        assert_eq!(
+            rt.apply_line_ops(&[LineOp::SetKind {
+                line: 0,
+                kind: LineKind::Heading { level: 9 },
+            }]),
+            Err(ApplyError::BadHeadingLevel { line: 0, level: 9 })
+        );
+        assert_eq!(rt.validate(), Ok(()));
+        assert!(rt
+            .apply_line_ops(&[LineOp::SetKind {
+                line: 0,
+                kind: LineKind::Heading { level: 6 },
+            }])
+            .is_ok());
     }
 
     #[test]
