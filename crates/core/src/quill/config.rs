@@ -206,10 +206,10 @@ impl QuillConfig {
         self.card_kinds.iter().find(|card| card.name == name)
     }
 
-    /// The `$quill` reference a main card carries, as `name@version`. Falls
-    /// back to a versionless reference when the pair is unparseable, which
-    /// [`Self::new`] admits: both emitters read it here so neither panics on a
-    /// config the loader never saw.
+    /// The `$quill` reference a main card carries, as `name@version`, falling
+    /// back to a versionless reference when the pair is unparseable — which
+    /// [`Self::new`] admits. The blueprint and the seed both read it here, so
+    /// neither can panic on a config the loader never saw.
     pub(crate) fn main_reference(&self) -> crate::QuillReference {
         format!("{}@{}", self.name, self.version)
             .parse()

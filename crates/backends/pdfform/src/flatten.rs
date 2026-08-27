@@ -32,9 +32,8 @@ pub fn flatten(base: Vec<u8>, fields: &[FieldSpec]) -> Result<Vec<u8>, PdfError>
         return Ok(base);
     }
 
-    // `push_f32` formats a non-finite float as the literal `NaN`/`inf`, which no
-    // PDF number grammar admits: the drawn stream would be unparseable. Refused
-    // here, matching `stamp`'s guard on the same field geometry.
+    // `push_f32` formats a non-finite float as the literal `NaN`/`inf`, a token
+    // no PDF number grammar admits: the drawn stream would be unparseable.
     for spec in &drawable {
         if !spec.rect.iter().all(|v| v.is_finite()) {
             return Err(PdfError::new(

@@ -606,8 +606,7 @@ fn a_nonsense_font_size_falls_back_to_auto_rather_than_forging_a_da() {
 }
 
 /// `rect` is public on the same terms as `font_size`, and pdf-writer prints a
-/// non-finite float verbatim: `inf`/`NaN` in a `/Rect` is a token no PDF number
-/// grammar admits, so the spine refuses rather than emitting a corrupt file.
+/// non-finite float verbatim: `inf`/`NaN` in a `/Rect` parses as no PDF number.
 #[test]
 fn a_non_finite_rect_is_refused_rather_than_written() {
     for bad in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
@@ -618,10 +617,9 @@ fn a_non_finite_rect_is_refused_rather_than_written() {
     }
 }
 
-/// Appending a second `/AcroForm` to a catalog that already has one is undefined
-/// per spec and parser-dependent in practice, and the old form's widgets stay
-/// live in the preserved page `/Annots`. Refused, like every other input-contract
-/// violation on this path.
+/// A catalog with two `/AcroForm` keys is undefined per spec and
+/// parser-dependent in practice, and the old form's widgets stay live in the
+/// preserved page `/Annots`.
 #[test]
 fn a_base_that_already_carries_an_acroform_is_refused() {
     let mut pdf = Pdf::new();
@@ -654,8 +652,7 @@ fn a_base_that_already_carries_an_acroform_is_refused() {
 }
 
 /// Only `Text` and `Choice` widgets write a `/DA`, so a checkbox's `font` names
-/// nothing: registering it would emit an unreferenced Type1 object and a dead
-/// `/DR /Font` entry into every stamped PDF.
+/// nothing and registering it would emit an unreferenced Type1 object.
 #[test]
 fn a_checkbox_font_registers_no_font_object() {
     let mut agree = FieldSpec::new(

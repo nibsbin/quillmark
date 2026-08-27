@@ -62,8 +62,7 @@ fn field_appearance(spec: &FieldSpec) -> Vec<u8> {
 
 /// Every face named by a `/DA` this stamp writes: the variable-text widgets'
 /// own, plus the Helvetica of the form-level [`DEFAULT_APPEARANCE`]. A checkbox
-/// or signature spec writes no `/DA`, so its `font` names nothing and buys the
-/// output an unreferenced font object.
+/// or signature writes no `/DA`, so its `font` names nothing.
 fn fonts_used(fields: &[FieldSpec]) -> Vec<FormFont> {
     let mut fonts: Vec<FormFont> = fields
         .iter()
@@ -115,10 +114,10 @@ pub fn stamp(
         return Ok(base);
     }
 
-    // A rect reaches `Rect::new` unchecked otherwise, and pdf-writer prints a
-    // non-finite float verbatim: the widget's `/Rect` would hold `inf`/`NaN`,
-    // tokens no PDF number grammar admits. Same posture as `field_appearance`
-    // takes on `font_size`, and for the same reason — `rect` is public.
+    // pdf-writer prints a non-finite float verbatim, so an unchecked rect puts
+    // `inf`/`NaN` in the widget's `/Rect` — tokens no PDF number grammar
+    // admits. `rect` is public, as `font_size` is, and guarded for the same
+    // reason.
     for spec in fields {
         if !spec.rect.iter().all(|v| v.is_finite()) {
             return Err(err(

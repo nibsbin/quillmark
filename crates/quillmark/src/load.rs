@@ -40,9 +40,8 @@ fn load_tree_from_path(path: &Path) -> Result<FileTreeNode, Box<dyn StdError + S
     use std::fs;
 
     // The root is the one directory whose absence is the caller's mistake
-    // rather than a walk detail: without this, a typo'd path walks to an empty
-    // tree and surfaces as `Quill.yaml not found in file tree`, pointing at the
-    // bundle's contents instead of the path.
+    // rather than a walk detail: unchecked, a typo'd path walks to an empty
+    // tree and fails as `Quill.yaml not found in file tree`.
     if !path.is_dir() {
         return Err(format!("Quill directory not found: {}", path.display()).into());
     }

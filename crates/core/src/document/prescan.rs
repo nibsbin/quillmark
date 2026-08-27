@@ -406,9 +406,9 @@ fn ensure_frame_at_indent(stack: &mut Vec<Frame>, indent: usize, kind: FrameKind
     stack.len() - 1
 }
 
-/// The comment slice runs to the `\n` this scan split on, so on CRLF input it
-/// still carries the `\r`. Dropping it here keeps the emit contract's "`\n`
-/// only" true of comment text, which rides through the DTO and wire verbatim.
+/// The slice runs to the `\n` this scan split on, so CRLF input carries a
+/// trailing `\r`. Dropped here: comment text reaches emit verbatim, and emit is
+/// `\n` only.
 fn strip_comment_marker(raw: &str) -> &str {
     let raw = raw.strip_suffix('\r').unwrap_or(raw);
     let after = raw.trim_start_matches('#');

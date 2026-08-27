@@ -38,10 +38,8 @@ fn test_unsupported_backend_errors_at_render_time() {
     );
 }
 
-
-/// A path that names no directory is the caller's mistake, not a bundle without
-/// a `Quill.yaml`: walking it to an empty tree points the reader at the bundle's
-/// contents instead of the typo.
+/// A path that names no directory is the caller's mistake, not a bundle missing
+/// its `Quill.yaml`.
 #[test]
 fn a_missing_quill_path_names_the_path_not_the_missing_config() {
     let temp_dir = TempDir::new().unwrap();

@@ -261,8 +261,8 @@ fn fold_legacy_attrs<'a>(
 }
 
 /// A [`LineKind`]'s canonical fields (`"kind":"para"`,
-/// `"kind":"heading","level":n`, …), unwrapped for [`line_to_value`], which
-/// flattens them beside a line's own keys.
+/// `"kind":"heading","level":n`, …), unwrapped so [`line_to_value`] can flatten
+/// them beside a line's own keys.
 fn line_kind_fields(kind: &LineKind) -> Map<String, Value> {
     let mut m = Map::new();
     match kind {

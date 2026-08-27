@@ -521,9 +521,8 @@ mod tests {
         QuillConfig::from_yaml(yaml).expect("valid yaml")
     }
 
-    /// `QuillConfig::new` documents itself as bypassing the loader's validation,
-    /// so the blueprint meets a name/version pair `QuillReference` refuses. It
-    /// falls back to the versionless reference, as seeding does.
+    /// `QuillConfig::new` is public and bypasses the loader's validation, so a
+    /// name/version pair the grammar refuses reaches the blueprint.
     #[test]
     fn a_reference_the_grammar_refuses_falls_back_rather_than_panicking() {
         let config = QuillConfig::new(
