@@ -102,8 +102,9 @@ impl StampOptions {
 /// a session-level query (see [`regions_of`]).
 ///
 /// `base` must satisfy the reader's input contract (traditional-xref,
-/// unencrypted, inline-annots, flat-tree), and each `rect` must already be final
-/// bottom-left PDF-point geometry.
+/// unencrypted, inline-annots, flat-tree) and carry no `/AcroForm` of its own,
+/// and each `rect` must already be final, finite, bottom-left PDF-point
+/// geometry.
 pub fn stamp(
     base: Vec<u8>,
     fields: &[FieldSpec],
@@ -135,6 +136,16 @@ pub fn stamp(
     let mut up = PdfUpdate::begin(&idx, opts.producer.as_deref())?;
 
     if !fields.is_empty() {
+        // Before any allocation: a second `/AcroForm` on the catalog is a dict
+        // the spec does not define, and the base's own widgets stay live in the
+        // page `/Annots` this update preserves.
+        if find_dict_value(idx.dict(up.catalog_id, CODE_PARSE, "catalog")?, "AcroForm").is_some() {
+            return Err(err(
+                CODE_EXISTING_ACROFORM,
+                "base PDF already carries an /AcroForm; strip its form before stamping",
+            ));
+        }
+
         let page_ids = up.resolve_pages(&idx, fields)?;
         let page_count = page_ids.len();
 
@@ -203,12 +214,6 @@ pub fn stamp(
         // A widget is fillable only if reachable both ways: the catalog's
         // `/AcroForm /Fields` (added here) and the page's `/Annots` (below).
         let cat_dict = idx.dict(up.catalog_id, CODE_PARSE, "catalog")?;
-        if find_dict_value(cat_dict, "AcroForm").is_some() {
-            return Err(err(
-                CODE_EXISTING_ACROFORM,
-                "base PDF already carries an /AcroForm; strip its form before stamping",
-            ));
-        }
         let mut cat_inner = cat_dict.to_vec();
         cat_inner.extend_from_slice(format!(" /AcroForm {acroform_id} 0 R").as_bytes());
         up.objects.push(dict_object(up.catalog_id, &cat_inner));

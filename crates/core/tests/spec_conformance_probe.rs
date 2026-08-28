@@ -11,7 +11,7 @@ use quillmark_core::Document;
 fn normalize_reaches_card_body() {
     let md = "~~~card-yaml\n$quill: t\n$kind: main\n~~~\n\n~~~card-yaml\n$kind: x\n~~~\n\n<!-- c -->trailing\u{202D}text";
     let doc = Document::parse(md).unwrap().document;
-    let doc = normalize_document(doc);
+    let doc = normalize_document(doc).unwrap();
     let body = doc.cards()[0].body_markdown();
     assert!(
         body.contains("trailingtext"),

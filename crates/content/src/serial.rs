@@ -260,9 +260,14 @@ fn fold_legacy_attrs<'a>(
     Ok(Cow::Owned(folded))
 }
 
-/// A [`LineKind`]'s canonical fields (`"kind":"para"`,
-/// `"kind":"heading","level":n`, …), unwrapped so [`line_to_value`] can flatten
-/// them beside a line's own keys.
+/// Encode a [`LineKind`] into its canonical `kind` object (`{"kind":"para"}`,
+/// `{"kind":"heading","level":n}`, …).
+pub fn line_kind_to_value(kind: &LineKind) -> Value {
+    Value::Object(line_kind_fields(kind))
+}
+
+/// The same fields unwrapped, for [`line_to_value`], which flattens them beside
+/// a line's own keys.
 fn line_kind_fields(kind: &LineKind) -> Map<String, Value> {
     let mut m = Map::new();
     match kind {

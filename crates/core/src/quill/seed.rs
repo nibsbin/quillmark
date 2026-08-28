@@ -9,7 +9,7 @@ use quillmark_content::Normalized;
 use super::Quill;
 use crate::quill::{CardSchema, FieldType, VARIANT_DISCRIMINANT_KEY};
 use crate::document::PayloadItem;
-use crate::{Card, Document, Payload, QuillValue, SeedOverlay};
+use crate::{Card, Document, Payload, QuillReference, QuillValue, SeedOverlay};
 
 /// Build the seeded `(payload, body)` for one card schema, layering an optional
 /// [`SeedOverlay`] over the schema-example base. Per field the precedence is
@@ -240,11 +240,21 @@ fn seeded_rest(name: &str, value: &QuillValue, field: &crate::quill::FieldSchema
         .unwrap_or_else(|_| value.clone())
 }
 
+/// `$quill` reference for the main card, as `name@version`. Falls back to a
+/// versionless reference if the configured version is unparseable (it is
+/// validated at quill load, so the fallback is defensive only).
+fn main_reference(quill: &Quill) -> QuillReference {
+    let config = quill.config();
+    format!("{}@{}", config.name, config.version)
+        .parse()
+        .unwrap_or_else(|_| QuillReference::latest(config.name.clone()))
+}
+
 pub(crate) fn seed_main(quill: &Quill) -> Card {
     // The main card is never seeded from an overlay: `$seed` keys range over
     // composable `card_kinds`, and `main` is not one of them.
     let (mut payload, body) = seed_parts(&quill.config().main, None);
-    payload.set_quill(quill.config().main_reference());
+    payload.set_quill(main_reference(quill));
     // The root block carries `$kind: main` alongside `$quill` (see the
     // markdown spec); set it so a seeded main card round-trips through
     // `to_markdown()` exactly as the parser and blueprint emit it.

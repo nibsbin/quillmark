@@ -63,7 +63,7 @@ impl QuillConfig {
         // rungs dropped. `resolve()` runs the total (keep-raw) conform for its own
         // fallibility-free path; both cut the same [`ladder_sourced`].
         let coerced = self.coerce_and_validate(doc)?;
-        let normalized = normalize_document(coerced);
+        let normalized = normalize_document(coerced)?;
 
         let final_main = Card::from_parts(
             rebuild_payload_with_meta(

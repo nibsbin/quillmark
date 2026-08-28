@@ -14,13 +14,15 @@ pub fn normalize_field_name(name: &str) -> String {
 
 /// Normalize every card's payload field names to Unicode NFC. Values and
 /// bodies carry through unchanged. Idempotent.
-pub fn normalize_document(doc: crate::document::Document) -> crate::document::Document {
+pub fn normalize_document(
+    doc: crate::document::Document,
+) -> Result<crate::document::Document, crate::error::ParseError> {
     use crate::document::Document;
 
     let main = normalize_card(doc.main());
     let normalized_cards: Vec<Card> = doc.cards().iter().map(normalize_card).collect();
 
-    Document::from_main_and_cards(main, normalized_cards)
+    Ok(Document::from_main_and_cards(main, normalized_cards))
 }
 
 fn normalize_card(card: &Card) -> Card {
@@ -28,7 +30,10 @@ fn normalize_card(card: &Card) -> Card {
     let mut payload = card.payload().clone();
     for item in payload.items_mut() {
         if let PayloadItem::Field { key, .. } = item {
-            *key = normalize_field_name(key);
+            let normalized = normalize_field_name(key);
+            if normalized != *key {
+                *key = normalized;
+            }
         }
     }
     Card::from_parts(payload, card.body().clone())
@@ -45,8 +50,8 @@ mod tests {
             Document::parse("~~~card-yaml\n$quill: test\n$kind: main\n~~~\n\n<<content>>")
                 .unwrap()
                 .document;
-        let normalized_once = super::normalize_document(doc);
-        let normalized_twice = super::normalize_document(normalized_once.clone());
+        let normalized_once = super::normalize_document(doc).unwrap();
+        let normalized_twice = super::normalize_document(normalized_once.clone()).unwrap();
 
         assert_eq!(
             normalized_once.main().body_markdown(),
@@ -63,7 +68,7 @@ mod tests {
         )
         .unwrap()
         .document;
-        let normalized = super::normalize_document(doc);
+        let normalized = super::normalize_document(doc).unwrap();
         assert_eq!(
             normalized
                 .main()

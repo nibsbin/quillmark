@@ -110,6 +110,10 @@ pub(super) fn build_block(
 
     let pre = prescan_fence_content(raw_content);
 
+    if let Some(err) = pre.fill_target_errors.first() {
+        return Err(ParseError::InvalidStructure(err.clone()));
+    }
+
     // `!must_fill` is not permitted on `$` metadata keys: those are extracted into
     // typed values and have no placeholder semantics.
     for item in &pre.items {

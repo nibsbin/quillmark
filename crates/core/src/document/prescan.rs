@@ -55,6 +55,8 @@ pub(crate) struct PreScan {
     /// value tree by the assembler. Top-level fills ride on `PreItem::Field`.
     pub nested_fills: Vec<Vec<CommentPathSegment>>,
     pub warnings: Vec<Diagnostic>,
+    /// `!must_fill` on mappings: turned into `ParseError::InvalidStructure` by the parser.
+    pub fill_target_errors: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -598,37 +600,47 @@ fn strip_fill_tag(trimmed: &str) -> Option<&str> {
 
 /// Inspect a field value for the `!must_fill` tag and other (noncanonical) tags.
 ///
-/// Returns `(fill, value_without_tag, had_other_tag)`. Whether the tag targets a
-/// mapping is not judged here: the assembler enforces that over the parsed
-/// value, where a nested target is reachable too.
-fn inspect_fill_and_tags(value: &str) -> (bool, String, bool) {
+/// Returns `(fill, value_without_tag, had_other_tag, fill_target_err)`.
+/// `fill_target_err` is set when the fill tag targets a mapping (rejected;
+/// scalars and sequences are allowed).
+fn inspect_fill_and_tags(value: &str, key: &str) -> (bool, String, bool, Option<String>) {
     let trimmed = value.trim_start();
     let leading_ws_len = value.len() - trimmed.len();
 
     if trimmed.is_empty() {
-        return (false, value.to_string(), false);
+        return (false, value.to_string(), false, None);
     }
 
     if let Some(rest) = strip_fill_tag(trimmed) {
         let rest_trim = rest.trim_start();
+        let err = if rest_trim.starts_with('{') {
+            Some(format!(
+                "`!must_fill` on key `{}` targets a mapping; `!must_fill` is supported on scalars and sequences only",
+                key
+            ))
+        } else {
+            None
+        };
         let reconstructed = if rest_trim.is_empty() {
             value[..leading_ws_len].to_string()
         } else {
             format!(" {}", rest_trim)
         };
-        return (true, reconstructed, false);
+        return (true, reconstructed, false, err);
     }
 
     if trimmed.starts_with('!') {
-        return (false, value.to_string(), true);
+        return (false, value.to_string(), true, None);
     }
 
-    (false, value.to_string(), false)
+    (false, value.to_string(), false, None)
 }
 
-/// [`inspect_fill_and_tags`] with its warning recorded onto `out`.
+/// [`inspect_fill_and_tags`] with its diagnostics recorded onto `out`,
+/// returning `(fill, value_without_tag, had_other_tag)`.
 fn record_fill_and_tags(out: &mut PreScan, value: &str, key: &str) -> (bool, String, bool) {
-    let (fill, value_without_tag, had_non_fill_tag) = inspect_fill_and_tags(value);
+    let (fill, value_without_tag, had_non_fill_tag, fill_target_err) =
+        inspect_fill_and_tags(value, key);
     if had_non_fill_tag {
         out.warnings.push(
             Diagnostic::new(
@@ -640,6 +652,9 @@ fn record_fill_and_tags(out: &mut PreScan, value: &str, key: &str) -> (bool, Str
             )
             .with_code("parse::unsupported_yaml_tag".to_string()),
         );
+    }
+    if let Some(err) = fill_target_err {
+        out.fill_target_errors.push(err);
     }
     (fill, value_without_tag, had_non_fill_tag)
 }
@@ -893,6 +908,10 @@ mod tests {
     fn fill_on_flow_sequence_allowed() {
         let input = "x: !must_fill [1, 2]\n";
         let out = prescan_fence_content(input);
+        assert!(
+            out.fill_target_errors.is_empty(),
+            "expected no error; !must_fill on sequences is supported"
+        );
         assert_eq!(
             out.items,
             vec![PreItem::Field {
@@ -979,6 +998,15 @@ mod tests {
         assert!(out.cleaned_yaml.contains("- second"));
     }
 
+    #[test]
+    fn fill_on_flow_mapping_errors() {
+        let input = "x: !must_fill {a: 1}\n";
+        let out = prescan_fence_content(input);
+        assert!(
+            !out.fill_target_errors.is_empty(),
+            "expected error; !must_fill on mappings is rejected"
+        );
+    }
     #[test]
     fn comment_after_plain_scalar_with_apostrophe() {
         // YAML: in a plain scalar, `'` is an ordinary character; the
