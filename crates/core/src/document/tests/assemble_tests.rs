@@ -1280,6 +1280,21 @@ fn test_line_ending_normalization() {
 }
 
 #[test]
+fn crlf_input_leaves_no_carriage_return_in_comment_text() {
+    let markdown = "~~~card-yaml\r\n$quill: test_quill\r\n$kind: main\r\n# standalone\r\ntitle: Test # trailing\r\n~~~\r\n\r\nBody.";
+    let doc = decompose(markdown).unwrap();
+    let emitted = doc.to_markdown();
+    assert!(
+        !emitted.contains('\r'),
+        "emit is LF-only, got: {emitted:?}"
+    );
+    assert!(
+        emitted.contains("# trailing\n") && emitted.contains("# standalone\n"),
+        "comment text kept its content, got: {emitted:?}"
+    );
+}
+
+#[test]
 fn test_payload_at_eof_no_trailing_newline() {
     let markdown = "~~~card-yaml\n$quill: test_quill\n$kind: main\ntitle: Test\n~~~";
     let doc = decompose(markdown).unwrap();

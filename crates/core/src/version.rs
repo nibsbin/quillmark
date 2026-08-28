@@ -1,12 +1,13 @@
 //! Semantic versioning (MAJOR.MINOR.PATCH) for Quill template references.
 //! Two-segment (`MAJOR.MINOR`) versions are also accepted; patch defaults to 0.
 
-use std::cmp::Ordering;
 use std::fmt;
 use std::str::FromStr;
 
 /// Semantic version number. Two-segment input defaults patch to 0.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+///
+/// Field order is the comparison order: the derived `Ord` is semver precedence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[non_exhaustive]
 pub struct Version {
     pub major: u32,
@@ -64,24 +65,6 @@ impl FromStr for Version {
 impl fmt::Display for Version {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}.{}.{}", self.major, self.minor, self.patch)
-    }
-}
-
-impl PartialOrd for Version {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for Version {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match self.major.cmp(&other.major) {
-            Ordering::Equal => match self.minor.cmp(&other.minor) {
-                Ordering::Equal => self.patch.cmp(&other.patch),
-                other => other,
-            },
-            other => other,
-        }
     }
 }
 

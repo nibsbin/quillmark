@@ -43,15 +43,25 @@ fn resolve_span_to_location(span: typst::syntax::DiagSpan, world: &QuillWorld) -
     let source = world.source(source_id).ok()?;
     let range = world.range(span)?;
 
-    let text = source.text();
-    let line = text[..range.start].matches('\n').count() + 1;
-    let column = range.start - text[..range.start].rfind('\n').map_or(0, |pos| pos + 1) + 1;
+    let (line, column) = line_and_column(source.text(), range.start);
 
     Some(Location::new(
         source.id().vpath().get_without_slash().to_string(),
         line as u32,
         column as u32,
     ))
+}
+
+/// 1-indexed line and column of `offset` in `text`. The column counts
+/// *characters*, which is what an editor jumps to: over bytes, every multi-byte
+/// glyph earlier on the line would inflate it.
+fn line_and_column(text: &str, offset: usize) -> (usize, usize) {
+    let prefix = &text[..offset];
+    let line_start = prefix.rfind('\n').map_or(0, |pos| pos + 1);
+    (
+        prefix.matches('\n').count() + 1,
+        prefix[line_start..].chars().count() + 1,
+    )
 }
 
 #[cfg(test)]
@@ -89,6 +99,14 @@ mod tests {
             );
         }
         Some(Quill::from_tree(tree).expect("load source"))
+    }
+
+    #[test]
+    fn columns_count_characters_not_bytes() {
+        let text = "#let café = 1\n#(café + x)\n";
+        assert_eq!(line_and_column(text, 0), (1, 1));
+        // `x` on line 2: nine characters precede it, ten bytes.
+        assert_eq!(line_and_column(text, text.find(" x)").unwrap() + 1), (2, 10));
     }
 
     #[test]

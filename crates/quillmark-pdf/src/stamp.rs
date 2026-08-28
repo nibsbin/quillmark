@@ -21,12 +21,14 @@ use pdf_writer::{Chunk, Finish, Name, Rect, Ref, Str, TextStr};
 use quillmark_core::RenderedRegion;
 
 use crate::error::PdfError;
-use crate::reader::{err, parse_indirect_ref, ObjectIndex, UpdatedObject};
+use crate::reader::{err, find_dict_value, parse_indirect_ref, ObjectIndex, UpdatedObject};
 use crate::update::PdfUpdate;
 use crate::writer::{alloc_id, append_refs_to_array_key, dict_object, OnNonArray};
 use crate::{FieldSpec, FieldType, FormFont, TextAlign};
 
 const CODE_PARSE: &str = "pdf::stamp_parse";
+const CODE_BAD_RECT: &str = "pdf::bad_rect";
+const CODE_EXISTING_ACROFORM: &str = "pdf::existing_acroform";
 
 /// The fixed checkbox on-state export name. A checkbox [`FieldSpec`] carries
 /// this as its `value` when checked, `None` when not.
@@ -58,10 +60,20 @@ fn field_appearance(spec: &FieldSpec) -> Vec<u8> {
     da
 }
 
-/// Every face named by a `/DA` this stamp writes: the widgets' own, plus the
-/// Helvetica of the form-level [`DEFAULT_APPEARANCE`].
+/// Every face named by a `/DA` this stamp writes: the variable-text widgets'
+/// own, plus the Helvetica of the form-level [`DEFAULT_APPEARANCE`]. A checkbox
+/// or signature writes no `/DA`, so its `font` names nothing.
 fn fonts_used(fields: &[FieldSpec]) -> Vec<FormFont> {
-    let mut fonts: Vec<FormFont> = fields.iter().map(|f| f.font).collect();
+    let mut fonts: Vec<FormFont> = fields
+        .iter()
+        .filter(|f| {
+            matches!(
+                f.field_type,
+                FieldType::Text { .. } | FieldType::Choice { .. }
+            )
+        })
+        .map(|f| f.font)
+        .collect();
     fonts.push(FormFont::Helvetica);
     fonts.sort_by_key(|f| f.resource_name());
     fonts.dedup();
@@ -90,8 +102,9 @@ impl StampOptions {
 /// a session-level query (see [`regions_of`]).
 ///
 /// `base` must satisfy the reader's input contract (traditional-xref,
-/// unencrypted, inline-annots, flat-tree), and each `rect` must already be final
-/// bottom-left PDF-point geometry.
+/// unencrypted, inline-annots, flat-tree) and carry no `/AcroForm` of its own,
+/// and each `rect` must already be final, finite, bottom-left PDF-point
+/// geometry.
 pub fn stamp(
     base: Vec<u8>,
     fields: &[FieldSpec],
@@ -102,11 +115,37 @@ pub fn stamp(
         return Ok(base);
     }
 
+    // pdf-writer prints a non-finite float verbatim, so an unchecked rect puts
+    // `inf`/`NaN` in the widget's `/Rect` — tokens no PDF number grammar
+    // admits. `rect` is public, as `font_size` is, and guarded for the same
+    // reason.
+    for spec in fields {
+        if !spec.rect.iter().all(|v| v.is_finite()) {
+            return Err(err(
+                CODE_BAD_RECT,
+                format!(
+                    "field `{}` has a non-finite /Rect: {:?}",
+                    spec.name, spec.rect
+                ),
+            ));
+        }
+    }
+
     let pdf = base;
     let idx = ObjectIndex::new(&pdf);
     let mut up = PdfUpdate::begin(&idx, opts.producer.as_deref())?;
 
     if !fields.is_empty() {
+        // Before any allocation: a second `/AcroForm` on the catalog is a dict
+        // the spec does not define, and the base's own widgets stay live in the
+        // page `/Annots` this update preserves.
+        if find_dict_value(idx.dict(up.catalog_id, CODE_PARSE, "catalog")?, "AcroForm").is_some() {
+            return Err(err(
+                CODE_EXISTING_ACROFORM,
+                "base PDF already carries an /AcroForm; strip its form before stamping",
+            ));
+        }
+
         let page_ids = up.resolve_pages(&idx, fields)?;
         let page_count = page_ids.len();
 

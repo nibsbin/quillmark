@@ -46,13 +46,6 @@ impl ValidationResult {
 }
 
 pub fn execute(args: ValidateArgs) -> Result<()> {
-    if !args.quill_path.exists() {
-        return Err(CliError::InvalidArgument(format!(
-            "Quill directory not found: {}",
-            args.quill_path.display()
-        )));
-    }
-
     let quill_yaml_path = args.quill_path.join("Quill.yaml");
     if !quill_yaml_path.exists() {
         return Err(CliError::InvalidArgument(format!(

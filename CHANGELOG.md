@@ -1,5 +1,55 @@
 # Changelog
 
+## Unreleased
+
+- fix(core): **a `plaintext` field declared `inline: true` keeps the flag on the
+  declaration wire.** `FieldSchema::serialize` projected the flag back out of
+  the type enum with a `RichText { inline: true }` match only, so
+  `type: plaintext, inline: true` serialized as `{"type":"plaintext"}` — WASM
+  `quill.schema()`, the Python binding, and the CLI `schema` command all lost
+  the single-line constraint, and a serde round-trip degraded the field to
+  `inline: false`.
+- fix(core): **a comment on a CRLF line no longer carries its `\r` into the
+  emitted document.** The prescan splits on `\n`, so a trailing- or own-line
+  comment slice ran to end-of-line including the `\r`; it rode through the DTO
+  and wire and was written back verbatim, against `to_markdown`'s "line endings:
+  `\n` only". Field values were never affected. A `\r` *inside* a comment still
+  reaches emit.
+- fix(facade): **loading a path that names no directory says so.** The walk
+  answered a missing root with an empty tree, so `quill_from_path("/typo")`
+  failed later with `Quill.yaml not found in file tree`, pointing at the
+  bundle's contents instead of the path. Python's `Quill.from_path` surfaced
+  that directly; the CLI carried two pre-checks of its own, now deleted, so all
+  three consumers report the one message.
+- fix(content): **`LineOp::SetKind` refuses a heading level outside `1..=6`.**
+  The arm checked kind/text agreement but not the level, so a Rust caller could
+  apply `Heading { level: 9 }` and leave a content whose `validate()` fails and
+  whose export emits `#########` — read back as a literal-hash paragraph on the
+  next import. The JSON wires already range-checked it. New
+  `ApplyError::BadHeadingLevel`.
+- fix(typst): **diagnostic columns count characters, not bytes.** Any multi-byte
+  character earlier on the source line inflated the reported column, which an
+  editor reads as a jump target.
+- fix(pdf): **a non-finite widget `/Rect` is refused (`pdf::bad_rect`) rather
+  than written.** `form.json` rect values deserialize as plain `f32` and
+  saturate to `inf`, and `flip_rect` arithmetic can reach `NaN`; pdf-writer
+  prints a non-finite float verbatim, so `stamp` returned `Ok` with `inf`/`NaN`
+  tokens in the output — no PDF number grammar admits them. `flatten` guards the
+  geometry it draws. Matches the posture `font_size` already took. `regions_of`
+  is still unguarded.
+- fix(pdf): **a base PDF that already carries an `/AcroForm` is refused
+  (`pdf::existing_acroform`).** The catalog rewrite appended a second
+  `/AcroForm` key without looking, leaving a dict the spec does not define and
+  the old form's widgets live in the preserved page `/Annots`. Stripping was
+  already the documented authoring rule; it is now checked.
+- fix(pdf): **`fonts_used` registers only the faces a `/DA` names.** Only `Text`
+  and `Choice` widgets write one, so a checkbox or signature spec carrying
+  `Times`/`Courier` emitted an unreferenced Type1 object and a dead `/DR /Font`
+  entry into every stamped PDF.
+- refactor(core): the unreachable null arm in the `Date`/`DateTime` coercion is
+  deleted (`conform_value` returns on any null before the type match), and
+  `Version` derives the ordering its field order already spells.
+
 ## v0.110.0 - 2026-08-26
 
 - **breaking** wasm: **the seam spells a container's `instance`, so the read
