@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.111.0 - 2026-08-30
 
 - feat(wasm): **`mapMarks(content, bundle)` answers where a `ChangeBundle`'s
   text-moving channels leave a field's marks**, the coordinates its `markOps`
@@ -61,6 +61,14 @@
 - refactor(core): the unreachable null arm in the `Date`/`DateTime` coercion is
   deleted (`conform_value` returns on any null before the type match), and
   `Version` derives the ordering its field order already spells.
+
+<!-- seed: commits since v0.110.0, confirm the entries above cover them, then delete this comment
+- feat(wasm): mapMarks, the rebase an editor had to predict
+- fix: drop three findings an adversarial review falsified
+- docs: dense-prose pass over the branch
+- fix: the low-complexity findings from the whole-codebase review
+-->
+
 
 ## v0.110.0 - 2026-08-26
 
