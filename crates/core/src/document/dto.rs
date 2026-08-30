@@ -571,8 +571,8 @@ impl TryFrom<PayloadItemV0_92_0> for PayloadItem {
                 fill,
                 nested_fills,
             } => {
-                use super::edit::{validate_field, FieldViolation};
-                validate_field(&key, &value).map_err(|v| {
+                use super::edit::{validate_field, validate_fill_targets, FieldViolation};
+                let malformed = |v: FieldViolation| {
                     StorageError::Malformed(match v {
                         FieldViolation::InvalidName => {
                             format!("invalid field name {key:?}: must match [A-Za-z_][A-Za-z0-9_]*")
@@ -581,14 +581,20 @@ impl TryFrom<PayloadItemV0_92_0> for PayloadItem {
                             "field {key:?} nests deeper than the maximum of {} levels",
                             crate::document::limits::MAX_YAML_DEPTH
                         ),
+                        FieldViolation::FillOnMapping => format!(
+                            "`!must_fill` on field {key:?} targets a mapping; `!must_fill` is \
+                             supported on scalars and sequences only"
+                        ),
                     })
-                })?;
+                };
+                validate_field(&key, &value).map_err(malformed)?;
                 let mut qv = QuillValue::from_json(value);
                 for path in nested_fills {
                     let segs: Vec<CommentPathSegment> =
                         path.into_iter().map(CommentPathSegment::from).collect();
                     qv.set_fill_at(&segs);
                 }
+                validate_fill_targets(&qv, fill).map_err(malformed)?;
                 PayloadItem::Field {
                     key,
                     value: qv,
@@ -1318,6 +1324,39 @@ title: Hi
         // The migration invents nothing the parser would not.
         let reparsed = Document::parse(&md).unwrap().document;
         assert_eq!(doc, reparsed);
+    }
+
+    /// A canonical content object is the exception: emit projects it to a
+    /// markdown scalar, which is a shape the marker has a spelling against.
+    #[test]
+    fn rejects_a_fill_marked_mapping() {
+        let blob = |value: &str, fill: &str| {
+            format!(
+                r#"{{
+                "schema": "quillmark/document@0.92.0",
+                "main": {{
+                    "payload": {{"items": [
+                        {{"type": "quill", "value": "q@1.0"}},
+                        {{"type": "kind", "value": "main"}},
+                        {{"type": "field", "key": "x", "value": {value}, "fill": {fill}}}
+                    ]}},
+                    "body": ""
+                }},
+                "cards": []
+            }}"#
+            )
+        };
+
+        let err = serde_json::from_str::<Document>(&blob(r#"{"a": 1}"#, "true"))
+            .expect_err("a fill-marked mapping is refused");
+        assert!(err.to_string().contains("must_fill"), "{err}");
+
+        let content = quillmark_content::import::from_markdown("Q3 results").expect("content");
+        let canonical =
+            serde_json::to_string(&quillmark_content::serial::to_canonical_value(&content))
+                .expect("canonical content serializes");
+        serde_json::from_str::<Document>(&blob(&canonical, "true"))
+            .expect("a fill-marked content object still loads");
     }
 
     #[test]

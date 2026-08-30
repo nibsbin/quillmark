@@ -321,6 +321,7 @@ Three outcomes, and the wire tells them apart only with this table in hand, sinc
 | `edit::invalid_kind_name` | `kind` | structured |
 | `edit::index_out_of_range` | `index`, `len` | structured |
 | `edit::value_too_deep` | `max` | structured |
+| `edit::fill_on_mapping` | `field` | structured |
 | `edit::field_not_inline` | `field`, `codec` | structured |
 | `edit::field_not_content` | `field`, `declared` | structured |
 | `edit::field_coercion_failed` | `field`, `target` | structured, coarser |

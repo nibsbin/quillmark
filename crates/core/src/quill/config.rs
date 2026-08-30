@@ -1786,10 +1786,12 @@ impl QuillConfig {
         let version = match quill_section.get("version") {
             Some(version_val) => {
                 // Handle version as string or number (YAML might parse 1.0 as number)
+                // A YAML `1.0` arrives as a number; rendering the JSON number
+                // keeps its fraction, which `f64::to_string` drops (`1.0` → `1`).
                 let raw = if let Some(s) = version_val.as_str() {
                     s.to_string()
-                } else if let Some(n) = version_val.as_f64() {
-                    n.to_string()
+                } else if version_val.is_number() {
+                    version_val.to_string()
                 } else {
                     errors.push(
                         Diagnostic::new(

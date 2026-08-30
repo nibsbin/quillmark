@@ -517,8 +517,11 @@ describe('Document blank-canvas constructor', () => {
     expect(field(doc.main, 'title')).toBe('Hello')
   })
 
-  it('throws on an invalid quill reference', () => {
-    expect(() => new Document('not a valid ref!!')).toThrow(/QuillReference/)
+  it('throws on an invalid quill reference, coded as setQuillRef codes it', () => {
+    expectEditCode(
+      () => new Document('not a valid ref!!'),
+      'parse::invalid_quill_reference',
+    )
   })
 })
 
@@ -582,7 +585,10 @@ describe('Document editor surface: setQuillRef / overwrite / revise', () => {
 
   it('setQuillRef throws on invalid reference', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
-    expect(() => doc.setQuillRef('INVALID QUILL REF WITH SPACES')).toThrow()
+    expectEditCode(
+      () => doc.setQuillRef('INVALID QUILL REF WITH SPACES'),
+      'parse::invalid_quill_reference',
+    )
   })
 
   it('revise({}, md) revises the main body and returns the text delta', () => {

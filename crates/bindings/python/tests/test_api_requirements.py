@@ -7,6 +7,8 @@ and no content lane (`overwrite` / `revise` / `apply_change` + codec); those are
 WASM-only by scope.
 """
 
+import datetime
+
 import pytest
 from quillmark import (
     Quillmark,
@@ -320,6 +322,30 @@ def test_store_ext_rejects_non_dict():
     doc = Document.from_markdown(SIMPLE_MD)
     with pytest.raises(ValueError, match="must be a dict"):
         doc.store_ext("nope")
+
+
+def test_unsupported_value_types_are_refused():
+    """At the boundary, rather than as the value's repr — a tuple stored as
+    "('a', 'b')" only surfaces as garbage at render or read-back."""
+    doc = Document.from_markdown(SIMPLE_MD)
+    for bad in [("a", "b"), {"x"}, b"bytes", object()]:
+        with pytest.raises(ValueError, match="no JSON form"):
+            doc.store_ext({"k": bad})
+
+
+def test_dates_keep_their_stringified_form():
+    """The three types whose `str()` is the spelling a field reads."""
+    doc = Document.from_markdown(SIMPLE_MD)
+    doc.store_ext(
+        {
+            "d": datetime.date(2026, 8, 30),
+            "t": datetime.time(9, 30),
+            "dt": datetime.datetime(2026, 8, 30, 9, 30),
+        }
+    )
+    assert doc.main["ext"]["d"] == "2026-08-30"
+    assert doc.main["ext"]["t"] == "09:30:00"
+    assert doc.main["ext"]["dt"] == "2026-08-30 09:30:00"
 
 
 def test_ext_round_trips_through_markdown():

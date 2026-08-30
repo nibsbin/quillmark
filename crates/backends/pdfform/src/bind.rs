@@ -267,12 +267,11 @@ pub fn project_kind(
         SchemaType::Enum => WidgetType::Choice {
             options: blank_first(field.enum_values.as_deref().unwrap_or_default()),
         },
-        // An array of scalars binds as text, its elements joined with newlines
-        // by `resolve::coerce_text`.
+        // `resolve::coerce_text` joins an array's elements with newlines, so the
+        // widget is multiline whatever `ui` says: a single-line one collapses
+        // the value the flattened raster stacks.
         SchemaType::Array => match field.items.as_deref() {
-            Some(items) if is_scalar_or_prose(items) => WidgetType::Text {
-                multiline: is_multiline(field),
-            },
+            Some(items) if is_scalar_or_prose(items) => WidgetType::Text { multiline: true },
             _ => return Err(unbindable()),
         },
         // `Object`, plus any type added to the `#[non_exhaustive]` `SchemaType`
@@ -348,6 +347,10 @@ main:
         type: string
       ui:
         multiline: true
+    tags:
+      type: array
+      items:
+        type: string
     agree:
       type: boolean
     favorite_color:
@@ -425,9 +428,12 @@ card_kinds:
         );
     }
 
+    /// With or without `ui.multiline`: the joined value carries newlines either
+    /// way.
     #[test]
-    fn scalar_array_projects_to_multiline_text_via_ui() {
+    fn a_scalar_array_projects_to_multiline_text() {
         assert_eq!(kind("comments").unwrap(), WidgetType::Text { multiline: true });
+        assert_eq!(kind("tags").unwrap(), WidgetType::Text { multiline: true });
     }
 
     #[test]
