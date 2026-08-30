@@ -189,3 +189,22 @@ fn a_point_past_the_tolerance_is_still_a_miss() {
     assert_eq!(session.position_at(0, 2.0, 2.0, 8.0), None);
     assert_eq!(session.field_at(0, 2.0, 2.0, 8.0), None);
 }
+
+/// `f64::max` returns the non-NaN side, so an unguarded gap reads a NaN
+/// coordinate as inside every box and the query answers the last-painted field
+/// where it has none to give. A consumer reaches this from the documented
+/// transform whenever `renderScale` is zero.
+#[test]
+fn a_non_finite_point_resolves_to_nothing() {
+    let session = open();
+    for (x, y) in [
+        (f32::NAN, f32::NAN),
+        (f32::NAN, 100.0),
+        (120.0, f32::NAN),
+        (f32::INFINITY, f32::INFINITY),
+        (f32::NEG_INFINITY, 100.0),
+    ] {
+        assert_eq!(session.position_at(0, x, y, 8.0), None, "positionAt({x}, {y})");
+        assert_eq!(session.field_at(0, x, y, 8.0), None, "fieldAt({x}, {y})");
+    }
+}

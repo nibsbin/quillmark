@@ -109,9 +109,16 @@ impl Aabb {
     }
 
     /// Gap from `(x, y)` to this box: zero inside it (edges included), else the
-    /// length of the shortest vector reaching it. The one measure both point
-    /// queries rank by, so a tolerance of zero is exactly containment.
+    /// length of the shortest vector reaching it, and infinite for a coordinate
+    /// that is not finite. The one measure both point queries rank by, so a
+    /// tolerance of zero is exactly containment.
+    ///
+    /// `f64::max` returns the non-NaN side, so without the finite check a NaN
+    /// coordinate collapses both axes to zero and reads as inside every box.
     fn distance(&self, x: f64, y: f64) -> f64 {
+        if !x.is_finite() || !y.is_finite() {
+            return f64::INFINITY;
+        }
         let dx = (self.min_x - x).max(0.0).max(x - self.max_x);
         let dy = (self.min_y - y).max(0.0).max(y - self.max_y);
         dx.hypot(dy)
