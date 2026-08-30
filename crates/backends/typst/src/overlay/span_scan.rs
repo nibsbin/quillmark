@@ -54,7 +54,7 @@ use typst::utils::PicoStr;
 use typst::World;
 use typst_layout::PagedDocument;
 
-use quillmark_core::{ContentHit, HitGranularity, RenderedRegion};
+use quillmark_core::{ContentHit, HitGranularity, RenderedRegion, LINE_REACH};
 
 use crate::emit::SegmentMap;
 use crate::world::QuillWorld;
@@ -109,17 +109,19 @@ impl Aabb {
     }
 
     /// Gap from `(x, y)` to this box: zero inside it (edges included), else the
-    /// length of the shortest vector reaching it, absent when either side is not
-    /// finite. The one measure both point queries rank by, so a tolerance of
-    /// zero is exactly containment, and an absent gap is one no `tol` reaches.
-    /// `RenderedRegion::distance` carries why the finite check is load-bearing.
+    /// shortest vector reaching it with its horizontal leg divided by
+    /// [`LINE_REACH`], absent when either side is not finite. The one measure
+    /// both point queries rank by, so a tolerance of zero is exactly
+    /// containment, and an absent gap is one no `tol` reaches.
+    /// `RenderedRegion::distance` carries the scaling and why the finite check
+    /// is load-bearing.
     fn distance(&self, x: f64, y: f64) -> Option<f64> {
         let corners = [self.min_x, self.min_y, self.max_x, self.max_y];
         let finite = x.is_finite() && y.is_finite() && corners.iter().all(|v| v.is_finite());
         finite.then(|| {
             let dx = (self.min_x - x).max(0.0).max(x - self.max_x);
             let dy = (self.min_y - y).max(0.0).max(y - self.max_y);
-            dx.hypot(dy)
+            (dx / LINE_REACH as f64).hypot(dy)
         })
     }
 }
