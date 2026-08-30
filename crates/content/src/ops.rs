@@ -742,15 +742,18 @@ impl Content {
     /// written in, under the rebase rule stated on [`ChangeBundle`].
     ///
     /// `bundle.mark_ops` are ignored, so an editor building them diffs its
-    /// intended marks against this instead of predicting the rebase. Marks a
-    /// text move drops (out of range, zero-width formatting) are absent, as they
-    /// are from the applied result.
+    /// intended marks against this instead of predicting the rebase. The answer
+    /// is [`normalize`](Self::normalize)d, as the store's is: marks a text move
+    /// drops (out of range, zero-width formatting) are absent, and same-kind
+    /// runs a move left adjacent arrive already unioned. A bundle whose
+    /// `mark_ops` are empty therefore names the marks the field will hold.
     ///
     /// Errors are [`apply_field_change`](Self::apply_field_change)'s on the same
     /// ops, minus those only a mark op raises.
     pub fn map_marks(&self, bundle: &ChangeBundle) -> Result<Vec<Mark>, ApplyError> {
         let mut scratch = self.clone();
         scratch.apply_text_channels(bundle)?;
+        scratch.normalize();
         Ok(scratch.marks)
     }
 
@@ -1307,6 +1310,47 @@ mod tests {
         rt.apply_field_change(&bundle).unwrap();
         assert_eq!(predicted, rt.marks);
         assert_eq!(anchor_at(&rt), (6, 6), "the anchor never left its position");
+    }
+
+    /// A move can leave two same-kind runs touching, and the store unions them.
+    /// An editor holding the returned marks as its own model of the field would
+    /// otherwise disagree with the next read.
+    #[test]
+    fn map_marks_reports_the_union_a_move_makes_adjacent() {
+        // Both bundle shapes: `apply_field_change` splits on `is_delta_only`,
+        // and the answer must match the store on either side of that split.
+        for line_ops in [
+            Vec::new(),
+            vec![LineOp::SetKind {
+                line: 0,
+                kind: LineKind::Para,
+            }],
+        ] {
+            let mut rt = from_markdown("ab cd").unwrap();
+            rt.apply_mark_ops(&[
+                MarkOp::Add {
+                    start: 0,
+                    end: 2,
+                    kind: MarkKind::Strong,
+                },
+                MarkOp::Add {
+                    start: 3,
+                    end: 5,
+                    kind: MarkKind::Strong,
+                },
+            ])
+            .unwrap();
+            let bundle = ChangeBundle {
+                delta: diff("ab cd", "abcd"),
+                line_ops,
+                ..Default::default()
+            };
+
+            let predicted = rt.map_marks(&bundle).unwrap();
+            rt.apply_field_change(&bundle).unwrap();
+            assert_eq!(predicted, rt.marks);
+            assert_eq!(strong_at(&rt), (0, 4), "the two runs are one");
+        }
     }
 
     /// `map_marks` reads; a bundle it rejects leaves the content alone.

@@ -46,8 +46,12 @@ impl ValidationResult {
 }
 
 pub fn execute(args: ValidateArgs) -> Result<()> {
+    // Gated on the directory: the loader below owns the missing-path message,
+    // and an ungated pre-check answers a typo'd path with the bundle's contents
+    // again. What it adds is the path on a real directory, which the tree
+    // loader cannot name.
     let quill_yaml_path = args.quill_path.join("Quill.yaml");
-    if !quill_yaml_path.exists() {
+    if args.quill_path.is_dir() && !quill_yaml_path.exists() {
         return Err(CliError::InvalidArgument(format!(
             "Quill.yaml not found in: {}",
             args.quill_path.display()
@@ -67,12 +71,11 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
             for diag in e.diagnostics() {
                 eprintln!("{}", diag.fmt_pretty());
             }
-            eprintln!(
-                "\nValidation failed: {} error(s) in Quill.yaml",
-                e.diagnostics().len()
-            );
+            // The branch covers every load failure, a missing directory and an
+            // unreadable `Quill.yaml` among them, so it names neither.
+            eprintln!("\nValidation failed: {} error(s)", e.diagnostics().len());
             return Err(CliError::InvalidArgument(
-                "Quill configuration is invalid".to_string(),
+                "Quill could not be loaded".to_string(),
             ));
         }
     };
