@@ -40,7 +40,7 @@ import initCore, { Quill, Document } from '../core/wasm.js';
 // itself), a `node:fs` read under Node, whose `fetch` rejects `file:` URLs.
 // Resolution-time, so `node:fs` never enters a browser graph.
 import { toModuleSource } from '#quillmark-env';
-import { importMarkdown, exportMarkdown, rebase, mapPos } from '../core/wasm.js';
+import { importMarkdown, exportMarkdown, rebase, mapPos, mapMarks } from '../core/wasm.js';
 import { parseDocPath, formatDocPath } from '../core/wasm.js';
 
 // ── Initialization ──────────────────────────────────────────────────────────
@@ -90,6 +90,7 @@ const CORE_SURFACE = Object.freeze({
 	exportMarkdown,
 	rebase,
 	mapPos,
+	mapMarks,
 	parseDocPath,
 	formatDocPath
 });

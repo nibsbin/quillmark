@@ -683,9 +683,6 @@ impl QuillConfig {
                 ))
             }
             FieldType::Date | FieldType::DateTime => {
-                if json_value.is_null() {
-                    return Ok(QuillValue::from_json(serde_json::Value::Null));
-                }
                 let text = if let Some(s) = json_value.as_str() {
                     // The blank is a value: it survives coercion so the ladder
                     // sees a *present* cell and lets it outrank a `default:`,
