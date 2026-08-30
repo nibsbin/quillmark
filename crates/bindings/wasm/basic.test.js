@@ -13,6 +13,7 @@ import {
   exportMarkdown,
   rebase,
   mapPos,
+  mapMarks,
   parseDocPath,
   formatDocPath,
 } from '@quillmark-wasm'
@@ -866,6 +867,55 @@ card_kinds:
     expect(() =>
       doc.applyChange({ field: 'intro' }, { markOps: [{ op: 'add', start: 999, end: 1000, type: 'emph' }] }),
     ).toThrow()
+  })
+
+  it('mapMarks answers where applyChange puts a mark, at the position the assocs differ', () => {
+    const doc = blankDoc()
+    doc.revise({}, 'hello world')
+    doc.applyChange(
+      {},
+      {
+        markOps: [
+          { op: 'add', start: 6, end: 6, type: 'anchor', id: 'c1' },
+          { op: 'add', start: 6, end: 11, type: 'strong' },
+        ],
+      },
+    )
+    const before = doc.main.body
+    const bundle = { delta: { ops: [{ retain: 6 }, { insert: 'X' }, { retain: 5 }] } }
+
+    // The trap: `mapPos` answers for a position the caller holds, and a caret
+    // typing here moves past its own text. A zero-width mark in the field does
+    // not — the store rebases it `before`.
+    expect(mapPos(bundle.delta, 6, 'after')).toBe(7)
+    const predicted = mapMarks(before, bundle)
+    expect(predicted.find((m) => m.type === 'anchor')).toMatchObject({ start: 6, end: 6 })
+    expect(predicted.find((m) => m.type === 'strong')).toMatchObject({ start: 7, end: 12 })
+
+    doc.applyChange({}, bundle)
+    expect(doc.main.body.marks).toEqual(predicted)
+  })
+
+  it('mapMarks carries a mark through every text-moving channel of one bundle', () => {
+    const doc = blankDoc()
+    doc.revise({}, 'hello world')
+    doc.applyChange({}, { markOps: [{ op: 'add', start: 6, end: 6, type: 'anchor', id: 'c1' }] })
+    const before = doc.main.body
+    const bundle = {
+      delta: { ops: [{ retain: 6 }, { insert: 'X' }, { retain: 5 }] },
+      islandOps: [
+        { op: 'insert', at: 6, id: 'i1', type: 'image', loss: 'lossless', props: { url: 'u', alt: 'a' } },
+      ],
+      lineOps: [{ op: 'split', at: 6 }],
+    }
+
+    const predicted = mapMarks(before, bundle)
+    doc.applyChange({}, bundle)
+    expect(doc.main.body.marks).toEqual(predicted)
+    expect(predicted.find((m) => m.type === 'anchor')).toMatchObject({ start: 6, end: 6 })
+
+    // A bundle `applyChange` would refuse throws here rather than answering.
+    expect(() => mapMarks(before, { islandOps: [{ op: 'insert', at: 99, id: 'i2', type: 'image', props: {} }] })).toThrow()
   })
 
   it('applyChange setContinues lowers a hard break op-wise', () => {

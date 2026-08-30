@@ -22,7 +22,7 @@ Placement decides where a mutation verb lives, in one sentence:
 
 `quill.writer(doc)` (mirroring core's `quill.writer(&mut doc)`) is the one schema-bound door: bare `set` / `set_all` / `reviseBody` / `reviseField` / `addCard` / `card(i)`, names and markdown in, diagnostics out. It resolves each field's type from the bound quill, so a name the schema does not declare is a typo (`UnknownField`), not a fallback.
 
-`Document` holds everything quill-free: the opaque `store*` primitive (verbatim, coercion deferred to render) and the addressed content lane: `overwrite` / `revise` / `applyChange` plus the `importMarkdown` / `exportMarkdown` / `rebase` / `mapPos` codec: which navigate by `Addr` and return `Delta` receipts but never consult a schema. **Transport** reads (`getStored` / `isFill` / `getExt`) return the stored value verbatim, need no schema, and sit on `Document` too.
+`Document` holds everything quill-free: the opaque `store*` primitive (verbatim, coercion deferred to render) and the addressed content lane: `overwrite` / `revise` / `applyChange` plus the `importMarkdown` / `exportMarkdown` / `rebase` / `mapPos` / `mapMarks` codec: which navigate by `Addr` and return `Delta` receipts but never consult a schema. **Transport** reads (`getStored` / `isFill` / `getExt`) return the stored value verbatim, need no schema, and sit on `Document` too.
 
 The **interpreting** reads (reading a field by its type) are schema-shaped questions ("this field's richtext, as markdown"), so they gain a schema-bound home: `quill.reader(doc)`, the read twin of `quill.writer(doc)` (mirroring core's `quill.reader(&doc)`).
 
@@ -73,7 +73,19 @@ The content lane's three verbs are rungs, and what sorts them is the fate of the
 
 - **overwrite** *destroys* them. Value semantics: store exactly this content, no import, no diff. A `toMarkdown → overwrite` round-trip cannot resurrect an anchor, which is why the cold-import path is spelled `overwrite(addr, importMarkdown(md))` at the call site, where the loss is visible.
 - **revise** *rebases* them. Import the markdown, diff against the current value, carry surviving anchors onto the new text, hand back the `Delta`.
-- **apply** *preserves* them. Splice ops into the content in place; anchors and island ids are untouched because the text around them is what moved.
+- **apply** *preserves* them. Splice ops into the content in place; anchors and island ids ride the splice because the text around them is what moved.
+
+**The rebase rule.** Every channel that moves text (`delta`, `islandOps`, `lineOps`) rebases the marks already in the field by one assoc rule, and `revise` carries surviving anchors by the same biases:
+
+| mark edge | assoc | an insertion at that exact position |
+|---|---|---|
+| a range's `start` | `after` | grows text outside the span |
+| a range's `end` | `before` | grows text outside the span |
+| a zero-width mark | `before` | leaves the mark put |
+
+The last row is the only position where the two assocs differ, and where an anchor most often sits.
+
+`markOps` are written in the coordinates that rebase produces. Left as prose, the rule is a prediction every editor bridge reimplements to decide which ops to emit; `mapMarks(content, bundle)` runs it instead, and a bridge diffs its intended marks against what it returns. Both readings walk one channel list (`Content::apply_text_channels`), so the store and the prediction cannot answer a position differently.
 
 **The rule governs user-field writes.** System metadata (`store_ext` / `store_seed_*`), structural operations (`insertCard` / `moveCard` / `setCardKind`), and the `remove_*` family sit outside it: `remove_*` has no lane because one verb serves every write path, and a structural op moves cards rather than writing into one. So `store_field` / `store_fields` / `store_fill` are the opaque store, `set` / `set_all` the typed writer, and a name never needs per-verb disambiguation against its neighbor (the opaque batch `store_fields` and the typed batch `set_all` are not near-homographs).
 
@@ -130,7 +142,7 @@ PyO3 bindings published as `quillmark` on PyPI. A `snake_case` surface over the 
 
 > **Scope: Tier 1 + storage + render.** Field I/O flows through `quill.writer(doc)` / `quill.reader(doc)` exclusively; `Document` is quill-free data and structure (parse, the storage DTO, `insert_card` / `remove_card` / `move_card` / `make_card`, `remove_field`, the `card` / `seed_overlay` reads, `$ext` / `$seed`).
 >
-> The opaque store (`store_field` / `store_fields` / `store_fill`) and the anchor-preserving content lane (`overwrite` / `revise` / `apply_change` + the `import_markdown` / `export_markdown` / `rebase` / `map_pos` codec) are **WASM-only by scope, not by lag**: their audience, storage/migration tooling holding no quill and live editors preserving anchor identity, is not a Python audience. A field write without a loadable quill operates on the storage DTO directly.
+> The opaque store (`store_field` / `store_fields` / `store_fill`) and the anchor-preserving content lane (`overwrite` / `revise` / `apply_change` + the `import_markdown` / `export_markdown` / `rebase` / `map_pos` / `map_marks` codec) are **WASM-only by scope, not by lag**: their audience, storage/migration tooling holding no quill and live editors preserving anchor identity, is not a Python audience. A field write without a loadable quill operates on the storage DTO directly.
 
 Every Python verb is identical to its core/WASM twin or names its one difference in the parity table above: `card=None` selectors fold the composable-card `$ext` / `remove_field` twins onto one axis, and `revise_field` discards the `Delta` (an editor receipt). No half-mirrored lane remains to drift.
 
