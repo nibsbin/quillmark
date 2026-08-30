@@ -2,6 +2,66 @@
 
 ## Unreleased
 
+- fix(cli): **`render -f svg` / `-f png` writes every page.** The Typst backend
+  emits one artifact per page and the command wrote `artifacts.first()`,
+  discarding the rest with no warning, so a multi-page document produced a
+  single-page file that looked complete. A multi-page render writes one numbered
+  file per page — `out.svg` becomes `out-1.svg`, `out-2.svg`, … , page one
+  included, so no unnumbered file claims to be the whole document — and
+  `--stdout`, which carries one artifact, refuses it rather than emitting page
+  one.
+- fix(core): **a `!must_fill` marker on a mapping is refused at every ingress,
+  not just at parse.** `Card::store_fill`, the `CardWire` boundary and the
+  `@0.92.0` storage DTO took `fill: true` against an object and emitted
+  `x: a: 1`, which `Document::parse` then refuses — breaking the emit round
+  trip. The rule the parser enforces now sits beside the other field invariants
+  as `edit::validate_fill_targets`, raising `edit::fill_on_mapping`. A canonical
+  content object stays legal: emit projects it to its markdown scalar before
+  writing the tag, which is the shape `!must_fill` emits against.
+- fix(core): **a comment after a nested key that needs quoting keeps its
+  position.** A comment's position is its index among its mapping's children,
+  and the prescan matched only a bare `[A-Za-z_][A-Za-z0-9_]*` nested key — so
+  `"a b": 1`, which the emitter writes itself, was not counted and every comment
+  after it in that mapping round-tripped one slot early. The prescan reads a
+  nested key in the spellings the emitter writes at depth: quoted, and plain
+  with characters the bare form excludes.
+- fix(pdfform): **an array-bound text widget is multiline.** `resolve::coerce_text`
+  joins an array's elements with newlines unconditionally while the widget took
+  `multiline` from `ui`, defaulting to false: a viewer collapsed the `/V` at its
+  first line while the flattened SVG/PNG stacked every line, so the interactive
+  PDF and the raster disagreed.
+- fix(core): **a version segment is plain digits, and a `$quill` `@` carries a
+  selector.** `u32::from_str` accepts a leading `+`, so `memo@+2.+1` parsed as
+  `Minor(2, 1)` and `version: "+1.0"` loaded, though `quill_ref_hint` promises
+  digits and neither spelling re-`Display`s to itself; and `memo@` yielded an
+  empty selector silently read as `latest`. An absent selector still means
+  latest.
+- fix(core): **an unquoted numeric `version:` keeps its fraction.** The loader
+  accepts a YAML number by intent but converted it through `f64::to_string`,
+  which drops the fraction: `version: 1.0` became `"1"` and failed validation
+  with a hint naming the `'1.0'` the author had written. An unquoted `1.10` is
+  the YAML number `1.1` before the loader sees it, so VERSIONING.md's quote-it
+  rule now names that rather than the `x.0` case.
+- fix(python): **a value with no JSON form raises instead of storing its
+  `repr`.** `py_to_json_at` fell through to `str()`, so a tuple stored
+  `"('a', 'b')"`, a `bytes` stored `"b'...'"` and a `set` stored `"{'x'}"` —
+  silently, surfacing as garbage at render or read-back. `datetime.date`,
+  `datetime.datetime` and `datetime.time` keep the stringified form the
+  fallback existed for; everything else is a `ValueError`, which is what the
+  WASM lane already refuses.
+- fix(python): **the type stub declares `Diagnostic.args`**, the localization
+  channel the class exposes. Under a type checker `diag.args` was an attribute
+  error on a `@final` class.
+- docs(python): **the error contract names both classes the binding raises.**
+  `errors.rs` claimed every raised exception is `QuillmarkError` carrying
+  diagnostics, while an argument the binding cannot convert raises `ValueError`
+  — the behavior the binding's own tests pin. Engine refusals carry diagnostics;
+  an unconvertible argument raises `ValueError` before the engine is called.
+  Stated in the module doc and in the error-handling guide.
+- fix(wasm): **`new Document(ref)` refuses an invalid reference with the code
+  and hint `setQuillRef` attaches.** The same input was classified two ways by
+  one binding: `parse::invalid_quill_reference` plus the canonical grammar hint,
+  or a bare message. Both doors mint it through one helper now.
 - fix(typst): **a literal `;` after emitted inline markup survives to the
   page.** Typst's markup parser reads a semicolon directly after an embedded
   code expression as that expression's terminator and renders nothing, so

@@ -827,9 +827,9 @@ impl Document {
     /// invalid quill reference.
     #[wasm_bindgen(constructor)]
     pub fn new(quill_ref: &str) -> Result<Document, JsValue> {
-        let qr: quillmark_core::QuillReference = quill_ref.parse().map_err(|e| {
-            WasmError::from(format!("invalid QuillReference '{quill_ref}': {e}")).to_js_value()
-        })?;
+        let qr: quillmark_core::QuillReference = quill_ref
+            .parse()
+            .map_err(|e: String| invalid_quill_reference("Document", quill_ref, &e))?;
         Ok(Document {
             inner: quillmark_core::Document::new(qr),
             parse_warnings: Vec::new(),
@@ -1512,18 +1512,9 @@ impl Document {
     /// Replace the QUILL reference string. Throws if `ref_str` is invalid.
     #[wasm_bindgen(js_name = setQuillRef)]
     pub fn set_quill_ref(&mut self, ref_str: &str) -> Result<(), JsValue> {
-        let qr: quillmark_core::QuillReference = ref_str.parse().map_err(|e| {
-            let diag = quillmark_core::Diagnostic::new(
-                quillmark_core::Severity::Error,
-                format!("setQuillRef: invalid reference '{}': {}", ref_str, e),
-            )
-            .with_code("parse::invalid_quill_reference".to_string())
-            .with_hint(quillmark_core::quill_ref_hint().to_string());
-            WasmError {
-                diagnostics: vec![diag],
-            }
-            .to_js_value()
-        })?;
+        let qr: quillmark_core::QuillReference = ref_str
+            .parse()
+            .map_err(|e: String| invalid_quill_reference("setQuillRef", ref_str, &e))?;
         self.inner.set_quill_ref(qr);
         Ok(())
     }
@@ -2233,6 +2224,21 @@ pub fn map_pos(
         }
     };
     Ok(delta.map_pos(pos, assoc))
+}
+
+/// The `$quill` reference refusal, one code and one hint for every door that
+/// parses one: the two differ in the `ctx` naming the door.
+fn invalid_quill_reference(ctx: &str, value: &str, reason: &str) -> JsValue {
+    let diag = quillmark_core::Diagnostic::new(
+        quillmark_core::Severity::Error,
+        format!("{}: invalid reference '{}': {}", ctx, value, reason),
+    )
+    .with_code("parse::invalid_quill_reference".to_string())
+    .with_hint(quillmark_core::quill_ref_hint().to_string());
+    WasmError {
+        diagnostics: vec![diag],
+    }
+    .to_js_value()
 }
 
 /// Maps `EditError` to a JS `Error` carrying one diagnostic, its `DocPath`
