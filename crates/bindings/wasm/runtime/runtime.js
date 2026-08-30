@@ -962,20 +962,22 @@ export class LiveSession {
 	 * @param {number} page
 	 * @param {number} x
 	 * @param {number} y
+	 * @param {number} [tolPt]
 	 * @returns {string | undefined}
 	 */
-	fieldAt(page, x, y) {
-		return this.#inner.fieldAt(page, x, y);
+	fieldAt(page, x, y, tolPt) {
+		return this.#inner.fieldAt(page, x, y, tolPt);
 	}
 
 	/**
 	 * @param {number} page
 	 * @param {number} x
 	 * @param {number} y
+	 * @param {number} [tolPt]
 	 * @returns {import('./runtime.d.ts').ContentHit | undefined}
 	 */
-	positionAt(page, x, y) {
-		return this.#inner.positionAt(page, x, y);
+	positionAt(page, x, y, tolPt) {
+		return this.#inner.positionAt(page, x, y, tolPt);
 	}
 
 	/**
