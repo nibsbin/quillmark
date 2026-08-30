@@ -121,7 +121,8 @@ pub trait SessionHandle: Send + Sync + 'static {
     /// degrading to the containing segment's start on origin-less ink (see
     /// [`ContentHit`]). `tol` reads as it does on [`field_at`](Self::field_at):
     /// the nearest content ink within that many points answers, which on a text
-    /// column is the nearer of the two lines a click between them sits between.
+    /// column is the nearer of the two lines a click in the leading falls
+    /// between.
     /// `None` past `tol` from all content ink, on a scalar/widget (no content
     /// address), or when the backend maps no content. Default `None`: a backend
     /// that carries a per-segment source map overrides this.

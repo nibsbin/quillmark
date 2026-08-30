@@ -120,7 +120,7 @@ impl Aabb {
 
 /// The nearest box within `tol` among `boxed`, which callers pass **in reverse
 /// paint order**: ties keep the first seen, so the last-painted of equally near
-/// items wins, as it did when only an exact hit could answer.
+/// items wins.
 ///
 /// Ranking by distance rather than growing each box is what keeps the answer
 /// the nearer item's: outset boxes overlap, and a first match over them answers

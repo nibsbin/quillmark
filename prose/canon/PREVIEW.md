@@ -299,13 +299,13 @@ the covering glyph's box.
 glyph's box is the run's ink height by that glyph's advance, so a text column
 answers over a fraction of the area it occupies: horizontally the boxes of one
 line abut, but the leading between two lines is inside the paragraph and on no
-glyph, and past the end of a short line there is nothing at all. Measured, an
-11pt paragraph is live over roughly two thirds of its own height at default
-leading and under half of it double-spaced. Both point queries therefore take a
+glyph, and past the end of a short line there is nothing at all. An 11pt
+paragraph is live over roughly two thirds of its own height at default leading,
+and under half of it double-spaced. Both point queries therefore take a
 tolerance: the nearest ink within `tolPt` answers, `0` being exact containment.
 
-**The caller owns the number, because the surface it is a property of is the
-pointer's.** Slack is a screen quantity — what a finger or a hand-held mouse
+**The caller owns the number, because the imprecision is the pointer's.**
+Slack is a screen quantity — what a finger or a hand-held mouse
 misses by — so a tolerance fixed in points shrinks under the cursor as the page
 is drawn smaller, which is where the target is already hardest to hit. A
 consumer converts its own slack at the scale it drew the page and passes the
@@ -317,13 +317,13 @@ two fields' lines answers whichever painted last, however far away it is.
 Ranking by distance answers the nearer one, and keeps the tolerance a pure
 widening: containment is distance zero, so no point that resolves exactly ever
 changes answer as `tolPt` rises. On a tie — two placements equally near, an
-exact hit under another exact hit — the later-painted still wins, as it always
-did. Widgets keep their precedence for a click that lands on one; nothing merely
+exact hit under another exact hit — the later-painted wins. Widgets keep their
+precedence for a click that lands on one; nothing merely
 near a point outranks ink the pointer is inside of.
 
-This is the whole of what tolerance buys, and it is not a bounding box over ink
-the field does not fill: a click stays on ink some placement actually drew, and
-a point far from all of it still resolves to nothing.
+A tolerance is not a bounding box over ink the field does not fill: a click
+stays on ink some placement drew, and a point far from all of it resolves to
+nothing.
 
 ## TypeScript surface
 

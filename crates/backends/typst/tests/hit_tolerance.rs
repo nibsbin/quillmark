@@ -1,9 +1,8 @@
 //! The pointer-slack argument on `field_at` / `position_at`: a click within
 //! `tol` points of a field's ink resolves to the nearest such ink. A glyph box
 //! is the run's ink height by the glyph's advance, so a text column is live over
-//! a fraction of its own area — the leading between two lines is inside a
-//! paragraph and on no glyph — and these hold what the slack may and may not
-//! change about that.
+//! a fraction of its own area: the leading between two lines is inside a
+//! paragraph and on no glyph. These hold what the slack may and may not change.
 
 use quillmark_core::{Backend, LiveSession};
 use quillmark_typst::TypstBackend;
