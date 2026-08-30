@@ -73,7 +73,8 @@ consumed by `quillmark-pdfform`. A minimal byte-level reader plus a single
 incremental-update appender that splices a fresh `/AcroForm` (and `/Info`
 `/Producer` stamp) onto a base PDF. Deliberately small: it hard-errors on
 out-of-contract input (xref streams, encryption, indirect `/Annots`,
-non-zero-generation base objects) rather than parsing the full format.
+non-zero-generation base objects, a base that already carries an `/AcroForm`,
+a non-finite widget `/Rect`) rather than parsing the full format.
 
 ### `bindings/*`
 

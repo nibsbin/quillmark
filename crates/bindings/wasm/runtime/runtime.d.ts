@@ -24,6 +24,7 @@ import type {
 	exportMarkdown,
 	rebase,
 	mapPos,
+	mapMarks,
 	parseDocPath,
 	formatDocPath
 } from '../core/wasm.js';
@@ -42,6 +43,7 @@ export interface CoreSurface {
 	exportMarkdown: typeof exportMarkdown;
 	rebase: typeof rebase;
 	mapPos: typeof mapPos;
+	mapMarks: typeof mapMarks;
 	parseDocPath: typeof parseDocPath;
 	formatDocPath: typeof formatDocPath;
 }

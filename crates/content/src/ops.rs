@@ -120,6 +120,20 @@ pub enum IslandOp {
 /// for an island insert and line indices for [`LineOp::Split`] /
 /// [`LineOp::Join`], which renumber every later line. A stale frame stays in
 /// range, so the bundle applies cleanly and lands the wrong document.
+///
+/// # Mark rebase
+///
+/// `delta`, `island_ops` and `line_ops` each move text, and each rebases the
+/// marks already in the field by one rule:
+///
+/// | mark edge | [`Assoc`] | an insertion at that exact position |
+/// |---|---|---|
+/// | a range's `start` | `After` | grows text *outside* the span |
+/// | a range's `end` | `Before` | grows text *outside* the span |
+/// | a zero-width mark | `Before` | leaves the mark put |
+///
+/// `mark_ops` name the result, so a caller emitting them predicts this rebase.
+/// [`Content::map_marks`] runs it rather than reproducing it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChangeBundle {
     /// The text splice; the identity delta (no ops) is no text change.
@@ -374,6 +388,13 @@ pub enum ApplyError {
         depth: usize,
         max: usize,
     },
+    /// A [`LineOp::SetKind`] naming a heading level outside `1..=6`. Refused
+    /// because `normalize` does not repair it: the level reaches export as that
+    /// many `#`, which CommonMark reads back as a literal-hash paragraph.
+    BadHeadingLevel {
+        line: usize,
+        level: u8,
+    },
 }
 
 impl Content {
@@ -439,9 +460,6 @@ impl Content {
         Ok(())
     }
 
-    /// A range mark's start biases `After` and its end `Before` (an insertion at
-    /// either edge grows text *outside* the span); a zero-width mark biases
-    /// `Before`.
     fn rebase_marks(&mut self, delta: &Delta) {
         for m in &mut self.marks {
             if m.start == m.end {
@@ -627,6 +645,14 @@ impl Content {
                             mismatch,
                         });
                     }
+                    if let LineKind::Heading { level } = kind
+                        && !(1..=6).contains(level)
+                    {
+                        return Err(ApplyError::BadHeadingLevel {
+                            line: *line,
+                            level: *level,
+                        });
+                    }
                     let line = self.line_mut(*line)?;
                     line.kind = kind.clone();
                 }
@@ -694,13 +720,41 @@ impl Content {
             return self.apply_text_delta(&bundle.delta);
         }
         let mut scratch = self.clone();
-        scratch.apply_text_delta_inner(&bundle.delta)?;
-        scratch.apply_island_ops_inner(&bundle.island_ops)?;
-        scratch.apply_line_ops_inner(&bundle.line_ops)?;
+        scratch.apply_text_channels(bundle)?;
         scratch.apply_mark_ops_inner(&bundle.mark_ops)?;
         scratch.normalize();
         *self = scratch;
         Ok(())
+    }
+
+    /// Every channel of `bundle` that moves text, in bundle order. Sole caller
+    /// of the three, so an editor reading [`map_marks`](Self::map_marks) and the
+    /// store reading [`apply_field_change`](Self::apply_field_change) cannot
+    /// answer a position differently.
+    fn apply_text_channels(&mut self, bundle: &ChangeBundle) -> Result<(), ApplyError> {
+        self.apply_text_delta_inner(&bundle.delta)?;
+        self.apply_island_ops_inner(&bundle.island_ops)?;
+        self.apply_line_ops_inner(&bundle.line_ops)
+    }
+
+    /// Where `bundle`'s text-moving channels leave the marks this content
+    /// already holds: the final-text coordinates [`ChangeBundle::mark_ops`] are
+    /// written in, under the rebase rule stated on [`ChangeBundle`].
+    ///
+    /// `bundle.mark_ops` are ignored, so an editor building them diffs its
+    /// intended marks against this instead of predicting the rebase. The answer
+    /// is [`normalize`](Self::normalize)d, as the store's is: marks a text move
+    /// drops (out of range, zero-width formatting) are absent, and same-kind
+    /// runs a move left adjacent arrive already unioned. A bundle whose
+    /// `mark_ops` are empty therefore names the marks the field will hold.
+    ///
+    /// Errors are [`apply_field_change`](Self::apply_field_change)'s on the same
+    /// ops, minus those only a mark op raises.
+    pub fn map_marks(&self, bundle: &ChangeBundle) -> Result<Vec<Mark>, ApplyError> {
+        let mut scratch = self.clone();
+        scratch.apply_text_channels(bundle)?;
+        scratch.normalize();
+        Ok(scratch.marks)
     }
 
     fn line_mut(&mut self, line: usize) -> Result<&mut Line, ApplyError> {
@@ -1130,6 +1184,194 @@ mod tests {
         assert_eq!(rt.text, "hXello");
     }
 
+    fn anchored(text: &str, at: Usv) -> crate::model::Normalized {
+        let mut rt = from_markdown(text).unwrap();
+        rt.apply_mark_ops(&[MarkOp::Add {
+            start: at,
+            end: at,
+            kind: MarkKind::Anchor { id: "a1".into() },
+        }])
+        .unwrap();
+        rt
+    }
+
+    fn anchor_at(rt: &Content) -> (Usv, Usv) {
+        let m = rt
+            .marks
+            .iter()
+            .find(|m| matches!(&m.kind, MarkKind::Anchor { id } if id == "a1"))
+            .expect("the anchor survives");
+        (m.start, m.end)
+    }
+
+    fn strong_at(rt: &Content) -> (Usv, Usv) {
+        let m = rt
+            .marks
+            .iter()
+            .find(|m| matches!(m.kind, MarkKind::Strong))
+            .expect("the mark survives");
+        (m.start, m.end)
+    }
+
+    /// A zero-width mark's own position is where the two assocs part, and where
+    /// an anchor most often sits. Every text-moving channel answers it `Before`.
+    #[test]
+    fn an_insert_at_a_zero_width_marks_position_leaves_it_put() {
+        let d = diff("hello world", "hello Xworld");
+        assert_eq!(d.map_pos(6, Assoc::After), 7, "the answer not taken");
+
+        let mut via_delta = anchored("hello world", 6);
+        via_delta.apply_text_delta(&d).unwrap();
+        assert_eq!(anchor_at(&via_delta), (6, 6));
+
+        let mut via_island = anchored("hello world", 6);
+        via_island
+            .apply_island_ops(&[IslandOp::Insert {
+                at: 6,
+                island: image("i1"),
+            }])
+            .unwrap();
+        assert_eq!(anchor_at(&via_island), (6, 6));
+
+        let mut via_line = anchored("hello world", 6);
+        via_line.apply_line_ops(&[LineOp::Split { at: 6 }]).unwrap();
+        assert_eq!(anchor_at(&via_line), (6, 6));
+    }
+
+    /// An insertion at either edge of a range grows text outside the span.
+    #[test]
+    fn an_insert_at_a_range_marks_edge_stays_outside_the_span() {
+        let mut at_start = from_markdown("hello world").unwrap();
+        at_start
+            .apply_mark_ops(&[MarkOp::Add {
+                start: 6,
+                end: 11,
+                kind: MarkKind::Strong,
+            }])
+            .unwrap();
+        at_start
+            .apply_text_delta(&diff("hello world", "hello Xworld"))
+            .unwrap();
+        assert_eq!(strong_at(&at_start), (7, 12));
+
+        let mut at_end = from_markdown("hello world").unwrap();
+        at_end
+            .apply_mark_ops(&[MarkOp::Add {
+                start: 0,
+                end: 5,
+                kind: MarkKind::Strong,
+            }])
+            .unwrap();
+        at_end
+            .apply_text_delta(&diff("hello world", "helloX world"))
+            .unwrap();
+        assert_eq!(strong_at(&at_end), (0, 5));
+
+        let mut at_end_island = from_markdown("hello world").unwrap();
+        at_end_island
+            .apply_mark_ops(&[MarkOp::Add {
+                start: 0,
+                end: 5,
+                kind: MarkKind::Strong,
+            }])
+            .unwrap();
+        at_end_island
+            .apply_island_ops(&[IslandOp::Insert {
+                at: 5,
+                island: image("i1"),
+            }])
+            .unwrap();
+        assert_eq!(strong_at(&at_end_island), (0, 5));
+    }
+
+    /// The reason an editor can diff against `map_marks` rather than reproduce
+    /// the rebase: both readings walk one channel list, over every channel at
+    /// once and at the position the assocs disagree on.
+    #[test]
+    fn map_marks_reports_where_apply_field_change_puts_them() {
+        let mut rt = anchored("hello world", 6);
+        rt.apply_mark_ops(&[MarkOp::Add {
+            start: 0,
+            end: 5,
+            kind: MarkKind::Strong,
+        }])
+        .unwrap();
+        let bundle = ChangeBundle {
+            delta: diff("hello world", "hello Xworld"),
+            island_ops: vec![IslandOp::Insert {
+                at: 6,
+                island: image("i1"),
+            }],
+            line_ops: vec![LineOp::Split { at: 6 }],
+            mark_ops: Vec::new(),
+        };
+
+        let predicted = rt.map_marks(&bundle).unwrap();
+        rt.apply_field_change(&bundle).unwrap();
+        assert_eq!(predicted, rt.marks);
+        assert_eq!(anchor_at(&rt), (6, 6), "the anchor never left its position");
+    }
+
+    /// A move can leave two same-kind runs touching, and the store unions them.
+    /// An editor holding the returned marks as its own model of the field would
+    /// otherwise disagree with the next read.
+    #[test]
+    fn map_marks_reports_the_union_a_move_makes_adjacent() {
+        // Both bundle shapes: `apply_field_change` splits on `is_delta_only`,
+        // and the answer must match the store on either side of that split.
+        for line_ops in [
+            Vec::new(),
+            vec![LineOp::SetKind {
+                line: 0,
+                kind: LineKind::Para,
+            }],
+        ] {
+            let mut rt = from_markdown("ab cd").unwrap();
+            rt.apply_mark_ops(&[
+                MarkOp::Add {
+                    start: 0,
+                    end: 2,
+                    kind: MarkKind::Strong,
+                },
+                MarkOp::Add {
+                    start: 3,
+                    end: 5,
+                    kind: MarkKind::Strong,
+                },
+            ])
+            .unwrap();
+            let bundle = ChangeBundle {
+                delta: diff("ab cd", "abcd"),
+                line_ops,
+                ..Default::default()
+            };
+
+            let predicted = rt.map_marks(&bundle).unwrap();
+            rt.apply_field_change(&bundle).unwrap();
+            assert_eq!(predicted, rt.marks);
+            assert_eq!(strong_at(&rt), (0, 4), "the two runs are one");
+        }
+    }
+
+    /// `map_marks` reads; a bundle it rejects leaves the content alone.
+    #[test]
+    fn map_marks_reports_an_out_of_bounds_bundle_without_touching_the_content() {
+        let rt = anchored("hello world", 6);
+        let before = rt.clone();
+        let err = rt
+            .map_marks(&ChangeBundle {
+                island_ops: vec![IslandOp::Insert {
+                    at: 99,
+                    island: image("i1"),
+                }],
+                ..Default::default()
+            })
+            .unwrap_err();
+        assert!(matches!(err, ApplyError::IslandInsertOutOfRange { .. }));
+        assert_eq!(rt.marks, before.marks);
+        assert_eq!(rt.text, before.text);
+    }
+
     #[test]
     fn apply_text_delta_pads_short_prepend() {
         // A prepend naming only its inserted text (no trailing retain) still
@@ -1376,6 +1618,25 @@ mod tests {
             })
         );
         assert!(rt.lines[0].containers.is_empty());
+    }
+
+    #[test]
+    fn line_op_set_kind_range_checks_the_heading_level() {
+        let mut rt = from_markdown("t").unwrap();
+        assert_eq!(
+            rt.apply_line_ops(&[LineOp::SetKind {
+                line: 0,
+                kind: LineKind::Heading { level: 9 },
+            }]),
+            Err(ApplyError::BadHeadingLevel { line: 0, level: 9 })
+        );
+        assert_eq!(rt.validate(), Ok(()));
+        assert!(rt
+            .apply_line_ops(&[LineOp::SetKind {
+                line: 0,
+                kind: LineKind::Heading { level: 6 },
+            }])
+            .is_ok());
     }
 
     #[test]

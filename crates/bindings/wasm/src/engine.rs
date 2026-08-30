@@ -418,6 +418,18 @@ export type IslandOp =
  * Within each channel ops apply in sequence against the state the earlier ones
  * left: an island `insert`'s `at` counts earlier ops' slots, and `lineOps`
  * positions and indices renumber through earlier `split`/`join`.
+ *
+ * **Mark rebase.** `delta`, `islandOps` and `lineOps` each move text, and each
+ * rebases the marks already in the field by one rule: a range mark's `start`
+ * takes assoc `after` and its `end` `before`, so an insertion at either edge
+ * grows text *outside* the span; a **zero-width** mark takes `before`, so an
+ * insertion at its own position leaves it put. That last case is the one
+ * position where the two assocs differ, and where an anchor most often sits.
+ *
+ * `markOps` name the result, so a caller emitting them predicts this rebase.
+ * `mapMarks(content, bundle)` runs it instead: pass the bundle's text-moving
+ * channels, diff the marks it returns against the ones you intend, and emit
+ * only the difference. Reproducing the rule by hand is a second copy to drift.
  */
 export interface ChangeBundle {
     delta?: Delta;
@@ -1614,6 +1626,10 @@ impl Document {
     /// Throws on an out-of-range card, a field that is not richtext, a malformed
     /// bundle, or an op that applies out of bounds; the value is unchanged on a
     /// failed apply.
+    ///
+    /// Each text-moving channel rebases the marks already in the field, by the
+    /// rule on `ChangeBundle`; `mapMarks` answers where they land, so a caller
+    /// building `markOps` need not predict it.
     #[wasm_bindgen(js_name = applyChange)]
     pub fn apply_change(
         &mut self,
@@ -1621,7 +1637,7 @@ impl Document {
         #[wasm_bindgen(unchecked_param_type = "ChangeBundle")] bundle: JsValue,
     ) -> Result<(), JsValue> {
         let addr = Addr::from_js_or_string(&addr)?;
-        let bundle = parse_change_bundle(&bundle)?;
+        let bundle = parse_change_bundle(&bundle, "applyChange")?;
         let base = self.addr_base(&addr);
         let card = self.addr_card_mut(&addr)?;
         match &addr.field {
@@ -1998,10 +2014,13 @@ fn js_to_content_with(
     })
 }
 
-fn parse_change_bundle(value: &JsValue) -> Result<quillmark_content::ChangeBundle, JsValue> {
-    let json = js_value_to_json(value.clone(), "applyChange")?;
+fn parse_change_bundle(
+    value: &JsValue,
+    ctx: &str,
+) -> Result<quillmark_content::ChangeBundle, JsValue> {
+    let json = js_value_to_json(value.clone(), ctx)?;
     quillmark_content::change_bundle_from_value(&json)
-        .map_err(|e| WasmError::from(format!("applyChange: {e}")).to_js_value())
+        .map_err(|e| WasmError::from(format!("{ctx}: {e}")).to_js_value())
 }
 
 /// Import a markdown string to canonical `Content`: the pure, document-free
@@ -2153,10 +2172,49 @@ pub fn format_doc_path(
     Ok(doc_path.to_string())
 }
 
+/// Where `bundle`'s text-moving channels (`delta`, then `islandOps`, then
+/// `lineOps`) leave `content`'s marks: the final-text coordinates the bundle's
+/// `markOps` are written in, under the rebase rule stated on `ChangeBundle`.
+/// The document-free read an editor diffs against to decide which `markOps` to
+/// emit, rather than reproducing that rule in its own language.
+///
+/// `bundle.markOps` are ignored. The answer is normalized, as the store's is:
+/// marks a text move drops (out of range, zero-width formatting) are absent,
+/// and same-kind runs a move left adjacent arrive already unioned, so a bundle
+/// carrying no `markOps` names the marks the field will hold.
+/// Throws on a non-content `content`, a malformed bundle, or an op that applies
+/// out of bounds: `applyChange`'s errors on the same ops.
+#[wasm_bindgen(js_name = mapMarks, unchecked_return_type = "ContentMark[]")]
+pub fn map_marks(
+    #[wasm_bindgen(unchecked_param_type = "Content")] content: JsValue,
+    #[wasm_bindgen(unchecked_param_type = "ChangeBundle")] bundle: JsValue,
+) -> Result<JsValue, JsValue> {
+    let content = js_to_content(content, "mapMarks")?;
+    let bundle = parse_change_bundle(&bundle, "mapMarks")?;
+    let marks = content
+        .map_marks(&bundle)
+        .map_err(|e| {
+            // `applyChange`'s wording on the same op, from the same variant.
+            let e = quillmark_core::EditError::ContentApply(e);
+            WasmError::from(format!("mapMarks: {e}")).to_js_value()
+        })?;
+    let out = serde_json::Value::Array(
+        marks
+            .iter()
+            .map(quillmark_content::serial::mark_to_value)
+            .collect(),
+    );
+    serialize_or_throw(&out, "mapMarks")
+}
+
 /// Map a base content position (a USV index into `Content.text`, not a UTF-16
 /// offset) through a `delta` to its new position, holding a caret stable across
 /// a `revise`. `assoc` decides the side of a same-position insertion (`"after"`
 /// moves past it). Throws on a malformed `delta`.
+///
+/// This maps a position the *caller* holds. For the marks already in a field,
+/// `mapMarks` applies the store's own assoc rule across every channel of a
+/// `ChangeBundle`.
 #[wasm_bindgen(js_name = mapPos)]
 pub fn map_pos(
     #[wasm_bindgen(unchecked_param_type = "Delta")] delta: JsValue,

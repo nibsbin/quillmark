@@ -832,7 +832,11 @@ impl Serialize for FieldSchema {
         // `inline: true` is projected back out of the enum (the flag's single
         // carrier) so the wire round-trips. `name` rides the map key; the
         // `*_content` caches are load-time derivations, never serialized.
-        let inline = matches!(self.r#type, FieldType::RichText { inline: true }).then_some(true);
+        let inline = matches!(
+            self.r#type,
+            FieldType::RichText { inline: true } | FieldType::PlainText { inline: true }
+        )
+        .then_some(true);
         let len = 1
             + inline.is_some() as usize
             + self.description.is_some() as usize

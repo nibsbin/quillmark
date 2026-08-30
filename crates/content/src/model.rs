@@ -1140,10 +1140,6 @@ impl Content {
     }
 }
 
-/// Apply the three merge rules and the canonical sort to a flat mark list:
-/// same-kind formatting marks union when adjacent *or* overlapping, different
-/// kinds overlap freely (never split into runs), and identity/unknown marks
-/// never merge. Zero-width formatting is dropped; zero-width anchors survive.
 /// One open container run, while [`canonicalize_containers`] walks past it.
 struct Run {
     /// The container **as stored** at the line that opened this run, which is
@@ -1228,6 +1224,10 @@ fn canonicalize_containers(lines: &mut [Line]) {
     }
 }
 
+/// Apply the three merge rules and the canonical sort to a flat mark list:
+/// same-kind formatting marks union when adjacent *or* overlapping, different
+/// kinds overlap freely (never split into runs), and identity/unknown marks
+/// never merge. Zero-width formatting is dropped; zero-width anchors survive.
 pub(crate) fn normalize_marks(marks: Vec<Mark>) -> Vec<Mark> {
     use std::collections::BTreeMap;
 
