@@ -353,6 +353,58 @@ The one place yrs is clearly better is size: 94 KB gzip against 416 KB, roughly
 overhead. If the substrate question ever reopens on capability grounds, that
 number is worth remembering. It does not reopen it here.
 
+## Greenfield: would yrs's model have been right from scratch?
+
+Migration cost aside, is `Content` actually a good model, or merely the
+incumbent? Asked of yrs specifically, the answer is **no**, for one decisive
+reason and against one genuine trade the flat model loses.
+
+**The attribute map is a ceiling, not an accident.** `Attrs` is one value per
+key per position, so overlapping same-type marks and two identity anchors over
+one range are unrepresentable — and two reviewers commenting on overlapping
+spans is ordinary, not exotic. Greenfield freedom does not lift that; it is the
+model's shape. Key-mangling (`anchor-{id}`) restores the capability and spends
+the key space to do it, leaving no way to ask for "every anchor" but a prefix
+scan. This is Peritext's own critique of attribute-map rich text, and it is why
+`Mark` carries a kind rather than a key.
+
+**A CRDT could not have been the resting form either.** Every CRDT stores
+replica identity per element, so equal content never implies equal bytes
+(§ Byte-stability, measured for both libraries). Content-addressed documents
+therefore need a canonical projection whatever the substrate — `serial.rs` gets
+written in every timeline. The escape hatch, hashing the materialized view
+rather than the stored bytes, *is* writing `serial.rs`. So yrs was never a
+candidate to be the model; at most it was an addition beside one.
+
+**Where a tree genuinely beats us, and beats Automerge too.** Two adjacent
+blockquotes in a yrs `XmlFragment` are two nodes, distinct by construction — no
+discriminator, no adjacency rule. `Container::instance` is the receipt the flat
+encoding pays for the same fact, and Automerge's `parents`-as-type-names pays it
+too. On this one axis the tree is strictly better than both flat encodings.
+
+The trade it buys that with is the one `Content` opens on: storing the tree makes
+a paragraph split or join a node surgery with paragraph identity to reconcile,
+where the flat encoding makes it one `\n`. For an engine whose authoring form is
+Markdown — where block structure is *derived* from a line's prefix and every edit
+is a text edit — flat is the better side of that trade, and `instance` is a fair
+price. For a ProseMirror-style structured editor with Markdown as the export, the
+tree wins instead. The fork is the product's, not the library's.
+
+**What the greenfield answer actually is.** Automerge's *shape*: flat USV text,
+block markers in the sequence rather than a `\n`-keyed sidecar, marks carrying
+identity rather than map keys, open string discriminators — with a canonical
+byte form as the resting form and a CRDT adapter only if collaboration arrives.
+That is A. The greenfield answer and the migration recommendation converge,
+which is the useful part: A is not the cheapest change from here, it is the model
+worth having.
+
+One condition flips this. Had multi-writer collaboration been a day-one
+requirement, the calculus inverts: hand-rolling convergence would be the error,
+and a two-artifact design (CRDT for the session, canonical form for rest) would
+be the starting point rather than the fallback. Quillmark's requirements are
+single-writer, content-addressed, and Markdown-first, and the answer is
+conditional on all three.
+
 ## What pre-1.0 changes, and what it does not
 
 Quillmark is 0.111.0 and already ships breaking minors, so "this is the moment
