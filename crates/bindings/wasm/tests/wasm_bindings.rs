@@ -139,7 +139,7 @@ fn test_session_region_shapes_cross_the_boundary() {
         rect[3].as_f64().unwrap() as f32 - 3.0,
     );
     let hit = session
-        .position_at(page, cx, cy)
+        .position_at(page, cx, cy, None)
         .expect("positionAt inside content resolves");
     assert_eq!(hit.field, "body");
     let caret = session.locate("body", hit.pos).expect("locate");

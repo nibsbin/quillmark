@@ -61,7 +61,7 @@ fn usaf_memo_regions_cover_body_signature_and_cards() {
     let cx = (body.rect[0] + body.rect[2]) / 2.0;
     let cy = (body.rect[1] + body.rect[3]) / 2.0;
     assert_eq!(
-        session.field_at(body.page, cx, cy).as_deref(),
+        session.field_at(body.page, cx, cy, 0.0).as_deref(),
         Some("$body"),
         "a click inside the rebuilt body routes to $body"
     );
@@ -135,7 +135,7 @@ fn usaf_memo_date_region_rides_the_vendored_display() {
     let cx = (date.rect[0] + date.rect[2]) / 2.0;
     let cy = (date.rect[1] + date.rect[3]) / 2.0;
     assert_eq!(
-        session.field_at(date.page, cx, cy).as_deref(),
+        session.field_at(date.page, cx, cy, 0.0).as_deref(),
         Some("date"),
         "a click on the vendored-placed memo date routes to its schema path"
     );
@@ -162,7 +162,7 @@ fn a_blank_indorsement_date_regions_through_its_fill_in_widget() {
     let cx = (date.rect[0] + date.rect[2]) / 2.0;
     let cy = (date.rect[1] + date.rect[3]) / 2.0;
     assert_eq!(
-        session.field_at(date.page, cx, cy).as_deref(),
+        session.field_at(date.page, cx, cy, 0.0).as_deref(),
         Some("$cards.indorsement.0.date"),
         "a click on the fill-in widget routes to the card's date"
     );

@@ -140,7 +140,7 @@ main:
     let cx = (first.rect[0] + first.rect[2]) / 2.0;
     let cy = (first.rect[1] + first.rect[3]) / 2.0;
     assert_eq!(
-        session.field_at(first.page, cx, cy).as_deref(),
+        session.field_at(first.page, cx, cy, 0.0).as_deref(),
         Some("intro"),
         "a click inside the first placement resolves"
     );
@@ -149,7 +149,7 @@ main:
     let mut second_hit = None;
     let mut y = first.rect[1] - 12.0;
     while y > 40.0 {
-        if let Some(f) = session.field_at(first.page, cx, y) {
+        if let Some(f) = session.field_at(first.page, cx, y, 0.0) {
             second_hit = Some(f);
         }
         y -= 6.0;
@@ -161,7 +161,7 @@ main:
     );
 
     assert_eq!(
-        session.field_at(first.page, 5.0, 5.0),
+        session.field_at(first.page, 5.0, 5.0, 0.0),
         None,
         "a click off any field's ink resolves to nothing"
     );
@@ -486,7 +486,7 @@ main:
     );
     let (cx, cy) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0);
     assert_eq!(
-        session.field_at(issued[0].page, cx, cy).as_deref(),
+        session.field_at(issued[0].page, cx, cy, 0.0).as_deref(),
         Some("issued"),
         "a click on the date ink routes to its schema path"
     );
@@ -563,7 +563,7 @@ card_kinds:
     let cx = (first.rect[0] + first.rect[2]) / 2.0;
     let cy = (first.rect[1] + first.rect[3]) / 2.0;
     assert_eq!(
-        session.field_at(first.page, cx, cy).as_deref(),
+        session.field_at(first.page, cx, cy, 0.0).as_deref(),
         Some("$cards.stamp.0.on"),
         "a click on a laundered card date routes to its per-instance schema path"
     );
@@ -659,7 +659,7 @@ main:
     let cx = (intro.rect[0] + intro.rect[2]) / 2.0;
     let cy = (intro.rect[1] + intro.rect[3]) / 2.0;
     assert_eq!(
-        session.field_at(intro.page, cx, cy).as_deref(),
+        session.field_at(intro.page, cx, cy, 0.0).as_deref(),
         Some("intro"),
         "clicks keep resolving against the served compile"
     );
@@ -752,7 +752,7 @@ typst:
     let cx = (subject[0].rect[0] + subject[0].rect[2]) / 2.0;
     let cy = (subject[0].rect[1] + subject[0].rect[3]) / 2.0;
     assert_eq!(
-        session.field_at(subject[0].page, cx, cy).as_deref(),
+        session.field_at(subject[0].page, cx, cy, 0.0).as_deref(),
         Some("subject"),
         "clicks on the wrapped ink route to the field"
     );
@@ -873,7 +873,7 @@ main:
     let cx = (z.rect[0] + z.rect[2]) / 2.0;
     let cy = (z.rect[1] + z.rect[3]) / 2.0;
     assert_eq!(
-        session.field_at(z.page, cx, cy).as_deref(),
+        session.field_at(z.page, cx, cy, 0.0).as_deref(),
         Some("zzz_late"),
         "the later-painted widget wins the click, not the alphabetically-first name"
     );
@@ -978,7 +978,7 @@ main:
     let cx = region.rect[0] + 5.0;
     let cy = region.rect[3] - 3.0;
     let hit = session
-        .position_at(region.page, cx, cy)
+        .position_at(region.page, cx, cy, 0.0)
         .expect("a click inside content resolves to a content position");
     assert_eq!(hit.field, "body");
     assert!(
@@ -1007,7 +1007,7 @@ main:
         region.rect
     );
 
-    assert_eq!(session.position_at(region.page, 5.0, 5.0), None);
+    assert_eq!(session.position_at(region.page, 5.0, 5.0, 0.0), None);
 
     // One past the last character — the caret position while typing — sits at
     // the last glyph, not back at the paragraph's first.
@@ -1122,7 +1122,7 @@ main:
     let hit_at = |y: f32| {
         [2.0f32, 6.0, 12.0, 24.0, 48.0]
             .iter()
-            .find_map(|dx| session.position_at(code.page, code.rect[0] + dx, y))
+            .find_map(|dx| session.position_at(code.page, code.rect[0] + dx, y, 0.0))
     };
     let top = hit_at(code.rect[3] - 3.0).expect("a click on the first fence line resolves");
     let bottom = hit_at(code.rect[1] + 3.0).expect("a click on the last fence line resolves");
@@ -1138,7 +1138,7 @@ main:
     );
     assert_eq!(bottom.granularity, Some(quillmark_core::HitGranularity::Segment));
     let prose_hit = session
-        .position_at(prose.page, prose.rect[0] + 5.0, prose.rect[3] - 3.0)
+        .position_at(prose.page, prose.rect[0] + 5.0, prose.rect[3] - 3.0, 0.0)
         .expect("a click in the prose paragraph resolves");
     assert_ne!(
         prose_hit.pos, top.pos,

@@ -125,7 +125,7 @@ fn a_property_read_regions_on_the_property() {
         (poc.rect[1] + poc.rect[3]) / 2.0,
     );
     assert_eq!(
-        session.field_at(poc.page, cx, cy).as_deref(),
+        session.field_at(poc.page, cx, cy, 0.0).as_deref(),
         Some("classification.poc"),
         "a click on the cell routes to the cell, not the container"
     );
@@ -160,7 +160,7 @@ fn a_property_read_through_a_let_alias_keeps_the_property_address() {
         (poc.rect[1] + poc.rect[3]) / 2.0,
     );
     assert_eq!(
-        session.field_at(poc.page, cx, cy).as_deref(),
+        session.field_at(poc.page, cx, cy, 0.0).as_deref(),
         Some("classification.poc"),
         "a click on a bound read routes to the cell it read"
     );
@@ -211,13 +211,13 @@ fn a_key_spelling_an_alias_claims_none_of_its_ink() {
         (region.rect[1] + region.rect[3]) / 2.0,
     );
     assert_eq!(
-        session.field_at(region.page, cx, cy).as_deref(),
+        session.field_at(region.page, cx, cy, 0.0).as_deref(),
         Some("subject"),
         "the surviving region is the read, and a click on it routes to the field"
     );
     // The dict's ink shares the line, starting at the 40pt margin.
     assert_eq!(
-        session.field_at(region.page, 60.0, cy),
+        session.field_at(region.page, 60.0, cy, 0.0),
         None,
         "a click on the dict's ink routes nowhere: {region:?}"
     );
@@ -358,7 +358,7 @@ fn a_direct_row_cell_read_anchors_on_the_row_property() {
         (cell.rect[1] + cell.rect[3]) / 2.0,
     );
     assert_eq!(
-        session.field_at(cell.page, cx, cy).as_deref(),
+        session.field_at(cell.page, cx, cy, 0.0).as_deref(),
         Some("refs.0.org"),
         "a click on the cell routes to the cell, not the table"
     );

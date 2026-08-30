@@ -94,11 +94,26 @@ impl RenderedRegion {
     /// falls inside this region, edges inclusive. Every `field_at` hit-test
     /// shares this predicate.
     pub fn contains(&self, page: usize, x: f32, y: f32) -> bool {
-        self.page == page
-            && self.rect[0] <= x
-            && x <= self.rect[2]
-            && self.rect[1] <= y
-            && y <= self.rect[3]
+        self.distance(page, x, y) == Some(0.0)
+    }
+
+    /// Gap in PDF points from the point to this region's rect: zero inside it,
+    /// else the length of the shortest vector reaching it; `None` on another
+    /// page, or when either side is not finite. What a tolerant hit-test ranks
+    /// by, so a tolerance of zero admits exactly what
+    /// [`contains`](Self::contains) does, and an absent gap is one no tolerance
+    /// reaches.
+    ///
+    /// The finite check is load-bearing: `f32::max` returns the non-NaN side, so
+    /// a NaN on either side otherwise collapses both axes to zero and reads as
+    /// inside.
+    pub fn distance(&self, page: usize, x: f32, y: f32) -> Option<f32> {
+        let finite = x.is_finite() && y.is_finite() && self.rect.iter().all(|v| v.is_finite());
+        (self.page == page && finite).then(|| {
+            let dx = (self.rect[0] - x).max(0.0).max(x - self.rect[2]);
+            let dy = (self.rect[1] - y).max(0.0).max(y - self.rect[3]);
+            dx.hypot(dy)
+        })
     }
 }
 
@@ -385,6 +400,29 @@ impl ContentHit {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_non_finite_point_is_outside_every_region() {
+        let region = RenderedRegion::new("subject".to_string(), 0, [10.0, 10.0, 20.0, 20.0]);
+        for (x, y) in [
+            (f32::NAN, f32::NAN),
+            (f32::NAN, 15.0),
+            (15.0, f32::NAN),
+            (f32::INFINITY, f32::INFINITY),
+            (f32::NEG_INFINITY, 15.0),
+        ] {
+            assert!(!region.contains(0, x, y), "({x}, {y}) reads as inside");
+            assert_ne!(region.distance(0, x, y), Some(0.0), "({x}, {y}) reads as zero gap");
+        }
+        assert!(region.contains(0, 15.0, 15.0));
+        assert_eq!(region.distance(0, 15.0, 15.0), Some(0.0));
+
+        // The rect is the other side of the same check: one non-finite box in a
+        // `regions()` set answers every click on its page.
+        let bad = RenderedRegion::new("subject".to_string(), 0, [f32::NAN; 4]);
+        assert!(!bad.contains(0, 999.0, 999.0));
+        assert_eq!(bad.distance(0, 999.0, 999.0), None);
+    }
 
     #[test]
     fn optional_span_omitted_when_none() {

@@ -1019,6 +1019,19 @@ A single line of body ink.`
       expect(chit.field).toBe('main.body')
       expect(chit.granularity).toBe('cluster')
 
+      // The tolerance is an argument, and a wrapper forwarding the method while
+      // dropping an argument type-checks and silently answers as if the caller
+      // never passed one. So it is asserted by its effect: a point clear of the
+      // line's own ink misses, and the same point within a tolerance spanning
+      // that clearance lands on the field it is nearest.
+      const clear = (y1 - y0) * 2
+      expect(session.positionAt(body.page, (x0 + x1) / 2, y1 + clear)).toBeUndefined()
+      expect(session.positionAt(body.page, (x0 + x1) / 2, y1 + clear, clear * 2).field).toBe(
+        'main.body'
+      )
+      expect(session.fieldAt(body.page, (x0 + x1) / 2, y1 + clear)).toBeUndefined()
+      expect(session.fieldAt(body.page, (x0 + x1) / 2, y1 + clear, clear * 2)).toBe('main.body')
+
       // paint.
       expect(typeof session.paint).toBe('function')
       const ctx = new FakeCanvasRenderingContext2D()

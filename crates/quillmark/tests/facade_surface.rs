@@ -132,9 +132,9 @@ fn preview_regions_spell_through_the_facade() {
 
     let cx = (region.rect[0] + region.rect[2]) / 2.0;
     let cy = (region.rect[1] + region.rect[3]) / 2.0;
-    assert_eq!(session.field_at(region.page, cx, cy).as_deref(), Some(region.field.as_str()));
+    assert_eq!(session.field_at(region.page, cx, cy, 0.0).as_deref(), Some(region.field.as_str()));
 
-    let hit: Option<ContentHit> = session.position_at(region.page, cx, cy);
+    let hit: Option<ContentHit> = session.position_at(region.page, cx, cy, 0.0);
     let hit: ContentHit = hit.expect("a content region's centre hit-tests to a content position");
     assert_eq!(hit.field, region.field);
     let _granularity: Option<HitGranularity> = hit.granularity;

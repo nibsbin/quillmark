@@ -109,7 +109,7 @@ fn plaintext_elements_and_scalars_surface_navigable_regions() {
 
     let region = regions.iter().find(|r| r.field == "tags.0").unwrap();
     let hit = session
-        .position_at(region.page, region.rect[0] + 5.0, region.rect[3] - 3.0)
+        .position_at(region.page, region.rect[0] + 5.0, region.rect[3] - 3.0, 0.0)
         .expect("a click inside a plaintext element resolves to a content position");
     assert_eq!(hit.field, "tags.0");
     assert!(hit.pos < STAR_TAG.chars().count());
@@ -146,7 +146,7 @@ fn a_plaintext_delimiter_is_one_addressable_cluster() {
     let caret = session.locate("tags.0", star).expect("caret");
     let next = caret_x(star + 1);
     let hit = session
-        .position_at(caret.page, (caret.rect[0] + next) / 2.0, caret.rect[3] - 3.0)
+        .position_at(caret.page, (caret.rect[0] + next) / 2.0, caret.rect[3] - 3.0, 0.0)
         .expect("the escaped glyph is hittable");
     assert_eq!(
         (hit.field.as_str(), hit.pos),
@@ -172,7 +172,7 @@ fn a_click_sweep_across_a_plaintext_element_walks_every_offset_once() {
     let mut walk: Vec<usize> = Vec::new();
     let mut x = region.rect[0];
     while x <= region.rect[2] {
-        if let Some(hit) = session.position_at(region.page, x, y) {
+        if let Some(hit) = session.position_at(region.page, x, y, 0.0) {
             assert_eq!(hit.field, "tags.0");
             assert_eq!(hit.granularity, Some(HitGranularity::Cluster));
             if walk.last() != Some(&hit.pos) {

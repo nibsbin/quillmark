@@ -57,7 +57,7 @@ fn a_claim_surfaces_as_a_region_and_answers_field_at() {
         (region.rect[1] + region.rect[3]) / 2.0,
     );
     assert_eq!(
-        session.field_at(region.page, cx, cy).as_deref(),
+        session.field_at(region.page, cx, cy, 0.0).as_deref(),
         Some("classification"),
         "a click inside the claim routes to its field"
     );

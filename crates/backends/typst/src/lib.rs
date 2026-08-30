@@ -324,24 +324,30 @@ impl SessionHandle for TypstSession {
         regions
     }
 
-    /// Widget boxes answer first: a widget is a deliberate click target drawing
-    /// no spanned ink of its own, so content ink beneath it must not swallow the
-    /// click. Among overlapping widgets the later-painted one wins, matching
-    /// `Scan::field_at`.
-    fn field_at(&self, page: usize, x: f32, y: f32) -> Option<String> {
-        self.live
-            .widget_regions
-            .iter()
-            .rev()
-            .find(|r| r.contains(page, x, y))
-            .map(|r| r.field.clone())
-            .or_else(|| self.scan().field_at(page, x, y))
+    /// The nearest of the widget and content lanes, a widget taking a tie: a
+    /// widget is a deliberate click target drawing no spanned ink of its own, so
+    /// ink beneath one must not swallow a click that lands on it. Among
+    /// overlapping widgets the later-painted wins, matching `Scan::field_at`.
+    ///
+    /// One comparison across both lanes, not one lane and then the other: a lane
+    /// consulted first answers at any gap within `tol`, which ranks a far hit in
+    /// that lane over a near one in the other.
+    fn field_at(&self, page: usize, x: f32, y: f32, tol: f32) -> Option<String> {
+        // Widget first: `min_by` keeps the first of equal gaps.
+        [
+            self.widget_at(page, x, y, tol),
+            self.scan().field_at(page, x, y, tol),
+        ]
+        .into_iter()
+        .flatten()
+        .min_by(|(a, _), (b, _)| a.total_cmp(b))
+        .map(|(_, field)| field)
     }
 
     /// The fine-grained twin of [`field_at`](Self::field_at). Widgets draw no
     /// spanned content ink, so unlike `field_at` they are not consulted.
-    fn position_at(&self, page: usize, x: f32, y: f32) -> Option<ContentHit> {
-        self.scan().position_at(page, x, y)
+    fn position_at(&self, page: usize, x: f32, y: f32, tol: f32) -> Option<ContentHit> {
+        self.scan().position_at(page, x, y, tol)
     }
 
     fn locate(&self, field: &str, pos: usize) -> Option<RenderedRegion> {
@@ -350,6 +356,18 @@ impl SessionHandle for TypstSession {
 }
 
 impl TypstSession {
+    /// The nearest widget within `tol` and its gap, later-painted on a tie.
+    fn widget_at(&self, page: usize, x: f32, y: f32, tol: f32) -> Option<(f32, String)> {
+        self.live
+            .widget_regions
+            .iter()
+            .rev()
+            .filter_map(|r| Some((r.distance(page, x, y)?, r)))
+            .filter(|(d, _)| *d <= tol)
+            .min_by(|(a, _), (b, _)| a.total_cmp(b))
+            .map(|(d, r)| (d, r.field.clone()))
+    }
+
     /// The live compile's tables, as the one context every content query takes.
     fn scan(&self) -> overlay::Scan<'_> {
         overlay::Scan {
