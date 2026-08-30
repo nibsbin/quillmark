@@ -208,3 +208,111 @@ fn a_non_finite_point_resolves_to_nothing() {
         assert_eq!(session.field_at(0, x, y, 8.0), None, "fieldAt({x}, {y})");
     }
 }
+
+const WIDGET_YAML: &str = r#"
+quill:
+  name: hit_tolerance_widget
+  version: 0.1.0
+  backend: typst
+  description: a widget above a paragraph
+typst:
+  plate_file: plate.typ
+main:
+  fields:
+    blank:
+      type: string
+      description: the fill-in widget
+    body:
+      type: richtext
+      description: the paragraph below it
+"#;
+
+const WIDGET_PLATE: &str = r#"
+#import "@local/quillmark-helper:0.1.0": data, form-field
+#set page(width: 400pt, height: 300pt, margin: 30pt)
+#set text(size: 11pt)
+
+#form-field("blank", type: "text", field: "blank", width: 60pt, height: 20pt)
+
+#v(40pt)
+
+#data.body
+"#;
+
+fn open_with_widget() -> LiveSession {
+    let data = serde_json::json!({
+        "blank": "",
+        "body": content("Body text well below the widget."),
+    });
+    TypstBackend
+        .open(&quill(WIDGET_YAML, WIDGET_PLATE), &data)
+        .expect("open")
+}
+
+/// Consulting one lane before the other answers at any gap within `tol`, so a
+/// raised tolerance moves a click off the widget it is nearest and onto far
+/// content. Both lanes rank in one comparison, so the nearer always answers.
+#[test]
+fn raising_the_tolerance_never_moves_a_click_to_a_farther_field() {
+    let session = open_with_widget();
+    let widget = session
+        .regions()
+        .into_iter()
+        .find(|r| r.field == "blank")
+        .expect("the widget surfaces a region");
+    let x = (widget.rect[0] + widget.rect[2]) / 2.0;
+
+    // Just below the widget's lower edge: nearest is the widget, by a wide
+    // margin over any body ink further down the page.
+    let y = widget.rect[1] - 2.0;
+    let near = session
+        .field_at(widget.page, x, y, 4.0)
+        .expect("a point 2pt off the widget resolves under a 4pt tolerance");
+    assert_eq!(near, "blank", "the nearest field is the widget");
+
+    for tol in [8.0f32, 20.0, 60.0, 200.0] {
+        assert_eq!(
+            session.field_at(widget.page, x, y, tol).as_deref(),
+            Some("blank"),
+            "tol={tol} moved the click off the widget it is 2pt from"
+        );
+    }
+}
+
+/// A widget still takes a click that lands on it, over content ink beneath.
+#[test]
+fn a_click_on_a_widget_beats_content_at_the_same_gap() {
+    let session = open_with_widget();
+    let widget = session
+        .regions()
+        .into_iter()
+        .find(|r| r.field == "blank")
+        .expect("the widget surfaces a region");
+    let (cx, cy) = (
+        (widget.rect[0] + widget.rect[2]) / 2.0,
+        (widget.rect[1] + widget.rect[3]) / 2.0,
+    );
+    for tol in [0.0f32, 8.0, 60.0] {
+        assert_eq!(
+            session.field_at(widget.page, cx, cy, tol).as_deref(),
+            Some("blank"),
+            "tol={tol}"
+        );
+    }
+}
+
+/// The finite guard is a `None`, not a large sentinel: a sentinel gap is one a
+/// tolerance can reach, and `renderScale == 0` yields an infinite `tolPt` from
+/// the same arithmetic that yields the non-finite point.
+#[test]
+fn an_infinite_tolerance_does_not_admit_a_non_finite_point() {
+    let session = open();
+    for (x, y) in [
+        (f32::NAN, f32::NAN),
+        (120.0, f32::NAN),
+        (f32::NEG_INFINITY, 100.0),
+    ] {
+        assert_eq!(session.field_at(0, x, y, f32::INFINITY), None, "fieldAt({x}, {y})");
+        assert_eq!(session.position_at(0, x, y, f32::INFINITY), None, "positionAt({x}, {y})");
+    }
+}

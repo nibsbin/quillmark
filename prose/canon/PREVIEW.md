@@ -317,9 +317,15 @@ two fields' lines answers whichever painted last, however far away it is.
 Ranking by distance answers the nearer one, and keeps the tolerance a pure
 widening: containment is distance zero, so no point that resolves exactly ever
 changes answer as `tolPt` rises. On a tie — two placements equally near, an
-exact hit under another exact hit — the later-painted wins. Widgets keep their
-precedence for a click that lands on one; nothing merely
-near a point outranks ink the pointer is inside of.
+exact hit under another exact hit — the later-painted wins.
+
+Widgets and content ink rank in **one** comparison, with a widget taking a tie:
+a widget draws no spanned ink of its own, so ink beneath one must not swallow a
+click that lands on it, and nothing merely near a point outranks ink the pointer
+is inside of. Consulting one lane and then the other would answer from the first
+at any gap within `tolPt`, which is the same paint-order lottery under a
+different name: a raised tolerance would move a click off the widget it is 2pt
+from and onto a paragraph 50pt away.
 
 A tolerance is not a bounding box over ink the field does not fill: a click
 stays on ink some placement drew, and a point far from all of it resolves to

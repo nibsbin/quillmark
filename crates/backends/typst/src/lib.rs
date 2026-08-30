@@ -324,18 +324,25 @@ impl SessionHandle for TypstSession {
         regions
     }
 
-    /// Widget boxes answer first: a widget is a deliberate click target drawing
-    /// no spanned ink of its own, so content ink beneath it must not swallow the
-    /// click. Among overlapping widgets the later-painted one wins, matching
-    /// `Scan::field_at`.
+    /// Widgets and content ink rank together by gap, and a widget takes a tie: a
+    /// widget is a deliberate click target drawing no spanned ink of its own, so
+    /// ink beneath one must not swallow a click that lands on it. Among
+    /// overlapping widgets the later-painted wins, matching `Scan::field_at`.
     ///
-    /// A click that lands on no widget takes the nearest ink within `tol`, and
-    /// a widget within `tol` last: a point inside ink is an answer the pointer
-    /// made, and nothing merely near it outranks one.
+    /// Ranking the two lanes in one comparison rather than consulting them in
+    /// turn is what keeps `tol` a widening: a lane consulted first answers at
+    /// any gap within `tol`, so raising `tol` would move a click off a widget it
+    /// is 2pt from and onto a paragraph 50pt away.
     fn field_at(&self, page: usize, x: f32, y: f32, tol: f32) -> Option<String> {
-        self.widget_at(page, x, y, 0.0)
-            .or_else(|| self.scan().field_at(page, x, y, tol))
-            .or_else(|| self.widget_at(page, x, y, tol))
+        match (
+            self.widget_at(page, x, y, tol),
+            self.scan().field_at_ranked(page, x, y, tol),
+        ) {
+            (Some((wd, w)), Some((cd, c))) => Some(if wd <= cd { w } else { c }),
+            (Some((_, w)), None) => Some(w),
+            (None, Some((_, c))) => Some(c),
+            (None, None) => None,
+        }
     }
 
     /// The fine-grained twin of [`field_at`](Self::field_at). Widgets draw no
@@ -350,8 +357,8 @@ impl SessionHandle for TypstSession {
 }
 
 impl TypstSession {
-    /// The nearest widget within `tol`, later-painted on a tie.
-    fn widget_at(&self, page: usize, x: f32, y: f32, tol: f32) -> Option<String> {
+    /// The nearest widget within `tol` and its gap, later-painted on a tie.
+    fn widget_at(&self, page: usize, x: f32, y: f32, tol: f32) -> Option<(f32, String)> {
         self.live
             .widget_regions
             .iter()
@@ -359,7 +366,7 @@ impl TypstSession {
             .filter_map(|r| Some((r.distance(page, x, y)?, r)))
             .filter(|(d, _)| *d <= tol)
             .min_by(|(a, _), (b, _)| a.total_cmp(b))
-            .map(|(_, r)| r.field.clone())
+            .map(|(d, r)| (d, r.field.clone()))
     }
 
     /// The live compile's tables, as the one context every content query takes.

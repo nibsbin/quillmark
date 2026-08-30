@@ -109,19 +109,24 @@ impl Aabb {
     }
 
     /// Gap from `(x, y)` to this box: zero inside it (edges included), else the
-    /// length of the shortest vector reaching it, and infinite for a coordinate
-    /// that is not finite. The one measure both point queries rank by, so a
-    /// tolerance of zero is exactly containment.
+    /// length of the shortest vector reaching it. `None` when the point or the
+    /// box is not finite, which no `tol` admits. The one measure both point
+    /// queries rank by, so a tolerance of zero is exactly containment.
     ///
     /// `f64::max` returns the non-NaN side, so without the finite check a NaN
-    /// coordinate collapses both axes to zero and reads as inside every box.
-    fn distance(&self, x: f64, y: f64) -> f64 {
-        if !x.is_finite() || !y.is_finite() {
-            return f64::INFINITY;
-        }
-        let dx = (self.min_x - x).max(0.0).max(x - self.max_x);
-        let dy = (self.min_y - y).max(0.0).max(y - self.max_y);
-        dx.hypot(dy)
+    /// on either side collapses both axes to zero and reads as inside.
+    fn distance(&self, x: f64, y: f64) -> Option<f64> {
+        let finite = x.is_finite()
+            && y.is_finite()
+            && self.min_x.is_finite()
+            && self.min_y.is_finite()
+            && self.max_x.is_finite()
+            && self.max_y.is_finite();
+        finite.then(|| {
+            let dx = (self.min_x - x).max(0.0).max(x - self.max_x);
+            let dy = (self.min_y - y).max(0.0).max(y - self.max_y);
+            dx.hypot(dy)
+        })
     }
 }
 
@@ -132,12 +137,16 @@ impl Aabb {
 /// Ranking by distance rather than growing each box is what keeps the answer
 /// the nearer item's: outset boxes overlap, and a first match over them answers
 /// whichever painted last however far away it is.
-fn nearest<T>(boxed: impl Iterator<Item = (Aabb, T)>, x: f64, y: f64, tol: f64) -> Option<T> {
+fn nearest<T>(
+    boxed: impl Iterator<Item = (Aabb, T)>,
+    x: f64,
+    y: f64,
+    tol: f64,
+) -> Option<(f64, T)> {
     boxed
-        .map(|(b, item)| (b.distance(x, y), item))
+        .filter_map(|(b, item)| Some((b.distance(x, y)?, item)))
         .filter(|(d, _)| *d <= tol)
         .min_by(|(a, _), (b, _)| a.total_cmp(b))
-        .map(|(_, item)| item)
 }
 
 /// Page-space (top-left origin) box → PDF-space (bottom-left origin) rect.
@@ -611,23 +620,38 @@ impl<'a> Scan<'a> {
     /// placement answers, not just the first. The nearest tracked ink wins,
     /// later-painted on a tie; untracked ink never occludes.
     pub(crate) fn field_at(&self, page: usize, x: f32, y: f32, tol: f32) -> Option<String> {
+        self.field_at_ranked(page, x, y, tol).map(|(_, field)| field)
+    }
+
+    /// [`field_at`](Self::field_at) carrying the gap it answered at, for a
+    /// caller ranking this lane against another.
+    pub(crate) fn field_at_ranked(
+        &self,
+        page: usize,
+        x: f32,
+        y: f32,
+        tol: f32,
+    ) -> Option<(f32, String)> {
         let frame = &self.doc.pages().get(page)?.frame;
         let page_h = frame.size().y.to_pt();
         let (x, y) = (x as f64, page_h - y as f64);
 
         let (hits, markers) = self.hits(Some(page));
 
-        let owner = nearest(
+        let (gap, hit) = nearest(
             hits.iter().rev().filter_map(|h| Some((h.rect?, h))),
             x,
             y,
             tol as f64,
-        )
-        .and_then(|h| h.class.owner())?;
-        Some(match owner {
-            Owner::Window(w) => self.windows[w].path.clone(),
-            Owner::Claim(c) => markers.claims[c].clone(),
-        })
+        )?;
+        let owner = hit.class.owner()?;
+        Some((
+            gap as f32,
+            match owner {
+                Owner::Window(w) => self.windows[w].path.clone(),
+                Owner::Claim(c) => markers.claims[c].clone(),
+            },
+        ))
     }
 
     /// A point (PDF bottom-left points) → content position in a content field,
@@ -652,7 +676,7 @@ impl<'a> Scan<'a> {
         walk_glyphs(frame, page, &mut cls, None, &mut hits);
 
         // Ink with no segment has no content position.
-        let hit = nearest(
+        let (_, hit) = nearest(
             hits.iter()
                 .rev()
                 .filter(|g| g.seg.is_some())
