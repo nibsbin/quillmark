@@ -12,7 +12,9 @@
   the whole rule drifted an anchor a character on text typed at the anchor's own
   position. `Content::map_marks` and `Content::apply_field_change` walk one
   channel list, so the prediction and the store cannot answer a position
-  differently. The rule is stated on `ChangeBundle` and in `BINDINGS.md`.
+  differently, and the answer is normalized as the store's is, so a bundle
+  carrying no `markOps` names the marks the field will hold. The rule is stated
+  on `ChangeBundle` and in `BINDINGS.md`.
 
 - fix(core): **a `plaintext` field declared `inline: true` keeps the flag on the
   declaration wire.** `FieldSchema::serialize` projected the flag back out of
@@ -31,8 +33,11 @@
   answered a missing root with an empty tree, so `quill_from_path("/typo")`
   failed later with `Quill.yaml not found in file tree`, pointing at the
   bundle's contents instead of the path. Python's `Quill.from_path` surfaced
-  that directly; the CLI carried two pre-checks of its own, now deleted, so all
-  three consumers report the one message.
+  that directly; the CLI's pre-checks are gone but for `validate`'s
+  missing-`Quill.yaml` one, gated on the directory existing so it names the
+  bundle a real directory lacks without shadowing the loader's answer for a
+  typo. `validate`'s load-failure summary names no file, that branch covering a
+  missing directory too.
 - fix(content): **`LineOp::SetKind` refuses a heading level outside `1..=6`.**
   The arm checked kind/text agreement but not the level, so a Rust caller could
   apply `Heading { level: 9 }` and leave a content whose `validate()` fails and
@@ -61,14 +66,6 @@
 - refactor(core): the unreachable null arm in the `Date`/`DateTime` coercion is
   deleted (`conform_value` returns on any null before the type match), and
   `Version` derives the ordering its field order already spells.
-
-<!-- seed: commits since v0.110.0, confirm the entries above cover them, then delete this comment
-- feat(wasm): mapMarks, the rebase an editor had to predict
-- fix: drop three findings an adversarial review falsified
-- docs: dense-prose pass over the branch
-- fix: the low-complexity findings from the whole-codebase review
--->
-
 
 ## v0.110.0 - 2026-08-26
 

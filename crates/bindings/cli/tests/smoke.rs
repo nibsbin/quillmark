@@ -172,6 +172,21 @@ fn absent_quill_exits_one_with_stderr() {
     );
 }
 
+/// Every command routes a typo'd path through the loader, which names the path
+/// rather than the `Quill.yaml` a directory that does not exist cannot be
+/// missing.
+#[test]
+fn a_missing_quill_path_names_the_path_on_every_command() {
+    for cmd in ["info", "schema", "validate"] {
+        let out = run(&[cmd, "/nonexistent/quill/path"]);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            stderr.contains("Quill directory not found"),
+            "`quillmark {cmd}` on a missing path: {stderr}"
+        );
+    }
+}
+
 #[test]
 fn unknown_format_fails_loudly() {
     let quill = taro();

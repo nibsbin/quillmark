@@ -2178,8 +2178,10 @@ pub fn format_doc_path(
 /// The document-free read an editor diffs against to decide which `markOps` to
 /// emit, rather than reproducing that rule in its own language.
 ///
-/// `bundle.markOps` are ignored. Marks a text move drops (out of range,
-/// zero-width formatting) are absent, as they are from the applied result.
+/// `bundle.markOps` are ignored. The answer is normalized, as the store's is:
+/// marks a text move drops (out of range, zero-width formatting) are absent,
+/// and same-kind runs a move left adjacent arrive already unioned, so a bundle
+/// carrying no `markOps` names the marks the field will hold.
 /// Throws on a non-content `content`, a malformed bundle, or an op that applies
 /// out of bounds: `applyChange`'s errors on the same ops.
 #[wasm_bindgen(js_name = mapMarks, unchecked_return_type = "ContentMark[]")]

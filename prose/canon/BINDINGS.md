@@ -85,7 +85,7 @@ The content lane's three verbs are rungs, and what sorts them is the fate of the
 
 The last row is the only position where the two assocs differ, and where an anchor most often sits.
 
-`markOps` are written in the coordinates that rebase produces. Left as prose, the rule is a prediction every editor bridge reimplements to decide which ops to emit; `mapMarks(content, bundle)` runs it instead, and a bridge diffs its intended marks against what it returns. Both readings walk one channel list (`Content::apply_text_channels`), so the store and the prediction cannot answer a position differently.
+`markOps` are written in the coordinates that rebase produces. Left as prose, the rule is a prediction every editor bridge reimplements to decide which ops to emit; `mapMarks(content, bundle)` runs it instead, and a bridge diffs its intended marks against what it returns. Both readings walk one channel list (`Content::apply_text_channels`) and normalize, so the store and the prediction cannot answer a position differently, nor hold a different set of marks where a move left two same-kind runs touching.
 
 **The rule governs user-field writes.** System metadata (`store_ext` / `store_seed_*`), structural operations (`insertCard` / `moveCard` / `setCardKind`), and the `remove_*` family sit outside it: `remove_*` has no lane because one verb serves every write path, and a structural op moves cards rather than writing into one. So `store_field` / `store_fields` / `store_fill` are the opaque store, `set` / `set_all` the typed writer, and a name never needs per-verb disambiguation against its neighbor (the opaque batch `store_fields` and the typed batch `set_all` are not near-homographs).
 
