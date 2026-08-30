@@ -1326,9 +1326,8 @@ title: Hi
         assert_eq!(doc, reparsed);
     }
 
-    /// The emitted `key: !must_fill` has no line for a block mapping, so the
-    /// blob is refused where parse refuses the same shape. A canonical content
-    /// object is the exception: emit projects it to a markdown scalar first.
+    /// A canonical content object is the exception: emit projects it to a
+    /// markdown scalar, which is a shape the marker has a spelling against.
     #[test]
     fn rejects_a_fill_marked_mapping() {
         let blob = |value: &str, fill: &str| {

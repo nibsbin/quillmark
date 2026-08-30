@@ -5,25 +5,24 @@
 - fix(cli): **`render -f svg` / `-f png` writes every page.** The Typst backend
   emits one artifact per page and the command wrote `artifacts.first()`,
   discarding the rest with no warning, so a multi-page document produced a
-  single-page file that looked complete. A multi-page render writes one numbered
-  file per page — `out.svg` becomes `out-1.svg`, `out-2.svg`, … , page one
-  included, so no unnumbered file claims to be the whole document — and
-  `--stdout`, which carries one artifact, refuses it rather than emitting page
-  one.
+  single-page file that looked complete. A multi-page render now writes one
+  numbered file per page: `out.svg` becomes `out-1.svg`, `out-2.svg`, ….  Page
+  one is numbered too, so no unnumbered file claims to be the whole document.
+  `--stdout` carries one artifact and refuses a multi-page render.
 - fix(core): **a `!must_fill` marker on a mapping is refused at every ingress,
   not just at parse.** `Card::store_fill`, the `CardWire` boundary and the
   `@0.92.0` storage DTO took `fill: true` against an object and emitted
   `x: a: 1`, which `Document::parse` then refuses — breaking the emit round
   trip. The rule the parser enforces now sits beside the other field invariants
   as `edit::validate_fill_targets`, raising `edit::fill_on_mapping`. A canonical
-  content object stays legal: emit projects it to its markdown scalar before
-  writing the tag, which is the shape `!must_fill` emits against.
+  content object stays legal: emit projects it to its markdown scalar first,
+  which is the shape `!must_fill` emits against.
 - fix(core): **a comment after a nested key that needs quoting keeps its
   position.** A comment's position is its index among its mapping's children,
-  and the prescan matched only a bare `[A-Za-z_][A-Za-z0-9_]*` nested key — so
-  `"a b": 1`, which the emitter writes itself, was not counted and every comment
+  and the prescan matched only a bare `[A-Za-z_][A-Za-z0-9_]*` nested key. So
+  `"a b": 1`, which the emitter writes itself, was not counted, and every comment
   after it in that mapping round-tripped one slot early. The prescan reads a
-  nested key in the spellings the emitter writes at depth: quoted, and plain
+  nested key in both spellings the emitter writes at depth: quoted, and plain
   with characters the bare form excludes.
 - fix(pdfform): **an array-bound text widget is multiline.** `resolve::coerce_text`
   joins an array's elements with newlines unconditionally while the widget took

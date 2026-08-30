@@ -472,12 +472,10 @@ fn split_key(line: &str) -> Option<(String, String)> {
 
 /// Byte index of the `:` closing a *nested* key.
 ///
-/// [`key_end`]'s bare form plus the two spellings [`emit_key`](super::emit) also
-/// writes at depth, nested keys being arbitrary user data: a quoted scalar, and
-/// a plain scalar carrying characters the bare form excludes (`a b`). A plain
-/// key ends at the first `: ` or at a `:` closing the line — YAML's own
-/// boundary — and cannot open with an indicator or run past a ` #` comment,
-/// because a key that would need to is emitted quoted.
+/// [`key_end`]'s bare form plus the two spellings `emit_key` also writes at
+/// depth, nested keys being arbitrary user data: a quoted scalar, and a plain
+/// scalar carrying characters the bare form excludes (`a b`). A plain key ends
+/// at the first `: `, or at a `:` closing the line — YAML's own boundary.
 fn nested_key_end(line: &str) -> Option<usize> {
     if let Some(i) = key_end(line) {
         return Some(i);
@@ -519,7 +517,7 @@ fn nested_key_end(line: &str) -> Option<usize> {
 }
 
 /// The YAML indicators a plain scalar cannot open with. A key needing one is
-/// emitted quoted, so a line opening with one is not a plain key.
+/// emitted quoted, as is one carrying a ` #`, so neither is read as a plain key.
 const PLAIN_SCALAR_EXCLUDED_FIRST: &[u8] = b"-?:,[]{}#&*!|>'\"%@`";
 
 /// Split a nested key line into `(key, source spelling, rest_after_colon)`.

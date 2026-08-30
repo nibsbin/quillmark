@@ -267,10 +267,9 @@ pub fn project_kind(
         SchemaType::Enum => WidgetType::Choice {
             options: blank_first(field.enum_values.as_deref().unwrap_or_default()),
         },
-        // An array of scalars binds as text, its elements joined with newlines
-        // by `resolve::coerce_text` — so the widget is multiline whatever `ui`
-        // says, or the value it carries is one a single-line widget collapses
-        // while the flattened raster stacks the lines.
+        // `resolve::coerce_text` joins an array's elements with newlines, so the
+        // widget is multiline whatever `ui` says: a single-line one collapses
+        // the value the flattened raster stacks.
         SchemaType::Array => match field.items.as_deref() {
             Some(items) if is_scalar_or_prose(items) => WidgetType::Text { multiline: true },
             _ => return Err(unbindable()),
@@ -429,10 +428,8 @@ card_kinds:
         );
     }
 
-    /// `resolve::coerce_text` joins an array's elements with newlines, so the
-    /// widget is multiline with or without `ui.multiline`: a single-line widget
-    /// holding a `/V` with newlines shows one line in a viewer while the
-    /// flattened raster draws them all.
+    /// With or without `ui.multiline`: the joined value carries newlines either
+    /// way.
     #[test]
     fn a_scalar_array_projects_to_multiline_text() {
         assert_eq!(kind("comments").unwrap(), WidgetType::Text { multiline: true });

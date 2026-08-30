@@ -325,9 +325,8 @@ def test_store_ext_rejects_non_dict():
 
 
 def test_unsupported_value_types_are_refused():
-    """`str()` on an arbitrary object stores its repr — a tuple as "('a', 'b')",
-    a set as "{'x'}" — which only surfaces as garbage at render or read-back.
-    Refused at the boundary, as the WASM lane already refuses them."""
+    """At the boundary, rather than as the value's repr — a tuple stored as
+    "('a', 'b')" only surfaces as garbage at render or read-back."""
     doc = Document.from_markdown(SIMPLE_MD)
     for bad in [("a", "b"), {"x"}, b"bytes", object()]:
         with pytest.raises(ValueError, match="no JSON form"):
@@ -335,7 +334,7 @@ def test_unsupported_value_types_are_refused():
 
 
 def test_dates_keep_their_stringified_form():
-    """The whitelist the `str()` fallback existed for."""
+    """The three types whose `str()` is the spelling a field reads."""
     doc = Document.from_markdown(SIMPLE_MD)
     doc.store_ext(
         {

@@ -325,8 +325,8 @@ fn validate_wire_field(key: &str, value: &JsonValue) -> Result<(), WireError> {
     super::edit::validate_field(key, value).map_err(|v| wire_field_error(key, v))
 }
 
-/// The `!must_fill` rule (`edit::validate_fill_targets`) on a wire field whose
-/// nested markers are already applied.
+/// Call after `set_fill_at` has applied the wire's nested markers: the check
+/// reads them off the value.
 fn validate_wire_fill_targets(
     key: &str,
     value: &QuillValue,

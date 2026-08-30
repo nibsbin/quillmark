@@ -269,9 +269,8 @@ fn nested_map_keys_with_structural_chars_emit_valid_yaml() {
     assert_eq!(cfg["needs # comment"], serde_json::json!(4));
 }
 
-/// A comment's position is its index among its mapping's children, and a quoted
-/// key is one of them: an emitter-quoted key invisible to the prescan shifts
-/// every comment after it one slot earlier.
+/// A comment's position is its index among its mapping's children, and a key the
+/// emitter quotes or spaces is one of those children.
 #[test]
 fn a_comment_after_a_quoted_nested_key_holds_its_position() {
     let src = "\

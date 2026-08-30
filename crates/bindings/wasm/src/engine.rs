@@ -2226,8 +2226,8 @@ pub fn map_pos(
     Ok(delta.map_pos(pos, assoc))
 }
 
-/// The `$quill` reference refusal, one code and one hint for every door that
-/// parses one: the two differ in the `ctx` naming the door.
+/// The `$quill` reference refusal: one code and one hint for every door that
+/// parses one, `ctx` naming the door.
 fn invalid_quill_reference(ctx: &str, value: &str, reason: &str) -> JsValue {
     let diag = quillmark_core::Diagnostic::new(
         quillmark_core::Severity::Error,

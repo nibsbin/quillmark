@@ -1623,9 +1623,9 @@ fn py_to_json_at(value: &Bound<'_, PyAny>, depth: usize) -> PyResult<serde_json:
         return Ok(serde_json::Value::Object(map));
     }
     // `datetime.date` (and its `datetime.datetime` subclass) and `datetime.time`
-    // stringify to the spellings a `date` / `datetime` field reads. Every other
-    // type is refused: `str()` on an arbitrary object stores its repr, which
-    // surfaces as garbage at render or read-back rather than here.
+    // stringify to the spellings a `date` / `datetime` field reads. For anything
+    // else `str()` stores a repr, which surfaces as garbage at render or
+    // read-back rather than at the call that wrote it.
     if value.is_instance_of::<PyDate>() || value.is_instance_of::<PyTime>() {
         return Ok(serde_json::Value::String(value.str()?.to_string()));
     }

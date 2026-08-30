@@ -393,10 +393,9 @@ fn push_trailer(out: &mut String, trailer: Option<&str>) {
 /// Empty objects emit `key: {}\n`, empty arrays `key: []\n`. When `fill` is
 /// `true`: scalars → `key: !must_fill <value>`, empty seqs → `key: !must_fill []`,
 /// null → `key: !must_fill`, non-empty seqs → `key: !must_fill\n  - …`. A marked
-/// mapping has no spelling — the tag rides the value, and a block mapping opens
-/// on the next line — so every ingress refuses one
-/// (`edit::validate_fill_targets`) and it emits structurally, marker dropped,
-/// rather than as a line no parser accepts.
+/// mapping has no spelling, so every ingress refuses one
+/// (`edit::validate_fill_targets`); one reaching here emits structurally, marker
+/// dropped, rather than as a line no parser accepts.
 fn emit_field_at(
     out: &mut String,
     key: &str,

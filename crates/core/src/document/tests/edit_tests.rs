@@ -251,9 +251,8 @@ fn test_card_store_fields_atomic_on_error() {
     assert!(card.payload().get("bad-name").is_none());
 }
 
-/// `key: !must_fill` writes the marker as the value's tag, and a block mapping
-/// opens on the next line with nowhere to carry one: the emitted `x: a: 1` does
-/// not re-parse. Refused at the mutator, as parse refuses it in source.
+/// The emitted `x: a: 1` does not re-parse, so the mutator refuses what parse
+/// refuses in source. A canonical content object stays storable.
 #[test]
 fn test_store_fill_refuses_a_mapping() {
     let mut card = Card::new("note").unwrap();

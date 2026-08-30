@@ -1,11 +1,14 @@
-//! Two classes, on either side of the boundary. A refusal the engine minted —
-//! an edit, a render, a validation — raises `QuillmarkError` carrying a
-//! non-empty `.diagnostics` list; the `EditError::<Variant>` prefix lives in the
-//! message, not the type. A Python value the binding cannot convert at all — a
-//! non-finite float, an int past 64 bits, a type with no JSON form, a malformed
-//! `path` sequence — raises `ValueError`, which is the exception a Python caller
-//! expects for its own argument and which no diagnostic describes. The WASM
-//! binding has no second class and throws its one shape for both.
+//! Two classes, on either side of the boundary.
+//!
+//! A refusal the engine minted — an edit, a render, a validation — raises
+//! `QuillmarkError` carrying a non-empty `.diagnostics` list; the
+//! `EditError::<Variant>` prefix lives in the message, not the type.
+//!
+//! An argument the binding cannot convert at all — a non-finite float, an int
+//! past 64 bits, a type with no JSON form, a malformed `path` sequence — raises
+//! `ValueError` before the engine is called. No diagnostic describes it, and
+//! `ValueError` is what a Python caller catches for its own argument. The WASM
+//! binding has one shape for both.
 
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;

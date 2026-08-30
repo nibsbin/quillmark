@@ -143,8 +143,6 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         ));
     }
 
-    // SVG and PNG carry one artifact per page. A single stream cannot hold them,
-    // so `--stdout` refuses rather than emitting page one as the document.
     if args.stdout {
         if result.artifacts.len() > 1 {
             return Err(CliError::InvalidArgument(format!(

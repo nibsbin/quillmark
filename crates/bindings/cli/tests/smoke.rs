@@ -154,8 +154,8 @@ fn render_svg_honours_the_format_flag() {
     assert!(svg.contains("<svg"), "output is not SVG: {}", &svg[..svg.len().min(80)]);
 }
 
-/// A long body over one artifact per page: every page reaches disk, numbered,
-/// with no unnumbered file claiming to be the whole document.
+/// No unnumbered file sits beside the numbered pages, claiming to be the whole
+/// document.
 #[test]
 fn multi_page_svg_writes_one_file_per_page() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -192,8 +192,7 @@ fn multi_page_svg_writes_one_file_per_page() {
     }
 }
 
-/// One stream cannot carry a page each, so the refusal is loud rather than a
-/// silent page one.
+/// Loudly, rather than by writing page one as the document.
 #[test]
 fn multi_page_stdout_is_refused() {
     let dir = tempfile::tempdir().expect("tempdir");

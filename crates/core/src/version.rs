@@ -276,8 +276,8 @@ mod tests {
         assert!(Version::from_str("2.1.x").is_err());
     }
 
-    /// `u32::from_str` takes a leading `+`; the grammar `quill_ref_hint`
-    /// promises does not, and `Display` never writes one back.
+    /// The grammar `quill_ref_hint` promises is plain digits, and `Display`
+    /// never writes a sign back.
     #[test]
     fn a_signed_segment_is_not_a_version() {
         assert!(Version::from_str("+2.1").is_err());

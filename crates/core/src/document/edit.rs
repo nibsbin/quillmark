@@ -93,10 +93,8 @@ pub enum EditError {
     #[error("value nests deeper than the maximum of {max} levels")]
     ValueTooDeep { max: usize },
 
-    /// A `!must_fill` marker on `field`, or on a node nested inside it, targets
-    /// a mapping. The parser refuses the same shape in source; the mutators and
-    /// the wire and storage boundaries carry markers as data, so they refuse it
-    /// here.
+    /// The offending marker may be on a node nested inside `field` rather than on
+    /// `field` itself.
     #[error("`!must_fill` on field '{field}' targets a mapping; `!must_fill` is supported on scalars and sequences only")]
     FillOnMapping { field: String },
 
@@ -373,17 +371,13 @@ pub fn validate_field(key: &str, value: &serde_json::Value) -> Result<(), FieldV
     Ok(())
 }
 
-/// The `!must_fill` markers a value carries, against the shape emit writes them
-/// in: the marker rides a value's tag, so a mapping — which opens on the next
-/// line — has no position for one.
+/// Refuse a `!must_fill` marker targeting a mapping
+/// ([`FieldViolation::FillOnMapping`]), the rule the parser enforces on source.
 ///
 /// The root under `fill` may still be a canonical content object: emit projects
 /// that to its markdown scalar before writing the marker
-/// (`emit::project_content_field`). Nested nodes are emitted structurally, with
-/// no projection, so a nested marker targets a scalar or a sequence.
-///
-/// Parse reads markers from source and refuses a mapping there; the mutators and
-/// the wire and storage boundaries take markers as data and call this.
+/// (`emit::project_content_field`). A nested node is emitted structurally, with
+/// no projection, so a marker there targets a scalar or a sequence.
 pub fn validate_fill_targets(
     value: &crate::QuillValue,
     fill: bool,

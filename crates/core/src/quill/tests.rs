@@ -499,9 +499,8 @@ main:
     assert_eq!(title_field.r#type, FieldType::String);
 }
 
-/// YAML reads an unquoted `1.0` as a number. `f64::to_string` drops the
-/// fraction, so the loader saw `"1"` and refused it — hinting at the `'1.0'`
-/// the author had written.
+/// YAML reads it as a number, and the fraction has to survive the crossing back
+/// to a version string.
 #[test]
 fn an_unquoted_numeric_version_keeps_its_fraction() {
     let yaml = r#"
