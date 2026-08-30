@@ -269,6 +269,62 @@ fn nested_map_keys_with_structural_chars_emit_valid_yaml() {
     assert_eq!(cfg["needs # comment"], serde_json::json!(4));
 }
 
+/// A comment's position is its index among its mapping's children, and a quoted
+/// key is one of them: an emitter-quoted key invisible to the prescan shifts
+/// every comment after it one slot earlier.
+#[test]
+fn a_comment_after_a_quoted_nested_key_holds_its_position() {
+    let src = "\
+~~~card-yaml
+$quill: test@1.0
+$kind: main
+config:
+  \"a b\": 1
+  # a note
+  city: Anytown
+  '- dash': 2
+  # a second note
+  zip: 12345
+~~~
+
+Body.
+";
+    let doc = Document::parse(src).expect("parses").document;
+    let md = doc.to_markdown();
+    // The emitter re-spells each key canonically; the comments keep their slots.
+    assert!(
+        md.contains("a b: 1\n  # a note\n  city: Anytown\n"),
+        "the first comment moved: {md}"
+    );
+    assert!(
+        md.contains("\"- dash\": 2\n  # a second note\n  zip: 12345\n"),
+        "the second comment moved: {md}"
+    );
+    let reparsed = Document::parse(&md).expect("the emitted document re-parses").document;
+    assert_eq!(doc, reparsed, "emit is not a fixed point: {md}");
+
+    // And the nested fill under a quoted key resolves against the parsed value.
+    let filled = "\
+~~~card-yaml
+$quill: test@1.0
+$kind: main
+config:
+  \"a b\": !must_fill
+  city: Anytown
+~~~
+
+Body.
+";
+    let doc = Document::parse(filled).expect("parses").document;
+    let md = doc.to_markdown();
+    assert!(md.contains("a b: !must_fill\n"), "the marker moved: {md}");
+    assert_eq!(
+        doc,
+        Document::parse(&md).expect("re-parses").document,
+        "emit is not a fixed point: {md}"
+    );
+}
+
 /// `store_field` keeps what it is handed, so both canonical forms rest here and
 /// the projection guard is byte identity against either.
 #[test]

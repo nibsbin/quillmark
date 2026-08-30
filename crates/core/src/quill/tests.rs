@@ -499,6 +499,31 @@ main:
     assert_eq!(title_field.r#type, FieldType::String);
 }
 
+/// YAML reads an unquoted `1.0` as a number. `f64::to_string` drops the
+/// fraction, so the loader saw `"1"` and refused it — hinting at the `'1.0'`
+/// the author had written.
+#[test]
+fn an_unquoted_numeric_version_keeps_its_fraction() {
+    let yaml = r#"
+quill:
+  name: numeric_version
+  version: 1.0
+  backend: typst
+  description: Numeric version
+
+typst:
+  plate_file: plate.typ
+
+main:
+  fields:
+    title:
+      type: string
+      description: Document title
+"#;
+    let config = QuillConfig::from_yaml(yaml).expect("an unquoted 1.0 loads");
+    assert_eq!(config.version, "1.0");
+}
+
 #[test]
 fn test_quill_config_missing_required_fields() {
     let yaml_missing_name = r#"
