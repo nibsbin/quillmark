@@ -25,6 +25,16 @@ impl Version {
     }
 }
 
+/// One numeric segment: ASCII digits, nothing else. `u32::from_str` alone also
+/// takes a leading `+`, a spelling no `Display` writes back.
+fn parse_segment(s: &str, label: &str) -> Result<u32, String> {
+    if s.is_empty() || !s.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(format!("Invalid {} version '{}': must be a number", label, s));
+    }
+    s.parse::<u32>()
+        .map_err(|_| format!("Invalid {} version '{}': must be a number", label, s))
+}
+
 impl FromStr for Version {
     type Err = String;
 
@@ -38,18 +48,10 @@ impl FromStr for Version {
             ));
         }
 
-        let major = parts[0]
-            .parse::<u32>()
-            .map_err(|_| format!("Invalid major version '{}': must be a number", parts[0]))?;
-
-        let minor = parts[1]
-            .parse::<u32>()
-            .map_err(|_| format!("Invalid minor version '{}': must be a number", parts[1]))?;
-
+        let major = parse_segment(parts[0], "major")?;
+        let minor = parse_segment(parts[1], "minor")?;
         let patch = if parts.len() == 3 {
-            parts[2]
-                .parse::<u32>()
-                .map_err(|_| format!("Invalid patch version '{}': must be a number", parts[2]))?
+            parse_segment(parts[2], "patch")?
         } else {
             0
         };
@@ -99,9 +101,24 @@ impl FromStr for VersionSelector {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let version_str = s.strip_prefix('@').unwrap_or(s);
+        // An absent selector is `latest`; a written `@` with nothing after it is
+        // a typo, not a spelling of it.
+        let (written, version_str) = match s.strip_prefix('@') {
+            Some(rest) => (true, rest),
+            None => (false, s),
+        };
 
-        if version_str.is_empty() || version_str == "latest" {
+        if version_str.is_empty() {
+            return if written {
+                Err(format!(
+                    "Invalid version selector '{}': `@` carries no selector; omit it for the latest version, or write one",
+                    s
+                ))
+            } else {
+                Ok(VersionSelector::Latest)
+            };
+        }
+        if version_str == "latest" {
             return Ok(VersionSelector::Latest);
         }
 
@@ -117,7 +134,7 @@ impl FromStr for VersionSelector {
                 })
             }
             1 => {
-                let major = version_str.parse::<u32>().map_err(|_| {
+                let major = parse_segment(version_str, "major").map_err(|_| {
                     format!(
                         "Invalid version selector '{}': expected number, MAJOR.MINOR, MAJOR.MINOR.PATCH, or 'latest'",
                         version_str
@@ -257,6 +274,30 @@ mod tests {
         assert!(Version::from_str("abc").is_err());
         assert!(Version::from_str("2.x").is_err());
         assert!(Version::from_str("2.1.x").is_err());
+    }
+
+    /// The grammar `quill_ref_hint` promises is plain digits, and `Display`
+    /// never writes a sign back.
+    #[test]
+    fn a_signed_segment_is_not_a_version() {
+        assert!(Version::from_str("+2.1").is_err());
+        assert!(Version::from_str("2.+1").is_err());
+        assert!(Version::from_str("2.1.+0").is_err());
+        assert!(QuillReference::from_str("memo@+2.+1").is_err());
+        assert!(VersionSelector::from_str("@+2").is_err());
+    }
+
+    /// `memo@` is a typo for `memo`, not a spelling of it: an absent selector
+    /// means latest, a written one has to say something.
+    #[test]
+    fn a_trailing_at_is_not_a_selector() {
+        assert!(QuillReference::from_str("memo@").is_err());
+        assert!(VersionSelector::from_str("@").is_err());
+        assert_eq!(
+            VersionSelector::from_str("").unwrap(),
+            VersionSelector::Latest,
+            "no selector at all is still latest"
+        );
     }
 
     #[test]

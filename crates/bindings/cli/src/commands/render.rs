@@ -1,6 +1,6 @@
 use crate::commands::load_quill;
 use crate::errors::{CliError, Result};
-use crate::output::{derive_output_path, write_output};
+use crate::output::{derive_output_path, page_output_path, write_output};
 use clap::Parser;
 use quillmark::{Document, Quillmark};
 use quillmark_core::{OutputFormat, RenderOptions};
@@ -137,28 +137,41 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         crate::errors::print_warnings(&result.warnings);
     }
 
-    let artifact = result.artifacts.first().ok_or_else(|| {
-        CliError::InvalidArgument("No artifacts produced from rendering".to_string())
-    })?;
+    if result.artifacts.is_empty() {
+        return Err(CliError::InvalidArgument(
+            "No artifacts produced from rendering".to_string(),
+        ));
+    }
 
-    let output_path = if args.stdout {
-        None
+    if args.stdout {
+        if result.artifacts.len() > 1 {
+            return Err(CliError::InvalidArgument(format!(
+                "{} renders {} pages, one artifact each, and --stdout carries one; \
+                 drop --stdout to write the pages as files",
+                args.format,
+                result.artifacts.len()
+            )));
+        }
+        write_output(true, None, args.quiet, &result.artifacts[0].bytes)?;
     } else {
-        Some(args.output.unwrap_or_else(|| {
+        let output_path = args.output.unwrap_or_else(|| {
             if let Some(ref path) = markdown_path_for_output {
                 derive_output_path(path, &args.format)
             } else {
                 PathBuf::from(format!("example.{}", args.format))
             }
-        }))
-    };
-
-    write_output(
-        args.stdout,
-        output_path.as_deref(),
-        args.quiet,
-        &artifact.bytes,
-    )?;
+        });
+        if let [artifact] = result.artifacts.as_slice() {
+            write_output(false, Some(&output_path), args.quiet, &artifact.bytes)?;
+        } else {
+            // Every page numbered, page one included: an unnumbered file beside
+            // numbered ones reads as the whole document.
+            for (i, artifact) in result.artifacts.iter().enumerate() {
+                let path = page_output_path(&output_path, i + 1);
+                write_output(false, Some(&path), args.quiet, &artifact.bytes)?;
+            }
+        }
+    }
 
     if args.verbose && !args.quiet {
         eprintln!("Rendering completed successfully");

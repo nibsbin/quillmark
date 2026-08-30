@@ -93,6 +93,11 @@ pub enum EditError {
     #[error("value nests deeper than the maximum of {max} levels")]
     ValueTooDeep { max: usize },
 
+    /// The offending marker may be on a node nested inside `field` rather than on
+    /// `field` itself.
+    #[error("`!must_fill` on field '{field}' targets a mapping; `!must_fill` is supported on scalars and sequences only")]
+    FillOnMapping { field: String },
+
     /// Markdown import failed: the content codec rejected the input for a body
     /// *or* a field path (e.g. container nesting past
     /// [`MAX_NESTING_DEPTH`](quillmark_content::MAX_NESTING_DEPTH)). Returned
@@ -187,6 +192,7 @@ impl EditError {
             EditError::ReservedKind => "edit::reserved_kind",
             EditError::IndexOutOfRange { .. } => "edit::index_out_of_range",
             EditError::ValueTooDeep { .. } => "edit::value_too_deep",
+            EditError::FillOnMapping { .. } => "edit::fill_on_mapping",
             EditError::Import(_) => "edit::import",
             EditError::FieldDecode { .. } => "edit::field_decode",
             EditError::FieldNotContent { .. } => "edit::field_not_content",
@@ -216,6 +222,7 @@ impl EditError {
                 "len" => len,
             },
             EditError::ValueTooDeep { max } => diag_args! { "max" => max },
+            EditError::FillOnMapping { field } => diag_args! { "field" => field },
             EditError::Import(_) => diag_args! {},
             EditError::FieldDecode {
                 field,
@@ -271,6 +278,7 @@ impl EditError {
             }
             EditError::InvalidFieldName(f)
             | EditError::FieldNotInline { field: f, .. }
+            | EditError::FillOnMapping { field: f }
             | EditError::FieldCoercionFailed { field: f, .. } => Some(base.field(f)),
             EditError::IndexOutOfRange { index, .. } => Some(DocPath::card(None, *index)),
             _ => (!base.segs().is_empty()).then(|| base.clone()),
@@ -290,6 +298,10 @@ pub enum FieldViolation {
     /// The value nests deeper than [`MAX_YAML_DEPTH`](crate::document::limits::MAX_YAML_DEPTH)
     /// (spec §8).
     TooDeep,
+    /// A `!must_fill` marker targets a mapping. The marker rides a value's tag,
+    /// and a block mapping opens on the next line, with no tag position of its
+    /// own (spec §3.4).
+    FillOnMapping,
 }
 
 pub(crate) fn edit_error_from_violation(name: &str, v: FieldViolation) -> EditError {
@@ -297,6 +309,9 @@ pub(crate) fn edit_error_from_violation(name: &str, v: FieldViolation) -> EditEr
         FieldViolation::InvalidName => EditError::InvalidFieldName(name.to_string()),
         FieldViolation::TooDeep => EditError::ValueTooDeep {
             max: crate::document::limits::MAX_YAML_DEPTH,
+        },
+        FieldViolation::FillOnMapping => EditError::FillOnMapping {
+            field: name.to_string(),
         },
     }
 }
@@ -352,6 +367,31 @@ pub fn validate_field(key: &str, value: &serde_json::Value) -> Result<(), FieldV
     }
     if crate::value::json_depth_exceeds(value, crate::document::limits::MAX_YAML_DEPTH) {
         return Err(FieldViolation::TooDeep);
+    }
+    Ok(())
+}
+
+/// Refuse a `!must_fill` marker targeting a mapping
+/// ([`FieldViolation::FillOnMapping`]), the rule the parser enforces on source.
+///
+/// The root under `fill` may still be a canonical content object: emit projects
+/// that to its markdown scalar before writing the marker
+/// (`emit::project_content_field`). A nested node is emitted structurally, with
+/// no projection, so a marker there targets a scalar or a sequence.
+pub fn validate_fill_targets(
+    value: &crate::QuillValue,
+    fill: bool,
+) -> Result<(), FieldViolation> {
+    if fill
+        && value.as_json().is_object()
+        && super::emit::project_content_field(value.as_json()).is_none()
+    {
+        return Err(FieldViolation::FillOnMapping);
+    }
+    for path in value.nonroot_fill_paths() {
+        if value.is_object_at(&path) {
+            return Err(FieldViolation::FillOnMapping);
+        }
     }
     Ok(())
 }

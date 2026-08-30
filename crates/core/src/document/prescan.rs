@@ -174,7 +174,9 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
                     kind: None,
                     child_count: 0,
                 });
-            } else if let Some((key, after_colon)) = split_key(after_dash_trimmed) {
+            } else if let Some((key, source_key, after_colon)) =
+                split_nested_key(after_dash_trimmed)
+            {
                 let (fill, value_without_tag, had_non_fill_tag) =
                     record_fill_and_tags(&mut out, &after_colon, &key);
                 if fill {
@@ -183,7 +185,7 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
                     out.nested_fills.push(key_path);
                 }
                 if fill || had_non_fill_tag {
-                    dash_body_clean = Some(format!("{}:{}", key, value_without_tag));
+                    dash_body_clean = Some(format!("{}:{}", source_key, value_without_tag));
                 }
                 stack.push(Frame {
                     indent: inline_indent_offset,
@@ -271,7 +273,7 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
         }
 
         // Case 4: nested key line inside a block mapping.
-        if let Some((key, after_colon)) = split_key(trimmed) {
+        if let Some((key, source_key, after_colon)) = split_nested_key(trimmed) {
             let frame_idx = ensure_frame_at_indent(&mut stack, indent, FrameKind::Mapping);
             let frame = &mut stack[frame_idx];
             let key_index = frame.child_count;
@@ -303,7 +305,7 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
                     });
                 }
                 let head = format!("{:width$}", "", width = indent);
-                cleaned_lines.push(format!("{}{}:{}", head, key, value_without_tag));
+                cleaned_lines.push(format!("{}{}:{}", head, source_key, value_without_tag));
             } else {
                 cleaned_lines.push(line.to_string());
             }
@@ -466,6 +468,72 @@ pub(super) fn key_end(line: &str) -> Option<usize> {
 fn split_key(line: &str) -> Option<(String, String)> {
     let i = key_end(line)?;
     Some((line[..i].to_string(), line[i + 1..].to_string()))
+}
+
+/// Byte index of the `:` closing a *nested* key.
+///
+/// [`key_end`]'s bare form plus the two spellings `emit_key` also writes at
+/// depth, nested keys being arbitrary user data: a quoted scalar, and a plain
+/// scalar carrying characters the bare form excludes (`a b`). A plain key ends
+/// at the first `: `, or at a `:` closing the line — YAML's own boundary.
+fn nested_key_end(line: &str) -> Option<usize> {
+    if let Some(i) = key_end(line) {
+        return Some(i);
+    }
+    let bytes = line.as_bytes();
+    let first = *bytes.first()?;
+    if first == b'"' || first == b'\'' {
+        let quote = first;
+        let mut i = 1;
+        while i < bytes.len() {
+            if bytes[i] == b'\\' && quote == b'"' {
+                i += 2;
+                continue;
+            }
+            if bytes[i] == quote {
+                // `''` inside a single-quoted scalar is one escaped quote.
+                if quote == b'\'' && bytes.get(i + 1) == Some(&b'\'') {
+                    i += 2;
+                    continue;
+                }
+                return (bytes.get(i + 1) == Some(&b':')).then_some(i + 1);
+            }
+            i += 1;
+        }
+        return None;
+    }
+    if PLAIN_SCALAR_EXCLUDED_FIRST.contains(&first) {
+        return None;
+    }
+    for i in 1..bytes.len() {
+        if bytes[i] == b'#' && bytes[i - 1] == b' ' {
+            return None;
+        }
+        if bytes[i] == b':' && matches!(bytes.get(i + 1), None | Some(b' ')) {
+            return Some(i);
+        }
+    }
+    None
+}
+
+/// The YAML indicators a plain scalar cannot open with. A key needing one is
+/// emitted quoted, as is one carrying a ` #`, so neither is read as a plain key.
+const PLAIN_SCALAR_EXCLUDED_FIRST: &[u8] = b"-?:,[]{}#&*!|>'\"%@`";
+
+/// Split a nested key line into `(key, source spelling, rest_after_colon)`.
+///
+/// The two forms differ wherever the source spells the key with anything the
+/// parser drops — quotes, whitespace before the `:`: paths carry the key the
+/// YAML parser sees, the cleaned line keeps what was written. A quoted key that
+/// does not decode is not a key.
+fn split_nested_key(line: &str) -> Option<(String, String, String)> {
+    let i = nested_key_end(line)?;
+    let source = &line[..i];
+    let key = match source.as_bytes().first() {
+        Some(b'"') | Some(b'\'') => serde_saphyr::from_str::<String>(source).ok()?,
+        _ => source.trim_end().to_string(),
+    };
+    Some((key, source.to_string(), line[i + 1..].to_string()))
 }
 
 /// Split `value` into `(value_without_comment, trailing_comment)` following

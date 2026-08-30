@@ -1555,7 +1555,7 @@ fn py_to_json(value: &Bound<'_, PyAny>) -> PyResult<serde_json::Value> {
 /// `depth` is the 0-based depth of the current node, so a container at `depth`
 /// is the `(depth + 1)`-th nesting level.
 fn py_to_json_at(value: &Bound<'_, PyAny>, depth: usize) -> PyResult<serde_json::Value> {
-    use pyo3::types::{PyBool, PyFloat, PyInt, PyList, PyString};
+    use pyo3::types::{PyBool, PyDate, PyFloat, PyInt, PyList, PyString, PyTime};
 
     let reject_too_deep = || {
         Err(PyValueError::new_err(format!(
@@ -1622,8 +1622,18 @@ fn py_to_json_at(value: &Bound<'_, PyAny>, depth: usize) -> PyResult<serde_json:
         }
         return Ok(serde_json::Value::Object(map));
     }
-    let s = value.str()?.to_string();
-    Ok(serde_json::Value::String(s))
+    // `datetime.date` (and its `datetime.datetime` subclass) and `datetime.time`
+    // stringify to the spellings a `date` / `datetime` field reads. For anything
+    // else `str()` stores a repr, which surfaces as garbage at render or
+    // read-back rather than at the call that wrote it.
+    if value.is_instance_of::<PyDate>() || value.is_instance_of::<PyTime>() {
+        return Ok(serde_json::Value::String(value.str()?.to_string()));
+    }
+    Err(PyValueError::new_err(format!(
+        "value of type '{}' has no JSON form; pass a str, int, float, bool, None, \
+         list, dict, or a datetime.date / datetime.time",
+        value.get_type().name()?
+    )))
 }
 
 fn py_to_object(
