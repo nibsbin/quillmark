@@ -244,6 +244,7 @@ impl TryFrom<CardWire> for Card {
                         let segs: Vec<PathSegment> = path.iter().map(PathSegment::from).collect();
                         qv.set_fill_at(&segs);
                     }
+                    validate_wire_fill_targets(&key, &qv, fill)?;
                     Ok(PayloadItem::Field {
                         key,
                         value: qv,
@@ -321,8 +322,22 @@ fn body_from_wire(body: &JsonValue) -> Result<Normalized, WireError> {
 /// Validate a wire field against the payload invariant (see
 /// `edit::validate_field`), mapping a violation to [`WireError::InvalidField`].
 fn validate_wire_field(key: &str, value: &JsonValue) -> Result<(), WireError> {
-    use super::edit::{validate_field, FieldViolation};
-    validate_field(key, value).map_err(|v| WireError::InvalidField {
+    super::edit::validate_field(key, value).map_err(|v| wire_field_error(key, v))
+}
+
+/// The `!must_fill` rule (`edit::validate_fill_targets`) on a wire field whose
+/// nested markers are already applied.
+fn validate_wire_fill_targets(
+    key: &str,
+    value: &QuillValue,
+    fill: bool,
+) -> Result<(), WireError> {
+    super::edit::validate_fill_targets(value, fill).map_err(|v| wire_field_error(key, v))
+}
+
+fn wire_field_error(key: &str, v: super::edit::FieldViolation) -> WireError {
+    use super::edit::FieldViolation;
+    WireError::InvalidField {
         key: key.to_string(),
         reason: match v {
             FieldViolation::InvalidName => {
@@ -332,8 +347,12 @@ fn validate_wire_field(key: &str, value: &JsonValue) -> Result<(), WireError> {
                 "nests deeper than the maximum of {} levels",
                 crate::document::limits::MAX_YAML_DEPTH
             ),
+            FieldViolation::FillOnMapping => {
+                "`!must_fill` targets a mapping; it is supported on scalars and sequences only"
+                    .to_string()
+            }
         },
-    })
+    }
 }
 
 #[cfg(test)]
@@ -370,6 +389,44 @@ mod tests {
 
         let back = Card::try_from(wire).expect("wire → card");
         assert_eq!(back, card, "nested fill must survive Card → wire → Card");
+    }
+
+    /// The emitted `key: !must_fill` has no line for a block mapping, so the
+    /// wire refuses one where parse does — at the root and nested.
+    #[test]
+    fn card_wire_refuses_a_fill_marked_mapping() {
+        let field = |key: &str, value: JsonValue, fill: bool, nested: Vec<Vec<PathStepWire>>| {
+            let mut wire = CardWire::new("note".to_string(), JsonValue::Null);
+            wire.payload_items.push(PayloadItemWire::Field {
+                key: key.to_string(),
+                value,
+                fill,
+                nested_fills: nested,
+            });
+            wire
+        };
+
+        let err = Card::try_from(field("x", json!({"a": 1}), true, Vec::new()))
+            .expect_err("a fill-marked mapping is refused");
+        assert!(
+            matches!(&err, WireError::InvalidField { key, .. } if key == "x"),
+            "{err:?}"
+        );
+
+        let nested = vec![vec![PathStepWire::Key("inner".to_string())]];
+        let err = Card::try_from(field("addr", json!({"inner": {"a": 1}}), false, nested))
+            .expect_err("a nested fill on a mapping is refused");
+        assert!(
+            matches!(&err, WireError::InvalidField { key, .. } if key == "addr"),
+            "{err:?}"
+        );
+
+        // The one mapping a marker may target: emit projects it to a markdown
+        // scalar first.
+        let content = quillmark_content::import::from_markdown("Q3 results").expect("content");
+        let canonical = quillmark_content::serial::to_canonical_value(&content);
+        Card::try_from(field("subject", canonical, true, Vec::new()))
+            .expect("a fill-marked content object still crosses");
     }
 
     /// A content object rides the wire structurally and losslessly, so an

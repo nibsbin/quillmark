@@ -32,9 +32,11 @@ The file must open with a `~~~` block containing a `$quill:` key identifying the
 - `--output-data <DATA_FILE>`: Write compiled JSON data to a file
 - `-v` / `--verbose`: Show detailed processing information on stderr
 - `--quiet`: Suppress warnings and the output-destination line
-- `--stdout`: Write the artifact to stdout instead of a file (and ignore `-o`)
+- `--stdout`: Write the artifact to stdout instead of a file (and ignore `-o`); refused when the render produces more than one page
 
 **Streams:** under `--stdout` the artifact owns stdout, and progress, warnings, and errors all go to stderr, so `quillmark render ./my-quill input.md --stdout --verbose > out.pdf` writes a valid PDF. Without `--stdout`, the one stdout line is `Output written to: <path>`, which `--quiet` suppresses.
+
+**Pages:** `svg` and `png` render one artifact per page. A multi-page document writes one numbered file per page — `out.svg` becomes `out-1.svg`, `out-2.svg`, … — so no unnumbered file claims to be the whole document. `--stdout` carries one artifact and refuses a multi-page render.
 
 **Examples:**
 

@@ -470,6 +470,7 @@ impl Payload {
     ) -> Result<Option<QuillValue>, super::edit::FieldViolation> {
         let key = key.into();
         super::edit::validate_field(&key, value.as_json())?;
+        super::edit::validate_fill_targets(&value, false)?;
         Ok(self.insert_item(key, value, false))
     }
 
@@ -482,6 +483,7 @@ impl Payload {
     ) -> Result<Option<QuillValue>, super::edit::FieldViolation> {
         let key = key.into();
         super::edit::validate_field(&key, value.as_json())?;
+        super::edit::validate_fill_targets(&value, true)?;
         Ok(self.insert_item(key, value, true))
     }
 

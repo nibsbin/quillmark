@@ -355,6 +355,10 @@ fn validate_parsed_field(key: &str, value: &serde_json::Value) -> Result<(), Par
             key,
             crate::document::limits::MAX_YAML_DEPTH
         )),
+        FieldViolation::FillOnMapping => ParseError::InvalidStructure(format!(
+            "`!must_fill` on key `{}` targets a mapping; `!must_fill` is supported on scalars and sequences only",
+            key
+        )),
     })
 }
 

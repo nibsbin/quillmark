@@ -307,7 +307,7 @@ fn emit_payload_items(out: &mut String, items: &[PayloadItem]) {
 /// is on the serialized *strings*: under `serde_json/preserve_order`, `Value`'s
 /// `PartialEq` is order-independent, so a `Value` guard would also project a
 /// content-canonical object whose keys are in non-canonical order.
-fn project_content_field(value: &JsonValue) -> Option<String> {
+pub(super) fn project_content_field(value: &JsonValue) -> Option<String> {
     if !value.is_object() {
         return None;
     }
@@ -392,8 +392,11 @@ fn push_trailer(out: &mut String, trailer: Option<&str>) {
 ///
 /// Empty objects emit `key: {}\n`, empty arrays `key: []\n`. When `fill` is
 /// `true`: scalars → `key: !must_fill <value>`, empty seqs → `key: !must_fill []`,
-/// null → `key: !must_fill`, non-empty seqs → `key: !must_fill\n  - …`. Mappings
-/// with `fill` are rejected at parse and never reach this path.
+/// null → `key: !must_fill`, non-empty seqs → `key: !must_fill\n  - …`. A marked
+/// mapping has no spelling — the tag rides the value, and a block mapping opens
+/// on the next line — so every ingress refuses one
+/// (`edit::validate_fill_targets`) and it emits structurally, marker dropped,
+/// rather than as a line no parser accepts.
 fn emit_field_at(
     out: &mut String,
     key: &str,
@@ -428,20 +431,12 @@ fn emit_field_at(
                 out.push('\n');
                 emit_sequence_children(out, items, pos.seq_indent(), ctx);
             }
-            JsonValue::Object(map) => match pos {
-                KeyPos::Line(_) => {
-                    out.push_str(": ");
-                    emit_scalar(out, value);
-                    push_trailer(out, inline_trailer);
-                    out.push('\n');
-                }
-                KeyPos::SeqHead(_) => {
-                    out.push(':');
-                    push_trailer(out, inline_trailer);
-                    out.push('\n');
-                    emit_mapping_children(out, map, pos.map_indent(), ctx);
-                }
-            },
+            JsonValue::Object(map) => {
+                out.push(':');
+                push_trailer(out, inline_trailer);
+                out.push('\n');
+                emit_mapping_children(out, map, pos.map_indent(), ctx);
+            }
         }
         return;
     }

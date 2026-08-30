@@ -615,6 +615,9 @@ mod args_canon {
             EditError::ReservedKind,
             EditError::IndexOutOfRange { index: 3, len: 1 },
             EditError::ValueTooDeep { max: 8 },
+            EditError::FillOnMapping {
+                field: "addr".into(),
+            },
             EditError::Import(quillmark_content::import::ImportError::NestingTooDeep {
                 depth: 9,
                 max: 8,

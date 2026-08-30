@@ -251,6 +251,41 @@ fn test_card_store_fields_atomic_on_error() {
     assert!(card.payload().get("bad-name").is_none());
 }
 
+/// `key: !must_fill` writes the marker as the value's tag, and a block mapping
+/// opens on the next line with nowhere to carry one: the emitted `x: a: 1` does
+/// not re-parse. Refused at the mutator, as parse refuses it in source.
+#[test]
+fn test_store_fill_refuses_a_mapping() {
+    let mut card = Card::new("note").unwrap();
+    let err = card
+        .store_fill("x", QuillValue::from_json(serde_json::json!({"a": 1})))
+        .expect_err("a fill-marked mapping is refused");
+    assert_eq!(err.code(), "edit::fill_on_mapping", "{err}");
+    assert!(card.payload().get("x").is_none(), "and nothing was stored");
+
+    // A canonical content object is the one mapping a marker may target: emit
+    // projects it to a markdown scalar first.
+    let content = quillmark_content::import::from_markdown("Q3 results").unwrap();
+    card.store_fill(
+        "subject",
+        QuillValue::from_json(quillmark_content::serial::to_canonical_value(&content)),
+    )
+    .expect("a fill-marked content object is stored");
+
+    let md = crate::document::Document::from_main_and_cards(
+        {
+            let mut main = card.clone();
+            main.payload_mut()
+                .set_quill("q@1.0.0".parse().expect("reference"));
+            main.payload_mut().set_kind("main");
+            main
+        },
+        Vec::new(),
+    )
+    .to_markdown();
+    let _ = crate::document::Document::parse(&md).expect("the emitted document re-parses");
+}
+
 #[test]
 fn test_card_store_fields_clears_fill_and_repeated_name_last_wins() {
     let mut card = Card::new("note").unwrap();

@@ -154,6 +154,75 @@ fn render_svg_honours_the_format_flag() {
     assert!(svg.contains("<svg"), "output is not SVG: {}", &svg[..svg.len().min(80)]);
 }
 
+/// A long body over one artifact per page: every page reaches disk, numbered,
+/// with no unnumbered file claiming to be the whole document.
+#[test]
+fn multi_page_svg_writes_one_file_per_page() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let doc = dir.path().join("long.md");
+    let body: String = (0..120)
+        .map(|i| format!("Paragraph {i} of a body long enough to span pages.\n\n"))
+        .collect();
+    std::fs::write(
+        &doc,
+        format!("~~~card-yaml\n$quill: taro\ntitle: Long\nauthor: Tester\n~~~\n\n{body}"),
+    )
+    .expect("write the input document");
+
+    let out = dir.path().join("out.svg");
+    ok(&[
+        "render",
+        taro().to_str().unwrap(),
+        doc.to_str().unwrap(),
+        "-f",
+        "svg",
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+
+    assert!(
+        !out.exists(),
+        "an unnumbered out.svg sits beside the numbered pages"
+    );
+    for page in 1..=2 {
+        let path = dir.path().join(format!("out-{page}.svg"));
+        let svg = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("page {page} was not written: {e}"));
+        assert!(svg.contains("<svg"), "page {page} is not SVG");
+    }
+}
+
+/// One stream cannot carry a page each, so the refusal is loud rather than a
+/// silent page one.
+#[test]
+fn multi_page_stdout_is_refused() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let doc = dir.path().join("long.md");
+    let body: String = (0..120)
+        .map(|i| format!("Paragraph {i} of a body long enough to span pages.\n\n"))
+        .collect();
+    std::fs::write(
+        &doc,
+        format!("~~~card-yaml\n$quill: taro\ntitle: Long\nauthor: Tester\n~~~\n\n{body}"),
+    )
+    .expect("write the input document");
+
+    let out = run(&[
+        "render",
+        taro().to_str().unwrap(),
+        doc.to_str().unwrap(),
+        "-f",
+        "svg",
+        "--stdout",
+    ]);
+    assert!(!out.status.success(), "multi-page --stdout exited 0");
+    assert!(
+        out.stdout.is_empty(),
+        "a refused --stdout still wrote {} bytes",
+        out.stdout.len()
+    );
+}
+
 /// Exit 1 rather than any non-zero code: a panic exits differently, so a script
 /// reading the status can tell a refusal from a crash.
 #[test]
