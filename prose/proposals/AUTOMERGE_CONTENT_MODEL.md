@@ -11,8 +11,11 @@ one text sequence with U+FFFC object slots, ranged marks, and a container path
 per block. Adopting Automerge's *shape* is therefore cheap in concept and
 buys three invariants' worth of simplification. Adopting Automerge as the
 *substrate* costs byte-stability, which is load-bearing, and measurably
-regresses the one edit lane we built for. Keep the model; if collaboration
-becomes a goal, adapt to Automerge at a session seam rather than at rest.
+regresses the one edit lane we built for. As a **maintenance offload** it
+inverts: the crate's defects are all in the layer Automerge does not implement,
+and the trade adds 34 dependencies, a binary decoder, and a pre-1.0 upstream
+under a published SemVer promise. Keep the model; if collaboration becomes a
+goal, adapt to Automerge at a session seam rather than at rest.
 
 ## Two proposals in one question
 
@@ -163,10 +166,11 @@ Automerge minor a Quillmark major.
 
 ## What the substrate buys, and the lane where it loses
 
-The honest case for B is real: merge, sync, offline editing, and presence, none
-of which we can build cheaply ourselves. Nothing in the repository asks for them
-today — no collaboration surface exists, and `PREVIEW.md` § "One session type"
-turns on there being exactly one owned consumer.
+B has two honest cases. One is capability — merge, sync, offline editing, and
+presence, none of which we can build cheaply ourselves; nothing in the
+repository asks for them today, and `PREVIEW.md` § "One session type" turns on
+there being exactly one owned consumer. The other is maintenance offload, which
+§ The maintenance argument takes on its own terms.
 
 The near-term case would be `delta.rs`: a hand-rolled Myers diff plus a move
 detector, carrying a documented residual (text both moved and rewritten in one
@@ -195,12 +199,105 @@ rewrites a whole field with no preservation contract — so we would be adopting
 Automerge at its documented weak point and losing our compensation for it. A
 real editor emitting per-keystroke ops would invert this comparison completely.
 
+## The maintenance argument
+
+Merge is not the only reason to want B. The stronger motive is **offloading
+maintenance**: hand the security, robustness and stability of hard code to
+people who work on it full time.
+
+The premise checks out. Automerge's README states that two maintainers work on
+it full time; the crate carries **zero `unsafe` blocks**; it has shipped
+steadily since 2022. Offloading hard code to that is a good instinct, and the
+instinct is not what fails here. The fit is.
+
+### The bugs are not where the dependency is
+
+Fix commits landing in `crates/content`, by file. (History is a shallow clone,
+so this is a 14-day window, not the project's life — but it is the window in
+which the crate took 27 of the repository's 188 commits, so it is not a quiet
+one.)
+
+Eleven fix commits touched the crate. A commit reaches several files, so the
+column counts commits per file rather than partitioning them.
+
+| File | Fixes touching it | Would Automerge own it? |
+|---|---|---|
+| `model.rs` | 6 | No — projection and block model |
+| `serial.rs` | 6 | No — canonical form, deleted only if we accept the binary wire |
+| `ops.rs` | 5 | Partly — the op channels, not their semantics |
+| `import.rs` / `export.rs` | 4 | No — Automerge has no Markdown |
+| `delta.rs` | **0** | **Yes** — position mapping, diff, rebase |
+
+The one file Automerge genuinely replaces is the one file that has needed no
+fixing. Every defect landed in the Markdown projection, the canonical form, or
+the block-and-container model — the layer that stays ours under B. Two of them
+name that layer outright: *clear a `continues` that crosses a container
+boundary*, and *give a container the instance its identity was missing*.
+
+Two more are stack-overflow guards — *walk export's block tree on a frame
+stack*, *walk census iteratively*. Those are the robustness class the argument
+is about, and they are in Markdown export and a content census, neither of
+which Automerge implements.
+
+### Most of the crate is not offloadable at all
+
+| Component | Lines | Under B |
+|---|---|---|
+| `import.rs` + `export.rs` (Markdown codecs) | 3,015 | Kept whole — no counterpart |
+| `serial.rs` (canonical JSON) | 1,791 | Kept, or byte-stability goes |
+| `model.rs` + `ops.rs` | 4,457 | Partly replaced; the projection and validation stay |
+| `delta.rs` | 734 | Replaced, and measurably worse (§ the rebase table) |
+| Rest | 646 | Kept |
+
+Of 10,643 lines, the Markdown codecs alone are 28% with no counterpart
+upstream. What B actually removes is a minority of the crate, and it adds a
+`Content` ⇄ `AutoCommit` adapter we then own — the hardest kind of code to
+maintain, because it encodes assumptions about someone else's model.
+
+### The trade adds surface on each named axis
+
+| Axis | Today | Under B |
+|---|---|---|
+| Supply chain | 21 transitive crates | 55 (+34: `zlib-rs`, `flate2`, `chacha20`, `sha2`, `rand`, `tracing`, …) |
+| Untrusted-input decoder | `serde_json` into a validated struct | a 10,347-line columnar binary decoder, ~70 `unwrap`/`expect` in its storage path |
+| Stability | our own internal API | pre-1.0 for four years; 0.8.0 → 0.11.0 in five months, each minor a Cargo-semver break |
+
+Zero `unsafe` bounds the decoder's failure to panics rather than memory
+corruption, which is a real assurance. But a panic on `wasm32` is a trap that
+takes the module down with nothing for the host to catch — the exact failure
+`MAX_JSON_DEPTH` was written to prevent, now reintroduced at a wider door.
+
+The stability axis inverts hardest. `quillmark-content` is published and makes a
+SemVer promise ([COMPATIBILITY.md](../canon/COMPATIBILITY.md)); B pins that
+promise to an upstream shipping a breaking minor roughly every seven weeks.
+Automerge's README is candid about why: the Rust crate is "oriented around
+producing a performant backend for the Javascript wrapper", with an API that is
+"low level and not well documented". The artifact those two maintainers stabilize
+is the JavaScript package. The Rust crate is the means.
+
+### The redirect
+
+The instinct is right; the target is wrong. The genuinely hard, genuinely
+offloadable work in this crate has **already been offloaded**: Markdown parsing
+to `pulldown-cmark`, sequence diffing to `similar`. What remains hand-rolled is
+`delta.rs`'s position mapping and move detector — 734 lines that have produced
+no bugs and that Automerge does worse.
+
+The change that actually shrinks the surface we maintain is A, and it needs no
+dependency: deleting `continues`, `LineCountMismatch`, `RESERVED_*`,
+`fold_legacy_attrs`, and the `MarkKind::ord` placement rule removes code *and*
+removes the invariants that code exists to uphold. One of the eleven fixes above
+is in machinery A deletes outright. That is a smaller claim than "offload the
+model", and it is the one the evidence supports.
+
 ## Recommendation
 
 **Do not adopt the substrate.** It trades a promise we spend (byte-stability)
 for a capability we do not yet want (merge), regresses the one lane we invested
-in, and doubles the core bundle. The precondition to revisit is a real
-multi-writer product requirement, and the revisit should start from the
+in, and doubles the core bundle. As a maintenance offload it inverts: the bugs
+are in the layer B keeps, and B adds 34 dependencies, a binary decoder, and a
+pre-1.0 upstream under a published SemVer promise. The precondition to revisit
+is a real multi-writer product requirement, and the revisit should start from the
 adapter below rather than from replacing `Content`.
 
 **When collaboration lands, adapt at the session seam.** `Content` ⇄
@@ -211,11 +308,12 @@ substrate, keeps canonical JSON the resting form, and keeps the hash contract
 intact. It also stays optional: a separate crate, not a dependency of the
 published leaf.
 
-**The shape's simplifications are worth taking on their own merits, and do not
-need Automerge.** Moving block markers into the sequence deletes `continues`,
-`LineCountMismatch`, and one `LineKindMismatch` arm; making the block role a
-string plus an open `attrs` map deletes `RESERVED_*`, `fold_legacy_attrs`, and
-the `MarkKind::ord` placement rule. That is a schema-version event
+**The shape's simplifications are worth taking on their own merits, and are what
+actually serves the maintenance motive.** Moving block markers into the sequence
+deletes `continues`, `LineCountMismatch`, and one `LineKindMismatch` arm; making
+the block role a string plus an open `attrs` map deletes `RESERVED_*`,
+`fold_legacy_attrs`, and the `MarkKind::ord` placement rule. Each deletion
+removes an invariant as well as its code, and takes no dependency to do it. That is a schema-version event
 (`quillmark/document@0.94.0`), a structural migration off `0.93.0`, and a
 rewrite of most of `crates/content` plus `emit.rs` and the binding content
 types. It should be argued as its own proposal against its own benefit, not
