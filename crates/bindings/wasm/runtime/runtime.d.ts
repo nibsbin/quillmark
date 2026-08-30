@@ -612,13 +612,26 @@ export declare class LiveSession {
 	 * transform documented there: `x = clickPx.x / renderScale`,
 	 * `y = pageHeightPt - clickPx.y / renderScale`. Unlike {@link regions},
 	 * *every* placement answers, not just the first.
+	 *
+	 * `tolPt` is how far off the ink a click still counts, in the same points,
+	 * and defaults to `0` — exact. It is pointer slack, so derive it from the
+	 * scale the page was drawn at (`slackPx / renderScale`) rather than fixing a
+	 * value in points, which shrinks under the cursor as the page zooms out. The
+	 * nearest placement answers and containment is distance zero, so raising
+	 * `tolPt` only ever fills a miss.
 	 */
-	fieldAt(page: number, x: number, y: number): string | undefined;
+	fieldAt(page: number, x: number, y: number, tolPt?: number): string | undefined;
 	/**
 	 * Fine-grained click → content position (caret placement). Same PDF-point
-	 * space as {@link fieldAt}; `undefined` off all content ink.
+	 * space as {@link fieldAt}; `undefined` past `tolPt` from all content ink.
+	 *
+	 * `tolPt` buys the most here: a glyph box is the line's ink by the glyph's
+	 * advance, so the leading between two lines lies inside a paragraph and on no
+	 * glyph, and a text column answers over a fraction of its own area. Under
+	 * `tolPt` a point between two lines takes the one it is nearer, at the column
+	 * it was clicked in.
 	 */
-	positionAt(page: number, x: number, y: number): ContentHit | undefined;
+	positionAt(page: number, x: number, y: number, tolPt?: number): ContentHit | undefined;
 	/**
 	 * Content position → caret rect: reverse of {@link positionAt}. `field` is a
 	 * canonical `DocPath` address (`parseDocPath`-routable), as {@link regions} keys.

@@ -328,20 +328,20 @@ impl SessionHandle for TypstSession {
     /// no spanned ink of its own, so content ink beneath it must not swallow the
     /// click. Among overlapping widgets the later-painted one wins, matching
     /// `Scan::field_at`.
-    fn field_at(&self, page: usize, x: f32, y: f32) -> Option<String> {
-        self.live
-            .widget_regions
-            .iter()
-            .rev()
-            .find(|r| r.contains(page, x, y))
-            .map(|r| r.field.clone())
-            .or_else(|| self.scan().field_at(page, x, y))
+    ///
+    /// A click that lands on no widget takes the nearest ink within `tol`, and
+    /// a widget within `tol` last: a point inside ink is an answer the pointer
+    /// made, and nothing merely near it outranks one.
+    fn field_at(&self, page: usize, x: f32, y: f32, tol: f32) -> Option<String> {
+        self.widget_at(page, x, y, 0.0)
+            .or_else(|| self.scan().field_at(page, x, y, tol))
+            .or_else(|| self.widget_at(page, x, y, tol))
     }
 
     /// The fine-grained twin of [`field_at`](Self::field_at). Widgets draw no
     /// spanned content ink, so unlike `field_at` they are not consulted.
-    fn position_at(&self, page: usize, x: f32, y: f32) -> Option<ContentHit> {
-        self.scan().position_at(page, x, y)
+    fn position_at(&self, page: usize, x: f32, y: f32, tol: f32) -> Option<ContentHit> {
+        self.scan().position_at(page, x, y, tol)
     }
 
     fn locate(&self, field: &str, pos: usize) -> Option<RenderedRegion> {
@@ -350,6 +350,18 @@ impl SessionHandle for TypstSession {
 }
 
 impl TypstSession {
+    /// The nearest widget within `tol`, later-painted on a tie.
+    fn widget_at(&self, page: usize, x: f32, y: f32, tol: f32) -> Option<String> {
+        self.live
+            .widget_regions
+            .iter()
+            .rev()
+            .filter_map(|r| Some((r.distance(page, x, y)?, r)))
+            .filter(|(d, _)| *d <= tol)
+            .min_by(|(a, _), (b, _)| a.total_cmp(b))
+            .map(|(_, r)| r.field.clone())
+    }
+
     /// The live compile's tables, as the one context every content query takes.
     fn scan(&self) -> overlay::Scan<'_> {
         overlay::Scan {

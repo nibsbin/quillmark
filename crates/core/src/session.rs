@@ -87,21 +87,31 @@ pub trait SessionHandle: Send + Sync + 'static {
         Vec::new()
     }
 
-    /// The schema field whose content is under a point: the forward
-    /// (click → field) direction of the region system. `x`/`y` are PDF points
-    /// with a **bottom-left** origin on `page`, the same convention as
-    /// [`RenderedRegion::rect`]. Unlike [`regions`](Self::regions), *every*
-    /// placement should answer: one concrete point identifies one drawn item.
+    /// The schema field whose content is under a point, or within `tol` points
+    /// of one: the forward (click → field) direction of the region system.
+    /// `x`/`y`/`tol` are PDF points and the origin is **bottom-left** on `page`,
+    /// the same convention as [`RenderedRegion::rect`]. Unlike
+    /// [`regions`](Self::regions), *every* placement should answer: one concrete
+    /// point identifies one drawn item.
+    ///
+    /// `tol` is what a pointer cannot hit exactly, so a caller derives it from
+    /// the scale it drew the page at rather than passing a document constant: a
+    /// tolerance fixed in points shrinks on screen as the page does, which is
+    /// where a target is already hardest to hit. Zero is exact containment, and
+    /// widening it never changes an answer — the nearest placement wins and
+    /// containment is distance zero.
     ///
     /// The default hit-tests [`regions`](Self::regions), which is complete only
     /// for a backend whose regions enumerate every placement. A backend that
     /// emits first-placement-only content must override this with a real
     /// document hit-test, or clicks on unenumerated placements dead-end.
-    fn field_at(&self, page: usize, x: f32, y: f32) -> Option<String> {
+    fn field_at(&self, page: usize, x: f32, y: f32, tol: f32) -> Option<String> {
         self.regions()
             .into_iter()
-            .find(|r| r.contains(page, x, y))
-            .map(|r| r.field)
+            .filter_map(|r| Some((r.distance(page, x, y)?, r)))
+            .filter(|(d, _)| *d <= tol)
+            .min_by(|(a, _), (b, _)| a.total_cmp(b))
+            .map(|(_, r)| r.field)
     }
 
     /// A point → **content position** in a content field: the fine-grained
@@ -109,10 +119,13 @@ pub trait SessionHandle: Send + Sync + 'static {
     /// alone). `x`/`y` are PDF points, bottom-left origin on `page`. Returns
     /// the field plus a USV offset into its `Content`, cluster-exact and
     /// degrading to the containing segment's start on origin-less ink (see
-    /// [`ContentHit`]). `None` off all content ink, on a scalar/widget (no
-    /// content address), or when the backend maps no content. Default `None`:
-    /// a backend that carries a per-segment source map overrides this.
-    fn position_at(&self, _page: usize, _x: f32, _y: f32) -> Option<ContentHit> {
+    /// [`ContentHit`]). `tol` reads as it does on [`field_at`](Self::field_at):
+    /// the nearest content ink within that many points answers, which on a text
+    /// column is the nearer of the two lines a click between them sits between.
+    /// `None` past `tol` from all content ink, on a scalar/widget (no content
+    /// address), or when the backend maps no content. Default `None`: a backend
+    /// that carries a per-segment source map overrides this.
+    fn position_at(&self, _page: usize, _x: f32, _y: f32, _tol: f32) -> Option<ContentHit> {
         None
     }
 
@@ -227,24 +240,34 @@ impl LiveSession {
         crate::field_boxes(self.cached_regions(), field)
     }
 
-    /// The schema field whose content is under a point on `page`. `x`/`y` are
-    /// PDF points with a **bottom-left** origin, as [`RenderedRegion::rect`].
-    /// Every placement answers, not just the first surfaced by
-    /// [`regions`](Self::regions). `None` off any field's ink, out of range, or
-    /// for backends that place no schema fields.
-    pub fn field_at(&self, page: usize, x: f32, y: f32) -> Option<String> {
-        self.inner.field_at(page, x, y)
+    /// The schema field whose content is under a point on `page`, or within
+    /// `tol` of one. `x`/`y`/`tol` are PDF points with a **bottom-left**
+    /// origin, as [`RenderedRegion::rect`]. Every placement answers, not just
+    /// the first surfaced by [`regions`](Self::regions). `None` past `tol` from
+    /// any field's ink, out of range, or for backends that place no schema
+    /// fields.
+    ///
+    /// The nearest placement answers, so `tol` only ever fills a miss: a point
+    /// inside ink is at distance zero and keeps that ink whatever `tol` is.
+    /// Pass what a pointer's imprecision is worth at the scale the page was
+    /// drawn at — a screen-space slack converted to points, not a constant.
+    pub fn field_at(&self, page: usize, x: f32, y: f32, tol: f32) -> Option<String> {
+        self.inner.field_at(page, x, y, tol)
     }
 
     /// A point → **content position**: the field *and* a USV offset into its
     /// `Content`. The offset is cluster-exact and degrades to the containing
-    /// segment's start on origin-less ink. `None` off all content ink, on a
-    /// scalar/widget, or for backends with no content map.
+    /// segment's start on origin-less ink. `tol` reads as on
+    /// [`field_at`](Self::field_at), and buys more here: a glyph box is the
+    /// line's ink, so the leading between two lines is inside a paragraph and
+    /// on no glyph, and under `tol` such a point takes the line it is nearer.
+    /// `None` past `tol` from all content ink, on a scalar/widget, or for
+    /// backends with no content map.
     ///
     /// Resolves against the current compile; the editor anchors the caret it
     /// places across later edits itself.
-    pub fn position_at(&self, page: usize, x: f32, y: f32) -> Option<ContentHit> {
-        self.inner.position_at(page, x, y)
+    pub fn position_at(&self, page: usize, x: f32, y: f32, tol: f32) -> Option<ContentHit> {
+        self.inner.position_at(page, x, y, tol)
     }
 
     /// A content position → **caret rect**, the reverse of
@@ -424,7 +447,7 @@ main:
                 span: Some([0, 3]),
             }]
         }
-        fn position_at(&self, _: usize, _: f32, _: f32) -> Option<ContentHit> {
+        fn position_at(&self, _: usize, _: f32, _: f32, _: f32) -> Option<ContentHit> {
             Some(ContentHit {
                 field: "subject".to_string(),
                 pos: 2,

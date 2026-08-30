@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- feat(core)!: **`fieldAt` and `positionAt` take a pointer tolerance, and
+  resolve to the nearest ink rather than the first containing it.** A glyph's
+  box is its run's ink height by its own advance, so a text column answers over
+  a fraction of the area it occupies: the boxes of one line abut, but the
+  leading between two lines is inside the paragraph and on no glyph. An 11pt
+  paragraph is live over about two thirds of its own height at default leading
+  and under half of it double-spaced, which is the whole of why clicking the
+  preview to place a caret misses. Both queries now take `tol` in PDF points
+  (`tolPt`, optional, on the WASM seam) and answer with the nearest placement
+  within it. The caller derives it from the scale it drew the page at, slack
+  being a property of the pointer rather than of the document: a tolerance fixed
+  in points shrinks under the cursor exactly as the target does. Ranking by
+  distance rather than growing each rect is what keeps the answer the nearer
+  item's — outset boxes overlap, and a first match over them decides by paint
+  order — and makes the tolerance a pure widening: containment is distance zero,
+  so no point that resolves exactly changes answer however high `tol` goes, and
+  later-painted still wins a tie. `RenderedRegion::distance` is the measure, and
+  `contains` is now stated in terms of it. The break is the added argument on
+  `SessionHandle::{field_at,position_at}` and their `LiveSession` forwarders,
+  which a type checker reports; `0.0` is the previous behaviour exactly. The
+  WASM argument is optional and defaults to `0`, so no JS caller changes.
 - fix(typst): **a literal `;` after emitted inline markup survives to the
   page.** Typst's markup parser reads a semicolon directly after an embedded
   code expression as that expression's terminator and renders nothing, so

@@ -94,11 +94,19 @@ impl RenderedRegion {
     /// falls inside this region, edges inclusive. Every `field_at` hit-test
     /// shares this predicate.
     pub fn contains(&self, page: usize, x: f32, y: f32) -> bool {
-        self.page == page
-            && self.rect[0] <= x
-            && x <= self.rect[2]
-            && self.rect[1] <= y
-            && y <= self.rect[3]
+        self.distance(page, x, y) == Some(0.0)
+    }
+
+    /// Gap in PDF points from the point to this region's rect: zero inside it,
+    /// else the length of the shortest vector reaching it; `None` on another
+    /// page. What a tolerant hit-test ranks by, so a tolerance of zero admits
+    /// exactly what [`contains`](Self::contains) does.
+    pub fn distance(&self, page: usize, x: f32, y: f32) -> Option<f32> {
+        (self.page == page).then(|| {
+            let dx = (self.rect[0] - x).max(0.0).max(x - self.rect[2]);
+            let dy = (self.rect[1] - y).max(0.0).max(y - self.rect[3]);
+            dx.hypot(dy)
+        })
     }
 }
 

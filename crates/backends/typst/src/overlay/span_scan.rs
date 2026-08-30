@@ -108,9 +108,29 @@ impl Aabb {
         self.max_y = self.max_y.max(o.max_y);
     }
 
-    fn contains(&self, x: f64, y: f64) -> bool {
-        self.min_x <= x && x <= self.max_x && self.min_y <= y && y <= self.max_y
+    /// Gap from `(x, y)` to this box: zero inside it (edges included), else the
+    /// length of the shortest vector reaching it. The one measure both point
+    /// queries rank by, so a tolerance of zero is exactly containment.
+    fn distance(&self, x: f64, y: f64) -> f64 {
+        let dx = (self.min_x - x).max(0.0).max(x - self.max_x);
+        let dy = (self.min_y - y).max(0.0).max(y - self.max_y);
+        dx.hypot(dy)
     }
+}
+
+/// The nearest box within `tol` among `boxed`, which callers pass **in reverse
+/// paint order**: ties keep the first seen, so the last-painted of equally near
+/// items wins, as it did when only an exact hit could answer.
+///
+/// Ranking by distance rather than growing each box is what keeps the answer
+/// the nearer item's: outset boxes overlap, and a first match over them answers
+/// whichever painted last however far away it is.
+fn nearest<T>(boxed: impl Iterator<Item = (Aabb, T)>, x: f64, y: f64, tol: f64) -> Option<T> {
+    boxed
+        .map(|(b, item)| (b.distance(x, y), item))
+        .filter(|(d, _)| *d <= tol)
+        .min_by(|(a, _), (b, _)| a.total_cmp(b))
+        .map(|(_, item)| item)
 }
 
 /// Page-space (top-left origin) box → PDF-space (bottom-left origin) rect.
@@ -579,31 +599,40 @@ impl<'a> Scan<'a> {
         out.into_iter().map(|(r, _)| r).collect()
     }
 
-    /// The schema field under a point (`x`/`y` in PDF bottom-left points).
-    /// Unlike [`regions`](Self::regions) every placement answers, not just the
-    /// first. Among tracked ink the later-painted item wins; untracked ink never
-    /// occludes.
-    pub(crate) fn field_at(&self, page: usize, x: f32, y: f32) -> Option<String> {
+    /// The schema field under a point (`x`/`y` in PDF bottom-left points), or
+    /// within `tol` points of one. Unlike [`regions`](Self::regions) every
+    /// placement answers, not just the first. The nearest tracked ink wins,
+    /// later-painted on a tie; untracked ink never occludes.
+    pub(crate) fn field_at(&self, page: usize, x: f32, y: f32, tol: f32) -> Option<String> {
         let frame = &self.doc.pages().get(page)?.frame;
         let page_h = frame.size().y.to_pt();
         let (x, y) = (x as f64, page_h - y as f64);
 
         let (hits, markers) = self.hits(Some(page));
 
-        hits.iter()
-            .rev()
-            .find(|h| h.rect.is_some_and(|r| r.contains(x, y)))
-            .and_then(|h| h.class.owner())
-            .map(|owner| match owner {
-                Owner::Window(w) => self.windows[w].path.clone(),
-                Owner::Claim(c) => markers.claims[c].clone(),
-            })
+        let owner = nearest(
+            hits.iter().rev().filter_map(|h| Some((h.rect?, h))),
+            x,
+            y,
+            tol as f64,
+        )
+        .and_then(|h| h.class.owner())?;
+        Some(match owner {
+            Owner::Window(w) => self.windows[w].path.clone(),
+            Owner::Claim(c) => markers.claims[c].clone(),
+        })
     }
 
-    /// A point (PDF bottom-left points) → content position in a content field.
-    /// Degrades to the segment's content start when the resolved node nests
-    /// inside no single run (a multi-line `#raw` block, or structural ink).
-    pub(crate) fn position_at(&self, page: usize, x: f32, y: f32) -> Option<ContentHit> {
+    /// A point (PDF bottom-left points) → content position in a content field,
+    /// resolving to the nearest glyph within `tol` points. Degrades to the
+    /// segment's content start when the resolved node nests inside no single
+    /// run (a multi-line `#raw` block, or structural ink).
+    ///
+    /// A glyph box is the run's ink height by the glyph's advance, so a text
+    /// column answers over a fraction of its own area: the leading between two
+    /// lines belongs to neither. Under `tol` the point takes the line it is
+    /// nearer, at the column it was clicked in, which is where a caret goes.
+    pub(crate) fn position_at(&self, page: usize, x: f32, y: f32, tol: f32) -> Option<ContentHit> {
         if self.windows.is_empty() {
             return None;
         }
@@ -615,11 +644,16 @@ impl<'a> Scan<'a> {
         let mut hits = Vec::new();
         walk_glyphs(frame, page, &mut cls, None, &mut hits);
 
-        // Later-painted wins; ink with no segment has no content position.
-        let hit = hits
-            .iter()
-            .rev()
-            .find(|g| g.seg.is_some() && g.rect.contains(px, py))?;
+        // Ink with no segment has no content position.
+        let hit = nearest(
+            hits.iter()
+                .rev()
+                .filter(|g| g.seg.is_some())
+                .map(|g| (g.rect, g)),
+            px,
+            py,
+            tol as f64,
+        )?;
         let window = &self.windows[hit.window];
         let segmap = &window.segments[hit.seg?];
         let (pos, granularity) = invert_hit(self.helper, segmap, &hit.node, hit.offset);
@@ -2137,12 +2171,12 @@ Interleaved plate chrome.
             (runaway.rect[1] + runaway.rect[3]) / 2.0,
         );
         assert_eq!(
-            p.scan(&[]).field_at(last, cx, cy),
+            p.scan(&[]).field_at(last, cx, cy, 0.0),
             Some("classification".to_string()),
             "sanity: unsuppressed, that ink routes to the stranded claim"
         );
         assert_eq!(
-            p.scan(&p.unclosed()).field_at(last, cx, cy),
+            p.scan(&p.unclosed()).field_at(last, cx, cy, 0.0),
             None,
             "suppressed, page chrome under a runaway claim answers to no field"
         );

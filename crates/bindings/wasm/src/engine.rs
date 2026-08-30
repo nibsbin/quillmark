@@ -2700,24 +2700,43 @@ impl LiveSession {
     /// `FieldRegion.rect`, so from a canvas click use
     /// `x = clickPx.x / renderScale`, `y = pageHeightPt - clickPx.y / renderScale`.
     /// Unlike `regions()`, *every* placement answers, not just the first.
+    ///
+    /// `tolPt` is how far off the ink a click still counts, in the same points,
+    /// and defaults to `0` — exact. Convert the pointer slack a surface wants
+    /// from CSS pixels at the scale it drew the page (`slackPx / renderScale`),
+    /// so it stays the same size under the cursor as the page zooms. The
+    /// nearest placement answers, so raising it only fills a miss.
     #[wasm_bindgen(js_name = fieldAt)]
-    pub fn field_at(&self, page: usize, x: f32, y: f32) -> Option<String> {
+    pub fn field_at(&self, page: usize, x: f32, y: f32, tol_pt: Option<f32>) -> Option<String> {
         self.inner
-            .field_at(page, x, y)
+            .field_at(page, x, y, tol_pt.unwrap_or(0.0))
             .map(|f| plate_to_docpath(&f, &self.kinds()))
     }
 
     /// A point → **content position**: the field *and* a USV offset into its
     /// `Content`, for placing a caret or mapping a selection into the content
-    /// model, or `undefined` off all content ink. `x`/`y` are PDF points,
-    /// bottom-left origin, as in `fieldAt`. The offset is cluster-exact and
-    /// degrades to the containing segment's start on origin-less ink.
+    /// model, or `undefined` off all content ink. `x`/`y`/`tolPt` are PDF
+    /// points, bottom-left origin, as in `fieldAt`. The offset is cluster-exact
+    /// and degrades to the containing segment's start on origin-less ink.
+    ///
+    /// `tolPt` earns the most here: a glyph box is the line's ink by the
+    /// glyph's advance, so the leading between two lines lies inside a paragraph
+    /// and on no glyph. Under `tolPt` such a point takes the nearer line, at the
+    /// column it was clicked in.
     #[wasm_bindgen(js_name = positionAt)]
-    pub fn position_at(&self, page: usize, x: f32, y: f32) -> Option<ContentHit> {
-        self.inner.position_at(page, x, y).map(|mut hit| {
-            hit.field = plate_to_docpath(&hit.field, &self.kinds());
-            hit.into()
-        })
+    pub fn position_at(
+        &self,
+        page: usize,
+        x: f32,
+        y: f32,
+        tol_pt: Option<f32>,
+    ) -> Option<ContentHit> {
+        self.inner
+            .position_at(page, x, y, tol_pt.unwrap_or(0.0))
+            .map(|mut hit| {
+                hit.field = plate_to_docpath(&hit.field, &self.kinds());
+                hit.into()
+            })
     }
 
     /// A content position → **caret rect**, the reverse of `positionAt`: the box

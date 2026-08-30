@@ -1,0 +1,192 @@
+//! The pointer-slack argument on `field_at` / `position_at`: a click within
+//! `tol` points of a field's ink resolves to the nearest such ink. A glyph box
+//! is the run's ink height by the glyph's advance, so a text column is live over
+//! a fraction of its own area — the leading between two lines is inside a
+//! paragraph and on no glyph — and these hold what the slack may and may not
+//! change about that.
+
+use quillmark_core::{Backend, LiveSession};
+use quillmark_typst::TypstBackend;
+
+mod common;
+use common::{content, quill_with_plate as quill};
+
+const YAML: &str = r#"
+quill:
+  name: hit_tolerance
+  version: 0.1.0
+  backend: typst
+  description: tolerant hit-testing
+typst:
+  plate_file: plate.typ
+main:
+  fields:
+    intro:
+      type: richtext
+      description: the paragraph above
+    body:
+      type: richtext
+      description: the paragraph below
+"#;
+
+const PLATE: &str = r#"
+#import "@local/quillmark-helper:0.1.0": data
+#set page(width: 400pt, height: 300pt, margin: 30pt)
+#set text(size: 11pt)
+
+#data.intro
+
+#data.body
+"#;
+
+fn open() -> LiveSession {
+    let data = serde_json::json!({
+        "intro": content(&"Intro text that wraps across more than one line of the measure. ".repeat(3)),
+        "body": content(&"Body text that also wraps across more than one line of the measure. ".repeat(3)),
+    });
+    TypstBackend.open(&quill(YAML, PLATE), &data).expect("open")
+}
+
+/// The `[low, high]` y bands on page 0 that answer at column `x` with no
+/// tolerance: one per line of type, top of the page last.
+fn live_bands(session: &LiveSession, x: f32) -> Vec<[f32; 2]> {
+    let (_, h) = session.page_size_pt(0).expect("page size");
+    let mut bands: Vec<[f32; 2]> = Vec::new();
+    let mut y = 0.0;
+    while y <= h {
+        if session.position_at(0, x, y, 0.0).is_some() {
+            match bands.last_mut() {
+                Some(band) if band[1] >= y - 0.5 => band[1] = y,
+                _ => bands.push([y, y]),
+            }
+        }
+        y += 0.25;
+    }
+    bands
+}
+
+#[test]
+fn a_click_in_the_leading_between_two_lines_takes_the_nearer_line() {
+    let session = open();
+    let x = 120.0;
+    let bands = live_bands(&session, x);
+    assert!(bands.len() >= 3, "the two fields wrap to several lines: {bands:?}");
+
+    // Adjacent lines of one paragraph, `lower` printed after `upper` on the page.
+    let (lower, upper) = (bands[bands.len() - 2], bands[bands.len() - 1]);
+    let gap = upper[0] - lower[1];
+    assert!(gap > 1.0, "the leading is a real gap: {gap}pt between {lower:?} and {upper:?}");
+
+    let tol = gap;
+    let near_upper = session
+        .position_at(0, x, lower[1] + gap * 0.75, tol)
+        .expect("a point in the leading resolves under tolerance");
+    let near_lower = session
+        .position_at(0, x, lower[1] + gap * 0.25, tol)
+        .expect("a point in the leading resolves under tolerance");
+    assert_ne!(
+        near_upper.pos, near_lower.pos,
+        "the two halves of the leading take different lines"
+    );
+
+    for (hit, band, side) in [
+        (&near_upper, upper, "upper"),
+        (&near_lower, lower, "lower"),
+    ] {
+        let caret = session
+            .locate(&hit.field, hit.pos)
+            .expect("the resolved position locates a caret");
+        assert!(
+            caret.rect[3] >= band[0] && caret.rect[1] <= band[1],
+            "the {side} half of the leading lands on the {side} line: caret {:?} against band {band:?}",
+            caret.rect
+        );
+    }
+}
+
+/// Distance ranking, not a grown box: outset rects overlap, and a first match
+/// over them in paint order answers the later-painted item however far away it
+/// is. Here that is the paragraph below, and the click is nearer the one above.
+#[test]
+fn the_nearer_field_wins_over_the_later_painted_one() {
+    let session = open();
+    let x = 120.0;
+    let bands = live_bands(&session, x);
+
+    let last_of = |field: &str| {
+        let mut lowest: Option<[f32; 2]> = None;
+        for band in &bands {
+            let mid = (band[0] + band[1]) / 2.0;
+            if session.position_at(0, x, mid, 0.0).map(|h| h.field).as_deref() == Some(field)
+                && lowest.is_none_or(|low| band[0] < low[0])
+            {
+                lowest = Some(*band);
+            }
+        }
+        lowest.expect("the field prints at this column")
+    };
+    let intro_last = last_of("intro");
+    let body_first = bands
+        .iter()
+        .copied()
+        .filter(|b| b[1] < intro_last[0])
+        .max_by(|a, b| a[0].total_cmp(&b[0]))
+        .expect("the body prints below the intro");
+
+    let gap = intro_last[0] - body_first[1];
+    let y = body_first[1] + gap * 0.9;
+    let hit = session
+        .position_at(0, x, y, gap)
+        .expect("the paragraph break resolves under a tolerance spanning it");
+    assert_eq!(
+        hit.field, "intro",
+        "a point {:.2}pt below the intro and {:.2}pt above the body takes the intro",
+        intro_last[0] - y,
+        y - body_first[1]
+    );
+}
+
+/// The property that makes the slack safe to raise: it only ever fills a miss.
+#[test]
+fn a_tolerance_never_changes_an_answer_an_exact_hit_already_had() {
+    let session = open();
+    let (w, h) = session.page_size_pt(0).expect("page size");
+    let mut exact = 0;
+    let mut filled = 0;
+    let (mut x, step) = (0.0, 7.0);
+    while x <= w {
+        let mut y = 0.0;
+        while y <= h {
+            match session.position_at(0, x, y, 0.0) {
+                Some(hit) => {
+                    exact += 1;
+                    assert_eq!(
+                        session.position_at(0, x, y, 8.0),
+                        Some(hit),
+                        "a tolerance changed the answer at ({x}, {y})"
+                    );
+                }
+                None => filled += usize::from(session.position_at(0, x, y, 8.0).is_some()),
+            }
+            if let Some(field) = session.field_at(0, x, y, 0.0) {
+                assert_eq!(
+                    session.field_at(0, x, y, 8.0),
+                    Some(field),
+                    "a tolerance changed the field at ({x}, {y})"
+                );
+            }
+            y += step;
+        }
+        x += step;
+    }
+    assert!(exact > 0, "the sweep crosses ink");
+    assert!(filled > 0, "the sweep crosses ink it only reaches under tolerance");
+}
+
+#[test]
+fn a_point_past_the_tolerance_is_still_a_miss() {
+    let session = open();
+    // The page corner: margin alone puts it 30pt from any ink.
+    assert_eq!(session.position_at(0, 2.0, 2.0, 8.0), None);
+    assert_eq!(session.field_at(0, 2.0, 2.0, 8.0), None);
+}
