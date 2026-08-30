@@ -284,6 +284,8 @@ config:
   city: Anytown
   '- dash': 2
   # a second note
+  spaced key : 3
+  # a third note
   zip: 12345
 ~~~
 
@@ -297,8 +299,12 @@ Body.
         "the first comment moved: {md}"
     );
     assert!(
-        md.contains("\"- dash\": 2\n  # a second note\n  zip: 12345\n"),
+        md.contains("\"- dash\": 2\n  # a second note\n  spaced key: 3\n"),
         "the second comment moved: {md}"
+    );
+    assert!(
+        md.contains("spaced key: 3\n  # a third note\n  zip: 12345\n"),
+        "the third comment moved: {md}"
     );
     let reparsed = Document::parse(&md).expect("the emitted document re-parses").document;
     assert_eq!(doc, reparsed, "emit is not a fixed point: {md}");

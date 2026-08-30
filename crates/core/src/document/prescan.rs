@@ -524,15 +524,16 @@ const PLAIN_SCALAR_EXCLUDED_FIRST: &[u8] = b"-?:,[]{}#&*!|>'\"%@`";
 
 /// Split a nested key line into `(key, source spelling, rest_after_colon)`.
 ///
-/// The two forms of the key differ for a quoted one: paths carry the key the
-/// YAML parser sees, while the cleaned line keeps the spelling the source (or
-/// the emitter) wrote. A quoted key that does not decode is not a key.
+/// The two forms differ wherever the source spells the key with anything the
+/// parser drops — quotes, whitespace before the `:`: paths carry the key the
+/// YAML parser sees, the cleaned line keeps what was written. A quoted key that
+/// does not decode is not a key.
 fn split_nested_key(line: &str) -> Option<(String, String, String)> {
     let i = nested_key_end(line)?;
     let source = &line[..i];
     let key = match source.as_bytes().first() {
         Some(b'"') | Some(b'\'') => serde_saphyr::from_str::<String>(source).ok()?,
-        _ => source.to_string(),
+        _ => source.trim_end().to_string(),
     };
     Some((key, source.to_string(), line[i + 1..].to_string()))
 }
