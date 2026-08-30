@@ -109,19 +109,13 @@ impl Aabb {
     }
 
     /// Gap from `(x, y)` to this box: zero inside it (edges included), else the
-    /// length of the shortest vector reaching it. `None` when the point or the
-    /// box is not finite, which no `tol` admits. The one measure both point
-    /// queries rank by, so a tolerance of zero is exactly containment.
-    ///
-    /// `f64::max` returns the non-NaN side, so without the finite check a NaN
-    /// on either side collapses both axes to zero and reads as inside.
+    /// length of the shortest vector reaching it, absent when either side is not
+    /// finite. The one measure both point queries rank by, so a tolerance of
+    /// zero is exactly containment, and an absent gap is one no `tol` reaches.
+    /// `RenderedRegion::distance` carries why the finite check is load-bearing.
     fn distance(&self, x: f64, y: f64) -> Option<f64> {
-        let finite = x.is_finite()
-            && y.is_finite()
-            && self.min_x.is_finite()
-            && self.min_y.is_finite()
-            && self.max_x.is_finite()
-            && self.max_y.is_finite();
+        let corners = [self.min_x, self.min_y, self.max_x, self.max_y];
+        let finite = x.is_finite() && y.is_finite() && corners.iter().all(|v| v.is_finite());
         finite.then(|| {
             let dx = (self.min_x - x).max(0.0).max(x - self.max_x);
             let dy = (self.min_y - y).max(0.0).max(y - self.max_y);
@@ -616,16 +610,11 @@ impl<'a> Scan<'a> {
     }
 
     /// The schema field under a point (`x`/`y` in PDF bottom-left points), or
-    /// within `tol` points of one. Unlike [`regions`](Self::regions) every
-    /// placement answers, not just the first. The nearest tracked ink wins,
-    /// later-painted on a tie; untracked ink never occludes.
-    pub(crate) fn field_at(&self, page: usize, x: f32, y: f32, tol: f32) -> Option<String> {
-        self.field_at_ranked(page, x, y, tol).map(|(_, field)| field)
-    }
-
-    /// [`field_at`](Self::field_at) carrying the gap it answered at, for a
-    /// caller ranking this lane against another.
-    pub(crate) fn field_at_ranked(
+    /// within `tol` points of one, and the gap it answered at. Unlike
+    /// [`regions`](Self::regions) every placement answers, not just the first.
+    /// The nearest tracked ink wins, later-painted on a tie; untracked ink never
+    /// occludes. The gap is what ranks this lane against another.
+    pub(crate) fn field_at(
         &self,
         page: usize,
         x: f32,
@@ -2202,12 +2191,12 @@ Interleaved plate chrome.
             (runaway.rect[1] + runaway.rect[3]) / 2.0,
         );
         assert_eq!(
-            p.scan(&[]).field_at(last, cx, cy, 0.0),
+            p.scan(&[]).field_at(last, cx, cy, 0.0).map(|(_, f)| f),
             Some("classification".to_string()),
             "sanity: unsuppressed, that ink routes to the stranded claim"
         );
         assert_eq!(
-            p.scan(&p.unclosed()).field_at(last, cx, cy, 0.0),
+            p.scan(&p.unclosed()).field_at(last, cx, cy, 0.0).map(|(_, f)| f),
             None,
             "suppressed, page chrome under a runaway claim answers to no field"
         );

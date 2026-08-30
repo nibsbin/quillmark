@@ -324,25 +324,24 @@ impl SessionHandle for TypstSession {
         regions
     }
 
-    /// Widgets and content ink rank together by gap, and a widget takes a tie: a
+    /// The nearest of the widget and content lanes, a widget taking a tie: a
     /// widget is a deliberate click target drawing no spanned ink of its own, so
     /// ink beneath one must not swallow a click that lands on it. Among
     /// overlapping widgets the later-painted wins, matching `Scan::field_at`.
     ///
-    /// Ranking the two lanes in one comparison rather than consulting them in
-    /// turn is what keeps `tol` a widening: a lane consulted first answers at
-    /// any gap within `tol`, so raising `tol` would move a click off a widget it
-    /// is 2pt from and onto a paragraph 50pt away.
+    /// One comparison across both lanes, not one lane and then the other: a lane
+    /// consulted first answers at any gap within `tol`, which ranks a far hit in
+    /// that lane over a near one in the other.
     fn field_at(&self, page: usize, x: f32, y: f32, tol: f32) -> Option<String> {
-        match (
+        // Widget first: `min_by` keeps the first of equal gaps.
+        [
             self.widget_at(page, x, y, tol),
-            self.scan().field_at_ranked(page, x, y, tol),
-        ) {
-            (Some((wd, w)), Some((cd, c))) => Some(if wd <= cd { w } else { c }),
-            (Some((_, w)), None) => Some(w),
-            (None, Some((_, c))) => Some(c),
-            (None, None) => None,
-        }
+            self.scan().field_at(page, x, y, tol),
+        ]
+        .into_iter()
+        .flatten()
+        .min_by(|(a, _), (b, _)| a.total_cmp(b))
+        .map(|(_, field)| field)
     }
 
     /// The fine-grained twin of [`field_at`](Self::field_at). Widgets draw no

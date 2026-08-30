@@ -99,12 +99,14 @@ impl RenderedRegion {
 
     /// Gap in PDF points from the point to this region's rect: zero inside it,
     /// else the length of the shortest vector reaching it; `None` on another
-    /// page, or when the point or the rect is not finite. What a tolerant
-    /// hit-test ranks by, so a tolerance of zero admits exactly what
-    /// [`contains`](Self::contains) does.
+    /// page, or when either side is not finite. What a tolerant hit-test ranks
+    /// by, so a tolerance of zero admits exactly what
+    /// [`contains`](Self::contains) does, and an absent gap is one no tolerance
+    /// reaches.
     ///
-    /// `f32::max` returns the non-NaN side, so without the finite check a NaN
-    /// on either side collapses both axes to zero and reads as inside.
+    /// The finite check is load-bearing: `f32::max` returns the non-NaN side, so
+    /// a NaN on either side otherwise collapses both axes to zero and reads as
+    /// inside.
     pub fn distance(&self, page: usize, x: f32, y: f32) -> Option<f32> {
         let finite = x.is_finite() && y.is_finite() && self.rect.iter().all(|v| v.is_finite());
         (self.page == page && finite).then(|| {
@@ -415,8 +417,8 @@ mod tests {
         assert!(region.contains(0, 15.0, 15.0));
         assert_eq!(region.distance(0, 15.0, 15.0), Some(0.0));
 
-        // A non-finite rect is the same trap from the other side: one bad box
-        // in a `regions()` set would otherwise swallow every click on its page.
+        // The rect is the other side of the same check: one non-finite box in a
+        // `regions()` set answers every click on its page.
         let bad = RenderedRegion::new("subject".to_string(), 0, [f32::NAN; 4]);
         assert!(!bad.contains(0, 999.0, 999.0));
         assert_eq!(bad.distance(0, 999.0, 999.0), None);

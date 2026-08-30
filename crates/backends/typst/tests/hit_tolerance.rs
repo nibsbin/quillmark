@@ -190,10 +190,9 @@ fn a_point_past_the_tolerance_is_still_a_miss() {
     assert_eq!(session.field_at(0, 2.0, 2.0, 8.0), None);
 }
 
-/// `f64::max` returns the non-NaN side, so an unguarded gap reads a NaN
-/// coordinate as inside every box and the query answers the last-painted field
-/// where it has none to give. A consumer reaches this from the documented
-/// transform whenever `renderScale` is zero.
+/// A point that is not finite is outside every box, so both queries answer
+/// nothing. The documented click transform produces one whenever `renderScale`
+/// is zero.
 #[test]
 fn a_non_finite_point_resolves_to_nothing() {
     let session = open();
@@ -249,9 +248,8 @@ fn open_with_widget() -> LiveSession {
         .expect("open")
 }
 
-/// Consulting one lane before the other answers at any gap within `tol`, so a
-/// raised tolerance moves a click off the widget it is nearest and onto far
-/// content. Both lanes rank in one comparison, so the nearer always answers.
+/// The nearer of the widget and content lanes answers at every tolerance, so
+/// raising `tol` never moves a click to a farther field.
 #[test]
 fn raising_the_tolerance_never_moves_a_click_to_a_farther_field() {
     let session = open_with_widget();
@@ -279,31 +277,9 @@ fn raising_the_tolerance_never_moves_a_click_to_a_farther_field() {
     }
 }
 
-/// A widget still takes a click that lands on it, over content ink beneath.
-#[test]
-fn a_click_on_a_widget_beats_content_at_the_same_gap() {
-    let session = open_with_widget();
-    let widget = session
-        .regions()
-        .into_iter()
-        .find(|r| r.field == "blank")
-        .expect("the widget surfaces a region");
-    let (cx, cy) = (
-        (widget.rect[0] + widget.rect[2]) / 2.0,
-        (widget.rect[1] + widget.rect[3]) / 2.0,
-    );
-    for tol in [0.0f32, 8.0, 60.0] {
-        assert_eq!(
-            session.field_at(widget.page, cx, cy, tol).as_deref(),
-            Some("blank"),
-            "tol={tol}"
-        );
-    }
-}
-
-/// The finite guard is a `None`, not a large sentinel: a sentinel gap is one a
-/// tolerance can reach, and `renderScale == 0` yields an infinite `tolPt` from
-/// the same arithmetic that yields the non-finite point.
+/// No tolerance admits a non-finite point, an infinite one included: the gap is
+/// absent rather than large. `renderScale == 0` yields both at once, an infinite
+/// `tolPt` and a non-finite point, from the same division.
 #[test]
 fn an_infinite_tolerance_does_not_admit_a_non_finite_point() {
     let session = open();
@@ -314,5 +290,53 @@ fn an_infinite_tolerance_does_not_admit_a_non_finite_point() {
     ] {
         assert_eq!(session.field_at(0, x, y, f32::INFINITY), None, "fieldAt({x}, {y})");
         assert_eq!(session.position_at(0, x, y, f32::INFINITY), None, "positionAt({x}, {y})");
+    }
+}
+
+const OVERLAID_PLATE: &str = r#"
+#import "@local/quillmark-helper:0.1.0": data, form-field
+#set page(width: 400pt, height: 300pt, margin: 30pt)
+#set text(size: 11pt)
+
+#data.body
+
+#place(top + left, dx: 40pt, dy: 40pt,
+  form-field("blank", type: "text", field: "blank", width: 60pt, height: 20pt))
+"#;
+
+fn open_with_overlaid_widget() -> LiveSession {
+    let data = serde_json::json!({
+        "blank": "",
+        "body": content(&"Body text under and around the placed widget. ".repeat(6)),
+    });
+    TypstBackend
+        .open(&quill(WIDGET_YAML, OVERLAID_PLATE), &data)
+        .expect("open")
+}
+
+/// A widget takes a tie, so ink beneath one never swallows a click that lands
+/// on it. The widget is laid over the paragraph, so the point is inside both.
+#[test]
+fn a_widget_takes_a_tie_with_the_content_ink_under_it() {
+    let session = open_with_overlaid_widget();
+    let widget = session
+        .regions()
+        .into_iter()
+        .find(|r| r.field == "blank")
+        .expect("the widget surfaces a region");
+    let (cx, cy) = (
+        (widget.rect[0] + widget.rect[2]) / 2.0,
+        (widget.rect[1] + widget.rect[3]) / 2.0,
+    );
+    assert!(
+        session.position_at(widget.page, cx, cy, 0.0).is_some(),
+        "the fixture puts content ink under the widget, so the gaps tie"
+    );
+    for tol in [0.0f32, 8.0, 60.0] {
+        assert_eq!(
+            session.field_at(widget.page, cx, cy, tol).as_deref(),
+            Some("blank"),
+            "tol={tol}"
+        );
     }
 }
