@@ -15,9 +15,10 @@ regresses the one edit lane we built for. As a **maintenance offload** it
 inverts: the crate's defects are all in the layer Automerge does not implement.
 `yrs` is smaller and more used but fits the model far worse and offloads
 strictly less. Being pre-1.0 makes the *migration* cheap, not the steady-state
-bill, and the change the open window actually licenses is the shape. Keep the
-model; if collaboration becomes a goal, adapt to Automerge at a session seam
-rather than at rest.
+bill, and what the open window licenses is the shape — of which the vocabulary
+half (A1) is nearly free and the block-marker half (A2) buys a merge-safety
+property a single writer is not spending. Keep the model; if collaboration
+becomes a goal, adapt to Automerge at a session seam rather than at rest.
 
 ## Two proposals in one question
 
@@ -457,20 +458,51 @@ substrate, keeps canonical JSON the resting form, and keeps the hash contract
 intact. It also stays optional: a separate crate, not a dependency of the
 published leaf.
 
-**Take the shape, and take it now.** Moving block markers into the sequence
-deletes `continues`, `LineCountMismatch`, and one `LineKindMismatch` arm; making
-the block role a string plus an open `attrs` map deletes `RESERVED_*`,
-`fold_legacy_attrs`, and the `MarkKind::ord` placement rule. Each deletion
-removes an invariant as well as its code, and takes no dependency to do it —
-which is the maintenance motive served directly rather than outsourced.
+**Take the shape — but it is two changes, and single-writer splits them.** They
+were bundled above because Automerge ships both. Nothing else couples them, and
+their costs differ by an order of magnitude.
 
-The cost is a schema-version event (`quillmark/document@0.94.0`), a structural
-migration off `0.93.0`, and a rewrite of most of `crates/content` plus
-`emit.rs` and the binding content types. That is the one cost on this page that
-the pre-1.0 window is actually for: it is at its cheapest now and rises with
-every stored row. It still wants its own proposal arguing its own benefit,
-and it must not claim to deliver Automerge compatibility — B is what would need
-that, and B is not recommended.
+**A1, one spelling per vocabulary.** Today a built-in carries its payload in
+named sibling keys (`{"kind":"heading","level":1}`) and an unknown carries it in
+an opaque bag (`{"kind":"callout","attrs":{…}}`). Every mechanism in
+§ Promoting a vocabulary member exists to bridge those two spellings:
+`fold_legacy_attrs` at three call sites, `RESERVED_LINE_KINDS` /
+`RESERVED_CONTAINERS` / `RESERVED_MARK_TYPES` with their three `reject_*_attrs`
+twins, the three `ReservedUnknown*` invariants, and the rule pinning a new
+`MarkKind` to the ordinal before `Unknown`. Give every member the *same*
+spelling — `{"kind":"heading","attrs":{"level":1}}` — and all of it goes, because
+promotion stops being an encoding change: the bytes a build wrote while
+`callout` was unknown are the bytes the build that knows it reads. The sort
+tie-break becomes the type string, which two builds compute identically whether
+or not either knows the member, so the ordinal rule has nothing left to protect.
+It is a schema-version event and a pure re-encode. It moves no text and no
+offset.
+
+**A2, block markers in the sequence.** A U+FFFC marker opens each block carrying
+`{type, parents, attrs}`; a `\n` with no marker following it is a within-block
+break. That deletes `Line::continues` (which reaches fourteen files),
+`Invariant::LineCountMismatch`, `FirstLineContinues`,
+`ContinuesAcrossContainers`, and `LineKindMismatch::IslandNotOneSlot`, and states
+a code fence's `lang` once instead of on every line of it.
+
+Its cost is not the deletions' size but the **coordinate space**: markers occupy
+USV positions, so every offset moves. `FieldRegion.span`, `ContentHit.pos`,
+`locate(field, pos)`, `Delta` ops (which must then never split a marker),
+`emit.rs`'s slot table and per-segment source map, and every consumer's caret
+arithmetic all shift, and the migration must rebase every mark range in every
+stored row.
+
+And its headline benefit — a split or join is one splice, with no parallel array
+to reconcile — is a **merge-safety** property. With one writer, `ops.rs`
+maintains that array transactionally and no concurrent edit can catch it
+mid-update, so the guarantee is bought where it was not being lost. A2 is worth
+what A1 is worth only under concurrent editing, which § Recommendation's first
+paragraph has already declined.
+
+So: **A1 now**, on the pre-1.0 window, as its own proposal arguing its own
+benefit. **A2 deferred**, revisited if a structural editor or a second writer
+ever makes the coordinate change pay for itself. Neither may claim to deliver
+Automerge compatibility — B is what would need that, and B is not recommended.
 
 ## Reproducing
 
