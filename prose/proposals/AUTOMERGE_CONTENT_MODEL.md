@@ -2,7 +2,7 @@
 
 > **Implementation**: `crates/content/src` (the model this would replace)
 > **Related**: [DOCUMENT_STORAGE.md](../canon/DOCUMENT_STORAGE.md), [PREVIEW.md](../canon/PREVIEW.md)
-> **Status**: spike. Measured against `automerge` 0.11.0; recommendation is *no* to the substrate, *maybe* to the shape.
+> **Status**: spike. Measured against `automerge` 0.11.0 and `yrs` 0.26/0.27; recommendation is *no* to the substrate, *yes* to the shape while the window is open.
 
 ## TL;DR
 
@@ -12,10 +12,12 @@ per block. Adopting Automerge's *shape* is therefore cheap in concept and
 buys three invariants' worth of simplification. Adopting Automerge as the
 *substrate* costs byte-stability, which is load-bearing, and measurably
 regresses the one edit lane we built for. As a **maintenance offload** it
-inverts: the crate's defects are all in the layer Automerge does not implement,
-and the trade adds 34 dependencies, a binary decoder, and a pre-1.0 upstream
-under a published SemVer promise. Keep the model; if collaboration becomes a
-goal, adapt to Automerge at a session seam rather than at rest.
+inverts: the crate's defects are all in the layer Automerge does not implement.
+`yrs` is smaller and more used but fits the model far worse and offloads
+strictly less. Being pre-1.0 makes the *migration* cheap, not the steady-state
+bill, and the change the open window actually licenses is the shape. Keep the
+model; if collaboration becomes a goal, adapt to Automerge at a session seam
+rather than at rest.
 
 ## Two proposals in one question
 
@@ -290,6 +292,101 @@ removes the invariants that code exists to uphold. One of the eleven fixes above
 is in machinery A deletes outright. That is a smaller claim than "offload the
 model", and it is the one the evidence supports.
 
+## yrs, measured the same way
+
+If the motive is offloading maintenance, the library choice should follow the
+maintenance evidence rather than the first name to mind. `yrs` (the Rust
+y-crdt) is the obvious alternative: 1.13M recent downloads against Automerge's
+210K, backed by Yjs's deployment base.
+
+It wins the axes Automerge lost, loses the ones Automerge won, and fails worse
+on the one that decides the question.
+
+| Axis | Automerge 0.11.0 | yrs 0.26/0.27 |
+|---|---|---|
+| Model fit to `Content` | near-isomorphic | **poor** — see below |
+| Same content, two histories | breaks (213 vs 222 B) | breaks (30 vs 40 B) |
+| Default identity | `ActorId::random()` | `ClientID::random()` |
+| Converged merge, opposite orders | breaks | **holds** |
+| Overlapping same-name marks | clipped `[0,9)` → `[0,4)` | clipped `[0,9)` → `[0,4)` |
+| Anchor across a verbatim block move | wrong paragraph | wrong paragraph |
+| Stale-text writer built in | `update_text` / `update_spans` | **none** |
+| WASM, encode + decode + read | 416 KB gzip | **94 KB gzip** |
+| 31-char field | 188 B | **44 B** |
+| 1080-char field, one write | **220 B** | 1094 B |
+| 300 edit rounds on it | 1651 B (7.5×) | 6859 B (6.3×) |
+| `unsafe` blocks | **0** | 73 |
+| Transitive crates, unioned with ours | 55 | **43** |
+| Current release builds on rustc 1.94.1 | yes | **no** |
+
+Four of those need saying plainly.
+
+**The model fit is the disqualifier.** Automerge's block markers made the
+convergence table above almost a mapping. yrs offers neither half of it.
+Formatting is `Attrs = HashMap<Arc<str>, Any>` — a literal per-position
+attribute map, the exact structure `delta.rs` names as unable to carry the mark
+algebra, confirmed by the same clipping probe. Block structure is not in the
+sequence at all: it lives in a separate `XmlFragment` **tree**, which is what
+`y-prosemirror` drives. Storing the tree is precisely what `Content` refuses —
+"the line tree is *derived* from this flat list … never stored, so a split/join
+is a single-char edit with no paragraph identity to reconcile". yrs would force
+back the design the model was written to avoid.
+
+**It offloads strictly less.** There is no `update_text` equivalent, so
+`delta.rs` — the one file Automerge would genuinely take over, and the one file
+that has needed no fixing — stays entirely ours. On the maintenance argument
+specifically, yrs takes over nothing that is hard.
+
+**It is the wrong direction on the security axis.** 73 `unsafe` blocks against
+Automerge's zero. The dependency tree is smaller and cleaner (no compression,
+no crypto), which is a real gain, but memory-safety assurance is the axis the
+motive names first.
+
+**Its current release does not compile here.** `cargo add yrs` resolves 0.27.4,
+which fails on rustc 1.94.1 (`if let` guards), and the crate declares no
+`rust-version` — so Cargo cannot resolve away from it, and the failure surfaces
+as a compile error inside a dependency. 0.26.0 builds. This is the kind of thing
+an offload inherits.
+
+The one place yrs is clearly better is size: 94 KB gzip against 416 KB, roughly
+13% on the core bundle instead of 63%, and a third of Automerge's per-field
+overhead. If the substrate question ever reopens on capability grounds, that
+number is worth remembering. It does not reopen it here.
+
+## What pre-1.0 changes, and what it does not
+
+Quillmark is 0.111.0 and already ships breaking minors, so "this is the moment
+for traumatic changes" is right, and it discounts three of the objections
+above:
+
+- **The SemVer-promise objection mostly dissolves.** Pinning a published crate
+  to a pre-1.0 upstream matters far less when the published crate breaks freely
+  itself.
+- **The schema-version event is cheap.** A migration off `0.93.0` costs what the
+  deployed corpus costs, and that is at its smallest now.
+- **The rewrite's *breakage* half is free.** The labor stays; the compatibility
+  ceremony around it does not.
+
+None of those were the argument. The costs that decide it are steady-state, not
+migration:
+
+| Cost | Does 1.0 make it worse later? |
+|---|---|
+| Byte-stability lost (divergence detection, cache keys) | No — it is gone permanently either way |
+| Marks clipped on overlap | No — architectural |
+| Anchors silently re-homed across a move | No — architectural |
+| +34 crates, a binary decoder, 63% bundle | No — permanent |
+| The bugs sit in the layer the substrate keeps | No — that is what the fix history shows |
+
+Being pre-1.0 lowers the price of *changing*, not the price of *living with the
+result*. The substrate's bill is almost all the second kind.
+
+The corollary runs the other way, and it is the useful one: the change this
+argument most strongly licenses is **A**. A is a schema-version event with a
+migration — exactly the cost that is cheap now and expensive after 1.0 — and its
+benefit (deleted invariants, deleted code, no dependency) is permanent. If the
+window is the reason to act, A is what the window is for.
+
 ## Recommendation
 
 **Do not adopt the substrate.** It trades a promise we spend (byte-stability)
@@ -308,23 +405,27 @@ substrate, keeps canonical JSON the resting form, and keeps the hash contract
 intact. It also stays optional: a separate crate, not a dependency of the
 published leaf.
 
-**The shape's simplifications are worth taking on their own merits, and are what
-actually serves the maintenance motive.** Moving block markers into the sequence
+**Take the shape, and take it now.** Moving block markers into the sequence
 deletes `continues`, `LineCountMismatch`, and one `LineKindMismatch` arm; making
 the block role a string plus an open `attrs` map deletes `RESERVED_*`,
 `fold_legacy_attrs`, and the `MarkKind::ord` placement rule. Each deletion
-removes an invariant as well as its code, and takes no dependency to do it. That is a schema-version event
-(`quillmark/document@0.94.0`), a structural migration off `0.93.0`, and a
-rewrite of most of `crates/content` plus `emit.rs` and the binding content
-types. It should be argued as its own proposal against its own benefit, not
-carried in on Automerge's coat-tails — and the one thing it must not claim to
-deliver is compatibility with Automerge, since B is what would need that and B
-is not recommended.
+removes an invariant as well as its code, and takes no dependency to do it —
+which is the maintenance motive served directly rather than outsourced.
+
+The cost is a schema-version event (`quillmark/document@0.94.0`), a structural
+migration off `0.93.0`, and a rewrite of most of `crates/content` plus
+`emit.rs` and the binding content types. That is the one cost on this page that
+the pre-1.0 window is actually for: it is at its cheapest now and rises with
+every stored row. It still wants its own proposal arguing its own benefit,
+and it must not claim to deliver Automerge compatibility — B is what would need
+that, and B is not recommended.
 
 ## Reproducing
 
-The probes are four small programs against `automerge = "0.11.0"`, none of them
-touching this workspace:
+Small programs against `automerge = "0.11.0"` and `yrs = "0.26.0"`, none of them
+touching this workspace. Probes 1–4 run against both; the yrs spellings are
+`Doc::with_options(Options::with_client_id(…))`, `Text::format` with an `Attrs`
+map, `encode_state_as_update_v1`, and `Text::sticky_index` for the anchor.
 
 1. **Determinism.** Build one text+mark document two ways (one splice vs. two),
    with a random and then a pinned `ActorId`; compare `text()` and `save()`.
@@ -335,5 +436,8 @@ touching this workspace:
    / `load` / `spans`, built with
    `RUSTFLAGS='--cfg getrandom_backend="wasm_js"' cargo build --release
    --target wasm32-unknown-unknown`, against an empty `cdylib` baseline.
-4. **Anchor rebase.** Anchor a middle paragraph, call `update_text` with the
-   paragraphs reordered, read back what the mark and a `Cursor` now cover.
+4. **Anchor rebase.** Anchor a middle paragraph, reorder the paragraphs
+   (`update_text` on Automerge; the delete-then-insert a diff would emit, on
+   yrs), read back what the mark, `Cursor`, or `StickyIndex` now covers.
+5. **Fix locality.** `git log --format=%s -- crates/content | grep ^fix`, then
+   `git show --name-only` each, tallying commits per file.
