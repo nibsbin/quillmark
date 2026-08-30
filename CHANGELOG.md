@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- feat(wasm): **`mapMarks(content, bundle)` answers where a `ChangeBundle`'s
+  text-moving channels leave a field's marks**, the coordinates its `markOps`
+  are written in. Each of `delta`, `islandOps` and `lineOps` rebases the marks
+  already in the field — a range's `start` takes assoc `after` and its `end`
+  `before`, a zero-width mark takes `before` — and that rule reached the
+  boundary only as a comment on a private method, so an editor deciding which
+  `markOps` to emit had to reimplement it, and one that read the range rule as
+  the whole rule drifted an anchor a character on text typed at the anchor's own
+  position. `Content::map_marks` and `Content::apply_field_change` walk one
+  channel list, so the prediction and the store cannot answer a position
+  differently. The rule is stated on `ChangeBundle` and in `BINDINGS.md`.
+
 - fix(core): **a `plaintext` field declared `inline: true` keeps the flag on the
   declaration wire.** `FieldSchema::serialize` projected the flag back out of
   the type enum with a `RichText { inline: true }` match only, so
