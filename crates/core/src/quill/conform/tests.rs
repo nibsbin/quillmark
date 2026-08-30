@@ -275,6 +275,59 @@ fn conform_is_a_no_op_on_seeds() {
     assert_eq!(bytes(&doc2), before2, "seed_card is already at rest");
 }
 
+/// A variant container's cells commit through the same strict write every other
+/// seeded field takes, so a content cell rests as a content object rather than
+/// as the overlay's raw markdown. Otherwise conform moves bytes and hash on a
+/// document nobody edited.
+#[test]
+fn conform_is_a_no_op_on_a_seeded_variant_container() {
+    const YAML: &str = r#"
+quill:
+  name: variant_seed
+  version: "1.0"
+  backend: typst
+  description: variant seed rest
+main:
+  fields:
+    title:
+      type: string
+card_kinds:
+  entry:
+    fields:
+      classification:
+        type: enum
+        values: [UNCLASSIFIED, CUI]
+        default: ""
+        variants:
+          CUI:
+            note: { type: richtext }
+"#;
+    let quill = quill_from_yaml(YAML);
+    let overlay = SeedOverlay::from_json(&json!({
+        "classification": { "value": "CUI", "note": "**bold note**" }
+    }))
+    .unwrap();
+    let card = quill.seed_card("entry", Some(&overlay)).expect("kind exists");
+    let value = card
+        .payload()
+        .get("classification")
+        .expect("seeded classification")
+        .as_json()
+        .clone();
+    assert!(
+        value["note"].is_object(),
+        "a seeded content cell rests as a content object, got {}",
+        value["note"]
+    );
+
+    let mut doc = quill.seed_document();
+    doc.push_card(card).unwrap();
+    let before = bytes(&doc);
+    let diags = quill.conform(&mut doc).expect("conform");
+    assert!(diags.is_empty(), "{diags:?}");
+    assert_eq!(bytes(&doc), before, "the seeded container is already at rest");
+}
+
 #[test]
 fn a_fill_tag_on_a_seeded_cell_survives_store_load_conform() {
     let quill = quill();

@@ -162,6 +162,10 @@ fn seed_field(field: &crate::quill::FieldSchema, overlaid: Option<&QuillValue>) 
 /// the `!must_fill` marker rides a committed `example` exactly as elsewhere: an
 /// example documents shape, so it is not an answer. An overlay value is exempt —
 /// supplying one is a template author deciding.
+///
+/// The assembled container commits through [`seeded_rest`], the same strict
+/// write every other field's seed takes: a content cell rests as a content
+/// object, so `conform(seed_document())` stays a byte no-op.
 fn seed_variant(
     name: &str,
     field: &crate::quill::FieldSchema,
@@ -213,7 +217,11 @@ fn seed_variant(
         }
     }
 
-    let mut value = QuillValue::from_json(serde_json::Value::Object(map));
+    let mut value = seeded_rest(
+        name,
+        &QuillValue::from_json(serde_json::Value::Object(map)),
+        field,
+    );
     for path in &fills {
         value.set_fill_at(path);
     }

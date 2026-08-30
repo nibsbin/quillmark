@@ -1,5 +1,63 @@
 # Changelog
 
+## Unreleased
+
+- fix(typst): **a literal `;` after emitted inline markup survives to the
+  page.** Typst's markup parser reads a semicolon directly after an embedded
+  code expression as that expression's terminator and renders nothing, so
+  ``Use `--force`; otherwise`` lowered to `#raw("--force"); otherwise` and
+  dropped the character. `continues_expr` guarded `(` and `.ident` for the same
+  reason; it guards `;` now, and the emitter writes the same `\` before it.
+- fix(typst): **the caret one past a field's last character resolves to the last
+  glyph, not the paragraph's first.** `Scan::locate` admits the end position but
+  `forward_pos` matched runs half-open, so the most common caret position while
+  typing fell through to the segment's generated start. A position no run
+  contains now resolves against the nearest preceding run.
+- fix(typst): **a vendored package whose manifest declares a non-semver
+  `version` or an unusable `entrypoint` path warns instead of failing the
+  session.** Both aborted `QuillWorld::new` even when the plate never imports
+  that package, where an unparseable manifest, an unusable asset path, and a
+  missing entrypoint already warn and carry on. A non-semver `version` skips the
+  package; an unusable `entrypoint` path keeps the files already loaded and
+  skips only the check that the entrypoint is among them.
+- fix(wasm): **`RenderResult` crosses a diagnostic's `args` as the
+  `Record<string, unknown>` it declares.** It returns through tsify's ABI, whose
+  default serializer emits a `Map` for a map-typed field, where every
+  hand-serialized diagnostic path passes `serialize_maps_as_objects(true)`.
+  `RenderResult.warnings` puts the document's parse warnings ahead of the
+  render's own, and a `plate::unsupported_construct` parse warning carries
+  `args`: a quill declining a construct its body still holds renders
+  successfully, and `args.construct` read back `undefined`. `RenderResult` and
+  `Diagnostic` declare `hashmap_as_object`, and a `const` assertion holds each
+  to it.
+- fix(content): **a table island whose `aligns` or a row is not an array
+  normalizes to one the store can reload.** `normalize_table_props` repaired a
+  non-array `header` but fell through for the other two, while `table_shape_error`
+  read them as width 0 — so an island op carrying `{"aligns": "bogus"}` was
+  accepted and serialized, and the exact bytes then failed to reopen with
+  `TableAlignsMismatch`. Normalizing a table now makes its shape check pass, as
+  `KnownIslandType::normalize_props` promises.
+- fix(content): **a code block's `lang` is reduced to an identifier on the
+  storage lane and refused on the authored one.** `sanitize_lang` ran on import
+  only, so the storage decode and the `setKind` op wire took any string and
+  `emit_code` wrote it onto the fence header verbatim: a `lang` of
+  `"rust\ninjected line"` exported a content line the document never had, and a
+  backtick made the fence illegal. The storage decode sanitizes, so a blob
+  written that way still opens; the authored wire raises a shape error, since
+  the host is writing now and the repair would be silent.
+- fix(core): **a variant-bearing enum refuses a non-string `default:` at load,
+  as a plain enum already does.** The scalar branch applied the render floor's
+  leniency to a schema literal, so `default: 1` against `values: ["1"]` loaded
+  clean and then selected nothing: `selected_member`, `resolve_variant_sourced`
+  and the absent-discriminant fallback all read the default through `as_str`, so
+  the field compiled to the blank world instead.
+- fix(core): **a seeded variant container commits at its resting form.**
+  `seed_parts` runs every other field through the strict write, but
+  `seed_variant` pushed its assembled container straight through, so a `$seed`
+  overlay for a richtext cell rested as raw markdown and the next `conform`
+  rewrote bytes on a document nobody edited — the divergence the shared write
+  exists to prevent.
+
 ## v0.111.0 - 2026-08-30
 
 - feat(wasm): **`mapMarks(content, bundle)` answers where a `ChangeBundle`'s

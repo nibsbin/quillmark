@@ -59,10 +59,11 @@ marker rather than ahead of the indentation: `\` before a space is Typst's
 linebreak, not an escape.
 
 The same `\` guards the tail of a `#…` expression. Typst reads a `(` directly
-after one as that call's arguments and a `.` before an identifier as a field
-access, so an emitted `#raw(…)`, a wrap's closing `]` and an island's `)` would
-each run on into the document text behind them. Trivia between the two ends the
-expression on its own.
+after one as that call's arguments, a `.` before an identifier as a field
+access, and a `;` as the expression's terminator, so an emitted `#raw(…)`, a
+wrap's closing `]` and an island's `)` would each run on into the document text
+behind them — or, for the `;`, eat the character. Trivia between the two ends
+the expression on its own.
 
 Debug builds parse every emission with Typst's own parser: a syntax error there
 is a lowering bug, never a document's.

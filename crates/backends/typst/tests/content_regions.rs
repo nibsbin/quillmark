@@ -1008,6 +1008,72 @@ main:
     );
 
     assert_eq!(session.position_at(region.page, 5.0, 5.0), None);
+
+    // One past the last character — the caret position while typing — sits at
+    // the last glyph, not back at the paragraph's first.
+    let text_len = "Alpha beta gamma delta epsilon.".chars().count();
+    let end = session.locate("body", text_len).expect("end-of-text caret");
+    let last = session.locate("body", text_len - 1).expect("last-glyph caret");
+    let first = session.locate("body", 0).expect("first-glyph caret");
+    assert!(
+        end.rect[0] >= last.rect[0] && end.rect[0] > first.rect[0],
+        "end caret {:?} is at the last glyph {:?}, not the first {:?}",
+        end.rect,
+        last.rect,
+        first.rect
+    );
+}
+
+#[test]
+fn locate_past_a_trailing_hard_break_holds_the_preceding_run() {
+    const YAML: &str = r#"
+quill:
+  name: nav_hard_break
+  version: 0.1.0
+  backend: typst
+  description: caret past a trailing hard break
+typst:
+  plate_file: plate.typ
+main:
+  fields:
+    body:
+      type: richtext
+      description: one paragraph closed by a hard break
+"#;
+    const PLATE: &str = r#"
+#import "@local/quillmark-helper:0.1.0": data
+#set page(width: 612pt, height: 792pt, margin: 72pt)
+#set text(size: 11pt)
+
+#data.body
+"#;
+    // Shift+enter at the end of a paragraph: the segment's last content
+    // character is the hard break, which lowers to `#linebreak()` and closes no
+    // run, so the caret past it has only a preceding run to hold.
+    use quillmark_content::model::{Content, Line, LineKind};
+    let rt = Content::new(
+        "Alpha beta\n".to_string(),
+        vec![
+            Line::new(LineKind::Para),
+            Line::new(LineKind::Para).with_continues(true),
+        ],
+    )
+    .into_normalized();
+    assert_eq!(rt.validate(), Ok(()));
+    let data = serde_json::json!({ "body": quillmark_content::serial::to_canonical_value(&rt) });
+    let session = TypstBackend.open(&quill(YAML, PLATE), &data).expect("open");
+
+    let first = session.locate("body", 0).expect("first-glyph caret");
+    let last = session.locate("body", 10).expect("last-glyph caret");
+    let end = session.locate("body", 11).expect("past-the-break caret");
+    assert!(
+        end.rect[0] >= last.rect[0] && end.rect[0] > first.rect[0],
+        "the caret past the break is at the last glyph {:?}, not the paragraph's \
+         first {:?}: {:?}",
+        last.rect,
+        first.rect,
+        end.rect
+    );
 }
 
 #[test]
