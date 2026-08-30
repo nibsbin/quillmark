@@ -687,10 +687,13 @@ fn validate_variant(
     let Some(object) = json.as_object() else {
         // The bare scalar spelling. Anything that is not a member-shaped scalar
         // is a type error against the container.
-        let scalar = value
-            .as_str()
-            .map(str::to_string)
-            .or_else(|| super::config::scalar_as_string(json));
+        let scalar = value.as_str().map(str::to_string).or_else(|| match ctx {
+            // The floor's leniency, which a document value passes through. A
+            // schema literal is judged as written, and every reader of a
+            // `default:` takes it through `as_str`.
+            ValueContext::Document => super::config::scalar_as_string(json),
+            ValueContext::SchemaLiteral => None,
+        });
         match scalar {
             Some(member) => check_member(&member, path, &mut errors),
             None => errors.push(ValidationError::TypeMismatch {

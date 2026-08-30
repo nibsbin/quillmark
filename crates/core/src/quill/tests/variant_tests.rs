@@ -129,6 +129,22 @@ fn a_variant_keyed_by_the_blank_is_a_load_error() {
     assert!(err.contains("quill::variant_unknown_value"));
 }
 
+/// Every reader of a `default:` takes it through `as_str`, so load reads it as
+/// written — exactly as a plain enum's is read.
+#[test]
+fn a_non_string_variant_default_is_a_load_error() {
+    let variant = load_error(
+        "    c:\n      type: enum\n      values: [\"1\"]\n      default: 1\n      \
+         variants:\n        \"1\":\n          x: { type: string }\n",
+    );
+    let plain = load_error("    c:\n      type: enum\n      values: [\"1\"]\n      default: 1\n");
+    assert!(
+        variant.contains("quill::default_type_mismatch"),
+        "variant-bearing enum accepted a numeric default: {variant}"
+    );
+    assert!(plain.contains("quill::default_type_mismatch"), "{plain}");
+}
+
 #[test]
 fn a_variant_field_named_value_collides_with_the_discriminant() {
     let err = load_error(

@@ -806,8 +806,10 @@ fn heading_level(level: pulldown_cmark::HeadingLevel) -> u8 {
 
 /// A code-block info string reduced to a language identifier: its leading run of
 /// ASCII alphanumerics and `-`/`_`/`.`/`+`. Every stored `lang` has this shape,
-/// so an emitter writes it into its own syntax unquoted and unescaped.
-fn sanitize_lang(lang: &str) -> String {
+/// so an emitter writes it into its own syntax unquoted and unescaped. Every
+/// lane that mints a `LineKind::Code` runs it — the storage decode and the op
+/// wires as much as this importer.
+pub(crate) fn sanitize_lang(lang: &str) -> String {
     lang.chars()
         .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '+'))
         .collect()

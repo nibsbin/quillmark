@@ -27,9 +27,10 @@
 //! `#`, `[`, `$` are already escaped, so this is no code-execution vector.
 //!
 //! **Expression tails.** The same `\` guards the other direction. Typst reads a
-//! `(` directly after a `#…` expression as that call's arguments and a `.` before
-//! an identifier as a field access, so the text behind an emitted `#raw(…)`,
-//! `#image(…)` or a wrap's `]` would reach it as code (`continues_expr`).
+//! `(` directly after a `#…` expression as that call's arguments, a `.` before
+//! an identifier as a field access, and a `;` as the expression's terminator, so
+//! the text behind an emitted `#raw(…)`, `#image(…)` or a wrap's `]` would reach
+//! it as code — or, for the `;`, vanish (`continues_expr`).
 //!
 //! **The 2→4 escape coupling.** Each run records only its `(content, generated)`
 //! pair; per-char spans are *recomputed* by a scan treating `//`→`\/\/` as a
@@ -110,13 +111,14 @@ fn opens_line_anchor(s: &str) -> bool {
 /// Does `s` continue the `#…` expression written before it? Typst reads a `(`
 /// directly after one as that call's arguments and a `.` before an identifier
 /// as a field access, either swallowing document text into code: a `` `x` ``
-/// followed by `(y)` emits `#raw("x")(y)`, a call on content. `[` needs no rule,
-/// [`escape_markup`] having escaped it already, and trivia between the two ends
-/// the expression on its own.
+/// followed by `(y)` emits `#raw("x")(y)`, a call on content. A `;` directly
+/// after one terminates it, and the character renders as nothing. `[` needs no
+/// rule, [`escape_markup`] having escaped it already, and trivia between the two
+/// ends the expression on its own.
 fn continues_expr(s: &str) -> bool {
     let mut c = s.chars();
     match c.next() {
-        Some('(') => true,
+        Some('(') | Some(';') => true,
         Some('.') => c.next().is_some_and(typst::syntax::is_id_start),
         _ => false,
     }
@@ -1771,13 +1773,16 @@ mod tests {
         }
     }
 
-    /// A `#…` expression the emitter wrote runs on into a `(` or a `.field`
-    /// directly after it, so those take the same `\` prefix as a line anchor.
+    /// A `#…` expression the emitter wrote runs on into a `(`, a `.field` or a
+    /// `;` directly after it, so those take the same `\` prefix as a line anchor.
     #[test]
     fn expression_tail_prefixes_backslash() {
         assert_eq!(emit("`x`(y)").markup, "#raw(\"x\")\\(y)\n\n");
         assert_eq!(emit("**b**(y)").markup, "#strong[b]\\(y)\n\n");
         assert_eq!(emit("`x`.len").markup, "#raw(\"x\")\\.len\n\n");
+        assert_eq!(emit("`--force`; x").markup, "#raw(\"--force\")\\; x\n\n");
+        assert_eq!(emit("**W**; x").markup, "#strong[W]\\; x\n\n");
+        assert_eq!(emit("a\\\n; b").markup, "a#linebreak()\\; b\n\n");
         assert_eq!(
             emit("![i](u)(y)").markup,
             "#image(\"u\", alt: \"i\")\\(y)\n\n"
@@ -1788,6 +1793,20 @@ mod tests {
         assert_eq!(emit("`x`.5").markup, "#raw(\"x\").5\n\n");
         // Prose reaching a `(` is no expression tail.
         assert_eq!(emit("a(y)").markup, "a(y)\n\n");
+    }
+
+    /// Typst reads the guarded `;` as an `Escape`, not the `Semicolon` that
+    /// ends an expression and renders nothing.
+    #[test]
+    fn guarded_semicolon_survives_the_parser() {
+        use typst::syntax::{parse, SyntaxKind};
+
+        let kinds = |src: &str| -> Vec<SyntaxKind> {
+            parse(src).children().map(|c| c.kind()).collect()
+        };
+        assert!(kinds("#strong[b];c").contains(&SyntaxKind::Semicolon));
+        assert!(!kinds(&emit("**b**;c").markup).contains(&SyntaxKind::Semicolon));
+        assert!(kinds(&emit("**b**;c").markup).contains(&SyntaxKind::Escape));
     }
 
     /// Typst's own parser over the emitter's output: the block-level nodes it

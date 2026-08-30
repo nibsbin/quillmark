@@ -2,7 +2,10 @@ use std::collections::HashMap;
 use std::path::Path;
 use typst::diag::{FileError, FileResult};
 use typst::foundations::{Bytes, Datetime, Duration};
-use typst::syntax::{package::PackageSpec, FileId, RootedPath, Source, VirtualPath, VirtualRoot};
+use typst::syntax::{
+    package::{PackageSpec, PackageVersion},
+    FileId, RootedPath, Source, VirtualPath, VirtualRoot,
+};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 use typst::{Library, World};
@@ -271,12 +274,24 @@ impl QuillWorld {
                 let toml_content = String::from_utf8_lossy(toml_contents);
                 match parse_package_toml(&toml_content) {
                     Ok(package_info) => {
+                        let Ok(version) = package_info.version.parse::<PackageVersion>() else {
+                            warnings.push(
+                                Diagnostic::new(
+                                    Severity::Warning,
+                                    format!(
+                                        "Skipping package '{package_name}': its typst.toml \
+                                         declares version '{}', which is not `major.minor.patch`",
+                                        package_info.version
+                                    ),
+                                )
+                                .with_code("typst::package_manifest".to_string()),
+                            );
+                            continue;
+                        };
                         let spec = PackageSpec {
                             namespace: package_info.namespace.clone().into(),
                             name: package_info.name.clone().into(),
-                            version: package_info.version.parse().map_err(|_| {
-                                format!("Invalid version format: {}", package_info.version)
-                            })?,
+                            version,
                         };
 
                         Self::load_package_files_from_quill(
@@ -372,8 +387,13 @@ impl QuillWorld {
         }
 
         if let (Some(spec), Some(entrypoint_name)) = (&package_spec, entrypoint) {
-            let entrypoint_path = VirtualPath::new(entrypoint_name)
-                .map_err(|e| format!("Invalid entrypoint path {}: {}", entrypoint_name, e))?;
+            let entrypoint_path = match VirtualPath::new(entrypoint_name) {
+                Ok(vpath) => vpath,
+                Err(e) => {
+                    warnings.push(skipped_path(Path::new(entrypoint_name), e));
+                    return Ok(());
+                }
+            };
             let entrypoint_file_id = file_id(Some(spec.clone()), entrypoint_path);
 
             if !sources.contains_key(&entrypoint_file_id) {
@@ -615,6 +635,48 @@ name = "minimal-package"
             world.load_warnings().is_empty(),
             "clean quill warned: {:?}",
             world.load_warnings()
+        );
+    }
+
+    /// A manifest that parses but declares a non-semver version, and one whose
+    /// entrypoint is not a usable Typst path: both degrade like every other
+    /// unusable quill file rather than failing the session.
+    #[test]
+    fn unusable_package_version_or_entrypoint_warns_instead_of_failing_the_world() {
+        let quill = quill_with(&[
+            (
+                "packages/oldver/typst.toml",
+                "[package]\nname = \"oldver\"\nversion = \"1.0\"\nentrypoint = \"lib.typ\"\n",
+            ),
+            ("packages/oldver/lib.typ", "#let x = 1\n"),
+        ]);
+        let world = QuillWorld::new(&quill, "// probe").expect("world builds anyway");
+        let codes: Vec<&str> = world
+            .load_warnings()
+            .iter()
+            .filter_map(|d| d.code.as_deref())
+            .collect();
+        assert!(
+            codes.contains(&"typst::package_manifest"),
+            "expected a package-manifest warning, got {codes:?}"
+        );
+
+        let quill = quill_with(&[
+            (
+                "packages/escapee/typst.toml",
+                "[package]\nname = \"escapee\"\nversion = \"0.1.0\"\nentrypoint = \"../lib.typ\"\n",
+            ),
+            ("packages/escapee/lib.typ", "#let x = 1\n"),
+        ]);
+        let world = QuillWorld::new(&quill, "// probe").expect("world builds anyway");
+        let codes: Vec<&str> = world
+            .load_warnings()
+            .iter()
+            .filter_map(|d| d.code.as_deref())
+            .collect();
+        assert!(
+            codes.contains(&"typst::path_skipped"),
+            "expected a skipped-path warning, got {codes:?}"
         );
     }
 

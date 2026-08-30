@@ -115,4 +115,25 @@ mod tests {
             assert_eq!(KnownIslandType::parse(k.as_str()), Some(k));
         }
     }
+
+    /// `normalize_props` guarantees `shape_error` returns `None`. An island
+    /// op's props are untyped at the wire, so a scalar where an array belongs is
+    /// a shape the two halves have to agree on.
+    #[test]
+    fn normalize_repairs_every_props_shape_validate_refuses() {
+        for props in [
+            serde_json::json!({"header": ["h"], "aligns": "bogus", "rows": [["a"]]}),
+            serde_json::json!({"header": "bogus", "aligns": ["left"], "rows": [["a"]]}),
+            serde_json::json!({"header": ["h"], "aligns": ["left"], "rows": ["bogus"]}),
+            serde_json::json!({"header": ["h"], "aligns": 7, "rows": [[], null]}),
+        ] {
+            let mut props = props;
+            KnownIslandType::Table.normalize_props(&mut props);
+            assert_eq!(
+                KnownIslandType::Table.shape_error(&props),
+                None,
+                "normalized props still refused: {props}"
+            );
+        }
+    }
 }

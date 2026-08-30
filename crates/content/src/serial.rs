@@ -323,7 +323,11 @@ pub fn line_kind_from_value(v: &Value) -> Result<LineKind, ParseError> {
             Ok(LineKind::Heading { level: level as u8 })
         }
         "code" => Ok(LineKind::Code {
-            lang: o.get("lang").and_then(Value::as_str).map(str::to_string),
+            lang: o
+                .get("lang")
+                .and_then(Value::as_str)
+                .map(crate::import::sanitize_lang)
+                .filter(|l| !l.is_empty()),
         }),
         "island" => Ok(LineKind::Island),
         "rule" => Ok(LineKind::Rule),
@@ -564,10 +568,31 @@ pub fn mark_from_value(v: &Value) -> Result<Mark, ParseError> {
 // The rule is narrow on purpose: `attrs` beside a *reserved* name, nothing else.
 
 /// [`line_kind_from_value`] for the authored lane: `attrs` beside a built-in
-/// `kind` is a shape error rather than a silent drop.
+/// `kind`, or a `lang` the storage decode would reduce, is a shape error rather
+/// than a silent repair.
 pub(crate) fn line_kind_from_authored_value(v: &Value) -> Result<LineKind, ParseError> {
     reject_line_kind_attrs(v)?;
+    reject_unwritable_lang(v)?;
     line_kind_from_value(v)
+}
+
+/// A `lang` [`crate::import::sanitize_lang`] would change is a shape error: the
+/// emitter writes it onto the fence header unquoted, so the storage lane's
+/// reduction of it is a repair the host did not ask for.
+fn reject_unwritable_lang(v: &Value) -> Result<(), ParseError> {
+    let Some(o) = v.as_object() else {
+        return Ok(());
+    };
+    if o.get("kind").and_then(Value::as_str) != Some("code") {
+        return Ok(());
+    }
+    let Some(lang) = o.get("lang").and_then(Value::as_str) else {
+        return Ok(());
+    };
+    if crate::import::sanitize_lang(lang) != lang {
+        return Err(ParseError::Shape("code lang"));
+    }
+    Ok(())
 }
 
 /// [`container_from_value`] for the authored lane. See
@@ -759,14 +784,15 @@ pub(crate) fn table_cells(props: &Value) -> Vec<(String, Vec<Mark>)> {
 ///   offsets stable, so the cell's marks stay in range.
 /// - **Canonical cell marks.** Each cell's marks are re-normalized (sort,
 ///   same-kind union, drop zero-width) so equal cells serialize to equal bytes.
+/// - **Arrays where arrays belong.** A present non-array `header`, `aligns`, or
+///   row carries no cells, so it becomes an empty array rather than garbage the
+///   validate-side twin then rejects.
 pub(crate) fn normalize_table_props(props: &mut Value) {
     let cols = table_cols(props);
     let Some(obj) = props.as_object_mut() else {
         return;
     };
     let header = obj.entry("header").or_insert_with(|| Value::Array(vec![]));
-    // A non-array header carries no cells; rewrite it to an empty array rather
-    // than retaining garbage `validate` would reject.
     if !header.is_array() {
         *header = Value::Array(vec![]);
     }
@@ -775,6 +801,9 @@ pub(crate) fn normalize_table_props(props: &mut Value) {
         h.iter_mut().for_each(canon_cell);
     }
     let aligns = obj.entry("aligns").or_insert_with(|| Value::Array(vec![]));
+    if !aligns.is_array() {
+        *aligns = Value::Array(vec![]);
+    }
     if let Some(a) = aligns.as_array_mut() {
         while a.len() < cols {
             a.push(Value::String("none".into()));
@@ -782,6 +811,9 @@ pub(crate) fn normalize_table_props(props: &mut Value) {
     }
     if let Some(rows) = obj.get_mut("rows").and_then(Value::as_array_mut) {
         for row in rows.iter_mut() {
+            if !row.is_array() {
+                *row = Value::Array(vec![]);
+            }
             pad_row(row, cols);
             if let Some(r) = row.as_array_mut() {
                 r.iter_mut().for_each(canon_cell);
@@ -1550,6 +1582,52 @@ mod tests {
         let json = rt.to_canonical_json();
         let back = Content::from_canonical_json(&json).unwrap();
         assert_eq!(back.marks[0].kind, rt.marks[0].kind);
+    }
+
+    /// A `lang` is written into a fence header unquoted, so every lane that
+    /// mints a `Code` reduces it to the identifier shape the emitter assumes —
+    /// the storage decode and the `setKind` op wire as much as the importer.
+    #[test]
+    fn decoded_code_lang_carries_the_sanitized_shape() {
+        let cases: [(Value, Option<&str>); 4] = [
+            (
+                serde_json::json!({"kind": "code", "lang": "rust\ninjected line"}),
+                Some("rust"),
+            ),
+            (serde_json::json!({"kind": "code", "lang": "r`s"}), Some("r")),
+            (serde_json::json!({"kind": "code", "lang": " rust"}), None),
+            (
+                serde_json::json!({"kind": "code", "attrs": {"lang": "c++ 17"}}),
+                Some("c++"),
+            ),
+        ];
+        for (v, want) in cases {
+            assert_eq!(
+                line_kind_from_value(&v).unwrap(),
+                LineKind::Code {
+                    lang: want.map(str::to_string)
+                },
+                "{v}"
+            );
+        }
+    }
+
+    /// The two lanes answer a `lang` the emitter cannot write oppositely: the
+    /// storage decode reduces it so the blob still opens, the authored wire
+    /// refuses it so the host hears about it.
+    #[test]
+    fn an_unwritable_code_lang_sanitizes_on_storage_and_is_refused_when_authored() {
+        let v = serde_json::json!({"kind": "code", "lang": "rust\ninjected line"});
+        assert_eq!(
+            line_kind_from_value(&v).unwrap(),
+            LineKind::Code {
+                lang: Some("rust".to_string())
+            }
+        );
+        assert!(matches!(
+            line_kind_from_authored_value(&v),
+            Err(ParseError::Shape("code lang"))
+        ));
     }
 
     /// Promotion moves a construct's payload from the opaque bag to named

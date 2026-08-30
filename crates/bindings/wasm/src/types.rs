@@ -94,7 +94,7 @@ impl From<Location> for quillmark_core::Location {
 
 /// Diagnostic message (error or warning)
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
+#[tsify(into_wasm_abi, from_wasm_abi, hashmap_as_object)]
 #[serde(rename_all = "camelCase")]
 pub struct Diagnostic {
     pub severity: Severity,
@@ -120,6 +120,12 @@ pub struct Diagnostic {
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub source_chain: Vec<String>,
 }
+
+// tsify's default serializer emits a `Map` for a map-typed field, against
+// `args`' declared `Record<string, unknown>`. The config that applies is the
+// *outermost* crossing type's, so every type that can carry a diagnostic across
+// the ABI declares `hashmap_as_object`.
+const _: () = assert!(<Diagnostic as tsify::Tsify>::SERIALIZATION_CONFIG.hashmap_as_object);
 
 impl From<quillmark_core::Diagnostic> for Diagnostic {
     fn from(diag: quillmark_core::Diagnostic) -> Self {
@@ -187,7 +193,7 @@ impl From<quillmark_core::Artifact> for Artifact {
 /// Result of a render operation.
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
+#[tsify(into_wasm_abi, from_wasm_abi, hashmap_as_object)]
 #[serde(rename_all = "camelCase")]
 pub struct RenderResult {
     pub artifacts: Vec<Artifact>,
@@ -198,6 +204,9 @@ pub struct RenderResult {
     /// for it. Page indices are document-space even under a `pages` subset.
     pub regions: Vec<FieldRegion>,
 }
+
+#[cfg(any(feature = "typst", feature = "pdfform"))]
+const _: () = assert!(<RenderResult as tsify::Tsify>::SERIALIZATION_CONFIG.hashmap_as_object);
 
 /// What a committed `LiveSession.update` changed. `dirtyPages` lists pages whose
 /// content differs from the previous compile, including pages the edit added;
