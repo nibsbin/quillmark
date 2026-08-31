@@ -54,7 +54,7 @@ use typst::utils::PicoStr;
 use typst::World;
 use typst_layout::PagedDocument;
 
-use quillmark_core::{ContentHit, HitGranularity, RenderedRegion, LINE_REACH};
+use quillmark_core::{ContentHit, HitGranularity, RenderedRegion};
 
 use crate::emit::SegmentMap;
 use crate::world::QuillWorld;
@@ -108,20 +108,17 @@ impl Aabb {
         self.max_y = self.max_y.max(o.max_y);
     }
 
-    /// Gap from `(x, y)` to this box: zero inside it (edges included), else the
-    /// shortest vector reaching it with its horizontal leg divided by
-    /// [`LINE_REACH`], absent when either side is not finite. The one measure
-    /// both point queries rank by, so a tolerance of zero is exactly
-    /// containment, and an absent gap is one no `tol` reaches.
-    /// `RenderedRegion::distance` carries the scaling and why the finite check
-    /// is load-bearing.
+    /// Gap from `(x, y)` to this box, zero inside it (edges included), absent
+    /// when either side is not finite. The one measure both point queries rank
+    /// by, so a tolerance of zero is exactly containment.
+    /// `RenderedRegion::distance` carries why the finite check is load-bearing.
     fn distance(&self, x: f64, y: f64) -> Option<f64> {
         let corners = [self.min_x, self.min_y, self.max_x, self.max_y];
         let finite = x.is_finite() && y.is_finite() && corners.iter().all(|v| v.is_finite());
         finite.then(|| {
             let dx = (self.min_x - x).max(0.0).max(x - self.max_x);
             let dy = (self.min_y - y).max(0.0).max(y - self.max_y);
-            (dx / LINE_REACH as f64).hypot(dy)
+            dx.hypot(dy)
         })
     }
 }
@@ -129,10 +126,6 @@ impl Aabb {
 /// The nearest box within `tol` among `boxed`, which callers pass **in reverse
 /// paint order**: ties keep the first seen, so the last-painted of equally near
 /// items wins.
-///
-/// Ranking by distance rather than growing each box is what keeps the answer
-/// the nearer item's: outset boxes overlap, and a first match over them answers
-/// whichever painted last however far away it is.
 fn nearest<T>(
     boxed: impl Iterator<Item = (Aabb, T)>,
     x: f64,
@@ -649,11 +642,6 @@ impl<'a> Scan<'a> {
     /// resolving to the nearest glyph within `tol` points. Degrades to the
     /// segment's content start when the resolved node nests inside no single
     /// run (a multi-line `#raw` block, or structural ink).
-    ///
-    /// A glyph box is the run's ink height by the glyph's advance, so a text
-    /// column answers over a fraction of its own area: the leading between two
-    /// lines belongs to neither. Under `tol` the point takes the line it is
-    /// nearer, at the column it was clicked in, which is where a caret goes.
     pub(crate) fn position_at(&self, page: usize, x: f32, y: f32, tol: f32) -> Option<ContentHit> {
         if self.windows.is_empty() {
             return None;

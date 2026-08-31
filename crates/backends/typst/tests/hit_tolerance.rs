@@ -1,8 +1,7 @@
 //! The pointer-slack argument on `field_at` / `position_at`: a click within
-//! `tol` points of a field's ink resolves to the nearest such ink. A glyph box
-//! is the run's ink height by the glyph's advance, so a text column is live over
-//! a fraction of its own area: the leading between two lines is inside a
-//! paragraph and on no glyph. These hold what the slack may and may not change.
+//! `tol` points of a field's ink resolves to the nearest such ink: the leading
+//! between two lines is inside a paragraph and on no glyph. These hold what the
+//! slack may and may not change.
 
 use quillmark_core::{Backend, LiveSession};
 use quillmark_typst::TypstBackend;
@@ -194,10 +193,13 @@ fn open_with_a_short_line() -> LiveSession {
         .expect("open")
 }
 
-/// A click out in the measure beside a line answers with that line, at a gap two
-/// orders past the slack that reaches it.
+/// The slack is a radius in both axes, so it does not reach along a row: the
+/// empty measure beside a short line is as far from that line as a point the
+/// same distance above it. A tolerance that crossed a measure would make a
+/// click's column stop mattering, and a click in one page margin answer with a
+/// field set against the other.
 #[test]
-fn a_click_out_in_the_measure_answers_with_the_line_it_is_level_with() {
+fn the_empty_measure_beside_a_line_is_not_that_line() {
     let session = open_with_a_short_line();
     let intro = session
         .regions()
@@ -205,49 +207,19 @@ fn a_click_out_in_the_measure_answers_with_the_line_it_is_level_with() {
         .find(|r| r.field == "intro")
         .expect("intro surfaces a region");
     let y = (intro.rect[1] + intro.rect[3]) / 2.0;
-    let far = intro.rect[2] + 120.0;
-    assert!(
-        session.field_at(0, far, y, 0.0).is_none(),
-        "the probe sits in dead measure, not on ink"
-    );
-
-    assert_eq!(
-        session.field_at(0, far, y, 3.1).as_deref(),
-        Some("intro"),
-        "a click 120pt out in the measure answers with the line level with it"
-    );
-    let hit = session
-        .position_at(0, far, y, 3.1)
-        .expect("and resolves to a content position");
-    assert_eq!(hit.field, "intro");
-}
-
-/// Ink the point is inside of outranks a line-end however far the reach would
-/// stretch to it.
-#[test]
-fn the_measure_reach_never_outranks_ink_the_point_is_inside() {
-    let session = open_with_a_short_line();
-    let regions = session.regions();
-    let intro = regions
-        .iter()
-        .find(|r| r.field == "intro")
-        .expect("intro surfaces a region");
-    let far = intro.rect[2] + 120.0;
-
-    // The body's own rows, at the same column the intro's line-end reaches.
-    let body_rows: Vec<f32> = regions
-        .iter()
-        .filter(|r| r.field == "body")
-        .map(|r| (r.rect[1] + r.rect[3]) / 2.0)
-        .collect();
-    assert!(!body_rows.is_empty(), "the body surfaces regions: {regions:?}");
-    for y in body_rows {
-        assert_eq!(
-            session.field_at(0, far, y, 3.1).as_deref(),
-            Some("body"),
-            "a point on the body's own ink at ({far}, {y}) stays the body's"
+    let x = intro.rect[2] + 120.0;
+    for tol in [0.0f32, 3.1, 8.0, 20.0, 120.0] {
+        assert_ne!(
+            session.field_at(0, x, y, tol).as_deref(),
+            Some("intro"),
+            "tol={tol} reached 120pt along the row into the intro's own whitespace"
         );
     }
+    assert_eq!(
+        session.field_at(0, x, y, 3.1),
+        None,
+        "and at a pointer's slack that whitespace is on no field at all"
+    );
 }
 
 #[test]

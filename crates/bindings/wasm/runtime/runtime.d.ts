@@ -625,11 +625,9 @@ export declare class LiveSession {
 	 * Fine-grained click → content position (caret placement). Same PDF-point
 	 * space as {@link fieldAt}; `undefined` past `tolPt` from all content ink.
 	 *
-	 * `tolPt` buys the most here: a glyph box is the line's ink by the glyph's
-	 * advance, so the leading between two lines lies inside a paragraph and on no
-	 * glyph, and a text column answers over a fraction of its own area. Under
-	 * `tolPt` a point between two lines takes the one it is nearer, at the column
-	 * it was clicked in.
+	 * `tolPt` buys the most here: the leading between two lines lies inside a
+	 * paragraph and on no glyph, and under `tolPt` a point there takes the line
+	 * it is nearer.
 	 */
 	positionAt(page: number, x: number, y: number, tolPt?: number): ContentHit | undefined;
 	/**

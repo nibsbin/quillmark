@@ -40,21 +40,6 @@
 //! the same sidecar on request ([`RenderOptions::regions`](crate::RenderOptions)).
 //! Empty for backends that place no schema fields.
 
-/// How much further a tolerance reaches along a line of text than across one.
-///
-/// The dead gap a click lands in differs by two orders between the axes: across
-/// a line it is the leading, a few points wide and belonging to the neighbouring
-/// line; along one it is the rest of the measure, hundreds of points wide and
-/// belonging to that line's own end. One radius widened to cross a measure
-/// answers for ink most of a page away.
-///
-/// Hit ranking divides the horizontal gap by this before measuring, so the
-/// region a tolerance admits is `tol` tall and `tol * LINE_REACH` wide — ~400pt
-/// at the ~3.1pt a 2 CSS px pointer is worth. Unlike `tol` it is the engine's:
-/// pointer slack is a screen quantity, where this is a property of how text is
-/// set.
-pub const LINE_REACH: f32 = 128.0;
-
 /// One schema field placement's extent on a rendered page.
 ///
 /// `rect` is `[x0, y0, x1, y1]` in PDF points with a **bottom-left** origin:
@@ -112,13 +97,11 @@ impl RenderedRegion {
         self.distance(page, x, y) == Some(0.0)
     }
 
-    /// Gap in PDF points from the point to this region's rect: zero inside it,
-    /// else the shortest vector reaching it with its horizontal leg divided by
-    /// [`LINE_REACH`]. `None` on another page, or when either side is not
-    /// finite. What a tolerant hit-test ranks by, so a tolerance of zero admits
-    /// exactly what [`contains`](Self::contains) does — scaling a leg cannot
-    /// turn a non-zero gap into a zero one — and an absent gap is one no
-    /// tolerance reaches.
+    /// Gap in PDF points from the point to this region's rect, zero inside it.
+    /// `None` on another page, or when either side is not finite. What a
+    /// tolerant hit-test ranks by, so a tolerance of zero admits exactly what
+    /// [`contains`](Self::contains) does, and an absent gap is one no tolerance
+    /// reaches.
     ///
     /// The finite check is load-bearing: `f32::max` returns the non-NaN side, so
     /// a NaN on either side otherwise collapses both axes to zero and reads as
@@ -128,7 +111,7 @@ impl RenderedRegion {
         (self.page == page && finite).then(|| {
             let dx = (self.rect[0] - x).max(0.0).max(x - self.rect[2]);
             let dy = (self.rect[1] - y).max(0.0).max(y - self.rect[3]);
-            (dx / LINE_REACH).hypot(dy)
+            dx.hypot(dy)
         })
     }
 }

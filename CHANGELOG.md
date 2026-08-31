@@ -2,26 +2,6 @@
 
 ## Unreleased
 
-- feat(core)!: **the pointer tolerance reaches along a line, not just around the
-  point.** A glyph's box is its run's ink height by its own advance, so the two
-  axes fail differently: across a line the dead gap is the leading, a few points
-  wide and belonging to the neighbouring line, while along one it is the rest of
-  the measure the line does not fill — 248 of 443 points beside a seeded
-  `usaf_memo` body line, 56% of that line's width — belonging to that line's own
-  end. The radius added for the leading is two orders short of the measure, and
-  widening it until it reached would answer for ink most of a page away. Hit
-  ranking now divides the horizontal leg by `LINE_REACH` before measuring, making
-  the admitted region an ellipse `tol` tall and `tol * LINE_REACH` wide: a click
-  out in a line's own whitespace answers with that line, and one a row up still
-  answers with the row above. The ratio is the engine's rather than the caller's,
-  `tol` being the pointer's slack and a screen quantity where this is a property
-  of how text is set. Containment is still distance zero — scaling a leg cannot
-  turn a non-zero gap into a zero one — so `tol = 0` remains exact containment and
-  no point that resolved exactly changes answer. The break is behavioural, not a
-  signature: `field_at` / `position_at` answer where they previously returned
-  nothing, and a consumer relying on a whitespace click resolving to nothing sees
-  a field.
-
 - feat(core)!: **`fieldAt` and `positionAt` take a pointer tolerance, and
   resolve to the nearest ink rather than the first containing it.** A glyph's
   box is its run's ink height by its own advance, so a text column answers over
@@ -31,9 +11,10 @@
   and under half of it double-spaced, which is the whole of why clicking the
   preview to place a caret misses. Both queries now take `tol` in PDF points
   (`tolPt`, optional, on the WASM seam) and answer with the nearest placement
-  within it. The caller derives it from the scale it drew the page at, slack
-  being a property of the pointer rather than of the document: a tolerance fixed
-  in points shrinks under the cursor exactly as the target does. Ranking by
+  within it, a radius in both axes. The caller derives it from the scale it drew
+  the page at, slack being a property of the pointer rather than of the
+  document: a tolerance fixed in points shrinks under the cursor exactly as the
+  target does. Ranking by
   distance rather than growing each rect is what keeps the answer the nearer
   item's — outset boxes overlap, and a first match over them decides by paint
   order — and makes the tolerance a pure widening: containment is distance zero,
