@@ -119,10 +119,7 @@ pub trait SessionHandle: Send + Sync + 'static {
     /// alone). `x`/`y` are PDF points, bottom-left origin on `page`. Returns
     /// the field plus a USV offset into its `Content`, cluster-exact and
     /// degrading to the containing segment's start on origin-less ink (see
-    /// [`ContentHit`]). `tol` reads as it does on [`field_at`](Self::field_at):
-    /// the nearest content ink within that many points answers, which on a text
-    /// column is the nearer of the two lines a click in the leading falls
-    /// between.
+    /// [`ContentHit`]). `tol` reads as it does on [`field_at`](Self::field_at).
     /// `None` past `tol` from all content ink, on a scalar/widget (no content
     /// address), or when the backend maps no content. Default `None`: a backend
     /// that carries a per-segment source map overrides this.
@@ -259,9 +256,8 @@ impl LiveSession {
     /// A point → **content position**: the field *and* a USV offset into its
     /// `Content`. The offset is cluster-exact and degrades to the containing
     /// segment's start on origin-less ink. `tol` reads as on
-    /// [`field_at`](Self::field_at), and buys more here: a glyph box is the
-    /// line's ink, so the leading between two lines is inside a paragraph and
-    /// on no glyph, and under `tol` such a point takes the line it is nearer.
+    /// [`field_at`](Self::field_at), and buys the most here: the leading
+    /// between two lines is inside a paragraph and on no glyph.
     /// `None` past `tol` from all content ink, on a scalar/widget, or for
     /// backends with no content map.
     ///
