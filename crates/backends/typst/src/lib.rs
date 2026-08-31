@@ -328,20 +328,19 @@ impl SessionHandle for TypstSession {
     /// widget is a deliberate click target drawing no spanned ink of its own, so
     /// ink beneath one must not swallow a click that lands on it. Among
     /// overlapping widgets the later-painted wins, matching `Scan::field_at`.
-    ///
-    /// One comparison across both lanes, not one lane and then the other: a lane
-    /// consulted first answers at any gap within `tol`, which ranks a far hit in
-    /// that lane over a near one in the other.
     fn field_at(&self, page: usize, x: f32, y: f32, tol: f32) -> Option<String> {
+        let widget = self.widget_at(page, x, y, tol);
+        // Nothing outranks a widget the point is inside of, and the content lane
+        // walks every frame up to `page` to answer.
+        if widget.as_ref().is_some_and(|&(gap, _)| gap == 0.0) {
+            return widget.map(|(_, field)| field);
+        }
         // Widget first: `min_by` keeps the first of equal gaps.
-        [
-            self.widget_at(page, x, y, tol),
-            self.scan().field_at(page, x, y, tol),
-        ]
-        .into_iter()
-        .flatten()
-        .min_by(|(a, _), (b, _)| a.total_cmp(b))
-        .map(|(_, field)| field)
+        [widget, self.scan().field_at(page, x, y, tol)]
+            .into_iter()
+            .flatten()
+            .min_by(|(a, _), (b, _)| a.total_cmp(b))
+            .map(|(_, field)| field)
     }
 
     /// The fine-grained twin of [`field_at`](Self::field_at). Widgets draw no
