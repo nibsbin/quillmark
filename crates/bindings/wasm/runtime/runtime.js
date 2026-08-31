@@ -398,12 +398,12 @@ for (const name of /** @type {const} */ (['validate', 'resolve', 'conform'])) {
 // leaving `props` / the mark payload / `level` opaque at every consumer. These
 // are the checked narrowing path: on the true branch the payload's pinned shape
 // is asserted. Only the payload-carrying arms get a guard: an island always
-// carries `props`, a `link` mark carries `url`, an `anchor` mark carries `id`, a
-// `heading` line carries `level` and a `code` line `lang`, a `list_item`
-// container its shape; the payload-free arms (`strong`/`emph`/`underline`/
-// `strike`/`code` marks, `para`/`island`/`rule` lines, `quote`) narrow to
-// nothing. An unrecognized discriminant fails every guard and keeps its opaque
-// `attrs`/`props`.
+// carries `props`, and a `link`/`anchor` mark, a `heading`/`code` line and a
+// `list_item` container each carry their payload in `attrs`; the payload-free
+// arms (`strong`/`emph`/`underline`/`strike`/`code` marks, `para`/`island`/
+// `rule` lines, `quote`) omit `attrs` and narrow to nothing. An unrecognized
+// discriminant fails every guard and carries the same `attrs` a known one
+// would.
 
 /**
  * @param {import('../core/wasm.js').ContentIsland} island
@@ -423,7 +423,7 @@ export function isImageIsland(island) {
 
 /**
  * @param {import('../core/wasm.js').ContentMark} mark
- * @returns {mark is import('../core/wasm.js').ContentMark & { type: 'link'; url: string }}
+ * @returns {mark is import('../core/wasm.js').ContentMark & { type: 'link'; attrs: { url: string } }}
  */
 export function isLinkMark(mark) {
 	return mark.type === 'link';
@@ -431,7 +431,7 @@ export function isLinkMark(mark) {
 
 /**
  * @param {import('../core/wasm.js').ContentMark} mark
- * @returns {mark is import('../core/wasm.js').ContentMark & { type: 'anchor'; id: string }}
+ * @returns {mark is import('../core/wasm.js').ContentMark & { type: 'anchor'; attrs: { id: string } }}
  */
 export function isAnchorMark(mark) {
 	return mark.type === 'anchor';
@@ -439,7 +439,7 @@ export function isAnchorMark(mark) {
 
 /**
  * @param {import('../core/wasm.js').ContentLine} line
- * @returns {line is import('../core/wasm.js').ContentLine & { kind: 'heading'; level: number }}
+ * @returns {line is import('../core/wasm.js').ContentLine & { kind: 'heading'; attrs: { level: number } }}
  */
 export function isHeadingLine(line) {
 	return line.kind === 'heading';
@@ -447,7 +447,7 @@ export function isHeadingLine(line) {
 
 /**
  * @param {import('../core/wasm.js').ContentLine} line
- * @returns {line is import('../core/wasm.js').ContentLine & { kind: 'code'; lang?: string }}
+ * @returns {line is import('../core/wasm.js').ContentLine & { kind: 'code'; attrs?: { lang?: string } }}
  */
 export function isCodeLine(line) {
 	return line.kind === 'code';
@@ -455,7 +455,7 @@ export function isCodeLine(line) {
 
 /**
  * @param {import('../core/wasm.js').ContentContainer} container
- * @returns {container is import('../core/wasm.js').ContentContainer & { container: 'list_item'; ordered: boolean; start: number; ordinal: number; instance?: number }}
+ * @returns {container is import('../core/wasm.js').ContentContainer & { container: 'list_item'; attrs: { ordered: boolean; start: number; ordinal: number }; instance?: number }}
  */
 export function isListItemContainer(container) {
 	return container.container === 'list_item';
@@ -517,12 +517,14 @@ export function isUnknownIsland(island) {
 // form cannot tell a list ending beside another from one list of two items, so
 // an omitted discriminator welds them and nothing reports it.
 //
-// WELD_KEYS is the rule `Container::same_weld` owns upstream: which fields two
-// adjacent runs must share for the markdown projection to read them as one, and
-// therefore for the canonical form to have to spend a discriminator. `start` is
-// not among them, since CommonMark reads only a list's first number. A table
-// rather than a switch, so `tests/known_names_drift.rs` can pin it against the
-// Rust predicate.
+// WELD_KEYS is the rule `Container::same_weld` owns upstream: which `attrs`
+// entries two adjacent runs must share for the markdown projection to read them
+// as one, and therefore for the canonical form to have to spend a
+// discriminator. `start` is not among them, since CommonMark reads only a
+// list's first number — which is also why a built-in cannot simply take the
+// unknown branch now that both spell their payload alike. A table rather than a
+// switch, so `tests/known_names_drift.rs` can pin it against the Rust
+// predicate.
 
 const WELD_KEYS = { list_item: ['ordered'], quote: [] };
 
@@ -549,7 +551,7 @@ function weldsWith(a, b) {
 	// `hasOwn`, so a tag colliding with an `Object.prototype` member reaches the
 	// unknown branch rather than a function.
 	if (!Object.hasOwn(WELD_KEYS, a.container)) return sameJson(a.attrs, b.attrs);
-	return WELD_KEYS[a.container].every((k) => a[k] === b[k]);
+	return WELD_KEYS[a.container].every((k) => a.attrs?.[k] === b.attrs?.[k]);
 }
 
 /**

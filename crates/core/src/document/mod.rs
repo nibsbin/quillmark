@@ -166,7 +166,9 @@ pub(crate) mod prescan;
 pub mod wire;
 pub(crate) mod yaml_hints;
 
-pub use dto::{peek_storage_version, StorageError, StoredDocument, STORAGE_V0_93_0};
+pub use dto::{
+    peek_storage_version, StorageError, StoredDocument, STORAGE_V0_112_0, STORAGE_V0_93_0,
+};
 pub use edit::EditError;
 pub use meta::{is_valid_kind_name, validate_composable_kind, CardKindError};
 pub use payload::{MetaKey, Payload, PayloadItem};

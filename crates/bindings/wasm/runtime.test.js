@@ -621,7 +621,7 @@ describe('@quillmark/wasm/runtime: open-set membership guards', () => {
   // uniform across members, and the tables themselves are pinned against the
   // Rust constants by `crates/bindings/wasm/tests/known_names_drift.rs`.
   it('answers known-vs-unknown on all four axes', () => {
-    expect(isUnknownLine({ kind: 'heading', level: 2, containers: [] })).toBe(false)
+    expect(isUnknownLine({ kind: 'heading', attrs: { level: 2 }, containers: [] })).toBe(false)
     expect(isUnknownLine({ kind: 'callout', attrs: {}, containers: [] })).toBe(true)
 
     expect(isUnknownContainer({ container: 'quote' })).toBe(false)
@@ -644,7 +644,7 @@ describe('@quillmark/wasm/runtime: open-set membership guards', () => {
 })
 
 describe('@quillmark/wasm/runtime: container run boundaries', () => {
-  const LIST = { container: 'list_item', ordered: false, start: 1, ordinal: 0 }
+  const LIST = { container: 'list_item', attrs: { ordered: false, start: 1, ordinal: 0 } }
   const QUOTE = { container: 'quote' }
   const content = (a, b) => ({
     text: 'a\nb',
@@ -662,11 +662,12 @@ describe('@quillmark/wasm/runtime: container run boundaries', () => {
   it('stamps on what the markdown projection can carry, not on equality', () => {
     // `start` differs and they still weld: CommonMark reads only a list's first
     // number, so the projection cannot carry the second one.
-    expect(stamp(LIST, { ...LIST, start: 3 })).toEqual([0, 1])
-    expect(stamp(LIST, { ...LIST, ordinal: 4 })).toEqual([0, 1])
+    const list = (over) => ({ ...LIST, attrs: { ...LIST.attrs, ...over } })
+    expect(stamp(LIST, list({ start: 3 }))).toEqual([0, 1])
+    expect(stamp(LIST, list({ ordinal: 4 }))).toEqual([0, 1])
     expect(stamp(QUOTE, QUOTE)).toEqual([0, 1])
     // A shape the projection can tell apart needs no discriminator.
-    expect(stamp(LIST, { ...LIST, ordered: true })).toEqual([0, 0])
+    expect(stamp(LIST, list({ ordered: true }))).toEqual([0, 0])
 
     // An unknown container's boundary lives in storage, and its whole `attrs`
     // is its shape.
@@ -687,13 +688,13 @@ describe('@quillmark/wasm/runtime: container run boundaries', () => {
     const [a, b] = assignInstances([LIST, LIST])
     const stamped = importMarkdown(exportMarkdown(content(a, b)))
     expect(stamped.lines.map((l) => l.containers[0].instance)).toEqual([0, 1])
-    expect(stamped.lines.map((l) => l.containers[0].ordinal)).toEqual([0, 0])
+    expect(stamped.lines.map((l) => l.containers[0].attrs.ordinal)).toEqual([0, 0])
 
     // The same paths without the discriminator: one item spanning two
     // paragraphs, the second marker gone, and no error anywhere.
     const welded = importMarkdown(exportMarkdown(content(LIST, LIST)))
     expect(welded.lines.map((l) => l.containers[0].instance)).toEqual([0, 0])
-    expect(welded.lines.map((l) => l.containers[0].ordinal)).toEqual([0, 0])
+    expect(welded.lines.map((l) => l.containers[0].attrs.ordinal)).toEqual([0, 0])
   })
 })
 

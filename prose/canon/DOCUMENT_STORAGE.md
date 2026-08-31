@@ -38,7 +38,7 @@ bindings) and never a storage option.
 
 ## The Format
 
-The current schema (`quillmark/document@0.93.0`) carries each card's full
+The current schema (`quillmark/document@0.112.0`) carries each card's full
 ordered payload: typed `$` system metadata, user fields, and YAML
 comments interleaved in source order: as a single discriminated-union
 item list. This is what makes inline-comment preservation symmetric across
@@ -48,7 +48,7 @@ object, not a markdown string); see Byte-stability.
 
 ```json
 {
-  "schema": "quillmark/document@0.93.0",
+  "schema": "quillmark/document@0.112.0",
   "main": {
     "payload": {
       "items": [
@@ -78,12 +78,20 @@ document came through the bound door) live on the `Parsed` record, not on
 their `Document` handle as session state and exclude them from `equals` and
 the DTO alike.
 
-### Legacy schemas (V0_92_0, V0_82_0, V0_81_0)
+### Legacy schemas (V0_93_0, V0_92_0, V0_82_0, V0_81_0)
+
+Documents written under `"schema": "quillmark/document@0.93.0"` carry the same
+tree as the current one, over the content form that spelled a built-in's payload
+as named siblings (`{"kind":"heading","level":1}`). The hop is the `body`
+decode and nothing else: the content decoder reads that spelling wherever it
+meets it, which it must, because most stored content in that spelling reaches no
+migration at all — a `richtext` field rests as a content object inside an opaque
+payload value, under no schema tag of its own.
 
 Documents written before `0.93.0` carry
 `"schema": "quillmark/document@0.92.0"` and store the card `body` as a
 markdown string rather than the embedded canonical content. Readers accept
-them and migrate forward to V0_93_0 on load; writers do not produce this
+them and migrate forward to V0_112_0 on load; writers do not produce this
 shape. The one hop that can reject is the body cold-import (see
 Byte-stability).
 
@@ -163,7 +171,7 @@ and one bound load away from converging.
 
 **Migrated rows: a conditional caveat.** The guarantee above is unconditional
 for a document the current writer serializes directly. A row still carrying
-a legacy schema tag migrates forward on read, and the `0.92.0 → 0.93.0` hop
+a legacy schema tag migrates forward on read, and the `0.92.0` hop
 cold-imports the stored markdown `body` string through the same
 Markdown → richtext path `Document::parse` uses. Byte-stability of
 *that* row across a crate upgrade is therefore conditional on
@@ -194,11 +202,12 @@ byte-identically and project as their nearest safe neighbor.
 
 **Two mechanisms, split by payload.** A block axis carries one, so its built-ins
 decode eagerly into typed fields (`LineKind::Heading { level }`) and an
-unrecognized member needs a sibling `Unknown` arm to hold its `attrs`. The two
+unrecognized member needs a sibling `Unknown` arm to hold its payload. The two
 island axes carry none, so the wire string *is* the stored value and the closed
 set is a **view** over it (`KnownIslandType::parse`, `Loss::fidelity`). The
 split decides which axes need the reserved-name rule below: a carrier axis has
-two spellings of a built-in's name and must reject one, a view axis has one.
+two in-memory arms per wire object and must keep one from impersonating the
+other, a view axis has one. On the wire both spell a payload alike.
 
 | Axis | Carrier | Unknown value projects as |
 |---|---|---|
@@ -228,7 +237,7 @@ adjacency quotient. `Content::normalize` canonicalizes it to `0`, flipping to
 `1` only where the adjacent preceding sibling run would otherwise weld, so a
 document needing no discriminator carries none and its stored bytes are the
 bytes it had before the field existed (§ Byte-stability). That is why the key
-is additive within `@0.93.0` rather than a schema-version event: no blob
+was additive within `@0.93.0` rather than a schema-version event: no blob
 written before it moves. The cost is in the other direction, and only for a
 document that spends the key — a build predating the field ignores it and reads
 the two runs welded, so a row written here and re-saved there loses the
@@ -292,42 +301,61 @@ Three rules bound the openness:
   `Invariant::JsonTooDeep` for content that never went through a decoder. This
   is `Invariant::NestingTooDeep`'s container cap on the payload axis.
 
-- **Payload rides `attrs`.** A built-in carries its payload in named sibling
-  keys (`level`, `lang`, `url`); an unknown carries it in one opaque `attrs`
-  object. A *new* construct must therefore put its payload under `attrs` to
-  survive a reader that predates it: a sibling key an old reader does not
-  read is dropped on re-encode.
+- **Payload rides `attrs`, for every member.** A `heading`'s `level`, a `code`'s
+  `lang`, a `link`'s `url`, a `list_item`'s shape and an unknown's whole opaque
+  bag are all `attrs` entries: `{"kind":"heading","attrs":{"level":1}}`. The
+  envelope keys stay siblings — `kind`/`type`/`container`, `containers`,
+  `continues`, a mark's `start`/`end`, a container's `instance` — because they
+  belong to the object rather than to the member it names. An empty bag is
+  omitted, on the rule `continues: false` already follows: presence is a pure
+  function of the value, so `normalize` collapses `{}` and an absent bag to one
+  spelling.
+
+  One spelling per name is what makes promotion cost nothing (see Promoting a
+  vocabulary member). It is also what a *new* construct needs: its payload is
+  in the place a reader that predates it already looks.
+
 - **No reserved name reuse.** An unknown may not take a built-in's name
   (`heading`, `quote`, `link`, …): it would serialize as the built-in and parse
-  back as one, silently dropping its attrs. `Content::validate` rejects this
-  (`Invariant::ReservedUnknownTag` / `ReservedUnknownLineKind` /
-  `ReservedUnknownContainer`) for an in-process Rust construction. The rule is
-  the three carrier axes' alone, and the `Unknown` arm is what makes it
-  necessary: a view axis has one value per wire string, so a built-in's name *is*
-  that built-in, with no second spelling to collide with it. The wire
-  reaches that check on neither block axis nor the mark axis: a decoder resolves
-  the built-in name *before* the `Unknown` fallthrough, so `{"kind": "para",
-  "attrs": {…}}` decodes to `Para` and the attrs are dropped unread. The two
-  wire lanes therefore split:
+  back as one, dropping any attrs the built-in's own payload does not name.
+  `Content::validate` rejects this (`Invariant::ReservedUnknownTag` /
+  `ReservedUnknownLineKind` / `ReservedUnknownContainer`) for an in-process Rust
+  construction, which is now the only place it can arise: with one spelling per
+  name there is no second wire form to collide with a built-in's, so no lane has
+  a collision to reject. The rule is the three carrier axes' alone, and the
+  `Unknown` arm is what makes it necessary: a view axis has one value per wire
+  string. It is construction hygiene, and what keeps
+  `from_canonical_json(to_canonical_json(rt)) == rt` unconditional for a
+  validate-clean value.
 
-    - **The authored lane rejects it.** `attrs` beside a built-in discriminator
-      is a shape error (`serial::line_kind_from_authored_value` and its two
-      twins for the op wire, `serial::from_authored_value` for a whole content).
-      An op or an `overwrite` is host-authored now, so that shape means a stale
-      copy of the built-in list, never a document from the past. Reads that hand
-      back stored content (`exportMarkdown`, `rebase`) are storage-lane, not
-      this one. The same split governs an unreadable **table-cell mark**.
-      Storage skips it: `serial::parse_cell` is lenient, and normalization makes
-      the skip permanent. The authored lane refuses it, because a host's
-      malformed mark vanishing with no signal is the silent corruption this rule
-      exists to catch.
-    - **The storage lane accepts it, and must.** A blob written while `callout`
-      was unknown carries `{"kind": "callout", "attrs": {…}}`; the release that
-      promotes `callout` to a built-in has to keep opening it. Rejecting at
-      `from_canonical_json` would refuse documents at rest exactly when the
-      vocabulary grows: the failure this section exists to prevent. Opening it
-      is half: the promoted arm also *reads* the bag rather than dropping it, see
-      Promoting a vocabulary member.
+  A foreign bag on a built-in is a different thing and stays permitted: on a
+  member carrying no payload it drops unread, on one that does it is read past.
+  That is the old "the carrier preserves unknown tags, not unknown payloads on
+  known tags", restated at attrs-key granularity.
+
+The lanes still split, on what is now the only ambiguous shape — a built-in's
+payload spelled as a **named sibling**, which is how every release through
+`@0.93.0` wrote it:
+
+  - **The storage lane reads it, and must.** `serial::payload` falls back to the
+    sibling when the bag is absent. Most stored content cannot be migrated: a
+    `richtext` field rests as a content object inside an opaque payload value,
+    under no schema tag, so the decoder's tolerance is the only thing that opens
+    it. The fallback is frozen and coupled to nothing — unlike the fold it
+    replaced, which grew with every promotion — but it is also not retirable on
+    tag evidence, since no tag names those rows. Read-repair converges the
+    population; cold rows keep it alive.
+  - **The authored lane rejects it.** A legacy payload sibling is a shape error
+    (`serial::line_kind_from_authored_value` and its two twins for the op wire,
+    `serial::from_authored_value` for a whole content). A host writing it now
+    holds a stale copy of the encoding, and where a bag sits beside it the
+    sibling it meant is not the one the decoder reads. Reads that hand back
+    stored content (`exportMarkdown`, `rebase`) are storage-lane, not this one.
+
+The same split governs an unreadable **table-cell mark**. Storage skips it:
+`serial::parse_cell` is lenient, and normalization makes the skip permanent. The
+authored lane refuses it, because a host's malformed mark vanishing with no
+signal is the silent corruption the split exists to catch.
 
 The opaque attrs are hash input like everything else in the canonical form, so
 they are recursively key-sorted along with the rest (see Byte-stability). What
@@ -357,60 +385,46 @@ has re-coupled to a closed set, and misreads the first release that adds a
 built-in.
 
 The bound: **the carrier preserves unknown tags, not unknown payloads on known
-tags.** A future `kind: "footnote"` carrying a sibling `ref` loses `ref` at any
-consumer that predates it, predicates or no: the first rule above (*payload
-rides `attrs`*) read from the other end.
+tags.** A future `kind: "footnote"` carrying an `attrs.ref` loses `ref` at any
+consumer that predates it, predicates or no. What the first rule above (*payload
+rides `attrs`, for every member*) buys is the other half: a future *name* keeps
+its whole payload, because the place that payload sits does not depend on
+knowing the name.
 
 ## Promoting a vocabulary member
 
-Adding an unknown is not a schema event. The reverse trip: a later release
-**promoting** a tag to a built-in, which is what the open set exists for: moves
-four things at once.
+Adding an unknown is not a schema event, and neither is the reverse trip: a
+later release **promoting** a tag to a built-in, which is what the open set
+exists for. Promotion is **not an encoding change**: the bytes a build wrote
+while `callout` was unknown are exactly the bytes the build that knows it reads,
+because both spell the payload in `attrs`. Add the arm, add the name to the
+list, and the same decoder that carried the tag opaque now types it.
 
-| What moves | How |
-|---|---|
-| Encoding | `{"kind":"callout","attrs":{…}}` becomes `{"kind":"callout",…}` with named siblings. |
-| Stored blobs | The decoder resolves the built-in name *before* the `Unknown` fallthrough, so the stored `attrs` reach an arm that reads siblings. |
-| Normalization | A promoted mark that `is_formatting()` unions adjacent runs that were two marks. |
-| Sort order | `attrs_key` is `tag\0{json}` for an `Unknown` and whatever its own arm returns for a built-in, so the `(start, end, ord)` tie-break can reorder. |
-
-The first two are data loss on exactly the documents the open set protects; the
-last two move canonical bytes for a document nobody edited. Four rules bound
-them.
-
-**A promoted built-in's decoder also reads the legacy `attrs` form.** This is
-the load-bearing one: without it the first promotion eats every stored blob's
-payload, silently. It is structural rather than a discipline: `fold_legacy_attrs`
-folds an `attrs` bag into the object whenever the discriminator names a reserved
-member, before the built-in arms run, on all three block-and-mark axes. A named
-sibling wins over a bag entry, only reserved names fold, and the discriminator is
-read from the original object. A promotion adds its name to `RESERVED_*` in the
-same edit that adds its arm, so it inherits the fold and carries its own legacy
-form. Re-encoding a folded blob writes the promoted spelling, so the read is a
-byte movement of the read-repair kind that § Byte-stability governs.
-
-The island axis has no such gap: `props` is the payload carrier for known and
-unknown types alike, so a promoted island type reads what its unknown wrote. Nor
-does `loss`, which carries no payload.
-
-**A new `MarkKind` takes the ordinal immediately before `Unknown`.** That is the
-one placement where a build that knows the type and a build that reads it as
-`Unknown` order the mark identically against every built-in; any other slot gives
-one document two canonical forms, one per reader. The rule is stated on
-`MarkKind::ord` itself. It is the mark axis' alone: the block axes sort by
-nothing.
+Two things do still move, and only for a *mark*:
 
 **Promoting a mark into the formatting class changes stored meaning**, since
-adjacent runs that round-trip as two marks begin to union. It is a
-canonical-byte event, and takes the read-repair-or-accept-the-movement treatment
-that § Byte-stability sets out for migrated rows.
+adjacent runs that round-tripped as two marks begin to union
+(`MarkKind::is_formatting`). It is a canonical-byte event, and takes the
+read-repair-or-accept-the-movement treatment that § Byte-stability sets out for
+migrated rows.
 
-**`RESERVED_*` growth rejects previously-valid authored content**, by design. A
-host still authoring `Unknown { tag: "callout" }` after the promotion gets
-`ReservedUnknownLineKind`, and `from_authored_value` starts refusing `attrs`
-beside `"callout"`: the reserved-name rule above, applied to a name that changed
-sides. From the host's seat it reads as a release breaking its writes, so it is a
-release note, not a silent tightening.
+**`RESERVED_*` growth rejects a previously-valid in-process construction.** A
+Rust embedder still building `Unknown { tag: "callout" }` after the promotion
+gets `ReservedUnknownLineKind` from `validate`. Nothing on the wire changes: a
+host sending `{"kind":"callout","attrs":{…}}` is writing the promoted spelling
+already, either side of the release. So this is a Rust API note, not a wire
+break.
+
+What is *not* on the list is the sort order. The canonical tie-break after
+`(start, end)` is `MarkKind::sort_key` — the `(type, attrs)` pair the wire
+carries, read back off the value — so a build that knows a member and a build
+that reads it as `Unknown` compute the same key from the same bytes. The
+ordinal this replaced could only ever promise that against the built-ins, never
+against another unknown, and it had to be renumbered on every promotion. The
+block axes sort by nothing, as before.
+
+The island axes never had a gap here: `props` is the payload carrier for known
+and unknown types alike, and `loss` carries no payload.
 
 ## The two id handles
 
@@ -510,9 +524,14 @@ position, never the id, so this policy holds either way.
 
 The schema version is tied to the **crate version at which the `Document`
 wire format was last changed**: not the running crate version. The
-current format was fixed in `0.93.0`, so the version tag is
-`quillmark/document@0.93.0`; every later patch release writes that same
+current format was fixed in `0.112.0`, so the version tag is
+`quillmark/document@0.112.0`; every later patch release writes that same
 value, because patches do not change the format.
+
+The format is the *bytes*, not only the envelope: `0.112.0` left the DTO tree
+untouched and moved every built-in's payload into `attrs` inside the `body`
+(§ Open vocabularies), which is a format change because the writer emits
+different bytes for the same document.
 
 `0.92.0` is a unified payload-item list (typed `$` entries living alongside
 user fields and comments in a single `Vec<PayloadItem>`), a per-field
@@ -521,25 +540,33 @@ survive a storage round-trip (the JSON `value` projection is fill-free), and
 the `seed` payload-item variant (the `$seed` per-card-kind overlay map).
 `0.93.0` leaves the payload model unchanged and instead embeds the card
 `body` as the **canonical content**: structurally, as a nested object, not a
-markdown string (see Byte-stability).
+markdown string (see Byte-stability). `0.112.0` leaves the tree unchanged in
+turn and moves every built-in's payload into `attrs` inside that content.
 
-The V0_92_0 → V0_93_0 migration is the one hop that can fail: it
-cold-imports the stored markdown `body` string through the same
-Markdown → richtext path `Document::parse` uses, so a
-pathologically over-nested legacy body is rejected
-(`StorageError::Malformed`) rather than silently truncated.
+The V0_92_0 hop cold-imports the stored markdown `body` string through the same
+Markdown → richtext path `Document::parse` uses, so a pathologically
+over-nested legacy body is rejected (`StorageError::Malformed`) rather than
+silently truncated. The V0_93_0 hop decodes its raw `body`, and can reject for
+the same reason a load can.
 
 `0.81.0` is the oldest tag read, and migrations chain
-(`V0_81_0 → V0_82_0 → V0_92_0 → V0_93_0`); only the newest DTO converts to
-the live `Document`. The `V0_81_0` hop is structural, the `V0_82_0` hop is
-lossy in exactly one place — `$id` is dropped (see "Legacy schemas").
+(`V0_81_0 → V0_82_0 → V0_92_0 → V0_112_0`, with `V0_93_0 → V0_112_0` entering
+directly); only the newest DTO converts to the live `Document`. The V0_92_0
+chain lands on V0_112_0 rather than passing through V0_93_0: a cold import
+yields the live content, and re-spelling it *back* to `@0.93.0` only to read it
+forward again would need an encoder for a form this crate no longer writes. The
+`V0_81_0` hop is structural, the `V0_82_0` hop is lossy in exactly one place —
+`$id` is dropped (see "Legacy schemas").
 
 ## Adding a Schema Version
 
 When the `Document` wire format changes again:
 
-1. **Freeze** the current `DocumentV0_93_0` type tree: leave its struct
+1. **Freeze** the current `DocumentV0_112_0` type tree: leave its struct
    /enum definitions and serde derives untouched so existing rows still parse.
+   Replace any field whose type tracks the live crate — `CanonicalContent` is
+   the one — with raw `serde_json::Value`, or the frozen tree will *write* the
+   new format under the old tag.
 2. **Remove** the conversions binding the old DTO to the *live* `Document`
    (`From<&Document>` and `TryFrom<… for Document>`): a frozen tree cannot
    convert to a model it predates, and step 3 supersedes them.
@@ -547,40 +574,48 @@ When the `Document` wire format changes again:
    plus its `From<&Document>` and `TryFrom<… for Document>` conversions.
 4. **Add** the `StoredDocument::V0_NN_0` variant, tagged
    `#[serde(rename = "quillmark/document@0.NN.0")]`.
-5. **Write the migration**: `From<DocumentV0_93_0> for DocumentV0_NN_0` if
+5. **Write the migration**: `From<DocumentV0_112_0> for DocumentV0_NN_0` if
    the mapping cannot fail (a purely structural rename/restructure), or
-   `TryFrom<DocumentV0_93_0> for DocumentV0_NN_0` if it can reject, as the
-   V0_92_0 → V0_93_0 cold-import does for an over-nested legacy body. This is
-   the only real labor: it encodes how old fields map to the new model
-   (renames, restructures, defaults for new fields, and: for a `TryFrom`
-   hop: which malformed inputs get rejected).
-6. **Extend** the reader (each older blob migrates one hop, then chains).
-   Every arm below the newest already funnels through the V0_92_0 → V0_93_0
-   hop, which can reject, so every one of those arms threads `?`, whether
-   or not the new V0_93_0 → V0_NN_0 hop (shown here as infallible) adds
-   another:
+   `TryFrom<DocumentV0_112_0> for DocumentV0_NN_0` if it can reject, as the
+   V0_92_0 cold-import does for an over-nested legacy body and the V0_93_0 hop
+   does for a body that will not decode. This is the only real labor: it
+   encodes how old fields map to the new model (renames, restructures,
+   defaults for new fields, and: for a `TryFrom` hop: which malformed inputs
+   get rejected).
+6. **Extend** the reader. Each older blob migrates to the newest DTO, hopping
+   where a hop exists and entering directly where re-spelling backwards would
+   need an encoder the crate no longer has. Every arm below the newest is
+   fallible today, so every one threads `?`:
    ```rust
    match stored {
        StoredDocument::V0_NN_0(p) => Document::try_from(p),
-       StoredDocument::V0_93_0(p) => Document::try_from(DocumentV0_NN_0::from(p)),
-       StoredDocument::V0_92_0(p) => Document::try_from(DocumentV0_NN_0::from(
-           DocumentV0_93_0::try_from(p)?,
+       StoredDocument::V0_112_0(p) => Document::try_from(DocumentV0_NN_0::try_from(p)?),
+       StoredDocument::V0_93_0(p) => Document::try_from(DocumentV0_NN_0::try_from(
+           DocumentV0_112_0::try_from(p)?,
        )),
    }
    ```
-   If the new hop is itself a `TryFrom`, thread a second `?` after
-   `DocumentV0_NN_0::try_from(...)` in every arm.
+
+**A migration reaches the `body` and nothing else.** Every other stored content
+— a `richtext` or `plaintext` field, a `$seed` overlay — sits inside an opaque
+payload value carrying no schema tag, and a walk cannot tell one from host data
+that merely looks like it (`$ext` is arbitrary by contract). So a change to the
+*content* encoding is not migratable, and has to be readable instead: the
+decoder reads the old spelling wherever it meets it, and the schema bump records
+that the writer moved. Design a content change so a decoder can absorb it, or it
+cannot ship.
 
 A new frozen DTO can also reject at parse time through a custom
 `Deserialize` rather than through a `TryFrom` migration: `CanonicalContent`
-(the `body` field's type) normalizes and validates the embedded content,
+(the current `body` field's type) normalizes and validates the embedded content,
 failing with a serde error before any `TryFrom` in the chain above runs.
 Design a new DTO's `Deserialize` to fail the same way if it embeds
-structured (non-string) data of its own.
+structured (non-string) data of its own — and note that freezing it per step 1
+moves that check into the hop.
 
 Old and new DTOs **coexist** in `dto.rs`, so a row written by any
 still-supported past version always loads. Migrations chain
-(`V0_92_0 → V0_93_0 → V0_NN_0 → …`); only the newest DTO converts to the live
+(`V0_92_0 → V0_112_0 → V0_NN_0 → …`); only the newest DTO converts to the live
 `Document`, so each migration step stays small as versions accumulate. The
 cost is one frozen type tree per schema version plus one migration function
 per version bump.
@@ -603,7 +638,7 @@ sourcing it from a row count rather than a version number.
 
 ## Gotchas
 
-- The schema version is a hand-set constant (`STORAGE_V0_93_0`), **not**
+- The schema version is a hand-set constant (`STORAGE_V0_112_0`), **not**
   `CARGO_PKG_VERSION`: bumping it is a deliberate act tied to a model change.
 - Unknown schema versions are rejected on read, never silently ignored.
 - DTO type names carry version suffixes with underscores

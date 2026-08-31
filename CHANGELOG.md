@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+- feat(content)!: **every vocabulary member spells its payload in `attrs`.** The
+  canonical content had two spellings for one thing: a built-in put its payload
+  in named siblings (`{"kind":"heading","level":1}`), an unknown put it in one
+  opaque bag, and which a document used depended on whether the build that wrote
+  it happened to know the name. Promoting a name from unknown to built-in was
+  therefore an encoding change, and five mechanisms existed to bridge the split.
+  Now `Heading{level}` ⇄ `attrs.level`, `Code{lang}` ⇄ `attrs.lang`, `Link{url}`
+  ⇄ `attrs.url`, `Anchor{id}` ⇄ `attrs.id`, and `ListItem`'s
+  `ordered`/`start`/`ordinal` ⇄ the same three under `attrs`, with the envelope
+  keys (`kind`/`type`/`container`, `containers`, `continues`, `start`/`end`,
+  `instance`) staying siblings and an empty bag omitted. The Rust types are
+  unchanged — typed in memory, uniform on the wire. `fold_legacy_attrs`, the
+  `reject_*_attrs` family, `MarkKind::ord` and its placement rule, and
+  `RESERVED_*`'s wire role are all deleted; the canonical mark tie-break becomes
+  `MarkKind::sort_key`, the `(type, attrs)` pair the wire carries, which two
+  builds compute identically whether or not either knows the member. **Stored
+  documents need no migration**: the decoder reads the old spelling wherever the
+  `attrs` bag is absent. That is the load-bearing half — a `richtext` field
+  rests as a content object inside an opaque payload value carrying no schema
+  tag, so most stored content reaches no migration and a walk cannot safely find
+  it (`$ext` is arbitrary host data by contract). The fallback is frozen: unlike
+  the fold, a promotion neither grows it nor inherits it. The **break is at the
+  seam**: a host reading `line.level` / `line.lang` / `mark.url` / `mark.id` or a
+  list item's shape reads them under `attrs` (the TS narrowing types move too, so
+  `typecheck` reports it), and the authored lane — `overwrite`, `install`,
+  `CardInput.body`, and the op wire — *rejects* the old spelling rather than
+  reading it, so a stale write throws instead of landing somewhere it did not
+  aim. A foreign bag beside a built-in becomes legal in exchange, dropping unread
+  as it always did in effect. Canonical bytes move (`attrs` on built-ins, and
+  coincident marks reorder on the new tie-break), so **content hashes recompute
+  once**; generated Typst nests coincident wraps the other way for identical
+  glyphs, moving golden expectations. A consumer holding bare seam JSON outside a
+  stored document gets a hard break, having no tag to dispatch on. The storage
+  tag becomes `quillmark/document@0.112.0`; `@0.93.0` rows migrate forward on
+  read. See [0.111 → 0.112](docs/migrations/0.111-to-0.112.md).
 - feat(core)!: **the pointer tolerance reaches along a line, not just around the
   point.** A glyph's box is its run's ink height by its own advance, so the two
   axes fail differently: across a line the dead gap is the leading, a few points

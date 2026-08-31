@@ -356,7 +356,7 @@ Body.
         "expected seed variant in DTO: {json}"
     );
     assert!(
-        json.contains("quillmark/document@0.93.0"),
-        "expected 0.93.0 schema tag: {json}",
+        json.contains("quillmark/document@0.112.0"),
+        "expected 0.112.0 schema tag: {json}",
     );
 }

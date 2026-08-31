@@ -720,7 +720,12 @@ impl<'a> Emit<'a> {
 struct Wrap {
     start: usize,
     end: usize,
-    ord: u8,
+    /// The canonical order among coincident wraps: the mark's own tie-break, so
+    /// the nesting follows the stored order rather than a second one kept here.
+    /// Every wrap is a content-wrapping call, so the nesting it picks is
+    /// visually inert — `#strong[#emph[x]]` and `#emph[#strong[x]]` set the
+    /// same glyphs — and only the generated string moves.
+    ord: (String, String),
     open: String,
 }
 
@@ -745,7 +750,7 @@ fn clip_wraps_to_codes(wraps: &mut Vec<Wrap>, codes: &[(usize, usize)]) {
 }
 
 /// The mark boundary sweep, shared by prose inline emission and table-cell
-/// rendering: opens `wraps` (longer span first, then kind-ord) and
+/// rendering: opens `wraps` (longer span first, then the canonical mark order) and
 /// closes-and-reopens deeper survivors at overlaps. `emit_run(out, pos, tail)`
 /// writes the content at `pos` and returns the next position and the [`Tail`] it
 /// leaves. Every wrap `open` ends `[`, and a content block's head is a line
@@ -763,7 +768,7 @@ fn sweep_marks(
 ) {
     // Open marks, outermost first. Storing the index (not `(end, ord)`) keeps
     // each mark's identity, so a reopened mark re-emits its OWN delimiter: two
-    // same-`(ord, end)` links with distinct URLs must not collapse.
+    // same-`end` links must not collapse, whatever their urls.
     let mut stack: Vec<usize> = Vec::new();
     let mut pos = lo;
     while pos <= hi {
@@ -788,7 +793,7 @@ fn sweep_marks(
             break;
         }
         let mut opening: Vec<usize> = (0..wraps.len()).filter(|&wi| wraps[wi].start == pos).collect();
-        opening.sort_by(|&a, &b| wraps[b].end.cmp(&wraps[a].end).then(wraps[a].ord.cmp(&wraps[b].ord)));
+        opening.sort_by(|&a, &b| wraps[b].end.cmp(&wraps[a].end).then_with(|| wraps[a].ord.cmp(&wraps[b].ord)));
         for wi in opening {
             out.push_str(&wraps[wi].open);
             tail = Tail::Anchor;
@@ -852,14 +857,14 @@ fn wraps_and_codes(marks: &[Mark], lo: usize, hi: usize) -> (Vec<Wrap>, Vec<(usi
                 wraps.push(Wrap {
                     start: s,
                     end: e,
-                    ord: m.kind.ord(),
+                    ord: m.kind.sort_key(),
                     open: wrap_open(&m.kind),
                 });
             }
             MarkKind::Link { url } => wraps.push(Wrap {
                 start: s,
                 end: e,
-                ord: m.kind.ord(),
+                ord: m.kind.sort_key(),
                 open: format!("#link(\"{}\")[", escape_string(url)),
             }),
             // `Anchor` is identity, `Unknown` has no Typst spelling, and
@@ -1329,11 +1334,11 @@ mod tests {
     }
 
     /// Coincident `strong`+`emph` lose their source nesting order at import, so
-    /// the emitter nests canonically by kind-ord.
+    /// the emitter nests them in the order the canonical form stores.
     #[test]
     fn coincident_strong_emph_nests_canonically() {
         for m in ["**_x_**", "***x***", "_**x**_"] {
-            assert_eq!(emit(m).markup, "#strong[#emph[x]]\n\n");
+            assert_eq!(emit(m).markup, "#emph[#strong[x]]\n\n");
         }
     }
 

@@ -305,6 +305,16 @@ proptest! {
         prop_assert_eq!(back.to_canonical_json(), json);
     }
 
+    /// Property 2a': the *value* fixed point, which is the other promise and
+    /// not the same one. Bytes can hold while a value that encodes to some
+    /// other value's bytes loses this.
+    #[test]
+    fn canonical_value_fixed_point(md in document()) {
+        let rt = from_markdown(&md).unwrap();
+        let back = Content::from_canonical_json(&rt.to_canonical_json()).unwrap();
+        prop_assert_eq!(back, rt);
+    }
+
     /// Property 2b: canonical bytes are insensitive to mark *discovery* order.
     /// Islands are ordered by slot position, so only mark order is free.
     #[test]

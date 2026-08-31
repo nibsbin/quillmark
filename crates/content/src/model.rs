@@ -38,7 +38,7 @@ pub struct Content {
     /// identity to reconcile.
     pub lines: Vec<Line>,
     /// Marks over char ranges, kept normalized: sorted by
-    /// `(start, end, kind-ord, attrs)`, same-kind formatting marks unioned.
+    /// `(start, end, type, attrs)`, same-kind formatting marks unioned.
     pub marks: Vec<Mark>,
     /// One entry per [`ISLAND_SLOT`], in slot order (ascending char position).
     pub islands: Vec<Island>,
@@ -129,6 +129,62 @@ impl LineKind {
     pub fn projects_as_para(&self) -> bool {
         matches!(self, LineKind::Para | LineKind::Unknown { .. })
     }
+
+    /// The wire `kind` name.
+    pub fn tag(&self) -> &str {
+        match self {
+            LineKind::Para => "para",
+            LineKind::Heading { .. } => "heading",
+            LineKind::Code { .. } => "code",
+            LineKind::Island => "island",
+            LineKind::Rule => "rule",
+            LineKind::Unknown { tag, .. } => tag,
+        }
+    }
+
+    /// The payload bag, one spelling for every member of the vocabulary.
+    pub fn attrs(&self) -> Cow<'_, JsonValue> {
+        match self {
+            LineKind::Para | LineKind::Island | LineKind::Rule => Cow::Owned(JsonValue::Null),
+            LineKind::Heading { level } => Cow::Owned(bag([("level", (*level).into())])),
+            LineKind::Code { lang } => Cow::Owned(match lang {
+                Some(l) => bag([("lang", l.as_str().into())]),
+                None => JsonValue::Null,
+            }),
+            LineKind::Unknown { attrs, .. } => Cow::Borrowed(attrs),
+        }
+    }
+}
+
+/// A payload bag from its entries, which must be listed in ascending key order:
+/// [`Content::normalize`] canonicalizes an opaque bag, and a minted one is
+/// canonical by construction.
+fn bag<const N: usize>(entries: [(&str, JsonValue); N]) -> JsonValue {
+    debug_assert!(entries.windows(2).all(|w| w[0].0 < w[1].0));
+    let mut m = serde_json::Map::with_capacity(N);
+    for (k, v) in entries {
+        m.insert(k.to_string(), v);
+    }
+    JsonValue::Object(m)
+}
+
+/// Whether a payload bag holds nothing: the two spellings of "no payload" a
+/// decode can produce (an absent key reads as `Null`, an empty object is one).
+/// [`Content::normalize`] collapses them to `Null`, so a bag's presence on the
+/// wire stays a pure function of the value.
+pub(crate) fn is_empty_bag(v: &JsonValue) -> bool {
+    match v {
+        JsonValue::Null => true,
+        JsonValue::Object(m) => m.is_empty(),
+        _ => false,
+    }
+}
+
+/// Collapse an empty bag to the one spelling. See [`is_empty_bag`].
+fn collapse_empty_bag(v: &mut JsonValue) {
+    if is_empty_bag(v) {
+        *v = JsonValue::Null;
+    }
 }
 
 /// A container a line nests inside. The ancestor path is a `Vec<Container>`.
@@ -195,6 +251,34 @@ impl Container {
             Container::ListItem { instance, .. }
             | Container::Quote { instance }
             | Container::Unknown { instance, .. } => *instance,
+        }
+    }
+
+    /// The wire `container` name.
+    pub fn tag(&self) -> &str {
+        match self {
+            Container::ListItem { .. } => "list_item",
+            Container::Quote { .. } => "quote",
+            Container::Unknown { tag, .. } => tag,
+        }
+    }
+
+    /// The payload bag, one spelling for every member of the vocabulary.
+    /// `instance` is not in it: it is an envelope key, carried on every arm.
+    pub fn attrs(&self) -> Cow<'_, JsonValue> {
+        match self {
+            Container::ListItem {
+                ordered,
+                start,
+                ordinal,
+                ..
+            } => Cow::Owned(bag([
+                ("ordered", (*ordered).into()),
+                ("ordinal", (*ordinal).into()),
+                ("start", (*start).into()),
+            ])),
+            Container::Quote { .. } => Cow::Owned(JsonValue::Null),
+            Container::Unknown { attrs, .. } => Cow::Borrowed(attrs),
         }
     }
 
@@ -532,41 +616,56 @@ impl MarkKind {
         )
     }
 
-    /// Total order over kinds for the canonical sort tie-break, after
-    /// `(start, end)`. Stable across releases: part of the freeze.
-    ///
-    /// A new variant takes the slot immediately **before** [`MarkKind::Unknown`],
-    /// pushing `Unknown` up by one: the only placement where a build that knows
-    /// the type and a build that reads it as `Unknown` order it identically
-    /// against every built-in. Anywhere else is two canonical forms for one
-    /// document, one per reader.
-    pub fn ord(&self) -> u8 {
+    /// The wire `type` name.
+    pub fn tag(&self) -> &str {
         match self {
-            MarkKind::Strong => 0,
-            MarkKind::Emph => 1,
-            MarkKind::Underline => 2,
-            MarkKind::Strike => 3,
-            MarkKind::Code => 4,
-            MarkKind::Link { .. } => 5,
-            MarkKind::Anchor { .. } => 6,
-            MarkKind::Unknown { .. } => 7,
+            MarkKind::Strong => "strong",
+            MarkKind::Emph => "emph",
+            MarkKind::Underline => "underline",
+            MarkKind::Strike => "strike",
+            MarkKind::Code => "code",
+            MarkKind::Link { .. } => "link",
+            MarkKind::Anchor { .. } => "anchor",
+            MarkKind::Unknown { tag, .. } => tag,
         }
     }
 
-    /// Attribute tie-break string, appended after `ord` in the canonical sort so
-    /// two marks that differ only in attrs order deterministically. Also the
-    /// grouping key for same-kind union (two formatting marks union only when
-    /// this matches; e.g. two `link`s union only at the same url).
-    pub fn attrs_key(&self) -> String {
+    /// The payload bag, one spelling for every member of the vocabulary.
+    pub fn attrs(&self) -> Cow<'_, JsonValue> {
         match self {
-            MarkKind::Link { url } => url.clone(),
-            MarkKind::Anchor { id } => id.clone(),
-            MarkKind::Unknown { tag, attrs } => {
-                // Attrs sorted so the key is order-insensitive.
-                format!("{}\u{0}{}", tag, canonical_json_string(attrs))
-            }
-            _ => String::new(),
+            MarkKind::Strong
+            | MarkKind::Emph
+            | MarkKind::Underline
+            | MarkKind::Strike
+            | MarkKind::Code => Cow::Owned(JsonValue::Null),
+            MarkKind::Link { url } => Cow::Owned(bag([("url", url.as_str().into())])),
+            MarkKind::Anchor { id } => Cow::Owned(bag([("id", id.as_str().into())])),
+            MarkKind::Unknown { attrs, .. } => Cow::Borrowed(attrs),
         }
+    }
+
+    /// The canonical sort tie-break after `(start, end)`, and the grouping key
+    /// for same-kind union (two `link`s union only at one url).
+    ///
+    /// It is the pair the **wire** carries, read back off the value: a build
+    /// that knows a member and a build that reads it as [`MarkKind::Unknown`]
+    /// compute the same key from the same bytes, so one document has one
+    /// canonical form whatever either build's vocabulary is. That is what
+    /// replaces the ordinal this tie-break used to spend, whose placement rule
+    /// could only ever hold against the built-ins.
+    ///
+    /// The attrs half comes from [`attrs`](Self::attrs) rather than a string per
+    /// arm, so it cannot disagree with what the encoder writes — which it would
+    /// do first on a member whose payload is optional, where the two builds see
+    /// an empty bag and an absent one.
+    pub fn sort_key(&self) -> (String, String) {
+        let attrs = self.attrs();
+        let attrs = if is_empty_bag(&attrs) {
+            String::new()
+        } else {
+            canonical_json_string(&attrs)
+        };
+        (self.tag().to_string(), attrs)
     }
 }
 
@@ -902,10 +1001,12 @@ impl Content {
             }
             if let LineKind::Unknown { attrs, .. } = &mut line.kind {
                 canonicalize_keys(attrs);
+                collapse_empty_bag(attrs);
             }
             for c in &mut line.containers {
                 if let Container::Unknown { attrs, .. } = c {
                     canonicalize_keys(attrs);
+                    collapse_empty_bag(attrs);
                 }
             }
         }
@@ -919,6 +1020,7 @@ impl Content {
         for mark in &mut self.marks {
             if let MarkKind::Unknown { attrs, .. } = &mut mark.kind {
                 canonicalize_keys(attrs);
+                collapse_empty_bag(attrs);
             }
         }
         // A formatting mark's edges never sit on a line boundary: markdown can't
@@ -1231,8 +1333,8 @@ fn canonicalize_containers(lines: &mut [Line]) {
 pub(crate) fn normalize_marks(marks: Vec<Mark>) -> Vec<Mark> {
     use std::collections::BTreeMap;
 
-    let mut groups: BTreeMap<(u8, String), Vec<(Usv, Usv)>> = BTreeMap::new();
-    let mut kind_of: BTreeMap<(u8, String), MarkKind> = BTreeMap::new();
+    let mut groups: BTreeMap<(String, String), Vec<(Usv, Usv)>> = BTreeMap::new();
+    let mut kind_of: BTreeMap<(String, String), MarkKind> = BTreeMap::new();
     let mut passthrough: Vec<Mark> = Vec::new();
 
     for m in marks {
@@ -1240,7 +1342,7 @@ pub(crate) fn normalize_marks(marks: Vec<Mark>) -> Vec<Mark> {
             if m.start >= m.end {
                 continue; // drop zero-width / inverted formatting
             }
-            let key = (m.kind.ord(), m.kind.attrs_key());
+            let key = m.kind.sort_key();
             kind_of.entry(key.clone()).or_insert_with(|| m.kind.clone());
             groups.entry(key).or_default().push((m.start, m.end));
         } else {
@@ -1274,9 +1376,9 @@ pub(crate) fn normalize_marks(marks: Vec<Mark>) -> Vec<Mark> {
     }
     out.extend(passthrough);
 
-    // Key cached per mark so `attrs_key`'s allocation runs once each, not once
+    // Key cached per mark so `sort_key`'s allocation runs once each, not once
     // per comparison.
-    out.sort_by_cached_key(|m| (m.start, m.end, m.kind.ord(), m.kind.attrs_key()));
+    out.sort_by_cached_key(|m| (m.start, m.end, m.kind.sort_key()));
     // Two marks equal in range, kind and attrs are one handle recorded twice:
     // redundant bytes, not two handles. The sort makes any such pair adjacent.
     out.dedup();

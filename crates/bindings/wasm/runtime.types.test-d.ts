@@ -209,27 +209,27 @@ if (isImageIsland(guardIsland)) {
 
 declare const guardMark: ContentMark;
 if (isLinkMark(guardMark)) {
-	const url: string = guardMark.url;
+	const url: string = guardMark.attrs.url;
 	void url;
 }
 if (isAnchorMark(guardMark)) {
-	const id: string = guardMark.id;
+	const id: string = guardMark.attrs.id;
 	void id;
 }
 
 declare const guardLine: ContentLine;
 if (isHeadingLine(guardLine)) {
-	const level: number = guardLine.level;
+	const level: number = guardLine.attrs.level;
 	void level;
 }
 if (isCodeLine(guardLine)) {
-	const lang: string | undefined = guardLine.lang;
+	const lang: string | undefined = guardLine.attrs?.lang;
 	void lang;
 }
 
 declare const guardContainer: ContentContainer;
 if (isListItemContainer(guardContainer)) {
-	const ordinal: number = guardContainer.ordinal;
+	const ordinal: number = guardContainer.attrs.ordinal;
 	void ordinal;
 }
 
