@@ -198,6 +198,24 @@ fn bag_from_wire(
     Ok(v.clone())
 }
 
+/// [`bag_from_wire`] for a carrier axis' `attrs`: an empty bag reads as the
+/// absent one. The encoder omits it either way, so collapsing here is what
+/// makes a value decoded from one spelling equal one decoded from the other.
+/// `normalize` cannot reach every such value — a [`crate::ops::MarkOp`] carries
+/// a kind with no content to be normalized with.
+///
+/// Island `props` keeps both spellings, and takes [`bag_from_wire`] directly:
+/// it is written on every island, so `{}` there is a value rather than an
+/// omission.
+fn attrs_from_wire(o: &Map<String, Value>, what: &'static str) -> Result<Value, ParseError> {
+    let attrs = bag_from_wire(o, "attrs", what)?;
+    Ok(if crate::model::is_empty_bag(&attrs) {
+        Value::Null
+    } else {
+        attrs
+    })
+}
+
 /// Read a wire position as a [`Usv`] index. **Checked**, not `as usize`: the
 /// deployment target is wasm32, where the truncating cast turns `2^32 + 5` into
 /// an in-range `5`, landing a mark at the wrong position instead of rejecting
@@ -223,41 +241,64 @@ fn arr_or_empty<'a>(v: &'a Value, key: &str) -> &'a [Value] {
     v.get(key).map(as_slice).unwrap_or_default()
 }
 
-/// Fold a legacy `attrs` bag into the object when `tag` names a **built-in**:
-/// the storage lane's promotion path. A blob written while `callout` was outside
-/// this build's vocabulary carries `{"kind":"callout","attrs":{…}}`, and the
-/// release that promotes `callout` reads named siblings that blob never had,
-/// dropping its payload unread. Folding the bag in before the built-in arms run
-/// makes each promotion carry its own legacy form structurally.
-///
-/// Three bounds. A named sibling wins over an `attrs` entry. Only a reserved
-/// name folds, so an unknown's bag stays its opaque payload. The discriminator
-/// is read from the *original* object, so a bag holding a
-/// `kind`/`type`/`container` key cannot re-target the match.
-///
-/// The authored lane rejects `attrs` beside a built-in up front, so it never
-/// arrives here with this shape.
-///
-/// Depth-checked like [`bag_from_wire`]: the fold deep-clones the object it
-/// folds into.
-fn fold_legacy_attrs<'a>(
-    o: &'a Map<String, Value>,
-    tag: &str,
-    reserved: &[&str],
-    what: &'static str,
-) -> Result<Cow<'a, Map<String, Value>>, ParseError> {
-    let Some(bag @ Value::Object(attrs)) = o.get("attrs") else {
-        return Ok(Cow::Borrowed(o));
-    };
-    if attrs.is_empty() || !reserved.contains(&tag) {
-        return Ok(Cow::Borrowed(o));
+// The `@0.93.0` payload keys, per built-in name: the spelling that put a
+// built-in's payload in named siblings. One frozen table, read from both sides —
+// [`payload`] falls back to exactly the keys [`reject_legacy_siblings`] refuses
+// — so a key a later promotion adds is in neither, and the two spellings stay
+// split by release rather than by which names a build knows.
+
+/// The `@0.93.0` payload keys of a built-in `kind`.
+fn legacy_line_kind_keys(tag: &str) -> &'static [&'static str] {
+    match tag {
+        "heading" => &["level"],
+        "code" => &["lang"],
+        _ => &[],
     }
-    crate::model::check_json_depth(bag, what).map_err(ParseError::Invalid)?;
-    let mut folded = o.clone();
-    for (k, v) in attrs {
-        folded.entry(k.clone()).or_insert_with(|| v.clone());
+}
+
+/// The `@0.93.0` payload keys of a built-in `container`. `instance` is not among
+/// them: it was an envelope key then and stays one.
+fn legacy_container_keys(tag: &str) -> &'static [&'static str] {
+    match tag {
+        "list_item" => &["ordered", "ordinal", "start"],
+        _ => &[],
     }
-    Ok(Cow::Owned(folded))
+}
+
+/// The `@0.93.0` payload keys of a built-in mark `type`. `start`/`end` are not
+/// among them: they are the mark's own envelope.
+fn legacy_mark_keys(ty: &str) -> &'static [&'static str] {
+    match ty {
+        "link" => &["url"],
+        "anchor" => &["id"],
+        _ => &[],
+    }
+}
+
+/// One entry of a built-in's payload bag: `attrs.<key>`, or the named sibling
+/// `<key>` where there is no bag and `key` is one of `legacy` — the `@0.93.0`
+/// spelling, which storage still holds and no migration reaches.
+///
+/// Unambiguous because a bag's presence is a pure function of the value: a
+/// built-in carrying a payload always writes one, so an absent bag means either
+/// the sibling spelling or an empty payload, and those agree on every key. An
+/// empty bag is an absent one here as it is everywhere else, so the two
+/// spellings of "no payload" cannot answer differently.
+fn payload<'a>(o: &'a Map<String, Value>, legacy: &[&str], key: &'static str) -> Option<&'a Value> {
+    match o.get("attrs").filter(|a| !crate::model::is_empty_bag(a)) {
+        Some(attrs) => attrs.get(key),
+        None if legacy.contains(&key) => o.get(key),
+        None => None,
+    }
+}
+
+/// Write a payload bag into an encoder's own map, omitting an empty one:
+/// presence is a pure function of the value, the rule `continues: false`
+/// already follows.
+fn insert_attrs(m: &mut Map<String, Value>, attrs: Cow<'_, Value>) {
+    if !crate::model::is_empty_bag(&attrs) {
+        m.insert("attrs".into(), attrs.into_owned());
+    }
 }
 
 /// Encode a [`LineKind`] into its canonical `kind` object (`{"kind":"para"}`,
@@ -269,34 +310,13 @@ pub fn line_kind_to_value(kind: &LineKind) -> Value {
 /// The same fields unwrapped, for [`line_to_value`], which flattens them beside
 /// a line's own keys.
 fn line_kind_fields(kind: &LineKind) -> Map<String, Value> {
+    // One arm for the whole vocabulary: the tag *is* the discriminator and the
+    // payload rides the `attrs` bag whether or not this build knows the role, so
+    // a reader lacking it carries the line whole and the build that gains it
+    // reads what the reader wrote.
     let mut m = Map::new();
-    match kind {
-        LineKind::Para => {
-            m.insert("kind".into(), "para".into());
-        }
-        LineKind::Heading { level } => {
-            m.insert("kind".into(), "heading".into());
-            m.insert("level".into(), Value::from(*level));
-        }
-        LineKind::Code { lang } => {
-            m.insert("kind".into(), "code".into());
-            if let Some(l) = lang {
-                m.insert("lang".into(), Value::String(l.clone()));
-            }
-        }
-        LineKind::Island => {
-            m.insert("kind".into(), "island".into());
-        }
-        LineKind::Rule => {
-            m.insert("kind".into(), "rule".into());
-        }
-        // The tag *is* the discriminator and the payload rides one opaque
-        // `attrs` bag, so a reader lacking the role still carries it whole.
-        LineKind::Unknown { tag, attrs } => {
-            m.insert("kind".into(), Value::String(tag.clone()));
-            m.insert("attrs".into(), attrs.clone());
-        }
-    }
+    insert_attrs(&mut m, kind.attrs());
+    m.insert("kind".into(), Value::String(kind.tag().to_string()));
     m
 }
 
@@ -309,12 +329,11 @@ pub fn line_kind_from_value(v: &Value) -> Result<LineKind, ParseError> {
         .get("kind")
         .and_then(Value::as_str)
         .ok_or(ParseError::Shape("line kind"))?;
-    let o = fold_legacy_attrs(o, tag, Content::RESERVED_LINE_KINDS, "line attrs")?;
+    let legacy = legacy_line_kind_keys(tag);
     match tag {
         "para" => Ok(LineKind::Para),
         "heading" => {
-            let level = o
-                .get("level")
+            let level = payload(o, legacy, "level")
                 .and_then(Value::as_u64)
                 .ok_or(ParseError::Shape("heading level"))?;
             if !(1..=6).contains(&level) {
@@ -323,8 +342,7 @@ pub fn line_kind_from_value(v: &Value) -> Result<LineKind, ParseError> {
             Ok(LineKind::Heading { level: level as u8 })
         }
         "code" => Ok(LineKind::Code {
-            lang: o
-                .get("lang")
+            lang: payload(o, legacy, "lang")
                 .and_then(Value::as_str)
                 .map(crate::import::sanitize_lang)
                 .filter(|l| !l.is_empty()),
@@ -335,7 +353,7 @@ pub fn line_kind_from_value(v: &Value) -> Result<LineKind, ParseError> {
         // projected as `Para`, so the document still opens.
         other => Ok(LineKind::Unknown {
             tag: other.to_string(),
-            attrs: bag_from_wire(&o, "attrs", "line attrs")?,
+            attrs: attrs_from_wire(o, "line attrs")?,
         }),
     }
 }
@@ -387,32 +405,14 @@ pub fn container_to_value(c: &Container) -> Value {
 
 fn container_to_value_with(c: &Container, zero: ZeroInstance) -> Value {
     let mut m = Map::new();
-    match c {
-        Container::ListItem {
-            ordered,
-            start,
-            ordinal,
-            ..
-        } => {
-            m.insert("container".into(), "list_item".into());
-            m.insert("ordered".into(), Value::Bool(*ordered));
-            m.insert("ordinal".into(), Value::from(*ordinal));
-            m.insert("start".into(), Value::from(*start));
-        }
-        Container::Quote { .. } => {
-            m.insert("container".into(), "quote".into());
-        }
-        Container::Unknown { tag, attrs, .. } => {
-            m.insert("attrs".into(), attrs.clone());
-            m.insert("container".into(), Value::String(tag.clone()));
-        }
-    }
+    insert_attrs(&mut m, c.attrs());
+    m.insert("container".into(), Value::String(c.tag().to_string()));
+    // Not payload: the discriminator that keeps two adjacent same-shape runs
+    // apart is an envelope key, carried on every arm including `Unknown`.
     if c.instance() != 0 || zero == ZeroInstance::Spell {
         m.insert("instance".into(), Value::from(c.instance()));
     }
-    // `instance` sorts between `container` and the arm's own keys, so this one
-    // encoder cannot settle its order at the insert either.
-    Value::Object(sort_own_keys(m))
+    Value::Object(m)
 }
 
 /// Decode a [`Container`] from its canonical wire object.
@@ -422,13 +422,19 @@ pub fn container_from_value(v: &Value) -> Result<Container, ParseError> {
         .get("container")
         .and_then(Value::as_str)
         .ok_or(ParseError::Shape("container kind"))?;
-    let o = fold_legacy_attrs(o, tag, Content::RESERVED_CONTAINERS, "container attrs")?;
     let instance = o.get("instance").and_then(Value::as_u64).unwrap_or(0);
+    let legacy = legacy_container_keys(tag);
     match tag {
         "list_item" => Ok(Container::ListItem {
-            ordered: o.get("ordered").and_then(Value::as_bool).unwrap_or(false),
-            start: o.get("start").and_then(Value::as_u64).unwrap_or(1),
-            ordinal: o.get("ordinal").and_then(Value::as_u64).unwrap_or(0),
+            ordered: payload(o, legacy, "ordered")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            start: payload(o, legacy, "start")
+                .and_then(Value::as_u64)
+                .unwrap_or(1),
+            ordinal: payload(o, legacy, "ordinal")
+                .and_then(Value::as_u64)
+                .unwrap_or(0),
             instance,
         }),
         "quote" => Ok(Container::Quote { instance }),
@@ -436,7 +442,7 @@ pub fn container_from_value(v: &Value) -> Result<Container, ParseError> {
         // transparently.
         other => Ok(Container::Unknown {
             tag: other.to_string(),
-            attrs: bag_from_wire(&o, "attrs", "container attrs")?,
+            attrs: attrs_from_wire(o, "container attrs")?,
             instance,
         }),
     }
@@ -445,41 +451,11 @@ pub fn container_from_value(v: &Value) -> Result<Container, ParseError> {
 /// Encode a [`Mark`] (`start`, `end`, `type`, …) into its canonical wire object.
 pub fn mark_to_value(mark: &Mark) -> Value {
     let mut m = Map::new();
-    m.insert("start".into(), Value::from(mark.start));
+    insert_attrs(&mut m, mark.kind.attrs());
     m.insert("end".into(), Value::from(mark.end));
-    match &mark.kind {
-        MarkKind::Strong => {
-            m.insert("type".into(), "strong".into());
-        }
-        MarkKind::Emph => {
-            m.insert("type".into(), "emph".into());
-        }
-        MarkKind::Underline => {
-            m.insert("type".into(), "underline".into());
-        }
-        MarkKind::Strike => {
-            m.insert("type".into(), "strike".into());
-        }
-        MarkKind::Code => {
-            m.insert("type".into(), "code".into());
-        }
-        MarkKind::Link { url } => {
-            m.insert("type".into(), "link".into());
-            m.insert("url".into(), Value::String(url.clone()));
-        }
-        MarkKind::Anchor { id } => {
-            m.insert("type".into(), "anchor".into());
-            m.insert("id".into(), Value::String(id.clone()));
-        }
-        MarkKind::Unknown { tag, attrs } => {
-            m.insert("type".into(), Value::String(tag.clone()));
-            m.insert("attrs".into(), attrs.clone());
-        }
-    }
-    // A kind's own keys do not all sort after `start`/`end` — `attrs` precedes
-    // both, `id` falls between them — so this one encoder cannot settle its
-    // order at the insert.
-    Value::Object(sort_own_keys(m))
+    m.insert("start".into(), Value::from(mark.start));
+    m.insert("type".into(), Value::String(mark.kind.tag().to_string()));
+    Value::Object(m)
 }
 
 /// What every mark carries whatever its type.
@@ -518,9 +494,7 @@ pub fn mark_from_value(v: &Value) -> Result<Mark, ParseError> {
         end,
         ty,
     } = mark_shape(v)?;
-    // After the shape read, not inside it: the fold's clone is exactly the cost
-    // `mark_shape` exists to let a verdict-only caller skip.
-    let o = fold_legacy_attrs(o, ty, Content::RESERVED_MARK_TYPES, "mark attrs")?;
+    let legacy = legacy_mark_keys(ty);
     let kind = match ty {
         "strong" => MarkKind::Strong,
         "emph" => MarkKind::Emph,
@@ -528,15 +502,13 @@ pub fn mark_from_value(v: &Value) -> Result<Mark, ParseError> {
         "strike" => MarkKind::Strike,
         "code" => MarkKind::Code,
         "link" => MarkKind::Link {
-            url: o
-                .get("url")
+            url: payload(o, legacy, "url")
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_string(),
         },
         "anchor" => MarkKind::Anchor {
-            id: o
-                .get("id")
+            id: payload(o, legacy, "id")
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_string(),
@@ -545,33 +517,34 @@ pub fn mark_from_value(v: &Value) -> Result<Mark, ParseError> {
         // whatever `attrs` it carried.
         other => MarkKind::Unknown {
             tag: other.to_string(),
-            attrs: bag_from_wire(&o, "attrs", "mark attrs")?,
+            attrs: attrs_from_wire(o, "mark attrs")?,
         },
     };
     Ok(Mark { start, end, kind })
 }
 
-// Authored-lane readers, strict about reserved-name reuse.
+// Authored-lane readers, strict about the payload spelling.
 //
-// The readers above resolve a built-in discriminator before the `Unknown`
-// fallthrough, so `{"kind": "para", "attrs": {…}}` decodes to `Para` and the
-// `attrs` are dropped unread. The two wire lanes want opposite answers to that
-// drop, and the seam is authored-now vs read-back:
+// [`payload`] reads a built-in's payload from a named sibling where there is no
+// bag, so `{"type": "link", "url": "…"}` decodes. The two wire lanes want
+// opposite answers to that, and the seam is authored-now vs read-back:
 //
-// - **Storage** (`Content::from_canonical_json`) stays lenient. A blob written
-//   when `callout` was unknown carries `{"kind": "callout", "attrs": {…}}`, and
-//   the release that makes `callout` a built-in must still open it.
+// - **Storage** (`Content::from_canonical_json`) stays lenient. Stored content
+//   in that spelling is mostly beyond any migration's reach: a `richtext` field
+//   rests as the content object inside an opaque payload value, with no schema
+//   tag over it.
 // - **Authored** (the `crate::ops` wire, and `install` through
 //   [`from_authored_value`]) rejects it: the host is writing now, so the shape
-//   means a stale copy of the built-in list and the drop is silent corruption.
+//   means a stale copy of the encoding and the read is a guess at its intent.
 //
-// The rule is narrow on purpose: `attrs` beside a *reserved* name, nothing else.
+// The rule is narrow on purpose: a *legacy payload key* beside the name that
+// spelled it, nothing else. It reads the same frozen table [`payload`] does.
 
-/// [`line_kind_from_value`] for the authored lane: `attrs` beside a built-in
-/// `kind`, or a `lang` the storage decode would reduce, is a shape error rather
-/// than a silent repair.
+/// [`line_kind_from_value`] for the authored lane: a legacy payload sibling, or
+/// a `lang` the storage decode would reduce, is a shape error rather than a
+/// silent repair.
 pub(crate) fn line_kind_from_authored_value(v: &Value) -> Result<LineKind, ParseError> {
-    reject_line_kind_attrs(v)?;
+    reject_line_kind_legacy(v)?;
     reject_unwritable_lang(v)?;
     line_kind_from_value(v)
 }
@@ -586,7 +559,8 @@ fn reject_unwritable_lang(v: &Value) -> Result<(), ParseError> {
     if o.get("kind").and_then(Value::as_str) != Some("code") {
         return Ok(());
     }
-    let Some(lang) = o.get("lang").and_then(Value::as_str) else {
+    let Some(lang) = payload(o, legacy_line_kind_keys("code"), "lang").and_then(Value::as_str)
+    else {
         return Ok(());
     };
     if crate::import::sanitize_lang(lang) != lang {
@@ -598,13 +572,13 @@ fn reject_unwritable_lang(v: &Value) -> Result<(), ParseError> {
 /// [`container_from_value`] for the authored lane. See
 /// [`line_kind_from_authored_value`].
 pub(crate) fn container_from_authored_value(v: &Value) -> Result<Container, ParseError> {
-    reject_container_attrs(v)?;
+    reject_container_legacy(v)?;
     container_from_value(v)
 }
 
 /// [`mark_from_value`] for the authored lane. See [`line_kind_from_authored_value`].
 pub(crate) fn mark_from_authored_value(v: &Value) -> Result<Mark, ParseError> {
-    reject_mark_attrs(v)?;
+    reject_mark_legacy(v)?;
     mark_from_value(v)
 }
 
@@ -612,35 +586,35 @@ pub(crate) fn mark_from_authored_value(v: &Value) -> Result<Mark, ParseError> {
 /// the only caller: [`parse_cell`] reads their marks leniently, so a cell mark
 /// reaches no strict decode that would raise the error on its own.
 pub(crate) fn reject_unreadable_mark(v: &Value) -> Result<(), ParseError> {
-    reject_mark_attrs(v)?;
+    reject_mark_legacy(v)?;
     mark_shape(v)?;
     Ok(())
 }
 
 /// [`from_canonical_value`] for a content the **host authored just now**: the
 /// `install` input, not a blob read back from storage. Same decode, plus the
-/// reserved-name rule on every axis [`Content::validate`] checks: line kinds,
+/// legacy-spelling rule on every axis [`Content::validate`] checks: line kinds,
 /// containers, prose marks, and table-cell marks.
 pub fn from_authored_value(v: &Value) -> Result<Normalized, ParseError> {
-    reject_reserved_attrs_deep(v)?;
+    reject_legacy_siblings_deep(v)?;
     from_canonical_value(v)
 }
 
 /// The authored-lane scan [`from_authored_value`] runs. Structural rather than a
 /// blind recursive walk: an unknown's `attrs` is opaque host payload that may
-/// legitimately contain an object spelled `{"type": "link", "attrs": …}`, and
+/// legitimately contain an object spelled `{"type": "link", "url": …}`, and
 /// rejecting that would make the carrier unable to carry.
-fn reject_reserved_attrs_deep(v: &Value) -> Result<(), ParseError> {
+fn reject_legacy_siblings_deep(v: &Value) -> Result<(), ParseError> {
     for line in arr_or_empty(v, "lines") {
-        reject_line_kind_attrs(line)?;
+        reject_line_kind_legacy(line)?;
         for c in arr_or_empty(line, "containers") {
-            reject_container_attrs(c)?;
+            reject_container_legacy(c)?;
         }
     }
-    // Only the reserved-name half here: a prose mark that will not parse is
+    // Only the legacy-spelling half here: a prose mark that will not parse is
     // rejected by the strict decode `from_canonical_value` runs next.
     for m in arr_or_empty(v, "marks") {
-        reject_mark_attrs(m)?;
+        reject_mark_legacy(m)?;
     }
     // Cell marks ride the prose mark shape, so the rule follows them in, plus
     // the readability check, since no strict decode reaches them. Dispatch goes
@@ -666,56 +640,44 @@ fn reject_reserved_attrs_deep(v: &Value) -> Result<(), ParseError> {
     Ok(())
 }
 
-fn reject_line_kind_attrs(v: &Value) -> Result<(), ParseError> {
-    reject_reserved_attrs(
-        v,
-        "kind",
-        Content::RESERVED_LINE_KINDS,
-        "attrs beside built-in kind",
-    )
+fn reject_line_kind_legacy(v: &Value) -> Result<(), ParseError> {
+    reject_legacy_siblings(v, "kind", legacy_line_kind_keys, "legacy kind payload")
 }
 
-fn reject_container_attrs(v: &Value) -> Result<(), ParseError> {
-    reject_reserved_attrs(
+fn reject_container_legacy(v: &Value) -> Result<(), ParseError> {
+    reject_legacy_siblings(
         v,
         "container",
-        Content::RESERVED_CONTAINERS,
-        "attrs beside built-in container",
+        legacy_container_keys,
+        "legacy container payload",
     )
 }
 
-fn reject_mark_attrs(v: &Value) -> Result<(), ParseError> {
-    reject_reserved_attrs(
-        v,
-        "type",
-        Content::RESERVED_MARK_TYPES,
-        "attrs beside built-in mark type",
-    )
+fn reject_mark_legacy(v: &Value) -> Result<(), ParseError> {
+    reject_legacy_siblings(v, "type", legacy_mark_keys, "legacy mark payload")
 }
 
-/// Error when `v` carries an `attrs` bag alongside a `discriminant` naming a
-/// built-in: the producer meant an unknown and named a known. A non-object or a
-/// missing/non-string discriminant is left to the reader that follows, which
-/// reports the shape error in its own terms.
+/// Error when `v` spells a built-in's payload the `@0.93.0` way, as a named
+/// sibling. A non-object or a missing/non-string discriminant is left to the
+/// reader that follows, which reports the shape error in its own terms.
 ///
-/// `attrs` is tested first: it is absent on all but the unknown arms, and
-/// `serde_json` runs with `preserve_order`, so each key probe hashes.
-fn reject_reserved_attrs(
+/// The storage lane reads that spelling; a host writing it *now* holds a stale
+/// copy of the encoding, and the sibling it means is not necessarily the one
+/// [`payload`] would read — a bag beside it wins, so the write would land
+/// somewhere the host did not aim.
+fn reject_legacy_siblings(
     v: &Value,
     discriminant: &str,
-    reserved: &[&str],
+    legacy: fn(&str) -> &'static [&'static str],
     err: &'static str,
 ) -> Result<(), ParseError> {
     let Some(o) = v.as_object() else {
         return Ok(());
     };
-    if !o.contains_key("attrs") {
-        return Ok(());
-    }
     let Some(tag) = o.get(discriminant).and_then(Value::as_str) else {
         return Ok(());
     };
-    if reserved.contains(&tag) {
+    if legacy(tag).iter().any(|k| o.contains_key(*k)) {
         return Err(ParseError::Shape(err));
     }
     Ok(())
@@ -956,13 +918,13 @@ mod tests {
     /// carry an adjacent same-shape sibling.
     #[test]
     fn instance_is_absent_from_the_wire_until_it_is_needed() {
-        let plain = r#"{"islands":[],"lines":[{"containers":[{"container":"list_item","ordered":false,"ordinal":0,"start":1}],"kind":"para"},{"containers":[{"container":"list_item","ordered":false,"ordinal":1,"start":1}],"kind":"para"}],"marks":[],"text":"a\nb"}"#;
+        let plain = r#"{"islands":[],"lines":[{"containers":[{"attrs":{"ordered":false,"ordinal":0,"start":1},"container":"list_item"}],"kind":"para"},{"containers":[{"attrs":{"ordered":false,"ordinal":1,"start":1},"container":"list_item"}],"kind":"para"}],"marks":[],"text":"a\nb"}"#;
         let rt = Content::from_canonical_json(plain).expect("decodes");
         assert_eq!(rt.to_canonical_json(), plain, "byte layout moved");
         assert!(rt.lines.iter().all(|l| l.containers[0].instance() == 0));
 
         // Two adjacent one-item lists: the one shape that spends the key.
-        let two = r#"{"islands":[],"lines":[{"containers":[{"container":"list_item","ordered":false,"ordinal":0,"start":1}],"kind":"para"},{"containers":[{"container":"list_item","instance":1,"ordered":false,"ordinal":0,"start":1}],"kind":"para"}],"marks":[],"text":"a\nb"}"#;
+        let two = r#"{"islands":[],"lines":[{"containers":[{"attrs":{"ordered":false,"ordinal":0,"start":1},"container":"list_item"}],"kind":"para"},{"containers":[{"attrs":{"ordered":false,"ordinal":0,"start":1},"container":"list_item","instance":1}],"kind":"para"}],"marks":[],"text":"a\nb"}"#;
         let rt = Content::from_canonical_json(two).expect("decodes");
         assert_eq!(rt.to_canonical_json(), two);
         assert_eq!(rt.lines[1].containers[0].instance(), 1);
@@ -1078,7 +1040,7 @@ mod tests {
                 "{what} accepted a 1 000-deep payload"
             );
             // The authored lane funnels through the same decode, so it refuses
-            // the same shape rather than trapping on the reserved-name scan.
+            // the same shape rather than trapping on its own scan first.
             assert!(matches!(
                 from_authored_value(&v),
                 Err(ParseError::Invalid(Invariant::JsonTooDeep { .. }))
@@ -1120,20 +1082,25 @@ mod tests {
         );
     }
 
-    /// The legacy-attrs fold is the one frame that spends the depth without
-    /// retaining the bag: it deep-clones the object it folds into, and runs for
-    /// a *built-in* name, where no `Unknown` arm reads the bag at all.
+    /// The depth cap guards what the decode **retains**. A bag beside a built-in
+    /// that carries no payload is read by nobody and cloned by nobody, so it
+    /// costs no frames and needs no verdict: it drops with the caller's own
+    /// `Value`, which spends the frames it was always going to spend.
     #[test]
-    fn deep_json_payload_is_rejected_before_the_legacy_attrs_fold() {
+    fn a_deep_bag_no_arm_reads_is_dropped_rather_than_refused() {
         let mut deep = Value::Null;
         for _ in 0..1_000 {
             deep = serde_json::json!({"a": deep});
         }
-        // `para` is reserved, `attrs` is a non-empty object: the fold path.
-        let v = serde_json::json!({"text":"x","lines":[{"kind":"para","containers":[],"attrs":deep}],
-          "marks":[],"islands":[]});
+        let line = |kind: &str| {
+            serde_json::json!({"text":"x","lines":[{"kind":kind,"containers":[],"attrs":deep}],
+              "marks":[],"islands":[]})
+        };
+        // `para` carries no payload: the bag is foreign, and drops unread.
+        assert!(from_canonical_value(&line("para")).is_ok());
+        // `callout` is unknown, so the bag *is* its payload and is retained.
         assert_eq!(
-            from_canonical_value(&v),
+            from_canonical_value(&line("callout")),
             Err(ParseError::Invalid(Invariant::JsonTooDeep {
                 what: "line attrs",
                 max: crate::MAX_JSON_DEPTH,
@@ -1330,11 +1297,41 @@ mod tests {
 
     #[test]
     fn golden_bytes_are_feature_independent() {
-        // If this string changes, the freeze changed: bump the schema version.
+        // If either string changes, the freeze changed: bump the schema version.
         let rt = sample().into_normalized();
         assert_eq!(
             rt.to_canonical_json(),
             r#"{"islands":[],"lines":[{"containers":[],"kind":"para"}],"marks":[{"end":5,"start":0,"type":"emph"},{"end":11,"start":6,"type":"strong"}],"text":"hello world"}"#
+        );
+
+        // A payload on all three carrier axes. The sample above spends none, so
+        // on its own it sleeps through a change to *how* a payload is spelled —
+        // which is the change a schema bump is most likely to be.
+        let mut rt = Content::empty();
+        rt.text = "hi".into();
+        rt.lines = vec![Line {
+            kind: LineKind::Heading { level: 2 },
+            containers: vec![Container::ListItem {
+                ordered: true,
+                start: 3,
+                ordinal: 0,
+                instance: 0,
+            }],
+            continues: false,
+        }];
+        rt.marks = vec![Mark {
+            start: 0,
+            end: 2,
+            kind: MarkKind::Link { url: "u".into() },
+        }];
+        assert_eq!(
+            rt.into_normalized().to_canonical_json(),
+            concat!(
+                r#"{"islands":[],"lines":[{"attrs":{"level":2},"containers":"#,
+                r#"[{"attrs":{"ordered":true,"ordinal":0,"start":3},"container":"list_item"}],"#,
+                r#""kind":"heading"}],"marks":[{"attrs":{"url":"u"},"end":2,"start":0,"type":"link"}],"#,
+                r#""text":"hi"}"#
+            )
         );
     }
 
@@ -1467,24 +1464,24 @@ mod tests {
         );
     }
 
-    /// The authored lane applies the reserved-name rule the decoders cannot: by
-    /// the time a lenient reader has resolved `"para"` to `Para`, the `attrs`
-    /// are gone and `validate` has nothing to object to. The last case is a cell
-    /// mark that will not parse at all, the one axis with no strict decode
-    /// behind it.
+    /// The authored lane refuses the `@0.93.0` payload spelling the storage lane
+    /// still reads. A host writing it now holds a stale copy of the encoding,
+    /// and where a bag sits beside it the sibling it meant is not the one
+    /// [`payload`] reads. The last case is a cell mark that will not parse at
+    /// all, the one axis with no strict decode behind it.
     #[test]
-    fn authored_lane_rejects_attrs_beside_a_built_in_name() {
+    fn authored_lane_rejects_the_legacy_payload_spelling() {
         let bad = [
             // line kind
-            r#"{"islands":[],"lines":[{"attrs":{"tone":"warn"},"containers":[],"kind":"para"}],"marks":[],"text":"x"}"#,
+            r#"{"islands":[],"lines":[{"containers":[],"kind":"heading","level":2}],"marks":[],"text":"x"}"#,
             // container
-            r#"{"islands":[],"lines":[{"containers":[{"attrs":{},"container":"quote"}],"kind":"para"}],"marks":[],"text":"x"}"#,
+            r#"{"islands":[],"lines":[{"containers":[{"container":"list_item","ordered":true}],"kind":"para"}],"marks":[],"text":"x"}"#,
             // prose mark
-            r#"{"islands":[],"lines":[{"containers":[],"kind":"para"}],"marks":[{"attrs":{},"end":1,"start":0,"type":"strong"}],"text":"x"}"#,
+            r#"{"islands":[],"lines":[{"containers":[],"kind":"para"}],"marks":[{"end":1,"start":0,"type":"link","url":"u"}],"text":"x"}"#,
             // table cell mark
             concat!(
                 r#"{"islands":[{"id":"i1","loss":"lossless","props":{"aligns":["none"],"#,
-                r#""header":[{"marks":[{"attrs":{},"end":1,"start":0,"type":"emph"}],"text":"h"}],"#,
+                r#""header":[{"marks":[{"end":1,"start":0,"type":"link","url":"u"}],"text":"h"}],"#,
                 r#""rows":[[{"marks":[],"text":"r"}]]},"type":"table"}],"#,
                 r#""lines":[{"containers":[],"kind":"island"}],"marks":[],"text":"￼"}"#
             ),
@@ -1502,8 +1499,8 @@ mod tests {
                 matches!(from_authored_value(&v), Err(ParseError::Shape(_))),
                 "accepted: {json}"
             );
-            // The storage lane opens all five: a document written before the
-            // name was built in must keep loading.
+            // The storage lane opens all five: stored content in that
+            // spelling must keep loading, and most of it reaches no migration.
             assert!(
                 Content::from_canonical_json(json).is_ok(),
                 "storage lane rejected: {json}"
@@ -1516,6 +1513,30 @@ mod tests {
             .as_array()
             .unwrap()
             .is_empty());
+    }
+
+    /// A foreign bag on a built-in is neither the legacy spelling nor a
+    /// payload: it drops unread on a member that carries none, and is read past
+    /// on one that does. Both lanes agree, the shape being unambiguous.
+    #[test]
+    fn a_foreign_bag_on_a_built_in_drops_unread() {
+        let json = concat!(
+            r#"{"islands":[],"lines":[{"attrs":{"tone":"warn"},"containers":"#,
+            r#"[{"attrs":{"x":1},"container":"quote"}],"kind":"para"}],"#,
+            r#""marks":[{"attrs":{"y":2},"end":1,"start":0,"type":"strong"}],"text":"x"}"#
+        );
+        let v: Value = serde_json::from_str(json).unwrap();
+        let rt = from_authored_value(&v).expect("authored lane accepts");
+        assert_eq!(rt.lines[0].kind, LineKind::Para);
+        assert_eq!(rt.marks[0].kind, MarkKind::Strong);
+        assert_eq!(
+            Content::from_canonical_json(json).expect("storage lane accepts"),
+            rt
+        );
+        assert_eq!(
+            rt.to_canonical_json(),
+            r#"{"islands":[],"lines":[{"containers":[{"container":"quote"}],"kind":"para"}],"marks":[{"end":1,"start":0,"type":"strong"}],"text":"x"}"#
+        );
     }
 
     /// An unknown's `attrs` is opaque host payload and may contain an object
@@ -1589,16 +1610,27 @@ mod tests {
     /// the storage decode and the `setKind` op wire as much as the importer.
     #[test]
     fn decoded_code_lang_carries_the_sanitized_shape() {
-        let cases: [(Value, Option<&str>); 4] = [
+        let cases: [(Value, Option<&str>); 5] = [
             (
-                serde_json::json!({"kind": "code", "lang": "rust\ninjected line"}),
+                serde_json::json!({"kind": "code", "attrs": {"lang": "rust\ninjected line"}}),
                 Some("rust"),
             ),
-            (serde_json::json!({"kind": "code", "lang": "r`s"}), Some("r")),
-            (serde_json::json!({"kind": "code", "lang": " rust"}), None),
+            (
+                serde_json::json!({"kind": "code", "attrs": {"lang": "r`s"}}),
+                Some("r"),
+            ),
+            (
+                serde_json::json!({"kind": "code", "attrs": {"lang": " rust"}}),
+                None,
+            ),
             (
                 serde_json::json!({"kind": "code", "attrs": {"lang": "c++ 17"}}),
                 Some("c++"),
+            ),
+            // The sibling spelling reaches the same reduction.
+            (
+                serde_json::json!({"kind": "code", "lang": "r`s"}),
+                Some("r"),
             ),
         ];
         for (v, want) in cases {
@@ -1617,7 +1649,7 @@ mod tests {
     /// refuses it so the host hears about it.
     #[test]
     fn an_unwritable_code_lang_sanitizes_on_storage_and_is_refused_when_authored() {
-        let v = serde_json::json!({"kind": "code", "lang": "rust\ninjected line"});
+        let v = serde_json::json!({"kind": "code", "attrs": {"lang": "rust\ninjected line"}});
         assert_eq!(
             line_kind_from_value(&v).unwrap(),
             LineKind::Code {
@@ -1630,19 +1662,20 @@ mod tests {
         ));
     }
 
-    /// Promotion moves a construct's payload from the opaque bag to named
-    /// siblings, and every blob written before it still spells it the old way.
-    /// The storage lane folds the bag in, so the promoted decoder reads what the
-    /// unknown wrote instead of dropping it.
+    /// The `@0.93.0` spelling — every built-in's payload in named siblings —
+    /// decodes unchanged. The frozen artifact: delete it with the sibling read,
+    /// once no stored content is left in that shape, which no schema tag can
+    /// answer since a `richtext` field rests as a content object under no tag of
+    /// its own.
     #[test]
-    fn built_in_decoders_read_the_legacy_attrs_form() {
+    fn built_in_decoders_read_the_legacy_sibling_form() {
         let cases: [(Value, LineKind); 2] = [
             (
-                serde_json::json!({"kind": "heading", "attrs": {"level": 2}}),
+                serde_json::json!({"kind": "heading", "level": 2}),
                 LineKind::Heading { level: 2 },
             ),
             (
-                serde_json::json!({"kind": "code", "attrs": {"lang": "rust"}}),
+                serde_json::json!({"kind": "code", "lang": "rust"}),
                 LineKind::Code {
                     lang: Some("rust".into()),
                 },
@@ -1652,8 +1685,7 @@ mod tests {
             assert_eq!(line_kind_from_value(&v).unwrap(), want);
         }
         let item = serde_json::json!({
-            "container": "list_item",
-            "attrs": {"ordered": true, "start": 3, "ordinal": 1}
+            "container": "list_item", "ordered": true, "start": 3, "ordinal": 1
         });
         assert_eq!(
             container_from_value(&item).unwrap(),
@@ -1664,19 +1696,27 @@ mod tests {
                 instance: 0,
             }
         );
-        let link = serde_json::json!({"start": 0, "end": 1, "type": "link", "attrs": {"url": "u"}});
-        assert_eq!(
-            mark_from_value(&link).unwrap().kind,
-            MarkKind::Link { url: "u".into() }
-        );
-        // Both spellings present: the named sibling is the canonical one.
+        for (v, want) in [
+            (
+                serde_json::json!({"start": 0, "end": 1, "type": "link", "url": "u"}),
+                MarkKind::Link { url: "u".into() },
+            ),
+            (
+                serde_json::json!({"start": 0, "end": 1, "type": "anchor", "id": "a1"}),
+                MarkKind::Anchor { id: "a1".into() },
+            ),
+        ] {
+            assert_eq!(mark_from_value(&v).unwrap().kind, want);
+        }
+        // Both spellings present: the bag is the spelling, and the sibling is
+        // read only in its absence — so the bag wins and this stays a pure
+        // fallback rather than a merge.
         let both = serde_json::json!({"kind": "heading", "level": 3, "attrs": {"level": 2}});
         assert_eq!(
             line_kind_from_value(&both).unwrap(),
-            LineKind::Heading { level: 3 }
+            LineKind::Heading { level: 2 }
         );
-        // An unknown's bag is payload, not a source of named fields: the `kind`
-        // inside it would re-target the match if the fold read it back out.
+        // An unknown's bag is opaque payload, never a source of named fields.
         let unknown = serde_json::json!({"kind": "callout", "attrs": {"kind": "heading", "level": 2}});
         assert_eq!(
             line_kind_from_value(&unknown).unwrap(),
@@ -1685,22 +1725,122 @@ mod tests {
                 attrs: serde_json::json!({"kind": "heading", "level": 2}),
             }
         );
-        // Re-encode is the promoted spelling, so opening a legacy blob under the
-        // release that promotes its tag moves the document's canonical bytes.
-        let legacy = r#"{"islands":[],"lines":[{"attrs":{"level":2},"containers":[],"kind":"heading"}],"marks":[],"text":"hi"}"#;
+        // Re-encode is the current spelling, so opening a legacy row and writing
+        // it back moves its canonical bytes: read-repair, once per row.
+        let legacy = r#"{"islands":[],"lines":[{"containers":[],"kind":"heading","level":2}],"marks":[],"text":"hi"}"#;
         assert_eq!(
             Content::from_canonical_json(legacy)
                 .unwrap()
                 .to_canonical_json(),
-            r#"{"islands":[],"lines":[{"containers":[],"kind":"heading","level":2}],"marks":[],"text":"hi"}"#
+            r#"{"islands":[],"lines":[{"attrs":{"level":2},"containers":[],"kind":"heading"}],"marks":[],"text":"hi"}"#
         );
     }
 
-    /// `ord` is part of the freeze, and a promoted type takes the slot `Unknown`
-    /// held. Anywhere else, a build that knows the type orders it differently
-    /// from one that reads it as `Unknown`: one document, two canonical forms.
+    /// An empty bag is not a bag: it is one of the two spellings of *no
+    /// payload*, so it cannot out-vote the sibling read the way a real one
+    /// does. Reading it as a bag would fail a `heading` outright and renumber a
+    /// list item in silence.
     #[test]
-    fn unknown_holds_the_last_mark_ordinal() {
+    fn an_empty_bag_does_not_shadow_the_legacy_sibling() {
+        assert_eq!(
+            line_kind_from_value(&serde_json::json!({
+                "kind": "heading", "level": 2, "attrs": {}
+            }))
+            .unwrap(),
+            LineKind::Heading { level: 2 }
+        );
+        assert_eq!(
+            container_from_value(&serde_json::json!({
+                "container": "list_item", "attrs": {}, "ordered": true, "start": 3, "ordinal": 1
+            }))
+            .unwrap(),
+            Container::ListItem {
+                ordered: true,
+                start: 3,
+                ordinal: 1,
+                instance: 0,
+            }
+        );
+    }
+
+    /// An empty bag has one spelling on the wire (absent) and one in memory
+    /// (`Null`), on all three carrier axes. Without the second, the *value*
+    /// fixed point wobbles: `{}` would encode to bytes that decode to `Null`,
+    /// so a content would not equal its own round trip.
+    #[test]
+    fn an_empty_bag_has_one_spelling_on_each_side() {
+        let build = |attrs: Value| {
+            let mut rt = Content::empty();
+            rt.text = "ab".into();
+            rt.lines = vec![Line {
+                kind: LineKind::Unknown {
+                    tag: "callout".into(),
+                    attrs: attrs.clone(),
+                },
+                containers: vec![Container::Unknown {
+                    tag: "indent".into(),
+                    attrs: attrs.clone(),
+                    instance: 0,
+                }],
+                continues: false,
+            }];
+            rt.marks = vec![Mark {
+                start: 0,
+                end: 2,
+                kind: MarkKind::Unknown {
+                    tag: "kbd".into(),
+                    attrs,
+                },
+            }];
+            rt.into_normalized()
+        };
+
+        let null = build(Value::Null);
+        let empty = build(serde_json::json!({}));
+        // One in-memory spelling: `normalize` collapses the two.
+        assert_eq!(null, empty);
+        // One wire spelling: absent, on every axis.
+        let json = null.to_canonical_json();
+        assert!(!json.contains("attrs"), "{json}");
+        assert_eq!(empty.to_canonical_json(), json);
+        // …so both fixed points hold, the value one included.
+        let back = Content::from_canonical_json(&json).unwrap();
+        assert_eq!(back, null);
+        assert_eq!(back.to_canonical_json(), json);
+    }
+
+    /// Promotion stops being an encoding change: the bytes written while a name
+    /// was outside the vocabulary are the bytes the build that knows it reads,
+    /// so no lane's answer flips on the release that promotes the name.
+    #[test]
+    fn promotion_does_not_move_the_encoding() {
+        let doc = |kind: &str| {
+            serde_json::json!({
+                "islands": [],
+                "lines": [{"attrs": {"level": 2}, "containers": [], "kind": kind}],
+                "marks": [],
+                "text": "hi",
+            })
+        };
+        // Outside `RESERVED_LINE_KINDS` today, and what `"callout"` becomes the
+        // release it is promoted: one spelling, accepted by both lanes either
+        // side of that release.
+        for kind in ["callout", "heading"] {
+            assert!(from_authored_value(&doc(kind)).is_ok(), "{kind}");
+            assert!(from_canonical_value(&doc(kind)).is_ok(), "{kind}");
+        }
+        // And the payload survives the promotion rather than dropping unread.
+        assert_eq!(
+            line_kind_from_value(&doc("heading")["lines"][0]).unwrap(),
+            LineKind::Heading { level: 2 }
+        );
+    }
+
+    /// The canonical tie-break is the `(type, attrs)` pair the wire carries, so
+    /// a build that knows a member and one that reads it as `Unknown` order it
+    /// identically — against every other member, not only the built-ins.
+    #[test]
+    fn the_mark_tie_break_is_what_the_wire_carries() {
         let all = [
             MarkKind::Strong,
             MarkKind::Emph,
@@ -1715,7 +1855,7 @@ mod tests {
             },
         ];
         // Exhaustive on purpose: a new variant is a compile error here, where
-        // the placement rule gets read.
+        // the rule gets read.
         for k in &all {
             match k {
                 MarkKind::Strong
@@ -1728,9 +1868,15 @@ mod tests {
                 | MarkKind::Unknown { .. } => {}
             }
         }
-        let ords: Vec<u8> = all.iter().map(MarkKind::ord).collect();
-        assert_eq!(ords, (0..all.len() as u8).collect::<Vec<_>>());
-        assert!(matches!(all.last(), Some(MarkKind::Unknown { .. })));
+        for k in &all {
+            // What a build lacking the name reconstructs from the same bytes.
+            let wire = mark_to_value(&Mark::new(0, 1, k.clone()));
+            let unknowing = MarkKind::Unknown {
+                tag: wire["type"].as_str().unwrap().to_string(),
+                attrs: wire.get("attrs").cloned().unwrap_or(Value::Null),
+            };
+            assert_eq!(k.sort_key(), unknowing.sort_key(), "{k:?}");
+        }
     }
 
     /// Formatting-class membership is stored meaning: two adjacent unknowns are
@@ -1767,25 +1913,4 @@ mod tests {
         assert_eq!(rt.marks.len(), 1);
     }
 
-    /// Promotion grows `RESERVED_*`, and the authored lane then refuses a shape
-    /// it accepted the release before. By design: a host still authoring the
-    /// unknown spelling is writing the silent drop the rule exists to catch.
-    #[test]
-    fn reserved_growth_flips_authored_acceptance() {
-        let doc = |kind: &str| {
-            serde_json::json!({
-                "islands": [],
-                "lines": [{"attrs": {"level": 2}, "containers": [], "kind": kind}],
-                "marks": [],
-                "text": "hi",
-            })
-        };
-        // Outside `RESERVED_LINE_KINDS` today: an unknown carrying its payload.
-        assert!(from_authored_value(&doc("callout")).is_ok());
-        // Inside it: what `"callout"` becomes the release it is promoted.
-        assert!(matches!(
-            from_authored_value(&doc("heading")),
-            Err(ParseError::Shape(_))
-        ));
-    }
 }

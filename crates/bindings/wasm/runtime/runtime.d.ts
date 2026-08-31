@@ -219,34 +219,32 @@ export declare function isImageIsland(
 	island: ContentIsland
 ): island is ContentIsland & { type: 'image'; props: ImageProps };
 
-/** Narrow a {@link ContentMark} to the `link` arm (carries `url`). */
+/** Narrow a {@link ContentMark} to the `link` arm (carries `attrs.url`). */
 export declare function isLinkMark(
 	mark: ContentMark
-): mark is ContentMark & { type: 'link'; url: string };
+): mark is ContentMark & { type: 'link'; attrs: { url: string } };
 
-/** Narrow a {@link ContentMark} to the `anchor` arm (carries `id`). */
+/** Narrow a {@link ContentMark} to the `anchor` arm (carries `attrs.id`). */
 export declare function isAnchorMark(
 	mark: ContentMark
-): mark is ContentMark & { type: 'anchor'; id: string };
+): mark is ContentMark & { type: 'anchor'; attrs: { id: string } };
 
-/** Narrow a {@link ContentLine} to the `heading` arm (carries `level`). */
+/** Narrow a {@link ContentLine} to the `heading` arm (carries `attrs.level`). */
 export declare function isHeadingLine(
 	line: ContentLine
-): line is ContentLine & { kind: 'heading'; level: number };
+): line is ContentLine & { kind: 'heading'; attrs: { level: number } };
 
-/** Narrow a {@link ContentLine} to the `code` arm (carries `lang`). */
+/** Narrow a {@link ContentLine} to the `code` arm (carries `attrs.lang`). */
 export declare function isCodeLine(
 	line: ContentLine
-): line is ContentLine & { kind: 'code'; lang?: string };
+): line is ContentLine & { kind: 'code'; attrs?: { lang?: string } };
 
 /** Narrow a {@link ContentContainer} to the `list_item` arm (carries its shape). */
 export declare function isListItemContainer(
 	container: ContentContainer
 ): container is ContentContainer & {
 	container: 'list_item';
-	ordered: boolean;
-	start: number;
-	ordinal: number;
+	attrs: { ordered: boolean; start: number; ordinal: number };
 	instance: number;
 };
 
@@ -257,8 +255,9 @@ export declare function isListItemContainer(
 // built-in names by hand re-couples to a closed set.
 //
 // They classify unknown TAGS, not unknown payloads on known tags: a future
-// `kind: "footnote"` carrying a sibling `ref` loses `ref` at any consumer that
-// predates it, with or without these.
+// `kind: "footnote"` carrying an `attrs.ref` loses `ref` at any consumer that
+// predates it, with or without these. The spelling needs no classifying: a
+// payload rides `attrs` whether or not this build knows the name.
 
 /** True when this build does not know `line.kind`: the open arm, carrying opaque `attrs`. */
 export declare function isUnknownLine(

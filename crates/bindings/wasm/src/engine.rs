@@ -202,8 +202,9 @@ export interface Content {
 
 /** One `\n`-separated segment of `Content.text`, in order. `kind` is an open set:
  * an unknown role round-trips with opaque `attrs` and renders as a paragraph.
- * The open arm blocks discriminant narrowing, so read `level`/`lang` behind a
- * check of the arm you want. */
+ * Every role spells its payload in `attrs`, known or not, so promoting one moves
+ * no bytes. The open arm blocks discriminant narrowing, so read
+ * `attrs.level`/`attrs.lang` behind a check of the arm you want. */
 export type ContentLine = {
     containers: ContentContainer[];
     /** A within-block hard line break rather than a new block. Omitted (false) in the common case. */
@@ -213,11 +214,11 @@ export type ContentLine = {
 /** A line's block role, shared by `ContentLine` and the `setKind` op. */
 export type ContentLineKind =
     | { kind: "para" }
-    | { kind: "heading"; level: number }
-    | { kind: "code"; lang?: string }
+    | { kind: "heading"; attrs: { level: number } }
+    | { kind: "code"; attrs?: { lang?: string } }
     | { kind: "island" }
     | { kind: "rule" }
-    | { kind: string; attrs: unknown };
+    | { kind: string; attrs?: unknown };
 
 /** An ancestor block a line nests inside, outermost first. Open like
  * `ContentLine.kind`: an unrecognized container round-trips with opaque `attrs`
@@ -246,22 +247,26 @@ export type ContentLineKind =
  * Content parsed from a stored document is the one shape that arrives without
  * it — storage omits a zero — and needs a cast. */
 export type ContentContainer =
-    | { container: "list_item"; ordered: boolean; start: number; ordinal: number; instance: number }
+    | {
+          container: "list_item";
+          attrs: { ordered: boolean; start: number; ordinal: number };
+          instance: number;
+      }
     | { container: "quote"; instance: number }
-    | { container: string; attrs: unknown; instance: number };
+    | { container: string; attrs?: unknown; instance: number };
 
 /** A mark over char range `[start, end)` into `Content.text`. The open `type`
  * arm blocks discriminant narrowing, so read a payload-carrying arm behind its
- * guard: `isLinkMark` (`url`) / `isAnchorMark` (`id`), from
+ * guard: `isLinkMark` (`attrs.url`) / `isAnchorMark` (`attrs.id`), from
  * `@quillmark/wasm/runtime`. An `anchor`'s `id` is a caller-supplied opaque
  * handle, unique per `Content` and invariant while the mark lives (positions
  * rebase, the id never does); it has no markdown projection and survives only
  * through the edit lane. */
 export type ContentMark = { start: number; end: number } & (
     | { type: "strong" | "emph" | "underline" | "strike" | "code" }
-    | { type: "link"; url: string }
-    | { type: "anchor"; id: string }
-    | { type: string; attrs: unknown }
+    | { type: "link"; attrs: { url: string } }
+    | { type: "anchor"; attrs: { id: string } }
+    | { type: string; attrs?: unknown }
 );
 
 /** A cell in a `TableProps`. `marks` rides the prose `ContentMark` shape, but
@@ -890,7 +895,7 @@ impl Document {
     /// tag advances only when the wire format changes, not on every release.
     #[wasm_bindgen(js_name = currentStorageVersion)]
     pub fn current_storage_version() -> String {
-        quillmark_core::document::STORAGE_V0_93_0.to_string()
+        quillmark_core::document::STORAGE_V0_112_0.to_string()
     }
 
     /// Authoring-format rules for the card-yaml markdown surface, re-exposed from
@@ -1977,8 +1982,8 @@ fn js_to_content(value: JsValue, ctx: &str) -> Result<quillmark_content::Normali
 }
 
 /// [`js_to_content`] on the **authored** lane. The host is writing this content
-/// now, so `attrs` beside a built-in discriminator is a stale copy of the
-/// built-in list, and is reported instead of silently dropped.
+/// now, so a built-in's payload spelled as a named sibling is a stale copy of
+/// the encoding, and is reported instead of read as a guess at its intent.
 fn js_to_authored_content(
     value: JsValue,
     ctx: &str,

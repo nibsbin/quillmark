@@ -720,7 +720,6 @@ impl<'a> Emit<'a> {
 struct Wrap {
     start: usize,
     end: usize,
-    ord: u8,
     open: String,
 }
 
@@ -745,14 +744,14 @@ fn clip_wraps_to_codes(wraps: &mut Vec<Wrap>, codes: &[(usize, usize)]) {
 }
 
 /// The mark boundary sweep, shared by prose inline emission and table-cell
-/// rendering: opens `wraps` (longer span first, then kind-ord) and
-/// closes-and-reopens deeper survivors at overlaps. `emit_run(out, pos, tail)`
-/// writes the content at `pos` and returns the next position and the [`Tail`] it
-/// leaves. Every wrap `open` ends `[`, and a content block's head is a line
-/// start of Typst's own, so the anchor rearms at each one; each `]` completes a
-/// call instead. `wraps` must already be clipped against the code spans
-/// ([`clip_wraps_to_codes`]), so no wrap `end` hides inside a span the
-/// callback's cursor jumps over.
+/// rendering: opens `wraps` (longer span first, coincident wraps in `wraps`
+/// order) and closes-and-reopens deeper survivors at overlaps.
+/// `emit_run(out, pos, tail)` writes the content at `pos` and returns the next
+/// position and the [`Tail`] it leaves. Every wrap `open` ends `[`, and a
+/// content block's head is a line start of Typst's own, so the anchor rearms at
+/// each one; each `]` completes a call instead. `wraps` must already be clipped
+/// against the code spans ([`clip_wraps_to_codes`]), so no wrap `end` hides
+/// inside a span the callback's cursor jumps over.
 fn sweep_marks(
     lo: usize,
     hi: usize,
@@ -761,9 +760,9 @@ fn sweep_marks(
     mut tail: Tail,
     mut emit_run: impl FnMut(&mut String, usize, Tail) -> (usize, Tail),
 ) {
-    // Open marks, outermost first. Storing the index (not `(end, ord)`) keeps
+    // Open marks, outermost first. Storing the index (not the boundary) keeps
     // each mark's identity, so a reopened mark re-emits its OWN delimiter: two
-    // same-`(ord, end)` links with distinct URLs must not collapse.
+    // same-`end` links must not collapse, whatever their urls.
     let mut stack: Vec<usize> = Vec::new();
     let mut pos = lo;
     while pos <= hi {
@@ -788,7 +787,14 @@ fn sweep_marks(
             break;
         }
         let mut opening: Vec<usize> = (0..wraps.len()).filter(|&wi| wraps[wi].start == pos).collect();
-        opening.sort_by(|&a, &b| wraps[b].end.cmp(&wraps[a].end).then(wraps[a].ord.cmp(&wraps[b].ord)));
+        // No tie-break beyond `wraps` order, which the stable sort keeps.
+        // `wraps` follows the marks, canonically sorted by `(start, end,
+        // MarkKind::sort_key)` over their **stored** spans — the order two
+        // coincident marks nest in, and the only order the document defines.
+        // Clipping ([`clip_wraps_to_codes`], and the window clamp above) can
+        // make two marks coincide that did not, and those nest in their stored
+        // order too rather than in a second one re-derived from the clip.
+        opening.sort_by(|&a, &b| wraps[b].end.cmp(&wraps[a].end));
         for wi in opening {
             out.push_str(&wraps[wi].open);
             tail = Tail::Anchor;
@@ -852,14 +858,12 @@ fn wraps_and_codes(marks: &[Mark], lo: usize, hi: usize) -> (Vec<Wrap>, Vec<(usi
                 wraps.push(Wrap {
                     start: s,
                     end: e,
-                    ord: m.kind.ord(),
                     open: wrap_open(&m.kind),
                 });
             }
             MarkKind::Link { url } => wraps.push(Wrap {
                 start: s,
                 end: e,
-                ord: m.kind.ord(),
                 open: format!("#link(\"{}\")[", escape_string(url)),
             }),
             // `Anchor` is identity, `Unknown` has no Typst spelling, and
@@ -1329,12 +1333,33 @@ mod tests {
     }
 
     /// Coincident `strong`+`emph` lose their source nesting order at import, so
-    /// the emitter nests canonically by kind-ord.
+    /// the emitter nests them in the order the canonical form stores.
     #[test]
     fn coincident_strong_emph_nests_canonically() {
         for m in ["**_x_**", "***x***", "_**x**_"] {
-            assert_eq!(emit(m).markup, "#strong[#emph[x]]\n\n");
+            assert_eq!(emit(m).markup, "#emph[#strong[x]]\n\n");
         }
+    }
+
+    /// A code span clips two links down to one range, so they coincide in
+    /// `wraps` without coinciding in the document. They nest in their stored
+    /// order — `z` starts first — not in an order re-derived from the clip,
+    /// which would put `a` outside and hand the text to the wrong target.
+    #[test]
+    fn clipping_two_marks_together_nests_them_in_their_stored_order() {
+        use quillmark_content::model::Line;
+        let rt = Content::new("abcdefghij".to_string(), vec![Line::new(LineKind::Para)])
+            .with_marks(vec![
+                Mark::new(0, 3, MarkKind::Code),
+                Mark::new(1, 10, MarkKind::Link { url: "z".into() }),
+                Mark::new(3, 10, MarkKind::Link { url: "a".into() }),
+            ])
+            .into_normalized();
+        assert_eq!(rt.validate(), Ok(()));
+        assert_eq!(
+            emit_content(&rt).unwrap().markup,
+            "#raw(\"abc\")#link(\"z\")[#link(\"a\")[defghij]]\n\n"
+        );
     }
 
     /// Reconstructs a run's generated bytes by the `//`→`\/\/` 2-char/4-byte

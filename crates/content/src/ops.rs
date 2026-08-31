@@ -183,10 +183,10 @@ use crate::serial::{
 };
 use serde_json::Value;
 
-/// Decode a [`MarkOp`] from its wire object (`{op, start, end, type, …}` for
+/// Decode a [`MarkOp`] from its wire object (`{op, start, end, type, attrs}` for
 /// `add`/`remove`, `{op, id}` for `removeAnchor`). `add`/`remove` read the mark
-/// vocabulary on the authored lane, which refuses `attrs` beside a built-in
-/// `type` rather than resolving to the built-in and dropping them.
+/// vocabulary on the authored lane, which refuses the `@0.93.0` payload
+/// spelling rather than guessing which of the two a stale host meant.
 pub fn mark_op_from_value(v: &Value) -> Result<MarkOp, ParseError> {
     let o = v.as_object().ok_or(ParseError::Shape("mark op"))?;
     match o.get("op").and_then(Value::as_str) {
@@ -218,7 +218,7 @@ pub fn mark_op_from_value(v: &Value) -> Result<MarkOp, ParseError> {
 }
 
 /// Decode a [`LineOp`] from its wire object. `setKind` carries the line-kind
-/// discriminant (`kind`/`level`/`lang`) flattened alongside `op`/`line`.
+/// discriminant (`kind` plus its `attrs`) flattened alongside `op`/`line`.
 pub fn line_op_from_value(v: &Value) -> Result<LineOp, ParseError> {
     let o = v.as_object().ok_or(ParseError::Shape("line op"))?;
     let line = || usv_from(o.get("line"), "line op line");
@@ -1020,7 +1020,7 @@ mod tests {
             ),
             (
                 serde_json::json!({
-                    "op": "add", "start": 1, "end": 2, "type": "link", "url": "https://x",
+                    "op": "add", "start": 1, "end": 2, "type": "link", "attrs": {"url": "https://x"},
                 }),
                 MarkOp::Add {
                     start: 1,
@@ -1032,7 +1032,7 @@ mod tests {
             ),
             (
                 serde_json::json!({
-                    "op": "remove", "start": 4, "end": 6, "type": "anchor", "id": "c1",
+                    "op": "remove", "start": 4, "end": 6, "type": "anchor", "attrs": {"id": "c1"},
                 }),
                 MarkOp::Remove {
                     start: 4,
@@ -1062,7 +1062,7 @@ mod tests {
                 LineOp::Join { line: 1 },
             ),
             (
-                serde_json::json!({"op": "setKind", "line": 0, "kind": "heading", "level": 2}),
+                serde_json::json!({"op": "setKind", "line": 0, "kind": "heading", "attrs": {"level": 2}}),
                 LineOp::SetKind {
                     line: 0,
                     kind: LineKind::Heading { level: 2 },
@@ -1123,29 +1123,31 @@ mod tests {
         }
     }
 
-    /// The lenient reader would resolve the built-in name and drop the payload
-    /// unread, corrupting the line with no diagnostic.
+    /// The op wire is authored-now, so it refuses the `@0.93.0` payload
+    /// spelling the storage lane still reads: a host writing it holds a stale
+    /// copy of the encoding, and the write would land where it did not aim.
     #[test]
-    fn op_wire_rejects_attrs_beside_a_built_in_name() {
+    fn op_wire_rejects_the_legacy_payload_spelling() {
         let bad = serde_json::json!({
-            "op": "setKind", "line": 0, "kind": "para", "attrs": {"tone": "warn"},
+            "op": "setKind", "line": 0, "kind": "heading", "level": 2,
         });
         assert!(matches!(line_op_from_value(&bad), Err(ParseError::Shape(_))));
         let bad = serde_json::json!({
             "op": "setContainers", "line": 0,
-            "containers": [{"container": "quote", "attrs": {"k": 1}}],
+            "containers": [{"container": "list_item", "ordered": true}],
         });
         assert!(matches!(line_op_from_value(&bad), Err(ParseError::Shape(_))));
         let bad = serde_json::json!({
-            "op": "add", "start": 0, "end": 1, "type": "strong", "attrs": {"k": 1},
+            "op": "add", "start": 0, "end": 1, "type": "link", "url": "u",
         });
         assert!(matches!(mark_op_from_value(&bad), Err(ParseError::Shape(_))));
 
-        // An unknown name keeps carrying `attrs` (the rule is reserved-name
-        // reuse, not `attrs` itself) and a built-in without `attrs` is untouched.
+        // One spelling per name: a built-in's payload rides the bag exactly as
+        // an unknown's does, and a foreign bag on a built-in drops unread.
         for ok in [
             serde_json::json!({"op": "setKind", "line": 0, "kind": "callout", "attrs": {"tone": "warn"}}),
-            serde_json::json!({"op": "setKind", "line": 0, "kind": "heading", "level": 2}),
+            serde_json::json!({"op": "setKind", "line": 0, "kind": "heading", "attrs": {"level": 2}}),
+            serde_json::json!({"op": "setKind", "line": 0, "kind": "para", "attrs": {"tone": "warn"}}),
         ] {
             assert!(line_op_from_value(&ok).is_ok(), "rejected: {ok}");
         }
@@ -1466,23 +1468,23 @@ mod tests {
 
     #[test]
     fn apply_mark_ops_remove_non_formatting_drops_whole() {
+        // `Value::Null` on both sides: the one in-memory spelling of an empty
+        // bag, which `normalize` and the wire decode both settle on.
+        let unknown = || MarkKind::Unknown {
+            tag: "x".into(),
+            attrs: Value::Null,
+        };
         let mut rt = from_markdown("abcdef").unwrap().into_content();
         rt.marks.push(Mark {
             start: 0,
             end: 6,
-            kind: MarkKind::Unknown {
-                tag: "x".into(),
-                attrs: serde_json::json!({}),
-            },
+            kind: unknown(),
         });
         let mut rt = rt.into_normalized();
         rt.apply_mark_ops(&[MarkOp::Remove {
             start: 2,
             end: 4,
-            kind: MarkKind::Unknown {
-                tag: "x".into(),
-                attrs: serde_json::json!({}),
-            },
+            kind: unknown(),
         }])
         .unwrap();
         assert!(!rt

@@ -917,7 +917,7 @@ card_kinds:
       {},
       {
         markOps: [
-          { op: 'add', start: 6, end: 6, type: 'anchor', id: 'c1' },
+          { op: 'add', start: 6, end: 6, type: 'anchor', attrs: { id: 'c1' } },
           { op: 'add', start: 6, end: 11, type: 'strong' },
         ],
       },
@@ -940,7 +940,7 @@ card_kinds:
   it('mapMarks carries a mark through every text-moving channel of one bundle', () => {
     const doc = blankDoc()
     doc.revise({}, 'hello world')
-    doc.applyChange({}, { markOps: [{ op: 'add', start: 6, end: 6, type: 'anchor', id: 'c1' }] })
+    doc.applyChange({}, { markOps: [{ op: 'add', start: 6, end: 6, type: 'anchor', attrs: { id: 'c1' } }] })
     const before = doc.main.body
     const bundle = {
       delta: { ops: [{ retain: 6 }, { insert: 'X' }, { retain: 5 }] },
@@ -987,7 +987,7 @@ card_kinds:
     expect(island.type).toBe('table')
 
     // An anchor over "intro", above the table: the thing an `overwrite` would drop.
-    doc.applyChange({}, { markOps: [{ op: 'add', start: 0, end: 5, type: 'anchor', id: 'c1' }] })
+    doc.applyChange({}, { markOps: [{ op: 'add', start: 0, end: 5, type: 'anchor', attrs: { id: 'c1' } }] })
 
     doc.applyChange(
       {},
@@ -1008,7 +1008,7 @@ card_kinds:
       },
     )
     expect(doc.main.body.islands[0].props.rows[0][0].text).toBe('b')
-    expect(doc.main.body.marks.some((m) => m.type === 'anchor' && m.id === 'c1')).toBe(true)
+    expect(doc.main.body.marks.some((m) => m.type === 'anchor' && m.attrs.id === 'c1')).toBe(true)
 
     // An id no island carries throws rather than passing as a silent no-op.
     expect(() =>

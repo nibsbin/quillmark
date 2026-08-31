@@ -57,6 +57,10 @@ def test_body_spells_every_container_instance():
     containers = [c for line in doc.body["lines"] for c in line["containers"]]
     assert [c["container"] for c in containers] == ["quote", "list_item"]
     assert [c["instance"] for c in containers] == [0, 0]
+    # `instance` is an envelope key and stays a sibling; the shape a member
+    # names rides `attrs`, whether or not this build knows the name.
+    assert containers[1]["attrs"] == {"ordered": False, "ordinal": 0, "start": 1}
+    assert "attrs" not in containers[0]
 
 
 def test_body_empty_when_absent():
@@ -84,7 +88,7 @@ def test_json_dto_round_trip(taro_md):
 
     dto = doc.to_json()
     assert isinstance(dto, str)
-    assert "quillmark/document@0.93.0" in dto
+    assert "quillmark/document@0.112.0" in dto
 
     restored = Document.from_json(dto)
     assert restored.quill_ref == doc.quill_ref

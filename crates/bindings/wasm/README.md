@@ -173,9 +173,9 @@ discriminates the two formats without exceptions as control flow:
 const doc = Document.tryFromJson(content) ?? Document.fromMarkdown(content);
 ```
 
-The `schema` value (`quillmark/document@0.93.0`) is the **model version**,
+The `schema` value (`quillmark/document@0.112.0`) is the **model version**,
 not the running crate version. It is a hand-set constant, bumped only when
-the `Document` model itself changes, so every `0.93.x` patch release reads
+the `Document` model itself changes, so every `0.112.x` patch release reads
 and writes that same value.
 
 - **Upgrading is safe.** A newer build always reads documents written by an

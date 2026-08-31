@@ -24,7 +24,7 @@ A `Document`'s in-memory layout tracks the evolving Quillmark model and is not a
     const doc2 = Document.fromJson(blob);   // or tryFromJson → null on bad input
     ```
 
-Every blob carries a `schema` tag (`quillmark/document@<version>`). Readers dispatch on it, accept every still-supported past version by migrating forward on read, and **reject an unknown version** rather than guessing. The current tag is `quillmark/document@0.93.0`.
+Every blob carries a `schema` tag (`quillmark/document@<version>`). Readers dispatch on it, accept every still-supported past version by migrating forward on read, and **reject an unknown version** rather than guessing. The current tag is `quillmark/document@0.112.0`.
 
 ## Byte-stability
 
