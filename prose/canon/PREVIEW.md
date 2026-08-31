@@ -304,6 +304,19 @@ paragraph is live over roughly two thirds of its own height at default leading,
 and under half of it double-spaced. Both point queries therefore take a
 tolerance: the nearest ink within `tolPt` answers, `0` being exact containment.
 
+**The slack is an ellipse, not a circle, because the two axes fail
+differently.** Across a line the dead gap is the leading, a few points wide, and
+it belongs to the neighbouring line. Along one it is the rest of the measure the
+line does not fill — on a seeded `usaf_memo` body line, 248 of 443 points — and
+it belongs to that line's own end. One radius cannot serve both: widened until it
+crossed a measure it would answer for ink most of a page away. Ranking divides
+the horizontal leg by `LINE_REACH` before measuring, so the admitted region is
+`tolPt` tall and `tolPt * LINE_REACH` wide, and a click out in the measure
+answers with the line it is level with while a click one row up still answers
+with that row. Unlike `tolPt` the ratio is the engine's: pointer slack is a
+screen quantity, where how far a line runs beside its own whitespace is a
+property of how text is set and holds at every scale.
+
 **The caller owns the number, because the imprecision is the pointer's.**
 Slack is a screen quantity — what a finger or a hand-held mouse
 misses by — so a tolerance fixed in points shrinks under the cursor as the page
@@ -315,9 +328,10 @@ result; the engine holds no default because it cannot see that scale.
 makes overlapping boxes decide by paint order, so a click in the leading between
 two fields' lines answers whichever painted last, however far away it is.
 Ranking by distance answers the nearer one, and keeps the tolerance a pure
-widening: containment is distance zero, so no point that resolves exactly ever
-changes answer as `tolPt` rises. On a tie — two placements equally near, an
-exact hit under another exact hit — the later-painted wins.
+widening: containment is distance zero — scaling a leg cannot turn a non-zero
+gap into a zero one — so no point that resolves exactly ever changes answer as
+`tolPt` rises. On a tie — two placements equally near, an exact hit under
+another exact hit — the later-painted wins.
 
 Widgets and content ink rank in one comparison, a widget taking a tie: a widget
 draws no spanned ink of its own, so ink beneath one must not swallow a click that
@@ -327,7 +341,12 @@ of. One lane consulted before the other answers from the first at any gap within
 
 A tolerance is not a bounding box over ink the field does not fill: a click
 stays on ink some placement drew, and a point far from all of it resolves to
-nothing.
+nothing. Far is measured after the scaling, so a point out in a line's own
+whitespace is near that line and one a few rows off the text block is near
+nothing — but either way the answer is a glyph some placement drew, never a
+union spanning ink it did not. Which is why the reach is a ranking and not
+`regions()`: clamping within a line's own row to that line's own glyphs claims
+no ink between two disjoint segments.
 
 ## TypeScript surface
 

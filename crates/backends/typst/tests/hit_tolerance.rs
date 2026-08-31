@@ -182,6 +182,74 @@ fn a_tolerance_never_changes_an_answer_an_exact_hit_already_had() {
     assert!(filled > 0, "the sweep crosses ink it only reaches under tolerance");
 }
 
+/// A short line with the rest of its measure empty beside it: `intro` is one
+/// line, `body` fills the measure below.
+fn open_with_a_short_line() -> LiveSession {
+    let data = serde_json::json!({
+        "intro": content("Short."),
+        "body": content(&"Body text that fills the measure and wraps past one line. ".repeat(3)),
+    });
+    TypstBackend
+        .open(&quill(YAML, PLATE), &data)
+        .expect("open")
+}
+
+/// A click out in the measure beside a line answers with that line, at a gap two
+/// orders past the slack that reaches it.
+#[test]
+fn a_click_out_in_the_measure_answers_with_the_line_it_is_level_with() {
+    let session = open_with_a_short_line();
+    let intro = session
+        .regions()
+        .into_iter()
+        .find(|r| r.field == "intro")
+        .expect("intro surfaces a region");
+    let y = (intro.rect[1] + intro.rect[3]) / 2.0;
+    let far = intro.rect[2] + 120.0;
+    assert!(
+        session.field_at(0, far, y, 0.0).is_none(),
+        "the probe sits in dead measure, not on ink"
+    );
+
+    assert_eq!(
+        session.field_at(0, far, y, 3.1).as_deref(),
+        Some("intro"),
+        "a click 120pt out in the measure answers with the line level with it"
+    );
+    let hit = session
+        .position_at(0, far, y, 3.1)
+        .expect("and resolves to a content position");
+    assert_eq!(hit.field, "intro");
+}
+
+/// Ink the point is inside of outranks a line-end however far the reach would
+/// stretch to it.
+#[test]
+fn the_measure_reach_never_outranks_ink_the_point_is_inside() {
+    let session = open_with_a_short_line();
+    let regions = session.regions();
+    let intro = regions
+        .iter()
+        .find(|r| r.field == "intro")
+        .expect("intro surfaces a region");
+    let far = intro.rect[2] + 120.0;
+
+    // The body's own rows, at the same column the intro's line-end reaches.
+    let body_rows: Vec<f32> = regions
+        .iter()
+        .filter(|r| r.field == "body")
+        .map(|r| (r.rect[1] + r.rect[3]) / 2.0)
+        .collect();
+    assert!(!body_rows.is_empty(), "the body surfaces regions: {regions:?}");
+    for y in body_rows {
+        assert_eq!(
+            session.field_at(0, far, y, 3.1).as_deref(),
+            Some("body"),
+            "a point on the body's own ink at ({far}, {y}) stays the body's"
+        );
+    }
+}
+
 #[test]
 fn a_point_past_the_tolerance_is_still_a_miss() {
     let session = open();
