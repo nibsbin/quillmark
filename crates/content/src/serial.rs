@@ -241,20 +241,54 @@ fn arr_or_empty<'a>(v: &'a Value, key: &str) -> &'a [Value] {
     v.get(key).map(as_slice).unwrap_or_default()
 }
 
+// The `@0.93.0` payload keys, per built-in name: the spelling that put a
+// built-in's payload in named siblings. One frozen table, read from both sides —
+// [`payload`] falls back to exactly the keys [`reject_legacy_siblings`] refuses
+// — so a key a later promotion adds is in neither, and the two spellings stay
+// split by release rather than by which names a build knows.
+
+/// The `@0.93.0` payload keys of a built-in `kind`.
+fn legacy_line_kind_keys(tag: &str) -> &'static [&'static str] {
+    match tag {
+        "heading" => &["level"],
+        "code" => &["lang"],
+        _ => &[],
+    }
+}
+
+/// The `@0.93.0` payload keys of a built-in `container`. `instance` is not among
+/// them: it was an envelope key then and stays one.
+fn legacy_container_keys(tag: &str) -> &'static [&'static str] {
+    match tag {
+        "list_item" => &["ordered", "ordinal", "start"],
+        _ => &[],
+    }
+}
+
+/// The `@0.93.0` payload keys of a built-in mark `type`. `start`/`end` are not
+/// among them: they are the mark's own envelope.
+fn legacy_mark_keys(ty: &str) -> &'static [&'static str] {
+    match ty {
+        "link" => &["url"],
+        "anchor" => &["id"],
+        _ => &[],
+    }
+}
+
 /// One entry of a built-in's payload bag: `attrs.<key>`, or the named sibling
-/// `<key>` where there is no bag — the `@0.93.0` spelling, which storage still
-/// holds and no migration reaches.
+/// `<key>` where there is no bag and `key` is one of `legacy` — the `@0.93.0`
+/// spelling, which storage still holds and no migration reaches.
 ///
 /// Unambiguous because a bag's presence is a pure function of the value: a
 /// built-in carrying a payload always writes one, so an absent bag means either
-/// the sibling spelling or an empty payload, and those agree on every key.
-///
-/// Frozen. The two spellings are split by release, not by whether a build knows
-/// the name, so a promotion neither grows this nor inherits it.
-fn payload<'a>(o: &'a Map<String, Value>, key: &'static str) -> Option<&'a Value> {
-    match o.get("attrs") {
+/// the sibling spelling or an empty payload, and those agree on every key. An
+/// empty bag is an absent one here as it is everywhere else, so the two
+/// spellings of "no payload" cannot answer differently.
+fn payload<'a>(o: &'a Map<String, Value>, legacy: &[&str], key: &'static str) -> Option<&'a Value> {
+    match o.get("attrs").filter(|a| !crate::model::is_empty_bag(a)) {
         Some(attrs) => attrs.get(key),
-        None => o.get(key),
+        None if legacy.contains(&key) => o.get(key),
+        None => None,
     }
 }
 
@@ -295,10 +329,11 @@ pub fn line_kind_from_value(v: &Value) -> Result<LineKind, ParseError> {
         .get("kind")
         .and_then(Value::as_str)
         .ok_or(ParseError::Shape("line kind"))?;
+    let legacy = legacy_line_kind_keys(tag);
     match tag {
         "para" => Ok(LineKind::Para),
         "heading" => {
-            let level = payload(o, "level")
+            let level = payload(o, legacy, "level")
                 .and_then(Value::as_u64)
                 .ok_or(ParseError::Shape("heading level"))?;
             if !(1..=6).contains(&level) {
@@ -307,7 +342,7 @@ pub fn line_kind_from_value(v: &Value) -> Result<LineKind, ParseError> {
             Ok(LineKind::Heading { level: level as u8 })
         }
         "code" => Ok(LineKind::Code {
-            lang: payload(o, "lang")
+            lang: payload(o, legacy, "lang")
                 .and_then(Value::as_str)
                 .map(crate::import::sanitize_lang)
                 .filter(|l| !l.is_empty()),
@@ -388,13 +423,18 @@ pub fn container_from_value(v: &Value) -> Result<Container, ParseError> {
         .and_then(Value::as_str)
         .ok_or(ParseError::Shape("container kind"))?;
     let instance = o.get("instance").and_then(Value::as_u64).unwrap_or(0);
+    let legacy = legacy_container_keys(tag);
     match tag {
         "list_item" => Ok(Container::ListItem {
-            ordered: payload(o, "ordered")
+            ordered: payload(o, legacy, "ordered")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
-            start: payload(o, "start").and_then(Value::as_u64).unwrap_or(1),
-            ordinal: payload(o, "ordinal").and_then(Value::as_u64).unwrap_or(0),
+            start: payload(o, legacy, "start")
+                .and_then(Value::as_u64)
+                .unwrap_or(1),
+            ordinal: payload(o, legacy, "ordinal")
+                .and_then(Value::as_u64)
+                .unwrap_or(0),
             instance,
         }),
         "quote" => Ok(Container::Quote { instance }),
@@ -454,6 +494,7 @@ pub fn mark_from_value(v: &Value) -> Result<Mark, ParseError> {
         end,
         ty,
     } = mark_shape(v)?;
+    let legacy = legacy_mark_keys(ty);
     let kind = match ty {
         "strong" => MarkKind::Strong,
         "emph" => MarkKind::Emph,
@@ -461,13 +502,13 @@ pub fn mark_from_value(v: &Value) -> Result<Mark, ParseError> {
         "strike" => MarkKind::Strike,
         "code" => MarkKind::Code,
         "link" => MarkKind::Link {
-            url: payload(o, "url")
+            url: payload(o, legacy, "url")
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_string(),
         },
         "anchor" => MarkKind::Anchor {
-            id: payload(o, "id")
+            id: payload(o, legacy, "id")
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_string(),
@@ -497,36 +538,7 @@ pub fn mark_from_value(v: &Value) -> Result<Mark, ParseError> {
 //   means a stale copy of the encoding and the read is a guess at its intent.
 //
 // The rule is narrow on purpose: a *legacy payload key* beside the name that
-// spelled it, nothing else. The table is frozen, so a promotion neither grows
-// it nor inherits it.
-
-/// The `@0.93.0` payload keys of a built-in `kind`.
-fn legacy_line_kind_keys(tag: &str) -> &'static [&'static str] {
-    match tag {
-        "heading" => &["level"],
-        "code" => &["lang"],
-        _ => &[],
-    }
-}
-
-/// The `@0.93.0` payload keys of a built-in `container`. `instance` is not among
-/// them: it was an envelope key then and stays one.
-fn legacy_container_keys(tag: &str) -> &'static [&'static str] {
-    match tag {
-        "list_item" => &["ordered", "ordinal", "start"],
-        _ => &[],
-    }
-}
-
-/// The `@0.93.0` payload keys of a built-in mark `type`. `start`/`end` are not
-/// among them: they are the mark's own envelope.
-fn legacy_mark_keys(ty: &str) -> &'static [&'static str] {
-    match ty {
-        "link" => &["url"],
-        "anchor" => &["id"],
-        _ => &[],
-    }
-}
+// spelled it, nothing else. It reads the same frozen table [`payload`] does.
 
 /// [`line_kind_from_value`] for the authored lane: a legacy payload sibling, or
 /// a `lang` the storage decode would reduce, is a shape error rather than a
@@ -547,7 +559,8 @@ fn reject_unwritable_lang(v: &Value) -> Result<(), ParseError> {
     if o.get("kind").and_then(Value::as_str) != Some("code") {
         return Ok(());
     }
-    let Some(lang) = payload(o, "lang").and_then(Value::as_str) else {
+    let Some(lang) = payload(o, legacy_line_kind_keys("code"), "lang").and_then(Value::as_str)
+    else {
         return Ok(());
     };
     if crate::import::sanitize_lang(lang) != lang {
@@ -1597,16 +1610,27 @@ mod tests {
     /// the storage decode and the `setKind` op wire as much as the importer.
     #[test]
     fn decoded_code_lang_carries_the_sanitized_shape() {
-        let cases: [(Value, Option<&str>); 4] = [
+        let cases: [(Value, Option<&str>); 5] = [
             (
-                serde_json::json!({"kind": "code", "lang": "rust\ninjected line"}),
+                serde_json::json!({"kind": "code", "attrs": {"lang": "rust\ninjected line"}}),
                 Some("rust"),
             ),
-            (serde_json::json!({"kind": "code", "lang": "r`s"}), Some("r")),
-            (serde_json::json!({"kind": "code", "lang": " rust"}), None),
+            (
+                serde_json::json!({"kind": "code", "attrs": {"lang": "r`s"}}),
+                Some("r"),
+            ),
+            (
+                serde_json::json!({"kind": "code", "attrs": {"lang": " rust"}}),
+                None,
+            ),
             (
                 serde_json::json!({"kind": "code", "attrs": {"lang": "c++ 17"}}),
                 Some("c++"),
+            ),
+            // The sibling spelling reaches the same reduction.
+            (
+                serde_json::json!({"kind": "code", "lang": "r`s"}),
+                Some("r"),
             ),
         ];
         for (v, want) in cases {
@@ -1709,6 +1733,33 @@ mod tests {
                 .unwrap()
                 .to_canonical_json(),
             r#"{"islands":[],"lines":[{"attrs":{"level":2},"containers":[],"kind":"heading"}],"marks":[],"text":"hi"}"#
+        );
+    }
+
+    /// An empty bag is not a bag: it is one of the two spellings of *no
+    /// payload*, so it cannot out-vote the sibling read the way a real one
+    /// does. Reading it as a bag would fail a `heading` outright and renumber a
+    /// list item in silence.
+    #[test]
+    fn an_empty_bag_does_not_shadow_the_legacy_sibling() {
+        assert_eq!(
+            line_kind_from_value(&serde_json::json!({
+                "kind": "heading", "level": 2, "attrs": {}
+            }))
+            .unwrap(),
+            LineKind::Heading { level: 2 }
+        );
+        assert_eq!(
+            container_from_value(&serde_json::json!({
+                "container": "list_item", "attrs": {}, "ordered": true, "start": 3, "ordinal": 1
+            }))
+            .unwrap(),
+            Container::ListItem {
+                ordered: true,
+                start: 3,
+                ordinal: 1,
+                instance: 0,
+            }
         );
     }
 

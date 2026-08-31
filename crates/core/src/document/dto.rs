@@ -1772,7 +1772,7 @@ title: Hi
 
     #[test]
     fn over_nested_legacy_body_is_malformed() {
-        // An over-nested legacy body never rendered; the 92→93 hop maps
+        // An over-nested legacy body never rendered; the 92→112 hop maps
         // `NestingTooDeep` to `Malformed` rather than dropping structure.
         let deep = ">".repeat(crate::error::MAX_NESTING_DEPTH + 5);
         let card = CardV0_92_0 {
@@ -1784,19 +1784,30 @@ title: Hi
         assert!(err.to_string().contains("card body"));
     }
 
+    /// A body that will not decode is refused under either tag, though by
+    /// different machinery: `CanonicalContent`'s parse-time check under the
+    /// current one, the hop's own decode under `@0.93.0`, whose frozen tree
+    /// carries the body raw.
     #[test]
     fn deserialize_rejects_invalid_content_body() {
-        let blob = r#"{
-            "schema": "quillmark/document@0.93.0",
-            "main": {
-                "payload": {"items": [
-                    {"type": "quill", "value": "q@0.1"},
-                    {"type": "kind", "value": "main"}
-                ]},
-                "body": {"text": "a\nb", "lines": [{"kind": "para", "containers": []}], "marks": [], "islands": []}
-            },
-            "cards": []
-        }"#;
-        assert!(serde_json::from_str::<Document>(blob).is_err());
+        for schema in [STORAGE_V0_112_0, STORAGE_V0_93_0] {
+            let blob = format!(
+                r#"{{
+                "schema": "{schema}",
+                "main": {{
+                    "payload": {{"items": [
+                        {{"type": "quill", "value": "q@0.1"}},
+                        {{"type": "kind", "value": "main"}}
+                    ]}},
+                    "body": {{"text": "a\nb", "lines": [{{"kind": "para", "containers": []}}], "marks": [], "islands": []}}
+                }},
+                "cards": []
+            }}"#
+            );
+            assert!(
+                serde_json::from_str::<Document>(&blob).is_err(),
+                "accepted a one-line `lines` over two lines of text under {schema}"
+            );
+        }
     }
 }

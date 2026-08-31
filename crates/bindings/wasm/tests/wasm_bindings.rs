@@ -153,7 +153,7 @@ fn test_json_dto_round_trip() {
 
     let dto = doc.to_json();
     assert!(
-        dto.contains("\"quillmark/document@0.93.0\""),
+        dto.contains("\"quillmark/document@0.112.0\""),
         "DTO string must carry the schema version, got: {dto}"
     );
 

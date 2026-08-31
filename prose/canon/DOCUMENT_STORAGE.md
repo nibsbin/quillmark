@@ -338,18 +338,30 @@ payload spelled as a **named sibling**, which is how every release through
 `@0.93.0` wrote it:
 
   - **The storage lane reads it, and must.** `serial::payload` falls back to the
-    sibling when the bag is absent. Most stored content cannot be migrated: a
-    `richtext` field rests as a content object inside an opaque payload value,
-    under no schema tag, so the decoder's tolerance is the only thing that opens
-    it. The fallback is frozen: a promotion neither grows it nor inherits it. It
-    is also not retirable on tag evidence, no tag naming those rows. Read-repair
-    converges the population; cold rows keep it alive.
+    sibling when the bag is absent — an *empty* bag being an absent one here as
+    everywhere. Most stored content cannot be migrated: a `richtext` field rests
+    as a content object inside an opaque payload value, under no schema tag, so
+    the decoder's tolerance is the only thing that opens it. It is also not
+    retirable on tag evidence, no tag naming those rows. Read-repair converges
+    the population; cold rows keep it alive.
   - **The authored lane rejects it.** A legacy payload sibling is a shape error
     (`serial::line_kind_from_authored_value` and its two twins for the op wire,
     `serial::from_authored_value` for a whole content). A host writing it now
     holds a stale copy of the encoding, and where a bag sits beside it the
     sibling it meant is not the one the decoder reads. Reads that hand back
     stored content (`exportMarkdown`, `rebase`) are storage-lane, not this one.
+
+  Both read one frozen table (`serial::legacy_*_keys`): the fallback reads
+  exactly the keys the rejection refuses, so a key a later promotion adds is in
+  neither and the two spellings stay split by release rather than by which names
+  a build knows.
+
+  The authored lane is the whole-content doors — `overwrite`, `install`,
+  `CardInput.body`, the op wire. A **typed field write** is not among them:
+  `document::canonical_richtext_value` decodes storage-lane on purpose, sharing
+  that entry point with a quill's schema literals, which are read out of a
+  `Quill.yaml` that may predate the release. It re-canonicalizes what it
+  decodes, so the value rests in the current spelling either way.
 
 The same split governs an unreadable **table-cell mark**. Storage skips it:
 `serial::parse_cell` is lenient, and normalization makes the skip permanent. The
@@ -589,7 +601,10 @@ When the `Document` wire format changes again:
        StoredDocument::V0_112_0(p) => Document::try_from(DocumentV0_NN_0::try_from(p)?),
        StoredDocument::V0_93_0(p) => Document::try_from(DocumentV0_NN_0::try_from(
            DocumentV0_112_0::try_from(p)?,
-       )),
+       )?),
+       StoredDocument::V0_92_0(p) => Document::try_from(DocumentV0_NN_0::try_from(
+           DocumentV0_112_0::try_from(p)?,
+       )?),
    }
    ```
 

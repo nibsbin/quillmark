@@ -720,12 +720,6 @@ impl<'a> Emit<'a> {
 struct Wrap {
     start: usize,
     end: usize,
-    /// The canonical order among coincident wraps: the mark's own tie-break, so
-    /// the nesting follows the stored order rather than a second one kept here.
-    /// Every wrap is a content-wrapping call, so which nesting it picks is
-    /// visually inert — `#strong[#emph[x]]` and `#emph[#strong[x]]` set the
-    /// same glyphs.
-    ord: (String, String),
     open: String,
 }
 
@@ -750,14 +744,14 @@ fn clip_wraps_to_codes(wraps: &mut Vec<Wrap>, codes: &[(usize, usize)]) {
 }
 
 /// The mark boundary sweep, shared by prose inline emission and table-cell
-/// rendering: opens `wraps` (longer span first, then the canonical mark order) and
-/// closes-and-reopens deeper survivors at overlaps. `emit_run(out, pos, tail)`
-/// writes the content at `pos` and returns the next position and the [`Tail`] it
-/// leaves. Every wrap `open` ends `[`, and a content block's head is a line
-/// start of Typst's own, so the anchor rearms at each one; each `]` completes a
-/// call instead. `wraps` must already be clipped against the code spans
-/// ([`clip_wraps_to_codes`]), so no wrap `end` hides inside a span the
-/// callback's cursor jumps over.
+/// rendering: opens `wraps` (longer span first, coincident wraps in `wraps`
+/// order) and closes-and-reopens deeper survivors at overlaps.
+/// `emit_run(out, pos, tail)` writes the content at `pos` and returns the next
+/// position and the [`Tail`] it leaves. Every wrap `open` ends `[`, and a
+/// content block's head is a line start of Typst's own, so the anchor rearms at
+/// each one; each `]` completes a call instead. `wraps` must already be clipped
+/// against the code spans ([`clip_wraps_to_codes`]), so no wrap `end` hides
+/// inside a span the callback's cursor jumps over.
 fn sweep_marks(
     lo: usize,
     hi: usize,
@@ -766,7 +760,7 @@ fn sweep_marks(
     mut tail: Tail,
     mut emit_run: impl FnMut(&mut String, usize, Tail) -> (usize, Tail),
 ) {
-    // Open marks, outermost first. Storing the index (not `(end, ord)`) keeps
+    // Open marks, outermost first. Storing the index (not the boundary) keeps
     // each mark's identity, so a reopened mark re-emits its OWN delimiter: two
     // same-`end` links must not collapse, whatever their urls.
     let mut stack: Vec<usize> = Vec::new();
@@ -793,7 +787,11 @@ fn sweep_marks(
             break;
         }
         let mut opening: Vec<usize> = (0..wraps.len()).filter(|&wi| wraps[wi].start == pos).collect();
-        opening.sort_by(|&a, &b| wraps[b].end.cmp(&wraps[a].end).then_with(|| wraps[a].ord.cmp(&wraps[b].ord)));
+        // No tie-break: `wraps` follows the marks, which arrive canonically
+        // sorted by `(start, end, MarkKind::sort_key)`, and a stable sort on
+        // `end` alone leaves two coincident wraps in that order. Nesting the
+        // stored order is what keeps one document one string.
+        opening.sort_by(|&a, &b| wraps[b].end.cmp(&wraps[a].end));
         for wi in opening {
             out.push_str(&wraps[wi].open);
             tail = Tail::Anchor;
@@ -857,14 +855,12 @@ fn wraps_and_codes(marks: &[Mark], lo: usize, hi: usize) -> (Vec<Wrap>, Vec<(usi
                 wraps.push(Wrap {
                     start: s,
                     end: e,
-                    ord: m.kind.sort_key(),
                     open: wrap_open(&m.kind),
                 });
             }
             MarkKind::Link { url } => wraps.push(Wrap {
                 start: s,
                 end: e,
-                ord: m.kind.sort_key(),
                 open: format!("#link(\"{}\")[", escape_string(url)),
             }),
             // `Anchor` is identity, `Unknown` has no Typst spelling, and

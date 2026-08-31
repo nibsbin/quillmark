@@ -1982,8 +1982,8 @@ fn js_to_content(value: JsValue, ctx: &str) -> Result<quillmark_content::Normali
 }
 
 /// [`js_to_content`] on the **authored** lane. The host is writing this content
-/// now, so `attrs` beside a built-in discriminator is a stale copy of the
-/// built-in list, and is reported instead of silently dropped.
+/// now, so a built-in's payload spelled as a named sibling is a stale copy of
+/// the encoding, and is reported instead of read as a guess at its intent.
 fn js_to_authored_content(
     value: JsValue,
     ctx: &str,
