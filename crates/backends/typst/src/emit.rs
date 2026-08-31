@@ -722,9 +722,9 @@ struct Wrap {
     end: usize,
     /// The canonical order among coincident wraps: the mark's own tie-break, so
     /// the nesting follows the stored order rather than a second one kept here.
-    /// Every wrap is a content-wrapping call, so the nesting it picks is
+    /// Every wrap is a content-wrapping call, so which nesting it picks is
     /// visually inert — `#strong[#emph[x]]` and `#emph[#strong[x]]` set the
-    /// same glyphs — and only the generated string moves.
+    /// same glyphs.
     ord: (String, String),
     open: String,
 }

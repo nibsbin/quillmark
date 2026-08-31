@@ -521,10 +521,9 @@ export function isUnknownIsland(island) {
 // entries two adjacent runs must share for the markdown projection to read them
 // as one, and therefore for the canonical form to have to spend a
 // discriminator. `start` is not among them, since CommonMark reads only a
-// list's first number — which is also why a built-in cannot simply take the
-// unknown branch now that both spell their payload alike. A table rather than a
-// switch, so `tests/known_names_drift.rs` can pin it against the Rust
-// predicate.
+// list's first number — a subset, which is why a built-in needs an entry rather
+// than the unknown branch's whole-bag compare. A table rather than a switch, so
+// `tests/known_names_drift.rs` can pin it against the Rust predicate.
 
 const WELD_KEYS = { list_item: ['ordered'], quote: [] };
 

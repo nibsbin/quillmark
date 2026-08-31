@@ -650,9 +650,7 @@ impl MarkKind {
     /// It is the pair the **wire** carries, read back off the value: a build
     /// that knows a member and a build that reads it as [`MarkKind::Unknown`]
     /// compute the same key from the same bytes, so one document has one
-    /// canonical form whatever either build's vocabulary is. That is what
-    /// replaces the ordinal this tie-break used to spend, whose placement rule
-    /// could only ever hold against the built-ins.
+    /// canonical form whatever either build's vocabulary is.
     ///
     /// The attrs half comes from [`attrs`](Self::attrs) rather than a string per
     /// arm, so it cannot disagree with what the encoder writes — which it would

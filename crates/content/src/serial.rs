@@ -198,11 +198,11 @@ fn bag_from_wire(
     Ok(v.clone())
 }
 
-/// [`bag_from_wire`] for a carrier axis' `attrs`, where an empty bag reads as
-/// the absent one: the encoder omits it either way, so collapsing here is what
-/// makes a value decoded from one spelling compare equal to one decoded from
-/// the other. `normalize` cannot reach every such value — a [`crate::ops::MarkOp`]
-/// carries a kind with no content to be normalized with.
+/// [`bag_from_wire`] for a carrier axis' `attrs`: an empty bag reads as the
+/// absent one. The encoder omits it either way, so collapsing here is what
+/// makes a value decoded from one spelling equal one decoded from the other.
+/// `normalize` cannot reach every such value — a [`crate::ops::MarkOp`] carries
+/// a kind with no content to be normalized with.
 ///
 /// Island `props` keeps both spellings, and takes [`bag_from_wire`] directly:
 /// it is written on every island, so `{}` there is a value rather than an
@@ -241,21 +241,16 @@ fn arr_or_empty<'a>(v: &'a Value, key: &str) -> &'a [Value] {
     v.get(key).map(as_slice).unwrap_or_default()
 }
 
-/// One entry of a built-in's payload bag.
+/// One entry of a built-in's payload bag: `attrs.<key>`, or the named sibling
+/// `<key>` where there is no bag — the `@0.93.0` spelling, which storage still
+/// holds and no migration reaches.
 ///
-/// The bag is the spelling on every axis, so this is `attrs.<key>` — except on a
-/// row written before `@0.112.0`, which spelled a built-in's payload as named
-/// siblings. Reading the sibling when the bag is **absent** is what lets those
-/// bytes decode unchanged, and it is unambiguous because a bag's presence is a
-/// pure function of the value: a built-in carrying a payload always writes one,
-/// so an absent bag means the legacy spelling or an empty payload, and the two
-/// agree on every key.
+/// Unambiguous because a bag's presence is a pure function of the value: a
+/// built-in carrying a payload always writes one, so an absent bag means either
+/// the sibling spelling or an empty payload, and those agree on every key.
 ///
-/// Frozen, and coupled to nothing. The fold this replaces had to grow with the
-/// vocabulary — a promotion added a name to `RESERVED_*` and inherited the fold
-/// with it — because the two spellings were split by *whether a build knew the
-/// name*. One spelling per name leaves a split by release alone, which no later
-/// promotion touches.
+/// Frozen. The two spellings are split by release, not by whether a build knows
+/// the name, so a promotion neither grows this nor inherits it.
 fn payload<'a>(o: &'a Map<String, Value>, key: &'static str) -> Option<&'a Value> {
     match o.get("attrs") {
         Some(attrs) => attrs.get(key),
@@ -489,25 +484,23 @@ pub fn mark_from_value(v: &Value) -> Result<Mark, ParseError> {
 
 // Authored-lane readers, strict about the payload spelling.
 //
-// [`payload`] reads a built-in's payload from a named sibling when the bag is
-// absent, so `{"type": "link", "url": "…"}` — the `@0.93.0` spelling — still
-// decodes. The two wire lanes want opposite answers to that, and the seam is
-// authored-now vs read-back:
+// [`payload`] reads a built-in's payload from a named sibling where there is no
+// bag, so `{"type": "link", "url": "…"}` decodes. The two wire lanes want
+// opposite answers to that, and the seam is authored-now vs read-back:
 //
-// - **Storage** (`Content::from_canonical_json`) stays lenient. Every row
-//   written before the bump spells a built-in's payload that way, and most of
-//   them are not reachable by any migration: a `richtext` field rests as the
-//   content object inside an opaque payload value, with no schema tag over it.
+// - **Storage** (`Content::from_canonical_json`) stays lenient. Stored content
+//   in that spelling is mostly beyond any migration's reach: a `richtext` field
+//   rests as the content object inside an opaque payload value, with no schema
+//   tag over it.
 // - **Authored** (the `crate::ops` wire, and `install` through
 //   [`from_authored_value`]) rejects it: the host is writing now, so the shape
 //   means a stale copy of the encoding and the read is a guess at its intent.
 //
 // The rule is narrow on purpose: a *legacy payload key* beside the name that
-// spelled it, nothing else. Its table is frozen at the release that moved them,
-// so unlike the fold it replaces, a later promotion neither grows it nor
-// inherits it.
+// spelled it, nothing else. The table is frozen, so a promotion neither grows
+// it nor inherits it.
 
-/// The `@0.93.0` payload keys of a built-in `kind`, which the bag now carries.
+/// The `@0.93.0` payload keys of a built-in `kind`.
 fn legacy_line_kind_keys(tag: &str) -> &'static [&'static str] {
     match tag {
         "heading" => &["level"],
@@ -1493,8 +1486,8 @@ mod tests {
                 matches!(from_authored_value(&v), Err(ParseError::Shape(_))),
                 "accepted: {json}"
             );
-            // The storage lane opens all five: a row written before the bump
-            // must keep loading, and most such rows reach no migration.
+            // The storage lane opens all five: stored content in that
+            // spelling must keep loading, and most of it reaches no migration.
             assert!(
                 Content::from_canonical_json(json).is_ok(),
                 "storage lane rejected: {json}"
@@ -1509,9 +1502,9 @@ mod tests {
             .is_empty());
     }
 
-    /// A foreign bag on a built-in is not the legacy spelling and not a payload:
-    /// it drops unread on a member that carries none, and is read past on one
-    /// that does. Both lanes agree, since neither shape is ambiguous any more.
+    /// A foreign bag on a built-in is neither the legacy spelling nor a
+    /// payload: it drops unread on a member that carries none, and is read past
+    /// on one that does. Both lanes agree, the shape being unambiguous.
     #[test]
     fn a_foreign_bag_on_a_built_in_drops_unread() {
         let json = concat!(
@@ -1645,11 +1638,11 @@ mod tests {
         ));
     }
 
-    /// Every built-in spelled its payload as named siblings through `@0.93.0`,
-    /// and those bytes are read by this build unchanged. This is the frozen
-    /// artifact: delete it with the sibling read, once no stored content is left
-    /// in the shape — which no schema tag can answer, since a `richtext` field
-    /// rests as a content object under no tag of its own.
+    /// The `@0.93.0` spelling — every built-in's payload in named siblings —
+    /// decodes unchanged. The frozen artifact: delete it with the sibling read,
+    /// once no stored content is left in that shape, which no schema tag can
+    /// answer since a `richtext` field rests as a content object under no tag of
+    /// its own.
     #[test]
     fn built_in_decoders_read_the_legacy_sibling_form() {
         let cases: [(Value, LineKind); 2] = [
@@ -1794,8 +1787,7 @@ mod tests {
 
     /// The canonical tie-break is the `(type, attrs)` pair the wire carries, so
     /// a build that knows a member and one that reads it as `Unknown` order it
-    /// identically — against every other member, not just the built-ins, which
-    /// is as far as the ordinal this replaced could reach.
+    /// identically — against every other member, not only the built-ins.
     #[test]
     fn the_mark_tie_break_is_what_the_wire_carries() {
         let all = [

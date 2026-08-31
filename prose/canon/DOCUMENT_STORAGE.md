@@ -328,10 +328,10 @@ Three rules bound the openness:
   `from_canonical_json(to_canonical_json(rt)) == rt` unconditional for a
   validate-clean value.
 
-  A foreign bag on a built-in is a different thing and stays permitted: on a
+  A foreign bag on a built-in is a different thing and is permitted: on a
   member carrying no payload it drops unread, on one that does it is read past.
-  That is the old "the carrier preserves unknown tags, not unknown payloads on
-  known tags", restated at attrs-key granularity.
+  That is "the carrier preserves unknown tags, not unknown payloads on known
+  tags" at attrs-key granularity.
 
 The lanes still split, on what is now the only ambiguous shape — a built-in's
 payload spelled as a **named sibling**, which is how every release through
@@ -341,10 +341,9 @@ payload spelled as a **named sibling**, which is how every release through
     sibling when the bag is absent. Most stored content cannot be migrated: a
     `richtext` field rests as a content object inside an opaque payload value,
     under no schema tag, so the decoder's tolerance is the only thing that opens
-    it. The fallback is frozen and coupled to nothing — unlike the fold it
-    replaced, which grew with every promotion — but it is also not retirable on
-    tag evidence, since no tag names those rows. Read-repair converges the
-    population; cold rows keep it alive.
+    it. The fallback is frozen: a promotion neither grows it nor inherits it. It
+    is also not retirable on tag evidence, no tag naming those rows. Read-repair
+    converges the population; cold rows keep it alive.
   - **The authored lane rejects it.** A legacy payload sibling is a shape error
     (`serial::line_kind_from_authored_value` and its two twins for the op wire,
     `serial::from_authored_value` for a whole content). A host writing it now
@@ -415,16 +414,14 @@ host sending `{"kind":"callout","attrs":{…}}` is writing the promoted spelling
 already, either side of the release. So this is a Rust API note, not a wire
 break.
 
-What is *not* on the list is the sort order. The canonical tie-break after
-`(start, end)` is `MarkKind::sort_key` — the `(type, attrs)` pair the wire
-carries, read back off the value — so a build that knows a member and a build
-that reads it as `Unknown` compute the same key from the same bytes. The
-ordinal this replaced could only ever promise that against the built-ins, never
-against another unknown, and it had to be renumbered on every promotion. The
-block axes sort by nothing, as before.
+The sort order is not among them. The canonical tie-break after `(start, end)`
+is `MarkKind::sort_key` — the `(type, attrs)` pair the wire carries, read back
+off the value — so a build that knows a member and a build that reads it as
+`Unknown` compute the same key from the same bytes, whichever members each
+knows. The block axes sort by nothing.
 
-The island axes never had a gap here: `props` is the payload carrier for known
-and unknown types alike, and `loss` carries no payload.
+The island axes have no gap here: `props` is the payload carrier for known and
+unknown types alike, and `loss` carries no payload.
 
 ## The two id handles
 
@@ -554,7 +551,7 @@ the same reason a load can.
 directly); only the newest DTO converts to the live `Document`. The V0_92_0
 chain lands on V0_112_0 rather than passing through V0_93_0: a cold import
 yields the live content, and re-spelling it *back* to `@0.93.0` only to read it
-forward again would need an encoder for a form this crate no longer writes. The
+forward again would need an encoder for that form, which this crate lacks. The
 `V0_81_0` hop is structural, the `V0_82_0` hop is lossy in exactly one place —
 `$id` is dropped (see "Legacy schemas").
 
@@ -584,7 +581,7 @@ When the `Document` wire format changes again:
    get rejected).
 6. **Extend** the reader. Each older blob migrates to the newest DTO, hopping
    where a hop exists and entering directly where re-spelling backwards would
-   need an encoder the crate no longer has. Every arm below the newest is
+   need an encoder the crate lacks. Every arm below the newest is
    fallible today, so every one threads `?`:
    ```rust
    match stored {
@@ -610,8 +607,8 @@ A new frozen DTO can also reject at parse time through a custom
 (the current `body` field's type) normalizes and validates the embedded content,
 failing with a serde error before any `TryFrom` in the chain above runs.
 Design a new DTO's `Deserialize` to fail the same way if it embeds
-structured (non-string) data of its own — and note that freezing it per step 1
-moves that check into the hop.
+structured (non-string) data of its own. Freezing it per step 1 moves that check
+into the hop.
 
 Old and new DTOs **coexist** in `dto.rs`, so a row written by any
 still-supported past version always loads. Migrations chain

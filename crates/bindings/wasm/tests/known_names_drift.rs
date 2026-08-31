@@ -132,10 +132,10 @@ fn js_weld_keys_match_the_rust_weld_rule() {
         .map(|(tag, _)| tag.trim().trim_start_matches(',').trim().to_string())
         .filter(|t| !t.is_empty())
         .collect();
-    // A built-in arriving without an entry would fall through to the unknown
-    // branch, which compares the whole `attrs`. Both arms carry one now, so the
-    // fallthrough type-checks — and still answers wrong, since `list_item`
-    // welds on a *subset* of its payload (see the `start` case below).
+    // A built-in arriving without an entry falls through to the unknown branch,
+    // which compares the whole `attrs`. Every arm carries one, so that
+    // fallthrough type-checks and still answers wrong: `list_item` welds on a
+    // *subset* of its payload (see the `start` case below).
     assert_eq!(tags, Content::RESERVED_CONTAINERS);
 
     let li = |ordered, start, ordinal, instance| Container::ListItem {
@@ -156,9 +156,9 @@ fn js_weld_keys_match_the_rust_weld_rule() {
     .map(|(name, _)| name)
     .collect();
     assert_eq!(keys("list_item"), reacts);
-    // Why the table outlives the one-spelling change: `start` and `ordinal` ride
-    // `attrs` like everything else, and welding still ignores them, so comparing
-    // the bag whole would spend a discriminator the projection does not need.
+    // `start` and `ordinal` ride `attrs` like everything else, and welding
+    // ignores them, so comparing the bag whole spends a discriminator the
+    // projection does not need.
     assert!(base.same_weld(&li(false, 3, 1, 0)));
     assert_ne!(base.attrs(), li(false, 3, 1, 0).attrs());
 

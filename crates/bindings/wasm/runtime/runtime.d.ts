@@ -256,9 +256,8 @@ export declare function isListItemContainer(
 //
 // They classify unknown TAGS, not unknown payloads on known tags: a future
 // `kind: "footnote"` carrying an `attrs.ref` loses `ref` at any consumer that
-// predates it, with or without these. What they no longer have to classify is
-// the *spelling*: a payload rides `attrs` whether or not this build knows the
-// name, so a promoted tag reads the same either side of its promotion.
+// predates it, with or without these. The spelling needs no classifying: a
+// payload rides `attrs` whether or not this build knows the name.
 
 /** True when this build does not know `line.kind`: the open arm, carrying opaque `attrs`. */
 export declare function isUnknownLine(

@@ -10,8 +10,8 @@
 //!
 //! - **`quillmark/document@0.112.0`**: current, and what new writes carry. The
 //!   V0_93_0 tree over a content whose every vocabulary member spells its
-//!   payload in one `attrs` bag, built-ins included. Nothing in the envelope
-//!   moved; the bytes inside every `body` did.
+//!   payload in one `attrs` bag, built-ins included. The two differ inside the
+//!   `body` and nowhere else.
 //! - **`quillmark/document@0.93.0`**: the same tree over the content form that
 //!   spelled a built-in's payload as named siblings (`{"kind":"heading",
 //!   "level":1}`). Read-only. The hop is a tag change and nothing else: the
@@ -60,7 +60,7 @@ use crate::version::QuillReference;
 /// retagging it would break the versioning it exists to serve.
 pub const STORAGE_V0_112_0: &str = "quillmark/document@0.112.0";
 
-/// The tag [`STORAGE_V0_112_0`] replaced, still read.
+/// The tag before [`STORAGE_V0_112_0`], still read.
 pub const STORAGE_V0_93_0: &str = "quillmark/document@0.93.0";
 
 /// Read the storage version off a raw DTO payload without deserializing it.
@@ -234,8 +234,8 @@ pub struct CardV0_93_0 {
     pub body: serde_json::Value,
 }
 
-/// The V0_93_0 payload shape: identical to V0_92_0, and untouched by this bump,
-/// which moved bytes inside the `body` only.
+/// The V0_93_0 payload shape: identical to V0_92_0. The `body` is where the two
+/// document versions differ.
 pub type PayloadV0_93_0 = PayloadV0_92_0;
 
 // ─── V0_92_0 wire format ──────────────────────────────────────────────────────
@@ -461,8 +461,8 @@ impl TryFrom<StoredDocument> for Document {
         //
         // The V0_92 chain lands on V0_112 rather than passing through V0_93: a
         // cold import yields the live content, and re-spelling it *back* to
-        // `@0.93.0` only to read it forward again would need an encoder for a
-        // form this crate no longer writes.
+        // `@0.93.0` only to read it forward again would need an encoder for
+        // that form, which this crate does not have.
         match stored {
             StoredDocument::V0_112_0(payload) => Document::try_from(payload),
             StoredDocument::V0_93_0(payload) => {
@@ -543,16 +543,15 @@ impl TryFrom<CardV0_112_0> for Card {
 //
 // Structurally nothing moves: the trees are the same shape, and the content
 // decoder reads the `@0.93.0` payload spelling as it reads the current one. So
-// the hop is the decode the frozen tree's raw `body` deferred — which is also
+// the hop is the decode the frozen tree's raw `body` defers — which is also
 // where an invalid legacy body is caught, `CanonicalContent`'s parse-time check
 // not being available to a raw field.
 //
 // It reaches only the `body`. Every other stored content — a `richtext` or
 // `plaintext` field, a `$seed` overlay — sits inside an opaque payload value
 // with no schema tag over it, and no migration can find it without guessing at
-// the shape of host data. Those rows are read by the decoder's own tolerance,
-// which is why that tolerance is the load-bearing half of this bump and this
-// hop is the bookkeeping half.
+// the shape of host data. What opens those is the decoder's tolerance, not this
+// hop.
 
 impl TryFrom<DocumentV0_93_0> for DocumentV0_112_0 {
     type Error = StorageError;
