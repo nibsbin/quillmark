@@ -2730,10 +2730,9 @@ impl LiveSession {
     /// points, bottom-left origin, as in `fieldAt`. The offset is cluster-exact
     /// and degrades to the containing segment's start on origin-less ink.
     ///
-    /// `tolPt` earns the most here: a glyph box is the line's ink by the
-    /// glyph's advance, so the leading between two lines lies inside a paragraph
-    /// and on no glyph. Under `tolPt` such a point takes the nearer line, at the
-    /// column it was clicked in.
+    /// `tolPt` earns the most here: the leading between two lines lies inside a
+    /// paragraph and on no glyph, and under `tolPt` such a point takes the
+    /// nearer line.
     #[wasm_bindgen(js_name = positionAt)]
     pub fn position_at(
         &self,

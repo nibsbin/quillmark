@@ -66,9 +66,10 @@
   and under half of it double-spaced, which is the whole of why clicking the
   preview to place a caret misses. Both queries now take `tol` in PDF points
   (`tolPt`, optional, on the WASM seam) and answer with the nearest placement
-  within it. The caller derives it from the scale it drew the page at, slack
-  being a property of the pointer rather than of the document: a tolerance fixed
-  in points shrinks under the cursor exactly as the target does. Ranking by
+  within it, a radius in both axes. The caller derives it from the scale it drew
+  the page at, slack being a property of the pointer rather than of the
+  document: a tolerance fixed in points shrinks under the cursor exactly as the
+  target does. Ranking by
   distance rather than growing each rect is what keeps the answer the nearer
   item's — outset boxes overlap, and a first match over them decides by paint
   order — and makes the tolerance a pure widening: containment is distance zero,
