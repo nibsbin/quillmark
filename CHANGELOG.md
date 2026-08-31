@@ -33,7 +33,9 @@
   as it always did in effect. Canonical bytes move (`attrs` on built-ins, and
   coincident marks reorder on the new tie-break), so **content hashes recompute
   once**; generated Typst nests coincident wraps the other way for identical
-  glyphs, moving golden expectations. A consumer holding bare seam JSON outside a
+  glyphs, and `exportMarkdown` nests them the same way (`**~~x~~**` becomes
+  `~~**x**~~`, parsing back to the same content), so goldens and any hash over
+  either projection move too. A consumer holding bare seam JSON outside a
   stored document gets a hard break, having no tag to dispatch on. The storage
   tag becomes `quillmark/document@0.112.0`; `@0.93.0` rows migrate forward on
   read. See [0.111 → 0.112](docs/migrations/0.111-to-0.112.md).

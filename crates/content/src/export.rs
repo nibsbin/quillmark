@@ -1043,6 +1043,24 @@ mod tests {
         assert_eq!(to_markdown(&rt), format!("{}x", "> ".repeat(DEPTH)));
     }
 
+    /// Coincident marks nest in the order the canonical form stores, which is
+    /// `MarkKind::sort_key` at a tie — the same rule the Typst emitter follows,
+    /// and the reason this projection's bytes move when that key does. Both
+    /// spellings re-import to one content, so the fixed point is over the
+    /// content, not over the markdown.
+    #[test]
+    fn coincident_marks_project_in_the_stored_order() {
+        let rt = Content::new("x".to_string(), vec![Line::new(LineKind::Para)])
+            .with_marks(vec![
+                Mark::new(0, 1, MarkKind::Strong),
+                Mark::new(0, 1, MarkKind::Strike),
+            ])
+            .into_normalized();
+        rt.validate().expect("validates");
+        assert_eq!(to_markdown(&rt), "~~**x**~~");
+        assert_eq!(from_markdown("**~~x~~**").unwrap(), rt);
+    }
+
     fn li(ordinal: u64, instance: u64) -> Vec<Container> {
         vec![Container::ListItem {
             ordered: false,
