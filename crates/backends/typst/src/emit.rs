@@ -1642,6 +1642,14 @@ mod tests {
                     !markup.contains(ISLAND_SLOT),
                     "the slot char reached the markup: {markup:?}"
                 );
+                // The guard breaks the coupling by escaping, so the text either
+                // side of the closed gap still reaches the page as itself.
+                let authored: String = text.chars().filter(|c| *c != ISLAND_SLOT).collect();
+                assert_eq!(
+                    resolve(markup.trim_end()).0,
+                    authored,
+                    "the seam guard moved the text for {text:?}"
+                );
                 cases.push(markup);
             }
         }
