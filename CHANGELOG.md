@@ -61,6 +61,27 @@
   `SessionHandle::{field_at,position_at}` and their `LiveSession` forwarders,
   which a type checker reports; `0.0` is the previous behaviour exactly. The
   WASM argument is optional and defaults to `0`, so no JS caller changes.
+- fix(core): **the payload ingresses refuse what no parse can produce.** The
+  wire `TryFrom`, the storage DTO and `push_card` / `insert_card` each admitted
+  a payload whose markdown does not read back: a duplicate field key, more
+  fields than `MAX_FIELD_COUNT`, a repeated `$` entry, a comment whose text
+  spans lines, and a composable card carrying `$quill` or `$seed`. The comment
+  is the one that fails quietly — `#` opens a single line, so a text of
+  `"hi\ninjected: pwned"` emits bare YAML after the first line and re-reads as
+  a field nobody wrote. The rest emit markdown the parser rejects, and a
+  composable `$quill` also trips the `debug_assert` in `from_main_and_cards`,
+  which the rebuild behind `compile_data` runs: a render panicked on a debug
+  build where it owed an error. `PayloadViolation` carries the verdict —
+  `FieldViolation`'s seam one level up, reading the item list rather than one
+  item — which the wire maps to `WireError::InvalidPayload` and the DTO to
+  `StorageError::Malformed`, so both boundaries share one message. The
+  `$quill` / `$seed` half is positional, since a `CardWire` is equally how the
+  main card is read back, so it sits at placement beside the `$kind` gate as
+  `EditError::RootOnlyEntry` (`edit::root_only_entry`). The DTO refuses a root
+  `$kind` other than `main` and synthesises an absent one, as the parser does.
+  Additive: `validate_payload`, `PayloadViolation`, `MetaKey::ALL`. Both error
+  enums are `#[non_exhaustive]`, so no compiling caller changes, and no
+  document the format calls readable is refused.
 - fix(cli): **`render -f svg` / `-f png` writes every page.** The Typst backend
   emits one artifact per page and the command wrote `artifacts.first()`,
   discarding the rest with no warning, so a multi-page document produced a
