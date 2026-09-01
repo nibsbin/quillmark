@@ -32,6 +32,11 @@
 //! the text behind an emitted `#raw(…)`, `#image(…)` or a wrap's `]` would reach
 //! it as code — or, for the `;`, vanish (`continues_expr`).
 //!
+//! **Seams.** And a third time, where the emitter writes nothing between two
+//! runs. Escaping is per run, so a multi-character rule sees one side of such a
+//! join at a time and the coupling straddling it escapes neither
+//! (`couples_across`).
+//!
 //! **The 2→4 escape coupling.** Each run records only its `(content, generated)`
 //! pair; per-char spans are *recomputed* by a scan treating `//`→`\/\/` as a
 //! 2-char/4-byte cluster and every other char as its own. The `escape_tripwire`
@@ -147,6 +152,20 @@ fn continues_expr(s: &str) -> bool {
     }
 }
 
+/// Do the characters either side of a seam form a Typst coupling? `prev` is the
+/// character behind it, `s` the text ahead. An island this build renders as
+/// nothing lets two runs abut that the content keeps apart, and [`escape_markup`]
+/// sees one side at a time: `a/`, that island, `/b` writes `a//b`, a comment
+/// that eats the rest of the line. Conservative on `...`, whose third dot can
+/// sit either side.
+fn couples_across(prev: Option<char>, s: &str) -> bool {
+    match (prev, s.chars().next()) {
+        (Some('/'), Some('/')) | (Some('.'), Some('.')) => true,
+        (Some('-'), Some(c)) => c == '-' || c == '?' || c.is_numeric(),
+        _ => false,
+    }
+}
+
 /// What the emitter last wrote, which decides the guard the next text run needs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Tail {
@@ -156,6 +175,9 @@ enum Tail {
     Expr,
     /// Ink, which ends both.
     Text,
+    /// Ink, then something that emitted no bytes: the text ahead abuts the text
+    /// behind ([`couples_across`]).
+    Seam,
 }
 
 /// The escape discipline a text run was generated under: which scan inverts its
@@ -711,8 +733,13 @@ impl<'a> Emit<'a> {
             if c == ISLAND_SLOT {
                 let markup = self.island_markup(pos);
                 buf.push_str(&markup);
-                // An island type this build does not know renders nothing.
-                let left = if markup.is_empty() { tail } else { Tail::Expr };
+                // An island type this build does not know, and an empty table,
+                // render nothing, closing the gap the slot held open.
+                let left = match (markup.is_empty(), tail) {
+                    (false, _) => Tail::Expr,
+                    (true, Tail::Text) => Tail::Seam,
+                    (true, t) => t,
+                };
                 return (pos + 1, left);
             }
             let (re, left, (content, g, ctx)) =
@@ -936,6 +963,7 @@ fn emit_run(
     let guarded = match tail {
         Tail::Anchor => opens_line_anchor(&content),
         Tail::Expr => continues_expr(&content),
+        Tail::Seam => couples_across(out.chars().last(), &content),
         Tail::Text => false,
     };
     if guarded {
@@ -1586,6 +1614,8 @@ mod tests {
     /// whatever the marks and islands.
     #[test]
     fn no_emission_forms_a_shorthand_or_a_comment() {
+        use quillmark_content::model::{Island, Line};
+
         let mut cases: Vec<String> = sample_inputs().iter().map(|md| emit(md).markup).collect();
 
         let all = |t: &str, k| vec![Mark::new(0, t.chars().count(), k)];
@@ -1597,6 +1627,23 @@ mod tests {
             ("a--b", vec![Mark::new(0, 2, MarkKind::Code)]),
         ] {
             cases.push(emit_marked(text, marks));
+        }
+
+        // An island this build renders as nothing closes the gap its slot held.
+        for ty in ["widget", "table"] {
+            for text in ["a/{}/b", "a-{}-b", "a-{}?b", "a-{}5b", "a.{}..b", "a..{}.b"] {
+                let text = text.replace("{}", &ISLAND_SLOT.to_string());
+                let rt = Content::new(text.clone(), vec![Line::new(LineKind::Para)])
+                    .with_islands(vec![Island::new("isl-0".into(), ty.into())])
+                    .into_normalized();
+                assert_eq!(rt.validate(), Ok(()), "content invariants for {text:?}");
+                let markup = emit_content(&rt).unwrap().markup;
+                assert!(
+                    !markup.contains(ISLAND_SLOT),
+                    "the slot char reached the markup: {markup:?}"
+                );
+                cases.push(markup);
+            }
         }
 
         for markup in cases {

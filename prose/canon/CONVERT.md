@@ -74,6 +74,13 @@ wrap's closing `]` and an island's `)` would each run on into the document text
 behind them — or, for the `;`, eat the character. Trivia between the two ends
 the expression on its own.
 
+And a third time, at a **seam**: a position where the emitter writes nothing
+between two runs, which an island this build renders as nothing (an unknown
+type, an empty table) leaves behind. The escapers are per run, so a
+multi-character rule sees one side of such a join at a time and the pair
+straddling it escapes neither: `a/`, that island, `/b` would write `a//b`, a
+comment that eats the rest of the line.
+
 Debug builds parse every emission with Typst's own parser: a syntax error there
 is a lowering bug, never a document's.
 
