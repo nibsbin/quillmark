@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.112.0 - 2026-09-01
 
 - feat(content)!: **every vocabulary member spells its payload in `attrs`.** The
   canonical content had two spellings for one thing: a built-in put its payload
