@@ -18,7 +18,7 @@ use quillmark_content::{ApplyError, ChangeBundle, Delta, Normalized};
 use crate::document::meta::{validate_composable_kind, CardKindError};
 use crate::error::diag_args;
 use crate::document::payload::MetaKey;
-use crate::document::{Card, Codec, ContentDecodeError, Document, Payload};
+use crate::document::{Card, Codec, ContentDecodeError, Document, Payload, PayloadItem};
 use crate::quill::{CoercionError, FieldSchema, FieldType, Leniency, QuillConfig};
 use crate::value::{PathSegment, QuillValue};
 use crate::version::QuillReference;
@@ -86,6 +86,11 @@ pub enum EditError {
 
     #[error("card kind 'main' is reserved for the document root")]
     ReservedKind,
+
+    /// A card placed as a composable card carries a `$` entry that binds the
+    /// document root (`$quill`, `$seed`).
+    #[error("'{key}' is carried by the document root only, not by a composable card")]
+    RootOnlyEntry { key: String },
 
     #[error("index {index} is out of range (len = {len})")]
     IndexOutOfRange { index: usize, len: usize },
@@ -190,6 +195,7 @@ impl EditError {
             EditError::UnknownField { .. } => "edit::unknown_field",
             EditError::InvalidKindName(_) => "edit::invalid_kind_name",
             EditError::ReservedKind => "edit::reserved_kind",
+            EditError::RootOnlyEntry { .. } => "edit::root_only_entry",
             EditError::IndexOutOfRange { .. } => "edit::index_out_of_range",
             EditError::ValueTooDeep { .. } => "edit::value_too_deep",
             EditError::FillOnMapping { .. } => "edit::fill_on_mapping",
@@ -217,6 +223,7 @@ impl EditError {
             EditError::UnknownField { field, at: _ } => diag_args! { "field" => field },
             EditError::InvalidKindName(kind) => diag_args! { "kind" => kind },
             EditError::ReservedKind => diag_args! {},
+            EditError::RootOnlyEntry { key } => diag_args! { "key" => key },
             EditError::IndexOutOfRange { index, len } => diag_args! {
                 "index" => index,
                 "len" => len,
@@ -304,6 +311,50 @@ pub enum FieldViolation {
     FillOnMapping,
 }
 
+/// A payload-level invariant violation: [`FieldViolation`]'s seam one level up,
+/// reading the item list rather than one item's contents. Shared by every
+/// payload ingestion path, each mapping it to its own error type.
+///
+/// Every variant names something YAML cannot express, so a payload carrying one
+/// emits markdown the parser rejects — except
+/// [`MultiLineComment`](Self::MultiLineComment), which re-reads cleanly as a
+/// different document.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum PayloadViolation {
+    /// Two user fields share a key; a YAML mapping admits each key once.
+    DuplicateField { key: String },
+    /// More user fields than [`MAX_FIELD_COUNT`](crate::error::MAX_FIELD_COUNT)
+    /// (spec §8). Comments and `$` entries are not charged, matching the bound
+    /// the parser applies after `$`-key extraction.
+    TooManyFields { count: usize, max: usize },
+    /// A `$` system entry appears more than once; emit writes its line for each.
+    DuplicateMeta { key: &'static str },
+    /// Comment text spans lines. A `#` opens one line, so every line after the
+    /// first emits as bare YAML: the payload re-reads as fields no one wrote.
+    MultiLineComment,
+}
+
+impl std::fmt::Display for PayloadViolation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PayloadViolation::DuplicateField { key } => {
+                write!(f, "duplicate user-field key {key:?}")
+            }
+            PayloadViolation::TooManyFields { count, max } => write!(
+                f,
+                "card has {count} user fields, exceeding the maximum of {max}"
+            ),
+            PayloadViolation::DuplicateMeta { key } => {
+                write!(f, "duplicate `{key}` entry")
+            }
+            PayloadViolation::MultiLineComment => f.write_str(
+                "comment text spans multiple lines; a comment occupies one line",
+            ),
+        }
+    }
+}
+
 pub(crate) fn edit_error_from_violation(name: &str, v: FieldViolation) -> EditError {
     match v {
         FieldViolation::InvalidName => EditError::InvalidFieldName(name.to_string()),
@@ -367,6 +418,52 @@ pub fn validate_field(key: &str, value: &serde_json::Value) -> Result<(), FieldV
     }
     if crate::value::json_depth_exceeds(value, crate::document::limits::MAX_YAML_DEPTH) {
         return Err(FieldViolation::TooDeep);
+    }
+    Ok(())
+}
+
+/// Validate a payload against every [`PayloadViolation`]. The per-item twin is
+/// [`validate_field`].
+pub fn validate_payload(payload: &Payload) -> Result<(), PayloadViolation> {
+    let max = crate::error::MAX_FIELD_COUNT;
+    let count = payload.len();
+    if count > max {
+        return Err(PayloadViolation::TooManyFields { count, max });
+    }
+
+    let mut fields: std::collections::HashSet<&str> = std::collections::HashSet::new();
+    let mut seen_quill = false;
+    let mut seen_kind = false;
+    let mut metas: std::collections::HashSet<MetaKey> = std::collections::HashSet::new();
+    for item in payload.items() {
+        let dup = |key| Err(PayloadViolation::DuplicateMeta { key });
+        match item {
+            PayloadItem::Field { key, .. } => {
+                if !fields.insert(key.as_str()) {
+                    return Err(PayloadViolation::DuplicateField { key: key.clone() });
+                }
+            }
+            PayloadItem::Quill { .. } => {
+                if std::mem::replace(&mut seen_quill, true) {
+                    return dup("$quill");
+                }
+            }
+            PayloadItem::Kind { .. } => {
+                if std::mem::replace(&mut seen_kind, true) {
+                    return dup("$kind");
+                }
+            }
+            PayloadItem::Meta { key, .. } => {
+                if !metas.insert(*key) {
+                    return dup(key.as_str());
+                }
+            }
+            PayloadItem::Comment { text, .. } => {
+                if text.contains(['\n', '\r']) {
+                    return Err(PayloadViolation::MultiLineComment);
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -461,7 +558,7 @@ impl Document {
     /// composable kind ([`EditError::InvalidKindName`] /
     /// [`EditError::ReservedKind`] otherwise).
     pub fn push_card(&mut self, card: Card) -> Result<(), EditError> {
-        Self::check_composable_kind(&card)?;
+        Self::check_composable_placement(&card)?;
         self.cards_vec_mut().push(card);
         Ok(())
     }
@@ -474,14 +571,33 @@ impl Document {
         if index > len {
             return Err(EditError::IndexOutOfRange { index, len });
         }
-        Self::check_composable_kind(&card)?;
+        Self::check_composable_placement(&card)?;
         self.cards_vec_mut().insert(index, card);
         Ok(())
     }
 
-    /// A card with no `$kind` is rejected as an invalid (empty) name.
-    fn check_composable_kind(card: &Card) -> Result<(), EditError> {
-        check_kind(card.kind().unwrap_or(""))
+    /// The `$` entries a card may carry once placed as a composable card. A
+    /// card with no `$kind` is rejected as an invalid (empty) name.
+    ///
+    /// Positional, so it lives here rather than in `TryFrom<CardWire>`: a
+    /// [`CardWire`](crate::CardWire) is equally how the *main* card is read back
+    /// and rewritten, and carries no signal of which it is.
+    fn check_composable_placement(card: &Card) -> Result<(), EditError> {
+        check_kind(card.kind().unwrap_or(""))?;
+        if card.quill().is_some() {
+            return Err(EditError::RootOnlyEntry {
+                key: "$quill".to_string(),
+            });
+        }
+        if let Some(key) = MetaKey::ALL
+            .iter()
+            .find(|k| k.is_root_only() && card.payload().meta(**k).is_some())
+        {
+            return Err(EditError::RootOnlyEntry {
+                key: key.as_str().to_string(),
+            });
+        }
+        Ok(())
     }
 
     pub fn remove_card(&mut self, index: usize) -> Option<Card> {
