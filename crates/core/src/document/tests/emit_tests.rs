@@ -330,6 +330,46 @@ Body.
     );
 }
 
+/// A plaintext-codec field mints through `from_plaintext`, which keeps a line's
+/// edge whitespace verbatim, and emit projects any canonical content object
+/// through the markdown exporter. So an indented sample reaches the re-parse
+/// only if the projection escapes what markdown strips at a line's edges.
+#[test]
+fn an_indented_plaintext_field_survives_emit_and_reparse() {
+    use crate::document::{Card, Payload};
+    use crate::value::QuillValue;
+    use indexmap::IndexMap;
+
+    let text = "    indented\nplain\ntrailing   ";
+    let content = quillmark_content::from_plaintext(text);
+
+    let mut payload: IndexMap<String, QuillValue> = IndexMap::new();
+    payload.insert(
+        "sample".to_string(),
+        QuillValue::from_json(quillmark_content::serial::to_canonical_value(&content)),
+    );
+    let mut p = Payload::from_index_map(payload);
+    p.set_quill("test".parse().unwrap());
+    p.set_kind("main");
+    let main = Card::from_parts(p, quillmark_content::Normalized::empty());
+
+    let md = Document::from_main_and_cards(main, vec![]).to_markdown();
+    let back = Document::parse(&md).expect("re-parses").document;
+    let projected = back
+        .main()
+        .payload()
+        .get("sample")
+        .and_then(|v| v.as_str())
+        .expect("the field projected to a markdown string");
+    assert_eq!(
+        quillmark_content::from_markdown(projected)
+            .expect("the projection re-imports")
+            .text,
+        text,
+        "indented plaintext lost in emit:\n{md}"
+    );
+}
+
 /// `store_field` keeps what it is handed, so both canonical forms rest here and
 /// the projection guard is byte identity against either.
 #[test]

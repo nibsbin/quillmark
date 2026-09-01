@@ -169,6 +169,40 @@ proptest! {
         prop_assert_eq!(&rt, &rt2, "not a fixed point.\n in:  {:?}\n out: {:?}", md, md2);
     }
 
+    /// Property 1a: editor text is a fixed point at the line edges the other
+    /// generators keep clear. `document()` builds markdown, which cannot mint a
+    /// line leading or trailing with whitespace, and `plain_word` pins its first
+    /// char alphanumeric so no block marker leads a token. `apply_text_delta` and
+    /// `from_plaintext` mint both freely.
+    #[test]
+    fn edge_whitespace_and_block_markers_round_trip(
+        lead in prop::collection::vec(prop::sample::select(vec![' ', '\t']), 0..5),
+        body in prop::sample::select(vec![
+            "foo", "- item", "# h", "1. x", "> q", "===", "+ p", "***", "a b",
+        ]),
+        trail in prop::collection::vec(prop::sample::select(vec![' ', '\t']), 0..5),
+        second in prop::option::of(prop::sample::select(vec!["===", "---", "  x", "y  "])),
+    ) {
+        let mut text: String = lead.into_iter().collect();
+        text.push_str(body);
+        text.extend(trail);
+        if let Some(s) = &second {
+            text.push('\n');
+            text.push_str(s);
+        }
+        let lines = (0..text.split('\n').count())
+            .map(|i| Line::new(LineKind::Para).with_continues(i > 0))
+            .collect();
+        let rt = Content::new(text.clone(), lines).into_normalized();
+        prop_assume!(rt.validate().is_ok());
+
+        let md = to_markdown(&rt);
+        let rt2 = from_markdown(&md).unwrap();
+        prop_assert_eq!(&rt2.text, &rt.text,
+            "text drifted.\n in:  {:?}\n md:   {:?}\n out: {:?}", rt.text, md, rt2.text);
+        prop_assert_eq!(&rt, &rt2, "not a fixed point: {:?}", md);
+    }
+
     /// Property 1b: free (Peritext-style) overlap, which `apply_mark_ops`
     /// produces but markdown import never does, exports to *balanced* markdown.
     /// The shape is a staircase (`s1 < s2 < e1 < e2 == n`) over contiguous
