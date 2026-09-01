@@ -14,6 +14,7 @@ quillmark-pdf = { workspace = true }
 proptest = { workspace = true }
 serde_json = { workspace = true }
 indexmap = { workspace = true }
+typst = { workspace = true }
 
 [dev-dependencies]
 quillmark-fixtures = { workspace = true }

@@ -36,9 +36,18 @@ paragraph, one heading, one whole code fence, one island line. It is what
 
 Two escapers guard the two Typst contexts; both live in `emit`:
 
-- **`escape_markup`**: text in markup context. Escapes (backslash first)
-  `\ // ~ * _ ` `` ` `` ` # [ ] { } $ < > @`. Applied to plain text runs and to
-  a table cell's text.
+- **`escape_markup`**: text in markup context. Escapes
+  `\ // ~ * _ ` `` ` `` ` # [ ] { } $ < > @`, and the head of each shorthand
+  Typst substitutes a codepoint for: `--` and `---` (dashes), `-?` (an invisible
+  soft hyphen), `-` before a number (a minus sign), `...` (an ellipsis). What a
+  shorthand leaves behind is too short to re-form it. Applied to plain text runs
+  and to a table cell's text.
+
+  **Smart quotes are the quill's.** `'` and `"` pass through, so Typst's
+  language-aware substitution applies and a quill chooses with
+  `#set smartquote(enabled: false)`. Escaping them here would settle that for
+  every quill with no way back — unlike the shorthands, which the lexer decides
+  and no set rule reaches.
 - **`escape_string`**: text inside a Typst string literal. Escapes
   `\ " \n \r \t` and other control characters as `\u{…}`. Applied to `#link` /
   `#image` URLs, code content, and code-fence language tags.
@@ -196,8 +205,6 @@ The file parser parses each block once: no runtime `eval`, no `json()` blob.
 
 ## Gotchas
 
-- **Backslash first.** `escape_markup` replaces `\` before any other character,
-  or later escapes would be double-escaped.
 - **All code is `#raw(...)`, not backtick markup.** Both inline code and code
   fences put content into a string literal where backtick runs are inert: no
   delimiter can collide, and `escape_string` covers the only specials (`"` / `\`).
