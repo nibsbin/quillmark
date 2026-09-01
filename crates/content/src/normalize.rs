@@ -35,6 +35,10 @@ fn strip_bidi_formatting(s: &str) -> String {
 /// CommonMark HTML block type 2 ends with the line containing `-->`, so text on
 /// that line after `-->` would be swallowed. Bare `-->` outside a comment is
 /// left untouched.
+///
+/// Only a comment **opening a line** starts such a block; one reached mid-line
+/// is inline HTML, which swallows nothing, so a break inserted there would split
+/// a paragraph the source did not.
 fn fix_html_comment_fences(s: &str) -> String {
     if !s.contains("-->") {
         return s.to_string();
@@ -66,7 +70,13 @@ fn fix_html_comment_fences(s: &str) -> String {
 
             let after_content = &s[after_fence..];
 
-            let needs_newline = if after_content.is_empty()
+            // An HTML block opens on at most three spaces of indent.
+            let line_start = s[..abs_open].rfind('\n').map_or(0, |i| i + 1);
+            let indent = &s[line_start..abs_open];
+            let opens_block = indent.len() <= 3 && indent.chars().all(|c| c == ' ');
+
+            let needs_newline = if !opens_block
+                || after_content.is_empty()
                 || after_content.starts_with('\n')
                 || after_content.starts_with("\r\n")
             {
@@ -204,6 +214,15 @@ mod tests {
                 "Some text before <!-- comment -->",
                 "Some text before <!-- comment -->",
             ),
+            // Mid-line, the comment is inline HTML and swallows nothing, so the
+            // trailing text stays on its own line.
+            (
+                "Some text before <!-- comment -->and after",
+                "Some text before <!-- comment -->and after",
+            ),
+            // Three spaces still open a block; four are an indented code line.
+            ("   <!-- c -->Text", "   <!-- c -->\nText"),
+            ("    <!-- c -->Text", "    <!-- c -->Text"),
             ("-->some text", "-->some text"),
             // The first <!-- opens, the first --> closes; inner <!-- is just text.
             ("<!-- <!-- -->Trailing", "<!-- <!-- -->\nTrailing"),
