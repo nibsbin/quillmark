@@ -157,6 +157,9 @@ pub enum WireError {
     /// `[A-Za-z_][A-Za-z0-9_]*`, or a value (including `$ext`) nesting past the
     /// §8 depth limit.
     InvalidField { key: String, reason: String },
+    /// The `payload_items` list violates an invariant of the list as a whole:
+    /// a duplicate key, too many fields, or a comment spanning lines.
+    InvalidPayload { reason: String },
 }
 
 impl std::fmt::Display for WireError {
@@ -168,6 +171,7 @@ impl std::fmt::Display for WireError {
             WireError::InvalidField { key, reason } => {
                 write!(f, "invalid field {key:?}: {reason}")
             }
+            WireError::InvalidPayload { reason } => f.write_str(reason),
         }
     }
 }
@@ -266,11 +270,14 @@ impl TryFrom<CardWire> for Card {
                 .map_err(|reason| WireError::InvalidQuillReference { value, reason })?;
             payload.set_quill(reference);
         }
-        // No `$kind` check: its validity is positional (`main` is right for the
-        // root, reserved for a composable card) and a `CardWire` carries no
-        // signal of which it is, so it belongs to `push_card`/`insert_card`.
-        // Checking only the grammar here would split one user-facing concept
-        // across two error types and shadow the routable `EditError` code.
+        // No `$kind` check, and none on `$quill`/`$seed` above: their validity
+        // is positional (`main` is right for the root and reserved for a
+        // composable card; `$quill`/`$seed` bind the root and are refused on a
+        // composable card) and a `CardWire` carries no signal of which it is —
+        // it is equally how the main card is read back and rewritten. All three
+        // belong to `push_card`/`insert_card`. Checking only the grammar here
+        // would split one user-facing concept across two error types and shadow
+        // the routable `EditError` code.
         if !wire.kind.is_empty() {
             payload.set_kind(wire.kind);
         }
@@ -287,6 +294,8 @@ impl TryFrom<CardWire> for Card {
         if let Some(seed) = wire.seed {
             payload.set_seed(crate::value::depth_check_meta_map(seed, too_deep("$seed"))?);
         }
+        super::edit::validate_payload(&payload)
+            .map_err(|v| WireError::InvalidPayload { reason: v.to_string() })?;
         let body = body_from_wire(&wire.body)?;
         Ok(Card::from_parts(payload, body))
     }
