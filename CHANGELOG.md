@@ -98,6 +98,27 @@
   — starts an HTML block. One reached mid-line is inline HTML and swallows
   nothing, so an inline island turned `ab` into `"a b"`. The repair fires for
   the block-opening case alone.
+- fix(core): **the payload ingresses refuse what no parse can produce.** The
+  wire `TryFrom`, the storage DTO and `push_card` / `insert_card` each admitted
+  a payload whose markdown does not read back: a duplicate field key, more
+  fields than `MAX_FIELD_COUNT`, a repeated `$` entry, a comment whose text
+  spans lines, and a composable card carrying `$quill` or `$seed`. The comment
+  is the one that fails quietly — `#` opens a single line, so a text of
+  `"hi\ninjected: pwned"` emits bare YAML after the first line and re-reads as
+  a field nobody wrote. The rest emit markdown the parser rejects, and a
+  composable `$quill` also trips the `debug_assert` in `from_main_and_cards`,
+  which the rebuild behind `compile_data` runs: a render panicked on a debug
+  build where it owed an error. `PayloadViolation` carries the verdict —
+  `FieldViolation`'s seam one level up, reading the item list rather than one
+  item — which the wire maps to `WireError::InvalidPayload` and the DTO to
+  `StorageError::Malformed`, so both boundaries share one message. The
+  `$quill` / `$seed` half is positional, since a `CardWire` is equally how the
+  main card is read back, so it sits at placement beside the `$kind` gate as
+  `EditError::RootOnlyEntry` (`edit::root_only_entry`). The DTO refuses a root
+  `$kind` other than `main` and synthesises an absent one, as the parser does.
+  Additive: `validate_payload`, `PayloadViolation`, `MetaKey::ALL`. Both error
+  enums are `#[non_exhaustive]`, so no compiling caller changes, and no
+  document the format calls readable is refused.
 - fix(cli): **`render -f svg` / `-f png` writes every page.** The Typst backend
   emits one artifact per page and the command wrote `artifacts.first()`,
   discarding the rest with no warning, so a multi-page document produced a
@@ -163,6 +184,27 @@
   ``Use `--force`; otherwise`` lowered to `#raw("--force"); otherwise` and
   dropped the character. `continues_expr` guarded `(` and `.ident` for the same
   reason; it guards `;` now, and the emitter writes the same `\` before it.
+- fix(typst): **document text reaches the page as the characters it holds, not
+  Typst's substitutions for them.** `escape_markup` escaped `~`, whose lexer
+  shorthand is a non-breaking space, and left the rest of that class active:
+  `pages 3--5` rendered an en dash, `wait...` an ellipsis, `-5` a minus sign,
+  and `-?` an invisible soft hyphen, taking both authored characters off the
+  page. A mark decided it too, since Typst reads the text behind one as a fresh
+  token: `x-5` stayed literal but `**x**-5` lowered to `#strong[x]-5`, a minus
+  sign the content never held. Each shorthand's head is escaped now, which is
+  enough — what one leaves behind is too short to re-form it. **Smart quotes
+  stay.** `'` and `"` are an element with a set rule, not a lexer shorthand, so
+  a quill picks its own typography with `#set smartquote(enabled: false)`; the
+  emitter escaping them would settle that for every quill with no way back.
+  Documents holding a dash pair, an ellipsis or a signed number render
+  differently.
+- fix(typst): **an island that renders as nothing no longer joins the text
+  either side of it.** An island type this build does not know, and an empty
+  table island, emit no markup, so the two text runs their slot separated abut
+  in the output — where the escapers, which run per text run, see one side of
+  the join at a time. `a/`, such an island, `/b` wrote `a//b`: a Typst comment
+  that swallowed the rest of the paragraph. The emitter guards that seam with
+  the same `\` it writes at a line anchor and an expression tail.
 - fix(typst): **the caret one past a field's last character resolves to the last
   glyph, not the paragraph's first.** `Scan::locate` admits the end position but
   `forward_pos` matched runs half-open, so the most common caret position while

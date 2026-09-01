@@ -28,7 +28,7 @@ use crate::version::QuillReference;
 /// DTO. They differ in canonical sort rank, root-only-ness, and whether the
 /// seeding layer interprets them ([`crate::SeedOverlay::from_json`] reads
 /// `$seed`; `$ext` stays opaque).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum MetaKey {
     /// `$ext`: opaque out-of-band consumer state (editor renames, agent
@@ -39,6 +39,10 @@ pub enum MetaKey {
 }
 
 impl MetaKey {
+    /// Lets a rule keyed on a property ([`is_root_only`](Self::is_root_only))
+    /// enumerate rather than name the members it happens to match today.
+    pub const ALL: [MetaKey; 2] = [MetaKey::Ext, MetaKey::Seed];
+
     /// The literal source key (`"$ext"` / `"$seed"`).
     pub fn as_str(self) -> &'static str {
         match self {

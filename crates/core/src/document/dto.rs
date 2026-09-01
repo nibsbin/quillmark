@@ -485,11 +485,24 @@ impl TryFrom<DocumentV0_112_0> for Document {
     type Error = StorageError;
 
     fn try_from(payload: DocumentV0_112_0) -> Result<Self, Self::Error> {
-        let main = Card::try_from(payload.main)?;
+        let mut main = Card::try_from(payload.main)?;
         if main.quill().is_none() {
             return Err(StorageError::Malformed(
                 "main card must carry a $quill entry".into(),
             ));
+        }
+        // The root's `$kind` is `main` by position: any other value emits a root
+        // block the parser rejects. An absent one is synthesised so the emit
+        // stays parseable, as the parser and the V0_81_0 hop both do.
+        match main.kind() {
+            Some("main") => {}
+            None => main.payload_mut().set_kind("main"),
+            Some(other) => {
+                return Err(StorageError::Malformed(format!(
+                    "main card has $kind {other:?}, but `main` is reserved for \
+                     the document root"
+                )))
+            }
         }
         let cards = payload
             .cards
@@ -1057,26 +1070,10 @@ impl From<CommentPathSegmentV0_82_0> for CommentPathSegmentV0_92_0 {
     }
 }
 
-/// Reject a payload no markdown-parsed `Document` could produce: too many
-/// fields or a duplicate user-field key. The markdown parser already
-/// rejects both; this only guards hand-crafted storage DTOs.
+/// Reject a payload no markdown-parsed `Document` could produce. The parser
+/// rejects each on source; this guards hand-crafted storage DTOs.
 fn validate_dto_payload(payload: &Payload) -> Result<(), StorageError> {
-    if payload.len() > crate::error::MAX_FIELD_COUNT {
-        return Err(StorageError::Malformed(format!(
-            "card has {} user fields, exceeding the maximum of {}",
-            payload.len(),
-            crate::error::MAX_FIELD_COUNT
-        )));
-    }
-    let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
-    for key in payload.keys() {
-        if !seen.insert(key.as_str()) {
-            return Err(StorageError::Malformed(format!(
-                "duplicate user-field key {key:?}"
-            )));
-        }
-    }
-    Ok(())
+    super::edit::validate_payload(payload).map_err(|v| StorageError::Malformed(v.to_string()))
 }
 
 #[cfg(test)]

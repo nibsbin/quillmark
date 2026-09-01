@@ -1,5 +1,6 @@
 use proptest::prelude::*;
 use quillmark_typst::emit::{escape_markup, escape_string};
+use typst::syntax::SyntaxKind;
 
 /// The render path: import markdown to a `Content`, then lower it to markup.
 fn mark_to_typst(markdown: &str) -> Result<String, String> {
@@ -9,11 +10,58 @@ fn mark_to_typst(markdown: &str) -> Result<String, String> {
         .map_err(|e| e.to_string())
 }
 
-// The single-character markup escapes. Backslash and `//` are excluded: the
-// former is escaped first to prevent double-escaping, the latter as a pattern.
+// The markup escapes that fire on the character alone.
 const TYPST_SPECIAL_CHARS: &[char] = &[
     '~', '*', '_', '`', '#', '[', ']', '{', '}', '$', '<', '>', '@',
 ];
+
+/// What escaped document text may lower to. `SmartQuote` is the declared
+/// exception: `'` and `"` stay authored so a quill sets its own typography with
+/// `#set smartquote(…)`.
+const ALLOWED_LEAVES: &[SyntaxKind] = &[
+    SyntaxKind::Text,
+    SyntaxKind::Space,
+    SyntaxKind::Parbreak,
+    SyntaxKind::Escape,
+    SyntaxKind::SmartQuote,
+];
+
+/// A `--` or a `...` never lands by chance in a draw over all of Unicode, so
+/// the second alphabet is Typst's special characters alone.
+fn escaper_input() -> impl Strategy<Value = String> {
+    prop_oneof![
+        r#"[-.?/~*_#\[\]{}$<>@'"0-9a-c \\`]{0,40}"#,
+        "\\PC*",
+    ]
+}
+
+/// What Typst resolves a markup fragment to: its characters, and the leaf kinds
+/// it read them as. A comment resolves to nothing and a shorthand to the
+/// codepoint it substitutes, so either shows as a mismatch rather than as its
+/// own source text.
+fn resolve(markup: &str) -> (String, Vec<SyntaxKind>) {
+    use typst::syntax::{ast, ast::AstNode, SyntaxNode};
+
+    fn walk(n: &SyntaxNode, text: &mut String, kinds: &mut Vec<SyntaxKind>) {
+        if n.children().len() > 0 {
+            for c in n.children() {
+                walk(c, text, kinds);
+            }
+            return;
+        }
+        kinds.push(n.kind());
+        match n.kind() {
+            SyntaxKind::Escape => text.push(ast::Escape::from_untyped(n).unwrap().get()),
+            SyntaxKind::Shorthand => text.push(ast::Shorthand::from_untyped(n).unwrap().get()),
+            SyntaxKind::LineComment | SyntaxKind::BlockComment => {}
+            _ => text.push_str(n.leaf_text()),
+        }
+    }
+
+    let (mut text, mut kinds) = (String::new(), Vec::new());
+    walk(&typst::syntax::parse(markup), &mut text, &mut kinds);
+    (text, kinds)
+}
 
 proptest! {
     #[test]
@@ -42,23 +90,20 @@ proptest! {
     }
 
     #[test]
-    fn fuzz_escape_markup_backslash_first(s in "\\PC*") {
-        let escaped = escape_markup(&s);
-        let input_backslashes = s.matches('\\').count();
+    fn fuzz_escape_markup_survives_the_typst_parser(s in escaper_input()) {
+        // Typst also reads U+2028 / U+2029 as line breaks, which no escape can
+        // neutralize (`\` before whitespace is its linebreak). The content layer
+        // admits them, so they are not this function's to answer.
+        let s: String = s.chars().filter(|&c| c != '\u{2028}' && c != '\u{2029}').collect();
+        // Past `at_start`, whose markers are the emitter's guard, not the escaper's.
+        let (text, kinds) = resolve(&format!("x{}", escape_markup(&s)));
 
-        let special_count: usize = TYPST_SPECIAL_CHARS.iter()
-            .map(|&ch| s.matches(ch).count())
-            .sum();
-
-        // Each `//` becomes `\/\/`, so two backslashes apiece.
-        let double_slash_count = s.matches("//").count();
-
-        let expected_backslashes = input_backslashes * 2 + special_count + double_slash_count * 2;
-        let actual_backslashes = escaped.matches('\\').count();
-
-        assert_eq!(actual_backslashes, expected_backslashes,
-            "Backslash count mismatch for input {:?}: expected {}, got {}",
-            s, expected_backslashes, actual_backslashes);
+        assert_eq!(text, format!("x{s}"),
+            "escaping {:?} did not reach Typst as its own characters: {:?}", s, text);
+        for k in kinds {
+            assert!(ALLOWED_LEAVES.contains(&k),
+                "escaping {:?} lowered to a {:?} leaf", s, k);
+        }
     }
 
     #[test]

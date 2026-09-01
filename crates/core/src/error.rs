@@ -613,6 +613,9 @@ mod args_canon {
             EditError::unknown_field("nope"),
             EditError::InvalidKindName("Bad".into()),
             EditError::ReservedKind,
+            EditError::RootOnlyEntry {
+                key: "$quill".into(),
+            },
             EditError::IndexOutOfRange { index: 3, len: 1 },
             EditError::ValueTooDeep { max: 8 },
             EditError::FillOnMapping {

@@ -1074,3 +1074,157 @@ fn wire_card_rejects_value_past_depth_limit_and_bad_names() {
     );
 }
 
+
+/// `$quill` and `$seed` bind the document root. Placing a card that carries
+/// either is refused, so the emitted markdown stays parseable — the invariant
+/// `from_main_and_cards` asserts, enforced where a card is placed.
+#[test]
+fn test_insert_card_refuses_root_only_entries() {
+    use crate::document::CardWire;
+
+    let placed = |mutate: &dyn Fn(&mut CardWire)| {
+        let mut wire = CardWire::new("note".to_string(), serde_json::Value::Null);
+        mutate(&mut wire);
+        let card = Card::try_from(wire).expect("the wire stays permissive on placement metadata");
+        let mut doc = make_doc();
+        doc.push_card(card.clone()).map(|()| doc).map_err(|e| {
+            let mut doc = make_doc();
+            assert_eq!(doc.insert_card(0, card), Err(e.clone()), "push and insert agree");
+            e
+        })
+    };
+
+    assert_eq!(
+        placed(&|w| w.quill = Some("memo@1.0.0".to_string())).unwrap_err(),
+        EditError::RootOnlyEntry {
+            key: "$quill".to_string()
+        }
+    );
+    assert_eq!(
+        placed(&|w| w.seed = Some(
+            serde_json::json!({"note": {}}).as_object().unwrap().clone()
+        ))
+        .unwrap_err(),
+        EditError::RootOnlyEntry {
+            key: "$seed".to_string()
+        }
+    );
+
+    // `$ext` is not root-only: it rides any card.
+    let doc = placed(&|w| {
+        w.ext = Some(serde_json::json!({"ns": {}}).as_object().unwrap().clone())
+    })
+    .expect("$ext is allowed on a composable card");
+    let _ = Document::parse(&doc.to_markdown()).expect("emit reparses");
+
+    // The same wire is how the main card is read back, so refusing `$quill` at
+    // placement must not cost that round trip.
+    let main = CardWire::from(make_doc().main());
+    assert!(main.quill.is_some());
+    Card::try_from(main).expect("the main card still crosses the wire");
+}
+
+/// A card the wire refuses never reaches placement: the payload invariants that
+/// are card-local are checked where the card is built.
+#[test]
+fn test_wire_refuses_payload_level_violations() {
+    use crate::document::wire::{CardWire, PayloadItemWire, WireError};
+
+    let built = |items: Vec<PayloadItemWire>| {
+        let mut wire = CardWire::new("note".to_string(), serde_json::Value::Null);
+        wire.payload_items = items;
+        Card::try_from(wire)
+    };
+    let field = |key: &str| PayloadItemWire::Field {
+        key: key.to_string(),
+        value: serde_json::json!(1),
+        fill: false,
+        nested_fills: Vec::new(),
+    };
+
+    let dup = built(vec![field("title"), field("title")]).unwrap_err();
+    assert!(
+        matches!(&dup, WireError::InvalidPayload { reason } if reason.contains("duplicate")),
+        "{dup:?}"
+    );
+
+    let too_many =
+        built((0..=crate::error::MAX_FIELD_COUNT).map(|i| field(&format!("f{i}"))).collect())
+            .unwrap_err();
+    assert!(
+        matches!(&too_many, WireError::InvalidPayload { reason } if reason.contains("maximum")),
+        "{too_many:?}"
+    );
+
+    // A comment spanning lines emits bare YAML after the first line: the one
+    // violation whose markdown re-reads *cleanly*, as fields no one wrote.
+    let injected = built(vec![PayloadItemWire::Comment {
+        text: "hi\ninjected: pwned".to_string(),
+        inline: false,
+    }])
+    .unwrap_err();
+    assert!(
+        matches!(&injected, WireError::InvalidPayload { reason } if reason.contains("one line")),
+        "{injected:?}"
+    );
+
+    built(vec![field("title"), field("subject")]).expect("distinct keys cross");
+}
+
+/// The storage DTO is a hand-craftable ingress, so it owns the positional
+/// invariants the parser enforces on source.
+#[test]
+fn storage_dto_polices_root_kind_and_repeated_entries() {
+    let load = |items: serde_json::Value| {
+        serde_json::from_value::<crate::document::Document>(serde_json::json!({
+            "schema": "quillmark/document@0.92.0",
+            "main": {"payload": {"items": items}, "body": ""},
+            "cards": []
+        }))
+    };
+    let quill = serde_json::json!({"type": "quill", "value": "q@1.0"});
+    let kind = |v: &str| serde_json::json!({"type": "kind", "value": v});
+
+    let err = load(serde_json::json!([quill, kind("note")])).unwrap_err();
+    assert!(
+        err.to_string().contains("reserved for the document root"),
+        "a non-`main` root kind emits a block the parser rejects, got: {err}"
+    );
+
+    // Absent is not malformed: the parser synthesises it, so the DTO does too.
+    let doc = load(serde_json::json!([quill])).expect("an absent root kind loads");
+    assert_eq!(doc.main().kind(), Some("main"));
+    let reparsed = Document::parse(&doc.to_markdown()).expect("emit reparses");
+    assert_eq!(reparsed.document.main().kind(), Some("main"));
+
+    for repeated in [
+        serde_json::json!([quill, kind("main"), quill]),
+        serde_json::json!([quill, kind("main"), kind("main")]),
+    ] {
+        let err = load(repeated).unwrap_err();
+        assert!(
+            err.to_string().contains("duplicate"),
+            "a repeated `$` entry emits the line twice, got: {err}"
+        );
+    }
+}
+
+/// A comment carrying a newline emits bare YAML after its first line: the
+/// storage twin of the wire's injection guard.
+#[test]
+fn storage_dto_refuses_a_multi_line_comment() {
+    let err = serde_json::from_value::<crate::document::Document>(serde_json::json!({
+        "schema": "quillmark/document@0.92.0",
+        "main": {
+            "payload": {"items": [
+                {"type": "quill", "value": "q@1.0"},
+                {"type": "kind", "value": "main"},
+                {"type": "comment", "text": "hi\ninjected: pwned", "inline": false}
+            ]},
+            "body": ""
+        },
+        "cards": []
+    }))
+    .unwrap_err();
+    assert!(err.to_string().contains("one line"), "got: {err}");
+}

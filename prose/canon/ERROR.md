@@ -327,6 +327,7 @@ Three outcomes, and the wire tells them apart only with this table in hand, sinc
 | `edit::field_coercion_failed` | `field`, `target` | structured, coarser |
 | `edit::field_decode` | `field`, `codec` | structured, coarser |
 | `edit::reserved_kind` | — | code-determined |
+| `edit::root_only_entry` | `key` | structured |
 | `edit::import` | — | fallback |
 | `edit::content_apply` | — | fallback |
 | `conform::invalid_field_name` | `field` | structured |
