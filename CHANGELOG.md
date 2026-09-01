@@ -147,6 +147,27 @@
   ``Use `--force`; otherwise`` lowered to `#raw("--force"); otherwise` and
   dropped the character. `continues_expr` guarded `(` and `.ident` for the same
   reason; it guards `;` now, and the emitter writes the same `\` before it.
+- fix(typst): **document text reaches the page as the characters it holds, not
+  Typst's substitutions for them.** `escape_markup` escaped `~`, whose lexer
+  shorthand is a non-breaking space, and left the rest of that class active:
+  `pages 3--5` rendered an en dash, `wait...` an ellipsis, `-5` a minus sign,
+  and `-?` an invisible soft hyphen, taking both authored characters off the
+  page. A mark decided it too, since Typst reads the text behind one as a fresh
+  token: `x-5` stayed literal but `**x**-5` lowered to `#strong[x]-5`, a minus
+  sign the content never held. Each shorthand's head is escaped now, which is
+  enough — what one leaves behind is too short to re-form it. **Smart quotes
+  stay.** `'` and `"` are an element with a set rule, not a lexer shorthand, so
+  a quill picks its own typography with `#set smartquote(enabled: false)`; the
+  emitter escaping them would settle that for every quill with no way back.
+  Documents holding a dash pair, an ellipsis or a signed number render
+  differently.
+- fix(typst): **an island that renders as nothing no longer joins the text
+  either side of it.** An island type this build does not know, and an empty
+  table island, emit no markup, so the two text runs their slot separated abut
+  in the output — where the escapers, which run per text run, see one side of
+  the join at a time. `a/`, such an island, `/b` wrote `a//b`: a Typst comment
+  that swallowed the rest of the paragraph. The emitter guards that seam with
+  the same `\` it writes at a line anchor and an expression tail.
 - fix(typst): **the caret one past a field's last character resolves to the last
   glyph, not the paragraph's first.** `Scan::locate` admits the end position but
   `forward_pos` matched runs half-open, so the most common caret position while

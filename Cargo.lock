@@ -2315,6 +2315,7 @@ dependencies = [
  "quillmark-pdf",
  "quillmark-typst",
  "serde_json",
+ "typst",
 ]
 
 [[package]]
