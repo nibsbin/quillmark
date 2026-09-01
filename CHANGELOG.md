@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.112.0 - 2026-09-01
 
 - feat(content)!: **every vocabulary member spells its payload in `attrs`.** The
   canonical content had two spellings for one thing: a built-in put its payload
@@ -254,6 +254,42 @@
   overlay for a richtext cell rested as raw markdown and the next `conform`
   rewrote bytes on a document nobody edited — the divergence the shared write
   exists to prevent.
+
+<!-- seed: commits since v0.111.0, confirm the entries above cover them, then delete this comment
+- docs(changelog): the export-escape and placeholder entries
+- test(typst): the seam guard keeps the text it separates
+- docs(changelog): the payload ingress entry
+- docs: fix a comment that stated the opposite of its case
+- docs: state the escapes at the altitude a reader needs
+- fix: escape what markdown strips at a line's edges, and fence the island placeholder
+- docs: cut the echoes and hand-kept lists from the new prose
+- fix(typst): an island rendering as nothing no longer joins the text either side
+- fix(typst): document text reaches the page as its own characters
+- fix: the ingress boundaries enforce what the parser does
+- docs: drop the retracted LINE_REACH entry the union merge brought back
+- fix: the emitter nests by stored order, and the markdown moves with it
+- fix: the loose ends of the attrs-spelling change
+- docs: state what the codec is, not how it got there
+- feat(content)!: every vocabulary member spells its payload in attrs
+- perf(typst): a widget the point is inside of skips the content scan
+- refactor(core)!: the pointer tolerance is a radius, not a line reach
+- feat(core)!: the pointer tolerance reaches along a line, not just around the point
+- refactor(typst): one field_at per lane, and a test for the tie
+- fix(typst): rank widgets and content ink in one comparison
+- fix(core): a non-finite point is outside every region
+- Say each of these in the fewest words that stay correct
+- fix(wasm): forward the tolerance through the canonical LiveSession wrapper
+- feat(core)!: a pointer tolerance on fieldAt and positionAt, resolved nearest-first
+- docs: cut the comments that restate their own code
+- fix: a nested key's path drops the whitespace before its colon
+- fix: Python value conversion, and one shape for a bad quill reference
+- fix: quoted nested keys, array widget newlines, and the version grammar
+- fix: CLI drops pages, and fill-marked mappings emit unparseable YAML
+- fix: eight low-risk findings from the whole-codebase review
+- chore(deps): bump taiki-e/install-action in the actions group
+- chore(deps): bump tsify from 0.5.6 to 0.5.8 in the cargo group
+-->
+
 
 ## v0.111.0 - 2026-08-30
 
