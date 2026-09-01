@@ -61,6 +61,43 @@
   `SessionHandle::{field_at,position_at}` and their `LiveSession` forwarders,
   which a type checker reports; `0.0` is the previous behaviour exactly. The
   WASM argument is optional and defaults to `0`, so no JS caller changes.
+- fix(content): **markdown export escapes what markdown strips at a line's
+  edges.** A line's leading and trailing space/tab crossed verbatim, so
+  `from_markdown(to_markdown(rt))` dropped it — and where the leading run
+  opened an indented code block, or hid a `- ` / `# ` / `> ` / `N. ` marker
+  from the position-0 escapes, the re-import rewrote the line's kind and
+  containers with it: `"    foo"` returned as `"foo"` under `Code`, and
+  `"   - item"` as `"item"` inside a `ListItem` nobody wrote. Neither takes
+  adversarial input, since `apply_text_delta` and `from_plaintext` both mint
+  edge whitespace: a `Codec::Plaintext` field holding an indented sample was
+  corrupted by `Document::to_markdown`. The verify-and-drop net could not catch
+  it, being gated on flanking marks — a mark-free line never reaches it, and
+  the `,…,` probe wrapping the lines that do blocks every leading-block
+  construct by design, so it reads such a line as safe while the `**` ships
+  into the text. Space and tab at an edge now cross as character references
+  (`&#32;` / `&#9;`), markdown having no backslash escape for whitespace. A
+  literal `&` still escapes, so text authored as `&#32;` returns as itself. An
+  image `alt` is the one edge run a reference cannot carry — the parser trims
+  alt after decoding it — and joins the module's documented codec limits.
+  Emitted markdown moves for content holding an edge run.
+- fix(content): **a `=` run on a continuation line stays text.** It underlined
+  the paragraph line above it into a setext heading, taking the hard break's
+  `\` into the text with it: `"abc\n==="` returned as an H1 reading `"abc\"`.
+  `\=` joins the block starters escaped at position 0.
+- fix(content): **an unknown island's type cannot leave its placeholder.**
+  `emit_island` wrote `island_type` — an open wire string no lane constrains —
+  raw into `<!-- island:… -->`, where a `-->` closes the comment early and a
+  line break ends the HTML block, either way leaking the rest as content text.
+  At column zero that opens whatever the rest spells, a `~~~` card fence
+  included, which the document layer reads as another card. The type crosses
+  with `<` / `>` as entities and control characters as spaces; nothing reads it
+  back out of markdown.
+- fix(content): **an inline unknown island keeps its line whole.**
+  `fix_html_comment_fences` inserted a newline after any `-->` carrying text
+  behind it, but only a comment opening a line — at most three spaces of indent
+  — starts an HTML block. One reached mid-line is inline HTML and swallows
+  nothing, so an inline island turned `ab` into `"a b"`. The repair fires for
+  the block-opening case alone.
 - fix(cli): **`render -f svg` / `-f png` writes every page.** The Typst backend
   emits one artifact per page and the command wrote `artifacts.first()`,
   discarding the rest with no warning, so a multi-page document produced a
