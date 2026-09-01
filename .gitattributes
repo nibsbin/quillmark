@@ -11,7 +11,9 @@
 # both entries.
 #
 # It resolves silently: two branches editing the *same* entry merge to the union
-# of both, with nothing to flag it. Tolerable for prose no build step parses,
+# of both, with nothing to flag it. A deletion is not a state the union can hold
+# either, so an entry retracted on one branch returns with the next merge from a
+# branch that predates the retraction. Tolerable for prose no build step parses,
 # which is why it stays scoped to the changelog — a union-merged Cargo.lock is
 # duplicate `[[package]]` entries and a file cargo cannot read.
 #
