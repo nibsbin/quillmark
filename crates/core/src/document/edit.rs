@@ -311,14 +311,14 @@ pub enum FieldViolation {
     FillOnMapping,
 }
 
-/// A payload-level invariant violation: the item list read as a whole, where
-/// [`FieldViolation`] reads one item's own contents.
+/// A payload-level invariant violation: [`FieldViolation`]'s seam one level up,
+/// reading the item list rather than one item's contents. Shared by every
+/// payload ingestion path, each mapping it to its own error type.
 ///
-/// The same seam as [`FieldViolation`] one level up: shared by every payload
-/// ingestion path, each mapping it to its own error type. Every variant names
-/// something YAML cannot express, so a payload carrying one emits markdown the
-/// parser rejects — or, for [`MultiLineComment`](Self::MultiLineComment),
-/// silently re-reads as a different document.
+/// Every variant names something YAML cannot express, so a payload carrying one
+/// emits markdown the parser rejects — except
+/// [`MultiLineComment`](Self::MultiLineComment), which re-reads cleanly as a
+/// different document.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum PayloadViolation {
@@ -328,10 +328,10 @@ pub enum PayloadViolation {
     /// (spec §8). Comments and `$` entries are not charged, matching the bound
     /// the parser applies after `$`-key extraction.
     TooManyFields { count: usize, max: usize },
-    /// A `$` system entry appears more than once.
+    /// A `$` system entry appears more than once; emit writes its line for each.
     DuplicateMeta { key: &'static str },
-    /// Comment text spans lines. A `#` opens one line, so the lines after the
-    /// first emit as bare YAML: the payload re-reads as fields no one wrote.
+    /// Comment text spans lines. A `#` opens one line, so every line after the
+    /// first emits as bare YAML: the payload re-reads as fields no one wrote.
     MultiLineComment,
 }
 
@@ -422,8 +422,7 @@ pub fn validate_field(key: &str, value: &serde_json::Value) -> Result<(), FieldV
     Ok(())
 }
 
-/// Validate a payload as a whole: field-key uniqueness and count, `$`-entry
-/// uniqueness, and single-line comments. The per-item twin is
+/// Validate a payload against every [`PayloadViolation`]. The per-item twin is
 /// [`validate_field`].
 pub fn validate_payload(payload: &Payload) -> Result<(), PayloadViolation> {
     let max = crate::error::MAX_FIELD_COUNT;
@@ -577,12 +576,11 @@ impl Document {
         Ok(())
     }
 
-    /// The invariants a card acquires by being placed as a composable card: a
-    /// valid, non-reserved `$kind` (a card with none is rejected as an invalid
-    /// empty name), and none of the root-only `$` entries.
+    /// The `$` entries a card may carry once placed as a composable card. A
+    /// card with no `$kind` is rejected as an invalid (empty) name.
     ///
-    /// Positional, so it lives here rather than in `TryFrom<CardWire>`: a bare
-    /// [`CardWire`](crate::CardWire) is also how the *main* card is read back
+    /// Positional, so it lives here rather than in `TryFrom<CardWire>`: a
+    /// [`CardWire`](crate::CardWire) is equally how the *main* card is read back
     /// and rewritten, and carries no signal of which it is.
     fn check_composable_placement(card: &Card) -> Result<(), EditError> {
         check_kind(card.kind().unwrap_or(""))?;

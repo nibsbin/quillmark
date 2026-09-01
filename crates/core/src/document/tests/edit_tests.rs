@@ -1117,8 +1117,8 @@ fn test_insert_card_refuses_root_only_entries() {
     .expect("$ext is allowed on a composable card");
     let _ = Document::parse(&doc.to_markdown()).expect("emit reparses");
 
-    // The comment on `check_composable_placement`: the same wire is how the
-    // main card is read back, and that round trip must keep working.
+    // The same wire is how the main card is read back, so refusing `$quill` at
+    // placement must not cost that round trip.
     let main = CardWire::from(make_doc().main());
     assert!(main.quill.is_some());
     Card::try_from(main).expect("the main card still crosses the wire");
@@ -1171,9 +1171,8 @@ fn test_wire_refuses_payload_level_violations() {
     built(vec![field("title"), field("subject")]).expect("distinct keys cross");
 }
 
-/// The storage DTO is a hand-craftable ingress, so it owns the invariants the
-/// parser enforces on source: the root's positional `$kind`, and one `$` entry
-/// per key.
+/// The storage DTO is a hand-craftable ingress, so it owns the positional
+/// invariants the parser enforces on source.
 #[test]
 fn storage_dto_polices_root_kind_and_repeated_entries() {
     let load = |items: serde_json::Value| {

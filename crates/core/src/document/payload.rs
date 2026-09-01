@@ -39,8 +39,8 @@ pub enum MetaKey {
 }
 
 impl MetaKey {
-    /// Every variant, so a rule keyed on a property ([`is_root_only`](Self::is_root_only))
-    /// enumerates rather than naming the members it happens to match today.
+    /// Lets a rule keyed on a property ([`is_root_only`](Self::is_root_only))
+    /// enumerate rather than name the members it happens to match today.
     pub const ALL: [MetaKey; 2] = [MetaKey::Ext, MetaKey::Seed];
 
     /// The literal source key (`"$ext"` / `"$seed"`).

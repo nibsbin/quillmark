@@ -492,8 +492,8 @@ impl TryFrom<DocumentV0_112_0> for Document {
             ));
         }
         // The root's `$kind` is `main` by position: any other value emits a root
-        // block the parser rejects. An absent one is synthesised, as the parser
-        // does and as the V0_81_0 hop already does, so the emit stays parseable.
+        // block the parser rejects. An absent one is synthesised so the emit
+        // stays parseable, as the parser and the V0_81_0 hop both do.
         match main.kind() {
             Some("main") => {}
             None => main.payload_mut().set_kind("main"),
@@ -1070,10 +1070,8 @@ impl From<CommentPathSegmentV0_82_0> for CommentPathSegmentV0_92_0 {
     }
 }
 
-/// Reject a payload no markdown-parsed `Document` could produce: too many
-/// fields, a duplicate user-field key, a repeated `$` entry, or a comment
-/// spanning lines. The markdown parser already rejects each; this only guards
-/// hand-crafted storage DTOs.
+/// Reject a payload no markdown-parsed `Document` could produce. The parser
+/// rejects each on source; this guards hand-crafted storage DTOs.
 fn validate_dto_payload(payload: &Payload) -> Result<(), StorageError> {
     super::edit::validate_payload(payload).map_err(|v| StorageError::Malformed(v.to_string()))
 }

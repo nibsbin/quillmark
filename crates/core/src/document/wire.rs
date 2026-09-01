@@ -157,8 +157,9 @@ pub enum WireError {
     /// `[A-Za-z_][A-Za-z0-9_]*`, or a value (including `$ext`) nesting past the
     /// §8 depth limit.
     InvalidField { key: String, reason: String },
-    /// The `payload_items` list violates an invariant of the list as a whole:
-    /// a duplicate key, too many fields, or a comment spanning lines.
+    /// The `payload_items` list violates an invariant of the list as a whole
+    /// (`edit::PayloadViolation`): a duplicate key, a field count past the §8
+    /// bound, a comment spanning lines.
     InvalidPayload { reason: String },
 }
 
@@ -270,14 +271,13 @@ impl TryFrom<CardWire> for Card {
                 .map_err(|reason| WireError::InvalidQuillReference { value, reason })?;
             payload.set_quill(reference);
         }
-        // No `$kind` check, and none on `$quill`/`$seed` above: their validity
-        // is positional (`main` is right for the root and reserved for a
-        // composable card; `$quill`/`$seed` bind the root and are refused on a
-        // composable card) and a `CardWire` carries no signal of which it is —
-        // it is equally how the main card is read back and rewritten. All three
-        // belong to `push_card`/`insert_card`. Checking only the grammar here
-        // would split one user-facing concept across two error types and shadow
-        // the routable `EditError` code.
+        // No `$kind` check, and none on `$quill`/`$seed` above: all three are
+        // positional — `main` is right for the root and reserved for a
+        // composable card, `$quill`/`$seed` bind the root — and a `CardWire` is
+        // equally how the main card is read back and rewritten, so it carries no
+        // signal of which it is. All three belong to `push_card`/`insert_card`.
+        // Checking only the grammar here would split one user-facing concept
+        // across two error types and shadow the routable `EditError` code.
         if !wire.kind.is_empty() {
             payload.set_kind(wire.kind);
         }
