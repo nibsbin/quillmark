@@ -331,10 +331,9 @@ Body.
 }
 
 /// A plaintext-codec field mints through `from_plaintext`, which keeps a line's
-/// leading and trailing whitespace verbatim, and emit projects any canonical
-/// content object through the markdown exporter. So an indented sample — the
-/// thing a plaintext field exists to carry — reaches the re-parse only if the
-/// projection escapes what markdown strips at a line's edges.
+/// edge whitespace verbatim, and emit projects any canonical content object
+/// through the markdown exporter. So an indented sample reaches the re-parse
+/// only if the projection escapes what markdown strips at a line's edges.
 #[test]
 fn an_indented_plaintext_field_survives_emit_and_reparse() {
     use crate::document::{Card, Payload};

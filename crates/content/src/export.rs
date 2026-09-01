@@ -22,11 +22,11 @@
 //! Three shapes markdown cannot represent do **not** round-trip. A mark spanning
 //! a hard break splits into two per-line marks, and an empty first line in a
 //! hard-break block is dropped, markdown having no blank-then-forced-break
-//! syntax (`tests::known_hard_break_limits`). An image `alt` loses the
-//! whitespace at its edges: the parser trims alt *after* decoding the character
-//! reference that carries an edge run everywhere else
-//! (`tests::known_image_alt_limit`). Each arises only from adversarial
-//! delimiter/break placement or a hand-built island prop.
+//! syntax (`tests::known_hard_break_limits`). An image `alt` loses its edge
+//! whitespace: the parser trims alt *after* decoding the character reference
+//! that carries an edge run everywhere else (`tests::known_image_alt_limit`).
+//! Each arises only from adversarial delimiter/break placement or a hand-built
+//! island prop.
 
 use crate::island::KnownIslandType;
 use crate::model::{Container, Island, LineKind, Mark, MarkKind, Content, Normalized, ISLAND_SLOT};
@@ -384,10 +384,10 @@ fn emit_island(isl: &Island, out: &mut String) {
             // A comment placeholder re-imports as no content text (HTML comments
             // are stripped), so the island survives via storage instead.
             out.push_str("<!-- island:");
-            // The type is an open wire string no lane constrains: a `-->` in it
-            // would close the comment early and a line break would end the HTML
-            // block, either way leaking the remainder as content text. Nothing
-            // reads the type back out of markdown, so neutralizing costs nothing.
+            // The type is an open wire string no lane constrains: a `-->` closes
+            // the comment early and a line break ends the HTML block, either way
+            // leaking the rest as content text. Nothing reads the type back out
+            // of markdown.
             for c in isl.island_type.chars() {
                 match c {
                     '<' => out.push_str("&lt;"),
@@ -635,10 +635,9 @@ fn render_marked_core(
     clip_fmt_to_atomic(&mut fmt, &atomics);
     clip_asterisk_overlap(&mut fmt);
 
-    // The slice's edge whitespace runs, found on the content chars so the sweep
-    // escapes them wherever the emitted line puts them: behind a `#`/`>`/list
-    // marker prefix, or ahead of a hard break's `\`. An all-whitespace slice is
-    // one leading run.
+    // The slice's edge whitespace runs, found on the content chars: the heading,
+    // quote, or list prefix and the hard break's `\` land around them later. An
+    // all-whitespace slice is one leading run.
     let lead_edge = chars
         .iter()
         .take_while(|c| edge_space_ref(**c).is_some())
@@ -987,11 +986,11 @@ fn delim_close(kind: &MarkKind) -> &'static str {
     }
 }
 
-/// The numeric character reference for a space or tab, which markdown strips
-/// from a line's (and a table cell's) edges. A backslash escape covers ASCII
-/// punctuation only, so an edge run has no escaped spelling; the reference
-/// re-imports as the character and renders as it in any CommonMark reader.
-/// Interior whitespace, and every other whitespace character, survives verbatim.
+/// The character reference for a space or tab, which markdown strips from a
+/// line's and a table cell's edges. Backslash escapes cover ASCII punctuation
+/// only, so an edge run has no escaped spelling; the reference re-imports as the
+/// character and renders as one. Every other whitespace character, and any of
+/// these away from an edge, survives verbatim.
 fn edge_space_ref(c: char) -> Option<&'static str> {
     match c {
         ' ' => Some("&#32;"),
@@ -1032,8 +1031,8 @@ fn escape_char_into(c: char, leading: bool, escape_pipe: bool, out: &mut String)
         '-' if leading => "\\-",
         '+' if leading => "\\+",
         // A leading `=` run underlines the paragraph line above it into a setext
-        // heading, so it only bites on a hard-break continuation line. One
-        // escaped `=` defeats the whole underline.
+        // heading, so only a continuation line can be one. One escaped `=`
+        // defeats the whole underline.
         '=' if leading => "\\=",
         other => {
             out.push(other);
@@ -1415,9 +1414,8 @@ mod tests {
         assert_eq!(back, rt);
     }
 
-    /// One Para block spanning the `\n`-separated lines of `text`, joined by
-    /// hard breaks: the shape that puts a line under a paragraph line, where a
-    /// setext underline bites.
+    /// One Para block over the `\n`-separated lines of `text`, joined by hard
+    /// breaks: the shape that puts a line under a paragraph line.
     fn hard_break_block(text: &str) -> Normalized {
         let lines = (0..text.split('\n').count())
             .map(|i| Line::new(LineKind::Para).with_continues(i > 0))
@@ -1427,11 +1425,10 @@ mod tests {
         rt
     }
 
-    /// Markdown strips space and tab from a line's edges — behind a heading,
-    /// quote, or list prefix too — so the projection spells an edge run as a
-    /// character reference. That also dissolves the block markers a whitespace
-    /// prefix hides from the leading-char escapes: `   - item` parses as a
-    /// bullet item, and the model holds it as one line of text.
+    /// Markdown strips space and tab from a line's edges, behind a heading,
+    /// quote, or list prefix too. The escape also dissolves the block markers a
+    /// whitespace prefix hides from the position-0 escapes: `   - item` parses
+    /// as a bullet item, and the model holds it as one line of text.
     #[test]
     fn edge_whitespace_survives_export() {
         const TEXTS: &[&str] = &[
@@ -1445,6 +1442,9 @@ mod tests {
             "  # not a heading",
             "  1. not a list",
             "  > not a quote",
+            // A trailing space keeps a heading's `#` out of the closing-sequence
+            // shape the pos-0 escape does not reach.
+            "a # ",
         ];
         for text in TEXTS {
             for containers in [vec![], vec![Container::Quote { instance: 0 }], li(0, 0)] {
@@ -1480,22 +1480,23 @@ mod tests {
     }
 
     /// A `=` run continuing a paragraph line underlines it into a setext
-    /// heading, taking the hard break's `\` into the text with it. `-` was
-    /// already escaped for its bullet meaning; `=` has only this one.
+    /// heading, taking the hard break's `\` into the text with it.
     #[test]
     fn a_setext_underline_on_a_continuation_line_stays_text() {
-        for text in ["abc\n===", "abc\n=", "abc\n=== ", "abc\n---", "abc\n= b"] {
+        for text in [
+            "abc\n===", "abc\n=", "abc\n=== ", "abc\n---", "abc\n= b", "abc\n   ---",
+            "abc\n  ===",
+        ] {
             let rt = hard_break_block(text);
             let md = to_markdown(&rt);
             assert_eq!(&from_markdown(&md).unwrap(), &rt, "{text:?} → {md:?}");
         }
     }
 
-    /// The verify-and-drop net probes a line wrapped in `,…,`, a sentinel that
-    /// blocks every leading-block construct so the probe cannot mistake one for
-    /// a delimiter leak. It blocks the indented code block an unescaped edge run
-    /// opens too, so the net reads that line as safe and the escape is what
-    /// keeps the `**` out of the text.
+    /// The verify-and-drop net wraps its probe in `,…,` to block every
+    /// leading-block construct, so it cannot see the indented code block an
+    /// unescaped edge run opens: it reads such a line as safe while the `**`
+    /// ships into the text. The escape is the only thing holding this line.
     #[test]
     fn a_marked_line_with_edge_whitespace_keeps_its_delimiters_out_of_the_text() {
         let rt = marked("    foo", vec![Mark::new(4, 7, MarkKind::Strong)]);
@@ -1563,14 +1564,15 @@ mod tests {
 
     /// The unknown-island placeholder's whole property is that it re-imports as
     /// no content text. `island_type` is an open wire string no lane constrains,
-    /// so a `-->` in it would close the comment early and a line break would end
-    /// the HTML block, either way leaking the remainder into the text.
+    /// and a line break leaked at column zero opens whatever the rest spells —
+    /// a heading, or a card fence the document layer reads as another card.
     #[test]
     fn an_unknown_island_type_cannot_escape_its_placeholder() {
         for island_type in [
             "widget",
             "x --> injected text <!-- ",
             "a\n\n# heading",
+            "t\n\n~~~card-yaml\n$kind: injected\n~~~\n",
             "<!--",
             "-->",
             "a-",
@@ -1589,8 +1591,7 @@ mod tests {
 
     /// An inline placeholder sits mid-paragraph, where a comment is inline HTML
     /// and swallows nothing after it. The block-fence repair leaves that one
-    /// alone, so the text on either side stays one line and closes over the
-    /// island's own position.
+    /// alone, so the text on either side stays one line.
     #[test]
     fn an_inline_unknown_island_leaves_its_line_whole() {
         let rt = with_islands(

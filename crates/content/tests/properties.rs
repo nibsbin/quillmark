@@ -171,9 +171,9 @@ proptest! {
 
     /// Property 1a: editor text is a fixed point at the line edges the other
     /// generators keep clear. `document()` builds markdown, which cannot mint a
-    /// line whose text leads or trails with whitespace, and `plain_word` pins its
-    /// first char alphanumeric so no block marker ever leads a token — while
-    /// `apply_text_delta` and `from_plaintext` mint both freely.
+    /// line leading or trailing with whitespace, and `plain_word` pins its first
+    /// char alphanumeric so no block marker leads a token. `apply_text_delta` and
+    /// `from_plaintext` mint both freely.
     #[test]
     fn edge_whitespace_and_block_markers_round_trip(
         lead in prop::collection::vec(prop::sample::select(vec![' ', '\t']), 0..5),
