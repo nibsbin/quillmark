@@ -39,26 +39,6 @@
   stored document gets a hard break, having no tag to dispatch on. The storage
   tag becomes `quillmark/document@0.112.0`; `@0.93.0` rows migrate forward on
   read. See [0.111 → 0.112](docs/migrations/0.111-to-0.112.md).
-- feat(core)!: **the pointer tolerance reaches along a line, not just around the
-  point.** A glyph's box is its run's ink height by its own advance, so the two
-  axes fail differently: across a line the dead gap is the leading, a few points
-  wide and belonging to the neighbouring line, while along one it is the rest of
-  the measure the line does not fill — 248 of 443 points beside a seeded
-  `usaf_memo` body line, 56% of that line's width — belonging to that line's own
-  end. The radius added for the leading is two orders short of the measure, and
-  widening it until it reached would answer for ink most of a page away. Hit
-  ranking now divides the horizontal leg by `LINE_REACH` before measuring, making
-  the admitted region an ellipse `tol` tall and `tol * LINE_REACH` wide: a click
-  out in a line's own whitespace answers with that line, and one a row up still
-  answers with the row above. The ratio is the engine's rather than the caller's,
-  `tol` being the pointer's slack and a screen quantity where this is a property
-  of how text is set. Containment is still distance zero — scaling a leg cannot
-  turn a non-zero gap into a zero one — so `tol = 0` remains exact containment and
-  no point that resolved exactly changes answer. The break is behavioural, not a
-  signature: `field_at` / `position_at` answer where they previously returned
-  nothing, and a consumer relying on a whitespace click resolving to nothing sees
-  a field.
-
 - feat(core)!: **`fieldAt` and `positionAt` take a pointer tolerance, and
   resolve to the nearest ink rather than the first containing it.** A glyph's
   box is its run's ink height by its own advance, so a text column answers over
@@ -71,13 +51,13 @@
   within it, a radius in both axes. The caller derives it from the scale it drew
   the page at, slack being a property of the pointer rather than of the
   document: a tolerance fixed in points shrinks under the cursor exactly as the
-  target does. Ranking by
-  distance rather than growing each rect is what keeps the answer the nearer
-  item's — outset boxes overlap, and a first match over them decides by paint
-  order — and makes the tolerance a pure widening: containment is distance zero,
-  so no point that resolves exactly changes answer however high `tol` goes, and
-  later-painted still wins a tie. `RenderedRegion::distance` is the measure, and
-  `contains` is now stated in terms of it. The break is the added argument on
+  target does. Ranking by distance rather than growing each rect is what keeps
+  the answer the nearer item's — outset boxes overlap, and a first match over
+  them decides by paint order — and makes the tolerance a pure widening:
+  containment is distance zero, so no point that resolves exactly changes answer
+  however high `tol` goes, and later-painted still wins a tie.
+  `RenderedRegion::distance` is the measure, and `contains` is now stated in
+  terms of it. The break is the added argument on
   `SessionHandle::{field_at,position_at}` and their `LiveSession` forwarders,
   which a type checker reports; `0.0` is the previous behaviour exactly. The
   WASM argument is optional and defaults to `0`, so no JS caller changes.
