@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- feat(bindings)!: **the storage DTO verbs name their lane, not their encoding.**
+  `Document.toJson` / `fromJson` / `tryFromJson` / `loadJson` become `toStored` /
+  `fromStored` / `tryFromStored` / `loadStored`, and Python's `to_json` /
+  `from_json` / `try_from_json` become `to_stored` / `from_stored` /
+  `try_from_stored`. `storageVersionOf` and `currentStorageVersion` are
+  unchanged, already naming storage. "Stored" is the at-rest form throughout, so
+  the pair completes the family `getStored` started; the bare `store` stays the
+  field-write lane's verb, which is why the adjective carries the
+  document-level pair rather than a `store` / `load` pair. The old names are
+  removed rather than aliased. Stored blobs, the `schema` tag, and every byte
+  these verbs write are untouched.
+
 ## v0.112.0 - 2026-09-01
 
 - feat(content)!: **every vocabulary member spells its payload in `attrs`.** The

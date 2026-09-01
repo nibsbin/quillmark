@@ -428,7 +428,7 @@ card_kinds:
     expect(quill.conform(transported)).toEqual([])
     expect(transported.equals(bound)).toBe(true)
     expect(quill.conform(transported)).toEqual([])
-    expect(transported.toJson()).toBe(bound.toJson())
+    expect(transported.toStored()).toBe(bound.toStored())
   })
 
   it('a value the strict write refuses rests authored with a conform warning', () => {
@@ -454,9 +454,9 @@ card_kinds:
     // The transport door still opens it, and conform reports the same mismatch
     // without touching the document.
     const doc = Document.fromMarkdown(md)
-    const before = doc.toJson()
+    const before = doc.toStored()
     expectEditCode(() => quill.conform(doc), 'quill::name_mismatch')
-    expect(doc.toJson()).toBe(before)
+    expect(doc.toStored()).toBe(before)
   })
 
   it('getContent decodes by declared type: markdown for richtext, literal for plaintext', () => {
@@ -1176,7 +1176,7 @@ main:
   })
 
   it('propagates a clone-construction failure (doc clone), leaving the quill clone cached', async () => {
-    // Exercises the teardown path when the doc clone (Document.fromJson) throws:
+    // Exercises the teardown path when the doc clone (Document.fromStored) throws:
     // the quill clone is already materialized and cached (NOT freed here, that
     // is the T3 caching contract), only the per-call doc clone is freed in the
     // finally. We can only assert the error surfaces (cache/leak state is not
@@ -1186,7 +1186,7 @@ main:
     // stand-in Document: both caller handles are checked before the clone runs
     // (see "handles from another copy" below), so they have to be real. Same
     // Proxy-over-the-real-module shape as fromTreeCountingEngine, so the quill
-    // clone left cached is a real backend quill and only `fromJson` misbehaves.
+    // clone left cached is a real backend quill and only `fromStored` misbehaves.
     const engine = new Engine({
       backends: {
         typst: {
@@ -1194,7 +1194,7 @@ main:
             const real = await import('../../../pkg/backends/typst/wasm.js')
             const refusingDocument = new Proxy(real.Document, {
               get(target, prop, receiver) {
-                if (prop === 'fromJson') {
+                if (prop === 'fromStored') {
                   return () => {
                     throw new Error('doc clone refused')
                   }
@@ -1234,7 +1234,7 @@ main:
 // the built core artifact on disk, which is a genuinely different class over a
 // different linear memory.
 describe('@quillmark/wasm/runtime: handles from another copy (duplicate install)', () => {
-  const foreignDoc = (doc) => ({ toJson: () => doc.toJson() })
+  const foreignDoc = (doc) => ({ toStored: () => doc.toStored() })
   const foreignQuill = (quill) => ({
     toTree: () => quill.toTree(),
     backendId: quill.backendId,
@@ -1359,7 +1359,7 @@ describe('@quillmark/wasm/runtime: handles from another copy (duplicate install)
   })
 
   // The document half stays hand-placed. Deriving it is unsound: the stand-in
-  // doc carries `toJson`, so a verb skipping `requireLocalDoc` would succeed and
+  // doc carries `toStored`, so a verb skipping `requireLocalDoc` would succeed and
   // pass a derived assertion. Which verbs take a `Document` is guarded
   // structurally inside `#withClones` and named here at the boundary.
   it('refuses a foreign Document at every Engine entry point taking one', async () => {

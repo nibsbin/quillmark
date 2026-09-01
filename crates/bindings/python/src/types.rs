@@ -222,7 +222,7 @@ impl PyQuill {
     /// Land `doc`'s declared content fields at their canonical rest **in
     /// place**, returning the `conform::*` diagnostic dicts for values that would
     /// not commit. The read-repair verb for a document that arrived through the
-    /// transport door (`from_markdown`, `from_json`, a stored row).
+    /// transport door (`from_markdown`, `from_stored`, a stored row).
     ///
     /// Idempotent and a byte no-op on an already-canonical document, comments
     /// included. A `!must_fill` marker anywhere in a field's value skips that
@@ -329,7 +329,7 @@ impl PyDocument {
     /// Raises `QuillmarkError` on malformed JSON, unknown `schema`, missing fields,
     /// or unparseable quill reference.
     #[staticmethod]
-    fn from_json(json: &str) -> PyResult<Self> {
+    fn from_stored(json: &str) -> PyResult<Self> {
         let inner: Document = serde_json::from_str(json).map_err(|e| {
             let msg = format!("invalid storage DTO: {e}");
             raise_with_diagnostics(
@@ -346,9 +346,9 @@ impl PyDocument {
         })
     }
 
-    /// Like [`from_json`] but returns `None` instead of raising.
+    /// Like [`from_stored`] but returns `None` instead of raising.
     #[staticmethod]
-    fn try_from_json(json: &str) -> Option<Self> {
+    fn try_from_stored(json: &str) -> Option<Self> {
         let inner: Document = serde_json::from_str(json).ok()?;
         Some(PyDocument {
             inner,
@@ -396,7 +396,7 @@ impl PyDocument {
     }
 
     /// Serialize to a versioned storage DTO string. Byte-deterministic per schema version.
-    fn to_json(&self) -> String {
+    fn to_stored(&self) -> String {
         serde_json::to_string(&self.inner).expect("Document serialization is infallible")
     }
 

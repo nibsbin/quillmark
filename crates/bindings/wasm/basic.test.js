@@ -215,20 +215,20 @@ describe('Document.toMarkdown: fromMarkdown → mutate → emit → re-parse', (
 })
 
 // ---------------------------------------------------------------------------
-// Document.toJson / Document.fromJson: versioned storage DTO round-trip
+// Document.toStored / Document.fromStored: versioned storage DTO round-trip
 // ---------------------------------------------------------------------------
 
-describe('Document JSON DTO: toJson / fromJson', () => {
+describe('Document JSON DTO: toStored / fromStored', () => {
   // The DTO's content rules (what round-trips, what a reconstruction drops,
   // which payloads are refused) are core's
   // (`core/src/document/dto.rs`). At this boundary the questions are narrower:
   // does the DTO cross as a plain JSON string, does a handle survive the
-  // round-trip, and do the JS-only statics (`tryFromJson`, `storageVersionOf`)
+  // round-trip, and do the JS-only statics (`tryFromStored`, `storageVersionOf`)
   // answer with `undefined` where their throwing twins throw.
 
-  it('toJson emits a plain JSON string carrying the current schema version', () => {
+  it('toStored emits a plain JSON string carrying the current schema version', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
-    const dto = doc.toJson()
+    const dto = doc.toStored()
     expect(typeof dto).toBe('string')
     expect(JSON.parse(dto).schema).toBe(Document.currentStorageVersion())
   })
@@ -238,7 +238,7 @@ describe('Document JSON DTO: toJson / fromJson', () => {
     doc.storeField('title', 'New Title')
     doc.insertCard(Document.makeCard('note', { author: 'Alice' }, 'Hello'))
 
-    const restored = Document.fromJson(doc.toJson())
+    const restored = Document.fromStored(doc.toStored())
 
     expect(restored.equals(doc)).toBe(true)
     expect(field(restored.main, 'title')).toBe('New Title')
@@ -246,27 +246,27 @@ describe('Document JSON DTO: toJson / fromJson', () => {
     expect(exportMarkdown(restored.cards[0].body)).toBe('Hello')
   })
 
-  it('fromJson throws on a payload it cannot accept', () => {
+  it('fromStored throws on a payload it cannot accept', () => {
     expect(() =>
-      Document.fromJson('{"schema":"quillmark/document@0.99.0","main":{}}'),
+      Document.fromStored('{"schema":"quillmark/document@0.99.0","main":{}}'),
     ).toThrow()
   })
 
-  it('tryFromJson is the non-throwing twin: a Document, or undefined', () => {
-    const dto = Document.fromMarkdown(TEST_MARKDOWN).toJson()
-    expect(Document.tryFromJson(dto).equals(Document.fromMarkdown(TEST_MARKDOWN))).toBe(true)
+  it('tryFromStored is the non-throwing twin: a Document, or undefined', () => {
+    const dto = Document.fromMarkdown(TEST_MARKDOWN).toStored()
+    expect(Document.tryFromStored(dto).equals(Document.fromMarkdown(TEST_MARKDOWN))).toBe(true)
 
-    expect(Document.tryFromJson('not json at all')).toBeUndefined()
+    expect(Document.tryFromStored('not json at all')).toBeUndefined()
     expect(
-      Document.tryFromJson('{"schema":"quillmark/document@0.99.0","main":{}}'),
+      Document.tryFromStored('{"schema":"quillmark/document@0.99.0","main":{}}'),
     ).toBeUndefined()
   })
 
   it('storageVersionOf reads the schema tag off any payload, or undefined', () => {
-    const current = Document.fromMarkdown(TEST_MARKDOWN).toJson()
+    const current = Document.fromMarkdown(TEST_MARKDOWN).toStored()
     expect(Document.storageVersionOf(current)).toBe(Document.currentStorageVersion())
 
-    // A future version reads back as-is, even though fromJson would reject it.
+    // A future version reads back as-is, even though fromStored would reject it.
     expect(
       Document.storageVersionOf('{"schema":"quillmark/document@0.99.0","main":{}}'),
     ).toBe('quillmark/document@0.99.0')
@@ -1959,7 +1959,7 @@ addr:
     expect(addr.nestedFills).toEqual([['street']])
 
     // Storage round-trip preserves the nested marker.
-    const restored = Document.fromJson(doc.toJson())
+    const restored = Document.fromStored(doc.toStored())
     expect(restored.toMarkdown()).toContain('street: !must_fill')
 
     // A card built with nestedFills survives insertCard → emit.

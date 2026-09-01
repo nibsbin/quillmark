@@ -139,9 +139,9 @@ doc = Document("my_quill")                       # blank canvas: $quill only, no
 doc = Document.from_markdown(markdown)
 emitted = doc.to_markdown()
 
-stored   = doc.to_json()
-restored = Document.from_json(stored)
-maybe    = Document.try_from_json(blob)          # None when not a DTO
+stored   = doc.to_stored()
+restored = Document.from_stored(stored)
+maybe    = Document.try_from_stored(blob)          # None when not a DTO
 
 Document.storage_version_of(blob)                # raw tag (incl. unknown futures)
 Document.current_storage_version()               # what this build writes

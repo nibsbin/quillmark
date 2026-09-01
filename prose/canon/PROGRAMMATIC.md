@@ -99,7 +99,7 @@ Where the writer refuses a value, conform leaves it authored and reports a
 reject it.
 
 The primitive stays load-bearing: it is what lets a `Document` be constructed
-and `from_json`'d with no bundle (standalone data), what quill-agnostic
+and `from_stored`'d with no bundle (standalone data), what quill-agnostic
 storage/migration infra writes through, what a store-now-validate-later editor
 uses to hold not-yet-conforming input, and the way to store a value opaquely on
 purpose. Reach for the opaque `store_*` for those; reach for the writer by

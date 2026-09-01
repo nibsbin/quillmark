@@ -106,8 +106,8 @@ has no counterpart for it, so the alternative is refusing the row; `$id`
 reached no backend, which is what makes dropping it the cheaper loss.
 
 `"schema": "quillmark/document@0.81.0"` is the oldest tag that exists, not
-just the oldest one read: `0.81.0` introduced `toJson` / `fromJson`, and no
-build before it serialized a `Document` at all. Every stored blob therefore
+just the oldest one read: `0.81.0` is where `Document` serialization begins, and
+no build before it serialized a `Document` at all. Every stored blob therefore
 carries one of the four tags above, and the reader set is complete. Its shape
 is pre-unification: a separate `sentinel` beside a `frontmatter` item list. It
 carries neither `$id` nor `$ext`, so its hop to V0_82_0 is lossless.

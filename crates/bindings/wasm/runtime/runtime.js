@@ -17,7 +17,7 @@
 //
 //   - `Engine` is the render dispatcher. It routes on `quill.backendId`, lazily
 //     imports that backend's build, clones the canonical `Quill`/`Document` into
-//     the backend's memory as data (`toTree`→`fromTree`, `toJson`→`fromJson`),
+//     the backend's memory as data (`toTree`→`fromTree`, `toStored`→`fromStored`),
 //     renders, and never lets the backend handles escape.
 //
 //     CLONE LIFETIMES: the per-call `Document` clone is transient, since
@@ -264,10 +264,10 @@ function quillmarkError(code, message, hint) {
 // WASM package twice AND needs handles to cross between the copies, so a
 // crossing is a consumer bug, and every seam taking a core handle says so.
 //
-// Crossing read-only handles as data is mechanically possible (`toJson` and
+// Crossing read-only handles as data is mechanically possible (`toStored` and
 // `toTree` serialize either way) and is not done: it leaves a package where some
 // verbs work and some throw, and it hides a cliff, since a crossed read is a
-// whole-document `toJson` + `fromJson` and a form reading fifty fields pays
+// whole-document `toStored` + `fromStored` and a form reading fifty fields pays
 // fifty round trips.
 //
 // What the checks deliver is the ERROR, not the rejection. wasm-bindgen's glue
@@ -290,8 +290,8 @@ const HANDLE_KINDS = {
 	},
 	Document: {
 		code: 'runtime::not_a_document',
-		probe: 'toJson',
-		hint: 'Pass a Document built by Document.fromMarkdown / fromJson or quill.seedDocument.'
+		probe: 'toStored',
+		hint: 'Pass a Document built by Document.fromMarkdown / fromStored or quill.seedDocument.'
 	}
 };
 
@@ -797,7 +797,7 @@ export class Engine {
 	 * memory and run `fn` against the backend engine. Only `render`/`open` call
 	 * this, so `doc` is always present.
 	 *
-	 * OWNERSHIP WINDOW: both caller handles are snapshotted (`doc.toJson()`, and
+	 * OWNERSHIP WINDOW: both caller handles are snapshotted (`doc.toStored()`, and
 	 * `quill.toTree()` on a clone-cache miss) BEFORE the first await. The backend
 	 * load below is a real suspension point, so reading the handles after it
 	 * would race a caller that `free()`s them as soon as this call returns its
@@ -816,7 +816,7 @@ export class Engine {
 	async #withClones(method, quill, doc, fn) {
 		const backendId = this.#backendOf(quill, method);
 		requireLocalDoc(doc, method);
-		const docJson = doc.toJson();
+		const docJson = doc.toStored();
 		const quillTree = this.#quillClones.get(backendId)?.has(quill) ? null : quill.toTree();
 		const { mod, engine } = await this.#resolveBackend(backendId);
 		// The doc clone and `fn` share one try so the clone is freed even if a
@@ -825,7 +825,7 @@ export class Engine {
 		const backendQuill = this.#cachedQuillClone(mod, backendId, quill, quillTree);
 		let backendDoc = null;
 		try {
-			backendDoc = mod.Document.fromJson(docJson);
+			backendDoc = mod.Document.fromStored(docJson);
 			return fn({ mod, engine, quill: backendQuill, doc: backendDoc });
 		} finally {
 			backendDoc?.free();
@@ -896,7 +896,7 @@ export class Engine {
 export class LiveSession {
 	/**
 	 * @param {{ pageCount: number, backendId: string, supportsCanvas: boolean, warnings: any[], update: Function, render: Function, regions: Function, pageSize: Function, paint: Function, free: Function }} inner backend-build LiveSession (typst or pdfform)
-	 * @param {{ Document: { fromJson(json: string): any } }} mod the session's backend build, used to materialize `update` documents in its linear memory
+	 * @param {{ Document: { fromStored(json: string): any } }} mod the session's backend build, used to materialize `update` documents in its linear memory
 	 */
 	constructor(inner, mod) {
 		this.#inner = inner;
@@ -913,7 +913,7 @@ export class LiveSession {
 		requireLocalDoc(doc, 'session.update(doc)');
 		let backendDoc = null;
 		try {
-			backendDoc = this.#mod.Document.fromJson(doc.toJson());
+			backendDoc = this.#mod.Document.fromStored(doc.toStored());
 			return this.#inner.update(backendDoc);
 		} finally {
 			backendDoc?.free();

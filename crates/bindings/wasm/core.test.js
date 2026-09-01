@@ -160,7 +160,7 @@ title: Draft
     expect(doc.getStored({ card: 0, field: 'author' })).toBe(field(doc.cards[0], 'author'))
 
     // Storage DTO round-trips losslessly: the editor's persistence path.
-    const restored = Document.fromJson(doc.toJson())
+    const restored = Document.fromStored(doc.toStored())
     expect(restored.equals(doc)).toBe(true)
 
     // Removal works back down to empty.

@@ -5,23 +5,23 @@ A `Document`'s in-memory layout tracks the evolving Quillmark model and is not a
 | Form | Round-trips? | Stable for storage? |
 |---|---|---|
 | Markdown (`to_markdown`) | yes | no: syntax evolves |
-| Storage JSON (`to_json`) | yes, lossless | yes: frozen per schema version |
+| Storage JSON (`to_stored`) | yes, lossless | yes: frozen per schema version |
 
 ## Round-trip
 
 === "Python"
 
     ```python
-    blob = doc.to_json()              # versioned JSON string
+    blob = doc.to_stored()              # versioned JSON string
     # … store blob …
-    doc = Document.from_json(blob)    # exact reconstruction
+    doc = Document.from_stored(blob)    # exact reconstruction
     ```
 
 === "JavaScript"
 
     ```javascript
-    const blob = doc.toJson();
-    const doc2 = Document.fromJson(blob);   // or tryFromJson → null on bad input
+    const blob = doc.toStored();
+    const doc2 = Document.fromStored(blob);   // or tryFromStored → null on bad input
     ```
 
 Every blob carries a `schema` tag (`quillmark/document@<version>`). Readers dispatch on it, accept every still-supported past version by migrating forward on read, and **reject an unknown version** rather than guessing. The current tag is `quillmark/document@0.112.0`.

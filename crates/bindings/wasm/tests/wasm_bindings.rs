@@ -151,16 +151,16 @@ fn test_json_dto_round_trip() {
     let md = "~~~card-yaml\n$quill: test_quill\n$kind: main\ntitle: Hello\nsubject: !must_fill A Subject\n~~~\n\n# Hello\n\n~~~card-yaml\n$kind: note\nfor: someone\n~~~\n\nNote body.\n";
     let doc = Document::from_markdown(md).expect("fromMarkdown failed");
 
-    let dto = doc.to_json();
+    let dto = doc.to_stored();
     assert!(
         dto.contains("\"quillmark/document@0.112.0\""),
         "DTO string must carry the schema version, got: {dto}"
     );
 
-    let restored = Document::from_json(&dto).expect("fromJson failed");
+    let restored = Document::from_stored(&dto).expect("fromStored failed");
     assert!(
         restored.equals(&doc),
-        "fromJson(toJson(doc)) must equal doc"
+        "fromStored(toStored(doc)) must equal doc"
     );
     assert_eq!(restored.quill_ref(), doc.quill_ref());
 }

@@ -224,7 +224,7 @@ def test_conform_converges_a_transported_document(tmp_path):
 
     diags = quill.conform(doc)
     assert isinstance(diags, list) and diags == []
-    assert doc.to_json() == quill.parse(md).to_json()
+    assert doc.to_stored() == quill.parse(md).to_stored()
     assert quill.conform(doc) == []
 
 
@@ -250,7 +250,7 @@ def test_the_wrong_quill_raises_before_any_mutation(tmp_path):
     assert excinfo.value.diagnostics[0].code == "quill::name_mismatch"
 
     doc = Document.from_markdown(md)
-    before = doc.to_json()
+    before = doc.to_stored()
     with pytest.raises(QuillmarkError):
         quill.conform(doc)
-    assert doc.to_json() == before
+    assert doc.to_stored() == before
