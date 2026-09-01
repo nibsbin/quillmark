@@ -215,7 +215,7 @@ mod tests {
                 "Some text before <!-- comment -->",
             ),
             // Mid-line, the comment is inline HTML and swallows nothing, so the
-            // trailing text stays on its own line.
+            // text after it stays on the same line.
             (
                 "Some text before <!-- comment -->and after",
                 "Some text before <!-- comment -->and after",

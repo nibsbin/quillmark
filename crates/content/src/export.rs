@@ -986,11 +986,12 @@ fn delim_close(kind: &MarkKind) -> &'static str {
     }
 }
 
-/// The character reference for a space or tab, which markdown strips from a
-/// line's and a table cell's edges. Backslash escapes cover ASCII punctuation
-/// only, so an edge run has no escaped spelling; the reference re-imports as the
-/// character and renders as one. Every other whitespace character, and any of
-/// these away from an edge, survives verbatim.
+/// The character reference for a space or tab, the whitespace markdown strips
+/// from the edges of a line and of a table cell. Backslash escapes cover ASCII
+/// punctuation only, so an edge run has no escaped spelling; the reference
+/// re-imports as the character and renders as the character. Every other
+/// whitespace character, and either of these away from an edge, survives
+/// verbatim.
 fn edge_space_ref(c: char) -> Option<&'static str> {
     match c {
         ' ' => Some("&#32;"),
@@ -1031,7 +1032,7 @@ fn escape_char_into(c: char, leading: bool, escape_pipe: bool, out: &mut String)
         '-' if leading => "\\-",
         '+' if leading => "\\+",
         // A leading `=` run underlines the paragraph line above it into a setext
-        // heading, so only a continuation line can be one. One escaped `=`
+        // heading, so only a continuation line can start one. One escaped `=`
         // defeats the whole underline.
         '=' if leading => "\\=",
         other => {
@@ -1443,7 +1444,7 @@ mod tests {
             "  1. not a list",
             "  > not a quote",
             // A trailing space keeps a heading's `#` out of the closing-sequence
-            // shape the pos-0 escape does not reach.
+            // shape the position-0 escapes do not reach.
             "a # ",
         ];
         for text in TEXTS {
