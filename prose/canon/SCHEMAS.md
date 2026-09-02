@@ -176,6 +176,11 @@ only when the field itself is one.** `reader.get_content(name)` answers for a
 whole-field leaf; `reader.get_content_at(name, path)` walks the same `items` /
 `properties` / `variants` axis conform walks, reaching an `array<richtext>`
 element, an `object`'s content property, a leaf under both, or a variant's cell.
+`reader.get(name)` projects the same subtree in one read, exporting at every
+leaf it reaches: an `array<richtext>` reads as an array of markdown strings, and
+a mixed `object` reads its content property as text beside its verbatim
+scalars. A field whose type tree bears no content leaf reads verbatim, the walk
+being the identity on it.
 Without it the caller reads the stored element and decides for itself what the
 bytes mean, which is the judgement the resting form exists to remove. The caller
 also has less to decide with: the codec is a schema fact, and the stored shape
@@ -385,6 +390,7 @@ field maps rather than a sort key):
 | seeding | `example:` › absent, stamped `!must_fill` where the schema obliges | (deferred to render floor) | committed `Document`: [Document seeding](#document-seeding) |
 | add-card (into a document) | `$seed` overlay › `example:` › absent | (deferred to render floor) | a new composable `Card`: [Document seeding](#document-seeding) |
 | editor (consumer-side) | authored › `default:` › blank, resolved per field and **tagged with its source rung** | blank | the engine's [`resolve()`](#the-resolved-value-view-resolve) resolved-value view: value and source rung per field |
+| portable values (`project`) | authored only: an absent field stays absent | **none**: the shape is sparse | the [portable values shape](#the-portable-values-shape-project--set_values): `DocumentValues`, content leaves as their codec's text |
 
 ### Cells and namespaces
 
@@ -473,6 +479,65 @@ errors stay `Quill::validate`'s, which a consumer merges with its own producers
 consumer code. Schema guidance (`example:`, labels, groups) reads from
 `Quill::schema`. Python is out of scope until a Python consumer names a call
 site (the Tier-1 cut, [BINDINGS.md](BINDINGS.md)).
+
+### The portable values shape (`project()` / `set_values()`)
+
+`Quill::project(doc)` answers what the document *carries*, where
+[`resolve()`](#the-resolved-value-view-resolve) answers what the render
+projection *would use*. Both read each field through the same render floor, so
+the two cannot disagree about what a document authored; they part after it. One
+reading, two projections.
+
+The shape is `{fields, body, cards: [{kind, fields, body, ext?}], ext?}`, a 1:1
+transcription of the typed writer's input. Every content leaf is its codec's
+text — `richtext` markdown, `plaintext` literal — at **every depth the field's
+type tree reaches**: an `array<richtext>` is an array of markdown strings, a
+mixed `object` projects its content property and passes its scalars verbatim, a
+variant carries its discriminant verbatim and each cell through its own codec.
+
+Two properties define it. It is **sparse**: an absent field is absent here too,
+never materialized from its `default:`, so writing the shape back cannot erase
+an absence signal ([Non-persist invariant](#blank-filled-render)). It is
+**total**: it never raises, a leaf that decodes under neither encoding riding
+out verbatim — the load that admitted it already warned, and an ingestion must
+open a document it can repair.
+
+`TypedWriter::set_values(values)` is the write twin, and the typed lane widened
+from one field (`set`) through one card's fields (`set_all`) to the document.
+Replace, not merge: a declared field the shape does not name is removed,
+`cards` *is* the card list, `body` becomes the body. All-or-nothing, every
+refusal carrying the `DocPath` it anchors at.
+
+**A cell whose incoming value equals its projection is not written.** That
+guard, comparing at the projection rather than at the stored bytes, is what
+makes `set_values(project(doc))` a byte no-op on any document the bound door
+admits — comparing at the storage level would call an anchor-bearing content
+changed, its re-import lacking the anchor. So an untouched cell keeps what a
+re-import cannot reproduce, and **nothing is normalized that the consumer did
+not change**: a scalar shorthand the floor reads as typed (`qty: "3"` → `3`)
+stays as authored until that cell is edited.
+
+**A projection, never a storage format** ([DOCUMENT_STORAGE.md](DOCUMENT_STORAGE.md)).
+What it does not carry, and what a cycle does to it:
+
+| Not carried | A cycle |
+|---|---|
+| identity anchors, content-only marks | kept on an untouched cell; lost on an edited one, which is a cold import |
+| `!must_fill` markers, nested YAML comments | kept on an untouched cell; cleared on a written one, as every write path clears them |
+| the author's exact markdown | export canonicalizes: mark nesting, escaping, trailing whitespace. The *document* round-trips, not the string a consumer sent |
+| `default:` rungs, blanks, `example:` | never present (sparse) |
+| `$quill`, `$seed`, undeclared fields | absent from the shape and untouched by `set_values` |
+| card identity | position + kind is the only match, so deleting, inserting or reordering an entry rewrites every card after it. Structural edits belong to the structural verbs |
+
+`$ext` **is** carried, on the main card and each card: it is the consumer's own
+card key ([PROGRAMMATIC.md](PROGRAMMATIC.md) § "Addressing cards for
+re-render"), so a shape that dropped it would break the bookkeeping it exists to
+serve. An absent `ext` leaves `$ext` untouched, an open namespace this caller
+may not be the only writer of; an empty one removes it.
+
+Unlike `resolve`, both verbs reach Python: this shape is the API contract a
+consumer reads, edits, and hands back, and it is the element type of a bulk
+generation spec's `documents` list.
 
 ## Blank-filled render
 

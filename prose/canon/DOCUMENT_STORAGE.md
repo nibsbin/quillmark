@@ -16,9 +16,15 @@ syntax also evolves), `Document` serializes to a **versioned JSON envelope**,
 |---|---|---|
 | Markdown (`Document::to_markdown`) | Yes | No: syntax evolves |
 | `StoredDocument` JSON | Yes: lossless | Yes: frozen per schema version |
+| `DocumentValues` JSON (`Quill::project`) | The *document* does: `set_values(project(doc))` is a no-op. The values canonicalize once | **No**: a consumer projection, lossy by design |
 
 Use `StoredDocument` JSON whenever a `Document` must survive a process
 restart or a crate upgrade: database rows, caches, message payloads.
+
+`Quill::project` is the third form and the one a consumer edits: content as
+its codec's text, sparse, and carrying neither anchors nor `$quill`
+([SCHEMAS.md](SCHEMAS.md) § "The portable values shape"). It is an API shape,
+never a row.
 
 `Document::to_plate_json` also exists as a lossy, one-way export to
 Plate-shaped backends; it is core-only (not exposed by the WASM or Python

@@ -58,6 +58,14 @@ Values convert in place at each boundary (Python objects, JS values, Rust
 scalars via `Into<QuillValue>`); no surface asks the caller to serialize
 YAML or Markdown.
 
+The whole document is one call in each direction. `quill.project(doc)` reads it
+as portable values and `quill.writer(doc).set_values(values)` writes that shape
+back, so a program holding a whole form or an API payload issues one verb rather
+than folding it over `set_all` and `add_card` itself
+([SCHEMAS.md](SCHEMAS.md) § "The portable values shape"). It is the typed lane:
+`set_values` refuses an undeclared name exactly as `set_all` does, and reports
+every refused cell at once under its own `DocPath`.
+
 ## Validation: batched, atomic, at the boundary
 
 Structural invariants (field-name grammar, value depth, card kind) are
@@ -124,7 +132,7 @@ idx = next(i for i, c in enumerate(doc.cards)                      # at patch ti
 quill.writer(doc).card(idx).set_all({"qty": new_qty})
 ```
 
-`$ext` round-trips through Markdown and the storage DTO and never reaches a backend ([CARDS.md](CARDS.md) § Out-of-band Metadata). **The engine guarantees nothing about what a consumer puts there**: no uniqueness, no collision check, no repair on a hand-edited file. A key duplicated across two cards resolves to whichever the scan hits first. Namespacing (`$ext.myapp`) is what keeps two tools on one card from colliding, and it is a convention, not an enforced rule.
+`$ext` round-trips through Markdown and the storage DTO and never reaches a backend ([CARDS.md](CARDS.md) § Out-of-band Metadata). It rides the portable values shape too, so a key stamped here survives a `project` → edit → `set_values` cycle: the projection carries `$ext` precisely because this pattern depends on it. **The engine guarantees nothing about what a consumer puts there**: no uniqueness, no collision check, no repair on a hand-edited file. A key duplicated across two cards resolves to whichever the scan hits first. Namespacing (`$ext.myapp`) is what keeps two tools on one card from colliding, and it is a convention, not an enforced rule.
 
 Patching one card at a time is for a document that is no longer a pure projection of its source data: where data → document is a pure function, rebuild instead. Reach for this only when a rebuild would destroy accumulated hand edits.
 
