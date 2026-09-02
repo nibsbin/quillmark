@@ -17,6 +17,25 @@
   undeclared fields are not carried. `toStored` remains persistence and
   `resolve` remains the render view — that one blank-fills every declared
   field and tags its rung, this one reports what the document carries.
+- feat(core): **`writer.set_values(values)` writes the whole document back.**
+  The typed lane widens from one field (`set`) through one card's fields
+  (`set_all`) to the document, and is `project`'s write twin. Replace, not
+  merge: a declared field the shape does not name is removed, `values.cards`
+  *is* the card list, `values.body` becomes the body. All-or-nothing — every
+  cell resolves before any is written and every refusal comes back under its
+  own `DocPath` (`main.qty`, `cards.line_item[0].desc`). **A cell whose
+  incoming value equals its projection is not written**, so
+  `set_values(project(doc))` moves no bytes on any document the bound door
+  admits, carrying through what a re-import cannot reproduce: identity
+  anchors, content-only marks, `!must_fill` markers, YAML comments, a leaf
+  that decodes under neither encoding, and a scalar shorthand the render floor
+  reads as typed. Nothing is normalized that the consumer did not change; a
+  cell converges to typed rest only when it is edited. A changed content cell
+  is a cold import, so anchors on it do not survive — `revise_field` per cell
+  is the path that keeps them. Cards match by position and kind, so deleting
+  or reordering an entry rewrites every card after it; the structural verbs
+  are the path that does not. An absent `ext` leaves `$ext` untouched, an
+  empty one removes it.
 - feat(core)!: **a content leaf reads as text wherever it sits, not only at the
   top of a field.** `reader.get` dispatched on the *field's* declared type, so
   an `array<richtext>` or an `object` with a `richtext` property returned the

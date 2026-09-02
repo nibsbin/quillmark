@@ -24,6 +24,7 @@ pub use conform::BoundParseError;
 pub use resolved::{FieldSource, Resolved, ResolvedCard, ResolvedField, ResolvedMain};
 pub use values::{CardValues, DocumentValues};
 pub(crate) use config::field_contains_content;
+pub(crate) use values::project_field;
 pub use fill::blank;
 pub use formats::{parse_date, parse_datetime};
 pub use ignore::QuillIgnore;

@@ -166,28 +166,42 @@ fn project_card_fields(schema: Option<&CardSchema>, card: &Card) -> IndexMap<Str
         .iter()
         .filter_map(|(name, field_schema)| {
             let value = authored.get(name.as_str())?;
-            let conformed =
-                QuillConfig::conform_value(value, field_schema, name, Leniency::Render)
-                    .unwrap_or_else(|_| (*value).clone());
-            let projected = project_value(
-                name,
-                conformed.as_json(),
-                field_schema,
-                &mut Vec::new(),
-                ProjectMode::Total,
-            )
-            .expect("ProjectMode::Total never raises");
-            Some((name.clone(), projected))
+            Some((name.clone(), project_field(name, value, field_schema)))
         })
         .collect()
 }
 
+/// One authored field's projection: the render floor's reading, then every
+/// content leaf below it as its codec's text.
+///
+/// [`TypedWriter::set_values`](crate::TypedWriter::set_values) guards each cell
+/// against this rather than against the stored bytes, so a value that projects
+/// equal is not rewritten — the only comparison under which an anchor-bearing
+/// content, a `!must_fill` marker, or a scalar shorthand the floor reads as
+/// typed all count as unchanged.
+pub(crate) fn project_field(
+    name: &str,
+    value: &crate::QuillValue,
+    schema: &crate::FieldSchema,
+) -> JsonValue {
+    let conformed = QuillConfig::conform_value(value, schema, name, Leniency::Render)
+        .unwrap_or_else(|_| value.clone());
+    project_value(
+        name,
+        conformed.as_json(),
+        schema,
+        &mut Vec::new(),
+        ProjectMode::Total,
+    )
+    .expect("ProjectMode::Total never raises")
+}
+
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
     use crate::quill::quill_from_yaml;
 
-    const QUILL: &str = r#"
+    pub(super) const QUILL: &str = r#"
 quill:
   name: memo
   version: "1.0"
@@ -220,7 +234,7 @@ card_kinds:
       qty: { type: integer }
 "#;
 
-    const DOC: &str = "\
+    pub(super) const DOC: &str = "\
 ~~~card-yaml
 $quill: memo@1.0
 $kind: main
@@ -372,5 +386,231 @@ Item note.
             serde_json::from_value::<DocumentValues>(serde_json::json!({"feilds": {}})).is_err(),
             "the hand-authored lane must fail loudly on a misspelled key"
         );
+    }
+}
+
+#[cfg(test)]
+mod roundtrip_tests {
+    use super::tests::*;
+    use super::*;
+    use crate::document::EditError;
+    use crate::quill::quill_from_yaml;
+
+    /// I1: the cycle writes nothing at all, on every document the bound door
+    /// admits — markers, comments, `$ext`, dirty leaves and scalar shorthands
+    /// included.
+    #[track_caller]
+    fn assert_cycle_is_a_no_op(quill: &Quill, md: &str) {
+        let mut doc = quill.parse(md).expect("document should parse").document;
+        let before = serde_json::to_string(&doc).unwrap();
+        let values = quill.project(&doc);
+        quill
+            .writer(&mut doc)
+            .set_values(&values)
+            .unwrap_or_else(|e| panic!("set_values refused its own projection: {e:?}"));
+        assert_eq!(
+            serde_json::to_string(&doc).unwrap(),
+            before,
+            "set_values(project(doc)) moved bytes"
+        );
+    }
+
+    #[test]
+    fn the_untouched_cycle_is_a_byte_no_op() {
+        let quill = quill_from_yaml(QUILL);
+        assert_cycle_is_a_no_op(&quill, DOC);
+    }
+
+    #[test]
+    fn the_cycle_preserves_what_a_re_import_cannot_reproduce() {
+        let quill = quill_from_yaml(QUILL);
+        for (what, md) in [
+            (
+                "a must-fill marker",
+                "~~~card-yaml\n$quill: memo@1.0\n$kind: main\nsubject: !must_fill Draft\n~~~\n",
+            ),
+            (
+                "a YAML comment",
+                "~~~card-yaml\n$quill: memo@1.0\n$kind: main\n# keep me\nsubject: Hi\n~~~\n",
+            ),
+            (
+                "an undeclared field",
+                "~~~card-yaml\n$quill: memo@1.0\n$kind: main\nstray: whatever\n~~~\n",
+            ),
+            (
+                "a scalar shorthand the floor reads as typed",
+                "~~~card-yaml\n$quill: memo@1.0\n$kind: main\n~~~\n\n\
+                 ~~~card-yaml\n$kind: line_item\nqty: \"3\"\n~~~\n",
+            ),
+            (
+                "a kindless card",
+                "~~~card-yaml\n$quill: memo@1.0\n$kind: main\n~~~\n\n~~~card-yaml\nfoo: bar\n~~~\n",
+            ),
+            (
+                "an unknown-kind card",
+                "~~~card-yaml\n$quill: memo@1.0\n$kind: main\n~~~\n\n\
+                 ~~~card-yaml\n$kind: mystery\nfoo: bar\n~~~\nStray.\n",
+            ),
+        ] {
+            let mut doc = quill.parse(md).expect("parses").document;
+            let before = serde_json::to_string(&doc).unwrap();
+            let values = quill.project(&doc);
+            quill.writer(&mut doc).set_values(&values).expect(what);
+            assert_eq!(
+                serde_json::to_string(&doc).unwrap(),
+                before,
+                "the cycle did not preserve {what}"
+            );
+        }
+    }
+
+    /// I2: one write canonicalises, and the canonical form is a fixed point.
+    #[test]
+    fn a_write_canonicalises_once_then_holds_still() {
+        let quill = quill_from_yaml(QUILL);
+        let blank = || {
+            quill
+                .parse("~~~card-yaml\n$quill: memo@1.0\n$kind: main\n~~~\n")
+                .expect("parses")
+                .document
+        };
+        let mut values = DocumentValues::default();
+        values.fields.insert("subject".into(), serde_json::json!("Widget __A__"));
+        values.fields.insert("qty".into(), serde_json::json!("3"));
+
+        let mut d1 = blank();
+        quill.writer(&mut d1).set_values(&values).unwrap();
+        let p = quill.project(&d1);
+        assert_eq!(
+            p.fields["subject"],
+            serde_json::json!("Widget **A**"),
+            "the write canonicalises markdown"
+        );
+        assert_eq!(p.fields["qty"], serde_json::json!(3), "and the scalar");
+
+        let mut d2 = blank();
+        quill.writer(&mut d2).set_values(&p).unwrap();
+        assert_eq!(
+            serde_json::to_string(&d1).unwrap(),
+            serde_json::to_string(&d2).unwrap()
+        );
+        assert_eq!(quill.project(&d2), p, "the canonical form is a fixed point");
+    }
+
+    #[test]
+    fn a_declared_field_absent_from_the_shape_is_removed() {
+        let quill = quill_from_yaml(QUILL);
+        let mut doc = quill
+            .parse("~~~card-yaml\n$quill: memo@1.0\n$kind: main\nsubject: Hi\nnote: keep\n~~~\n")
+            .expect("parses")
+            .document;
+        let mut values = quill.project(&doc);
+        values.fields.shift_remove("note");
+        quill.writer(&mut doc).set_values(&values).unwrap();
+        assert_eq!(quill.reader(&doc).get("note").unwrap(), None);
+        assert!(doc.main().payload().get("subject").is_some());
+    }
+
+    #[test]
+    fn an_undeclared_name_in_the_shape_is_refused_with_its_path() {
+        let quill = quill_from_yaml(QUILL);
+        let mut doc = quill
+            .parse("~~~card-yaml\n$quill: memo@1.0\n$kind: main\n~~~\n")
+            .expect("parses")
+            .document;
+        let mut values = DocumentValues::default();
+        values.fields.insert("nope".into(), serde_json::json!("x"));
+        let errors = quill.writer(&mut doc).set_values(&values).unwrap_err();
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].0.to_string(), "main.nope");
+        assert!(matches!(errors[0].1, EditError::UnknownField { .. }));
+    }
+
+    #[test]
+    fn every_refusal_arrives_at_once_and_nothing_is_written() {
+        let quill = quill_from_yaml(QUILL);
+        let mut doc = quill
+            .parse("~~~card-yaml\n$quill: memo@1.0\n$kind: main\nsubject: Hi\n~~~\n")
+            .expect("parses")
+            .document;
+        let before = serde_json::to_string(&doc).unwrap();
+        let mut values = DocumentValues::default();
+        values.fields.insert("nope".into(), serde_json::json!("x"));
+        values.fields.insert("alsonope".into(), serde_json::json!("y"));
+        values.cards.push(CardValues::new(
+            "line_item",
+            [("bad".to_string(), serde_json::json!(1))].into_iter().collect(),
+        ));
+        let errors = quill.writer(&mut doc).set_values(&values).unwrap_err();
+        let paths: Vec<String> = errors.iter().map(|(p, _)| p.to_string()).collect();
+        assert_eq!(paths, ["main.nope", "main.alsonope", "cards.line_item[0].bad"]);
+        assert_eq!(
+            serde_json::to_string(&doc).unwrap(),
+            before,
+            "an all-or-nothing batch leaves the document untouched"
+        );
+    }
+
+    #[test]
+    fn the_card_list_is_replaced_and_truncated() {
+        let quill = quill_from_yaml(QUILL);
+        let mut doc = quill
+            .parse(
+                "~~~card-yaml\n$quill: memo@1.0\n$kind: main\n~~~\n\n\
+                 ~~~card-yaml\n$kind: line_item\nqty: 1\n~~~\n\n\
+                 ~~~card-yaml\n$kind: line_item\nqty: 2\n~~~\n",
+            )
+            .expect("parses")
+            .document;
+        let mut values = quill.project(&doc);
+        values.cards.truncate(1);
+        quill.writer(&mut doc).set_values(&values).unwrap();
+        assert_eq!(doc.cards().len(), 1);
+        assert_eq!(
+            quill.reader(&doc).card(0).unwrap().get("qty").unwrap(),
+            Some(crate::ReadValue::Value(crate::QuillValue::from_json(
+                serde_json::json!(1)
+            )))
+        );
+    }
+
+    #[test]
+    fn a_new_card_is_appended_from_the_shape() {
+        let quill = quill_from_yaml(QUILL);
+        let mut doc = quill
+            .parse("~~~card-yaml\n$quill: memo@1.0\n$kind: main\n~~~\n")
+            .expect("parses")
+            .document;
+        let mut values = quill.project(&doc);
+        values.cards.push(
+            CardValues::new(
+                "line_item",
+                [("desc".to_string(), serde_json::json!("Widget **A**"))]
+                    .into_iter()
+                    .collect(),
+            )
+            .with_body("Note."),
+        );
+        quill.writer(&mut doc).set_values(&values).unwrap();
+        assert_eq!(doc.cards().len(), 1);
+        assert_eq!(quill.project(&doc).cards[0].body, "Note.");
+    }
+
+    #[test]
+    fn an_absent_ext_is_untouched_and_an_empty_one_removes() {
+        let quill = quill_from_yaml(QUILL);
+        let md = "~~~card-yaml\n$quill: memo@1.0\n$kind: main\n$ext:\n  app:\n    k: 1\n~~~\n";
+
+        let mut doc = quill.parse(md).expect("parses").document;
+        let mut values = quill.project(&doc);
+        values.ext = None;
+        quill.writer(&mut doc).set_values(&values).unwrap();
+        assert!(doc.main().ext().is_some(), "an absent ext leaves $ext alone");
+
+        let mut doc = quill.parse(md).expect("parses").document;
+        let mut values = quill.project(&doc);
+        values.ext = Some(serde_json::Map::new());
+        quill.writer(&mut doc).set_values(&values).unwrap();
+        assert!(doc.main().ext().is_none(), "an empty ext removes $ext");
     }
 }
