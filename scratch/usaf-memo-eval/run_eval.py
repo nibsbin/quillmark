@@ -551,7 +551,7 @@ def main() -> None:
     parser.add_argument("--budget", type=float, default=18.0)
     parser.add_argument("--max-rounds", type=int, default=8)
     parser.add_argument("--workers", type=int, default=6)
-    parser.add_argument("--repeats", type=int, default=3)
+    parser.add_argument("--repeats", type=int, default=8)
     parser.add_argument("--no-commit", action="store_true")
     parser.add_argument("--smoke", action="store_true", help="One cheap trial then exit")
     args = parser.parse_args()
