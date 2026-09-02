@@ -174,7 +174,9 @@ pub(crate) fn append_incremental_update(
 /// A header is `<id> <generation> obj` at a token boundary, so `19 0 obj` is not
 /// found inside `519 0 obj`, at any generation (re-saved PDFs carry non-zero
 /// ones). A later occurrence overwrites an earlier one, so a lookup answers with
-/// the live copy.
+/// the live copy. Literal strings, `%`-comments and stream bodies are skipped, so
+/// header bytes inside a string value or inside stream data cannot shadow the
+/// real object.
 pub struct ObjectIndex<'a> {
     pdf: &'a [u8],
     starts: HashMap<u32, usize>,
@@ -183,13 +185,19 @@ pub struct ObjectIndex<'a> {
 impl<'a> ObjectIndex<'a> {
     pub fn new(pdf: &'a [u8]) -> Self {
         let mut starts = HashMap::new();
-        for i in 0..pdf.len() {
-            if !pdf[i].is_ascii_digit() || !(i == 0 || matches!(pdf[i - 1], b'\n' | b'\r' | b' ')) {
+        let mut i = 0;
+        while i < pdf.len() {
+            if let Some(ni) = skip_stream_body(pdf, i).or_else(|| skip_string_or_comment(pdf, i)) {
+                i = ni;
                 continue;
             }
-            if let Some(id) = obj_header_id(&pdf[i..]) {
+            if pdf[i].is_ascii_digit()
+                && (i == 0 || matches!(pdf[i - 1], b'\n' | b'\r' | b' '))
+                && let Some(id) = obj_header_id(&pdf[i..])
+            {
                 starts.insert(id, i);
             }
+            i += 1;
         }
         Self { pdf, starts }
     }
@@ -268,13 +276,14 @@ fn obj_header_id(rest: &[u8]) -> Option<u32> {
 }
 
 /// The index just past the `endobj` closing the body at `from`. Literal
-/// `( … )` strings and `%`-comments are skipped so those bytes inside a string
-/// value or comment cannot truncate the object early.
+/// `( … )` strings, `%`-comments and stream bodies are skipped so those bytes
+/// inside a string value, a comment or stream data cannot truncate the object
+/// early.
 fn find_endobj_end(pdf: &[u8], from: usize) -> Option<usize> {
     let needle = b"endobj";
     let mut i = from;
     while i < pdf.len() {
-        if let Some(ni) = skip_string_or_comment(pdf, i) {
+        if let Some(ni) = skip_stream_body(pdf, i).or_else(|| skip_string_or_comment(pdf, i)) {
             i = ni;
             continue;
         }
@@ -391,6 +400,29 @@ fn skip_string_or_comment(b: &[u8], i: usize) -> Option<usize> {
         }
         _ => None,
     }
+}
+
+/// If `b[i]` opens a stream body — the `stream` keyword at a token boundary,
+/// followed by CRLF or LF per ISO 32000 §7.3.8 — the index just past the
+/// `endstream` closing it, so raw stream data is never read as structure. `None`
+/// when `b[i]` opens no stream, and when no `endstream` follows: a truncated
+/// stream is then scanned as ordinary bytes rather than swallowing the rest of
+/// the file.
+fn skip_stream_body(b: &[u8], i: usize) -> Option<usize> {
+    const OPEN: &[u8] = b"stream";
+    const CLOSE: &[u8] = b"endstream";
+    if !b[i..].starts_with(OPEN) || !(i == 0 || is_pdf_delim(b[i - 1])) {
+        return None;
+    }
+    let after_kw = i + OPEN.len();
+    let body = match b.get(after_kw)? {
+        b'\n' => after_kw + 1,
+        b'\r' if b.get(after_kw + 1) == Some(&b'\n') => after_kw + 2,
+        _ => return None,
+    };
+    (body..b.len().saturating_sub(CLOSE.len() - 1))
+        .find(|&j| b[j..].starts_with(CLOSE))
+        .map(|j| j + CLOSE.len())
 }
 
 /// The index after the last byte of the value beginning at `start`, whose
@@ -947,6 +979,39 @@ mod tests {
         let dict = extract_outer_dict(&pdf[s..e]).expect("dict parses");
         let title = find_dict_value(dict, "Title").expect("/Title");
         assert_eq!(title.trim_ascii(), b"(My endobj report)");
+    }
+
+    #[test]
+    fn obj_header_inside_string_does_not_shadow_object() {
+        let pdf = b"%PDF\n4 0 obj\n<< /V (real) >>\nendobj\n\
+                    5 0 obj\n<< /Subject (see 4 0 obj for the rest) >>\nendobj\n";
+        let dict = ObjectIndex::new(pdf).dict(4, CODE_PARSE, "obj").unwrap();
+        assert_eq!(find_dict_value(dict, "V").unwrap().trim_ascii(), b"(real)");
+    }
+
+    #[test]
+    fn obj_header_inside_stream_body_does_not_shadow_object() {
+        let pdf = b"%PDF\n4 0 obj\n<< /V (real) >>\nendobj\n\
+                    5 0 obj\n<< /Length 13 >>\nstream\n4 0 obj junk\nendstream\nendobj\n";
+        let dict = ObjectIndex::new(pdf).dict(4, CODE_PARSE, "obj").unwrap();
+        assert_eq!(find_dict_value(dict, "V").unwrap().trim_ascii(), b"(real)");
+    }
+
+    #[test]
+    fn object_after_a_stream_body_is_indexed() {
+        // The stream's unbalanced `(` would otherwise run the string skipper to EOF.
+        let pdf = b"%PDF\n5 0 obj\n<< /Length 12 >>\nstream\n(unbalanced\nendstream\nendobj\n\
+                    6 0 obj\n<< /V (after) >>\nendobj\n";
+        let dict = ObjectIndex::new(pdf).dict(6, CODE_PARSE, "obj").unwrap();
+        assert_eq!(find_dict_value(dict, "V").unwrap().trim_ascii(), b"(after)");
+    }
+
+    #[test]
+    fn endobj_inside_stream_body_does_not_truncate_object() {
+        let pdf = b"%PDF\n5 0 obj\n<< /Length 9 >>\nstream\nendobj x\nendstream\nendobj\n";
+        let idx = ObjectIndex::new(pdf);
+        let (s, e) = idx.object_bytes(5).expect("found object 5");
+        assert!(pdf[s..e].ends_with(b"endstream\nendobj"));
     }
 
     #[test]

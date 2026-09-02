@@ -60,6 +60,14 @@
   document-level pair rather than a `store` / `load` pair. The old names are
   removed rather than aliased. Stored blobs, the `schema` tag, and every byte
   these verbs write are untouched.
+- fix(pdf): **the object index skips literal strings, `%`-comments and stream
+  bodies, so `N G obj` bytes carried as content cannot shadow the real object.**
+  The scan accepted any `<id> <gen> obj` at a token boundary and a later
+  occurrence overwrites an earlier one, so a header spelled inside a string value
+  (`/Subject (see 4 0 obj)`) or inside raw stream data displaced the real
+  object's offset, and every read of that object parsed from the false position.
+  `find_endobj_end` skips stream bodies too: `endobj` bytes in stream data
+  truncated the object body.
 
 ## v0.112.0 - 2026-09-01
 
