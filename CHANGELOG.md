@@ -68,6 +68,14 @@
   object's offset, and every read of that object parsed from the false position.
   `find_endobj_end` skips stream bodies too: `endobj` bytes in stream data
   truncated the object body.
+- fix(pdf): **an inheritable page attribute resolves along the page's own
+  ancestor chain, not the root `/Pages` node alone.** `/Rotate` and `/MediaBox`
+  were read from the page dict and then from the root, so a base whose
+  intermediate `/Pages` node carries `/Rotate 90` passed the rotation guard and
+  every stamped widget landed a quarter turn off, and a page inheriting its
+  `/MediaBox` from an intermediate node was flipped against the root's page
+  height. The `/Kids` walk carries each page's ancestor ids, nearest first, and
+  both readers consult the page dict then that chain (ISO 32000-1 §7.7.3.4).
 
 ## v0.112.0 - 2026-09-01
 
