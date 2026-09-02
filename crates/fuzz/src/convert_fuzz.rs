@@ -1,4 +1,6 @@
 use proptest::prelude::*;
+use quillmark_content::export::to_plaintext;
+use quillmark_content::import::from_plaintext;
 use quillmark_typst::emit::{escape_markup, escape_string};
 use typst::syntax::SyntaxKind;
 
@@ -26,11 +28,13 @@ const ALLOWED_LEAVES: &[SyntaxKind] = &[
     SyntaxKind::SmartQuote,
 ];
 
-/// A `--` or a `...` never lands by chance in a draw over all of Unicode, so
-/// the second alphabet is Typst's special characters alone.
+/// A `--`, a `...`, or a separator ahead of a block marker never lands by
+/// chance in a draw over all of Unicode. The second alphabet is what does land
+/// one: Typst's special characters, the U+2028/U+2029 separators it reads as
+/// line breaks, and the markers and space that open a block behind one.
 fn escaper_input() -> impl Strategy<Value = String> {
     prop_oneof![
-        r#"[-.?/~*_#\[\]{}$<>@'"0-9a-c \\`]{0,40}"#,
+        r#"[-.?/~*_#+=\[\]{}$<>@'"0-9a-c \\`\x{2028}\x{2029}]{0,40}"#,
         "\\PC*",
     ]
 }
@@ -91,10 +95,12 @@ proptest! {
 
     #[test]
     fn fuzz_escape_markup_survives_the_typst_parser(s in escaper_input()) {
-        // Typst also reads U+2028 / U+2029 as line breaks, which no escape can
-        // neutralize (`\` before whitespace is its linebreak). The content layer
-        // admits them, so they are not this function's to answer.
-        let s: String = s.chars().filter(|&c| c != '\u{2028}' && c != '\u{2029}').collect();
+        // The escaper answers for the text a content holds, so the draw enters
+        // through the content ingress, which spaces the U+2028/U+2029
+        // separators: Typst reads one as a line break that reopens `at_start`,
+        // and no escape neutralizes it (a `\` before whitespace is its own
+        // linebreak).
+        let s = to_plaintext(&from_plaintext(&s));
         // Past `at_start`, whose markers are the emitter's guard, not the escaper's.
         let (text, kinds) = resolve(&format!("x{}", escape_markup(&s)));
 

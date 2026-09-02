@@ -10,7 +10,10 @@
 //! SVG/PNG raster outputs only; the AcroForm PDF deliverable is stamped.
 
 use quillmark_pdf::{
-    reader::{extract_outer_dict, find_dict_value, splice_dict_value, ObjectIndex, UpdatedObject},
+    reader::{
+        extract_outer_dict, find_dict_value, parse_indirect_ref, splice_dict_value, ObjectIndex,
+        Page, UpdatedObject,
+    },
     writer::{
         alloc_id, append_refs_to_array_key, dict_object, pdf_escape, winansi_encode, OnNonArray,
     },
@@ -50,8 +53,8 @@ pub fn flatten(base: Vec<u8>, fields: &[FieldSpec]) -> Result<Vec<u8>, PdfError>
     let idx = ObjectIndex::new(&pdf);
     let mut up = PdfUpdate::begin(&idx, None)?;
 
-    let page_ids = up.resolve_pages(&idx, fields)?;
-    let page_count = page_ids.len();
+    let pages = up.resolve_pages(&idx, fields)?;
+    let page_count = pages.len();
 
     // Helvetica and ZapfDingbats are among the 14 standard PDF fonts every
     // conforming reader provides, so neither is embedded.
@@ -75,17 +78,31 @@ pub fn flatten(base: Vec<u8>, fields: &[FieldSpec]) -> Result<Vec<u8>, PdfError>
             continue;
         }
 
-        let stream_id = alloc_id(&mut up.next_id)?;
-        up.objects.push(content_stream_object(
-            stream_id,
-            &build_content_stream(page_fields),
-        ));
-
-        let page_obj_id = page_ids[page_idx];
+        let page = &pages[page_idx];
+        let page_obj_id = page.id;
         let what = format!("page object {page_obj_id}");
         let pg_dict = idx.dict(page_obj_id, CODE_PARSE, &what)?;
 
-        let new_pg = rewrite_page_for_flatten(pg_dict, helv_id, zadb_id, stream_id)?;
+        let resources = resolve_resources(&idx, page)?;
+        let font_inner: &[u8] = match &resources {
+            Some(res) => font_dict(res)?.map_or(&[], |f| f.inner),
+            None => &[],
+        };
+        let names = FontNames::free_in(font_inner);
+
+        let stream_id = alloc_id(&mut up.next_id)?;
+        up.objects.push(content_stream_object(
+            stream_id,
+            &build_content_stream(page_fields, &names),
+        ));
+
+        let new_pg = rewrite_page_for_flatten(
+            &idx,
+            pg_dict,
+            resources.as_deref(),
+            &[(&names.text, helv_id), (&names.check, zadb_id)],
+            stream_id,
+        )?;
         up.objects.push(dict_object(page_obj_id, &new_pg));
     }
 
@@ -100,7 +117,40 @@ fn has_drawable_value(spec: &FieldSpec) -> bool {
     }
 }
 
-fn build_content_stream(fields: &[&FieldSpec]) -> Vec<u8> {
+/// The `/Font` resource names one page's flatten stream selects. Chosen per page
+/// because they must be free in that page's own `/Font` dict.
+struct FontNames {
+    text: String,
+    check: String,
+}
+
+impl FontNames {
+    fn free_in(font_inner: &[u8]) -> Self {
+        Self {
+            text: free_font_name(font_inner, typography::TEXT_FONT_RESOURCE),
+            check: free_font_name(font_inner, typography::CHECK_FONT_RESOURCE),
+        }
+    }
+}
+
+/// `preferred` when it is unbound in `font_inner`, else the first free
+/// `<preferred><n>`. Binding a name the background's own stream selects would
+/// rebind it there too: a dict carrying the key twice resolves last-wins.
+fn free_font_name(font_inner: &[u8], preferred: &str) -> String {
+    if find_dict_value(font_inner, preferred).is_none() {
+        return preferred.to_string();
+    }
+    let mut n = 2;
+    loop {
+        let name = format!("{preferred}{n}");
+        if find_dict_value(font_inner, &name).is_none() {
+            return name;
+        }
+        n += 1;
+    }
+}
+
+fn build_content_stream(fields: &[&FieldSpec], names: &FontNames) -> Vec<u8> {
     let mut out = Vec::new();
     for spec in fields {
         let [x0, y0, x1, y1] = spec.rect;
@@ -113,7 +163,7 @@ fn build_content_stream(fields: &[&FieldSpec]) -> Vec<u8> {
                 // ZapfDingbats check glyphs are roughly square; centre in the box.
                 let x_pos = x0 + (w - size * typography::CHECK_GLYPH_WIDTH_FACTOR) * 0.5;
                 let y_pos = y0 + (h - size) * 0.5;
-                write_zadb_char(&mut out, x_pos, y_pos, size);
+                write_check_char(&mut out, &names.check, x_pos, y_pos, size);
             }
             FieldType::Text { .. } => {
                 if let Some(value) = &spec.value {
@@ -121,7 +171,7 @@ fn build_content_stream(fields: &[&FieldSpec]) -> Vec<u8> {
                     let x_pos = x0 + typography::TEXT_INSET;
                     let y_top = y1 - size - typography::TEXT_TOP_INSET;
                     let lines: Vec<&str> = value.lines().collect();
-                    write_text_block(&mut out, &lines, x_pos, y_top, size, spec.rect);
+                    write_text_block(&mut out, &names.text, &lines, x_pos, y_top, size, spec.rect);
                 }
             }
             FieldType::Choice { .. } => {
@@ -129,7 +179,15 @@ fn build_content_stream(fields: &[&FieldSpec]) -> Vec<u8> {
                     let size = typography::value_size(h);
                     let x_pos = x0 + typography::TEXT_INSET;
                     let y_pos = y0 + (h - size) * 0.5;
-                    write_text_block(&mut out, &[value.as_str()], x_pos, y_pos, size, spec.rect);
+                    write_text_block(
+                        &mut out,
+                        &names.text,
+                        &[value.as_str()],
+                        x_pos,
+                        y_pos,
+                        size,
+                        spec.rect,
+                    );
                 }
             }
         }
@@ -137,10 +195,18 @@ fn build_content_stream(fields: &[&FieldSpec]) -> Vec<u8> {
     out
 }
 
-/// Draw `lines` in `/Helv`, clipped to `clip` so an over-long value cannot paint
-/// over neighbouring content. Bytes are transcoded to WinAnsi to match the
-/// font's `/Encoding /WinAnsiEncoding`.
-fn write_text_block(out: &mut Vec<u8>, lines: &[&str], x: f32, y: f32, size: f32, clip: [f32; 4]) {
+/// Draw `lines` in the page's text font, clipped to `clip` so an over-long value
+/// cannot paint over neighbouring content. Bytes are transcoded to WinAnsi to
+/// match the font's `/Encoding /WinAnsiEncoding`.
+fn write_text_block(
+    out: &mut Vec<u8>,
+    font: &str,
+    lines: &[&str],
+    x: f32,
+    y: f32,
+    size: f32,
+    clip: [f32; 4],
+) {
     if lines.is_empty() {
         return;
     }
@@ -156,7 +222,7 @@ fn write_text_block(out: &mut Vec<u8>, lines: &[&str], x: f32, y: f32, size: f32
     out.push(b' ');
     push_f32(out, cy1 - cy0);
     out.extend_from_slice(b" re W n\n");
-    out.extend_from_slice(b"BT\n/Helv ");
+    out.extend_from_slice(format!("BT\n/{font} ").as_bytes());
     push_f32(out, size);
     out.extend_from_slice(b" Tf\n");
     push_f32(out, x);
@@ -178,8 +244,8 @@ fn write_text_block(out: &mut Vec<u8>, lines: &[&str], x: f32, y: f32, size: f32
 
 /// Draw ZapfDingbats glyph 0x34 (`'4'`), the filled check mark — the same glyph
 /// the AcroForm stamp path declares via `/MK /CA (4)`.
-fn write_zadb_char(out: &mut Vec<u8>, x: f32, y: f32, size: f32) {
-    out.extend_from_slice(b"q\nBT\n/ZaDb ");
+fn write_check_char(out: &mut Vec<u8>, font: &str, x: f32, y: f32, size: f32) {
+    out.extend_from_slice(format!("q\nBT\n/{font} ").as_bytes());
     push_f32(out, size);
     out.extend_from_slice(b" Tf\n");
     push_f32(out, x);
@@ -189,90 +255,171 @@ fn write_zadb_char(out: &mut Vec<u8>, x: f32, y: f32, size: f32) {
 }
 
 fn rewrite_page_for_flatten(
+    idx: &ObjectIndex,
     pg_dict: &[u8],
-    helv_id: u32,
-    zadb_id: u32,
+    resources: Option<&[u8]>,
+    fonts: &[(&str, u32)],
     stream_id: u32,
 ) -> Result<Vec<u8>, PdfError> {
-    // A page `/Contents` is legitimately a bare stream reference, so the
-    // flatten stream wraps it rather than refusing it.
-    let with_stream = append_refs_to_array_key(
+    let with_stream = append_content_stream(idx, pg_dict, stream_id)?;
+    add_font_resources(&with_stream, resources, fonts)
+}
+
+/// Append the flatten stream to the page `/Contents`. A `/Contents` naming an
+/// *array* object expands to that array's elements: wrapping the reference would
+/// leave an array as an element of the `/Contents` array, which is not a content
+/// stream. A reference to a stream is legitimate and wraps.
+fn append_content_stream(
+    idx: &ObjectIndex,
+    pg_dict: &[u8],
+    stream_id: u32,
+) -> Result<Vec<u8>, PdfError> {
+    if let Some(value) = find_dict_value(pg_dict, "Contents")
+        && let Some(inner) = referenced_array_inner(idx, value)
+    {
+        let merged = format!("[{} {stream_id} 0 R]", String::from_utf8_lossy(inner).trim());
+        return Ok(splice_dict_value(
+            pg_dict,
+            b"/Contents",
+            value,
+            merged.as_bytes(),
+        ));
+    }
+    append_refs_to_array_key(
         pg_dict,
         "Contents",
         &[stream_id],
         CODE_PARSE,
         OnNonArray::Wrap,
-    )?;
-    add_font_resources(&with_stream, &[("Helv", helv_id), ("ZaDb", zadb_id)])
+    )
 }
 
-/// Inject `/<name> <font_id> 0 R` for each of `fonts` into the page's
-/// `/Resources /Font` dict, creating intermediate dicts as needed. An indirect
-/// `/Resources` or `/Font` is an error rather than a skip: a `Tf` name resolves
-/// only through the page's `/Font` subdictionary, so an uninjected name draws
-/// nothing.
-fn add_font_resources(pg_dict: &[u8], fonts: &[(&str, u32)]) -> Result<Vec<u8>, PdfError> {
+/// The elements of the array object `value` references, or `None` when `value`
+/// is not a reference or names an object that is not an array.
+fn referenced_array_inner<'a>(idx: &ObjectIndex<'a>, value: &[u8]) -> Option<&'a [u8]> {
+    let (id, _) = parse_indirect_ref(value.trim_ascii())?;
+    let (start, end) = idx.object_bytes(id)?;
+    let body = &idx.bytes()[start..end];
+    // The `<id> <gen> obj` header holds only digits, so the first `obj` is it.
+    let after_header = body.windows(3).position(|w| w == b"obj")? + 3;
+    let inner = body[after_header..].trim_ascii().strip_prefix(b"[")?;
+    let close = inner.iter().rposition(|&b| b == b']')?;
+    Some(&inner[..close])
+}
+
+/// The page's effective `/Resources` inner bytes, with an indirect `/Resources`
+/// or `/Font` replaced by an inline copy of the referenced dict. `/Resources` is
+/// inheritable, so a page carrying none draws with the nearest ancestor's.
+/// `None` when no node on the chain carries one; the first present value is
+/// taken, so one that fails to parse is an error rather than a step past.
+fn resolve_resources(idx: &ObjectIndex, page: &Page) -> Result<Option<Vec<u8>>, PdfError> {
+    page.inherited_attribute(idx, "Resources", |value| {
+        Some(inline_dict(idx, value, "page /Resources"))
+    })
+    .transpose()?
+    .map(|inner| inline_font_dict(idx, inner))
+    .transpose()
+}
+
+/// A dict-valued entry as inline bytes: an inline dict is copied as is, an
+/// indirect reference is dereferenced through `idx`. References nested in the
+/// copy stay valid — they resolve against the same file.
+fn inline_dict(idx: &ObjectIndex, value: &[u8], what: &str) -> Result<Vec<u8>, PdfError> {
+    let trimmed = value.trim_ascii();
+    if trimmed.starts_with(b"<<") {
+        return extract_outer_dict(trimmed)
+            .map(<[u8]>::to_vec)
+            .ok_or_else(|| PdfError::new(CODE_PARSE, format!("{what} dict not parseable")));
+    }
+    let (id, _) = parse_indirect_ref(trimmed).ok_or_else(|| {
+        PdfError::new(
+            CODE_PARSE,
+            format!("{what} is neither a dict nor an indirect reference"),
+        )
+    })?;
+    Ok(idx
+        .dict(id, CODE_PARSE, &format!("{what} object {id}"))?
+        .to_vec())
+}
+
+/// `res_inner` with an indirect `/Font` replaced by an inline copy, so the font
+/// dict can be read by name and extended.
+fn inline_font_dict(idx: &ObjectIndex, res_inner: Vec<u8>) -> Result<Vec<u8>, PdfError> {
+    let inlined = match find_dict_value(&res_inner, "Font") {
+        Some(font_val) if !font_val.trim_ascii().starts_with(b"<<") => {
+            let mut value = b"<< ".to_vec();
+            value.extend_from_slice(&inline_dict(idx, font_val, "page /Resources /Font")?);
+            value.extend_from_slice(b" >>");
+            Some(splice_dict_value(&res_inner, b"/Font", font_val, &value))
+        }
+        _ => None,
+    };
+    Ok(inlined.unwrap_or(res_inner))
+}
+
+/// The `/Font` subdictionary of a resolved `/Resources` dict, which
+/// [`resolve_resources`] has already inlined.
+struct FontDict<'a> {
+    /// The value span, locating the entry for a splice.
+    value: &'a [u8],
+    inner: &'a [u8],
+}
+
+fn font_dict(res_inner: &[u8]) -> Result<Option<FontDict<'_>>, PdfError> {
+    let Some(value) = find_dict_value(res_inner, "Font") else {
+        return Ok(None);
+    };
+    let inner = extract_outer_dict(value)
+        .ok_or_else(|| PdfError::new(CODE_PARSE, "page /Resources /Font dict not parseable"))?;
+    Ok(Some(FontDict { value, inner }))
+}
+
+/// Write `resources`, extended with `/<name> <font_id> 0 R` for each of `fonts`,
+/// as the page's own inline `/Resources`, creating intermediate dicts as needed.
+/// `resources` is the page's *effective* dict, possibly inherited: a page's own
+/// `/Resources` shadows the inherited one outright, so the copy has to carry the
+/// ancestor's entries forward or the background loses its names.
+fn add_font_resources(
+    pg_dict: &[u8],
+    resources: Option<&[u8]>,
+    fonts: &[(&str, u32)],
+) -> Result<Vec<u8>, PdfError> {
     let entries = fonts
         .iter()
         .map(|(name, font_id)| format!("/{name} {font_id} 0 R"))
         .collect::<Vec<_>>()
         .join(" ");
 
-    match find_dict_value(pg_dict, "Resources") {
+    let new_res_inner: Vec<u8> = match resources {
+        None => format!("/Font << {entries} >>").into_bytes(),
+        Some(res_inner) => match font_dict(res_inner)? {
+            None => {
+                let mut out = res_inner.to_vec();
+                out.extend_from_slice(format!(" /Font << {entries} >>").as_bytes());
+                out
+            }
+            Some(font) => {
+                let mut new_font_val = b"<< ".to_vec();
+                new_font_val.extend_from_slice(font.inner);
+                new_font_val.extend_from_slice(format!(" {entries} >>").as_bytes());
+                splice_dict_value(res_inner, b"/Font", font.value, &new_font_val)
+            }
+        },
+    };
+
+    let mut new_res_val = b"<< ".to_vec();
+    new_res_val.extend_from_slice(&new_res_inner);
+    new_res_val.extend_from_slice(b" >>");
+
+    Ok(match find_dict_value(pg_dict, "Resources") {
+        Some(res_val) => splice_dict_value(pg_dict, b"/Resources", res_val, &new_res_val),
         None => {
             let mut out = pg_dict.to_vec();
-            out.extend_from_slice(format!(" /Resources << /Font << {entries} >> >>").as_bytes());
-            Ok(out)
+            out.extend_from_slice(b" /Resources ");
+            out.extend_from_slice(&new_res_val);
+            out
         }
-        Some(res_val) => {
-            if !res_val.trim_ascii().starts_with(b"<<") {
-                // Indirect /Resources ref: cannot inject the named font, and the
-                // emitted `/Helv`/`/ZaDb` Tf operators would not resolve.
-                return Err(PdfError::new(
-                    CODE_PARSE,
-                    "page /Resources is an indirect reference; flatten requires inline resources",
-                ));
-            }
-            let res_inner = extract_outer_dict(res_val)
-                .ok_or_else(|| PdfError::new(CODE_PARSE, "page /Resources dict not parseable"))?;
-
-            let new_res_inner: Vec<u8> = match find_dict_value(res_inner, "Font") {
-                None => {
-                    let mut out = res_inner.to_vec();
-                    out.extend_from_slice(format!(" /Font << {entries} >>").as_bytes());
-                    out
-                }
-                Some(font_val) => {
-                    if !font_val.trim_ascii().starts_with(b"<<") {
-                        return Err(PdfError::new(
-                            CODE_PARSE,
-                            "page /Resources /Font is an indirect reference; flatten requires \
-                             an inline /Font dict",
-                        ));
-                    }
-                    let font_inner = extract_outer_dict(font_val).ok_or_else(|| {
-                        PdfError::new(CODE_PARSE, "page /Resources /Font dict not parseable")
-                    })?;
-                    let mut new_font_val = b"<< ".to_vec();
-                    new_font_val.extend_from_slice(font_inner);
-                    new_font_val.extend_from_slice(format!(" {entries} >>").as_bytes());
-
-                    splice_dict_value(res_inner, b"/Font", font_val, &new_font_val)
-                }
-            };
-
-            let mut new_res_val = b"<< ".to_vec();
-            new_res_val.extend_from_slice(&new_res_inner);
-            new_res_val.extend_from_slice(b" >>");
-
-            Ok(splice_dict_value(
-                pg_dict,
-                b"/Resources",
-                res_val,
-                &new_res_val,
-            ))
-        }
-    }
+    })
 }
 
 /// Build a base-14 Type1 font object. Symbol fonts pass `encoding: None` to keep
@@ -309,6 +456,7 @@ fn push_f32(out: &mut Vec<u8>, v: f32) {
 mod tests {
     use super::*;
     use lopdf::Document as PdfDoc;
+    use pdf_writer::{Name, Pdf, Rect, Ref};
     use quillmark_pdf::CHECKBOX_ON_STATE;
 
     /// Single-page US-Letter background, no AcroForm and no annots.
@@ -347,6 +495,210 @@ mod tests {
         haystack.windows(needle.len()).any(|w| w == needle)
     }
 
+    fn default_names() -> FontNames {
+        FontNames::free_in(b"")
+    }
+
+    /// The `/Resources` dict of the flattened PDF's only page.
+    fn page_resources(pdf: &[u8]) -> lopdf::Dictionary {
+        let doc = PdfDoc::load_mem(pdf).expect("lopdf reparse: structurally valid");
+        let (_, page_id) = doc.get_pages().into_iter().next().expect("one page");
+        doc.get_dictionary(page_id)
+            .expect("page dict")
+            .get(b"Resources")
+            .expect("page carries its own /Resources")
+            .as_dict()
+            .expect("/Resources is a dict")
+            .clone()
+    }
+
+    /// One US-Letter page whose object ids are 1 catalog, 2 `/Pages`, 3 page,
+    /// 4 a background content stream, 5 the font it selects. `on_pages` and
+    /// `on_page` write the entries under test onto the tree node and the page;
+    /// `extra` adds further objects.
+    fn build_base(
+        on_pages: impl FnOnce(&mut pdf_writer::writers::Pages),
+        on_page: impl FnOnce(&mut pdf_writer::writers::Page),
+        extra: impl FnOnce(&mut Pdf),
+    ) -> Vec<u8> {
+        let letter = Rect::new(0.0, 0.0, 612.0, 792.0);
+        let mut pdf = Pdf::new();
+        pdf.catalog(Ref::new(1)).pages(Ref::new(2));
+        {
+            let mut pages = pdf.pages(Ref::new(2));
+            pages.kids([Ref::new(3)]).count(1).media_box(letter);
+            on_pages(&mut pages);
+        }
+        {
+            let mut page = pdf.page(Ref::new(3));
+            page.parent(Ref::new(2)).media_box(letter);
+            on_page(&mut page);
+        }
+        pdf.stream(Ref::new(4), b"BT /F1 12 Tf 72 700 Td (background) Tj ET");
+        pdf.indirect(Ref::new(5))
+            .dict()
+            .pair(Name(b"Type"), Name(b"Font"))
+            .pair(Name(b"Subtype"), Name(b"Type1"))
+            .pair(Name(b"BaseFont"), Name(b"Helvetica"));
+        extra(&mut pdf);
+        pdf.finish()
+    }
+
+    #[test]
+    fn resources_inherited_from_the_page_tree_reach_the_flattened_page() {
+        let base = build_base(
+            |pages| {
+                let mut res = pages.insert(Name(b"Resources")).dict();
+                res.insert(Name(b"ProcSet"))
+                    .array()
+                    .items([Name(b"PDF"), Name(b"Text")]);
+                res.insert(Name(b"Font"))
+                    .dict()
+                    .pair(Name(b"F1"), Ref::new(5));
+            },
+            |page| {
+                page.contents(Ref::new(4));
+            },
+            |_| {},
+        );
+
+        let pdf = flatten(base, &[text_field("FullName", "Ada Lovelace")]).expect("flatten ok");
+
+        let res = page_resources(&pdf);
+        assert!(
+            res.has(b"ProcSet"),
+            "the inherited /Resources entries survive the page's own dict"
+        );
+        let fonts = res.get(b"Font").unwrap().as_dict().unwrap();
+        assert!(fonts.has(b"F1"), "the background's font binding survives");
+        assert!(
+            fonts.has(b"Helv") && fonts.has(b"ZaDb"),
+            "the drawn fonts are injected beside it"
+        );
+    }
+
+    #[test]
+    fn resources_inherit_along_the_kids_chain_without_a_parent_link() {
+        // The same tree as `build_base`, minus the page's `/Parent`: the ancestor
+        // chain is the `/Kids` walk's, the one `/Rotate` and `/MediaBox` resolve
+        // along, so a missing back-link cannot detach the page from its resources.
+        let letter = Rect::new(0.0, 0.0, 612.0, 792.0);
+        let mut pdf = Pdf::new();
+        pdf.catalog(Ref::new(1)).pages(Ref::new(2));
+        {
+            let mut pages = pdf.pages(Ref::new(2));
+            pages.kids([Ref::new(3)]).count(1).media_box(letter);
+            pages
+                .insert(Name(b"Resources"))
+                .dict()
+                .insert(Name(b"Font"))
+                .dict()
+                .pair(Name(b"F1"), Ref::new(5));
+        }
+        pdf.page(Ref::new(3)).media_box(letter).contents(Ref::new(4));
+        pdf.stream(Ref::new(4), b"BT /F1 12 Tf 72 700 Td (background) Tj ET");
+        pdf.indirect(Ref::new(5))
+            .dict()
+            .pair(Name(b"Type"), Name(b"Font"))
+            .pair(Name(b"Subtype"), Name(b"Type1"))
+            .pair(Name(b"BaseFont"), Name(b"Helvetica"));
+        let base = pdf.finish();
+
+        let pdf = flatten(base, &[text_field("FullName", "Ada Lovelace")]).expect("flatten ok");
+
+        let fonts = page_resources(&pdf)
+            .get(b"Font")
+            .unwrap()
+            .as_dict()
+            .unwrap()
+            .clone();
+        assert!(fonts.has(b"F1"), "the background's font binding survives");
+        assert!(fonts.has(b"Helv"), "the drawn font is injected beside it");
+    }
+
+    #[test]
+    fn a_font_name_the_page_already_binds_keeps_its_own_font() {
+        let base = build_base(
+            |_| {},
+            |page| {
+                page.contents(Ref::new(4));
+                let mut res = page.insert(Name(b"Resources")).dict();
+                res.insert(Name(b"Font"))
+                    .dict()
+                    .pair(Name(b"Helv"), Ref::new(5));
+            },
+            |_| {},
+        );
+
+        let pdf = flatten(base, &[text_field("FullName", "Ada Lovelace")]).expect("flatten ok");
+
+        let fonts = page_resources(&pdf)
+            .get(b"Font")
+            .unwrap()
+            .as_dict()
+            .unwrap()
+            .clone();
+        assert_eq!(
+            fonts.get(b"Helv").unwrap().as_reference().unwrap(),
+            (5, 0),
+            "/Helv stays bound to the background's own font"
+        );
+        assert!(
+            fonts.has(b"Helv2"),
+            "the drawn font takes a free name instead"
+        );
+        assert!(
+            contains_window(&pdf, b"/Helv2 "),
+            "the drawn stream selects the name it was registered under"
+        );
+    }
+
+    #[test]
+    fn a_contents_reference_to_an_array_expands_to_its_streams() {
+        let base = build_base(
+            |_| {},
+            |page| {
+                page.contents(Ref::new(6));
+                let mut res = page.insert(Name(b"Resources")).dict();
+                res.insert(Name(b"Font"))
+                    .dict()
+                    .pair(Name(b"F1"), Ref::new(5));
+            },
+            // The `/Contents` reference names an array object, not a stream.
+            |pdf| {
+                pdf.indirect(Ref::new(6))
+                    .array()
+                    .items([Ref::new(4), Ref::new(7)]);
+                pdf.stream(Ref::new(7), b"0.75 w 72 690 200 20 re S");
+            },
+        );
+
+        let pdf = flatten(base, &[text_field("FullName", "Ada Lovelace")]).expect("flatten ok");
+
+        let doc = PdfDoc::load_mem(&pdf).expect("lopdf reparse: structurally valid");
+        let (_, page_id) = doc.get_pages().into_iter().next().expect("one page");
+        let contents = doc
+            .get_dictionary(page_id)
+            .unwrap()
+            .get(b"Contents")
+            .unwrap()
+            .as_array()
+            .expect("/Contents is an array")
+            .clone();
+        assert_eq!(
+            contents.len(),
+            3,
+            "the referenced array's elements plus the drawn stream"
+        );
+        for item in &contents {
+            let id = item.as_reference().expect("/Contents element is a reference");
+            assert!(
+                doc.get_object(id).unwrap().as_stream().is_ok(),
+                "every /Contents element resolves to a stream"
+            );
+        }
+    }
+
     #[test]
     fn flatten_produces_no_acroform() {
         let pdf = flatten_ok(&[text_field("FullName", "Ada Lovelace")]);
@@ -382,7 +734,7 @@ mod tests {
     fn build_content_stream_transcodes_non_ascii_to_winansi() {
         let value = "Caf\u{e9} \u{2014} Se\u{f1}or \u{2019}A\u{2019}";
         let spec = text_field("FullName", value);
-        let stream = build_content_stream(&[&spec]);
+        let stream = build_content_stream(&[&spec], &default_names());
 
         // WinAnsi: é→0xE9, —→0x97, ñ→0xF1, ’→0x92.
         let want: &[u8] = &[
@@ -408,7 +760,7 @@ mod tests {
     #[test]
     fn flatten_checked_checkbox_emits_zapfdingbats_glyph() {
         let spec = checkbox_field("Agree", true);
-        let stream = build_content_stream(&[&spec]);
+        let stream = build_content_stream(&[&spec], &default_names());
         let text = String::from_utf8_lossy(&stream);
 
         assert!(

@@ -60,6 +60,56 @@
   document-level pair rather than a `store` / `load` pair. The old names are
   removed rather than aliased. Stored blobs, the `schema` tag, and every byte
   these verbs write are untouched.
+- fix(pdf): **the object index skips literal strings, `%`-comments and stream
+  bodies, so `N G obj` bytes carried as content cannot shadow the real object.**
+  The scan accepted any `<id> <gen> obj` at a token boundary and a later
+  occurrence overwrites an earlier one, so a header spelled inside a string value
+  (`/Subject (see 4 0 obj)`) or inside raw stream data displaced the real
+  object's offset, and every read of that object parsed from the false position.
+  `find_endobj_end` skips stream bodies too: `endobj` bytes in stream data
+  truncated the object body.
+- fix(pdf): **an inheritable page attribute resolves along the page's own
+  ancestor chain, not the root `/Pages` node alone.** `/Rotate` and `/MediaBox`
+  were read from the page dict and then from the root, so a base whose
+  intermediate `/Pages` node carries `/Rotate 90` passed the rotation guard and
+  every stamped widget landed a quarter turn off, and a page inheriting its
+  `/MediaBox` from an intermediate node was flipped against the root's page
+  height. The `/Kids` walk carries each page's ancestor ids, nearest first, and
+  both readers consult the page dict then that chain (ISO 32000-1 §7.7.3.4).
+- fix(pdfform): **flatten keeps the background's resources and its own
+  `/Contents`.** `/Resources` is inheritable, so writing a fresh one onto a page
+  that carried none shadowed the ancestor's dict and unbound every name the
+  background stream selects; the effective dict is now resolved up `/Parent`,
+  inlined onto the page and extended there. The drawn fonts take names free in
+  that dict (`Helv2` where `Helv` is taken), since a second binding for a name
+  the background uses rebinds it under a last-wins parser. A `/Contents`
+  reference naming an *array* object expands to its elements instead of being
+  wrapped, which had left an array as an element of the `/Contents` array.
+- refactor(pdf): **one ancestor chain per page.** `PdfUpdate::resolve_pages`
+  returns `Vec<Page>` rather than page ids: each `Page` carries its `/Pages`
+  ancestors from the `/Kids` walk and resolves any inheritable attribute
+  through `Page::inherited_attribute`. Flatten reads `/Resources` through it
+  instead of climbing `/Parent` on its own, so rotation, media box and
+  resources answer from the same chain under the same cycle and depth guards.
+- fix(core): **`Quill::resolve` keeps a mis-shaped container value raw rather
+  than blanking it under the document's own label.** A seed the render
+  coercion cannot conform — `rows: abc` on an `array`, `addr: 5` on a typed
+  dictionary, a list where a variant container belongs — was rebuilt from the
+  schema anyway, so the row showed an empty container still tagged
+  `authored`. The container arms now compose an absent or already-shaped seed
+  only, and anything else falls through to the keep-raw path
+  `conform_card_render` documents. The render gate refuses the shape, so the
+  plate is unchanged.
+- fix(content): **a U+2028 or U+2029 in document text becomes a space.**
+  Typst's lexer reads both as line breaks, so one mid-paragraph reopens
+  `at_start` and the characters behind it are read as a block marker:
+  `"intro\u{2028}- item"` rendered a bullet, `- item` on its own line. No
+  escape reaches them — a `\` before whitespace is Typst's own linebreak — so
+  the separators join `\r` and the bidi controls as characters the content
+  forbids, refused by `validate` and replaced at every text ingress:
+  `from_plaintext`, markdown import, and an `Op::Insert` through
+  `apply_text_delta`. A space rather than a drop, both being Unicode
+  whitespace, so the words either side stay parted.
 
 ## v0.112.0 - 2026-09-01
 

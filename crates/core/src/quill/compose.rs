@@ -566,7 +566,7 @@ fn compose(
     seed_rung: FieldSource,
 ) -> (QuillValue, FieldSource) {
     match (&field.r#type, &field.properties, &field.items) {
-        (FieldType::Object, Some(props), _) => {
+        (FieldType::Object, Some(props), _) if composes_as(seed, serde_json::Value::is_object) => {
             let obj = seed.and_then(|v| v.as_json().as_object());
             let mut out = serde_json::Map::new();
             let rung = compose_members(obj, props, seed_rung, &mut out);
@@ -582,7 +582,7 @@ fn compose(
             }
             (QuillValue::from_json(serde_json::Value::Object(out)), rung)
         }
-        (FieldType::Array, _, Some(items)) => {
+        (FieldType::Array, _, Some(items)) if composes_as(seed, serde_json::Value::is_array) => {
             let arr = seed
                 .and_then(|v| v.as_json().as_array().cloned())
                 .unwrap_or_default();
@@ -600,6 +600,19 @@ fn compose(
             None => (blank(field), FieldSource::Blank),
         },
     }
+}
+
+/// Whether `seed` composes as the container: absent, so the blank container is
+/// the whole answer, or already of `shape`.
+///
+/// A present seed of another shape (`rows: abc` on an `array`, `addr: 5` on a
+/// typed dictionary) is kept raw by the scalar arm instead, as
+/// [`conform_card_render`] keeps it: [`resolve_value_sourced`] reports the seed's
+/// own rung, so a rebuilt container would carry the document's label over content
+/// the document never wrote. The gate refuses the shape
+/// (`validation::type_mismatch`), so only the ungated views meet it.
+fn composes_as(seed: Option<&QuillValue>, shape: fn(&serde_json::Value) -> bool) -> bool {
+    seed.is_none_or(|v| shape(v.as_json()))
 }
 
 /// Resolve every declared member of a namespace over its slice of `seed` into
@@ -656,6 +669,15 @@ fn resolve_variant_sourced(
     field: &FieldSchema,
 ) -> (QuillValue, FieldSource) {
     let present = value.filter(|v| !v.as_json().is_null());
+    // A present seed that is neither the container nor a bare member name is
+    // kept raw, as any mis-shaped container is ([`composes_as`]): the rung is
+    // the document's, and a blank world under it would read as an answer the
+    // document gave.
+    if let Some(raw) =
+        present.filter(|v| !v.as_json().is_object() && v.as_json().as_str().is_none())
+    {
+        return (raw.clone(), FieldSource::Authored);
+    }
     let authored = present.map(|v| v.as_json());
     // Coercion normalizes to the container, so the authored discriminant is the
     // `value` key. A bare scalar that bypassed coercion (a serde-built payload)
