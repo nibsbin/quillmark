@@ -281,9 +281,18 @@ def summarize() -> dict[str, Any]:
     return out
 
 
-def git_commit_push(message: str) -> None:
+def maybe_commit(force: bool = False) -> None:
+    with LOCK:
+        n = STATE["traces"]
+        spent = STATE["spent"]
+    git_commit_push(f"scratch: usaf_memo eval traces n={n} spent=${spent:.2f}", min_interval=0 if force else 600.0)
+
+
+def git_commit_push(message: str, min_interval: float = 0.0) -> None:
     global LAST_COMMIT
     with COMMIT_LOCK:
+        if min_interval and time.time() - LAST_COMMIT < min_interval:
+            return
         try:
             subprocess.run(["git", "add", "scratch/usaf-memo-eval"], cwd="/agent/repos/quillmark", check=True)
             st = subprocess.run(
@@ -294,6 +303,7 @@ def git_commit_push(message: str) -> None:
                 text=True,
             )
             if not st.stdout.strip():
+                LAST_COMMIT = time.time()
                 return
             subprocess.run(["git", "commit", "-m", message], cwd="/agent/repos/quillmark", check=True)
             subprocess.run(
@@ -304,15 +314,6 @@ def git_commit_push(message: str) -> None:
             LAST_COMMIT = time.time()
         except subprocess.CalledProcessError as exc:
             print(f"git commit/push failed: {exc}", file=sys.stderr)
-
-
-def maybe_commit(force: bool = False) -> None:
-    if not force and time.time() - LAST_COMMIT < 90:
-        return
-    with LOCK:
-        n = STATE["traces"]
-        spent = STATE["spent"]
-    git_commit_push(f"scratch: usaf_memo eval traces n={n} spent=${spent:.2f}")
 
 
 def call_model(client: OpenAI, spec: dict[str, Any], input_list: list[Any], instructions: str) -> Any:
@@ -408,7 +409,7 @@ def run_trial(
                 "round": rnd,
                 "usage": usage,
                 "cost_usd": round_cost,
-                "output": [dump_item(item) for item in output],
+                "output_types": [str(getattr(item, "type", None)) for item in output],
                 "tool_calls": [],
             }
 
@@ -525,6 +526,7 @@ def run_trial(
         "prompt": task["prompt"],
     }
     append_jsonl(TRACES, row)
+    do_sum = False
     with LOCK:
         STATE["traces"] += 1
         if success:
@@ -540,7 +542,10 @@ def run_trial(
             "fail": STATE["fail"],
             "skipped_models": sorted(STATE["skipped_models"]),
         }
+        do_sum = STATE["traces"] % 25 == 0
     write_json(PROGRESS, progress)
+    if do_sum:
+        summarize()
     return row
 
 
@@ -567,7 +572,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--budget", type=float, default=18.0)
     parser.add_argument("--max-rounds", type=int, default=8)
-    parser.add_argument("--workers", type=int, default=6)
+    parser.add_argument("--workers", type=int, default=12)
     parser.add_argument("--repeats", type=int, default=8)
     parser.add_argument("--no-commit", action="store_true")
     parser.add_argument("--smoke", action="store_true", help="One cheap trial then exit")

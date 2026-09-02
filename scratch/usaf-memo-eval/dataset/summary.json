@@ -1,28 +1,201 @@
 {
-  "updated_at": "2026-09-02T05:13:31.586116+00:00",
-  "traces": 1,
-  "successes": 0,
-  "success_rate": 0.0,
-  "cost_usd": 0.0014058,
+  "updated_at": "2026-09-02T05:44:44.814993+00:00",
+  "traces": 977,
+  "successes": 823,
+  "success_rate": 0.842374616171955,
+  "cost_usd": 2.5971694399999956,
   "per_model": {
     "gpt-5-nano": {
-      "n": 1,
-      "ok": 0,
-      "cost_usd": 0.0014058,
-      "input_tokens": 9452,
-      "output_tokens": 2333,
-      "reasoning_tokens": 1472,
-      "create_document_attempts": 1,
-      "got_blueprint": 1
+      "n": 123,
+      "ok": 113,
+      "cost_usd": 0.1279777,
+      "input_tokens": 974730,
+      "output_tokens": 234823,
+      "reasoning_tokens": 132032,
+      "create_document_attempts": 193,
+      "got_blueprint": 122
+    },
+    "gpt-5.4-mini": {
+      "n": 123,
+      "ok": 123,
+      "cost_usd": 0.7689233999999999,
+      "input_tokens": 581362,
+      "output_tokens": 87495,
+      "reasoning_tokens": 28379,
+      "create_document_attempts": 147,
+      "got_blueprint": 123
+    },
+    "gpt-4.1-mini": {
+      "n": 122,
+      "ok": 60,
+      "cost_usd": 0.38744680000000015,
+      "input_tokens": 847437,
+      "output_tokens": 81487,
+      "reasoning_tokens": 0,
+      "create_document_attempts": 139,
+      "got_blueprint": 122
+    },
+    "gpt-5.6-luna": {
+      "n": 123,
+      "ok": 123,
+      "cost_usd": 0.17265490000000006,
+      "input_tokens": 517802,
+      "output_tokens": 70895,
+      "reasoning_tokens": 16276,
+      "create_document_attempts": 135,
+      "got_blueprint": 123
+    },
+    "gpt-5.6-luna:medium": {
+      "n": 123,
+      "ok": 123,
+      "cost_usd": 0.19575625999999985,
+      "input_tokens": 493588,
+      "output_tokens": 89230,
+      "reasoning_tokens": 32552,
+      "create_document_attempts": 129,
+      "got_blueprint": 123
+    },
+    "gpt-5.4-nano": {
+      "n": 123,
+      "ok": 120,
+      "cost_usd": 0.27593528,
+      "input_tokens": 639535,
+      "output_tokens": 138108,
+      "reasoning_tokens": 56665,
+      "create_document_attempts": 155,
+      "got_blueprint": 123
+    },
+    "gpt-5-mini": {
+      "n": 122,
+      "ok": 122,
+      "cost_usd": 0.3824890999999999,
+      "input_tokens": 569110,
+      "output_tokens": 129653,
+      "reasoning_tokens": 44416,
+      "create_document_attempts": 143,
+      "got_blueprint": 122
+    },
+    "gpt-4.1-nano": {
+      "n": 118,
+      "ok": 39,
+      "cost_usd": 0.28598599999999985,
+      "input_tokens": 4029220,
+      "output_tokens": 235084,
+      "reasoning_tokens": 0,
+      "create_document_attempts": 436,
+      "got_blueprint": 118
     }
   },
   "per_category": {
     "mfr": {
-      "n": 1,
-      "ok": 0
+      "n": 40,
+      "ok": 31
+    },
+    "simple_tasking": {
+      "n": 48,
+      "ok": 39
+    },
+    "yaml_traps": {
+      "n": 112,
+      "ok": 101
+    },
+    "cui": {
+      "n": 80,
+      "ok": 63
+    },
+    "classified": {
+      "n": 64,
+      "ok": 57
+    },
+    "indorsement": {
+      "n": 112,
+      "ok": 92
+    },
+    "distribution": {
+      "n": 24,
+      "ok": 18
+    },
+    "attachments": {
+      "n": 40,
+      "ok": 35
+    },
+    "daf_style": {
+      "n": 16,
+      "ok": 15
+    },
+    "letterhead": {
+      "n": 56,
+      "ok": 44
+    },
+    "space_force": {
+      "n": 15,
+      "ok": 12
+    },
+    "civilian": {
+      "n": 15,
+      "ok": 12
+    },
+    "body_format": {
+      "n": 46,
+      "ok": 37
+    },
+    "long_body": {
+      "n": 13,
+      "ok": 12
+    },
+    "minimal": {
+      "n": 16,
+      "ok": 13
+    },
+    "addressing": {
+      "n": 24,
+      "ok": 21
+    },
+    "authority_line": {
+      "n": 16,
+      "ok": 16
+    },
+    "cc": {
+      "n": 8,
+      "ok": 8
+    },
+    "references": {
+      "n": 16,
+      "ok": 12
+    },
+    "instruction_following": {
+      "n": 40,
+      "ok": 38
+    },
+    "enums": {
+      "n": 16,
+      "ok": 14
+    },
+    "numbers": {
+      "n": 16,
+      "ok": 15
+    },
+    "dates": {
+      "n": 8,
+      "ok": 6
+    },
+    "narrative": {
+      "n": 96,
+      "ok": 78
+    },
+    "underspecified": {
+      "n": 40,
+      "ok": 34
     }
   },
   "diagnostic_codes": {
-    "parse::yaml_error_with_location": 1
+    "parse::missing_quill": 271,
+    "parse::yaml_error_with_location": 256,
+    "validation::must_fill": 165,
+    "parse::invalid_structure": 14,
+    "mcp::empty_content": 11,
+    "validation::enum_violation": 10,
+    "validation::unknown_card": 6,
+    "validation::not_inline": 2
   }
 }
