@@ -7,7 +7,7 @@ use crate::model::{
     line_kind_mismatch, Container, Island, Line, LineKind, LineKindMismatch, Mark, MarkKind,
     Content, Usv, ISLAND_SLOT,
 };
-use crate::normalize::is_bidi_char;
+use crate::normalize::admit_char;
 use crate::usv::char_to_byte;
 use std::borrow::Cow;
 
@@ -405,9 +405,10 @@ impl Content {
     /// *deletes* a slot drops the corresponding [`Island`]; a delta that
     /// *inserts* a raw slot is rejected ([`ApplyError::IslandSlotInInsert`]).
     ///
-    /// Inserted text is sanitized first: `\r` and Unicode bidi controls (the
-    /// chars [`Content::validate`] forbids) are stripped, mirroring what
-    /// `import` applies at the string boundary.
+    /// Inserted text is sanitized first, mirroring what `import` applies at the
+    /// string boundary: `\r` and Unicode bidi controls are stripped, and a
+    /// U+2028/U+2029 line separator becomes a space — the chars
+    /// [`Content::validate`] forbids.
     pub fn apply_text_delta(&mut self, delta: &Delta) -> Result<(), ApplyError> {
         self.apply_text_delta_inner(delta)?;
         self.normalize();
@@ -836,18 +837,14 @@ fn ranges_overlap(a0: Usv, a1: Usv, b0: Usv, b1: Usv) -> bool {
     a0 < b1 && b0 < a1
 }
 
-/// A char `validate()` rejects. A raw [`ISLAND_SLOT`] is refused separately.
-fn insert_forbidden(c: char) -> bool {
-    c == '\r' || is_bidi_char(c)
-}
-
-/// Drop [`insert_forbidden`] chars from every `Op::Insert`, borrowing the delta
-/// through untouched when none carries one.
+/// Put every `Op::Insert` under the [`admit_char`] contract — the chars
+/// `validate()` rejects, dropped or spaced — borrowing the delta through
+/// untouched when none carries one. A raw [`ISLAND_SLOT`] is refused separately.
 fn sanitize_inserts(delta: &Delta) -> Cow<'_, Delta> {
     let needs_cleaning = delta
         .ops
         .iter()
-        .any(|op| matches!(op, Op::Insert(s) if s.chars().any(insert_forbidden)));
+        .any(|op| matches!(op, Op::Insert(s) if s.chars().any(|c| admit_char(c) != Some(c))));
     if !needs_cleaning {
         return Cow::Borrowed(delta);
     }
@@ -855,7 +852,7 @@ fn sanitize_inserts(delta: &Delta) -> Cow<'_, Delta> {
         .ops
         .iter()
         .map(|op| match op {
-            Op::Insert(s) => Op::Insert(s.chars().filter(|c| !insert_forbidden(*c)).collect()),
+            Op::Insert(s) => Op::Insert(s.chars().filter_map(admit_char).collect()),
             other => other.clone(),
         })
         .collect();
@@ -1736,6 +1733,20 @@ mod tests {
         };
         rt.apply_text_delta(&d).unwrap();
         assert_eq!(rt.text, "ab");
+        assert_eq!(rt.validate(), Ok(()));
+    }
+
+    #[test]
+    fn insert_line_separator_is_spaced() {
+        // A space keeps the words apart without minting the line break Typst
+        // would read, and which would make `- item` a bullet.
+        let mut rt = from_markdown("ab").unwrap();
+        let d = Delta {
+            ops: vec![Op::Retain(2), Op::Insert("\u{2028}- item".into())],
+        };
+        rt.apply_text_delta(&d).unwrap();
+        assert_eq!(rt.text, "ab - item");
+        assert_eq!(rt.lines.len(), 1);
         assert_eq!(rt.validate(), Ok(()));
     }
 

@@ -60,6 +60,16 @@
   document-level pair rather than a `store` / `load` pair. The old names are
   removed rather than aliased. Stored blobs, the `schema` tag, and every byte
   these verbs write are untouched.
+- fix(content): **a U+2028 or U+2029 in document text becomes a space.**
+  Typst's lexer reads both as line breaks, so one mid-paragraph reopens
+  `at_start` and the characters behind it are read as a block marker:
+  `"intro\u{2028}- item"` rendered a bullet, `- item` on its own line. No
+  escape reaches them — a `\` before whitespace is Typst's own linebreak — so
+  the separators join `\r` and the bidi controls as characters the content
+  forbids, refused by `validate` and replaced at every text ingress:
+  `from_plaintext`, markdown import, and an `Op::Insert` through
+  `apply_text_delta`. A space rather than a drop, both being Unicode
+  whitespace, so the words either side stay parted.
 
 ## v0.112.0 - 2026-09-01
 

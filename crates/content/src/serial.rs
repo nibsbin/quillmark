@@ -813,13 +813,18 @@ fn pad_row(v: &mut Value, cols: usize) {
     }
 }
 
-/// De-newline a cell's text (each `\n`/`\r` → a space, 1:1 so mark offsets hold)
-/// and re-normalize its marks. Writes back into the cell's **own** object rather
-/// than minting a fresh one, so a key this build does not recognize survives.
+/// Every char a downstream lexer reads as a line break, the U+2028/U+2029
+/// separators included. A cell is one line.
+const CELL_BREAKS: &[char] = &['\n', '\r', '\u{2028}', '\u{2029}'];
+
+/// De-newline a cell's text (each line break → a space, 1:1 so mark offsets
+/// hold) and re-normalize its marks. Writes back into the cell's **own** object
+/// rather than minting a fresh one, so a key this build does not recognize
+/// survives.
 fn canon_cell(cell: &mut Value) {
     let (text, marks) = parse_cell(cell);
-    let text = if text.contains(['\n', '\r']) {
-        text.replace(['\n', '\r'], " ")
+    let text = if text.contains(CELL_BREAKS) {
+        text.replace(CELL_BREAKS, " ")
     } else {
         text
     };
@@ -870,7 +875,7 @@ pub(crate) fn table_shape_error(props: &Value) -> Option<Invariant> {
     }
     for (i, cell) in table_cell_values(props).enumerate() {
         let text = cell.get("text").and_then(Value::as_str).unwrap_or_default();
-        if text.contains('\n') || text.contains('\r') {
+        if text.contains(CELL_BREAKS) {
             return Some(Invariant::TableCellNewline { cell: i });
         }
     }

@@ -20,14 +20,37 @@ pub(crate) fn is_bidi_char(c: char) -> bool {
     )
 }
 
-/// Removes the Unicode bidi formatting controls, which sit adjacent to `**`/`_`
-/// and defeat delimiter recognition.
-fn strip_bidi_formatting(s: &str) -> String {
-    if !s.chars().any(is_bidi_char) {
+/// U+2028 LINE SEPARATOR and U+2029 PARAGRAPH SEPARATOR, which Typst's lexer
+/// reads as line breaks: one mid-paragraph reopens `at_start`, so what follows
+/// it is read as a block marker the author never wrote.
+#[inline]
+pub(crate) fn is_line_separator(c: char) -> bool {
+    matches!(c, '\u{2028}' | '\u{2029}')
+}
+
+/// What the content admits `c` as, `None` dropping it. A `\r` is dropped
+/// because it pairs with a `\n` that stays; a line separator becomes a space,
+/// both being Unicode whitespace, so dropping one would join the words it parts.
+/// No downstream escape can neutralize a separator — a `\` before whitespace is
+/// Typst's own linebreak — so the content refuses it.
+#[inline]
+pub(crate) fn admit_char(c: char) -> Option<char> {
+    match c {
+        '\r' => None,
+        c if is_bidi_char(c) => None,
+        c if is_line_separator(c) => Some(' '),
+        c => Some(c),
+    }
+}
+
+/// Apply [`admit_char`] across `s`: the bidi controls sit adjacent to `**`/`_`
+/// and defeat delimiter recognition, the separators spell block structure.
+fn admit_chars(s: &str) -> String {
+    if !s.chars().any(|c| admit_char(c) != Some(c)) {
         return s.to_string();
     }
 
-    s.chars().filter(|c| !is_bidi_char(*c)).collect()
+    s.chars().filter_map(admit_char).collect()
 }
 
 /// Inserts a newline after `-->` when followed by non-whitespace content.
@@ -110,11 +133,11 @@ fn fix_html_comment_fences(s: &str) -> String {
     result
 }
 
-/// Applies all markdown normalizations in order: CRLF → LF, bidi strip,
-/// HTML comment fence repair.
+/// Applies all markdown normalizations in order: CRLF → LF, bidi controls
+/// dropped and U+2028/U+2029 spaced, HTML comment fence repair.
 pub fn normalize_markdown(markdown: &str) -> String {
     let cleaned = normalize_line_endings(markdown);
-    let cleaned = strip_bidi_formatting(&cleaned);
+    let cleaned = admit_chars(&cleaned);
     fix_html_comment_fences(&cleaned)
 }
 
@@ -145,11 +168,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_strip_bidi_formatting_cases() {
+    fn bidi_controls_are_dropped_and_separators_spaced() {
         let cases: &[(&str, &str)] = &[
             ("hello world", "hello world"),
             ("", ""),
             ("**bold** text", "**bold** text"),
+            ("intro\u{2028}- item", "intro - item"),
+            ("intro\u{2029}= Heading", "intro = Heading"),
             ("he\u{202D}llo", "hello"),
             ("**asdf** or \u{202D}**(1234**", "**asdf** or **(1234**"),
             ("a\u{200E}b\u{200F}c", "abc"),
@@ -167,7 +192,7 @@ mod tests {
         ];
 
         for (input, expected) in cases {
-            assert_eq!(strip_bidi_formatting(input), *expected, "input: {:?}", input);
+            assert_eq!(admit_chars(input), *expected, "input: {:?}", input);
         }
     }
 
