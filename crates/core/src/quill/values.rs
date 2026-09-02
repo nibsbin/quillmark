@@ -1,155 +1,167 @@
-//! The portable values shape: [`Quill::project`].
+//! The values shape: [`DocumentValues`] / [`CardValues`], read by
+//! [`TypedReader::values`](crate::TypedReader::values) and written by
+//! [`TypedWriter::set_values`](crate::TypedWriter::set_values).
 //!
-//! [`resolve`](Quill::resolve) answers what the render projection *would* use,
-//! blank-filling every declared field and tagging the rung it came from. This
-//! answers what the document *carries*, with content leaves as their codec's
-//! text, so a consumer edits plain values and sends them back. The two share the
-//! render floor's reading of a value and differ after it.
+//! Three forms of a document exist, one per question. **Stored** is the at-rest
+//! value, verbatim and quill-free. **Values** is stored with every content leaf
+//! decoded to its codec's text, so a consumer edits plain values. **Resolved**
+//! ([`Quill::resolve`](crate::Quill::resolve)) is values blank-filled and
+//! render-coerced, each cell tagged with the rung it came from. A read never
+//! coerces a scalar: `qty: "3"` is `"3"` here and `3` only in the resolved
+//! view, because canonicalizing is what a write does.
 
 use indexmap::IndexMap;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value as JsonValue;
 
-use super::config::Leniency;
-use super::{CardSchema, Quill, QuillConfig};
+use super::{CardSchema, QuillConfig};
 use crate::normalize::normalize_field_name;
 use crate::reader::{project_value, ProjectMode};
-use crate::{Card, Document};
+use crate::Card;
 
-/// A document's values as a consumer reads and edits them: the declared fields
-/// the document carries, content leaves as their codec's text (`richtext`
-/// markdown, `plaintext` literal text), every other value as the render floor
-/// reads it, bodies as markdown.
+/// A document in the values form: the fields the main card carries, its body as
+/// markdown, its `$ext`, and every composable card. Every content leaf is its
+/// codec's text (`richtext` markdown, `plaintext` literal) at every depth the
+/// field's type tree reaches; every other value is as stored, a present-null as
+/// `null`. Declared fields come first in declaration order, then undeclared
+/// fields verbatim in authored order.
 ///
 /// **Sparse**: an absent field is absent here too, never materialized from its
-/// `default:`. **A projection, never a storage format** — markdown does not
+/// `default:`. **A projection, never a storage format**: markdown does not
 /// carry anchors, island ids, or content-only marks, and `$quill`, `$seed`,
-/// `!must_fill` markers, YAML comments and undeclared fields are not carried.
-/// Persist a document through [`StoredDocument`](crate::document).
+/// `!must_fill` markers and YAML comments are not carried. Persist a document
+/// through [`StoredDocument`](crate::document).
+///
+/// The read fills every axis. On the way into
+/// [`set_values`](crate::TypedWriter::set_values) each axis is optional and an
+/// absent one is untouched, so `DocumentValues::default()` is the empty patch
+/// and a full read written back is a byte no-op.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[non_exhaustive]
 pub struct DocumentValues {
-    /// Emitted in declaration order; key order carries no contract on the way
-    /// in.
-    #[serde(default)]
-    pub fields: IndexMap<String, JsonValue>,
-    /// The main body's markdown. Absent on input reads as the empty body.
-    #[serde(default)]
-    pub body: String,
-    /// In document order.
-    #[serde(default)]
-    pub cards: Vec<CardValues>,
-    /// The main card's `$ext`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ext: Option<serde_json::Map<String, JsonValue>>,
+    pub fields: Option<IndexMap<String, JsonValue>>,
+    /// The main body's markdown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+    /// In document order.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cards: Option<Vec<CardValues>>,
+    /// The main card's `$ext`: `Some(None)` is `null`, a card carrying none;
+    /// `Some(Some(map))` the map, `{}` included, which is an explicit
+    /// `$ext: {}`.
+    #[serde(
+        default,
+        deserialize_with = "double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub ext: Option<Option<serde_json::Map<String, JsonValue>>>,
 }
 
-/// `kind` is the stored `$kind`, `""` for a kindless card. A kind naming no
-/// schema carries its fields verbatim: there is no declared type to project
-/// them through.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// One composable card in the values form. `kind` is `Some(None)` (`null`) for
+/// a kindless card. A kind the schema does not declare carries its fields
+/// verbatim, there being no declared type to project them through.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[non_exhaustive]
 pub struct CardValues {
-    pub kind: String,
-    #[serde(default)]
-    pub fields: IndexMap<String, JsonValue>,
-    #[serde(default)]
-    pub body: String,
+    /// Absent on input keeps the kind of the card at that position.
+    #[serde(
+        default,
+        deserialize_with = "double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub kind: Option<Option<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ext: Option<serde_json::Map<String, JsonValue>>,
+    pub fields: Option<IndexMap<String, JsonValue>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+    #[serde(
+        default,
+        deserialize_with = "double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub ext: Option<Option<serde_json::Map<String, JsonValue>>>,
+}
+
+/// Absent → `None`, `null` → `Some(None)`, a value → `Some(Some(v))`. Serde's
+/// own `Option<Option<T>>` reads `null` as the outer `None`, which would make a
+/// removal indistinguishable from an untouched axis.
+fn double_option<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
 }
 
 impl DocumentValues {
-    /// Main fields only: no cards, empty body, no `ext`.
+    /// A patch of the main fields alone: body, cards and `$ext` untouched.
     pub fn new(fields: IndexMap<String, JsonValue>) -> Self {
         Self {
-            fields,
-            body: String::new(),
-            cards: Vec::new(),
-            ext: None,
+            fields: Some(fields),
+            ..Self::default()
         }
     }
 
     pub fn with_body(mut self, body: impl Into<String>) -> Self {
-        self.body = body.into();
+        self.body = Some(body.into());
         self
     }
 
     pub fn with_cards(mut self, cards: Vec<CardValues>) -> Self {
-        self.cards = cards;
+        self.cards = Some(cards);
         self
     }
 
-    pub fn with_ext(mut self, ext: serde_json::Map<String, JsonValue>) -> Self {
+    /// `None` removes `$ext`; an empty map records an explicit `$ext: {}`.
+    pub fn with_ext(mut self, ext: Option<serde_json::Map<String, JsonValue>>) -> Self {
         self.ext = Some(ext);
         self
     }
 }
 
 impl CardValues {
+    /// A card of `kind` with these fields: body and `$ext` absent, which on a
+    /// card being built is empty and on one being patched is untouched.
     pub fn new(kind: impl Into<String>, fields: IndexMap<String, JsonValue>) -> Self {
         Self {
-            kind: kind.into(),
-            fields,
-            body: String::new(),
-            ext: None,
+            kind: Some(Some(kind.into())),
+            fields: Some(fields),
+            ..Self::default()
         }
     }
 
     pub fn with_body(mut self, body: impl Into<String>) -> Self {
-        self.body = body.into();
+        self.body = Some(body.into());
         self
     }
 
-    pub fn with_ext(mut self, ext: serde_json::Map<String, JsonValue>) -> Self {
+    /// `None` removes `$ext`; an empty map records an explicit `$ext: {}`.
+    pub fn with_ext(mut self, ext: Option<serde_json::Map<String, JsonValue>>) -> Self {
         self.ext = Some(ext);
         self
     }
 }
 
-impl Quill {
-    /// The portable values of `doc` against this quill's schema.
-    ///
-    /// Total: never raises. A content leaf that decodes under neither encoding
-    /// passes verbatim rather than failing the whole read — the load that
-    /// admitted it already reported it (`conform::*` on
-    /// [`Parsed`](crate::Parsed) warnings), and an ingestion must open a
-    /// document it can repair.
-    pub fn project(&self, doc: &Document) -> DocumentValues {
-        let config = self.config();
-        let cards = doc
-            .cards()
-            .iter()
-            .map(|card| {
-                let schema = card.kind().and_then(|k| config.card_kind(k));
-                CardValues {
-                    kind: card.kind().unwrap_or_default().to_string(),
-                    fields: project_card_fields(schema, card),
-                    body: card.body_markdown(),
-                    ext: card.ext().cloned(),
-                }
-            })
-            .collect();
-        DocumentValues {
-            fields: project_card_fields(Some(&config.main), doc.main()),
-            body: doc.main().body_markdown(),
-            cards,
-            ext: doc.main().ext().cloned(),
-        }
+/// One composable card read whole, every axis filled.
+pub(crate) fn card_values(config: &QuillConfig, card: &Card) -> CardValues {
+    let schema = card.kind().and_then(|k| config.card_kind(k));
+    CardValues {
+        kind: Some(card.kind().map(String::from)),
+        fields: Some(card_fields(schema, card)),
+        body: Some(card.body_markdown()),
+        ext: Some(card.ext().cloned()),
     }
 }
 
-/// One card's authored fields, in declaration order, each read through the
-/// render floor and then projected at every content leaf below it.
-///
-/// The floor's reading is [`resolve`](Quill::resolve)'s (`Leniency::Render`,
-/// keep-raw on refusal, NFC-normalized keys), so the two views cannot disagree
-/// about what a document authored. A `None` schema is a card kind carrying no
-/// declaration: its fields have no declared type to project through and ride
-/// verbatim.
-fn project_card_fields(schema: Option<&CardSchema>, card: &Card) -> IndexMap<String, JsonValue> {
+/// One card's authored fields: declared ones first in declaration order, each
+/// projected at every content leaf below it, then undeclared ones verbatim in
+/// authored order. The schema is a floor, not an allowlist, as it is for the
+/// resolved view. A `None` schema is a card kind carrying no declaration, so
+/// every field rides verbatim.
+pub(crate) fn card_fields(schema: Option<&CardSchema>, card: &Card) -> IndexMap<String, JsonValue> {
     let payload = card.payload().to_index_map();
     let Some(schema) = schema else {
         return payload
@@ -157,38 +169,44 @@ fn project_card_fields(schema: Option<&CardSchema>, card: &Card) -> IndexMap<Str
             .map(|(name, value)| (name, value.as_json().clone()))
             .collect();
     };
-    let mut authored: IndexMap<String, &crate::QuillValue> = IndexMap::new();
+    let mut out = IndexMap::with_capacity(payload.len());
+    let mut undeclared = IndexMap::new();
     for (raw_name, value) in payload.iter() {
-        authored.insert(normalize_field_name(raw_name), value);
+        match schema.fields.get_full(normalize_field_name(raw_name).as_str()) {
+            Some((_, name, field_schema)) => {
+                out.insert(name.clone(), project_field(name, value, field_schema));
+            }
+            None => {
+                undeclared.insert(raw_name.clone(), value.as_json().clone());
+            }
+        }
     }
-    schema
+    let mut ordered: IndexMap<String, JsonValue> = schema
         .fields
-        .iter()
-        .filter_map(|(name, field_schema)| {
-            let value = authored.get(name.as_str())?;
-            Some((name.clone(), project_field(name, value, field_schema)))
-        })
-        .collect()
+        .keys()
+        .filter_map(|name| out.shift_remove_entry(name))
+        .collect();
+    ordered.extend(undeclared);
+    ordered
 }
 
-/// One authored field's projection: the render floor's reading, then every
-/// content leaf below it as its codec's text.
+/// One authored field in the values form: every content leaf below it as its
+/// codec's text, everything else verbatim, a leaf that decodes under neither
+/// encoding riding out as stored.
 ///
 /// [`TypedWriter::set_values`](crate::TypedWriter::set_values) guards each cell
 /// against this rather than against the stored bytes, so a value that projects
-/// equal is not rewritten — the only comparison under which an anchor-bearing
-/// content, a `!must_fill` marker, or a scalar shorthand the floor reads as
-/// typed all count as unchanged.
+/// equal is not rewritten: the only comparison under which an anchor-bearing
+/// content, a `!must_fill` marker, or a scalar shorthand all count as
+/// unchanged.
 pub(crate) fn project_field(
     name: &str,
     value: &crate::QuillValue,
     schema: &crate::FieldSchema,
 ) -> JsonValue {
-    let conformed = QuillConfig::conform_value(value, schema, name, Leniency::Render)
-        .unwrap_or_else(|_| value.clone());
     project_value(
         name,
-        conformed.as_json(),
+        value.as_json(),
         schema,
         &mut Vec::new(),
         ProjectMode::Total,
@@ -197,11 +215,12 @@ pub(crate) fn project_field(
 }
 
 #[cfg(test)]
-pub(super) mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::quill::quill_from_yaml;
+    use crate::{Document, Quill};
 
-    pub(super) const QUILL: &str = r#"
+    pub(crate) const QUILL: &str = r#"
 quill:
   name: memo
   version: "1.0"
@@ -234,7 +253,7 @@ card_kinds:
       qty: { type: integer }
 "#;
 
-    pub(super) const DOC: &str = "\
+    pub(crate) const DOC: &str = "\
 ~~~card-yaml
 $quill: memo@1.0
 $kind: main
@@ -268,29 +287,46 @@ qty: \"3\"
 Item note.
 ";
 
+    pub(crate) fn parse(quill: &Quill, md: &str) -> Document {
+        quill.parse(md).expect("document should parse").document
+    }
+
+    pub(crate) fn values_of(quill: &Quill, doc: &Document) -> DocumentValues {
+        quill.reader(doc).values()
+    }
+
+    /// The read fills every axis, so a test may unwrap them.
+    pub(crate) fn fields(v: &DocumentValues) -> &IndexMap<String, JsonValue> {
+        v.fields.as_ref().expect("a read fills `fields`")
+    }
+
+    pub(crate) fn cards(v: &DocumentValues) -> &[CardValues] {
+        v.cards.as_deref().expect("a read fills `cards`")
+    }
+
     fn projected() -> DocumentValues {
         let quill = quill_from_yaml(QUILL);
-        let doc = quill.parse(DOC).expect("document should parse").document;
-        quill.project(&doc)
+        values_of(&quill, &parse(&quill, DOC))
     }
 
     #[test]
     fn content_leaves_project_at_every_depth() {
         let v = projected();
-        assert_eq!(v.fields["subject"], serde_json::json!("Hello **world**"));
-        assert_eq!(v.fields["note"], serde_json::json!("a *literal* line"));
+        let f = fields(&v);
+        assert_eq!(f["subject"], serde_json::json!("Hello **world**"));
+        assert_eq!(f["note"], serde_json::json!("a *literal* line"));
         assert_eq!(
-            v.fields["paragraphs"],
+            f["paragraphs"],
             serde_json::json!(["Para **one**", "Para two"]),
             "an array<richtext> exports at each element, not as stored content"
         );
         assert_eq!(
-            v.fields["letterhead"],
+            f["letterhead"],
             serde_json::json!({"motto": "Fly *fight*", "code": "9"}),
             "a content property projects; a scalar sibling rides verbatim"
         );
         assert_eq!(
-            v.fields["classification"],
+            f["classification"],
             serde_json::json!({
                 "value": "CUI",
                 "controlled_by": "OPR: 49 FW",
@@ -301,44 +337,79 @@ Item note.
     }
 
     #[test]
-    fn the_shape_is_sparse() {
+    fn the_shape_is_sparse_and_never_coerces() {
         let v = projected();
         assert!(
-            !v.fields.contains_key("qty"),
+            !fields(&v).contains_key("qty"),
             "an absent field is absent here: its `default: 1` is never materialized"
         );
+        assert_eq!(
+            cards(&v)[0].fields.as_ref().unwrap()["qty"],
+            serde_json::json!("3"),
+            "a scalar shorthand reads as stored; the resolved view is the coerced one"
+        );
     }
 
     #[test]
-    fn bodies_cards_and_ext_ride_the_shape() {
+    fn every_axis_is_filled_on_read() {
         let v = projected();
-        assert_eq!(v.body, "Body prose.");
-        assert_eq!(v.ext, Some(serde_json::json!({"editor": {"title": "Q3 memo"}}).as_object().unwrap().clone()));
-
-        let card = &v.cards[0];
-        assert_eq!(card.kind, "line_item");
-        assert_eq!(card.body, "Item note.");
-        assert_eq!(card.fields["desc"], serde_json::json!("Widget **A**"));
+        assert_eq!(v.body.as_deref(), Some("Body prose."));
         assert_eq!(
-            card.fields["qty"],
-            serde_json::json!(3),
-            "the render floor reads the authored `\"3\"` as the plate does"
+            v.ext,
+            Some(serde_json::json!({"editor": {"title": "Q3 memo"}}).as_object().cloned())
         );
+        let card = &cards(&v)[0];
+        assert_eq!(card.kind, Some(Some("line_item".to_string())));
+        assert_eq!(card.body.as_deref(), Some("Item note."));
+        assert_eq!(card.fields.as_ref().unwrap()["desc"], serde_json::json!("Widget **A**"));
         assert_eq!(
             card.ext,
-            Some(serde_json::json!({"myapp": {"row_id": 17}}).as_object().unwrap().clone()),
-            "$ext is the consumer's own card key and survives the projection"
+            Some(serde_json::json!({"myapp": {"row_id": 17}}).as_object().cloned()),
+            "$ext is the consumer's own card key and rides the shape"
         );
     }
 
     #[test]
-    fn undeclared_fields_are_not_carried() {
+    fn a_card_without_ext_reads_null_and_a_kindless_one_null_kind() {
         let quill = quill_from_yaml(QUILL);
-        let md = "~~~card-yaml\n$quill: memo@1.0\n$kind: main\nsubject: Hi\nstray: whatever\n~~~\n";
-        let doc = quill.parse(md).expect("parses").document;
-        let v = quill.project(&doc);
-        assert!(v.fields.contains_key("subject"));
-        assert!(!v.fields.contains_key("stray"));
+        let doc = parse(
+            &quill,
+            "~~~card-yaml\n$quill: memo@1.0\n$kind: main\n~~~\n\n~~~card-yaml\nfoo: bar\n~~~\n",
+        );
+        let v = values_of(&quill, &doc);
+        assert_eq!(v.ext, Some(None));
+        let card = &cards(&v)[0];
+        assert_eq!(card.kind, Some(None));
+        assert_eq!(card.ext, Some(None));
+        assert_eq!(
+            serde_json::to_value(card).unwrap(),
+            serde_json::json!({"kind": null, "fields": {"foo": "bar"}, "body": "", "ext": null})
+        );
+    }
+
+    #[test]
+    fn present_null_reads_as_null() {
+        let quill = quill_from_yaml(QUILL);
+        let doc = parse(&quill, "~~~card-yaml\n$quill: memo@1.0\n$kind: main\nsubject:\nqty:\n~~~\n");
+        let v = values_of(&quill, &doc);
+        assert_eq!(fields(&v)["subject"], JsonValue::Null);
+        assert_eq!(fields(&v)["qty"], JsonValue::Null);
+    }
+
+    #[test]
+    fn undeclared_fields_ride_verbatim_after_the_declared_ones() {
+        let quill = quill_from_yaml(QUILL);
+        let doc = parse(
+            &quill,
+            "~~~card-yaml\n$quill: memo@1.0\n$kind: main\nstray: whatever\nsubject: Hi\n~~~\n",
+        );
+        let v = values_of(&quill, &doc);
+        assert_eq!(
+            fields(&v).keys().collect::<Vec<_>>(),
+            ["subject", "stray"],
+            "declared first in declaration order, then undeclared in authored order"
+        );
+        assert_eq!(fields(&v)["stray"], serde_json::json!("whatever"));
     }
 
     #[test]
@@ -346,31 +417,64 @@ Item note.
         let quill = quill_from_yaml(QUILL);
         let md = "~~~card-yaml\n$quill: memo@1.0\n$kind: main\n~~~\n\n\
                   ~~~card-yaml\n$kind: mystery\nfoo: bar\n~~~\nStray.\n";
-        let doc = quill.parse(md).expect("parses").document;
-        let card = &quill.project(&doc).cards[0];
-        assert_eq!(card.kind, "mystery");
-        assert_eq!(card.fields["foo"], serde_json::json!("bar"));
-        assert_eq!(card.body, "Stray.");
+        let v = values_of(&quill, &parse(&quill, md));
+        let card = &cards(&v)[0];
+        assert_eq!(card.kind, Some(Some("mystery".to_string())));
+        assert_eq!(card.fields.as_ref().unwrap()["foo"], serde_json::json!("bar"));
+        assert_eq!(card.body.as_deref(), Some("Stray."));
     }
 
     #[test]
     fn a_leaf_that_decodes_under_neither_encoding_passes_verbatim() {
         let quill = quill_from_yaml(QUILL);
-        let mut doc = quill.parse("~~~card-yaml\n$quill: memo@1.0\n$kind: main\n~~~\n")
-            .expect("parses")
-            .document;
+        let mut doc = parse(&quill, "~~~card-yaml\n$quill: memo@1.0\n$kind: main\n~~~\n");
         doc.main_mut()
             .store_field(
                 "paragraphs",
                 crate::QuillValue::from_json(serde_json::json!([{"not": "content"}])),
             )
             .unwrap();
-        let v = quill.project(&doc);
+        let v = values_of(&quill, &doc);
         assert_eq!(
-            v.fields["paragraphs"],
+            fields(&v)["paragraphs"],
             serde_json::json!([{"not": "content"}]),
-            "project is total: a dirty leaf rides out rather than failing the read"
+            "the whole-document read is total: a dirty leaf rides out rather than failing it"
         );
+        assert!(
+            quill.reader(&doc).get("paragraphs").is_err(),
+            "the single-cell read raises on the same leaf"
+        );
+    }
+
+    #[test]
+    fn get_is_values_restricted_to_one_field() {
+        let quill = quill_from_yaml(QUILL);
+        let doc = parse(&quill, DOC);
+        let reader = quill.reader(&doc);
+        let v = reader.values();
+        for (name, value) in fields(&v) {
+            assert_eq!(
+                reader.get(name).unwrap().map(|q| q.as_json().clone()).as_ref(),
+                Some(value),
+                "`{name}`"
+            );
+        }
+        let card = reader.card(0).unwrap();
+        for (name, value) in card.values().fields.as_ref().unwrap() {
+            assert_eq!(
+                card.get(name).unwrap().map(|q| q.as_json().clone()).as_ref(),
+                Some(value),
+                "card `{name}`"
+            );
+        }
+    }
+
+    #[test]
+    fn the_card_read_is_the_document_read_restricted_to_one_slot() {
+        let quill = quill_from_yaml(QUILL);
+        let doc = parse(&quill, DOC);
+        let reader = quill.reader(&doc);
+        assert_eq!(reader.card(0).unwrap().values(), cards(&reader.values())[0]);
     }
 
     #[test]
@@ -381,236 +485,31 @@ Item note.
     }
 
     #[test]
+    fn serde_tells_absent_from_null() {
+        let absent: DocumentValues = serde_json::from_value(serde_json::json!({})).unwrap();
+        assert_eq!(absent, DocumentValues::default());
+        assert_eq!(absent.ext, None);
+
+        let null: DocumentValues =
+            serde_json::from_value(serde_json::json!({"ext": null, "cards": [{"kind": null}]}))
+                .unwrap();
+        assert_eq!(null.ext, Some(None));
+        assert_eq!(null.cards.unwrap()[0].kind, Some(None));
+
+        let out = serde_json::to_value(DocumentValues::default().with_ext(None)).unwrap();
+        assert_eq!(out, serde_json::json!({"ext": null}), "a removal serializes as null");
+        assert_eq!(
+            serde_json::to_value(DocumentValues::default()).unwrap(),
+            serde_json::json!({}),
+            "the empty patch serializes to nothing"
+        );
+    }
+
+    #[test]
     fn an_unknown_key_is_refused_on_the_way_in() {
         assert!(
             serde_json::from_value::<DocumentValues>(serde_json::json!({"feilds": {}})).is_err(),
             "the hand-authored lane must fail loudly on a misspelled key"
         );
-    }
-}
-
-#[cfg(test)]
-mod roundtrip_tests {
-    use super::tests::*;
-    use super::*;
-    use crate::document::EditError;
-    use crate::quill::quill_from_yaml;
-
-    /// I1: the cycle writes nothing at all, on every document the bound door
-    /// admits — markers, comments, `$ext`, dirty leaves and scalar shorthands
-    /// included.
-    #[track_caller]
-    fn assert_cycle_is_a_no_op(quill: &Quill, md: &str) {
-        let mut doc = quill.parse(md).expect("document should parse").document;
-        let before = serde_json::to_string(&doc).unwrap();
-        let values = quill.project(&doc);
-        quill
-            .writer(&mut doc)
-            .set_values(&values)
-            .unwrap_or_else(|e| panic!("set_values refused its own projection: {e:?}"));
-        assert_eq!(
-            serde_json::to_string(&doc).unwrap(),
-            before,
-            "set_values(project(doc)) moved bytes"
-        );
-    }
-
-    #[test]
-    fn the_untouched_cycle_is_a_byte_no_op() {
-        let quill = quill_from_yaml(QUILL);
-        assert_cycle_is_a_no_op(&quill, DOC);
-    }
-
-    #[test]
-    fn the_cycle_preserves_what_a_re_import_cannot_reproduce() {
-        let quill = quill_from_yaml(QUILL);
-        for (what, md) in [
-            (
-                "a must-fill marker",
-                "~~~card-yaml\n$quill: memo@1.0\n$kind: main\nsubject: !must_fill Draft\n~~~\n",
-            ),
-            (
-                "a YAML comment",
-                "~~~card-yaml\n$quill: memo@1.0\n$kind: main\n# keep me\nsubject: Hi\n~~~\n",
-            ),
-            (
-                "an undeclared field",
-                "~~~card-yaml\n$quill: memo@1.0\n$kind: main\nstray: whatever\n~~~\n",
-            ),
-            (
-                "a scalar shorthand the floor reads as typed",
-                "~~~card-yaml\n$quill: memo@1.0\n$kind: main\n~~~\n\n\
-                 ~~~card-yaml\n$kind: line_item\nqty: \"3\"\n~~~\n",
-            ),
-            (
-                "a kindless card",
-                "~~~card-yaml\n$quill: memo@1.0\n$kind: main\n~~~\n\n~~~card-yaml\nfoo: bar\n~~~\n",
-            ),
-            (
-                "an unknown-kind card",
-                "~~~card-yaml\n$quill: memo@1.0\n$kind: main\n~~~\n\n\
-                 ~~~card-yaml\n$kind: mystery\nfoo: bar\n~~~\nStray.\n",
-            ),
-        ] {
-            let mut doc = quill.parse(md).expect("parses").document;
-            let before = serde_json::to_string(&doc).unwrap();
-            let values = quill.project(&doc);
-            quill.writer(&mut doc).set_values(&values).expect(what);
-            assert_eq!(
-                serde_json::to_string(&doc).unwrap(),
-                before,
-                "the cycle did not preserve {what}"
-            );
-        }
-    }
-
-    /// I2: one write canonicalises, and the canonical form is a fixed point.
-    #[test]
-    fn a_write_canonicalises_once_then_holds_still() {
-        let quill = quill_from_yaml(QUILL);
-        let blank = || {
-            quill
-                .parse("~~~card-yaml\n$quill: memo@1.0\n$kind: main\n~~~\n")
-                .expect("parses")
-                .document
-        };
-        let mut values = DocumentValues::default();
-        values.fields.insert("subject".into(), serde_json::json!("Widget __A__"));
-        values.fields.insert("qty".into(), serde_json::json!("3"));
-
-        let mut d1 = blank();
-        quill.writer(&mut d1).set_values(&values).unwrap();
-        let p = quill.project(&d1);
-        assert_eq!(
-            p.fields["subject"],
-            serde_json::json!("Widget **A**"),
-            "the write canonicalises markdown"
-        );
-        assert_eq!(p.fields["qty"], serde_json::json!(3), "and the scalar");
-
-        let mut d2 = blank();
-        quill.writer(&mut d2).set_values(&p).unwrap();
-        assert_eq!(
-            serde_json::to_string(&d1).unwrap(),
-            serde_json::to_string(&d2).unwrap()
-        );
-        assert_eq!(quill.project(&d2), p, "the canonical form is a fixed point");
-    }
-
-    #[test]
-    fn a_declared_field_absent_from_the_shape_is_removed() {
-        let quill = quill_from_yaml(QUILL);
-        let mut doc = quill
-            .parse("~~~card-yaml\n$quill: memo@1.0\n$kind: main\nsubject: Hi\nnote: keep\n~~~\n")
-            .expect("parses")
-            .document;
-        let mut values = quill.project(&doc);
-        values.fields.shift_remove("note");
-        quill.writer(&mut doc).set_values(&values).unwrap();
-        assert_eq!(quill.reader(&doc).get("note").unwrap(), None);
-        assert!(doc.main().payload().get("subject").is_some());
-    }
-
-    #[test]
-    fn an_undeclared_name_in_the_shape_is_refused_with_its_path() {
-        let quill = quill_from_yaml(QUILL);
-        let mut doc = quill
-            .parse("~~~card-yaml\n$quill: memo@1.0\n$kind: main\n~~~\n")
-            .expect("parses")
-            .document;
-        let mut values = DocumentValues::default();
-        values.fields.insert("nope".into(), serde_json::json!("x"));
-        let errors = quill.writer(&mut doc).set_values(&values).unwrap_err();
-        assert_eq!(errors.len(), 1);
-        assert_eq!(errors[0].0.to_string(), "main.nope");
-        assert!(matches!(errors[0].1, EditError::UnknownField { .. }));
-    }
-
-    #[test]
-    fn every_refusal_arrives_at_once_and_nothing_is_written() {
-        let quill = quill_from_yaml(QUILL);
-        let mut doc = quill
-            .parse("~~~card-yaml\n$quill: memo@1.0\n$kind: main\nsubject: Hi\n~~~\n")
-            .expect("parses")
-            .document;
-        let before = serde_json::to_string(&doc).unwrap();
-        let mut values = DocumentValues::default();
-        values.fields.insert("nope".into(), serde_json::json!("x"));
-        values.fields.insert("alsonope".into(), serde_json::json!("y"));
-        values.cards.push(CardValues::new(
-            "line_item",
-            [("bad".to_string(), serde_json::json!(1))].into_iter().collect(),
-        ));
-        let errors = quill.writer(&mut doc).set_values(&values).unwrap_err();
-        let paths: Vec<String> = errors.iter().map(|(p, _)| p.to_string()).collect();
-        assert_eq!(paths, ["main.nope", "main.alsonope", "cards.line_item[0].bad"]);
-        assert_eq!(
-            serde_json::to_string(&doc).unwrap(),
-            before,
-            "an all-or-nothing batch leaves the document untouched"
-        );
-    }
-
-    #[test]
-    fn the_card_list_is_replaced_and_truncated() {
-        let quill = quill_from_yaml(QUILL);
-        let mut doc = quill
-            .parse(
-                "~~~card-yaml\n$quill: memo@1.0\n$kind: main\n~~~\n\n\
-                 ~~~card-yaml\n$kind: line_item\nqty: 1\n~~~\n\n\
-                 ~~~card-yaml\n$kind: line_item\nqty: 2\n~~~\n",
-            )
-            .expect("parses")
-            .document;
-        let mut values = quill.project(&doc);
-        values.cards.truncate(1);
-        quill.writer(&mut doc).set_values(&values).unwrap();
-        assert_eq!(doc.cards().len(), 1);
-        assert_eq!(
-            quill.reader(&doc).card(0).unwrap().get("qty").unwrap(),
-            Some(crate::ReadValue::Value(crate::QuillValue::from_json(
-                serde_json::json!(1)
-            )))
-        );
-    }
-
-    #[test]
-    fn a_new_card_is_appended_from_the_shape() {
-        let quill = quill_from_yaml(QUILL);
-        let mut doc = quill
-            .parse("~~~card-yaml\n$quill: memo@1.0\n$kind: main\n~~~\n")
-            .expect("parses")
-            .document;
-        let mut values = quill.project(&doc);
-        values.cards.push(
-            CardValues::new(
-                "line_item",
-                [("desc".to_string(), serde_json::json!("Widget **A**"))]
-                    .into_iter()
-                    .collect(),
-            )
-            .with_body("Note."),
-        );
-        quill.writer(&mut doc).set_values(&values).unwrap();
-        assert_eq!(doc.cards().len(), 1);
-        assert_eq!(quill.project(&doc).cards[0].body, "Note.");
-    }
-
-    #[test]
-    fn an_absent_ext_is_untouched_and_an_empty_one_removes() {
-        let quill = quill_from_yaml(QUILL);
-        let md = "~~~card-yaml\n$quill: memo@1.0\n$kind: main\n$ext:\n  app:\n    k: 1\n~~~\n";
-
-        let mut doc = quill.parse(md).expect("parses").document;
-        let mut values = quill.project(&doc);
-        values.ext = None;
-        quill.writer(&mut doc).set_values(&values).unwrap();
-        assert!(doc.main().ext().is_some(), "an absent ext leaves $ext alone");
-
-        let mut doc = quill.parse(md).expect("parses").document;
-        let mut values = quill.project(&doc);
-        values.ext = Some(serde_json::Map::new());
-        quill.writer(&mut doc).set_values(&values).unwrap();
-        assert!(doc.main().ext().is_none(), "an empty ext removes $ext");
     }
 }

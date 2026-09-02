@@ -191,15 +191,37 @@ card_kinds:
     expect(fieldOf(ed.document.main, 'stray')).toBeUndefined()
   })
 
-  it('setValues writes the whole document, and an unedited projection is a no-op', () => {
+  it('setValues writes the document, an unedited read is a no-op, and undefined is absent', () => {
     const quill = buildQuill()
     const ed = quill.writer(blankDoc())
-    ed.setValues({ fields: { subject: 'Q3 **results**', qty: '5' } })
+    ed.setValues({ fields: { subject: 'Q3 **results**', qty: '5' }, ext: { app: { k: 1 } } })
     expect(fieldOf(ed.document.main, 'qty')).toBe(5)
 
     const before = ed.document.toStored()
-    ed.setValues(quill.project(ed.document))
+    ed.setValues(quill.reader(ed.document).values())
     expect(ed.document.toStored()).toBe(before)
+
+    // `undefined` is absent (untouched) where the wasm boundary alone would
+    // fold it to `null` (a removal); an unnamed declared field is removed.
+    ed.setValues({ fields: { subject: 'Q4', qty: undefined }, ext: undefined, cards: undefined })
+    const v = quill.reader(ed.document).values()
+    expect(v.fields).toEqual({ subject: 'Q4' })
+    expect(v.ext).toEqual({ app: { k: 1 } })
+    ed.setValues({ ext: null })
+    expect(quill.reader(ed.document).values().ext).toBeNull()
+  })
+
+  it('reader.resolve is the render view beside reader.values', () => {
+    const quill = buildQuill()
+    const doc = blankDoc()
+    quill.writer(doc).setValues({ fields: { subject: 'Hi' } })
+    const reader = quill.reader(doc)
+    expect(reader.values().fields).toEqual({ subject: 'Hi' })
+    const resolved = reader.resolve()
+    expect(resolved.main.fields.find((f) => f.name === 'subject')).toMatchObject({
+      source: 'authored',
+    })
+    expect(resolved.main.fields.find((f) => f.name === 'qty').source).not.toBe('authored')
   })
 
   it('reviseBody writes the main body from markdown and returns a Delta', () => {
@@ -1277,7 +1299,6 @@ describe('@quillmark/wasm/runtime: handles from another copy (duplicate install)
 
     expectForeign(() => doc.equals(foreignDoc(other)), 'Document.equals')
     expectForeign(() => quill.validate(foreignDoc(doc)), 'Quill.validate')
-    expectForeign(() => quill.resolve(foreignDoc(doc)), 'Quill.resolve')
 
     // A local handle still takes the generated path unchanged.
     expect(doc.equals(other)).toBe(true)
@@ -1291,7 +1312,6 @@ describe('@quillmark/wasm/runtime: handles from another copy (duplicate install)
     for (const [call, method] of [
       [() => doc.equals(null), 'Document.equals'],
       [() => quill.validate({}), 'Quill.validate'],
-      [() => quill.resolve(42), 'Quill.resolve'],
     ]) {
       const caught = caughtFrom(call)
       expect(isQuillmarkError(caught)).toBe(true)
@@ -1429,7 +1449,6 @@ describe('@quillmark/wasm/runtime: handles from another copy (duplicate install)
 
       expectForeign(() => docA.equals(docB), 'Document.equals')
       expectForeign(() => quillA.validate(docB), 'Quill.validate')
-      expectForeign(() => quillA.resolve(docB), 'Quill.resolve')
       expectForeign(() => quillA.writer(docB), 'quill.writer(doc)')
       expectForeign(() => quillA.reader(docB), 'quill.reader(doc)')
       expectForeign(() => new DocumentWriter(quillB, docA), 'quill.writer(doc)')

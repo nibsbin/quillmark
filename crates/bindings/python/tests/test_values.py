@@ -1,9 +1,10 @@
-"""The portable values shape: ``quill.project`` and ``writer.set_values``.
+"""The values form: ``reader.values`` and ``writer.set_values``.
 
-The shape's semantics are core's (``core/src/quill/values.rs``). At this
-boundary the questions are narrower: does the shape arrive as a plain dict,
-does a content leaf one level in arrive as text, does the write reach core, and
-do refusals arrive as diagnostics carrying their own ``path``.
+The shape's semantics are core's (``core/src/quill/values.rs``,
+``core/src/writer.rs``). At this boundary the questions are narrower: does the
+shape arrive as a plain dict with every key present, does ``None`` cross both
+ways where an absent key is untouched, does the write reach core at both
+scopes, and do refusals arrive as diagnostics carrying their own ``path``.
 """
 
 import pytest
@@ -16,7 +17,7 @@ QUILL_YAML = """quill:
   name: py_values
   version: "1.0"
   backend: typst
-  description: Portable values coverage
+  description: Values form coverage
 
 typst:
   plate_file: plate.typ
@@ -42,6 +43,8 @@ card_kinds:
       desc:
         type: richtext
         inline: true
+      qty:
+        type: integer
 """
 
 MD = """~~~card-yaml
@@ -61,6 +64,7 @@ Body prose.
 ~~~card-yaml
 $kind: line_item
 desc: Widget __A__
+qty: "3"
 ~~~
 Item note.
 """
@@ -74,47 +78,81 @@ def make_quill(tmp_path):
     return Quill.from_path(str(quill_dir))
 
 
-def test_project_reads_content_leaves_as_text_at_every_depth(tmp_path):
+def test_values_reads_every_axis_content_as_text_and_scalars_as_stored(tmp_path):
     quill = make_quill(tmp_path)
-    values = quill.project(quill.parse(MD))
+    values = quill.reader(quill.parse(MD)).values()
 
     assert values["fields"]["subject"] == "Hello **world**"
     assert values["fields"]["note"] == "a *literal* line"
     assert values["fields"]["paragraphs"] == ["Para **one**"]
+    assert "qty" not in values["fields"], "an absent field is not its `default`"
     assert values["body"] == "Body prose."
     assert values["ext"] == {"app": {"k": 1}}
 
     (card,) = values["cards"]
-    assert card["kind"] == "line_item"
-    assert card["fields"]["desc"] == "Widget **A**"
-    assert card["body"] == "Item note."
+    assert card == {
+        "kind": "line_item",
+        "fields": {"desc": "Widget **A**", "qty": "3"},
+        "body": "Item note.",
+        "ext": None,
+    }
 
 
-def test_project_is_sparse(tmp_path):
+def test_none_crosses_both_ways(tmp_path):
     quill = make_quill(tmp_path)
-    values = quill.project(quill.parse(MD))
-    assert "qty" not in values["fields"], "an absent field is not its `default`"
+    doc = quill.parse(
+        "~~~card-yaml\n$quill: py_values@1.0\n$kind: main\nsubject:\n~~~\n\n"
+        "~~~card-yaml\nfoo: bar\n~~~\n"
+    )
+    values = quill.reader(doc).values()
+    assert values["fields"]["subject"] is None, "a present-null is not authored-empty"
+    assert values["ext"] is None
+    assert values["cards"][0]["kind"] is None
+    assert values["cards"][0]["fields"] == {"foo": "bar"}
+
+    quill.writer(doc).set_values({"ext": {"app": {}}})
+    assert quill.reader(doc).values()["ext"] == {"app": {}}
+    quill.writer(doc).set_values({"ext": None})
+    assert quill.reader(doc).values()["ext"] is None
 
 
-def test_writing_back_an_unedited_projection_changes_no_bytes(tmp_path):
+def test_writing_back_an_unedited_read_changes_no_bytes(tmp_path):
     quill = make_quill(tmp_path)
     doc = quill.parse(MD)
     before = doc.to_stored()
-    quill.writer(doc).set_values(quill.project(doc))
+    quill.writer(doc).set_values(quill.reader(doc).values())
     assert doc.to_stored() == before
 
 
-def test_set_values_writes_an_edit_and_removes_an_omitted_field(tmp_path):
+def test_an_absent_key_is_untouched_and_a_present_axis_is_replaced(tmp_path):
     quill = make_quill(tmp_path)
     doc = quill.parse(MD)
-    values = quill.project(doc)
-    values["fields"]["subject"] = "Goodbye *world*"
-    del values["fields"]["note"]
-    quill.writer(doc).set_values(values)
+    quill.writer(doc).set_values({"fields": {"subject": "Goodbye *world*"}})
 
-    after = quill.project(doc)
+    after = quill.reader(doc).values()
     assert after["fields"]["subject"] == "Goodbye *world*"
-    assert "note" not in after["fields"]
+    assert "note" not in after["fields"], "an unnamed declared field is removed"
+    assert after["body"] == "Body prose.", "the body key was absent"
+    assert len(after["cards"]) == 1, "the cards key was absent"
+    assert after["ext"] == {"app": {"k": 1}}
+
+
+def test_the_card_scope_reads_and_writes_one_slot(tmp_path):
+    quill = make_quill(tmp_path)
+    doc = quill.parse(MD)
+    reader = quill.reader(doc)
+    assert reader.card(0).values() == reader.values()["cards"][0]
+
+    quill.writer(doc).card(0).set_values({"fields": {"desc": "Gadget"}})
+    assert reader.card(0).values()["fields"] == {"desc": "Gadget"}
+    assert reader.values()["fields"]["subject"] == "Hello **world**"
+
+    with raises_edit_code("edit::unknown_field") as excinfo:
+        quill.writer(doc).card(0).set_values({"fields": {"bad": 1}})
+    assert excinfo.value.diagnostics[0].path == "cards.line_item[0].bad"
+
+    with raises_edit_code("edit::index_out_of_range"):
+        quill.writer(doc).card(7).set_values({})
 
 
 def test_an_undeclared_name_is_refused_under_its_own_path(tmp_path):

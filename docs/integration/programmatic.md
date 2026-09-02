@@ -46,18 +46,18 @@ Markdown authoring, the [blueprint](../quills/blueprint.md) (for LLMs), and thes
 
 ## Reading fields back
 
-`quill.reader(doc)` is the read twin: `reader.get(name)` returns each field by its declared type (a `richtext` field as Markdown, a composite carrying content leaves projecting each leaf, every other type as its canonical value) with schema authority, so an undeclared name raises `edit::unknown_field` rather than reading back nothing.
+`quill.reader(doc)` is the read twin: `reader.get(name)` returns each field in the values form (every content leaf as its codec's text, a `richtext` leaf as Markdown, everything else as stored) with schema authority, so an undeclared name raises `edit::unknown_field` rather than reading back nothing. A read never coerces: `qty: "3"` reads `"3"` until a write canonicalizes it; `reader.resolve()` (JavaScript) is the coerced, blank-filled render view.
 
 `reader.get_content(name)` (`getContent` in JavaScript) is the same read at the other end of the codec, returning the field's content corpus rather than its projection. Reach for it when you hold a content editor: a content field rests as a corpus when the typed writer committed it and as the authored string when a Markdown parse produced it, and this read decodes both through the codec the declared type names. A type that is not a content leaf raises `edit::field_not_content`: an `integer` has no corpus, and an `array<richtext>` carries content without having one.
 
 ## The whole document as plain values
 
-`quill.project(doc)` reads the document as one portable shape, and `quill.writer(doc).set_values(values)` writes that shape back. Reach for the pair when you hold a whole form or an API payload rather than one field.
+`quill.reader(doc).values()` reads the document as one shape, and `quill.writer(doc).set_values(values)` writes that shape back. Reach for the pair when you hold a whole form or an API payload rather than one field; `reader.card(i).values()` / `writer.card(i).set_values(values)` are the same pair for one card.
 
 === "Python"
 
     ```python
-    values = quill.project(doc)
+    values = quill.reader(doc).values()
     # {"fields": {"subject": "Hello **world**", "paragraphs": ["Para **one**"]},
     #  "body": "Body prose.", "cards": [...], "ext": {"app": {"k": 1}}}
     values["fields"]["subject"] = "Goodbye *world*"
@@ -67,14 +67,16 @@ Markdown authoring, the [blueprint](../quills/blueprint.md) (for LLMs), and thes
 === "JavaScript"
 
     ```javascript
-    const values = quill.project(doc);
+    const values = quill.reader(doc).values();
     values.fields.subject = 'Goodbye *world*';
     quill.writer(doc).setValues(values);
     ```
 
-Every content leaf is its codec's text at every depth the field's type tree reaches, so an `array<richtext>` is an array of Markdown strings. The shape is **sparse** — an absent field is an absent key, never its `default` — and `project` never raises. `set_values` is the typed lane: it refuses an undeclared name exactly as `set_all` does, applies nothing on error, and reports every refused cell at once under its own path (`main.qty`, `cards.line_item[0].desc`).
+Every content leaf is its codec's text at every depth the field's type tree reaches, so an `array<richtext>` is an array of Markdown strings; everything else is as stored, and a present-null is `null`. The shape is **sparse** — an absent field is an absent key, never its `default` — and `values()` never raises. `set_values` is the typed lane: it refuses an undeclared name exactly as `set_all` does, applies nothing on error, and reports every refused cell at once under its own path (`main.qty`, `cards.line_item[0].desc`).
 
-Writing back an unedited projection changes no bytes, so a read-edit-write cycle leaves the cells you did not touch alone — identity anchors, `!must_fill` markers and YAML comments included. A cell you *do* edit is a cold import and loses its anchors; use `revise_field` per cell where they must survive. Cards match by position and kind, so deleting or reordering an entry rewrites every card after it: reach for the structural verbs there.
+**An absent key is untouched; a present one replaces its axis.** `{"fields": {...}}` rewrites the main fields (a declared field the map omits is removed) and leaves the body, the cards and `$ext` alone; `"cards"` is the whole card list; `"ext": null` removes `$ext` and `{}` stores an explicit empty one. In JavaScript an `undefined` member reads as absent.
+
+Writing back an unedited read changes no bytes, so a read-edit-write cycle leaves the cells you did not touch alone — identity anchors, `!must_fill` markers and YAML comments included. A cell you *do* edit is a cold import and loses its anchors; use `revise_field` per cell where they must survive. Cards match by position and kind, so deleting or reordering an entry rewrites every card after it: reach for the structural verbs there.
 
 It is a projection, not a storage format — persist with `to_stored` ([Persistence](persistence.md)).
 

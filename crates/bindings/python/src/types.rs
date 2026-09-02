@@ -249,24 +249,6 @@ impl PyQuill {
         Ok(list.clone())
     }
 
-    /// The portable values of `doc`: the declared fields it carries, every
-    /// content leaf as its codec's text (`richtext` markdown, `plaintext`
-    /// literal), bodies as markdown, and `$ext` on the main card and each card.
-    /// The read a consumer edits and hands back to `writer.set_values`.
-    ///
-    /// Sparse: an absent field is an absent key, never materialized from its
-    /// `default`. Total: never raises, a leaf that decodes under neither
-    /// encoding riding out verbatim. A projection, never a storage format —
-    /// markdown carries no anchors, island ids or content-only marks, and
-    /// `$quill`, `$seed`, `!must_fill` markers, YAML comments and undeclared
-    /// fields are not carried. Persist with `to_stored`.
-    fn project<'py>(&self, py: Python<'py>, doc: &PyDocument) -> PyResult<Bound<'py, PyAny>> {
-        let values = self.inner.project(&doc.inner);
-        let json = serde_json::to_value(&values)
-            .map_err(|e| PyValueError::new_err(format!("project: serialization failed: {e}")))?;
-        json_to_py(py, &json)
-    }
-
     /// Seed a starter `Document` from the schema: the main card plus one instance
     /// of each composable card kind, each committing its fields' `example` values
     /// and leaving every other field absent (interpolated at render). A field
@@ -768,17 +750,19 @@ impl PyWriter {
             .map_err(convert_edit_errors)
     }
 
-    /// Make the document's fields, bodies and cards exactly `values`: the write
-    /// twin of `quill.project(doc)`.
+    /// Write the document in the values form: the write twin of
+    /// `reader.values()`.
     ///
-    /// Replace, not merge — a declared field `values` does not name is removed,
-    /// `cards` is the card list, `body` becomes the body, and an absent `ext`
-    /// leaves `$ext` untouched while an empty one removes it. All-or-nothing:
+    /// An absent key is untouched; a present one replaces its axis: `fields`
+    /// is the whole truth for declared names (an unnamed one is removed; an
+    /// undeclared one the card holds is accepted unchanged and refused
+    /// changed), `cards` is the card list, `body` the body, `ext=None`
+    /// removes `$ext` and `{}` records an explicit empty one. All-or-nothing:
     /// nothing is applied on error and every refused cell is one diagnostic
     /// carrying its own `path` (`main.qty`, `cards.line_item[0].desc`).
     ///
     /// A cell whose value equals its projection is not written, so handing back
-    /// an unedited `project` result changes no bytes. A changed content cell is
+    /// an unedited `values()` read changes no bytes. A changed content cell is
     /// a cold import — `revise_field` per cell is what keeps its anchors — and
     /// cards match by position and kind, so deleting or reordering an entry
     /// rewrites every card after it.
@@ -971,6 +955,26 @@ impl PyCardWriter {
             .map(|_| ())
             .map_err(convert_edit_error)
     }
+
+    /// Write this card in the values form: `Writer.set_values` restricted to
+    /// one slot, under the same per-axis rule. An absent `kind` keeps the
+    /// card's; a differing one rebuilds the slot. Refusals anchor at
+    /// `cards.<kind>[<index>]`; raises `edit::index_out_of_range` for a bad
+    /// bound index and `ValueError` for a `values` this binding cannot read as
+    /// the shape.
+    fn set_values(&self, py: Python<'_>, values: &Bound<'_, PyAny>) -> PyResult<()> {
+        let json = py_to_json(values)?;
+        let values: quillmark_core::CardValues = serde_json::from_value(json)
+            .map_err(|e| PyValueError::new_err(format!("set_values: invalid values shape: {e}")))?;
+        let quill = self.quill.borrow(py);
+        let mut doc = self.doc.borrow_mut(py);
+        let mut writer = quill.inner.writer(&mut doc.inner);
+        writer
+            .card(self.index)
+            .map_err(convert_edit_error)?
+            .set_values(&values)
+            .map_err(convert_edit_errors_at)
+    }
 }
 
 /// A `Document` bound to its `Quill` for interpreted reads, from
@@ -1068,6 +1072,28 @@ impl PyReader {
         doc.inner.main().body_markdown()
     }
 
+    /// The whole document in the values form: `{"fields", "body", "cards",
+    /// "ext"}`, the main card's fields with every content leaf as its codec's
+    /// text (`richtext` markdown, `plaintext` literal) and everything else as
+    /// stored, its body as markdown, its `$ext` (`None` when it carries none),
+    /// and every composable card as `{"kind", "fields", "body", "ext"}` with
+    /// `kind` `None` for a kindless card. A present-null field is `None`.
+    ///
+    /// Every key is present, so the dict is a valid `writer.set_values` input
+    /// and handing it back unedited changes no bytes. Sparse: an absent field
+    /// is an absent key, never its `default`. Never raises: a content leaf
+    /// that decodes under neither encoding rides out as stored where `get`
+    /// would raise. A projection, never a storage format: persist with
+    /// `to_stored`.
+    fn values<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let quill = self.quill.borrow(py);
+        let doc = self.doc.borrow(py);
+        let values = quill.inner.reader(&doc.inner).values();
+        let json = serde_json::to_value(&values)
+            .map_err(|e| PyValueError::new_err(format!("values: serialization failed: {e}")))?;
+        json_to_py(py, &json)
+    }
+
     /// A `CardReader` for the composable card at `index`. The index is checked
     /// lazily at the read, so this never raises. The cursor is ephemeral: a
     /// `remove_card`/`add_card` between binding and reading silently retargets it.
@@ -1156,6 +1182,21 @@ impl PyCardReader {
             .get_content_at(name, &at)
             .map_err(convert_edit_error)?;
         content_to_py(py, read)
+    }
+
+    /// This card in the values form: `Reader.values` restricted to one slot.
+    /// Raises `edit::index_out_of_range` for a bad bound index.
+    fn values<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let quill = self.quill.borrow(py);
+        let doc = self.doc.borrow(py);
+        let reader = quill.inner.reader(&doc.inner);
+        let values = reader
+            .card(self.index)
+            .map_err(convert_edit_error)?
+            .values();
+        let json = serde_json::to_value(&values)
+            .map_err(|e| PyValueError::new_err(format!("values: serialization failed: {e}")))?;
+        json_to_py(py, &json)
     }
 
     /// The card twin of `Reader.body_markdown`. Raises `edit::index_out_of_range`
@@ -1420,22 +1461,11 @@ fn content_to_py<'py>(
 
 fn read_value_to_py<'py>(
     py: Python<'py>,
-    read: Option<quillmark_core::ReadValue>,
+    read: Option<quillmark_core::QuillValue>,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
     match read {
         None => Ok(None),
-        Some(quillmark_core::ReadValue::Markdown(s))
-        | Some(quillmark_core::ReadValue::Plaintext(s)) => Ok(Some(s.into_bound_py_any(py)?)),
-        Some(quillmark_core::ReadValue::Value(v)) => Ok(Some(quillvalue_to_py(py, &v)?)),
-        // `#[non_exhaustive]`: raising beats `None`, which reads as "absent".
-        Some(_) => Err(crate::errors::raise_with_diagnostics(
-            vec![quillmark_core::Diagnostic::new(
-                quillmark_core::Severity::Error,
-                "this build cannot project that field's value".to_string(),
-            )
-            .with_code("edit::unprojectable_value".to_string())],
-            "this build cannot project that field's value".to_string(),
-        )),
+        Some(v) => Ok(Some(quillvalue_to_py(py, &v)?)),
     }
 }
 

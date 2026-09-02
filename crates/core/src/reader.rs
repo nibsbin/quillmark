@@ -9,15 +9,25 @@
 //!
 //! ```ignore
 //! let v = quill.reader(&doc);
-//! v.get("subject")?;            // richtext → Some(Markdown(..))
-//! v.get("qty")?;                // integer  → Some(Value(3))
+//! v.get("subject")?;            // richtext → Some("Hello **world**")
+//! v.get("qty")?;                // integer  → Some("3"), as stored
 //! v.get("absent")?;             // absent   → None
 //! v.get("nope");                // unknown name → Err(UnknownField)
 //! v.card(2)?.get("body")?;      // card field, kind resolves its schema
+//! v.values();                   // the whole document in the same form
 //! ```
 //!
+//! Every read here answers in the **values form**: the stored value with each
+//! content leaf decoded to its codec's text (`richtext` markdown, `plaintext`
+//! literal), at every depth the field's type tree reaches, and everything else
+//! verbatim. [`get`](TypedReader::get) reads one field in it and
+//! [`values`](TypedReader::values) the whole document, so
+//! `get(name)` is `values().fields[name]` on every field that decodes.
+//! Scalars are never coerced by a read: `qty: "3"` reads `"3"` here and `3`
+//! in [`resolve`](TypedReader::resolve), the render view.
+//!
 //! **Absence returns; mismatch raises; an unknown name is a typo.** A present
-//! value that does not decode under a content field raises
+//! value that does not decode under a content leaf raises
 //! [`EditError::FieldDecode`], and an undeclared name raises
 //! [`EditError::UnknownField`], as
 //! [`TypedWriter::set`](crate::TypedWriter::set) does on the write side.
@@ -39,23 +49,11 @@ use quillmark_content::Normalized;
 
 use crate::document::edit::field_decode;
 use crate::document::{Card, Codec, Document, EditError};
-use crate::quill::{CardSchema, FieldSchema, FieldType, QuillConfig};
+use crate::quill::{
+    card_fields, card_values, resolve_document, CardSchema, CardValues, DocumentValues,
+    FieldSchema, FieldType, QuillConfig, Resolved,
+};
 use crate::value::{PathSegment, QuillValue};
-
-/// The interpreted value at a field address: the output of [`TypedReader::get`].
-/// Absence is the `None` of the enclosing `Option`, not a variant here.
-#[derive(Debug, Clone, PartialEq)]
-#[non_exhaustive]
-pub enum ReadValue {
-    /// A `richtext` field projected to markdown (`export ∘ decode`), a lossy
-    /// view: content-only marks do not survive markdown.
-    Markdown(String),
-    /// A `plaintext` field's verbatim text, marks never interpreted (`*hi*` is
-    /// four characters, not emphasis).
-    Plaintext(String),
-    /// A non-content field's canonical value, verbatim.
-    Value(QuillValue),
-}
 
 /// A [`Document`] bound to its [`QuillConfig`] for typed reads. Construct with
 /// [`Quill::reader`](crate::Quill::reader). Reads target the main card; use
@@ -72,15 +70,15 @@ impl<'a> TypedReader<'a> {
         Self { config, doc }
     }
 
-    /// Read a main-card field, interpreted by its declared type: `richtext` to
-    /// markdown ([`ReadValue::Markdown`]), `plaintext` to literal text
-    /// ([`ReadValue::Plaintext`]), every other type verbatim
-    /// ([`ReadValue::Value`]). `Ok(None)` when the field is absent;
+    /// Read a main-card field in the values form: every content leaf in its
+    /// type tree as its codec's text (`richtext` markdown, `plaintext` literal),
+    /// everything else as stored. A present-null field reads `Some(null)`.
+    /// `Ok(None)` when the field is absent;
     /// [`EditError::UnknownField`] for a name the schema does not declare (a typo,
-    /// as on the write side); [`EditError::FieldDecode`] when a content
-    /// field holds a value that does not decode (a scalar an opaque
-    /// [`store_field`](crate::Card::store_field) wrote).
-    pub fn get(&self, name: &str) -> Result<Option<ReadValue>, EditError> {
+    /// as on the write side); [`EditError::FieldDecode`], anchored at the leaf,
+    /// when a content leaf holds a value that does not decode (a scalar an
+    /// opaque [`store_field`](crate::Card::store_field) wrote).
+    pub fn get(&self, name: &str) -> Result<Option<QuillValue>, EditError> {
         read_field(self.doc.main(), Some(&self.config.main.fields), name)
     }
 
@@ -138,6 +136,34 @@ impl<'a> TypedReader<'a> {
         self.doc.main().body_markdown()
     }
 
+    /// The whole document in the values form: the main card's fields, body
+    /// and `$ext`, and every composable card, every axis filled
+    /// ([`DocumentValues`]). Total: never raises, a content leaf that decodes
+    /// under neither encoding riding out as stored, because the documents an
+    /// ingestion most needs to read are the ones that arrived dirty. The read
+    /// [`TypedWriter::set_values`](crate::TypedWriter::set_values) writes back.
+    pub fn values(&self) -> DocumentValues {
+        DocumentValues {
+            fields: Some(card_fields(Some(&self.config.main), self.doc.main())),
+            body: Some(self.doc.main().body_markdown()),
+            cards: Some(
+                self.doc
+                    .cards()
+                    .iter()
+                    .map(|card| card_values(self.config, card))
+                    .collect(),
+            ),
+            ext: Some(self.doc.main().ext().cloned()),
+        }
+    }
+
+    /// The resolved view: for every declared field, the value the render
+    /// projection would use and the rung it came from. The one read that
+    /// blank-fills and coerces; see [`Quill::resolve`](crate::Quill::resolve).
+    pub fn resolve(&self) -> Resolved {
+        resolve_document(self.config, self.doc)
+    }
+
     /// A schema-bound reader for the composable card at `index`. The card's
     /// `$kind` resolves its [`CardSchema`]; an unknown kind carries no schema, so
     /// every field name on it reads with [`EditError::UnknownField`] (read such
@@ -150,14 +176,19 @@ impl<'a> TypedReader<'a> {
             .card(index)
             .ok_or(EditError::IndexOutOfRange { index, len })?;
         let schema = card.kind().and_then(|k| self.config.card_kind(k));
-        Ok(CardReader { schema, card })
+        Ok(CardReader {
+            config: self.config,
+            schema,
+            card,
+        })
     }
 }
 
 /// A single composable card bound to its [`CardSchema`], from
-/// [`TypedReader::card`]. Same `get` / `body_markdown` verbs as [`TypedReader`],
-/// reading the card at its bound index.
+/// [`TypedReader::card`]. Same `get` / `values` / `body_markdown` verbs as
+/// [`TypedReader`], reading the card at its bound index.
 pub struct CardReader<'a> {
+    config: &'a QuillConfig,
     schema: Option<&'a CardSchema>,
     card: &'a Card,
 }
@@ -168,11 +199,11 @@ impl CardReader<'_> {
         self.card.kind()
     }
 
-    /// Read a field on this card, interpreted by its declared type: the card
-    /// twin of [`TypedReader::get`]. Resolves the field against the card's
+    /// Read a field on this card in the values form: the card twin of
+    /// [`TypedReader::get`]. Resolves the field against the card's
     /// [`CardSchema`]; a name the schema does not declare (or any name when the
     /// card kind is unknown) reads with [`EditError::UnknownField`].
-    pub fn get(&self, name: &str) -> Result<Option<ReadValue>, EditError> {
+    pub fn get(&self, name: &str) -> Result<Option<QuillValue>, EditError> {
         read_field(self.card, self.schema.map(|s| &s.fields), name)
     }
 
@@ -196,6 +227,12 @@ impl CardReader<'_> {
     pub fn body_markdown(&self) -> String {
         self.card.body_markdown()
     }
+
+    /// This card in the values form: [`TypedReader::values`] restricted to one
+    /// slot, every axis filled.
+    pub fn values(&self) -> CardValues {
+        card_values(self.config, self.card)
+    }
 }
 
 /// The shared read dispatch behind [`TypedReader::get`] and [`CardReader::get`].
@@ -204,38 +241,21 @@ fn read_field(
     card: &Card,
     fields_schema: Option<&IndexMap<String, FieldSchema>>,
     name: &str,
-) -> Result<Option<ReadValue>, EditError> {
+) -> Result<Option<QuillValue>, EditError> {
     let schema = fields_schema
         .and_then(|m| m.get(name))
         .ok_or_else(|| EditError::unknown_field(name))?;
-    let Some(codec) = content_codec(&schema.r#type) else {
-        let Some(value) = card.payload().get(name) else {
-            return Ok(None);
-        };
-        // A composite carrying content below it projects at each leaf, so one
-        // `get` reads a field's text whatever depth the content sits at; a
-        // composite carrying none is verbatim, and the walk is the identity on
-        // it.
-        if !crate::quill::field_contains_content(schema) {
-            return Ok(Some(ReadValue::Value(value.clone())));
-        }
-        let projected = project_value(
-            name,
-            value.as_json(),
-            schema,
-            &mut Vec::new(),
-            ProjectMode::Strict,
-        )?;
-        return Ok(Some(ReadValue::Value(QuillValue::from_json(projected))));
+    let Some(value) = card.payload().get(name) else {
+        return Ok(None);
     };
-    match card.field_text(name, codec) {
-        None => Ok(None),
-        Some(Ok(text)) => Ok(Some(match codec {
-            Codec::Richtext => ReadValue::Markdown(text),
-            Codec::Plaintext => ReadValue::Plaintext(text),
-        })),
-        Some(Err(e)) => Err(field_decode(name, &[], codec, e)),
-    }
+    let projected = project_value(
+        name,
+        value.as_json(),
+        schema,
+        &mut Vec::new(),
+        ProjectMode::Strict,
+    )?;
+    Ok(Some(QuillValue::from_json(projected)))
 }
 
 /// The shared [`Content`](quillmark_content::Content) dispatch behind every `get_content` /
@@ -279,14 +299,17 @@ pub(crate) enum ProjectMode {
     Total,
 }
 
-/// Project `value` through `schema`'s type tree: every content leaf to its
-/// codec's text, every other node verbatim, descending `items` / `properties` /
-/// `variants`. `at` is the path from the field to `value`, extended on descent
-/// and read only to anchor a [`Strict`](ProjectMode::Strict) failure.
+/// Project `value` through `schema`'s type tree into the values form: every
+/// content leaf to its codec's text, every other node verbatim, descending
+/// `items` / `properties` / `variants`. `at` is the path from the field to
+/// `value`, extended on descent and read only to anchor a
+/// [`Strict`](ProjectMode::Strict) failure.
 ///
 /// The descent is over the schema, so a node whose shape the schema cannot take
 /// stops there and passes verbatim: a value is never reshaped to match a
-/// declaration it does not fit.
+/// declaration it does not fit. A null rides as null at every type, so the form
+/// keeps present-null apart from authored-empty; blank-filling is the render
+/// view's.
 pub(crate) fn project_value(
     name: &str,
     value: &serde_json::Value,
@@ -294,10 +317,10 @@ pub(crate) fn project_value(
     at: &mut Vec<PathSegment>,
     mode: ProjectMode,
 ) -> Result<serde_json::Value, EditError> {
+    if value.is_null() {
+        return Ok(serde_json::Value::Null);
+    }
     if let Some(codec) = content_codec(&schema.r#type) {
-        if value.is_null() {
-            return Ok(serde_json::Value::String(String::new()));
-        }
         return match codec.decode_field(value) {
             Ok(content) => Ok(serde_json::Value::String(codec.project(&content))),
             Err(e) => match mode {
@@ -529,6 +552,10 @@ card_kinds:
         doc
     }
 
+    fn json(value: serde_json::Value) -> Option<QuillValue> {
+        Some(QuillValue::from_json(value))
+    }
+
     #[test]
     fn richtext_field_projects_to_markdown() {
         let config = config();
@@ -536,19 +563,46 @@ card_kinds:
         let view = TypedReader::new(&config, &doc);
         assert_eq!(
             view.get("subject").unwrap(),
-            Some(ReadValue::Markdown("Hello **world**".to_string()))
+            json(serde_json::json!("Hello **world**"))
         );
     }
 
     #[test]
-    fn scalar_field_returns_canonical_value() {
+    fn scalar_field_reads_as_stored() {
         let config = config();
         let doc = seeded_doc(&config);
         let view = TypedReader::new(&config, &doc);
+        assert_eq!(view.get("qty").unwrap(), json(serde_json::json!(3)));
+
+        let mut authored = blank_doc();
+        authored
+            .main_mut()
+            .store_field("qty", QuillValue::from_json(serde_json::json!("3")))
+            .unwrap();
         assert_eq!(
-            view.get("qty").unwrap(),
-            Some(ReadValue::Value(QuillValue::from_json(serde_json::json!(3))))
+            TypedReader::new(&config, &authored).get("qty").unwrap(),
+            json(serde_json::json!("3")),
+            "a read never coerces: the shorthand stays until a write canonicalizes it"
         );
+    }
+
+    #[test]
+    fn present_null_reads_as_null_at_every_type() {
+        let config = config();
+        let mut doc = blank_doc();
+        for name in ["subject", "note", "qty", "paragraphs"] {
+            doc.main_mut()
+                .store_field(name, QuillValue::from_json(serde_json::Value::Null))
+                .unwrap();
+        }
+        let view = TypedReader::new(&config, &doc);
+        for name in ["subject", "note", "qty", "paragraphs"] {
+            assert_eq!(
+                view.get(name).unwrap(),
+                json(serde_json::Value::Null),
+                "`{name}`: present-null is not authored-empty"
+            );
+        }
     }
 
     #[test]
@@ -598,10 +652,7 @@ card_kinds:
             )
             .unwrap();
         let view = TypedReader::new(&config, &doc);
-        assert_eq!(
-            view.get("note").unwrap(),
-            Some(ReadValue::Plaintext("a *literal* line".to_string()))
-        );
+        assert_eq!(view.get("note").unwrap(), json(serde_json::json!("a *literal* line")));
     }
 
     #[test]
@@ -1008,10 +1059,7 @@ card_kinds:
         let view = TypedReader::new(&config, &doc);
         let card = view.card(0).unwrap();
         assert_eq!(card.kind(), Some("note"));
-        assert_eq!(
-            card.get("body").unwrap(),
-            Some(ReadValue::Markdown("a *card*".to_string()))
-        );
+        assert_eq!(card.get("body").unwrap(), json(serde_json::json!("a *card*")));
         assert!(matches!(card.get("nope"), Err(EditError::UnknownField { .. })));
     }
 
@@ -1029,23 +1077,16 @@ card_kinds:
         let view = TypedReader::new(&config, &doc);
         assert_eq!(
             view.get("paragraphs").unwrap(),
-            Some(ReadValue::Value(QuillValue::from_json(serde_json::json!([
-                "Para **one**"
-            ])))),
+            json(serde_json::json!(["Para **one**"])),
         );
         assert_eq!(
             view.get("recipients").unwrap(),
-            Some(ReadValue::Value(QuillValue::from_json(serde_json::json!([
-                "a *literal* line"
-            ])))),
+            json(serde_json::json!(["a *literal* line"])),
             "each element decodes at its own declared codec"
         );
         assert_eq!(
             view.get("letterhead").unwrap(),
-            Some(ReadValue::Value(QuillValue::from_json(serde_json::json!({
-                "motto": "Fly **fight**",
-                "code": "9"
-            })))),
+            json(serde_json::json!({"motto": "Fly **fight**", "code": "9"})),
             "a content property projects; a scalar sibling rides verbatim"
         );
     }
@@ -1059,9 +1100,7 @@ card_kinds:
             .unwrap();
         assert_eq!(
             TypedReader::new(&config, &doc).get("tags").unwrap(),
-            Some(ReadValue::Value(QuillValue::from_json(serde_json::json!([
-                "x", "y"
-            ]))))
+            json(serde_json::json!(["x", "y"]))
         );
     }
 

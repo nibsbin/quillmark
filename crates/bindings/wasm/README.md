@@ -304,6 +304,8 @@ ed.setAll({ qty: "3", subject: "Q3" });             // all-or-nothing batch
 ed.reviseField("subject", "Q3 **results**");        // typed AND anchor-preserving; returns a Delta
 ed.set("titel", "x");                               // throws UnknownField: a typo, not a fallback
 ed.card(2).set("body", "**note**");                 // composable card, resolved by its $kind
+ed.setValues({ fields: { subject: "Q3" } });        // the values form: a present axis replaces, an absent one is untouched
+ed.card(2).setValues({ fields: { body: "**note**" } });
 ```
 
 `DocumentWriter` / `CardWriter` are pure JS holding references to your existing
@@ -317,17 +319,22 @@ write.
 
 ```ts
 const v = quill.reader(doc);
-v.get("subject");                                   // by declared type: richtext → markdown, plaintext → literal text
+v.get("subject");                                   // the values form: every content leaf as its codec's text, else as stored
 v.getContent("subject");                            // the same read as a `Content`, whichever lane stored it
 v.bodyMarkdown();                                   // the main body markdown (quill-free)
 v.card(0).get("body");                              // a card field, resolved by its $kind
+v.values();                                         // the whole document in the values form; ed.setValues(v.values()) is a no-op
+v.card(0).values();                                 // one card in it
+v.resolve();                                        // the render view: blank-filled, coerced, each field tagged with its rung
 ```
 
 `get` projects and `getContent` returns the `Content`; both decode through the codec
 the field's **declared type** names, which is why they bind the quill and the
 verbatim `doc.getStored` does not. An undeclared name throws `UnknownField`, a
 type that is not a content leaf throws `FieldNotContent`, and an undecodable
-value throws `FieldDecode`; an absent field reads back `undefined`.
+value throws `FieldDecode`; an absent field reads back `undefined` and a
+present-null `null`. A read never coerces a scalar (`qty: "3"` reads `"3"`);
+`resolve()` is the coerced view. `values()` is total where `get` throws.
 
 ### `engine.render(quill, parsed, opts?)` vs. `engine.open(quill, parsed)`
 

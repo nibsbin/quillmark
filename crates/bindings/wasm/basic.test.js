@@ -1991,7 +1991,7 @@ addr:
 })
 
 // ---------------------------------------------------------------------------
-// quill.resolve: the resolved-value view
+// reader.resolve, through its `_resolve` ABI: the resolved-value view
 // ---------------------------------------------------------------------------
 //
 // For every declared field: the value the render projection would use and the
@@ -2001,7 +2001,7 @@ addr:
 // validate(), guidance stays the schema. See prose/canon/SCHEMAS.md
 // § "Value sources and projections".
 
-describe('quill.resolve', () => {
+describe('reader.resolve, through the _resolve ABI', () => {
   const QUILL_YAML = `quill:
   name: field_states_test
   version: "1.0"
@@ -2046,7 +2046,7 @@ $kind: main
 title: Hello
 ~~~
 `
-    const f = quill.resolve(Document.fromMarkdown(md)).main.fields
+    const f = quill._resolve(Document.fromMarkdown(md)).main.fields
 
     // Declaration order is structural: the array order is the contract.
     expect(f.map((r) => r.name)).toEqual(['title', 'status', 'notes', 'count', 'author'])
@@ -2069,7 +2069,7 @@ title: T
 
 Hello body.
 `
-    const withBody = quill.resolve(Document.fromMarkdown(authored))
+    const withBody = quill._resolve(Document.fromMarkdown(authored))
     expect(withBody.main.body).toBeDefined()
     expect(withBody.main.body.source).toBe('authored')
     // Not smuggled into the fields array under any `body` / `$body` name.
@@ -2082,7 +2082,7 @@ $kind: main
 title: T
 ~~~
 `
-    const noBody = quill.resolve(Document.fromMarkdown(blank))
+    const noBody = quill._resolve(Document.fromMarkdown(blank))
     expect(noBody.main.body.source).toBe('blank')
   })
 
@@ -2094,7 +2094,7 @@ $kind: main
 title: T
 ~~~
 `
-    const f = quill.resolve(Document.fromMarkdown(md)).main.fields
+    const f = quill._resolve(Document.fromMarkdown(md)).main.fields
     // Each row is exactly { name, value, source }, schema guidance (example:)
     // and diagnostics read from quill.schema / quill.validate, not duplicated.
     const author = byName(f, 'author')
@@ -2117,7 +2117,7 @@ label: L
 ~~~
 Note body.
 `
-    const states = quill.resolve(Document.fromMarkdown(md))
+    const states = quill._resolve(Document.fromMarkdown(md))
     expect(states.cards.length).toBe(1)
     const card = states.cards[0]
     expect(card.kind).toBe('note')
@@ -2138,7 +2138,7 @@ count: "not-a-number"
     // A value the render coercion cannot conform is kept raw and Authored,
     // exactly as compile_data leaves it: the error surfaces via validate(),
     // not this view (which carries no diagnostics).
-    const row = byName(quill.resolve(Document.fromMarkdown(md)).main.fields, 'count')
+    const row = byName(quill._resolve(Document.fromMarkdown(md)).main.fields, 'count')
     expect(row.source).toBe('authored')
     expect(row.value).toBe('not-a-number')
     expect('diagnostics' in row).toBe(false)
@@ -2152,28 +2152,31 @@ $kind: main
 title: T
 ~~~
 `
-    const states = quill.resolve(Document.fromMarkdown(md))
+    const states = quill._resolve(Document.fromMarkdown(md))
     const round = JSON.parse(JSON.stringify(states))
     expect(byName(round.main.fields, 'title').value).toBe('T')
   })
 })
 
+
 // ---------------------------------------------------------------------------
-// quill.project / writer.setValues: the portable values shape
+// reader.values / writer.setValues, through their `_readerValues` /
+// `_setValues` ABI: the values form
 // ---------------------------------------------------------------------------
 //
-// The shape's semantics (sparse, total, the walk's per-leaf projection, the
-// write guard) are core's (`core/src/quill/values.rs`). At this boundary the
-// questions are narrower: does the shape cross as a plain JS object, does a
-// content leaf one level in arrive as text, does the write reach core, and do
-// refusals arrive as diagnostics carrying their own `path`.
+// The shape's semantics (the per-axis rule, the walk's per-leaf projection, the
+// write guard) are core's (`core/src/quill/values.rs`, `core/src/writer.rs`).
+// At this boundary the questions are narrower: does the shape cross as a plain
+// JS object with every axis present, does `null` cross both ways, does the
+// write reach core at both scopes, and do refusals arrive as diagnostics
+// carrying their own `path`.
 
-describe('quill.project / writer.setValues', () => {
+describe('reader.values / writer.setValues', () => {
   const QUILL_YAML = `quill:
   name: values_test
   version: "1.0"
   backend: typst
-  description: Portable values coverage
+  description: Values form coverage
 
 main:
   fields:
@@ -2196,6 +2199,8 @@ card_kinds:
       desc:
         type: richtext
         inline: true
+      qty:
+        type: integer
 `
 
   const buildQuill = () =>
@@ -2218,13 +2223,14 @@ Body prose.
 ~~~card-yaml
 $kind: line_item
 desc: Widget __A__
+qty: "3"
 ~~~
 Item note.
 `
 
-  it('projects content leaves as text at every depth, sparsely', () => {
+  it('reads every axis, content leaves as text at every depth, scalars as stored', () => {
     const quill = buildQuill()
-    const v = quill.project(quill.parse(MD))
+    const v = quill.parse(MD)._readerValues(quill, {})
 
     expect(v.fields.subject).toBe('Hello **world**')
     expect(v.fields.note).toBe('a *literal* line')
@@ -2233,31 +2239,67 @@ Item note.
     expect(v.body).toBe('Body prose.')
     expect(v.ext).toEqual({ app: { k: 1 } })
 
-    expect(v.cards).toHaveLength(1)
-    expect(v.cards[0].kind).toBe('line_item')
-    expect(v.cards[0].fields.desc).toBe('Widget **A**')
-    expect(v.cards[0].body).toBe('Item note.')
+    expect(v.cards).toEqual([
+      {
+        kind: 'line_item',
+        fields: { desc: 'Widget **A**', qty: '3' },
+        body: 'Item note.',
+        ext: null,
+      },
+    ])
   })
 
-  it('writing back an unedited projection changes no bytes', () => {
+  it('null crosses both ways: a missing $ext, a kindless card, a present-null field', () => {
+    const quill = buildQuill()
+    const doc = quill.parse(
+      '~~~card-yaml\n$quill: values_test\n$kind: main\nsubject:\n~~~\n\n~~~card-yaml\nfoo: bar\n~~~\n',
+    )
+    const v = doc._readerValues(quill, {})
+    expect(v.fields.subject).toBeNull()
+    expect(v.ext).toBeNull()
+    expect(v.cards[0].kind).toBeNull()
+    expect(v.cards[0].fields).toEqual({ foo: 'bar' })
+    expect(v.cards[0].ext).toBeNull()
+
+    doc._setValues(quill, {}, { ext: { app: {} } })
+    expect(doc._readerValues(quill, {}).ext).toEqual({ app: {} })
+    doc._setValues(quill, {}, { ext: null })
+    expect(doc._readerValues(quill, {}).ext).toBeNull()
+  })
+
+  it('writing back an unedited read changes no bytes', () => {
     const quill = buildQuill()
     const doc = quill.parse(MD)
     const before = doc.toStored()
-    doc._setValues(quill, quill.project(doc))
+    doc._setValues(quill, {}, doc._readerValues(quill, {}))
     expect(doc.toStored()).toBe(before)
   })
 
-  it('setValues writes an edited cell and removes a field the shape omits', () => {
+  it('an absent axis is untouched and a present one is replaced', () => {
     const quill = buildQuill()
     const doc = quill.parse(MD)
-    const v = quill.project(doc)
-    v.fields.subject = 'Goodbye *world*'
-    delete v.fields.note
-    doc._setValues(quill, v)
+    doc._setValues(quill, {}, { fields: { subject: 'Goodbye *world*' } })
 
-    const after = quill.project(doc)
+    const after = doc._readerValues(quill, {})
     expect(after.fields.subject).toBe('Goodbye *world*')
     expect('note' in after.fields).toBe(false)
+    expect(after.body).toBe('Body prose.')
+    expect(after.cards).toHaveLength(1)
+    expect(after.ext).toEqual({ app: { k: 1 } })
+  })
+
+  it('the card scope reads and writes one slot', () => {
+    const quill = buildQuill()
+    const doc = quill.parse(MD)
+    expect(doc._readerValues(quill, { card: 0 })).toEqual(doc._readerValues(quill, {}).cards[0])
+
+    doc._setValues(quill, { card: 0 }, { fields: { desc: 'Gadget' } })
+    expect(doc._readerValues(quill, { card: 0 }).fields).toEqual({ desc: 'Gadget' })
+    expect(doc._readerValues(quill, {}).fields.subject).toBe('Hello **world**')
+
+    expectEditCode(() => doc._setValues(quill, { card: 0 }, { fields: { bad: 1 } }), 'edit::unknown_field')
+    expectEditCode(() => doc._readerValues(quill, { card: 7 }), 'edit::index_out_of_range')
+    expectEditCode(() => doc._setValues(quill, { card: 7 }, {}), 'edit::index_out_of_range')
   })
 
   it('refusals arrive as diagnostics carrying their own path', () => {
@@ -2266,7 +2308,7 @@ Item note.
     const before = doc.toStored()
     let thrown
     try {
-      doc._setValues(quill, { fields: { nope: 'x' } })
+      doc._setValues(quill, {}, { fields: { nope: 'x' } })
     } catch (err) {
       thrown = err
     }
@@ -2279,6 +2321,6 @@ Item note.
   it('a malformed values object throws before anything is read', () => {
     const quill = buildQuill()
     const doc = quill.parse(MD)
-    expect(() => doc._setValues(quill, { feilds: {} })).toThrow()
+    expect(() => doc._setValues(quill, {}, { feilds: {} })).toThrow()
   })
 })

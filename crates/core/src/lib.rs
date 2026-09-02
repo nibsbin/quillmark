@@ -31,7 +31,7 @@ pub mod writer;
 pub use writer::{CardWriter, TypedWriter};
 
 pub mod reader;
-pub use reader::{CardReader, ReadValue, TypedReader};
+pub use reader::{CardReader, TypedReader};
 
 pub mod backend;
 pub use backend::{formats_support_canvas, unsupported_format, Backend};

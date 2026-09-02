@@ -760,12 +760,13 @@ impl Quill {
         })
     }
 
-    /// The resolved-value view of `doc`: for every declared field, the value the
-    /// render projection would use and the `FieldSource` rung it came from
-    /// (`"authored" | "default" | "blank"`). The card body is a `body` sibling on
-    /// its card, never a row in `fields`, and `null` when the kind enables no
-    /// body. Value and provenance only; completeness stays `validate`'s.
-    #[wasm_bindgen(js_name = resolve, unchecked_return_type = "Resolved")]
+    /// The resolved-value view of `doc`: the ABI under `reader.resolve()`. For
+    /// every declared field, the value the render projection would use and the
+    /// `FieldSource` rung it came from (`"authored" | "default" | "blank"`). The
+    /// card body is a `body` sibling on its card, never a row in `fields`, and
+    /// `null` when the kind enables no body. Value and provenance only;
+    /// completeness stays `validate`'s.
+    #[wasm_bindgen(js_name = _resolve, skip_typescript, unchecked_return_type = "Resolved")]
     pub fn resolve(&self, doc: &Document) -> Result<JsValue, JsValue> {
         let states = self.inner.resolve(&doc.inner);
         let serializer = serde_wasm_bindgen::Serializer::new()
@@ -773,27 +774,6 @@ impl Quill {
             .serialize_missing_as_null(true);
         states.serialize(&serializer).map_err(|e| {
             WasmError::from(format!("resolve: serialization failed: {e}")).to_js_value()
-        })
-    }
-
-    /// The portable values of `doc`: the declared fields it carries, every
-    /// content leaf as its codec's text (`richtext` markdown, `plaintext`
-    /// literal), bodies as markdown, and `$ext` on the main card and each card.
-    /// The read a consumer edits and sends back through `writer.setValues`.
-    ///
-    /// **Sparse**: an absent field is an absent key, never materialized from its
-    /// `default:` — `resolve` is the view that blank-fills. **Total**: never
-    /// throws, a leaf that decodes under neither encoding riding out verbatim.
-    /// **A projection, never a storage format**: markdown carries no anchors,
-    /// island ids or content-only marks, and `$quill`, `$seed`, `!must_fill`
-    /// markers, YAML comments and undeclared fields are not carried. Persist
-    /// with `toStored`.
-    #[wasm_bindgen(js_name = project, unchecked_return_type = "DocumentValues")]
-    pub fn project(&self, doc: &Document) -> Result<JsValue, JsValue> {
-        let values = self.inner.project(&doc.inner);
-        let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
-        values.serialize(&serializer).map_err(|e| {
-            WasmError::from(format!("project: serialization failed: {e}")).to_js_value()
         })
     }
 
@@ -1113,17 +1093,7 @@ impl Document {
                 .map_err(|e| edit_error_to_js(&e, &base))?;
                 match read {
                     None => Ok(JsValue::UNDEFINED),
-                    Some(quillmark_core::ReadValue::Markdown(s))
-                    | Some(quillmark_core::ReadValue::Plaintext(s)) => Ok(JsValue::from_str(&s)),
-                    Some(quillmark_core::ReadValue::Value(v)) => {
-                        serialize_or_throw(v.as_json(), "reader.get")
-                    }
-                    // `#[non_exhaustive]`: throwing beats `undefined`, which
-                    // reads as "absent field".
-                    Some(_) => Err(crate::error::WasmError::from(
-                        "reader.get: this build cannot project that field's value",
-                    )
-                    .to_js_value()),
+                    Some(v) => serialize_or_throw(v.as_json(), "reader.get"),
                 }
             }
         }
@@ -1738,33 +1708,82 @@ impl Document {
         }
     }
 
-    /// Make this document's fields, bodies and cards exactly `values`: the ABI
-    /// under `writer.setValues`, and the write twin of `quill.project`.
+    /// The values form at `addr`: the ABI under `reader.values()` (the main-card
+    /// address, the whole document as `DocumentValues`) and
+    /// `reader.card(i).values()` (`{ card }`, that card as `CardValues`). Every
+    /// axis filled; `null` for a card without `$ext` and for a kindless card's
+    /// `kind`; a present-null field as `null`. Total on the field axis: a
+    /// content leaf that decodes under neither encoding rides out as stored.
+    /// An out-of-range `addr.card` throws.
+    #[wasm_bindgen(js_name = _readerValues, skip_typescript, unchecked_return_type = "DocumentValues | CardValues")]
+    pub fn reader_values(
+        &self,
+        quill: &Quill,
+        #[wasm_bindgen(unchecked_param_type = "CardAddr")] addr: JsValue,
+    ) -> Result<JsValue, JsValue> {
+        let addr = Addr::from_js(&addr)?;
+        addr.require_card_only("readerValues")?;
+        let base = self.addr_base(&addr);
+        let reader = quill.inner.reader(&self.inner);
+        let serializer = serde_wasm_bindgen::Serializer::new()
+            .serialize_maps_as_objects(true)
+            .serialize_missing_as_null(true);
+        let serialized = match addr.card {
+            None => reader.values().serialize(&serializer),
+            Some(index) => reader
+                .card(index)
+                .map_err(|e| edit_error_to_js(&e, &base))?
+                .values()
+                .serialize(&serializer),
+        };
+        serialized.map_err(|e| {
+            WasmError::from(format!("reader.values: serialization failed: {e}")).to_js_value()
+        })
+    }
+
+    /// Write the values form at `addr`: the ABI under `writer.setValues` (the
+    /// main-card address, a `DocumentValuesInput`) and
+    /// `writer.card(i).setValues` (`{ card }`, a `CardValuesInput`).
     ///
-    /// Replace, not merge — a declared field `values` does not name is removed,
-    /// `cards` is the card list, `body` becomes the body. All-or-nothing:
+    /// An absent axis is untouched; a present one is replaced. All-or-nothing:
     /// nothing is applied on error and every refused cell arrives as one
     /// `diagnostics` entry carrying its own `path` (`main.qty`,
     /// `cards.line_item[0].desc`). A cell whose value equals its projection is
-    /// not written, so writing back an unedited `project` result is a no-op.
-    /// A malformed `values` (an unknown key, a wrong member type) throws before
+    /// not written, so writing back an unedited `values` read is a no-op. A
+    /// malformed `values` (an unknown key, a wrong member type) throws before
     /// any of it is read.
     #[wasm_bindgen(js_name = _setValues, skip_typescript)]
     pub fn set_values(
         &mut self,
         quill: &Quill,
-        #[wasm_bindgen(unchecked_param_type = "DocumentValuesInput")] values: JsValue,
+        #[wasm_bindgen(unchecked_param_type = "CardAddr")] addr: JsValue,
+        #[wasm_bindgen(unchecked_param_type = "DocumentValuesInput | CardValuesInput")]
+        values: JsValue,
     ) -> Result<(), JsValue> {
+        let addr = Addr::from_js(&addr)?;
+        addr.require_card_only("setValues")?;
+        let base = self.addr_base(&addr);
         let json = js_value_to_json(values, "setValues")?;
-        let values: quillmark_core::DocumentValues =
-            serde_json::from_value(json).map_err(|e| {
-                WasmError::from(format!("setValues: invalid values shape: {e}")).to_js_value()
-            })?;
-        quill
-            .inner
-            .writer(&mut self.inner)
-            .set_values(&values)
-            .map_err(edit_errors_at_to_js)
+        let shape_error = |e: serde_json::Error| {
+            WasmError::from(format!("setValues: invalid values shape: {e}")).to_js_value()
+        };
+        let mut writer = quill.inner.writer(&mut self.inner);
+        match addr.card {
+            None => {
+                let values: quillmark_core::DocumentValues =
+                    serde_json::from_value(json).map_err(shape_error)?;
+                writer.set_values(&values).map_err(edit_errors_at_to_js)
+            }
+            Some(index) => {
+                let values: quillmark_core::CardValues =
+                    serde_json::from_value(json).map_err(shape_error)?;
+                writer
+                    .card(index)
+                    .map_err(|e| edit_error_to_js(&e, &base))?
+                    .set_values(&values)
+                    .map_err(edit_errors_at_to_js)
+            }
+        }
     }
 
     /// Build a composable card of `kind`, typed-commit `fields` onto it, set its
@@ -2130,50 +2149,67 @@ export type DocPathSeg =
 #[wasm_bindgen(typescript_custom_section)]
 const VALUES_TS: &'static str = r#"
 /**
- * One composable card's values. `kind` is the stored `$kind`, `""` when the
- * card carries none; a kind the schema does not declare carries its fields
- * verbatim, there being no declared type to project them through.
+ * One composable card in the values form (`reader.card(i).values()`). `kind`
+ * is the stored `$kind`, `null` for a kindless card; a kind the schema does
+ * not declare carries its fields verbatim, there being no declared type to
+ * project them through. `ext` is `null` when the card carries no `$ext` and
+ * `{}` for an explicit `$ext: {}`.
  */
 export interface CardValues {
-    kind: string;
+    kind: string | null;
     fields: Record<string, unknown>;
     body: string;
-    ext?: Record<string, unknown>;
+    ext: Record<string, unknown> | null;
 }
 
 /**
- * A document's values as a consumer reads and edits them (`quill.project`): the
- * declared fields it carries, every content leaf as its codec's text (`richtext`
- * markdown, `plaintext` literal), bodies as markdown, `$ext` where present.
+ * A document in the values form (`reader.values()`): the stored value with
+ * every content leaf decoded to its codec's text (`richtext` markdown,
+ * `plaintext` literal) at every depth, everything else as stored, a
+ * present-null as `null`. `fields` carries the declared fields the card holds
+ * in declaration order, then undeclared ones verbatim in authored order.
  *
- * Sparse — an absent field is an absent key, never its `default:`. A
- * projection, never a storage format: markdown carries no anchors, island ids
- * or content-only marks, and `$quill`, `$seed`, `!must_fill` markers, YAML
- * comments and undeclared fields are not carried. Persist with `toStored`.
+ * Sparse — an absent field is an absent key, never its `default:` (`resolve`
+ * is the view that blank-fills). A projection, never a storage format:
+ * markdown carries no anchors, island ids or content-only marks, and
+ * `$quill`, `$seed`, `!must_fill` markers and YAML comments are not carried.
+ * Persist with `toStored`.
  *
- * Every `DocumentValues` is a valid `DocumentValuesInput`.
+ * Every axis is present on a read, so every `DocumentValues` is a valid
+ * `DocumentValuesInput`, and writing one back unedited changes no bytes.
  */
 export interface DocumentValues {
     fields: Record<string, unknown>;
     body: string;
     cards: CardValues[];
-    ext?: Record<string, unknown>;
+    ext: Record<string, unknown> | null;
 }
 
-/** `writer.setValues` input: every member optional but a card's `kind`. */
+/**
+ * `writer.card(i).setValues` input, and one entry of
+ * `DocumentValuesInput.cards`. An absent axis is untouched: an absent `kind`
+ * keeps the card's, an absent `fields` / `body` / `ext` leaves that axis
+ * alone (empty on a card being built). `ext: null` removes `$ext`. An
+ * `undefined` member reads as absent, `null` as `null`.
+ */
 export interface CardValuesInput {
-    kind: string;
+    kind?: string | null;
     fields?: Record<string, unknown>;
     body?: string;
-    ext?: Record<string, unknown>;
+    ext?: Record<string, unknown> | null;
 }
 
-/** `writer.setValues` input; see `DocumentValues`. */
+/**
+ * `writer.setValues` input. An absent axis is untouched; a present one is
+ * replaced: `fields` is the whole truth for declared names, `cards` is the
+ * card list, `body` the body, `ext: null` removes `$ext` and `{}` records an
+ * explicit empty one. An `undefined` member reads as absent, `null` as `null`.
+ */
 export interface DocumentValuesInput {
     fields?: Record<string, unknown>;
     body?: string;
     cards?: CardValuesInput[];
-    ext?: Record<string, unknown>;
+    ext?: Record<string, unknown> | null;
 }
 "#;
 

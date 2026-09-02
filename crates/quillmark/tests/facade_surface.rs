@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use quillmark::{
     BoundParseError, CardReader, Document, EditError, FileTreeNode, Parsed, Quill, QuillReference,
-    QuillValue, ReadValue, TypedReader, TypedWriter,
+    QuillValue, TypedReader, TypedWriter,
 };
 
 const QUILL: &str = r#"
@@ -93,19 +93,16 @@ fn typed_read_spells_through_the_facade() {
 
     let reader: TypedReader = quill.reader(&doc);
 
-    let subject: Option<ReadValue> = reader.get("subject").expect("subject is declared");
-    assert!(
-        matches!(subject, Some(ReadValue::Markdown(ref md)) if md == "Hello **world**"),
-        "{subject:?}"
-    );
+    let subject: Option<QuillValue> = reader.get("subject").expect("subject is declared");
+    assert_eq!(subject.as_ref().and_then(|v| v.as_str()), Some("Hello **world**"));
 
-    let typo: Result<Option<ReadValue>, EditError> = reader.get("nope");
+    let typo: Result<Option<QuillValue>, EditError> = reader.get("nope");
     assert!(matches!(typo, Err(EditError::UnknownField { .. })), "{typo:?}");
 
     let card: CardReader = reader.card(0).expect("the note card resolves its schema");
     assert_eq!(card.kind(), Some("note"));
-    let body: Option<ReadValue> = card.get("body").expect("body is declared on `note`");
-    assert!(matches!(body, Some(ReadValue::Markdown(ref md)) if md == "a *card*"), "{body:?}");
+    let body: Option<QuillValue> = card.get("body").expect("body is declared on `note`");
+    assert_eq!(body.as_ref().and_then(|v| v.as_str()), Some("a *card*"));
 }
 
 #[cfg(feature = "typst")]

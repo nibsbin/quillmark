@@ -373,7 +373,9 @@ patchHandleChecked(Document.prototype, 'equals', (original) =>
 		return original.call(this, other);
 	}
 );
-for (const name of /** @type {const} */ (['validate', 'resolve', 'conform'])) {
+// `_resolve` is not among them: it is reached only through `quill.reader(doc)`,
+// whose constructor checks both handles.
+for (const name of /** @type {const} */ (['validate', 'conform'])) {
 	// Named once per patch, not per call: `validate` runs per keystroke.
 	const method = `Quill.${name}`;
 	patchHandleChecked(Quill.prototype, name, (original) =>
@@ -1100,25 +1102,6 @@ export class DocumentWriter {
 	 * @param {number} [at] insertion index; appends when omitted
 	 * @returns {void}
 	 */
-	/**
-	 * Make the document's fields, bodies and cards exactly `values`: the write
-	 * twin of `quill.project(doc)`. Replace, not merge — a declared field
-	 * `values` does not name is removed, `cards` is the card list, `body`
-	 * becomes the body, and an absent `ext` leaves `$ext` untouched while an
-	 * empty one removes it. All-or-nothing: nothing is applied on error and
-	 * every refused cell is one diagnostic carrying its own `path`.
-	 *
-	 * A cell whose value equals its projection is not written, so writing back
-	 * an unedited `project` result changes no bytes. A changed content cell is
-	 * a cold import — `reviseField` per cell is what keeps its anchors — and
-	 * cards match by position and kind, so deleting or reordering an entry
-	 * rewrites every card after it.
-	 * @param {DocumentValuesInput} values
-	 * @returns {void}
-	 */
-	setValues(values) {
-		return this.#doc._setValues(this.#quill, values);
-	}
 	addCard(kind, fields, body, at) {
 		return this.#doc._addCard(this.#quill, kind, fields, body, at);
 	}
@@ -1130,6 +1113,27 @@ export class DocumentWriter {
 		return this.#doc.removeCard(index);
 	}
 	/**
+	 * Write the document in the values form: the write twin of
+	 * `reader.values()`. An absent axis is untouched; a present one is
+	 * replaced: `fields` is the whole truth for declared names (an unnamed one
+	 * is removed; an undeclared one the card holds is accepted unchanged and
+	 * refused changed), `cards` is the card list, `body` the body, `ext: null`
+	 * removes `$ext` and `{}` records an explicit empty one. All-or-nothing:
+	 * nothing is applied on error and every refused cell is one diagnostic
+	 * carrying its own `path`.
+	 *
+	 * A cell whose value equals its projection is not written, so writing back
+	 * an unedited read changes no bytes. A changed content cell is a cold
+	 * import — `reviseField` per cell is what keeps its anchors — and cards
+	 * match by position and kind, so deleting or reordering an entry rewrites
+	 * every card after it. An `undefined` member reads as absent.
+	 * @param {DocumentValuesInput} values
+	 * @returns {void}
+	 */
+	setValues(values) {
+		return this.#doc._setValues(this.#quill, MAIN_CARD_ADDR, withoutUndefined(values));
+	}
+	/**
 	 * A {@link CardWriter} bound to the composable card at `index`, checked
 	 * lazily at the write. It holds `index`, not the card, so a
 	 * `removeCard`/`addCard` between binding and writing silently retargets it.
@@ -1139,6 +1143,30 @@ export class DocumentWriter {
 	card(index) {
 		return new CardWriter(this.#quill, this.#doc, index);
 	}
+}
+
+/**
+ * The values shape with every `undefined` member dropped, at the shape's own
+ * members, its `fields` entries, and each card entry's. `undefined` is absent
+ * (untouched) where `null` is a value (a removal, a present-null), and the
+ * wasm boundary would fold the two together.
+ * @param {unknown} values
+ * @returns {unknown}
+ */
+function withoutUndefined(values) {
+	if (values === null || typeof values !== 'object' || Array.isArray(values)) return values;
+	const out = {};
+	for (const [key, value] of Object.entries(values)) {
+		if (value === undefined) continue;
+		if (key === 'cards' && Array.isArray(value)) {
+			out[key] = value.map(withoutUndefined);
+		} else if (key === 'fields' && value !== null && typeof value === 'object') {
+			out[key] = Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined));
+		} else {
+			out[key] = value;
+		}
+	}
+	return out;
 }
 
 /**
@@ -1212,6 +1240,17 @@ export class CardWriter {
 	 */
 	reviseField(name, text) {
 		return this.#doc._reviseField(this.#quill, { card: this.#index, field: name }, text);
+	}
+	/**
+	 * Write this card in the values form: {@link DocumentWriter.setValues}
+	 * restricted to one slot, under the same per-axis rule. An absent `kind`
+	 * keeps the card's; a differing one rebuilds the slot. Refusals anchor at
+	 * `cards.<kind>[index]`; throws `IndexOutOfRange` for a bad bound index.
+	 * @param {CardValuesInput} values
+	 * @returns {void}
+	 */
+	setValues(values) {
+		return this.#doc._setValues(this.#quill, { card: this.#index }, withoutUndefined(values));
 	}
 }
 
@@ -1306,6 +1345,29 @@ export class DocumentReader {
 		return this.#doc._readerGet(this.#quill, {});
 	}
 	/**
+	 * The whole document in the values form: the main card's fields, body and
+	 * `$ext`, and every composable card, every content leaf as its codec's
+	 * text, everything else as stored. Every axis is present, so the result is
+	 * a valid {@link DocumentWriter.setValues} input and writing it back
+	 * unedited changes no bytes. Never throws: a content leaf that decodes
+	 * under neither encoding rides out as stored where {@link get} would throw.
+	 * @returns {DocumentValues}
+	 */
+	values() {
+		return this.#doc._readerValues(this.#quill, MAIN_CARD_ADDR);
+	}
+	/**
+	 * The resolved-value view: for every declared field, the value the render
+	 * projection would use and the rung it came from (`authored` / `default` /
+	 * `blank`). The one read that blank-fills and coerces; {@link values} reports
+	 * what the document carries. Value and provenance only; completeness stays
+	 * `quill.validate`'s.
+	 * @returns {Resolved}
+	 */
+	resolve() {
+		return this.#quill._resolve(this.#doc);
+	}
+	/**
 	 * A {@link CardReader} bound to the composable card at `index`, checked lazily
 	 * at the read. It holds `index`, not the card, so a `removeCard`/`addCard`
 	 * between binding and reading silently retargets it.
@@ -1383,6 +1445,14 @@ export class CardReader {
 	 */
 	bodyMarkdown() {
 		return this.#doc._readerGet(this.#quill, { card: this.#index });
+	}
+	/**
+	 * This card in the values form: {@link DocumentReader.values} restricted to
+	 * one slot. Throws `IndexOutOfRange` for a bad bound index.
+	 * @returns {CardValues}
+	 */
+	values() {
+		return this.#doc._readerValues(this.#quill, { card: this.#index });
 	}
 }
 
