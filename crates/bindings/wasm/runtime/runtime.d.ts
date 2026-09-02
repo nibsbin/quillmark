@@ -162,7 +162,11 @@ export type {
 	ResolvedField,
 	ResolvedMain,
 	ResolvedCard,
-	Resolved
+	Resolved,
+	CardValues,
+	DocumentValues,
+	CardValuesInput,
+	DocumentValuesInput
 } from '../core/wasm.js';
 
 // ── Error contract ──────────────────────────────────────────────────────────
@@ -737,6 +741,21 @@ export declare class DocumentWriter {
 	 * untouched.
 	 */
 	addCard(kind: string, fields?: Record<string, unknown>, body?: string, at?: number): void;
+	/**
+	 * Make the document's fields, bodies and cards exactly `values`: the write
+	 * twin of `quill.project(doc)`. Replace, not merge — a declared field
+	 * `values` does not name is removed, `cards` is the card list, `body`
+	 * becomes the body, and an absent `ext` leaves `$ext` untouched while an
+	 * empty one removes it. All-or-nothing: nothing is applied on error and
+	 * every refused cell is one diagnostic carrying its own `path`.
+	 *
+	 * A cell whose value equals its projection is not written, so writing back
+	 * an unedited `project` result changes no bytes. A changed content cell is
+	 * a cold import — {@link DocumentWriter.reviseField} per cell is what keeps
+	 * its anchors — and cards match by position and kind, so deleting or
+	 * reordering an entry rewrites every card after it.
+	 */
+	setValues(values: DocumentValuesInput): void;
 	/** Remove the composable card at `index`, returning it (or `undefined`). */
 	removeCard(index: number): Card | undefined;
 	/**

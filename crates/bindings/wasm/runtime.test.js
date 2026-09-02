@@ -191,6 +191,17 @@ card_kinds:
     expect(fieldOf(ed.document.main, 'stray')).toBeUndefined()
   })
 
+  it('setValues writes the whole document, and an unedited projection is a no-op', () => {
+    const quill = buildQuill()
+    const ed = quill.writer(blankDoc())
+    ed.setValues({ fields: { subject: 'Q3 **results**', qty: '5' } })
+    expect(fieldOf(ed.document.main, 'qty')).toBe(5)
+
+    const before = ed.document.toStored()
+    ed.setValues(quill.project(ed.document))
+    expect(ed.document.toStored()).toBe(before)
+  })
+
   it('reviseBody writes the main body from markdown and returns a Delta', () => {
     const ed = buildQuill().writer(blankDoc())
     const delta = ed.reviseBody('New **body**.')

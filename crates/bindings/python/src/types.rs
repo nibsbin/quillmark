@@ -13,7 +13,8 @@ use std::time::Instant;
 
 use crate::enums::{PyOutputFormat, PySeverity};
 use crate::errors::{
-    convert_edit_error, convert_edit_errors, convert_render_error, raise_with_diagnostics,
+    convert_edit_error, convert_edit_errors, convert_edit_errors_at, convert_render_error,
+    raise_with_diagnostics,
 };
 
 #[pyclass(name = "Quillmark")]
@@ -246,6 +247,24 @@ impl PyQuill {
             .cast::<PyList>()
             .map_err(|_| PyValueError::new_err("conform: expected a list at top level"))?;
         Ok(list.clone())
+    }
+
+    /// The portable values of `doc`: the declared fields it carries, every
+    /// content leaf as its codec's text (`richtext` markdown, `plaintext`
+    /// literal), bodies as markdown, and `$ext` on the main card and each card.
+    /// The read a consumer edits and hands back to `writer.set_values`.
+    ///
+    /// Sparse: an absent field is an absent key, never materialized from its
+    /// `default`. Total: never raises, a leaf that decodes under neither
+    /// encoding riding out verbatim. A projection, never a storage format —
+    /// markdown carries no anchors, island ids or content-only marks, and
+    /// `$quill`, `$seed`, `!must_fill` markers, YAML comments and undeclared
+    /// fields are not carried. Persist with `to_stored`.
+    fn project<'py>(&self, py: Python<'py>, doc: &PyDocument) -> PyResult<Bound<'py, PyAny>> {
+        let values = self.inner.project(&doc.inner);
+        let json = serde_json::to_value(&values)
+            .map_err(|e| PyValueError::new_err(format!("project: serialization failed: {e}")))?;
+        json_to_py(py, &json)
     }
 
     /// Seed a starter `Document` from the schema: the main card plus one instance
@@ -747,6 +766,36 @@ impl PyWriter {
             .writer(&mut doc.inner)
             .set_all(batch)
             .map_err(convert_edit_errors)
+    }
+
+    /// Make the document's fields, bodies and cards exactly `values`: the write
+    /// twin of `quill.project(doc)`.
+    ///
+    /// Replace, not merge — a declared field `values` does not name is removed,
+    /// `cards` is the card list, `body` becomes the body, and an absent `ext`
+    /// leaves `$ext` untouched while an empty one removes it. All-or-nothing:
+    /// nothing is applied on error and every refused cell is one diagnostic
+    /// carrying its own `path` (`main.qty`, `cards.line_item[0].desc`).
+    ///
+    /// A cell whose value equals its projection is not written, so handing back
+    /// an unedited `project` result changes no bytes. A changed content cell is
+    /// a cold import — `revise_field` per cell is what keeps its anchors — and
+    /// cards match by position and kind, so deleting or reordering an entry
+    /// rewrites every card after it.
+    ///
+    /// Raises `ValueError` for a `values` this binding cannot read as the
+    /// shape, before any of it is applied.
+    fn set_values(&self, py: Python<'_>, values: &Bound<'_, PyAny>) -> PyResult<()> {
+        let json = py_to_json(values)?;
+        let values: quillmark_core::DocumentValues = serde_json::from_value(json)
+            .map_err(|e| PyValueError::new_err(format!("set_values: invalid values shape: {e}")))?;
+        let quill = self.quill.borrow(py);
+        let mut doc = self.doc.borrow_mut(py);
+        quill
+            .inner
+            .writer(&mut doc.inner)
+            .set_values(&values)
+            .map_err(convert_edit_errors_at)
     }
 
     /// Revise the main body from markdown; anchors rebase. The `Delta` receipt is

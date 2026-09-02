@@ -2157,3 +2157,128 @@ title: T
     expect(byName(round.main.fields, 'title').value).toBe('T')
   })
 })
+
+// ---------------------------------------------------------------------------
+// quill.project / writer.setValues: the portable values shape
+// ---------------------------------------------------------------------------
+//
+// The shape's semantics (sparse, total, the walk's per-leaf projection, the
+// write guard) are core's (`core/src/quill/values.rs`). At this boundary the
+// questions are narrower: does the shape cross as a plain JS object, does a
+// content leaf one level in arrive as text, does the write reach core, and do
+// refusals arrive as diagnostics carrying their own `path`.
+
+describe('quill.project / writer.setValues', () => {
+  const QUILL_YAML = `quill:
+  name: values_test
+  version: "1.0"
+  backend: typst
+  description: Portable values coverage
+
+main:
+  fields:
+    subject:
+      type: richtext
+      inline: true
+    note:
+      type: plaintext
+    qty:
+      type: integer
+      default: 1
+    paragraphs:
+      type: array
+      items:
+        type: richtext
+
+card_kinds:
+  line_item:
+    fields:
+      desc:
+        type: richtext
+        inline: true
+`
+
+  const buildQuill = () =>
+    Quill.fromTree(makeQuill({ name: 'values_test', quillYaml: QUILL_YAML }))
+
+  const MD = `~~~card-yaml
+$quill: values_test
+$kind: main
+$ext:
+  app:
+    k: 1
+subject: Hello **world**
+note: a *literal* line
+paragraphs:
+  - Para **one**
+~~~
+
+Body prose.
+
+~~~card-yaml
+$kind: line_item
+desc: Widget __A__
+~~~
+Item note.
+`
+
+  it('projects content leaves as text at every depth, sparsely', () => {
+    const quill = buildQuill()
+    const v = quill.project(quill.parse(MD))
+
+    expect(v.fields.subject).toBe('Hello **world**')
+    expect(v.fields.note).toBe('a *literal* line')
+    expect(v.fields.paragraphs).toEqual(['Para **one**'])
+    expect('qty' in v.fields).toBe(false)
+    expect(v.body).toBe('Body prose.')
+    expect(v.ext).toEqual({ app: { k: 1 } })
+
+    expect(v.cards).toHaveLength(1)
+    expect(v.cards[0].kind).toBe('line_item')
+    expect(v.cards[0].fields.desc).toBe('Widget **A**')
+    expect(v.cards[0].body).toBe('Item note.')
+  })
+
+  it('writing back an unedited projection changes no bytes', () => {
+    const quill = buildQuill()
+    const doc = quill.parse(MD)
+    const before = doc.toStored()
+    doc._setValues(quill, quill.project(doc))
+    expect(doc.toStored()).toBe(before)
+  })
+
+  it('setValues writes an edited cell and removes a field the shape omits', () => {
+    const quill = buildQuill()
+    const doc = quill.parse(MD)
+    const v = quill.project(doc)
+    v.fields.subject = 'Goodbye *world*'
+    delete v.fields.note
+    doc._setValues(quill, v)
+
+    const after = quill.project(doc)
+    expect(after.fields.subject).toBe('Goodbye *world*')
+    expect('note' in after.fields).toBe(false)
+  })
+
+  it('refusals arrive as diagnostics carrying their own path', () => {
+    const quill = buildQuill()
+    const doc = quill.parse(MD)
+    const before = doc.toStored()
+    let thrown
+    try {
+      doc._setValues(quill, { fields: { nope: 'x' } })
+    } catch (err) {
+      thrown = err
+    }
+    expect(thrown, 'expected a throw, got none').toBeDefined()
+    expect(thrown.diagnostics[0].code).toBe('edit::unknown_field')
+    expect(thrown.diagnostics[0].path).toBe('main.nope')
+    expect(doc.toStored()).toBe(before)
+  })
+
+  it('a malformed values object throws before anything is read', () => {
+    const quill = buildQuill()
+    const doc = quill.parse(MD)
+    expect(() => doc._setValues(quill, { feilds: {} })).toThrow()
+  })
+})

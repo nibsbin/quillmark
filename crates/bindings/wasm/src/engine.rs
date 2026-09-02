@@ -776,6 +776,27 @@ impl Quill {
         })
     }
 
+    /// The portable values of `doc`: the declared fields it carries, every
+    /// content leaf as its codec's text (`richtext` markdown, `plaintext`
+    /// literal), bodies as markdown, and `$ext` on the main card and each card.
+    /// The read a consumer edits and sends back through `writer.setValues`.
+    ///
+    /// **Sparse**: an absent field is an absent key, never materialized from its
+    /// `default:` — `resolve` is the view that blank-fills. **Total**: never
+    /// throws, a leaf that decodes under neither encoding riding out verbatim.
+    /// **A projection, never a storage format**: markdown carries no anchors,
+    /// island ids or content-only marks, and `$quill`, `$seed`, `!must_fill`
+    /// markers, YAML comments and undeclared fields are not carried. Persist
+    /// with `toStored`.
+    #[wasm_bindgen(js_name = project, unchecked_return_type = "DocumentValues")]
+    pub fn project(&self, doc: &Document) -> Result<JsValue, JsValue> {
+        let values = self.inner.project(&doc.inner);
+        let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+        values.serialize(&serializer).map_err(|e| {
+            WasmError::from(format!("project: serialization failed: {e}")).to_js_value()
+        })
+    }
+
     /// Seed a starter `Document` from the schema: the main card plus one instance
     /// of each composable card kind, each committing its fields' `example:`
     /// values and leaving every other field absent (interpolated at render as
@@ -1717,6 +1738,35 @@ impl Document {
         }
     }
 
+    /// Make this document's fields, bodies and cards exactly `values`: the ABI
+    /// under `writer.setValues`, and the write twin of `quill.project`.
+    ///
+    /// Replace, not merge — a declared field `values` does not name is removed,
+    /// `cards` is the card list, `body` becomes the body. All-or-nothing:
+    /// nothing is applied on error and every refused cell arrives as one
+    /// `diagnostics` entry carrying its own `path` (`main.qty`,
+    /// `cards.line_item[0].desc`). A cell whose value equals its projection is
+    /// not written, so writing back an unedited `project` result is a no-op.
+    /// A malformed `values` (an unknown key, a wrong member type) throws before
+    /// any of it is read.
+    #[wasm_bindgen(js_name = _setValues, skip_typescript)]
+    pub fn set_values(
+        &mut self,
+        quill: &Quill,
+        #[wasm_bindgen(unchecked_param_type = "DocumentValuesInput")] values: JsValue,
+    ) -> Result<(), JsValue> {
+        let json = js_value_to_json(values, "setValues")?;
+        let values: quillmark_core::DocumentValues =
+            serde_json::from_value(json).map_err(|e| {
+                WasmError::from(format!("setValues: invalid values shape: {e}")).to_js_value()
+            })?;
+        quill
+            .inner
+            .writer(&mut self.inner)
+            .set_values(&values)
+            .map_err(edit_errors_at_to_js)
+    }
+
     /// Build a composable card of `kind`, typed-commit `fields` onto it, set its
     /// body from optional markdown, and place it: the ABI under `writer.addCard`.
     /// `at` absent appends, a number inserts at that index (`0..=cards.length`).
@@ -2078,6 +2128,56 @@ export type DocPathSeg =
 "#;
 
 #[wasm_bindgen(typescript_custom_section)]
+const VALUES_TS: &'static str = r#"
+/**
+ * One composable card's values. `kind` is the stored `$kind`, `""` when the
+ * card carries none; a kind the schema does not declare carries its fields
+ * verbatim, there being no declared type to project them through.
+ */
+export interface CardValues {
+    kind: string;
+    fields: Record<string, unknown>;
+    body: string;
+    ext?: Record<string, unknown>;
+}
+
+/**
+ * A document's values as a consumer reads and edits them (`quill.project`): the
+ * declared fields it carries, every content leaf as its codec's text (`richtext`
+ * markdown, `plaintext` literal), bodies as markdown, `$ext` where present.
+ *
+ * Sparse — an absent field is an absent key, never its `default:`. A
+ * projection, never a storage format: markdown carries no anchors, island ids
+ * or content-only marks, and `$quill`, `$seed`, `!must_fill` markers, YAML
+ * comments and undeclared fields are not carried. Persist with `toStored`.
+ *
+ * Every `DocumentValues` is a valid `DocumentValuesInput`.
+ */
+export interface DocumentValues {
+    fields: Record<string, unknown>;
+    body: string;
+    cards: CardValues[];
+    ext?: Record<string, unknown>;
+}
+
+/** `writer.setValues` input: every member optional but a card's `kind`. */
+export interface CardValuesInput {
+    kind: string;
+    fields?: Record<string, unknown>;
+    body?: string;
+    ext?: Record<string, unknown>;
+}
+
+/** `writer.setValues` input; see `DocumentValues`. */
+export interface DocumentValuesInput {
+    fields?: Record<string, unknown>;
+    body?: string;
+    cards?: CardValuesInput[];
+    ext?: Record<string, unknown>;
+}
+"#;
+
+#[wasm_bindgen(typescript_custom_section)]
 const RESOLVED_TS: &'static str = r#"
 /**
  * The commitment-ladder rung that produced a `ResolvedField.value`.
@@ -2274,6 +2374,24 @@ fn edit_errors_to_js(
                 .with_code(err.code().to_string())
                 .with_args(err.args())
                 .with_path(base.field(&name).to_string())
+        })
+        .collect();
+    WasmError { diagnostics }.to_js_value()
+}
+
+/// The [`edit_errors_to_js`] twin for a batch spanning cards, where each
+/// refusal carries the whole [`DocPath`](quillmark_core::DocPath) it anchors at
+/// rather than a field name under one base.
+fn edit_errors_at_to_js(
+    errors: Vec<(quillmark_core::DocPath, quillmark_core::EditError)>,
+) -> JsValue {
+    let diagnostics: Vec<quillmark_core::Diagnostic> = errors
+        .into_iter()
+        .map(|(path, err)| {
+            quillmark_core::Diagnostic::new(quillmark_core::Severity::Error, err.to_string())
+                .with_code(err.code().to_string())
+                .with_args(err.args())
+                .with_path(path.to_string())
         })
         .collect();
     WasmError { diagnostics }.to_js_value()

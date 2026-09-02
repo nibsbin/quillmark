@@ -1100,6 +1100,25 @@ export class DocumentWriter {
 	 * @param {number} [at] insertion index; appends when omitted
 	 * @returns {void}
 	 */
+	/**
+	 * Make the document's fields, bodies and cards exactly `values`: the write
+	 * twin of `quill.project(doc)`. Replace, not merge — a declared field
+	 * `values` does not name is removed, `cards` is the card list, `body`
+	 * becomes the body, and an absent `ext` leaves `$ext` untouched while an
+	 * empty one removes it. All-or-nothing: nothing is applied on error and
+	 * every refused cell is one diagnostic carrying its own `path`.
+	 *
+	 * A cell whose value equals its projection is not written, so writing back
+	 * an unedited `project` result changes no bytes. A changed content cell is
+	 * a cold import — `reviseField` per cell is what keeps its anchors — and
+	 * cards match by position and kind, so deleting or reordering an entry
+	 * rewrites every card after it.
+	 * @param {DocumentValuesInput} values
+	 * @returns {void}
+	 */
+	setValues(values) {
+		return this.#doc._setValues(this.#quill, values);
+	}
 	addCard(kind, fields, body, at) {
 		return this.#doc._addCard(this.#quill, kind, fields, body, at);
 	}
