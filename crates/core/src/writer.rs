@@ -139,15 +139,19 @@ impl<'a> TypedWriter<'a> {
     /// fields ([`set_all`](Self::set_all)) to the whole document, and the write
     /// twin of [`Quill::project`](crate::Quill::project).
     ///
-    /// **Replace, not merge.** A declared field `values` does not name is
-    /// removed, `values.cards` *is* the card list (matched to the document's by
-    /// position when the kinds agree, rebuilt otherwise, truncated past its
-    /// end), and `values.body` becomes the body. An undeclared name in `values`
-    /// is [`EditError::UnknownField`], as on every typed write; an undeclared
-    /// field the *document* carries is left alone, being outside this
-    /// vocabulary rather than absent from it. An absent `ext` leaves `$ext`
-    /// untouched — it is an open namespace this caller may not be the only
-    /// writer of — while an empty one removes it.
+    /// **Replace, not merge**, per axis:
+    ///
+    /// - A declared field `values` does not name is removed.
+    /// - `values.cards` *is* the card list: matched to the document's by
+    ///   position where the kinds agree, rebuilt otherwise, truncated past its
+    ///   end.
+    /// - `values.body` becomes the body.
+    /// - An absent `ext` leaves `$ext` untouched; an empty one removes it.
+    ///   `$ext` is an open namespace this caller may not be the only writer of.
+    ///
+    /// An undeclared name in `values` is [`EditError::UnknownField`], as on
+    /// every typed write. An undeclared field the *document* carries is left
+    /// alone: it is outside this vocabulary rather than absent from it.
     ///
     /// **A cell whose incoming value equals its projection is not written.**
     /// So `set_values(&quill.project(&doc))` is a byte no-op on any document,

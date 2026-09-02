@@ -495,12 +495,12 @@ type tree reaches**: an `array<richtext>` is an array of markdown strings, a
 mixed `object` projects its content property and passes its scalars verbatim, a
 variant carries its discriminant verbatim and each cell through its own codec.
 
-Two properties define it. It is **sparse**: an absent field is absent here too,
-never materialized from its `default:`, so writing the shape back cannot erase
-an absence signal ([Non-persist invariant](#blank-filled-render)). It is
-**total**: it never raises, a leaf that decodes under neither encoding riding
-out verbatim — the load that admitted it already warned, and an ingestion must
-open a document it can repair.
+It is **sparse**: an absent field is absent here too, never materialized from
+its `default:`, so writing the shape back cannot erase an absence signal
+([Non-persist invariant](#blank-filled-render)). It is **total**: it never
+raises, a leaf that decodes under neither encoding riding out verbatim — the
+load that admitted it already warned, and an ingestion must open a document it
+can repair.
 
 `TypedWriter::set_values(values)` is the write twin, and the typed lane widened
 from one field (`set`) through one card's fields (`set_all`) to the document.

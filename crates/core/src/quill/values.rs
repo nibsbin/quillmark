@@ -25,29 +25,29 @@ use crate::{Card, Document};
 /// `default:`. **A projection, never a storage format** — markdown does not
 /// carry anchors, island ids, or content-only marks, and `$quill`, `$seed`,
 /// `!must_fill` markers, YAML comments and undeclared fields are not carried.
-/// [`StoredDocument`](crate::document) remains persistence.
+/// Persist a document through [`StoredDocument`](crate::document).
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[non_exhaustive]
 pub struct DocumentValues {
-    /// Main-card fields by name, emitted in declaration order. Key order
-    /// carries no contract on the way in.
+    /// Emitted in declaration order; key order carries no contract on the way
+    /// in.
     #[serde(default)]
     pub fields: IndexMap<String, JsonValue>,
     /// The main body's markdown. Absent on input reads as the empty body.
     #[serde(default)]
     pub body: String,
-    /// Every composable card, in document order.
+    /// In document order.
     #[serde(default)]
     pub cards: Vec<CardValues>,
-    /// The main card's `$ext`, when it carries one.
+    /// The main card's `$ext`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ext: Option<serde_json::Map<String, JsonValue>>,
 }
 
-/// One composable card's values. `kind` is the stored `$kind`, `""` for a
-/// kindless card. A kind naming no schema carries its fields verbatim: there is
-/// no declared type to project them through.
+/// `kind` is the stored `$kind`, `""` for a kindless card. A kind naming no
+/// schema carries its fields verbatim: there is no declared type to project
+/// them through.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[non_exhaustive]
