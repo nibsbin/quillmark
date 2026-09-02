@@ -3,10 +3,15 @@ name = "quillmark-merge"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Bulk document generation over the schema model: a merge spec interpreted into documents and a per-row report"
+include.workspace = true
+readme = "README.md"
+description = "Bulk document generation for Quillmark: a merge spec interpreted over rows into documents, with a per-row report"
+documentation = "https://docs.rs/quillmark-merge"
 homepage.workspace = true
 repository = "https://github.com/borb-sh/quillmark"
-publish = false
+keywords = ["markdown", "pdf", "mail-merge", "template", "csv"]
+categories = ["text-processing"]
+publish = true
 
 [dependencies]
 indexmap = { workspace = true }
@@ -14,6 +19,7 @@ quillmark-core = { workspace = true }
 serde = { workspace = true }
 serde-saphyr = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 time = { workspace = true }
 
 [dev-dependencies]

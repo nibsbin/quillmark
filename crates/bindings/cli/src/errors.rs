@@ -9,6 +9,8 @@ pub enum CliError {
     Render(RenderError),
     Parse(quillmark_core::ParseError),
     InvalidArgument(String),
+    /// The failure was already printed in full; only the exit status remains.
+    Reported,
 }
 
 impl fmt::Display for CliError {
@@ -18,6 +20,7 @@ impl fmt::Display for CliError {
             CliError::Render(e) => write!(f, "{}", e),
             CliError::Parse(e) => write!(f, "Parse error: {}", e),
             CliError::InvalidArgument(msg) => write!(f, "Invalid argument: {}", msg),
+            CliError::Reported => write!(f, "errors reported above"),
         }
     }
 }
@@ -58,6 +61,7 @@ pub fn print_cli_error(err: &CliError) {
         CliError::InvalidArgument(msg) => {
             eprintln!("[ERROR] Invalid argument: {}", msg);
         }
+        CliError::Reported => {}
     }
 }
 

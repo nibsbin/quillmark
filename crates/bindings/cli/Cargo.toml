@@ -23,9 +23,13 @@ doc = false
 
 [dependencies]
 clap = { version = "~4.6", features = ["derive"] }
+csv = { workspace = true }
 indexmap = { workspace = true }
 quillmark = { workspace = true }
 quillmark-core = { workspace = true }
+quillmark-merge = { workspace = true }
+rayon = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 
 # `quillmark-fixtures` is path-only, so cargo strips it from the published

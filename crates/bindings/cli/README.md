@@ -60,6 +60,20 @@ Checks the quill's configuration: `Quill.yaml` parse errors, `example:`/`default
 literals against their declared types, and referenced files. `-v` adds advisory
 warnings such as missing field descriptions. Exits 1 on any error.
 
+### `quillmark merge <QUILL_PATH> <SPEC_FILE> <INPUT_FILE> --out <DIR>`
+
+Generates one document per input row (or per group of rows) through a merge
+spec and renders them all: mail merge over the quill's schema. Rows come from
+`.csv` / `.tsv` / `.json`; the spec pins `$quill`, maps columns onto fields,
+and patterns the output name. The whole batch is planned and reported before
+anything renders.
+
+- `--dry-run` — plan and report only
+- `--force` — render the rows no error touches, report the rest
+- `--json` — the report and manifest as one JSON object on stdout
+- `-f, --format <FORMAT>` — `pdf` (default), `svg`, or `png`
+- `--delimiter <CHAR>`, `--jobs <N>`, `--quiet`
+
 ### `quillmark info <QUILL_PATH> [--json]`
 
 Prints quill metadata — name, version, author, backend, field and card counts.

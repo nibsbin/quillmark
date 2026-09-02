@@ -30,6 +30,9 @@ enum Commands {
 
     /// Display metadata and information about a quill
     Info(commands::info::InfoArgs),
+
+    /// Generate one document per input row (or per group of rows) through a merge spec
+    Merge(commands::merge::MergeArgs),
 }
 
 fn main() {
@@ -41,6 +44,7 @@ fn main() {
         Commands::Blueprint(args) => commands::blueprint::execute(args),
         Commands::Validate(args) => commands::validate::execute(args),
         Commands::Info(args) => commands::info::execute(args),
+        Commands::Merge(args) => commands::merge::execute(args),
     };
 
     if let Err(e) = result {

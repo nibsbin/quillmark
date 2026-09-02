@@ -8,7 +8,7 @@ quill:
   name: certificate
   version: 1.2.0
   backend: typst
-  description: merge spike
+  description: merge tests
 typst:
   plate_file: plate.typ
 main:
@@ -51,37 +51,31 @@ fn quill() -> Quill {
             contents: b"#import \"@local/quillmark-helper:0.1.0\": data\n#data.recipient".to_vec(),
         },
     );
-    Quill::from_tree(FileTreeNode::Directory { files }).expect("spike quill loads")
+    Quill::from_tree(FileTreeNode::Directory { files }).expect("test quill loads")
 }
 
-fn rows(header: &[&str], data: &[&[&str]]) -> Vec<Row> {
-    data.iter()
-        .map(|cells| {
-            header
-                .iter()
-                .zip(cells.iter())
-                .map(|(h, c)| (h.to_string(), Value::String(c.to_string())))
-                .collect()
-        })
-        .collect()
-}
-
-fn errors(plan: &MergePlan) -> Vec<&RowDiagnostic> {
-    plan.report
-        .iter()
-        .filter(|d| d.diagnostic.severity == Severity::Error)
-        .collect()
-}
-
-fn warnings(plan: &MergePlan) -> Vec<&RowDiagnostic> {
-    plan.report
-        .iter()
-        .filter(|d| d.diagnostic.severity == Severity::Warning)
-        .collect()
+fn rows(header: &[&str], data: &[&[&str]]) -> Input {
+    Input::Rows(
+        data.iter()
+            .map(|cells| {
+                header
+                    .iter()
+                    .zip(cells.iter())
+                    .map(|(h, c)| (h.to_string(), Value::String(c.to_string())))
+                    .collect()
+            })
+            .collect(),
+    )
 }
 
 fn spec(yaml: &str) -> MergeSpec {
     MergeSpec::from_yaml(yaml).expect("spec parses")
+}
+
+fn error_codes(plan: &MergePlan) -> Vec<String> {
+    plan.errors()
+        .filter_map(|d| d.diagnostic.code.clone())
+        .collect()
 }
 
 const CERT_SPEC: &str = r#"
@@ -93,7 +87,7 @@ map:
   qty:         { column: Qty }
   tags:        { column: Tags, split: "," }
   cohort.lead: { column: Instructor }
-output: "{recipient}-certificate.pdf"
+output: "{recipient}-certificate"
 "#;
 
 const HEADER: &[&str] = &["Name", "Date", "Qty", "Tags", "Instructor", "Notes"];
@@ -117,7 +111,8 @@ fn document_mode_lowers_transforms_and_localizes_the_bad_cell() {
     assert_eq!(plan.skipped_empty, 1);
     assert_eq!(plan.documents.len(), 1, "{:#?}", plan.report);
     let doc = &plan.documents[0];
-    assert_eq!(doc.filename, "Ada-certificate.pdf");
+    assert_eq!(doc.filename, "Ada-certificate");
+    assert_eq!(doc.key, "Ada-certificate", "no `key:`, so the output name keys the row");
     assert_eq!(doc.rows, [0]);
     let fields = q.reader(&doc.document).values().fields.unwrap();
     assert_eq!(fields["recipient"], json!("Ada"));
@@ -125,13 +120,12 @@ fn document_mode_lowers_transforms_and_localizes_the_bad_cell() {
     assert_eq!(fields["awarded_on"], json!("2026-03-01"), "date re-spelled ISO");
     assert_eq!(fields["qty"], json!(2), "the typed write coerced the cell");
     assert_eq!(fields["tags"], json!(["a", "b"]), "split trims pieces");
-    assert_eq!(fields["cohort"], json!({"lead": "Grace"}), "dotted address assembles the container");
-    assert_eq!(
-        doc.document.main().ext().unwrap()["merge"],
-        json!({"row_key": "0"})
-    );
+    assert_eq!(fields["cohort"], json!({"lead": "Grace"}), "a dotted target assembles the container");
+    let ext = &doc.document.main().ext().unwrap()["merge"];
+    assert_eq!(ext["row_key"], json!("Ada-certificate"));
+    assert_eq!(ext["spec_hash"], json!(spec(CERT_SPEC).hash()));
 
-    let errs = errors(&plan);
+    let errs: Vec<_> = plan.errors().collect();
     assert_eq!(errs.len(), 1, "{errs:#?}");
     let e = errs[0];
     assert_eq!(e.row, Some(1));
@@ -139,20 +133,20 @@ fn document_mode_lowers_transforms_and_localizes_the_bad_cell() {
     assert_eq!(e.diagnostic.path.as_deref(), Some("main.qty"));
     assert_eq!(e.diagnostic.code.as_deref(), Some("edit::field_coercion_failed"));
 
-    let unmapped: Vec<_> = warnings(&plan)
-        .into_iter()
+    let unmapped: Vec<_> = plan
+        .warnings()
         .filter(|w| w.diagnostic.code.as_deref() == Some("merge::unmapped_column"))
         .collect();
     assert_eq!(unmapped.len(), 1, "one warning per unmapped column, once");
     assert_eq!(unmapped[0].row, None);
-    assert!(unmapped[0].diagnostic.message.contains("'Notes'"));
+    assert_eq!(unmapped[0].column.as_deref(), Some("Notes"));
 
     assert!(!plan.is_clean());
-    assert_eq!(plan.clean_documents().count(), 1, "`--force` renders the clean row");
+    assert_eq!(plan.clean_documents().count(), 1, "a forced render renders the clean row");
 }
 
 #[test]
-fn an_empty_cell_is_absent_and_surfaces_as_the_obligation_warning() {
+fn an_empty_cell_is_absent_and_a_constant_blank_is_authored() {
     let q = quill();
     let plan = plan(
         &q,
@@ -161,24 +155,94 @@ fn an_empty_cell_is_absent_and_surfaces_as_the_obligation_warning() {
 $quill: certificate@1.2.0
 map:
   recipient:  { column: Name }
+  event:      { value: "" }
   awarded_on: { column: Date, format: "%m/%d/%Y" }
   qty:        { column: Qty }
-output: "{awarded_on}.pdf"
+output: "{awarded_on}"
 "#,
         ),
-        &rows(&["Name", "Date", "Qty"], &[&["", "3/1/2026", ""]]),
+        &rows(&["Name", "Date", "Qty"], &[&["", "3/1/2026", "  "]]),
     );
     assert!(plan.is_clean(), "{:#?}", plan.report);
     assert_eq!(plan.documents.len(), 1);
     let fields = q.reader(&plan.documents[0].document).values().fields.unwrap();
     assert!(!fields.contains_key("recipient"), "absent, not authored-empty");
-    assert!(!fields.contains_key("qty"), "an empty integer cell is not a coercion error");
-    let w = warnings(&plan);
+    assert!(!fields.contains_key("qty"), "a blank integer cell is not a coercion error");
+    assert_eq!(fields["event"], json!(""), "a constant is verbatim, the blank included");
+    let w: Vec<_> = plan.warnings().collect();
     assert_eq!(w.len(), 1, "{w:#?}");
     assert_eq!(w[0].diagnostic.code.as_deref(), Some("validation::must_fill"));
     assert_eq!(w[0].diagnostic.path.as_deref(), Some("main.recipient"));
     assert_eq!(w[0].row, Some(0));
     assert_eq!(w[0].column.as_deref(), Some("Name"), "reverse-mapped from the path");
+}
+
+#[test]
+fn a_header_that_is_a_target_maps_by_identity_and_an_entry_overrides_it() {
+    let q = quill();
+    let plan = plan(
+        &q,
+        &spec(
+            r#"
+$quill: certificate@1.2.0
+map:
+  recipient: { column: Name }
+output: "{recipient}"
+"#,
+        ),
+        &rows(
+            &["Name", "recipient", "qty", "cohort.lead", "$body", "Notes"],
+            &[&["Ada", "ignored", "4", "Grace", "Well *done*.", "x"]],
+        ),
+    );
+    assert!(plan.is_clean(), "{:#?}", plan.report);
+    let doc = &plan.documents[0].document;
+    let values = q.reader(doc).values();
+    let fields = values.fields.unwrap();
+    assert_eq!(fields["recipient"], json!("Ada"), "the explicit entry wins over the identity header");
+    assert_eq!(fields["qty"], json!(4));
+    assert_eq!(fields["cohort"], json!({"lead": "Grace"}), "a dotted header maps by identity too");
+    assert_eq!(values.body.unwrap(), "Well *done*.");
+    let unmapped: Vec<_> = plan
+        .warnings()
+        .filter(|w| w.diagnostic.code.as_deref() == Some("merge::unmapped_column"))
+        .map(|w| w.column.clone().unwrap())
+        .collect();
+    assert_eq!(unmapped, ["recipient", "Notes"], "an overridden identity header is ignored, and says so");
+}
+
+#[test]
+fn a_key_column_keys_the_row_and_must_be_unique() {
+    let q = quill();
+    let plan = plan(
+        &q,
+        &spec(
+            r#"
+$quill: certificate@1.2.0
+key: ID
+map:
+  recipient: { column: Name }
+output: "{recipient}"
+"#,
+        ),
+        &rows(
+            &["ID", "Name"],
+            &[&["e-1", "Ada"], &["e-1", "Bob"], &["", "Cy"], &["e-2", "Dee"]],
+        ),
+    );
+    let keys: Vec<&str> = plan.documents.iter().map(|d| d.key.as_str()).collect();
+    assert_eq!(keys, ["e-1", "e-2"]);
+    assert_eq!(
+        q.reader(&plan.documents[0].document).values().ext.unwrap().unwrap()["merge"]["row_key"],
+        json!("e-1")
+    );
+    let errs: Vec<_> = plan.errors().collect();
+    assert_eq!(errs.len(), 2, "{errs:#?}");
+    assert_eq!(errs[0].row, Some(1));
+    assert_eq!(errs[0].column.as_deref(), Some("ID"));
+    assert_eq!(errs[0].diagnostic.code.as_deref(), Some("merge::duplicate_key"));
+    assert_eq!(errs[1].row, Some(2));
+    assert_eq!(errs[1].diagnostic.code.as_deref(), Some("merge::missing_key"));
 }
 
 #[test]
@@ -191,7 +255,7 @@ map:
   awarded_on:           { column: Date, format: "%m/%d/%Y" }
   classification.value: { value: CUI }
   classification.poc:   { column: POC }
-output: "{recipient}.pdf"
+output: "{recipient}"
 "#;
     let plan = plan(
         &q,
@@ -209,7 +273,7 @@ output: "{recipient}.pdf"
         json!("2026-03-01"),
         "a zero-padded cell parses under the same pattern as an unpadded one"
     );
-    let w = warnings(&plan);
+    let w: Vec<_> = plan.warnings().collect();
     assert_eq!(w.len(), 1, "{w:#?}");
     assert_eq!(w[0].row, Some(1));
     assert_eq!(w[0].diagnostic.path.as_deref(), Some("main.classification.poc"));
@@ -230,7 +294,7 @@ fn an_output_collision_means_the_pattern_does_not_key_the_input() {
         ),
     );
     assert_eq!(plan.documents.len(), 1);
-    let errs = errors(&plan);
+    let errs: Vec<_> = plan.errors().collect();
     assert_eq!(errs.len(), 1, "{errs:#?}");
     assert_eq!(errs[0].row, Some(1));
     assert_eq!(errs[0].diagnostic.code.as_deref(), Some("merge::output_collision"));
@@ -241,18 +305,20 @@ $quill: certificate@1.2.0
 mode: cards
 group_by: "Invoice #"
 map:
-  recipient: { column: Customer }
-  event:     { column: "Invoice #" }
+  recipient:  { column: Customer }
+  event:      { column: "Invoice #" }
   awarded_on: { value: "2026-03-01" }
+  $body:      { column: Note }
 cards:
   line_item:
     map:
-      desc: { column: Description }
-      qty:  { column: Qty }
-output: "invoice-{event}.pdf"
+      desc:  { column: Description }
+      qty:   { column: Qty }
+      $body: { column: Detail }
+output: "invoice-{event}"
 "#;
 
-const INVOICE_HEADER: &[&str] = &["Invoice #", "Customer", "Description", "Qty"];
+const INVOICE_HEADER: &[&str] = &["Invoice #", "Customer", "Note", "Description", "Qty", "Detail"];
 
 #[test]
 fn cards_mode_groups_rows_in_first_appearance_order_and_keeps_row_order() {
@@ -263,10 +329,10 @@ fn cards_mode_groups_rows_in_first_appearance_order_and_keeps_row_order() {
         &rows(
             INVOICE_HEADER,
             &[
-                &["INV-2", "Bolt", "Gear", "1"],
-                &["INV-1", "Acme", "Widget", "2"],
-                &["INV-2", "Bolt", "Sprocket", "3"],
-                &["INV-1", "Acme", "Gadget", "4"],
+                &["INV-2", "Bolt", "Net 30", "Gear", "1", "steel"],
+                &["INV-1", "Acme", "", "Widget", "2", ""],
+                &["INV-2", "Bolt", "Net 30", "Sprocket", "3", ""],
+                &["INV-1", "Acme", "", "Gadget", "4", "brass"],
             ],
         ),
     );
@@ -274,13 +340,16 @@ fn cards_mode_groups_rows_in_first_appearance_order_and_keeps_row_order() {
     let keys: Vec<&str> = plan.documents.iter().map(|d| d.key.as_str()).collect();
     assert_eq!(keys, ["INV-2", "INV-1"]);
     assert_eq!(plan.documents[0].rows, [0, 2]);
-    assert_eq!(plan.documents[0].filename, "invoice-INV-2.pdf");
+    assert_eq!(plan.documents[0].filename, "invoice-INV-2");
     let values = q.reader(&plan.documents[0].document).values();
     assert_eq!(values.fields.unwrap()["recipient"], json!("Bolt"));
+    assert_eq!(values.body.unwrap(), "Net 30", "a main `$body` target fills the main body");
     let cards = values.cards.unwrap();
     let descs: Vec<&Value> = cards.iter().map(|c| &c.fields.as_ref().unwrap()["desc"]).collect();
     assert_eq!(descs, [&json!("Gear"), &json!("Sprocket")]);
     assert_eq!(cards[1].fields.as_ref().unwrap()["qty"], json!(3));
+    assert_eq!(cards[0].body.as_deref(), Some("steel"), "a card `$body` target fills the card body");
+    assert_eq!(cards[1].body.as_deref(), Some(""));
     assert_eq!(
         plan.documents[0].document.main().ext().unwrap()["merge"]["row_key"],
         json!("INV-2")
@@ -295,31 +364,70 @@ fn cards_mode_localizes_a_card_cell_and_refuses_a_non_constant_main_column() {
         &rows(
             INVOICE_HEADER,
             &[
-                &["INV-1", "Acme", "Widget", "2"],
-                &["INV-2", "Bolt", "Gear", "1"],
-                &["INV-1", "Acme", "Gadget", "x"],
-                &["INV-2", "Bolt Inc", "Sprocket", "3"],
-                &["", "Nobody", "Orphan", "1"],
+                &["INV-1", "Acme", "", "Widget", "2", ""],
+                &["INV-2", "Bolt", "", "Gear", "1", ""],
+                &["INV-1", "Acme", "", "Gadget", "x", ""],
+                &["INV-2", "Bolt Inc", "", "Sprocket", "3", ""],
+                &["INV-3", "Cog", "Net 30", "Pin", "1", ""],
+                &["INV-3", "Cog", "Net 60", "Nut", "1", ""],
+                &["", "Nobody", "", "Orphan", "1", ""],
             ],
         ),
     );
     assert!(plan.documents.is_empty());
-    let errs = errors(&plan);
-    assert_eq!(errs.len(), 3, "{errs:#?}");
+    let errs: Vec<_> = plan.errors().collect();
+    assert_eq!(errs.len(), 4, "{errs:#?}");
 
-    let card_err = errs.iter().find(|e| e.diagnostic.code.as_deref() == Some("edit::field_coercion_failed")).unwrap();
+    let card_err = errs
+        .iter()
+        .find(|e| e.diagnostic.code.as_deref() == Some("edit::field_coercion_failed"))
+        .unwrap();
     assert_eq!(card_err.row, Some(2), "the card's own source row, not the group's first");
     assert_eq!(card_err.column.as_deref(), Some("Qty"));
     assert_eq!(card_err.diagnostic.path.as_deref(), Some("cards.line_item[1].qty"));
 
-    let conflict = errs.iter().find(|e| e.diagnostic.code.as_deref() == Some("merge::group_conflict")).unwrap();
-    assert_eq!(conflict.row, Some(3));
-    assert_eq!(conflict.column.as_deref(), Some("Customer"));
-    assert_eq!(conflict.diagnostic.path.as_deref(), Some("main.recipient"));
+    let conflicts: Vec<_> = errs
+        .iter()
+        .filter(|e| e.diagnostic.code.as_deref() == Some("merge::group_conflict"))
+        .collect();
+    assert_eq!(conflicts.len(), 2);
+    assert_eq!(conflicts[0].row, Some(3));
+    assert_eq!(conflicts[0].column.as_deref(), Some("Customer"));
+    assert_eq!(conflicts[0].diagnostic.path.as_deref(), Some("main.recipient"));
+    assert_eq!(conflicts[1].row, Some(5), "a main body differing within a group is a conflict too");
+    assert_eq!(conflicts[1].diagnostic.path.as_deref(), Some("main.body"));
 
-    let orphan = errs.iter().find(|e| e.diagnostic.code.as_deref() == Some("merge::missing_group_key")).unwrap();
-    assert_eq!(orphan.row, Some(4));
+    let orphan = errs
+        .iter()
+        .find(|e| e.diagnostic.code.as_deref() == Some("merge::missing_group_key"))
+        .unwrap();
+    assert_eq!(orphan.row, Some(6));
     assert_eq!(orphan.column.as_deref(), Some("Invoice #"));
+}
+
+#[test]
+fn cards_mode_refuses_an_identity_header_both_cards_declare() {
+    let plan = plan(
+        &quill(),
+        &spec(
+            r#"
+$quill: certificate@1.2.0
+mode: cards
+group_by: inv
+cards:
+  line_item:
+    map:
+      desc: { column: Description }
+output: "{recipient}"
+"#,
+        ),
+        &rows(&["inv", "recipient", "Description", "qty"], &[&["1", "Ada", "Widget", "2"]]),
+    );
+    assert!(plan.documents.is_empty());
+    let errs: Vec<_> = plan.errors().collect();
+    assert_eq!(errs.len(), 1, "{errs:#?}");
+    assert_eq!(errs[0].diagnostic.code.as_deref(), Some("merge::ambiguous_column"));
+    assert_eq!(errs[0].column.as_deref(), Some("qty"));
 }
 
 #[test]
@@ -333,43 +441,154 @@ mode: cards
 map:
   nope: { column: Name }
   recipient: { column: Missing, value: "both" }
-output: "x.pdf"
+  qty.digits: { column: Name }
+  cohort.nope: { column: Name }
+  classification.value.x: { column: Name }
+output: "x-{nope"
 "#,
         ),
         &rows(&["Name"], &[&["Ada"]]),
     );
     assert!(plan.documents.is_empty());
-    let codes: Vec<&str> = errors(&plan)
-        .iter()
-        .filter_map(|e| e.diagnostic.code.as_deref())
-        .collect();
-    assert!(codes.contains(&"merge::quill_mismatch"), "{codes:?}");
-    assert!(codes.contains(&"merge::spec_mode"), "{codes:?}");
-    assert!(codes.contains(&"merge::spec_unknown_target"), "{codes:?}");
-    assert!(codes.contains(&"merge::spec_mapping"), "{codes:?}");
-    assert!(codes.contains(&"merge::unknown_column"), "{codes:?}");
-    assert!(errors(&plan).iter().all(|e| e.row.is_none()));
+    let codes = error_codes(&plan);
+    for expected in [
+        "merge::quill_mismatch",
+        "merge::spec_mode",
+        "merge::spec_unknown_target",
+        "merge::spec_mapping",
+        "merge::spec_output",
+    ] {
+        assert!(codes.contains(&expected.to_string()), "{expected} missing from {codes:?}");
+    }
+    assert_eq!(
+        codes.iter().filter(|c| *c == "merge::spec_unknown_target").count(),
+        4,
+        "an undeclared field, a scalar stepped into, an undeclared property, a step past the discriminant"
+    );
+    assert!(plan.errors().all(|e| e.row.is_none()));
+    assert!(
+        !codes.contains(&"merge::unknown_column".to_string()),
+        "header checks wait for a spec that holds"
+    );
+}
+
+#[test]
+fn a_column_the_input_lacks_stops_the_plan_before_any_row() {
+    let plan = plan(
+        &quill(),
+        &spec(CERT_SPEC),
+        &rows(&["Name"], &[&["Ada"]]),
+    );
+    assert!(plan.documents.is_empty());
+    let errs: Vec<_> = plan.errors().collect();
+    assert!(errs.iter().all(|e| e.diagnostic.code.as_deref() == Some("merge::unknown_column")), "{errs:#?}");
+    let columns: Vec<&str> = errs.iter().filter_map(|e| e.column.as_deref()).collect();
+    assert_eq!(columns, ["Date", "Qty", "Tags", "Instructor"]);
 }
 
 #[test]
 fn a_bad_date_reports_the_cell_and_leaves_the_field_absent() {
-    let q = quill();
     let plan = plan(
-        &q,
+        &quill(),
         &spec(CERT_SPEC),
         &rows(HEADER, &[&["Ada", "2026-03-01", "1", "", "", ""]]),
     );
-    let errs = errors(&plan);
+    let errs: Vec<_> = plan.errors().collect();
     assert_eq!(errs.len(), 1, "{errs:#?}");
     assert_eq!(errs[0].diagnostic.code.as_deref(), Some("merge::date_format"));
     assert_eq!(errs[0].row, Some(0));
     assert_eq!(errs[0].column.as_deref(), Some("Date"));
     assert_eq!(errs[0].diagnostic.path.as_deref(), Some("main.awarded_on"));
-    assert_eq!(plan.clean_documents().count(), 0);
-    let _ = q;
+    assert_eq!(plan.documents.len(), 1, "the row still lowers; the field is absent");
+    assert_eq!(plan.clean_documents().count(), 0, "and an error on its row keeps it out of a forced render");
 }
 
-/// The render loop the CLI would run, against a real backend: one-shot
+#[test]
+fn the_documents_lane_skips_the_mapping_and_anchors_by_index() {
+    let q = quill();
+    let documents = vec![
+        DocumentValues::new(IndexMap::from([
+            ("recipient".to_string(), json!("Ada")),
+            ("awarded_on".to_string(), json!("2026-03-01")),
+            ("tags".to_string(), json!(["a", "b"])),
+        ]))
+        .with_body("Cited.")
+        .with_cards(vec![CardValues::new(
+            "line_item",
+            IndexMap::from([("desc".to_string(), json!("Widget")), ("qty".to_string(), json!(2))]),
+        )]),
+        DocumentValues::new(IndexMap::from([
+            ("recipient".to_string(), json!("Bob")),
+            ("nope".to_string(), json!(1)),
+        ])),
+    ];
+    let plan = plan(
+        &q,
+        &MergeSpec::new("certificate@1.2.0", "{recipient}"),
+        &Input::Documents(documents),
+    );
+    assert_eq!(plan.documents.len(), 1, "{:#?}", plan.report);
+    let values = q.reader(&plan.documents[0].document).values();
+    assert_eq!(values.fields.unwrap()["tags"], json!(["a", "b"]), "native JSON rides through");
+    assert_eq!(values.body.unwrap(), "Cited.");
+    assert_eq!(values.cards.unwrap().len(), 1);
+    assert_eq!(plan.documents[0].key, "Ada");
+    let errs: Vec<_> = plan.errors().collect();
+    assert_eq!(errs.len(), 1, "{errs:#?}");
+    assert_eq!(errs[0].row, Some(1));
+    assert_eq!(errs[0].column, None, "no column: nothing was mapped");
+    assert_eq!(errs[0].diagnostic.code.as_deref(), Some("edit::unknown_field"));
+    assert_eq!(errs[0].diagnostic.path.as_deref(), Some("main.nope"));
+}
+
+#[test]
+fn the_spec_hash_ignores_spelling_and_tracks_meaning() {
+    let a = spec(CERT_SPEC).hash();
+    let b = spec(&CERT_SPEC.replace("  ", " ").replace("\"{recipient}-certificate\"", "'{recipient}-certificate'")).hash();
+    let c = spec(&CERT_SPEC.replace("column: Qty", "column: Quantity")).hash();
+    assert_eq!(a, b);
+    assert_ne!(a, c);
+    assert_eq!(a.len(), 64);
+}
+
+#[test]
+fn the_input_hash_tracks_the_values_the_spec_and_the_quill() {
+    let q = quill();
+    let one = |csv: &[&str], yaml: &str| {
+        let plan = plan(&q, &spec(yaml), &rows(&["Name", "Qty"], &[csv]));
+        plan.documents[0].input_hash.clone()
+    };
+    let base = "$quill: certificate@1.2.0\nmap:\n  recipient: { column: Name }\n  qty: { column: Qty }\noutput: \"{recipient}\"\n";
+    let same = one(&["Ada", "1"], base);
+    assert_eq!(same, one(&["Ada", "1"], base));
+    assert_ne!(same, one(&["Ada", "2"], base));
+    assert_ne!(same, one(&["Ada", "1"], &base.replace("1.2.0", "1")), "the pin is part of the input");
+    assert_ne!(same, one(&["Ada", "1"], &base.replace("{recipient}", "{recipient}-x")));
+    assert_eq!(same.len(), 64);
+}
+
+#[test]
+fn report_serializes_with_its_anchors() {
+    let plan = plan(
+        &quill(),
+        &spec(CERT_SPEC),
+        &rows(HEADER, &[&["Ada", "3/1/2026", "abc", "", "", ""]]),
+    );
+    let json = serde_json::to_value(&plan).unwrap();
+    let report = json["report"].as_array().unwrap();
+    let warning = &report[0];
+    assert_eq!(warning["row"], Value::Null, "spec-level: no row");
+    assert_eq!(warning["column"], json!("Notes"));
+    let error = &report[1];
+    assert_eq!(error["row"], json!(0));
+    assert_eq!(error["column"], json!("Qty"));
+    assert_eq!(error["diagnostic"]["path"], json!("main.qty"));
+    assert_eq!(error["diagnostic"]["severity"], json!("error"));
+    assert_eq!(json["skipped_empty"], json!(0));
+    assert!(json["documents"].as_array().unwrap().is_empty());
+}
+
+/// The render loop the CLI runs, against a real backend: one-shot
 /// `engine.render` per document versus one session updated per document.
 #[test]
 fn taro_batch_renders_through_one_session_or_one_shot_per_document() {
@@ -380,17 +599,10 @@ fn taro_batch_renders_through_one_session_or_one_shot_per_document() {
     fn assert_send_sync<T: Send + Sync>() {}
     assert_send_sync::<LiveSession>();
     assert_send_sync::<Quill>();
+    assert_send_sync::<Quillmark>();
 
     let q = quillmark::quill_from_path(quillmark_fixtures::quills_path("taro")).unwrap();
-    let spec = spec(
-        r#"
-$quill: taro@0.1.0
-map:
-  author: { column: Author }
-  title:  { column: Title }
-output: "{author}.pdf"
-"#,
-    );
+    let spec = MergeSpec::new("taro@0.1.0", "{author}");
     let n = 20;
     let data: Vec<[String; 2]> = (0..n)
         .map(|i| [format!("Author {i}"), format!("Taro tasting no. {i}")])
@@ -399,13 +611,13 @@ output: "{author}.pdf"
         .iter()
         .map(|[a, t]| {
             IndexMap::from([
-                ("Author".to_string(), json!(a)),
-                ("Title".to_string(), json!(t)),
+                ("author".to_string(), json!(a)),
+                ("title".to_string(), json!(t)),
             ])
         })
         .collect();
     let planned = Instant::now();
-    let plan = plan(&q, &spec, &rows);
+    let plan = plan(&q, &spec, &Input::Rows(rows));
     let planned = planned.elapsed();
     assert!(plan.is_clean(), "{:#?}", plan.report);
     assert_eq!(plan.documents.len(), n);
@@ -440,4 +652,3 @@ output: "{author}.pdf"
         sessioned / n as u32
     );
 }
-
