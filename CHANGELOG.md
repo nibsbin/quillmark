@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+- feat(core): **`quill.project(doc)` reads a document as portable values.**
+  `DocumentValues` / `CardValues` carry the declared fields a document holds
+  with every content leaf as its codec's text — `richtext` markdown,
+  `plaintext` literal — bodies as markdown, and `$ext` on the main card and
+  each card. A consumer reads plain values, edits them, and sends them back;
+  #1444's structured lane authors the same shape by hand. It is **sparse** (an
+  absent field is absent, never materialized from its `default:`, so writing
+  the shape back cannot erase an absence signal) and **total** (a leaf that
+  decodes under neither encoding rides out verbatim rather than failing the
+  read — the load that admitted it already warned). A projection, never a
+  storage format: markdown carries no anchors, island ids or content-only
+  marks, and `$quill`, `$seed`, `!must_fill` markers, YAML comments and
+  undeclared fields are not carried. `toStored` remains persistence and
+  `resolve` remains the render view — that one blank-fills every declared
+  field and tags its rung, this one reports what the document carries.
+- feat(core)!: **a content leaf reads as text wherever it sits, not only at the
+  top of a field.** `reader.get` dispatched on the *field's* declared type, so
+  an `array<richtext>` or an `object` with a `richtext` property returned the
+  stored canonical content objects while a bare `richtext` field returned
+  markdown — the storage form leaking through the interpreting read. One
+  recursive walk over the field's type tree now projects at every content leaf,
+  descending `items` / `properties` / `variants`, so `reader.get("paragraphs")`
+  is `["Para **one**", …]` and a mixed object projects its content property
+  while its scalar siblings ride verbatim. A leaf that does not decode still
+  raises `edit::field_decode`, now anchored at the element
+  (`main.paragraphs[1]`). Fields whose type tree bears no content leaf are
+  untouched, as are content fields read whole. `reader.getContent` /
+  `getContentAt` are unchanged: they answer with the `Content`, this projects.
+
 - feat(bindings)!: **the storage DTO verbs name their lane, not their encoding.**
   `Document.toJson` / `fromJson` / `tryFromJson` / `loadJson` become `toStored` /
   `fromStored` / `tryFromStored` / `loadStored`, and Python's `to_json` /

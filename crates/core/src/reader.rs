@@ -209,7 +209,24 @@ fn read_field(
         .and_then(|m| m.get(name))
         .ok_or_else(|| EditError::unknown_field(name))?;
     let Some(codec) = content_codec(&schema.r#type) else {
-        return Ok(card.payload().get(name).map(|v| ReadValue::Value(v.clone())));
+        let Some(value) = card.payload().get(name) else {
+            return Ok(None);
+        };
+        // A composite carrying content below it projects at each leaf, so one
+        // `get` reads a field's text whatever depth the content sits at; a
+        // composite carrying none is verbatim, and the walk is the identity on
+        // it.
+        if !crate::quill::field_contains_content(schema) {
+            return Ok(Some(ReadValue::Value(value.clone())));
+        }
+        let projected = project_value(
+            name,
+            value.as_json(),
+            schema,
+            &mut Vec::new(),
+            ProjectMode::Strict,
+        )?;
+        return Ok(Some(ReadValue::Value(QuillValue::from_json(projected))));
     };
     match card.field_text(name, codec) {
         None => Ok(None),
@@ -251,6 +268,99 @@ fn read_content(
         .decode_field(value)
         .map(Some)
         .map_err(|e| field_decode(name, at, codec, e))
+}
+
+/// What a content leaf that decodes under neither encoding does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProjectMode {
+    /// Raise [`EditError::FieldDecode`] anchored at the leaf.
+    Strict,
+    /// Pass the value verbatim.
+    Total,
+}
+
+/// Project `value` through `schema`'s type tree: every content leaf to its
+/// codec's text, every other node verbatim, descending `items` / `properties` /
+/// `variants`. `at` is the path from the field to `value`, extended on descent
+/// and read only to anchor a [`Strict`](ProjectMode::Strict) failure.
+///
+/// The descent is over the schema, so a node whose shape the schema cannot take
+/// stops there and passes verbatim: a value is never reshaped to match a
+/// declaration it does not fit.
+pub(crate) fn project_value(
+    name: &str,
+    value: &serde_json::Value,
+    schema: &FieldSchema,
+    at: &mut Vec<PathSegment>,
+    mode: ProjectMode,
+) -> Result<serde_json::Value, EditError> {
+    if let Some(codec) = content_codec(&schema.r#type) {
+        if value.is_null() {
+            return Ok(serde_json::Value::String(String::new()));
+        }
+        return match codec.decode_field(value) {
+            Ok(content) => Ok(serde_json::Value::String(codec.project(&content))),
+            Err(e) => match mode {
+                ProjectMode::Strict => Err(field_decode(name, at, codec, e)),
+                ProjectMode::Total => Ok(value.clone()),
+            },
+        };
+    }
+    match (&schema.r#type, value) {
+        (FieldType::Array, serde_json::Value::Array(items)) => {
+            let Some(item_schema) = schema.items.as_deref() else {
+                return Ok(value.clone());
+            };
+            let mut out = Vec::with_capacity(items.len());
+            for (index, item) in items.iter().enumerate() {
+                at.push(PathSegment::Index(index));
+                let projected = project_value(name, item, item_schema, at, mode);
+                at.pop();
+                out.push(projected?);
+            }
+            Ok(serde_json::Value::Array(out))
+        }
+        (FieldType::Object, serde_json::Value::Object(map)) => {
+            let props = schema.properties.as_ref();
+            project_map(name, map, at, mode, |key| {
+                props.and_then(|p| p.get(key)).map(|s| &**s)
+            })
+        }
+        // Which world is live is a value-time fact, so the walk unions the
+        // worlds: a cell of a dormant world projects at its own codec, as the
+        // document carries it. The discriminant declares no cell and rides
+        // verbatim.
+        (FieldType::Enum, serde_json::Value::Object(map)) if schema.is_variant_bearing() => {
+            project_map(name, map, at, mode, |key| schema.variant_field(key))
+        }
+        _ => Ok(value.clone()),
+    }
+}
+
+/// The shared object arm of [`project_value`]: every entry projected through the
+/// schema `cell` resolves for its key, and verbatim where it resolves none (the
+/// schema is a floor, not an allowlist).
+fn project_map<'a>(
+    name: &str,
+    map: &serde_json::Map<String, serde_json::Value>,
+    at: &mut Vec<PathSegment>,
+    mode: ProjectMode,
+    cell: impl Fn(&str) -> Option<&'a FieldSchema>,
+) -> Result<serde_json::Value, EditError> {
+    let mut out = serde_json::Map::with_capacity(map.len());
+    for (key, child) in map {
+        let projected = match cell(key) {
+            None => child.clone(),
+            Some(child_schema) => {
+                at.push(PathSegment::Key(key.clone()));
+                let projected = project_value(name, child, child_schema, at, mode);
+                at.pop();
+                projected?
+            }
+        };
+        out.insert(key.clone(), projected);
+    }
+    Ok(serde_json::Value::Object(out))
 }
 
 /// The one declared-type → codec dispatch: `None` for a type that is no content
@@ -903,6 +1013,74 @@ card_kinds:
             Some(ReadValue::Markdown("a *card*".to_string()))
         );
         assert!(matches!(card.get("nope"), Err(EditError::UnknownField { .. })));
+    }
+
+    #[test]
+    fn a_composite_reads_its_content_leaves_as_text() {
+        let config = config();
+        let mut doc = blank_doc();
+        {
+            let mut w = crate::TypedWriter::new(&config, &mut doc);
+            w.set("paragraphs", serde_json::json!(["Para **one**"])).unwrap();
+            w.set("recipients", serde_json::json!(["a *literal* line"])).unwrap();
+            w.set("letterhead", serde_json::json!({"motto": "Fly **fight**", "code": "9"}))
+                .unwrap();
+        }
+        let view = TypedReader::new(&config, &doc);
+        assert_eq!(
+            view.get("paragraphs").unwrap(),
+            Some(ReadValue::Value(QuillValue::from_json(serde_json::json!([
+                "Para **one**"
+            ])))),
+        );
+        assert_eq!(
+            view.get("recipients").unwrap(),
+            Some(ReadValue::Value(QuillValue::from_json(serde_json::json!([
+                "a *literal* line"
+            ])))),
+            "each element decodes at its own declared codec"
+        );
+        assert_eq!(
+            view.get("letterhead").unwrap(),
+            Some(ReadValue::Value(QuillValue::from_json(serde_json::json!({
+                "motto": "Fly **fight**",
+                "code": "9"
+            })))),
+            "a content property projects; a scalar sibling rides verbatim"
+        );
+    }
+
+    #[test]
+    fn a_content_free_composite_reads_verbatim() {
+        let config = config();
+        let mut doc = blank_doc();
+        doc.main_mut()
+            .store_field("tags", QuillValue::from_json(serde_json::json!(["x", "y"])))
+            .unwrap();
+        assert_eq!(
+            TypedReader::new(&config, &doc).get("tags").unwrap(),
+            Some(ReadValue::Value(QuillValue::from_json(serde_json::json!([
+                "x", "y"
+            ]))))
+        );
+    }
+
+    #[test]
+    fn a_composite_leaf_that_does_not_decode_raises_at_the_leaf() {
+        let config = config();
+        let mut doc = blank_doc();
+        doc.main_mut()
+            .store_field(
+                "paragraphs",
+                QuillValue::from_json(serde_json::json!(["ok", 3])),
+            )
+            .unwrap();
+        let err = TypedReader::new(&config, &doc).get("paragraphs").unwrap_err();
+        assert_eq!(
+            err.doc_path(&crate::DocPath::main()).unwrap().to_string(),
+            "main.paragraphs[1]",
+            "the strict read anchors at the element, as get_content_at does"
+        );
     }
 
     #[test]
