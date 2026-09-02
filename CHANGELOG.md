@@ -85,6 +85,12 @@
   the background uses rebinds it under a last-wins parser. A `/Contents`
   reference naming an *array* object expands to its elements instead of being
   wrapped, which had left an array as an element of the `/Contents` array.
+- refactor(pdf): **one ancestor chain per page.** `PdfUpdate::resolve_pages`
+  returns `Vec<Page>` rather than page ids: each `Page` carries its `/Pages`
+  ancestors from the `/Kids` walk and resolves any inheritable attribute
+  through `Page::inherited_attribute`. Flatten reads `/Resources` through it
+  instead of climbing `/Parent` on its own, so rotation, media box and
+  resources answer from the same chain under the same cycle and depth guards.
 - fix(core): **`Quill::resolve` keeps a mis-shaped container value raw rather
   than blanking it under the document's own label.** A seed the render
   coercion cannot conform — `rows: abc` on an `array`, `addr: 5` on a typed

@@ -9,12 +9,10 @@
 //! true of any background with balanced `q`/`Q` and no dangling `cm`. Backs the
 //! SVG/PNG raster outputs only; the AcroForm PDF deliverable is stamped.
 
-use std::collections::HashSet;
-
 use quillmark_pdf::{
     reader::{
         extract_outer_dict, find_dict_value, parse_indirect_ref, splice_dict_value, ObjectIndex,
-        UpdatedObject,
+        Page, UpdatedObject,
     },
     writer::{
         alloc_id, append_refs_to_array_key, dict_object, pdf_escape, winansi_encode, OnNonArray,
@@ -55,8 +53,8 @@ pub fn flatten(base: Vec<u8>, fields: &[FieldSpec]) -> Result<Vec<u8>, PdfError>
     let idx = ObjectIndex::new(&pdf);
     let mut up = PdfUpdate::begin(&idx, None)?;
 
-    let page_ids = up.resolve_pages(&idx, fields)?;
-    let page_count = page_ids.len();
+    let pages = up.resolve_pages(&idx, fields)?;
+    let page_count = pages.len();
 
     // Helvetica and ZapfDingbats are among the 14 standard PDF fonts every
     // conforming reader provides, so neither is embedded.
@@ -80,11 +78,12 @@ pub fn flatten(base: Vec<u8>, fields: &[FieldSpec]) -> Result<Vec<u8>, PdfError>
             continue;
         }
 
-        let page_obj_id = page_ids[page_idx];
+        let page = &pages[page_idx];
+        let page_obj_id = page.id;
         let what = format!("page object {page_obj_id}");
         let pg_dict = idx.dict(page_obj_id, CODE_PARSE, &what)?;
 
-        let resources = resolve_resources(&idx, pg_dict)?;
+        let resources = resolve_resources(&idx, page)?;
         let font_inner: &[u8] = match &resources {
             Some(res) => font_dict(res)?.map_or(&[], |f| f.inner),
             None => &[],
@@ -310,34 +309,16 @@ fn referenced_array_inner<'a>(idx: &ObjectIndex<'a>, value: &[u8]) -> Option<&'a
 
 /// The page's effective `/Resources` inner bytes, with an indirect `/Resources`
 /// or `/Font` replaced by an inline copy of the referenced dict. `/Resources` is
-/// inheritable (ISO 32000-1 §7.7.3.4), so a page carrying none draws with the
-/// nearest ancestor's, found by climbing `/Parent`. `None` when no node on that
-/// chain carries one.
-fn resolve_resources<'a>(
-    idx: &ObjectIndex<'a>,
-    pg_dict: &'a [u8],
-) -> Result<Option<Vec<u8>>, PdfError> {
-    // Deeper than any real page tree; a chain that long or that revisits a node
-    // is malformed, not a resource to inherit.
-    const MAX_ANCESTORS: usize = 64;
-
-    let mut node = pg_dict;
-    let mut seen = HashSet::new();
-    for _ in 0..MAX_ANCESTORS {
-        if let Some(value) = find_dict_value(node, "Resources") {
-            let inner = inline_dict(idx, value, "page /Resources")?;
-            return inline_font_dict(idx, inner).map(Some);
-        }
-        let Some((parent_id, _)) = find_dict_value(node, "Parent").and_then(parse_indirect_ref)
-        else {
-            return Ok(None);
-        };
-        if !seen.insert(parent_id) {
-            return Ok(None);
-        }
-        node = idx.dict(parent_id, CODE_PARSE, &format!("page tree node {parent_id}"))?;
-    }
-    Ok(None)
+/// inheritable, so a page carrying none draws with the nearest ancestor's.
+/// `None` when no node on the chain carries one; the first present value is
+/// taken, so one that fails to parse is an error rather than a step past.
+fn resolve_resources(idx: &ObjectIndex, page: &Page) -> Result<Option<Vec<u8>>, PdfError> {
+    page.inherited_attribute(idx, "Resources", |value| {
+        Some(inline_dict(idx, value, "page /Resources"))
+    })
+    .transpose()?
+    .map(|inner| inline_font_dict(idx, inner))
+    .transpose()
 }
 
 /// A dict-valued entry as inline bytes: an inline dict is copied as is, an
@@ -594,6 +575,45 @@ mod tests {
             fonts.has(b"Helv") && fonts.has(b"ZaDb"),
             "the drawn fonts are injected beside it"
         );
+    }
+
+    #[test]
+    fn resources_inherit_along_the_kids_chain_without_a_parent_link() {
+        // The same tree as `build_base`, minus the page's `/Parent`: the ancestor
+        // chain is the `/Kids` walk's, the one `/Rotate` and `/MediaBox` resolve
+        // along, so a missing back-link cannot detach the page from its resources.
+        let letter = Rect::new(0.0, 0.0, 612.0, 792.0);
+        let mut pdf = Pdf::new();
+        pdf.catalog(Ref::new(1)).pages(Ref::new(2));
+        {
+            let mut pages = pdf.pages(Ref::new(2));
+            pages.kids([Ref::new(3)]).count(1).media_box(letter);
+            pages
+                .insert(Name(b"Resources"))
+                .dict()
+                .insert(Name(b"Font"))
+                .dict()
+                .pair(Name(b"F1"), Ref::new(5));
+        }
+        pdf.page(Ref::new(3)).media_box(letter).contents(Ref::new(4));
+        pdf.stream(Ref::new(4), b"BT /F1 12 Tf 72 700 Td (background) Tj ET");
+        pdf.indirect(Ref::new(5))
+            .dict()
+            .pair(Name(b"Type"), Name(b"Font"))
+            .pair(Name(b"Subtype"), Name(b"Type1"))
+            .pair(Name(b"BaseFont"), Name(b"Helvetica"));
+        let base = pdf.finish();
+
+        let pdf = flatten(base, &[text_field("FullName", "Ada Lovelace")]).expect("flatten ok");
+
+        let fonts = page_resources(&pdf)
+            .get(b"Font")
+            .unwrap()
+            .as_dict()
+            .unwrap()
+            .clone();
+        assert!(fonts.has(b"F1"), "the background's font binding survives");
+        assert!(fonts.has(b"Helv"), "the drawn font is injected beside it");
     }
 
     #[test]

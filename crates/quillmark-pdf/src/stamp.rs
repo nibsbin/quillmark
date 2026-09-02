@@ -146,8 +146,8 @@ pub fn stamp(
             ));
         }
 
-        let page_ids = up.resolve_pages(&idx, fields)?;
-        let page_count = page_ids.len();
+        let pages = up.resolve_pages(&idx, fields)?;
+        let page_count = pages.len();
 
         let fonts = fonts_used(fields);
         let font_ids: Vec<u32> = fonts
@@ -164,7 +164,7 @@ pub fn stamp(
         let mut widgets_by_page: Vec<Vec<u32>> = vec![Vec::new(); page_count];
         for (spec, &wid) in fields.iter().zip(&widget_ids) {
             widgets_by_page[spec.page].push(wid);
-            let page_ref = Ref::new(page_ids[spec.page] as i32);
+            let page_ref = Ref::new(pages[spec.page].id as i32);
             up.objects.push(UpdatedObject {
                 id: wid,
                 bytes: write_widget_object(spec, Ref::new(wid as i32), page_ref),
@@ -222,7 +222,7 @@ pub fn stamp(
             if widget_refs.is_empty() {
                 continue;
             }
-            let page_obj_id = page_ids[page_idx];
+            let page_obj_id = pages[page_idx].id;
             let what = format!("page node {page_obj_id}");
             let pg_dict = idx.dict(page_obj_id, CODE_PARSE, &what)?;
             up.objects.push(dict_object(

@@ -636,9 +636,30 @@ pub(crate) fn open_trailer<'a>(
 /// A page object and the `/Pages` nodes it descends from, nearest ancestor
 /// first: the chain an inheritable attribute resolves along.
 #[derive(Debug)]
-pub(crate) struct Page {
-    pub(crate) id: u32,
+pub struct Page {
+    pub id: u32,
     ancestors: Vec<u32>,
+}
+
+impl Page {
+    /// The inheritable attribute `key`, `parse`d from the page dict, else from
+    /// the nearest ancestor `/Pages` node carrying a parseable one
+    /// (ISO 32000-1 §7.7.3.4). `parse` returning `None` keeps the search
+    /// climbing, so a caller that wants the first *present* value wraps its
+    /// result in `Some`.
+    pub fn inherited_attribute<T>(
+        &self,
+        idx: &ObjectIndex,
+        key: &str,
+        parse: impl Fn(&[u8]) -> Option<T>,
+    ) -> Option<T> {
+        std::iter::once(self.id)
+            .chain(self.ancestors.iter().copied())
+            .find_map(|id| {
+                let dict = idx.dict(id, CODE_PARSE, "page node").ok()?;
+                parse(find_dict_value(dict, key)?)
+            })
+    }
 }
 
 /// Flatten the catalog's `/Pages` tree into its page objects in document order,
@@ -689,23 +710,6 @@ pub(crate) fn walk_page_tree(idx: &ObjectIndex, catalog_id: u32) -> Result<Vec<P
     Ok(out)
 }
 
-/// The inheritable attribute `key` of `page`, `parse`d from the page dict, else
-/// from the nearest ancestor `/Pages` node carrying a parseable one
-/// (ISO 32000-1 §7.7.3.4).
-fn inherited_attribute<T>(
-    idx: &ObjectIndex,
-    page: &Page,
-    key: &str,
-    parse: impl Fn(&[u8]) -> Option<T>,
-) -> Option<T> {
-    std::iter::once(page.id)
-        .chain(page.ancestors.iter().copied())
-        .find_map(|id| {
-            let dict = idx.dict(id, CODE_PARSE, "page node").ok()?;
-            parse(find_dict_value(dict, key)?)
-        })
-}
-
 /// The catalog's root `/Pages` node id.
 fn root_pages_id(idx: &ObjectIndex, catalog_id: u32) -> Result<u32, PdfError> {
     let cat_dict = idx.dict(catalog_id, CODE_PARSE, "catalog")?;
@@ -726,7 +730,9 @@ pub(crate) fn assert_unrotated_pages<'p>(
     let parse_rotate =
         |raw: &[u8]| -> Option<i64> { std::str::from_utf8(raw.trim_ascii()).ok()?.parse().ok() };
     for page in pages {
-        let rotate = inherited_attribute(idx, page, "Rotate", parse_rotate).unwrap_or(0);
+        let rotate = page
+            .inherited_attribute(idx, "Rotate", parse_rotate)
+            .unwrap_or(0);
         if rotate.rem_euclid(360) != 0 {
             return Err(err(
                 "pdf::rotated_page",
@@ -811,12 +817,14 @@ fn media_boxes_of(idx: &ObjectIndex, catalog_id: u32) -> Result<Vec<[f32; 4]>, P
     let pages = walk_page_tree(idx, catalog_id)?;
     let mut out = Vec::with_capacity(pages.len());
     for page in &pages {
-        let mb = inherited_attribute(idx, page, "MediaBox", parse_rect_array).ok_or_else(|| {
-            err(
-                CODE_PARSE,
-                format!("page {} has no resolvable /MediaBox", page.id),
-            )
-        })?;
+        let mb = page
+            .inherited_attribute(idx, "MediaBox", parse_rect_array)
+            .ok_or_else(|| {
+                err(
+                    CODE_PARSE,
+                    format!("page {} has no resolvable /MediaBox", page.id),
+                )
+            })?;
         out.push(normalize_rect(mb));
     }
     Ok(out)

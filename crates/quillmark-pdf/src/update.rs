@@ -6,7 +6,7 @@
 use crate::error::PdfError;
 use crate::reader::{
     append_incremental_update, assert_unrotated_pages, err, find_dict_value, open_trailer,
-    parse_indirect_ref, walk_page_tree, ObjectIndex, UpdatedObject,
+    parse_indirect_ref, walk_page_tree, ObjectIndex, Page, UpdatedObject,
 };
 use crate::writer::apply_producer_stamp;
 use crate::FieldSpec;
@@ -71,13 +71,15 @@ impl PdfUpdate {
         })
     }
 
-    /// Resolve the base's page object ids, bounds-checking every field's `page`
-    /// so a spec targeting a non-existent page errors rather than panicking later.
+    /// Resolve the base's pages in document order, each carrying the ancestor
+    /// chain its inheritable attributes resolve along, bounds-checking every
+    /// field's `page` so a spec targeting a non-existent page errors rather than
+    /// panicking later.
     pub fn resolve_pages(
         &self,
         idx: &ObjectIndex,
         fields: &[FieldSpec],
-    ) -> Result<Vec<u32>, PdfError> {
+    ) -> Result<Vec<Page>, PdfError> {
         let pages = walk_page_tree(idx, self.catalog_id)?;
         let page_count = pages.len();
         let mut checked = vec![false; page_count];
@@ -104,7 +106,7 @@ impl PdfUpdate {
         // Geometry is written in unrotated user space, so a rotated target page
         // would mis-place every field.
         assert_unrotated_pages(idx, targeted)?;
-        Ok(pages.iter().map(|page| page.id).collect())
+        Ok(pages)
     }
 
     /// Serialize the accumulated objects onto `pdf` via one incremental-update
