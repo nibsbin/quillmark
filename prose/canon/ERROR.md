@@ -356,6 +356,7 @@ Every `conform::*` row is reachable only through the content-field walk, so the 
 
 - **`quill::*`** is quill-authoring. Its reader is a template author debugging `Quill.yaml`, the one audience for whom canonical English is the deliverable. Three of its codes are `format!`-built per slot besides.
 - **`typst::*`** is an open set: the code is Typst's own message text up to the first `:` (`error_mapping.rs`), so it re-spells itself whenever Typst rewords a diagnostic and cannot key a string table at all.
+- **`merge::*`** is spec-authoring ([MERGE.md](MERGE.md)): its reader is the person writing a merge spec or the spreadsheet behind it, and the message names the row, column and value. It rides beside the `edit::*` and `validation::*` rows the interpreter re-anchors, which keep their args.
 
 Because those codes carry no args, every consumer template falls back on them by the rule above. That is what makes a surface covering a third of the codes total rather than partial.
 

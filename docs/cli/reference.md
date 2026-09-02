@@ -167,6 +167,54 @@ quillmark info ./my-quill
 quillmark info ./my-quill --json
 ```
 
+### merge
+
+Generate one document per input row, or per group of rows, through a merge
+spec, and render them all. Full guide: [Bulk Generation](../integration/bulk-generation.md).
+
+```bash
+quillmark merge [OPTIONS] <QUILL_PATH> <SPEC_FILE> <INPUT_FILE> --out <DIR>
+```
+
+**Arguments:**
+
+- `<QUILL_PATH>`: Path to quill directory
+- `<SPEC_FILE>`: The merge spec, YAML (or JSON by `.json` extension): `$quill`, `mode`, `map`, `output`, …
+- `<INPUT_FILE>`: `.csv` / `.tsv` (a header row; cells are strings), or `.json`: an array of row objects, or an object carrying a `documents` array in the values form
+
+**Options:**
+
+- `--out <DIR>`: Output directory; every artifact and `manifest.json` land here (required unless `--dry-run`)
+- `--dry-run`: Plan and print the report, render nothing
+- `--force`: Render the documents no error touches and report the rest
+- `--json`: Emit the report and the manifest as one JSON object on stdout (rows 0-based)
+- `-f <FORMAT>` / `--format <FORMAT>`: `pdf` (default), `svg`, `png`; appended to the spec's `output` stem
+- `--delimiter <CHAR>`: Field delimiter for a tabular input (default `,`, or a tab for `.tsv`)
+- `--jobs <N>`: Render threads (default: every core)
+- `--quiet`: Suppress the report and the summary line
+
+**Report:** printed to stderr, one line per error and one per distinct warning (a warning repeated across rows shows its count and first row). A tabular input is numbered as a spreadsheet numbers it (the header is row 1); a JSON input by index. The plan runs whole before anything renders; a spec-level problem (an unknown target, a column the input lacks, a `$quill` that does not pair) stops it before the first row.
+
+**Manifest:** `manifest.json` in `--out` lists every planned document: `key`, `rows`, `filename`, `input_hash`, `status` (`rendered`, `failed`, `skipped`), `files`.
+
+**Exit status:** 1 whenever the report holds an error or a render failed, `--force` included.
+
+**Examples:**
+
+```bash
+# Headers are field names: the spec is $quill and output
+quillmark merge ./certificate certs.yaml attendees.csv --out ./certs
+
+# Check the batch without rendering
+quillmark merge ./certificate certs.yaml attendees.csv --dry-run
+
+# Machine-readable report for CI
+quillmark merge ./certificate certs.yaml attendees.csv --dry-run --json
+
+# Render what is clean, report the rest, four threads
+quillmark merge ./invoice invoices.yaml lines.tsv --out ./invoices --force --jobs 4
+```
+
 ## Exit Codes
 
 - `0`: success

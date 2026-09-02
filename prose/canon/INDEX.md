@@ -15,6 +15,7 @@
 - **[BLUEPRINT.md](BLUEPRINT.md)** - Annotated Markdown blueprint for LLM/MCP authoring
 - **[PROGRAMMATIC.md](PROGRAMMATIC.md)** - Building documents in memory (blank canvas, batched mutators) for automation
 - **[CARDS.md](CARDS.md)** - Composable cards delivered on the `$cards` plate-JSON array
+- **[MERGE.md](MERGE.md)** - Bulk generation: the merge spec, its interpreter, and the per-row report
 
 ## Backends
 

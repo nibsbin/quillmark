@@ -47,6 +47,13 @@ The `Quillmark` engine plus the `quill_from_path` loader; re-exports core's
 `Quill`. Filesystem walking lives here, so core stays filesystem-agnostic:
 in-memory loading is `Quill::from_tree` in core.
 
+### `quillmark-merge`
+
+Bulk generation over the schema model: a `MergeSpec` interpreted over input
+rows (or over documents already in the values form) into `Document`s plus a
+per-row report. Depends on `quillmark-core` alone and renders nothing: the
+plan hands documents to the surface's render loop. See [MERGE.md](MERGE.md).
+
 ### `backends/quillmark-typst`
 
 Implements `Backend` for PDF, SVG, and PNG. Lowers each content field's `Content` value to Typst markup at codegen (`emit::emit_content`), recording a per-segment source map. Resolves fonts and assets. See [CONVERT.md](CONVERT.md) and [PLATE_DATA.md](PLATE_DATA.md).

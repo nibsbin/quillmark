@@ -14,7 +14,8 @@ axis.
 ## What the promise covers
 
 The published crates are `quillmark-core`, `quillmark`, `quillmark-content`,
-`quillmark-pdf`, `quillmark-typst`, `quillmark-pdfform`, and `quillmark-cli`.
+`quillmark-pdf`, `quillmark-typst`, `quillmark-pdfform`, `quillmark-merge`, and
+`quillmark-cli`.
 The Python, WASM, fuzz, and fixture crates are `publish = false`: they path-dep
 the core beside them and ship as one build, so nothing there is a compatibility
 surface.

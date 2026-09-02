@@ -51,6 +51,7 @@ nav:
       - Error Handling: integration/error-handling.md
       - Persistence: integration/persistence.md
       - Operations: integration/operations.md
+      - Bulk Generation: integration/bulk-generation.md
   - CLI:
       - Reference: cli/reference.md
   - Reference:

@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- feat(merge): **bulk generation: `quillmark-merge` and the CLI `merge` verb.**
+  A `MergeSpec` (YAML or JSON; pins `$quill`, maps columns onto schema
+  addresses, patterns the output name) is interpreted over input rows into
+  one `Document` per row (`mode: document`) or per group of rows with one
+  card per row (`mode: cards`, `group_by`, one card kind), or over a
+  `documents` list already in the values form. Lowering goes through
+  `writer.set_values`, so every refusal comes back as a `RowDiagnostic`
+  carrying the engine's `Diagnostic`, its 0-based row, and the input column
+  reverse-mapped from the path; `Quill::validate` diagnostics ride the same
+  way. Rules: a header that is itself a target maps by identity and a `map`
+  entry overrides it; an empty column cell is absent (the ladder decides)
+  while `value: ""` authors the blank; `split` and a strftime `format` with
+  lenient padding are the only transforms; `$body` is a target; a
+  main-mapped column must be constant within a group; the output name must
+  not collide; `key` names the column that keys a row, else the output name
+  does. Each document is stamped `$ext.merge { row_key, spec_hash }` and
+  carries an `input_hash`. `quillmark merge <QUILL> <SPEC> <INPUT> --out
+  <DIR>` reads CSV/TSV/JSON, plans first and prints the report (`--dry-run`
+  stops there, `--force` renders the clean rows), renders on one live
+  session per rayon worker, and writes `manifest.json`. Canon: `MERGE.md`.
 - feat(core): **the values form: `reader.values()` reads a document as plain
   values and `writer.set_values(values)` writes them back.** A document has
   three forms: *stored* (verbatim, quill-free), *values* (stored with every
