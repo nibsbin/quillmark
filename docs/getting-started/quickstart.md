@@ -72,7 +72,7 @@
 
     // Rendering goes through the Engine. Its methods are async: the first call
     // lazily loads the Typst backend binary; the canonical quill crosses into
-    // backend memory internally (no manual fromTree/fromJson needed).
+    // backend memory internally (no manual fromTree/fromStored needed).
     const engine = new Engine();
     const result = await engine.render(quill, doc, { format: "pdf" });
     const pdfBytes = result.artifacts[0].bytes;

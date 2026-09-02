@@ -117,17 +117,22 @@ impl Quill {
     ///
     /// [`compile_data`]: Quill::compile_data
     pub fn resolve(&self, doc: &Document) -> Resolved {
-        let config = self.config();
-        let (fields, body) = resolve_card_fields(&config.main, doc.main());
-        let main = ResolvedMain { fields, body };
-        let cards = doc
-            .cards()
-            .iter()
-            .enumerate()
-            .map(|(index, card)| card_states(config, card, index))
-            .collect();
-        Resolved { main, cards }
+        resolve_document(self.config(), doc)
     }
+}
+
+/// The producer behind [`Quill::resolve`] and
+/// [`TypedReader::resolve`](crate::TypedReader::resolve).
+pub(crate) fn resolve_document(config: &QuillConfig, doc: &Document) -> Resolved {
+    let (fields, body) = resolve_card_fields(&config.main, doc.main());
+    let main = ResolvedMain { fields, body };
+    let cards = doc
+        .cards()
+        .iter()
+        .enumerate()
+        .map(|(index, card)| card_states(config, card, index))
+        .collect();
+    Resolved { main, cards }
 }
 
 /// Resolve one card (main or a schema-declared kind) into its ordered

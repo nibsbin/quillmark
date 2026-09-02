@@ -31,7 +31,7 @@ pub mod writer;
 pub use writer::{CardWriter, TypedWriter};
 
 pub mod reader;
-pub use reader::{CardReader, ReadValue, TypedReader};
+pub use reader::{CardReader, TypedReader};
 
 pub mod backend;
 pub use backend::{formats_support_canvas, unsupported_format, Backend};
@@ -61,8 +61,8 @@ pub use quillmark_content::Content;
 
 pub mod quill;
 pub use quill::{
-    blank, BoundParseError, FieldSource, FileTreeNode, Quill, Resolved, ResolvedCard,
-    ResolvedField, ResolvedMain, QuillIgnore, STANDARD_METADATA_KEYS,
+    blank, BoundParseError, CardValues, DocumentValues, FieldSource, FileTreeNode, Quill,
+    Resolved, ResolvedCard, ResolvedField, ResolvedMain, QuillIgnore, STANDARD_METADATA_KEYS,
 };
 /// The schema model behind [`Quill::config`], and the error
 /// [`QuillConfig::validate_document`] returns.

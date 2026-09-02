@@ -191,6 +191,39 @@ card_kinds:
     expect(fieldOf(ed.document.main, 'stray')).toBeUndefined()
   })
 
+  it('setValues writes the document, an unedited read is a no-op, and undefined is absent', () => {
+    const quill = buildQuill()
+    const ed = quill.writer(blankDoc())
+    ed.setValues({ fields: { subject: 'Q3 **results**', qty: '5' }, ext: { app: { k: 1 } } })
+    expect(fieldOf(ed.document.main, 'qty')).toBe(5)
+
+    const before = ed.document.toStored()
+    ed.setValues(quill.reader(ed.document).values())
+    expect(ed.document.toStored()).toBe(before)
+
+    // `undefined` is absent (untouched) where the wasm boundary alone would
+    // fold it to `null` (a removal); an unnamed declared field is removed.
+    ed.setValues({ fields: { subject: 'Q4', qty: undefined }, ext: undefined, cards: undefined })
+    const v = quill.reader(ed.document).values()
+    expect(v.fields).toEqual({ subject: 'Q4' })
+    expect(v.ext).toEqual({ app: { k: 1 } })
+    ed.setValues({ ext: null })
+    expect(quill.reader(ed.document).values().ext).toBeNull()
+  })
+
+  it('reader.resolve is the render view beside reader.values', () => {
+    const quill = buildQuill()
+    const doc = blankDoc()
+    quill.writer(doc).setValues({ fields: { subject: 'Hi' } })
+    const reader = quill.reader(doc)
+    expect(reader.values().fields).toEqual({ subject: 'Hi' })
+    const resolved = reader.resolve()
+    expect(resolved.main.fields.find((f) => f.name === 'subject')).toMatchObject({
+      source: 'authored',
+    })
+    expect(resolved.main.fields.find((f) => f.name === 'qty').source).not.toBe('authored')
+  })
+
   it('reviseBody writes the main body from markdown and returns a Delta', () => {
     const ed = buildQuill().writer(blankDoc())
     const delta = ed.reviseBody('New **body**.')
@@ -428,7 +461,7 @@ card_kinds:
     expect(quill.conform(transported)).toEqual([])
     expect(transported.equals(bound)).toBe(true)
     expect(quill.conform(transported)).toEqual([])
-    expect(transported.toJson()).toBe(bound.toJson())
+    expect(transported.toStored()).toBe(bound.toStored())
   })
 
   it('a value the strict write refuses rests authored with a conform warning', () => {
@@ -454,9 +487,9 @@ card_kinds:
     // The transport door still opens it, and conform reports the same mismatch
     // without touching the document.
     const doc = Document.fromMarkdown(md)
-    const before = doc.toJson()
+    const before = doc.toStored()
     expectEditCode(() => quill.conform(doc), 'quill::name_mismatch')
-    expect(doc.toJson()).toBe(before)
+    expect(doc.toStored()).toBe(before)
   })
 
   it('getContent decodes by declared type: markdown for richtext, literal for plaintext', () => {
@@ -1176,7 +1209,7 @@ main:
   })
 
   it('propagates a clone-construction failure (doc clone), leaving the quill clone cached', async () => {
-    // Exercises the teardown path when the doc clone (Document.fromJson) throws:
+    // Exercises the teardown path when the doc clone (Document.fromStored) throws:
     // the quill clone is already materialized and cached (NOT freed here, that
     // is the T3 caching contract), only the per-call doc clone is freed in the
     // finally. We can only assert the error surfaces (cache/leak state is not
@@ -1186,7 +1219,7 @@ main:
     // stand-in Document: both caller handles are checked before the clone runs
     // (see "handles from another copy" below), so they have to be real. Same
     // Proxy-over-the-real-module shape as fromTreeCountingEngine, so the quill
-    // clone left cached is a real backend quill and only `fromJson` misbehaves.
+    // clone left cached is a real backend quill and only `fromStored` misbehaves.
     const engine = new Engine({
       backends: {
         typst: {
@@ -1194,7 +1227,7 @@ main:
             const real = await import('../../../pkg/backends/typst/wasm.js')
             const refusingDocument = new Proxy(real.Document, {
               get(target, prop, receiver) {
-                if (prop === 'fromJson') {
+                if (prop === 'fromStored') {
                   return () => {
                     throw new Error('doc clone refused')
                   }
@@ -1234,7 +1267,7 @@ main:
 // the built core artifact on disk, which is a genuinely different class over a
 // different linear memory.
 describe('@quillmark/wasm/runtime: handles from another copy (duplicate install)', () => {
-  const foreignDoc = (doc) => ({ toJson: () => doc.toJson() })
+  const foreignDoc = (doc) => ({ toStored: () => doc.toStored() })
   const foreignQuill = (quill) => ({
     toTree: () => quill.toTree(),
     backendId: quill.backendId,
@@ -1266,7 +1299,6 @@ describe('@quillmark/wasm/runtime: handles from another copy (duplicate install)
 
     expectForeign(() => doc.equals(foreignDoc(other)), 'Document.equals')
     expectForeign(() => quill.validate(foreignDoc(doc)), 'Quill.validate')
-    expectForeign(() => quill.resolve(foreignDoc(doc)), 'Quill.resolve')
 
     // A local handle still takes the generated path unchanged.
     expect(doc.equals(other)).toBe(true)
@@ -1280,7 +1312,6 @@ describe('@quillmark/wasm/runtime: handles from another copy (duplicate install)
     for (const [call, method] of [
       [() => doc.equals(null), 'Document.equals'],
       [() => quill.validate({}), 'Quill.validate'],
-      [() => quill.resolve(42), 'Quill.resolve'],
     ]) {
       const caught = caughtFrom(call)
       expect(isQuillmarkError(caught)).toBe(true)
@@ -1359,7 +1390,7 @@ describe('@quillmark/wasm/runtime: handles from another copy (duplicate install)
   })
 
   // The document half stays hand-placed. Deriving it is unsound: the stand-in
-  // doc carries `toJson`, so a verb skipping `requireLocalDoc` would succeed and
+  // doc carries `toStored`, so a verb skipping `requireLocalDoc` would succeed and
   // pass a derived assertion. Which verbs take a `Document` is guarded
   // structurally inside `#withClones` and named here at the boundary.
   it('refuses a foreign Document at every Engine entry point taking one', async () => {
@@ -1418,7 +1449,6 @@ describe('@quillmark/wasm/runtime: handles from another copy (duplicate install)
 
       expectForeign(() => docA.equals(docB), 'Document.equals')
       expectForeign(() => quillA.validate(docB), 'Quill.validate')
-      expectForeign(() => quillA.resolve(docB), 'Quill.resolve')
       expectForeign(() => quillA.writer(docB), 'quill.writer(doc)')
       expectForeign(() => quillA.reader(docB), 'quill.reader(doc)')
       expectForeign(() => new DocumentWriter(quillB, docA), 'quill.writer(doc)')

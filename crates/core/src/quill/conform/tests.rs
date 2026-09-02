@@ -420,9 +420,10 @@ Body.
         .get("note")
         .unwrap()
         .expect("note is present");
-    let crate::ReadValue::Plaintext(text) = text else {
-        panic!("plaintext field reads as plaintext");
-    };
+    let text = text
+        .as_str()
+        .expect("a plaintext field reads as its literal text")
+        .to_string();
     assert_eq!(text, r"a \*b\* line");
 
     let delta = quill

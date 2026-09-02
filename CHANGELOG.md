@@ -1,5 +1,66 @@
 # Changelog
 
+## Unreleased
+
+- feat(core): **the values form: `reader.values()` reads a document as plain
+  values and `writer.set_values(values)` writes them back.** A document has
+  three forms: *stored* (verbatim, quill-free), *values* (stored with every
+  content leaf decoded to its codec's text — `richtext` markdown, `plaintext`
+  literal — at every depth), and *resolved* (values blank-filled,
+  render-coerced and rung-tagged). `DocumentValues` / `CardValues` are the
+  middle one: `{fields, body, cards: [{kind, fields, body, ext}], ext}`, every
+  axis present on a read, bodies as markdown, `$ext` on the main card and each
+  card (`null` when none), `kind` `null` for a kindless card, a present-null
+  as `null`, declared fields first then undeclared ones verbatim. A read never
+  coerces: `qty: "3"` reads `"3"` here and `3` only in `resolve`. **Sparse**
+  (an absent field is absent, never its `default:`) and **total** (a leaf that
+  decodes under neither encoding rides out as stored where `get` raises). A
+  projection, never a storage format: markdown carries no anchors, island ids
+  or content-only marks, and `$quill`, `$seed`, `!must_fill` markers and YAML
+  comments are not carried. `reader.card(i).values()` /
+  `writer.card(i).set_values` are the same pair for one card.
+  `set_values` is the typed lane widened to the document: **an absent axis is
+  untouched, a present one is replaced.** `fields` is the whole truth for
+  declared names (an unnamed one is removed; an undeclared one the card holds
+  is accepted unchanged, refused changed, left alone unnamed), `cards` *is*
+  the card list (matched by position and kind, a differing kind rebuilds the
+  slot, past the end appends, past the list removes; an absent `kind` keeps
+  the card's), `body` is replaced, `ext: null` removes `$ext` and `{}` records
+  an explicit empty one. All-or-nothing, every refusal under its own `DocPath`
+  (`main.qty`, `cards.line_item[0].desc`). **A cell whose incoming value
+  equals its projection is not written**, so `set_values(reader.values())`
+  moves no bytes on any document the bound door admits, carrying through what
+  a re-import cannot reproduce: identity anchors, content-only marks,
+  `!must_fill` markers, YAML comments, a leaf that decodes under neither
+  encoding, a scalar shorthand, an explicit `$ext: {}`. A changed content cell
+  is a cold import, as on `set`; `revise_field` per cell keeps anchors.
+- feat(core)!: **`reader.get` answers in the values form, and `ReadValue` is
+  gone.** `get` returns the plain value: every content leaf in the field's
+  type tree as its codec's text, descending `items` / `properties` /
+  `variants`, so `reader.get("paragraphs")` is `["Para **one**", …]` and a
+  mixed object projects its content property beside its verbatim scalars,
+  where an `array<richtext>` used to return the stored content objects. A
+  present-null reads `null` rather than `""`. A leaf that does not decode
+  raises `edit::field_decode` anchored at the element (`main.paragraphs[1]`).
+  `get(name)` equals `values().fields[name]` on every field that decodes.
+  `reader.getContent` / `getContentAt` are unchanged.
+- feat(bindings)!: **`resolve` lives on the reader.** `quill.resolve(doc)`
+  becomes `quill.reader(doc).resolve()`, beside `values()`: a verb that needs a
+  schema lives on the cursor, and the two whole-document reads sit together.
+  WASM-only, as before.
+
+- feat(bindings)!: **the storage DTO verbs name their lane, not their encoding.**
+  `Document.toJson` / `fromJson` / `tryFromJson` / `loadJson` become `toStored` /
+  `fromStored` / `tryFromStored` / `loadStored`, and Python's `to_json` /
+  `from_json` / `try_from_json` become `to_stored` / `from_stored` /
+  `try_from_stored`. `storageVersionOf` and `currentStorageVersion` are
+  unchanged, already naming storage. "Stored" is the at-rest form throughout, so
+  the pair completes the family `getStored` started; the bare `store` stays the
+  field-write lane's verb, which is why the adjective carries the
+  document-level pair rather than a `store` / `load` pair. The old names are
+  removed rather than aliased. Stored blobs, the `schema` tag, and every byte
+  these verbs write are untouched.
+
 ## v0.112.0 - 2026-09-01
 
 - feat(content)!: **every vocabulary member spells its payload in `attrs`.** The

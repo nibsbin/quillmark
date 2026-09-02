@@ -175,7 +175,7 @@ Coercion runs when the document lowers into the backend's data, **upstream of th
 **Changing a declared date type on a deployed corpus is a corpus operation, not a schema edit.** The stored string is never rewritten: neither the transport door nor `conform` touches a scalar. Nothing is lost, and every document holding a value the new grammar rejects strands at render. Audit before publishing the change: load each stored row through the transport door, read the field, and test it against the target grammar. `reader.get` returns the stored string verbatim for both date types.
 
 ```js
-const doc = Document.fromJson(row);
+const doc = Document.fromStored(row);
 const value = quill.reader(doc).get('issued');
 if (value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
   // Strands under `type: date`. Repair before the schema change ships.

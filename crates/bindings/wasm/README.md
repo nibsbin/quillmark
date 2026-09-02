@@ -148,7 +148,7 @@ document was built. Parse warnings and the `conform::*` warnings both ride
 `doc.warnings`.
 
 `quill.conform(doc)` is the same walk in place on a document that arrived any
-other way (`fromJson`, a stored row), returning the `conform::*` `Diagnostic[]`
+other way (`fromStored`, a stored row), returning the `conform::*` `Diagnostic[]`
 (`[]` when everything rested). It is idempotent and a byte no-op on an
 already-canonical document, YAML comments included, so calling it on every load
 is safe. A `!must_fill` marker anywhere in a field's value skips that field; a
@@ -158,19 +158,19 @@ mutation.
 
 ```ts
 const doc = quill.parse(markdown);          // rests canonical
-const stale = Document.fromJson(row);
+const stale = Document.fromStored(row);
 const diags = quill.conform(stale);         // converges in place
 ```
 
 ### Storage compatibility across versions
 
-Persist `doc.toJson()`, not `doc.toMarkdown()`: the DTO wire format is frozen
+Persist `doc.toStored()`, not `doc.toMarkdown()`: the DTO wire format is frozen
 per `schema` version, whereas Markdown syntax evolves, and `toMarkdown` output
-is normalised rather than byte-equal to the source. `Document.tryFromJson`
+is normalised rather than byte-equal to the source. `Document.tryFromStored`
 discriminates the two formats without exceptions as control flow:
 
 ```ts
-const doc = Document.tryFromJson(content) ?? Document.fromMarkdown(content);
+const doc = Document.tryFromStored(content) ?? Document.fromMarkdown(content);
 ```
 
 The `schema` value (`quillmark/document@0.112.0`) is the **model version**,
@@ -181,10 +181,10 @@ and writes that same value.
 - **Upgrading is safe.** A newer build always reads documents written by an
   older one. Each schema version's wire format is frozen and never changes;
   when the model does change, the new build ships a migration that converts
-  old payloads on `fromJson`. A document you commit as your canonical
+  old payloads on `fromStored`. A document you commit as your canonical
   on-disk format keeps loading across crate upgrades: there is no need to
   pin old wasm to read old data.
-- **Downgrading is not.** `fromJson` rejects an *unknown* (i.e. newer)
+- **Downgrading is not.** `fromStored` rejects an *unknown* (i.e. newer)
   `schema` version rather than guessing at a format it predates. Don't feed
   documents written by a newer build back into an older one.
 
@@ -200,9 +200,9 @@ if (v && v !== Document.currentStorageVersion()) {
 `storageVersionOf` does not validate the payload: it only reads the
 `schema` field, returning `undefined` for non-JSON, non-objects, or
 payloads that don't carry one. Use it to distinguish "wrong version" from
-"corrupt" when `fromJson` throws.
+"corrupt" when `fromStored` throws.
 
-In short: persist the `toJson` string, upgrade freely, never downgrade. The
+In short: persist the `toStored` string, upgrade freely, never downgrade. The
 full design (including how migrations are added) is in
 `prose/canon/DOCUMENT_STORAGE.md`.
 
@@ -304,6 +304,8 @@ ed.setAll({ qty: "3", subject: "Q3" });             // all-or-nothing batch
 ed.reviseField("subject", "Q3 **results**");        // typed AND anchor-preserving; returns a Delta
 ed.set("titel", "x");                               // throws UnknownField: a typo, not a fallback
 ed.card(2).set("body", "**note**");                 // composable card, resolved by its $kind
+ed.setValues({ fields: { subject: "Q3" } });        // the values form: a present axis replaces, an absent one is untouched
+ed.card(2).setValues({ fields: { body: "**note**" } });
 ```
 
 `DocumentWriter` / `CardWriter` are pure JS holding references to your existing
@@ -317,17 +319,22 @@ write.
 
 ```ts
 const v = quill.reader(doc);
-v.get("subject");                                   // by declared type: richtext → markdown, plaintext → literal text
+v.get("subject");                                   // the values form: every content leaf as its codec's text, else as stored
 v.getContent("subject");                            // the same read as a `Content`, whichever lane stored it
 v.bodyMarkdown();                                   // the main body markdown (quill-free)
 v.card(0).get("body");                              // a card field, resolved by its $kind
+v.values();                                         // the whole document in the values form; ed.setValues(v.values()) is a no-op
+v.card(0).values();                                 // one card in it
+v.resolve();                                        // the render view: blank-filled, coerced, each field tagged with its rung
 ```
 
 `get` projects and `getContent` returns the `Content`; both decode through the codec
 the field's **declared type** names, which is why they bind the quill and the
 verbatim `doc.getStored` does not. An undeclared name throws `UnknownField`, a
 type that is not a content leaf throws `FieldNotContent`, and an undecodable
-value throws `FieldDecode`; an absent field reads back `undefined`.
+value throws `FieldDecode`; an absent field reads back `undefined` and a
+present-null `null`. A read never coerces a scalar (`qty: "3"` reads `"3"`);
+`resolve()` is the coerced view. `values()` is total where `get` throws.
 
 ### `engine.render(quill, parsed, opts?)` vs. `engine.open(quill, parsed)`
 

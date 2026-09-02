@@ -83,24 +83,24 @@ def test_cards_access():
 
 
 def test_json_dto_round_trip(taro_md):
-    """to_json emits a versioned DTO string that from_json round-trips."""
+    """to_stored emits a versioned DTO string that from_stored round-trips."""
     doc = Document.from_markdown(taro_md)
 
-    dto = doc.to_json()
+    dto = doc.to_stored()
     assert isinstance(dto, str)
     assert "quillmark/document@0.112.0" in dto
 
-    restored = Document.from_json(dto)
+    restored = Document.from_stored(dto)
     assert restored.quill_ref == doc.quill_ref
     assert restored.to_markdown() == doc.to_markdown()
 
 
 def test_json_dto_rejects_invalid_input():
-    """from_json rejects an unknown schema tag and malformed JSON."""
+    """from_stored rejects an unknown schema tag and malformed JSON."""
     with pytest.raises(QuillmarkError):
-        Document.from_json('{"schema":"quillmark/document@0.99.0","main":{}}')
+        Document.from_stored('{"schema":"quillmark/document@0.99.0","main":{}}')
     with pytest.raises(QuillmarkError):
-        Document.from_json("not json at all")
+        Document.from_stored("not json at all")
 
 
 def test_json_dto_drops_parse_warnings():
@@ -110,27 +110,27 @@ def test_json_dto_drops_parse_warnings():
     doc = Document.from_markdown(warn_md)
     assert len(doc.warnings) > 0, "source document should have a parse warning"
 
-    restored = Document.from_json(doc.to_json())
+    restored = Document.from_stored(doc.to_stored())
     assert restored.warnings == []
 
 
-def test_try_from_json_round_trip(taro_md):
+def test_try_from_stored_round_trip(taro_md):
     doc = Document.from_markdown(taro_md)
-    dto = doc.to_json()
+    dto = doc.to_stored()
 
-    restored = Document.try_from_json(dto)
+    restored = Document.try_from_stored(dto)
     assert restored is not None
     assert restored.quill_ref == doc.quill_ref
 
 
-def test_try_from_json_returns_none_on_markdown(taro_md):
-    assert Document.try_from_json(taro_md) is None
-    assert Document.try_from_json("not json at all") is None
-    assert Document.try_from_json('{"schema":"quillmark/document@0.99.0"}') is None
+def test_try_from_stored_returns_none_on_markdown(taro_md):
+    assert Document.try_from_stored(taro_md) is None
+    assert Document.try_from_stored("not json at all") is None
+    assert Document.try_from_stored('{"schema":"quillmark/document@0.99.0"}') is None
 
 
 def test_schema_version_of_returns_unknown_future_versions():
-    # Note: this would be rejected by from_json, but storage_version_of returns it
+    # Note: this would be rejected by from_stored, but storage_version_of returns it
     # so callers can distinguish "build too old" from "payload corrupt".
     future = '{"schema":"quillmark/document@0.99.0"}'
     assert Document.storage_version_of(future) == "quillmark/document@0.99.0"
@@ -144,7 +144,7 @@ def test_schema_version_of_returns_none_for_non_dto():
 
 def test_current_schema_version_matches_emitted_tag(taro_md):
     doc = Document.from_markdown(taro_md)
-    dto = doc.to_json()
+    dto = doc.to_stored()
 
     current = Document.current_storage_version()
     assert isinstance(current, str)
@@ -274,7 +274,7 @@ def test_nested_fill_exposed_as_nested_fills():
     addr = next(i for i in doc.main["payload_items"] if i.get("key") == "addr")
     assert addr.get("nestedFills") == [["street"]], addr
     # Storage round-trip preserves the nested marker.
-    restored = Document.from_json(doc.to_json())
+    restored = Document.from_stored(doc.to_stored())
     assert "street: !must_fill" in restored.to_markdown()
 
 

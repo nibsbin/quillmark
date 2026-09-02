@@ -150,10 +150,11 @@ export type {
 	DocPathSeg
 } from '../core/wasm.js';
 
-// The resolved-value view: the return shape of `quill.resolve(doc)`. Value
-// + source rung per declared field (the body is a `body` sibling on its card,
-// never a row in `fields`); diagnostics stay `quill.validate`, guidance stays
-// `quill.schema`.
+// The two schema-bound whole-document reads on `quill.reader(doc)`: the values
+// form (`reader.values()`, what the document carries, content leaves as their
+// codec's text) and the resolved view (`reader.resolve()`, value + source rung
+// per declared field, the body a `body` sibling on its card, never a row in
+// `fields`); diagnostics stay `quill.validate`, guidance stays `quill.schema`.
 // Declared in the core build's generated `.d.ts` via a
 // `typescript_custom_section`; re-exported here so the single public entry
 // point names them.
@@ -162,7 +163,11 @@ export type {
 	ResolvedField,
 	ResolvedMain,
 	ResolvedCard,
-	Resolved
+	Resolved,
+	CardValues,
+	DocumentValues,
+	CardValuesInput,
+	DocumentValuesInput
 } from '../core/wasm.js';
 
 // ── Error contract ──────────────────────────────────────────────────────────
@@ -673,13 +678,14 @@ declare module '../core/wasm.js' {
 		 */
 		writer(doc: Document): DocumentWriter;
 		/**
-		 * Bind this quill's schema to `doc` for interpreted reads: the read twin of
+		 * Bind this quill's schema to `doc` for schema-bound reads: the read twin of
 		 * {@link Quill.writer}, mirroring core's `quill.reader(&doc)`. Each field is
-		 * read by its declared type (a richtext field to markdown, every other type
-		 * verbatim) with schema authority, so a name the schema does not declare
-		 * throws rather than reading back `undefined`. Holds both handles by
-		 * reference and owns neither (nothing to `free()`); ephemeral by convention:
-		 * bind, read, discard.
+		 * read in the values form (every content leaf as its codec's text, every
+		 * other value as stored) with schema authority, so a name the schema does
+		 * not declare throws rather than reading back `undefined`; the whole
+		 * document reads through `values()`, and the render view through
+		 * `resolve()`. Holds both handles by reference and owns neither (nothing
+		 * to `free()`); ephemeral by convention: bind, read, discard.
 		 */
 		reader(doc: Document): DocumentReader;
 	}
@@ -737,6 +743,24 @@ export declare class DocumentWriter {
 	 * untouched.
 	 */
 	addCard(kind: string, fields?: Record<string, unknown>, body?: string, at?: number): void;
+	/**
+	 * Write the document in the values form: the write twin of
+	 * {@link DocumentReader.values}. An absent axis is untouched; a present one
+	 * is replaced: `fields` is the whole truth for declared names (an unnamed
+	 * one is removed; an undeclared one the card holds is accepted unchanged and
+	 * refused changed), `cards` is the card list, `body` the body, `ext: null`
+	 * removes `$ext` and `{}` records an explicit empty one. All-or-nothing:
+	 * nothing is applied on error and every refused cell is one diagnostic
+	 * carrying its own `path`.
+	 *
+	 * A cell whose value equals its projection is not written, so writing back
+	 * an unedited read changes no bytes. A changed content cell is a cold
+	 * import — {@link DocumentWriter.reviseField} per cell is what keeps its
+	 * anchors — and cards match by position and kind, so deleting or reordering
+	 * an entry rewrites every card after it. An `undefined` member reads as
+	 * absent.
+	 */
+	setValues(values: DocumentValuesInput): void;
 	/** Remove the composable card at `index`, returning it (or `undefined`). */
 	removeCard(index: number): Card | undefined;
 	/**
@@ -773,6 +797,13 @@ export declare class CardWriter {
 	 * for an undeclared name and `IndexOutOfRange` for a bad bound index.
 	 */
 	reviseField(name: string, text: string): Delta;
+	/**
+	 * Write this card in the values form: {@link DocumentWriter.setValues}
+	 * restricted to one slot, under the same per-axis rule. An absent `kind`
+	 * keeps the card's; a differing one rebuilds the slot. Refusals anchor at
+	 * `cards.<kind>[index]`; throws `IndexOutOfRange` for a bad bound index.
+	 */
+	setValues(values: CardValuesInput): void;
 }
 
 /**
@@ -835,6 +866,23 @@ export declare class DocumentReader {
 	/** The main body's markdown: the quill-free body read. Equals `get({})`. */
 	bodyMarkdown(): string;
 	/**
+	 * The whole document in the values form: the main card's fields, body and
+	 * `$ext`, and every composable card, every content leaf as its codec's text,
+	 * everything else as stored. Every axis is present, so the result is a valid
+	 * {@link DocumentWriter.setValues} input and writing it back unedited changes
+	 * no bytes. Never throws: a content leaf that decodes under neither encoding
+	 * rides out as stored where {@link get} would throw.
+	 */
+	values(): DocumentValues;
+	/**
+	 * The resolved-value view: for every declared field, the value the render
+	 * projection would use and the rung it came from (`authored` / `default` /
+	 * `blank`). The one read that blank-fills and coerces; {@link values}
+	 * reports what the document carries. Value and provenance only;
+	 * completeness stays `quill.validate`'s.
+	 */
+	resolve(): Resolved;
+	/**
 	 * A {@link CardReader} for the composable card at `index`. Index validity is
 	 * checked lazily at read time, so an out-of-range index does not throw here.
 	 * The cursor is ephemeral: a `removeCard`/`addCard` between binding and reading
@@ -872,4 +920,9 @@ export declare class CardReader {
 	getContentAt(name: string, path: PathStep[]): Content | undefined;
 	/** This card's body markdown: the card twin of {@link DocumentReader.bodyMarkdown}. */
 	bodyMarkdown(): string;
+	/**
+	 * This card in the values form: {@link DocumentReader.values} restricted to
+	 * one slot. Throws `IndexOutOfRange` for a bad bound index.
+	 */
+	values(): CardValues;
 }

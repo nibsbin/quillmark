@@ -42,6 +42,17 @@ pub fn convert_edit_errors(errors: Vec<(String, EditError)>) -> PyErr {
     raise_with_diagnostics(diags, message)
 }
 
+/// The [`convert_edit_errors`] twin for a batch spanning cards, where each
+/// refusal carries the whole `DocPath` it anchors at rather than a field name.
+pub fn convert_edit_errors_at(errors: Vec<(quillmark_core::DocPath, EditError)>) -> PyErr {
+    convert_edit_errors(
+        errors
+            .into_iter()
+            .map(|(path, err)| (path.to_string(), err))
+            .collect(),
+    )
+}
+
 /// The message is the primary diagnostic's for a single diagnostic, an
 /// `"<N> error(s): <first>"` aggregate for more.
 pub fn convert_render_error(err: RenderError) -> PyErr {

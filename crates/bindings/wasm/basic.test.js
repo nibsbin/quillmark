@@ -215,20 +215,20 @@ describe('Document.toMarkdown: fromMarkdown → mutate → emit → re-parse', (
 })
 
 // ---------------------------------------------------------------------------
-// Document.toJson / Document.fromJson: versioned storage DTO round-trip
+// Document.toStored / Document.fromStored: versioned storage DTO round-trip
 // ---------------------------------------------------------------------------
 
-describe('Document JSON DTO: toJson / fromJson', () => {
+describe('Document JSON DTO: toStored / fromStored', () => {
   // The DTO's content rules (what round-trips, what a reconstruction drops,
   // which payloads are refused) are core's
   // (`core/src/document/dto.rs`). At this boundary the questions are narrower:
   // does the DTO cross as a plain JSON string, does a handle survive the
-  // round-trip, and do the JS-only statics (`tryFromJson`, `storageVersionOf`)
+  // round-trip, and do the JS-only statics (`tryFromStored`, `storageVersionOf`)
   // answer with `undefined` where their throwing twins throw.
 
-  it('toJson emits a plain JSON string carrying the current schema version', () => {
+  it('toStored emits a plain JSON string carrying the current schema version', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
-    const dto = doc.toJson()
+    const dto = doc.toStored()
     expect(typeof dto).toBe('string')
     expect(JSON.parse(dto).schema).toBe(Document.currentStorageVersion())
   })
@@ -238,7 +238,7 @@ describe('Document JSON DTO: toJson / fromJson', () => {
     doc.storeField('title', 'New Title')
     doc.insertCard(Document.makeCard('note', { author: 'Alice' }, 'Hello'))
 
-    const restored = Document.fromJson(doc.toJson())
+    const restored = Document.fromStored(doc.toStored())
 
     expect(restored.equals(doc)).toBe(true)
     expect(field(restored.main, 'title')).toBe('New Title')
@@ -246,27 +246,27 @@ describe('Document JSON DTO: toJson / fromJson', () => {
     expect(exportMarkdown(restored.cards[0].body)).toBe('Hello')
   })
 
-  it('fromJson throws on a payload it cannot accept', () => {
+  it('fromStored throws on a payload it cannot accept', () => {
     expect(() =>
-      Document.fromJson('{"schema":"quillmark/document@0.99.0","main":{}}'),
+      Document.fromStored('{"schema":"quillmark/document@0.99.0","main":{}}'),
     ).toThrow()
   })
 
-  it('tryFromJson is the non-throwing twin: a Document, or undefined', () => {
-    const dto = Document.fromMarkdown(TEST_MARKDOWN).toJson()
-    expect(Document.tryFromJson(dto).equals(Document.fromMarkdown(TEST_MARKDOWN))).toBe(true)
+  it('tryFromStored is the non-throwing twin: a Document, or undefined', () => {
+    const dto = Document.fromMarkdown(TEST_MARKDOWN).toStored()
+    expect(Document.tryFromStored(dto).equals(Document.fromMarkdown(TEST_MARKDOWN))).toBe(true)
 
-    expect(Document.tryFromJson('not json at all')).toBeUndefined()
+    expect(Document.tryFromStored('not json at all')).toBeUndefined()
     expect(
-      Document.tryFromJson('{"schema":"quillmark/document@0.99.0","main":{}}'),
+      Document.tryFromStored('{"schema":"quillmark/document@0.99.0","main":{}}'),
     ).toBeUndefined()
   })
 
   it('storageVersionOf reads the schema tag off any payload, or undefined', () => {
-    const current = Document.fromMarkdown(TEST_MARKDOWN).toJson()
+    const current = Document.fromMarkdown(TEST_MARKDOWN).toStored()
     expect(Document.storageVersionOf(current)).toBe(Document.currentStorageVersion())
 
-    // A future version reads back as-is, even though fromJson would reject it.
+    // A future version reads back as-is, even though fromStored would reject it.
     expect(
       Document.storageVersionOf('{"schema":"quillmark/document@0.99.0","main":{}}'),
     ).toBe('quillmark/document@0.99.0')
@@ -1959,7 +1959,7 @@ addr:
     expect(addr.nestedFills).toEqual([['street']])
 
     // Storage round-trip preserves the nested marker.
-    const restored = Document.fromJson(doc.toJson())
+    const restored = Document.fromStored(doc.toStored())
     expect(restored.toMarkdown()).toContain('street: !must_fill')
 
     // A card built with nestedFills survives insertCard → emit.
@@ -1991,7 +1991,7 @@ addr:
 })
 
 // ---------------------------------------------------------------------------
-// quill.resolve: the resolved-value view
+// reader.resolve, through its `_resolve` ABI: the resolved-value view
 // ---------------------------------------------------------------------------
 //
 // For every declared field: the value the render projection would use and the
@@ -2001,7 +2001,7 @@ addr:
 // validate(), guidance stays the schema. See prose/canon/SCHEMAS.md
 // § "Value sources and projections".
 
-describe('quill.resolve', () => {
+describe('reader.resolve, through the _resolve ABI', () => {
   const QUILL_YAML = `quill:
   name: field_states_test
   version: "1.0"
@@ -2046,7 +2046,7 @@ $kind: main
 title: Hello
 ~~~
 `
-    const f = quill.resolve(Document.fromMarkdown(md)).main.fields
+    const f = quill._resolve(Document.fromMarkdown(md)).main.fields
 
     // Declaration order is structural: the array order is the contract.
     expect(f.map((r) => r.name)).toEqual(['title', 'status', 'notes', 'count', 'author'])
@@ -2069,7 +2069,7 @@ title: T
 
 Hello body.
 `
-    const withBody = quill.resolve(Document.fromMarkdown(authored))
+    const withBody = quill._resolve(Document.fromMarkdown(authored))
     expect(withBody.main.body).toBeDefined()
     expect(withBody.main.body.source).toBe('authored')
     // Not smuggled into the fields array under any `body` / `$body` name.
@@ -2082,7 +2082,7 @@ $kind: main
 title: T
 ~~~
 `
-    const noBody = quill.resolve(Document.fromMarkdown(blank))
+    const noBody = quill._resolve(Document.fromMarkdown(blank))
     expect(noBody.main.body.source).toBe('blank')
   })
 
@@ -2094,7 +2094,7 @@ $kind: main
 title: T
 ~~~
 `
-    const f = quill.resolve(Document.fromMarkdown(md)).main.fields
+    const f = quill._resolve(Document.fromMarkdown(md)).main.fields
     // Each row is exactly { name, value, source }, schema guidance (example:)
     // and diagnostics read from quill.schema / quill.validate, not duplicated.
     const author = byName(f, 'author')
@@ -2117,7 +2117,7 @@ label: L
 ~~~
 Note body.
 `
-    const states = quill.resolve(Document.fromMarkdown(md))
+    const states = quill._resolve(Document.fromMarkdown(md))
     expect(states.cards.length).toBe(1)
     const card = states.cards[0]
     expect(card.kind).toBe('note')
@@ -2138,7 +2138,7 @@ count: "not-a-number"
     // A value the render coercion cannot conform is kept raw and Authored,
     // exactly as compile_data leaves it: the error surfaces via validate(),
     // not this view (which carries no diagnostics).
-    const row = byName(quill.resolve(Document.fromMarkdown(md)).main.fields, 'count')
+    const row = byName(quill._resolve(Document.fromMarkdown(md)).main.fields, 'count')
     expect(row.source).toBe('authored')
     expect(row.value).toBe('not-a-number')
     expect('diagnostics' in row).toBe(false)
@@ -2152,8 +2152,175 @@ $kind: main
 title: T
 ~~~
 `
-    const states = quill.resolve(Document.fromMarkdown(md))
+    const states = quill._resolve(Document.fromMarkdown(md))
     const round = JSON.parse(JSON.stringify(states))
     expect(byName(round.main.fields, 'title').value).toBe('T')
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+// reader.values / writer.setValues, through their `_readerValues` /
+// `_setValues` ABI: the values form
+// ---------------------------------------------------------------------------
+//
+// The shape's semantics (the per-axis rule, the walk's per-leaf projection, the
+// write guard) are core's (`core/src/quill/values.rs`, `core/src/writer.rs`).
+// At this boundary the questions are narrower: does the shape cross as a plain
+// JS object with every axis present, does `null` cross both ways, does the
+// write reach core at both scopes, and do refusals arrive as diagnostics
+// carrying their own `path`.
+
+describe('reader.values / writer.setValues', () => {
+  const QUILL_YAML = `quill:
+  name: values_test
+  version: "1.0"
+  backend: typst
+  description: Values form coverage
+
+main:
+  fields:
+    subject:
+      type: richtext
+      inline: true
+    note:
+      type: plaintext
+    qty:
+      type: integer
+      default: 1
+    paragraphs:
+      type: array
+      items:
+        type: richtext
+
+card_kinds:
+  line_item:
+    fields:
+      desc:
+        type: richtext
+        inline: true
+      qty:
+        type: integer
+`
+
+  const buildQuill = () =>
+    Quill.fromTree(makeQuill({ name: 'values_test', quillYaml: QUILL_YAML }))
+
+  const MD = `~~~card-yaml
+$quill: values_test
+$kind: main
+$ext:
+  app:
+    k: 1
+subject: Hello **world**
+note: a *literal* line
+paragraphs:
+  - Para **one**
+~~~
+
+Body prose.
+
+~~~card-yaml
+$kind: line_item
+desc: Widget __A__
+qty: "3"
+~~~
+Item note.
+`
+
+  it('reads every axis, content leaves as text at every depth, scalars as stored', () => {
+    const quill = buildQuill()
+    const v = quill.parse(MD)._readerValues(quill, {})
+
+    expect(v.fields.subject).toBe('Hello **world**')
+    expect(v.fields.note).toBe('a *literal* line')
+    expect(v.fields.paragraphs).toEqual(['Para **one**'])
+    expect('qty' in v.fields).toBe(false)
+    expect(v.body).toBe('Body prose.')
+    expect(v.ext).toEqual({ app: { k: 1 } })
+
+    expect(v.cards).toEqual([
+      {
+        kind: 'line_item',
+        fields: { desc: 'Widget **A**', qty: '3' },
+        body: 'Item note.',
+        ext: null,
+      },
+    ])
+  })
+
+  it('null crosses both ways: a missing $ext, a kindless card, a present-null field', () => {
+    const quill = buildQuill()
+    const doc = quill.parse(
+      '~~~card-yaml\n$quill: values_test\n$kind: main\nsubject:\n~~~\n\n~~~card-yaml\nfoo: bar\n~~~\n',
+    )
+    const v = doc._readerValues(quill, {})
+    expect(v.fields.subject).toBeNull()
+    expect(v.ext).toBeNull()
+    expect(v.cards[0].kind).toBeNull()
+    expect(v.cards[0].fields).toEqual({ foo: 'bar' })
+    expect(v.cards[0].ext).toBeNull()
+
+    doc._setValues(quill, {}, { ext: { app: {} } })
+    expect(doc._readerValues(quill, {}).ext).toEqual({ app: {} })
+    doc._setValues(quill, {}, { ext: null })
+    expect(doc._readerValues(quill, {}).ext).toBeNull()
+  })
+
+  it('writing back an unedited read changes no bytes', () => {
+    const quill = buildQuill()
+    const doc = quill.parse(MD)
+    const before = doc.toStored()
+    doc._setValues(quill, {}, doc._readerValues(quill, {}))
+    expect(doc.toStored()).toBe(before)
+  })
+
+  it('an absent axis is untouched and a present one is replaced', () => {
+    const quill = buildQuill()
+    const doc = quill.parse(MD)
+    doc._setValues(quill, {}, { fields: { subject: 'Goodbye *world*' } })
+
+    const after = doc._readerValues(quill, {})
+    expect(after.fields.subject).toBe('Goodbye *world*')
+    expect('note' in after.fields).toBe(false)
+    expect(after.body).toBe('Body prose.')
+    expect(after.cards).toHaveLength(1)
+    expect(after.ext).toEqual({ app: { k: 1 } })
+  })
+
+  it('the card scope reads and writes one slot', () => {
+    const quill = buildQuill()
+    const doc = quill.parse(MD)
+    expect(doc._readerValues(quill, { card: 0 })).toEqual(doc._readerValues(quill, {}).cards[0])
+
+    doc._setValues(quill, { card: 0 }, { fields: { desc: 'Gadget' } })
+    expect(doc._readerValues(quill, { card: 0 }).fields).toEqual({ desc: 'Gadget' })
+    expect(doc._readerValues(quill, {}).fields.subject).toBe('Hello **world**')
+
+    expectEditCode(() => doc._setValues(quill, { card: 0 }, { fields: { bad: 1 } }), 'edit::unknown_field')
+    expectEditCode(() => doc._readerValues(quill, { card: 7 }), 'edit::index_out_of_range')
+    expectEditCode(() => doc._setValues(quill, { card: 7 }, {}), 'edit::index_out_of_range')
+  })
+
+  it('refusals arrive as diagnostics carrying their own path', () => {
+    const quill = buildQuill()
+    const doc = quill.parse(MD)
+    const before = doc.toStored()
+    let thrown
+    try {
+      doc._setValues(quill, {}, { fields: { nope: 'x' } })
+    } catch (err) {
+      thrown = err
+    }
+    expect(thrown, 'expected a throw, got none').toBeDefined()
+    expect(thrown.diagnostics[0].code).toBe('edit::unknown_field')
+    expect(thrown.diagnostics[0].path).toBe('main.nope')
+    expect(doc.toStored()).toBe(before)
+  })
+
+  it('a malformed values object throws before anything is read', () => {
+    const quill = buildQuill()
+    const doc = quill.parse(MD)
+    expect(() => doc._setValues(quill, {}, { feilds: {} })).toThrow()
   })
 })
