@@ -60,6 +60,15 @@
   document-level pair rather than a `store` / `load` pair. The old names are
   removed rather than aliased. Stored blobs, the `schema` tag, and every byte
   these verbs write are untouched.
+- fix(pdfform): **flatten keeps the background's resources and its own
+  `/Contents`.** `/Resources` is inheritable, so writing a fresh one onto a page
+  that carried none shadowed the ancestor's dict and unbound every name the
+  background stream selects; the effective dict is now resolved up `/Parent`,
+  inlined onto the page and extended there. The drawn fonts take names free in
+  that dict (`Helv2` where `Helv` is taken), since a second binding for a name
+  the background uses rebinds it under a last-wins parser. A `/Contents`
+  reference naming an *array* object expands to its elements instead of being
+  wrapped, which had left an array as an element of the `/Contents` array.
 
 ## v0.112.0 - 2026-09-01
 

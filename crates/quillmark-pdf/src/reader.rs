@@ -513,7 +513,7 @@ fn is_pdf_delim(c: u8) -> bool {
     )
 }
 
-pub(crate) fn parse_indirect_ref(s: &[u8]) -> Option<(u32, u16)> {
+pub fn parse_indirect_ref(s: &[u8]) -> Option<(u32, u16)> {
     let s = skip_ws(s);
     let mut i = 0;
     while i < s.len() && s[i].is_ascii_digit() {

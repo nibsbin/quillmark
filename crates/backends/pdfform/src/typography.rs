@@ -4,11 +4,19 @@
 //! flatten path must commit to a concrete font and size. Keeping that decision
 //! here is what makes preview and flattening agree exactly.
 
-/// Base-14 Helvetica, registered as `/Helv`, for text and choice values.
+/// Base-14 Helvetica, for text and choice values.
 pub(crate) const TEXT_FONT: &str = "Helvetica";
 
-/// Base-14 ZapfDingbats, registered as `/ZaDb`, for the checkbox check glyph.
+/// Base-14 ZapfDingbats, for the checkbox check glyph.
 pub(crate) const CHECK_FONT: &str = "ZapfDingbats";
+
+/// Preferred `/Font` resource name for [`TEXT_FONT`], shared with the `/DA` the
+/// stamp path writes. A page already binding it gets a derived name instead.
+pub(crate) const TEXT_FONT_RESOURCE: &str = quillmark_pdf::FormFont::Helvetica.resource_name();
+
+/// Preferred `/Font` resource name for [`CHECK_FONT`], the AcroForm spelling for
+/// ZapfDingbats.
+pub(crate) const CHECK_FONT_RESOURCE: &str = "ZaDb";
 
 pub(crate) const MIN_SIZE: f32 = 4.0;
 pub(crate) const MAX_SIZE: f32 = 12.0;

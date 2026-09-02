@@ -55,7 +55,7 @@ fn field_appearance(spec: &FieldSpec) -> Vec<u8> {
         .filter(|s| s.is_finite() && *s > 0.0)
         .unwrap_or(0.0);
     let mut da = b"/".to_vec();
-    da.extend_from_slice(spec.font.resource_name());
+    da.extend_from_slice(spec.font.resource_name().as_bytes());
     da.extend_from_slice(format!(" {size} Tf 0 g").as_bytes());
     da
 }
@@ -201,7 +201,7 @@ pub fn stamp(
                 let mut dr = form.insert(Name(b"DR")).dict();
                 let mut font_dict = dr.insert(Name(b"Font")).dict();
                 for (font, &fid) in fonts.iter().zip(&font_ids) {
-                    font_dict.pair(Name(font.resource_name()), Ref::new(fid as i32));
+                    font_dict.pair(Name(font.resource_name().as_bytes()), Ref::new(fid as i32));
                 }
             }
             form.finish();
