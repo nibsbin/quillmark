@@ -94,6 +94,16 @@
   only, and anything else falls through to the keep-raw path
   `conform_card_render` documents. The render gate refuses the shape, so the
   plate is unchanged.
+- fix(content): **a U+2028 or U+2029 in document text becomes a space.**
+  Typst's lexer reads both as line breaks, so one mid-paragraph reopens
+  `at_start` and the characters behind it are read as a block marker:
+  `"intro\u{2028}- item"` rendered a bullet, `- item` on its own line. No
+  escape reaches them — a `\` before whitespace is Typst's own linebreak — so
+  the separators join `\r` and the bidi controls as characters the content
+  forbids, refused by `validate` and replaced at every text ingress:
+  `from_plaintext`, markdown import, and an `Op::Insert` through
+  `apply_text_delta`. A space rather than a drop, both being Unicode
+  whitespace, so the words either side stay parted.
 
 ## v0.112.0 - 2026-09-01
 

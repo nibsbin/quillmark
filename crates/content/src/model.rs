@@ -6,7 +6,7 @@
 //! encoded: the model stores only the resulting range, so the stored form is
 //! identical whatever the editor did.
 
-use crate::normalize::is_bidi_char;
+use crate::normalize::{is_bidi_char, is_line_separator};
 use serde_json::Value as JsonValue;
 use std::borrow::Cow;
 
@@ -24,9 +24,10 @@ pub const ISLAND_SLOT: char = '\u{FFFC}';
 /// One content field as a content: the text plus the structure that rides on it.
 ///
 /// Invariants (established once by import normalization, checked by
-/// [`Content::validate`]): the text holds no `\r` and no bidi controls; the
-/// count of [`ISLAND_SLOT`] equals `islands.len()`; `lines.len()` equals the
-/// number of `\n`-separated segments; marks are normalized (sorted, unioned).
+/// [`Content::validate`]): the text holds no `\r`, no bidi controls, and no
+/// U+2028/U+2029 line separators; the count of [`ISLAND_SLOT`] equals
+/// `islands.len()`; `lines.len()` equals the number of `\n`-separated segments;
+/// marks are normalized (sorted, unioned).
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct Content {
@@ -781,6 +782,9 @@ pub enum Invariant {
     CarriageReturn,
     /// A bidi formatting control in the text.
     BidiControl(char),
+    /// A U+2028/U+2029 line separator in the text, which a downstream lexer
+    /// reads as a line break.
+    LineSeparator(char),
     /// `island_slot_count != islands.len()`.
     IslandSlotMismatch { slots: usize, islands: usize },
     /// `lines.len() != newline_segment_count`.
@@ -1089,6 +1093,9 @@ impl Content {
             }
             if is_bidi_char(c) {
                 return Err(Invariant::BidiControl(c));
+            }
+            if is_line_separator(c) {
+                return Err(Invariant::LineSeparator(c));
             }
             if c == ISLAND_SLOT {
                 slots += 1;

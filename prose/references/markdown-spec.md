@@ -426,7 +426,12 @@ Before CommonMark parsing, each body region is normalized:
 2. **Bidi control stripping.** Remove U+061C, U+200E, U+200F,
    U+202A–U+202E, U+2066–U+2069. These invisible characters can
    desynchronize delimiter runs when copy-pasted from bidi-aware sources.
-3. **HTML comment fence repair.** If `-->` is followed by non-whitespace
+3. **Line-separator spacing.** Replace U+2028 (LINE SEPARATOR) and U+2029
+   (PARAGRAPH SEPARATOR) with a single U+0020 space. CommonMark reads
+   neither as a line ending, but a backend lexer may, in which case the
+   text after one is read as a block marker the author never wrote. Both
+   are Unicode whitespace, so a space keeps the words they part apart.
+4. **HTML comment fence repair.** If `-->` is followed by non-whitespace
    text on the same line, insert a newline after `-->` so the trailing
    text reaches the paragraph parser instead of being consumed by the
    CommonMark HTML-block rule (type 2).

@@ -1,10 +1,10 @@
 //! Markdown import (cold): `normalize → pulldown → content`.
 //!
 //! Input is normalized by [`crate::normalize::normalize_markdown`] (CRLF→LF,
-//! bidi strip, HTML comment-fence repair) so the content invariants hold by
-//! construction, then parsed with `pulldown_cmark` (CommonMark + strikethrough
-//! + pipe tables) and walked into a [`Content`]. This is the one place the
-//! `<u>` allowlist runs.
+//! bidi controls dropped, U+2028/U+2029 spaced, HTML comment-fence repair) so
+//! the content invariants hold by construction, then parsed with
+//! `pulldown_cmark` (CommonMark + strikethrough + pipe tables) and walked into
+//! a [`Content`]. This is the one place the `<u>` allowlist runs.
 //!
 //! ## Canonicalizations (documented, not bugs)
 //!
@@ -78,7 +78,7 @@ pub fn from_markdown(markdown: &str) -> Result<Normalized, ImportError> {
 /// [`from_markdown`]. Every character is content, never syntax: `*hi*` is four
 /// literal chars, not emphasis. With [`crate::export::to_plaintext`] it pins the
 /// fixed point `to_plaintext(from_plaintext(s)) == s` for any `s` free of `\r`,
-/// bidi controls, and [`ISLAND_SLOT`].
+/// bidi controls, U+2028/U+2029 line separators, and [`ISLAND_SLOT`].
 ///
 /// Line structure is **derived, not stored**: a lone `\n` between two non-empty
 /// segments is a within-paragraph break ([`Line::continues`] `true`); a blank
@@ -89,7 +89,8 @@ pub fn from_plaintext(s: &str) -> Normalized {
     // through untouched.
     let text: String = s
         .chars()
-        .filter(|&c| c != '\r' && c != ISLAND_SLOT && !crate::normalize::is_bidi_char(c))
+        .filter(|&c| c != ISLAND_SLOT)
+        .filter_map(crate::normalize::admit_char)
         .collect();
     // One line per `\n`-separated segment. A single streaming pass carries the
     // prior segment's non-emptiness, so line 0 is `false` and no intermediate
@@ -126,17 +127,19 @@ struct Inline {
 }
 
 impl Inline {
-    /// Append inline text, stripping characters the content forbids: `\r` and a
-    /// stray [`ISLAND_SLOT`] are dropped; a stray `\n` becomes a space, real
-    /// line boundaries going through [`Self::push_raw`]. Admitting a bare slot
-    /// char would break the slot-count invariant.
+    /// Append inline text under the [`crate::normalize::admit_char`] contract,
+    /// with a stray [`ISLAND_SLOT`] dropped and a stray `\n` spaced, real line
+    /// boundaries going through [`Self::push_raw`]. Admitting a bare slot char
+    /// would break the slot-count invariant.
     fn push_text(&mut self, s: &str) {
         for c in s.chars() {
             let c = match c {
-                '\r' => continue,
                 ISLAND_SLOT => continue,
                 '\n' => ' ',
-                other => other,
+                other => match crate::normalize::admit_char(other) {
+                    Some(c) => c,
+                    None => continue,
+                },
             };
             self.text.push(c);
             self.pos += 1;
@@ -632,9 +635,13 @@ impl Builder {
     fn push_code_line(&mut self, seg: &str) {
         for c in seg.chars() {
             match c {
-                '\r' | '\n' => continue,
+                '\n' => continue,
                 ISLAND_SLOT => continue,
-                other => self.inline.push_raw(other),
+                other => {
+                    if let Some(c) = crate::normalize::admit_char(other) {
+                        self.inline.push_raw(c);
+                    }
+                }
             }
         }
     }
@@ -951,6 +958,21 @@ mod tests {
         let rt = imp_plain(&format!("a{ISLAND_SLOT}b"));
         assert_eq!(rt.text, "ab", "the reserved island slot is dropped");
         assert_eq!(rt.islands.len(), 0);
+    }
+
+    #[test]
+    fn line_separators_are_spaced_at_every_text_ingress() {
+        for sep in ['\u{2028}', '\u{2029}'] {
+            let src = format!("intro{sep}- item");
+            assert_eq!(imp_plain(&src).text, "intro - item", "plaintext {sep:?}");
+            assert_eq!(imp(&src).text, "intro - item", "markdown {sep:?}");
+        }
+
+        let held = Content::new("intro\u{2028}- item".into(), vec![Line::new(LineKind::Para)]);
+        assert_eq!(
+            held.validate(),
+            Err(crate::model::Invariant::LineSeparator('\u{2028}'))
+        );
     }
 
     #[test]
