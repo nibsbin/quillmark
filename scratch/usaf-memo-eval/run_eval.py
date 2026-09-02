@@ -176,8 +176,10 @@ def usage_from_response(resp: Any) -> dict[str, Any]:
 def dump_item(item: Any) -> dict[str, Any]:
     if hasattr(item, "model_dump"):
         data = item.model_dump()
-        # Keep traces from exploding on huge binary blobs.
-        return json.loads(json.dumps(data, default=str))
+        data = json.loads(json.dumps(data, default=str))
+        if isinstance(data, dict) and data.get("type") == "reasoning":
+            data.pop("encrypted_content", None)
+        return data
     return {"type": getattr(item, "type", None), "repr": repr(item)}
 
 
