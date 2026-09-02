@@ -1,0 +1,320 @@
+quill:
+  name: usaf_memo
+  version: 0.3.0
+  backend: typst
+  description: U.S. Air Force and Space Force Official Memorandum
+
+typst:
+  plate_file: plate.typ
+
+main:
+  ui:
+    groups: [addressing, letterhead, classification, additional]
+  body:
+    example: |
+      The first paragraph. Top-level paragraphs are auto-numbered; do not add manual numbering.
+
+      - Nested bullets are automatically lettered.
+
+      Lines that take no number, letter, or bullet — a roster of names, an address — go in a block quote, typeset as written. End a line with a backslash to break it.
+
+      > FIRST M. LAST, Maj, USAF\
+      > SECOND N. LAST, Capt, USAF
+  fields:
+    memo_for:
+      type: array
+      items:
+        type: plaintext
+        inline: true
+      example:
+        - ORG1/SYMBOL
+        - ORG2/SYMBOL
+      ui:
+        group: addressing
+        compact: true
+      description: "Organization or office symbol, rendered in uppercase. To address a specific person, add their rank and name in parentheses: 'ORG/SYMBOL (LT COL JANE DOE)'. For a long list, enter 'SEE DISTRIBUTION' and name the recipients in the Distribution field."
+
+    memo_from:
+      type: array
+      items:
+        type: plaintext
+        inline: true
+      default: []
+      example:
+        - ORG/SYMBOL
+        - Organization Name
+        - 123 Street Ave
+        - City ST 12345-6789
+      ui:
+        group: addressing
+        compact: true
+      description: "The office symbol alone when every recipient is on this installation. The full mailing address as well when any recipient is elsewhere, so they can write back. Leave blank for a Memorandum for Record, which prints no FROM line."
+
+    subject:
+      type: richtext
+      inline: true
+      example: Subject of the Memorandum
+      ui:
+        group: addressing
+      description: "Keep it brief. Capitalize the first letter of each word except articles, prepositions, and conjunctions. Put any suspense date in parentheses. Italicize publication titles with *asterisks*."
+    
+    date:
+      type: date
+      default: ""
+      ui:
+        group: addressing
+        compact: true
+      description: "YYYY-MM-DD, printed in the format the Memo Style field selects. Leave blank to use today's date."
+      
+    authority_line:
+      type: plaintext
+      inline: true
+      default: ""
+      example: FOR THE COMMANDER
+      ui:
+        group: addressing
+        compact: true
+      description: "Line telling the reader the signer acted for the commander, the command section, or the headquarters, printed in uppercase above the signature block. AFH 33-337 words it 'FOR THE COMMANDER', or the appropriate title where the head of your organization holds one other than commander. Fill it in when the commander's designated representative signs for a specific action, when the memo carries the commander's position or the coordinated position of the headquarters staff, or when a staff member directs action or announces policy within their own area of responsibility. Leave blank — the usual case — when the commander signs, when the memo gives the opinion of a unit, directorate, division, office, or branch, or when it goes outside the DoD. Leave blank as well when the deputy or vice commander signs while the commander is temporarily away, unless command action is directed by law and requires an indication of delegation."
+
+    signature_block:
+      type: array
+      items:
+        type: plaintext
+        inline: true
+      example:
+        - "FIRST M. LAST, Rank, USAF"
+        - Duty Title
+      ui:
+        group: addressing
+        compact: true
+      description: "Line 1: Name in UPPERCASE as signed, grade, and service. Line 2: Duty title."
+
+    letterhead_title:
+      type: array
+      items:
+        type: plaintext
+        inline: true
+      default:
+        - DEPARTMENT OF THE AIR FORCE
+      example:
+        - DEPARTMENT OF THE AIR FORCE
+        - HEADQUARTERS [UNIT NAME]
+      ui:
+        group: letterhead
+      description: "Letterhead lines, top to bottom, all rendered in uppercase. The first is the department title, set larger than the rest. Change that line only for a Joint Command or a DoW agency. The lines below it are your unit's full organization name."
+
+    letterhead_seal:
+      type: enum
+      values:
+        - dow
+        - dod
+      default: dow
+      ui:
+        group: letterhead
+        compact: true
+      description: "Department of War (DoW) or Department of Defense (DoD) seal, shown at the top left of the letterhead. Leave blank for no seal."
+
+    letterhead_seal_subtitle:
+      type: plaintext
+      inline: true
+      default: ""
+      ui:
+        group: letterhead
+        compact: true
+      description: "Bold-caps line below the seal. Nothing prints when it is blank, or when there is no seal."
+
+    tag_line:
+      type: richtext
+      inline: true
+      default: ""
+      ui:
+        group: letterhead
+        compact: true
+      description: "Organizational motto, centered in the footer of every page. Supports Markdown emphasis: *italics*, **bold**."
+
+    classification:
+      type: enum
+      values:
+        - UNCLASSIFIED
+        - CUI
+        - CONFIDENTIAL
+        - SECRET
+        - TOP SECRET
+      default: ""
+      ui:
+        group: classification
+        compact: true
+      description: "Classification marking, banner-printed at the top and bottom of every page. Leave blank for no banner, which is what an unclassified document normally carries. Mark per DAFI 16-1404, DoDM 5200.48 for CUI, and applicable DoD guidance."
+      variants:
+        CUI:
+          controlled_by:
+            type: plaintext
+            inline: true
+            example: SAF/AA
+            description: "Office or organization that designated this information as CUI. Required by DoDM 5200.48."
+          poc:
+            type: plaintext
+            inline: true
+            example: "Capt J. Smith, DSN 555-1234, john.smith@us.af.mil"
+            description: "Point of contact for CUI questions. Required by DoDM 5200.48."
+          category:
+            type: plaintext
+            inline: true
+            default: ""
+            description: "CUI category from the DoD CUI Registry, such as 'Privacy/MED', 'CTI', or 'PRVCY'. Leave blank to omit."
+          limited_dissemination:
+            type: plaintext
+            inline: true
+            default: ""
+            description: "Limited dissemination control shown in the indicator block, such as 'FEDONLY' or 'NOFORN'; rendered in uppercase. The banner's own suffix is the separate Dissemination field."
+
+    dissemination:
+      type: plaintext
+      inline: true
+      default: ""
+      ui:
+        group: classification
+        compact: true
+      description: "Suffix appended to the banner after a double slash, rendered in uppercase: 'NF' prints as CUI//NF. Leave blank for no suffix."
+
+    references:
+      type: array
+      items:
+        type: richtext
+        inline: true
+      default: []
+      example:
+        - "AFMAN 33-326, 25 November 2011, *Preparing Official Communications*"
+        - "AFI 33-360, *Publications and Forms Management*"
+      ui:
+        group: additional
+      description: "Cite each reference by organization, type, date, and title. Two or more print as a References block lettered (a), (b), (c); a single one prints in parentheses after the subject, per AFH 33-337. Italicize publication titles with *asterisks*."
+
+    cc:
+      type: array
+      items:
+        type: plaintext
+        inline: true
+      default: []
+      example:
+        - Rank and Name, ORG/SYMBOL
+      ui:
+        group: additional
+      description: Offices or people receiving a courtesy copy, one per line.
+
+    distribution:
+      type: array
+      items:
+        type: plaintext
+        inline: true
+      default: []
+      example:
+        - ORG1/SYMBOL
+        - ORG2/SYMBOL
+      ui:
+        group: additional
+      description: "Every recipient, listed here when 'SEE DISTRIBUTION' stands in the Memo For field."
+
+    attachments:
+      type: array
+      items:
+        type: richtext
+        inline: true
+      default: []
+      example:
+        - Attachment description, YYYY MMM DD
+      ui:
+        group: additional
+      description: "Attachments in the order the memo mentions them. Describe each briefly; do not write 'as stated' or abbreviate. A lone attachment prints unnumbered, two or more are numbered. Italicize publication titles with *asterisks*."
+
+    memo_style:
+      type: enum
+      values:
+        - usaf
+        - daf
+      default: usaf
+      ui:
+        group: additional
+        compact: true
+      description: "USAF memorandum or DAF headquarters memorandum, per AFH 33-337. DAF dates as 'September 15, 2026' rather than '15 September 2026', and leaves top-level paragraphs unnumbered with a first-line indent."
+
+    font_size:
+      type: number
+      default: 12
+      ui:
+        group: additional
+        compact: true
+      description: "Body text size in points; decimals allowed, such as 11.5. AFH 33-337 §5 specifies 12."
+
+card_kinds:
+  indorsement:
+    description: "An endorsing official's response to the memo, or their forwarding of it onward. Indorsements are numbered in card order: 1st Ind, 2d Ind, 3d Ind."
+    ui:
+      title: Routing indorsement
+      groups: [addressing, additional]
+    fields:
+      from:
+        type: plaintext
+        inline: true
+        example: ORG/SYMBOL
+        ui:
+          group: addressing
+          compact: true
+        description: Office symbol or Rank Name of the endorsing official.
+      for:
+        type: plaintext
+        inline: true
+        example: ORG/SYMBOL
+        ui:
+          group: addressing
+          compact: true
+        description: Office symbol or organization receiving the endorsed memo.
+      date:
+        type: date
+        default: ""
+        ui:
+          group: addressing
+          compact: true
+        description: "YYYY-MM-DD, the date the endorser signs or forwards the memo — distinct from the originating memo's date, per AFH 33-337 Ch. 14. Leave blank to print a fillable PDF text field for the endorser to type into when signing."
+      authority_line:
+        type: plaintext
+        inline: true
+        default: ""
+        ui:
+          group: addressing
+          compact: true
+        description: "Authority line for this indorsement, printed in uppercase above its signature block. An indorsement has a closing section of its own, so the same rules apply: fill it in when the endorser signs for the commander or the headquarters, leave it blank when the commander signs."
+      signature_block:
+        type: array
+        items:
+          type: plaintext
+          inline: true
+        example:
+          - "FIRST M. LAST, Rank, USAF"
+          - Duty Title
+        ui:
+          group: addressing
+          compact: true
+        description: "Line 1: Name in UPPERCASE as signed, grade, and service. Line 2: Duty title."
+      format:
+        type: enum
+        values:
+          - standard
+          - informal
+          - separate_page
+        default: standard
+        ui:
+          group: additional
+          compact: true
+        description: "'standard' keeps the indorsement on the action document's page under a one-line header, and moves it to a page of its own, under the fuller header, when it no longer fits. 'separate_page' always begins a new page. 'informal' prints no header at all, so an informal indorsement with an empty body is nothing but a signature block — with no text of its own to hold it to the page, it can open a page alone. Give it a body or an action, or use 'standard'."
+      action:
+        type: enum
+        values:
+          - undecided
+          - approve
+          - disapprove
+        default: ""
+        ui:
+          group: additional
+          compact: true
+        description: "The endorser's decision, printed as an either/or line with the choice underlined and the rejected option struck out. Leave blank to omit the line. The wording follows the indorsement's place in the chain: the last one is the approval authority and reads Approve/Disapprove, every earlier one is a coordinating official and reads Concur/Nonconcur. Use 'undecided' to print the pair unmarked, for the endorser to mark by hand."
