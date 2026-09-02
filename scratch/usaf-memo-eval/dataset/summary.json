@@ -1,201 +1,202 @@
 {
-  "updated_at": "2026-09-02T05:44:44.814993+00:00",
-  "traces": 977,
-  "successes": 823,
-  "success_rate": 0.842374616171955,
-  "cost_usd": 2.5971694399999956,
+  "updated_at": "2026-09-02T05:54:29.161007+00:00",
+  "traces": 1375,
+  "successes": 1159,
+  "success_rate": 0.8429090909090909,
+  "cost_usd": 3.6253110700000026,
   "per_model": {
     "gpt-5-nano": {
-      "n": 123,
-      "ok": 113,
-      "cost_usd": 0.1279777,
-      "input_tokens": 974730,
-      "output_tokens": 234823,
-      "reasoning_tokens": 132032,
-      "create_document_attempts": 193,
-      "got_blueprint": 122
+      "n": 173,
+      "ok": 159,
+      "cost_usd": 0.17766141000000002,
+      "input_tokens": 1344801,
+      "output_tokens": 326799,
+      "reasoning_tokens": 182592,
+      "create_document_attempts": 268,
+      "got_blueprint": 172
     },
     "gpt-5.4-mini": {
-      "n": 123,
-      "ok": 123,
-      "cost_usd": 0.7689233999999999,
-      "input_tokens": 581362,
-      "output_tokens": 87495,
-      "reasoning_tokens": 28379,
-      "create_document_attempts": 147,
-      "got_blueprint": 123
+      "n": 174,
+      "ok": 174,
+      "cost_usd": 1.0942045499999995,
+      "input_tokens": 824341,
+      "output_tokens": 125120,
+      "reasoning_tokens": 40731,
+      "create_document_attempts": 210,
+      "got_blueprint": 174
     },
     "gpt-4.1-mini": {
-      "n": 122,
-      "ok": 60,
-      "cost_usd": 0.38744680000000015,
-      "input_tokens": 847437,
-      "output_tokens": 81487,
+      "n": 172,
+      "ok": 88,
+      "cost_usd": 0.5227484000000002,
+      "input_tokens": 1138723,
+      "output_tokens": 107701,
       "reasoning_tokens": 0,
-      "create_document_attempts": 139,
-      "got_blueprint": 122
+      "create_document_attempts": 190,
+      "got_blueprint": 172
     },
     "gpt-5.6-luna": {
-      "n": 123,
-      "ok": 123,
-      "cost_usd": 0.17265490000000006,
-      "input_tokens": 517802,
-      "output_tokens": 70895,
-      "reasoning_tokens": 16276,
-      "create_document_attempts": 135,
-      "got_blueprint": 123
+      "n": 174,
+      "ok": 174,
+      "cost_usd": 0.2295088000000001,
+      "input_tokens": 727964,
+      "output_tokens": 100944,
+      "reasoning_tokens": 22949,
+      "create_document_attempts": 190,
+      "got_blueprint": 174
     },
     "gpt-5.6-luna:medium": {
-      "n": 123,
-      "ok": 123,
-      "cost_usd": 0.19575625999999985,
-      "input_tokens": 493588,
-      "output_tokens": 89230,
-      "reasoning_tokens": 32552,
-      "create_document_attempts": 129,
-      "got_blueprint": 123
+      "n": 174,
+      "ok": 174,
+      "cost_usd": 0.2688151799999999,
+      "input_tokens": 695391,
+      "output_tokens": 129270,
+      "reasoning_tokens": 45949,
+      "create_document_attempts": 182,
+      "got_blueprint": 174
     },
     "gpt-5.4-nano": {
-      "n": 123,
-      "ok": 120,
-      "cost_usd": 0.27593528,
-      "input_tokens": 639535,
-      "output_tokens": 138108,
-      "reasoning_tokens": 56665,
-      "create_document_attempts": 155,
-      "got_blueprint": 123
+      "n": 174,
+      "ok": 170,
+      "cost_usd": 0.3969457800000001,
+      "input_tokens": 896984,
+      "output_tokens": 201466,
+      "reasoning_tokens": 79623,
+      "create_document_attempts": 218,
+      "got_blueprint": 174
     },
     "gpt-5-mini": {
-      "n": 122,
-      "ok": 122,
-      "cost_usd": 0.3824890999999999,
-      "input_tokens": 569110,
-      "output_tokens": 129653,
-      "reasoning_tokens": 44416,
-      "create_document_attempts": 143,
-      "got_blueprint": 122
+      "n": 172,
+      "ok": 172,
+      "cost_usd": 0.54806035,
+      "input_tokens": 785451,
+      "output_tokens": 188492,
+      "reasoning_tokens": 61696,
+      "create_document_attempts": 198,
+      "got_blueprint": 172
     },
     "gpt-4.1-nano": {
-      "n": 118,
-      "ok": 39,
-      "cost_usd": 0.28598599999999985,
-      "input_tokens": 4029220,
-      "output_tokens": 235084,
+      "n": 162,
+      "ok": 48,
+      "cost_usd": 0.3873665999999995,
+      "input_tokens": 5411582,
+      "output_tokens": 324193,
       "reasoning_tokens": 0,
-      "create_document_attempts": 436,
-      "got_blueprint": 118
+      "create_document_attempts": 620,
+      "got_blueprint": 162
     }
   },
   "per_category": {
     "mfr": {
-      "n": 40,
-      "ok": 31
+      "n": 48,
+      "ok": 37
     },
     "simple_tasking": {
       "n": 48,
       "ok": 39
     },
     "yaml_traps": {
-      "n": 112,
-      "ok": 101
+      "n": 123,
+      "ok": 112
     },
     "cui": {
-      "n": 80,
-      "ok": 63
+      "n": 111,
+      "ok": 88
     },
     "classified": {
-      "n": 64,
-      "ok": 57
+      "n": 71,
+      "ok": 64
     },
     "indorsement": {
-      "n": 112,
-      "ok": 92
+      "n": 136,
+      "ok": 110
     },
     "distribution": {
       "n": 24,
       "ok": 18
     },
     "attachments": {
-      "n": 40,
-      "ok": 35
+      "n": 48,
+      "ok": 40
     },
     "daf_style": {
       "n": 16,
       "ok": 15
     },
     "letterhead": {
-      "n": 56,
-      "ok": 44
+      "n": 79,
+      "ok": 65
     },
     "space_force": {
-      "n": 15,
+      "n": 16,
       "ok": 12
     },
     "civilian": {
-      "n": 15,
+      "n": 16,
       "ok": 12
     },
     "body_format": {
-      "n": 46,
-      "ok": 37
+      "n": 63,
+      "ok": 49
     },
     "long_body": {
-      "n": 13,
-      "ok": 12
-    },
-    "minimal": {
       "n": 16,
       "ok": 13
     },
+    "minimal": {
+      "n": 32,
+      "ok": 25
+    },
     "addressing": {
-      "n": 24,
-      "ok": 21
+      "n": 48,
+      "ok": 41
     },
     "authority_line": {
+      "n": 32,
+      "ok": 30
+    },
+    "cc": {
       "n": 16,
       "ok": 16
     },
-    "cc": {
-      "n": 8,
-      "ok": 8
-    },
     "references": {
-      "n": 16,
-      "ok": 12
+      "n": 32,
+      "ok": 26
     },
     "instruction_following": {
-      "n": 40,
-      "ok": 38
+      "n": 63,
+      "ok": 60
     },
     "enums": {
+      "n": 32,
+      "ok": 27
+    },
+    "numbers": {
+      "n": 32,
+      "ok": 28
+    },
+    "dates": {
       "n": 16,
       "ok": 14
     },
-    "numbers": {
-      "n": 16,
-      "ok": 15
-    },
-    "dates": {
-      "n": 8,
-      "ok": 6
-    },
     "narrative": {
-      "n": 96,
-      "ok": 78
+      "n": 191,
+      "ok": 159
     },
     "underspecified": {
-      "n": 40,
-      "ok": 34
+      "n": 66,
+      "ok": 59
     }
   },
   "diagnostic_codes": {
-    "parse::missing_quill": 271,
-    "parse::yaml_error_with_location": 256,
-    "validation::must_fill": 165,
-    "parse::invalid_structure": 14,
+    "parse::missing_quill": 414,
+    "parse::yaml_error_with_location": 325,
+    "validation::must_fill": 257,
+    "parse::invalid_structure": 18,
     "mcp::empty_content": 11,
-    "validation::enum_violation": 10,
+    "validation::enum_violation": 11,
     "validation::unknown_card": 6,
-    "validation::not_inline": 2
+    "validation::not_inline": 2,
+    "validation::type_mismatch": 2
   }
 }
