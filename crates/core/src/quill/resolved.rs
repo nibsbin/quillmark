@@ -346,6 +346,62 @@ card_kinds:
         assert_eq!(status.value.as_json(), &serde_json::json!("draft"));
     }
 
+    const CONTAINERS: &str = r#"
+quill:
+  name: shape_test
+  version: "1.0"
+  backend: typst
+  description: Container-shape tests
+main:
+  fields:
+    counts:
+      type: array
+      items:
+        type: integer
+    address:
+      type: object
+      properties:
+        street: { type: string }
+"#;
+
+    fn shape_doc(fields: &str) -> Document {
+        parse(&format!(
+            "~~~card-yaml\n$quill: shape_test@1.0\n$kind: main\n{fields}~~~\n"
+        ))
+    }
+
+    #[test]
+    fn an_array_field_blanks_only_where_the_document_left_it_out() {
+        let quill = quill_from_yaml(CONTAINERS);
+
+        // `abc` conforms to no `integer[]`, so it reaches the ladder raw. The row
+        // is the document's own text under the document's own label, not `[]`.
+        let raw = quill.resolve(&shape_doc("counts: abc\n"));
+        let r = row(&raw.main.fields, "counts");
+        assert_eq!(r.source, FieldSource::Authored);
+        assert_eq!(r.value.as_json(), &serde_json::json!("abc"));
+
+        let absent = quill.resolve(&shape_doc(""));
+        let r = row(&absent.main.fields, "counts");
+        assert_eq!(r.source, FieldSource::Blank);
+        assert_eq!(r.value.as_json(), &serde_json::json!([]));
+    }
+
+    #[test]
+    fn a_typed_dict_blanks_only_where_the_document_left_it_out() {
+        let quill = quill_from_yaml(CONTAINERS);
+
+        let raw = quill.resolve(&shape_doc("address: 5\n"));
+        let r = row(&raw.main.fields, "address");
+        assert_eq!(r.source, FieldSource::Authored);
+        assert_eq!(r.value.as_json(), &serde_json::json!(5));
+
+        let absent = quill.resolve(&shape_doc(""));
+        let r = row(&absent.main.fields, "address");
+        assert_eq!(r.source, FieldSource::Blank);
+        assert_eq!(r.value.as_json(), &serde_json::json!({ "street": "" }));
+    }
+
     // ── Byte-for-byte with the render projection ─────────────────────────────
     // Both projections cut the one shared ladder (`ladder_sourced`), but over
     // separately-conformed input: the render gate's fallible conform vs the
