@@ -1,6 +1,8 @@
 //! Markdown-string preprocessing run before parsing, at the
 //! [`from_markdown`](crate::import::from_markdown) boundary.
 
+/// The Unicode bidi formatting controls, which sit adjacent to `**`/`_` and
+/// defeat delimiter recognition.
 #[inline]
 pub(crate) fn is_bidi_char(c: char) -> bool {
     matches!(
@@ -43,8 +45,6 @@ pub(crate) fn admit_char(c: char) -> Option<char> {
     }
 }
 
-/// Apply [`admit_char`] across `s`: the bidi controls sit adjacent to `**`/`_`
-/// and defeat delimiter recognition, the separators spell block structure.
 fn admit_chars(s: &str) -> String {
     if !s.chars().any(|c| admit_char(c) != Some(c)) {
         return s.to_string();

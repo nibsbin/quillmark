@@ -602,8 +602,8 @@ fn compose(
     }
 }
 
-/// Whether `seed` composes as the container `field` declares: absent, so the
-/// blank container is the whole answer, or already that shape.
+/// Whether `seed` composes as the container: absent, so the blank container is
+/// the whole answer, or already of `shape`.
 ///
 /// A present seed of another shape (`rows: abc` on an `array`, `addr: 5` on a
 /// typed dictionary) is kept raw by the scalar arm instead, as
