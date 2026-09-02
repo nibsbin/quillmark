@@ -2319,6 +2319,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "quillmark-merge"
+version = "0.112.0"
+dependencies = [
+ "indexmap",
+ "quillmark",
+ "quillmark-core",
+ "quillmark-fixtures",
+ "serde",
+ "serde-saphyr",
+ "serde_json",
+ "time",
+]
+
+[[package]]
 name = "quillmark-pdf"
 version = "0.112.0"
 dependencies = [

@@ -11,6 +11,7 @@ members = [
     "crates/fuzz",
     "crates/bindings/python",
     "crates/bindings/cli",
+    "crates/merge",
 ]
 # The default members to include when running `cargo build` or `cargo test` in the workspace root.
 default-members = [
@@ -20,6 +21,7 @@ default-members = [
     "crates/backends/typst",
     "crates/backends/pdfform",
     "crates/bindings/cli",
+    "crates/merge",
 ]
 resolver = "2"
 
