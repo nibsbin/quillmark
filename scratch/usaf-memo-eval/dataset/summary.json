@@ -1,213 +1,213 @@
 {
-  "updated_at": "2026-09-02T07:16:06.780239+00:00",
-  "traces": 3875,
-  "successes": 3311,
-  "success_rate": 0.8544516129032258,
-  "cost_usd": 12.603423109999994,
+  "updated_at": "2026-09-02T07:39:35.629545+00:00",
+  "traces": 4325,
+  "successes": 3699,
+  "success_rate": 0.8552601156069364,
+  "cost_usd": 14.372340030000007,
   "per_model": {
     "gpt-5-nano": {
-      "n": 460,
-      "ok": 417,
-      "cost_usd": 0.47327788000000015,
-      "input_tokens": 3558052,
-      "output_tokens": 864611,
-      "reasoning_tokens": 478016,
-      "create_document_attempts": 707,
-      "got_blueprint": 459
+      "n": 509,
+      "ok": 463,
+      "cost_usd": 0.5228783200000002,
+      "input_tokens": 3983392,
+      "output_tokens": 956267,
+      "reasoning_tokens": 531456,
+      "create_document_attempts": 790,
+      "got_blueprint": 508
     },
     "gpt-5.4-mini": {
-      "n": 461,
-      "ok": 461,
-      "cost_usd": 2.878950749999997,
-      "input_tokens": 2127989,
-      "output_tokens": 330030,
-      "reasoning_tokens": 105699,
-      "create_document_attempts": 542,
-      "got_blueprint": 461
+      "n": 511,
+      "ok": 511,
+      "cost_usd": 3.178397099999997,
+      "input_tokens": 2355508,
+      "output_tokens": 363185,
+      "reasoning_tokens": 116820,
+      "create_document_attempts": 600,
+      "got_blueprint": 511
     },
     "gpt-4.1-mini": {
-      "n": 459,
-      "ok": 242,
-      "cost_usd": 1.3557892000000011,
-      "input_tokens": 2955065,
-      "output_tokens": 275546,
+      "n": 509,
+      "ok": 265,
+      "cost_usd": 1.5083128000000008,
+      "input_tokens": 3299826,
+      "output_tokens": 306475,
       "reasoning_tokens": 0,
-      "create_document_attempts": 494,
-      "got_blueprint": 459
+      "create_document_attempts": 548,
+      "got_blueprint": 509
     },
     "gpt-5.6-luna": {
-      "n": 461,
-      "ok": 461,
-      "cost_usd": 0.5720827400000001,
-      "input_tokens": 1901374,
-      "output_tokens": 268087,
-      "reasoning_tokens": 62101,
-      "create_document_attempts": 497,
-      "got_blueprint": 461
+      "n": 511,
+      "ok": 510,
+      "cost_usd": 0.63957444,
+      "input_tokens": 2108862,
+      "output_tokens": 295676,
+      "reasoning_tokens": 68641,
+      "create_document_attempts": 550,
+      "got_blueprint": 511
     },
     "gpt-5.6-luna:medium": {
-      "n": 461,
-      "ok": 461,
-      "cost_usd": 0.6841815799999988,
-      "input_tokens": 1824739,
-      "output_tokens": 341385,
-      "reasoning_tokens": 121789,
-      "create_document_attempts": 479,
-      "got_blueprint": 461
+      "n": 511,
+      "ok": 511,
+      "cost_usd": 0.7607835199999989,
+      "input_tokens": 2028874,
+      "output_tokens": 375652,
+      "reasoning_tokens": 134897,
+      "create_document_attempts": 532,
+      "got_blueprint": 511
     },
     "gpt-5.4-nano": {
-      "n": 460,
-      "ok": 447,
-      "cost_usd": 1.0700715600000004,
-      "input_tokens": 2291781,
-      "output_tokens": 552336,
-      "reasoning_tokens": 209294,
-      "create_document_attempts": 556,
-      "got_blueprint": 460
+      "n": 511,
+      "ok": 498,
+      "cost_usd": 1.19852095,
+      "input_tokens": 2540384,
+      "output_tokens": 621291,
+      "reasoning_tokens": 232205,
+      "create_document_attempts": 618,
+      "got_blueprint": 511
     },
     "gpt-5-mini": {
-      "n": 459,
-      "ok": 459,
-      "cost_usd": 1.4178472999999996,
-      "input_tokens": 2074962,
-      "output_tokens": 497707,
-      "reasoning_tokens": 166400,
-      "create_document_attempts": 523,
-      "got_blueprint": 459
+      "n": 509,
+      "ok": 509,
+      "cost_usd": 1.5752186999999995,
+      "input_tokens": 2294078,
+      "output_tokens": 551336,
+      "reasoning_tokens": 184640,
+      "create_document_attempts": 579,
+      "got_blueprint": 509
     },
     "gpt-4.1-nano": {
-      "n": 441,
-      "ok": 150,
-      "cost_usd": 1.032130099999999,
-      "input_tokens": 13876917,
-      "output_tokens": 892208,
+      "n": 491,
+      "ok": 169,
+      "cost_usd": 1.1460383999999988,
+      "input_tokens": 15364160,
+      "output_tokens": 996592,
       "reasoning_tokens": 0,
-      "create_document_attempts": 1678,
-      "got_blueprint": 441
+      "create_document_attempts": 1861,
+      "got_blueprint": 491
     },
     "gpt-5.6-terra": {
-      "n": 213,
-      "ok": 213,
-      "cost_usd": 3.1190919999999993,
-      "input_tokens": 844337,
-      "output_tokens": 130534,
-      "reasoning_tokens": 47334,
-      "create_document_attempts": 222,
-      "got_blueprint": 213
+      "n": 263,
+      "ok": 263,
+      "cost_usd": 3.8426157999999986,
+      "input_tokens": 1036721,
+      "output_tokens": 160745,
+      "reasoning_tokens": 58547,
+      "create_document_attempts": 273,
+      "got_blueprint": 263
     }
   },
   "per_category": {
     "mfr": {
-      "n": 127,
-      "ok": 103
+      "n": 145,
+      "ok": 118
     },
     "simple_tasking": {
-      "n": 129,
-      "ok": 109
+      "n": 153,
+      "ok": 128
     },
     "yaml_traps": {
-      "n": 397,
-      "ok": 362
+      "n": 457,
+      "ok": 414
     },
     "cui": {
-      "n": 296,
-      "ok": 225
+      "n": 325,
+      "ok": 247
     },
     "classified": {
-      "n": 204,
-      "ok": 183
+      "n": 238,
+      "ok": 213
     },
     "indorsement": {
-      "n": 404,
-      "ok": 337
+      "n": 459,
+      "ok": 381
     },
     "distribution": {
-      "n": 80,
-      "ok": 65
+      "n": 92,
+      "ok": 74
     },
     "attachments": {
-      "n": 127,
-      "ok": 106
+      "n": 144,
+      "ok": 123
     },
     "daf_style": {
-      "n": 43,
-      "ok": 39
+      "n": 50,
+      "ok": 45
     },
     "letterhead": {
-      "n": 236,
-      "ok": 203
+      "n": 277,
+      "ok": 240
     },
     "space_force": {
-      "n": 43,
-      "ok": 35
+      "n": 51,
+      "ok": 42
     },
     "civilian": {
-      "n": 42,
-      "ok": 37
+      "n": 50,
+      "ok": 45
     },
     "body_format": {
-      "n": 167,
-      "ok": 135
+      "n": 186,
+      "ok": 151
     },
     "long_body": {
-      "n": 42,
-      "ok": 32
-    },
-    "minimal": {
-      "n": 84,
-      "ok": 71
-    },
-    "addressing": {
-      "n": 126,
-      "ok": 108
-    },
-    "authority_line": {
-      "n": 84,
-      "ok": 76
-    },
-    "cc": {
-      "n": 42,
-      "ok": 40
-    },
-    "references": {
-      "n": 84,
-      "ok": 72
-    },
-    "instruction_following": {
-      "n": 207,
-      "ok": 186
-    },
-    "enums": {
-      "n": 84,
-      "ok": 71
-    },
-    "numbers": {
-      "n": 84,
-      "ok": 76
-    },
-    "dates": {
-      "n": 42,
+      "n": 50,
       "ok": 39
     },
+    "minimal": {
+      "n": 100,
+      "ok": 86
+    },
+    "addressing": {
+      "n": 150,
+      "ok": 130
+    },
+    "authority_line": {
+      "n": 100,
+      "ok": 92
+    },
+    "cc": {
+      "n": 50,
+      "ok": 47
+    },
+    "references": {
+      "n": 94,
+      "ok": 82
+    },
+    "instruction_following": {
+      "n": 213,
+      "ok": 190
+    },
+    "enums": {
+      "n": 86,
+      "ok": 73
+    },
+    "numbers": {
+      "n": 86,
+      "ok": 78
+    },
+    "dates": {
+      "n": 43,
+      "ok": 40
+    },
     "narrative": {
-      "n": 503,
-      "ok": 427
+      "n": 516,
+      "ok": 439
     },
     "underspecified": {
-      "n": 198,
-      "ok": 174
+      "n": 210,
+      "ok": 182
     }
   },
   "diagnostic_codes": {
-    "parse::missing_quill": 1027,
-    "parse::yaml_error_with_location": 904,
-    "validation::must_fill": 582,
-    "parse::invalid_structure": 56,
-    "mcp::empty_content": 29,
-    "validation::enum_violation": 27,
-    "validation::unknown_card": 14,
+    "parse::missing_quill": 1123,
+    "parse::yaml_error_with_location": 1020,
+    "validation::must_fill": 645,
+    "parse::invalid_structure": 69,
+    "mcp::empty_content": 33,
+    "validation::enum_violation": 32,
+    "validation::unknown_card": 15,
+    "validation::type_mismatch": 7,
     "validation::not_inline": 6,
-    "validation::type_mismatch": 6,
     "mcp::invalid_arguments": 2
   }
 }
