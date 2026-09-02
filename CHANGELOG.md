@@ -76,6 +76,15 @@
   `/MediaBox` from an intermediate node was flipped against the root's page
   height. The `/Kids` walk carries each page's ancestor ids, nearest first, and
   both readers consult the page dict then that chain (ISO 32000-1 §7.7.3.4).
+- fix(pdfform): **flatten keeps the background's resources and its own
+  `/Contents`.** `/Resources` is inheritable, so writing a fresh one onto a page
+  that carried none shadowed the ancestor's dict and unbound every name the
+  background stream selects; the effective dict is now resolved up `/Parent`,
+  inlined onto the page and extended there. The drawn fonts take names free in
+  that dict (`Helv2` where `Helv` is taken), since a second binding for a name
+  the background uses rebinds it under a last-wins parser. A `/Contents`
+  reference naming an *array* object expands to its elements instead of being
+  wrapped, which had left an array as an element of the `/Contents` array.
 
 ## v0.112.0 - 2026-09-01
 

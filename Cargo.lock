@@ -2335,6 +2335,7 @@ dependencies = [
  "hayro",
  "hayro-svg",
  "lopdf",
+ "pdf-writer",
  "quillmark",
  "quillmark-content",
  "quillmark-core",

@@ -287,7 +287,8 @@ fn scaled_render_settings(scale: f32) -> RenderSettings {
 }
 
 /// Satisfies standard Type1 font queries from hayro's embedded font data:
-/// required for the flat PDF's `Helv` and `ZaDb` content streams.
+/// required for the Helvetica and ZapfDingbats the flat PDF's content streams
+/// draw with.
 fn standard_font_settings() -> InterpreterSettings {
     InterpreterSettings {
         font_resolver: Arc::new(|query| match query {

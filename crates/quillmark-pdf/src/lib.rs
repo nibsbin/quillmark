@@ -128,12 +128,13 @@ pub enum FormFont {
 }
 
 impl FormFont {
-    /// The `/DR` `/Font` key a `/DA` names this face by.
-    pub(crate) fn resource_name(self) -> &'static [u8] {
+    /// The `/DR` `/Font` key a `/DA` names this face by, and the name a drawn
+    /// content stream selects it with.
+    pub const fn resource_name(self) -> &'static str {
         match self {
-            Self::Helvetica => b"Helv",
-            Self::Times => b"TiRo",
-            Self::Courier => b"Cour",
+            Self::Helvetica => "Helv",
+            Self::Times => "TiRo",
+            Self::Courier => "Cour",
         }
     }
 
