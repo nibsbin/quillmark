@@ -102,9 +102,18 @@ MODELS: list[dict[str, Any]] = [
         "input": 0.40,
         "cached": 0.10,
         "output": 1.60,
-        "share": 0.10,
+        "share": 0.07,
         "reasoning": None,
         "tier": "medium",
+    },
+    {
+        "id": "gpt-4.1-nano",
+        "input": 0.10,
+        "cached": 0.025,
+        "output": 0.40,
+        "share": 0.08,
+        "reasoning": None,
+        "tier": "low",
     },
 ]
 
@@ -311,6 +320,7 @@ def call_model(client: OpenAI, spec: dict[str, Any], input_list: list[Any], inst
         "input": input_list,
         "instructions": instructions,
         "store": False,
+        "max_output_tokens": 12288,
     }
     if spec.get("reasoning"):
         kwargs["reasoning"] = {"effort": spec["reasoning"]}
