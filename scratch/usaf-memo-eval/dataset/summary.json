@@ -1,0 +1,28 @@
+{
+  "updated_at": "2026-09-02T05:13:31.586116+00:00",
+  "traces": 1,
+  "successes": 0,
+  "success_rate": 0.0,
+  "cost_usd": 0.0014058,
+  "per_model": {
+    "gpt-5-nano": {
+      "n": 1,
+      "ok": 0,
+      "cost_usd": 0.0014058,
+      "input_tokens": 9452,
+      "output_tokens": 2333,
+      "reasoning_tokens": 1472,
+      "create_document_attempts": 1,
+      "got_blueprint": 1
+    }
+  },
+  "per_category": {
+    "mfr": {
+      "n": 1,
+      "ok": 0
+    }
+  },
+  "diagnostic_codes": {
+    "parse::yaml_error_with_location": 1
+  }
+}

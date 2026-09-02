@@ -410,9 +410,14 @@ def run_trial(
                 "tool_calls": [],
             }
 
-            function_calls = [item for item in output if getattr(item, "type", None) == "function_call"]
+            function_calls = [
+                item
+                for item in output
+                if getattr(item, "type", None) == "function_call"
+                or str(getattr(item, "type", None)) == "function_call"
+            ]
             if not function_calls:
-                stop_reason = "no_tool_call"
+                stop_reason = "abandoned" if create_attempts else "no_tool_call"
                 text = getattr(resp, "output_text", None)
                 round_row["output_text"] = text
                 rounds.append(round_row)
