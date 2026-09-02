@@ -601,18 +601,27 @@ pub(crate) fn open_trailer<'a>(
     Ok((xref_offset, trailer, catalog_id))
 }
 
-/// Flatten the catalog's `/Pages` tree into page object ids in document order.
-/// The walk is capped to prevent runaway on a pathological PDF.
-pub(crate) fn resolve_page_ids(idx: &ObjectIndex, catalog_id: u32) -> Result<Vec<u32>, PdfError> {
+/// A page object and the `/Pages` nodes it descends from, nearest ancestor
+/// first: the chain an inheritable attribute resolves along.
+#[derive(Debug)]
+pub(crate) struct Page {
+    pub(crate) id: u32,
+    ancestors: Vec<u32>,
+}
+
+/// Flatten the catalog's `/Pages` tree into its page objects in document order,
+/// each carrying its ancestor chain. The walk is capped to prevent runaway on a
+/// pathological PDF.
+pub(crate) fn walk_page_tree(idx: &ObjectIndex, catalog_id: u32) -> Result<Vec<Page>, PdfError> {
     let root_pages_id = root_pages_id(idx, catalog_id)?;
 
     const MAX_NODES: usize = 100_000;
     let mut out = Vec::new();
-    let mut stack = vec![root_pages_id];
+    let mut stack = vec![(root_pages_id, Vec::<u32>::new())];
     // A node reached twice is a cyclic or shared-node `/Pages` tree: a `/Kids`
     // self-cycle would otherwise walk until MAX_NODES.
     let mut seen: HashSet<u32> = HashSet::new();
-    while let Some(node_id) = stack.pop() {
+    while let Some((node_id, ancestors)) = stack.pop() {
         if !seen.insert(node_id) {
             return Err(err(
                 CODE_PARSE,
@@ -629,17 +638,40 @@ pub(crate) fn resolve_page_ids(idx: &ObjectIndex, catalog_id: u32) -> Result<Vec
         if typ.starts_with("/Pages") {
             let kids = find_dict_value(dict, "Kids")
                 .ok_or_else(|| err(CODE_PARSE, "/Pages node missing /Kids"))?;
+            let mut kid_ancestors = Vec::with_capacity(ancestors.len() + 1);
+            kid_ancestors.push(node_id);
+            kid_ancestors.extend_from_slice(&ancestors);
             let mut kid_ids: Vec<u32> = parse_ref_array(kids)
                 .into_iter()
                 .map(|(id, _)| id)
                 .collect();
             kid_ids.reverse();
-            stack.extend(kid_ids);
+            stack.extend(kid_ids.into_iter().map(|id| (id, kid_ancestors.clone())));
         } else {
-            out.push(node_id);
+            out.push(Page {
+                id: node_id,
+                ancestors,
+            });
         }
     }
     Ok(out)
+}
+
+/// The inheritable attribute `key` of `page`, `parse`d from the page dict, else
+/// from the nearest ancestor `/Pages` node carrying a parseable one
+/// (ISO 32000-1 §7.7.3.4).
+fn inherited_attribute<T>(
+    idx: &ObjectIndex,
+    page: &Page,
+    key: &str,
+    parse: impl Fn(&[u8]) -> Option<T>,
+) -> Option<T> {
+    std::iter::once(page.id)
+        .chain(page.ancestors.iter().copied())
+        .find_map(|id| {
+            let dict = idx.dict(id, CODE_PARSE, "page node").ok()?;
+            parse(find_dict_value(dict, key)?)
+        })
 }
 
 /// The catalog's root `/Pages` node id.
@@ -652,32 +684,24 @@ fn root_pages_id(idx: &ObjectIndex, catalog_id: u32) -> Result<u32, PdfError> {
 }
 
 /// Reject a page with a non-zero `/Rotate`, its own value or the one inherited
-/// from the root `/Pages`. The stamp and flatten paths write geometry in
-/// unrotated user space and do not compensate, so a rotated base page would
-/// display every widget away from its intended box.
-pub(crate) fn assert_unrotated_pages(
+/// from its nearest ancestor `/Pages` node. The stamp and flatten paths write
+/// geometry in unrotated user space and do not compensate, so a rotated base
+/// page would display every widget away from its intended box.
+pub(crate) fn assert_unrotated_pages<'p>(
     idx: &ObjectIndex,
-    catalog_id: u32,
-    page_ids: &[u32],
+    pages: impl IntoIterator<Item = &'p Page>,
 ) -> Result<(), PdfError> {
-    let read_rotate = |id: u32| -> Option<i64> {
-        let dict = idx.dict(id, CODE_PARSE, "page").ok()?;
-        let raw = find_dict_value(dict, "Rotate")?;
-        std::str::from_utf8(raw.trim_ascii())
-            .ok()?
-            .trim()
-            .parse::<i64>()
-            .ok()
-    };
-    let inherited = root_pages_id(idx, catalog_id).ok().and_then(read_rotate);
-    for &page_id in page_ids {
-        let rotate = read_rotate(page_id).or(inherited).unwrap_or(0);
+    let parse_rotate =
+        |raw: &[u8]| -> Option<i64> { std::str::from_utf8(raw.trim_ascii()).ok()?.parse().ok() };
+    for page in pages {
+        let rotate = inherited_attribute(idx, page, "Rotate", parse_rotate).unwrap_or(0);
         if rotate.rem_euclid(360) != 0 {
             return Err(err(
                 "pdf::rotated_page",
                 format!(
-                    "page object {page_id} has /Rotate {rotate}; the stamp spine only \
-                     handles unrotated pages"
+                    "page object {} has /Rotate {rotate}; the stamp spine only \
+                     handles unrotated pages",
+                    page.id
                 ),
             ));
         }
@@ -743,32 +767,27 @@ fn normalize_rect(mb: [f32; 4]) -> [f32; 4] {
 }
 
 /// The `/MediaBox` of every page, normalized to `[x0, y0, x1, y1]`, in document
-/// order, falling back to the root `/Pages` node's when a page declares none.
-/// The full rect rather than width/height, so a caller flipping page-relative
-/// top-left geometry can honour a non-zero page origin.
+/// order, taken from the nearest ancestor `/Pages` node carrying one when a page
+/// declares none. The full rect rather than width/height, so a caller flipping
+/// page-relative top-left geometry can honour a non-zero page origin.
 pub(crate) fn page_media_boxes(pdf: &[u8]) -> Result<Vec<[f32; 4]>, PdfError> {
     let (_, _, catalog_id) = open_trailer(pdf, CODE_PARSE)?;
+    media_boxes_of(&ObjectIndex::new(pdf), catalog_id)
+}
 
-    let idx = ObjectIndex::new(pdf);
-    let inherited = root_pages_media_box(&idx, catalog_id);
-    let page_ids = resolve_page_ids(&idx, catalog_id)?;
-    let mut out = Vec::with_capacity(page_ids.len());
-    for id in page_ids {
-        let dict = idx.dict(id, CODE_PARSE, &format!("page node {id}"))?;
-        let mb = find_dict_value(dict, "MediaBox")
-            .and_then(parse_rect_array)
-            .or(inherited)
-            .ok_or_else(|| err(CODE_PARSE, format!("page {id} has no resolvable /MediaBox")))?;
+fn media_boxes_of(idx: &ObjectIndex, catalog_id: u32) -> Result<Vec<[f32; 4]>, PdfError> {
+    let pages = walk_page_tree(idx, catalog_id)?;
+    let mut out = Vec::with_capacity(pages.len());
+    for page in &pages {
+        let mb = inherited_attribute(idx, page, "MediaBox", parse_rect_array).ok_or_else(|| {
+            err(
+                CODE_PARSE,
+                format!("page {} has no resolvable /MediaBox", page.id),
+            )
+        })?;
         out.push(normalize_rect(mb));
     }
     Ok(out)
-}
-
-/// The root `/Pages` node's `/MediaBox`, if present: the value pages inherit.
-fn root_pages_media_box(idx: &ObjectIndex, catalog_id: u32) -> Option<[f32; 4]> {
-    let pages_id = root_pages_id(idx, catalog_id).ok()?;
-    let dict = idx.dict(pages_id, CODE_PARSE, "root /Pages node").ok()?;
-    find_dict_value(dict, "MediaBox").and_then(parse_rect_array)
 }
 
 #[cfg(test)]
@@ -953,23 +972,57 @@ mod tests {
     fn page_tree_cycle_is_rejected() {
         let pdf = b"%PDF\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
                     2 0 obj\n<< /Type /Pages /Kids [2 0 R] /Count 1 >>\nendobj\n";
-        let e = resolve_page_ids(&ObjectIndex::new(pdf), 1).expect_err("cycle rejected");
+        let e = walk_page_tree(&ObjectIndex::new(pdf), 1).expect_err("cycle rejected");
         assert_eq!(e.code, CODE_PARSE);
         assert!(e.message.contains("revisits"), "{}", e.message);
     }
 
     #[test]
     fn rotated_page_is_rejected() {
-        // /Rotate inherited from the root /Pages node.
         let pdf = b"%PDF\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
                     2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 /Rotate 90 >>\nendobj\n\
                     3 0 obj\n<< /Type /Page /Parent 2 0 R >>\nendobj\n";
-        let e = assert_unrotated_pages(&ObjectIndex::new(pdf), 1, &[3])
-            .expect_err("rotated page rejected");
+        let idx = ObjectIndex::new(pdf);
+        let pages = walk_page_tree(&idx, 1).expect("page tree walks");
+        let e = assert_unrotated_pages(&idx, &pages).expect_err("rotated page rejected");
         assert_eq!(e.code, "pdf::rotated_page");
         let flat = b"%PDF\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
                      2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n\
                      3 0 obj\n<< /Type /Page /Parent 2 0 R >>\nendobj\n";
-        assert!(assert_unrotated_pages(&ObjectIndex::new(flat), 1, &[3]).is_ok());
+        let flat_idx = ObjectIndex::new(flat);
+        let flat_pages = walk_page_tree(&flat_idx, 1).expect("page tree walks");
+        assert!(assert_unrotated_pages(&flat_idx, &flat_pages).is_ok());
+    }
+
+    #[test]
+    fn rotate_resolves_to_the_nearest_ancestor_carrying_it() {
+        let pdf = b"%PDF\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
+                    2 0 obj\n<< /Type /Pages /Kids [5 0 R] /Count 2 >>\nendobj\n\
+                    5 0 obj\n<< /Type /Pages /Parent 2 0 R /Kids [3 0 R 4 0 R] /Count 2 \
+                    /Rotate 90 >>\nendobj\n\
+                    3 0 obj\n<< /Type /Page /Parent 5 0 R >>\nendobj\n\
+                    4 0 obj\n<< /Type /Page /Parent 5 0 R /Rotate 0 >>\nendobj\n";
+        let idx = ObjectIndex::new(pdf);
+        let pages = walk_page_tree(&idx, 1).expect("page tree walks");
+        let e = assert_unrotated_pages(&idx, &pages[..1])
+            .expect_err("an intermediate /Pages node's /Rotate reaches its pages");
+        assert_eq!(e.code, "pdf::rotated_page");
+        assert!(
+            assert_unrotated_pages(&idx, &pages[1..]).is_ok(),
+            "a page's own /Rotate 0 outranks its ancestor's 90"
+        );
+    }
+
+    #[test]
+    fn media_box_resolves_to_the_nearest_ancestor_carrying_it() {
+        let pdf = b"%PDF\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
+                    2 0 obj\n<< /Type /Pages /Kids [5 0 R 4 0 R] /Count 2 \
+                    /MediaBox [0 0 612 792] >>\nendobj\n\
+                    5 0 obj\n<< /Type /Pages /Parent 2 0 R /Kids [3 0 R] /Count 1 \
+                    /MediaBox [0 0 200 400] >>\nendobj\n\
+                    3 0 obj\n<< /Type /Page /Parent 5 0 R >>\nendobj\n\
+                    4 0 obj\n<< /Type /Page /Parent 2 0 R >>\nendobj\n";
+        let boxes = media_boxes_of(&ObjectIndex::new(pdf), 1).expect("media boxes resolve");
+        assert_eq!(boxes, [[0.0, 0.0, 200.0, 400.0], [0.0, 0.0, 612.0, 792.0]]);
     }
 }
