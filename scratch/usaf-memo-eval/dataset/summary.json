@@ -1,212 +1,212 @@
 {
-  "updated_at": "2026-09-02T06:34:44.206914+00:00",
-  "traces": 2475,
-  "successes": 2107,
-  "success_rate": 0.8513131313131314,
-  "cost_usd": 7.163968679999998,
+  "updated_at": "2026-09-02T06:45:10.058941+00:00",
+  "traces": 2825,
+  "successes": 2409,
+  "success_rate": 0.8527433628318584,
+  "cost_usd": 8.51764988,
   "per_model": {
     "gpt-5-nano": {
-      "n": 305,
-      "ok": 278,
-      "cost_usd": 0.30989362000000004,
-      "input_tokens": 2315826,
-      "output_tokens": 567307,
-      "reasoning_tokens": 319680,
-      "create_document_attempts": 464,
-      "got_blueprint": 304
+      "n": 342,
+      "ok": 310,
+      "cost_usd": 0.3473225400000001,
+      "input_tokens": 2572198,
+      "output_tokens": 636292,
+      "reasoning_tokens": 360064,
+      "create_document_attempts": 515,
+      "got_blueprint": 341
     },
     "gpt-5.4-mini": {
-      "n": 305,
-      "ok": 305,
-      "cost_usd": 1.9004658,
-      "input_tokens": 1427522,
-      "output_tokens": 216431,
-      "reasoning_tokens": 69274,
-      "create_document_attempts": 363,
-      "got_blueprint": 305
+      "n": 344,
+      "ok": 344,
+      "cost_usd": 2.120968649999999,
+      "input_tokens": 1583719,
+      "output_tokens": 240474,
+      "reasoning_tokens": 77814,
+      "create_document_attempts": 404,
+      "got_blueprint": 344
     },
     "gpt-4.1-mini": {
-      "n": 303,
-      "ok": 163,
-      "cost_usd": 0.8999640000000005,
-      "input_tokens": 1958342,
-      "output_tokens": 182836,
+      "n": 342,
+      "ok": 182,
+      "cost_usd": 1.0145572000000003,
+      "input_tokens": 2214361,
+      "output_tokens": 206100,
       "reasoning_tokens": 0,
-      "create_document_attempts": 330,
-      "got_blueprint": 303
+      "create_document_attempts": 372,
+      "got_blueprint": 342
     },
     "gpt-5.6-luna": {
-      "n": 305,
-      "ok": 305,
-      "cost_usd": 0.3929309000000003,
-      "input_tokens": 1262917,
-      "output_tokens": 175076,
-      "reasoning_tokens": 40439,
-      "create_document_attempts": 330,
-      "got_blueprint": 305
+      "n": 344,
+      "ok": 344,
+      "cost_usd": 0.43338918000000026,
+      "input_tokens": 1409736,
+      "output_tokens": 195659,
+      "reasoning_tokens": 45801,
+      "create_document_attempts": 369,
+      "got_blueprint": 344
     },
     "gpt-5.6-luna:medium": {
-      "n": 305,
-      "ok": 305,
-      "cost_usd": 0.4609280799999995,
-      "input_tokens": 1217579,
-      "output_tokens": 224055,
-      "reasoning_tokens": 80394,
-      "create_document_attempts": 319,
-      "got_blueprint": 305
+      "n": 344,
+      "ok": 344,
+      "cost_usd": 0.5108215599999992,
+      "input_tokens": 1364426,
+      "output_tokens": 251008,
+      "reasoning_tokens": 90572,
+      "create_document_attempts": 358,
+      "got_blueprint": 344
     },
     "gpt-5.4-nano": {
-      "n": 305,
-      "ok": 298,
-      "cost_usd": 0.71644878,
-      "input_tokens": 1539629,
-      "output_tokens": 370834,
-      "reasoning_tokens": 139419,
-      "create_document_attempts": 373,
-      "got_blueprint": 305
+      "n": 344,
+      "ok": 337,
+      "cost_usd": 0.8070236000000002,
+      "input_tokens": 1725367,
+      "output_tokens": 417852,
+      "reasoning_tokens": 156707,
+      "create_document_attempts": 420,
+      "got_blueprint": 344
     },
     "gpt-5-mini": {
-      "n": 304,
-      "ok": 304,
-      "cost_usd": 0.9560985999999994,
-      "input_tokens": 1396420,
-      "output_tokens": 332340,
-      "reasoning_tokens": 108544,
-      "create_document_attempts": 351,
-      "got_blueprint": 304
+      "n": 342,
+      "ok": 342,
+      "cost_usd": 1.0563306499999996,
+      "input_tokens": 1549977,
+      "output_tokens": 367135,
+      "reasoning_tokens": 122304,
+      "create_document_attempts": 391,
+      "got_blueprint": 342
     },
     "gpt-4.1-nano": {
-      "n": 285,
-      "ok": 91,
-      "cost_usd": 0.6554932999999994,
-      "input_tokens": 8979921,
-      "output_tokens": 559289,
+      "n": 326,
+      "ok": 109,
+      "cost_usd": 0.7551154999999993,
+      "input_tokens": 10318467,
+      "output_tokens": 646772,
       "reasoning_tokens": 0,
-      "create_document_attempts": 1072,
-      "got_blueprint": 285
+      "create_document_attempts": 1241,
+      "got_blueprint": 326
     },
     "gpt-5.6-terra": {
-      "n": 58,
-      "ok": 58,
-      "cost_usd": 0.8717456000000001,
-      "input_tokens": 233275,
-      "output_tokens": 35251,
-      "reasoning_tokens": 12703,
-      "create_document_attempts": 61,
-      "got_blueprint": 58
+      "n": 97,
+      "ok": 97,
+      "cost_usd": 1.472121,
+      "input_tokens": 388479,
+      "output_tokens": 60388,
+      "reasoning_tokens": 21623,
+      "create_document_attempts": 102,
+      "got_blueprint": 97
     }
   },
   "per_category": {
     "mfr": {
-      "n": 90,
-      "ok": 72
+      "n": 93,
+      "ok": 75
     },
     "simple_tasking": {
-      "n": 98,
-      "ok": 81
+      "n": 100,
+      "ok": 82
     },
     "yaml_traps": {
-      "n": 272,
-      "ok": 246
+      "n": 282,
+      "ok": 252
     },
     "cui": {
-      "n": 193,
-      "ok": 148
+      "n": 217,
+      "ok": 165
     },
     "classified": {
-      "n": 144,
-      "ok": 130
+      "n": 149,
+      "ok": 134
     },
     "indorsement": {
-      "n": 272,
-      "ok": 225
+      "n": 289,
+      "ok": 239
     },
     "distribution": {
-      "n": 56,
-      "ok": 44
-    },
-    "attachments": {
-      "n": 88,
-      "ok": 74
-    },
-    "daf_style": {
-      "n": 30,
-      "ok": 29
-    },
-    "letterhead": {
-      "n": 147,
-      "ok": 126
-    },
-    "space_force": {
-      "n": 25,
-      "ok": 21
-    },
-    "civilian": {
-      "n": 25,
-      "ok": 20
-    },
-    "body_format": {
-      "n": 99,
-      "ok": 78
-    },
-    "long_body": {
-      "n": 25,
-      "ok": 20
-    },
-    "minimal": {
-      "n": 50,
-      "ok": 41
-    },
-    "addressing": {
-      "n": 75,
-      "ok": 65
-    },
-    "authority_line": {
-      "n": 50,
+      "n": 58,
       "ok": 46
     },
+    "attachments": {
+      "n": 91,
+      "ok": 76
+    },
+    "daf_style": {
+      "n": 33,
+      "ok": 31
+    },
+    "letterhead": {
+      "n": 174,
+      "ok": 150
+    },
+    "space_force": {
+      "n": 33,
+      "ok": 28
+    },
+    "civilian": {
+      "n": 33,
+      "ok": 28
+    },
+    "body_format": {
+      "n": 123,
+      "ok": 98
+    },
+    "long_body": {
+      "n": 33,
+      "ok": 26
+    },
+    "minimal": {
+      "n": 66,
+      "ok": 54
+    },
+    "addressing": {
+      "n": 99,
+      "ok": 84
+    },
+    "authority_line": {
+      "n": 66,
+      "ok": 60
+    },
     "cc": {
-      "n": 25,
-      "ok": 24
+      "n": 33,
+      "ok": 32
     },
     "references": {
-      "n": 50,
-      "ok": 43
+      "n": 66,
+      "ok": 57
     },
     "instruction_following": {
-      "n": 122,
-      "ok": 111
+      "n": 141,
+      "ok": 128
     },
     "enums": {
-      "n": 50,
-      "ok": 42
+      "n": 65,
+      "ok": 56
     },
     "numbers": {
-      "n": 50,
-      "ok": 45
+      "n": 64,
+      "ok": 59
     },
     "dates": {
-      "n": 25,
-      "ok": 23
+      "n": 32,
+      "ok": 30
     },
     "narrative": {
-      "n": 294,
-      "ok": 249
+      "n": 360,
+      "ok": 310
     },
     "underspecified": {
-      "n": 120,
-      "ok": 104
+      "n": 125,
+      "ok": 109
     }
   },
   "diagnostic_codes": {
-    "parse::missing_quill": 668,
-    "parse::yaml_error_with_location": 586,
-    "validation::must_fill": 397,
-    "parse::invalid_structure": 31,
-    "mcp::empty_content": 21,
+    "parse::missing_quill": 773,
+    "parse::yaml_error_with_location": 657,
+    "validation::must_fill": 432,
+    "parse::invalid_structure": 34,
+    "mcp::empty_content": 25,
     "validation::enum_violation": 21,
-    "validation::unknown_card": 10,
-    "validation::not_inline": 5,
+    "validation::unknown_card": 11,
+    "validation::not_inline": 6,
     "validation::type_mismatch": 2
   }
 }
