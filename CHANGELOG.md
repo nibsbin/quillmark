@@ -85,6 +85,15 @@
   the background uses rebinds it under a last-wins parser. A `/Contents`
   reference naming an *array* object expands to its elements instead of being
   wrapped, which had left an array as an element of the `/Contents` array.
+- fix(core): **`Quill::resolve` keeps a mis-shaped container value raw rather
+  than blanking it under the document's own label.** A seed the render
+  coercion cannot conform — `rows: abc` on an `array`, `addr: 5` on a typed
+  dictionary, a list where a variant container belongs — was rebuilt from the
+  schema anyway, so the row showed an empty container still tagged
+  `authored`. The container arms now compose an absent or already-shaped seed
+  only, and anything else falls through to the keep-raw path
+  `conform_card_render` documents. The render gate refuses the shape, so the
+  plate is unchanged.
 
 ## v0.112.0 - 2026-09-01
 

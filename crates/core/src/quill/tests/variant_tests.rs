@@ -475,6 +475,25 @@ fn resolve_reports_the_container_as_one_cell_matching_the_plate() {
     assert_eq!(row.source, crate::quill::resolved::FieldSource::Default);
 }
 
+/// A value the container cannot be built from stays raw, as a mis-shaped
+/// `array` or typed dictionary does: `resolve()` labels the row Authored, and a
+/// blank world under that label would read as an answer the document gave.
+#[test]
+fn a_mis_shaped_container_value_stays_raw() {
+    let quill = quill();
+    let document = doc("classification: [CUI, SECRET]\n");
+    let row = quill
+        .resolve(&document)
+        .main
+        .fields
+        .into_iter()
+        .find(|f| f.name == "classification")
+        .expect("classification row");
+
+    assert_eq!(row.source, crate::quill::resolved::FieldSource::Authored);
+    assert_eq!(row.value.as_json(), &json!(["CUI", "SECRET"]));
+}
+
 /// The container is a namespace like any other: its rung is the strongest that
 /// contributed, so a cell the document wrote lifts a container whose
 /// discriminant came from the schema.
