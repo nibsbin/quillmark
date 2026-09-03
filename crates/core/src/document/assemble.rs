@@ -9,7 +9,7 @@ use crate::error::ParseError;
 use crate::value::QuillValue;
 use crate::Diagnostic;
 
-use super::fences::find_metadata_blocks;
+use super::fences::{find_metadata_blocks, RootFault};
 use super::meta::{extract_meta_items, meta_key};
 use super::payload::{Payload, PayloadItem};
 use quillmark_content::Normalized;
@@ -22,10 +22,52 @@ fn import_body_or_parse_error(md: &str) -> Result<Normalized, ParseError> {
 use super::prescan::{prescan_fence_content, CommentPathSegment, NestedComment, PreItem};
 use super::{Card, Document};
 
-/// A `MissingQuill` message naming the specific malformation. LLM authors hit
-/// one recurring shape: a bare YAML mapping with `$quill:` at the top and no
-/// fences, where naming the concrete edit converges faster than generic advice.
-fn missing_block_message(markdown: &str) -> String {
+/// A `MissingQuill` message naming the specific malformation. LLM authors hit a
+/// few recurring shapes — a bare YAML mapping with no fences, an opener whose
+/// closer is missing or misspelt — where naming the concrete edit converges
+/// faster than generic advice. `root_fault` is what the fence scanner saw at the
+/// root position, so a document that *does* open correctly is never told to open
+/// correctly.
+fn missing_block_message(markdown: &str, root_fault: Option<&RootFault>) -> String {
+    match root_fault {
+        Some(RootFault::Unclosed {
+            opener_line,
+            near_closer,
+            last_field,
+        }) => {
+            let mut msg = format!(
+                "Root card-yaml block opened at line {} is never closed.",
+                opener_line + 1
+            );
+            if let Some((line, text)) = near_closer {
+                msg.push_str(&format!(
+                    " The line `{}` at line {} does not close it: a closing fence is at \
+                     column zero and at least as long as the opener.",
+                    text,
+                    line + 1
+                ));
+            }
+            msg.push_str(" Add a line containing exactly `~~~` (three tildes, no info string) ");
+            match last_field {
+                Some(key) => msg.push_str(&format!("after the last field (`{}`), ", key)),
+                None => msg.push_str("after the last field, "),
+            }
+            msg.push_str("before the prose body.");
+            return msg;
+        }
+        Some(RootFault::InfoString { opener_line, info }) => {
+            return format!(
+                "Root card-yaml block opener at line {} is `~~~{}`, which opens an ordinary \
+                 code block. The card-yaml opener carries no info string: drop `{}` and open \
+                 with a bare `~~~` (the `card-yaml` and `yaml` info strings are also accepted).",
+                opener_line + 1,
+                info,
+                info
+            );
+        }
+        None => {}
+    }
+
     let trimmed = markdown.trim_start();
 
     if trimmed.starts_with("$quill:") || trimmed.starts_with("quill:") {
@@ -205,11 +247,13 @@ pub(super) fn decompose_with_warnings(
     }
 
     // The first block is the document root; the rest are composable cards.
-    let (mut blocks, warnings) = find_metadata_blocks(markdown)?;
+    let scan = find_metadata_blocks(markdown)?;
+    let mut blocks = scan.blocks;
+    let warnings = scan.warnings;
 
     if blocks.is_empty() {
         return Err(crate::error::ParseError::MissingQuill(
-            missing_block_message(markdown),
+            missing_block_message(markdown, scan.root_fault.as_ref()),
         ));
     }
 

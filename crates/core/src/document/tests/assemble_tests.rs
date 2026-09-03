@@ -63,6 +63,72 @@ fn test_missing_block_with_bare_yaml_calls_out_missing_fence() {
 }
 
 #[test]
+fn test_unclosed_root_fence_names_the_missing_closer_not_the_missing_block() {
+    let markdown =
+        "~~~\n$quill: usaf_memo@0.3.0\n$kind: main\nsubject: Memo\nfont_size: 12\n\nThe body.\n";
+    let err = decompose(markdown).unwrap_err();
+    let msg = err.to_string();
+    assert_eq!(
+        err.to_diagnostic().code.as_deref(),
+        Some("parse::missing_quill")
+    );
+    assert!(
+        msg.contains("Root card-yaml block opened at line 1 is never closed"),
+        "got: {msg}"
+    );
+    assert!(
+        msg.contains("after the last field (`font_size`)"),
+        "got: {msg}"
+    );
+    assert!(
+        !msg.contains("The document must open with"),
+        "the generic advice restates what the author already wrote: {msg}"
+    );
+}
+
+#[test]
+fn test_two_tilde_closer_is_named_as_the_failed_closer() {
+    let markdown = "~~~\n$quill: usaf_memo@0.3.0\n$kind: main\ntitle: Memo\n~~\n\nThe body.\n";
+    let msg = decompose(markdown).unwrap_err().to_string();
+    assert!(
+        msg.contains("Root card-yaml block opened at line 1 is never closed"),
+        "got: {msg}"
+    );
+    assert!(
+        msg.contains("The line `~~` at line 5 does not close it"),
+        "got: {msg}"
+    );
+}
+
+#[test]
+fn test_indented_closer_is_named_as_the_failed_closer() {
+    let markdown = "~~~\n$quill: usaf_memo@0.3.0\n$kind: main\ntitle: Memo\n  ~~~\n\nBody.\n";
+    let msg = decompose(markdown).unwrap_err().to_string();
+    assert!(
+        msg.contains("The line `~~~` at line 5 does not close it"),
+        "got: {msg}"
+    );
+}
+
+#[test]
+fn test_unclosed_root_fence_without_quill_keeps_the_generic_message() {
+    let markdown = "~~~\ntitle: Memo\n\nThe body.\n";
+    let msg = decompose(markdown).unwrap_err().to_string();
+    assert!(msg.contains("Missing required root"), "got: {msg}");
+}
+
+#[test]
+fn test_root_opener_with_foreign_info_string_names_the_info_string() {
+    let markdown = "~~~metadata\n$quill: usaf_memo@0.3.0\n$kind: main\n~~~\n\nBody.\n";
+    let msg = decompose(markdown).unwrap_err().to_string();
+    assert!(
+        msg.contains("opener at line 1 is `~~~metadata`"),
+        "got: {msg}"
+    );
+    assert!(msg.contains("drop `metadata`"), "got: {msg}");
+}
+
+#[test]
 fn test_dash_root_block_parses_equivalent_to_card_yaml() {
     let dash_md = "---\n$quill: test_quill\n$kind: main\ntitle: Test\n---\n\nBody.";
     let canonical_md = "~~~card-yaml\n$quill: test_quill\n$kind: main\ntitle: Test\n~~~\n\nBody.";
@@ -135,7 +201,10 @@ fn test_tilde_opener_with_dash_closer_falls_through() {
     let markdown = "~~~card-yaml\n$quill: test_quill\n$kind: main\ntitle: T\n---\n\nBody.";
     let err = decompose(markdown).unwrap_err();
     let msg = err.to_string();
-    assert!(msg.contains("Missing required root"), "got: {msg}");
+    assert!(
+        msg.contains("opened at line 1 is never closed"),
+        "got: {msg}"
+    );
 }
 
 #[test]
@@ -238,12 +307,12 @@ author: Test Author
 
 Content without closing fence";
 
-    let result = decompose(markdown);
-    assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("Missing required root"));
+    let msg = decompose(markdown).unwrap_err().to_string();
+    assert!(
+        msg.contains("Root card-yaml block opened at line 1 is never closed"),
+        "got: {msg}"
+    );
+    assert!(msg.contains("after the last field (`author`)"), "got: {msg}");
 }
 
 #[test]

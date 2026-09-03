@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- fix(core): **an unclosed root `~~~` block is reported as unclosed.** A
+  document that opens with `~~~` and `$quill` but never closes the fence drew
+  the generic `parse::missing_quill` text, telling the author to open a block
+  they had already opened while the scanner's unclosed-fence signal was
+  dropped. That signal now reaches the diagnostic: the message names the
+  opener's line, the field to close after, and — for a `~~` run or an indented
+  `~~~` — the line that failed to close it. A root opener carrying a foreign
+  info string (`~~~metadata`) is named the same way.
+- feat(core): **`~~~yaml` opens a card-yaml block**, a second non-canonical
+  alias beside `~~~card-yaml`; both re-emit as bare `~~~`. A YAML *code* block
+  in prose is a backtick fence (```` ```yaml ````), unchanged.
 - feat(core): **the values form: `reader.values()` reads a document as plain
   values and `writer.set_values(values)` writes them back.** A document has
   three forms: *stored* (verbatim, quill-free), *values* (stored with every
