@@ -70,9 +70,16 @@ fn body_text(card: &CardSchema, fallback_kind: &str) -> String {
         return String::new();
     }
     let example = card.body.as_ref().and_then(|b| b.example.as_deref());
-    let fallback = format!("Write {} body here.", fallback_kind);
+    let fallback = body_placeholder(fallback_kind);
     let text = example.unwrap_or(fallback.as_str());
     format!("\n{}\n", text)
+}
+
+/// The body text a kind declaring no `body.example` shows. Shared with the
+/// `validation::example_unchanged` walk, which recognizes it in a document: the
+/// two are one string or the placeholder ships unnoticed.
+pub(super) fn body_placeholder(kind: &str) -> String {
+    format!("Write {kind} body here.")
 }
 
 /// Build the root card: `$quill` (with the `# keep verbatim` inline reminder),
