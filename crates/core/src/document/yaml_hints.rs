@@ -74,6 +74,9 @@ fn derive_hint(message: &str, content: &str) -> Option<String> {
 
     // An unquoted value containing `:` reads as a nested mapping key.
     if m.contains("mapping values are not allowed") {
+        if let Some(hint) = indented_top_level_key_hint(message, content) {
+            return Some(hint);
+        }
         if let Some((field, value)) = first_field_with_unquoted_colon(content) {
             return Some(format!(
                 "Unquoted values cannot contain `:` (it starts a nested mapping key). \
@@ -216,6 +219,47 @@ fn first_field_with_unquoted_prefix(content: &str, prefixes: &[char]) -> Option<
     None
 }
 
+/// The 1-based line number the parser flagged, read off the `line N column M`
+/// prefix of its message (`at line N, column M` is accepted too).
+fn flagged_line_number(message: &str) -> Option<usize> {
+    let rest = &message[message.find("line ")? + "line ".len()..];
+    let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+    digits.parse().ok()
+}
+
+/// `line` as a mapping key, when its shape is `key:` or `key: value`.
+fn mapping_key(line: &str) -> Option<&str> {
+    let (key, rest) = line.split_once(':')?;
+    let plain =
+        !key.is_empty() && !key.contains(' ') && !key.starts_with('#') && !key.starts_with('-');
+    (plain && (rest.is_empty() || rest.starts_with(' '))).then_some(key)
+}
+
+/// The hint for a top-level key indented by a stray leading space: YAML folds
+/// such a line into the preceding plain scalar and reports the same "mapping
+/// values are not allowed" as an unquoted colon does, with no colon in sight.
+fn indented_top_level_key_hint(message: &str, content: &str) -> Option<String> {
+    let number = flagged_line_number(message)?;
+    let lines: Vec<&str> = content.lines().collect();
+    let flagged = lines.get(number.checked_sub(1)?)?;
+    if !flagged.starts_with(' ') {
+        return None;
+    }
+    let key = mapping_key(flagged.trim_start())?;
+    let previous = lines[..number - 1]
+        .iter()
+        .rev()
+        .find(|l| !l.trim().is_empty())?;
+    if previous.starts_with([' ', '\t']) {
+        return None;
+    }
+    mapping_key(previous)?;
+    Some(format!(
+        "Line {number} starts with a space. Top-level fields must begin at \
+         column 0; remove the leading space before `{key}:`."
+    ))
+}
+
 /// The first `key: <value>` line whose unquoted value contains a second `:`,
 /// which is what raises "mapping values are not allowed in this context".
 fn first_field_with_unquoted_colon(content: &str) -> Option<(String, String)> {
@@ -307,6 +351,77 @@ mod tests {
         assert!(hint.contains("system_name"));
         assert!(hint.contains("Node.js Service: Order Processing API"));
         assert!(hint.contains("Quote"));
+    }
+
+    #[test]
+    fn hint_for_indented_key_names_the_leading_space() {
+        let content = concat!(
+            "subject: Near-Miss Involving Aerospace Ground Equipment Tug on the Flightline\n",
+            " date: 2026-04-02\n",
+            "authority_line: \"\"\n"
+        );
+        let enriched = enrich_yaml_error(
+            "error: line 2 column 6: mapping values are not allowed in this context",
+            content,
+        );
+        let hint = enriched.hint.expect("hint should be set");
+        assert!(hint.contains("Line 2 starts with a space"), "{hint}");
+        assert!(hint.contains("`date:`"), "{hint}");
+        assert!(!hint.contains("double quotes"), "{hint}");
+    }
+
+    #[test]
+    fn hint_for_indented_bare_key_names_the_leading_space() {
+        let content = "subject: Near-Miss On The Flightline\n distribution:\nauthority_line: \"\"\n";
+        let enriched = enrich_yaml_error(
+            "error: line 2 column 14: mapping values are not allowed in this context",
+            content,
+        );
+        let hint = enriched.hint.expect("hint should be set");
+        assert!(hint.contains("Line 2 starts with a space"), "{hint}");
+        assert!(hint.contains("`distribution:`"), "{hint}");
+    }
+
+    #[test]
+    fn hint_for_unquoted_colon_survives_the_indent_branch() {
+        let enriched = enrich_yaml_error(
+            "error: line 1 column 13: mapping values are not allowed in this context",
+            "field: value: with colon\n",
+        );
+        let hint = enriched.hint.expect("hint should be set");
+        assert!(hint.contains("field"), "{hint}");
+        assert!(hint.contains("value: with colon"), "{hint}");
+        assert!(hint.contains("Quote"), "{hint}");
+    }
+
+    #[test]
+    fn indented_key_hint_reads_the_real_parser_message() {
+        let content = concat!(
+            "subject: Near-Miss Involving Aerospace Ground Equipment Tug on the Flightline\n",
+            " date: 2026-04-02\n",
+            "authority_line: \"\"\n"
+        );
+        let raw = serde_saphyr::from_str_with_options::<serde_json::Value>(
+            content,
+            crate::document::limits::yaml_parse_options(),
+        )
+        .expect_err("the indented key should not parse")
+        .to_string();
+        let hint = enrich_yaml_error(&raw, content)
+            .hint
+            .expect("hint should be set");
+        assert!(hint.contains("Line 2 starts with a space"), "{hint}");
+        assert!(hint.contains("`date:`"), "{hint}");
+    }
+
+    #[test]
+    fn indented_key_after_a_prose_line_falls_through() {
+        let enriched = enrich_yaml_error(
+            "error: line 2 column 6: mapping values are not allowed in this context",
+            "a long plain scalar with no colon\n date: 2026-04-02\n",
+        );
+        let hint = enriched.hint.expect("hint should be set");
+        assert!(hint.contains("double quotes"), "{hint}");
     }
 
     #[test]
