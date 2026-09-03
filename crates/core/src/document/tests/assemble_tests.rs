@@ -44,6 +44,18 @@ fn test_malformed_quill_reference_carries_code_and_grammar_hint() {
 }
 
 #[test]
+fn test_body_prose_inside_the_block_is_told_to_close_the_block() {
+    let md = "~~~card-yaml\n$quill: usaf_memo\n$kind: main\ntitle: Near-Miss Report\n\
+              88th Communications Squadron, Wright-Patterson AFB\n\
+              This memorandum documents a near-miss on the flight line.\n~~~\n";
+    let err = decompose(md).unwrap_err();
+    let hint = err.to_diagnostic().hint.expect("hint should be set");
+    assert!(hint.contains("reads as prose"), "got: {hint}");
+    assert!(hint.contains("88th Communications Squadron"), "got: {hint}");
+    assert!(!hint.contains("block scalar"), "got: {hint}");
+}
+
+#[test]
 fn test_root_dash_frontmatter_without_quill_reports_missing_quill() {
     let err = decompose("---\nquill: usaf_memo\ntitle: Memo\n---\n\nBody\n").unwrap_err();
     let msg = err.to_string();

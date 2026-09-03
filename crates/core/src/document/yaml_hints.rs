@@ -129,6 +129,14 @@ fn derive_hint(message: &str, content: &str) -> Option<String> {
 
     // A continuation line of a plain scalar read as a new key.
     if m.contains("simple key expected") || m.contains("simple key expect") {
+        if let Some(flagged) = flagged_prose_line(&m, content) {
+            return Some(format!(
+                "Line {} (\"{}\") has no `key:` and reads as prose. Body text belongs \
+                 after the closing `~~~`, not inside the block: close the block before it.",
+                flagged.number,
+                truncate_for_message(flagged.text)
+            ));
+        }
         return Some(
             "A second line of a value was read as a new mapping key (YAML \
              plain-scalar values stop at the next unindented line). For \
@@ -167,6 +175,99 @@ fn derive_hint(message: &str, content: &str) -> Option<String> {
     }
 
     None
+}
+
+/// A line of `content` the parser flagged, with its 1-indexed number.
+struct FlaggedLine<'a> {
+    number: usize,
+    text: &'a str,
+}
+
+/// The flagged line when it reads as body prose written inside the block rather
+/// than the wrapped continuation of a plain scalar: no `key:`, sentence-shaped,
+/// and not the tail of an unfinished field above it.
+fn flagged_prose_line<'a>(message: &str, content: &'a str) -> Option<FlaggedLine<'a>> {
+    let number = flagged_line_number(message)?;
+    let lines: Vec<&str> = content.lines().collect();
+    let text = lines.get(number.checked_sub(1)?)?.trim();
+    if text.is_empty() || has_colon_outside_quotes(text) {
+        return None;
+    }
+
+    let previous = number
+        .checked_sub(2)
+        .and_then(|i| lines.get(i))
+        .map(|l| l.trim());
+    let after_blank = matches!(previous, None | Some(""));
+    if !after_blank && !text.contains(' ') && !ends_a_sentence(text) {
+        return None;
+    }
+
+    // The competing reading: a plain scalar wrapped onto a second line. It needs
+    // an unfinished `key: value` directly above and nothing continuing below,
+    // and no sentence punctuation of its own.
+    let wrapped_scalar = !after_blank
+        && previous.is_some_and(looks_unterminated_scalar)
+        && !ends_a_sentence(text)
+        && !text.contains(',')
+        && lines.iter().rposition(|l| !l.trim().is_empty()) == Some(number - 1);
+
+    (!wrapped_scalar).then_some(FlaggedLine { number, text })
+}
+
+/// The 1-indexed line the parser named (`line 3 column 1`, `at line 17, column 1`).
+fn flagged_line_number(message: &str) -> Option<usize> {
+    let (_, rest) = message.split_once("line ")?;
+    rest.chars()
+        .take_while(char::is_ascii_digit)
+        .collect::<String>()
+        .parse()
+        .ok()
+}
+
+/// Whether `line` carries a `:` that YAML would read as a key separator.
+fn has_colon_outside_quotes(line: &str) -> bool {
+    let mut in_single = false;
+    let mut in_double = false;
+    for ch in line.chars() {
+        match ch {
+            '\'' if !in_double => in_single = !in_single,
+            '"' if !in_single => in_double = !in_double,
+            ':' if !in_single && !in_double => return true,
+            _ => {}
+        }
+    }
+    false
+}
+
+fn ends_a_sentence(line: &str) -> bool {
+    matches!(line.trim_end().chars().last(), Some('.' | '!' | '?'))
+}
+
+/// Whether `line` is a `key: <plain multi-word value>` a reader would take as
+/// running on: the shape whose next line is a scalar continuation, not a key.
+fn looks_unterminated_scalar(line: &str) -> bool {
+    let Some((key, value)) = line.split_once(':') else {
+        return false;
+    };
+    if key.is_empty() || key.contains(char::is_whitespace) || key.starts_with(['#', '-']) {
+        return false;
+    }
+    let value = value.trim();
+    if !value.contains(' ') || value.starts_with(['\'', '"', '|', '>', '[', '{', '&', '*', '#']) {
+        return false;
+    }
+    !matches!(value.chars().last(), Some('.' | '!' | '?' | ',' | ';'))
+}
+
+/// The line as quoted in a hint, elided past a readable prefix.
+fn truncate_for_message(text: &str) -> String {
+    const MAX: usize = 48;
+    if text.chars().count() <= MAX {
+        return text.to_string();
+    }
+    let head: String = text.chars().take(MAX).collect();
+    format!("{}…", head.trim_end())
 }
 
 /// The alias/anchor hint, naming the offending field when one is recognizable.
@@ -361,6 +462,60 @@ mod tests {
         let hint = enriched.hint.expect("hint should be set");
         assert!(hint.contains("block scalar"));
         assert!(hint.contains("|"));
+    }
+
+    #[test]
+    fn hint_for_wrapped_scalar_survives_a_located_line() {
+        let enriched = enrich_yaml_error(
+            "error: line 2 column 1: simple key expected ':'",
+            "summary: This is a long\nsummary across multiple lines\n",
+        );
+        let hint = enriched.hint.expect("hint should be set");
+        assert!(hint.contains("block scalar"), "{hint}");
+        assert!(!hint.contains("reads as prose"), "{hint}");
+    }
+
+    #[test]
+    fn hint_for_prose_inside_block_says_close_the_block() {
+        let content = "title: Near-Miss Report\ndate: 2026-03-14\n\
+                       88th Communications Squadron, Wright-Patterson AFB\n\
+                       This memorandum documents a near-miss on the flight line.\n";
+        let enriched = enrich_yaml_error("error: line 3 column 1: simple key expected ':'", content);
+        let hint = enriched.hint.expect("hint should be set");
+        assert!(hint.contains("Line 3"), "{hint}");
+        assert!(hint.contains("88th Communications Squadron"), "{hint}");
+        assert!(hint.contains("reads as prose"), "{hint}");
+        assert!(hint.contains("`~~~`"), "{hint}");
+        assert!(!hint.contains("block scalar"), "{hint}");
+    }
+
+    #[test]
+    fn hint_for_prose_after_a_blank_line_says_close_the_block() {
+        let content = "title: Memo\n\nThis memorandum documents a near-miss on the flight line.\n";
+        let enriched = enrich_yaml_error("error: line 3 column 1: simple key expected ':'", content);
+        let hint = enriched.hint.expect("hint should be set");
+        assert!(hint.contains("Line 3"), "{hint}");
+        assert!(hint.contains("reads as prose"), "{hint}");
+        assert!(!hint.contains("block scalar"), "{hint}");
+    }
+
+    #[test]
+    fn hint_for_prose_right_after_a_multi_word_field_says_close_the_block() {
+        let content = "title: Near-Miss Report\n88th Communications Squadron, Wright-Patterson AFB\n";
+        let enriched = enrich_yaml_error("error: line 2 column 1: simple key expected ':'", content);
+        let hint = enriched.hint.expect("hint should be set");
+        assert!(hint.contains("reads as prose"), "{hint}");
+    }
+
+    #[test]
+    fn prose_hint_elides_a_long_line() {
+        let long = "This memorandum documents a near-miss that occurred during the flight line inspection.";
+        let content = format!("title: Memo\n\n{long}\n");
+        let enriched =
+            enrich_yaml_error("error: line 3 column 1: simple key expected ':'", &content);
+        let hint = enriched.hint.expect("hint should be set");
+        assert!(hint.contains('…'), "{hint}");
+        assert!(!hint.contains("inspection"), "{hint}");
     }
 
     #[test]
