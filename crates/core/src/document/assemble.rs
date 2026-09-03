@@ -19,7 +19,7 @@ use quillmark_content::Normalized;
 fn import_body_or_parse_error(md: &str) -> Result<Normalized, ParseError> {
     super::import_body(md).map_err(|e| ParseError::BodyImport(e.to_string()))
 }
-use super::prescan::{prescan_fence_content, CommentPathSegment, NestedComment, PreItem};
+use super::prescan::{prescan_fence_content, CommentPathSegment, NestedComment, PreItem, PreScan};
 use super::{Card, Document};
 
 /// A `MissingQuill` message naming the specific malformation. LLM authors hit
@@ -86,6 +86,46 @@ pub(super) struct MetadataBlock {
     pub(super) pre_warnings: Vec<Diagnostic>,
 }
 
+/// The document-absolute, 1-indexed position of a YAML parse failure.
+///
+/// `parser` is the position the engine reports inside the string it parsed:
+/// the fence content less the comment lines prescan drops
+/// ([`PreScan::source_lines`] maps what survives back) and less the leading
+/// whitespace `trim` removes. With no reported position the block's first
+/// content line is the anchor.
+fn document_position(
+    markdown: &str,
+    content_start: usize,
+    pre: &PreScan,
+    parser: Option<(usize, usize)>,
+) -> (usize, usize) {
+    let first_line = markdown[..content_start].lines().count() + 1;
+    let Some((rel_line, rel_column)) = parser else {
+        return (first_line, 1);
+    };
+
+    let cleaned = &pre.cleaned_yaml;
+    let trimmed_prefix = &cleaned[..cleaned.len() - cleaned.trim_start().len()];
+
+    let cleaned_index = trimmed_prefix.matches('\n').count() + rel_line.saturating_sub(1);
+    let source_index = pre
+        .source_lines
+        .get(cleaned_index)
+        .or_else(|| pre.source_lines.last())
+        .copied()
+        .unwrap_or(0);
+
+    // Only the first parsed line lost leading whitespace to `trim`.
+    let column = if rel_line <= 1 {
+        let head = trimmed_prefix.rsplit('\n').next().unwrap_or("");
+        rel_column + head.chars().count()
+    } else {
+        rel_column
+    };
+
+    (first_line + source_index, column)
+}
+
 /// Process one recognised card-yaml block into a [`MetadataBlock`].
 ///
 /// `block_start` / `block_end` bound the whole block; `content_start` /
@@ -138,11 +178,18 @@ pub(super) fn build_block(
         ) {
             Ok(parsed) => parsed,
             Err(e) => {
-                let line = markdown[..block_start].lines().count() + 1;
                 let enriched = super::yaml_hints::enrich_yaml_error(&e.to_string(), &content);
+                let (line, column) = document_position(
+                    markdown,
+                    content_start,
+                    &pre,
+                    e.location()
+                        .map(|l| (l.line() as usize, l.column() as usize)),
+                );
                 return Err(ParseError::YamlErrorWithLocation {
                     message: enriched.message,
                     line,
+                    column,
                     block_index,
                     hint: enriched.hint,
                 });

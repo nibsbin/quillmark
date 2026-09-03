@@ -47,6 +47,11 @@ pub struct NestedComment {
 pub(crate) struct PreScan {
     /// YAML with `!must_fill` tags stripped and comment lines removed; fed to serde_saphyr.
     pub cleaned_yaml: String,
+    /// The 0-indexed line of the fence content each line of
+    /// [`Self::cleaned_yaml`] came from. Own-line comments are dropped rather
+    /// than blanked, so the two numberings diverge and a parse failure needs
+    /// this to travel back to a document position.
+    pub source_lines: Vec<usize>,
     /// Top-level fields and comments in source order.
     pub items: Vec<PreItem>,
     pub nested_comments: Vec<NestedComment>,
@@ -57,6 +62,20 @@ pub(crate) struct PreScan {
     pub warnings: Vec<Diagnostic>,
     /// `!must_fill` on mappings: turned into `ParseError::InvalidStructure` by the parser.
     pub fill_target_errors: Vec<String>,
+}
+
+/// The emitted YAML lines paired with the source line each came from.
+#[derive(Debug)]
+struct Cleaned {
+    lines: Vec<String>,
+    source_lines: Vec<usize>,
+}
+
+impl Cleaned {
+    fn push(&mut self, source_line: usize, text: String) {
+        self.lines.push(text);
+        self.source_lines.push(source_line);
+    }
 }
 
 #[derive(Debug)]
@@ -77,7 +96,10 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
     let mut out = PreScan::default();
 
     let lines: Vec<&str> = content.split('\n').collect();
-    let mut cleaned_lines: Vec<String> = Vec::with_capacity(lines.len());
+    let mut cleaned = Cleaned {
+        lines: Vec::with_capacity(lines.len()),
+        source_lines: Vec::with_capacity(lines.len()),
+    };
 
     let mut stack: Vec<Frame> = vec![Frame {
         indent: 0,
@@ -89,13 +111,13 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
     // Indent of the `key:` line that opened the current block scalar, if any.
     let mut block_scalar_indent: Option<usize> = None;
 
-    for raw_line in &lines {
+    for (source_line, raw_line) in lines.iter().enumerate() {
         let line = *raw_line;
         let indent = leading_space_count(line);
         let trimmed = &line[indent..];
 
         if trimmed.is_empty() {
-            cleaned_lines.push(line.to_string());
+            cleaned.push(source_line, line.to_string());
             continue;
         }
 
@@ -104,7 +126,7 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
         // A line at or below the key's indent ends the scalar.
         if let Some(key_indent) = block_scalar_indent {
             if indent > key_indent {
-                cleaned_lines.push(line.to_string());
+                cleaned.push(source_line, line.to_string());
                 continue;
             }
             block_scalar_indent = None;
@@ -210,9 +232,9 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
                     None if after_dash.trim_end().is_empty() => "-".to_string(),
                     None => format!("- {}", after_dash.trim_end()),
                 };
-                cleaned_lines.push(format!("{}{}", head, body));
+                cleaned.push(source_line, format!("{}{}", head, body));
             } else {
-                cleaned_lines.push(line.to_string());
+                cleaned.push(source_line, line.to_string());
             }
 
             // For a `- |-` item the content is indented past the dash, so the
@@ -254,8 +276,7 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
                     });
                 }
 
-                let cleaned = format!("{}:{}", key, value_without_tag);
-                cleaned_lines.push(cleaned);
+                cleaned.push(source_line, format!("{}:{}", key, value_without_tag));
 
                 if let Some(c) = trailing_comment {
                     out.items.push(PreItem::Comment {
@@ -305,9 +326,12 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
                     });
                 }
                 let head = format!("{:width$}", "", width = indent);
-                cleaned_lines.push(format!("{}{}:{}", head, source_key, value_without_tag));
+                cleaned.push(
+                    source_line,
+                    format!("{}{}:{}", head, source_key, value_without_tag),
+                );
             } else {
-                cleaned_lines.push(line.to_string());
+                cleaned.push(source_line, line.to_string());
             }
 
             if has_empty_inline_value(&value_without_tag) {
@@ -325,16 +349,13 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
             continue;
         }
 
-        cleaned_lines.push(line.to_string());
+        cleaned.push(source_line, line.to_string());
     }
 
     // A tag surviving here sits in a position prescan cannot lift (inside a flow
     // collection, or on a bare sequence element) where serde_saphyr would drop it
     // silently.
-    if cleaned_lines
-        .iter()
-        .any(|l| line_has_unsupported_fill_tag(l))
-    {
+    if cleaned.lines.iter().any(|l| line_has_unsupported_fill_tag(l)) {
         out.warnings.push(
             Diagnostic::new(
                 Severity::Warning,
@@ -347,7 +368,8 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
         );
     }
 
-    out.cleaned_yaml = cleaned_lines.join("\n");
+    out.cleaned_yaml = cleaned.lines.join("\n");
+    out.source_lines = cleaned.source_lines;
     out
 }
 
@@ -1004,6 +1026,26 @@ mod tests {
             let out = prescan_fence_content(input);
             assert_eq!(out.cleaned_yaml.lines().count(), input.lines().count());
         }
+    }
+
+    #[test]
+    fn source_lines_map_cleaned_lines_back_over_dropped_comments() {
+        let input = "# lead\ntitle: Doc\n\n# note\nrole: !must_fill\nbio: |\n  # not a comment\nend: x\n";
+        let out = prescan_fence_content(input);
+
+        assert_eq!(out.cleaned_yaml.split('\n').count(), out.source_lines.len());
+        let source = |needle: &str| {
+            let i = out
+                .cleaned_yaml
+                .split('\n')
+                .position(|l| l.contains(needle))
+                .expect("cleaned line present");
+            out.source_lines[i]
+        };
+        assert_eq!(source("title:"), 1);
+        assert_eq!(source("role:"), 4);
+        assert_eq!(source("# not a comment"), 6);
+        assert_eq!(source("end:"), 7);
     }
 
     #[test]
