@@ -627,22 +627,7 @@ impl Builder {
                 continues,
             );
             self.code_opened = true;
-            // Code text is literal; still enforce content invariants.
-            self.push_code_line(seg);
-        }
-    }
-
-    fn push_code_line(&mut self, seg: &str) {
-        for c in seg.chars() {
-            match c {
-                '\n' => continue,
-                ISLAND_SLOT => continue,
-                other => {
-                    if let Some(c) = crate::normalize::admit_char(other) {
-                        self.inline.push_raw(c);
-                    }
-                }
-            }
+            self.inline.push_text(seg);
         }
     }
 
@@ -1082,6 +1067,17 @@ mod tests {
             == LineKind::Code {
                 lang: Some("rust".into())
             }));
+    }
+
+    #[test]
+    fn code_block_drops_a_stray_slot_and_breaks_on_a_bare_cr() {
+        let rt = imp("```\na\u{FFFC}b\nc\rd\n```");
+        assert_eq!(rt.text, "ab\nc\nd");
+        assert_eq!(rt.lines.len(), 3);
+        assert!(rt
+            .lines
+            .iter()
+            .all(|l| l.kind == LineKind::Code { lang: None }));
     }
 
     #[test]
