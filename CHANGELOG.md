@@ -314,6 +314,15 @@
   too. `Card::store_ext` bounds `$ext` depth through
   `value::depth_check_meta_map`, the check the wire and the storage DTO run.
   Every diagnostic code is unchanged.
+- refactor(core): **`FieldViolation` spells its own message, once.** The parse,
+  wire and storage boundaries each re-spelled the three field-invariant
+  reasons, and the wording had drifted apart ("invalid data-field name `x`:
+  field names must match…" vs `invalid field name "x": must match…` vs a keyless
+  "field names must match…"). `Display` gives the reason alone — the form
+  `WireError::InvalidField` carries beside its own `key` — and
+  `FieldViolation::message(key)` names the key inline, which all three
+  boundaries wrap. The parse path's dead `FillOnMapping` arm goes with the
+  match it lived in: `validate_field` returns `InvalidName` / `TooDeep` only.
 
 ## v0.112.0 - 2026-09-01
 

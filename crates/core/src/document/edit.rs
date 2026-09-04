@@ -296,7 +296,10 @@ impl EditError {
 /// A field-level invariant violation, shared by every payload ingestion path.
 ///
 /// Each boundary maps it to its own error type (`ParseError`, `StorageError`,
-/// `WireError`, `EditError`), so the invariant is enforced once, here.
+/// `WireError`, `EditError`), so the invariant is enforced once, here. Its
+/// [`Display`](std::fmt::Display) is the reason alone, for a boundary carrying
+/// the offending key itself; [`message`](Self::message) names the key inline
+/// for the boundaries whose error type does not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum FieldViolation {
@@ -309,6 +312,33 @@ pub enum FieldViolation {
     /// and a block mapping opens on the next line, with no tag position of its
     /// own (spec §3.4).
     FillOnMapping,
+}
+
+impl FieldViolation {
+    /// The reason with `key` named inline: the rendering
+    /// [`WireError::InvalidField`](crate::document::wire::WireError::InvalidField)
+    /// composes from its own key and this `Display`.
+    pub fn message(&self, key: &str) -> String {
+        format!("invalid field {key:?}: {self}")
+    }
+}
+
+impl std::fmt::Display for FieldViolation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FieldViolation::InvalidName => {
+                f.write_str("field names must match [A-Za-z_][A-Za-z0-9_]*")
+            }
+            FieldViolation::TooDeep => write!(
+                f,
+                "nests deeper than the maximum of {} levels",
+                crate::document::limits::MAX_YAML_DEPTH
+            ),
+            FieldViolation::FillOnMapping => f.write_str(
+                "`!must_fill` targets a mapping; `!must_fill` is supported on scalars and sequences only",
+            ),
+        }
+    }
 }
 
 /// A payload-level invariant violation: [`FieldViolation`]'s seam one level up,

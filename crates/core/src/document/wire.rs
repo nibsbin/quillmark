@@ -330,22 +330,9 @@ fn validate_wire_fill_targets(
 }
 
 fn wire_field_error(key: &str, v: super::edit::FieldViolation) -> WireError {
-    use super::edit::FieldViolation;
     WireError::InvalidField {
         key: key.to_string(),
-        reason: match v {
-            FieldViolation::InvalidName => {
-                "field names must match [A-Za-z_][A-Za-z0-9_]*".to_string()
-            }
-            FieldViolation::TooDeep => format!(
-                "nests deeper than the maximum of {} levels",
-                crate::document::limits::MAX_YAML_DEPTH
-            ),
-            FieldViolation::FillOnMapping => {
-                "`!must_fill` targets a mapping; it is supported on scalars and sequences only"
-                    .to_string()
-            }
-        },
+        reason: v.to_string(),
     }
 }
 

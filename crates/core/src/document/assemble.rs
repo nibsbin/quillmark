@@ -435,22 +435,8 @@ pub(super) fn decompose_with_warnings(
 /// Validate a user field entering the payload from the parse path, mapping a
 /// violation to `ParseError::InvalidStructure` (spec §10).
 fn validate_parsed_field(key: &str, value: &serde_json::Value) -> Result<(), ParseError> {
-    use crate::document::edit::{validate_field, FieldViolation};
-    validate_field(key, value).map_err(|v| match v {
-        FieldViolation::InvalidName => ParseError::InvalidStructure(format!(
-            "invalid data-field name `{}`: field names must match [A-Za-z_][A-Za-z0-9_]*",
-            key
-        )),
-        FieldViolation::TooDeep => ParseError::InvalidStructure(format!(
-            "field `{}` nests deeper than the maximum of {} levels",
-            key,
-            crate::document::limits::MAX_YAML_DEPTH
-        )),
-        FieldViolation::FillOnMapping => ParseError::InvalidStructure(format!(
-            "`!must_fill` on key `{}` targets a mapping; `!must_fill` is supported on scalars and sequences only",
-            key
-        )),
-    })
+    crate::document::edit::validate_field(key, value)
+        .map_err(|v| ParseError::InvalidStructure(v.message(key)))
 }
 
 /// Take the typed `$` item for `key` out of `typed`, leaving its slot empty.
