@@ -110,6 +110,11 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- fix(cli): **`-f PDF` writes `example.pdf`.** `--format` parses
+  case-insensitively, but the derived output filename, the `example.<fmt>`
+  fallback and the multi-page `--stdout` refusal interpolated the flag as
+  typed, so `-f PDF` wrote `example.PDF` and `-f Svg` named `Svg` in its
+  message. All three read the parsed format's lowercase id.
 
 ## v0.112.0 - 2026-09-01
 

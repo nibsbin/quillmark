@@ -266,3 +266,31 @@ fn unknown_format_fails_loudly() {
     );
 }
 
+
+/// `--format` parses case-insensitively, and the derived filename takes the
+/// parsed format's id, not the flag as typed.
+#[test]
+fn format_casing_does_not_reach_the_output_filename() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let quill = taro();
+
+    let out = cli()
+        .current_dir(dir.path())
+        .args(["render", quill.to_str().unwrap(), "-f", "PDF", "--quiet"])
+        .output()
+        .expect("the built binary is executable");
+    assert!(
+        out.status.success(),
+        "render -f PDF exited {:?}\nstderr: {}",
+        out.status.code(),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        dir.path().join("example.pdf").is_file(),
+        "example.pdf missing; dir holds {:?}",
+        std::fs::read_dir(dir.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect::<Vec<_>>()
+    );
+}
