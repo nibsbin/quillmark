@@ -323,6 +323,10 @@
   `FieldViolation::message(key)` names the key inline, which all three
   boundaries wrap. The parse path's dead `FillOnMapping` arm goes with the
   match it lived in: `validate_field` returns `InvalidName` / `TooDeep` only.
+- refactor(core): **the prescan's frame stack carries no `kind`.**
+  `Frame.kind` and `FrameKind` were written at every push and read nowhere
+  but the write that filled them in, so both are gone, along with the
+  `ensure_frame_at_indent` parameter that carried the value.
 
 ## v0.112.0 - 2026-09-01
 
