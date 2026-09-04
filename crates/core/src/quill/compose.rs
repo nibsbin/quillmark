@@ -262,9 +262,10 @@ impl Quill {
     /// (`compile_data` / `dry_run` ignore `$seed`), so every diagnostic here is
     /// a **warning** rooted at `$seed.<kind>[.<field>]`. An overlay keyed by a
     /// name that is not a declared `card_kind` is flagged; otherwise each
-    /// overlaid field is checked against that kind's schema with the same
-    /// conformance core the schema's own `example:` / `default:` literals use
-    /// (partial values allowed, no null/absence gating).
+    /// overlaid field is checked against that kind's schema as the **document**
+    /// value it is — an overlay cell is what `seed_card` commits into a new
+    /// card — so the variant container is a spelling it accepts, a present-null
+    /// cell reads as absent, and an omitted field raises nothing.
     /// The reserved `$body` key is the body override, not a field, and is
     /// skipped.
     fn validate_seed(&self, doc: &Document) -> Vec<Diagnostic> {
@@ -316,9 +317,7 @@ impl Quill {
                     continue;
                 };
                 let qv = QuillValue::from_json(value.clone());
-                for violation in
-                    super::validation::validate_schema_literal(field_schema, &qv, &field_path)
-                {
+                for violation in super::validation::validate_field(field_schema, &qv, &field_path) {
                     diags.push(seed_violation_diagnostic(&violation));
                 }
             }

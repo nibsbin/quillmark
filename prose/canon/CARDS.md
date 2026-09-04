@@ -170,6 +170,9 @@ The main card **carries** `$seed` but is never a *subject* of it: its keys range
 over `card_kinds`, and `main ∉ card_kinds` (a `$seed.main` entry is an advisory
 unknown-kind). Overlays are validated only on the editor surface
 (`Quill::validate`, warning-severity, rooted at `$seed.<kind>[.<field>]`) and
-**never gate render**: `compile_data` / `dry_run` ignore `$seed` entirely. A
-malformed overlay surfaces enforcement only when a card is actually spawned from
-it, as an ordinary card diagnostic on that card.
+**never gate render**: `compile_data` / `dry_run` ignore `$seed` entirely. Each
+cell is judged as the **document** value it is — an overlay cell is what
+`seed_card` commits into the new card — so the container spelling of a
+variant-bearing enum and a present-null cell read here exactly as they read in a
+card. A malformed overlay surfaces enforcement only when a card is actually
+spawned from it, as an ordinary card diagnostic on that card.
