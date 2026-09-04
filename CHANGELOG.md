@@ -110,6 +110,14 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- fix(content): **a mark flanking an unknown island's placeholder survives
+  export.** The verify-and-drop net re-imports the rendered line and expects
+  the line's own text back, island slot included, but a type this build has no
+  projection for renders as a comment placeholder that re-imports as nothing.
+  The probe could never match, so every `**` / `*` / `~~` on such a line was
+  dropped as unrepresentable. The expected text omits the slots of islands with
+  no markdown projection and keeps every other one, so the probe measures
+  delimiter leakage alone and still reads an image's slot back.
 
 ## v0.112.0 - 2026-09-01
 
