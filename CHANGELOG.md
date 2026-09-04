@@ -338,6 +338,16 @@
   that does the strip and covers `normalize_document` with a field-name NFC
   case. The hint on a malformed `main.body` lists `unsupported`, reading the key
   list off one const beside `BodyCardSchema`.
+- fix(cli): **`render` parses a `MARKDOWN_FILE` through the bound door, so
+  `conform::*` and `plate::unsupported_construct` warnings reach stderr.** The
+  command called `Document::parse`, the transport door, which runs neither the
+  conform walk nor the declined-construct walk: a `usaf_memo` body carrying a
+  `***` rendered with an empty stderr where every other surface warns. It calls
+  `Quill::parse` instead, and the existing splice carries that door's warnings
+  into `RenderResult.warnings` unchanged. Rendered bytes are the same — the
+  coercion pass already ran in `compile_data` — and a `$quill` naming another
+  quill refuses at parse rather than at compile, with the same diagnostics and
+  the same exit 1. The seeded path (no `MARKDOWN_FILE`) is unchanged.
 
 ## v0.112.0 - 2026-09-01
 

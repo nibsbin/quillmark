@@ -2,7 +2,7 @@ use crate::commands::load_quill;
 use crate::errors::{CliError, Result};
 use crate::output::{derive_output_path, page_output_path, write_output};
 use clap::Parser;
-use quillmark::{Document, Quillmark};
+use quillmark::Quillmark;
 use quillmark_core::{OutputFormat, RenderOptions};
 use std::fs;
 use std::path::PathBuf;
@@ -69,7 +69,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
             }
 
             let markdown = fs::read_to_string(markdown_path)?;
-            let output = Document::parse(&markdown)?;
+            let output = quill.parse(&markdown)?;
 
             if args.verbose {
                 eprintln!("Markdown parsed successfully");
