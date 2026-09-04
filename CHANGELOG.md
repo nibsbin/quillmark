@@ -110,6 +110,16 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- fix(content): **a heading, an island and a rule take no continuation lines.**
+  `segment` grouped a `continues` line into the block above, but export renders
+  only the first line of those three kinds, so `SetContinues` on the line after
+  a heading validated clean and exported `"# a"` with the continuation dropped,
+  while the Typst emitter still rendered it. `LineKind::takes_continuations`
+  names the kinds a continuation is legal after (`Para`, `Code`, `Unknown`);
+  `SetContinues` refuses the write (`ApplyError::ContinuesSingleLineBlock`),
+  `normalize` clears a flag `SetKind` or a stored document left there, and
+  `validate` rejects a hand-built one (`Invariant::ContinuesSingleLineBlock`),
+  the repair-or-refuse split `ContinuesAcrossContainers` already carries.
 
 ## v0.112.0 - 2026-09-01
 

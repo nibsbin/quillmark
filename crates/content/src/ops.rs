@@ -58,7 +58,8 @@ pub enum LineOp {
     /// break, a code fence's interior line) rather than starting a new block.
     /// Split, join and text-delta `\n` insertion all mint `continues: false`
     /// lines, so this is the only op that reaches the flag. Setting it on line 0
-    /// is [`ApplyError::FirstLineContinues`].
+    /// is [`ApplyError::FirstLineContinues`]; setting it after a block that
+    /// renders one line is [`ApplyError::ContinuesSingleLineBlock`].
     SetContinues { line: usize, continues: bool },
 }
 
@@ -345,6 +346,11 @@ pub enum ApplyError {
     /// its container path differs from the previous line's, and a within-block
     /// break lives inside one container.
     ContinuesAcrossContainers { line: usize },
+    /// [`LineOp::SetContinues`] would make a line continue a block that renders
+    /// one line ([`LineKind::takes_continuations`]): a heading, an island or a
+    /// rule. Export reads the block's first line alone, so the write would
+    /// silently drop the continuation's text.
+    ContinuesSingleLineBlock { line: usize },
     /// The text delta's expected base length disagreed with the content:
     /// it was built against a different revision.
     DeltaBaseMismatch {
@@ -687,6 +693,18 @@ impl Content {
                             .is_some_and(|(l, prev)| l.containers != prev.containers)
                     {
                         return Err(ApplyError::ContinuesAcrossContainers { line: *line });
+                    }
+                    // The kind side of the same refusal: a heading, an island
+                    // and a rule are one line, so nothing after one is inside
+                    // the block it claims to continue.
+                    if *continues
+                        && self
+                            .lines
+                            .get(*line)
+                            .and(self.lines.get(line.wrapping_sub(1)))
+                            .is_some_and(|prev| !prev.kind.takes_continuations())
+                    {
+                        return Err(ApplyError::ContinuesSingleLineBlock { line: *line });
                     }
                     let l = self.line_mut(*line)?;
                     l.continues = *continues;
@@ -1583,6 +1601,44 @@ mod tests {
             Ok(())
         );
         assert!(rt.lines[1].continues);
+    }
+
+    /// A heading, an island and a rule are one line in both projections, so a
+    /// line continuing one is text neither emitter reaches. Refused on the
+    /// deliberate channel, exactly as the container crossing is.
+    #[test]
+    fn set_continues_after_a_single_line_block_is_refused() {
+        for markdown in ["# a\n\nb", "| h |\n| --- |\n| c |\n\nb", "***\n\nb"] {
+            let mut rt = from_markdown(markdown).unwrap();
+            let line = rt.lines.len() - 1;
+            assert_eq!(
+                rt.apply_line_ops(&[LineOp::SetContinues {
+                    line,
+                    continues: true
+                }]),
+                Err(ApplyError::ContinuesSingleLineBlock { line }),
+                "{markdown}"
+            );
+            assert!(!rt.lines[line].continues);
+            assert_eq!(crate::export::to_markdown(&rt), markdown, "{markdown}");
+        }
+
+        // `SetKind` reaches the shape from the other side, by retagging the
+        // block a continuation already follows. That retag is accepted and the
+        // terminal `normalize` clears the flag, so the continuation lands as
+        // the paragraph it is rather than vanishing.
+        let mut rt = from_markdown("a\\\nb").unwrap();
+        assert!(rt.lines[1].continues, "a hard break is a continuation");
+        assert_eq!(
+            rt.apply_line_ops(&[LineOp::SetKind {
+                line: 0,
+                kind: LineKind::Heading { level: 1 },
+            }]),
+            Ok(())
+        );
+        assert!(!rt.lines[1].continues);
+        assert_eq!(rt.validate(), Ok(()));
+        assert_eq!(crate::export::to_markdown(&rt), "# a\n\nb");
     }
 
     /// A `Join` merging two lines of differing paths leaves the line after the
