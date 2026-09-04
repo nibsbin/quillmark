@@ -96,6 +96,23 @@ impl Codec {
         }
     }
 
+    /// The shape-mismatch message for a value in neither accepted encoding,
+    /// naming the shape that arrived. Every surface that refuses an unshaped
+    /// richtext value spells this one sentence.
+    pub(crate) fn unshaped_message(self, value: &serde_json::Value) -> String {
+        format!(
+            "expected a {} content object or {}, got {}",
+            self.name(),
+            self.string_form(),
+            match value {
+                serde_json::Value::Bool(_) => "a boolean",
+                serde_json::Value::Number(_) => "a number",
+                serde_json::Value::Array(_) => "an array",
+                _ => "an unsupported value",
+            }
+        )
+    }
+
     /// [`decode_value`](Self::decode_value) closed over the shapes a stored field
     /// can hold: a null is the empty content (null ≡ absent), and anything
     /// neither object nor string is a decode failure.
@@ -106,11 +123,7 @@ impl Codec {
         match self.decode_value(value) {
             Some(result) => result,
             None if value.is_null() => Ok(Normalized::empty()),
-            None => Err(ContentDecodeError::NotContent(format!(
-                "expected a {} content object or {}",
-                self.name(),
-                self.string_form()
-            ))),
+            None => Err(ContentDecodeError::NotContent(self.unshaped_message(value))),
         }
     }
 

@@ -397,7 +397,9 @@ pub(crate) fn field_decode(
 }
 
 /// Depth-bound the values of an `$ext` / `$seed` map: the map itself is level
-/// 1, so its values carry the rest of the budget.
+/// 1, so its values carry the rest of the budget. The iterator form of
+/// [`crate::value::depth_check_meta_map`], for the merge that must clear the
+/// bound before it owns a map.
 fn check_meta_depth<'v>(
     values: impl IntoIterator<Item = &'v serde_json::Value>,
 ) -> Result<(), EditError> {
@@ -743,7 +745,8 @@ impl Card {
         &mut self,
         value: serde_json::Map<String, serde_json::Value>,
     ) -> Result<(), EditError> {
-        check_meta_depth(value.values())?;
+        let value =
+            crate::value::depth_check_meta_map(value, |max| EditError::ValueTooDeep { max })?;
         self.payload_mut().set_ext(value);
         Ok(())
     }

@@ -110,6 +110,15 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- refactor(core): **every surface that refuses a non-content richtext value
+  spells one sentence.** `Codec::decode_field` builds the shape-mismatch
+  message and names the shape that arrived (`expected a richtext content
+  object or a markdown string, got a number`); the wire `$body` reader and the
+  richtext write coercion route through it instead of carrying their own
+  copies, so the schema-bound read and the strict projection name the shape
+  too. `Card::store_ext` bounds `$ext` depth through
+  `value::depth_check_meta_map`, the check the wire and the storage DTO run.
+  Every diagnostic code is unchanged.
 
 ## v0.112.0 - 2026-09-01
 
