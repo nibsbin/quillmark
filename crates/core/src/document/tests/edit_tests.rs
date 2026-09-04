@@ -300,6 +300,30 @@ fn test_store_fill_refuses_a_mapping() {
     let _ = crate::document::Document::parse(&md).expect("the emitted document re-parses");
 }
 
+/// The batch carries the same fill-target rule as the single write: a marker on
+/// a nested mapping emits as an unmarked key and reloads as a DTO violation.
+#[test]
+fn test_card_store_fields_refuses_a_nested_fill_on_a_mapping() {
+    let marked = || {
+        let mut value = QuillValue::from_json(serde_json::json!({"a": {"b": 1}}));
+        assert!(value.set_fill_at(&[crate::value::PathSegment::Key("a".to_string())]));
+        value
+    };
+    let mut card = Card::new("note").unwrap();
+    card.store_field("keep", qv("old")).unwrap();
+
+    let single = card
+        .store_field("x", marked())
+        .expect_err("a marker on a nested mapping is refused");
+    let batch = card
+        .store_fields([("keep".to_string(), qv("new")), ("x".to_string(), marked())])
+        .expect_err("and the batch refuses it identically");
+
+    assert_eq!(batch, vec![("x".to_string(), single)]);
+    assert!(card.payload().get("x").is_none());
+    assert_eq!(card.payload().get("keep").unwrap().as_str(), Some("old"));
+}
+
 #[test]
 fn test_card_store_fields_clears_fill_and_repeated_name_last_wins() {
     let mut card = Card::new("note").unwrap();

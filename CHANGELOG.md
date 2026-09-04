@@ -184,6 +184,14 @@
   and re-read as a nested key, so the document did not survive
   `parse(to_markdown())`. The check reads the name's own characters, matching
   the raw bytes the parser's key grammar accepts.
+- fix(core): **`Card::store_fields` refuses a `!must_fill` marker targeting a
+  mapping, as `Card::store_field` does.** The batch checked the field-name
+  grammar and value depth only, so a `QuillValue` carrying a marker on a
+  nested object node was stored, emitted with the marker dropped, and refused
+  by the `@0.92.0` storage DTO on reload. `edit::validate_fill_targets` runs
+  per field in the same all-or-nothing pass, so the offending name rides the
+  batch's error vector as `edit::fill_on_mapping` beside every other
+  violation. The WASM `storeFields` inherits it.
 
 ## v0.112.0 - 2026-09-01
 
