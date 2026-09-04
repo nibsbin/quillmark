@@ -2,11 +2,10 @@
 //! owner among the `document/tests/` unit modules.
 //!
 //! What those modules do not carry: the §8 input caps (sole coverage in the
-//! workspace), the bidi strip a card body takes at parse, and the
-//! `normalize_document` pass.
+//! workspace), the bidi strip a card body takes at parse, and the ASCII gate a
+//! field name passes at parse.
 
-use quillmark_core::normalize::normalize_document;
-use quillmark_core::Document;
+use quillmark_core::{Document, ParseError};
 
 #[test]
 fn parse_strips_a_bidi_control_from_a_card_body() {
@@ -20,20 +19,15 @@ fn parse_strips_a_bidi_control_from_a_card_body() {
     );
 }
 
-/// U+212A KELVIN SIGN composes to `K` under NFC: parse stores the authored key
-/// verbatim, and this pass is what folds it.
+/// U+212A KELVIN SIGN composes to `K` under NFC, and a field name is ASCII as
+/// authored: parse refuses the key rather than folding it.
 #[test]
-fn normalize_document_folds_a_field_name_to_nfc() {
+fn parse_refuses_a_field_name_that_only_normalises_to_ascii() {
     let md = "~~~card-yaml\n$quill: t\n$kind: main\n\u{212A}elvin: v\n~~~\n\nBody.";
-    let doc = Document::parse(md).unwrap().document;
+    let err = Document::parse(md).expect_err("a Kelvin-sign key is not a field name");
     assert!(
-        doc.main().payload().get("Kelvin").is_none(),
-        "parse stores the authored key"
-    );
-    let doc = normalize_document(doc).unwrap();
-    assert_eq!(
-        doc.main().payload().get("Kelvin").and_then(|v| v.as_str()),
-        Some("v")
+        matches!(&err, ParseError::InvalidStructure(m) if m.contains("field names must match")),
+        "{err:?}"
     );
 }
 
