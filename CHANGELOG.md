@@ -382,6 +382,16 @@
   `x: null` emit — and a lone `-` opening a sequence item was not one. The
   scan strips one trailing `\r` per line up front, so the cleaned YAML and
   every captured comment are `\n`-only.
+- fix(core): **`key: !must_fill` written inside a block scalar or a quoted
+  scalar is that scalar's text, and warns about nothing.** The
+  `parse::fill_marker_unsupported_position` check re-read every cleaned line
+  after the prescan, block-scalar bodies among them, and accepted any `:` plus
+  whitespace as the tag's left boundary, so `note: |` over
+  `see key: !must_fill here` kept the literal and still reported a marker
+  lost. The prescan now decides the warning per line as it reads one, where a
+  block-scalar body and a quoted value are known for what they are; the four
+  positions the marker genuinely cannot survive — a flow map, a flow
+  sequence, a bare sequence element, a flow value at depth — warn as before.
 
 ## v0.112.0 - 2026-09-01
 
