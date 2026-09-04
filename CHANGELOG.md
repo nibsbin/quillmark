@@ -272,6 +272,15 @@
   in reverse, so a pdfform quill whose widgets overlap answers with the
   last-stamped one. A backend that mixes widget and content regions through the
   default overrides `field_at` to hand a widget the tie, as Typst does.
+- fix(typst): **an image in a content field resolves a quill asset.**
+  `![logo](assets/logo.svg)` in a `richtext` field lowers to `#image(..)`
+  inside the helper package's `lib.typ`, and Typst resolves an image path
+  against the root of the file holding the call, never leaving it; assets sat
+  under the project root alone, so the one thing an image island lowers to
+  failed the render outright. `QuillWorld` registers each `assets/` file under
+  the helper package's file id as well, one `Bytes` behind both ids, and a
+  content image names an asset by its quill-root path, rooted or relative, the
+  path a plate names it by.
 
 ## v0.112.0 - 2026-09-01
 
