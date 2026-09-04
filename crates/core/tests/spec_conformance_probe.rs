@@ -47,8 +47,14 @@ fn per_block_field_count_cap() {
         s.push_str(&format!("f{}: v\n", i));
     }
     s.push_str("~~~\n\nBody.");
-    let err = Document::parse(&s).unwrap_err().to_string();
-    assert!(err.contains("Input too large"), "got: {}", err);
+    let diag = Document::parse(&s).unwrap_err().to_diagnostic();
+    assert_eq!(diag.code.as_deref(), Some("parse::too_many_fields"));
+    assert!(
+        diag.message.contains("Too many fields") && !diag.message.contains("bytes"),
+        "a field count is not a byte count, got: {}",
+        diag.message
+    );
+    assert_eq!(diag.args.get("count"), Some(&serde_json::json!(1001)));
 }
 
 #[test]
@@ -57,8 +63,14 @@ fn card_count_cap_is_per_card() {
     for _ in 0..1001 {
         s.push_str("\n~~~card-yaml\n$kind: x\n~~~\n\nB.\n");
     }
-    let err = Document::parse(&s).unwrap_err().to_string();
-    assert!(err.contains("Input too large"), "got: {}", err);
+    let diag = Document::parse(&s).unwrap_err().to_diagnostic();
+    assert_eq!(diag.code.as_deref(), Some("parse::too_many_cards"));
+    assert!(
+        diag.message.contains("Too many cards") && !diag.message.contains("bytes"),
+        "a card count is not a byte count, got: {}",
+        diag.message
+    );
+    assert_eq!(diag.args.get("count"), Some(&serde_json::json!(1001)));
 }
 
 /// `docs/integration/operations.md` tells an integrator to read the caps rather

@@ -245,8 +245,8 @@ pub(super) fn build_block(
     // user-data fields.
     if let Some(serde_json::Value::Object(ref map)) = yaml_value {
         if map.len() > crate::error::MAX_FIELD_COUNT {
-            return Err(ParseError::InputTooLarge {
-                size: map.len(),
+            return Err(ParseError::TooManyFields {
+                count: map.len(),
                 max: crate::error::MAX_FIELD_COUNT,
             });
         }

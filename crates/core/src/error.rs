@@ -306,6 +306,17 @@ pub enum ParseError {
     #[error("Input too large: {size} bytes (max: {max} bytes)")]
     InputTooLarge { size: usize, max: usize },
 
+    /// A card-yaml block carries more user fields than [`MAX_FIELD_COUNT`]
+    /// (spec §8), counted after `$`-key extraction. Code
+    /// `parse::too_many_fields`.
+    #[error("Too many fields in one card-yaml block: {count} (max: {max})")]
+    TooManyFields { count: usize, max: usize },
+
+    /// A document carries more composable cards than [`MAX_CARD_COUNT`]
+    /// (spec §8). Code `parse::too_many_cards`.
+    #[error("Too many cards: {count} (max: {max})")]
+    TooManyCards { count: usize, max: usize },
+
     #[error("Invalid YAML structure: {0}")]
     InvalidStructure(String),
 
@@ -373,6 +384,14 @@ impl ParseError {
                 "size" => size,
                 "max" => max,
             },
+            ParseError::TooManyFields { count, max } => diag_args! {
+                "count" => count,
+                "max" => max,
+            },
+            ParseError::TooManyCards { count, max } => diag_args! {
+                "count" => count,
+                "max" => max,
+            },
             ParseError::InvalidStructure(_) => diag_args! {},
             ParseError::EmptyInput(_) => diag_args! {},
             ParseError::MissingQuill(_) => diag_args! {},
@@ -402,6 +421,19 @@ impl ParseError {
                 format!("Input too large: {} bytes (max: {} bytes)", size, max),
             )
             .with_code("parse::input_too_large".to_string()),
+            ParseError::TooManyFields { count, max } => Diagnostic::new(
+                Severity::Error,
+                format!(
+                    "Too many fields in one card-yaml block: {} (max: {})",
+                    count, max
+                ),
+            )
+            .with_code("parse::too_many_fields".to_string()),
+            ParseError::TooManyCards { count, max } => Diagnostic::new(
+                Severity::Error,
+                format!("Too many cards: {} (max: {})", count, max),
+            )
+            .with_code("parse::too_many_cards".to_string()),
             ParseError::InvalidStructure(msg) => Diagnostic::new(Severity::Error, msg.clone())
                 .with_code("parse::invalid_structure".to_string()),
             ParseError::EmptyInput(msg) => Diagnostic::new(Severity::Error, msg.clone())
@@ -702,6 +734,8 @@ mod args_canon {
 
         for e in [
             ParseError::InputTooLarge { size: 2, max: 1 },
+            ParseError::TooManyFields { count: 2, max: 1 },
+            ParseError::TooManyCards { count: 2, max: 1 },
             ParseError::InvalidStructure("x".into()),
             ParseError::EmptyInput("x".into()),
             ParseError::MissingQuill("x".into()),
