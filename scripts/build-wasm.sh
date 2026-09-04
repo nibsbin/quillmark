@@ -53,10 +53,10 @@ echo "Building WASM modules for @quillmark/wasm... [profile: $MODE_LABEL]"
 
 cd "$(dirname "$0")/.."
 
-# Start from a clean pkg/. CI restores a cached pkg/ from a previous build
-# (restore-keys partial-matches an older release), and this script only ever
-# mkdir/cp/sed *into* pkg/; it never removes files. Without this, any file
-# dropped from the pkg layout between builds lingers and ships on `npm publish`.
+# Start from a clean pkg/. This script only ever mkdir/cp/sed *into* pkg/; it
+# never removes files, so a rebuild in a tree that built an earlier pkg layout
+# keeps every file that layout dropped, and `npm publish` ships them. CI caches
+# target/wasm32-unknown-unknown/<profile> alone, so its pkg/ is built fresh.
 rm -rf pkg
 
 # Check for required tools. The CLI's version must match the wasm-bindgen

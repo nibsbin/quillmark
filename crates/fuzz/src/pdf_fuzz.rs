@@ -5,7 +5,7 @@
 //!
 //! The oracle is deliberately weak — a refusal is an acceptable answer. The
 //! reader's input contract (traditional-xref, unencrypted, inline-annots,
-//! flat-tree) refuses most well-formed PDFs too, so `Ok` is not assertable.
+//! bounded-tree) refuses most well-formed PDFs too, so `Ok` is not assertable.
 //!
 //! Two input populations, because they fail differently: arbitrary bytes almost
 //! never reach past the trailer scan, while a real form with one byte changed

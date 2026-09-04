@@ -102,8 +102,8 @@ impl StampOptions {
 /// a session-level query (see [`regions_of`]).
 ///
 /// `base` must satisfy the reader's input contract (traditional-xref,
-/// unencrypted, inline-annots, flat-tree) and carry no `/AcroForm` of its own,
-/// and each `rect` must already be final, finite, bottom-left PDF-point
+/// unencrypted, inline-annots, bounded-tree) and carry no `/AcroForm` of its
+/// own, and each `rect` must already be final, finite, bottom-left PDF-point
 /// geometry.
 pub fn stamp(
     base: Vec<u8>,

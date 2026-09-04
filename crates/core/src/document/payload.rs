@@ -243,7 +243,8 @@ impl Payload {
         Self { items }
     }
 
-    /// The inverse of [`from_items_with_nested`](Self::from_items_with_nested):
+    /// The inverse of
+    /// [`from_items_with_flat_nested`](Self::from_items_with_flat_nested):
     /// re-prefix each nested comment's path with its owning item's key, for the
     /// storage DTO's payload-level sidecar.
     pub(crate) fn flat_nested_comments(&self) -> Vec<NestedComment> {

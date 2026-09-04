@@ -2,21 +2,38 @@
 //! owner among the `document/tests/` unit modules.
 //!
 //! What those modules do not carry: the §8 input caps (sole coverage in the
-//! workspace) and the `normalize_document` pass.
+//! workspace), the bidi strip a card body takes at parse, and the
+//! `normalize_document` pass.
 
 use quillmark_core::normalize::normalize_document;
 use quillmark_core::Document;
 
 #[test]
-fn normalize_reaches_card_body() {
+fn parse_strips_a_bidi_control_from_a_card_body() {
     let md = "~~~card-yaml\n$quill: t\n$kind: main\n~~~\n\n~~~card-yaml\n$kind: x\n~~~\n\n<!-- c -->trailing\u{202D}text";
     let doc = Document::parse(md).unwrap().document;
-    let doc = normalize_document(doc).unwrap();
     let body = doc.cards()[0].body_markdown();
     assert!(
         body.contains("trailingtext"),
         "card body missing bidi-strip, got: {:?}",
         body
+    );
+}
+
+/// U+212A KELVIN SIGN composes to `K` under NFC: parse stores the authored key
+/// verbatim, and this pass is what folds it.
+#[test]
+fn normalize_document_folds_a_field_name_to_nfc() {
+    let md = "~~~card-yaml\n$quill: t\n$kind: main\n\u{212A}elvin: v\n~~~\n\nBody.";
+    let doc = Document::parse(md).unwrap().document;
+    assert!(
+        doc.main().payload().get("Kelvin").is_none(),
+        "parse stores the authored key"
+    );
+    let doc = normalize_document(doc).unwrap();
+    assert_eq!(
+        doc.main().payload().get("Kelvin").and_then(|v| v.as_str()),
+        Some("v")
     );
 }
 

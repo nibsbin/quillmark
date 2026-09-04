@@ -8,7 +8,10 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Diagnostic, Severity, diag_args};
 use crate::value::QuillValue;
 
-use super::types::{RICHTEXT_INLINE_TOKEN_MSG, UI_ORDER_REMOVED_MSG, VARIANT_DISCRIMINANT_KEY};
+use super::types::{
+    BODY_CARD_SCHEMA_KEYS, RICHTEXT_INLINE_TOKEN_MSG, UI_ORDER_REMOVED_MSG,
+    VARIANT_DISCRIMINANT_KEY,
+};
 use super::{BodyCardSchema, CardSchema, FieldSchema, FieldType, GroupRegistry, UiCardSchema};
 
 /// Canonical string text for a bare scalar unambiguously representable as a
@@ -1923,7 +1926,10 @@ impl QuillConfig {
             main_obj_opt.and_then(|main_obj| main_obj.get("body")),
             "main.body",
             "quill::invalid_body",
-            "Valid keys under 'body' are: enabled, example.",
+            &format!(
+                "Valid keys under 'body' are: {}.",
+                BODY_CARD_SCHEMA_KEYS.join(", ")
+            ),
             &mut errors,
         );
 

@@ -109,6 +109,10 @@ impl std::fmt::Display for BlockConstruct {
     }
 }
 
+/// The keys [`BodyCardSchema`] deserializes, for the hint on a rejected
+/// `body:` section. `example_content` is `#[serde(skip)]` and unauthorable.
+pub(crate) const BODY_CARD_SCHEMA_KEYS: &[&str] = &["enabled", "example", "unsupported"];
+
 /// Body namespace configuration for a card kind
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

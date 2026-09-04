@@ -6,11 +6,12 @@
 //! ## Input contract
 //!
 //! The base PDF must be traditional-xref, unencrypted, inline-annots,
-//! flat-tree: a classic `xref` table (not an xref *stream*), no `/Encrypt`, page
-//! `/Annots` written inline rather than as an indirect reference, and a page tree
-//! shallow enough to walk. That is the precise inverse of the scanner's error
-//! branches. `hayro-syntax` is read-only and exposes no byte spans, so it cannot
-//! drive a byte-splice append; hence this bespoke scanner.
+//! bounded-tree: a classic `xref` table (not an xref *stream*), no `/Encrypt`,
+//! page `/Annots` written inline rather than as an indirect reference, and a
+//! `/Pages` tree of any depth that reaches each node once and stays under
+//! 100 000 nodes. That is the precise inverse of the scanner's error branches.
+//! `hayro-syntax` is read-only and exposes no byte spans, so it cannot drive a
+//! byte-splice append; hence this bespoke scanner.
 
 use std::collections::{HashMap, HashSet};
 

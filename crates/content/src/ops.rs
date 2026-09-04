@@ -658,9 +658,9 @@ impl Content {
                     line.kind = kind.clone();
                 }
                 LineOp::SetContainers { line, containers } => {
-                    // Both emitters recurse one frame per container, so an
-                    // over-deep path is a stack overflow at render, not a render
-                    // error. Same cap as import.
+                    // The Typst emitter recurses one frame per container, so a
+                    // path past this cap is a render refusal rather than markup.
+                    // Same cap as import.
                     if containers.len() > crate::MAX_NESTING_DEPTH {
                         return Err(ApplyError::NestingTooDeep {
                             line: *line,
