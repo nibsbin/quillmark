@@ -1,17 +1,18 @@
 //! Line-oriented fence scanner for card-yaml blocks.
 //!
 //! A column-zero `~~~` fence (three or more tildes) with an empty info string,
-//! or the non-canonical `card-yaml` alias, opens a card-yaml block. Openers
-//! inside an ordinary CommonMark fenced code block are literal content, so a
-//! backtick fence (or a `~~~` fence carrying a language) writes one in prose.
+//! or one of the non-canonical `card-yaml` / `yaml` aliases, opens a card-yaml
+//! block. Openers inside an ordinary CommonMark fenced code block are literal
+//! content, so a backtick fence (or a `~~~` fence carrying a language) writes
+//! one in prose.
 
 use crate::error::ParseError;
 use crate::{Diagnostic, Severity};
 
 use super::assemble::MetadataBlock;
 
-/// Accepted on input as a non-canonical alias; never emitted.
-const CARD_YAML_INFO: &str = "card-yaml";
+/// Accepted on input as non-canonical aliases; never emitted.
+const CARD_YAML_INFO: [&str; 2] = ["card-yaml", "yaml"];
 
 pub(super) struct Lines<'a> {
     pub(super) source: &'a str,
@@ -115,7 +116,7 @@ fn card_yaml_opener_run(line: &str) -> Option<usize> {
     match code_fence_on_line(line, None) {
         Some((b'~', run, false)) => {
             let info = code_fence_info(line, run);
-            (info.is_empty() || info == CARD_YAML_INFO).then_some(run)
+            (info.is_empty() || CARD_YAML_INFO.contains(&info)).then_some(run)
         }
         _ => None,
     }
@@ -171,7 +172,54 @@ fn has_paired_dash_with_yaml_keys(lines: &Lines<'_>, opener_k: usize) -> bool {
     false
 }
 
-pub(super) type FenceScan = (Vec<MetadataBlock>, Vec<Diagnostic>);
+/// What the scanner saw where the root block should have been, when the line it
+/// found there produced no block. Carried out of the scan so the `MissingQuill`
+/// message names the malformation instead of describing the shape the author
+/// already wrote.
+pub(super) enum RootFault {
+    /// A card-yaml opener declaring `$quill` that nothing closes.
+    Unclosed {
+        opener_line: usize,
+        /// The first all-tilde line below the opener: a run too short to close
+        /// it, or an indented one.
+        near_closer: Option<(usize, String)>,
+        /// The last top-level key of the payload the author wrote.
+        last_field: Option<String>,
+    },
+    /// A tilde fence declaring `$quill` whose info string opens a code block.
+    InfoString { opener_line: usize, info: String },
+}
+
+pub(super) struct FenceScan {
+    pub(super) blocks: Vec<MetadataBlock>,
+    pub(super) warnings: Vec<Diagnostic>,
+    pub(super) root_fault: Option<RootFault>,
+}
+
+/// The payload lines of a would-be block at `opener_k`: down to the first blank
+/// line, which is where an author who forgot the closer stopped writing YAML.
+fn payload_lines<'a>(lines: &'a Lines<'a>, opener_k: usize) -> impl Iterator<Item = usize> + 'a {
+    ((opener_k + 1)..lines.len()).take_while(|&j| !lines.is_blank(j))
+}
+
+fn declares_quill_beneath(lines: &Lines<'_>, opener_k: usize) -> bool {
+    payload_lines(lines, opener_k).any(|j| lines.line_text(j).trim_start().starts_with("$quill:"))
+}
+
+fn last_field_key(lines: &Lines<'_>, opener_k: usize) -> Option<String> {
+    payload_lines(lines, opener_k)
+        .map(|j| lines.line_text(j))
+        .filter(|text| !text.starts_with(' '))
+        .filter_map(|text| super::prescan::key_end(text).map(|end| text[..end].to_string()))
+        .last()
+}
+
+fn near_closer_below(lines: &Lines<'_>, opener_k: usize) -> Option<(usize, String)> {
+    ((opener_k + 1)..lines.len()).find_map(|j| {
+        let trimmed = lines.line_text(j).trim();
+        (!trimmed.is_empty() && trimmed.bytes().all(|b| b == b'~')).then(|| (j, trimmed.to_string()))
+    })
+}
 
 /// Find all card-yaml metadata blocks. A block requires a blank line above it,
 /// so body round-tripping stays stable.
@@ -179,6 +227,7 @@ pub(super) fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseErr
     let lines = Lines::new(markdown);
     let mut blocks: Vec<MetadataBlock> = Vec::new();
     let mut warnings: Vec<Diagnostic> = Vec::new();
+    let mut root_fault: Option<RootFault> = None;
     // (char, run_len, opener_line_index) of an open ordinary code fence.
     let mut open_code_fence: Option<(u8, usize, usize)> = None;
 
@@ -237,6 +286,13 @@ pub(super) fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseErr
                 // Per CommonMark an unclosed `~~~` fence is an ordinary code
                 // block running to EOF, so delegate rather than erroring. The
                 // end-of-document check below surfaces the warning.
+                if blocks.is_empty() && root_fault.is_none() && declares_quill_beneath(&lines, k) {
+                    root_fault = Some(RootFault::Unclosed {
+                        opener_line: k,
+                        near_closer: near_closer_below(&lines, k),
+                        last_field: last_field_key(&lines, k),
+                    });
+                }
                 open_code_fence = Some((b'~', open_run, k));
                 k += 1;
                 continue;
@@ -316,6 +372,18 @@ pub(super) fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseErr
 
         // Any other fence opener is an ordinary fenced code block.
         if let Some((ch, run_len, _)) = code_fence_on_line(text, None) {
+            if ch == b'~'
+                && blocks.is_empty()
+                && root_fault.is_none()
+                && !text.starts_with(' ')
+                && (0..k).all(|i| lines.is_blank(i))
+                && declares_quill_beneath(&lines, k)
+            {
+                root_fault = Some(RootFault::InfoString {
+                    opener_line: k,
+                    info: code_fence_info(text, run_len).to_string(),
+                });
+            }
             open_code_fence = Some((ch, run_len, k));
         }
         k += 1;
@@ -345,5 +413,9 @@ pub(super) fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseErr
         );
     }
 
-    Ok((blocks, warnings))
+    Ok(FenceScan {
+        blocks,
+        warnings,
+        root_fault,
+    })
 }
