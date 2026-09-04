@@ -141,7 +141,10 @@ reads and the shape the WASM boundary pins:
   above); `aligns` is one `none | left | center | right` per column. Import
   normalizes to a single column count: header, every row, and `aligns` padded
   to the widest, so `columns:` and `align:` agree.
-- **`image`** → `{ url, alt }`; `alt` is the empty string when the source omits it.
+- **`image`** → `{ url, alt }`; `alt` is the empty string when the source omits
+  it. A `url` naming a quill file resolves against the quill root
+  (`assets/logo.svg`, or `/assets/logo.svg` for the same file), the path a plate
+  names it by.
 
 The `KnownIslandType` dispatch (`crates/content/src/island.rs`) owns these
 shapes engine-side; the WASM surface pins them as `TableProps` / `ImageProps` /
