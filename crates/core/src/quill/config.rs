@@ -1391,14 +1391,11 @@ impl QuillConfig {
             let diag = match &violation {
                 ValidationError::TypeMismatch {
                     path,
+                    expected: declared,
                     actual,
                     source_token,
                     ..
                 } => {
-                    // Use the field's declared `type:` verbatim (`datetime`,
-                    // `markdown`, …); the validator's `expected` collapses those
-                    // to `string`, which would misreport the author's intent.
-                    let declared = schema.r#type.as_str();
                     // validation.rs uses "number" for all non-integer JSON numbers;
                     // display as "float" so messages match the YAML author's mental model.
                     let display_actual = if actual == "number" {
