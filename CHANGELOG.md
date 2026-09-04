@@ -110,6 +110,15 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- fix(core): **a new `$` entry lands after the preceding `$` line's inline
+  comment, not between the line and its comment.** `Payload::upsert_meta`
+  inserted one past the last lower-ranked `$` item, which is the index the
+  trailing comment occupies, and emit reads a trailer as belonging to whatever
+  item precedes it: `$quill: q@1.0 # note` with no explicit `$kind` emitted
+  `$kind: main # note`. The insert now steps over that comment, so the four
+  callers — the `$kind` synthesis on parse, `store_ext`, `store_seed_overlay`,
+  `set_quill_ref` — leave the trailer on its own key and `parse(to_markdown())`
+  holds.
 
 ## v0.112.0 - 2026-09-01
 

@@ -400,12 +400,17 @@ impl Payload {
             .unwrap_or_else(|| {
                 // Insert after the last lower-ranked `$` item and before any
                 // non-`$` entry: keeps the `$` ordering without displacing
-                // user fields.
-                self.items
+                // user fields. That item's inline trailer sits at the same
+                // index and stays with it.
+                let after = self
+                    .items
                     .iter()
                     .rposition(|i| matches!(i.meta_rank(), Some(r) if r < new_rank))
-                    .map(|p| p + 1)
-                    .unwrap_or(0)
+                    .map_or(0, |p| p + 1);
+                match self.items.get(after) {
+                    Some(PayloadItem::Comment { inline: true, .. }) => after + 1,
+                    _ => after,
+                }
             });
         self.items.insert(insert_at, new);
     }

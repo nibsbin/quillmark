@@ -1,4 +1,4 @@
-use crate::document::tests::collect_md_files;
+use crate::document::tests::{collect_md_files, parse};
 
 #[test]
 fn markdown_and_json_converge_on_canonical_form() {
@@ -64,5 +64,45 @@ fn markdown_and_json_converge_on_canonical_form() {
     eprintln!(
         "markdown_and_json_converge_on_canonical_form: {} passed, {} skipped",
         passed, skipped
+    );
+}
+
+#[test]
+fn synthesised_kind_leaves_the_quill_trailer_on_quill() {
+    let src = "~~~card-yaml\n$quill: q@1.0 # note on quill\ntitle: x\n~~~\n";
+    let doc = parse(src);
+
+    let emitted = doc.to_markdown();
+    assert!(
+        emitted.contains("$quill: q@1.0 # note on quill\n$kind: main\n"),
+        "trailer belongs to $quill, not to the synthesised $kind\nGot:\n{}",
+        emitted
+    );
+    assert_eq!(
+        parse(&emitted),
+        doc,
+        "emit must re-parse to the same document"
+    );
+}
+
+#[test]
+fn store_ext_leaves_the_kind_trailer_on_kind() {
+    let src = "~~~card-yaml\n$quill: q@1.0\n$kind: main # note on kind\ntitle: x\n~~~\n";
+    let mut doc = parse(src);
+
+    let mut ext = serde_json::Map::new();
+    ext.insert("editor".into(), serde_json::json!({ "pinned": true }));
+    doc.main_mut().store_ext(ext).expect("shallow map stores");
+
+    let emitted = doc.to_markdown();
+    assert!(
+        emitted.contains("$kind: main # note on kind\n$ext:\n"),
+        "trailer belongs to $kind, not to the new $ext\nGot:\n{}",
+        emitted
+    );
+    assert_eq!(
+        parse(&emitted),
+        doc,
+        "emit must re-parse to the same document"
     );
 }
