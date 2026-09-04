@@ -200,6 +200,13 @@
   container is `authored`, as any other present value is; a present-null still
   reads as absent and keeps the discriminant's rung. The value the row carries
   is unchanged.
+- fix(core): **a nested richtext `example:` reaches the blueprint as its
+  `# e.g.` hint.** A richtext cell never inlines its example, and the
+  per-property builder for typed-dict properties and typed-table rows gated the
+  hint on `default:` alone, so a defaultless richtext property's `example:`
+  appeared in neither the cell nor a hint. Both gates are one helper now, and a
+  property's `example:` behaves as a card-level field's does at every depth, as
+  BLUEPRINT.md § Typed dictionaries states.
 
 ## v0.112.0 - 2026-09-01
 

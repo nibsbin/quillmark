@@ -212,12 +212,19 @@ fn typed_table_props(field: &FieldSchema) -> Option<&IndexMap<String, Box<FieldS
     }
 }
 
+/// Whether a leaf's `example:` surfaces as a `# e.g.` hint rather than as the
+/// cell's own value: a `default:` already occupies the cell, or the leaf is
+/// richtext, whose cell an example never inlines (see `scalar_value`). The gate
+/// is a value-axis question and stays keyed on `default`: `must_fill` never
+/// moves an example between the cell and the hint.
+fn eg_hinted(field: &FieldSchema) -> bool {
+    field.default.is_some() || matches!(field.r#type, FieldType::RichText { .. })
+}
+
 /// Push the leading prose comments for a *top-level* field: the description,
-/// then the `# e.g.` hint. `eg_when` gates the hint: a scalar surfaces it only
-/// when a `default:` already occupies the cell (otherwise the example *is* the
-/// cell's value), while typed containers always surface it (their example never
-/// inlines). The gate is a value-axis question and stays keyed on `default`:
-/// `must_fill` never moves an example between the cell and the hint.
+/// then the `# e.g.` hint. `eg_when` gates the hint: a leaf surfaces it under
+/// `eg_hinted`, while typed containers always surface it (their example never
+/// inlines).
 fn push_leading(items: &mut Vec<PayloadItem>, field: &FieldSchema, eg_when: bool) {
     if let Some(desc) = collapse_opt(&field.description) {
         items.push(PayloadItem::comment(desc));
@@ -255,11 +262,7 @@ fn scalar_value(field: &FieldSchema) -> JsonValue {
 /// Append a scalar / scalar-array / richtext field as a single payload field
 /// plus its trailing inline type annotation.
 fn append_scalar(items: &mut Vec<PayloadItem>, field: &FieldSchema) {
-    // A richtext field never inlines its `example:` as the marker value, so
-    // (unlike other defaultless scalars) the example would vanish entirely.
-    // Surface it as a `# e.g.` hint instead (no-ops when no `example:` is set).
-    let eg_when = field.default.is_some() || matches!(field.r#type, FieldType::RichText { .. });
-    push_leading(items, field, eg_when);
+    push_leading(items, field, eg_hinted(field));
     let (json, fill) = scalar_cell(field);
     items.push(PayloadItem::Field {
         key: field.name.clone(),
@@ -297,8 +300,7 @@ fn build_property_mapping(
                 inline: false,
             });
         }
-        // `# e.g.` only when a `default:` holds the cell (see `push_leading`).
-        if prop.default.is_some() {
+        if eg_hinted(prop) {
             if let Some(eg) = prop.example.as_ref() {
                 nested.push(NestedComment {
                     container_path: prefix.to_vec(),
@@ -1063,6 +1065,56 @@ main:
         assert!(t.contains("# e.g. Cupertino\n"), "{t}");
         assert!(t.contains("  street: !must_fill # string\n"));
         assert!(t.contains("  city: \"\" # string\n"));
+    }
+
+    /// A richtext cell never inlines its example, so the `# e.g.` hint is the
+    /// only place the example can land — at every depth a property is declared.
+    #[test]
+    fn a_richtext_example_surfaces_as_an_eg_hint_at_every_depth() {
+        let t = cfg(r#"
+quill: { name: x, version: 1.0.0, backend: typst, description: x }
+main:
+  fields:
+    bio: { type: richtext, example: Top hello }
+    contact:
+      type: object
+      properties:
+        bio: { type: richtext, example: Nested hello }
+    rows:
+      type: array
+      items:
+        type: object
+        properties:
+          bio: { type: richtext, example: Row hello }
+"#)
+        .blueprint();
+
+        assert!(
+            t.contains("# e.g. Top hello\nbio: !must_fill # richtext<markdown>\n"),
+            "{t}"
+        );
+        assert!(
+            t.contains(concat!(
+                "contact: # object\n",
+                "  # e.g. Nested hello\n",
+                "  bio: !must_fill # richtext<markdown>\n",
+            )),
+            "{t}"
+        );
+        assert!(
+            t.contains(concat!(
+                "rows: # array<object>\n",
+                "  # e.g. Row hello\n",
+                "  - bio: !must_fill # richtext<markdown>\n",
+            )),
+            "{t}"
+        );
+
+        let doc1 = Document::parse(&t).expect("blueprint must parse").document;
+        let doc2 = Document::parse(&doc1.to_markdown())
+            .expect("re-emit must parse")
+            .document;
+        assert_eq!(doc1, doc2, "the hinted blueprint must round-trip");
     }
 
     /// A typed dictionary is a namespace, not a cell: a literal on the
