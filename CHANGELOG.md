@@ -110,6 +110,11 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- fix(cli): **`--quiet` silences `--verbose` entirely.** Seven of the nine
+  `--verbose` lines in `render` printed regardless of `--quiet`, only the two
+  after the compile checking it, so `--verbose --quiet` still narrated the
+  load and the parse. `execute` resolves the pair once up front, and the help
+  text's "Suppress all non-error output" is what the flag does.
 
 ## v0.112.0 - 2026-09-01
 
