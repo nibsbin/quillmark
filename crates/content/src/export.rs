@@ -729,8 +729,22 @@ fn render_marked_core(
                 let content: String = chars[cs..ce].iter().collect();
                 let ticks = longest_backtick_run(&content) + 1;
                 let fence = "`".repeat(ticks.max(1));
+                // CommonMark folds an edge backtick into the fence and strips
+                // one space off each side of a span that begins and ends with
+                // one, unless it is all spaces; the pad defeats both.
+                let pad = content.starts_with('`')
+                    || content.ends_with('`')
+                    || (content.starts_with(' ')
+                        && content.ends_with(' ')
+                        && content.chars().any(|c| c != ' '));
                 out.push_str(&fence);
+                if pad {
+                    out.push(' ');
+                }
                 out.push_str(&content);
+                if pad {
+                    out.push(' ');
+                }
                 out.push_str(&fence);
                 pos = ce;
                 continue;
@@ -1745,6 +1759,28 @@ mod tests {
         assert_eq!(md, "**ab**`cdef`");
         let rt2 = from_markdown(&md).unwrap();
         assert_eq!(rt2.text, "abcdef");
+    }
+
+    /// CommonMark reads a code span's edge backtick as part of the fence run and
+    /// strips one space off each side of a span that begins *and* ends with one,
+    /// so both shapes need the pad the parser then removes. A span of nothing but
+    /// spaces is exempt from the strip, so a pad there would grow it.
+    #[test]
+    fn code_span_edges_keep_their_pad() {
+        for (md, text, want) in [
+            ("`` `a ``", "`a", "`` `a ``"),
+            ("`` a` ``", "a`", "`` a` ``"),
+            ("`` `a` ``", "`a`", "`` `a` ``"),
+            ("`` ` ``", "`", "`` ` ``"),
+            ("`  a  `", " a ", "`  a  `"),
+            ("`a`", "a", "`a`"),
+            ("`  `", "  ", "`  `"),
+        ] {
+            let rt = from_markdown(md).unwrap();
+            assert_eq!(rt.text, text, "import of {md:?}");
+            assert_eq!(to_markdown(&rt), want);
+            round_trips(md);
+        }
     }
 
     /// Entity-shaped text must not re-import as the decoded entity: exporting

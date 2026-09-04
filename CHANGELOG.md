@@ -110,6 +110,13 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- fix(content): **a code span whose content touches its fence exports with the
+  CommonMark space pad.** Export emitted `fence + content + fence`, so an edge
+  backtick joined the fence run (text `` `a `` came back as ` ```a`` `) and a
+  span that begins and ends with a space lost one off each side on re-import
+  (`" a "` came back as `"a"`). A pad space now flanks the content in exactly
+  those two cases, which import strips back off; a span of nothing but spaces
+  is exempt from the strip and so stays unpadded.
 
 ## v0.112.0 - 2026-09-01
 
