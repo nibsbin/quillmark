@@ -110,6 +110,14 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- fix(pdf): **a `/Rotate` the reader cannot read as an integer refuses the
+  stamp.** `assert_unrotated_pages` parsed the raw value and treated a failure
+  as an absence, so `/Rotate 7 0 R` — legal for any dict value — climbed past
+  the page and fell to the default zero, stamping every widget in unrotated
+  user space onto a page the viewer turns. The first *present* value along the
+  ancestor chain now binds: a direct integer is checked as before
+  (`pdf::rotated_page` when it is not a multiple of 360), anything else is
+  `pdf::parse`, matching how `/MediaBox` treats an unresolvable value.
 
 ## v0.112.0 - 2026-09-01
 
