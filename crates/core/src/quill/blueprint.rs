@@ -104,13 +104,15 @@ fn build_main_card(card: &CardSchema, quill_ref: &str, description: Option<&str>
 }
 
 /// Build a composable card: `$kind: <kind>`, the `composable (0..N)` role
-/// comment, the optional description, then the fields.
+/// comment, a comment naming it a deletable sample, the optional description,
+/// then the fields.
 fn build_card(card: &CardSchema) -> Card {
     let mut items = vec![
         PayloadItem::Kind {
             value: card.name.clone(),
         },
         PayloadItem::comment("composable (0..N)"),
+        PayloadItem::comment("sample card; delete if not needed"),
     ];
     if let Some(desc) = collapse_opt(&card.description) {
         items.push(PayloadItem::comment(desc));
@@ -815,7 +817,7 @@ card_kinds:
 "#)
         .blueprint();
         assert!(t.contains(
-            "~~~\n$kind: note\n# composable (0..N)\n# A short note appended to the document.\n"
+            "~~~\n$kind: note\n# composable (0..N)\n# sample card; delete if not needed\n# A short note appended to the document.\n"
         ));
     }
 
