@@ -110,6 +110,14 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- fix(fuzz): **the wide-payload property requires the parse to succeed and to
+  keep every field.** `fuzz_decompose_large_payload` swallowed a parse `Err`
+  and asserted `payload().len() <= size`, a bound `Payload::len` cannot
+  exceed, so a parse that refused the input or dropped every field passed. It
+  expects the parse and pins `len() == size`, which holds at every generated
+  width since all sit under `MAX_FIELD_COUNT`. The README's `parse_fuzz.rs`
+  row names what the file generates and `conform_fuzz.rs` gets the row it
+  lacked.
 
 ## v0.112.0 - 2026-09-01
 
