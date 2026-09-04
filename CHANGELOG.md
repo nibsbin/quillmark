@@ -411,6 +411,14 @@
   the comment and the mapping indented under it, so the first emit is the fixed
   point. A blueprint's typed-table row takes that form too, its first
   property's description sitting inside the row with the rest.
+- fix(pdf): **a `/Rotate` the reader cannot read as an integer refuses the
+  stamp.** `assert_unrotated_pages` parsed the raw value and treated a failure
+  as an absence, so `/Rotate 7 0 R` — legal for any dict value — climbed past
+  the page and fell to the default zero, stamping every widget in unrotated
+  user space onto a page the viewer turns. The first *present* value along the
+  ancestor chain now binds: a direct integer is checked as before
+  (`pdf::rotated_page` when it is not a multiple of 360), anything else is
+  `pdf::parse`, matching how `/MediaBox` treats an unresolvable value.
 
 ## v0.112.0 - 2026-09-01
 
