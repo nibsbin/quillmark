@@ -290,6 +290,13 @@
   whose origin is the box's top-left in every layout context, so
   `session.regions()`, `fieldAt`, and the stamped AcroForm `/Rect` all land on
   the widget. A plate that compensated for the offset shifts by that much.
+- refactor(typst): **a compile's form fields cross to the PDF spine as one
+  derivation.** `Compiled` carries `field_specs: Vec<FieldSpec>` built with the
+  compile: `widget_regions` is `regions_of` over it and `render_document_pages`
+  stamps it directly, where each PDF render had rebuilt the specs from the
+  placements, page-height scan included. A placement naming a page outside the
+  document now fails the compile alongside the extraction errors it sits with,
+  instead of emptying the session's regions and surfacing at render.
 
 ## v0.112.0 - 2026-09-01
 

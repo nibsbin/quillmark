@@ -57,12 +57,11 @@ struct TypstSession {
 /// query: a point hit or a region scan is a read of these tables.
 struct Compiled {
     document: typst_layout::PagedDocument,
-    /// Extracted from each committed compile; converted to spine `FieldSpec`s
-    /// on every render.
-    field_placements: Vec<overlay::FieldPlacement>,
-    /// The placements as regions, the single derivation `regions` and
-    /// `field_at` both read. Empty if the placements fail to resolve; a render
-    /// surfaces the same error.
+    /// This compile's form fields in the spine's coordinates: what a PDF render
+    /// stamps and what `widget_regions` projects.
+    field_specs: Vec<quillmark_pdf::FieldSpec>,
+    /// The specs as regions, the single derivation `regions` and `field_at`
+    /// both read.
     widget_regions: Vec<RenderedRegion>,
     /// The span scan's classification table: generated content-block windows
     /// then the plate's scalar reference-site windows.
@@ -98,17 +97,16 @@ fn recompile(
 
     let (document, compile_warnings) = compile::compile_document(world)?;
     let helper_source = helper_source(world)?;
-    let field_placements = overlay::extract(&document)?;
+    let placements = overlay::extract(&document)?;
+    let field_specs = overlay::build_field_specs(&document, &placements)?;
+    let widget_regions = quillmark_pdf::regions_of(&field_specs);
 
     let unclosed = overlay::unclosed_claims(&document);
     let hashes = page_hashes(&document);
     let warnings = session_warnings(world, compile_warnings, &unclosed);
-    let widget_regions = overlay::build_field_specs(&document, &field_placements)
-        .map(|specs| quillmark_pdf::regions_of(&specs))
-        .unwrap_or_default();
     Ok(Compiled {
         document,
-        field_placements,
+        field_specs,
         widget_regions,
         windows,
         helper_source,
@@ -255,7 +253,7 @@ impl SessionHandle for TypstSession {
             opts.pages.as_deref(),
             format,
             opts.ppi,
-            &self.live.field_placements,
+            &self.live.field_specs,
             opts.producer.as_deref(),
         )
     }
@@ -316,8 +314,7 @@ impl SessionHandle for TypstSession {
     /// Widgets first (one fixed-size box each), then span-tracked content in
     /// (page, field, site) order. `field` is not unique: page fragments, several
     /// scalar reference sites, or tracked content plus a bound widget all
-    /// repeat it, so consumers group by field. Widget regions are empty if the
-    /// placements fail to resolve; a render surfaces the same error.
+    /// repeat it, so consumers group by field.
     fn regions(&self) -> Vec<quillmark_core::RenderedRegion> {
         let mut regions = self.live.widget_regions.clone();
         regions.extend(self.scan().regions());
@@ -431,21 +428,18 @@ impl Backend for TypstBackend {
         let scalar_windows: Vec<overlay::FieldWindow> = {
             use typst::World as _;
             let main_id = world.main();
-            world
+            let plate = world
                 .source(main_id)
-                .ok()
-                .map(|src| {
-                    overlay::scalar_windows(&src, &schema_meta.root)
-                    .into_iter()
-                    .map(|(path, range)| overlay::FieldWindow {
-                        path,
-                        file: main_id,
-                        range,
-                        segments: Vec::new(),
-                    })
-                    .collect()
+                .expect("QuillWorld::source serves main by identity");
+            overlay::scalar_windows(&plate, &schema_meta.root)
+                .into_iter()
+                .map(|(path, range)| overlay::FieldWindow {
+                    path,
+                    file: main_id,
+                    range,
+                    segments: Vec::new(),
                 })
-                .unwrap_or_default()
+                .collect()
         };
         let live = recompile(&mut world, data.as_ref(), &schema_meta, &scalar_windows)?;
         let session = TypstSession {
