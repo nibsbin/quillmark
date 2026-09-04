@@ -2,10 +2,16 @@
 //! the two emit identical bytes for an object, a text string, and the `/Info`
 //! `/Producer` stamp.
 
+use pdf_writer::Ref;
+
 use crate::error::PdfError;
 use crate::reader::{err, find_dict_value, splice_dict_value, ObjectIndex, UpdatedObject};
 
 const CODE_PARSE: &str = "pdf::write";
+
+/// The largest object id a PDF reference carries here: `pdf_writer::Ref` holds
+/// an `i32` and panics outside `1 ..= i32::MAX`.
+const MAX_ID: u32 = i32::MAX as u32;
 
 /// Serialize one indirect object from its inner dict bytes:
 /// `<id> 0 obj\n<< <inner> >>\nendobj\n`.
@@ -16,17 +22,31 @@ pub fn dict_object(id: u32, inner: &[u8]) -> UpdatedObject {
     UpdatedObject { id, bytes }
 }
 
-/// Hand out the next object id from `next`, checked so a malformed
-/// near-`u32::MAX` `/Size` errors instead of wrapping into a colliding id.
+/// Hand out the next object id from `next`, bounded at `i32::MAX` so a
+/// malformed large `/Size` errors instead of wrapping into a colliding id or
+/// handing out one no reference admits.
 pub fn alloc_id(next: &mut u32) -> Result<u32, PdfError> {
     let id = *next;
-    *next = id.checked_add(1).ok_or_else(|| {
-        err(
+    if id > MAX_ID {
+        return Err(err(
             CODE_PARSE,
             "PDF object id space exhausted (/Size too large)",
-        )
-    })?;
+        ));
+    }
+    *next = id + 1;
     Ok(id)
+}
+
+/// `id` as a reference, refusing what [`Ref::new`] panics on. Base object ids
+/// reach this straight from the file, so the bound is the reader's to enforce.
+pub(crate) fn to_ref(id: u32) -> Result<Ref, PdfError> {
+    if id == 0 || id > MAX_ID {
+        return Err(err(
+            CODE_PARSE,
+            format!("PDF object id {id} is outside the writable id space 1..={MAX_ID}"),
+        ));
+    }
+    Ok(Ref::new(id as i32))
 }
 
 /// Escape bytes for a PDF literal string `( … )`: `(`, `)`, `\` → `\x`.
@@ -211,6 +231,25 @@ pub fn winansi_encode(s: &str) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn alloc_id_stops_at_the_reference_id_space() {
+        let mut next = MAX_ID;
+        assert_eq!(alloc_id(&mut next).unwrap(), MAX_ID);
+        let err = alloc_id(&mut next).unwrap_err();
+        assert_eq!(err.code, CODE_PARSE);
+        assert!(err.message.contains("id space"), "{}", err.message);
+    }
+
+    #[test]
+    fn to_ref_rejects_ids_no_reference_admits() {
+        // Base object ids skip `alloc_id`, so these reach `to_ref` unbounded.
+        assert!(to_ref(0).is_err());
+        assert!(to_ref(MAX_ID + 1).is_err());
+        assert!(to_ref(u32::MAX).is_err());
+        assert_eq!(to_ref(1).unwrap(), Ref::new(1));
+        assert_eq!(to_ref(MAX_ID).unwrap(), Ref::new(i32::MAX));
+    }
 
     #[test]
     fn winansi_latin1_and_cp1252_punctuation() {

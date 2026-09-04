@@ -110,6 +110,15 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- fix(pdf): **a base PDF whose trailer `/Size` sits above `i32::MAX` is refused
+  rather than panicking mid-stamp.** `alloc_id` bounded only `u32` overflow, so
+  a `/Size` in `2^31 ..= 2^32-2` handed out ids that cast to a negative `i32`
+  and pdf-writer's `Ref::new` panicked ("indirect reference out of valid
+  range") — a crafted `form.pdf` opened cleanly and then took down the process,
+  and with it a WASM module. `alloc_id` stops at `i32::MAX`, and every id that
+  becomes a reference goes through a checked `to_ref`, which also covers the
+  base page ids that never pass through `alloc_id`. The refusal carries the
+  existing `pdf::write` id-space error.
 
 ## v0.112.0 - 2026-09-01
 
