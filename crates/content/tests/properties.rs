@@ -41,13 +41,26 @@ fn special_url() -> impl Strategy<Value = String> {
     (clean_word(), r"[a-z0-9 ()&]{1,5}").prop_map(|(a, b)| format!("ex.com/{a}{b}"))
 }
 
+// A code span whose content touches its fence: an edge backtick would join the
+// fence run and edge spaces would be stripped, so export owes each a space pad.
+fn code_span() -> impl Strategy<Value = String> {
+    prop_oneof![
+        clean_word().prop_map(|w| format!("`{w}`")),
+        clean_word().prop_map(|w| format!("`` `{w} ``")),
+        clean_word().prop_map(|w| format!("`` {w}` ``")),
+        clean_word().prop_map(|w| format!("`` `{w}` ``")),
+        clean_word().prop_map(|w| format!("`  {w}  `")),
+        Just("`` ` ``".to_string()),
+    ]
+}
+
 fn inline_token() -> impl Strategy<Value = String> {
     prop_oneof![
         plain_word(),
         clean_word().prop_map(|w| format!("**{w}**")),
         clean_word().prop_map(|w| format!("_{w}_")),
         clean_word().prop_map(|w| format!("~~{w}~~")),
-        clean_word().prop_map(|w| format!("`{w}`")),
+        code_span(),
         clean_word().prop_map(|w| format!("<u>{w}</u>")),
         (clean_word(), clean_word()).prop_map(|(t, u)| format!("[{t}](https://ex.com/{u})")),
         (clean_word(), special_url()).prop_map(|(t, u)| format!("[{t}](<{u}>)")),
