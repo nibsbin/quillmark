@@ -348,6 +348,13 @@
   coercion pass already ran in `compile_data` — and a `$quill` naming another
   quill refuses at parse rather than at compile, with the same diagnostics and
   the same exit 1. The seeded path (no `MARKDOWN_FILE`) is unchanged.
+- fix(cli): **`validate` states each failure once.** A failing run printed its
+  own summary and then a second copy through the error it returned, which
+  `main` labelled `[ERROR] Invalid argument:` — including on a load failure,
+  which is a quill config failure and not an argument the caller got wrong. The
+  command returns `CliError::Reported` once it has written the per-diagnostic
+  lines and the summary, and a load failure carries the loader's `RenderError`
+  the way every other subcommand does. Exit status stays 1 on every path.
 
 ## v0.112.0 - 2026-09-01
 
