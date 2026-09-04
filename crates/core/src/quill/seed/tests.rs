@@ -261,13 +261,18 @@ fn doc_with_seed(seed_block: &str) -> Document {
 #[test]
 fn seed_overlay_type_mismatch_is_advisory_and_does_not_gate_render() {
     let quill = quill_from_yaml(QUILL);
-    let doc = doc_with_seed("$seed:\n  note:\n    author: 123\n");
+    let doc = doc_with_seed("$seed:\n  note:\n    author: { given: A }\n");
 
     let diags = quill.validate(&doc);
     let seed_diag = diags
         .iter()
         .find(|d| d.path.as_deref() == Some("$seed.note.author"))
         .expect("a diagnostic rooted at the seed field");
+    assert_eq!(
+        seed_diag.code.as_deref(),
+        Some("validation::type_mismatch"),
+        "a shape no card could carry is still flagged: {seed_diag:?}",
+    );
     assert_eq!(
         seed_diag.severity,
         Severity::Warning,
@@ -305,6 +310,72 @@ fn well_formed_seed_overlay_yields_no_seed_diagnostics() {
             .iter()
             .any(|d| d.path.as_deref().is_some_and(|p| p.starts_with("$seed"))),
         "a well-formed overlay should produce no seed diagnostics: {diags:?}",
+    );
+}
+
+/// The container is the spelling `seed_variant` reads its discriminant off, so
+/// the overlay the seeder accepts is the overlay the validator passes.
+#[test]
+fn a_variant_container_overlay_validates_clean_and_seeds() {
+    const VARIANT_QUILL: &str = r#"
+quill:
+  name: seed_test
+  version: "1.0"
+  backend: typst
+  description: Seed variant test
+main:
+  fields:
+    title:
+      type: string
+card_kinds:
+  entry:
+    fields:
+      classification:
+        type: enum
+        values: [UNCLASSIFIED, CUI]
+        default: ""
+        variants:
+          CUI:
+            note: { type: richtext }
+"#;
+    let quill = quill_from_yaml(VARIANT_QUILL);
+    let doc = doc_with_seed(
+        "$seed:\n  entry:\n    classification:\n      value: CUI\n      note: hello\n",
+    );
+
+    let diags = quill.validate(&doc);
+    assert!(
+        !diags
+            .iter()
+            .any(|d| d.path.as_deref().is_some_and(|p| p.starts_with("$seed"))),
+        "a container overlay is a document value, not a schema literal: {diags:?}",
+    );
+
+    let overlay = overlay(json!({ "classification": { "value": "CUI", "note": "hello" } }));
+    let card = quill
+        .seed_card("entry", Some(&overlay))
+        .expect("kind exists");
+    assert_eq!(
+        card.payload()
+            .get("classification")
+            .expect("seeded classification")
+            .as_json()["value"],
+        json!("CUI"),
+    );
+}
+
+/// Null ≡ absent in an overlay cell as in any authored one: the field is simply
+/// unanswered, and the seeded card blank-fills it at render.
+#[test]
+fn a_null_overlay_cell_draws_no_diagnostic() {
+    let quill = quill_from_yaml(QUILL);
+    let doc = doc_with_seed("$seed:\n  note:\n    author: null\n");
+    let diags = quill.validate(&doc);
+    assert!(
+        !diags
+            .iter()
+            .any(|d| d.path.as_deref().is_some_and(|p| p.starts_with("$seed"))),
+        "a present-null overlay cell is an absent one: {diags:?}",
     );
 }
 

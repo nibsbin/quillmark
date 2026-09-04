@@ -110,6 +110,15 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- fix(core): **a `$seed` overlay cell is validated as the document value it
+  is.** `validate` judged each cell as a Quill.yaml schema literal, a context
+  that refuses the container spelling of a variant-bearing enum and reads a
+  present-null as a typed value, so `classification: { value: CUI, note:
+  hello }` and `author: null` each drew a `validation::type_mismatch` warning
+  while `seed_card` committed both. An overlay cell is what `seed_card` writes
+  into the new card, so it takes the same pass a card's own fields take: the
+  container is a spelling it accepts, null reads as absent, and a mistyped
+  cell still warns. Overlays stay advisory and never gate render.
 
 ## v0.112.0 - 2026-09-01
 
