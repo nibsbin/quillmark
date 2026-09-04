@@ -1,7 +1,7 @@
 use crate::commands::load_quill;
-use crate::errors::{CliError, Result};
+use crate::errors::Result;
+use crate::output::write_file;
 use clap::Parser;
-use std::fs;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -21,7 +21,7 @@ pub fn execute(args: BlueprintArgs) -> Result<()> {
     let blueprint = quill.config().blueprint();
 
     if let Some(output_path) = args.output {
-        fs::write(&output_path, blueprint).map_err(CliError::Io)?;
+        write_file(&output_path, blueprint.as_bytes(), false)?;
     } else {
         println!("{}", blueprint);
     }

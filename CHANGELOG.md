@@ -355,6 +355,19 @@
   command returns `CliError::Reported` once it has written the per-diagnostic
   lines and the summary, and a load failure carries the loader's `RenderError`
   the way every other subcommand does. Exit status stays 1 on every path.
+- fix(cli): **`schema -o` and `blueprint -o` create the parent directories
+  their path names, as `render -o` does.** Both wrote with a bare `fs::write`,
+  so `schema ./q -o nested/dir/s.yaml` failed with "No such file or
+  directory" while the same path under `render -o` succeeded. The CLI's
+  `write_output` splits into `write_stdout(bytes)` and `write_file(path,
+  bytes, announce)` — dropping the unreachable arm that refused neither
+  stdout nor a path — and all three `-o` flags route through `write_file`.
+  `schema` and `blueprint` pass `announce: false` and stay silent on stdout;
+  `render` announces unless `--quiet`.
+- refactor(quillmark): **`Quillmark::render` resolves the backend once.** It
+  called `supported_formats` and `open`, each resolving the quill's backend
+  separately; it now holds the resolved backend and asks it for both. Same
+  diagnostics in the same order.
 
 ## v0.112.0 - 2026-09-01
 

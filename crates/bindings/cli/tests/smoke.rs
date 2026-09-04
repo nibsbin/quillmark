@@ -157,6 +157,22 @@ fn output_flag_writes_the_named_file() {
     }
 }
 
+/// `-o` names a directory that does not exist yet, as `render -o` allows, and
+/// the file still lands there without a word on stdout.
+#[test]
+fn output_flag_creates_parent_directories() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let quill = taro();
+
+    for (cmd, name) in [("schema", "s.yaml"), ("blueprint", "b.md")] {
+        let path = dir.path().join("nested").join(cmd).join(name);
+        let stdout = ok(&[cmd, quill.to_str().unwrap(), "-o", path.to_str().unwrap()]);
+        assert!(stdout.is_empty(), "{cmd} -o wrote to stdout: {stdout}");
+        let written = std::fs::read_to_string(&path).expect("the -o file exists");
+        assert!(!written.trim().is_empty(), "{cmd} -o wrote an empty file");
+    }
+}
+
 /// The one command that reaches a backend, seeded (no markdown argument).
 #[test]
 fn render_writes_a_pdf() {

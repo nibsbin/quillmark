@@ -3,31 +3,22 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-/// Write `bytes` to stdout, or to `output_path` (creating parent directories),
-/// announcing the destination unless `quiet`. Stdout wins when both are set;
-/// neither set is an argument error.
-pub fn write_output(
-    use_stdout: bool,
-    output_path: Option<&Path>,
-    quiet: bool,
-    bytes: &[u8],
-) -> Result<()> {
-    if use_stdout {
-        io::stdout().write_all(bytes)?;
-        return Ok(());
-    }
-    let Some(path) = output_path else {
-        return Err(crate::errors::CliError::InvalidArgument(
-            "No output path configured and stdout output not selected".to_string(),
-        ));
-    };
+/// Write `bytes` to stdout.
+pub fn write_stdout(bytes: &[u8]) -> Result<()> {
+    io::stdout().write_all(bytes)?;
+    Ok(())
+}
+
+/// Write `bytes` to `path`, creating its parent directories, naming the
+/// destination on stdout when `announce`.
+pub fn write_file(path: &Path, bytes: &[u8], announce: bool) -> Result<()> {
     if let Some(parent) = path.parent() {
         if !parent.exists() {
             fs::create_dir_all(parent)?;
         }
     }
     fs::write(path, bytes)?;
-    if !quiet {
+    if announce {
         println!("Output written to: {}", path.display());
     }
     Ok(())
