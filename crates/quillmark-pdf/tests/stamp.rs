@@ -276,10 +276,6 @@ fn rotated_page_rejected_cleanly() {
     assert_eq!(err.code, "pdf::rotated_page");
 }
 
-/// A one-page base whose trailer `/Size` reads `size`. The xref table precedes
-/// the trailer, so the length change leaves every stored offset intact.
-fn base_with_spliced_size(size: &str) -> Vec<u8> {
-
 /// A one-page base whose page carries `/Rotate` as the indirect reference
 /// `5 0 R`, resolving to `90`, or no `/Rotate` at all.
 fn build_base_with_indirect_rotate(rotate: bool) -> Vec<u8> {
@@ -337,8 +333,9 @@ fn indirect_rotate_rejected_cleanly() {
     .expect("the same base without the /Rotate stamps");
 }
 
-#[test]
-fn implausible_size_errors_cleanly_without_panic() {
+/// A one-page base whose trailer `/Size` reads `size`. The xref table precedes
+/// the trailer, so the length change leaves every stored offset intact.
+fn base_with_spliced_size(size: &str) -> Vec<u8> {
     let base = build_base_pdf(1);
     // Byte-level splice: the PDF binary-marker comment is not valid UTF-8.
     let needle = b"/Size 5";

@@ -156,6 +156,7 @@ fn crlf_input_parses_as_its_lf_twin() {
         crlf_out.document, lf_out.document,
         "CRLF and LF input must parse to the same document"
     );
+}
 
 /// `key: !must_fill` spelled inside a block scalar or a quoted scalar is that
 /// scalar's text: the value keeps it verbatim and no marker is reported lost.

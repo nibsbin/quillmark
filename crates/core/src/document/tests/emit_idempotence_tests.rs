@@ -105,6 +105,7 @@ fn store_ext_leaves_the_kind_trailer_on_kind() {
         doc,
         "emit must re-parse to the same document"
     );
+}
 
 /// Emit, the wire and the storage DTO all read a root `!must_fill` off the
 /// payload item's flag, so a value tree whose own root bit disagrees with that
@@ -135,6 +136,16 @@ fn a_root_fill_bit_on_a_stored_value_round_trips() {
     assert!(md.contains("\ny: draft\n"), "{md}");
     assert!(md.contains("\nz: !must_fill draft\n"), "{md}");
 
+    let reparsed = Document::parse(&md)
+        .expect("the emitted document re-parses")
+        .document;
+    assert_eq!(reparsed, doc, "markdown round-trip:\n{md}");
+
+    let json = serde_json::to_string(&doc).expect("to_json");
+    let restored: Document = serde_json::from_str(&json).expect("from_json");
+    assert_eq!(restored, doc, "storage DTO round-trip");
+}
+
 /// A comment between a bare `-` and the item's first key belongs to the item, so
 /// it re-emits inside the item and the first emit is already the fixed point.
 #[test]
@@ -160,11 +171,5 @@ Body.
     let reparsed = Document::parse(&md)
         .expect("the emitted document re-parses")
         .document;
-    assert_eq!(reparsed, doc, "markdown round-trip:\n{md}");
-
-    let json = serde_json::to_string(&doc).expect("to_json");
-    let restored: Document = serde_json::from_str(&json).expect("from_json");
-    assert_eq!(restored, doc, "storage DTO round-trip");
-
     assert_eq!(doc, reparsed, "emit is not a fixed point: {md}");
 }

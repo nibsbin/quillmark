@@ -406,6 +406,7 @@ fn format_casing_does_not_reach_the_output_filename() {
             .map(|e| e.unwrap().file_name())
             .collect::<Vec<_>>()
     );
+}
 
 /// `--quiet` wins over `--verbose`: no progress line reaches stderr.
 #[test]
