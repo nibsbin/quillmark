@@ -264,6 +264,14 @@
   `0 g 0 Tr 0 Tc 0 Tw 100 Tz 0 Ts`, the state the stamped `/DA` starts from.
   SVG/PNG/canvas only: the AcroForm PDF deliverable is stamped, not flattened,
   so no artifact changes.
+- fix(core): **the default `field_at` hands a tie to the later-painted
+  placement.** It ranked `regions()` with `min_by`, which keeps the first of
+  equal distances, so two placements on one rect resolved to the one
+  underneath — against the documented contract and against the Typst backend,
+  which overrides `field_at` with later-wins. The default now walks `regions()`
+  in reverse, so a pdfform quill whose widgets overlap answers with the
+  last-stamped one. A backend that mixes widget and content regions through the
+  default overrides `field_at` to hand a widget the tie, as Typst does.
 
 ## v0.112.0 - 2026-09-01
 
