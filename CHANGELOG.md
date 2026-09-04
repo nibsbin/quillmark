@@ -110,6 +110,16 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- fix(core)!: **the §8 count caps report a count, not a byte size.** The
+  card-count and per-block field-count caps raised `parse::input_too_large`,
+  whose one message shape is `Input too large: {size} bytes (max: {max}
+  bytes)`, so 1001 fields read as 1001 bytes and the `size` arg rode out under
+  a code whose canon row says bytes. Each cap has its own variant and code:
+  `ParseError::TooManyFields` / `parse::too_many_fields` and
+  `ParseError::TooManyCards` / `parse::too_many_cards`, both carrying `count`
+  and `max`. `parse::input_too_large` keeps the two byte caps, document size
+  and YAML payload size. A consumer routing count overflow on
+  `parse::input_too_large` reads the two new codes instead.
 
 ## v0.112.0 - 2026-09-01
 
