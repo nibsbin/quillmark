@@ -475,6 +475,53 @@ fn resolve_reports_the_container_as_one_cell_matching_the_plate() {
     assert_eq!(row.source, crate::quill::resolved::FieldSource::Default);
 }
 
+fn classification_row(quill: &Quill, document: &Document) -> crate::quill::resolved::ResolvedField {
+    quill
+        .resolve(document)
+        .main
+        .fields
+        .into_iter()
+        .find(|f| f.name == "classification")
+        .expect("classification row")
+}
+
+/// A container the document wrote reads `authored` whichever rung filled its
+/// discriminant (`prose/canon/SCHEMAS.md` § "The resolved-value view"), so the
+/// reported rung does not turn on whether the schema happens to carry a
+/// `default:`.
+#[test]
+fn a_present_container_reads_authored_whichever_rung_filled_the_tag() {
+    let quill = quill();
+    for fields in ["classification: {}\n", "classification:\n  value:\n"] {
+        let document = doc(fields);
+        let row = classification_row(&quill, &document);
+        assert_eq!(row.value.as_json(), &plate(&document));
+        assert_eq!(
+            row.source,
+            crate::quill::resolved::FieldSource::Authored,
+            "{fields}"
+        );
+    }
+
+    // The value the row carries is still the `default:` member's blank-filled
+    // world: only the rung the container reports changes.
+    let yaml = quill_yaml().replace(
+        "      default: \"\"\n      variants:",
+        "      default: CUI\n      variants:",
+    );
+    let defaulted = quill_from_yaml(&yaml);
+    let row = classification_row(&defaulted, &doc("classification: {}\n"));
+    assert_eq!(
+        row.value.as_json(),
+        &json!({ "value": "CUI", "controlled_by": "", "category": "" })
+    );
+    assert_eq!(row.source, crate::quill::resolved::FieldSource::Authored);
+
+    // A present-null container is absent, so it keeps the discriminant's rung.
+    let row = classification_row(&defaulted, &doc("classification:\n"));
+    assert_eq!(row.source, crate::quill::resolved::FieldSource::Default);
+}
+
 /// A value the container cannot be built from stays raw, as a mis-shaped
 /// `array` or typed dictionary does: `resolve()` labels the row Authored, and a
 /// blank world under that label would read as an answer the document gave.
