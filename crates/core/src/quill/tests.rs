@@ -2249,6 +2249,24 @@ fn datetime_type_mismatch_reports_datetime_not_string() {
 }
 
 #[test]
+fn nested_example_type_mismatch_names_the_element_type() {
+    let yaml = example_default_yaml(
+        "    tags:\n      type: array\n      items:\n        type: string\n      example: [1]\n",
+    );
+    let errors = QuillConfig::from_yaml_with_warnings(&yaml).unwrap_err();
+    let diag = errors
+        .iter()
+        .find(|d| d.code.as_deref() == Some("quill::example_type_mismatch"))
+        .expect("expected example_type_mismatch error");
+    assert!(
+        diag.message.contains("declares type 'string'"),
+        "message should name the item type the element is judged against, got: {}",
+        diag.message
+    );
+    assert!(!diag.message.contains("type 'array'"));
+}
+
+#[test]
 fn type_date_accepts_bare_dates_and_rejects_time_components() {
     let yaml = r#"
 quill:

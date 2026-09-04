@@ -110,6 +110,16 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- fix(core): **a type mismatch names the field's own declared type, so `date`,
+  `datetime` and `enum` report themselves.** The validator collapsed the three
+  onto `string`, so `due: 20260101` against `type: date` read "schema declares
+  `string`. Either provide a value of type `string` or change the schema's
+  `type:` to `integer`" — a type the schema does not declare and an exit that
+  discards the field's format. The declared type now has one source,
+  `FieldType::as_str`, which the schema-literal path already re-derived for its
+  own messages. `validation::type_mismatch` carries the name in `args.expected`,
+  so a consumer reading that key sees `date`, `datetime` or `enum` where it saw
+  `string`.
 
 ## v0.112.0 - 2026-09-01
 
