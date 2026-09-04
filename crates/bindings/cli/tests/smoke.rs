@@ -222,6 +222,37 @@ fn multi_page_stdout_is_refused() {
     );
 }
 
+/// `render` parses through the bound door, so a construct the quill declares
+/// its plate does not typeset reaches stderr instead of vanishing: `usaf_memo`
+/// declares `body.unsupported: [rule]`, and a `***` leaves the page unmarked.
+#[test]
+fn a_declined_construct_warns_on_stderr() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let doc = dir.path().join("rule.md");
+    std::fs::write(
+        &doc,
+        "~~~card-yaml\n$quill: usaf_memo\n$kind: main\n~~~\n\none\n\n***\n\ntwo\n",
+    )
+    .expect("write the input document");
+
+    let memo = quillmark_fixtures::quills_path("usaf_memo");
+    let out_pdf = dir.path().join("rule.pdf");
+    let out = run(&[
+        "render",
+        memo.to_str().unwrap(),
+        doc.to_str().unwrap(),
+        "-o",
+        out_pdf.to_str().unwrap(),
+    ]);
+
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "render exited nonzero: {stderr}");
+    assert!(
+        stderr.contains("plate::unsupported_construct"),
+        "the declined construct raised no warning: {stderr}"
+    );
+}
+
 /// Exit 1 rather than any non-zero code: a panic exits differently, so a script
 /// reading the status can tell a refusal from a crash.
 #[test]

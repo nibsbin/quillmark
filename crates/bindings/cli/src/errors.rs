@@ -42,6 +42,17 @@ impl From<quillmark_core::ParseError> for CliError {
     }
 }
 
+impl From<quillmark_core::BoundParseError> for CliError {
+    fn from(err: quillmark_core::BoundParseError) -> Self {
+        use quillmark_core::BoundParseError as E;
+        match err {
+            E::Parse(e) => CliError::Parse(e),
+            E::Mismatch(e) => CliError::Render(e),
+            other => CliError::InvalidArgument(other.to_string()),
+        }
+    }
+}
+
 pub type Result<T> = std::result::Result<T, CliError>;
 
 pub fn print_cli_error(err: &CliError) {

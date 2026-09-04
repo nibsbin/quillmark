@@ -110,6 +110,16 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- fix(cli): **`render` parses a `MARKDOWN_FILE` through the bound door, so
+  `conform::*` and `plate::unsupported_construct` warnings reach stderr.** The
+  command called `Document::parse`, the transport door, which runs neither the
+  conform walk nor the declined-construct walk: a `usaf_memo` body carrying a
+  `***` rendered with an empty stderr where every other surface warns. It calls
+  `Quill::parse` instead, and the existing splice carries that door's warnings
+  into `RenderResult.warnings` unchanged. Rendered bytes are the same — the
+  coercion pass already ran in `compile_data` — and a `$quill` naming another
+  quill refuses at parse rather than at compile, with the same diagnostics and
+  the same exit 1. The seeded path (no `MARKDOWN_FILE`) is unchanged.
 
 ## v0.112.0 - 2026-09-01
 
