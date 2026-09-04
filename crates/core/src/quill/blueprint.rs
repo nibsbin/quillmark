@@ -1104,8 +1104,9 @@ main:
         assert!(
             t.contains(concat!(
                 "rows: # array<object>\n",
-                "  # e.g. Row hello\n",
-                "  - bio: !must_fill # richtext<markdown>\n",
+                "  -\n",
+                "    # e.g. Row hello\n",
+                "    bio: !must_fill # richtext<markdown>\n",
             )),
             "{t}"
         );
