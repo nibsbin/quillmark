@@ -1398,6 +1398,22 @@ mod tests {
     }
 
     #[test]
+    fn apply_field_change_rejects_a_bundle_whose_retains_overflow() {
+        // The whole host lane: JSON bundle through the store, not a Delta
+        // built in Rust.
+        let bundle = change_bundle_from_value(&serde_json::json!({
+            "delta": { "ops": [{ "retain": usize::MAX }, { "retain": 2 }] }
+        }))
+        .unwrap();
+        let mut rt = from_markdown("hi").unwrap();
+        assert!(matches!(
+            rt.apply_field_change(&bundle),
+            Err(ApplyError::DeltaBaseMismatch { .. })
+        ));
+        assert_eq!(rt.text, "hi");
+    }
+
+    #[test]
     fn apply_mark_ops_remove_punches_hole() {
         let mut rt = from_markdown("abcdef").unwrap();
         rt.apply_mark_ops(&[MarkOp::Add {
