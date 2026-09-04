@@ -110,6 +110,10 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- refactor(core): **the prescan's frame stack carries no `kind`.**
+  `Frame.kind` and `FrameKind` were written at every push and read nowhere
+  but the write that filled them in, so both are gone, along with the
+  `ensure_frame_at_indent` parameter that carried the value.
 
 ## v0.112.0 - 2026-09-01
 

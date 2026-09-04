@@ -63,14 +63,7 @@ pub(crate) struct PreScan {
 struct Frame {
     indent: usize,
     path: Vec<CommentPathSegment>,
-    kind: Option<FrameKind>,
     child_count: usize,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum FrameKind {
-    Mapping,
-    Sequence,
 }
 
 pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
@@ -82,7 +75,6 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
     let mut stack: Vec<Frame> = vec![Frame {
         indent: 0,
         path: Vec::new(),
-        kind: Some(FrameKind::Mapping),
         child_count: 0,
     }];
 
@@ -142,7 +134,7 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
 
         // Case 2: sequence item line (`- ...`).
         if trimmed == "-" || trimmed.starts_with("- ") {
-            let frame_idx = ensure_frame_at_indent(&mut stack, indent, FrameKind::Sequence);
+            let frame_idx = ensure_frame_at_indent(&mut stack, indent);
             let frame = &mut stack[frame_idx];
             let item_index = frame.child_count;
             frame.child_count += 1;
@@ -171,7 +163,6 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
                 stack.push(Frame {
                     indent: indent + 2,
                     path: item_path,
-                    kind: None,
                     child_count: 0,
                 });
             } else if let Some((key, source_key, after_colon)) =
@@ -190,7 +181,6 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
                 stack.push(Frame {
                     indent: inline_indent_offset,
                     path: item_path,
-                    kind: Some(FrameKind::Mapping),
                     child_count: 1,
                 });
             }
@@ -249,7 +239,6 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
                     stack.push(Frame {
                         indent: 2,
                         path: key_path,
-                        kind: None,
                         child_count: 0,
                     });
                 }
@@ -274,7 +263,7 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
 
         // Case 4: nested key line inside a block mapping.
         if let Some((key, source_key, after_colon)) = split_nested_key(trimmed) {
-            let frame_idx = ensure_frame_at_indent(&mut stack, indent, FrameKind::Mapping);
+            let frame_idx = ensure_frame_at_indent(&mut stack, indent);
             let frame = &mut stack[frame_idx];
             let key_index = frame.child_count;
             frame.child_count += 1;
@@ -314,7 +303,6 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
                 stack.push(Frame {
                     indent: indent + 2,
                     path: key_path,
-                    kind: None,
                     child_count: 0,
                 });
             }
@@ -387,16 +375,13 @@ fn line_has_unsupported_fill_tag(line: &str) -> bool {
     false
 }
 
-/// The deepest frame matching `indent` and `kind`, pushing a new one if the
-/// current top is shallower.
-fn ensure_frame_at_indent(stack: &mut Vec<Frame>, indent: usize, kind: FrameKind) -> usize {
+/// The deepest frame at `indent`, pushing a new one if the current top is
+/// shallower.
+fn ensure_frame_at_indent(stack: &mut Vec<Frame>, indent: usize) -> usize {
     let top_idx = stack.len() - 1;
-    let top = &mut stack[top_idx];
+    let top = &stack[top_idx];
 
     if top.indent == indent {
-        if top.kind.is_none() {
-            top.kind = Some(kind);
-        }
         return top_idx;
     }
 
@@ -404,7 +389,6 @@ fn ensure_frame_at_indent(stack: &mut Vec<Frame>, indent: usize, kind: FrameKind
     stack.push(Frame {
         indent,
         path: parent_path,
-        kind: Some(kind),
         child_count: 0,
     });
     stack.len() - 1
