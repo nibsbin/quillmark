@@ -458,7 +458,9 @@ fn build_payload(
 
 /// Apply the nested `!must_fill` markers rooted at `key` onto `value`'s tree.
 /// Paths are rooted at the owning top-level key, so the first segment is
-/// stripped. A marker on a mapping node is rejected, as at the top level.
+/// stripped. A path that is nothing but that key names the root, whose marker
+/// the item's own `fill` flag carries. A marker on a mapping node is rejected,
+/// as at the top level.
 fn apply_nested_fills(
     key: &str,
     value: &mut QuillValue,
@@ -468,7 +470,7 @@ fn apply_nested_fills(
         let Some((CommentPathSegment::Key(first), rest)) = path.split_first() else {
             continue;
         };
-        if first != key {
+        if first != key || rest.is_empty() {
             continue;
         }
         if value.is_object_at(rest) {

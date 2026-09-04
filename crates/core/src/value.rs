@@ -240,6 +240,13 @@ impl QuillValue {
         }
     }
 
+    /// Clear `fill` on the root node. A stored field's root marker rides the
+    /// owning [`PayloadItem`](crate::PayloadItem)'s flag, so the tree beneath
+    /// it carries the nested markers alone.
+    pub(crate) fn clear_root_fill(&mut self) {
+        self.node.fill = false;
+    }
+
     /// Whether the node at `path` (relative to the root) is a mapping.
     /// Used to reject `!must_fill` on object-valued nodes.
     pub fn is_object_at(&self, path: &[PathSegment]) -> bool {
