@@ -177,6 +177,13 @@
   callers — the `$kind` synthesis on parse, `store_ext`, `store_seed_overlay`,
   `set_quill_ref` — leave the trailer on its own key and `parse(to_markdown())`
   holds.
+- fix(core): **a field name is ASCII as written, not as it normalises.**
+  `is_valid_field_name` ran NFC before matching `[A-Za-z_][A-Za-z0-9_]*`,
+  which no non-ASCII name can pass except a canonical singleton that composes
+  to ASCII: `store_field("\u{212A}elvin", …)` was accepted, emitted verbatim,
+  and re-read as a nested key, so the document did not survive
+  `parse(to_markdown())`. The check reads the name's own characters, matching
+  the raw bytes the parser's key grammar accepts.
 
 ## v0.112.0 - 2026-09-01
 
