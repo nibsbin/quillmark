@@ -110,6 +110,13 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- fix(core): **a nested richtext `example:` reaches the blueprint as its
+  `# e.g.` hint.** A richtext cell never inlines its example, and the
+  per-property builder for typed-dict properties and typed-table rows gated the
+  hint on `default:` alone, so a defaultless richtext property's `example:`
+  appeared in neither the cell nor a hint. Both gates are one helper now, and a
+  property's `example:` behaves as a card-level field's does at every depth, as
+  BLUEPRINT.md § Typed dictionaries states.
 
 ## v0.112.0 - 2026-09-01
 
