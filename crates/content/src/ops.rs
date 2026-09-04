@@ -9,6 +9,7 @@ use crate::model::{
 };
 use crate::normalize::admit_char;
 use crate::usv::char_to_byte;
+use serde::Deserialize;
 use std::borrow::Cow;
 
 /// A mark edit in final-text coordinates (post-delta, post-line-op).
@@ -278,9 +279,9 @@ pub fn change_bundle_from_value(v: &Value) -> Result<ChangeBundle, String> {
         .as_object()
         .ok_or("bundle must be an object { delta?, islandOps?, lineOps?, markOps? }")?;
     let get = |snake: &str, camel: &str| obj.get(snake).or_else(|| obj.get(camel));
-    let delta = match get("delta", "delta") {
+    let delta = match obj.get("delta") {
         Some(Value::Null) | None => Delta { ops: Vec::new() },
-        Some(d) => serde_json::from_value(d.clone()).map_err(|e| format!("invalid delta: {e}"))?,
+        Some(d) => Delta::deserialize(d).map_err(|e| format!("invalid delta: {e}"))?,
     };
     Ok(ChangeBundle {
         delta,
@@ -299,12 +300,9 @@ fn op_array<T>(
     convert: impl Fn(&Value) -> Result<T, ParseError>,
     what: &str,
 ) -> Result<Vec<T>, String> {
-    let Some(value) = value else {
+    let Some(value) = value.filter(|v| !v.is_null()) else {
         return Ok(Vec::new());
     };
-    if value.is_null() {
-        return Ok(Vec::new());
-    }
     let arr = value
         .as_array()
         .ok_or_else(|| format!("{what} must be an array"))?;

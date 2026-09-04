@@ -161,6 +161,13 @@
   `normalize` clears a flag `SetKind` or a stored document left there, and
   `validate` rejects a hand-built one (`Invariant::ContinuesSingleLineBlock`),
   the repair-or-refuse split `ContinuesAcrossContainers` already carries.
+- refactor(content): **code-block import filters its text through
+  `Inline::push_text`.** `push_code_line` differed from it only in dropping a
+  `\n` where `push_text` spaces one, and its segments come from a
+  `split('\n')`, so the two agree on every input it receives.
+  `change_bundle_from_value` reads `delta` with a single lookup and
+  deserializes it from the borrowed `Value` rather than a clone, and
+  `op_array`'s absent and null cases are one `Option::filter`.
 
 ## v0.112.0 - 2026-09-01
 
