@@ -206,6 +206,7 @@ fn a_card_entry_without_a_kind_keeps_the_cards_and_a_differing_kind_rebuilds() {
         ["cards[1]"],
         "a position with no card to inherit from is refused as a kindless build is"
     );
+    assert!(matches!(&errors[0].1, EditError::InvalidKindName(k) if k.is_empty()));
 }
 
 #[test]

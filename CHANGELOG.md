@@ -110,6 +110,12 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- refactor(core): **`set_values` refuses a kindless card slot through the card
+  constructor rather than a hand-built error.** `plan_slot` carried an early
+  return minting `edit::invalid_kind_name` for a position holding no card and
+  naming no kind; flattening the kind to `Option<&str>` sends that case to
+  `build_card`, where `Card::new("")` raises the same error at the same
+  `cards[<i>]` path.
 
 ## v0.112.0 - 2026-09-01
 

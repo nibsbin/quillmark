@@ -382,8 +382,7 @@ impl CardPlan {
 
 /// Resolve the values for card position `index`. The kind is the entry's, or
 /// the card's there when the entry carries none; a position holding no card
-/// and naming no kind is refused as building a kindless card is, at
-/// `cards[<index>]`.
+/// and naming no kind is a kindless build, refused at `cards[<index>]`.
 fn plan_slot(
     config: &QuillConfig,
     doc: &Document,
@@ -393,15 +392,8 @@ fn plan_slot(
 ) -> Option<Slot> {
     let current = doc.card(index);
     let kind = match &incoming.kind {
-        None => current.map(|c| c.kind()),
-        Some(kind) => Some(kind.as_deref()),
-    };
-    let Some(kind) = kind else {
-        errors.push((
-            DocPath::card(None, index),
-            EditError::InvalidKindName(String::new()),
-        ));
-        return None;
+        None => current.and_then(|c| c.kind()),
+        Some(kind) => kind.as_deref(),
     };
     let base = DocPath::card(kind, index);
     let schema = kind.and_then(|k| config.card_kind(k));
