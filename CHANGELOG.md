@@ -110,6 +110,15 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- fix(typst): **a `form-field` widget's rect is the box it prints in, whatever
+  the layout context.** The helper emitted its `<__qm_field__>` metadata beside
+  the box rather than inside it, and a tag's own position is the line's baseline
+  inline and the flow cursor's left edge in a block: an inline widget reported
+  a rect one box-height low, and one under `#align(center, ..)` or
+  `#align(right, ..)` reported the left margin. The tag rides in the box body,
+  whose origin is the box's top-left in every layout context, so
+  `session.regions()`, `fieldAt`, and the stamped AcroForm `/Rect` all land on
+  the widget. A plate that compensated for the offset shifts by that much.
 
 ## v0.112.0 - 2026-09-01
 
