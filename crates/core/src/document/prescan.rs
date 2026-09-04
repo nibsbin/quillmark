@@ -89,6 +89,8 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
     // Indent of the `key:` line that opened the current block scalar, if any.
     let mut block_scalar_indent: Option<usize> = None;
 
+    let mut unsupported_fill_tag = false;
+
     for raw_line in &lines {
         let line = *raw_line;
         let indent = leading_space_count(line);
@@ -179,6 +181,7 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
             {
                 let (fill, value_without_tag, had_non_fill_tag) =
                     record_fill_and_tags(&mut out, &after_colon, &key);
+                unsupported_fill_tag |= value_has_unsupported_fill_tag(&value_without_tag);
                 if fill {
                     let mut key_path = item_path.clone();
                     key_path.push(CommentPathSegment::Key(key.clone()));
@@ -193,6 +196,8 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
                     kind: Some(FrameKind::Mapping),
                     child_count: 1,
                 });
+            } else {
+                unsupported_fill_tag |= value_has_unsupported_fill_tag(after_dash_trimmed);
             }
 
             if let Some(c) = &trailing_comment {
@@ -231,6 +236,7 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
 
                 let (fill, value_without_tag, _) =
                     record_fill_and_tags(&mut out, &value_part, &key);
+                unsupported_fill_tag |= value_has_unsupported_fill_tag(&value_without_tag);
 
                 out.items.push(PreItem::Field {
                     key: key.clone(),
@@ -291,6 +297,7 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
             let (value_part, trailing_comment) = split_trailing_comment(&after_colon);
 
             let (fill, value_without_tag, _) = record_fill_and_tags(&mut out, &value_part, &key);
+            unsupported_fill_tag |= value_has_unsupported_fill_tag(&value_without_tag);
             if fill {
                 out.nested_fills.push(key_path.clone());
             }
@@ -325,16 +332,11 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
             continue;
         }
 
+        unsupported_fill_tag |= line_has_unsupported_fill_tag(line);
         cleaned_lines.push(line.to_string());
     }
 
-    // A tag surviving here sits in a position prescan cannot lift (inside a flow
-    // collection, or on a bare sequence element) where serde_saphyr would drop it
-    // silently.
-    if cleaned_lines
-        .iter()
-        .any(|l| line_has_unsupported_fill_tag(l))
-    {
+    if unsupported_fill_tag {
         out.warnings.push(
             Diagnostic::new(
                 Severity::Warning,
@@ -351,31 +353,46 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
     out
 }
 
-/// True when `line` still carries a `!must_fill` / `!fill` tag in a value or
-/// element position that prescan could not lift. Block-style markers are
-/// stripped before this runs, so a survivor means an unsupported position.
-/// The boundary checks keep a quoted scalar that merely contains the literal
-/// text (e.g. `note: "see !must_fill"`) from matching.
+/// True when `value` — the text after a `key:` or a `- `, with a block-style
+/// marker already stripped — carries a `!must_fill` tag prescan cannot lift:
+/// the whole element, or a member of a flow collection. A quoted scalar is
+/// text, so a tag spelled inside one (`note: "see key: !must_fill here"`) does
+/// not match.
+fn value_has_unsupported_fill_tag(value: &str) -> bool {
+    let value = value.trim_start();
+    !value.starts_with(['"', '\'']) && fill_tag_in_node_position(value, true)
+}
+
+/// True when `line`, which prescan resolved into neither a key nor an element
+/// (a flow collection continued across lines), carries a `!must_fill` tag
+/// after flow punctuation. What opens the line is unknown, so a tag at its
+/// head is not read as a node.
 fn line_has_unsupported_fill_tag(line: &str) -> bool {
+    fill_tag_in_node_position(line, false)
+}
+
+/// True when a fill tag in `text` stands where YAML reads a node: after flow
+/// punctuation, or — when `head_is_node` — at the head of `text` itself.
+fn fill_tag_in_node_position(text: &str, head_is_node: bool) -> bool {
     for tag in FILL_TAGS {
         let mut from = 0;
-        while let Some(rel) = line[from..].find(tag) {
+        while let Some(rel) = text[from..].find(tag) {
             let at = from + rel;
             let after = at + tag.len();
             // Trailing boundary: a real tag ends at whitespace, flow
-            // punctuation, or end of line, not mid-word (`!fillet`).
-            let trailing_ok = line[after..]
+            // punctuation, or end of text, not mid-word (`!fillet`).
+            let trailing_ok = text[after..]
                 .chars()
                 .next()
                 .is_none_or(|c| c.is_whitespace() || matches!(c, ',' | '}' | ']'));
-            // Leading boundary: the tag sits in value/element position,
-            // directly after `{` / `[` / `,`, or after whitespace following
-            // `:` / `-` / `,` / `{` / `[`.
-            let before = line[..at].trim_end_matches([' ', '\t']);
+            // Leading boundary: the tag sits directly after `{` / `[` / `,`,
+            // or after whitespace following `:` / `-` / `,` / `{` / `[`.
+            let before = text[..at].trim_end_matches([' ', '\t']);
             let had_ws = before.len() != at;
             let leading_ok = match before.chars().last() {
                 Some('{') | Some('[') | Some(',') => true,
                 Some(':') | Some('-') => had_ws,
+                None => head_is_node,
                 _ => false,
             };
             if trailing_ok && leading_ok {

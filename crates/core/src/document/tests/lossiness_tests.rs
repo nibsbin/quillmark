@@ -102,11 +102,23 @@ fn unsupported_fill_position_warns_not_silently_dropped() {
 
     assert!(
         warns("~~~card-yaml\n$quill: q\n$kind: main\naddr: {street: !must_fill, city: x}\n~~~\n"),
-        "flow-collection marker must warn"
+        "flow-map marker must warn"
+    );
+    assert!(
+        warns("~~~card-yaml\n$quill: q\n$kind: main\ntags: [!must_fill, a]\n~~~\n"),
+        "flow-sequence marker must warn"
     );
     assert!(
         warns("~~~card-yaml\n$quill: q\n$kind: main\ntags:\n  - !must_fill\n  - a\n~~~\n"),
         "bare sequence-element marker must warn"
+    );
+    assert!(
+        warns("~~~card-yaml\n$quill: q\n$kind: main\naddr:\n  street: {n: !must_fill}\n~~~\n"),
+        "marker in a nested flow value must warn"
+    );
+    assert!(
+        warns("~~~card-yaml\n$quill: q\n$kind: main\nto:\n  - name: [!must_fill]\n~~~\n"),
+        "marker in a flow value on a sequence-item line must warn"
     );
     assert!(
         !warns(
@@ -118,6 +130,47 @@ fn unsupported_fill_position_warns_not_silently_dropped() {
         !warns("~~~card-yaml\n$quill: q\n$kind: main\nnote: \"see !must_fill docs\"\n~~~\n"),
         "quoted literal must not warn"
     );
+}
+
+/// `key: !must_fill` spelled inside a block scalar or a quoted scalar is that
+/// scalar's text: the value keeps it verbatim and no marker is reported lost.
+#[test]
+fn fill_marker_text_inside_a_scalar_does_not_warn() {
+    let cases = [
+        (
+            "~~~card-yaml\n$quill: q\n$kind: main\nnote: |\n  see key: !must_fill here\n~~~\n",
+            "see key: !must_fill here\n",
+        ),
+        (
+            "~~~card-yaml\n$quill: q\n$kind: main\nnote: \"see key: !must_fill here\"\n~~~\n",
+            "see key: !must_fill here",
+        ),
+    ];
+
+    for (src, value) in cases {
+        let out = Document::parse(src).unwrap();
+        assert!(
+            out.warnings.is_empty(),
+            "marker text inside a scalar must not warn\nSource:\n{}\nGot: {:?}",
+            src,
+            out.warnings
+        );
+        assert_eq!(
+            out.document
+                .main()
+                .payload()
+                .get("note")
+                .and_then(|v| v.as_str()),
+            Some(value),
+            "scalar must keep the marker text verbatim\nSource:\n{}",
+            src
+        );
+        assert!(
+            !out.document.main().payload().is_fill("note"),
+            "marker text is not a marker\nSource:\n{}",
+            src
+        );
+    }
 }
 
 #[test]
