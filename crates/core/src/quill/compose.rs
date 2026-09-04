@@ -662,8 +662,10 @@ fn compose_members(
 /// that world is present, so no guarded access is needed; outside it, none is.
 ///
 /// The discriminant cuts the same ladder as any enum (authored › `default:` ›
-/// blank), and the container reports it joined with what its live world's cells
-/// contributed ([`compose_members`]) — the rule every namespace follows.
+/// blank), but the container's own rung is the *cell's*: one the document wrote
+/// reads authored whichever rung filled the tag, joined with what its live
+/// world's cells contributed ([`compose_members`]) — the rule every namespace
+/// follows (`prose/canon/SCHEMAS.md` § "The resolved-value view").
 fn resolve_variant_sourced(
     value: Option<&QuillValue>,
     field: &FieldSchema,
@@ -691,11 +693,10 @@ fn resolve_variant_sourced(
             None => (String::new(), FieldSource::Blank),
         },
     };
-    // A present container with no discriminant is still authored: the author
-    // wrote the cell, and the ladder filled the tag they left out.
-    let source = match (present.is_some(), source) {
-        (true, FieldSource::Blank) => FieldSource::Authored,
-        (_, s) => s,
+    let source = if present.is_some() {
+        FieldSource::Authored
+    } else {
+        source
     };
 
     let mut out = serde_json::Map::new();

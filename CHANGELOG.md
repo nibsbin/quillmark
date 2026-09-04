@@ -192,6 +192,14 @@
   per field in the same all-or-nothing pass, so the offending name rides the
   batch's error vector as `edit::fill_on_mapping` beside every other
   violation. The WASM `storeFields` inherits it.
+- fix(core): **a variant container the document wrote reads `authored`
+  whichever rung filled its discriminant.** `resolve()` lifted a present
+  container off the blank rung only, so `classification: {}` reported
+  `default` where the schema declared one and `authored` where it did not —
+  the reported rung turning on the schema rather than the document. A present
+  container is `authored`, as any other present value is; a present-null still
+  reads as absent and keeps the discriminant's rung. The value the row carries
+  is unchanged.
 
 ## v0.112.0 - 2026-09-01
 
