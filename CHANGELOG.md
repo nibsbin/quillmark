@@ -424,6 +424,13 @@
   after the compile checking it, so `--verbose --quiet` still narrated the
   load and the parse. `execute` resolves the pair once up front, and the help
   text's "Suppress all non-error output" is what the flag does.
+- refactor(core,typst,pdfform): **the default PPI is stated once, as
+  `RenderOptions::DEFAULT_PPI`.** Each raster backend carried its own
+  `DEFAULT_PPI = 144.0` const, one of them documented as mirroring a core
+  constant that did not exist, so changing the default meant editing three
+  files. `RenderOptions::ppi_or_default()` resolves the option against that
+  constant and both backends call it. Additive on the core API; the resolved
+  value is unchanged.
 
 ## v0.112.0 - 2026-09-01
 
