@@ -246,6 +246,15 @@
   `new`.** It was the one `pub`-field type in core's root modules without the
   attribute COMPATIBILITY.md's struct rule asks for. Its field stays readable;
   an out-of-crate struct literal becomes `ParseOutputFormatError::new(input)`.
+- fix(pdf): **a base PDF whose trailer `/Size` sits above `i32::MAX` is refused
+  rather than panicking mid-stamp.** `alloc_id` bounded only `u32` overflow, so
+  a `/Size` in `2^31 ..= 2^32-2` handed out ids that cast to a negative `i32`
+  and pdf-writer's `Ref::new` panicked ("indirect reference out of valid
+  range") — a crafted `form.pdf` opened cleanly and then took down the process,
+  and with it a WASM module. `alloc_id` stops at `i32::MAX`, and every id that
+  becomes a reference goes through a checked `to_ref`, which also covers the
+  base page ids that never pass through `alloc_id`. The refusal carries the
+  existing `pdf::write` id-space error.
 
 ## v0.112.0 - 2026-09-01
 
