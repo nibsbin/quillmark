@@ -143,6 +143,14 @@
   (`" a "` came back as `"a"`). A pad space now flanks the content in exactly
   those two cases, which import strips back off; a span of nothing but spaces
   is exempt from the strip and so stays unpadded.
+- fix(content): **a mark flanking an unknown island's placeholder survives
+  export.** The verify-and-drop net re-imports the rendered line and expects
+  the line's own text back, island slot included, but a type this build has no
+  projection for renders as a comment placeholder that re-imports as nothing.
+  The probe could never match, so every `**` / `*` / `~~` on such a line was
+  dropped as unrepresentable. The expected text omits the slots of islands with
+  no markdown projection and keeps every other one, so the probe measures
+  delimiter leakage alone and still reads an image's slot back.
 
 ## v0.112.0 - 2026-09-01
 
