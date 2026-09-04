@@ -861,8 +861,10 @@ pub enum Invariant {
     /// (an `Island`-tagged prose line projects to its resolved island alone).
     LineKindMismatch { line: usize, mismatch: LineKindMismatch },
     /// A line's container path is nested deeper than
-    /// [`MAX_NESTING_DEPTH`](crate::MAX_NESTING_DEPTH). Both emitters recurse
-    /// one frame per container, so an unbounded path overflows the stack.
+    /// [`MAX_NESTING_DEPTH`](crate::MAX_NESTING_DEPTH). The Typst emitter
+    /// recurses one frame per container and refuses a deeper path rather than
+    /// overflow the stack; markdown export walks an explicit stack and projects
+    /// any depth.
     NestingTooDeep {
         line: usize,
         depth: usize,

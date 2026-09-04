@@ -327,6 +327,17 @@
   `Frame.kind` and `FrameKind` were written at every push and read nowhere
   but the write that filled them in, so both are gone, along with the
   `ensure_frame_at_indent` parameter that carried the value.
+- docs(content,pdf,core): **six internal docs state what the code does.**
+  `NestingTooDeep` and `SetContainers` name the Typst emitter as the recursive
+  one, markdown export walking an explicit stack; the PDF reader's input
+  contract reads `bounded-tree`, a `/Pages` tree of any depth reaching each node
+  once and staying under 100 000 nodes; `flat_nested_comments` links
+  `from_items_with_flat_nested`, which resolves; `build-wasm.sh` puts the
+  `rm -rf pkg` on this script never removing files, CI caching the wasm build
+  dir alone. `spec_conformance_probe` names its body case for the parse pass
+  that does the strip and covers `normalize_document` with a field-name NFC
+  case. The hint on a malformed `main.body` lists `unsupported`, reading the key
+  list off one const beside `BodyCardSchema`.
 
 ## v0.112.0 - 2026-09-01
 

@@ -1951,6 +1951,31 @@ main:
 }
 
 #[test]
+fn test_main_body_malformed_hint_names_every_authored_key() {
+    let yaml_content = r#"
+quill:
+  name: bad_body
+  version: "1.0"
+  backend: typst
+  description: Bad body test
+
+main:
+  body:
+    unsuported: [Table]
+"#;
+
+    let err = QuillConfig::from_yaml_with_warnings(yaml_content).unwrap_err();
+    let hint = err
+        .iter()
+        .find(|d| d.code.as_deref() == Some("quill::invalid_body"))
+        .and_then(|d| d.hint.clone())
+        .expect("a malformed main.body carries a hint");
+    for key in ["enabled", "example", "unsupported"] {
+        assert!(hint.contains(key), "hint omits {key}: {hint}");
+    }
+}
+
+#[test]
 fn test_field_ui_title_is_valid() {
     let yaml_content = r#"
 quill:
