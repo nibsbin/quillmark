@@ -242,6 +242,10 @@
   naming no kind; flattening the kind to `Option<&str>` sends that case to
   `build_card`, where `Card::new("")` raises the same error at the same
   `cards[<i>]` path.
+- refactor(core)!: **`ParseOutputFormatError` is `#[non_exhaustive]` and gains
+  `new`.** It was the one `pub`-field type in core's root modules without the
+  attribute COMPATIBILITY.md's struct rule asks for. Its field stays readable;
+  an out-of-crate struct literal becomes `ParseOutputFormatError::new(input)`.
 
 ## v0.112.0 - 2026-09-01
 

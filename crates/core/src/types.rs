@@ -44,9 +44,17 @@ impl std::fmt::Display for OutputFormat {
     }
 }
 
-/// Error returned when a string does not name an [`OutputFormat`].
+/// Error returned when a string does not name an [`OutputFormat`]. The field
+/// is the input as parsed, lowercased.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ParseOutputFormatError(pub String);
+
+impl ParseOutputFormatError {
+    pub fn new(input: impl Into<String>) -> Self {
+        Self(input.into())
+    }
+}
 
 impl std::fmt::Display for ParseOutputFormatError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -70,7 +78,7 @@ impl std::str::FromStr for OutputFormat {
             "pdf" => Ok(OutputFormat::Pdf),
             "svg" => Ok(OutputFormat::Svg),
             "png" => Ok(OutputFormat::Png),
-            other => Err(ParseOutputFormatError(other.to_string())),
+            other => Err(ParseOutputFormatError::new(other)),
         }
     }
 }
@@ -92,6 +100,14 @@ mod tests {
         }
     }
 
+    #[test]
+    fn unknown_output_format_names_the_input_lowercased() {
+        assert_eq!(
+            OutputFormat::from_str("Docx"),
+            Err(ParseOutputFormatError::new("docx"))
+        );
+        assert_eq!(ParseOutputFormatError::new("docx").0, "docx");
+    }
 }
 
 /// An artifact produced by rendering.
