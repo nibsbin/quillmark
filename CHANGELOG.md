@@ -110,6 +110,13 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- refactor(typst): **a compile's form fields cross to the PDF spine as one
+  derivation.** `Compiled` carries `field_specs: Vec<FieldSpec>` built with the
+  compile: `widget_regions` is `regions_of` over it and `render_document_pages`
+  stamps it directly, where each PDF render had rebuilt the specs from the
+  placements, page-height scan included. A placement naming a page outside the
+  document now fails the compile alongside the extraction errors it sits with,
+  instead of emptying the session's regions and surfacing at render.
 
 ## v0.112.0 - 2026-09-01
 
