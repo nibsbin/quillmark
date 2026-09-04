@@ -419,6 +419,11 @@
   ancestor chain now binds: a direct integer is checked as before
   (`pdf::rotated_page` when it is not a multiple of 360), anything else is
   `pdf::parse`, matching how `/MediaBox` treats an unresolvable value.
+- fix(cli): **`--quiet` silences `--verbose` entirely.** Seven of the nine
+  `--verbose` lines in `render` printed regardless of `--quiet`, only the two
+  after the compile checking it, so `--verbose --quiet` still narrated the
+  load and the parse. `execute` resolves the pair once up front, and the help
+  text's "Suppress all non-error output" is what the flag does.
 
 ## v0.112.0 - 2026-09-01
 

@@ -45,13 +45,14 @@ pub struct RenderArgs {
 // Progress chatter goes to stderr: under `--stdout` the artifact owns stdout,
 // and a `--verbose` line there would land inside the emitted PDF.
 pub fn execute(args: RenderArgs) -> Result<()> {
-    if args.verbose {
+    let verbose = args.verbose && !args.quiet;
+    if verbose {
         eprintln!("Loading quill from: {}", args.quill.display());
     }
 
     let quill = load_quill(&args.quill)?;
 
-    if args.verbose {
+    if verbose {
         eprintln!("Quill loaded: {}", quill.name());
     }
 
@@ -64,14 +65,14 @@ pub fn execute(args: RenderArgs) -> Result<()> {
                 )));
             }
 
-            if args.verbose {
+            if verbose {
                 eprintln!("Reading markdown from: {}", markdown_path.display());
             }
 
             let markdown = fs::read_to_string(markdown_path)?;
             let output = quill.parse(&markdown)?;
 
-            if args.verbose {
+            if verbose {
                 eprintln!("Markdown parsed successfully");
             }
             (
@@ -81,13 +82,13 @@ pub fn execute(args: RenderArgs) -> Result<()> {
             )
         } else {
             // No input file: the seed renders without any caller-supplied values.
-            if args.verbose {
+            if verbose {
                 eprintln!("Using seeded document from quill");
             }
             (quill.seed_document(), Vec::new(), None)
         };
 
-    if args.verbose {
+    if verbose {
         eprintln!("Render-ready quill for backend: {}", quill.backend_id());
     }
 
@@ -96,7 +97,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         .parse::<OutputFormat>()
         .map_err(|e| CliError::InvalidArgument(e.to_string()))?;
 
-    if args.verbose {
+    if verbose {
         eprintln!("Rendering to format: {:?}", output_format);
     }
 
@@ -118,7 +119,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
                 e
             )))
         })?;
-        if args.verbose && !args.quiet {
+        if verbose {
             eprintln!("JSON data written to: {}", data_path.display());
         }
     }
@@ -173,7 +174,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         }
     }
 
-    if args.verbose && !args.quiet {
+    if verbose {
         eprintln!("Rendering completed successfully");
     }
 

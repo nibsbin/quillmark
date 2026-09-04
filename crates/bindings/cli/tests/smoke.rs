@@ -406,4 +406,27 @@ fn format_casing_does_not_reach_the_output_filename() {
             .map(|e| e.unwrap().file_name())
             .collect::<Vec<_>>()
     );
+
+/// `--quiet` wins over `--verbose`: no progress line reaches stderr.
+#[test]
+fn quiet_silences_verbose() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let out_path = dir.path().join("out.pdf");
+    let quill = taro();
+
+    let out = run(&[
+        "render",
+        quill.to_str().unwrap(),
+        "-o",
+        out_path.to_str().unwrap(),
+        "--verbose",
+        "--quiet",
+    ]);
+    assert!(out.status.success(), "exited {:?}", out.status.code());
+    assert!(
+        out.stderr.is_empty(),
+        "--quiet let --verbose through:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(out.stdout.is_empty(), "--quiet let the destination line through");
 }
