@@ -305,6 +305,15 @@
   width since all sit under `MAX_FIELD_COUNT`. The README's `parse_fuzz.rs`
   row names what the file generates and `conform_fuzz.rs` gets the row it
   lacked.
+- refactor(core): **every surface that refuses a non-content richtext value
+  spells one sentence.** `Codec::decode_field` builds the shape-mismatch
+  message and names the shape that arrived (`expected a richtext content
+  object or a markdown string, got a number`); the wire `$body` reader and the
+  richtext write coercion route through it instead of carrying their own
+  copies, so the schema-bound read and the strict projection name the shape
+  too. `Card::store_ext` bounds `$ext` depth through
+  `value::depth_check_meta_map`, the check the wire and the storage DTO run.
+  Every diagnostic code is unchanged.
 
 ## v0.112.0 - 2026-09-01
 

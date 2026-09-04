@@ -1040,6 +1040,35 @@ fn store_field_rejects_value_past_depth_limit() {
         .is_err());
 }
 
+/// The `$ext` map is itself a level, so its values carry `MAX_YAML_DEPTH - 1`:
+/// the wholesale store and the namespace merge bound the merged map identically.
+#[test]
+fn store_ext_charges_the_map_its_own_level() {
+    let mut doc =
+        crate::document::Document::parse("~~~\n$quill: q@1.0\n$kind: main\n~~~\n").unwrap().document;
+    let map = |depth: usize| {
+        let mut m = serde_json::Map::new();
+        m.insert("a".to_string(), deep_value(depth));
+        m
+    };
+
+    doc.main_mut().store_ext(map(99)).expect("99 levels under a map is exactly the limit");
+    let err = doc.main_mut().store_ext(map(100)).unwrap_err();
+    assert!(
+        matches!(err, crate::document::EditError::ValueTooDeep { max: 100 }),
+        "expected ValueTooDeep, got {err:?}"
+    );
+    assert_eq!(err.code(), "edit::value_too_deep");
+    assert_eq!(
+        doc.main().ext().and_then(|m| m.get("a")),
+        Some(&deep_value(99)),
+        "the refused map leaves the stored one untouched"
+    );
+
+    doc.main_mut().store_ext_namespace("ns", deep_value(99)).expect("the merge bound matches");
+    assert!(doc.main_mut().store_ext_namespace("ns", deep_value(100)).is_err());
+}
+
 #[test]
 fn storage_dto_rejects_value_past_depth_limit() {
     let stored = serde_json::json!({

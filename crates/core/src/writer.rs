@@ -665,6 +665,25 @@ card_kinds:
         assert!(doc.main().payload().get("notafield").is_none());
     }
 
+    /// A richtext write refuses a value in neither accepted encoding under the
+    /// codec's own sentence, the one the wire and the schema-bound read spell.
+    #[test]
+    fn set_rejects_a_non_content_shape_by_naming_it() {
+        let config = config();
+        let mut doc = blank_doc();
+        let mut ed = TypedWriter::new(&config, &mut doc);
+        let err = ed
+            .set("subject", QuillValue::from_json(serde_json::json!(true)))
+            .unwrap_err();
+        assert_eq!(err.code(), "edit::field_decode");
+        assert!(
+            matches!(&err, EditError::FieldDecode { message, .. }
+                if message
+                    == "expected a richtext content object or a markdown string, got a boolean"),
+            "got {err:?}"
+        );
+    }
+
     #[test]
     fn set_all_is_all_or_nothing() {
         let config = config();

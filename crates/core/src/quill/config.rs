@@ -631,15 +631,7 @@ impl QuillConfig {
                                 path,
                                 json_value,
                                 "richtext",
-                                format!(
-                                    "expected a richtext content object or a markdown string, got {}",
-                                    match json_value {
-                                        serde_json::Value::Bool(_) => "a boolean",
-                                        serde_json::Value::Number(_) => "a number",
-                                        serde_json::Value::Array(_) => "an array",
-                                        _ => "an unsupported value",
-                                    }
-                                ),
+                                crate::document::Codec::Richtext.unshaped_message(json_value),
                             ),
                             E::NotInline => inline_err(),
                         });
