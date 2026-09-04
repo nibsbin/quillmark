@@ -30,7 +30,11 @@ It exists so no public signature names `serde-saphyr`. A third-party error type 
 
 Two surfaces return one directly (`QuillValue::from_yaml_str`, `QuillConfig::schema_yaml`); `QuillConfig::from_yaml_with_warnings` converts through it to `quill::yaml_parse_error`. The card-yaml path does not travel this way: it becomes `ParseError::YamlErrorWithLocation`, which additionally knows the enclosing block.
 
-Its `line`/`column` are document coordinates, not block-relative ones. The assembler translates: the engine reports a position inside the string it parsed, which is the fence content minus the comment lines prescan drops (`PreScan::source_lines` maps what survives back) and minus the whitespace `trim` takes off the front. `to_diagnostic()` renders that as a `Location` against `DOCUMENT_FILE` (`input.md`) — markdown reaches the engine as a string, so the anchor names the input rather than a path on disk. The message names the block instead of repeating a number (`YAML error in the root card-yaml block: …`, `… in card-yaml block 2: …`); the engine's own snippet inside it stays block-relative, as the engine rendered it.
+Its `line`/`column` are document coordinates, not block-relative ones:
+
+- The engine reports a position inside the string it parsed: the fence content minus the comment lines prescan drops (`PreScan::source_lines` maps what survives back) and minus the whitespace `trim` takes off the front. The assembler translates that position onto the document.
+- `to_diagnostic()` renders it as a `Location` against `DOCUMENT_FILE` (`input.md`). Markdown reaches the engine as a string, so the anchor names the input rather than a path on disk.
+- The message names the block instead of repeating a number (`YAML error in the root card-yaml block: …`, `… in card-yaml block 2: …`). The engine's own snippet inside it stays block-relative, as the engine rendered it.
 
 **`RenderError`**: the main rendering error, a struct carrying a non-empty
 `Vec<Diagnostic>` (`RenderError::new` / `from_diag` / `coded(code, message)`

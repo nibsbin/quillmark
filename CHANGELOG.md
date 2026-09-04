@@ -10,6 +10,14 @@
   opener's line, the field to close after, and — for a `~~` run or an indented
   `~~~` — the line that failed to close it. A root opener carrying a foreign
   info string (`~~~metadata`) is named the same way.
+- fix(core): **a card-yaml parse failure carries a document `Location`.**
+  `YamlErrorWithLocation` keeps the engine's line and column, translated
+  through the comment lines prescan drops and the leading whitespace `trim`
+  removes onto the document's own coordinates, and `to_diagnostic()` sets them
+  as the `Location` (`input.md`). The message names the block (`YAML error in
+  the root card-yaml block: …`, `… in card-yaml block 2: …`) in place of the
+  block-relative `at line N (block K)` prefix, and `args` no longer carries
+  `line`.
 - feat(core): **`~~~yaml` opens a card-yaml block**, a second non-canonical
   alias beside `~~~card-yaml`; both re-emit as bare `~~~`. A YAML *code* block
   in prose is a backtick fence (```` ```yaml ````), unchanged.
