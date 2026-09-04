@@ -236,6 +236,12 @@
   and `max`. `parse::input_too_large` keeps the two byte caps, document size
   and YAML payload size. A consumer routing count overflow on
   `parse::input_too_large` reads the two new codes instead.
+- refactor(core): **`set_values` refuses a kindless card slot through the card
+  constructor rather than a hand-built error.** `plan_slot` carried an early
+  return minting `edit::invalid_kind_name` for a position holding no card and
+  naming no kind; flattening the kind to `Option<&str>` sends that case to
+  `build_card`, where `Card::new("")` raises the same error at the same
+  `cards[<i>]` path.
 
 ## v0.112.0 - 2026-09-01
 
