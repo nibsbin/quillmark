@@ -110,6 +110,10 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- refactor(core)!: **`ParseOutputFormatError` is `#[non_exhaustive]` and gains
+  `new`.** It was the one `pub`-field type in core's root modules without the
+  attribute COMPATIBILITY.md's struct rule asks for. Its field stays readable;
+  an out-of-crate struct literal becomes `ParseOutputFormatError::new(input)`.
 
 ## v0.112.0 - 2026-09-01
 
