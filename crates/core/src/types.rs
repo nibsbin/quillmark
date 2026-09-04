@@ -44,9 +44,17 @@ impl std::fmt::Display for OutputFormat {
     }
 }
 
-/// Error returned when a string does not name an [`OutputFormat`].
+/// Error returned when a string does not name an [`OutputFormat`]. The field
+/// is the input as parsed, lowercased.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ParseOutputFormatError(pub String);
+
+impl ParseOutputFormatError {
+    pub fn new(input: impl Into<String>) -> Self {
+        Self(input.into())
+    }
+}
 
 impl std::fmt::Display for ParseOutputFormatError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -70,7 +78,7 @@ impl std::str::FromStr for OutputFormat {
             "pdf" => Ok(OutputFormat::Pdf),
             "svg" => Ok(OutputFormat::Svg),
             "png" => Ok(OutputFormat::Png),
-            other => Err(ParseOutputFormatError(other.to_string())),
+            other => Err(ParseOutputFormatError::new(other)),
         }
     }
 }
@@ -92,6 +100,23 @@ mod tests {
         }
     }
 
+    #[test]
+    fn unknown_output_format_names_the_input_lowercased() {
+        assert_eq!(
+            OutputFormat::from_str("Docx"),
+            Err(ParseOutputFormatError::new("docx"))
+        );
+        assert_eq!(ParseOutputFormatError::new("docx").0, "docx");
+    }
+
+    #[test]
+    fn ppi_falls_back_to_the_default() {
+        assert_eq!(RenderOptions::default().ppi_or_default(), 144.0);
+        assert_eq!(
+            RenderOptions::default().with_ppi(300.0).ppi_or_default(),
+            300.0
+        );
+    }
 }
 
 /// An artifact produced by rendering.
@@ -132,7 +157,8 @@ pub struct RenderOptions {
     pub output_format: Option<OutputFormat>,
     /// Pixels per inch for raster output formats (e.g., PNG).
     /// Ignored for vector/document formats (PDF, SVG).
-    /// Defaults to 144.0 (2x at 72pt/inch) when `None`.
+    /// `None` resolves to [`RenderOptions::DEFAULT_PPI`] through
+    /// [`ppi_or_default`](RenderOptions::ppi_or_default).
     pub ppi: Option<f32>,
     /// Optional 0-based page indices to render (e.g., `vec![0, 2]` for
     /// the first and third pages). `None` renders all pages. Any index
@@ -157,6 +183,15 @@ pub struct RenderOptions {
 }
 
 impl RenderOptions {
+    /// The pixels per inch every raster backend uses when [`ppi`](Self::ppi) is
+    /// `None`: 2x at 72 pt/inch.
+    pub const DEFAULT_PPI: f32 = 144.0;
+
+    /// [`ppi`](Self::ppi), or [`DEFAULT_PPI`](Self::DEFAULT_PPI).
+    pub fn ppi_or_default(&self) -> f32 {
+        self.ppi.unwrap_or(Self::DEFAULT_PPI)
+    }
+
     pub fn with_output_format(mut self, output_format: OutputFormat) -> Self {
         self.output_format = Some(output_format);
         self

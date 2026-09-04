@@ -306,6 +306,17 @@ pub enum ParseError {
     #[error("Input too large: {size} bytes (max: {max} bytes)")]
     InputTooLarge { size: usize, max: usize },
 
+    /// A card-yaml block carries more user fields than [`MAX_FIELD_COUNT`]
+    /// (spec §8), counted after `$`-key extraction. Code
+    /// `parse::too_many_fields`.
+    #[error("Too many fields in one card-yaml block: {count} (max: {max})")]
+    TooManyFields { count: usize, max: usize },
+
+    /// A document carries more composable cards than [`MAX_CARD_COUNT`]
+    /// (spec §8). Code `parse::too_many_cards`.
+    #[error("Too many cards: {count} (max: {max})")]
+    TooManyCards { count: usize, max: usize },
+
     #[error("Invalid YAML structure: {0}")]
     InvalidStructure(String),
 
@@ -335,16 +346,32 @@ pub enum ParseError {
     #[error("{0}")]
     BodyImport(String),
 
-    #[error("YAML error at line {line}: {message}")]
+    #[error("YAML error in {}: {message}", block_label(*block_index))]
     YamlErrorWithLocation {
         message: String,
-        /// 1-indexed line in the source document.
+        /// 1-indexed line of the failure in the source document, not in the
+        /// block's YAML payload: the two numberings meet here.
         line: usize,
+        /// 1-indexed column, paired with `line`.
+        column: usize,
         /// 0-indexed metadata block.
         block_index: usize,
         hint: Option<String>,
     },
 }
+
+/// Name of the card-yaml block at `block_index`, by position: the parse failed
+/// before `$kind` was readable.
+fn block_label(block_index: usize) -> String {
+    match block_index {
+        0 => "the root card-yaml block".to_string(),
+        n => format!("card-yaml block {}", n),
+    }
+}
+
+/// The document a [`ParseError`] points at. Markdown reaches the engine as a
+/// string, so the anchor names the input rather than a path on disk.
+pub const DOCUMENT_FILE: &str = "input.md";
 
 impl ParseError {
     /// The facts this error's message interpolates. See [`Diagnostic::args`].
@@ -357,6 +384,14 @@ impl ParseError {
                 "size" => size,
                 "max" => max,
             },
+            ParseError::TooManyFields { count, max } => diag_args! {
+                "count" => count,
+                "max" => max,
+            },
+            ParseError::TooManyCards { count, max } => diag_args! {
+                "count" => count,
+                "max" => max,
+            },
             ParseError::InvalidStructure(_) => diag_args! {},
             ParseError::EmptyInput(_) => diag_args! {},
             ParseError::MissingQuill(_) => diag_args! {},
@@ -365,16 +400,15 @@ impl ParseError {
             ParseError::InvalidQuillReference { value, reason: _ } => diag_args! {
                 "value" => value,
             },
-            // This diagnostic sets no `location`, so `args` is the only
-            // structured route to the coordinates. `message` is the YAML
-            // engine's own prose and keeps no key.
+            // The coordinates ride on the diagnostic's `location`; `message` is
+            // the YAML engine's own prose and keeps no key.
             ParseError::YamlErrorWithLocation {
                 message: _,
-                line,
+                line: _,
+                column: _,
                 block_index,
                 hint: _,
             } => diag_args! {
-                "line" => line,
                 "blockIndex" => block_index,
             },
         }
@@ -387,6 +421,19 @@ impl ParseError {
                 format!("Input too large: {} bytes (max: {} bytes)", size, max),
             )
             .with_code("parse::input_too_large".to_string()),
+            ParseError::TooManyFields { count, max } => Diagnostic::new(
+                Severity::Error,
+                format!(
+                    "Too many fields in one card-yaml block: {} (max: {})",
+                    count, max
+                ),
+            )
+            .with_code("parse::too_many_fields".to_string()),
+            ParseError::TooManyCards { count, max } => Diagnostic::new(
+                Severity::Error,
+                format!("Too many cards: {} (max: {})", count, max),
+            )
+            .with_code("parse::too_many_cards".to_string()),
             ParseError::InvalidStructure(msg) => Diagnostic::new(Severity::Error, msg.clone())
                 .with_code("parse::invalid_structure".to_string()),
             ParseError::EmptyInput(msg) => Diagnostic::new(Severity::Error, msg.clone())
@@ -404,17 +451,20 @@ impl ParseError {
             ParseError::YamlErrorWithLocation {
                 message,
                 line,
+                column,
                 block_index,
                 hint,
             } => {
                 let mut d = Diagnostic::new(
                     Severity::Error,
-                    format!(
-                        "YAML error at line {} (block {}): {}",
-                        line, block_index, message
-                    ),
+                    format!("YAML error in {}: {}", block_label(*block_index), message),
                 )
-                .with_code("parse::yaml_error_with_location".to_string());
+                .with_code("parse::yaml_error_with_location".to_string())
+                .with_location(Location::new(
+                    DOCUMENT_FILE.to_string(),
+                    *line as u32,
+                    *column as u32,
+                ));
                 if let Some(h) = hint {
                     d = d.with_hint(h.clone());
                 }
@@ -684,6 +734,8 @@ mod args_canon {
 
         for e in [
             ParseError::InputTooLarge { size: 2, max: 1 },
+            ParseError::TooManyFields { count: 2, max: 1 },
+            ParseError::TooManyCards { count: 2, max: 1 },
             ParseError::InvalidStructure("x".into()),
             ParseError::EmptyInput("x".into()),
             ParseError::MissingQuill("x".into()),
@@ -695,6 +747,7 @@ mod args_canon {
             ParseError::YamlErrorWithLocation {
                 message: "x".into(),
                 line: 3,
+                column: 1,
                 block_index: 1,
                 hint: None,
             },

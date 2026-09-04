@@ -32,6 +32,7 @@ Write main body here.
 ~~~
 $kind: <card_kind>
 # composable (0..N)
+# sample card; delete if not needed
 # <card description>
 ...fields...
 ~~~
@@ -142,7 +143,10 @@ read as a leading annotation for the field below it. A composable card's kind is
 emitted as an own-line `# composable (0..N)` comment directly under the
 `$kind` line, ahead of the card description: that comment carries the
 card's cardinality, which is structural information rather than a
-redundant instruction.
+redundant instruction. A second own-line comment, `# sample card; delete if
+not needed`, follows directly under it: the card's fields and body are one
+worked example of that kind, and "0..N" alone does not say a reader is free
+to drop it.
 
 Examples:
 
@@ -160,7 +164,7 @@ Examples:
 | `date: !must_fill # date<YYYY-MM-DD>` | must-fill date |
 | `severity: !must_fill # enum<low \| medium \| high>` | must-fill enum |
 | `$quill: cmu_letter@0.1.0 # keep verbatim` | quill binding metadata, emitted verbatim; the inline reminder guards against dropping the line |
-| `$kind: skill` followed by `# composable (0..N)` | repeat the entire `~~~` … `~~~` block per instance |
+| `$kind: skill` followed by `# composable (0..N)` and `# sample card; delete if not needed` | repeat the entire `~~~` … `~~~` block per instance, or delete it if none are needed |
 
 ## Placeholder value precedence
 
@@ -192,6 +196,20 @@ is one rule, **`!must_fill` on a field → replace before shipping; otherwise th
 value cell is shippable as-is**. A marked document still renders (the cell
 blank-fills, or uses its suggested value); the marker only drives the non-fatal
 `validation::must_fill` warning (see "Guarantees").
+
+A value shown under `!must_fill` is the schema's own `example:` —
+illustrative, not real data. Dropping the tag while keeping that value
+verbatim ships the schema's example as if it were the answer; replace the
+value along with the tag.
+
+The blueprint's own `!must_fill` cells aside, an author's `field: ""` and a
+blank/null `field:` (or `field: null`) are different answers once the document
+is parsed: `""` is the field's own explicit blank and is kept exactly as
+written, while `field:` / `field: null` carry no data (**null ≡ absent**) and
+fall back to the field's `default:` when one is declared, else to the field's
+own blank (`authored` › `default:` › `blank`; see [SCHEMAS.md](SCHEMAS.md)
+§ "Native validation"). Write `""` on purpose to force a field empty; leave it
+blank or `null` to accept its default.
 
 The marker is stamped where the LLM types the value. This table is also the
 **cell set the `unauthored` trigger addresses**: the schema-side predicate warns
@@ -399,6 +417,11 @@ particular, `ui.group` emits no banner lines; fields within the same
 
 `body.enabled: false` suppresses the marker entirely for body-less cards
 (e.g., a `skills` card whose data is purely structured).
+
+A composable card's emitted block — its `$kind` line, the `composable
+(0..N)` / sample-card comments, its fields, and its placeholder body — is
+one sample instance of that kind, not a required one. Delete the whole block
+when the document needs none of that kind.
 
 A `body.example` whose text contains a line that would parse as a
 card-yaml opener (a bare `~~~` (or the `~~~card-yaml` alias)) is

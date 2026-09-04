@@ -79,6 +79,21 @@ fn test_document_store_field_rejects_dollar_prefixed_names() {
 }
 
 #[test]
+fn test_document_store_field_rejects_non_ascii_names() {
+    for name in ["\u{212A}elvin", "e\u{0301}tat"] {
+        let mut doc = make_doc();
+        assert_eq!(
+            doc.main_mut().store_field(name, qv("value")),
+            Err(EditError::InvalidFieldName(name.to_string())),
+            "expected InvalidFieldName for {:?}",
+            name
+        );
+        doc.main_mut().store_field("after", qv("w")).unwrap();
+        assert_eq!(Document::parse(&doc.to_markdown()).unwrap().document, doc);
+    }
+}
+
+#[test]
 fn test_document_store_field_updates_existing() {
     let mut doc = make_doc();
     doc.main_mut().store_field("title", qv("New Title")).unwrap();
@@ -285,6 +300,30 @@ fn test_store_fill_refuses_a_mapping() {
     let _ = crate::document::Document::parse(&md).expect("the emitted document re-parses");
 }
 
+/// The batch carries the same fill-target rule as the single write: a marker on
+/// a nested mapping emits as an unmarked key and reloads as a DTO violation.
+#[test]
+fn test_card_store_fields_refuses_a_nested_fill_on_a_mapping() {
+    let marked = || {
+        let mut value = QuillValue::from_json(serde_json::json!({"a": {"b": 1}}));
+        assert!(value.set_fill_at(&[crate::value::PathSegment::Key("a".to_string())]));
+        value
+    };
+    let mut card = Card::new("note").unwrap();
+    card.store_field("keep", qv("old")).unwrap();
+
+    let single = card
+        .store_field("x", marked())
+        .expect_err("a marker on a nested mapping is refused");
+    let batch = card
+        .store_fields([("keep".to_string(), qv("new")), ("x".to_string(), marked())])
+        .expect_err("and the batch refuses it identically");
+
+    assert_eq!(batch, vec![("x".to_string(), single)]);
+    assert!(card.payload().get("x").is_none());
+    assert_eq!(card.payload().get("keep").unwrap().as_str(), Some("old"));
+}
+
 #[test]
 fn test_card_store_fields_clears_fill_and_repeated_name_last_wins() {
     let mut card = Card::new("note").unwrap();
@@ -297,6 +336,28 @@ fn test_card_store_fields_clears_fill_and_repeated_name_last_wins() {
     let value = card.payload().get("title").unwrap();
     assert!(!value.fill());
     assert_eq!(value.as_str(), Some("final"));
+}
+
+/// The payload item's flag is the sole carrier of a root `!must_fill`, so a
+/// value arriving with its own root bit set is stored under the marker the
+/// mutator names: `Payload::is_fill` and [`QuillValue::fill`] agree afterwards.
+#[test]
+fn test_store_clears_a_root_fill_bit_on_the_incoming_value() {
+    let mut marked = qv("draft");
+    assert!(marked.set_fill_at(&[]));
+
+    let mut card = Card::new("note").unwrap();
+    card.store_fields([("x".to_string(), marked.clone())])
+        .unwrap();
+    card.store_field("y", marked.clone()).unwrap();
+    card.store_fill("z", marked).unwrap();
+
+    for key in ["x", "y"] {
+        assert!(!card.payload().is_fill(key), "{key} carries no marker");
+        assert!(!card.payload().get(key).unwrap().fill(), "{key} value");
+    }
+    assert!(card.payload().is_fill("z"));
+    assert!(!card.payload().get("z").unwrap().fill());
 }
 
 #[test]
@@ -1001,6 +1062,35 @@ fn store_field_rejects_value_past_depth_limit() {
         .is_err());
 }
 
+/// The `$ext` map is itself a level, so its values carry `MAX_YAML_DEPTH - 1`:
+/// the wholesale store and the namespace merge bound the merged map identically.
+#[test]
+fn store_ext_charges_the_map_its_own_level() {
+    let mut doc =
+        crate::document::Document::parse("~~~\n$quill: q@1.0\n$kind: main\n~~~\n").unwrap().document;
+    let map = |depth: usize| {
+        let mut m = serde_json::Map::new();
+        m.insert("a".to_string(), deep_value(depth));
+        m
+    };
+
+    doc.main_mut().store_ext(map(99)).expect("99 levels under a map is exactly the limit");
+    let err = doc.main_mut().store_ext(map(100)).unwrap_err();
+    assert!(
+        matches!(err, crate::document::EditError::ValueTooDeep { max: 100 }),
+        "expected ValueTooDeep, got {err:?}"
+    );
+    assert_eq!(err.code(), "edit::value_too_deep");
+    assert_eq!(
+        doc.main().ext().and_then(|m| m.get("a")),
+        Some(&deep_value(99)),
+        "the refused map leaves the stored one untouched"
+    );
+
+    doc.main_mut().store_ext_namespace("ns", deep_value(99)).expect("the merge bound matches");
+    assert!(doc.main_mut().store_ext_namespace("ns", deep_value(100)).is_err());
+}
+
 #[test]
 fn storage_dto_rejects_value_past_depth_limit() {
     let stored = serde_json::json!({
@@ -1227,4 +1317,49 @@ fn storage_dto_refuses_a_multi_line_comment() {
     }))
     .unwrap_err();
     assert!(err.to_string().contains("one line"), "got: {err}");
+}
+
+/// One violation, the three ingestion boundaries that spell it: parse, wire,
+/// storage. Each renders the text `FieldViolation` owns, naming the key.
+#[test]
+fn every_ingestion_boundary_renders_one_violation_text() {
+    use crate::document::edit::FieldViolation;
+
+    let expected = FieldViolation::InvalidName.message("bad name");
+
+    let parse_err =
+        Document::parse("~~~card-yaml\n$quill: test_quill\n$kind: main\nbad name: v\n~~~\n")
+            .unwrap_err();
+    assert!(
+        parse_err.to_string().contains(&expected),
+        "parse: {parse_err}"
+    );
+
+    let mut wire = crate::document::CardWire::new("main".to_string(), serde_json::json!(""));
+    wire.payload_items = vec![crate::document::PayloadItemWire::Field {
+        key: "bad name".to_string(),
+        value: serde_json::json!("v"),
+        fill: false,
+        nested_fills: Vec::new(),
+    }];
+    let wire_err = Card::try_from(wire).unwrap_err();
+    assert!(wire_err.to_string().contains(&expected), "wire: {wire_err}");
+
+    let storage_err = serde_json::from_value::<Document>(serde_json::json!({
+        "schema": "quillmark/document@0.92.0",
+        "main": {
+            "payload": {"items": [
+                {"type": "quill", "value": "q@1.0"},
+                {"type": "kind", "value": "main"},
+                {"type": "field", "key": "bad name", "value": "v"}
+            ]},
+            "body": ""
+        },
+        "cards": []
+    }))
+    .unwrap_err();
+    assert!(
+        storage_err.to_string().contains(&expected),
+        "storage: {storage_err}"
+    );
 }

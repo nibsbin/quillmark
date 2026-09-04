@@ -2,13 +2,15 @@ use quillmark_core::RenderError;
 use std::fmt;
 
 /// [`print_cli_error`] renders full diagnostics for the render and parse
-/// variants, a plain line for the rest.
+/// variants, a plain line for `Io` and `InvalidArgument`, and nothing for
+/// `Reported`, whose diagnostics the command has already written.
 #[derive(Debug)]
 pub enum CliError {
     Io(std::io::Error),
     Render(RenderError),
     Parse(quillmark_core::ParseError),
     InvalidArgument(String),
+    Reported,
 }
 
 impl fmt::Display for CliError {
@@ -18,6 +20,7 @@ impl fmt::Display for CliError {
             CliError::Render(e) => write!(f, "{}", e),
             CliError::Parse(e) => write!(f, "Parse error: {}", e),
             CliError::InvalidArgument(msg) => write!(f, "Invalid argument: {}", msg),
+            CliError::Reported => write!(f, "diagnostics reported"),
         }
     }
 }
@@ -42,6 +45,17 @@ impl From<quillmark_core::ParseError> for CliError {
     }
 }
 
+impl From<quillmark_core::BoundParseError> for CliError {
+    fn from(err: quillmark_core::BoundParseError) -> Self {
+        use quillmark_core::BoundParseError as E;
+        match err {
+            E::Parse(e) => CliError::Parse(e),
+            E::Mismatch(e) => CliError::Render(e),
+            other => CliError::InvalidArgument(other.to_string()),
+        }
+    }
+}
+
 pub type Result<T> = std::result::Result<T, CliError>;
 
 pub fn print_cli_error(err: &CliError) {
@@ -58,6 +72,7 @@ pub fn print_cli_error(err: &CliError) {
         CliError::InvalidArgument(msg) => {
             eprintln!("[ERROR] Invalid argument: {}", msg);
         }
+        CliError::Reported => {}
     }
 }
 

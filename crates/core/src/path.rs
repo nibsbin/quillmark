@@ -15,15 +15,21 @@
 //!         | "cards" "[" index "]"            // unknown-kind card (the only bare-index root)
 //! segment:= "." field | "[" index "]" | ".body"
 //! kind   := [a-z_][a-z0-9_]*
-//! field  := any run excluding "." "[" "]"
+//! field  := (plain | escape)*
+//! plain  := any byte other than "." "[" "]" "\"
+//! escape := "\" ("." | "[" | "]" | "\")
 //! ```
 //!
 //! A field name is what the document carries, not an identifier: a nested YAML
 //! map key is unconstrained, so `!must_fill` collection mints `main.m.0` and
-//! `main.m.a-b`. `Display` → `FromStr` needs only that a name exclude `.`, `[`,
-//! `]`. So **an all-digit name reads back as a name, never an index**
-//! (`main.m.0` is `Field{"0"}`), and the plate-space `.N` index spelling is
-//! translated at the geometry boundary (`region.rs`) instead.
+//! `main.m.a-b`. A name is free to contain `.`, `[`, `]` or `\` itself:
+//! `Display` escapes each with a leading `\` wherever it occurs, and `FromStr`
+//! undoes exactly that when it reads a field word back, so every name
+//! round-trips rather than only ones that happen to avoid the four
+//! meta-characters. A name with none of them renders unescaped. So **an
+//! all-digit name reads back as a name, never an index** (`main.m.0` is
+//! `Field{"0"}`), and the plate-space `.N` index spelling is translated at
+//! the geometry boundary (`region.rs`) instead.
 //!
 //! Every document-model path is **rooted**, which makes the grammar total
 //! against a field named for a root: a main field literally named `cards` is
@@ -156,7 +162,7 @@ impl fmt::Display for DocPath {
                     if i != 0 {
                         f.write_str(".")?;
                     }
-                    f.write_str(name)?;
+                    write_escaped_field(f, name)?;
                 }
                 DocSeg::Index { index } => write!(f, "[{index}]")?,
                 DocSeg::Body => f.write_str(".body")?,
@@ -164,6 +170,22 @@ impl fmt::Display for DocPath {
         }
         Ok(())
     }
+}
+
+/// Write a field name with `.`, `[`, `]` and `\` escaped by a leading `\`, the
+/// exact inverse of the unescaping [`scan`] does when it reads a field word.
+/// A name with none of the four bytes writes unchanged.
+fn write_escaped_field(f: &mut fmt::Formatter<'_>, name: &str) -> fmt::Result {
+    if !name.contains(['.', '[', ']', '\\']) {
+        return f.write_str(name);
+    }
+    for c in name.chars() {
+        if matches!(c, '.' | '[' | ']' | '\\') {
+            f.write_str("\\")?;
+        }
+        write!(f, "{c}")?;
+    }
+    Ok(())
 }
 
 /// A [`DocPath`] parse failure. The parser is total over every path
@@ -228,8 +250,8 @@ impl FromStr for DocPath {
 }
 
 /// Scan a path into segments. Root/terminal words (`main`/`cards`/`body`) scan
-/// as fields and are reclassed by the caller. The round-trip charsets are
-/// enforced here only as "no empty word, digits inside brackets".
+/// as fields and are reclassed by the caller. Enforced here: no empty word,
+/// digits inside brackets, and a field word's escapes are all well-formed.
 fn scan(s: &str) -> Result<Vec<DocSeg>, &'static str> {
     let mut segs = Vec::new();
     let bytes = s.as_bytes();
@@ -256,25 +278,59 @@ fn scan(s: &str) -> Result<Vec<DocSeg>, &'static str> {
                 if i == start {
                     return Err("empty segment after '.'");
                 }
-                segs.push(DocSeg::Field { name: s[start..i].to_owned() });
+                segs.push(DocSeg::Field { name: unescape_field(&s[start..i])? });
             }
             _ => {
                 let start = i;
                 i = word_end(bytes, start);
-                segs.push(DocSeg::Field { name: s[start..i].to_owned() });
+                segs.push(DocSeg::Field { name: unescape_field(&s[start..i])? });
             }
         }
     }
     Ok(segs)
 }
 
-/// The index just past a word: the run up to the next `.` or `[`.
+/// The index just past a word: the run up to the next unescaped `.` or `[`.
+/// A `\` escapes whatever byte follows it, so `\.` and `\[` don't end the
+/// word early; stepping one byte at a time (rather than skipping two on a
+/// `\`) keeps this on UTF-8 boundaries even when the escaped byte begins a
+/// multi-byte character.
 fn word_end(bytes: &[u8], start: usize) -> usize {
     let mut i = start;
-    while i < bytes.len() && bytes[i] != b'.' && bytes[i] != b'[' {
+    let mut escaped = false;
+    while i < bytes.len() {
+        if escaped {
+            escaped = false;
+        } else if bytes[i] == b'\\' {
+            escaped = true;
+        } else if bytes[i] == b'.' || bytes[i] == b'[' {
+            break;
+        }
         i += 1;
     }
     i
+}
+
+/// Undo [`write_escaped_field`]'s escaping on a word [`word_end`] just
+/// bounded: `\.`, `\[`, `\]`, `\\` decode to the literal character. Any other
+/// byte after a `\`, or a `\` with nothing after it, is a parse error.
+fn unescape_field(raw: &str) -> Result<String, &'static str> {
+    if !raw.contains('\\') {
+        return Ok(raw.to_owned());
+    }
+    let mut out = String::with_capacity(raw.len());
+    let mut chars = raw.chars();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        match chars.next() {
+            Some(e @ ('.' | '[' | ']' | '\\')) => out.push(e),
+            _ => return Err("invalid escape in field name"),
+        }
+    }
+    Ok(out)
 }
 
 /// Match a `cards` head against the two card-root shapes. `None` when neither
@@ -414,9 +470,51 @@ mod tests {
 
     #[test]
     fn parse_rejects_malformed() {
-        for bad in ["", ".foo", "[0]", "foo[", "foo[a]", "foo[]", "a..b", "a."] {
+        for bad in [
+            "", ".foo", "[0]", "foo[", "foo[a]", "foo[]", "a..b", "a.", "main.a\\", "main.a\\x",
+        ] {
             assert!(bad.parse::<DocPath>().is_err(), "expected error for {bad:?}");
         }
+    }
+
+    #[test]
+    fn plain_field_name_renders_unescaped() {
+        // Pinned exact output: unaffected by the escaping scheme.
+        assert_eq!(DocPath::main().field("addr").to_string(), "main.addr");
+    }
+
+    #[test]
+    fn field_name_containing_dot_round_trips_distinct_from_two_segments() {
+        let dotted = DocPath::main().field("addr").field("a.b");
+        round_trip(dotted.clone(), "main.addr.a\\.b");
+        let split = DocPath::main().field("addr").field("a").field("b");
+        assert_eq!(split.to_string(), "main.addr.a.b");
+        assert_ne!(dotted, split);
+        assert_ne!(dotted.to_string(), split.to_string());
+    }
+
+    #[test]
+    fn field_name_containing_brackets_round_trips() {
+        round_trip(
+            DocPath::main().field("addr").field("a[0"),
+            "main.addr.a\\[0",
+        );
+        round_trip(
+            DocPath::main().field("addr").field("a]0"),
+            "main.addr.a\\]0",
+        );
+        round_trip(
+            DocPath::main().field("addr").field("[a][b]"),
+            "main.addr.\\[a\\]\\[b\\]",
+        );
+    }
+
+    #[test]
+    fn field_name_containing_escape_char_round_trips() {
+        round_trip(
+            DocPath::main().field("addr").field(r"a\b"),
+            "main.addr.a\\\\b",
+        );
     }
 
     #[test]

@@ -32,6 +32,14 @@ A **segment** is a maximal run of lines joined by `Line::continues`: one
 paragraph, one heading, one whole code fence, one island line. It is what
 "paragraph-level" means against the content, and the unit a region keys on.
 
+Only a `para`, `code` or unknown block takes continuations
+(`LineKind::takes_continuations`), and a continuation stays inside one container
+path. A heading, an island and a rule are one line, and both emitters render
+that line alone, so a `continues` line after one would be text neither
+projection reaches: `Content::normalize` clears the flag there,
+`Content::validate` rejects it (`Invariant::ContinuesSingleLineBlock`,
+`ContinuesAcrossContainers`), and `LineOp::SetContinues` refuses to write it.
+
 ## Escape functions
 
 Two escapers guard the two Typst contexts; both live in `emit`:
@@ -141,7 +149,10 @@ reads and the shape the WASM boundary pins:
   above); `aligns` is one `none | left | center | right` per column. Import
   normalizes to a single column count: header, every row, and `aligns` padded
   to the widest, so `columns:` and `align:` agree.
-- **`image`** → `{ url, alt }`; `alt` is the empty string when the source omits it.
+- **`image`** → `{ url, alt }`; `alt` is the empty string when the source omits
+  it. A `url` naming a quill file resolves against the quill root
+  (`assets/logo.svg`, or `/assets/logo.svg` for the same file), the path a plate
+  names it by.
 
 The `KnownIslandType` dispatch (`crates/content/src/island.rs`) owns these
 shapes engine-side; the WASM surface pins them as `TableProps` / `ImageProps` /

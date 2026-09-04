@@ -35,9 +35,6 @@ use {
 const FORM_PDF: &str = "form.pdf";
 const FORM_JSON: &str = "form.json";
 
-/// 2× at 72 pt/in, matching the core `RenderOptions::ppi` default.
-const DEFAULT_PPI: f32 = 144.0;
-
 const SUPPORTED_FORMATS: &[OutputFormat] =
     &[OutputFormat::Pdf, OutputFormat::Svg, OutputFormat::Png];
 
@@ -164,7 +161,7 @@ impl SessionHandle for PdfformSession {
             return self.render_svg();
         }
         if format == OutputFormat::Png {
-            let scale = opts.ppi.unwrap_or(DEFAULT_PPI) / 72.0;
+            let scale = opts.ppi_or_default() / 72.0;
             return self.render_png(scale);
         }
 

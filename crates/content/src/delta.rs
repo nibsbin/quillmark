@@ -1,8 +1,8 @@
 //! The per-field edit surface: a [`Delta`] of text splices over the USV content,
 //! plus the **stale-text writer** path, cold-parse a full new markdown document,
-//! char-diff it against the base, and rebase the base's identity marks
-//! (anchors/comments) through the diff so annotations survive an LLM
-//! full-document rewrite with no preservation contract on the LLM.
+//! char-diff it against the base, and rebase the base's non-formatting marks
+//! (anchors/comments, unknown tags) through the diff so annotations survive an
+//! LLM full-document rewrite with no preservation contract on the LLM.
 //!
 //! ## Text splices, not attributed ops
 //!
@@ -29,7 +29,7 @@
 //! (the match is lost) drops the anchor: the accepted residual, stated not
 //! hidden.
 
-use crate::model::{Mark, MarkKind, Content, Normalized};
+use crate::model::{Mark, Content, Normalized};
 use serde::{Deserialize, Serialize};
 use similar::{ChangeTag, TextDiff};
 
@@ -88,15 +88,14 @@ pub struct BaseLengthMismatch {
 
 impl Delta {
     /// Chars of base the `Retain`/`Delete` ops together consume: the base
-    /// length this delta was built against.
+    /// length this delta was built against. Saturating, so a wire delta whose
+    /// counts exceed `usize` reports a length no base has and
+    /// [`try_apply`](Self::try_apply) rejects it as a mismatch.
     pub fn expected_base_len(&self) -> usize {
-        self.ops
-            .iter()
-            .map(|op| match op {
-                Op::Retain(n) | Op::Delete(n) => *n,
-                Op::Insert(_) => 0,
-            })
-            .sum()
+        self.ops.iter().fold(0usize, |acc, op| match op {
+            Op::Retain(n) | Op::Delete(n) => acc.saturating_add(*n),
+            Op::Insert(_) => acc,
+        })
     }
 
     /// Apply to `base`, producing the new text. Base beyond what the ops
@@ -336,9 +335,10 @@ fn push_insert(ops: &mut Vec<Op>, s: &str) {
 }
 
 /// The stale-text writer path: cold-parse `new_markdown`, char-diff it against
-/// `base`, and carry `base`'s identity marks (anchors) forward, rebased through
-/// the diff (re-homing verbatim block moves). The returned content is `new_rt`
-/// (structure/marks/islands from the fresh import) plus the surviving anchors.
+/// `base`, and carry `base`'s non-formatting marks (anchors and unknown tags)
+/// forward, rebased through the diff (re-homing verbatim block moves). The
+/// returned content is `new_rt` (structure/marks/islands from the fresh import)
+/// plus the surviving handles.
 ///
 /// Returns the new content and the [`Delta`] used: the text change an editor
 /// bridge can map its own positions through.
@@ -353,12 +353,12 @@ pub fn diff_import(
     let new_chars: Vec<char> = new_rt.text.chars().collect();
     let inserted = delta.inserted_spans();
     for m in &base.marks {
-        // Only identity marks live in the content but not in markdown;
-        // formatting marks are re-derived by the fresh import.
-        let MarkKind::Anchor { .. } = &m.kind else {
+        // Formatting marks are re-derived by the fresh import; every other
+        // kind lives in the content but not in markdown.
+        if m.kind.is_formatting() {
             continue;
-        };
-        if let Some((ns, ne)) = rebase_anchor(&delta, &base_chars, &new_chars, &inserted, m) {
+        }
+        if let Some((ns, ne)) = rebase_mark(&delta, &base_chars, &new_chars, &inserted, m) {
             new_rt.marks.push(Mark {
                 start: ns,
                 end: ne,
@@ -370,9 +370,10 @@ pub fn diff_import(
     Ok((new_rt.into_normalized(), delta))
 }
 
-/// Rebase one anchor through the delta. Returns its new range, or `None` if it
-/// detaches (its text was deleted and no verbatim move re-homes it).
-fn rebase_anchor(
+/// Rebase one non-formatting mark through the delta. Returns its new range, or
+/// `None` if it detaches (its text was deleted and no verbatim move re-homes
+/// it).
+fn rebase_mark(
     delta: &Delta,
     base_chars: &[char],
     new_chars: &[char],
@@ -380,7 +381,7 @@ fn rebase_anchor(
     m: &Mark,
 ) -> Option<(usize, usize)> {
     if m.start == m.end {
-        // Zero-width point anchor.
+        // Zero-width point mark.
         if !delta.is_deleted(m.start) {
             let p = delta.map_pos(m.start, Assoc::Before);
             return Some((p, p));
@@ -508,6 +509,22 @@ mod tests {
             ops: vec![Op::Delete(9)],
         };
         assert!(over_del.try_apply("hello").is_err());
+    }
+
+    #[test]
+    fn try_apply_rejects_delta_whose_counts_overflow() {
+        // Counts arrive off the wire, where any u64 deserializes.
+        let over = Delta {
+            ops: vec![Op::Retain(usize::MAX), Op::Retain(2)],
+        };
+        assert_eq!(over.expected_base_len(), usize::MAX);
+        assert_eq!(
+            over.try_apply("hello"),
+            Err(BaseLengthMismatch {
+                expected: usize::MAX,
+                actual: 5,
+            })
+        );
     }
 
     #[test]

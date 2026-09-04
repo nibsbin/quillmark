@@ -262,9 +262,10 @@ impl Quill {
     /// (`compile_data` / `dry_run` ignore `$seed`), so every diagnostic here is
     /// a **warning** rooted at `$seed.<kind>[.<field>]`. An overlay keyed by a
     /// name that is not a declared `card_kind` is flagged; otherwise each
-    /// overlaid field is checked against that kind's schema with the same
-    /// conformance core the schema's own `example:` / `default:` literals use
-    /// (partial values allowed, no null/absence gating).
+    /// overlaid field is checked against that kind's schema as the **document**
+    /// value it is — an overlay cell is what `seed_card` commits into a new
+    /// card — so the variant container is a spelling it accepts, a present-null
+    /// cell reads as absent, and an omitted field raises nothing.
     /// The reserved `$body` key is the body override, not a field, and is
     /// skipped.
     fn validate_seed(&self, doc: &Document) -> Vec<Diagnostic> {
@@ -316,9 +317,7 @@ impl Quill {
                     continue;
                 };
                 let qv = QuillValue::from_json(value.clone());
-                for violation in
-                    super::validation::validate_schema_literal(field_schema, &qv, &field_path)
-                {
+                for violation in super::validation::validate_field(field_schema, &qv, &field_path) {
                     diags.push(seed_violation_diagnostic(&violation));
                 }
             }
@@ -662,8 +661,10 @@ fn compose_members(
 /// that world is present, so no guarded access is needed; outside it, none is.
 ///
 /// The discriminant cuts the same ladder as any enum (authored › `default:` ›
-/// blank), and the container reports it joined with what its live world's cells
-/// contributed ([`compose_members`]) — the rule every namespace follows.
+/// blank), but the container's own rung is the *cell's*: one the document wrote
+/// reads authored whichever rung filled the tag, joined with what its live
+/// world's cells contributed ([`compose_members`]) — the rule every namespace
+/// follows (`prose/canon/SCHEMAS.md` § "The resolved-value view").
 fn resolve_variant_sourced(
     value: Option<&QuillValue>,
     field: &FieldSchema,
@@ -691,11 +692,10 @@ fn resolve_variant_sourced(
             None => (String::new(), FieldSource::Blank),
         },
     };
-    // A present container with no discriminant is still authored: the author
-    // wrote the cell, and the ladder filled the tag they left out.
-    let source = match (present.is_some(), source) {
-        (true, FieldSource::Blank) => FieldSource::Authored,
-        (_, s) => s,
+    let source = if present.is_some() {
+        FieldSource::Authored
+    } else {
+        source
     };
 
     let mut out = serde_json::Map::new();

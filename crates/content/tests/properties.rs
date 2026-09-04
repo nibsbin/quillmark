@@ -1,7 +1,7 @@
 //! The content property suite: round-trip modulo loss class
 //! (`import(export(rt)) == rt`, exact here since the generator emits only
-//! lossless islands), canonical serialization, and diff-import preserving
-//! identity marks.
+//! lossless islands), canonical serialization, and diff-import preserving the
+//! marks markdown cannot carry.
 
 use proptest::prelude::*;
 use quillmark_content::delta::diff_import;
@@ -41,13 +41,26 @@ fn special_url() -> impl Strategy<Value = String> {
     (clean_word(), r"[a-z0-9 ()&]{1,5}").prop_map(|(a, b)| format!("ex.com/{a}{b}"))
 }
 
+// A code span whose content touches its fence: an edge backtick would join the
+// fence run and edge spaces would be stripped, so export owes each a space pad.
+fn code_span() -> impl Strategy<Value = String> {
+    prop_oneof![
+        clean_word().prop_map(|w| format!("`{w}`")),
+        clean_word().prop_map(|w| format!("`` `{w} ``")),
+        clean_word().prop_map(|w| format!("`` {w}` ``")),
+        clean_word().prop_map(|w| format!("`` `{w}` ``")),
+        clean_word().prop_map(|w| format!("`  {w}  `")),
+        Just("`` ` ``".to_string()),
+    ]
+}
+
 fn inline_token() -> impl Strategy<Value = String> {
     prop_oneof![
         plain_word(),
         clean_word().prop_map(|w| format!("**{w}**")),
         clean_word().prop_map(|w| format!("_{w}_")),
         clean_word().prop_map(|w| format!("~~{w}~~")),
-        clean_word().prop_map(|w| format!("`{w}`")),
+        code_span(),
         clean_word().prop_map(|w| format!("<u>{w}</u>")),
         (clean_word(), clean_word()).prop_map(|(t, u)| format!("[{t}](https://ex.com/{u})")),
         (clean_word(), special_url()).prop_map(|(t, u)| format!("[{t}](<{u}>)")),
@@ -381,6 +394,33 @@ proptest! {
         prop_assert!(anchor.is_some(), "anchor lost across surviving edit");
         let anchor = anchor.unwrap();
         prop_assert_eq!(&new_rt.text[anchor.start..anchor.end], a.as_str());
+    }
+
+    /// Property 3': an unknown mark has no markdown projection either, so the
+    /// fresh import cannot re-derive it and diff-import carries it forward
+    /// whole, tag and attrs intact.
+    #[test]
+    fn diff_import_preserves_surviving_unknown_mark(a in "[a-z]{3,8}", b in "[a-z]{3,8}") {
+        let base_md = format!("keep {a} here");
+        let mut base = from_markdown(&base_md).unwrap().into_content();
+        let start = 5;
+        let end = 5 + a.chars().count();
+        prop_assert_eq!(&base.text[start..end], a.as_str());
+        let kind = MarkKind::Unknown {
+            tag: "highlight".into(),
+            attrs: json!({ "color": "yellow" }),
+        };
+        base.marks.push(Mark::new(start, end, kind.clone()));
+        let base = base.into_normalized();
+
+        let new_md = format!("{b} keep {a} here");
+        let (new_rt, _delta) = diff_import(&base, &new_md).unwrap();
+        let mark = new_rt.marks.iter()
+            .find(|m| matches!(&m.kind, MarkKind::Unknown { tag, .. } if tag == "highlight"));
+        prop_assert!(mark.is_some(), "unknown mark lost across surviving edit");
+        let mark = mark.unwrap();
+        prop_assert_eq!(&new_rt.text[mark.start..mark.end], a.as_str());
+        prop_assert_eq!(&mark.kind, &kind);
     }
 
 }

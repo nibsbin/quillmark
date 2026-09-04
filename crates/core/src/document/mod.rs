@@ -96,6 +96,23 @@ impl Codec {
         }
     }
 
+    /// The shape-mismatch message for a value in neither accepted encoding,
+    /// naming the shape that arrived. Every surface that refuses an unshaped
+    /// richtext value spells this one sentence.
+    pub(crate) fn unshaped_message(self, value: &serde_json::Value) -> String {
+        format!(
+            "expected a {} content object or {}, got {}",
+            self.name(),
+            self.string_form(),
+            match value {
+                serde_json::Value::Bool(_) => "a boolean",
+                serde_json::Value::Number(_) => "a number",
+                serde_json::Value::Array(_) => "an array",
+                _ => "an unsupported value",
+            }
+        )
+    }
+
     /// [`decode_value`](Self::decode_value) closed over the shapes a stored field
     /// can hold: a null is the empty content (null ≡ absent), and anything
     /// neither object nor string is a decode failure.
@@ -106,11 +123,7 @@ impl Codec {
         match self.decode_value(value) {
             Some(result) => result,
             None if value.is_null() => Ok(Normalized::empty()),
-            None => Err(ContentDecodeError::NotContent(format!(
-                "expected a {} content object or {}",
-                self.name(),
-                self.string_form()
-            ))),
+            None => Err(ContentDecodeError::NotContent(self.unshaped_message(value))),
         }
     }
 
@@ -185,8 +198,8 @@ pub const FORMAT_RULES: &str = "Document format rules:
 \u{2022} The first block is the root and MUST contain `$quill: <name>@<version>`. Its `$kind` is `main` by position \u{2014} an explicit `$kind: main` is accepted but not required. Additional blocks declare composable cards via `$kind: <card_kind>`.
 \u{2022} Reserved `$`-keys: `$quill`, `$kind`, `$ext`, `$seed`. User fields use lowercase snake_case.
 \u{2022} Prose body is the text after a block's closing `~~~`, up to the next opener or EOF. To include a literal fenced code block in prose, use a backtick fence (```); any column-zero `~~~` block is parsed as card metadata.
-\u{2022} A field that already shows a concrete value carries a default and is shippable as-is \u{2014} keep the line, override the value, or delete it to fall back to the default. A blank or null value (`field:`, `field: null`, `field: ~`) is treated the same as omitting the field: it falls back to the default, or to the field's blank.
-\u{2022} `field: !must_fill <value>` marks a placeholder awaiting your input \u{2014} replace it with a real value and drop the `!must_fill` tag before shipping. A bare `field: !must_fill` is an empty placeholder. A leftover marker never blocks rendering, but it is reported as a warning until you replace it.
+\u{2022} A field that already shows a concrete value carries a default and is shippable as-is \u{2014} keep the line, override the value, or delete it to fall back to the default. A blank or null value (`field:`, `field: null`, `field: ~`) is treated the same as omitting the field: it falls back to the default, or to the field's blank. An explicit `field: \"\"` is different \u{2014} it is kept as-is, not folded into the blank/null fallback, so write it on purpose when you want the field empty rather than defaulted.
+\u{2022} `field: !must_fill <value>` marks a placeholder awaiting your input \u{2014} the `<value>` shown, when present, is the schema's own example, not real data; replace it with a real value and drop the `!must_fill` tag before shipping. A bare `field: !must_fill` is an empty placeholder. A leftover marker never blocks rendering, but it is reported as a warning until you replace it.
 \u{2022} Numbers and booleans MUST be unquoted (`year: 2025`, `pinned: true`); quoting turns them into strings and fails validation.
 \u{2022} Plain-scalar values cannot start with `*` or `&` (YAML alias/anchor markers) and cannot contain `: ` (colon-space). For markdown emphasis, embedded colons, or other special prefixes, quote the value: `field: '**bold**'` or `field: \"Name: subtitle\"`. Multi-line values use `|-`, not multi-line quoted scalars.";
 

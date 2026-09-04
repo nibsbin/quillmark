@@ -1,8 +1,8 @@
 use crate::commands::load_quill;
 use crate::errors::{CliError, Result};
-use crate::output::{derive_output_path, page_output_path, write_output};
+use crate::output::{derive_output_path, page_output_path, write_file, write_stdout};
 use clap::Parser;
-use quillmark::{Document, Quillmark};
+use quillmark::Quillmark;
 use quillmark_core::{OutputFormat, RenderOptions};
 use std::fs;
 use std::path::PathBuf;
@@ -45,13 +45,14 @@ pub struct RenderArgs {
 // Progress chatter goes to stderr: under `--stdout` the artifact owns stdout,
 // and a `--verbose` line there would land inside the emitted PDF.
 pub fn execute(args: RenderArgs) -> Result<()> {
-    if args.verbose {
+    let verbose = args.verbose && !args.quiet;
+    if verbose {
         eprintln!("Loading quill from: {}", args.quill.display());
     }
 
     let quill = load_quill(&args.quill)?;
 
-    if args.verbose {
+    if verbose {
         eprintln!("Quill loaded: {}", quill.name());
     }
 
@@ -64,14 +65,14 @@ pub fn execute(args: RenderArgs) -> Result<()> {
                 )));
             }
 
-            if args.verbose {
+            if verbose {
                 eprintln!("Reading markdown from: {}", markdown_path.display());
             }
 
             let markdown = fs::read_to_string(markdown_path)?;
-            let output = Document::parse(&markdown)?;
+            let output = quill.parse(&markdown)?;
 
-            if args.verbose {
+            if verbose {
                 eprintln!("Markdown parsed successfully");
             }
             (
@@ -81,13 +82,13 @@ pub fn execute(args: RenderArgs) -> Result<()> {
             )
         } else {
             // No input file: the seed renders without any caller-supplied values.
-            if args.verbose {
+            if verbose {
                 eprintln!("Using seeded document from quill");
             }
             (quill.seed_document(), Vec::new(), None)
         };
 
-    if args.verbose {
+    if verbose {
         eprintln!("Render-ready quill for backend: {}", quill.backend_id());
     }
 
@@ -96,7 +97,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         .parse::<OutputFormat>()
         .map_err(|e| CliError::InvalidArgument(e.to_string()))?;
 
-    if args.verbose {
+    if verbose {
         eprintln!("Rendering to format: {:?}", output_format);
     }
 
@@ -118,7 +119,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
                 e
             )))
         })?;
-        if args.verbose && !args.quiet {
+        if verbose {
             eprintln!("JSON data written to: {}", data_path.display());
         }
     }
@@ -148,32 +149,32 @@ pub fn execute(args: RenderArgs) -> Result<()> {
             return Err(CliError::InvalidArgument(format!(
                 "{} renders {} pages, one artifact each, and --stdout carries one; \
                  drop --stdout to write the pages as files",
-                args.format,
+                output_format,
                 result.artifacts.len()
             )));
         }
-        write_output(true, None, args.quiet, &result.artifacts[0].bytes)?;
+        write_stdout(&result.artifacts[0].bytes)?;
     } else {
         let output_path = args.output.unwrap_or_else(|| {
             if let Some(ref path) = markdown_path_for_output {
-                derive_output_path(path, &args.format)
+                derive_output_path(path, output_format.as_str())
             } else {
-                PathBuf::from(format!("example.{}", args.format))
+                PathBuf::from(format!("example.{}", output_format))
             }
         });
         if let [artifact] = result.artifacts.as_slice() {
-            write_output(false, Some(&output_path), args.quiet, &artifact.bytes)?;
+            write_file(&output_path, &artifact.bytes, !args.quiet)?;
         } else {
             // Every page numbered, page one included: an unnumbered file beside
             // numbered ones reads as the whole document.
             for (i, artifact) in result.artifacts.iter().enumerate() {
                 let path = page_output_path(&output_path, i + 1);
-                write_output(false, Some(&path), args.quiet, &artifact.bytes)?;
+                write_file(&path, &artifact.bytes, !args.quiet)?;
             }
         }
     }
 
-    if args.verbose && !args.quiet {
+    if verbose {
         eprintln!("Rendering completed successfully");
     }
 

@@ -276,8 +276,66 @@ fn rotated_page_rejected_cleanly() {
     assert_eq!(err.code, "pdf::rotated_page");
 }
 
+/// A one-page base whose page carries `/Rotate` as the indirect reference
+/// `5 0 R`, resolving to `90`, or no `/Rotate` at all.
+fn build_base_with_indirect_rotate(rotate: bool) -> Vec<u8> {
+    let mut pdf = Pdf::new();
+    let catalog_id = Ref::new(1);
+    let page_tree_id = Ref::new(2);
+    let page_id = Ref::new(3);
+    let content_id = Ref::new(4);
+    let rotate_id = Ref::new(5);
+    let rect = Rect::new(0.0, 0.0, 612.0, 792.0);
+    pdf.catalog(catalog_id).pages(page_tree_id);
+    {
+        let mut pages = pdf.pages(page_tree_id);
+        pages.kids([page_id]).count(1).media_box(rect);
+    }
+    {
+        let mut page = pdf.page(page_id);
+        page.parent(page_tree_id).media_box(rect).contents(content_id);
+        if rotate {
+            page.pair(Name(b"Rotate"), rotate_id);
+        }
+    }
+    let mut content = Content::new();
+    content.set_line_width(1.0);
+    content.rect(72.0, 700.0, 200.0, 20.0);
+    content.stroke();
+    pdf.stream(content_id, &content.finish());
+    pdf.indirect(rotate_id).primitive(90);
+    pdf.finish()
+}
+
 #[test]
-fn implausible_size_errors_cleanly_without_panic() {
+fn indirect_rotate_rejected_cleanly() {
+    let fields = vec![text_field(
+        "FullName",
+        "full_name",
+        0,
+        [180.0, 700.0, 520.0, 720.0],
+        "Ada",
+    )];
+    let err = stamp(
+        build_base_with_indirect_rotate(true),
+        &fields,
+        &StampOptions::default(),
+    )
+    .expect_err("an indirect /Rotate is not a resolvable rotation");
+    assert_eq!(err.code, "pdf::parse");
+    assert!(err.message.contains("/Rotate"), "{}", err.message);
+
+    stamp(
+        build_base_with_indirect_rotate(false),
+        &fields,
+        &StampOptions::default(),
+    )
+    .expect("the same base without the /Rotate stamps");
+}
+
+/// A one-page base whose trailer `/Size` reads `size`. The xref table precedes
+/// the trailer, so the length change leaves every stored offset intact.
+fn base_with_spliced_size(size: &str) -> Vec<u8> {
     let base = build_base_pdf(1);
     // Byte-level splice: the PDF binary-marker comment is not valid UTF-8.
     let needle = b"/Size 5";
@@ -286,14 +344,39 @@ fn implausible_size_errors_cleanly_without_panic() {
         .position(|w| w == needle)
         .expect("trailer /Size");
     let mut tampered = base[..at].to_vec();
-    tampered.extend_from_slice(b"/Size 4294967295");
+    tampered.extend_from_slice(format!("/Size {size}").as_bytes());
     tampered.extend_from_slice(&base[at + needle.len()..]);
+    tampered
+}
+
+#[test]
+fn implausible_size_errors_cleanly_without_panic() {
     let err = stamp(
-        tampered,
+        base_with_spliced_size("4294967295"),
         &[],
         &StampOptions::default().with_producer("Quillmark test".into()),
     )
     .expect_err("near-u32::MAX /Size should error");
+    assert!(err.message.contains("id space"), "{}", err.message);
+}
+
+#[test]
+fn size_past_i32_max_errors_cleanly_without_panic() {
+    // Ids seeded from here fit a `u32` but not the `i32` a reference holds.
+    let fields = vec![text_field(
+        "FullName",
+        "full_name",
+        0,
+        [180.0, 700.0, 520.0, 720.0],
+        "Ada",
+    )];
+    let err = stamp(
+        base_with_spliced_size("2147483648"),
+        &fields,
+        &StampOptions::default(),
+    )
+    .expect_err("/Size past i32::MAX should error");
+    assert_eq!(err.code, "pdf::write");
     assert!(err.message.contains("id space"), "{}", err.message);
 }
 

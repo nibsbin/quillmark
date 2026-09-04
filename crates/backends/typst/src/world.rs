@@ -143,18 +143,22 @@ impl QuillWorld {
         Ok((world, windows))
     }
 
-    /// A [`FileId`] for `rel` inside the virtual `@local/quillmark-helper`
-    /// package (e.g. `lib.typ`).
-    pub(crate) fn helper_fid(rel: &str) -> FileId {
-        let spec = PackageSpec {
+    /// The spec of the virtual `@local/quillmark-helper` package.
+    fn helper_spec() -> PackageSpec {
+        PackageSpec {
             namespace: helper::HELPER_NAMESPACE.into(),
             name: helper::HELPER_NAME.into(),
             version: helper::HELPER_VERSION
                 .parse()
                 .expect("Invalid helper version"),
-        };
+        }
+    }
+
+    /// A [`FileId`] for `rel` inside the virtual `@local/quillmark-helper`
+    /// package (e.g. `lib.typ`).
+    pub(crate) fn helper_fid(rel: &str) -> FileId {
         file_id(
-            Some(spec),
+            Some(Self::helper_spec()),
             VirtualPath::new(rel).expect("valid helper vpath"),
         )
     }
@@ -228,7 +232,11 @@ impl QuillWorld {
         Ok(font_data)
     }
 
-    /// Loads assets from quill's in-memory file system.
+    /// Loads assets from quill's in-memory file system. Each asset lands under
+    /// its project path *and* under the same path inside the helper package:
+    /// Typst resolves an `image` path against the root of the file holding the
+    /// call and never leaves it, and a content block's `#image(..)` is emitted
+    /// into the helper's `lib.typ`. One `Bytes` backs both ids.
     fn load_assets_from_quill(
         source: &Quill,
         binaries: &mut HashMap<FileId, Bytes>,
@@ -245,8 +253,12 @@ impl QuillWorld {
                         continue;
                     }
                 };
-                let id = file_id(None, virtual_path);
-                binaries.insert(id, Bytes::new(contents.to_vec()));
+                let bytes = Bytes::new(contents.to_vec());
+                binaries.insert(
+                    file_id(Some(Self::helper_spec()), virtual_path.clone()),
+                    bytes.clone(),
+                );
+                binaries.insert(file_id(None, virtual_path), bytes);
             }
         }
 

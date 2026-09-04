@@ -6,7 +6,10 @@
 //! and shown with a `WinAnsiEncoding` Helvetica, clipped to its field box. The
 //! stream is appended last to the page `/Contents` and positions text with
 //! absolute `Td`, so it assumes the identity CTM of page default user space —
-//! true of any background with balanced `q`/`Q` and no dangling `cm`. Backs the
+//! true of any background with balanced `q`/`Q` and no dangling `cm`. Colour and
+//! text state carry no such guarantee — a `/Contents` array is one stream, and
+//! neither `BT` nor an unpaired `0.9 g` or `3 Tr` is undone — so each drawn
+//! value opens by asserting the defaults the stamped `/DA` writes. Backs the
 //! SVG/PNG raster outputs only; the AcroForm PDF deliverable is stamped.
 
 use quillmark_pdf::{
@@ -24,6 +27,8 @@ use crate::typography;
 
 const CODE_PARSE: &str = "pdf::flatten_parse";
 const CODE_BAD_RECT: &str = "pdf::bad_rect";
+
+const STATE_RESET: &[u8] = b"0 g 0 Tr 0 Tc 0 Tw 100 Tz 0 Ts\n";
 
 /// Flatten `fields` onto `base` by drawing values as content stream operators.
 /// Backs raster output only, so it stamps no `/Info /Producer`.
@@ -213,6 +218,7 @@ fn write_text_block(
     let line_h = size * typography::LINE_SPACING;
     let [cx0, cy0, cx1, cy1] = clip;
     out.extend_from_slice(b"q\n");
+    out.extend_from_slice(STATE_RESET);
     // `x y w h re W n`
     push_f32(out, cx0);
     out.push(b' ');
@@ -245,7 +251,9 @@ fn write_text_block(
 /// Draw ZapfDingbats glyph 0x34 (`'4'`), the filled check mark — the same glyph
 /// the AcroForm stamp path declares via `/MK /CA (4)`.
 fn write_check_char(out: &mut Vec<u8>, font: &str, x: f32, y: f32, size: f32) {
-    out.extend_from_slice(format!("q\nBT\n/{font} ").as_bytes());
+    out.extend_from_slice(b"q\n");
+    out.extend_from_slice(STATE_RESET);
+    out.extend_from_slice(format!("BT\n/{font} ").as_bytes());
     push_f32(out, size);
     out.extend_from_slice(b" Tf\n");
     push_f32(out, x);
@@ -491,8 +499,12 @@ mod tests {
         flatten(BASE.to_vec(), fields).expect("flatten succeeds")
     }
 
+    fn window_pos(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+        haystack.windows(needle.len()).position(|w| w == needle)
+    }
+
     fn contains_window(haystack: &[u8], needle: &[u8]) -> bool {
-        haystack.windows(needle.len()).any(|w| w == needle)
+        window_pos(haystack, needle).is_some()
     }
 
     fn default_names() -> FontNames {
@@ -728,6 +740,25 @@ mod tests {
             text.contains(" re W n"),
             "text must clip to the field box (re W n)"
         );
+    }
+
+    #[test]
+    fn every_drawn_value_asserts_the_default_colour_and_text_state() {
+        for spec in [
+            text_field("FullName", "Ada Lovelace"),
+            checkbox_field("Agree", true),
+        ] {
+            let stream = build_content_stream(&[&spec], &default_names());
+            let reset = window_pos(&stream, b"0 g 0 Tr 0 Tc 0 Tw 100 Tz 0 Ts")
+                .unwrap_or_else(|| panic!("`{}` draws no state reset", spec.name));
+            let shown = window_pos(&stream, b") Tj").expect("the value is shown");
+            assert!(
+                reset < shown,
+                "`{}` must reset before it shows, or a background's `0.9 g` or \
+                 `3 Tr` paints the value invisible",
+                spec.name
+            );
+        }
     }
 
     #[test]

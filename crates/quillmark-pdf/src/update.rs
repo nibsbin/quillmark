@@ -52,8 +52,8 @@ impl PdfUpdate {
         let info_ref = find_dict_value(trailer, "Info").and_then(parse_indirect_ref);
 
         // One counter seeded at `/Size`, so created ids never collide with the
-        // base's. `alloc_id` checks it: a malformed near-`u32::MAX` `/Size` errors
-        // instead of wrapping into a colliding id.
+        // base's. `alloc_id` bounds it: a malformed large `/Size` errors instead
+        // of handing out an id that collides or that no reference admits.
         let mut next_id = size;
         let mut objects: Vec<UpdatedObject> = Vec::new();
         let mut extra_info_ref = None;

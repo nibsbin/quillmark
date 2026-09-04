@@ -63,6 +63,72 @@ fn test_missing_block_with_bare_yaml_calls_out_missing_fence() {
 }
 
 #[test]
+fn test_unclosed_root_fence_names_the_missing_closer_not_the_missing_block() {
+    let markdown =
+        "~~~\n$quill: usaf_memo@0.3.0\n$kind: main\nsubject: Memo\nfont_size: 12\n\nThe body.\n";
+    let err = decompose(markdown).unwrap_err();
+    let msg = err.to_string();
+    assert_eq!(
+        err.to_diagnostic().code.as_deref(),
+        Some("parse::missing_quill")
+    );
+    assert!(
+        msg.contains("Root card-yaml block opened at line 1 is never closed"),
+        "got: {msg}"
+    );
+    assert!(
+        msg.contains("after the last field (`font_size`)"),
+        "got: {msg}"
+    );
+    assert!(
+        !msg.contains("The document must open with"),
+        "the generic advice restates what the author already wrote: {msg}"
+    );
+}
+
+#[test]
+fn test_two_tilde_closer_is_named_as_the_failed_closer() {
+    let markdown = "~~~\n$quill: usaf_memo@0.3.0\n$kind: main\ntitle: Memo\n~~\n\nThe body.\n";
+    let msg = decompose(markdown).unwrap_err().to_string();
+    assert!(
+        msg.contains("Root card-yaml block opened at line 1 is never closed"),
+        "got: {msg}"
+    );
+    assert!(
+        msg.contains("The line `~~` at line 5 does not close it"),
+        "got: {msg}"
+    );
+}
+
+#[test]
+fn test_indented_closer_is_named_as_the_failed_closer() {
+    let markdown = "~~~\n$quill: usaf_memo@0.3.0\n$kind: main\ntitle: Memo\n  ~~~\n\nBody.\n";
+    let msg = decompose(markdown).unwrap_err().to_string();
+    assert!(
+        msg.contains("The line `~~~` at line 5 does not close it"),
+        "got: {msg}"
+    );
+}
+
+#[test]
+fn test_unclosed_root_fence_without_quill_keeps_the_generic_message() {
+    let markdown = "~~~\ntitle: Memo\n\nThe body.\n";
+    let msg = decompose(markdown).unwrap_err().to_string();
+    assert!(msg.contains("Missing required root"), "got: {msg}");
+}
+
+#[test]
+fn test_root_opener_with_foreign_info_string_names_the_info_string() {
+    let markdown = "~~~metadata\n$quill: usaf_memo@0.3.0\n$kind: main\n~~~\n\nBody.\n";
+    let msg = decompose(markdown).unwrap_err().to_string();
+    assert!(
+        msg.contains("opener at line 1 is `~~~metadata`"),
+        "got: {msg}"
+    );
+    assert!(msg.contains("drop `metadata`"), "got: {msg}");
+}
+
+#[test]
 fn test_dash_root_block_parses_equivalent_to_card_yaml() {
     let dash_md = "---\n$quill: test_quill\n$kind: main\ntitle: Test\n---\n\nBody.";
     let canonical_md = "~~~card-yaml\n$quill: test_quill\n$kind: main\ntitle: Test\n~~~\n\nBody.";
@@ -135,7 +201,10 @@ fn test_tilde_opener_with_dash_closer_falls_through() {
     let markdown = "~~~card-yaml\n$quill: test_quill\n$kind: main\ntitle: T\n---\n\nBody.";
     let err = decompose(markdown).unwrap_err();
     let msg = err.to_string();
-    assert!(msg.contains("Missing required root"), "got: {msg}");
+    assert!(
+        msg.contains("opened at line 1 is never closed"),
+        "got: {msg}"
+    );
 }
 
 #[test]
@@ -238,12 +307,12 @@ author: Test Author
 
 Content without closing fence";
 
-    let result = decompose(markdown);
-    assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("Missing required root"));
+    let msg = decompose(markdown).unwrap_err().to_string();
+    assert!(
+        msg.contains("Root card-yaml block opened at line 1 is never closed"),
+        "got: {msg}"
+    );
+    assert!(msg.contains("after the last field (`author`)"), "got: {msg}");
 }
 
 #[test]
@@ -1629,4 +1698,76 @@ fn a_user_field_named_id_is_untouched() {
         doc.cards()[0].payload().get("id").map(|v| v.as_json().clone()),
         Some(serde_json::json!("a"))
     );
+}
+
+/// The 1-indexed document line carrying `needle`.
+fn line_of(markdown: &str, needle: &str) -> u32 {
+    markdown
+        .lines()
+        .position(|l| l.contains(needle))
+        .map(|i| i as u32 + 1)
+        .unwrap_or_else(|| panic!("`{needle}` is not in the fixture"))
+}
+
+#[test]
+fn test_yaml_error_location_is_document_absolute() {
+    let markdown = "# Heading\n\nIntro prose.\n\n~~~\n$quill: usaf_memo\n$kind: main\ntitle: Briefing\n\n\nunit: 88th Communications Squadron: Wright-Patterson AFB\n~~~\n\nBody\n";
+    let diag = decompose(markdown).unwrap_err().to_diagnostic();
+
+    assert_eq!(
+        diag.code.as_deref(),
+        Some("parse::yaml_error_with_location")
+    );
+    let loc = diag.location.expect("the diagnostic carries a location");
+    assert_eq!(loc.file, "input.md");
+    assert_eq!(loc.line, line_of(markdown, "88th Communications"));
+    assert_eq!(loc.column, 35);
+}
+
+#[test]
+fn test_yaml_error_message_carries_one_line_number_system() {
+    let markdown = "~~~\n$quill: usaf_memo\n$kind: main\nunit: a: b\n~~~\n\nBody\n";
+    let diag = decompose(markdown).unwrap_err().to_diagnostic();
+
+    assert!(
+        diag.message.starts_with("YAML error in the root card-yaml block: "),
+        "the message names the block rather than a second line number: {}",
+        diag.message
+    );
+    assert!(
+        !diag.message.contains("(block 0)"),
+        "stale block suffix: {}",
+        diag.message
+    );
+    assert_eq!(
+        diag.args.keys().collect::<Vec<_>>(),
+        vec!["blockIndex"],
+        "the coordinates ride on `location`, not `args`"
+    );
+}
+
+#[test]
+fn test_yaml_error_location_survives_trimmed_leading_blanks() {
+    let markdown = "~~~\n\n# leading comment\n\n$quill: usaf_memo\n$kind: main\ntitle: Briefing\n\nunit: 88th Communications Squadron: Wright-Patterson AFB\n~~~\n\nBody\n";
+    let diag = decompose(markdown).unwrap_err().to_diagnostic();
+
+    let loc = diag.location.expect("the diagnostic carries a location");
+    assert_eq!(loc.line, line_of(markdown, "88th Communications"));
+    assert_eq!(loc.column, 35);
+}
+
+#[test]
+fn test_yaml_error_in_composable_card_names_the_block() {
+    let markdown = "~~~\n$quill: usaf_memo\n$kind: main\n~~~\n\nBody\n\n~~~\n$kind: note\n# a comment\nunit: a: b\n~~~\n";
+    let diag = decompose(markdown).unwrap_err().to_diagnostic();
+
+    assert!(
+        diag.message
+            .starts_with("YAML error in card-yaml block 1: "),
+        "got: {}",
+        diag.message
+    );
+    assert_eq!(diag.args["blockIndex"], serde_json::json!(1));
+    let loc = diag.location.expect("the diagnostic carries a location");
+    assert_eq!(loc.line, line_of(markdown, "unit: a: b"));
 }

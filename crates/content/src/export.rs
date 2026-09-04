@@ -534,9 +534,12 @@ fn render_inline(ctx: &Ctx, i: usize, escape_leading_block: bool) -> String {
                     .filter(|&&c| c == ISLAND_SLOT)
                     .count();
             ctx.rt.islands.get(before).map(|isl| {
-                let mut tmp = String::new();
-                emit_island(isl, &mut tmp);
-                tmp
+                let mut markup = String::new();
+                emit_island(isl, &mut markup);
+                SlotMarkup {
+                    markup,
+                    projects: KnownIslandType::parse(&isl.island_type).is_some(),
+                }
             })
         },
     )
@@ -579,6 +582,14 @@ fn bucket_marks(
     (code_ranges, fmt, links)
 }
 
+/// One island slot's markdown, and whether re-importing that markdown yields a
+/// slot back. A type with no markdown projection renders as a placeholder
+/// comment, which re-imports as no content text.
+struct SlotMarkup {
+    markup: String,
+    projects: bool,
+}
+
 /// Render marks over a standalone char slice to markdown: the projection's mark
 /// boundary sweep, shared by prose lines and table cells. `code_ranges`/`fmt`/
 /// `links` are the marks clipped to `chars` (local offsets); `escape_pipe` adds
@@ -607,7 +618,7 @@ fn render_marked_core(
     escape_punct_at: Option<usize>,
     escape_leading_block: bool,
     escape_pipe: bool,
-    island_markup_at: impl Fn(usize) -> Option<String>,
+    island_markup_at: impl Fn(usize) -> Option<SlotMarkup>,
 ) -> String {
     let n = chars.len();
 
@@ -708,8 +719,8 @@ fn render_marked_core(
                 out.push('[');
                 for (i, &c) in chars[ls..le].iter().enumerate() {
                     if c == ISLAND_SLOT {
-                        if let Some(markup) = island_markup_at(ls + i) {
-                            out.push_str(&markup);
+                        if let Some(slot) = island_markup_at(ls + i) {
+                            out.push_str(&slot.markup);
                         }
                     } else {
                         escape_char_into(c, i == 0, escape_pipe, &mut out);
@@ -729,8 +740,22 @@ fn render_marked_core(
                 let content: String = chars[cs..ce].iter().collect();
                 let ticks = longest_backtick_run(&content) + 1;
                 let fence = "`".repeat(ticks.max(1));
+                // CommonMark folds an edge backtick into the fence and strips
+                // one space off each side of a span that begins and ends with
+                // one, unless it is all spaces; the pad defeats both.
+                let pad = content.starts_with('`')
+                    || content.ends_with('`')
+                    || (content.starts_with(' ')
+                        && content.ends_with(' ')
+                        && content.chars().any(|c| c != ' '));
                 out.push_str(&fence);
+                if pad {
+                    out.push(' ');
+                }
                 out.push_str(&content);
+                if pad {
+                    out.push(' ');
+                }
                 out.push_str(&fence);
                 pos = ce;
                 continue;
@@ -738,8 +763,8 @@ fn render_marked_core(
             if pos < n {
                 let c = chars[pos];
                 if c == ISLAND_SLOT {
-                    if let Some(markup) = island_markup_at(pos) {
-                        out.push_str(&markup);
+                    if let Some(slot) = island_markup_at(pos) {
+                        out.push_str(&slot.markup);
                     }
                 } else if Some(pos) == escape_punct_at {
                     out.push('\\');
@@ -779,7 +804,16 @@ fn render_marked_core(
     // A punctuation sentinel blocks every leading-block construct, preserves edge
     // whitespace, and is flanking-equivalent to the line start/end it replaces,
     // so it never masks or invents a leak.
-    let expected: String = chars.iter().collect();
+    //
+    // A slot whose island has no markdown projection re-imports as nothing, so
+    // the expected text drops it; every other slot stays, so the probe still
+    // catches a leak that eats an island's markup.
+    let expected: String = chars
+        .iter()
+        .enumerate()
+        .filter(|&(i, &c)| c != ISLAND_SLOT || island_markup_at(i).is_some_and(|s| s.projects))
+        .map(|(_, c)| c)
+        .collect();
     let want = format!(",{expected},");
     let text_safe = |md: &str| {
         crate::import::from_markdown(&format!(",{md},"))
@@ -1604,6 +1638,61 @@ mod tests {
         assert_eq!(back.lines.len(), 1);
     }
 
+    /// The placeholder re-imports as no content text, so the net's expected text
+    /// carries no slot for it. Reading one back there would fail every probe and
+    /// cost the line every mark markdown can carry.
+    #[test]
+    fn a_mark_flanking_an_unknown_island_placeholder_survives() {
+        let rt = Content {
+            text: format!("x{ISLAND_SLOT} bold"),
+            lines: vec![Line::new(LineKind::Para)],
+            marks: vec![Mark::new(3, 7, MarkKind::Strong)],
+            islands: vec![Island::new("isl-0".into(), "widget".into())],
+        }
+        .into_normalized();
+        assert_eq!(rt.validate(), Ok(()), "hand-built content invalid");
+        let md = to_markdown(&rt);
+        assert_eq!(md, "x<!-- island:widget --> **bold**");
+        let back = from_markdown(&md).unwrap();
+        assert_eq!(back.text, "x bold");
+        assert_eq!(back.marks, vec![Mark::new(2, 6, MarkKind::Strong)]);
+    }
+
+    /// An image's markup does re-import as a slot, so the net still expects one
+    /// back and a mark that would eat it is dropped. Here both `**` sit against
+    /// the image's punctuation, where CommonMark flanking refuses them.
+    #[test]
+    fn a_mark_leaking_around_an_image_slot_is_still_dropped() {
+        let image = || {
+            Island::new("isl-0".into(), "image".into())
+                .with_props(serde_json::json!({"alt": "a", "url": "u"}))
+        };
+        let over_slot = Content {
+            text: format!("a{ISLAND_SLOT}b"),
+            lines: vec![Line::new(LineKind::Para)],
+            marks: vec![Mark::new(1, 2, MarkKind::Strong)],
+            islands: vec![image()],
+        }
+        .into_normalized();
+        let md = to_markdown(&over_slot);
+        assert_eq!(md, "a![a](u)b");
+        let back = from_markdown(&md).unwrap();
+        assert_eq!(back.text, over_slot.text);
+        assert_eq!(back.islands.len(), 1);
+        assert!(back.marks.is_empty(), "leaking mark kept: {md:?}");
+        // A mark on the same line whose delimiters do flank rides through.
+        let before_slot = Content {
+            text: format!("a{ISLAND_SLOT}b"),
+            lines: vec![Line::new(LineKind::Para)],
+            marks: vec![Mark::new(0, 1, MarkKind::Strong)],
+            islands: vec![image()],
+        }
+        .into_normalized();
+        let md = to_markdown(&before_slot);
+        assert_eq!(md, "**a**![a](u)b");
+        assert_eq!(from_markdown(&md).unwrap(), before_slot);
+    }
+
     /// An image `alt` is the one place the character reference cannot carry an
     /// edge run: the parser decodes it, then trims alt.
     #[test]
@@ -1745,6 +1834,28 @@ mod tests {
         assert_eq!(md, "**ab**`cdef`");
         let rt2 = from_markdown(&md).unwrap();
         assert_eq!(rt2.text, "abcdef");
+    }
+
+    /// CommonMark reads a code span's edge backtick as part of the fence run and
+    /// strips one space off each side of a span that begins *and* ends with one,
+    /// so both shapes need the pad the parser then removes. A span of nothing but
+    /// spaces is exempt from the strip, so a pad there would grow it.
+    #[test]
+    fn code_span_edges_keep_their_pad() {
+        for (md, text, want) in [
+            ("`` `a ``", "`a", "`` `a ``"),
+            ("`` a` ``", "a`", "`` a` ``"),
+            ("`` `a` ``", "`a`", "`` `a` ``"),
+            ("`` ` ``", "`", "`` ` ``"),
+            ("`  a  `", " a ", "`  a  `"),
+            ("`a`", "a", "`a`"),
+            ("`  `", "  ", "`  `"),
+        ] {
+            let rt = from_markdown(md).unwrap();
+            assert_eq!(rt.text, text, "import of {md:?}");
+            assert_eq!(to_markdown(&rt), want);
+            round_trips(md);
+        }
     }
 
     /// Entity-shaped text must not re-import as the decoded entity: exporting

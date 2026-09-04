@@ -112,6 +112,20 @@ my-quill/
 
 Then reference them by family name (`#set text(font: "CustomFont")`).
 
+## Images
+
+Files under `assets/` are reachable by their path from the Quill root, from the plate and from a `richtext` field alike:
+
+```typst
+#image("assets/logo.svg", width: 2cm)
+```
+
+```markdown
+![logo](assets/logo.svg)
+```
+
+A leading slash (`/assets/logo.svg`) names the same file.
+
 ## Typesetting
 
 Plate authors style output with Typst's standard `#set` directives:

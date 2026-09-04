@@ -302,30 +302,15 @@ impl TryFrom<CardWire> for Card {
 }
 
 /// Read a [`CardWire::body`] into a [`Content`] content. The body is the source
-/// of truth in two accepted encodings: a **content object** (an editor / a
-/// re-serialized card) is deserialized and validated; a **markdown string** (an
-/// LLM / markdown writer) is imported. `null`/absent is the empty content; any
-/// other shape is an invalid `$body`.
+/// of truth and reads through the richtext codec whatever the schema declares,
+/// so its accepted encodings are [`super::Codec::decode_field`]'s.
 fn body_from_wire(body: &JsonValue) -> Result<Normalized, WireError> {
-    let invalid = |reason: String| WireError::InvalidField {
-        key: "$body".to_string(),
-        reason,
-    };
-    match super::Codec::Richtext.decode_value(body) {
-        Some(result) => result.map_err(|e| invalid(e.into_message())),
-        None => match body {
-            JsonValue::Null => Ok(Normalized::empty()),
-            other => Err(invalid(format!(
-                "expected a richtext content object or a markdown string, got {}",
-                match other {
-                    JsonValue::Bool(_) => "a boolean",
-                    JsonValue::Number(_) => "a number",
-                    JsonValue::Array(_) => "an array",
-                    _ => "an unsupported value",
-                }
-            ))),
-        },
-    }
+    super::Codec::Richtext
+        .decode_field(body)
+        .map_err(|e| WireError::InvalidField {
+            key: "$body".to_string(),
+            reason: e.into_message(),
+        })
 }
 
 /// Validate a wire field against the payload invariant (see
@@ -345,22 +330,9 @@ fn validate_wire_fill_targets(
 }
 
 fn wire_field_error(key: &str, v: super::edit::FieldViolation) -> WireError {
-    use super::edit::FieldViolation;
     WireError::InvalidField {
         key: key.to_string(),
-        reason: match v {
-            FieldViolation::InvalidName => {
-                "field names must match [A-Za-z_][A-Za-z0-9_]*".to_string()
-            }
-            FieldViolation::TooDeep => format!(
-                "nests deeper than the maximum of {} levels",
-                crate::document::limits::MAX_YAML_DEPTH
-            ),
-            FieldViolation::FillOnMapping => {
-                "`!must_fill` targets a mapping; it is supported on scalars and sequences only"
-                    .to_string()
-            }
-        },
+        reason: v.to_string(),
     }
 }
 
@@ -543,6 +515,39 @@ mod tests {
         })
         .unwrap_err();
         assert!(matches!(err, WireError::InvalidQuillReference { .. }));
+    }
+
+    /// `$body` reads through the richtext codec: a null is the empty content, a
+    /// markdown string imports, and any other shape is refused under the codec's
+    /// own sentence, naming the shape that arrived.
+    #[test]
+    fn card_wire_body_reads_through_the_richtext_codec() {
+        let with_body = |body: JsonValue| Card::try_from(CardWire::new("note".to_string(), body));
+
+        assert_eq!(
+            with_body(JsonValue::Null).unwrap().body(),
+            &quillmark_content::Normalized::empty()
+        );
+        assert_eq!(
+            Codec::Richtext.project(with_body(json!("hi *there*")).unwrap().body()),
+            "hi *there*"
+        );
+
+        let err = with_body(json!(true)).unwrap_err();
+        assert!(
+            matches!(&err, WireError::InvalidField { key, reason }
+                if key == "$body"
+                    && reason
+                        == "expected a richtext content object or a markdown string, got a boolean"),
+            "got {err:?}"
+        );
+        for (body, tail) in [(json!(3), "a number"), (json!([]), "an array")] {
+            let err = with_body(body).unwrap_err();
+            assert!(
+                matches!(&err, WireError::InvalidField { reason, .. } if reason.ends_with(tail)),
+                "got {err:?}"
+            );
+        }
     }
 
     /// Construction accepts a kind the mutators reject: `make_card` is

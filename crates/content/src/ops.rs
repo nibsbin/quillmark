@@ -9,6 +9,7 @@ use crate::model::{
 };
 use crate::normalize::admit_char;
 use crate::usv::char_to_byte;
+use serde::Deserialize;
 use std::borrow::Cow;
 
 /// A mark edit in final-text coordinates (post-delta, post-line-op).
@@ -58,7 +59,8 @@ pub enum LineOp {
     /// break, a code fence's interior line) rather than starting a new block.
     /// Split, join and text-delta `\n` insertion all mint `continues: false`
     /// lines, so this is the only op that reaches the flag. Setting it on line 0
-    /// is [`ApplyError::FirstLineContinues`].
+    /// is [`ApplyError::FirstLineContinues`]; setting it after a block that
+    /// renders one line is [`ApplyError::ContinuesSingleLineBlock`].
     SetContinues { line: usize, continues: bool },
 }
 
@@ -277,9 +279,9 @@ pub fn change_bundle_from_value(v: &Value) -> Result<ChangeBundle, String> {
         .as_object()
         .ok_or("bundle must be an object { delta?, islandOps?, lineOps?, markOps? }")?;
     let get = |snake: &str, camel: &str| obj.get(snake).or_else(|| obj.get(camel));
-    let delta = match get("delta", "delta") {
+    let delta = match obj.get("delta") {
         Some(Value::Null) | None => Delta { ops: Vec::new() },
-        Some(d) => serde_json::from_value(d.clone()).map_err(|e| format!("invalid delta: {e}"))?,
+        Some(d) => Delta::deserialize(d).map_err(|e| format!("invalid delta: {e}"))?,
     };
     Ok(ChangeBundle {
         delta,
@@ -298,12 +300,9 @@ fn op_array<T>(
     convert: impl Fn(&Value) -> Result<T, ParseError>,
     what: &str,
 ) -> Result<Vec<T>, String> {
-    let Some(value) = value else {
+    let Some(value) = value.filter(|v| !v.is_null()) else {
         return Ok(Vec::new());
     };
-    if value.is_null() {
-        return Ok(Vec::new());
-    }
     let arr = value
         .as_array()
         .ok_or_else(|| format!("{what} must be an array"))?;
@@ -345,6 +344,11 @@ pub enum ApplyError {
     /// its container path differs from the previous line's, and a within-block
     /// break lives inside one container.
     ContinuesAcrossContainers { line: usize },
+    /// [`LineOp::SetContinues`] would make a line continue a block that renders
+    /// one line ([`LineKind::takes_continuations`]): a heading, an island or a
+    /// rule. Export reads the block's first line alone, so the write would
+    /// silently drop the continuation's text.
+    ContinuesSingleLineBlock { line: usize },
     /// The text delta's expected base length disagreed with the content:
     /// it was built against a different revision.
     DeltaBaseMismatch {
@@ -658,9 +662,9 @@ impl Content {
                     line.kind = kind.clone();
                 }
                 LineOp::SetContainers { line, containers } => {
-                    // Both emitters recurse one frame per container, so an
-                    // over-deep path is a stack overflow at render, not a render
-                    // error. Same cap as import.
+                    // The Typst emitter recurses one frame per container, so a
+                    // path past this cap is a render refusal rather than markup.
+                    // Same cap as import.
                     if containers.len() > crate::MAX_NESTING_DEPTH {
                         return Err(ApplyError::NestingTooDeep {
                             line: *line,
@@ -687,6 +691,18 @@ impl Content {
                             .is_some_and(|(l, prev)| l.containers != prev.containers)
                     {
                         return Err(ApplyError::ContinuesAcrossContainers { line: *line });
+                    }
+                    // The kind side of the same refusal: a heading, an island
+                    // and a rule are one line, so nothing after one is inside
+                    // the block it claims to continue.
+                    if *continues
+                        && self
+                            .lines
+                            .get(*line)
+                            .and(self.lines.get(line.wrapping_sub(1)))
+                            .is_some_and(|prev| !prev.kind.takes_continuations())
+                    {
+                        return Err(ApplyError::ContinuesSingleLineBlock { line: *line });
                     }
                     let l = self.line_mut(*line)?;
                     l.continues = *continues;
@@ -1398,6 +1414,22 @@ mod tests {
     }
 
     #[test]
+    fn apply_field_change_rejects_a_bundle_whose_retains_overflow() {
+        // The whole host lane: JSON bundle through the store, not a Delta
+        // built in Rust.
+        let bundle = change_bundle_from_value(&serde_json::json!({
+            "delta": { "ops": [{ "retain": usize::MAX }, { "retain": 2 }] }
+        }))
+        .unwrap();
+        let mut rt = from_markdown("hi").unwrap();
+        assert!(matches!(
+            rt.apply_field_change(&bundle),
+            Err(ApplyError::DeltaBaseMismatch { .. })
+        ));
+        assert_eq!(rt.text, "hi");
+    }
+
+    #[test]
     fn apply_mark_ops_remove_punches_hole() {
         let mut rt = from_markdown("abcdef").unwrap();
         rt.apply_mark_ops(&[MarkOp::Add {
@@ -1583,6 +1615,44 @@ mod tests {
             Ok(())
         );
         assert!(rt.lines[1].continues);
+    }
+
+    /// A heading, an island and a rule are one line in both projections, so a
+    /// line continuing one is text neither emitter reaches. Refused on the
+    /// deliberate channel, exactly as the container crossing is.
+    #[test]
+    fn set_continues_after_a_single_line_block_is_refused() {
+        for markdown in ["# a\n\nb", "| h |\n| --- |\n| c |\n\nb", "***\n\nb"] {
+            let mut rt = from_markdown(markdown).unwrap();
+            let line = rt.lines.len() - 1;
+            assert_eq!(
+                rt.apply_line_ops(&[LineOp::SetContinues {
+                    line,
+                    continues: true
+                }]),
+                Err(ApplyError::ContinuesSingleLineBlock { line }),
+                "{markdown}"
+            );
+            assert!(!rt.lines[line].continues);
+            assert_eq!(crate::export::to_markdown(&rt), markdown, "{markdown}");
+        }
+
+        // `SetKind` reaches the shape from the other side, by retagging the
+        // block a continuation already follows. That retag is accepted and the
+        // terminal `normalize` clears the flag, so the continuation lands as
+        // the paragraph it is rather than vanishing.
+        let mut rt = from_markdown("a\\\nb").unwrap();
+        assert!(rt.lines[1].continues, "a hard break is a continuation");
+        assert_eq!(
+            rt.apply_line_ops(&[LineOp::SetKind {
+                line: 0,
+                kind: LineKind::Heading { level: 1 },
+            }]),
+            Ok(())
+        );
+        assert!(!rt.lines[1].continues);
+        assert_eq!(rt.validate(), Ok(()));
+        assert_eq!(crate::export::to_markdown(&rt), "# a\n\nb");
     }
 
     /// A `Join` merging two lines of differing paths leaves the line after the

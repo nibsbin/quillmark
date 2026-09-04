@@ -3,7 +3,7 @@
 //! values land in `/V`; appearance synthesis is the viewer's job.
 
 use lopdf::Document as PdfDoc;
-use quillmark::{Document, OutputFormat, Quillmark, RenderOptions};
+use quillmark::{Document, FileTreeNode, OutputFormat, Quill, Quillmark, RenderOptions};
 
 const FILLED: &str = "~~~\n\
 $quill: sample_form\n\
@@ -239,5 +239,57 @@ fn apply_rebinds_values_and_reports_dirty_pages() {
     assert_eq!(
         decode_pdf_text(name.get(b"V").unwrap().as_str().unwrap()),
         "Grace Hopper"
+    );
+}
+
+/// The fixture's schema with two bound widgets stacked on one rect, so every
+/// point inside it sits the same distance from both.
+const STACKED_FORM_JSON: &str = r#"{
+  "schema": "quillmark/form@0.2.0",
+  "fields": [
+    {
+      "name": "Under",
+      "schema_field": "full_name",
+      "page": 0,
+      "rect": { "x": 180, "y": 100, "w": 340, "h": 20 }
+    },
+    {
+      "name": "Over",
+      "schema_field": "comments",
+      "page": 0,
+      "rect": { "x": 180, "y": 100, "w": 340, "h": 20 }
+    }
+  ]
+}"#;
+
+#[test]
+fn field_at_tie_takes_the_later_stamped_widget() {
+    let mut tree = quillmark::tree_from_path(quillmark_fixtures::quills_path("sample_form"))
+        .expect("load sample_form tree");
+    tree.insert(
+        "form.json",
+        FileTreeNode::File {
+            contents: STACKED_FORM_JSON.as_bytes().to_vec(),
+        },
+    )
+    .expect("replace form.json");
+    let quill = Quill::from_tree(tree).expect("load patched quill");
+    let doc = Document::parse(FILLED).expect("parse markdown").document;
+    let session = Quillmark::new().open(&quill, &doc).expect("open ok");
+
+    let regions = session.regions();
+    assert_eq!(
+        regions.iter().map(|r| r.field.as_str()).collect::<Vec<_>>(),
+        ["full_name", "comments"],
+        "regions follow `form.json` order, which is stamping order"
+    );
+    assert_eq!(regions[0].rect, regions[1].rect);
+
+    let [x0, y0, x1, y1] = regions[0].rect;
+    assert_eq!(
+        session
+            .field_at(regions[0].page, (x0 + x1) / 2.0, (y0 + y1) / 2.0, 0.0)
+            .as_deref(),
+        Some("comments")
     );
 }

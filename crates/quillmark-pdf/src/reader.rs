@@ -6,11 +6,12 @@
 //! ## Input contract
 //!
 //! The base PDF must be traditional-xref, unencrypted, inline-annots,
-//! flat-tree: a classic `xref` table (not an xref *stream*), no `/Encrypt`, page
-//! `/Annots` written inline rather than as an indirect reference, and a page tree
-//! shallow enough to walk. That is the precise inverse of the scanner's error
-//! branches. `hayro-syntax` is read-only and exposes no byte spans, so it cannot
-//! drive a byte-splice append; hence this bespoke scanner.
+//! bounded-tree: a classic `xref` table (not an xref *stream*), no `/Encrypt`,
+//! page `/Annots` written inline rather than as an indirect reference, and a
+//! `/Pages` tree of any depth that reaches each node once and stays under
+//! 100 000 nodes. That is the precise inverse of the scanner's error branches.
+//! `hayro-syntax` is read-only and exposes no byte spans, so it cannot drive a
+//! byte-splice append; hence this bespoke scanner.
 
 use std::collections::{HashMap, HashSet};
 
@@ -722,17 +723,33 @@ fn root_pages_id(idx: &ObjectIndex, catalog_id: u32) -> Result<u32, PdfError> {
 /// Reject a page with a non-zero `/Rotate`, its own value or the one inherited
 /// from its nearest ancestor `/Pages` node. The stamp and flatten paths write
 /// geometry in unrotated user space and do not compensate, so a rotated base
-/// page would display every widget away from its intended box.
+/// page would display every widget away from its intended box. The first
+/// *present* value binds, and one that is not a direct integer — an indirect
+/// reference, say — is an error rather than an absence falling to the default
+/// zero.
 pub(crate) fn assert_unrotated_pages<'p>(
     idx: &ObjectIndex,
     pages: impl IntoIterator<Item = &'p Page>,
 ) -> Result<(), PdfError> {
-    let parse_rotate =
-        |raw: &[u8]| -> Option<i64> { std::str::from_utf8(raw.trim_ascii()).ok()?.parse().ok() };
     for page in pages {
-        let rotate = page
-            .inherited_attribute(idx, "Rotate", parse_rotate)
-            .unwrap_or(0);
+        let Some(raw) =
+            page.inherited_attribute(idx, "Rotate", |raw| Some(raw.trim_ascii().to_vec()))
+        else {
+            continue;
+        };
+        let rotate: i64 = std::str::from_utf8(&raw)
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .ok_or_else(|| {
+                err(
+                    CODE_PARSE,
+                    format!(
+                        "page object {} has /Rotate {}, which is not an integer",
+                        page.id,
+                        String::from_utf8_lossy(&raw)
+                    ),
+                )
+            })?;
         if rotate.rem_euclid(360) != 0 {
             return Err(err(
                 "pdf::rotated_page",

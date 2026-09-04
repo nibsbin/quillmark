@@ -47,6 +47,11 @@ pub struct NestedComment {
 pub(crate) struct PreScan {
     /// YAML with `!must_fill` tags stripped and comment lines removed; fed to serde_saphyr.
     pub cleaned_yaml: String,
+    /// The 0-indexed line of the fence content each line of
+    /// [`Self::cleaned_yaml`] came from. Own-line comments are dropped rather
+    /// than blanked, so the two numberings diverge and a parse failure needs
+    /// this to travel back to a document position.
+    pub source_lines: Vec<usize>,
     /// Top-level fields and comments in source order.
     pub items: Vec<PreItem>,
     pub nested_comments: Vec<NestedComment>,
@@ -59,43 +64,56 @@ pub(crate) struct PreScan {
     pub fill_target_errors: Vec<String>,
 }
 
+/// The emitted YAML lines paired with the source line each came from.
+#[derive(Debug)]
+struct Cleaned {
+    lines: Vec<String>,
+    source_lines: Vec<usize>,
+}
+
+impl Cleaned {
+    fn push(&mut self, source_line: usize, text: String) {
+        self.lines.push(text);
+        self.source_lines.push(source_line);
+    }
+}
+
 #[derive(Debug)]
 struct Frame {
     indent: usize,
     path: Vec<CommentPathSegment>,
-    kind: Option<FrameKind>,
     child_count: usize,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum FrameKind {
-    Mapping,
-    Sequence,
 }
 
 pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
     let mut out = PreScan::default();
 
     let lines: Vec<&str> = content.split('\n').collect();
-    let mut cleaned_lines: Vec<String> = Vec::with_capacity(lines.len());
+    let mut cleaned = Cleaned {
+        lines: Vec::with_capacity(lines.len()),
+        source_lines: Vec::with_capacity(lines.len()),
+    };
 
     let mut stack: Vec<Frame> = vec![Frame {
         indent: 0,
         path: Vec::new(),
-        kind: Some(FrameKind::Mapping),
         child_count: 0,
     }];
 
     // Indent of the `key:` line that opened the current block scalar, if any.
     let mut block_scalar_indent: Option<usize> = None;
 
-    for raw_line in &lines {
-        let line = *raw_line;
+    let mut unsupported_fill_tag = false;
+
+    for (source_line, raw_line) in lines.iter().enumerate() {
+        // The split is on `\n`, so a CRLF line ends in `\r`. Dropped once here:
+        // every matcher below, and the cleaned YAML, see `\n`-only lines.
+        let line = raw_line.strip_suffix('\r').unwrap_or(raw_line);
         let indent = leading_space_count(line);
         let trimmed = &line[indent..];
 
         if trimmed.is_empty() {
-            cleaned_lines.push(line.to_string());
+            cleaned.push(source_line, line.to_string());
             continue;
         }
 
@@ -104,7 +122,7 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
         // A line at or below the key's indent ends the scalar.
         if let Some(key_indent) = block_scalar_indent {
             if indent > key_indent {
-                cleaned_lines.push(line.to_string());
+                cleaned.push(source_line, line.to_string());
                 continue;
             }
             block_scalar_indent = None;
@@ -142,7 +160,7 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
 
         // Case 2: sequence item line (`- ...`).
         if trimmed == "-" || trimmed.starts_with("- ") {
-            let frame_idx = ensure_frame_at_indent(&mut stack, indent, FrameKind::Sequence);
+            let frame_idx = ensure_frame_at_indent(&mut stack, indent);
             let frame = &mut stack[frame_idx];
             let item_index = frame.child_count;
             frame.child_count += 1;
@@ -171,7 +189,6 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
                 stack.push(Frame {
                     indent: indent + 2,
                     path: item_path,
-                    kind: None,
                     child_count: 0,
                 });
             } else if let Some((key, source_key, after_colon)) =
@@ -179,6 +196,7 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
             {
                 let (fill, value_without_tag, had_non_fill_tag) =
                     record_fill_and_tags(&mut out, &after_colon, &key);
+                unsupported_fill_tag |= value_has_unsupported_fill_tag(&value_without_tag);
                 if fill {
                     let mut key_path = item_path.clone();
                     key_path.push(CommentPathSegment::Key(key.clone()));
@@ -190,9 +208,10 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
                 stack.push(Frame {
                     indent: inline_indent_offset,
                     path: item_path,
-                    kind: Some(FrameKind::Mapping),
                     child_count: 1,
                 });
+            } else {
+                unsupported_fill_tag |= value_has_unsupported_fill_tag(after_dash_trimmed);
             }
 
             if let Some(c) = &trailing_comment {
@@ -210,9 +229,9 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
                     None if after_dash.trim_end().is_empty() => "-".to_string(),
                     None => format!("- {}", after_dash.trim_end()),
                 };
-                cleaned_lines.push(format!("{}{}", head, body));
+                cleaned.push(source_line, format!("{}{}", head, body));
             } else {
-                cleaned_lines.push(line.to_string());
+                cleaned.push(source_line, line.to_string());
             }
 
             // For a `- |-` item the content is indented past the dash, so the
@@ -231,6 +250,7 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
 
                 let (fill, value_without_tag, _) =
                     record_fill_and_tags(&mut out, &value_part, &key);
+                unsupported_fill_tag |= value_has_unsupported_fill_tag(&value_without_tag);
 
                 out.items.push(PreItem::Field {
                     key: key.clone(),
@@ -249,13 +269,11 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
                     stack.push(Frame {
                         indent: 2,
                         path: key_path,
-                        kind: None,
                         child_count: 0,
                     });
                 }
 
-                let cleaned = format!("{}:{}", key, value_without_tag);
-                cleaned_lines.push(cleaned);
+                cleaned.push(source_line, format!("{}:{}", key, value_without_tag));
 
                 if let Some(c) = trailing_comment {
                     out.items.push(PreItem::Comment {
@@ -274,7 +292,7 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
 
         // Case 4: nested key line inside a block mapping.
         if let Some((key, source_key, after_colon)) = split_nested_key(trimmed) {
-            let frame_idx = ensure_frame_at_indent(&mut stack, indent, FrameKind::Mapping);
+            let frame_idx = ensure_frame_at_indent(&mut stack, indent);
             let frame = &mut stack[frame_idx];
             let key_index = frame.child_count;
             frame.child_count += 1;
@@ -291,6 +309,7 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
             let (value_part, trailing_comment) = split_trailing_comment(&after_colon);
 
             let (fill, value_without_tag, _) = record_fill_and_tags(&mut out, &value_part, &key);
+            unsupported_fill_tag |= value_has_unsupported_fill_tag(&value_without_tag);
             if fill {
                 out.nested_fills.push(key_path.clone());
             }
@@ -305,16 +324,18 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
                     });
                 }
                 let head = format!("{:width$}", "", width = indent);
-                cleaned_lines.push(format!("{}{}:{}", head, source_key, value_without_tag));
+                cleaned.push(
+                    source_line,
+                    format!("{}{}:{}", head, source_key, value_without_tag),
+                );
             } else {
-                cleaned_lines.push(line.to_string());
+                cleaned.push(source_line, line.to_string());
             }
 
             if has_empty_inline_value(&value_without_tag) {
                 stack.push(Frame {
                     indent: indent + 2,
                     path: key_path,
-                    kind: None,
                     child_count: 0,
                 });
             }
@@ -325,16 +346,11 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
             continue;
         }
 
-        cleaned_lines.push(line.to_string());
+        unsupported_fill_tag |= line_has_unsupported_fill_tag(line);
+        cleaned.push(source_line, line.to_string());
     }
 
-    // A tag surviving here sits in a position prescan cannot lift (inside a flow
-    // collection, or on a bare sequence element) where serde_saphyr would drop it
-    // silently.
-    if cleaned_lines
-        .iter()
-        .any(|l| line_has_unsupported_fill_tag(l))
-    {
+    if unsupported_fill_tag {
         out.warnings.push(
             Diagnostic::new(
                 Severity::Warning,
@@ -347,35 +363,51 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
         );
     }
 
-    out.cleaned_yaml = cleaned_lines.join("\n");
+    out.cleaned_yaml = cleaned.lines.join("\n");
+    out.source_lines = cleaned.source_lines;
     out
 }
 
-/// True when `line` still carries a `!must_fill` / `!fill` tag in a value or
-/// element position that prescan could not lift. Block-style markers are
-/// stripped before this runs, so a survivor means an unsupported position.
-/// The boundary checks keep a quoted scalar that merely contains the literal
-/// text (e.g. `note: "see !must_fill"`) from matching.
+/// True when `value` — the text after a `key:` or a `- `, with a block-style
+/// marker already stripped — carries a `!must_fill` tag prescan cannot lift:
+/// the whole element, or a member of a flow collection. A quoted scalar is
+/// text, so a tag spelled inside one (`note: "see key: !must_fill here"`) does
+/// not match.
+fn value_has_unsupported_fill_tag(value: &str) -> bool {
+    let value = value.trim_start();
+    !value.starts_with(['"', '\'']) && fill_tag_in_node_position(value, true)
+}
+
+/// True when `line`, which prescan resolved into neither a key nor an element
+/// (a flow collection continued across lines), carries a `!must_fill` tag
+/// after flow punctuation. What opens the line is unknown, so a tag at its
+/// head is not read as a node.
 fn line_has_unsupported_fill_tag(line: &str) -> bool {
+    fill_tag_in_node_position(line, false)
+}
+
+/// True when a fill tag in `text` stands where YAML reads a node: after flow
+/// punctuation, or — when `head_is_node` — at the head of `text` itself.
+fn fill_tag_in_node_position(text: &str, head_is_node: bool) -> bool {
     for tag in FILL_TAGS {
         let mut from = 0;
-        while let Some(rel) = line[from..].find(tag) {
+        while let Some(rel) = text[from..].find(tag) {
             let at = from + rel;
             let after = at + tag.len();
             // Trailing boundary: a real tag ends at whitespace, flow
-            // punctuation, or end of line, not mid-word (`!fillet`).
-            let trailing_ok = line[after..]
+            // punctuation, or end of text, not mid-word (`!fillet`).
+            let trailing_ok = text[after..]
                 .chars()
                 .next()
                 .is_none_or(|c| c.is_whitespace() || matches!(c, ',' | '}' | ']'));
-            // Leading boundary: the tag sits in value/element position,
-            // directly after `{` / `[` / `,`, or after whitespace following
-            // `:` / `-` / `,` / `{` / `[`.
-            let before = line[..at].trim_end_matches([' ', '\t']);
+            // Leading boundary: the tag sits directly after `{` / `[` / `,`,
+            // or after whitespace following `:` / `-` / `,` / `{` / `[`.
+            let before = text[..at].trim_end_matches([' ', '\t']);
             let had_ws = before.len() != at;
             let leading_ok = match before.chars().last() {
                 Some('{') | Some('[') | Some(',') => true,
                 Some(':') | Some('-') => had_ws,
+                None => head_is_node,
                 _ => false,
             };
             if trailing_ok && leading_ok {
@@ -387,16 +419,13 @@ fn line_has_unsupported_fill_tag(line: &str) -> bool {
     false
 }
 
-/// The deepest frame matching `indent` and `kind`, pushing a new one if the
-/// current top is shallower.
-fn ensure_frame_at_indent(stack: &mut Vec<Frame>, indent: usize, kind: FrameKind) -> usize {
+/// The deepest frame at `indent`, pushing a new one if the current top is
+/// shallower.
+fn ensure_frame_at_indent(stack: &mut Vec<Frame>, indent: usize) -> usize {
     let top_idx = stack.len() - 1;
-    let top = &mut stack[top_idx];
+    let top = &stack[top_idx];
 
     if top.indent == indent {
-        if top.kind.is_none() {
-            top.kind = Some(kind);
-        }
         return top_idx;
     }
 
@@ -404,17 +433,12 @@ fn ensure_frame_at_indent(stack: &mut Vec<Frame>, indent: usize, kind: FrameKind
     stack.push(Frame {
         indent,
         path: parent_path,
-        kind: Some(kind),
         child_count: 0,
     });
     stack.len() - 1
 }
 
-/// The slice runs to the `\n` this scan split on, so CRLF input carries a
-/// trailing `\r`. Dropped here: comment text reaches emit verbatim, and emit is
-/// `\n` only.
 fn strip_comment_marker(raw: &str) -> &str {
-    let raw = raw.strip_suffix('\r').unwrap_or(raw);
     let after = raw.trim_start_matches('#');
     after.strip_prefix(' ').unwrap_or(after)
 }
@@ -830,6 +854,35 @@ mod tests {
     }
 
     #[test]
+    fn crlf_lines_carry_no_carriage_return_into_the_scan() {
+        let input = "dept: !must_fill\r\n# note\r\ntitle: x # trailing\r\n";
+        let out = prescan_fence_content(input);
+        assert_eq!(
+            out.items,
+            vec![
+                PreItem::Field {
+                    key: "dept".to_string(),
+                    fill: true,
+                },
+                PreItem::Comment {
+                    text: "note".to_string(),
+                    inline: false,
+                },
+                PreItem::Field {
+                    key: "title".to_string(),
+                    fill: false,
+                },
+                PreItem::Comment {
+                    text: "trailing".to_string(),
+                    inline: true,
+                },
+            ]
+        );
+        assert!(out.warnings.is_empty(), "got: {:?}", out.warnings);
+        assert!(!out.cleaned_yaml.contains('\r'));
+    }
+
+    #[test]
     fn fillet_is_not_a_fill_tag() {
         let input = "x: !must_filler value\n";
         let out = prescan_fence_content(input);
@@ -1004,6 +1057,26 @@ mod tests {
             let out = prescan_fence_content(input);
             assert_eq!(out.cleaned_yaml.lines().count(), input.lines().count());
         }
+    }
+
+    #[test]
+    fn source_lines_map_cleaned_lines_back_over_dropped_comments() {
+        let input = "# lead\ntitle: Doc\n\n# note\nrole: !must_fill\nbio: |\n  # not a comment\nend: x\n";
+        let out = prescan_fence_content(input);
+
+        assert_eq!(out.cleaned_yaml.split('\n').count(), out.source_lines.len());
+        let source = |needle: &str| {
+            let i = out
+                .cleaned_yaml
+                .split('\n')
+                .position(|l| l.contains(needle))
+                .expect("cleaned line present");
+            out.source_lines[i]
+        };
+        assert_eq!(source("title:"), 1);
+        assert_eq!(source("role:"), 4);
+        assert_eq!(source("# not a comment"), 6);
+        assert_eq!(source("end:"), 7);
     }
 
     #[test]

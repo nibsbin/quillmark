@@ -53,7 +53,7 @@ The `code` namespaces are the routing surface:
 
 `parse::*` · `validation::*` · `quill::*` · `edit::*` (mutators) · `typst::*` · `pdfform::*` · `backend::*` · `engine::*`.
 
-Notable codes: `quill::name_mismatch` / `quill::version_mismatch` (a well-formed document paired with the wrong quill; see [Versioning](../quills/versioning.md)); `engine::backend_not_found` (the quill's declared backend is not registered); `parse::input_too_large`, which carries four of the five [§8 caps](../reference/markdown-spec.md#8-limits) — document size, YAML payload size, card count, field count — distinguished only by its `max` arg, the fifth (nesting depth) arriving as `parse::yaml_error_with_location`.
+Notable codes: `quill::name_mismatch` / `quill::version_mismatch` (a well-formed document paired with the wrong quill; see [Versioning](../quills/versioning.md)); `engine::backend_not_found` (the quill's declared backend is not registered); `parse::input_too_large`, which carries the two byte-sized [§8 caps](../reference/markdown-spec.md#8-limits) — document size and YAML payload size — distinguished only by its `max` arg, while the count caps arrive as `parse::too_many_cards` and `parse::too_many_fields` (args `count`, `max`) and the nesting cap as `parse::yaml_error_with_location`.
 
 ## Warnings vs errors
 

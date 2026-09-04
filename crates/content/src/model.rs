@@ -58,7 +58,9 @@ pub struct Line {
     /// line break rather than starting a new block. `false` = a new block
     /// (paragraph spacing on either side); `true` = a within-block line break (a
     /// markdown hard break; consecutive lines of one code fence). The first line
-    /// is always `false`.
+    /// is always `false`, as is one whose container path differs from the line
+    /// above or whose block above renders a single line
+    /// ([`LineKind::takes_continuations`]).
     pub continues: bool,
 }
 
@@ -129,6 +131,18 @@ impl LineKind {
     /// open arm, leaving the two emitters to drift on a construct neither knows.
     pub fn projects_as_para(&self) -> bool {
         matches!(self, LineKind::Para | LineKind::Unknown { .. })
+    }
+
+    /// Whether a block of this kind renders the lines that [`Line::continues`]
+    /// joins to its first. A paragraph spans its hard-break run and a code
+    /// block its fence's interior; a heading, an island and a rule are one
+    /// line, and both emitters render that line alone, so a continuation there
+    /// is text the projection never reaches.
+    pub fn takes_continuations(&self) -> bool {
+        matches!(
+            self,
+            LineKind::Para | LineKind::Code { .. } | LineKind::Unknown { .. }
+        )
     }
 
     /// The wire `kind` name.
@@ -803,6 +817,11 @@ pub enum Invariant {
     /// that skipped it, the same pairing as
     /// [`LineKindMismatch`](Invariant::LineKindMismatch).
     ContinuesAcrossContainers { line: usize },
+    /// A line has `continues: true` but the line before it opens a block whose
+    /// kind renders one line ([`LineKind::takes_continuations`]), so the
+    /// continuation's text reaches no projection. `normalize` clears the flag;
+    /// this catches a hand-built content that skipped it.
+    ContinuesSingleLineBlock { line: usize },
     /// An [`MarkKind::Unknown`] reused a reserved built-in `type` name.
     ReservedUnknownTag(String),
     /// A [`LineKind::Unknown`] reused a reserved built-in `kind` name: its
@@ -842,8 +861,10 @@ pub enum Invariant {
     /// (an `Island`-tagged prose line projects to its resolved island alone).
     LineKindMismatch { line: usize, mismatch: LineKindMismatch },
     /// A line's container path is nested deeper than
-    /// [`MAX_NESTING_DEPTH`](crate::MAX_NESTING_DEPTH). Both emitters recurse
-    /// one frame per container, so an unbounded path overflows the stack.
+    /// [`MAX_NESTING_DEPTH`](crate::MAX_NESTING_DEPTH). The Typst emitter
+    /// recurses one frame per container and refuses a deeper path rather than
+    /// overflow the stack; markdown export walks an explicit stack and projects
+    /// any depth.
     NestingTooDeep {
         line: usize,
         depth: usize,
@@ -977,20 +998,6 @@ impl Content {
     /// serialization commits to.
     pub fn normalize(&mut self) {
         canonicalize_containers(&mut self.lines);
-        // A `continues` line whose container path differs from the line above
-        // claims to continue a block it is not in. `Join` mints these by
-        // merging two lines of differing paths, leaving the *next* line
-        // continuing across the seam. Both projections already read the flag as
-        // dead there — `export::emit_block` and `emit::segment_end` both
-        // require the depth to match before they absorb a continuation — so
-        // clearing it changes nothing observable and states what is already
-        // true. Same treatment, and the same reason, as the line-kind demotion
-        // below; a *deliberate* one is refused up front by the op channel.
-        for i in 1..self.lines.len() {
-            if self.lines[i].continues && self.lines[i].containers != self.lines[i - 1].containers {
-                self.lines[i].continues = false;
-            }
-        }
         // A splice writes text, never kinds: typing into a table line leaves it
         // `Island` over prose, joining a fence to an image line leaves it `Code`
         // over a slot, and export reads the kind and not the text, so the
@@ -1010,6 +1017,20 @@ impl Content {
                     canonicalize_keys(attrs);
                     collapse_empty_bag(attrs);
                 }
+            }
+        }
+        // Two accepted ops leave a `continues` line under a block it cannot
+        // continue: `Join` across differing paths, where both projections
+        // already read the flag as dead, and `SetKind` retagging the line
+        // above into a one-line block, where export would drop the text. Read
+        // after the demotion above, which settles what a spliced-over kind is;
+        // a deliberate one is refused up front by the op channel.
+        for i in 1..self.lines.len() {
+            if self.lines[i].continues
+                && (self.lines[i].containers != self.lines[i - 1].containers
+                    || !self.lines[i - 1].kind.takes_continuations())
+            {
+                self.lines[i].continues = false;
             }
         }
         // A table island's props are repaired (padded to one column count, cell
@@ -1121,14 +1142,21 @@ impl Content {
         if self.lines.first().is_some_and(|l| l.continues) {
             return Err(Invariant::FirstLineContinues);
         }
-        // The one relational line invariant `validate` carries. Every other
-        // container rule is a property of a line pair too, and `normalize`
-        // settles each: a non-canonical `ordinal` renumbers, a run opening
-        // under a fresh parent re-reads, this flag clears. What is left here is
-        // the assertion that it ran.
+        // The relational line invariants `validate` carries, both of them a
+        // `continues` line against the block above it. Every other container
+        // rule is a property of a line pair too, and `normalize` settles each:
+        // a non-canonical `ordinal` renumbers, a run opening under a fresh
+        // parent re-reads, this flag clears. What is left here is the
+        // assertion that it ran.
         for (i, pair) in self.lines.windows(2).enumerate() {
-            if pair[1].continues && pair[1].containers != pair[0].containers {
+            if !pair[1].continues {
+                continue;
+            }
+            if pair[1].containers != pair[0].containers {
                 return Err(Invariant::ContinuesAcrossContainers { line: i + 1 });
+            }
+            if !pair[0].kind.takes_continuations() {
+                return Err(Invariant::ContinuesSingleLineBlock { line: i + 1 });
             }
         }
         // Only the formatting-mark edge test below reads it.
@@ -1893,6 +1921,45 @@ mod tests {
         rt.normalize();
         assert!(rt.lines[1].continues, "a hard break inside one item survives");
         assert_eq!(rt.validate(), Ok(()));
+    }
+
+    /// A heading, an island and a rule render as their own line alone, so a
+    /// `continues` line after one is text no projection reaches. `SetKind`
+    /// mints the shape by retagging the line a continuation already follows;
+    /// `normalize` clears the flag, and `validate` asserts that it ran.
+    #[test]
+    fn continues_after_a_single_line_block_is_cleared() {
+        let cases = [
+            (LineKind::Heading { level: 1 }, "a\nb", "# a\n\nb"),
+            (LineKind::Island, "\u{FFFC}\nb", "<!-- island:widget -->\n\nb"),
+            (LineKind::Rule, "\nb", "***\n\nb"),
+        ];
+        for (kind, text, markdown) in cases {
+            let mut rt = Content::new(
+                text.to_string(),
+                vec![
+                    Line::new(kind.clone()),
+                    Line::new(LineKind::Para).with_continues(true),
+                ],
+            )
+            .with_islands(match kind {
+                LineKind::Island => vec![Island::new("isl-0".into(), "widget".into())],
+                _ => vec![],
+            });
+            assert_eq!(
+                rt.validate(),
+                Err(Invariant::ContinuesSingleLineBlock { line: 1 }),
+                "a hand-built content that skipped normalize is caught"
+            );
+            rt.normalize();
+            assert!(!rt.lines[1].continues, "normalize clears it");
+            assert_eq!(rt.validate(), Ok(()));
+            assert_eq!(
+                crate::export::to_markdown(&rt.into_normalized()),
+                markdown,
+                "the continuation projects as the paragraph it is"
+            );
+        }
     }
 
     #[test]

@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- fix(core): **an unclosed root `~~~` block is reported as unclosed.** A
+  document that opens with `~~~` and `$quill` but never closes the fence drew
+  the generic `parse::missing_quill` text, telling the author to open a block
+  they had already opened while the scanner's unclosed-fence signal was
+  dropped. That signal now reaches the diagnostic: the message names the
+  opener's line, the field to close after, and — for a `~~` run or an indented
+  `~~~` — the line that failed to close it. A root opener carrying a foreign
+  info string (`~~~metadata`) is named the same way.
+- fix(core): **a card-yaml parse failure carries a document `Location`.**
+  `YamlErrorWithLocation` keeps the engine's line and column, translated
+  through the comment lines prescan drops and the leading whitespace `trim`
+  removes onto the document's own coordinates, and `to_diagnostic()` sets them
+  as the `Location` (`input.md`). The message names the block (`YAML error in
+  the root card-yaml block: …`, `… in card-yaml block 2: …`) in place of the
+  block-relative `at line N (block K)` prefix, and `args` no longer carries
+  `line`.
+- feat(core): **`~~~yaml` opens a card-yaml block**, a second non-canonical
+  alias beside `~~~card-yaml`; both re-emit as bare `~~~`. A YAML *code* block
+  in prose is a backtick fence (```` ```yaml ````), unchanged.
 - feat(core): **the values form: `reader.values()` reads a document as plain
   values and `writer.set_values(values)` writes them back.** A document has
   three forms: *stored* (verbatim, quill-free), *values* (stored with every
@@ -110,6 +129,316 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- fix(content): **a change bundle whose `retain`/`delete` counts sum past
+  `usize` is a base mismatch, not a panic.** `Delta::expected_base_len` summed
+  the counts unchecked, so a host-authored bundle carrying
+  `{"retain": 18446744073709551615}` aborted in debug and wrapped in release,
+  where the wrapped total let `apply` slice past the base. The sum saturates,
+  and the saturated length exceeds any real base, so `try_apply` and
+  `apply_field_change` return the `DeltaBaseMismatch` the contract already
+  names. No wire or API change.
+- fix(content): **`diff_import` carries unknown marks forward beside anchors.**
+  The rebase loop matched `MarkKind::Anchor` alone, so a full-document rewrite
+  through the stale-text writer lane dropped every open-set mark, even one over
+  text the rewrite left untouched. It now rebases every non-formatting mark —
+  formatting is what the fresh import re-derives, and the rest lives in the
+  content but not in markdown — so an unknown tag and its attrs survive a
+  revise the way an anchor does.
+- fix(content): **a code span whose content touches its fence exports with the
+  CommonMark space pad.** Export emitted `fence + content + fence`, so an edge
+  backtick joined the fence run (text `` `a `` came back as ` ```a`` `) and a
+  span that begins and ends with a space lost one off each side on re-import
+  (`" a "` came back as `"a"`). A pad space now flanks the content in exactly
+  those two cases, which import strips back off; a span of nothing but spaces
+  is exempt from the strip and so stays unpadded.
+- fix(content): **a mark flanking an unknown island's placeholder survives
+  export.** The verify-and-drop net re-imports the rendered line and expects
+  the line's own text back, island slot included, but a type this build has no
+  projection for renders as a comment placeholder that re-imports as nothing.
+  The probe could never match, so every `**` / `*` / `~~` on such a line was
+  dropped as unrepresentable. The expected text omits the slots of islands with
+  no markdown projection and keeps every other one, so the probe measures
+  delimiter leakage alone and still reads an image's slot back.
+- fix(content): **a heading, an island and a rule take no continuation lines.**
+  `segment` grouped a `continues` line into the block above, but export renders
+  only the first line of those three kinds, so `SetContinues` on the line after
+  a heading validated clean and exported `"# a"` with the continuation dropped,
+  while the Typst emitter still rendered it. `LineKind::takes_continuations`
+  names the kinds a continuation is legal after (`Para`, `Code`, `Unknown`);
+  `SetContinues` refuses the write (`ApplyError::ContinuesSingleLineBlock`),
+  `normalize` clears a flag `SetKind` or a stored document left there, and
+  `validate` rejects a hand-built one (`Invariant::ContinuesSingleLineBlock`),
+  the repair-or-refuse split `ContinuesAcrossContainers` already carries.
+- refactor(content): **code-block import filters its text through
+  `Inline::push_text`.** `push_code_line` differed from it only in dropping a
+  `\n` where `push_text` spaces one, and its segments come from a
+  `split('\n')`, so the two agree on every input it receives.
+  `change_bundle_from_value` reads `delta` with a single lookup and
+  deserializes it from the borrowed `Value` rather than a clone, and
+  `op_array`'s absent and null cases are one `Option::filter`.
+- fix(core): **a new `$` entry lands after the preceding `$` line's inline
+  comment, not between the line and its comment.** `Payload::upsert_meta`
+  inserted one past the last lower-ranked `$` item, which is the index the
+  trailing comment occupies, and emit reads a trailer as belonging to whatever
+  item precedes it: `$quill: q@1.0 # note` with no explicit `$kind` emitted
+  `$kind: main # note`. The insert now steps over that comment, so the four
+  callers — the `$kind` synthesis on parse, `store_ext`, `store_seed_overlay`,
+  `set_quill_ref` — leave the trailer on its own key and `parse(to_markdown())`
+  holds.
+- fix(core): **a field name is ASCII as written, not as it normalises.**
+  `is_valid_field_name` ran NFC before matching `[A-Za-z_][A-Za-z0-9_]*`,
+  which no non-ASCII name can pass except a canonical singleton that composes
+  to ASCII: `store_field("\u{212A}elvin", …)` was accepted, emitted verbatim,
+  and re-read as a nested key, so the document did not survive
+  `parse(to_markdown())`. The check reads the name's own characters, matching
+  the raw bytes the parser's key grammar accepts.
+- fix(core): **`Card::store_fields` refuses a `!must_fill` marker targeting a
+  mapping, as `Card::store_field` does.** The batch checked the field-name
+  grammar and value depth only, so a `QuillValue` carrying a marker on a
+  nested object node was stored, emitted with the marker dropped, and refused
+  by the `@0.92.0` storage DTO on reload. `edit::validate_fill_targets` runs
+  per field in the same all-or-nothing pass, so the offending name rides the
+  batch's error vector as `edit::fill_on_mapping` beside every other
+  violation. The WASM `storeFields` inherits it.
+- fix(core): **a variant container the document wrote reads `authored`
+  whichever rung filled its discriminant.** `resolve()` lifted a present
+  container off the blank rung only, so `classification: {}` reported
+  `default` where the schema declared one and `authored` where it did not —
+  the reported rung turning on the schema rather than the document. A present
+  container is `authored`, as any other present value is; a present-null still
+  reads as absent and keeps the discriminant's rung. The value the row carries
+  is unchanged.
+- fix(core): **a nested richtext `example:` reaches the blueprint as its
+  `# e.g.` hint.** A richtext cell never inlines its example, and the
+  per-property builder for typed-dict properties and typed-table rows gated the
+  hint on `default:` alone, so a defaultless richtext property's `example:`
+  appeared in neither the cell nor a hint. Both gates are one helper now, and a
+  property's `example:` behaves as a card-level field's does at every depth, as
+  BLUEPRINT.md § Typed dictionaries states.
+- fix(core): **a type mismatch names the field's own declared type, so `date`,
+  `datetime` and `enum` report themselves.** The validator collapsed the three
+  onto `string`, so `due: 20260101` against `type: date` read "schema declares
+  `string`. Either provide a value of type `string` or change the schema's
+  `type:` to `integer`" — a type the schema does not declare and an exit that
+  discards the field's format. The declared type now has one source,
+  `FieldType::as_str`, which the schema-literal path already re-derived for its
+  own messages. `validation::type_mismatch` carries the name in `args.expected`,
+  so a consumer reading that key sees `date`, `datetime` or `enum` where it saw
+  `string`.
+- fix(core): **a `$seed` overlay cell is validated as the document value it
+  is.** `validate` judged each cell as a Quill.yaml schema literal, a context
+  that refuses the container spelling of a variant-bearing enum and reads a
+  present-null as a typed value, so `classification: { value: CUI, note:
+  hello }` and `author: null` each drew a `validation::type_mismatch` warning
+  while `seed_card` committed both. An overlay cell is what `seed_card` writes
+  into the new card, so it takes the same pass a card's own fields take: the
+  container is a spelling it accepts, null reads as absent, and a mistyped
+  cell still warns. Overlays stay advisory and never gate render.
+- fix(core)!: **the §8 count caps report a count, not a byte size.** The
+  card-count and per-block field-count caps raised `parse::input_too_large`,
+  whose one message shape is `Input too large: {size} bytes (max: {max}
+  bytes)`, so 1001 fields read as 1001 bytes and the `size` arg rode out under
+  a code whose canon row says bytes. Each cap has its own variant and code:
+  `ParseError::TooManyFields` / `parse::too_many_fields` and
+  `ParseError::TooManyCards` / `parse::too_many_cards`, both carrying `count`
+  and `max`. `parse::input_too_large` keeps the two byte caps, document size
+  and YAML payload size. A consumer routing count overflow on
+  `parse::input_too_large` reads the two new codes instead.
+- refactor(core): **`set_values` refuses a kindless card slot through the card
+  constructor rather than a hand-built error.** `plan_slot` carried an early
+  return minting `edit::invalid_kind_name` for a position holding no card and
+  naming no kind; flattening the kind to `Option<&str>` sends that case to
+  `build_card`, where `Card::new("")` raises the same error at the same
+  `cards[<i>]` path.
+- refactor(core)!: **`ParseOutputFormatError` is `#[non_exhaustive]` and gains
+  `new`.** It was the one `pub`-field type in core's root modules without the
+  attribute COMPATIBILITY.md's struct rule asks for. Its field stays readable;
+  an out-of-crate struct literal becomes `ParseOutputFormatError::new(input)`.
+- fix(pdf): **a base PDF whose trailer `/Size` sits above `i32::MAX` is refused
+  rather than panicking mid-stamp.** `alloc_id` bounded only `u32` overflow, so
+  a `/Size` in `2^31 ..= 2^32-2` handed out ids that cast to a negative `i32`
+  and pdf-writer's `Ref::new` panicked ("indirect reference out of valid
+  range") — a crafted `form.pdf` opened cleanly and then took down the process,
+  and with it a WASM module. `alloc_id` stops at `i32::MAX`, and every id that
+  becomes a reference goes through a checked `to_ref`, which also covers the
+  base page ids that never pass through `alloc_id`. The refusal carries the
+  existing `pdf::write` id-space error.
+- fix(pdfform): **a flattened value asserts black fill and the default text
+  state before it draws.** The appended stream opened with `q` and set only
+  `Tf`, and a page's `/Contents` array is one stream, so a background's
+  unpaired `0.9 g` or `3 Tr` — a shaded field box, a scanned form's invisible
+  OCR layer — carried into the drawn value and rastered it near-white or
+  blank, with no diagnostic. Both writers now open with
+  `0 g 0 Tr 0 Tc 0 Tw 100 Tz 0 Ts`, the state the stamped `/DA` starts from.
+  SVG/PNG/canvas only: the AcroForm PDF deliverable is stamped, not flattened,
+  so no artifact changes.
+- fix(core): **the default `field_at` hands a tie to the later-painted
+  placement.** It ranked `regions()` with `min_by`, which keeps the first of
+  equal distances, so two placements on one rect resolved to the one
+  underneath — against the documented contract and against the Typst backend,
+  which overrides `field_at` with later-wins. The default now walks `regions()`
+  in reverse, so a pdfform quill whose widgets overlap answers with the
+  last-stamped one. A backend that mixes widget and content regions through the
+  default overrides `field_at` to hand a widget the tie, as Typst does.
+- fix(typst): **an image in a content field resolves a quill asset.**
+  `![logo](assets/logo.svg)` in a `richtext` field lowers to `#image(..)`
+  inside the helper package's `lib.typ`, and Typst resolves an image path
+  against the root of the file holding the call, never leaving it; assets sat
+  under the project root alone, so the one thing an image island lowers to
+  failed the render outright. `QuillWorld` registers each `assets/` file under
+  the helper package's file id as well, one `Bytes` behind both ids, and a
+  content image names an asset by its quill-root path, rooted or relative, the
+  path a plate names it by.
+- fix(typst): **a `form-field` widget's rect is the box it prints in, whatever
+  the layout context.** The helper emitted its `<__qm_field__>` metadata beside
+  the box rather than inside it, and a tag's own position is the line's baseline
+  inline and the flow cursor's left edge in a block: an inline widget reported
+  a rect one box-height low, and one under `#align(center, ..)` or
+  `#align(right, ..)` reported the left margin. The tag rides in the box body,
+  whose origin is the box's top-left in every layout context, so
+  `session.regions()`, `fieldAt`, and the stamped AcroForm `/Rect` all land on
+  the widget. A plate that compensated for the offset shifts by that much.
+- refactor(typst): **a compile's form fields cross to the PDF spine as one
+  derivation.** `Compiled` carries `field_specs: Vec<FieldSpec>` built with the
+  compile: `widget_regions` is `regions_of` over it and `render_document_pages`
+  stamps it directly, where each PDF render had rebuilt the specs from the
+  placements, page-height scan included. A placement naming a page outside the
+  document now fails the compile alongside the extraction errors it sits with,
+  instead of emptying the session's regions and surfacing at render.
+- fix(fuzz): **the wide-payload property requires the parse to succeed and to
+  keep every field.** `fuzz_decompose_large_payload` swallowed a parse `Err`
+  and asserted `payload().len() <= size`, a bound `Payload::len` cannot
+  exceed, so a parse that refused the input or dropped every field passed. It
+  expects the parse and pins `len() == size`, which holds at every generated
+  width since all sit under `MAX_FIELD_COUNT`. The README's `parse_fuzz.rs`
+  row names what the file generates and `conform_fuzz.rs` gets the row it
+  lacked.
+- refactor(core): **every surface that refuses a non-content richtext value
+  spells one sentence.** `Codec::decode_field` builds the shape-mismatch
+  message and names the shape that arrived (`expected a richtext content
+  object or a markdown string, got a number`); the wire `$body` reader and the
+  richtext write coercion route through it instead of carrying their own
+  copies, so the schema-bound read and the strict projection name the shape
+  too. `Card::store_ext` bounds `$ext` depth through
+  `value::depth_check_meta_map`, the check the wire and the storage DTO run.
+  Every diagnostic code is unchanged.
+- refactor(core): **`FieldViolation` spells its own message, once.** The parse,
+  wire and storage boundaries each re-spelled the three field-invariant
+  reasons, and the wording had drifted apart ("invalid data-field name `x`:
+  field names must match…" vs `invalid field name "x": must match…` vs a keyless
+  "field names must match…"). `Display` gives the reason alone — the form
+  `WireError::InvalidField` carries beside its own `key` — and
+  `FieldViolation::message(key)` names the key inline, which all three
+  boundaries wrap. The parse path's dead `FillOnMapping` arm goes with the
+  match it lived in: `validate_field` returns `InvalidName` / `TooDeep` only.
+- refactor(core): **the prescan's frame stack carries no `kind`.**
+  `Frame.kind` and `FrameKind` were written at every push and read nowhere
+  but the write that filled them in, so both are gone, along with the
+  `ensure_frame_at_indent` parameter that carried the value.
+- docs(content,pdf,core): **six internal docs state what the code does.**
+  `NestingTooDeep` and `SetContainers` name the Typst emitter as the recursive
+  one, markdown export walking an explicit stack; the PDF reader's input
+  contract reads `bounded-tree`, a `/Pages` tree of any depth reaching each node
+  once and staying under 100 000 nodes; `flat_nested_comments` links
+  `from_items_with_flat_nested`, which resolves; `build-wasm.sh` puts the
+  `rm -rf pkg` on this script never removing files, CI caching the wasm build
+  dir alone. `spec_conformance_probe` names its body case for the parse pass
+  that does the strip and covers `normalize_document` with a field-name NFC
+  case. The hint on a malformed `main.body` lists `unsupported`, reading the key
+  list off one const beside `BodyCardSchema`.
+- fix(cli): **`render` parses a `MARKDOWN_FILE` through the bound door, so
+  `conform::*` and `plate::unsupported_construct` warnings reach stderr.** The
+  command called `Document::parse`, the transport door, which runs neither the
+  conform walk nor the declined-construct walk: a `usaf_memo` body carrying a
+  `***` rendered with an empty stderr where every other surface warns. It calls
+  `Quill::parse` instead, and the existing splice carries that door's warnings
+  into `RenderResult.warnings` unchanged. Rendered bytes are the same — the
+  coercion pass already ran in `compile_data` — and a `$quill` naming another
+  quill refuses at parse rather than at compile, with the same diagnostics and
+  the same exit 1. The seeded path (no `MARKDOWN_FILE`) is unchanged.
+- fix(cli): **`validate` states each failure once.** A failing run printed its
+  own summary and then a second copy through the error it returned, which
+  `main` labelled `[ERROR] Invalid argument:` — including on a load failure,
+  which is a quill config failure and not an argument the caller got wrong. The
+  command returns `CliError::Reported` once it has written the per-diagnostic
+  lines and the summary, and a load failure carries the loader's `RenderError`
+  the way every other subcommand does. Exit status stays 1 on every path.
+- fix(cli): **`schema -o` and `blueprint -o` create the parent directories
+  their path names, as `render -o` does.** Both wrote with a bare `fs::write`,
+  so `schema ./q -o nested/dir/s.yaml` failed with "No such file or
+  directory" while the same path under `render -o` succeeded. The CLI's
+  `write_output` splits into `write_stdout(bytes)` and `write_file(path,
+  bytes, announce)` — dropping the unreachable arm that refused neither
+  stdout nor a path — and all three `-o` flags route through `write_file`.
+  `schema` and `blueprint` pass `announce: false` and stay silent on stdout;
+  `render` announces unless `--quiet`.
+- refactor(quillmark): **`Quillmark::render` resolves the backend once.** It
+  called `supported_formats` and `open`, each resolving the quill's backend
+  separately; it now holds the resolved backend and asks it for both. Same
+  diagnostics in the same order.
+- fix(cli): **`-f PDF` writes `example.pdf`.** `--format` parses
+  case-insensitively, but the derived output filename, the `example.<fmt>`
+  fallback and the multi-page `--stdout` refusal interpolated the flag as
+  typed, so `-f PDF` wrote `example.PDF` and `-f Svg` named `Svg` in its
+  message. All three read the parsed format's lowercase id.
+- fix(core): **a card fence with CRLF line endings parses as its LF twin
+  does.** The prescan splits the fence body on `\n`, so every CRLF line
+  reached the matchers with a trailing `\r`: a bare `x: !must_fill` matched
+  neither spelling the fill-tag stripper accepts, so the marker was read as an
+  unknown tag — dropped with a `parse::unsupported_yaml_tag` warning, a second
+  `parse::fill_marker_unsupported_position` warning, a `null` value and an
+  `x: null` emit — and a lone `-` opening a sequence item was not one. The
+  scan strips one trailing `\r` per line up front, so the cleaned YAML and
+  every captured comment are `\n`-only.
+- fix(core): **`key: !must_fill` written inside a block scalar or a quoted
+  scalar is that scalar's text, and warns about nothing.** The
+  `parse::fill_marker_unsupported_position` check re-read every cleaned line
+  after the prescan, block-scalar bodies among them, and accepted any `:` plus
+  whitespace as the tag's left boundary, so `note: |` over
+  `see key: !must_fill here` kept the literal and still reported a marker
+  lost. The prescan now decides the warning per line as it reads one, where a
+  block-scalar body and a quoted value are known for what they are; the four
+  positions the marker genuinely cannot survive — a flow map, a flow
+  sequence, a bare sequence element, a flow value at depth — warn as before.
+- fix(core): **a field write clears a root `!must_fill` bit riding on the
+  value it is handed.** The payload item's own `fill` flag is the one carrier
+  of a root marker — emit, the wire and the storage DTO all read it there —
+  while `QuillValue::set_fill_at(&[])` marks the value tree's root, and a
+  value stored after that call kept both bits, disagreeing. `Payload` clears
+  the tree's root bit on insert, so `is_fill` and `QuillValue::fill` answer
+  alike and a document compares equal to itself across the markdown and the
+  storage round-trip, where the split state emitted one document and compared
+  as another. Parse skips a nested-fill path naming only its own key, the
+  route reaching the same split from source.
+- fix(core): **a comment between a bare `-` and the item's first key stays
+  inside the item.** The prescan records such a comment against the item, but
+  emit wrote it above the `- ` line, where it re-parses as a comment on the
+  sequence — a parse-emit-parse inequality on input the parser accepts without
+  a warning, settling only on the second emit. A sequence item whose mapping
+  carries an own-line comment before its first key emits in the bare-dash form,
+  the comment and the mapping indented under it, so the first emit is the fixed
+  point. A blueprint's typed-table row takes that form too, its first
+  property's description sitting inside the row with the rest.
+- fix(pdf): **a `/Rotate` the reader cannot read as an integer refuses the
+  stamp.** `assert_unrotated_pages` parsed the raw value and treated a failure
+  as an absence, so `/Rotate 7 0 R` — legal for any dict value — climbed past
+  the page and fell to the default zero, stamping every widget in unrotated
+  user space onto a page the viewer turns. The first *present* value along the
+  ancestor chain now binds: a direct integer is checked as before
+  (`pdf::rotated_page` when it is not a multiple of 360), anything else is
+  `pdf::parse`, matching how `/MediaBox` treats an unresolvable value.
+- fix(cli): **`--quiet` silences `--verbose` entirely.** Seven of the nine
+  `--verbose` lines in `render` printed regardless of `--quiet`, only the two
+  after the compile checking it, so `--verbose --quiet` still narrated the
+  load and the parse. `execute` resolves the pair once up front, and the help
+  text's "Suppress all non-error output" is what the flag does.
+- refactor(core,typst,pdfform): **the default PPI is stated once, as
+  `RenderOptions::DEFAULT_PPI`.** Each raster backend carried its own
+  `DEFAULT_PPI = 144.0` const, one of them documented as mirroring a core
+  constant that did not exist, so changing the default meant editing three
+  files. `RenderOptions::ppi_or_default()` resolves the option against that
+  constant and both backends call it. Additive on the core API; the resolved
+  value is unchanged.
 
 ## v0.112.0 - 2026-09-01
 
