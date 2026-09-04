@@ -1228,3 +1228,48 @@ fn storage_dto_refuses_a_multi_line_comment() {
     .unwrap_err();
     assert!(err.to_string().contains("one line"), "got: {err}");
 }
+
+/// One violation, the three ingestion boundaries that spell it: parse, wire,
+/// storage. Each renders the text `FieldViolation` owns, naming the key.
+#[test]
+fn every_ingestion_boundary_renders_one_violation_text() {
+    use crate::document::edit::FieldViolation;
+
+    let expected = FieldViolation::InvalidName.message("bad name");
+
+    let parse_err =
+        Document::parse("~~~card-yaml\n$quill: test_quill\n$kind: main\nbad name: v\n~~~\n")
+            .unwrap_err();
+    assert!(
+        parse_err.to_string().contains(&expected),
+        "parse: {parse_err}"
+    );
+
+    let mut wire = crate::document::CardWire::new("main".to_string(), serde_json::json!(""));
+    wire.payload_items = vec![crate::document::PayloadItemWire::Field {
+        key: "bad name".to_string(),
+        value: serde_json::json!("v"),
+        fill: false,
+        nested_fills: Vec::new(),
+    }];
+    let wire_err = Card::try_from(wire).unwrap_err();
+    assert!(wire_err.to_string().contains(&expected), "wire: {wire_err}");
+
+    let storage_err = serde_json::from_value::<Document>(serde_json::json!({
+        "schema": "quillmark/document@0.92.0",
+        "main": {
+            "payload": {"items": [
+                {"type": "quill", "value": "q@1.0"},
+                {"type": "kind", "value": "main"},
+                {"type": "field", "key": "bad name", "value": "v"}
+            ]},
+            "body": ""
+        },
+        "cards": []
+    }))
+    .unwrap_err();
+    assert!(
+        storage_err.to_string().contains(&expected),
+        "storage: {storage_err}"
+    );
+}
