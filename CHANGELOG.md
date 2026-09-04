@@ -110,6 +110,15 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- fix(pdfform): **a flattened value asserts black fill and the default text
+  state before it draws.** The appended stream opened with `q` and set only
+  `Tf`, and a page's `/Contents` array is one stream, so a background's
+  unpaired `0.9 g` or `3 Tr` — a shaded field box, a scanned form's invisible
+  OCR layer — carried into the drawn value and rastered it near-white or
+  blank, with no diagnostic. Both writers now open with
+  `0 g 0 Tr 0 Tc 0 Tw 100 Tz 0 Ts`, the state the stamped `/DA` starts from.
+  SVG/PNG/canvas only: the AcroForm PDF deliverable is stamped, not flattened,
+  so no artifact changes.
 
 ## v0.112.0 - 2026-09-01
 
