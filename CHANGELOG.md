@@ -402,6 +402,15 @@
   storage round-trip, where the split state emitted one document and compared
   as another. Parse skips a nested-fill path naming only its own key, the
   route reaching the same split from source.
+- fix(core): **a comment between a bare `-` and the item's first key stays
+  inside the item.** The prescan records such a comment against the item, but
+  emit wrote it above the `- ` line, where it re-parses as a comment on the
+  sequence — a parse-emit-parse inequality on input the parser accepts without
+  a warning, settling only on the second emit. A sequence item whose mapping
+  carries an own-line comment before its first key emits in the bare-dash form,
+  the comment and the mapping indented under it, so the first emit is the fixed
+  point. A blueprint's typed-table row takes that form too, its first
+  property's description sitting inside the row with the rest.
 
 ## v0.112.0 - 2026-09-01
 
