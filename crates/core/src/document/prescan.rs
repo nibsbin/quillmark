@@ -104,7 +104,9 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
     let mut block_scalar_indent: Option<usize> = None;
 
     for (source_line, raw_line) in lines.iter().enumerate() {
-        let line = *raw_line;
+        // The split is on `\n`, so a CRLF line ends in `\r`. Dropped once here:
+        // every matcher below, and the cleaned YAML, see `\n`-only lines.
+        let line = raw_line.strip_suffix('\r').unwrap_or(raw_line);
         let indent = leading_space_count(line);
         let trimmed = &line[indent..];
 
@@ -416,11 +418,7 @@ fn ensure_frame_at_indent(stack: &mut Vec<Frame>, indent: usize) -> usize {
     stack.len() - 1
 }
 
-/// The slice runs to the `\n` this scan split on, so CRLF input carries a
-/// trailing `\r`. Dropped here: comment text reaches emit verbatim, and emit is
-/// `\n` only.
 fn strip_comment_marker(raw: &str) -> &str {
-    let raw = raw.strip_suffix('\r').unwrap_or(raw);
     let after = raw.trim_start_matches('#');
     after.strip_prefix(' ').unwrap_or(after)
 }
@@ -833,6 +831,35 @@ mod tests {
             }]
         );
         assert!(!out.cleaned_yaml.contains("!must_fill"));
+    }
+
+    #[test]
+    fn crlf_lines_carry_no_carriage_return_into_the_scan() {
+        let input = "dept: !must_fill\r\n# note\r\ntitle: x # trailing\r\n";
+        let out = prescan_fence_content(input);
+        assert_eq!(
+            out.items,
+            vec![
+                PreItem::Field {
+                    key: "dept".to_string(),
+                    fill: true,
+                },
+                PreItem::Comment {
+                    text: "note".to_string(),
+                    inline: false,
+                },
+                PreItem::Field {
+                    key: "title".to_string(),
+                    fill: false,
+                },
+                PreItem::Comment {
+                    text: "trailing".to_string(),
+                    inline: true,
+                },
+            ]
+        );
+        assert!(out.warnings.is_empty(), "got: {:?}", out.warnings);
+        assert!(!out.cleaned_yaml.contains('\r'));
     }
 
     #[test]

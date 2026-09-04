@@ -373,6 +373,15 @@
   fallback and the multi-page `--stdout` refusal interpolated the flag as
   typed, so `-f PDF` wrote `example.PDF` and `-f Svg` named `Svg` in its
   message. All three read the parsed format's lowercase id.
+- fix(core): **a card fence with CRLF line endings parses as its LF twin
+  does.** The prescan splits the fence body on `\n`, so every CRLF line
+  reached the matchers with a trailing `\r`: a bare `x: !must_fill` matched
+  neither spelling the fill-tag stripper accepts, so the marker was read as an
+  unknown tag — dropped with a `parse::unsupported_yaml_tag` warning, a second
+  `parse::fill_marker_unsupported_position` warning, a `null` value and an
+  `x: null` emit — and a lone `-` opening a sequence item was not one. The
+  scan strips one trailing `\r` per line up front, so the cleaned YAML and
+  every captured comment are `\n`-only.
 
 ## v0.112.0 - 2026-09-01
 

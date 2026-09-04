@@ -120,6 +120,32 @@ fn unsupported_fill_position_warns_not_silently_dropped() {
     );
 }
 
+/// The prescan splits on `\n`, so CRLF input reaches it with a trailing `\r` on
+/// every line. Line endings carry no meaning of their own: the parse must land
+/// where the LF twin lands.
+#[test]
+fn crlf_input_parses_as_its_lf_twin() {
+    let lf = "~~~card-yaml\n$quill: q\n$kind: main\n# note\nx: !must_fill\ny: keep\n~~~\n\nBody.\n";
+    let crlf = lf.replace('\n', "\r\n");
+
+    let lf_out = Document::parse(lf).unwrap();
+    let crlf_out = Document::parse(&crlf).unwrap();
+
+    assert!(
+        crlf_out.warnings.is_empty(),
+        "CRLF input must parse without warnings; got: {:?}",
+        crlf_out.warnings
+    );
+    assert!(
+        crlf_out.document.main().payload().is_fill("x"),
+        "a bare `!must_fill` must be recognised under CRLF"
+    );
+    assert_eq!(
+        crlf_out.document, lf_out.document,
+        "CRLF and LF input must parse to the same document"
+    );
+}
+
 #[test]
 fn nested_must_fill_round_trips() {
     let src = "~~~card-yaml\n$quill: q\n$kind: main\naddr:\n  street: !must_fill\n  city: Springfield\n~~~\n";
