@@ -508,8 +508,16 @@ impl Payload {
     }
 
     /// Insert or replace field `key` with `value`, setting its fill marker.
-    /// Position-preserving for an existing key, append otherwise.
-    fn insert_item(&mut self, key: String, value: QuillValue, fill: bool) -> Option<QuillValue> {
+    /// Position-preserving for an existing key, append otherwise. The item's
+    /// `fill` flag is the one carrier of a root marker, so a root fill bit on
+    /// the incoming tree is cleared rather than stored beside it.
+    fn insert_item(
+        &mut self,
+        key: String,
+        mut value: QuillValue,
+        fill: bool,
+    ) -> Option<QuillValue> {
+        value.clear_root_fill();
         for item in self.items.iter_mut() {
             if let PayloadItem::Field {
                 key: k,

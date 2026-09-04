@@ -392,6 +392,16 @@
   block-scalar body and a quoted value are known for what they are; the four
   positions the marker genuinely cannot survive — a flow map, a flow
   sequence, a bare sequence element, a flow value at depth — warn as before.
+- fix(core): **a field write clears a root `!must_fill` bit riding on the
+  value it is handed.** The payload item's own `fill` flag is the one carrier
+  of a root marker — emit, the wire and the storage DTO all read it there —
+  while `QuillValue::set_fill_at(&[])` marks the value tree's root, and a
+  value stored after that call kept both bits, disagreeing. `Payload` clears
+  the tree's root bit on insert, so `is_fill` and `QuillValue::fill` answer
+  alike and a document compares equal to itself across the markdown and the
+  storage round-trip, where the split state emitted one document and compared
+  as another. Parse skips a nested-fill path naming only its own key, the
+  route reaching the same split from source.
 
 ## v0.112.0 - 2026-09-01
 

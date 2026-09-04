@@ -338,6 +338,28 @@ fn test_card_store_fields_clears_fill_and_repeated_name_last_wins() {
     assert_eq!(value.as_str(), Some("final"));
 }
 
+/// The payload item's flag is the sole carrier of a root `!must_fill`, so a
+/// value arriving with its own root bit set is stored under the marker the
+/// mutator names: `Payload::is_fill` and [`QuillValue::fill`] agree afterwards.
+#[test]
+fn test_store_clears_a_root_fill_bit_on_the_incoming_value() {
+    let mut marked = qv("draft");
+    assert!(marked.set_fill_at(&[]));
+
+    let mut card = Card::new("note").unwrap();
+    card.store_fields([("x".to_string(), marked.clone())])
+        .unwrap();
+    card.store_field("y", marked.clone()).unwrap();
+    card.store_fill("z", marked).unwrap();
+
+    for key in ["x", "y"] {
+        assert!(!card.payload().is_fill(key), "{key} carries no marker");
+        assert!(!card.payload().get(key).unwrap().fill(), "{key} value");
+    }
+    assert!(card.payload().is_fill("z"));
+    assert!(!card.payload().get("z").unwrap().fill());
+}
+
 #[test]
 fn test_store_field_scalar_conversions() {
     let mut card = Card::new("note").unwrap();

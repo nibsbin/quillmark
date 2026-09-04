@@ -105,4 +105,42 @@ fn store_ext_leaves_the_kind_trailer_on_kind() {
         doc,
         "emit must re-parse to the same document"
     );
+
+/// Emit, the wire and the storage DTO all read a root `!must_fill` off the
+/// payload item's flag, so a value tree whose own root bit disagrees with that
+/// flag compares as a different `Document` than it emits. A caller's root bit
+/// is normalized on the way in, and both round-trips return an equal document
+/// whether the field is marked or not.
+#[test]
+fn a_root_fill_bit_on_a_stored_value_round_trips() {
+    use crate::document::Document;
+    use crate::value::QuillValue;
+
+    let mut marked = QuillValue::from_json(serde_json::json!("draft"));
+    assert!(marked.set_fill_at(&[]));
+
+    let mut doc = Document::new("q@1.0.0".parse().expect("reference"));
+    doc.main_mut()
+        .store_fields([("x".to_string(), marked.clone())])
+        .expect("store_fields accepts the value");
+    doc.main_mut()
+        .store_field("y", marked.clone())
+        .expect("store_field accepts the value");
+    doc.main_mut()
+        .store_fill("z", marked)
+        .expect("store_fill accepts the value");
+
+    let md = doc.to_markdown();
+    assert!(md.contains("\nx: draft\n"), "{md}");
+    assert!(md.contains("\ny: draft\n"), "{md}");
+    assert!(md.contains("\nz: !must_fill draft\n"), "{md}");
+
+    let reparsed = Document::parse(&md)
+        .expect("the emitted document re-parses")
+        .document;
+    assert_eq!(reparsed, doc, "markdown round-trip:\n{md}");
+
+    let json = serde_json::to_string(&doc).expect("to_json");
+    let restored: Document = serde_json::from_str(&json).expect("from_json");
+    assert_eq!(restored, doc, "storage DTO round-trip");
 }
