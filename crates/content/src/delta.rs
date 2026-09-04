@@ -88,15 +88,14 @@ pub struct BaseLengthMismatch {
 
 impl Delta {
     /// Chars of base the `Retain`/`Delete` ops together consume: the base
-    /// length this delta was built against.
+    /// length this delta was built against. Saturating, so a wire delta whose
+    /// counts exceed `usize` reports a length no base has and
+    /// [`try_apply`](Self::try_apply) rejects it as a mismatch.
     pub fn expected_base_len(&self) -> usize {
-        self.ops
-            .iter()
-            .map(|op| match op {
-                Op::Retain(n) | Op::Delete(n) => *n,
-                Op::Insert(_) => 0,
-            })
-            .sum()
+        self.ops.iter().fold(0usize, |acc, op| match op {
+            Op::Retain(n) | Op::Delete(n) => acc.saturating_add(*n),
+            Op::Insert(_) => acc,
+        })
     }
 
     /// Apply to `base`, producing the new text. Base beyond what the ops
@@ -508,6 +507,22 @@ mod tests {
             ops: vec![Op::Delete(9)],
         };
         assert!(over_del.try_apply("hello").is_err());
+    }
+
+    #[test]
+    fn try_apply_rejects_delta_whose_counts_overflow() {
+        // Counts arrive off the wire, where any u64 deserializes.
+        let over = Delta {
+            ops: vec![Op::Retain(usize::MAX), Op::Retain(2)],
+        };
+        assert_eq!(over.expected_base_len(), usize::MAX);
+        assert_eq!(
+            over.try_apply("hello"),
+            Err(BaseLengthMismatch {
+                expected: usize::MAX,
+                actual: 5,
+            })
+        );
     }
 
     #[test]

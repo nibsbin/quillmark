@@ -121,6 +121,14 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- fix(content): **a change bundle whose `retain`/`delete` counts sum past
+  `usize` is a base mismatch, not a panic.** `Delta::expected_base_len` summed
+  the counts unchecked, so a host-authored bundle carrying
+  `{"retain": 18446744073709551615}` aborted in debug and wrapped in release,
+  where the wrapped total let `apply` slice past the base. The sum saturates,
+  and the saturated length exceeds any real base, so `try_apply` and
+  `apply_field_change` return the `DeltaBaseMismatch` the contract already
+  names. No wire or API change.
 
 ## v0.112.0 - 2026-09-01
 
