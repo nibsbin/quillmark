@@ -77,6 +77,72 @@ fn validate_accepts_a_shipped_quill() {
     ok(&["validate", quill.to_str().unwrap()]);
 }
 
+/// A quill directory carrying just `yaml`, for the failure paths no shipped
+/// fixture covers.
+fn quill_with_config(yaml: &str) -> tempfile::TempDir {
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(dir.path().join("Quill.yaml"), yaml).expect("write Quill.yaml");
+    dir
+}
+
+/// One summary, not one per printer: the command writes its own, so the error
+/// it returns must not carry a second.
+#[test]
+fn a_failing_validate_prints_one_summary() {
+    let dir = quill_with_config(
+        r#"quill:
+  name: broken
+  version: 0.1.0
+  backend: typst
+  description: Names a plate that is not there
+typst:
+  plate_file: absent.typ
+main:
+  fields:
+    title:
+      description: title of document
+      type: string
+"#,
+    );
+
+    let out = run(&["validate", dir.path().to_str().unwrap()]);
+    assert_eq!(
+        out.status.code(),
+        Some(1),
+        "a failing validate exited {:?}",
+        out.status.code()
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let summaries = stderr
+        .lines()
+        .filter(|line| line.contains("Validation failed"))
+        .count();
+    assert_eq!(summaries, 1, "expected one summary line: {stderr}");
+}
+
+/// A config that will not load is a quill failure, and reads as one.
+#[test]
+fn an_unloadable_quill_is_not_an_invalid_argument() {
+    let dir = quill_with_config("quill:\n  name: broken\n  backend: typst\n");
+
+    let out = run(&["validate", dir.path().to_str().unwrap()]);
+    assert_eq!(
+        out.status.code(),
+        Some(1),
+        "an unloadable quill exited {:?}",
+        out.status.code()
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("quill::missing_version"),
+        "the load diagnostics are missing: {stderr}"
+    );
+    assert!(
+        !stderr.contains("Invalid argument"),
+        "a load failure is labelled an invalid argument: {stderr}"
+    );
+}
+
 /// The two commands that take `-o`.
 #[test]
 fn output_flag_writes_the_named_file() {

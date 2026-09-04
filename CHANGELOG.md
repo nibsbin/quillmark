@@ -110,6 +110,13 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- fix(cli): **`validate` states each failure once.** A failing run printed its
+  own summary and then a second copy through the error it returned, which
+  `main` labelled `[ERROR] Invalid argument:` — including on a load failure,
+  which is a quill config failure and not an argument the caller got wrong. The
+  command returns `CliError::Reported` once it has written the per-diagnostic
+  lines and the summary, and a load failure carries the loader's `RenderError`
+  the way every other subcommand does. Exit status stays 1 on every path.
 
 ## v0.112.0 - 2026-09-01
 
