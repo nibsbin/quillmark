@@ -706,6 +706,10 @@ impl Card {
             .iter()
             .filter_map(|(name, value)| {
                 check_field(name, value.as_json())
+                    .and_then(|()| {
+                        validate_fill_targets(value, false)
+                            .map_err(|v| edit_error_from_violation(name, v))
+                    })
                     .err()
                     .map(|e| (name.clone(), e))
             })
