@@ -148,7 +148,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
             return Err(CliError::InvalidArgument(format!(
                 "{} renders {} pages, one artifact each, and --stdout carries one; \
                  drop --stdout to write the pages as files",
-                args.format,
+                output_format,
                 result.artifacts.len()
             )));
         }
@@ -156,9 +156,9 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     } else {
         let output_path = args.output.unwrap_or_else(|| {
             if let Some(ref path) = markdown_path_for_output {
-                derive_output_path(path, &args.format)
+                derive_output_path(path, output_format.as_str())
             } else {
-                PathBuf::from(format!("example.{}", args.format))
+                PathBuf::from(format!("example.{}", output_format))
             }
         });
         if let [artifact] = result.artifacts.as_slice() {

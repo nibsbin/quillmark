@@ -368,6 +368,11 @@
   called `supported_formats` and `open`, each resolving the quill's backend
   separately; it now holds the resolved backend and asks it for both. Same
   diagnostics in the same order.
+- fix(cli): **`-f PDF` writes `example.pdf`.** `--format` parses
+  case-insensitively, but the derived output filename, the `example.<fmt>`
+  fallback and the multi-page `--stdout` refusal interpolated the flag as
+  typed, so `-f PDF` wrote `example.PDF` and `-f Svg` named `Svg` in its
+  message. All three read the parsed format's lowercase id.
 
 ## v0.112.0 - 2026-09-01
 
