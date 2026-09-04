@@ -1,6 +1,6 @@
 use crate::commands::load_quill;
 use crate::errors::{CliError, Result};
-use crate::output::{derive_output_path, page_output_path, write_output};
+use crate::output::{derive_output_path, page_output_path, write_file, write_stdout};
 use clap::Parser;
 use quillmark::{Document, Quillmark};
 use quillmark_core::{OutputFormat, RenderOptions};
@@ -152,7 +152,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
                 result.artifacts.len()
             )));
         }
-        write_output(true, None, args.quiet, &result.artifacts[0].bytes)?;
+        write_stdout(&result.artifacts[0].bytes)?;
     } else {
         let output_path = args.output.unwrap_or_else(|| {
             if let Some(ref path) = markdown_path_for_output {
@@ -162,13 +162,13 @@ pub fn execute(args: RenderArgs) -> Result<()> {
             }
         });
         if let [artifact] = result.artifacts.as_slice() {
-            write_output(false, Some(&output_path), args.quiet, &artifact.bytes)?;
+            write_file(&output_path, &artifact.bytes, !args.quiet)?;
         } else {
             // Every page numbered, page one included: an unnumbered file beside
             // numbered ones reads as the whole document.
             for (i, artifact) in result.artifacts.iter().enumerate() {
                 let path = page_output_path(&output_path, i + 1);
-                write_output(false, Some(&path), args.quiet, &artifact.bytes)?;
+                write_file(&path, &artifact.bytes, !args.quiet)?;
             }
         }
     }
