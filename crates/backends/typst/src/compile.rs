@@ -40,16 +40,13 @@ pub(crate) fn compile_document(
     }
 }
 
-/// 2x at 72pt/inch.
-const DEFAULT_PPI: f32 = 144.0;
-
 /// `field_placements` are stamped as AcroForm widgets by the PDF path only;
 /// `producer` overrides the PDF `/Info` `/Producer` string.
 pub(crate) fn render_document_pages(
     document: &PagedDocument,
     pages: Option<&[usize]>,
     format: OutputFormat,
-    ppi: Option<f32>,
+    ppi: f32,
     field_placements: &[overlay::FieldPlacement],
     producer: Option<&str>,
 ) -> Result<RenderResult, RenderError> {
@@ -93,7 +90,7 @@ pub(crate) fn render_document_pages(
             Ok(RenderResult::new(artifacts, OutputFormat::Svg))
         }
         OutputFormat::Png => {
-            let scale = ppi.unwrap_or(DEFAULT_PPI) / 72.0;
+            let scale = ppi / 72.0;
             let opts = render_options(scale);
             let mut artifacts = Vec::with_capacity(selected_indices.len());
             for idx in selected_indices {

@@ -110,6 +110,13 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- refactor(core,typst,pdfform): **the default PPI is stated once, as
+  `RenderOptions::DEFAULT_PPI`.** Each raster backend carried its own
+  `DEFAULT_PPI = 144.0` const, one of them documented as mirroring a core
+  constant that did not exist, so changing the default meant editing three
+  files. `RenderOptions::ppi_or_default()` resolves the option against that
+  constant and both backends call it. Additive on the core API; the resolved
+  value is unchanged.
 
 ## v0.112.0 - 2026-09-01
 

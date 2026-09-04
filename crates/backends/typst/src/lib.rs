@@ -254,7 +254,7 @@ impl SessionHandle for TypstSession {
             &self.live.document,
             opts.pages.as_deref(),
             format,
-            opts.ppi,
+            opts.ppi_or_default(),
             &self.live.field_placements,
             opts.producer.as_deref(),
         )
