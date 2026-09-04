@@ -129,6 +129,13 @@
   and the saturated length exceeds any real base, so `try_apply` and
   `apply_field_change` return the `DeltaBaseMismatch` the contract already
   names. No wire or API change.
+- fix(content): **`diff_import` carries unknown marks forward beside anchors.**
+  The rebase loop matched `MarkKind::Anchor` alone, so a full-document rewrite
+  through the stale-text writer lane dropped every open-set mark, even one over
+  text the rewrite left untouched. It now rebases every non-formatting mark —
+  formatting is what the fresh import re-derives, and the rest lives in the
+  content but not in markdown — so an unknown tag and its attrs survive a
+  revise the way an anchor does.
 
 ## v0.112.0 - 2026-09-01
 
