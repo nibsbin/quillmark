@@ -110,6 +110,16 @@
   `from_plaintext`, markdown import, and an `Op::Insert` through
   `apply_text_delta`. A space rather than a drop, both being Unicode
   whitespace, so the words either side stay parted.
+- fix(pdf): **a dict ending in a hex string parses to its real `>>`.** The
+  scanner stepped over literal strings and `%`-comments but read a hex string
+  as ordinary bytes, so the string's own `>` abutting the dict's `>>` closed
+  the dict one byte early: `<< /T <41>>>` read as ` /T <41`, every
+  `find_dict_value` on that inner swallowed the rest as one hex string, and a
+  `/Producer` stamp rewrote the `/Info` with an unterminated `<…` — a title
+  lost to any reader. `skip_string_or_comment` steps a `<` that no `<` follows
+  to just past its `>`, which the dict, array and `endobj` scans all inherit.
+  The trigger is real: pdf-writer's compact mode, which krilla and typst-pdf
+  use, writes a non-ASCII `/Title` or `/Author` exactly this way.
 
 ## v0.112.0 - 2026-09-01
 
