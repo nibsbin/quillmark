@@ -66,3 +66,31 @@ fn markdown_and_json_converge_on_canonical_form() {
         passed, skipped
     );
 }
+
+/// A comment between a bare `-` and the item's first key belongs to the item, so
+/// it re-emits inside the item and the first emit is already the fixed point.
+#[test]
+fn a_comment_before_a_sequence_item_first_key_stays_inside_the_item() {
+    use crate::document::Document;
+
+    let src = "\
+~~~
+$quill: test@1.0
+$kind: main
+items:
+  -
+    # c
+    name: a
+~~~
+
+Body.
+";
+    let doc = Document::parse(src).expect("parses").document;
+    let md = doc.to_markdown();
+    assert_eq!(md, src, "the first emit is not the fixed point");
+
+    let reparsed = Document::parse(&md)
+        .expect("the emitted document re-parses")
+        .document;
+    assert_eq!(doc, reparsed, "emit is not a fixed point: {md}");
+}

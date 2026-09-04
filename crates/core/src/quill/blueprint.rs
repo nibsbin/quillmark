@@ -906,7 +906,7 @@ main:
 "#)
         .blueprint();
         assert!(t.contains(
-            "# Cited works.\nreferences: # array<object>\n  # Citing organization.\n  - org: !must_fill # string\n"
+            "# Cited works.\nreferences: # array<object>\n  -\n    # Citing organization.\n    org: !must_fill # string\n"
         ));
         assert!(t.contains("    # Publication year.\n    year: 0 # integer\n"));
     }
