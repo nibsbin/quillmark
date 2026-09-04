@@ -9,8 +9,6 @@
 
 use std::collections::BTreeMap;
 
-use unicode_normalization::UnicodeNormalization;
-
 use quillmark_content::delta::diff_import;
 use quillmark_content::import::ImportError;
 use quillmark_content::{ApplyError, ChangeBundle, Delta, Normalized};
@@ -34,12 +32,14 @@ fn render_at(field: &str, at: &[PathSegment]) -> String {
         .to_string()
 }
 
-/// `true` if `name` matches `[A-Za-z_][A-Za-z0-9_]*` after NFC normalisation.
+/// `true` if `name` matches `[A-Za-z_][A-Za-z0-9_]*`, tested on `name`'s own
+/// characters: the parser reads a key's raw bytes, so a name that merely
+/// normalises to ASCII (`U+212A KELVIN SIGN`) is not a top-level key.
 ///
 /// Case is preserved verbatim; only `$`-prefixed keys are reserved, so a user
 /// field can never shadow system metadata.
 pub fn is_valid_field_name(name: &str) -> bool {
-    let mut chars = name.nfc();
+    let mut chars = name.chars();
     let Some(first) = chars.next() else {
         return false;
     };

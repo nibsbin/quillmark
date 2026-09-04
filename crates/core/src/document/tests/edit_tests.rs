@@ -79,6 +79,21 @@ fn test_document_store_field_rejects_dollar_prefixed_names() {
 }
 
 #[test]
+fn test_document_store_field_rejects_non_ascii_names() {
+    for name in ["\u{212A}elvin", "e\u{0301}tat"] {
+        let mut doc = make_doc();
+        assert_eq!(
+            doc.main_mut().store_field(name, qv("value")),
+            Err(EditError::InvalidFieldName(name.to_string())),
+            "expected InvalidFieldName for {:?}",
+            name
+        );
+        doc.main_mut().store_field("after", qv("w")).unwrap();
+        assert_eq!(Document::parse(&doc.to_markdown()).unwrap().document, doc);
+    }
+}
+
+#[test]
 fn test_document_store_field_updates_existing() {
     let mut doc = make_doc();
     doc.main_mut().store_field("title", qv("New Title")).unwrap();
