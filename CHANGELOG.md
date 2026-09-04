@@ -151,6 +151,16 @@
   dropped as unrepresentable. The expected text omits the slots of islands with
   no markdown projection and keeps every other one, so the probe measures
   delimiter leakage alone and still reads an image's slot back.
+- fix(content): **a heading, an island and a rule take no continuation lines.**
+  `segment` grouped a `continues` line into the block above, but export renders
+  only the first line of those three kinds, so `SetContinues` on the line after
+  a heading validated clean and exported `"# a"` with the continuation dropped,
+  while the Typst emitter still rendered it. `LineKind::takes_continuations`
+  names the kinds a continuation is legal after (`Para`, `Code`, `Unknown`);
+  `SetContinues` refuses the write (`ApplyError::ContinuesSingleLineBlock`),
+  `normalize` clears a flag `SetKind` or a stored document left there, and
+  `validate` rejects a hand-built one (`Invariant::ContinuesSingleLineBlock`),
+  the repair-or-refuse split `ContinuesAcrossContainers` already carries.
 
 ## v0.112.0 - 2026-09-01
 

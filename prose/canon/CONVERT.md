@@ -32,6 +32,14 @@ A **segment** is a maximal run of lines joined by `Line::continues`: one
 paragraph, one heading, one whole code fence, one island line. It is what
 "paragraph-level" means against the content, and the unit a region keys on.
 
+Only a `para`, `code` or unknown block takes continuations
+(`LineKind::takes_continuations`), and a continuation stays inside one container
+path. A heading, an island and a rule are one line, and both emitters render
+that line alone, so a `continues` line after one would be text neither
+projection reaches: `Content::normalize` clears the flag there,
+`Content::validate` rejects it (`Invariant::ContinuesSingleLineBlock`,
+`ContinuesAcrossContainers`), and `LineOp::SetContinues` refuses to write it.
+
 ## Escape functions
 
 Two escapers guard the two Typst contexts; both live in `emit`:

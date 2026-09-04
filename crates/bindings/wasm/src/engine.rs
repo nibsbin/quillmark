@@ -374,7 +374,9 @@ export type MarkOp =
  * A line/block edit. `split`/`join` splice `\n` in post-`delta`,
  * post-`islandOps` coordinates; `setKind`/`setContainers`/`setContinues` touch
  * metadata. `setContinues` sets or clears a line's within-block hard-break flag
- * (`ContentLine.continues`); `continues: true` on line 0 is rejected.
+ * (`ContentLine.continues`); `continues: true` is rejected on line 0, on a line
+ * whose containers differ from the line above, and after a heading, island or
+ * rule, each of which is a block of one line.
  */
 export type LineOp =
     | { op: "split"; at: number }
