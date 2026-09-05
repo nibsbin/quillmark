@@ -14,7 +14,7 @@ do the heavy compilation.
 
 ## Data Flow
 
-1. **Parse**: card-yaml block extraction, bidi stripping, HTML fence normalization
+1. **Parse**: card-yaml block extraction, bidi stripping, line-separator spacing, HTML fence normalization
 2. **Normalize**: Type coercion, schema defaults, field validation
 3. **Compile**: Backend's `open()` receives the quill + JSON data and returns a `LiveSession`; `LiveSession::render()` produces artifacts
 
