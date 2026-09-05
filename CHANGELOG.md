@@ -747,6 +747,12 @@
   structural out-of-range op is `cards[<i>]`. A consumer routing on `path`
   reads the same string from both bindings; one comparing against a bare field
   name now matches nothing.
+- fix(python): **a card dict is `CardWire`'s serde projection rather than a hand
+  copy of it.** `card_to_pydict` serializes the wire and adapts the two keys
+  Python's surface owns: snake_case `payload_items`, and an explicit `None`
+  where an absent `$quill` / `$ext` / `$seed` leaves the wire key out. Every key
+  and value is what it was; the dict now iterates in the wire's own order, so
+  `payload_items` follows `ext` and `seed` instead of preceding them.
 
 ## v0.112.0 - 2026-09-01
 
