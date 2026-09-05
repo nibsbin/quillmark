@@ -72,7 +72,7 @@ routing coercion-vs-undeclared is `edit::field_coercion_failed` vs.
 
 ## Warning flow
 
-Warnings travel the same `Diagnostic` currency as errors, on five producer
+Warnings travel the same `Diagnostic` currency as errors, on six producer
 families:
 
 - **Parse warnings**: the `warnings` on the `Parsed` that `Document::parse`
@@ -110,6 +110,15 @@ families:
   Core cannot *detect* a plate dropping a construct — the absence of ink is
   not a signal a backend reports — so this family is a declaration, not an
   observation: nothing verifies it, and an undeclared drop stays silent.
+- **`backend::declined_construct`: observed-decline warnings.** Its twin, from
+  the other side. A backend that declines a construct *outright* is the
+  observer core is not, so it says so itself: one diagnostic per (content
+  field, construct) carrying `backend`, `construct` and `count` in `args` and
+  the field's `DocPath` in `path`, minted by `quillmark_core::declined_construct`
+  so the two lanes cannot drift into two key sets. Per field, not per body, and
+  at the compile that dropped the construct, so it rides the session's compile
+  warnings. The Typst backend declines `image` in content
+  ([CONVERT.md](CONVERT.md#declined-images)); nothing else declines anything.
 - **Compile warnings**: the Typst backend maps `typst::compile`'s non-fatal
   diagnostics (font fallback, overfull pages, …) through the same span
   resolution as errors. They are state of the session's current compile:
@@ -353,6 +362,7 @@ Three outcomes, and the wire tells them apart only with this table in hand, sinc
 | `parse::missing_quill` | — | fallback |
 | `parse::body_import` | — | fallback |
 | `plate::unsupported_construct` | `construct`, `count` | structured |
+| `backend::declined_construct` | `backend`, `construct`, `count` | structured |
 
 `parse::missing_quill` looks code-determined and is not: it picks one of three sentences by re-reading the source, and no field records which.
 
