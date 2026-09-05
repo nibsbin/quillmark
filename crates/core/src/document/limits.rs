@@ -1,4 +1,4 @@
-//! Nesting-depth budget for document parsing.
+//! Nesting-depth bound for values stored into a document.
 //!
 //! [`MAX_YAML_DEPTH`] governs the maximum container nesting accepted on the
 //! payload paths, preventing denial-of-service via deeply nested input.
@@ -20,11 +20,3 @@
 ///
 /// Prevents stack overflow from deeply nested input.
 pub const MAX_YAML_DEPTH: usize = 64;
-
-/// serde-saphyr parse options for every YAML entry point.
-///
-/// The default [`serde_saphyr::Budget`] carries the depth, size, and count
-/// caps the parser enforces.
-pub(crate) fn yaml_parse_options() -> serde_saphyr::Options {
-    serde_saphyr::Options::default()
-}

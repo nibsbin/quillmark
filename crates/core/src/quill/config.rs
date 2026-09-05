@@ -1649,13 +1649,9 @@ impl QuillConfig {
         let mut warnings: Vec<Diagnostic> = Vec::new();
         let mut errors: Vec<Diagnostic> = Vec::new();
 
-        // Parse YAML into serde_json::Value via serde_saphyr. The depth budget
-        // bounds nesting so an untrusted Quill.yaml cannot overflow the stack.
+        // Parse YAML into serde_json::Value via serde_saphyr.
         // Note: serde_json with "preserve_order" feature is required for this to work as expected
-        let quill_yaml_val: serde_json::Value = match serde_saphyr::from_str_with_options(
-            yaml_content,
-            crate::document::limits::yaml_parse_options(),
-        ) {
+        let quill_yaml_val: serde_json::Value = match serde_saphyr::from_str(yaml_content) {
             Ok(v) => v,
             Err(e) => {
                 // Through `YamlError` so this shares the one saphyr adapter:

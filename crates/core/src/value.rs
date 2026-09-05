@@ -172,11 +172,8 @@ impl QuillValue {
     /// Parse a YAML string under the parser's own budget, so an over-deep
     /// document errors rather than overflowing its stack.
     pub fn from_yaml_str(yaml_str: &str) -> Result<Self, crate::error::YamlError> {
-        let json_val: serde_json::Value = serde_saphyr::from_str_with_options(
-            yaml_str,
-            crate::document::limits::yaml_parse_options(),
-        )
-        .map_err(|e| crate::error::YamlError::from_de(e, yaml_str))?;
+        let json_val: serde_json::Value = serde_saphyr::from_str(yaml_str)
+            .map_err(|e| crate::error::YamlError::from_de(e, yaml_str))?;
         Ok(Self::from_json(json_val))
     }
 
