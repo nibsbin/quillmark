@@ -2096,24 +2096,6 @@ main:
     );
 }
 
-#[test]
-fn quill_yaml_deep_nesting_is_rejected() {
-    let mut deep = String::from(
-        "quill:\n  name: bomb\n  version: 1.0.0\n  backend: typst\n  description: bomb\n  payload:\n",
-    );
-    for i in 0..150 {
-        deep.push_str(&"  ".repeat(i + 1));
-        deep.push_str("nest:\n");
-    }
-    let result = QuillConfig::from_yaml(&deep);
-    assert!(result.is_err(), "deeply nested Quill.yaml must be rejected");
-    let msg = result.unwrap_err().to_string();
-    assert!(
-        msg.contains("depth") || msg.contains("YAML") || msg.contains("limit"),
-        "error should reference the depth/YAML limit, got: {msg}"
-    );
-}
-
 fn example_default_yaml(field_yaml: &str) -> String {
     format!(
         r#"

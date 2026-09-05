@@ -169,9 +169,8 @@ impl QuillValue {
         }
     }
 
-    /// Parse a YAML string under the shared
-    /// [`MAX_YAML_DEPTH`](crate::document::limits::MAX_YAML_DEPTH) budget, so
-    /// an over-deep document errors rather than overflowing the parser's stack.
+    /// Parse a YAML string under the parser's own budget, so an over-deep
+    /// document errors rather than overflowing its stack.
     pub fn from_yaml_str(yaml_str: &str) -> Result<Self, crate::error::YamlError> {
         let json_val: serde_json::Value = serde_saphyr::from_str_with_options(
             yaml_str,
