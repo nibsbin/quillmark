@@ -139,6 +139,12 @@
   placement. Storage stays lenient: `to_markdown` writes a content already in
   that shape as a paragraph, the table, and a paragraph, so the island survives
   re-import.
+- fix(content): **a paragraph emptied by HTML stripping leaves no line.**
+  `<span></span>` on its own imported as an empty `Para` line, which markdown
+  has no syntax to write, so `to_markdown` emitted a stray blank line and
+  re-import collapsed it: `from_markdown("a\n\n<span></span>\n\nb")` was not a
+  fixed point. Import now drops such a paragraph. An empty heading, code block
+  and container keep their line, markdown being able to write those back.
 - change(core)!: **YAML nesting depth is the parser's to bound, and
   `MAX_YAML_DEPTH` is gone.** The constant set `serde_saphyr`'s depth budget
   and doubled as the bound on host values crossing into the document, so one
