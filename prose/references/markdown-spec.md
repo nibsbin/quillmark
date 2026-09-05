@@ -448,7 +448,7 @@ error when any is exceeded:
 |---|---|
 | Document size | 10 MiB |
 | YAML payload size per block | 1 MiB |
-| YAML nesting depth | 100 |
+| YAML nesting depth | 64 |
 | Field count per block | 1000 |
 | Card count per document | 1000 |
 
