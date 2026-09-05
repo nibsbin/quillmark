@@ -986,7 +986,7 @@ fn store_field_rejects_value_past_depth_limit() {
     let too_deep = crate::value::QuillValue::from_json(deep_value(150));
     let err = doc.main_mut().store_field("y", too_deep).unwrap_err();
     assert!(
-        matches!(err, crate::document::EditError::ValueTooDeep { max: 100 }),
+        matches!(err, crate::document::EditError::ValueTooDeep { max: 64 }),
         "expected ValueTooDeep, got {err:?}"
     );
     let too_deep = crate::value::QuillValue::from_json(deep_value(150));
