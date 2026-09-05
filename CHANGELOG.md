@@ -21,6 +21,22 @@
 - feat(core): **`~~~yaml` opens a card-yaml block**, a second non-canonical
   alias beside `~~~card-yaml`; both re-emit as bare `~~~`. A YAML *code* block
   in prose is a backtick fence (```` ```yaml ````), unchanged.
+- feat(core): **`validation::example_unchanged`: a cell still holding the value
+  its schema showed.** `Quill::validate` warns (non-fatal, beside
+  `validation::must_fill`) where an authored value is the field's `example:`,
+  or a body is its `body.example` or the `Write <kind> body here.` placeholder
+  the blueprint generates for a kind declaring none. The blueprint seats a
+  defaultless field's example in its value cell under the `!must_fill` marker
+  and a seed commits one on every field that declares it, so dropping the
+  marker leaves a value that is present, type-valid, in-domain and nobody's
+  answer — a signed memo reading `Duty Title` under the commander's name, with
+  a clean validate. Arrays are compared element-wise against the same index of
+  the shown literal, so a half-edited list names the element left behind; a
+  typed dictionary and a variant container are walked per cell. A field
+  declaring no `example:` never fires: absence is `must_fill`'s question. The
+  `trigger` arg says which cell spoke (`field` or `body`) and `example` carries
+  the shown value.
+
 - feat(core): **the values form: `reader.values()` reads a document as plain
   values and `writer.set_values(values)` writes them back.** A document has
   three forms: *stored* (verbatim, quill-free), *values* (stored with every
