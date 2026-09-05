@@ -34,7 +34,9 @@ pub(crate) fn is_line_separator(c: char) -> bool {
 /// because it pairs with a `\n` that stays; a line separator becomes a space,
 /// both being Unicode whitespace, so dropping one would join the words it parts.
 /// No downstream escape can neutralize a separator — a `\` before whitespace is
-/// Typst's own linebreak — so the content refuses it.
+/// Typst's own linebreak — so it cannot survive in the text. Nothing reports the
+/// substitution; [`Content::validate`](crate::Content::validate) refuses only a
+/// separator that reached a content without passing an ingress.
 #[inline]
 pub(crate) fn admit_char(c: char) -> Option<char> {
     match c {
