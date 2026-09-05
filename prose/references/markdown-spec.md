@@ -450,9 +450,12 @@ error when any is exceeded:
 |---|---|
 | Document size | 10 MiB |
 | YAML payload size per block | 1 MiB |
-| YAML nesting depth | 100 |
 | Field count per block | 1000 |
 | Card count per document | 1000 |
+
+A conforming parser MUST also bound YAML nesting depth, at whatever depth
+its YAML parser accepts, so that deeply nested input is refused rather than
+exhausting the stack. The depth itself is the parser's to choose.
 
 Markdown block nesting depth (100) is enforced at import time by the
 markdown→content parser (`Document::parse`); the Typst backend re-checks

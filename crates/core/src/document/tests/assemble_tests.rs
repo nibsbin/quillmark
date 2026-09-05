@@ -1235,31 +1235,6 @@ fn test_yaml_size_limit() {
 }
 
 #[test]
-fn test_yaml_depth_limit() {
-    let mut yaml_content = String::new();
-    for i in 0..110 {
-        yaml_content.push_str(&"  ".repeat(i));
-        yaml_content.push_str(&format!("level{}: value\n", i));
-    }
-
-    let markdown = format!(
-        "~~~card-yaml\n$quill: test_quill\n$kind: main\n{}~~~\n\nBody",
-        yaml_content
-    );
-    let result = decompose(&markdown);
-
-    assert!(result.is_err());
-    let err_msg = result.unwrap_err().to_string();
-    assert!(
-        err_msg.to_lowercase().contains("budget")
-            || err_msg.to_lowercase().contains("depth")
-            || err_msg.contains("YAML"),
-        "Expected depth/budget error, got: {}",
-        err_msg
-    );
-}
-
-#[test]
 fn test_chevrons_preserved_in_all_contexts() {
     let markdown = "~~~card-yaml
 $quill: test_quill

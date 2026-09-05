@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- change(core)!: **YAML nesting depth is the parser's to bound, and
+  `MAX_YAML_DEPTH` is gone.** The constant set `serde_saphyr`'s depth budget
+  and doubled as the bound on host values crossing into the document, so one
+  number spoke for two unrelated limits. YAML parsing now runs on
+  `serde_saphyr`'s own budget, and the write surfaces (`store_field`,
+  `store_ext`, the wire and storage DTOs, the bindings' converters) bound
+  values at `MAX_JSON_DEPTH` (128), the depth storage already accepts —
+  raising the accepted depth on those paths from 100. Read the cap from
+  `quillmark_core::error::MAX_JSON_DEPTH`; `§8 Limits` no longer fixes a YAML
+  nesting number.
 - fix(typst): **a compile diagnostic carries a code from a closed set.** The
   code was the message up to its first `:`, so a missing asset minted
   `typst::file not found (searched at assets/logo.png)` — the author's path

@@ -89,18 +89,11 @@ fn card_count_cap_is_per_card() {
 /// out-of-crate, as a consumer writes them.
 #[test]
 fn spec_caps_are_reachable_at_their_documented_paths() {
-    use quillmark_core::document::limits::MAX_YAML_DEPTH;
     use quillmark_core::error::{
         MAX_CARD_COUNT, MAX_FIELD_COUNT, MAX_INPUT_SIZE, MAX_YAML_SIZE,
     };
 
-    for cap in [
-        MAX_INPUT_SIZE,
-        MAX_YAML_SIZE,
-        MAX_CARD_COUNT,
-        MAX_FIELD_COUNT,
-        MAX_YAML_DEPTH,
-    ] {
+    for cap in [MAX_INPUT_SIZE, MAX_YAML_SIZE, MAX_CARD_COUNT, MAX_FIELD_COUNT] {
         assert!(cap > 0);
     }
 }

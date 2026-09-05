@@ -172,7 +172,6 @@ pub mod dto;
 pub mod edit;
 pub mod emit;
 pub mod fences;
-pub mod limits;
 pub mod meta;
 pub mod payload;
 pub(crate) mod prescan;

@@ -305,7 +305,7 @@ impl EditError {
 pub enum FieldViolation {
     /// The field name does not match `[A-Za-z_][A-Za-z0-9_]*` (spec §3.4 / §10).
     InvalidName,
-    /// The value nests deeper than [`MAX_YAML_DEPTH`](crate::document::limits::MAX_YAML_DEPTH)
+    /// The value nests deeper than [`MAX_JSON_DEPTH`](quillmark_content::MAX_JSON_DEPTH)
     /// (spec §8).
     TooDeep,
     /// A `!must_fill` marker targets a mapping. The marker rides a value's tag,
@@ -332,7 +332,7 @@ impl std::fmt::Display for FieldViolation {
             FieldViolation::TooDeep => write!(
                 f,
                 "nests deeper than the maximum of {} levels",
-                crate::document::limits::MAX_YAML_DEPTH
+                quillmark_content::MAX_JSON_DEPTH
             ),
             FieldViolation::FillOnMapping => f.write_str(
                 "`!must_fill` targets a mapping; `!must_fill` is supported on scalars and sequences only",
@@ -389,7 +389,7 @@ pub(crate) fn edit_error_from_violation(name: &str, v: FieldViolation) -> EditEr
     match v {
         FieldViolation::InvalidName => EditError::InvalidFieldName(name.to_string()),
         FieldViolation::TooDeep => EditError::ValueTooDeep {
-            max: crate::document::limits::MAX_YAML_DEPTH,
+            max: quillmark_content::MAX_JSON_DEPTH,
         },
         FieldViolation::FillOnMapping => EditError::FillOnMapping {
             field: name.to_string(),
@@ -433,7 +433,7 @@ pub(crate) fn field_decode(
 fn check_meta_depth<'v>(
     values: impl IntoIterator<Item = &'v serde_json::Value>,
 ) -> Result<(), EditError> {
-    let max = crate::document::limits::MAX_YAML_DEPTH;
+    let max = quillmark_content::MAX_JSON_DEPTH;
     if values
         .into_iter()
         .any(|v| crate::value::json_depth_exceeds(v, max - 1))
@@ -448,7 +448,7 @@ pub fn validate_field(key: &str, value: &serde_json::Value) -> Result<(), FieldV
     if !is_valid_field_name(key) {
         return Err(FieldViolation::InvalidName);
     }
-    if crate::value::json_depth_exceeds(value, crate::document::limits::MAX_YAML_DEPTH) {
+    if crate::value::json_depth_exceeds(value, quillmark_content::MAX_JSON_DEPTH) {
         return Err(FieldViolation::TooDeep);
     }
     Ok(())

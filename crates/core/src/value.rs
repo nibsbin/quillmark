@@ -135,14 +135,14 @@ impl Node {
 /// model reject the identical shape.
 ///
 /// Every path that stores a value into a `Document` bounds nesting at
-/// [`crate::document::limits::MAX_YAML_DEPTH`], so the recursive consumers
+/// [`MAX_JSON_DEPTH`](quillmark_content::MAX_JSON_DEPTH), so the recursive consumers
 /// (emit, plate-JSON serialization, DTO conversion) are bounded by
 /// construction. The Python binding's `py_to_json_at` charges levels the same
 /// way.
 pub use quillmark_content::model::json_depth_exceeds;
 
 /// Depth-bound an owned `$ext` / `$seed` map against
-/// [`MAX_YAML_DEPTH`](crate::document::limits::MAX_YAML_DEPTH), returning it
+/// [`MAX_JSON_DEPTH`](quillmark_content::MAX_JSON_DEPTH), returning it
 /// unchanged when within bounds. On overflow, `on_too_deep` builds the caller's
 /// boundary error from the limit, so each write surface keeps its own error
 /// type while the wrap-check-rebuild lives here once.
@@ -150,7 +150,7 @@ pub(crate) fn depth_check_meta_map<E>(
     map: serde_json::Map<String, serde_json::Value>,
     on_too_deep: impl FnOnce(usize) -> E,
 ) -> Result<serde_json::Map<String, serde_json::Value>, E> {
-    let max = crate::document::limits::MAX_YAML_DEPTH;
+    let max = quillmark_content::MAX_JSON_DEPTH;
     let as_value = serde_json::Value::Object(map);
     if json_depth_exceeds(&as_value, max) {
         return Err(on_too_deep(max));
@@ -169,15 +169,11 @@ impl QuillValue {
         }
     }
 
-    /// Parse a YAML string under the shared
-    /// [`MAX_YAML_DEPTH`](crate::document::limits::MAX_YAML_DEPTH) budget, so
-    /// an over-deep document errors rather than overflowing the parser's stack.
+    /// Parse a YAML string under the parser's own budget, so an over-deep
+    /// document errors rather than overflowing its stack.
     pub fn from_yaml_str(yaml_str: &str) -> Result<Self, crate::error::YamlError> {
-        let json_val: serde_json::Value = serde_saphyr::from_str_with_options(
-            yaml_str,
-            crate::document::limits::yaml_parse_options(),
-        )
-        .map_err(|e| crate::error::YamlError::from_de(e, yaml_str))?;
+        let json_val: serde_json::Value = serde_saphyr::from_str(yaml_str)
+            .map_err(|e| crate::error::YamlError::from_de(e, yaml_str))?;
         Ok(Self::from_json(json_val))
     }
 
@@ -340,31 +336,6 @@ impl QuillValue {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn from_yaml_str_carries_the_shared_depth_budget() {
-        let max = crate::document::limits::MAX_YAML_DEPTH;
-        let nest = |levels: usize| {
-            let mut yaml = String::new();
-            for i in 0..levels {
-                yaml.push_str(&"  ".repeat(i));
-                yaml.push_str("nest:\n");
-            }
-            yaml.push_str(&"  ".repeat(levels));
-            yaml.push_str("leaf: 1\n");
-            yaml
-        };
-
-        assert!(QuillValue::from_yaml_str(&nest(max - 1)).is_ok());
-
-        let err = QuillValue::from_yaml_str(&nest(max + 8))
-            .expect_err("over-deep YAML must be refused, not recursed");
-        let msg = err.to_string().to_lowercase();
-        assert!(
-            msg.contains("depth") || msg.contains("budget") || msg.contains("limit"),
-            "error should name the depth budget, got: {err}"
-        );
-    }
 
     #[test]
     fn yaml_error_locates_and_sanitizes() {
