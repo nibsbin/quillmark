@@ -348,12 +348,9 @@ export interface CardAddr {
  * semantics), returned by `revise` and by the `rebase` codec. Map a stored
  * position through it with `mapPos`.
  *
- * Applying one **admits** an `insert` string rather than storing it verbatim.
- * `\r` and the Unicode bidi controls drop. A U+2028 or U+2029 line separator
- * becomes a space, a downstream lexer reading one as a line break and no escape
- * neutralizing it. Nothing reports the substitution: the apply succeeds either
- * way, so a caller that needs to know compares the applied text against what it
- * sent.
+ * Applying one admits an `insert` string rather than storing it verbatim: `\r`
+ * and the Unicode bidi controls drop, and a U+2028 or U+2029 line separator
+ * becomes a space. Nothing reports the substitution.
  */
 export interface Delta {
     ops: ({ retain: number } | { insert: string } | { delete: number })[];
