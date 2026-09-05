@@ -213,6 +213,13 @@
   end: `edit::index_out_of_range` where the verb raises,
   `typst::page_index_out_of_bounds` for a page, `None` where `remove_card`
   answers absence.
+- perf(python): **reading `RenderResult.artifacts` copies no bytes.** The
+  getter rebuilt its list on every read, cloning each artifact's buffer, and
+  `Artifact.bytes` cloned that again on the way into a `bytes`, so a `save`
+  followed by one `bytes` read moved a multi-MB PDF three times. The
+  `Artifact` and `Diagnostic` objects are built once, with the result, and
+  every `artifacts` or `warnings` read hands the same objects back; `bytes`
+  makes the one Rust→Python copy and `save` writes without one.
 - change(core)!: **YAML nesting depth is the parser's to bound, and
   `MAX_YAML_DEPTH` is gone.** The constant set `serde_saphyr`'s depth budget
   and doubled as the bound on host values crossing into the document, so one
