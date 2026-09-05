@@ -21,17 +21,44 @@ fn map_single_diagnostic(error: &SourceDiagnostic, world: &QuillWorld) -> Diagno
 
     let hint = error.hints.first().map(|h| h.v.to_string());
 
-    // Typst has no error codes; the message prefix stands in.
-    let code = Some(format!(
-        "typst::{}",
-        error.message.split(':').next().unwrap_or("error").trim()
-    ));
-
     let mut diag = Diagnostic::new(severity, error.message.to_string());
-    diag.code = code;
+    diag.code = Some(classify(&error.message).to_string());
     diag.location = location;
     diag.hint = hint;
     diag
+}
+
+/// Typst renders a type mismatch two ways: the cast machinery's
+/// `expected <a>, found <b>`, and the operand families of its `ops` module.
+fn is_type_error(message: &str) -> bool {
+    const OPERAND_MISMATCH: &[&str] = &[
+        "cannot add ",
+        "cannot apply ",
+        "cannot compare ",
+        "cannot divide ",
+        "cannot join ",
+        "cannot multiply ",
+        "cannot subtract ",
+    ];
+
+    (message.starts_with("expected ") && message.contains(", found "))
+        || OPERAND_MISMATCH.iter().any(|p| message.starts_with(p))
+}
+
+/// Typst has no error codes, so one is minted from the message's *shape*. The
+/// set is closed: an unrecognized message takes `typst::compile` rather than a
+/// code spelled by the message itself, which would carry author-supplied text
+/// into a routing key and leave that key unbounded.
+fn classify(message: &str) -> &'static str {
+    if message.starts_with("file not found (searched at ") {
+        "typst::file_not_found"
+    } else if message.starts_with("unknown variable: ") {
+        "typst::unknown_variable"
+    } else if is_type_error(message) {
+        "typst::type_error"
+    } else {
+        "typst::compile"
+    }
 }
 
 fn resolve_span_to_location(span: typst::syntax::DiagSpan, world: &QuillWorld) -> Option<Location> {
@@ -101,6 +128,60 @@ mod tests {
         Some(Quill::from_tree(tree).expect("load source"))
     }
 
+    /// Messages Typst 0.15.1 emits, taken from a compile of each case.
+    const REAL_MESSAGES: &[(&str, &str)] = &[
+        (
+            "file not found (searched at assets/marc.png)",
+            "typst::file_not_found",
+        ),
+        (
+            "file not found (searched at https:/example.com/x.png)",
+            "typst::file_not_found",
+        ),
+        ("unknown variable: general", "typst::unknown_variable"),
+        ("cannot add integer and string", "typst::type_error"),
+        ("expected length, found string", "typst::type_error"),
+        ("cannot apply 'not' to integer", "typst::type_error"),
+        ("unclosed delimiter", "typst::compile"),
+        ("expected expression", "typst::compile"),
+        ("unknown font family: nosuchfontfamily", "typst::compile"),
+    ];
+
+    #[test]
+    fn every_message_takes_a_code_from_the_closed_set() {
+        for (message, code) in REAL_MESSAGES {
+            assert_eq!(&classify(message), code, "classifying {message:?}");
+        }
+    }
+
+    /// The property the code exists for: a routing key a consumer can match and
+    /// a string table can hold, carrying none of the message it came from.
+    #[test]
+    fn a_code_is_a_slug_never_the_message() {
+        for (message, _) in REAL_MESSAGES {
+            let code = classify(message);
+            let slug = code.strip_prefix("typst::").expect("namespaced");
+            assert!(
+                !slug.is_empty() && slug.chars().all(|c| c.is_ascii_lowercase() || c == '_'),
+                "`{code}` is not a snake_case slug"
+            );
+            assert!(
+                !code.contains(message),
+                "`{code}` carries the message it was minted from"
+            );
+        }
+    }
+
+    /// An author-supplied path separates two messages of one shape; the code
+    /// they share is what a consumer routes on.
+    #[test]
+    fn a_path_in_the_message_does_not_reach_the_code() {
+        let a = classify("file not found (searched at assets/marc.png)");
+        let b = classify("file not found (searched at /etc/passwd)");
+        assert_eq!(a, b);
+        assert!(!a.contains("marc") && !a.contains("passwd"));
+    }
+
     #[test]
     fn columns_count_characters_not_bytes() {
         let text = "#let café = 1\n#(café + x)\n";
@@ -124,6 +205,38 @@ mod tests {
             mapped.hint.as_deref(),
             Some("try using a backslash escape: \\]"),
             "an existing Typst hint must not be overwritten"
+        );
+    }
+
+    /// The closed set holds against a real compile, not only against the
+    /// message table: Typst spells the path it searched into the message, and
+    /// the code stays the shape's.
+    #[test]
+    fn a_missing_file_codes_by_shape_through_a_compile() {
+        let Some(source) = source_with_plate(
+            "#set page(width: 200pt, height: 200pt)\n#image(\"assets/marc.png\")\n",
+        ) else {
+            return;
+        };
+
+        let diags = match TypstBackend.open(&source, &serde_json::json!({})) {
+            Ok(session) => session
+                .render(&RenderOptions::default().with_output_format(OutputFormat::Pdf))
+                .expect_err("a missing image should fail to compile")
+                .into_diagnostics(),
+            Err(err) => err.into_diagnostics(),
+        };
+
+        let diag = diags
+            .iter()
+            .find(|d| d.message.starts_with("file not found"))
+            .expect("expected a file-not-found diagnostic");
+
+        assert_eq!(diag.code.as_deref(), Some("typst::file_not_found"));
+        assert!(
+            diag.message.contains("assets/marc.png"),
+            "the searched path stays in the message: {}",
+            diag.message
         );
     }
 
