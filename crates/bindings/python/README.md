@@ -235,6 +235,12 @@ rather than the last card or page: it takes the same answer as an index past the
 end — `edit::index_out_of_range` where the verb raises, `None` where
 `remove_card` answers absence.
 
+Each one anchors at a rooted document path: `path` is `main.<field>` for a main
+field, `cards.<kind>[<i>].<field>` for a card field, and `cards[<i>]` for a
+structural out-of-range op, whichever verb refused. A card `add_card` rejects
+before placing it has no slot yet, so its bundle keys the bare `$kind` / `$body`
+or field name.
+
 ## Changelog
 
 See the [changelog](https://github.com/borb-sh/quillmark/blob/main/CHANGELOG.md)

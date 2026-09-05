@@ -66,11 +66,17 @@ pub fn page_indices(pages: Vec<isize>) -> PyResult<Vec<usize>> {
     Ok(pages.into_iter().map(|p| p as usize).collect())
 }
 
-pub fn convert_edit_error(err: EditError) -> PyErr {
-    let diagnostic =
+/// One diagnostic, its `path` the [`DocPath`](quillmark_core::DocPath) the
+/// error anchors at relative to `base`: the card root the mutator ran against,
+/// empty for a card built before placement.
+pub fn convert_edit_error(err: EditError, base: &quillmark_core::DocPath) -> PyErr {
+    let mut diagnostic =
         Diagnostic::new(Severity::Error, err.to_string())
             .with_code(err.code().to_string())
             .with_args(err.args());
+    if let Some(path) = err.doc_path(base) {
+        diagnostic = diagnostic.with_path(path.to_string());
+    }
     let message = diagnostic.message.clone();
     raise_with_diagnostics(vec![diagnostic], message)
 }
@@ -84,30 +90,34 @@ pub fn convert_wire_error(err: quillmark_core::WireError) -> PyErr {
 }
 
 /// Batched twin of [`convert_edit_error`]: one diagnostic per offending field,
-/// its `path` the field name.
-pub fn convert_edit_errors(errors: Vec<(String, EditError)>) -> PyErr {
+/// each anchored at its name under `base`.
+pub fn convert_edit_errors(
+    errors: Vec<(String, EditError)>,
+    base: &quillmark_core::DocPath,
+) -> PyErr {
+    convert_edit_errors_at(
+        errors
+            .into_iter()
+            .map(|(name, err)| (base.field(&name), err))
+            .collect(),
+    )
+}
+
+/// The [`convert_edit_errors`] twin for a batch spanning cards, where each
+/// refusal carries the whole `DocPath` it anchors at rather than a field name
+/// under one base.
+pub fn convert_edit_errors_at(errors: Vec<(quillmark_core::DocPath, EditError)>) -> PyErr {
     let diags: Vec<Diagnostic> = errors
         .into_iter()
-        .map(|(name, err)| {
+        .map(|(path, err)| {
             Diagnostic::new(Severity::Error, err.to_string())
                 .with_code(err.code().to_string())
                 .with_args(err.args())
-                .with_path(name)
+                .with_path(path.to_string())
         })
         .collect();
     let message = RenderError::summary_message(&diags);
     raise_with_diagnostics(diags, message)
-}
-
-/// The [`convert_edit_errors`] twin for a batch spanning cards, where each
-/// refusal carries the whole `DocPath` it anchors at rather than a field name.
-pub fn convert_edit_errors_at(errors: Vec<(quillmark_core::DocPath, EditError)>) -> PyErr {
-    convert_edit_errors(
-        errors
-            .into_iter()
-            .map(|(path, err)| (path.to_string(), err))
-            .collect(),
-    )
 }
 
 /// The message is the primary diagnostic's for a single diagnostic, an
