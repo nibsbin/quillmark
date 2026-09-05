@@ -159,6 +159,15 @@
   `description`) come first in that order, then the extra keys sorted by name,
   so `JSON.stringify` / `json.dumps` of a metadata snapshot is stable across
   processes. The extras rode core's `HashMap` iteration order.
+- docs(wasm,typst,core): **the live session's edit verb is `update` in prose
+  too.** The `@quillmark/wasm` README and the `LiveSession` rustdoc named an
+  `apply(doc)` the class does not carry, so a consumer following them reached
+  `session.apply is not a function`; the same stale name sat in the Typst
+  backend's and core's comments for `SessionHandle::update`. The README also
+  called `pageCount` and `pageSize(page)` stable for the session's lifetime,
+  which a committed `update` invalidates: they read the current compile, the
+  new count is `ChangeSet.pageCount`, and every page in `ChangeSet.dirtyPages`
+  needs its `pageSize` re-read.
 - change(core)!: **YAML nesting depth is the parser's to bound, and
   `MAX_YAML_DEPTH` is gone.** The constant set `serde_saphyr`'s depth budget
   and doubled as the bound on host values crossing into the document, so one
