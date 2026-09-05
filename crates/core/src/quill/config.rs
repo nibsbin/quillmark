@@ -8,7 +8,10 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Diagnostic, Severity, diag_args};
 use crate::value::QuillValue;
 
-use super::types::{RICHTEXT_INLINE_TOKEN_MSG, UI_ORDER_REMOVED_MSG, VARIANT_DISCRIMINANT_KEY};
+use super::types::{
+    BODY_CARD_SCHEMA_KEYS, RICHTEXT_INLINE_TOKEN_MSG, UI_ORDER_REMOVED_MSG,
+    VARIANT_DISCRIMINANT_KEY,
+};
 use super::{BodyCardSchema, CardSchema, FieldSchema, FieldType, GroupRegistry, UiCardSchema};
 
 /// Canonical string text for a bare scalar unambiguously representable as a
@@ -631,15 +634,7 @@ impl QuillConfig {
                                 path,
                                 json_value,
                                 "richtext",
-                                format!(
-                                    "expected a richtext content object or a markdown string, got {}",
-                                    match json_value {
-                                        serde_json::Value::Bool(_) => "a boolean",
-                                        serde_json::Value::Number(_) => "a number",
-                                        serde_json::Value::Array(_) => "an array",
-                                        _ => "an unsupported value",
-                                    }
-                                ),
+                                crate::document::Codec::Richtext.unshaped_message(json_value),
                             ),
                             E::NotInline => inline_err(),
                         });
@@ -1391,14 +1386,11 @@ impl QuillConfig {
             let diag = match &violation {
                 ValidationError::TypeMismatch {
                     path,
+                    expected: declared,
                     actual,
                     source_token,
                     ..
                 } => {
-                    // Use the field's declared `type:` verbatim (`datetime`,
-                    // `markdown`, …); the validator's `expected` collapses those
-                    // to `string`, which would misreport the author's intent.
-                    let declared = schema.r#type.as_str();
                     // validation.rs uses "number" for all non-integer JSON numbers;
                     // display as "float" so messages match the YAML author's mental model.
                     let display_actual = if actual == "number" {
@@ -1919,7 +1911,10 @@ impl QuillConfig {
             main_obj_opt.and_then(|main_obj| main_obj.get("body")),
             "main.body",
             "quill::invalid_body",
-            "Valid keys under 'body' are: enabled, example.",
+            &format!(
+                "Valid keys under 'body' are: {}.",
+                BODY_CARD_SCHEMA_KEYS.join(", ")
+            ),
             &mut errors,
         );
 

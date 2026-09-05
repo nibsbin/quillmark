@@ -343,6 +343,13 @@ fn emit_own_line_pending(out: &mut String, ctx: EmitCtx<'_>, position: usize, in
     }
 }
 
+/// Whether [`emit_own_line_pending`] has anything to write at `position`.
+fn has_own_line_pending(ctx: EmitCtx<'_>, position: usize) -> bool {
+    ctx.nested
+        .iter()
+        .any(|c| c.position == position && !c.inline && c.container_path.as_slice() == ctx.path)
+}
+
 /// Return the inline trailer for `position` in the context path. If multiple
 /// inline comments share the slot, returns the first and emits the rest as
 /// own-line.
@@ -516,7 +523,9 @@ fn emit_sequence_children(
 
 /// Emit a single `- <value>\n` sequence item. When the item is a mapping,
 /// if both the seq-item trailer and the first key's trailer are present,
-/// the inner one degrades to an own-line comment.
+/// the inner one degrades to an own-line comment. A mapping carrying an
+/// own-line comment before its first key takes the bare-dash form, the shape
+/// the parser reads that comment back from.
 fn emit_sequence_item(
     out: &mut String,
     value: &JsonValue,
@@ -532,7 +541,14 @@ fn emit_sequence_item(
             out.push('\n');
         }
         JsonValue::Object(map) => {
-            emit_own_line_pending(out, ctx, 0, base_indent);
+            if has_own_line_pending(ctx, 0) {
+                push_indent(out, base_indent);
+                out.push('-');
+                push_trailer(out, inline_trailer);
+                out.push('\n');
+                emit_mapping_children(out, map, base_indent + 2, ctx);
+                return;
+            }
 
             let mut first = true;
             for (i, (k, v)) in map.iter().enumerate() {

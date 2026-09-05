@@ -23,7 +23,7 @@ use quillmark_core::RenderedRegion;
 use crate::error::PdfError;
 use crate::reader::{err, find_dict_value, parse_indirect_ref, ObjectIndex, UpdatedObject};
 use crate::update::PdfUpdate;
-use crate::writer::{alloc_id, append_refs_to_array_key, dict_object, OnNonArray};
+use crate::writer::{alloc_id, append_refs_to_array_key, dict_object, to_ref, OnNonArray};
 use crate::{FieldSpec, FieldType, FormFont, TextAlign};
 
 const CODE_PARSE: &str = "pdf::stamp_parse";
@@ -102,8 +102,8 @@ impl StampOptions {
 /// a session-level query (see [`regions_of`]).
 ///
 /// `base` must satisfy the reader's input contract (traditional-xref,
-/// unencrypted, inline-annots, flat-tree) and carry no `/AcroForm` of its own,
-/// and each `rect` must already be final, finite, bottom-left PDF-point
+/// unencrypted, inline-annots, bounded-tree) and carry no `/AcroForm` of its
+/// own, and each `rect` must already be final, finite, bottom-left PDF-point
 /// geometry.
 pub fn stamp(
     base: Vec<u8>,
@@ -164,17 +164,17 @@ pub fn stamp(
         let mut widgets_by_page: Vec<Vec<u32>> = vec![Vec::new(); page_count];
         for (spec, &wid) in fields.iter().zip(&widget_ids) {
             widgets_by_page[spec.page].push(wid);
-            let page_ref = Ref::new(pages[spec.page].id as i32);
+            let page_ref = to_ref(pages[spec.page].id)?;
             up.objects.push(UpdatedObject {
                 id: wid,
-                bytes: write_widget_object(spec, Ref::new(wid as i32), page_ref),
+                bytes: write_widget_object(spec, to_ref(wid)?, page_ref),
             });
         }
 
         for (font, &fid) in fonts.iter().zip(&font_ids) {
             let mut fchunk = Chunk::new();
             fchunk
-                .type1_font(Ref::new(fid as i32))
+                .type1_font(to_ref(fid)?)
                 .base_font(Name(font.base_font()));
             up.objects.push(UpdatedObject {
                 id: fid,
@@ -185,12 +185,14 @@ pub fn stamp(
         let has_signature = fields
             .iter()
             .any(|f| matches!(f.field_type, FieldType::Signature));
+        let field_refs: Vec<Ref> = widget_ids
+            .iter()
+            .map(|&id| to_ref(id))
+            .collect::<Result<_, _>>()?;
         let mut achunk = Chunk::new();
         {
-            let mut form: Form<'_> = achunk
-                .indirect(Ref::new(acroform_id as i32))
-                .start::<Form>();
-            form.fields(widget_ids.iter().map(|&id| Ref::new(id as i32)));
+            let mut form: Form<'_> = achunk.indirect(to_ref(acroform_id)?).start::<Form>();
+            form.fields(field_refs);
             if has_signature {
                 form.sig_flags(SigFlags::SIGNATURES_EXIST);
             }
@@ -201,7 +203,7 @@ pub fn stamp(
                 let mut dr = form.insert(Name(b"DR")).dict();
                 let mut font_dict = dr.insert(Name(b"Font")).dict();
                 for (font, &fid) in fonts.iter().zip(&font_ids) {
-                    font_dict.pair(Name(font.resource_name().as_bytes()), Ref::new(fid as i32));
+                    font_dict.pair(Name(font.resource_name().as_bytes()), to_ref(fid)?);
                 }
             }
             form.finish();

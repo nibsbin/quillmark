@@ -145,7 +145,11 @@
   let size-pt = if size == auto { none } else { abs-pt("size", size) }
   assert(size-pt == none or size-pt > 0,
     message: "form-field: size must be a positive length or auto, got " + repr(size))
-  [#metadata((
+  // The backend reads this tag's position as the widget's top-left, and only
+  // the box body's origin is that point in every layout context: a tag beside
+  // the box sits on the line's baseline inline, and at the flow cursor's left
+  // edge in a block.
+  box(width: width, height: height, stroke: none, fill: none)[#metadata((
     kind: "__qm_field__",
     name: name,
     field-type: type,
@@ -159,7 +163,6 @@
     size: size-pt,
     align: align,
   ))<__qm_field__>]
-  box(width: width, height: height, stroke: none, fill: none)
 }
 
 /// Emit an unsigned signature field. A thin wrapper over `form-field` with

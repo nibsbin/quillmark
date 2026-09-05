@@ -105,9 +105,15 @@ pub trait SessionHandle: Send + Sync + 'static {
     /// for a backend whose regions enumerate every placement. A backend that
     /// emits first-placement-only content must override this with a real
     /// document hit-test, or clicks on unenumerated placements dead-end.
+    ///
+    /// A tie goes to the last of [`regions`](Self::regions), the later-painted
+    /// placement. That order lists widgets before content, so a backend placing
+    /// both lanes overrides this to hand a widget the tie, as the Typst backend
+    /// does.
     fn field_at(&self, page: usize, x: f32, y: f32, tol: f32) -> Option<String> {
         self.regions()
             .into_iter()
+            .rev()
             .filter_map(|r| Some((r.distance(page, x, y)?, r)))
             .filter(|(d, _)| *d <= tol)
             .min_by(|(a, _), (b, _)| a.total_cmp(b))
@@ -459,6 +465,31 @@ main:
                 span: Some([pos, pos]),
             })
         }
+    }
+
+    /// Two regions on one rect, so every hit inside it is a tie.
+    struct TiedRegionHandle;
+    impl SessionHandle for TiedRegionHandle {
+        fn render(&self, _: &RenderOptions) -> Result<RenderResult, RenderError> {
+            unimplemented!("render is not exercised by geometry tests")
+        }
+        fn page_count(&self) -> usize {
+            1
+        }
+        fn regions(&self) -> Vec<RenderedRegion> {
+            ["under", "over"]
+                .into_iter()
+                .map(|field| RenderedRegion::new(field.to_string(), 0, [0.0, 0.0, 10.0, 10.0]))
+                .collect()
+        }
+    }
+
+    #[test]
+    fn field_at_tie_takes_the_later_region() {
+        let session = LiveSession::new(Box::new(TiedRegionHandle), config());
+        assert_eq!(session.field_at(0, 5.0, 5.0, 0.0).as_deref(), Some("over"));
+        // Outside both rects by the same gap: the tolerant path ties too.
+        assert_eq!(session.field_at(0, 14.0, 5.0, 8.0).as_deref(), Some("over"));
     }
 
     #[test]

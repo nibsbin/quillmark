@@ -9,7 +9,7 @@ use crate::error::ParseError;
 use crate::value::QuillValue;
 use crate::Diagnostic;
 
-use super::fences::find_metadata_blocks;
+use super::fences::{find_metadata_blocks, RootFault};
 use super::meta::{extract_meta_items, meta_key};
 use super::payload::{Payload, PayloadItem};
 use quillmark_content::Normalized;
@@ -19,13 +19,55 @@ use quillmark_content::Normalized;
 fn import_body_or_parse_error(md: &str) -> Result<Normalized, ParseError> {
     super::import_body(md).map_err(|e| ParseError::BodyImport(e.to_string()))
 }
-use super::prescan::{prescan_fence_content, CommentPathSegment, NestedComment, PreItem};
+use super::prescan::{prescan_fence_content, CommentPathSegment, NestedComment, PreItem, PreScan};
 use super::{Card, Document};
 
-/// A `MissingQuill` message naming the specific malformation. LLM authors hit
-/// one recurring shape: a bare YAML mapping with `$quill:` at the top and no
-/// fences, where naming the concrete edit converges faster than generic advice.
-fn missing_block_message(markdown: &str) -> String {
+/// A `MissingQuill` message naming the specific malformation. LLM authors hit a
+/// few recurring shapes — a bare YAML mapping with no fences, an opener whose
+/// closer is missing or misspelt — where naming the concrete edit converges
+/// faster than generic advice. `root_fault` is what the fence scanner saw at the
+/// root position, so a document that *does* open correctly is never told to open
+/// correctly.
+fn missing_block_message(markdown: &str, root_fault: Option<&RootFault>) -> String {
+    match root_fault {
+        Some(RootFault::Unclosed {
+            opener_line,
+            near_closer,
+            last_field,
+        }) => {
+            let mut msg = format!(
+                "Root card-yaml block opened at line {} is never closed.",
+                opener_line + 1
+            );
+            if let Some((line, text)) = near_closer {
+                msg.push_str(&format!(
+                    " The line `{}` at line {} does not close it: a closing fence is at \
+                     column zero and at least as long as the opener.",
+                    text,
+                    line + 1
+                ));
+            }
+            msg.push_str(" Add a line containing exactly `~~~` (three tildes, no info string) ");
+            match last_field {
+                Some(key) => msg.push_str(&format!("after the last field (`{}`), ", key)),
+                None => msg.push_str("after the last field, "),
+            }
+            msg.push_str("before the prose body.");
+            return msg;
+        }
+        Some(RootFault::InfoString { opener_line, info }) => {
+            return format!(
+                "Root card-yaml block opener at line {} is `~~~{}`, which opens an ordinary \
+                 code block. The card-yaml opener carries no info string: drop `{}` and open \
+                 with a bare `~~~` (the `card-yaml` and `yaml` info strings are also accepted).",
+                opener_line + 1,
+                info,
+                info
+            );
+        }
+        None => {}
+    }
+
     let trimmed = markdown.trim_start();
 
     if trimmed.starts_with("$quill:") || trimmed.starts_with("quill:") {
@@ -86,6 +128,46 @@ pub(super) struct MetadataBlock {
     pub(super) pre_warnings: Vec<Diagnostic>,
 }
 
+/// The document-absolute, 1-indexed position of a YAML parse failure.
+///
+/// `parser` is the position the engine reports inside the string it parsed:
+/// the fence content less the comment lines prescan drops
+/// ([`PreScan::source_lines`] maps what survives back) and less the leading
+/// whitespace `trim` removes. With no reported position the block's first
+/// content line is the anchor.
+fn document_position(
+    markdown: &str,
+    content_start: usize,
+    pre: &PreScan,
+    parser: Option<(usize, usize)>,
+) -> (usize, usize) {
+    let first_line = markdown[..content_start].lines().count() + 1;
+    let Some((rel_line, rel_column)) = parser else {
+        return (first_line, 1);
+    };
+
+    let cleaned = &pre.cleaned_yaml;
+    let trimmed_prefix = &cleaned[..cleaned.len() - cleaned.trim_start().len()];
+
+    let cleaned_index = trimmed_prefix.matches('\n').count() + rel_line.saturating_sub(1);
+    let source_index = pre
+        .source_lines
+        .get(cleaned_index)
+        .or_else(|| pre.source_lines.last())
+        .copied()
+        .unwrap_or(0);
+
+    // Only the first parsed line lost leading whitespace to `trim`.
+    let column = if rel_line <= 1 {
+        let head = trimmed_prefix.rsplit('\n').next().unwrap_or("");
+        rel_column + head.chars().count()
+    } else {
+        rel_column
+    };
+
+    (first_line + source_index, column)
+}
+
 /// Process one recognised card-yaml block into a [`MetadataBlock`].
 ///
 /// `block_start` / `block_end` bound the whole block; `content_start` /
@@ -135,11 +217,18 @@ pub(super) fn build_block(
         let mut parsed = match serde_saphyr::from_str::<serde_json::Value>(&content) {
             Ok(parsed) => parsed,
             Err(e) => {
-                let line = markdown[..block_start].lines().count() + 1;
                 let enriched = super::yaml_hints::enrich_yaml_error(&e.to_string(), &content);
+                let (line, column) = document_position(
+                    markdown,
+                    content_start,
+                    &pre,
+                    e.location()
+                        .map(|l| (l.line() as usize, l.column() as usize)),
+                );
                 return Err(ParseError::YamlErrorWithLocation {
                     message: enriched.message,
                     line,
+                    column,
                     block_index,
                     hint: enriched.hint,
                 });
@@ -153,8 +242,8 @@ pub(super) fn build_block(
     // user-data fields.
     if let Some(serde_json::Value::Object(ref map)) = yaml_value {
         if map.len() > crate::error::MAX_FIELD_COUNT {
-            return Err(ParseError::InputTooLarge {
-                size: map.len(),
+            return Err(ParseError::TooManyFields {
+                count: map.len(),
                 max: crate::error::MAX_FIELD_COUNT,
             });
         }
@@ -202,11 +291,13 @@ pub(super) fn decompose_with_warnings(
     }
 
     // The first block is the document root; the rest are composable cards.
-    let (mut blocks, warnings) = find_metadata_blocks(markdown)?;
+    let scan = find_metadata_blocks(markdown)?;
+    let mut blocks = scan.blocks;
+    let warnings = scan.warnings;
 
     if blocks.is_empty() {
         return Err(crate::error::ParseError::MissingQuill(
-            missing_block_message(markdown),
+            missing_block_message(markdown, scan.root_fault.as_ref()),
         ));
     }
 
@@ -341,22 +432,8 @@ pub(super) fn decompose_with_warnings(
 /// Validate a user field entering the payload from the parse path, mapping a
 /// violation to `ParseError::InvalidStructure` (spec §10).
 fn validate_parsed_field(key: &str, value: &serde_json::Value) -> Result<(), ParseError> {
-    use crate::document::edit::{validate_field, FieldViolation};
-    validate_field(key, value).map_err(|v| match v {
-        FieldViolation::InvalidName => ParseError::InvalidStructure(format!(
-            "invalid data-field name `{}`: field names must match [A-Za-z_][A-Za-z0-9_]*",
-            key
-        )),
-        FieldViolation::TooDeep => ParseError::InvalidStructure(format!(
-            "field `{}` nests deeper than the maximum of {} levels",
-            key,
-            crate::document::limits::MAX_YAML_DEPTH
-        )),
-        FieldViolation::FillOnMapping => ParseError::InvalidStructure(format!(
-            "`!must_fill` on key `{}` targets a mapping; `!must_fill` is supported on scalars and sequences only",
-            key
-        )),
-    })
+    crate::document::edit::validate_field(key, value)
+        .map_err(|v| ParseError::InvalidStructure(v.message(key)))
 }
 
 /// Take the typed `$` item for `key` out of `typed`, leaving its slot empty.
@@ -455,7 +532,9 @@ fn build_payload(
 
 /// Apply the nested `!must_fill` markers rooted at `key` onto `value`'s tree.
 /// Paths are rooted at the owning top-level key, so the first segment is
-/// stripped. A marker on a mapping node is rejected, as at the top level.
+/// stripped. A path that is nothing but that key names the root, whose marker
+/// the item's own `fill` flag carries. A marker on a mapping node is rejected,
+/// as at the top level.
 fn apply_nested_fills(
     key: &str,
     value: &mut QuillValue,
@@ -465,7 +544,7 @@ fn apply_nested_fills(
         let Some((CommentPathSegment::Key(first), rest)) = path.split_first() else {
             continue;
         };
-        if first != key {
+        if first != key || rest.is_empty() {
             continue;
         }
         if value.is_object_at(rest) {

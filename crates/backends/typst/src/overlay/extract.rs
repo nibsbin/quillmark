@@ -1,7 +1,9 @@
 //! Walk a compiled Typst document and return one `FieldPlacement` per
-//! `form-field` call. The helper emits a `<__qm_field__>`-labelled `metadata`
-//! followed by an invisible same-sized box. Metadata has zero size, so its
-//! `introspector.position()` equals the box's top-left: no frame walk.
+//! `form-field` call. The helper wraps a `<__qm_field__>`-labelled `metadata`
+//! inside an invisible box of the widget's size, where the tag is the body
+//! flow's first item and so lands at the body origin. That origin is the box's
+//! top-left in every layout context, so `introspector.position()` is the
+//! widget's top-left: no frame walk.
 
 use std::collections::HashMap;
 

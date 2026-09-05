@@ -42,9 +42,10 @@ fn trim_fence(s: &str) -> &str {
 /// `None` when conformant, and when our scanner rejects the input outright:
 /// error paths are out of scope for this cross-check.
 fn nonconformance(md: &str) -> Option<String> {
-    let Ok((blocks, _warnings)) = find_metadata_blocks(md) else {
+    let Ok(scan) = find_metadata_blocks(md) else {
         return None;
     };
+    let blocks = scan.blocks;
     let pd = pulldown_fence_spans(md);
 
     for b in &blocks {

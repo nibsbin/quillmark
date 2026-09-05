@@ -632,11 +632,14 @@ card_kinds:
         doc.main_mut()
             .store_field("subject", QuillValue::from_json(serde_json::json!(3)))
             .unwrap();
-        let view = TypedReader::new(&config, &doc);
-        assert!(matches!(
-            view.get("subject"),
-            Err(EditError::FieldDecode { field, .. }) if field == "subject"
-        ));
+        let err = TypedReader::new(&config, &doc).get("subject").unwrap_err();
+        assert!(
+            matches!(&err, EditError::FieldDecode { field, message, .. }
+                if field == "subject"
+                    && message
+                        == "expected a richtext content object or a markdown string, got a number"),
+            "got {err:?}"
+        );
     }
 
     /// The string lane, which decoded through the markdown codec until it read

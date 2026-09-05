@@ -12,7 +12,7 @@ use crate::error_mapping::map_typst_errors;
 use crate::overlay;
 use crate::world::QuillWorld;
 use quillmark_core::{Artifact, Diagnostic, OutputFormat, RenderError, RenderResult};
-use quillmark_pdf::{stamp, StampOptions};
+use quillmark_pdf::{stamp, FieldSpec, StampOptions};
 
 pub(crate) fn render_options(pixel_per_pt: f32) -> RenderOptions {
     RenderOptions {
@@ -40,17 +40,14 @@ pub(crate) fn compile_document(
     }
 }
 
-/// 2x at 72pt/inch.
-const DEFAULT_PPI: f32 = 144.0;
-
-/// `field_placements` are stamped as AcroForm widgets by the PDF path only;
+/// `field_specs` are stamped as AcroForm widgets by the PDF path only;
 /// `producer` overrides the PDF `/Info` `/Producer` string.
 pub(crate) fn render_document_pages(
     document: &PagedDocument,
     pages: Option<&[usize]>,
     format: OutputFormat,
-    ppi: Option<f32>,
-    field_placements: &[overlay::FieldPlacement],
+    ppi: f32,
+    field_specs: &[FieldSpec],
     producer: Option<&str>,
 ) -> Result<RenderResult, RenderError> {
     if format == OutputFormat::Pdf && pages.is_some() {
@@ -93,7 +90,7 @@ pub(crate) fn render_document_pages(
             Ok(RenderResult::new(artifacts, OutputFormat::Svg))
         }
         OutputFormat::Png => {
-            let scale = ppi.unwrap_or(DEFAULT_PPI) / 72.0;
+            let scale = ppi / 72.0;
             let opts = render_options(scale);
             let mut artifacts = Vec::with_capacity(selected_indices.len());
             for idx in selected_indices {
@@ -112,12 +109,11 @@ pub(crate) fn render_document_pages(
                     format!("PDF generation failed: {e:?}"),
                 )
             })?;
-            let field_specs = overlay::build_field_specs(document, field_placements)?;
             let producer = producer
                 .map(str::to_string)
                 .unwrap_or_else(overlay::default_producer);
             let opts = StampOptions::default().with_producer(producer);
-            let stamped = stamp(pdf, &field_specs, &opts)?;
+            let stamped = stamp(pdf, field_specs, &opts)?;
             Ok(RenderResult::new(
                 vec![Artifact::new(stamped, OutputFormat::Pdf)],
                 OutputFormat::Pdf,

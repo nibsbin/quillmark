@@ -347,6 +347,10 @@ export interface CardAddr {
  * A text-splice change set over the USV content (CodeMirror `ChangeSet`
  * semantics), returned by `revise` and by the `rebase` codec. Map a stored
  * position through it with `mapPos`.
+ *
+ * Applying one admits an `insert` string rather than storing it verbatim: `\r`
+ * and the Unicode bidi controls drop, and a U+2028 or U+2029 line separator
+ * becomes a space. Nothing reports the substitution.
  */
 export interface Delta {
     ops: ({ retain: number } | { insert: string } | { delete: number })[];
@@ -374,7 +378,9 @@ export type MarkOp =
  * A line/block edit. `split`/`join` splice `\n` in post-`delta`,
  * post-`islandOps` coordinates; `setKind`/`setContainers`/`setContinues` touch
  * metadata. `setContinues` sets or clears a line's within-block hard-break flag
- * (`ContentLine.continues`); `continues: true` on line 0 is rejected.
+ * (`ContentLine.continues`); `continues: true` is rejected on line 0, on a line
+ * whose containers differ from the line above, and after a heading, island or
+ * rule, each of which is a block of one line.
  */
 export type LineOp =
     | { op: "split"; at: number }

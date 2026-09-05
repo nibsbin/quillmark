@@ -12,9 +12,9 @@ proptest! {
         let markdown =
             format!("~~~card-yaml\n$quill: test_quill\n$kind: main\n{}\n~~~\n\nContent", payload);
 
-        let result = Document::parse(&markdown).map(|p| p.document);
-        if let Ok(doc) = result {
-            assert!(doc.main().payload().len() <= size);
-        }
+        let doc = Document::parse(&markdown)
+            .expect("a well-formed payload parses")
+            .document;
+        prop_assert_eq!(doc.main().payload().len(), size);
     }
 }

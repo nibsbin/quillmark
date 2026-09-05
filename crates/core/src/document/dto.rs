@@ -678,21 +678,7 @@ impl TryFrom<PayloadItemV0_92_0> for PayloadItem {
                 nested_fills,
             } => {
                 use super::edit::{validate_field, validate_fill_targets, FieldViolation};
-                let malformed = |v: FieldViolation| {
-                    StorageError::Malformed(match v {
-                        FieldViolation::InvalidName => {
-                            format!("invalid field name {key:?}: must match [A-Za-z_][A-Za-z0-9_]*")
-                        }
-                        FieldViolation::TooDeep => format!(
-                            "field {key:?} nests deeper than the maximum of {} levels",
-                            crate::document::limits::MAX_YAML_DEPTH
-                        ),
-                        FieldViolation::FillOnMapping => format!(
-                            "`!must_fill` on field {key:?} targets a mapping; `!must_fill` is \
-                             supported on scalars and sequences only"
-                        ),
-                    })
-                };
+                let malformed = |v: FieldViolation| StorageError::Malformed(v.message(&key));
                 validate_field(&key, &value).map_err(malformed)?;
                 let mut qv = QuillValue::from_json(value);
                 for path in nested_fills {

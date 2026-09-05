@@ -22,13 +22,19 @@ severity.
 
 **`Diagnostic`**: severity, optional error `code`, `message`, optional `location` (text anchor: file/line/column), optional `path` (document-model anchor, dotted/bracketed path into the typed `Document`, set by schema validation/coercion), optional `hint`, `source_chain` (omitted from serialization when empty). `location` and `path` are independent and may co-exist.
 
-**`ParseError`**: parsing-stage error enum, `InputTooLarge`, `InvalidStructure`, `EmptyInput`, `MissingQuill`, `InvalidQuillReference`, `YamlErrorWithLocation`; converts to `Diagnostic` via `to_diagnostic()`. The `InvalidQuillReference` case (`parse::invalid_quill_reference`) attaches the canonical `$quill` grammar (`quill_ref_hint()`) as the diagnostic hint. That hint is the single source of truth for the reference grammar: bindings surface it verbatim (e.g. WASM `Document.quillRefHint`) rather than re-stating the rule.
+**`ParseError`**: parsing-stage error enum, `InputTooLarge`, `TooManyFields`, `TooManyCards`, `InvalidStructure`, `EmptyInput`, `MissingQuill`, `InvalidQuillReference`, `YamlErrorWithLocation`; converts to `Diagnostic` via `to_diagnostic()`. The `InvalidQuillReference` case (`parse::invalid_quill_reference`) attaches the canonical `$quill` grammar (`quill_ref_hint()`) as the diagnostic hint. That hint is the single source of truth for the reference grammar: bindings surface it verbatim (e.g. WASM `Document.quillRefHint`) rather than re-stating the rule.
 
 **`YamlError`**: the one adapter every `serde-saphyr` error passes through. Sanitizes the message (the engine appends its own Rust API names (`from_multiple`, `DuplicateKeyPolicy`) which `yaml_hints::enrich_yaml_error` strips), derives the hint, and carries the 1-indexed line/column the engine located; `to_diagnostic(code, file)` renders all three. The emit side has no input to point at, so it carries neither position nor hint.
 
 It exists so no public signature names `serde-saphyr`. A third-party error type in a published signature chains this crate's major to that crate's, and to the choice of engine at all; the workspace pins `~1.0` and keeps the engine an implementation detail. That promise covers the message as much as the type, which is why the sanitizer is inside the adapter rather than beside it.
 
 Two surfaces return one directly (`QuillValue::from_yaml_str`, `QuillConfig::schema_yaml`); `QuillConfig::from_yaml_with_warnings` converts through it to `quill::yaml_parse_error`. The card-yaml path does not travel this way: it becomes `ParseError::YamlErrorWithLocation`, which additionally knows the enclosing block.
+
+Its `line`/`column` are document coordinates, not block-relative ones:
+
+- The engine reports a position inside the string it parsed: the fence content minus the comment lines prescan drops (`PreScan::source_lines` maps what survives back) and minus the whitespace `trim` takes off the front. The assembler translates that position onto the document.
+- `to_diagnostic()` renders it as a `Location` against `DOCUMENT_FILE` (`input.md`). Markdown reaches the engine as a string, so the anchor names the input rather than a path on disk.
+- The message names the block instead of repeating a number (`YAML error in the root card-yaml block: …`, `… in card-yaml block 2: …`). The engine's own snippet inside it stays block-relative, as the engine rendered it.
 
 **`RenderError`**: the main rendering error, a struct carrying a non-empty
 `Vec<Diagnostic>` (`RenderError::new` / `from_diag` / `coded(code, message)`
@@ -86,8 +92,9 @@ families:
   *render floor* also refuses it (`validation::type_mismatch`); the floor is
   more lenient than the write, and what it adopts is valid.
 - **Validation warnings**: `Quill::validate(doc)` returns every
-  `validation::*` diagnostic, mixing severities; `validation::must_fill` and
-  the `$seed` checks are the non-fatal ones. This is the editor-facing
+  `validation::*` diagnostic, mixing severities; `validation::must_fill`,
+  `validation::out_of_variant`, `validation::example_unchanged` and the `$seed`
+  checks are the non-fatal ones. This is the editor-facing
   surface; the render pipeline blank-fills instead of warning on incomplete
   documents. A **fatal** row here means the document does not render: values
   are judged in the form the render floor builds from them
@@ -104,7 +111,7 @@ families:
   Core cannot *detect* a plate dropping a construct — the absence of ink is
   not a signal a backend reports — so this family is a declaration, not an
   observation: nothing verifies it, and an undeclared drop stays silent.
-- **Compile warnings**: the Typst backend maps `typst::compile`'s non-fatal
+- **Compile warnings**: the Typst backend maps the compiler's non-fatal
   diagnostics (font fallback, overfull pages, …) through the same span
   resolution as errors. They are state of the session's current compile:
   exposed via `LiveSession::warnings()` (the `SessionHandle::warnings` seam,
@@ -141,7 +148,21 @@ Python and WASM bindings delegate to core types:
 Typst diagnostics mapped via `map_typst_errors()`:
 - Severity levels mapped (Error/Warning)
 - Spans resolved to file/line/column
-- Error codes: `"typst::<message-prefix>"` (the diagnostic message text up to the first `:`)
+- Error codes: a **closed set**, keyed off the message's shape
+
+Typst has no error codes of its own, so the mapping mints one. It classifies
+rather than quotes: `typst::file_not_found` (a file the world refused),
+`typst::unknown_variable` (a plate naming a symbol that is not in scope),
+`typst::type_error` (a value that is not what the position wanted), and
+`typst::compile` for every message the set does not name. Errors and warnings
+are classified alike.
+
+The residual bucket is what keeps the set closed, and a code spelled by the
+message instead is what it rules out: that would carry author-supplied text —
+a searched path, a symbol name — into a routing key, and give the key one
+value per input. Typst's sentence stays in `message`, which is where the
+searched path is read. Classification reads that English, so a reworded
+message degrades to `typst::compile` rather than minting a code of its own.
 
 See `crates/backends/typst/src/error_mapping.rs`.
 
@@ -210,10 +231,28 @@ the schema obliges the cell (see [SCHEMAS.md](SCHEMAS.md) § "Native
 validation"). An incomplete document therefore produces no *fatal* field-level
 diagnostic, and warns exactly where a human has yet to make a call.
 
+`validation::example_unchanged` (non-fatal) asks the other question: not
+*whether* a cell was authored but *which* value it holds. The blueprint seats a
+defaultless field's `example:` in its value cell under the `!must_fill` marker,
+and a seed commits one on every field that declares it, so a dropped marker
+leaves a value that is present, type-valid, in-domain, and nobody's answer.
+It fires where the authored value is the shown one — element-wise inside an
+array, so a half-edited list still names the leftover element — and on a body
+left at its `body.example` or at the `Write <kind> body here.` placeholder
+generated for a kind declaring none. Its `trigger` arg says which cell spoke
+(`field` or `body`); `example` carries the shown value in its JSON shape. A
+field declaring no `example:` never fires: there is nothing to recognize, and
+absence is `must_fill`'s question. A cell still carrying its `!must_fill`
+marker never fires either: the blueprint writes marker and example together, so
+the marker already names the cell and by the same precedence its hint is the
+actionable one.
+
 Implementation: `crates/core/src/quill/validation.rs` (the `ValidationError`
 `Display` impl, for `validation::type_mismatch`) and
 `crates/core/src/quill/compose.rs` (`validate_fills`/`fill_warning` and
-`validate_unauthored`/`unauthored_warning`, for `validation::must_fill`).
+`validate_unauthored`/`unauthored_warning`, for `validation::must_fill`;
+`validate_examples`/`example_unchanged_warning`, for
+`validation::example_unchanged`).
 
 ## Document-model paths
 
@@ -315,6 +354,7 @@ Three outcomes, and the wire tells them apart only with this table in hand, sinc
 | `validation::body_disabled` | `card` | structured |
 | `validation::coercion_failed` | `value`, `target` | structured, coarser |
 | `validation::must_fill` | `trigger` | structured |
+| `validation::example_unchanged` | `example`, `trigger` | structured |
 | `validation::out_of_variant` | `variant`, `selected` | structured |
 | `validation::not_inline` | — | code-determined |
 | `validation::not_plain` | — | code-determined |
@@ -338,8 +378,10 @@ Three outcomes, and the wire tells them apart only with this table in hand, sinc
 | `conform::field_coercion_failed` | `field`, `target` | structured, coarser |
 | `conform::field_decode` | `field`, `codec` | structured, coarser |
 | `parse::input_too_large` | `size`, `max` | structured |
+| `parse::too_many_fields` | `count`, `max` | structured |
+| `parse::too_many_cards` | `count`, `max` | structured |
 | `parse::invalid_quill_reference` | `value` | structured, coarser |
-| `parse::yaml_error_with_location` | `line`, `blockIndex` | structured, coarser |
+| `parse::yaml_error_with_location` | `blockIndex` | structured, coarser |
 | `parse::empty_input` | — | code-determined |
 | `parse::invalid_structure` | — | fallback |
 | `parse::missing_quill` | — | fallback |
@@ -355,7 +397,7 @@ Every `conform::*` row is reachable only through the content-field walk, so the 
 `validation::*`, `edit::*`, and `parse::*` are the codes an end user meets, and the table covers them. The rest carry no args, which is the domain's shape rather than a phase of the work:
 
 - **`quill::*`** is quill-authoring. Its reader is a template author debugging `Quill.yaml`, the one audience for whom canonical English is the deliverable. Three of its codes are `format!`-built per slot besides.
-- **`typst::*`** is an open set: the code is Typst's own message text up to the first `:` (`error_mapping.rs`), so it re-spells itself whenever Typst rewords a diagnostic and cannot key a string table at all.
+- **`typst::*`** is a closed set (`error_mapping.rs`), but a coarse one: the compile codes classify a Typst diagnostic without taking it apart, so the detail stays in the message that carries it.
 
 Because those codes carry no args, every consumer template falls back on them by the rule above. That is what makes a surface covering a third of the codes total rather than partial.
 

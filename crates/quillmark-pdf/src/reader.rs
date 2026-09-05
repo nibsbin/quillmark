@@ -6,11 +6,12 @@
 //! ## Input contract
 //!
 //! The base PDF must be traditional-xref, unencrypted, inline-annots,
-//! flat-tree: a classic `xref` table (not an xref *stream*), no `/Encrypt`, page
-//! `/Annots` written inline rather than as an indirect reference, and a page tree
-//! shallow enough to walk. That is the precise inverse of the scanner's error
-//! branches. `hayro-syntax` is read-only and exposes no byte spans, so it cannot
-//! drive a byte-splice append; hence this bespoke scanner.
+//! bounded-tree: a classic `xref` table (not an xref *stream*), no `/Encrypt`,
+//! page `/Annots` written inline rather than as an indirect reference, and a
+//! `/Pages` tree of any depth that reaches each node once and stays under
+//! 100 000 nodes. That is the precise inverse of the scanner's error branches.
+//! `hayro-syntax` is read-only and exposes no byte spans, so it cannot drive a
+//! byte-splice append; hence this bespoke scanner.
 
 use std::collections::{HashMap, HashSet};
 
@@ -174,9 +175,9 @@ pub(crate) fn append_incremental_update(
 /// A header is `<id> <generation> obj` at a token boundary, so `19 0 obj` is not
 /// found inside `519 0 obj`, at any generation (re-saved PDFs carry non-zero
 /// ones). A later occurrence overwrites an earlier one, so a lookup answers with
-/// the live copy. Literal strings, `%`-comments and stream bodies are skipped, so
-/// header bytes inside a string value or inside stream data cannot shadow the
-/// real object.
+/// the live copy. Strings, `%`-comments and stream bodies are skipped, so header
+/// bytes inside a string value or inside stream data cannot shadow the real
+/// object.
 pub struct ObjectIndex<'a> {
     pdf: &'a [u8],
     starts: HashMap<u32, usize>,
@@ -275,10 +276,9 @@ fn obj_header_id(rest: &[u8]) -> Option<u32> {
     std::str::from_utf8(&rest[..digits]).ok()?.parse().ok()
 }
 
-/// The index just past the `endobj` closing the body at `from`. Literal
-/// `( … )` strings, `%`-comments and stream bodies are skipped so those bytes
-/// inside a string value, a comment or stream data cannot truncate the object
-/// early.
+/// The index just past the `endobj` closing the body at `from`. Strings,
+/// `%`-comments and stream bodies are skipped so those bytes inside a string
+/// value, a comment or stream data cannot truncate the object early.
 fn find_endobj_end(pdf: &[u8], from: usize) -> Option<usize> {
     let needle = b"endobj";
     let mut i = from;
@@ -384,13 +384,16 @@ fn skip_ws_and_comments(b: &[u8], start: usize) -> usize {
     }
 }
 
-/// If `b[i]` opens a literal string or a `%`-comment, the index just past it, so
-/// a scanner steps over raw `<<`/`>>`/`[`/`]`/`endobj` bytes without reading them
-/// as structure. Hex strings need no handling: a well-formed one holds only hex
-/// digits. `None` when `b[i]` is neither, and the caller advances one byte.
+/// If `b[i]` opens a string — literal or hex — or a `%`-comment, the index just
+/// past it, so a scanner steps over raw `<<`/`>>`/`[`/`]`/`endobj` bytes without
+/// reading them as structure. A hex string's closing `>` is one of those:
+/// against the enclosing dict's `>>` it forms a `>>` that is not the dict's. A
+/// `<` followed by `<` opens a dict, not a hex string. `None` when `b[i]` opens
+/// none of them, and the caller advances one byte.
 fn skip_string_or_comment(b: &[u8], i: usize) -> Option<usize> {
     match b.get(i)? {
         b'(' => Some(skip_pdf_string(b, i)),
+        b'<' if b.get(i + 1) != Some(&b'<') => Some(skip_pdf_hex_string(b, i)),
         b'%' => {
             let mut j = i + 1;
             while j < b.len() && b[j] != b'\n' && b[j] != b'\r' {
@@ -576,10 +579,10 @@ pub fn extract_outer_dict(obj_bytes: &[u8]) -> Option<&[u8]> {
     Some(&obj_bytes[open + 2..close])
 }
 
-/// The index of the `>>` matching the `<<` at `open`. Literal strings and
-/// `%`-comments are skipped: either can carry `<<` / `>>` as raw bytes that
-/// would otherwise skew the nesting depth. `Err` carries the index the scan ran
-/// out at, for a caller that reads an unbalanced dict leniently.
+/// The index of the `>>` matching the `<<` at `open`. Strings and `%`-comments
+/// are skipped: any of them can carry `<<` / `>>` as raw bytes that would
+/// otherwise skew the nesting depth. `Err` carries the index the scan ran out
+/// at, for a caller that reads an unbalanced dict leniently.
 fn dict_end(b: &[u8], open: usize) -> Result<usize, usize> {
     let mut depth = 0i32;
     let mut i = open;
@@ -722,17 +725,33 @@ fn root_pages_id(idx: &ObjectIndex, catalog_id: u32) -> Result<u32, PdfError> {
 /// Reject a page with a non-zero `/Rotate`, its own value or the one inherited
 /// from its nearest ancestor `/Pages` node. The stamp and flatten paths write
 /// geometry in unrotated user space and do not compensate, so a rotated base
-/// page would display every widget away from its intended box.
+/// page would display every widget away from its intended box. The first
+/// *present* value binds, and one that is not a direct integer — an indirect
+/// reference, say — is an error rather than an absence falling to the default
+/// zero.
 pub(crate) fn assert_unrotated_pages<'p>(
     idx: &ObjectIndex,
     pages: impl IntoIterator<Item = &'p Page>,
 ) -> Result<(), PdfError> {
-    let parse_rotate =
-        |raw: &[u8]| -> Option<i64> { std::str::from_utf8(raw.trim_ascii()).ok()?.parse().ok() };
     for page in pages {
-        let rotate = page
-            .inherited_attribute(idx, "Rotate", parse_rotate)
-            .unwrap_or(0);
+        let Some(raw) =
+            page.inherited_attribute(idx, "Rotate", |raw| Some(raw.trim_ascii().to_vec()))
+        else {
+            continue;
+        };
+        let rotate: i64 = std::str::from_utf8(&raw)
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .ok_or_else(|| {
+                err(
+                    CODE_PARSE,
+                    format!(
+                        "page object {} has /Rotate {}, which is not an integer",
+                        page.id,
+                        String::from_utf8_lossy(&raw)
+                    ),
+                )
+            })?;
         if rotate.rem_euclid(360) != 0 {
             return Err(err(
                 "pdf::rotated_page",
@@ -878,6 +897,18 @@ mod tests {
         let dict = extract_outer_dict(obj).expect("dict parses");
         let mb = find_dict_value(dict, "MediaBox").expect("/MediaBox survives the comment");
         assert_eq!(parse_rect_array(mb), Some([0.0, 0.0, 1.0, 2.0]));
+    }
+
+    #[test]
+    fn outer_dict_ends_after_a_trailing_hex_string() {
+        for (obj, inner) in [
+            (&b"<< /T <41>>>"[..], &b" /T <41>"[..]),
+            (b"<< /T <>>>", b" /T <>"),
+            (b"<< /T (a)>>", b" /T (a)"),
+            (b"<< /D << /T <41>>>>>", b" /D << /T <41>>>"),
+        ] {
+            assert_eq!(extract_outer_dict(obj), Some(inner));
+        }
     }
 
     #[test]

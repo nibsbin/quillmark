@@ -617,7 +617,7 @@ fn validate_value(
     if !type_valid && !format_error_already_reported {
         errors.push(ValidationError::TypeMismatch {
             path: path.to_string(),
-            expected: expected_type_name(&field.r#type).to_string(),
+            expected: field.r#type.as_str().to_string(),
             actual: yaml_scalar_type(value.as_json()).to_string(),
             source_token: verbatim_yaml_scalar(value.as_json()),
             // The `default:` token is a document-authoring aid ("omit the line
@@ -804,21 +804,6 @@ pub(crate) fn validate_schema_literal(
     validate_value(schema, value, path, ValueContext::SchemaLiteral)
 }
 
-fn expected_type_name(field_type: &FieldType) -> &'static str {
-    match field_type {
-        FieldType::String | FieldType::Date | FieldType::DateTime => "string",
-        // Enum is a closed string domain; a mistyped value reports the base type.
-        FieldType::Enum => "string",
-        FieldType::RichText { .. } => "richtext",
-        FieldType::PlainText { .. } => "plaintext",
-        FieldType::Integer => "integer",
-        FieldType::Number => "number",
-        FieldType::Boolean => "boolean",
-        FieldType::Array => "array",
-        FieldType::Object => "object",
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -910,6 +895,38 @@ main:
             ValidationError::TypeMismatch { path, expected, actual, source_token, .. }
             if path == "main.count" && expected == "integer" && actual == "number" && source_token == "9.5"
         )));
+    }
+
+    #[test]
+    fn date_type_mismatch_names_date_not_string() {
+        let config = config_with("    due:\n      type: date", "");
+        let doc = doc_from_fm(&[("due", json!(20260101))]);
+        let errors = validate_typed_document(&config, &doc).unwrap_err();
+        let err = errors
+            .iter()
+            .find(|e| matches!(e, ValidationError::TypeMismatch { path, .. } if path == "main.due"))
+            .expect("expected a type mismatch on main.due");
+        assert!(
+            err.to_string().contains("schema declares `date`"),
+            "message should name the date type, got: {err}"
+        );
+        assert_eq!(err.args().get("expected"), Some(&json!("date")));
+    }
+
+    #[test]
+    fn enum_type_mismatch_names_enum_not_string() {
+        let config = config_with("    lvl:\n      type: enum\n      values: [a, b]", "");
+        let doc = doc_from_fm(&[("lvl", json!(["a", "b"]))]);
+        let errors = validate_typed_document(&config, &doc).unwrap_err();
+        let err = errors
+            .iter()
+            .find(|e| matches!(e, ValidationError::TypeMismatch { path, .. } if path == "main.lvl"))
+            .expect("expected a type mismatch on main.lvl");
+        assert!(
+            err.to_string().contains("schema declares `enum`"),
+            "message should name the enum type, got: {err}"
+        );
+        assert_eq!(err.args().get("expected"), Some(&json!("enum")));
     }
 
     #[test]

@@ -14,7 +14,7 @@ do the heavy compilation.
 
 ## Data Flow
 
-1. **Parse**: card-yaml block extraction, bidi stripping, HTML fence normalization
+1. **Parse**: card-yaml block extraction, bidi stripping, line-separator spacing, HTML fence normalization
 2. **Normalize**: Type coercion, schema defaults, field validation
 3. **Compile**: Backend's `open()` receives the quill + JSON data and returns a `LiveSession`; `LiveSession::render()` produces artifacts
 
@@ -74,7 +74,8 @@ incremental-update appender that splices a fresh `/AcroForm` (and `/Info`
 `/Producer` stamp) onto a base PDF. Deliberately small: it hard-errors on
 out-of-contract input (xref streams, encryption, indirect `/Annots`,
 non-zero-generation base objects, a base that already carries an `/AcroForm`,
-a non-finite widget `/Rect`) rather than parsing the full format.
+a non-finite widget `/Rect`, a page `/Rotate` it cannot resolve to zero) rather
+than parsing the full format.
 
 ### `bindings/*`
 

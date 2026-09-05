@@ -1951,6 +1951,31 @@ main:
 }
 
 #[test]
+fn test_main_body_malformed_hint_names_every_authored_key() {
+    let yaml_content = r#"
+quill:
+  name: bad_body
+  version: "1.0"
+  backend: typst
+  description: Bad body test
+
+main:
+  body:
+    unsuported: [Table]
+"#;
+
+    let err = QuillConfig::from_yaml_with_warnings(yaml_content).unwrap_err();
+    let hint = err
+        .iter()
+        .find(|d| d.code.as_deref() == Some("quill::invalid_body"))
+        .and_then(|d| d.hint.clone())
+        .expect("a malformed main.body carries a hint");
+    for key in ["enabled", "example", "unsupported"] {
+        assert!(hint.contains(key), "hint omits {key}: {hint}");
+    }
+}
+
+#[test]
 fn test_field_ui_title_is_valid() {
     let yaml_content = r#"
 quill:
@@ -2228,6 +2253,24 @@ fn datetime_type_mismatch_reports_datetime_not_string() {
         diag.message
     );
     assert!(!diag.message.contains("type 'string'"));
+}
+
+#[test]
+fn nested_example_type_mismatch_names_the_element_type() {
+    let yaml = example_default_yaml(
+        "    tags:\n      type: array\n      items:\n        type: string\n      example: [1]\n",
+    );
+    let errors = QuillConfig::from_yaml_with_warnings(&yaml).unwrap_err();
+    let diag = errors
+        .iter()
+        .find(|d| d.code.as_deref() == Some("quill::example_type_mismatch"))
+        .expect("expected example_type_mismatch error");
+    assert!(
+        diag.message.contains("declares type 'string'"),
+        "message should name the item type the element is judged against, got: {}",
+        diag.message
+    );
+    assert!(!diag.message.contains("type 'array'"));
 }
 
 #[test]

@@ -9,8 +9,6 @@
 
 use std::collections::BTreeMap;
 
-use unicode_normalization::UnicodeNormalization;
-
 use quillmark_content::delta::diff_import;
 use quillmark_content::import::ImportError;
 use quillmark_content::{ApplyError, ChangeBundle, Delta, Normalized};
@@ -34,12 +32,14 @@ fn render_at(field: &str, at: &[PathSegment]) -> String {
         .to_string()
 }
 
-/// `true` if `name` matches `[A-Za-z_][A-Za-z0-9_]*` after NFC normalisation.
+/// `true` if `name` matches `[A-Za-z_][A-Za-z0-9_]*`, tested on `name`'s own
+/// characters: the parser reads a key's raw bytes, so a name that merely
+/// normalises to ASCII (`U+212A KELVIN SIGN`) is not a top-level key.
 ///
 /// Case is preserved verbatim; only `$`-prefixed keys are reserved, so a user
 /// field can never shadow system metadata.
 pub fn is_valid_field_name(name: &str) -> bool {
-    let mut chars = name.nfc();
+    let mut chars = name.chars();
     let Some(first) = chars.next() else {
         return false;
     };
@@ -296,7 +296,10 @@ impl EditError {
 /// A field-level invariant violation, shared by every payload ingestion path.
 ///
 /// Each boundary maps it to its own error type (`ParseError`, `StorageError`,
-/// `WireError`, `EditError`), so the invariant is enforced once, here.
+/// `WireError`, `EditError`), so the invariant is enforced once, here. Its
+/// [`Display`](std::fmt::Display) is the reason alone, for a boundary carrying
+/// the offending key itself; [`message`](Self::message) names the key inline
+/// for the boundaries whose error type does not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum FieldViolation {
@@ -309,6 +312,33 @@ pub enum FieldViolation {
     /// and a block mapping opens on the next line, with no tag position of its
     /// own (spec §3.4).
     FillOnMapping,
+}
+
+impl FieldViolation {
+    /// The reason with `key` named inline: the rendering
+    /// [`WireError::InvalidField`](crate::document::wire::WireError::InvalidField)
+    /// composes from its own key and this `Display`.
+    pub fn message(&self, key: &str) -> String {
+        format!("invalid field {key:?}: {self}")
+    }
+}
+
+impl std::fmt::Display for FieldViolation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FieldViolation::InvalidName => {
+                f.write_str("field names must match [A-Za-z_][A-Za-z0-9_]*")
+            }
+            FieldViolation::TooDeep => write!(
+                f,
+                "nests deeper than the maximum of {} levels",
+                crate::document::limits::MAX_YAML_DEPTH
+            ),
+            FieldViolation::FillOnMapping => f.write_str(
+                "`!must_fill` targets a mapping; `!must_fill` is supported on scalars and sequences only",
+            ),
+        }
+    }
 }
 
 /// A payload-level invariant violation: [`FieldViolation`]'s seam one level up,
@@ -397,7 +427,9 @@ pub(crate) fn field_decode(
 }
 
 /// Depth-bound the values of an `$ext` / `$seed` map: the map itself is level
-/// 1, so its values carry the rest of the budget.
+/// 1, so its values carry the rest of the budget. The iterator form of
+/// [`crate::value::depth_check_meta_map`], for the merge that must clear the
+/// bound before it owns a map.
 fn check_meta_depth<'v>(
     values: impl IntoIterator<Item = &'v serde_json::Value>,
 ) -> Result<(), EditError> {
@@ -706,6 +738,10 @@ impl Card {
             .iter()
             .filter_map(|(name, value)| {
                 check_field(name, value.as_json())
+                    .and_then(|()| {
+                        validate_fill_targets(value, false)
+                            .map_err(|v| edit_error_from_violation(name, v))
+                    })
                     .err()
                     .map(|e| (name.clone(), e))
             })
@@ -743,7 +779,8 @@ impl Card {
         &mut self,
         value: serde_json::Map<String, serde_json::Value>,
     ) -> Result<(), EditError> {
-        check_meta_depth(value.values())?;
+        let value =
+            crate::value::depth_check_meta_map(value, |max| EditError::ValueTooDeep { max })?;
         self.payload_mut().set_ext(value);
         Ok(())
     }

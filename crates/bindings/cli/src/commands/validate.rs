@@ -65,20 +65,7 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
     let mut result = ValidationResult::new();
 
     // `_with_warnings` keeps the config warnings the plain loader drops.
-    let (quill, config_warnings) = match quillmark::quill_from_path_with_warnings(&args.quill_path) {
-        Ok(pair) => pair,
-        Err(e) => {
-            for diag in e.diagnostics() {
-                eprintln!("{}", diag.fmt_pretty());
-            }
-            // The branch covers every load failure, a missing directory and an
-            // unreadable `Quill.yaml` among them, so it names neither.
-            eprintln!("\nValidation failed: {} error(s)", e.diagnostics().len());
-            return Err(CliError::InvalidArgument(
-                "Quill could not be loaded".to_string(),
-            ));
-        }
-    };
+    let (quill, config_warnings) = quillmark::quill_from_path_with_warnings(&args.quill_path)?;
     let config = quill.config();
 
     result.issues.extend(config_warnings);
@@ -103,10 +90,7 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
     print_validation_result(&result, args.verbose);
 
     if result.has_errors() {
-        Err(CliError::InvalidArgument(format!(
-            "Validation failed with {} error(s)",
-            result.count(Severity::Error)
-        )))
+        Err(CliError::Reported)
     } else {
         Ok(())
     }

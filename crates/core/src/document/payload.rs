@@ -243,7 +243,8 @@ impl Payload {
         Self { items }
     }
 
-    /// The inverse of [`from_items_with_nested`](Self::from_items_with_nested):
+    /// The inverse of
+    /// [`from_items_with_flat_nested`](Self::from_items_with_flat_nested):
     /// re-prefix each nested comment's path with its owning item's key, for the
     /// storage DTO's payload-level sidecar.
     pub(crate) fn flat_nested_comments(&self) -> Vec<NestedComment> {
@@ -400,12 +401,17 @@ impl Payload {
             .unwrap_or_else(|| {
                 // Insert after the last lower-ranked `$` item and before any
                 // non-`$` entry: keeps the `$` ordering without displacing
-                // user fields.
-                self.items
+                // user fields. That item's inline trailer sits at the same
+                // index and stays with it.
+                let after = self
+                    .items
                     .iter()
                     .rposition(|i| matches!(i.meta_rank(), Some(r) if r < new_rank))
-                    .map(|p| p + 1)
-                    .unwrap_or(0)
+                    .map_or(0, |p| p + 1);
+                match self.items.get(after) {
+                    Some(PayloadItem::Comment { inline: true, .. }) => after + 1,
+                    _ => after,
+                }
             });
         self.items.insert(insert_at, new);
     }
@@ -502,8 +508,16 @@ impl Payload {
     }
 
     /// Insert or replace field `key` with `value`, setting its fill marker.
-    /// Position-preserving for an existing key, append otherwise.
-    fn insert_item(&mut self, key: String, value: QuillValue, fill: bool) -> Option<QuillValue> {
+    /// Position-preserving for an existing key, append otherwise. The item's
+    /// `fill` flag is the one carrier of a root marker, so a root fill bit on
+    /// the incoming tree is cleared rather than stored beside it.
+    fn insert_item(
+        &mut self,
+        key: String,
+        mut value: QuillValue,
+        fill: bool,
+    ) -> Option<QuillValue> {
+        value.clear_root_fill();
         for item in self.items.iter_mut() {
             if let PayloadItem::Field {
                 key: k,
