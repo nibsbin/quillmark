@@ -150,6 +150,57 @@ pub fn check_raster(scale: f32, width_pt: f32, height_pt: f32) -> Result<(), Ren
     Ok(())
 }
 
+/// The pages a render covers: `pages` as given, or every page of `page_count`
+/// when it is `None`. An index at or past `page_count` fails under
+/// `backend::page_index_out_of_bounds`, naming every offending index.
+///
+/// The indices come back as given: order and repeats are the caller's.
+pub fn selected_pages(
+    pages: Option<&[usize]>,
+    page_count: usize,
+) -> Result<Vec<usize>, RenderError> {
+    let Some(requested) = pages else {
+        return Ok((0..page_count).collect());
+    };
+
+    let out_of_bounds: Vec<usize> = requested
+        .iter()
+        .copied()
+        .filter(|&i| i >= page_count)
+        .collect();
+    if !out_of_bounds.is_empty() {
+        return Err(RenderError::from_diag(
+            crate::Diagnostic::new(
+                crate::Severity::Error,
+                format!(
+                    "Page index out of bounds (page_count={page_count}); offending indices: {out_of_bounds:?}"
+                ),
+            )
+            .with_code("backend::page_index_out_of_bounds".to_string())
+            .with_hint("Read the session's page count before requesting pages.".to_string()),
+        ));
+    }
+
+    Ok(requested.to_vec())
+}
+
+/// The refusal a backend owes a `pages` selection on a format it emits whole,
+/// under `backend::page_selection_not_supported`. `format` names it in the
+/// message.
+pub fn page_selection_not_supported(format: OutputFormat) -> RenderError {
+    RenderError::from_diag(
+        crate::Diagnostic::new(
+            crate::Severity::Error,
+            format!("{format:?} output does not support page selection"),
+        )
+        .with_code("backend::page_selection_not_supported".to_string())
+        .with_hint(
+            "Drop the page selection to render the whole document, or ask for a per-page format."
+                .to_string(),
+        ),
+    )
+}
+
 /// Pre-session hint for whether a backend with these `formats` can paint pages
 /// to a canvas, used before a session exists (e.g. a GUI deciding whether to
 /// mount a canvas preview without first paying to open one).
@@ -213,6 +264,22 @@ mod tests {
         let scale = raster_scale(crate::RenderOptions::DEFAULT_PPI).expect("the default ppi");
         check_raster(scale, w, h).expect("the default render is not near the ceiling");
         assert!(f64::from(w * scale) * f64::from(h * scale) * 100.0 < MAX_RASTER_PIXELS as f64);
+    }
+
+    #[test]
+    fn no_selection_covers_every_page_and_a_selection_is_taken_verbatim() {
+        assert_eq!(selected_pages(None, 3).unwrap(), [0, 1, 2]);
+        assert_eq!(selected_pages(None, 0).unwrap(), [] as [usize; 0]);
+        assert_eq!(selected_pages(Some(&[2, 0, 0]), 3).unwrap(), [2, 0, 0]);
+    }
+
+    #[test]
+    fn a_page_past_the_document_is_refused() {
+        let err = selected_pages(Some(&[0, 3]), 3).unwrap_err();
+        assert_eq!(
+            err.diagnostics()[0].code.as_deref(),
+            Some("backend::page_index_out_of_bounds")
+        );
     }
 
     #[test]
