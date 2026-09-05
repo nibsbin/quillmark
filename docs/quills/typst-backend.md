@@ -120,7 +120,9 @@ A plate draws a file under `assets/` by its path from the Quill root:
 #image("assets/logo.svg", width: 2cm)
 ```
 
-**A markdown image in a `richtext` field draws nothing.** `![logo](assets/logo.svg)` in document content is dropped from the page and the render warns under `backend::declined_construct`, naming the field and how many images it holds. What such a url would name — a file in this Quill, a path beside the document, a remote address — is not decided, and a document is portable across the versions a `$quill` selector admits, so nothing here is settled enough for a document to depend on. The construct still stores and round-trips; only the page declines it.
+**A markdown image in a `richtext` field draws nothing.** `![logo](assets/logo.svg)` in document content reaches no page, and the render warns under `backend::declined_construct`, naming the field and how many images it holds.
+
+What such a url names — a file in this Quill, a path beside the document, a remote address — is undecided. A document is portable across every version a `$quill` selector admits, so a path into one Quill's file tree is not a binding it can take. The construct still stores and round-trips; only the page declines it.
 
 ## Typesetting
 

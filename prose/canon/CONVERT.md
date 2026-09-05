@@ -148,18 +148,16 @@ An `image` island lowers to nothing, and the compile that dropped it carries one
 counts wherever it sits, and a field holding one says so rather than losing it
 quietly.
 
-What such a `url` would name is the open question. A document is quill-free but
-for `$quill`, which is a *selector* ([VERSIONING](VERSIONING.md)) — `memo@1`
-admits 1.0.0 and 1.1.0 alike — and everything else a document references is
+What such a `url` names is undecided. A document is quill-free but for
+`$quill`, which is a *selector* ([VERSIONING](VERSIONING.md)) — `memo@1` admits
+1.0.0 and 1.1.0 alike — and everything else a document references is
 self-contained or declared. A path into one quill's file tree is neither, and
-no `DocPath`, `validate` signal or url space exists to make it either. So the
-backend draws none until that is settled, rather than binding a reading of the
-string that documents would then depend on.
+no `DocPath`, `validate` signal or url space makes it either. A backend that
+resolved the string anyway would bind documents to a reading nothing versions.
 
 The sibling lane `plate::unsupported_construct`
-(`crates/core/src/quill/support.rs`) is a *quill's* declaration about a body,
-which stays; this one is the backend's own observation about every content
-field, and goes when content images have a design.
+(`crates/core/src/quill/support.rs`) is a *quill's* declaration about a body;
+this one is the backend's own observation about every content field.
 
 ### Island props
 

@@ -39,8 +39,7 @@ pub struct ContentMap {
     pub path: String,
     pub block: Range<usize>,
     pub segments: Vec<SegmentMap>,
-    /// [`Emission::declined_images`] for this block: what the field held and the
-    /// page will not carry.
+    /// [`Emission::declined_images`] for this block.
     pub declined_images: usize,
 }
 

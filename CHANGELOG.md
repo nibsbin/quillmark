@@ -17,6 +17,16 @@
   routing on diagnostic codes gains a warning family** and needs an arm for it.
   Storage is untouched: an `image` island still parses, stores, round-trips to
   markdown and reaches an editor with its `{url, alt}` props.
+- fix(typst): **a compile diagnostic carries a code from a closed set.** The
+  code was the message up to its first `:`, so a missing asset minted
+  `typst::file not found (searched at assets/logo.png)` — the author's path
+  inside what consumers route on, one code per input — and a URL truncated
+  mid-value to `typst::file not found (searched at https`. Most Typst messages
+  hold no `:` at all, so the whole sentence became the code. The mapping now
+  classifies: `typst::file_not_found`, `typst::unknown_variable`,
+  `typst::type_error`, and `typst::compile` for every message the set does not
+  name, warnings included. Typst's sentence, and the path it searched, stay in
+  `message`.
 - fix(core): **an unclosed root `~~~` block is reported as unclosed.** A
   document that opens with `~~~` and `$quill` but never closes the fence drew
   the generic `parse::missing_quill` text, telling the author to open a block

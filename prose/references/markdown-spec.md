@@ -408,7 +408,7 @@ support may come in a future revision:
   `backend::declined_construct`. `src` names no space: a document is portable
   across the versions its `$quill` selector admits and declares every other
   thing it references, so a path into one quill's file tree is not a binding a
-  document may take. Deciding that space is the future work.
+  document may take.
 - Math (`$…$`, `$$…$$`), footnotes, task lists, definition lists: not
   supported. In markdown body text `$` is literal; inside a `~~~` card-yaml
   payload `$` is reserved as the prefix for system-metadata keys (§3.3).

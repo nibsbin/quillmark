@@ -177,7 +177,7 @@ impl Location {
 #[non_exhaustive]
 pub struct Diagnostic {
     pub severity: Severity,
-    /// Stable error code, e.g. `"parse::empty_input"` or `"typst::syntax"`.
+    /// Stable error code, e.g. `"parse::empty_input"` or `"typst::type_error"`.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub code: Option<String>,
     pub message: String,

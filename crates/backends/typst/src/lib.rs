@@ -141,8 +141,7 @@ fn card_kinds(data: &serde_json::Value) -> Vec<Option<String>> {
         .unwrap_or_default()
 }
 
-/// One `backend::declined_construct` per content field holding images: what the
-/// field carries and this compile drew nothing for.
+/// One `backend::declined_construct` per content field holding images.
 ///
 /// A field whose plate address does not translate is skipped rather than
 /// anchored loosely: the warning is about *this* field, and an unanchored one

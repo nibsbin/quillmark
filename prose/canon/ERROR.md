@@ -110,8 +110,8 @@ families:
   Core cannot *detect* a plate dropping a construct — the absence of ink is
   not a signal a backend reports — so this family is a declaration, not an
   observation: nothing verifies it, and an undeclared drop stays silent.
-- **`backend::declined_construct`: observed-decline warnings.** Its twin, from
-  the other side. A backend that declines a construct *outright* is the
+- **`backend::declined_construct`: observed-decline warnings.** The twin above,
+  from the other side. A backend that declines a construct *outright* is the
   observer core is not, so it says so itself: one diagnostic per (content
   field, construct) carrying `backend`, `construct` and `count` in `args` and
   the field's `DocPath` in `path`, minted by `quillmark_core::declined_construct`
@@ -119,7 +119,7 @@ families:
   at the compile that dropped the construct, so it rides the session's compile
   warnings. The Typst backend declines `image` in content
   ([CONVERT.md](CONVERT.md#declined-images)); nothing else declines anything.
-- **Compile warnings**: the Typst backend maps `typst::compile`'s non-fatal
+- **Compile warnings**: the Typst backend maps the compiler's non-fatal
   diagnostics (font fallback, overfull pages, …) through the same span
   resolution as errors. They are state of the session's current compile:
   exposed via `LiveSession::warnings()` (the `SessionHandle::warnings` seam,
@@ -130,12 +130,11 @@ families:
 
 Ordering in a merged `RenderResult.warnings` is pipeline order: parse
 warnings first, then compile warnings. No dedup *across* families, and one
-pair can now say the same thing twice: a quill declaring `unsupported:
-[image]` on a body the Typst backend also declines draws both codes at one
-`path`. That is two producers stating two facts — the quill's declaration
-and the backend's observation — and they sit on either side of a crate
-boundary the merge is the first place to see. So the reader collapses them if
-it wants one line; the engine does not decide that for it.
+pair overlaps: a quill declaring `unsupported: [image]` on a body the Typst
+backend also declines draws both codes at one `path`. Two producers state two
+facts there, the quill's declaration and the backend's observation, on either
+side of a crate boundary the merge is the first place to see. A reader wanting
+one line collapses them itself.
 `plate::unsupported_construct` dedups *within* itself, at the walk, for
 the reason the others need not: it is the one family whose producer sees
 every occurrence at once. `backend::declined_construct` does the same, per
@@ -161,7 +160,21 @@ Python and WASM bindings delegate to core types:
 Typst diagnostics mapped via `map_typst_errors()`:
 - Severity levels mapped (Error/Warning)
 - Spans resolved to file/line/column
-- Error codes: `"typst::<message-prefix>"` (the diagnostic message text up to the first `:`)
+- Error codes: a **closed set**, keyed off the message's shape
+
+Typst has no error codes of its own, so the mapping mints one. It classifies
+rather than quotes: `typst::file_not_found` (a file the world refused),
+`typst::unknown_variable` (a plate naming a symbol that is not in scope),
+`typst::type_error` (a value that is not what the position wanted), and
+`typst::compile` for every message the set does not name. Errors and warnings
+are classified alike.
+
+The residual bucket is what keeps the set closed, and a code spelled by the
+message instead is what it rules out: that would carry author-supplied text —
+a searched path, a symbol name — into a routing key, and give the key one
+value per input. Typst's sentence stays in `message`, which is where the
+searched path is read. Classification reads that English, so a reworded
+message degrades to `typst::compile` rather than minting a code of its own.
 
 See `crates/backends/typst/src/error_mapping.rs`.
 
@@ -378,7 +391,7 @@ Every `conform::*` row is reachable only through the content-field walk, so the 
 `validation::*`, `edit::*`, and `parse::*` are the codes an end user meets, and the table covers them. The rest carry no args, which is the domain's shape rather than a phase of the work:
 
 - **`quill::*`** is quill-authoring. Its reader is a template author debugging `Quill.yaml`, the one audience for whom canonical English is the deliverable. Three of its codes are `format!`-built per slot besides.
-- **`typst::*`** is an open set: the code is Typst's own message text up to the first `:` (`error_mapping.rs`), so it re-spells itself whenever Typst rewords a diagnostic and cannot key a string table at all.
+- **`typst::*`** is a closed set (`error_mapping.rs`), but a coarse one: the compile codes classify a Typst diagnostic without taking it apart, so the detail stays in the message that carries it.
 
 Because those codes carry no args, every consumer template falls back on them by the rule above. That is what makes a surface covering a third of the codes total rather than partial.
 
