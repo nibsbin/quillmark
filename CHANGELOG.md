@@ -145,6 +145,15 @@
   re-import collapsed it: `from_markdown("a\n\n<span></span>\n\nb")` was not a
   fixed point. Import now drops such a paragraph. An empty heading, code block
   and container keep their line, markdown being able to write those back.
+- fix(content): **an island alone on a line takes the line kind its type
+  projects.** An `image` slot alone on a `LineKind::Island` line and the same
+  slot on a `Para` line both wrote `![alt](url)`, which re-imports as `Para`,
+  and a `table` alone on a `Para` line wrote a pipe table, which re-imports as
+  `Island`: two normalized contents per document and one markdown, so any write
+  and read back flipped the kind. `KnownIslandType::block_only` names which
+  markup is a block, and `Content::normalize` writes the kind the round trip
+  yields — `Island` for a `table`, `Para` for an `image`. A type this build
+  cannot read keeps the kind it was stored with, its placeholder naming none.
 - change(core)!: **YAML nesting depth is the parser's to bound, and
   `MAX_YAML_DEPTH` is gone.** The constant set `serde_saphyr`'s depth budget
   and doubled as the bound on host values crossing into the document, so one
