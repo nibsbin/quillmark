@@ -57,7 +57,7 @@ pub fn page_indices(pages: Vec<isize>) -> PyResult<Vec<usize>> {
     let negative: Vec<isize> = pages.iter().copied().filter(|&p| p < 0).collect();
     if !negative.is_empty() {
         return Err(convert_render_error(RenderError::coded(
-            "typst::page_index_out_of_bounds",
+            "backend::page_index_out_of_bounds",
             format!(
                 "Page index out of bounds; offending indices: {negative:?}. Page indices are 0-based and count from the first page."
             ),

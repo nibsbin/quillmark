@@ -19,7 +19,7 @@ The crate is excluded from `default-members`, so a bare `cargo test` skips it; `
 | `decode_fuzz.rs` | The four JSON decode lanes (storage DTO, card wire, canonical content, op wire) where arbitrary JSON yields `Err`, never a panic |
 | `emit_roundtrip_fuzz.rs` | `parse → emit → re-parse` stability, and idempotence on the canonical form |
 | `parse_fuzz.rs` | `Document::parse` on a card-yaml payload of generated width: every one of the `fieldN: valueN` lines reaches the parsed payload |
-| `pdf_fuzz.rs` | `quillmark-pdf`'s byte-level PDF reads (`page_media_boxes`, `PdfUpdate::begin`, `stamp`): arbitrary bytes, and a real AcroForm truncated, single-byte-corrupted, or spliced, yield `Err`, never a panic |
+| `pdf_fuzz.rs` | `quillmark-pdf`'s byte-level PDF reads (`page_canvas_boxes`, `PdfUpdate::begin`, `stamp`): arbitrary bytes, and a real AcroForm truncated, single-byte-corrupted, or spliced, yield `Err`, never a panic |
 
 The properties these hold: escaped output never breaks out of its Typst string or markup context, deeply nested and oversize markdown lowers to Typst without panicking, arbitrary Unicode survives the escapers and the parse → emit round trip, a wide payload keeps every field across a parse, and the hand-rolled PDF reader refuses corrupt bytes rather than panicking.
 

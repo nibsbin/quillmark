@@ -79,7 +79,7 @@ def test_engine_render_negative_page_is_out_of_bounds(engine, taro_quill_dir, ta
     with pytest.raises(QuillmarkError) as exc_info:
         engine.render(quill, parsed, OutputFormat.SVG, pages=[-1])
 
-    assert exc_info.value.diagnostics[0].code == "typst::page_index_out_of_bounds"
+    assert exc_info.value.diagnostics[0].code == "backend::page_index_out_of_bounds"
 
 
 def test_engine_render_full_document(engine, taro_quill_dir, taro_md):
