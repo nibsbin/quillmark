@@ -1850,8 +1850,8 @@ impl Document {
         string_wire.payload_items = payload_items;
         // Round-trip through `Card` so the emitted card carries the content body,
         // not the raw authored string.
-        let card = quillmark_core::Card::try_from(string_wire)
-            .map_err(|e| WasmError::from(format!("makeCard: {e}")).to_js_value())?;
+        let card =
+            quillmark_core::Card::try_from(string_wire).map_err(|e| wire_error_to_js(&e))?;
         let wire = quillmark_core::CardWire::from(&card);
         serialize_or_throw(&wire, "makeCard")
     }
@@ -2378,6 +2378,16 @@ fn edit_error_to_js(err: &quillmark_core::EditError, base: &quillmark_core::DocP
     .to_js_value()
 }
 
+/// Maps a `WireError` to a JS `Error` carrying one diagnostic, under the code
+/// the addressed mutator onto the same violation mints. The card is not placed,
+/// so the diagnostic carries no `path`.
+fn wire_error_to_js(err: &quillmark_core::WireError) -> JsValue {
+    WasmError {
+        diagnostics: vec![err.to_diagnostic()],
+    }
+    .to_js_value()
+}
+
 /// Batched twin of [`edit_error_to_js`]: one diagnostic per offending field.
 fn edit_errors_to_js(
     errors: Vec<(String, quillmark_core::EditError)>,
@@ -2584,7 +2594,7 @@ fn js_to_card(value: &JsValue) -> Result<quillmark_core::Card, JsValue> {
     reject_deep_js_value(value, "insertCard")?;
     let wire: quillmark_core::CardWire = serde_wasm_bindgen::from_value(value.clone())
         .map_err(|e| WasmError::from(format!("card must be a Card object: {e}")).to_js_value())?;
-    quillmark_core::Card::try_from(wire).map_err(|e| WasmError::from(e.to_string()).to_js_value())
+    quillmark_core::Card::try_from(wire).map_err(|e| wire_error_to_js(&e))
 }
 
 fn file_tree_from_js_tree(tree: &JsValue) -> Result<quillmark_core::FileTreeNode, JsValue> {
