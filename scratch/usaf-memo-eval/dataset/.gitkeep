@@ -1,0 +1,2 @@
+# Keep this throwaway eval out of default `git add .` habits if needed.
+# Traces are committed on purpose so they can be analyzed later.

@@ -1,0 +1,214 @@
+{
+  "updated_at": "2026-09-02T08:20:11.523697+00:00",
+  "traces": 5189,
+  "successes": 4434,
+  "success_rate": 0.8544999036423203,
+  "cost_usd": 17.776213539999997,
+  "per_model": {
+    "gpt-5-nano": {
+      "n": 605,
+      "ok": 549,
+      "cost_usd": 0.6244296100000002,
+      "input_tokens": 4807493,
+      "output_tokens": 1142643,
+      "reasoning_tokens": 632128,
+      "create_document_attempts": 948,
+      "got_blueprint": 604
+    },
+    "gpt-5.4-mini": {
+      "n": 606,
+      "ok": 605,
+      "cost_usd": 3.7481851499999967,
+      "input_tokens": 2785289,
+      "output_tokens": 426392,
+      "reasoning_tokens": 135843,
+      "create_document_attempts": 711,
+      "got_blueprint": 606
+    },
+    "gpt-4.1-mini": {
+      "n": 604,
+      "ok": 317,
+      "cost_usd": 1.7872032000000018,
+      "input_tokens": 3910004,
+      "output_tokens": 362965,
+      "reasoning_tokens": 0,
+      "create_document_attempts": 653,
+      "got_blueprint": 604
+    },
+    "gpt-5.6-luna": {
+      "n": 606,
+      "ok": 605,
+      "cost_usd": 0.77630086,
+      "input_tokens": 2493320,
+      "output_tokens": 348978,
+      "reasoning_tokens": 81533,
+      "create_document_attempts": 651,
+      "got_blueprint": 606
+    },
+    "gpt-5.6-luna:medium": {
+      "n": 606,
+      "ok": 605,
+      "cost_usd": 0.9189306599999988,
+      "input_tokens": 2412921,
+      "output_tokens": 446373,
+      "reasoning_tokens": 160839,
+      "create_document_attempts": 632,
+      "got_blueprint": 606
+    },
+    "gpt-5.4-nano": {
+      "n": 606,
+      "ok": 588,
+      "cost_usd": 1.40464371,
+      "input_tokens": 2987053,
+      "output_tokens": 725339,
+      "reasoning_tokens": 275561,
+      "create_document_attempts": 727,
+      "got_blueprint": 606
+    },
+    "gpt-5-mini": {
+      "n": 605,
+      "ok": 604,
+      "cost_usd": 1.8679658499999994,
+      "input_tokens": 2699641,
+      "output_tokens": 652443,
+      "reasoning_tokens": 218880,
+      "create_document_attempts": 683,
+      "got_blueprint": 605
+    },
+    "gpt-4.1-nano": {
+      "n": 592,
+      "ok": 204,
+      "cost_usd": 1.3651048999999986,
+      "input_tokens": 18409861,
+      "output_tokens": 1169593,
+      "reasoning_tokens": 0,
+      "create_document_attempts": 2254,
+      "got_blueprint": 592
+    },
+    "gpt-5.6-terra": {
+      "n": 359,
+      "ok": 357,
+      "cost_usd": 5.283449600000003,
+      "input_tokens": 1420744,
+      "output_tokens": 219752,
+      "reasoning_tokens": 79498,
+      "create_document_attempts": 373,
+      "got_blueprint": 359
+    }
+  },
+  "per_category": {
+    "mfr": {
+      "n": 172,
+      "ok": 139
+    },
+    "simple_tasking": {
+      "n": 180,
+      "ok": 151
+    },
+    "yaml_traps": {
+      "n": 547,
+      "ok": 496
+    },
+    "cui": {
+      "n": 388,
+      "ok": 296
+    },
+    "classified": {
+      "n": 283,
+      "ok": 249
+    },
+    "indorsement": {
+      "n": 549,
+      "ok": 459
+    },
+    "distribution": {
+      "n": 111,
+      "ok": 88
+    },
+    "attachments": {
+      "n": 172,
+      "ok": 145
+    },
+    "daf_style": {
+      "n": 60,
+      "ok": 52
+    },
+    "letterhead": {
+      "n": 332,
+      "ok": 287
+    },
+    "space_force": {
+      "n": 60,
+      "ok": 50
+    },
+    "civilian": {
+      "n": 60,
+      "ok": 54
+    },
+    "body_format": {
+      "n": 224,
+      "ok": 181
+    },
+    "long_body": {
+      "n": 59,
+      "ok": 47
+    },
+    "minimal": {
+      "n": 118,
+      "ok": 103
+    },
+    "addressing": {
+      "n": 177,
+      "ok": 153
+    },
+    "authority_line": {
+      "n": 118,
+      "ok": 109
+    },
+    "cc": {
+      "n": 59,
+      "ok": 56
+    },
+    "references": {
+      "n": 117,
+      "ok": 101
+    },
+    "instruction_following": {
+      "n": 262,
+      "ok": 232
+    },
+    "enums": {
+      "n": 104,
+      "ok": 87
+    },
+    "numbers": {
+      "n": 104,
+      "ok": 94
+    },
+    "dates": {
+      "n": 52,
+      "ok": 48
+    },
+    "narrative": {
+      "n": 624,
+      "ok": 533
+    },
+    "underspecified": {
+      "n": 257,
+      "ok": 224
+    }
+  },
+  "diagnostic_codes": {
+    "parse::missing_quill": 1305,
+    "parse::yaml_error_with_location": 1273,
+    "validation::must_fill": 769,
+    "parse::invalid_structure": 90,
+    "mcp::empty_content": 43,
+    "validation::enum_violation": 37,
+    "validation::unknown_card": 16,
+    "validation::type_mismatch": 11,
+    "validation::not_inline": 6,
+    "mcp::invalid_arguments": 2,
+    "validation::format_violation": 1
+  }
+}
