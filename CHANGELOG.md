@@ -440,6 +440,17 @@
   constant and both backends call it. Additive on the core API; the resolved
   value is unchanged.
 
+- fix(core): **body prose left inside a card block is told to close the block,
+  not to wrap itself in a block scalar.** A closing `~~~` placed after the prose
+  body fails YAML on the first prose line, and `simple key expected` answered
+  every such line with the wrapped-scalar advice: rewriting the memo as
+  `body: |` keeps the body inside the block and fails again. The hint now reads
+  the flagged line the parser names — no `key:` outside quotes, sentence-shaped
+  or after a blank line, and not the tail of an unfinished `key: value` — and
+  names the real fix: the line reads as prose, and body text belongs after the
+  closing `~~~`, so close the block before it. A genuine plain scalar wrapped
+  onto a second line keeps the block-scalar hint.
+
 ## v0.112.0 - 2026-09-01
 
 - feat(content)!: **every vocabulary member spells its payload in `attrs`.** The
