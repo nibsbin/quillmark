@@ -129,12 +129,17 @@ families:
   `open` → `render` path.
 
 Ordering in a merged `RenderResult.warnings` is pipeline order: parse
-warnings first, then compile warnings. No dedup *across* families: they
-cannot overlap (the pre-render families anchor `path` or a markdown
-`location`, compile warnings a `location` in Typst sources).
+warnings first, then compile warnings. No dedup *across* families, and one
+pair can now say the same thing twice: a quill declaring `unsupported:
+[image]` on a body the Typst backend also declines draws both codes at one
+`path`. That is two producers stating two facts — the quill's declaration
+and the backend's observation — and they sit on either side of a crate
+boundary the merge is the first place to see. So the reader collapses them if
+it wants one line; the engine does not decide that for it.
 `plate::unsupported_construct` dedups *within* itself, at the walk, for
 the reason the others need not: it is the one family whose producer sees
-every occurrence at once.
+every occurrence at once. `backend::declined_construct` does the same, per
+field.
 
 ## Bindings Error Delegation
 
