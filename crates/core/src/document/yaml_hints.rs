@@ -218,7 +218,8 @@ fn flagged_prose_line<'a>(message: &str, content: &'a str) -> Option<FlaggedLine
     (!wrapped_scalar).then_some(FlaggedLine { number, text })
 }
 
-/// The 1-indexed line the parser named (`line 3 column 1`, `at line 17, column 1`).
+/// The 1-indexed line the parser named, read off the `line N column M` prefix
+/// of its message (`at line N, column M` is accepted too).
 fn flagged_line_number(message: &str) -> Option<usize> {
     let (_, rest) = message.split_once("line ")?;
     rest.chars()
@@ -318,14 +319,6 @@ fn first_field_with_unquoted_prefix(content: &str, prefixes: &[char]) -> Option<
         }
     }
     None
-}
-
-/// The 1-based line number the parser flagged, read off the `line N column M`
-/// prefix of its message (`at line N, column M` is accepted too).
-fn flagged_line_number(message: &str) -> Option<usize> {
-    let rest = &message[message.find("line ")? + "line ".len()..];
-    let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
-    digits.parse().ok()
 }
 
 /// `line` as a mapping key, when its shape is `key:` or `key: value`.

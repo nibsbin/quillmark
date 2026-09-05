@@ -239,7 +239,9 @@ impl Quill {
     /// value a cell holds. The blueprint seats a defaultless field's `example:`
     /// in its value cell, so dropping the marker leaves a schema-valid,
     /// in-domain value nobody chose — `Duty Title` under a commander's name —
-    /// and every other check reads it as authored content.
+    /// and every other check reads it as authored content. A cell still
+    /// carrying its marker is the marker's to report, by the same precedence:
+    /// `must_fill` already names it, and the value it holds adds nothing.
     ///
     /// Field values, defaults, and presentation order are not part of this
     /// surface: read them from the [`Document`] payload and the quill schema
@@ -258,7 +260,11 @@ impl Quill {
                 .filter(|d| !claimed.contains(&d.path)),
         );
         diags.extend(validate_variants(self.config(), doc));
-        diags.extend(validate_examples(self.config(), doc));
+        diags.extend(
+            validate_examples(self.config(), doc)
+                .into_iter()
+                .filter(|d| !claimed.contains(&d.path)),
+        );
         diags.extend(self.validate_seed(doc));
         diags
     }

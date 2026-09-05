@@ -228,7 +228,10 @@ left at its `body.example` or at the `Write <kind> body here.` placeholder
 generated for a kind declaring none. Its `trigger` arg says which cell spoke
 (`field` or `body`); `example` carries the shown value in its JSON shape. A
 field declaring no `example:` never fires: there is nothing to recognize, and
-absence is `must_fill`'s question.
+absence is `must_fill`'s question. A cell still carrying its `!must_fill`
+marker never fires either: the blueprint writes marker and example together, so
+the marker already names the cell and by the same precedence its hint is the
+actionable one.
 
 Implementation: `crates/core/src/quill/validation.rs` (the `ValidationError`
 `Display` impl, for `validation::type_mismatch`) and

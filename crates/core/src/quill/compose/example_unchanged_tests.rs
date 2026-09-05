@@ -64,6 +64,16 @@ fn a_cell_left_at_its_example_warns_and_an_authored_one_does_not() {
     assert!(paths(&quill, &md("subject: Airfield closure\n")).is_empty());
 }
 
+/// A marked cell is `must_fill`'s to report: the blueprint writes marker and
+/// example together, so the pair would otherwise say the same thing twice.
+#[test]
+fn a_cell_still_carrying_its_marker_is_left_to_must_fill() {
+    let quill = quill_from_yaml(MEMO);
+
+    assert!(paths(&quill, &md("subject: !must_fill Duty Title\n")).is_empty());
+    assert_eq!(paths(&quill, &md("subject: Duty Title\n")), ["main.subject"]);
+}
+
 #[test]
 fn a_field_declaring_no_example_never_warns() {
     let quill = quill_from_yaml(MEMO);
