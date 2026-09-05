@@ -92,8 +92,9 @@ families:
   *render floor* also refuses it (`validation::type_mismatch`); the floor is
   more lenient than the write, and what it adopts is valid.
 - **Validation warnings**: `Quill::validate(doc)` returns every
-  `validation::*` diagnostic, mixing severities; `validation::must_fill` and
-  the `$seed` checks are the non-fatal ones. This is the editor-facing
+  `validation::*` diagnostic, mixing severities; `validation::must_fill`,
+  `validation::out_of_variant`, `validation::example_unchanged` and the `$seed`
+  checks are the non-fatal ones. This is the editor-facing
   surface; the render pipeline blank-fills instead of warning on incomplete
   documents. A **fatal** row here means the document does not render: values
   are judged in the form the render floor builds from them
@@ -230,10 +231,28 @@ the schema obliges the cell (see [SCHEMAS.md](SCHEMAS.md) § "Native
 validation"). An incomplete document therefore produces no *fatal* field-level
 diagnostic, and warns exactly where a human has yet to make a call.
 
+`validation::example_unchanged` (non-fatal) asks the other question: not
+*whether* a cell was authored but *which* value it holds. The blueprint seats a
+defaultless field's `example:` in its value cell under the `!must_fill` marker,
+and a seed commits one on every field that declares it, so a dropped marker
+leaves a value that is present, type-valid, in-domain, and nobody's answer.
+It fires where the authored value is the shown one — element-wise inside an
+array, so a half-edited list still names the leftover element — and on a body
+left at its `body.example` or at the `Write <kind> body here.` placeholder
+generated for a kind declaring none. Its `trigger` arg says which cell spoke
+(`field` or `body`); `example` carries the shown value in its JSON shape. A
+field declaring no `example:` never fires: there is nothing to recognize, and
+absence is `must_fill`'s question. A cell still carrying its `!must_fill`
+marker never fires either: the blueprint writes marker and example together, so
+the marker already names the cell and by the same precedence its hint is the
+actionable one.
+
 Implementation: `crates/core/src/quill/validation.rs` (the `ValidationError`
 `Display` impl, for `validation::type_mismatch`) and
 `crates/core/src/quill/compose.rs` (`validate_fills`/`fill_warning` and
-`validate_unauthored`/`unauthored_warning`, for `validation::must_fill`).
+`validate_unauthored`/`unauthored_warning`, for `validation::must_fill`;
+`validate_examples`/`example_unchanged_warning`, for
+`validation::example_unchanged`).
 
 ## Document-model paths
 
@@ -335,6 +354,7 @@ Three outcomes, and the wire tells them apart only with this table in hand, sinc
 | `validation::body_disabled` | `card` | structured |
 | `validation::coercion_failed` | `value`, `target` | structured, coarser |
 | `validation::must_fill` | `trigger` | structured |
+| `validation::example_unchanged` | `example`, `trigger` | structured |
 | `validation::out_of_variant` | `variant`, `selected` | structured |
 | `validation::not_inline` | — | code-determined |
 | `validation::not_plain` | — | code-determined |

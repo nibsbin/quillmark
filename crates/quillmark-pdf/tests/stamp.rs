@@ -3,7 +3,7 @@
 //! values land in `/V` and the viewer synthesizes appearances.
 
 use pdf_writer::writers::Form;
-use pdf_writer::{Content, Finish, Name, Pdf, Rect, Ref};
+use pdf_writer::{Content, Finish, Name, Pdf, Rect, Ref, Settings, TextStr};
 use quillmark_pdf::{regions_of, stamp, FieldSpec, FieldType, StampOptions};
 
 /// An `n`-page US-Letter base satisfying the spine's input contract.
@@ -233,6 +233,69 @@ fn producer_only_no_fields_stamps_info_producer() {
     assert_eq!(
         info.get(b"Producer").unwrap().as_str().unwrap(),
         b"Quillmark test"
+    );
+}
+
+/// A one-page base whose compact `/Info` ends in a hex-encoded `/Title` —
+/// what pdf-writer's compact mode emits for a non-ASCII title written last.
+fn build_base_with_hex_title_info(title: &str) -> Vec<u8> {
+    let mut pdf = Pdf::with_settings(Settings { pretty: false });
+    let catalog_id = Ref::new(1);
+    let page_tree_id = Ref::new(2);
+    let page_id = Ref::new(3);
+    let content_id = Ref::new(4);
+    let info_id = Ref::new(5);
+    let rect = Rect::new(0.0, 0.0, 612.0, 792.0);
+    pdf.catalog(catalog_id).pages(page_tree_id);
+    {
+        let mut pages = pdf.pages(page_tree_id);
+        pages.kids([page_id]).count(1).media_box(rect);
+    }
+    pdf.page(page_id)
+        .parent(page_tree_id)
+        .media_box(rect)
+        .contents(content_id);
+    let mut content = Content::new();
+    content.set_line_width(1.0);
+    content.rect(72.0, 700.0, 200.0, 20.0);
+    content.stroke();
+    pdf.stream(content_id, &content.finish());
+    pdf.document_info(info_id)
+        .producer(TextStr("Base"))
+        .title(TextStr(title));
+    pdf.finish()
+}
+
+#[test]
+fn producer_stamp_preserves_a_trailing_hex_title() {
+    let title = "Résumé";
+    let result = stamp(
+        build_base_with_hex_title_info(title),
+        &[],
+        &StampOptions::default().with_producer("Quillmark test".into()),
+    )
+    .expect("stamp ok");
+
+    let doc = lopdf::Document::load_mem(&result).expect("lopdf reparse");
+    let info_ref = doc
+        .trailer
+        .get(b"Info")
+        .expect("trailer /Info")
+        .as_reference()
+        .expect("/Info indirect");
+    let info = doc.get_object(info_ref).unwrap().as_dict().unwrap();
+    assert_eq!(
+        info.get(b"Producer").unwrap().as_str().unwrap(),
+        b"Quillmark test"
+    );
+    let mut utf16be = vec![0xFE, 0xFF];
+    for unit in title.encode_utf16() {
+        utf16be.extend_from_slice(&unit.to_be_bytes());
+    }
+    assert_eq!(
+        info.get(b"Title").unwrap().as_str().unwrap(),
+        utf16be.as_slice(),
+        "the hex /Title survives the /Producer rewrite"
     );
 }
 

@@ -216,8 +216,8 @@ impl Quill {
     /// `validation::*` diagnostics verbatim (same code, `path`, `hint`) so
     /// consumers route on the code without parsing message text: type
     /// mismatches, unknown card kinds, body-on-disabled-body, and the non-fatal
-    /// `validation::must_fill` warning, the only non-fatal one; the rest are
-    /// blockers.
+    /// warnings (`validation::must_fill`, `validation::out_of_variant`,
+    /// `validation::example_unchanged`); the rest are blockers.
     ///
     /// **A blocker here means the document does not render.** Values are judged
     /// in the form the render floor builds from them (`conform_value` at
@@ -234,6 +234,14 @@ impl Quill {
     /// content — so both run, and the `trigger` arg tells a consumer which
     /// fired. Where both would fire on one path (a bare marker on an unauthored
     /// cell) the marker wins: its hint is the actionable one.
+    ///
+    /// `validation::example_unchanged` answers what `must_fill` cannot: *which*
+    /// value a cell holds. The blueprint seats a defaultless field's `example:`
+    /// in its value cell, so dropping the marker leaves a schema-valid,
+    /// in-domain value nobody chose — `Duty Title` under a commander's name —
+    /// and every other check reads it as authored content. A cell still
+    /// carrying its marker is the marker's to report, by the same precedence:
+    /// `must_fill` already names it, and the value it holds adds nothing.
     ///
     /// Field values, defaults, and presentation order are not part of this
     /// surface: read them from the [`Document`] payload and the quill schema
@@ -252,6 +260,11 @@ impl Quill {
                 .filter(|d| !claimed.contains(&d.path)),
         );
         diags.extend(validate_variants(self.config(), doc));
+        diags.extend(
+            validate_examples(self.config(), doc)
+                .into_iter()
+                .filter(|d| !claimed.contains(&d.path)),
+        );
         diags.extend(self.validate_seed(doc));
         diags
     }
@@ -1011,8 +1024,208 @@ pub(crate) fn unauthored_warning(path: &DocPath) -> Diagnostic {
     )
 }
 
+/// Surface every cell and body the document leaves at the value its schema
+/// *shows*, across the main card and every composable card.
+///
+/// The blueprint seats a defaultless field's `example:` in the value cell under
+/// the `!must_fill` marker (`prose/canon/BLUEPRINT.md` § "Placeholder value
+/// precedence"), and the marker is the only thing distinguishing it from an
+/// answer: an example is present, type-valid and in-domain, so coercion,
+/// validation and the unauthored predicate all read it as content. Drop the
+/// marker and a memo ships `Duty Title` under a signature block with a clean
+/// validate. This walk reads the same declarations the blueprint stamps from,
+/// and says the cell still holds what the schema showed.
+///
+/// It is about *which* value, never *whether* one was authored, so it declines
+/// the cells [`validate_unauthored`] owns: a field declaring no `example:` has
+/// nothing to compare against and is silent here whatever it holds.
+fn validate_examples(config: &QuillConfig, doc: &Document) -> Vec<Diagnostic> {
+    let mut diags = Vec::new();
+    for (schema, card, path) in schema_cards(config, doc) {
+        let Some(schema) = schema else { continue };
+        let payload = card.payload();
+        for (name, field) in &schema.fields {
+            collect_example_field(field, payload.get(name), &path.field(name), &mut diags);
+        }
+        collect_body_example(schema, card, &path, &mut diags);
+    }
+    diags
+}
+
+/// Warn at each cell whose value is the one its own declaration shows.
+///
+/// The recursion is [`collect_unauthored_field`]'s, for the same reason: the
+/// cells it reaches are where the blueprint stamps its values. A **typed
+/// dictionary** and a **variant container** are namespaces, so each member is
+/// judged against its own `example:`; an **array** is judged element-wise
+/// against the same index of the array literal its field shows, so an author who
+/// edited the first line and left the second still hears about the second.
+/// Absence is not this walk's business: an absent cell holds no value to
+/// recognize.
+fn collect_example_field(
+    field: &FieldSchema,
+    value: Option<&QuillValue>,
+    path: &DocPath,
+    out: &mut Vec<Diagnostic>,
+) {
+    let Some(present) = value.filter(|v| !v.as_json().is_null()) else {
+        return;
+    };
+    let json = present.as_json();
+
+    if field.is_variant_bearing() {
+        let authored = FieldSchema::authored_member(Some(json));
+        let shown = field
+            .example
+            .as_ref()
+            .and_then(|e| FieldSchema::authored_member(Some(e.as_json())));
+        if let Some(shown) = shown.filter(|s| Some(*s) == authored) {
+            out.push(example_unchanged_warning(
+                &path.field(VARIANT_DISCRIMINANT_KEY),
+                shown,
+            ));
+        }
+        if let Some(fields) = field.variant_fields(&field.selected_member(Some(json))) {
+            for (name, schema) in fields {
+                let cell = json
+                    .as_object()
+                    .and_then(|o| o.get(name))
+                    .map(|j| QuillValue::from_json(j.clone()));
+                collect_example_field(schema, cell.as_ref(), &path.field(name), out);
+            }
+        }
+        return;
+    }
+
+    if let (FieldType::Object, Some(props)) = (&field.r#type, &field.properties) {
+        for (name, prop) in props {
+            let pv = json
+                .as_object()
+                .and_then(|o| o.get(name))
+                .map(|j| QuillValue::from_json(j.clone()));
+            collect_example_field(prop, pv.as_ref(), &path.field(name), out);
+        }
+        return;
+    }
+
+    if let (FieldType::Array, Some(items)) = (&field.r#type, &field.items) {
+        // The array's own `example:` is the whole literal, so the element's
+        // counterpart is the one at its index; an element that is not the shown
+        // one still descends, since a typed table's cells carry examples of
+        // their own.
+        let shown = field.example.as_ref().and_then(|e| e.as_json().as_array());
+        for (index, element) in json.as_array().into_iter().flatten().enumerate() {
+            let at = path.index(index);
+            match shown.and_then(|eg| eg.get(index)).filter(|eg| *eg == element) {
+                Some(eg) => out.push(example_unchanged_warning(&at, eg)),
+                None => collect_example_field(
+                    items,
+                    Some(&QuillValue::from_json(element.clone())),
+                    &at,
+                    out,
+                ),
+            }
+        }
+        return;
+    }
+
+    if let Some(shown) = shown_example(field, json) {
+        out.push(example_unchanged_warning(path, shown.as_json()));
+    }
+}
+
+/// The `example:` `value` is still sitting at, `None` where the field declares
+/// none or the document wrote something else. A prose field shows its example
+/// twice — the markdown literal a blueprint inlines and the imported content a
+/// seed commits ([`FieldSchema::example_content`]) — and they are one
+/// declaration, so either match reports the declaration.
+fn shown_example<'a>(field: &'a FieldSchema, value: &serde_json::Value) -> Option<&'a QuillValue> {
+    let example = field.example.as_ref()?;
+    let matched = example.as_json() == value
+        || field
+            .example_content
+            .as_ref()
+            .is_some_and(|content| content.as_json() == value);
+    matched.then_some(example)
+}
+
+/// Warn when a card's body is the text the blueprint writes into it: the
+/// configured `body.example`, or the placeholder generated for a kind that
+/// declares none ([`super::blueprint::body_placeholder`]).
+///
+/// The comparison is against the markdown projection, the form the blueprint
+/// emitted and an author edits, re-imported so a body that only round-tripped
+/// through the content model (`__b__` → `**b**`) still counts as untouched.
+fn collect_body_example(
+    schema: &CardSchema,
+    card: &Card,
+    base: &DocPath,
+    out: &mut Vec<Diagnostic>,
+) {
+    if !schema.body_enabled() {
+        return;
+    }
+    let authored = card.body_markdown();
+    let authored = authored.trim();
+    if authored.is_empty() {
+        return;
+    }
+    let shown = match schema.body.as_ref().and_then(|b| b.example.as_deref()) {
+        Some(example) => example.to_string(),
+        None => super::blueprint::body_placeholder(&schema.name),
+    };
+    if authored == shown.trim() || canonical_markdown(&shown).as_deref() == Some(authored) {
+        out.push(body_example_unchanged_warning(&base.body(), shown.trim()));
+    }
+}
+
+/// `shown` through the content model and back, the round trip a body takes on
+/// its way into a document. `None` where the text does not import, which a
+/// generated placeholder and a load-validated example never do.
+fn canonical_markdown(shown: &str) -> Option<String> {
+    let content = crate::document::import_body(shown).ok()?;
+    Some(quillmark_content::export::to_markdown(&content).trim().to_string())
+}
+
+pub(crate) fn example_unchanged_warning(path: &DocPath, example: &serde_json::Value) -> Diagnostic {
+    let path = path.to_string();
+    let literal = serde_json::to_string(example).unwrap_or_else(|_| "null".to_string());
+    Diagnostic::new(
+        Severity::Warning,
+        format!("Field `{path}` still holds the schema's example value `{literal}`."),
+    )
+    .with_code("validation::example_unchanged".to_string())
+    .with_path(path)
+    .with_arg("example", example.clone())
+    .with_arg("trigger", "field".into())
+    .with_hint(
+        "Author the value this document means. An `example:` shows a cell's shape, never its \
+         content."
+            .to_string(),
+    )
+}
+
+pub(crate) fn body_example_unchanged_warning(path: &DocPath, example: &str) -> Diagnostic {
+    let path = path.to_string();
+    Diagnostic::new(
+        Severity::Warning,
+        format!("Body `{path}` still holds the text the blueprint wrote there."),
+    )
+    .with_code("validation::example_unchanged".to_string())
+    .with_path(path)
+    .with_arg("example", example.into())
+    .with_arg("trigger", "body".into())
+    .with_hint(
+        "Write the body this document means, in place of the example or placeholder text."
+            .to_string(),
+    )
+}
+
 #[cfg(test)]
 mod must_fill_tests;
+
+#[cfg(test)]
+mod example_unchanged_tests;
 
 #[cfg(test)]
 mod tests {

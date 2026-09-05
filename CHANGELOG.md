@@ -31,6 +31,23 @@
 - feat(core): **`~~~yaml` opens a card-yaml block**, a second non-canonical
   alias beside `~~~card-yaml`; both re-emit as bare `~~~`. A YAML *code* block
   in prose is a backtick fence (```` ```yaml ````), unchanged.
+- feat(core): **`validation::example_unchanged`: a cell still holding the value
+  its schema showed.** `Quill::validate` warns (non-fatal, beside
+  `validation::must_fill`) where an authored value is the field's `example:`,
+  or a body is its `body.example` or the `Write <kind> body here.` placeholder
+  the blueprint generates for a kind declaring none. The blueprint seats a
+  defaultless field's example in its value cell under the `!must_fill` marker
+  and a seed commits one on every field that declares it, so dropping the
+  marker leaves a value that is present, type-valid, in-domain and nobody's
+  answer — a signed memo reading `Duty Title` under the commander's name, with
+  a clean validate. Arrays are compared element-wise against the same index of
+  the shown literal, so a half-edited list names the element left behind; a
+  typed dictionary and a variant container are walked per cell. A field
+  declaring no `example:` never fires: absence is `must_fill`'s question, and
+  neither does a cell still carrying its marker, which `must_fill` already
+  names. The `trigger` arg says which cell spoke (`field` or `body`) and
+  `example` carries the shown value.
+
 - feat(core): **the values form: `reader.values()` reads a document as plain
   values and `writer.set_values(values)` writes them back.** A document has
   three forms: *stored* (verbatim, quill-free), *values* (stored with every
@@ -449,6 +466,36 @@
   files. `RenderOptions::ppi_or_default()` resolves the option against that
   constant and both backends call it. Additive on the core API; the resolved
   value is unchanged.
+
+- fix(core): **body prose left inside a card block is told to close the block,
+  not to wrap itself in a block scalar.** A closing `~~~` placed after the prose
+  body fails YAML on the first prose line, and `simple key expected` answered
+  every such line with the wrapped-scalar advice: rewriting the memo as
+  `body: |` keeps the body inside the block and fails again. The hint now reads
+  the flagged line the parser names — no `key:` outside quotes, sentence-shaped
+  or after a blank line, and not the tail of an unfinished `key: value` — and
+  names the real fix: the line reads as prose, and body text belongs after the
+  closing `~~~`, so close the block before it. A genuine plain scalar wrapped
+  onto a second line keeps the block-scalar hint.
+- fix(core): **a leading space before a top-level key gets its own hint.** One
+  stray space folds the line into the preceding plain scalar, and YAML raises
+  the same `mapping values are not allowed` an unquoted `:` inside a value
+  raises — so the hint sent the reader hunting for a colon that is not in the
+  block, and four models quoted the `subject:` above it instead. Where the
+  flagged line starts with a space, reads as `key:` or `key: value`, and
+  follows a column-zero key line, the hint names the space: top-level fields
+  begin at column 0, remove the one before `date:`. Anything else keeps the
+  quote-the-colon advice.
+- fix(pdf): **a dict ending in a hex string parses to its real `>>`.** The
+  scanner stepped over literal strings and `%`-comments but read a hex string
+  as ordinary bytes, so the string's own `>` abutting the dict's `>>` closed
+  the dict one byte early: `<< /T <41>>>` read as ` /T <41`, every
+  `find_dict_value` on that inner swallowed the rest as one hex string, and a
+  `/Producer` stamp rewrote the `/Info` with an unterminated `<…` — a title
+  lost to any reader. `skip_string_or_comment` steps a `<` that no `<` follows
+  to just past its `>`, which the dict, array and `endobj` scans all inherit.
+  The trigger is real: pdf-writer's compact mode, which krilla and typst-pdf
+  use, writes a non-ASCII `/Title` or `/Author` exactly this way.
 
 ## v0.112.0 - 2026-09-01
 
