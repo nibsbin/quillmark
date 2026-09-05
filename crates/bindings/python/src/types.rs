@@ -1639,7 +1639,7 @@ fn py_to_json_at(value: &Bound<'_, PyAny>, depth: usize) -> PyResult<serde_json:
     let reject_too_deep = || {
         Err(PyValueError::new_err(format!(
             "value nests deeper than the maximum of {} levels",
-            quillmark_core::document::limits::MAX_YAML_DEPTH
+            quillmark_core::error::MAX_JSON_DEPTH
         )))
     };
 
@@ -1679,7 +1679,7 @@ fn py_to_json_at(value: &Bound<'_, PyAny>, depth: usize) -> PyResult<serde_json:
         return Ok(serde_json::Value::String(s));
     }
     if value.is_instance_of::<PyList>() {
-        if depth >= quillmark_core::document::limits::MAX_YAML_DEPTH {
+        if depth >= quillmark_core::error::MAX_JSON_DEPTH {
             return reject_too_deep();
         }
         let list = value.cast::<PyList>()?;
@@ -1690,7 +1690,7 @@ fn py_to_json_at(value: &Bound<'_, PyAny>, depth: usize) -> PyResult<serde_json:
         return Ok(serde_json::Value::Array(arr?));
     }
     if value.is_instance_of::<PyDict>() {
-        if depth >= quillmark_core::document::limits::MAX_YAML_DEPTH {
+        if depth >= quillmark_core::error::MAX_JSON_DEPTH {
             return reject_too_deep();
         }
         let dict = value.cast::<PyDict>()?;

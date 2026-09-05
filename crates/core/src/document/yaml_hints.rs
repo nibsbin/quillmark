@@ -495,12 +495,9 @@ mod tests {
             " date: 2026-04-02\n",
             "authority_line: \"\"\n"
         );
-        let raw = serde_saphyr::from_str_with_options::<serde_json::Value>(
-            content,
-            crate::document::limits::yaml_parse_options(),
-        )
-        .expect_err("the indented key should not parse")
-        .to_string();
+        let raw = serde_saphyr::from_str::<serde_json::Value>(content)
+            .expect_err("the indented key should not parse")
+            .to_string();
         let hint = enrich_yaml_error(&raw, content)
             .hint
             .expect("hint should be set");

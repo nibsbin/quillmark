@@ -245,22 +245,22 @@ def _nest(levels, leaf):
 def test_depth_bound_matches_core_container_levels():
     """py_to_json_at and core's json_depth_exceeds reject the identical shape.
 
-    The cutoff is container levels (64), not nodes: a scalar leaf at the
-    bottom is not charged a level, so exactly 64 nested objects are accepted
-    and 65 are rejected: whether the deepest container holds a scalar or
+    The cutoff is container levels (128), not nodes: a scalar leaf at the
+    bottom is not charged a level, so exactly 128 nested objects are accepted
+    and 129 are rejected: whether the deepest container holds a scalar or
     another (non-empty) container. Exercised through `make_card`, whose field
     values cross the same `py_to_json` boundary the writer's `set` does.
     """
-    # Scalar-terminated: 64 objects with a scalar leaf is at the limit.
-    Document.make_card("note", {"ok_scalar": _nest(64, 1)})
+    # Scalar-terminated: 128 objects with a scalar leaf is at the limit.
+    Document.make_card("note", {"ok_scalar": _nest(128, 1)})
     with pytest.raises((QuillmarkError, ValueError)):
-        Document.make_card("note", {"deep_scalar": _nest(65, 1)})
+        Document.make_card("note", {"deep_scalar": _nest(129, 1)})
 
     # Container-terminated: the deepest container, not its contents, occupies
     # the last level, so the boundary is identical.
-    Document.make_card("note", {"ok_container": _nest(63, [1, 2, 3])})
+    Document.make_card("note", {"ok_container": _nest(127, [1, 2, 3])})
     with pytest.raises((QuillmarkError, ValueError)):
-        Document.make_card("note", {"deep_container": _nest(64, [1, 2, 3])})
+        Document.make_card("note", {"deep_container": _nest(128, [1, 2, 3])})
 
 
 def test_nested_fill_exposed_as_nested_fills():

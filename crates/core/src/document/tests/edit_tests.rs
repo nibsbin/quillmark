@@ -1047,7 +1047,7 @@ fn store_field_rejects_value_past_depth_limit() {
     let too_deep = crate::value::QuillValue::from_json(deep_value(150));
     let err = doc.main_mut().store_field("y", too_deep).unwrap_err();
     assert!(
-        matches!(err, crate::document::EditError::ValueTooDeep { max: 64 }),
+        matches!(err, crate::document::EditError::ValueTooDeep { max: 128 }),
         "expected ValueTooDeep, got {err:?}"
     );
     let too_deep = crate::value::QuillValue::from_json(deep_value(150));
@@ -1062,7 +1062,7 @@ fn store_field_rejects_value_past_depth_limit() {
         .is_err());
 }
 
-/// The `$ext` map is itself a level, so its values carry `MAX_YAML_DEPTH - 1`:
+/// The `$ext` map is itself a level, so its values carry `MAX_JSON_DEPTH - 1`:
 /// the wholesale store and the namespace merge bound the merged map identically.
 #[test]
 fn store_ext_charges_the_map_its_own_level() {
@@ -1074,21 +1074,21 @@ fn store_ext_charges_the_map_its_own_level() {
         m
     };
 
-    doc.main_mut().store_ext(map(99)).expect("99 levels under a map is exactly the limit");
-    let err = doc.main_mut().store_ext(map(100)).unwrap_err();
+    doc.main_mut().store_ext(map(127)).expect("127 levels under a map is exactly the limit");
+    let err = doc.main_mut().store_ext(map(128)).unwrap_err();
     assert!(
-        matches!(err, crate::document::EditError::ValueTooDeep { max: 100 }),
+        matches!(err, crate::document::EditError::ValueTooDeep { max: 128 }),
         "expected ValueTooDeep, got {err:?}"
     );
     assert_eq!(err.code(), "edit::value_too_deep");
     assert_eq!(
         doc.main().ext().and_then(|m| m.get("a")),
-        Some(&deep_value(99)),
+        Some(&deep_value(127)),
         "the refused map leaves the stored one untouched"
     );
 
-    doc.main_mut().store_ext_namespace("ns", deep_value(99)).expect("the merge bound matches");
-    assert!(doc.main_mut().store_ext_namespace("ns", deep_value(100)).is_err());
+    doc.main_mut().store_ext_namespace("ns", deep_value(127)).expect("the merge bound matches");
+    assert!(doc.main_mut().store_ext_namespace("ns", deep_value(128)).is_err());
 }
 
 #[test]

@@ -37,8 +37,10 @@ pub const MAX_YAML_SIZE: usize = 1024 * 1024;
 /// that imports also renders, and vice versa.
 pub use quillmark_content::MAX_NESTING_DEPTH;
 
-/// Re-exported from [`crate::document::limits::MAX_YAML_DEPTH`].
-pub use crate::document::limits::MAX_YAML_DEPTH;
+/// Maximum nesting depth for an opaque JSON payload (128 levels). Owned by
+/// `quillmark-content` and re-exported here so this crate's write surfaces and
+/// the bindings' converters bound host values at the depth storage accepts.
+pub use quillmark_content::MAX_JSON_DEPTH;
 
 /// Maximum number of card blocks allowed per document
 pub const MAX_CARD_COUNT: usize = 1000;

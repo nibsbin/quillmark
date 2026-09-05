@@ -634,7 +634,7 @@ mod tests {
         );
 
         let mut deep = serde_json::json!(0);
-        for _ in 0..(crate::document::limits::MAX_YAML_DEPTH + 5) {
+        for _ in 0..(quillmark_content::MAX_JSON_DEPTH + 5) {
             deep = serde_json::json!([deep]);
         }
         assert_eq!(
