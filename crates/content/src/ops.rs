@@ -4,8 +4,8 @@
 
 use crate::delta::{Assoc, Delta, Op};
 use crate::model::{
-    line_kind_mismatch, Container, Island, Line, LineKind, LineKindMismatch, Mark, MarkKind,
-    Content, Usv, ISLAND_SLOT,
+    is_whole_line, line_kind_mismatch, Container, Island, Line, LineKind, LineKindMismatch, Mark,
+    MarkKind, Content, Usv, ISLAND_SLOT,
 };
 use crate::normalize::admit_char;
 use crate::usv::char_to_byte;
@@ -82,6 +82,10 @@ pub enum IslandOp {
     ///
     /// `props`, `island_type` and `loss` all come from the op; nothing derives
     /// `loss` from the props.
+    ///
+    /// The type comes from the op too, so retyping an inline island into a
+    /// block-only one over a slot that shares its line is
+    /// [`ApplyError::BlockIslandNotAlone`], as landing one there is.
     Set { island: Island },
     /// Insert an island: the [`ISLAND_SLOT`] at `at` and its backing entry in
     /// one op, so a slot never exists without the [`Island`] behind it.
@@ -104,6 +108,11 @@ pub enum IslandOp {
     /// *before* line ops: `SetKind` validates the kind against the text already
     /// on the line. `LineOp::Split` cannot stand in for the delta's `\n`: it
     /// runs in the later stage.
+    ///
+    /// A type markdown writes as a block
+    /// ([`KnownIslandType::block_only`](crate::KnownIslandType::block_only), a
+    /// `table`) has no inline placement: `at` must be an empty line, else
+    /// [`ApplyError::BlockIslandNotAlone`].
     ///
     /// A slot inserted onto a line whose kind names its content (`Code`, `Rule`)
     /// contradicts that kind; `normalize` demotes the line to `Para` at the end
@@ -180,19 +189,21 @@ impl ChangeBundle {
 // and no encoder answers these.
 
 use crate::serial::{
-    container_from_authored_value, island_from_value, line_kind_from_authored_value,
-    mark_from_authored_value, usv_from, ParseError,
+    container_from_authored_value, island_from_authored_value, line_kind_from_authored_value,
+    mark_from_authored_value, reject_unwritable_link_url, usv_from, ParseError,
 };
 use serde_json::Value;
 
 /// Decode a [`MarkOp`] from its wire object (`{op, start, end, type, attrs}` for
 /// `add`/`remove`, `{op, id}` for `removeAnchor`). `add`/`remove` read the mark
 /// vocabulary on the authored lane, which refuses the `@0.93.0` payload
-/// spelling rather than guessing which of the two a stale host meant.
+/// spelling rather than guessing which of the two a stale host meant. `add`
+/// carries the url rule too, `remove` naming a mark the field already holds.
 pub fn mark_op_from_value(v: &Value) -> Result<MarkOp, ParseError> {
     let o = v.as_object().ok_or(ParseError::Shape("mark op"))?;
     match o.get("op").and_then(Value::as_str) {
         Some("add") => {
+            reject_unwritable_link_url(v)?;
             let mark = mark_from_authored_value(v)?;
             Ok(MarkOp::Add {
                 start: mark.start,
@@ -255,10 +266,12 @@ pub fn line_op_from_value(v: &Value) -> Result<LineOp, ParseError> {
 }
 
 /// Decode an [`IslandOp`] from its wire object. Both arms carry the island
-/// vocabulary (`{id, type, props, loss}`) flattened alongside `op`.
+/// vocabulary (`{id, type, props, loss}`) flattened alongside `op`, read on the
+/// authored lane, which refuses an image `url` the markdown projection cannot
+/// write.
 pub fn island_op_from_value(v: &Value) -> Result<IslandOp, ParseError> {
     let o = v.as_object().ok_or(ParseError::Shape("island op"))?;
-    let island = || island_from_value(v);
+    let island = || island_from_authored_value(v);
     match o.get("op").and_then(Value::as_str) {
         Some("set") => Ok(IslandOp::Set { island: island()? }),
         Some("insert") => Ok(IslandOp::Insert {
@@ -377,6 +390,13 @@ pub enum ApplyError {
     /// An [`IslandOp::Insert`] whose `at` is past the end of the text the delta
     /// and this bundle's earlier island ops left.
     IslandInsertOutOfRange { at: Usv, len: Usv },
+    /// An island op would leave a **block-only** island's slot
+    /// ([`KnownIslandType::block_only`](crate::KnownIslandType::block_only), a
+    /// `table`) sharing its line with other content. Markdown writes such an
+    /// island by breaking the line around it, so the op that lands one mid-line
+    /// is refused rather than restructuring the author's blocks. `at` is the
+    /// slot's position.
+    BlockIslandNotAlone { at: Usv },
     /// A [`LineOp::SetKind`] whose kind contradicts the line's text: tagging
     /// prose `Island` or `Rule`, or a slot-bearing line `Code`. Export trusts
     /// the kind over the text, so the write would silently drop the line's
@@ -410,8 +430,8 @@ impl Content {
     /// *inserts* a raw slot is rejected ([`ApplyError::IslandSlotInInsert`]).
     ///
     /// Inserted text is sanitized first, mirroring what `import` applies at the
-    /// string boundary: `\r` and Unicode bidi controls are stripped, and a
-    /// U+2028/U+2029 line separator becomes a space — the chars
+    /// string boundary: `\r` and Unicode bidi controls are stripped, and a line
+    /// separator (VT, FF, NEL, U+2028, U+2029) becomes a space — the chars
     /// [`Content::validate`] forbids.
     pub fn apply_text_delta(&mut self, delta: &Delta) -> Result<(), ApplyError> {
         self.apply_text_delta_inner(delta)?;
@@ -588,6 +608,15 @@ impl Content {
                         .ok_or_else(|| ApplyError::UnknownIslandId {
                             id: island.id.clone(),
                         })?;
+                    // The type comes from the op, so a `Set` can turn an inline
+                    // island into a block-only one over a slot that stays put.
+                    if crate::island::island_is_block_only(island) {
+                        let chars: Vec<char> = self.text.chars().collect();
+                        let at = nth_slot(&chars, idx);
+                        if !is_whole_line(&chars, at, at + 1) {
+                            return Err(ApplyError::BlockIslandNotAlone { at });
+                        }
+                    }
                     // In place: the slot does not move, so no anchor pays.
                     self.islands[idx] = island.clone();
                 }
@@ -606,6 +635,13 @@ impl Content {
                             at: *at,
                             len: chars.len(),
                         });
+                    }
+                    // The slot lands alone on its line only where the line is
+                    // empty now, which is the `\n` the bundle's delta opened.
+                    if crate::island::island_is_block_only(island)
+                        && !is_whole_line(&chars, *at, *at)
+                    {
+                        return Err(ApplyError::BlockIslandNotAlone { at: *at });
                     }
                     // Islands are stored in slot order.
                     let slot_idx = chars[..*at].iter().filter(|&&c| c == ISLAND_SLOT).count();
@@ -957,6 +993,18 @@ fn sync_for_delta(
     (lines, islands)
 }
 
+/// The USV position of the `n`th [`ISLAND_SLOT`] in `chars`, or the end of the
+/// text where the slots run out — a slot-synced island list has no such index.
+fn nth_slot(chars: &[char], n: usize) -> Usv {
+    chars
+        .iter()
+        .enumerate()
+        .filter(|&(_, &c)| c == ISLAND_SLOT)
+        .map(|(i, _)| i)
+        .nth(n)
+        .unwrap_or(chars.len())
+}
+
 fn newline_at_line_boundary(text: &str, line: usize) -> Result<Usv, ApplyError> {
     let mut current = 0usize;
     for (i, c) in text.chars().enumerate() {
@@ -1164,6 +1212,45 @@ mod tests {
         ] {
             assert!(line_op_from_value(&ok).is_ok(), "rejected: {ok}");
         }
+    }
+
+    /// A markdown destination admits no line ending, bare or angle-wrapped, so
+    /// a `url` carrying one exports as markup that re-imports without its link
+    /// or image. An op that stores a url refuses it rather than landing a mark
+    /// the projection dissolves; `remove` names a mark the field already holds,
+    /// so a legacy link stays removable.
+    #[test]
+    fn a_url_the_projection_cannot_write_is_refused_where_an_op_stores_it() {
+        let link = |op: &str, url: &str| {
+            serde_json::json!({"op": op, "start": 0, "end": 1, "type": "link", "attrs": {"url": url}})
+        };
+        for url in ["a\nb", "a\rb"] {
+            assert!(
+                matches!(
+                    mark_op_from_value(&link("add", url)),
+                    Err(ParseError::Shape(_))
+                ),
+                "accepted: {url:?}"
+            );
+            assert!(
+                mark_op_from_value(&link("remove", url)).is_ok(),
+                "unremovable: {url:?}"
+            );
+        }
+        let image = |url: &str| {
+            serde_json::json!({
+                "op": "insert", "at": 0, "id": "i1", "type": "image",
+                "props": {"alt": "a", "url": url},
+            })
+        };
+        assert!(matches!(
+            island_op_from_value(&image("u\nv")),
+            Err(ParseError::Shape(_))
+        ));
+        assert!(
+            island_op_from_value(&image("u v")).is_ok(),
+            "a space angle-wraps and round-trips"
+        );
     }
 
     #[test]
@@ -1810,14 +1897,16 @@ mod tests {
     fn insert_line_separator_is_spaced() {
         // A space keeps the words apart without minting the line break Typst
         // would read, and which would make `- item` a bullet.
-        let mut rt = from_markdown("ab").unwrap();
-        let d = Delta {
-            ops: vec![Op::Retain(2), Op::Insert("\u{2028}- item".into())],
-        };
-        rt.apply_text_delta(&d).unwrap();
-        assert_eq!(rt.text, "ab - item");
-        assert_eq!(rt.lines.len(), 1);
-        assert_eq!(rt.validate(), Ok(()));
+        for sep in ['\u{000B}', '\u{000C}', '\u{0085}', '\u{2028}', '\u{2029}'] {
+            let mut rt = from_markdown("ab").unwrap();
+            let d = Delta {
+                ops: vec![Op::Retain(2), Op::Insert(format!("{sep}- item"))],
+            };
+            rt.apply_text_delta(&d).unwrap();
+            assert_eq!(rt.text, "ab - item", "for {sep:?}");
+            assert_eq!(rt.lines.len(), 1);
+            assert_eq!(rt.validate(), Ok(()));
+        }
     }
 
     #[test]
@@ -2051,7 +2140,8 @@ mod tests {
             delta: diff("intro", "intro\n"),
             island_ops: vec![IslandOp::Insert {
                 at: 6,
-                island: image("isl-a"),
+                island: Island::new("isl-a".into(), "table".into())
+                    .with_props(table_props("H", "a")),
             }],
             line_ops: vec![LineOp::SetKind {
                 line: 1,
@@ -2062,6 +2152,7 @@ mod tests {
         .unwrap();
         let before = rt.clone();
         let held = rt.islands[0].clone();
+        assert_eq!(before.lines[1].kind, LineKind::Island);
 
         rt.apply_field_change(&ChangeBundle::from_delta(diff(&before.text, "intro\n")))
             .unwrap();
@@ -2079,6 +2170,61 @@ mod tests {
         })
         .unwrap();
         assert_eq!(rt, before, "same content, original id and kind included");
+    }
+
+    /// Markdown writes a table as a block, so its slot has to be a line's whole
+    /// content: an op landing one inside a paragraph would write pipes that
+    /// re-import as prose. An image is inline markup and keeps every position,
+    /// and `Set` carries the type, so retyping one is the same refusal.
+    #[test]
+    fn a_block_only_island_lands_only_on_a_line_of_its_own() {
+        let table = |id: &str| {
+            Island::new(id.into(), "table".into()).with_props(table_props("H", "a"))
+        };
+        let mut rt = from_markdown("ab").unwrap();
+        let before = rt.clone();
+        assert_eq!(
+            rt.apply_field_change(&island_bundle(vec![IslandOp::Insert {
+                at: 1,
+                island: table("isl-t"),
+            }])),
+            Err(ApplyError::BlockIslandNotAlone { at: 1 })
+        );
+        assert_eq!(rt, before, "the refusal commits nothing");
+
+        // The three-channel bundle a block island takes: the delta opens the
+        // line, this op fills it, `SetKind` tags it.
+        rt.apply_field_change(&ChangeBundle {
+            delta: diff("ab", "ab\n"),
+            island_ops: vec![IslandOp::Insert {
+                at: 3,
+                island: table("isl-t"),
+            }],
+            line_ops: vec![LineOp::SetKind {
+                line: 1,
+                kind: LineKind::Island,
+            }],
+            ..Default::default()
+        })
+        .unwrap();
+        assert_eq!(rt.validate(), Ok(()));
+
+        rt.apply_field_change(&island_bundle(vec![IslandOp::Insert {
+            at: 1,
+            island: image("isl-i"),
+        }]))
+        .unwrap();
+        assert_eq!(rt.text, format!("a{ISLAND_SLOT}b\n{ISLAND_SLOT}"));
+        assert_eq!(
+            rt.apply_field_change(&island_bundle(vec![IslandOp::Set {
+                island: table("isl-i"),
+            }])),
+            Err(ApplyError::BlockIslandNotAlone { at: 1 })
+        );
+        rt.apply_field_change(&island_bundle(vec![IslandOp::Set {
+            island: table("isl-t"),
+        }]))
+        .expect("the block island's own slot is a whole line");
     }
 
     /// An inserted island's id is caller-supplied on an anchor id's terms:

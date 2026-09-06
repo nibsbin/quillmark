@@ -341,16 +341,22 @@ present-null `null`. A read never coerces a scalar (`qty: "3"` reads `"3"`);
 Use **`engine.render`** for one-shot exports (PDF/SVG/PNG): compiles, emits
 artifacts, done. Use **`LiveSession`** (returned by `engine.open`) for
 reactive previews: the session is a persistent compiler. `paint` / `render` /
-`regions` / `fieldAt` read its current compile without recompiling, and `apply(doc)`
+`regions` / `fieldAt` read its current compile without recompiling, and `update(doc)`
 recompiles in place on each edit, returning a `ChangeSet` whose `dirtyPages`
-tells you which pages to repaint (`dirty ∩ visible`). Apply is transactional:
+tells you which pages to repaint (`dirty ∩ visible`). `update` is transactional:
 on throw, every read keeps serving the last-good compile. Don't open a session
-per export, and don't re-open per edit: `apply` instead.
+per export, and don't re-open per edit: `update` instead.
 
 A document that compiles to zero pages still produces a valid session
 (`pageCount === 0`); `paint(ctx, 0)` and `pageSize(0)` then throw. Branch on
 `pageCount === 0` to render a "no pages to preview" UI rather than relying on
 the throw.
+
+Their `warnings` differ in reach. `engine.render` returns one list for the
+whole pipeline: `doc.warnings` (parse, `conform::*`,
+`plate::unsupported_construct`) ahead of the compile's own. A session outlives
+the document it opened from, so `session.render` and `session.warnings` carry
+the compile half alone — read `doc.warnings` beside them.
 
 ### Canvas Preview
 
@@ -385,8 +391,10 @@ canvas.style.height = `${result.layoutHeight}px`;
   a page's canvas alive while it stays near the viewport: an idle canvas retains
   its pixels for free, whereas pooling one canvas across pages re-renders on
   every scroll.
-- `pageCount` and `pageSize(page)` are stable for the session's lifetime: cache
-  them.
+- `pageCount` and `pageSize(page)` read the current compile, not the session:
+  cache them between committed `update`s only. After one, the count is
+  `ChangeSet.pageCount`, and every page in `ChangeSet.dirtyPages` needs its
+  `pageSize` re-read.
 - In a Worker, pass an `OffscreenCanvasRenderingContext2D`; the layout
   dimensions are informational there. Loading the WASM module inside the Worker
   is the host's responsibility.
@@ -454,16 +462,19 @@ applies to every throw site:
 
 - `Document.fromMarkdown`: parse errors (missing root `$quill` metadata, YAML
   errors, `parse::input_too_large` for inputs > 10 MiB).
-- `Document` mutators (`storeField`, the writer's `set`, etc.): mutator
-  failures carry a namespaced `edit::*` `code` on `diagnostics[0]`
-  (`edit::invalid_field_name`, `edit::unknown_field`, `edit::index_out_of_range`,
-  `edit::field_coercion_failed`, …). Route on `diagnostics[0].code`, never on message
-  text.
+- `Document` mutators (`storeField`, `makeCard` / `insertCard`, the writer's
+  `set`, etc.): mutator failures carry a namespaced `edit::*` `code` on
+  `diagnostics[0]` (`edit::invalid_field_name`, `edit::unknown_field`,
+  `edit::index_out_of_range`, `edit::field_coercion_failed`, …). Route on
+  `diagnostics[0].code`, never on message text.
 - `engine.render` / `session.render`: backend compilation failures and
   validation errors.
 - `engine.render(quill, parsed)` against a quill whose *name* differs
   (`quill::name_mismatch`) or whose *version* falls outside the document's
   selector (`quill::version_mismatch`): a throw, never a warning.
+- The four `Engine` verbs against a quill whose declared `backend:` is not in
+  the registry: `engine::backend_not_found`, the code core raises for the same
+  condition, hinting the registered ids.
 - Any method taking a `Quill` or `Document`: a handle from a *second* copy of
   `@quillmark/wasm` is refused with `runtime::foreign_handle`, hinting `npm ls
   @quillmark/wasm`. Two copies are two WASM memories and two `Quill`/`Document`

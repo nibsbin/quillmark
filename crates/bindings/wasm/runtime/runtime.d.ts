@@ -337,6 +337,12 @@ export interface Artifact {
 /** Options for one render. */
 export interface RenderOptions {
 	format?: OutputFormat;
+	/**
+	 * Pixels per inch for raster formats (PNG); ignored by PDF and SVG.
+	 * Defaults to 144. Must be finite, above 0, and small enough to keep every
+	 * rendered page under 268435456 pixels — anything else throws
+	 * `backend::invalid_raster_scale`.
+	 */
 	ppi?: number;
 	pages?: number[];
 	producer?: string;
@@ -515,6 +521,10 @@ export interface EngineOptions {
  * `quill.backendId`, lazily loads that backend build, clones the quill and
  * document into the backend's WASM memory on demand, renders, and frees the
  * clones. The cross-memory crossing is invisible to callers.
+ *
+ * A `quill.backendId` outside the registry rejects with
+ * `engine::backend_not_found`, the capability probes included. The diagnostic's
+ * `hint` names the registered ids.
  */
 export declare class Engine {
 	constructor(options?: EngineOptions);
@@ -523,6 +533,12 @@ export declare class Engine {
 	 * Render `doc` against `quill` in one shot. Both handles are read
 	 * synchronously before the first await, so the caller may `free()` them as
 	 * soon as this call returns.
+	 *
+	 * This is the surface that merges the two warning halves:
+	 * {@link RenderResult.warnings} carries `doc.warnings` (parse, `conform::*`,
+	 * `plate::unsupported_construct`) ahead of the compile's own. A
+	 * {@link LiveSession} outlives the document it opened from, so
+	 * {@link LiveSession.render} carries the compile half alone.
 	 */
 	render(quill: Quill, doc: Document, options?: RenderOptions): Promise<RenderResult>;
 

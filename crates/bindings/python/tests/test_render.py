@@ -5,17 +5,21 @@ import pytest
 from quillmark import OutputFormat, Document, Quill, QuillmarkError
 
 
-def test_save_artifact(engine, taro_quill_dir, taro_md, tmp_path):
+def test_artifact_reads_share_one_buffer(engine, taro_quill_dir, taro_md, tmp_path):
+    """Re-reading `artifacts` hands back the same objects, and `bytes` is what `save` wrote."""
     quill = Quill.from_path(str(taro_quill_dir))
 
     parsed = Document.from_markdown(taro_md)
     result = engine.render(quill, parsed, OutputFormat.PDF)
 
-    output_path = tmp_path / "output.pdf"
-    result.artifacts[0].save(str(output_path))
+    artifact = result.artifacts[0]
+    assert result.artifacts[0] is artifact
 
-    assert output_path.exists()
-    assert output_path.stat().st_size > 0
+    output_path = tmp_path / "output.pdf"
+    artifact.save(str(output_path))
+
+    assert artifact.bytes
+    assert output_path.read_bytes() == artifact.bytes
 
 
 def test_engine_render_with_explicit_format(engine, taro_quill_dir, taro_md):
@@ -64,6 +68,18 @@ def test_engine_render_page_selection(engine, taro_quill_dir, taro_md):
     subset = engine.render(quill, parsed, OutputFormat.SVG, pages=[0])
     assert len(subset.artifacts) == 1
     assert subset.format == OutputFormat.SVG
+
+
+def test_engine_render_negative_page_is_out_of_bounds(engine, taro_quill_dir, taro_md):
+    """Page indices count from the first page, so a negative one is refused under
+    the code a page past the last is refused under."""
+    quill = Quill.from_path(str(taro_quill_dir))
+    parsed = Document.from_markdown(taro_md)
+
+    with pytest.raises(QuillmarkError) as exc_info:
+        engine.render(quill, parsed, OutputFormat.SVG, pages=[-1])
+
+    assert exc_info.value.diagnostics[0].code == "backend::page_index_out_of_bounds"
 
 
 def test_engine_render_full_document(engine, taro_quill_dir, taro_md):

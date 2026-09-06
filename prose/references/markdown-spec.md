@@ -256,11 +256,12 @@ data payload.
   `!must_fill` may be applied to scalars (string, integer, float, bool, null)
   and sequences; it is rejected on a mapping (tag the leaves, not the
   container). `!must_fill` may not be applied to a `$` metadata key. The marker
-  is preserved only in **block style**: `key: !must_fill` at any depth. A
-  marker written inside a **flow collection** (`{…}` / `[…]`) or on a **bare
-  sequence element** (`- !must_fill`) cannot be round-tripped and is reported
-  with a `parse::fill_marker_unsupported_position` warning (the value is kept,
-  the marker is not); markers under YAML **anchors/merge keys** are likewise
+  is preserved only in **block style** under a data field: `key: !must_fill` at
+  any depth. A marker written inside a **flow collection** (`{…}` / `[…]`), on a
+  **bare sequence element** (`- !must_fill`), or nested inside a **`$` metadata
+  value** (`$seed`, `$ext`) cannot be round-tripped and is reported with a
+  `parse::fill_marker_unsupported_position` warning (the value is kept, the
+  marker is not); markers under YAML **anchors/merge keys** are likewise
   not preserved. `!must_fill` is the only fill tag: every other custom tag,
   `!include`, `!env`, and the former `!fill` spelling: is dropped with a
   `parse::unsupported_yaml_tag` warning; the scalar value is kept but the tag
@@ -402,11 +403,13 @@ The following are parsed where CommonMark or pulldown-cmark already
 handles them, but produce limited or no Quillmark-specific output; fuller
 support may come in a future revision:
 
-- Images (`![alt](src)`): the markup *is* rendered by the Typst backend as
-  `#image("src", alt: "alt")`, with the alt text preserved as the output's
-  accessibility alternate text. What remains future work is asset-resolver
-  integration: `src` is emitted verbatim and resolved by the backend's
-  virtual filesystem, with no dedicated asset-resolution layer yet.
+- Images (`![alt](src)`): parsed into an `image` island carrying `{url, alt}`,
+  which stores, round-trips to markdown, and reaches an editor — but no backend
+  typesets one. The Typst backend draws nothing for it and warns under
+  `backend::declined_construct`. `src` names no space: a document is portable
+  across the versions its `$quill` selector admits and declares every other
+  thing it references, so a path into one quill's file tree is not a binding a
+  document may take.
 - Math (`$…$`, `$$…$$`), footnotes, task lists, definition lists: not
   supported. In markdown body text `$` is literal; inside a `~~~` card-yaml
   payload `$` is reserved as the prefix for system-metadata keys (§3.3).
@@ -428,11 +431,13 @@ Before CommonMark parsing, each body region is normalized:
 2. **Bidi control stripping.** Remove U+061C, U+200E, U+200F,
    U+202A–U+202E, U+2066–U+2069. These invisible characters can
    desynchronize delimiter runs when copy-pasted from bidi-aware sources.
-3. **Line-separator spacing.** Replace U+2028 (LINE SEPARATOR) and U+2029
-   (PARAGRAPH SEPARATOR) with a single U+0020 space. CommonMark reads
-   neither as a line ending, but a backend lexer may, in which case the
-   text after one is read as a block marker the author never wrote. Both
-   are Unicode whitespace, so a space keeps the words they part apart.
+3. **Line-separator spacing.** Replace U+000B (LINE TABULATION), U+000C
+   (FORM FEED), U+0085 (NEXT LINE), U+2028 (LINE SEPARATOR) and U+2029
+   (PARAGRAPH SEPARATOR) with a single U+0020 space. CommonMark reads none
+   of them as a line ending, but a backend lexer may, in which case the
+   text after one is read as a block marker the author never wrote and two
+   in a row split the paragraph. All five are Unicode whitespace, so a
+   space keeps the words they part apart.
 4. **HTML comment fence repair.** If `-->` is followed by non-whitespace
    text on the same line, insert a newline after `-->` so the trailing
    text reaches the paragraph parser instead of being consumed by the

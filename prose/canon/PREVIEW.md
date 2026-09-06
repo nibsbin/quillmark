@@ -46,7 +46,8 @@ pub trait SessionHandle: Send + Sync + 'static {
 
     // Canvas seam: default None = "no painter".
     fn page_size_pt(&self, page: usize) -> Option<(f32, f32)> { None }
-    fn render_rgba(&self, page: usize, scale: f32) -> Option<(u32, u32, Vec<u8>)> { None }
+    fn render_rgba(&self, page: usize, scale: f32)
+        -> Result<Option<(u32, u32, Vec<u8>)>, RenderError> { Ok(None) }
 
     // Warnings seam: the current compile's non-fatal diagnostics; default empty.
     fn warnings(&self) -> &[Diagnostic] { &[] }
@@ -130,6 +131,13 @@ compositing of its own. Backends satisfy it differently:
   streams at session-open (and again at each `update`), then rasterizes that
   flat PDF via hayro, so field values appear in the raster on their own, with
   no regions-compositing by the caller.
+
+`Ok(None)` is the out-of-range page and the painterless backend; the `Err` is a
+`scale` no page can be rasterized at. Neither rasterizer bounds the buffer it
+sizes from `scale × page size`, so a scale that is not finite and positive, or
+that puts the page past `MAX_RASTER_PIXELS` (16384², the area of the per-side
+clamp below), is refused under `backend::invalid_raster_scale` before either is
+asked. `RenderOptions.ppi` meets the same ceiling on the byte-artifact path.
 
 ### Painter owns the canvas
 
@@ -413,6 +421,17 @@ Each `paint` resets the backing store (writing `canvas.width` clears it), so
 paint is always a full repaint: consumers never call `clearRect`.
 
 ### Regions overlay transform
+
+One origin serves the whole canvas surface: `pageSize`, `regions`, the point
+queries, and the raster all measure from the **page's lower-left corner as
+drawn**, so `(0, 0)` is the raster's first pixel and `pageSize × renderScale` is
+its extent. A Typst page starts there already. A pdfform background's page need
+not. The file's own numbers are in PDF user space, and the page a viewer shows
+is the **canvas box**, `/CropBox` ∩ `/MediaBox`, which `pdfcrop` leaves
+translated away from `(0, 0)`. The backend reports that box's extent as the page
+size and subtracts its corner from every region, matching what hayro rasterizes.
+The widget `/Rect`s in the PDF the same session renders stay in user space:
+canvas geometry is box-relative, the deliverable is not.
 
 A consumer drawing overlays from `regions` must flip the Y axis: region
 `rect = [x0, y0, x1, y1]` is in PDF points with a **bottom-left** origin, a

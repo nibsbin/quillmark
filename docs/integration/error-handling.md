@@ -51,7 +51,7 @@ A multi-problem stage (validation, quill config, backend compile) reports **ever
 
 The `code` namespaces are the routing surface:
 
-`parse::*` · `validation::*` · `quill::*` · `edit::*` (mutators) · `typst::*` · `pdfform::*` · `backend::*` · `engine::*`.
+`parse::*` · `validation::*` · `quill::*` · `edit::*` (mutators) · `typst::*` · `pdfform::*` · `pdf::*` (the AcroForm stamping spine both PDF-producing backends share) · `backend::*` · `engine::*`.
 
 Notable codes: `quill::name_mismatch` / `quill::version_mismatch` (a well-formed document paired with the wrong quill; see [Versioning](../quills/versioning.md)); `engine::backend_not_found` (the quill's declared backend is not registered); `parse::input_too_large`, which carries the two byte-sized [§8 caps](../reference/markdown-spec.md#8-limits) — document size and YAML payload size — distinguished only by its `max` arg, while the count caps arrive as `parse::too_many_cards` and `parse::too_many_fields` (args `count`, `max`) and an over-deep payload as `parse::yaml_error_with_location`.
 
@@ -64,6 +64,7 @@ Fatality is a two-value ladder: `Error` blocks the stage that emits it; `Warning
 - **Parse warnings** (e.g. a `~~~` opener missing its blank line) carried on the parsed document (`doc.warnings`) and spliced into a render's warnings.
 - **Validation warnings**: `quill.validate(doc)` returns every diagnostic; `validation::must_fill` and the `$seed` checks are the non-fatal ones. `validation::must_fill` fires on two triggers, named by its `trigger` arg: `marker`, an outstanding `!must_fill` tag in the document, and `unauthored`, a cell the schema obliges (one with no `default:`) that nobody has authored. At most one per path; the marker wins where both apply. The render path never gates on either: an absent field blank-fills.
 - **Compile warnings**: a backend's non-fatal diagnostics (font fallback, overfull pages), carried on `result.warnings`.
+- **`backend::declined_construct`**: a construct the backend typesets nothing for, one per content field, carrying `backend`, `construct` and `count` in `args` and the field's path. The Typst backend declines `image`: a markdown image in a `richtext` field reaches no page, because what its url names is undecided.
 
 A successful render returns artifacts **and** a `warnings` list, so inspect it even on success.
 

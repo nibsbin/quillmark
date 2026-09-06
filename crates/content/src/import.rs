@@ -1,7 +1,7 @@
 //! Markdown import (cold): `normalize → pulldown → content`.
 //!
 //! Input is normalized by [`crate::normalize::normalize_markdown`] (CRLF→LF,
-//! bidi controls dropped, U+2028/U+2029 spaced, HTML comment-fence repair) so
+//! bidi controls dropped, line separators spaced, HTML comment-fence repair) so
 //! the content invariants hold by construction, then parsed with
 //! `pulldown_cmark` (CommonMark + strikethrough + pipe tables) and walked into
 //! a [`Content`]. This is the one place the `<u>` allowlist runs.
@@ -14,8 +14,9 @@
 //! - **Adjacent sibling containers keep their boundary.** Two consecutive lists
 //!   of one shape, and two consecutive block quotes, are told apart by
 //!   `Container::instance`, minted here and canonicalized by `normalize`.
-//! - **Empty blocks and containers keep their line**, so the structure survives
-//!   rather than vanishing.
+//! - **An empty heading, code block or container keeps its line**, so the
+//!   structure survives rather than vanishing. An empty paragraph drops,
+//!   markdown having no syntax to write one back.
 //! - **Island ids are minted sequentially** (`isl-0`, `isl-1`, …), so import is
 //!   a deterministic function of its markdown and never reads an ambient source.
 //!   Export drops the ids and re-import re-mints the same sequence.
@@ -78,7 +79,8 @@ pub fn from_markdown(markdown: &str) -> Result<Normalized, ImportError> {
 /// [`from_markdown`]. Every character is content, never syntax: `*hi*` is four
 /// literal chars, not emphasis. With [`crate::export::to_plaintext`] it pins the
 /// fixed point `to_plaintext(from_plaintext(s)) == s` for any `s` free of `\r`,
-/// bidi controls, U+2028/U+2029 line separators, and [`ISLAND_SLOT`].
+/// bidi controls, line separators (VT, FF, NEL, U+2028, U+2029), and
+/// [`ISLAND_SLOT`].
 ///
 /// Line structure is **derived, not stored**: a lone `\n` between two non-empty
 /// segments is a within-paragraph break ([`Line::continues`] `true`); a blank
@@ -328,12 +330,20 @@ impl Builder {
     }
 
     /// Open a line for a block that ended with no inline content (an empty
-    /// heading `#`, an empty paragraph): otherwise the block, and any content
-    /// model it carries, is silently lost.
+    /// heading `#`): otherwise the block, and any content model it carries, is
+    /// silently lost. An empty *paragraph* — all of whose inline content was
+    /// stripped HTML — is the exception: markdown spells it with nothing, so a
+    /// line kept here would export as a blank line that re-import collapses,
+    /// costing the fixed point. A container the drop leaves empty still gets
+    /// its line from [`Self::close_container`].
     fn flush_empty_block(&mut self) {
-        if let Some((k, cont)) = self.pending.take() {
-            self.open_line(k, cont);
+        let Some((kind, continues)) = self.pending.take() else {
+            return;
+        };
+        if matches!(kind, LineKind::Para) {
+            return;
         }
+        self.open_line(kind, continues);
     }
 
     /// Close a container: if it emitted no line, give it one empty `Para` line
@@ -947,17 +957,17 @@ mod tests {
 
     #[test]
     fn line_separators_are_spaced_at_every_text_ingress() {
-        for sep in ['\u{2028}', '\u{2029}'] {
+        for sep in ['\u{000B}', '\u{000C}', '\u{0085}', '\u{2028}', '\u{2029}'] {
             let src = format!("intro{sep}- item");
             assert_eq!(imp_plain(&src).text, "intro - item", "plaintext {sep:?}");
             assert_eq!(imp(&src).text, "intro - item", "markdown {sep:?}");
-        }
 
-        let held = Content::new("intro\u{2028}- item".into(), vec![Line::new(LineKind::Para)]);
-        assert_eq!(
-            held.validate(),
-            Err(crate::model::Invariant::LineSeparator('\u{2028}'))
-        );
+            let held = Content::new(src, vec![Line::new(LineKind::Para)]);
+            assert_eq!(
+                held.validate(),
+                Err(crate::model::Invariant::LineSeparator(sep))
+            );
+        }
     }
 
     #[test]
@@ -1224,6 +1234,30 @@ mod tests {
     fn empty_list_item_keeps_its_line() {
         let rt = imp("- a\n-\n- b");
         assert_eq!(rt.lines.len(), 3, "empty middle item preserved");
+    }
+
+    /// A paragraph whose inline content is entirely stripped HTML leaves no
+    /// line, markdown having no syntax to write one back; an empty heading or
+    /// container keeps the line `# `, `- ` and `>` can write. Either way the
+    /// import is a fixed point.
+    #[test]
+    fn empty_paragraph_drops_while_empty_heading_and_container_keep_their_line() {
+        let cases: &[(&str, usize)] = &[
+            ("a\n\n<span></span>\n\nb", 2),
+            ("a\n\n<span></span>", 1),
+            ("- a\n\n  <span></span>", 1),
+            ("> a\n>\n> <span></span>", 1),
+            ("# <span></span>", 1),
+            ("- <span></span>", 1),
+            ("> <span></span>", 1),
+        ];
+        for (md, lines) in cases {
+            let rt = imp(md);
+            assert_eq!(rt.lines.len(), *lines, "{md:?} -> {:?}", rt.lines);
+            let rt2 = from_markdown(&crate::export::to_markdown(&rt)).unwrap();
+            assert_eq!(rt2, rt, "{md:?} is not a fixed point");
+        }
+        assert_eq!(imp("a\n\n<span></span>\n\nb").text, "a\nb");
     }
 
     #[test]

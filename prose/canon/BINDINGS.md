@@ -8,7 +8,7 @@ Quillmark exposes one core engine through several language surfaces: Python (PyO
 
 ## Shared model
 
-- **Capability principle.** A `Quill` is portable, declarative config data. Its format capability (`supportedFormats`) and rendering are resolved by the `Quillmark` engine *against* a quill at render time: never by the quill itself. So `quill.metadata` is a pure, infallible config snapshot, while `render` / `supportedFormats` can fail for an unregistered backend.
+- **Capability principle.** A `Quill` is portable, declarative config data. Its format capability (`supportedFormats`) and rendering are resolved by the `Quillmark` engine *against* a quill at render time: never by the quill itself. So `quill.metadata` is a pure, infallible config snapshot, while `render` / `supportedFormats` can fail for an unregistered backend. Its key order is a function of the quill, identical on both surfaces carrying it: `name`, `version`, `backend`, `author`, `description`, then any extra keys in sorted order.
 - **One model, serialized across every boundary.** The `Document`/`Card` model and `Diagnostic`s cross each language boundary as the same core `serde` shapes (`CardWire`, the versioned storage DTO, `Diagnostic`), so a card or an error reads identically no matter which surface emits it. See [DOCUMENT_STORAGE.md](DOCUMENT_STORAGE.md), [CARDS.md](CARDS.md), [ERROR.md](ERROR.md).
 - **Uniform errors.** Each binding raises a single error type that always carries a non-empty diagnostic list (`QuillmarkError.diagnostics` / thrown `Error.diagnostics`).
 
@@ -97,7 +97,7 @@ The body verbs follow from the same rule rather than from a separate one. `write
 
 **The read side mirrors it.** The verbatim read is `getStored`: the read echo of `store`, and the interpreted read is `reader.get`, the reader/writer twin of `set`. So the transport and schema-plane reads carry the lane in the verb the same way the writes do, rather than collapsing both onto one `get` where only the receiver (`doc` vs `reader`) tells them apart. (Core needs no such split: its verbatim read is the map-idiomatic `payload().get`, already lexically distinct from `reader.get`; the collision is a WASM/pyo3 artifact of fusing the read onto the one `Document` handle, so only the bindings rename it.)
 
-**`equals` is the change gate.** A consumer driving a live preview gates `apply` on structural equality against a retained clone: `if (doc.equals(last)) return; last = doc.clone()`. It covers the document the consumer did not mutate itself: one swapped in from storage, or written through a writer held elsewhere. `toStored` is byte-deterministic within a schema version, for a consumer that prefers a hashed gate.
+**`equals` is the change gate.** A consumer driving a live preview gates `update` on structural equality against a retained clone: `if (doc.equals(last)) return; last = doc.clone()`. It covers the document the consumer did not mutate itself: one swapped in from storage, or written through a writer held elsewhere. `toStored` is byte-deterministic within a schema version, for a consumer that prefers a hashed gate.
 
 **No revision counter.** Neither `Document` nor the session carries one ([PREVIEW.md](PREVIEW.md)). Equality answers whether this is the content last compiled. A counter answers only whether something was written, so it re-applies on a load that is content-identical to the live compile. Core cannot back one regardless: `main_mut` / `cards_mut` hand out raw `&mut`, so no bump site sees every write.
 
@@ -177,6 +177,8 @@ Ships **multiple artifacts from one crate** behind a single public root export. 
 Each backend (Typst and pdfform) is a **private** build with its own linear memory, lazily loaded on the first render: there is no public `/core` or `/render` subpath. The core build is ~0.66 MB gzip; the Typst backend ~8 MB (Typst dominates), loaded only when something renders.
 
 Backend handles never escape the `Engine`: it clones the quill tree + `doc.toStored()` into the backend's memory as serialized data and frees the clones.
+
+The storage DTO carries no warnings, so the clone the backend renders knows nothing of the load's. `Engine.render` snapshots `doc.warnings` beside the DTO and splices it into `RenderResult.warnings` ahead of the compile's own ([ERROR.md](ERROR.md) § "Warning flow"): the runtime layer, not the backend build, is the surface that merges the two halves. `LiveSession.render` carries the compile half alone, a session outliving the document it opened from.
 
 **Exactly one copy of the package per process.** Two copies are two core builds (two linear memories, two `Quill`/`Document` classes), and no topology legitimately loads a multi-megabyte binary twice and needs handles to cross between the copies. Every seam taking a core handle checks it and throws a `QuillmarkError` naming the duplicate install, including the ones that could cross as data (`Engine`, `LiveSession.update`). Errors are the exception: `isQuillmarkError` stays structural, an error being data rather than a handle.
 

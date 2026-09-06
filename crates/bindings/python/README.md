@@ -47,9 +47,10 @@ render session and canvas preview; Python renders in one shot via
 [`@quillmark/wasm`](../wasm)'s.
 
 A `Quill` is portable, declarative config data, and `quill.metadata` a pure,
-infallible snapshot of the `quill:` section. The engine resolves the declared
-backend, so only the format probe (`supported_formats`) and `render` raise
-`engine::backend_not_found`.
+infallible snapshot of the `quill:` section: `name`, `version`, `backend`,
+`author`, `description`, then any extra keys in sorted order. The engine
+resolves the declared backend, so only the format probe (`supported_formats`)
+and `render` raise `engine::backend_not_found`.
 
 ### `Quillmark`
 
@@ -204,8 +205,10 @@ Neither axis gates render. Partial documents are accepted, and
 
 ## Error contract
 
-Every failure raises `QuillmarkError`, carrying a non-empty `.diagnostics` list
-of `Diagnostic` objects.
+An engine refusal raises `QuillmarkError`, carrying a non-empty `.diagnostics`
+list of `Diagnostic` objects. An argument the binding cannot read at all — a
+non-finite float, a value with no JSON form, a malformed `path` sequence —
+raises `ValueError` before the engine is called, described by no diagnostic.
 
 ```python
 try:
@@ -219,7 +222,24 @@ except QuillmarkError as exc:
 Mutator failures (invalid field names, kind names, out-of-range indices) carry a
 namespaced `edit::*` `code` on `diagnostics[0]`: `edit::invalid_field_name`,
 `edit::unknown_field`, `edit::index_out_of_range`, `edit::field_coercion_failed`,
-…. Route on `diagnostics[0].code`, never on message text.
+…. `make_card` / `insert_card` refuse a card's contents under those same codes.
+Route on `diagnostics[0].code`, never on message text.
+
+One thing raises `ValueError` instead: an argument this binding cannot convert
+at all — a non-finite float, an int past 64 bits, a type with no JSON form, a
+dict that is not the shape the surface reads. The engine never sees the call, so
+no diagnostic describes it.
+
+Card and page indices count from the front, so a negative one addresses nothing
+rather than the last card or page: it takes the same answer as an index past the
+end — `edit::index_out_of_range` where the verb raises, `None` where
+`remove_card` answers absence.
+
+Each one anchors at a rooted document path: `path` is `main.<field>` for a main
+field, `cards.<kind>[<i>].<field>` for a card field, and `cards[<i>]` for a
+structural out-of-range op, whichever verb refused. A card `add_card` rejects
+before placing it has no slot yet, so its bundle keys the bare `$kind` / `$body`
+or field name.
 
 ## Changelog
 
@@ -231,9 +251,16 @@ release notes and version history.
 
 ```bash
 uv venv
-uv pip install -e ".[dev]"
-uv run pytest
+source .venv/bin/activate
+uv pip install maturin pytest
+maturin develop
+pytest
 ```
+
+`maturin develop` builds the extension in the debug profile. Stay in the
+activated venv: `uv sync`, `uv run`, and `pip install -e` each sync the project
+through maturin's PEP 517 backend, a release build that replaces the debug
+`.so`.
 
 `python/quillmark/_quillmark.pyi` is hand-written and must track `src/`. No CI
 job gates it, so after changing the surface run the stub against the built
@@ -241,7 +268,7 @@ module yourself:
 
 ```bash
 uv pip install mypy
-uv run python -m mypy.stubtest --ignore-disjoint-bases quillmark
+python -m mypy.stubtest --ignore-disjoint-bases quillmark
 ```
 
 ## License

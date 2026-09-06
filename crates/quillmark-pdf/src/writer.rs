@@ -2,10 +2,12 @@
 //! the two emit identical bytes for an object, a text string, and the `/Info`
 //! `/Producer` stamp.
 
-use pdf_writer::Ref;
+use pdf_writer::{Chunk, Name, Ref};
 
 use crate::error::PdfError;
-use crate::reader::{err, find_dict_value, splice_dict_value, ObjectIndex, UpdatedObject};
+use crate::reader::{
+    err, find_dict_value, splice_dict_value, InfoSource, ObjectIndex, UpdatedObject,
+};
 
 const CODE_PARSE: &str = "pdf::write";
 
@@ -20,6 +22,31 @@ pub fn dict_object(id: u32, inner: &[u8]) -> UpdatedObject {
     bytes.extend_from_slice(inner);
     bytes.extend_from_slice(b" >>\nendobj\n");
     UpdatedObject { id, bytes }
+}
+
+/// One base-14 Type1 font object, never embedded. `encoding` names a predefined
+/// encoding; a symbol font passes `None` to keep its built-in one.
+pub fn type1_font_object(
+    id: u32,
+    base_font: &[u8],
+    encoding: Option<&[u8]>,
+) -> Result<UpdatedObject, PdfError> {
+    let mut chunk = Chunk::new();
+    {
+        let mut font = chunk.type1_font(to_ref(id)?);
+        font.base_font(Name(base_font));
+        if let Some(name) = encoding {
+            font.encoding_predefined(Name(name));
+        }
+    }
+    Ok(UpdatedObject::new(id, chunk.as_bytes().to_vec()))
+}
+
+/// One uncompressed content stream object carrying `content`.
+pub fn content_stream_object(id: u32, content: &[u8]) -> Result<UpdatedObject, PdfError> {
+    let mut chunk = Chunk::new();
+    chunk.stream(to_ref(id)?, content);
+    Ok(UpdatedObject::new(id, chunk.as_bytes().to_vec()))
 }
 
 /// Hand out the next object id from `next`, bounded at `i32::MAX` so a
@@ -149,17 +176,17 @@ pub(crate) fn upsert_producer(info_dict: &[u8], literal: &[u8]) -> Vec<u8> {
 
 /// Stamp `/Info` `/Producer = producer`, pushing the updated or freshly created
 /// `/Info` onto `objects`. Returns `Some(info_id)` when a new `/Info` was
-/// allocated, which the caller threads into the trailer.
+/// allocated, which the caller points the new trailer at.
 pub(crate) fn apply_producer_stamp(
     idx: &ObjectIndex,
-    info_ref: Option<(u32, u16)>,
+    info: InfoSource<'_>,
     producer: &str,
     next_id: &mut u32,
     objects: &mut Vec<UpdatedObject>,
 ) -> Result<Option<u32>, PdfError> {
     let literal = pdf_text_string(producer);
-    match info_ref {
-        Some((info_id, _)) => {
+    match info {
+        InfoSource::Object(info_id) => {
             // Overwritten in place at generation 0; a non-zero-generation
             // `/Info` would be silently corrupted.
             idx.assert_overwrite_gen_zero(info_id, "/Info")?;
@@ -168,11 +195,10 @@ pub(crate) fn apply_producer_stamp(
             objects.push(dict_object(info_id, &upsert_producer(info_dict, &literal)));
             Ok(None)
         }
-        None => {
+        InfoSource::Entries(entries) => {
             let info_id = alloc_id(next_id)?;
-            let mut inner = b"/Producer ".to_vec();
-            inner.extend_from_slice(&literal);
-            objects.push(dict_object(info_id, &inner));
+            let inner = upsert_producer(entries.trim_ascii(), &literal);
+            objects.push(dict_object(info_id, inner.trim_ascii()));
             Ok(Some(info_id))
         }
     }

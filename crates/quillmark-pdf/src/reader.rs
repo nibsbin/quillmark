@@ -73,16 +73,52 @@ pub(crate) fn find_trailer_dict(pdf: &[u8], xref_offset: usize) -> Result<&[u8],
         .ok_or_else(|| err(CODE_PARSE, "trailer dict not parseable"))
 }
 
-/// Carry `/Info` and `/ID` forward into the update's trailer: many readers
-/// (lopdf included) consult only the last trailer, so dropping them would lose
-/// the document `/Info` and file identifier. Callers append `/Size`, `/Root` and
-/// `/Prev` themselves.
-fn write_preserved_trailer_keys(out: &mut Vec<u8>, prior_trailer: &[u8]) {
-    for key in ["Info", "ID"] {
-        if let Some(value) = find_dict_value(prior_trailer, key) {
-            out.extend_from_slice(format!(" /{} ", key).as_bytes());
-            out.extend_from_slice(value.trim_ascii());
+/// What the trailer's `/Info` gives the producer stamp to rewrite.
+pub(crate) enum InfoSource<'a> {
+    /// Object `id`, rewritten in place under the trailer's existing reference.
+    Object(u32),
+    /// Entries for a fresh object whose reference replaces the trailer's
+    /// `/Info`: a direct dict's — ISO 32000-1 Table 15 asks for an indirect
+    /// reference, which not every writer honours — or none, when the trailer
+    /// carries no `/Info` or one this reader cannot read.
+    Entries(&'a [u8]),
+}
+
+pub(crate) fn read_info_source(trailer: &[u8]) -> InfoSource<'_> {
+    let Some(value) = find_dict_value(trailer, "Info") else {
+        return InfoSource::Entries(b"");
+    };
+    if let Some((id, _)) = parse_indirect_ref(value) {
+        return InfoSource::Object(id);
+    }
+    let trimmed = value.trim_ascii();
+    if trimmed.starts_with(b"<<")
+        && let Some(entries) = extract_outer_dict(trimmed)
+    {
+        return InfoSource::Entries(entries);
+    }
+    InfoSource::Entries(b"")
+}
+
+/// Carry the prior trailer's `/ID` and `/Info` forward into the update's
+/// trailer: many readers (lopdf included) consult only the last trailer, so
+/// dropping them would lose the document `/Info` and file identifier.
+/// `new_info_ref` supersedes that `/Info` rather than joining it, so the new
+/// trailer holds one `/Info` whatever shape the old value had. Callers append
+/// `/Size`, `/Root` and `/Prev` themselves.
+fn write_trailer_tail(out: &mut Vec<u8>, prior_trailer: &[u8], new_info_ref: Option<u32>) {
+    match new_info_ref {
+        Some(id) => out.extend_from_slice(format!(" /Info {id} 0 R").as_bytes()),
+        None => {
+            if let Some(value) = find_dict_value(prior_trailer, "Info") {
+                out.extend_from_slice(b" /Info ");
+                out.extend_from_slice(value.trim_ascii());
+            }
         }
+    }
+    if let Some(value) = find_dict_value(prior_trailer, "ID") {
+        out.extend_from_slice(b" /ID ");
+        out.extend_from_slice(value.trim_ascii());
     }
 }
 
@@ -103,23 +139,25 @@ impl UpdatedObject {
 /// Append one incremental update to `pdf`: each object in `objects`, then an
 /// xref subsection table and a trailer chaining to the prior xref via `/Prev`.
 ///
-/// `extra_info_ref` adds an explicit `/Info <id> 0 R` for the case where the
-/// prior trailer had none. `new_size` is the updated `/Size` (highest object
-/// number + 1) and `root_id` the document catalog.
+/// `new_info_ref` names an information dictionary written in this update, which
+/// the new trailer's `/Info` points at in place of the prior trailer's own.
+/// `new_size` is the updated `/Size` (highest object number + 1) and `root_id`
+/// the document catalog.
 pub(crate) fn append_incremental_update(
     mut pdf: Vec<u8>,
     prev_xref: usize,
     root_id: u32,
     new_size: u32,
-    extra_info_ref: Option<u32>,
+    new_info_ref: Option<u32>,
     objects: &[UpdatedObject],
 ) -> Result<Vec<u8>, PdfError> {
     // Built while the prior trailer at `prev_xref` is still intact.
     let mut trailer_tail = Vec::new();
-    write_preserved_trailer_keys(&mut trailer_tail, find_trailer_dict(&pdf, prev_xref)?);
-    if let Some(id) = extra_info_ref {
-        trailer_tail.extend_from_slice(format!(" /Info {id} 0 R").as_bytes());
-    }
+    write_trailer_tail(
+        &mut trailer_tail,
+        find_trailer_dict(&pdf, prev_xref)?,
+        new_info_ref,
+    );
 
     if !pdf.ends_with(b"\n") {
         pdf.push(b'\n');
@@ -812,7 +850,7 @@ fn parse_rect_array(bytes: &[u8]) -> Option<[f32; 4]> {
     (count == 4).then_some(nums)
 }
 
-/// Normalize a `/MediaBox` so `(x0, y0)` is lower-left and `(x1, y1)`
+/// Normalize a page box so `(x0, y0)` is lower-left and `(x1, y1)`
 /// upper-right, whichever corners the array listed.
 fn normalize_rect(mb: [f32; 4]) -> [f32; 4] {
     [
@@ -823,30 +861,82 @@ fn normalize_rect(mb: [f32; 4]) -> [f32; 4] {
     ]
 }
 
-/// The `/MediaBox` of every page, normalized to `[x0, y0, x1, y1]`, in document
-/// order, taken from the nearest ancestor `/Pages` node carrying one when a page
-/// declares none. The full rect rather than width/height, so a caller flipping
-/// page-relative top-left geometry can honour a non-zero page origin.
-pub(crate) fn page_media_boxes(pdf: &[u8]) -> Result<Vec<[f32; 4]>, PdfError> {
-    let (_, _, catalog_id) = open_trailer(pdf, CODE_PARSE)?;
-    media_boxes_of(&ObjectIndex::new(pdf), catalog_id)
+/// The overlap of two normalized rects. Disjoint inputs give an inverted rect,
+/// which [`canvas_box`] rejects on extent.
+fn intersect_rect(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
+    [
+        a[0].max(b[0]),
+        a[1].max(b[1]),
+        a[2].min(b[2]),
+        a[3].min(b[3]),
+    ]
 }
 
-fn media_boxes_of(idx: &ObjectIndex, catalog_id: u32) -> Result<Vec<[f32; 4]>, PdfError> {
-    let pages = walk_page_tree(idx, catalog_id)?;
-    let mut out = Vec::with_capacity(pages.len());
-    for page in &pages {
-        let mb = page
-            .inherited_attribute(idx, "MediaBox", parse_rect_array)
-            .ok_or_else(|| {
-                err(
-                    CODE_PARSE,
-                    format!("page {} has no resolvable /MediaBox", page.id),
-                )
-            })?;
-        out.push(normalize_rect(mb));
+/// The canvas box of every page, in document order.
+pub(crate) fn page_canvas_boxes(pdf: &[u8]) -> Result<Vec<[f32; 4]>, PdfError> {
+    let (_, _, catalog_id) = open_trailer(pdf, CODE_PARSE)?;
+    canvas_boxes_of(&ObjectIndex::new(pdf), catalog_id)
+}
+
+fn canvas_boxes_of(idx: &ObjectIndex, catalog_id: u32) -> Result<Vec<[f32; 4]>, PdfError> {
+    walk_page_tree(idx, catalog_id)?
+        .iter()
+        .map(|page| canvas_box(idx, page))
+        .collect()
+}
+
+/// `/CropBox` ∩ `/MediaBox`, each resolved along the page's ancestor chain and
+/// normalized; a page reaching no `/CropBox` takes its `/MediaBox`.
+fn canvas_box(idx: &ObjectIndex, page: &Page) -> Result<[f32; 4], PdfError> {
+    let media = page_box(idx, page, "MediaBox")?.ok_or_else(|| {
+        err(
+            CODE_PARSE,
+            format!("page {} has no resolvable /MediaBox", page.id),
+        )
+    })?;
+    let canvas = match page_box(idx, page, "CropBox")? {
+        Some(crop) => intersect_rect(media, crop),
+        None => media,
+    };
+    let (w, h) = (canvas[2] - canvas[0], canvas[3] - canvas[1]);
+    // hayro draws a page under a point per side at a clamped or A4 size
+    // (`hayro_syntax::page::Page::base_dimensions`), so its raster would not
+    // match the extent reported here.
+    if w < 1.0 || h < 1.0 {
+        return Err(err(
+            "pdf::degenerate_page_box",
+            format!(
+                "page {} has a {w} × {h} pt canvas box (/CropBox ∩ /MediaBox); \
+                 a page under a point per side has no renderable canvas",
+                page.id
+            ),
+        ));
     }
-    Ok(out)
+    Ok(canvas)
+}
+
+/// The page box `key`, normalized, from the first ancestor-chain node carrying
+/// one. The first *present* value binds, and one that is not a direct
+/// `[x0 y0 x1 y1]` array — an indirect reference, say — is an error rather than
+/// an absence to climb past: a renderer resolving it would draw a different box.
+fn page_box(idx: &ObjectIndex, page: &Page, key: &str) -> Result<Option<[f32; 4]>, PdfError> {
+    let Some(raw) = page.inherited_attribute(idx, key, |raw| Some(raw.trim_ascii().to_vec()))
+    else {
+        return Ok(None);
+    };
+    parse_rect_array(&raw)
+        .map(normalize_rect)
+        .map(Some)
+        .ok_or_else(|| {
+            err(
+                CODE_PARSE,
+                format!(
+                    "page {} has /{key} {}, which is not an [x0 y0 x1 y1] array of numbers",
+                    page.id,
+                    String::from_utf8_lossy(&raw)
+                ),
+            )
+        })
 }
 
 #[cfg(test)]
@@ -1118,15 +1208,47 @@ mod tests {
     }
 
     #[test]
-    fn media_box_resolves_to_the_nearest_ancestor_carrying_it() {
+    fn page_boxes_resolve_to_the_nearest_ancestor_carrying_them() {
         let pdf = b"%PDF\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
                     2 0 obj\n<< /Type /Pages /Kids [5 0 R 4 0 R] /Count 2 \
-                    /MediaBox [0 0 612 792] >>\nendobj\n\
+                    /MediaBox [0 0 612 792] /CropBox [0 0 612 792] >>\nendobj\n\
                     5 0 obj\n<< /Type /Pages /Parent 2 0 R /Kids [3 0 R] /Count 1 \
                     /MediaBox [0 0 200 400] >>\nendobj\n\
-                    3 0 obj\n<< /Type /Page /Parent 5 0 R >>\nendobj\n\
+                    3 0 obj\n<< /Type /Page /Parent 5 0 R /CropBox [10 20 150 300] >>\nendobj\n\
                     4 0 obj\n<< /Type /Page /Parent 2 0 R >>\nendobj\n";
-        let boxes = media_boxes_of(&ObjectIndex::new(pdf), 1).expect("media boxes resolve");
-        assert_eq!(boxes, [[0.0, 0.0, 200.0, 400.0], [0.0, 0.0, 612.0, 792.0]]);
+        let boxes = canvas_boxes_of(&ObjectIndex::new(pdf), 1).expect("canvas boxes resolve");
+        assert_eq!(boxes, [[10.0, 20.0, 150.0, 300.0], [0.0, 0.0, 612.0, 792.0]]);
+    }
+
+    #[test]
+    fn the_canvas_box_is_the_crop_box_clipped_to_the_media_box() {
+        let pdf = b"%PDF\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
+                    2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n\
+                    3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] \
+                    /CropBox [-40 100 500 900] >>\nendobj\n";
+        let boxes = canvas_boxes_of(&ObjectIndex::new(pdf), 1).expect("canvas boxes resolve");
+        assert_eq!(boxes, [[0.0, 100.0, 500.0, 792.0]]);
+    }
+
+    #[test]
+    fn a_canvas_box_under_a_point_per_side_is_rejected() {
+        let pdf = b"%PDF\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
+                    2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n\
+                    3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] \
+                    /CropBox [700 0 900 792] >>\nendobj\n";
+        let e = canvas_boxes_of(&ObjectIndex::new(pdf), 1).expect_err("disjoint boxes rejected");
+        assert_eq!(e.code, "pdf::degenerate_page_box");
+    }
+
+    #[test]
+    fn a_page_box_that_is_not_a_number_array_is_rejected() {
+        let pdf = b"%PDF\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
+                    2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 \
+                    /CropBox [0 0 100 100] >>\nendobj\n\
+                    3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] \
+                    /CropBox 9 0 R >>\nendobj\n";
+        let e = canvas_boxes_of(&ObjectIndex::new(pdf), 1).expect_err("indirect /CropBox rejected");
+        assert_eq!(e.code, CODE_PARSE);
+        assert!(e.message.contains("/CropBox"), "{}", e.message);
     }
 }

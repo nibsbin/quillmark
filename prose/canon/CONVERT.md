@@ -51,14 +51,23 @@ Two escapers guard the two Typst contexts; both live in `emit`:
   shorthand leaves behind is too short to re-form it. Applied to plain text runs
   and to a table cell's text.
 
+  **Stray newlines lower to a space.** Every character Typst's lexer reads as a
+  newline besides `\n` — `\r`, VT, FF, NEL, U+2028, U+2029 — becomes a space.
+  The content ingress drops or spaces all six, so one reaches the emitter only
+  from a content built or decoded some other way. No escape neutralizes one: a
+  `\` before whitespace is Typst's linebreak. One reopens `at_start`, so the
+  text behind it parses as a heading, list or term marker; two in a row split
+  the paragraph. One character to one byte, so the per-character span scan
+  stays exact, and the space is trivia the line-anchor guard holds open behind.
+
   **Smart quotes are the quill's.** `'` and `"` pass through, so Typst's
   language-aware substitution applies and a quill chooses with
   `#set smartquote(enabled: false)`. Escaping them here would settle that for
   every quill with no way back — unlike the shorthands, which the lexer decides
   and no set rule reaches.
 - **`escape_string`**: text inside a Typst string literal. Escapes
-  `\ " \n \r \t` and other control characters as `\u{…}`. Applied to `#link` /
-  `#image` URLs, code content, and code-fence language tags.
+  `\ " \n \r \t` and other control characters as `\u{…}`. Applied to `#link`
+  URLs, code content, and code-fence language tags.
 
 Both are position-blind. Typst's heading `=`, list `-`/`+`/`N.`, and term `/`
 are special only as a line's first token, each firing on a space after it or on
@@ -112,7 +121,7 @@ is a lowering bug, never a document's.
 | `Container::ListItem` (ordered) | `+ ` auto-numbered; the run's first item emits `N. `, which restarts Typst's running counter so an adjacent list numbers from its own `start` |
 | `Container::Quote` | `#quote(block: true)[…]` |
 | `Container::Unknown` (open set) | nothing: transparent; its run lowers at the enclosing level, one block, no wrapper |
-| `image` island | `#image("url", alt: "…")`; `alt:` omitted when empty |
+| `image` island | nothing, plus one `backend::declined_construct` warning per field (see [Declined images](#declined-images)) |
 | `table` island | `#table(columns: N, align: (…), table.header(…), …)` |
 
 Table alignment maps `none→auto`, `left`, `center`, `right`; the `align:`
@@ -139,6 +148,26 @@ Content that import never admits into the content: raw HTML other than `<u>`,
 HTML comments, `<br>`, math, footnotes, task lists, definition lists
 (markdown-spec §6.3): is absent here.
 
+### Declined images
+
+An `image` island lowers to nothing, and the compile that dropped it carries one
+[`backend::declined_construct`](ERROR.md#warning-flow) warning per field:
+`args` `{backend: "typst", construct: "image", count}`, `path` the field's
+`DocPath`. Declined, not unknown — the count comes off `islands`, so an image
+counts wherever it sits, and a field holding one says so rather than losing it
+quietly.
+
+What such a `url` names is undecided. A document is quill-free but for
+`$quill`, which is a *selector* ([VERSIONING](VERSIONING.md)) — `memo@1` admits
+1.0.0 and 1.1.0 alike — and everything else a document references is
+self-contained or declared. A path into one quill's file tree is neither, and
+no `DocPath`, `validate` signal or url space makes it either. A backend that
+resolved the string anyway would bind documents to a reading nothing versions.
+
+The sibling lane `plate::unsupported_construct`
+(`crates/core/src/quill/support.rs`) is a *quill's* declaration about a body;
+this one is the backend's own observation about every content field.
+
 ### Island props
 
 An island's `props` is a per-type canonical object: the shape this lowering
@@ -150,9 +179,7 @@ reads and the shape the WASM boundary pins:
   normalizes to a single column count: header, every row, and `aligns` padded
   to the widest, so `columns:` and `align:` agree.
 - **`image`** → `{ url, alt }`; `alt` is the empty string when the source omits
-  it. A `url` naming a quill file resolves against the quill root
-  (`assets/logo.svg`, or `/assets/logo.svg` for the same file), the path a plate
-  names it by.
+  it. What `url` names is undecided (see [Declined images](#declined-images)).
 
 The `KnownIslandType` dispatch (`crates/content/src/island.rs`) owns these
 shapes engine-side; the WASM surface pins them as `TableProps` / `ImageProps` /

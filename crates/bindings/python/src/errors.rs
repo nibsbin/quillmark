@@ -4,53 +4,120 @@
 //! `QuillmarkError` carrying a non-empty `.diagnostics` list; the
 //! `EditError::<Variant>` prefix lives in the message, not the type.
 //!
+//! A negative index is a refusal of that first kind: addressing nothing is what
+//! an out-of-range index is, so it raises under the code an index past the end
+//! carries.
+//!
 //! An argument the binding cannot convert at all — a non-finite float, an int
-//! past 64 bits, a type with no JSON form, a malformed `path` sequence — raises
-//! `ValueError` before the engine is called. No diagnostic describes it, and
-//! `ValueError` is what a Python caller catches for its own argument. The WASM
-//! binding has one shape for both.
+//! past 64 bits, a type with no JSON form, a malformed `path` sequence, a dict
+//! whose shape is not the one the surface reads — raises `ValueError` before the
+//! engine is called. No diagnostic describes it, and `ValueError` is what a
+//! Python caller catches for its own argument. The WASM binding has one shape
+//! for both.
+//!
+//! The line runs between shape and content: a card dict that will not
+//! deserialize is a `ValueError`, while one that deserializes and then violates
+//! an invariant — a malformed field name, a `$quill` that is not a reference, a
+//! `!must_fill` on a mapping — is the engine's refusal and raises
+//! `QuillmarkError` under its code.
 
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use quillmark_core::{Diagnostic, EditError, RenderError, Severity};
+use std::collections::BTreeMap;
 
 create_exception!(_quillmark, QuillmarkError, PyException);
 
-pub fn convert_edit_error(err: EditError) -> PyErr {
-    let diagnostic =
+/// Resolve a card index the caller passed. Indices count from the front, so a
+/// negative one is out of range whatever `len` is; a non-negative index past the
+/// end is the calling verb's own to answer.
+///
+/// Index parameters are signed for this: a `usize` parameter refuses a negative
+/// int in extraction, raising the `OverflowError` no contract here mentions. The
+/// diagnostic is minted rather than taken from [`convert_edit_error`] because
+/// `EditError::IndexOutOfRange` carries a `usize` and cannot hold the index.
+pub fn card_index(index: isize, len: usize) -> PyResult<usize> {
+    usize::try_from(index).map_err(|_| {
+        let mut args = BTreeMap::new();
+        args.insert("index".to_string(), serde_json::json!(index));
+        args.insert("len".to_string(), serde_json::json!(len));
+        let message = format!("index {index} is out of range (len = {len})");
+        let diagnostic = Diagnostic::new(Severity::Error, message.clone())
+            .with_code("edit::index_out_of_range".to_string())
+            .with_args(args);
+        raise_with_diagnostics(vec![diagnostic], message)
+    })
+}
+
+/// Resolve the `pages` selection the caller passed. Page indices are 0-based and
+/// count from the first page, so a negative one selects no page; the refusal
+/// carries the code the backend mints for a page past the last.
+pub fn page_indices(pages: Vec<isize>) -> PyResult<Vec<usize>> {
+    let negative: Vec<isize> = pages.iter().copied().filter(|&p| p < 0).collect();
+    if !negative.is_empty() {
+        return Err(convert_render_error(RenderError::coded(
+            "backend::page_index_out_of_bounds",
+            format!(
+                "Page index out of bounds; offending indices: {negative:?}. Page indices are 0-based and count from the first page."
+            ),
+        )));
+    }
+    Ok(pages.into_iter().map(|p| p as usize).collect())
+}
+
+/// One diagnostic, its `path` the [`DocPath`](quillmark_core::DocPath) the
+/// error anchors at relative to `base`: the card root the mutator ran against,
+/// empty for a card built before placement.
+pub fn convert_edit_error(err: EditError, base: &quillmark_core::DocPath) -> PyErr {
+    let mut diagnostic =
         Diagnostic::new(Severity::Error, err.to_string())
             .with_code(err.code().to_string())
             .with_args(err.args());
+    if let Some(path) = err.doc_path(base) {
+        diagnostic = diagnostic.with_path(path.to_string());
+    }
+    let message = diagnostic.message.clone();
+    raise_with_diagnostics(vec![diagnostic], message)
+}
+
+/// A card the wire refuses, under the code the addressed mutator onto the same
+/// violation mints. The card is not placed, so the diagnostic carries no `path`.
+pub fn convert_wire_error(err: quillmark_core::WireError) -> PyErr {
+    let diagnostic = err.to_diagnostic();
     let message = diagnostic.message.clone();
     raise_with_diagnostics(vec![diagnostic], message)
 }
 
 /// Batched twin of [`convert_edit_error`]: one diagnostic per offending field,
-/// its `path` the field name.
-pub fn convert_edit_errors(errors: Vec<(String, EditError)>) -> PyErr {
+/// each anchored at its name under `base`.
+pub fn convert_edit_errors(
+    errors: Vec<(String, EditError)>,
+    base: &quillmark_core::DocPath,
+) -> PyErr {
+    convert_edit_errors_at(
+        errors
+            .into_iter()
+            .map(|(name, err)| (base.field(&name), err))
+            .collect(),
+    )
+}
+
+/// The [`convert_edit_errors`] twin for a batch spanning cards, where each
+/// refusal carries the whole `DocPath` it anchors at rather than a field name
+/// under one base.
+pub fn convert_edit_errors_at(errors: Vec<(quillmark_core::DocPath, EditError)>) -> PyErr {
     let diags: Vec<Diagnostic> = errors
         .into_iter()
-        .map(|(name, err)| {
+        .map(|(path, err)| {
             Diagnostic::new(Severity::Error, err.to_string())
                 .with_code(err.code().to_string())
                 .with_args(err.args())
-                .with_path(name)
+                .with_path(path.to_string())
         })
         .collect();
     let message = RenderError::summary_message(&diags);
     raise_with_diagnostics(diags, message)
-}
-
-/// The [`convert_edit_errors`] twin for a batch spanning cards, where each
-/// refusal carries the whole `DocPath` it anchors at rather than a field name.
-pub fn convert_edit_errors_at(errors: Vec<(quillmark_core::DocPath, EditError)>) -> PyErr {
-    convert_edit_errors(
-        errors
-            .into_iter()
-            .map(|(path, err)| (path.to_string(), err))
-            .collect(),
-    )
 }
 
 /// The message is the primary diagnostic's for a single diagnostic, an

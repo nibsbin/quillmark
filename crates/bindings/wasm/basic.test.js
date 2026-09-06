@@ -1211,6 +1211,24 @@ Card two.
     expect(() => doc.insertCard({ kind: 'note', fields: { x: 1 } })).toThrow()
   })
 
+  it('a card the wire refuses carries the code its addressed mutator mints', () => {
+    // Two doors onto one violation: what storeField / setQuillRef throw for a
+    // name, a reference and a fill is what a card built from a wire throws.
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    const withField = (key, value, fill = false) => ({
+      kind: 'note',
+      payloadItems: [{ type: 'field', key, value, fill }],
+    })
+
+    expectEditCode(() => doc.insertCard(withField('bad-name', 1)), 'edit::invalid_field_name')
+    expectEditCode(() => doc.insertCard(withField('addr', { a: 1 }, true)), 'edit::fill_on_mapping')
+    expectEditCode(
+      () => doc.insertCard({ kind: 'note', quill: '@nope' }),
+      'parse::invalid_quill_reference',
+    )
+    expectEditCode(() => Document.makeCard('note', { 'bad-name': 1 }), 'edit::invalid_field_name')
+  })
+
   it('insertCard inserts at specified index', () => {
     const doc = Document.fromMarkdown(MD_WITH_CARDS)
     doc.insertCard({ kind: 'intro' }, 0)
@@ -1688,6 +1706,40 @@ card_kinds:
     expect(schema.card_kinds.main).toBeUndefined()
     expect(schema.card_kinds.indorsement.fields.signature_block).toBeDefined()
     expect(schema.card_kinds.indorsement.fields.CARD).toBeUndefined()
+  })
+
+  it('orders the five standard keys first, then the extra keys sorted by name', () => {
+    const EXTRAS_QUILL_YAML = `quill:
+  name: meta_test_quill
+  version: "0.2.1"
+  backend: typst
+  description: Metadata test
+
+typst:
+  zeta: z
+  plate_file: plate.typ
+  alpha: a
+  nu: n
+  beta: b
+  mu: m
+`
+    const quill = Quill.fromTree(
+      makeQuill({ name: 'meta_test_quill', plate: TEST_PLATE, quillYaml: EXTRAS_QUILL_YAML }),
+    )
+
+    expect(Object.keys(quill.metadata)).toEqual([
+      'name',
+      'version',
+      'backend',
+      'author',
+      'description',
+      'typst_alpha',
+      'typst_beta',
+      'typst_mu',
+      'typst_nu',
+      'typst_plate_file',
+      'typst_zeta',
+    ])
   })
 
   it('metadata and schema are JSON.stringify-able (plain objects)', () => {

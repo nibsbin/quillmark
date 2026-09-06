@@ -68,6 +68,24 @@ function makeRuntimeQuill() {
   return Quill.fromTree(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
 }
 
+// A quill declaring one construct its plate does not typeset, so `quill.parse`
+// draws a `plate::unsupported_construct` warning off a body holding a rule.
+const DECLINE_QUILL_YAML = `quill:
+  name: decliner
+  version: "1.0"
+  backend: typst
+  description: A quill that typesets no horizontal rule
+
+main:
+  body:
+    unsupported: [rule]
+  fields: {}
+`
+
+const DECLINE_PLATE = `#import "@local/quillmark-helper:0.1.0": data
+
+#data.at("$body")`
+
 const PKG_DIR = path.resolve(import.meta.dirname, '..', '..', '..', 'pkg')
 
 /** Read a field value from a card's payloadItems list by key. */
@@ -775,6 +793,24 @@ describe('@quillmark/wasm/runtime: Engine (hidden core→backend crossing)', () 
     expect(typeof (await engine.supportsCanvas(quill))).toBe('boolean')
   })
 
+  // ERROR.md § "Warning flow": `RenderResult.warnings` is pipeline order, the
+  // load half ahead of the compile's. Only the runtime layer can merge them —
+  // the document clone it renders comes through `fromStored`, which carries no
+  // warnings, so the backend build's own merge has nothing to prepend.
+  it('render fronts RenderResult.warnings with the load warnings, leaving doc.warnings intact', async () => {
+    const quill = Quill.fromTree(
+      makeQuill({ name: 'decliner', plate: DECLINE_PLATE, quillYaml: DECLINE_QUILL_YAML }),
+    )
+    const doc = quill.parse('~~~card-yaml\n$quill: decliner\n~~~\n\nAlpha\n\n---\n\nBeta\n')
+    const loadCodes = doc.warnings.map((d) => d.code)
+    expect(loadCodes).toContain('plate::unsupported_construct')
+
+    const result = await new Engine().render(quill, doc, { format: 'svg' })
+    expect(result.artifacts.length).toBeGreaterThan(0)
+    expect(result.warnings.slice(0, loadCodes.length)).toEqual(doc.warnings)
+    expect(doc.warnings.map((d) => d.code)).toEqual(loadCodes)
+  })
+
   it('manifest-backed capability probes do NOT load the backend', async () => {
     // A descriptor-form counting loader: it carries the same manifest the
     // default registry uses, so probes answer from the manifest (no load),
@@ -1092,7 +1128,7 @@ A single line of body ink.`
     expect(b.artifacts.length).toBeGreaterThan(0)
   })
 
-  it('throws a clear error for an unregistered backend', async () => {
+  it('rejects an unregistered backend with engine::backend_not_found, probes like renders', async () => {
     const engine = new Engine()
     // A quill whose declared backend has no loader.
     const yaml = `quill:
@@ -1108,7 +1144,19 @@ main:
 `
     const quill = Quill.fromTree(new Map([['Quill.yaml', new TextEncoder().encode(yaml)]]))
     const doc = quill.seedDocument()
-    await expect(engine.render(quill, doc)).rejects.toThrow(/no backend registered/)
+    for (const [call, verb] of [
+      [() => engine.render(quill, doc), 'engine.render'],
+      [() => engine.supportedFormats(quill), 'engine.supportedFormats'],
+    ]) {
+      const caught = await call().then(
+        () => expect.unreachable(`${verb} resolved against an unregistered backend`),
+        (e) => e
+      )
+      expect(isQuillmarkError(caught)).toBe(true)
+      expect(caught.diagnostics[0].code).toBe('engine::backend_not_found')
+      expect(caught.message).toContain('doesnotexist')
+      expect(caught.diagnostics[0].hint).toContain('typst')
+    }
   })
 
   it('accepts a custom backend descriptor override', async () => {

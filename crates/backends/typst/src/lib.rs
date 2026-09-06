@@ -24,7 +24,7 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use quillmark_core::{
-    quill::build_transform_schema,
+    quill::{build_transform_schema, BlockConstruct},
     session::SessionHandle,
     Backend, ChangeSet, ContentHit, Diagnostic, LiveSession, OutputFormat, Quill, RenderError,
     RenderOptions, RenderResult, RenderedRegion, Severity,
@@ -46,7 +46,7 @@ struct TypstSession {
     /// and codegen plus date validation read only these tables.
     schema_meta: SchemaMeta,
     /// The plate is static for a session's lifetime, so these are computed once
-    /// at `open` and re-appended into the compile's windows per apply.
+    /// at `open` and re-appended into the compile's windows per update.
     scalar_windows: Vec<overlay::FieldWindow>,
     /// Swapped whole, and only once [`recompile`] has succeeded, so on `Err`
     /// every read keeps serving the last-good compile.
@@ -67,13 +67,13 @@ struct Compiled {
     /// then the plate's scalar reference-site windows.
     windows: Vec<overlay::FieldWindow>,
     /// Span resolution goes through this snapshot, not the world: a failed
-    /// `apply` leaves the *next* injection's text in the world while every read
+    /// `update` leaves the *next* injection's text in the world while every read
     /// keeps serving this compile.
     helper_source: typst::syntax::Source,
     /// Diffed against the next compile's to produce `ChangeSet::dirty_pages`.
     page_hashes: Vec<u128>,
     /// What [`session_warnings`] built for this compile. The compile half swaps
-    /// on each committed `apply`; the load half rides along unchanged.
+    /// on each committed `update`; the load half rides along unchanged.
     warnings: Vec<Diagnostic>,
     /// [`overlay::unclosed_claims`] for this document, suppressed by every
     /// region and point query. Computed with the compile rather than per query:
@@ -90,7 +90,7 @@ fn recompile(
     schema_meta: &SchemaMeta,
     scalar_windows: &[overlay::FieldWindow],
 ) -> Result<Compiled, RenderError> {
-    let mut windows = world
+    let (mut windows, declined_images) = world
         .inject_helper_package(data, schema_meta)
         .map_err(|e| RenderError::coded(e.code(), e.to_string()))?;
     windows.extend(scalar_windows.iter().cloned());
@@ -103,7 +103,13 @@ fn recompile(
 
     let unclosed = overlay::unclosed_claims(&document);
     let hashes = page_hashes(&document);
-    let warnings = session_warnings(world, compile_warnings, &unclosed);
+    let warnings = session_warnings(
+        world,
+        compile_warnings,
+        &unclosed,
+        &declined_images,
+        &card_kinds(data),
+    );
     Ok(Compiled {
         document,
         field_specs,
@@ -116,13 +122,64 @@ fn recompile(
     })
 }
 
+/// The `$kind` of each card in `data`'s `$cards`, in document order:
+/// [`plate_addr_to_doc_path`](quillmark_core::plate_addr_to_doc_path) resolves a
+/// plate-space per-kind ordinal against it.
+fn card_kinds(data: &serde_json::Value) -> Vec<Option<String>> {
+    data.get("$cards")
+        .and_then(|c| c.as_array())
+        .map(|cards| {
+            cards
+                .iter()
+                .map(|c| {
+                    c.get("$kind")
+                        .and_then(|k| k.as_str())
+                        .map(str::to_string)
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// One `backend::declined_construct` per content field holding images.
+///
+/// A field whose plate address does not translate is skipped rather than
+/// anchored loosely: the warning is about *this* field, and an unanchored one
+/// names none.
+fn declined_image_warnings(
+    declined: &world::DeclinedImages,
+    card_kinds: &[Option<String>],
+) -> Vec<Diagnostic> {
+    let kinds: Vec<Option<&str>> = card_kinds.iter().map(|k| k.as_deref()).collect();
+    declined
+        .iter()
+        .filter_map(|(addr, count)| {
+            let path = quillmark_core::plate_addr_to_doc_path(addr, &kinds)?;
+            let diag = quillmark_core::declined_construct(
+                TypstBackend.id(),
+                BlockConstruct::Image,
+                *count,
+                &path,
+            );
+            Some(diag.with_hint(
+                "what a content image's url names is undecided; a plate draws a \
+                 quill asset with `#image(\"assets/…\")`"
+                    .to_string(),
+            ))
+        })
+        .collect()
+}
+
 /// The quill's load warnings, then this compile's own, then one per runaway
-/// `field-region`. One order, built in one place, so an `apply` that swaps only
-/// what it recompiled keeps the load half.
+/// `field-region`, then one per field whose images this backend declined. One
+/// order, built in one place, so an `update` that swaps only what it recompiled
+/// keeps the load half.
 fn session_warnings(
     world: &world::QuillWorld,
     compile: Vec<Diagnostic>,
     unclosed: &[(usize, String)],
+    declined_images: &world::DeclinedImages,
+    card_kinds: &[Option<String>],
 ) -> Vec<Diagnostic> {
     let mut all = world.load_warnings().to_vec();
     all.extend(compile);
@@ -138,6 +195,7 @@ fn session_warnings(
                 .to_string(),
         )
     }));
+    all.extend(declined_image_warnings(declined_images, card_kinds));
     all
 }
 
@@ -295,8 +353,16 @@ impl SessionHandle for TypstSession {
 
     /// Non-premultiplied RGBA8 at `scale`× the natural 72 ppi, returned as
     /// `(width_px, height_px, rgba)` with `w * h * 4` row-major bytes.
-    fn render_rgba(&self, page: usize, scale: f32) -> Option<(u32, u32, Vec<u8>)> {
-        let p = self.live.document.pages().get(page)?;
+    fn render_rgba(
+        &self,
+        page: usize,
+        scale: f32,
+    ) -> Result<Option<(u32, u32, Vec<u8>)>, RenderError> {
+        let Some(p) = self.live.document.pages().get(page) else {
+            return Ok(None);
+        };
+        let size = p.frame.size();
+        quillmark_core::check_raster(scale, size.x.to_pt() as f32, size.y.to_pt() as f32)?;
         let pixmap = typst_render::render(p, &compile::render_options(scale));
         let width = pixmap.width();
         let height = pixmap.height();
@@ -308,7 +374,7 @@ impl SessionHandle for TypstSession {
             rgba.push(c.blue());
             rgba.push(c.alpha());
         }
-        Some((width, height, rgba))
+        Ok(Some((width, height, rgba)))
     }
 
     /// Widgets first (one fixed-size box each), then span-tracked content in
@@ -574,7 +640,7 @@ pub(crate) struct SchemaMeta {
     pub(crate) root: AddressNode,
     pub(crate) cards: BTreeMap<String, AddressNode>,
     /// Serialized once: the schema is fixed for a session's lifetime, and every
-    /// apply splices this same literal into the generated `lib.typ`.
+    /// update splices this same literal into the generated `lib.typ`.
     meta_literal: String,
 }
 

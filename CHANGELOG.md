@@ -2,6 +2,232 @@
 
 ## Unreleased
 
+- fix(core): **a `ParseError` spells its English once.** `to_diagnostic()`
+  renders the variant's `Display` instead of a second copy of the same
+  sentence, and the copies had drifted: `InvalidStructure` displayed under an
+  `Invalid YAML structure: ` prefix the diagnostic dropped. A Rust caller
+  formatting `{err}` from `Document::parse` now reads that variant without the
+  prefix, matching the message every binding and the CLI have always shown.
+- fix(core): **a blank `main.description` emits no description line in the
+  blueprint.** The main card tested the raw string for emptiness and collapsed
+  whitespace afterwards, so `main: { description: "   " }` passed the test and
+  landed as a bare `# ` above the first field. The collapse now runs first, the
+  same order every other description takes, and a description that collapses to
+  nothing falls through to `quill.description`.
+- fix(core)!: **`main:` parses under the same strict card-schema shape as a
+  card kind.** A `main:` that is not a mapping, an unknown key under it
+  (`feilds:`, `title:`), and a `main.fields` that is not a mapping all loaded
+  as a main card with zero fields and no diagnostic; each is now
+  `quill::invalid_card_schema`. `main` and `card_kinds.<name>` accept
+  `description`, `fields`, `ui`, and `body` only, and a malformed `ui` or
+  `body` block under either reports `quill::invalid_ui` or
+  `quill::invalid_body` with the hint naming that block's keys, where a card
+  kind drew the whole-card `quill::invalid_card_schema`.
+- fix(core)!: **`Quill::validate` refuses every value the render floor
+  refuses.** Validation judged a floor refusal by the authored value's own
+  shape, and two shapes read well-typed there: a content object that is not
+  canonical content on a `richtext` or `plaintext` field (`{prose: older}`),
+  and an integer past `i64` on an `integer` field (`18446744073709551615`).
+  Both audited clean while `compile_data` and `dry_run` refused them, so the
+  `validate`/`dry_run` pairing an editor runs on gave two verdicts. A leaf the
+  floor cannot conform is now a `validation::type_mismatch` at the field's
+  path, unless a shape check already names the refusal
+  (`validation::not_inline`, `validation::not_plain`,
+  `validation::format_violation`); a container's refusal stays the element's or
+  property's, at its own path. A numeric literal past `i64` reports `actual:
+  number`, the type that does carry it, so the mismatch hint stays true, and
+  such a literal in a `default:` or `example:` is a load error.
+- fix(core): **a seeded variant commits its cells without a discriminant to
+  name their world.** `seed_card` needed the overlay or an `example:` to name a
+  member and dropped the whole field otherwise, so a `$seed` entry was honored
+  for a card's plain fields and silently discarded for its variant-bearing one.
+  The world walked is now the render floor's own selection — overlay ›
+  `example:` › `default:` › blank — and the container commits whenever a cell
+  has something to commit. `value` is written only where the overlay or an
+  `example:` named the member, so a `default:` stays deferred to the floor and
+  the container it leaves without a `value` resolves to the default's world.
+- fix(core): **a `!must_fill` marker nested inside `$seed` or `$ext` warns
+  instead of vanishing.** A `$` metadata value is a plain tree with no fill
+  carrier, so a marker under one reached neither storage nor emit and the cell
+  it marked read back as `null`. Parse now emits a
+  `parse::fill_marker_unsupported_position` warning naming the cell
+  (`$seed.note.from`), the family every other unpreservable marker position
+  already draws. The value under the marker is kept, as it was; a marker on the
+  `$` key itself remains a parse error.
+- fix(content): **VT, FF and NEL in document text become a space.** Typst's
+  lexer reads all three as line breaks, like the U+2028/U+2029 separators the
+  ingress already spaced, so one mid-paragraph reopens `at_start` and the
+  characters behind it are read as a block marker — `"intro\u{c}- item"`
+  rendered a bullet — and two in a row split the paragraph. The spaced set is
+  Typst's whole newline set less `\n`, named by
+  `normalize::is_line_separator`, refused by `validate`, and replaced at every
+  text ingress: `from_plaintext`, markdown import, an `Op::Insert` through
+  `apply_text_delta`, and a table cell's text. Markdown-spec §7 states it.
+- fix(typst): **`escape_markup` lowers every character Typst reads as a newline
+  to a space.** A content that reached the emitter without passing the ingress
+  — hand-built, or decoded from storage — could still carry `\r`, VT, FF, NEL,
+  U+2028 or U+2029, and the emitter wrote it through: the text behind it parsed
+  as a heading, list or term marker the document never wrote. One character to
+  one byte, so the per-character span scan stays exact, and the space is trivia
+  to the line-anchor guard, which lands on the marker behind it.
+- fix(typst,pdfform)!: **a raster nobody can allocate is refused, not
+  attempted.** `RenderOptions.ppi` and the `render_rgba` canvas scale reached
+  tiny-skia and hayro unchecked; both size their buffer from the value and
+  unwrap it, so `ppi: Infinity` or `1e9` panicked the process — in WASM a trap
+  that takes the engine instance with it — while NaN, zero and a negative
+  quietly rasterized a 1×1 image. Every raster path now refuses under
+  `backend::invalid_raster_scale` a scale that is not finite and positive, or
+  that would put a page past `MAX_RASTER_PIXELS` (16384² px: a 1 GiB RGBA
+  buffer, and the area of the WASM painter's per-side clamp, so nothing that
+  clamp admits is refused). US Letter at the default 144 ppi is 138× under it.
+  `SessionHandle::render_rgba` and `LiveSession::render_rgba` return
+  `Result<Option<(u32, u32, Vec<u8>)>, RenderError>` to carry the refusal;
+  `Ok(None)` is still the out-of-range page.
+- fix(pdfform)!: **flatten's own parse failure is `pdfform::flatten_parse`.** A
+  page dict or `/Contents` the content-stream flattener cannot read raised
+  `pdf::flatten_parse`, naming the stamp spine for a failure of the backend's
+  own code; it carries the `pdfform::*` namespace every other pdfform code
+  uses. `pdf::bad_rect` stays the spine's and is minted in one place,
+  `FieldSpec::assert_finite_rect`, which the stamp and flatten paths both call.
+- fix(typst,pdfform)!: **`RenderOptions::pages` means one thing on every
+  backend, under `backend::*` codes.** The PDF-form backend ignored the option:
+  SVG and PNG rendered every page whatever was asked for, PDF returned bytes
+  instead of refusing, and an out-of-range index passed silently. It now
+  narrows SVG and PNG to the named pages, in the order given, and refuses a
+  selection for PDF. Both backends mint the two refusals from the shared
+  constructors in `quillmark_core::backend`, so the codes are
+  `backend::page_index_out_of_bounds` and
+  `backend::page_selection_not_supported` in place of the Typst-private
+  `typst::page_index_out_of_bounds` and
+  `typst::pdf_page_selection_not_supported`.
+- fix(pdfform)!: **canvas geometry measures from the page's canvas box.** hayro
+  rasterizes `/CropBox` ∩ `/MediaBox` and draws that box's lower-left corner at
+  the raster's origin, while `page_size_pt` reported the `/MediaBox` extent and
+  `regions()` reported widget `/Rect`s in raw user space. An overlay over a
+  `pdfcrop`ped background (`/MediaBox [96 133 500 700]`) therefore sat 96 × 133
+  pt off its ink, and a `/CropBox` inside the MediaBox reported a page bigger
+  than its own raster. `page_size_pt` is the canvas box's extent, `regions()`
+  subtracts its lower-left corner, and `form.json`'s top-left rects flip against
+  it, so `pageSize`, `regions`, the point queries, and the raster share one
+  origin. Values move only on a page whose canvas box does not start at
+  `(0, 0)`: a background on `[0 0 W H]` with no `/CropBox` reports what it always
+  did. The stamped PDF's widget `/Rect`s stay in user space.
+  `quillmark_pdf::page_media_boxes` is `page_canvas_boxes`, and it refuses a
+  canvas box under a point per side (`pdf::degenerate_page_box`) and a page box
+  that is not a direct array of numbers.
+- fix(content)!: **a link or image `url` carrying a line ending is refused
+  where it is authored, and percent-encoded where it is written.** CommonMark
+  admits no line ending in a destination, bare or angle-wrapped, so `"a\nb"`
+  exported as `[t](<a\nb>)`, which pulldown reads as an inline HTML tag: the
+  re-import came back `[t]()` with the mark gone, and an image the same way
+  with its island gone. An authored lane that *stores* a url now refuses one —
+  `MarkOp::Add` of a `link`, `IslandOp::Insert` and `IslandOp::Set` of an
+  `image`, and the whole-content doors (`install`, `overwrite`,
+  `CardInput.body`) — the way an unwritable code-fence `lang` is refused.
+  `MarkOp::Remove` still takes it, matching on kind equality against a mark the
+  field already holds. Storage stays lenient, and `to_markdown` writes the line
+  ending as `%0A`/`%0D`, so the link survives and re-imports addressing the
+  encoded url.
+- fix(content)!: **a block-only island lands only on a line of its own, and the
+  markdown write breaks the paragraph around one already stored inline.** A
+  `table`'s markdown is a block, so a slot spliced into a paragraph exported as
+  pipes mid-line — `a| h |\n| --- |\n| c |b` — which re-imported as prose with
+  the island gone. `IslandOp::Insert` refuses an `at` that is not an empty line,
+  `IslandOp::Set` refuses retyping an inline island into a block-only one
+  (`ApplyError::BlockIslandNotAlone`), and the authored whole-content door
+  (`overwrite`, through `serial::from_authored_value`) refuses the same
+  placement. Storage stays lenient: `to_markdown` writes a content already in
+  that shape as a paragraph, the table, and a paragraph, so the island survives
+  re-import.
+- fix(content): **a paragraph emptied by HTML stripping leaves no line.**
+  `<span></span>` on its own imported as an empty `Para` line, which markdown
+  has no syntax to write, so `to_markdown` emitted a stray blank line and
+  re-import collapsed it: `from_markdown("a\n\n<span></span>\n\nb")` was not a
+  fixed point. Import now drops such a paragraph. An empty heading, code block
+  and container keep their line, markdown being able to write those back.
+- fix(content): **an island alone on a line takes the line kind its type
+  projects.** An `image` slot alone on a `LineKind::Island` line and the same
+  slot on a `Para` line both wrote `![alt](url)`, which re-imports as `Para`,
+  and a `table` alone on a `Para` line wrote a pipe table, which re-imports as
+  `Island`: two normalized contents per document and one markdown, so any write
+  and read back flipped the kind. `KnownIslandType::block_only` names which
+  markup is a block, and `Content::normalize` writes the kind the round trip
+  yields — `Island` for a `table`, `Para` for an `image`. A type this build
+  cannot read keeps the kind it was stored with, its placeholder naming none.
+- fix(wasm,python): **`quill.metadata` key order is a function of the quill.**
+  The five standard keys (`name`, `version`, `backend`, `author`,
+  `description`) come first in that order, then the extra keys sorted by name,
+  so `JSON.stringify` / `json.dumps` of a metadata snapshot is stable across
+  processes. The extras rode core's `HashMap` iteration order.
+- docs(wasm,typst,core): **the live session's edit verb is `update` in prose
+  too.** The `@quillmark/wasm` README and the `LiveSession` rustdoc named an
+  `apply(doc)` the class does not carry, so a consumer following them reached
+  `session.apply is not a function`; the same stale name sat in the Typst
+  backend's and core's comments for `SessionHandle::update`. The README also
+  called `pageCount` and `pageSize(page)` stable for the session's lifetime,
+  which a committed `update` invalidates: they read the current compile, the
+  new count is `ChangeSet.pageCount`, and every page in `ChangeSet.dirtyPages`
+  needs its `pageSize` re-read.
+- fix(wasm): **an unregistered backend rejects with `engine::backend_not_found`
+  like every other failure.** The four `Engine` verbs threw a bare `Error` for a
+  quill whose declared `backend:` has no loader, so `isQuillmarkError` answered
+  `false` and the README's own `catch` example re-threw it as a foreign
+  failure. The rejection now carries one diagnostic under the code core and the
+  Python binding already raise, hinting the registered backend ids.
+- fix(wasm): **`Engine.render` returns the document's load warnings ahead of
+  the compile's own.** The engine renders a backend-memory clone built by
+  `Document.fromStored`, which carries no warnings, so a `@quillmark/wasm`
+  consumer got compile warnings only and a parse, `conform::*` or
+  `plate::unsupported_construct` diagnostic reached `RenderResult.warnings`
+  from no public surface. `Engine.render` now snapshots `doc.warnings` beside
+  the storage DTO and fronts the result with it, the pipeline order ERROR.md
+  states. `doc.warnings` still carries the same list, and
+  `LiveSession.render` carries the compile half alone.
+- fix(core,wasm,python)!: **a card built from a wire refuses under the code its
+  addressed mutator mints.** `makeCard` / `insertCard` folded a malformed field
+  name, a bad `$quill` reference, a `!must_fill` on a mapping and a malformed
+  item list into one code-less refusal, so `diagnostics[0].code` was `undefined`
+  in JS and Python raised a bare `ValueError` — while `storeField` /
+  `setQuillRef` carried `edit::invalid_field_name`,
+  `parse::invalid_quill_reference` and `edit::fill_on_mapping` for the same
+  violations. `WireError` now carries the `EditError` its addressed twin raises
+  and both bindings stamp `WireError::code()` on the diagnostic. A card dict
+  Python cannot read as a card at all is still a `ValueError`; one that
+  deserializes and then violates an invariant is a `QuillmarkError` under its
+  code. The list-level violations (a duplicate key, a field count past the §8
+  bound, a `$` entry twice, a comment spanning lines) carry the new
+  `edit::invalid_payload`.
+- fix(python): **`OutputFormat` and `Severity` members are hashable.** The two
+  pyclass mirrors declared `eq` alone, which fills `tp_richcompare` and leaves
+  no `tp_hash`, so CPython stamped `__hash__ = None` and every variant was
+  rejected as a set member or a dict key: `set(engine.supported_formats(quill))`
+  and `Counter(d.severity for d in exc.diagnostics)` raised `TypeError`. Both
+  are now frozen and hash by variant, one slot per member.
+- fix(python)!: **a negative index is an out-of-range index, not an
+  `OverflowError`.** Every index parameter was a `usize`, so `doc.card(-1)`,
+  `doc.move_card(-1, 0)`, `writer.card(-1).set(..)` and `render(pages=[-1])`
+  died in the boundary conversion with a third exception type, outside the two
+  the binding documents. Indices are signed at the boundary now. A negative one
+  addresses nothing — it is not the last card, and the binding does not index
+  from the end — so it takes the answer its site already gives an index past the
+  end: `edit::index_out_of_range` where the verb raises,
+  `backend::page_index_out_of_bounds` for a page, `None` where `remove_card`
+  answers absence.
+- perf(python): **reading `RenderResult.artifacts` copies no bytes.** The
+  getter rebuilt its list on every read, cloning each artifact's buffer, and
+  `Artifact.bytes` cloned that again on the way into a `bytes`, so a `save`
+  followed by one `bytes` read moved a multi-MB PDF three times. The
+  `Artifact` and `Diagnostic` objects are built once, with the result, and
+  every `artifacts` or `warnings` read hands the same objects back; `bytes`
+  makes the one Rust→Python copy and `save` writes without one.
+- docs(cli): **the exit-code table separates a usage error from a refusal.**
+  The CLI reference and the crate README both promised `1` on any error, while
+  `clap` exits `2` on an invocation it cannot parse — an unknown flag, a missing
+  argument, an unknown subcommand — before any command runs. `1` is the command
+  running and refusing: an invalid quill, a missing file, a failed render, an
+  argument value the command itself rejects (`-f docx`). `--help` and
+  `--version` exit `0`. Stated in `prose/canon/CLI.md`, the reference, and the
+  README; a smoke test pins the `2`.
 - change(core)!: **YAML nesting depth is the parser's to bound, and
   `MAX_YAML_DEPTH` is gone.** The constant set `serde_saphyr`'s depth budget
   and doubled as the bound on host values crossing into the document, so one
@@ -12,6 +238,21 @@
   raising the accepted depth on those paths from 100. Read the cap from
   `quillmark_core::error::MAX_JSON_DEPTH`; `§8 Limits` no longer fixes a YAML
   nesting number.
+- change(typst): **an image in a content field draws nothing and warns.** What
+  a content image's `url` names is undecided — a document is quill-free but for
+  `$quill`, which selects a *range* of versions, and declares everything else it
+  references — so the Typst backend lowers an `image` island to nothing rather
+  than binding one reading of the string. A quill asset stays the plate's to
+  draw (`#image("assets/logo.svg")`), unchanged. The refusal is legible where it
+  used to be a Typst file-not-found error about a generated file the author never
+  wrote: one **`backend::declined_construct`** warning per content field, `args`
+  `{backend, construct, count}` and the field's `DocPath` in `path`, minted by
+  the new `quillmark_core::declined_construct` so it cannot drift from
+  quill-declared `plate::unsupported_construct` — the sixth warning family, and
+  the first a backend *observes* rather than a quill declares. **A consumer
+  routing on diagnostic codes gains a warning family** and needs an arm for it.
+  Storage is untouched: an `image` island still parses, stores, round-trips to
+  markdown and reaches an editor with its `{url, alt}` props.
 - fix(typst): **a compile diagnostic carries a code from a closed set.** The
   code was the message up to its first `:`, so a missing asset minted
   `typst::file not found (searched at assets/logo.png)` — the author's path
@@ -116,6 +357,14 @@
   document-level pair rather than a `store` / `load` pair. The old names are
   removed rather than aliased. Stored blobs, the `schema` tag, and every byte
   these verbs write are untouched.
+- fix(pdf): **a stamped trailer carries one `/Info`, whatever shape the base's
+  `/Info` had.** The producer stamp allocated a fresh information dictionary
+  whenever the trailer's `/Info` did not parse as an indirect reference, while
+  the trailer writer copied the old value forward regardless, so a direct-dict
+  `/Info << /Title (x) >>` came out as two `/Info` keys in one dict — undefined
+  per spec, parser-dependent in practice. The fresh reference now supersedes the
+  old value, and a direct dict's entries seed the object it names, so `/Title`
+  and the rest survive the stamp.
 - fix(pdf): **the object index skips literal strings, `%`-comments and stream
   bodies, so `N G obj` bytes carried as content cannot shadow the real object.**
   The scan accepted any `<id> <gen> obj` at a token boundary and a later
@@ -317,15 +566,6 @@
   in reverse, so a pdfform quill whose widgets overlap answers with the
   last-stamped one. A backend that mixes widget and content regions through the
   default overrides `field_at` to hand a widget the tie, as Typst does.
-- fix(typst): **an image in a content field resolves a quill asset.**
-  `![logo](assets/logo.svg)` in a `richtext` field lowers to `#image(..)`
-  inside the helper package's `lib.typ`, and Typst resolves an image path
-  against the root of the file holding the call, never leaving it; assets sat
-  under the project root alone, so the one thing an image island lowers to
-  failed the render outright. `QuillWorld` registers each `assets/` file under
-  the helper package's file id as well, one `Bytes` behind both ids, and a
-  content image names an asset by its quill-root path, rooted or relative, the
-  path a plate names it by.
 - fix(typst): **a `form-field` widget's rect is the box it prints in, whatever
   the layout context.** The helper emitted its `<__qm_field__>` metadata beside
   the box rather than inside it, and a tag's own position is the line's baseline
@@ -506,6 +746,21 @@
   to just past its `>`, which the dict, array and `endobj` scans all inherit.
   The trigger is real: pdf-writer's compact mode, which krilla and typst-pdf
   use, writes a non-ASCII `/Title` or `/Author` exactly this way.
+- fix(python)!: **every `edit::*` diagnostic anchors at the `DocPath` its verb
+  ran against.** `Diagnostic.path` had three spellings for one refusal:
+  `writer.set` minted none, `writer.set_all` the bare field name, and
+  `writer.set_values` the rooted path. The converters now thread the base
+  anchor the WASM binding does, so an undeclared name is `main.stray` from
+  every main-card verb, `cards.<kind>[<i>].stray` from a card cursor, and a
+  structural out-of-range op is `cards[<i>]`. A consumer routing on `path`
+  reads the same string from both bindings; one comparing against a bare field
+  name now matches nothing.
+- fix(python): **a card dict is `CardWire`'s serde projection rather than a hand
+  copy of it.** `card_to_pydict` serializes the wire and adapts the two keys
+  Python's surface owns: snake_case `payload_items`, and an explicit `None`
+  where an absent `$quill` / `$ext` / `$seed` leaves the wire key out. Every key
+  and value is what it was; the dict now iterates in the wire's own order, so
+  `payload_items` follows `ext` and `seed` instead of preceding them.
 
 ## v0.112.0 - 2026-09-01
 

@@ -29,8 +29,8 @@
 //! **Expression tails.** The same `\` guards the other direction. Typst reads a
 //! `(` directly after a `#…` expression as that call's arguments, a `.` before
 //! an identifier as a field access, and a `;` as the expression's terminator, so
-//! the text behind an emitted `#raw(…)`, `#image(…)` or a wrap's `]` would reach
-//! it as code — or, for the `;`, vanish (`continues_expr`).
+//! the text behind an emitted `#raw(…)` or a wrap's `]` would reach it as code
+//! — or, for the `;`, vanish (`continues_expr`).
 //!
 //! **Seams.** And a third time, where the emitter writes nothing between two
 //! runs. Escaping is per run, so a multi-character rule sees one side of such a
@@ -46,7 +46,16 @@
 use quillmark_core::error::MAX_NESTING_DEPTH;
 use quillmark_content::island::KnownIslandType;
 use quillmark_content::model::{Container, LineKind, Mark, MarkKind, Content, Normalized, ISLAND_SLOT};
+use quillmark_content::normalize::is_line_separator;
 use std::ops::Range;
+
+/// Does Typst's lexer read `c` as a newline where the emitter writes document
+/// text? Every character of its `is_newline` set but `\n`, which the emitter
+/// writes itself as a line boundary. `Content::validate` rejects all of them, so
+/// one reaches here only from a content the ingress never made.
+fn reads_as_newline(c: char) -> bool {
+    c == '\r' || is_line_separator(c)
+}
 
 /// Neutralizes every markup-special character, so document text cannot inject
 /// markup, references (`@`), or comments (`//`).
@@ -60,6 +69,12 @@ use std::ops::Range;
 /// nothing, so escaping every `-` before a number takes one more than the page
 /// needs. Reading far enough to tell would tie this function to a tokenization
 /// the lexer owns.
+///
+/// Every character Typst reads as a newline but `\n` lowers to a space, the
+/// content ingress's own rule. No escape neutralizes one — a `\` before
+/// whitespace is Typst's linebreak — and each reopens `at_start`, so the text
+/// behind it would parse as a heading, list or term marker. The space it becomes
+/// is trivia to the emitter, which holds the line-anchor guard open behind it.
 ///
 /// `'` and `"` pass through. Smart quotes are an element with a set rule, so a
 /// quill chooses with `#set smartquote(enabled: false)`; escaping them here
@@ -82,6 +97,9 @@ pub fn escape_markup(s: &str) -> String {
                 out.push_str(r"\-")
             }
             '.' if rest.starts_with("..") => out.push_str(r"\."),
+            // One char to one byte, which `gen_cluster` reads back as a plain
+            // cluster.
+            c if reads_as_newline(c) => out.push(' '),
             '\\' | '~' | '*' | '_' | '`' | '#' | '[' | ']' | '{' | '}' | '$' | '<' | '>' | '@' => {
                 out.push('\\');
                 out.push(c);
@@ -280,19 +298,30 @@ pub struct Emission {
     pub markup: String,
     /// One entry per emitted segment, in generation order.
     pub segments: Vec<SegmentMap>,
+    /// Image islands this emission drew nothing for. Counted off `islands`
+    /// rather than off the slots, so an image counts wherever it sits.
+    pub declined_images: usize,
 }
 
 impl Emission {
     /// A syntax error in emitted markup is a lowering bug, never a document's.
     /// Typst's parser is the only faithful judge of its own grammar, so debug
     /// builds run it over every emission.
-    fn new(markup: String, segments: Vec<SegmentMap>) -> Self {
+    fn new(rt: &Content, markup: String, segments: Vec<SegmentMap>) -> Self {
         debug_assert!(
             !typst::syntax::parse(&markup).diagnosis().errors,
             "emitted markup does not parse: {:?}\n{markup:?}",
             typst::syntax::parse(&markup).errors_and_warnings().0,
         );
-        Emission { markup, segments }
+        Emission {
+            markup,
+            segments,
+            declined_images: rt
+                .islands
+                .iter()
+                .filter(|i| KnownIslandType::parse(&i.island_type) == Some(KnownIslandType::Image))
+                .count(),
+        }
     }
 }
 
@@ -304,7 +333,7 @@ pub enum EmitError {
     /// on a hand-built content that skipped that guard.
     #[error("Nesting too deep: {depth} levels (max: {max} levels)")]
     NestingTooDeep { depth: usize, max: usize },
-    /// A non-blank date the shared parsers reject. Only a direct `apply` can
+    /// A non-blank date the shared parsers reject. Only a direct `update` can
     /// deliver one: coercion parses the same way.
     #[error("invalid date in field {field:?}: {value:?} is not a recognized date")]
     InvalidDate { field: String, value: String },
@@ -335,7 +364,7 @@ pub fn emit_content(rt: &Normalized) -> Result<Emission, EmitError> {
     let mut e = Emit::new(rt);
     let n = rt.lines.len();
     e.emit_block_level(0..n, 0);
-    Ok(Emission::new(e.out, e.segments))
+    Ok(Emission::new(rt, e.out, e.segments))
 }
 
 /// Lower an [`is_inline`] content to pure inline markup, omitting the block
@@ -351,7 +380,7 @@ pub(crate) fn emit_content_inline(rt: &Normalized) -> Result<Emission, EmitError
     // `is_inline` guarantees depth 0, so `emit_content`'s nesting guard is moot.
     let mut e = Emit::new(rt);
     e.emit_segment(0..rt.lines.len());
-    Ok(Emission::new(e.out, e.segments))
+    Ok(Emission::new(rt, e.out, e.segments))
 }
 
 struct Emit<'a> {
@@ -757,7 +786,10 @@ impl<'a> Emit<'a> {
             return String::new();
         };
         match KnownIslandType::parse(&isl.island_type) {
-            Some(KnownIslandType::Image) => image_markup(&isl.props),
+            // Declined, not unknown: what a content image's url names is
+            // undecided, so this backend draws none and
+            // `Emission::declined_images` counts them for the warning saying so.
+            Some(KnownIslandType::Image) => String::new(),
             Some(KnownIslandType::Table) => table_markup(&isl.props),
             // Parallel to the HTML rule; a new known type is a compile error
             // here, not silence.
@@ -932,10 +964,11 @@ fn wraps_and_codes(marks: &[Mark], lo: usize, hi: usize) -> (Vec<Wrap>, Vec<(usi
 /// line-anchor one and [`continues_expr`]'s — whose byte sits *outside* the
 /// run's window so `generated == escape_markup(content)` stays exact.
 ///
-/// Under [`Tail::Anchor`] a run opening with spaces or tabs stops at the first
-/// character that is neither: Typst reads them as trivia and holds the anchor
-/// open behind them, while `\` before a space is its linebreak rather than an
-/// escape, so the guard byte has to land on the marker itself.
+/// Under [`Tail::Anchor`] a run opening with trivia — spaces, tabs, and the
+/// [`reads_as_newline`] characters [`escape_markup`] lowers to a space — stops
+/// at the first character that is none of them: Typst reads trivia as holding
+/// the anchor open behind it, while `\` before a space is its linebreak rather
+/// than an escape, so the guard byte has to land on the marker itself.
 fn emit_run(
     out: &mut String,
     pos: usize,
@@ -955,7 +988,7 @@ fn emit_run(
         return (ce, Tail::Expr, (cs..ce, g0..g1, EscapeCtx::StringLit));
     }
     let mut re = next_boundary(pos, hi, chars, wraps, codes);
-    let trivia = |c: char| c == ' ' || c == '\t';
+    let trivia = |c: char| c == ' ' || c == '\t' || reads_as_newline(c);
     if tail == Tail::Anchor && trivia(chars[pos]) {
         re = (pos..re).find(|&p| !trivia(chars[p])).unwrap_or(re);
     }
@@ -991,18 +1024,6 @@ fn cell_markup(text: &str, marks: &[Mark]) -> String {
         let (re, left, _) = emit_run(out, pos, chars.len(), &chars, &wraps, &codes, tail);
         (re, left)
     });
-    out
-}
-
-/// `#image("url"[, alt: "…"])` from an image island's props.
-fn image_markup(props: &serde_json::Value) -> String {
-    let url = props.get("url").and_then(|v| v.as_str()).unwrap_or("");
-    let alt = props.get("alt").and_then(|v| v.as_str()).unwrap_or("");
-    let mut out = format!("#image(\"{}\"", escape_string(url));
-    if !alt.trim().is_empty() {
-        out.push_str(&format!(", alt: \"{}\"", escape_string(alt.trim())));
-    }
-    out.push(')');
     out
 }
 
@@ -1480,6 +1501,7 @@ mod tests {
             "-5 degrees",
             "a-b and a - b",
             "\"double\" and 'single'",
+            "a\u{000B}b\u{000C}c\u{0085}d\u{2028}e\u{2029}f",
         ];
         for s in samples {
             assert_eq!(
@@ -1520,13 +1542,20 @@ mod tests {
         (text, kinds)
     }
 
+    /// What escaped document text may lower to. `SmartQuote` is allowed by
+    /// policy: `'` and `"` stay authored so a quill picks its own typography.
+    const ALLOWED_LEAVES: &[SyntaxKind] = &[
+        SyntaxKind::Text,
+        SyntaxKind::Space,
+        SyntaxKind::Parbreak,
+        SyntaxKind::Escape,
+        SyntaxKind::SmartQuote,
+    ];
+
     /// Escaped text reaches the page as the characters the document holds, read
     /// back through Typst's own parser. The `x` prefix puts the fragment past
     /// `at_start`, whose markers are [`emit_run`]'s guard rather than
     /// [`escape_markup`]'s.
-    ///
-    /// `SmartQuote` is allowed by policy: `'` and `"` stay authored so a quill
-    /// picks its own typography.
     #[test]
     fn escaped_markup_resolves_to_the_authored_text() {
         let samples = [
@@ -1545,18 +1574,42 @@ mod tests {
             "trailing backslash \\",
             "-", "--", "---", "...", "//", "-?", "-1",
         ];
-        let allowed = [
-            SyntaxKind::Text,
-            SyntaxKind::Space,
-            SyntaxKind::Parbreak,
-            SyntaxKind::Escape,
-            SyntaxKind::SmartQuote,
-        ];
         for s in samples {
             let (text, kinds) = resolve(&format!("x{}", escape_markup(s)));
             assert_eq!(text, format!("x{s}"), "escaping {s:?} did not survive Typst");
             for k in kinds {
-                assert!(allowed.contains(&k), "{s:?} lowered to a {k:?} leaf");
+                assert!(ALLOWED_LEAVES.contains(&k), "{s:?} lowered to a {k:?} leaf");
+            }
+        }
+    }
+
+    /// The emitter lowers exactly Typst's own newline set, less the `\n` it
+    /// writes as a line boundary, so a Typst upgrade that widens the set fails
+    /// here rather than in a rendered document.
+    #[test]
+    fn the_lowered_set_is_typsts_newlines_less_lf() {
+        for c in ('\0'..=char::MAX).filter(|c| *c != '\n') {
+            assert_eq!(reads_as_newline(c), typst::syntax::is_newline(c), "{c:?}");
+        }
+    }
+
+    /// A character Typst reads as a newline lowers to a space, so the text
+    /// behind it stays prose instead of opening a heading, list or term marker,
+    /// and a pair of them does not split the paragraph. Such a character reaches
+    /// the emitter only from a content the ingress never made — hand-built, or
+    /// decoded from storage — so the content is built here rather than imported.
+    #[test]
+    fn a_stray_newline_lowers_to_a_space_and_opens_no_block() {
+        use quillmark_content::model::Line;
+        for c in ('\0'..=char::MAX).filter(|c| *c != '\n' && reads_as_newline(*c)) {
+            let text = format!("{c}- item{c}{c}tail{c}= not a heading");
+            let rt = Content::new(text, vec![Line::new(LineKind::Para)]).into_normalized();
+            assert!(rt.validate().is_err(), "{c:?} passes the content invariants");
+
+            let markup = emit_content(&rt).unwrap().markup;
+            assert_eq!(markup, " \\- item  tail = not a heading\n\n", "for {c:?}");
+            for k in resolve(&markup).1 {
+                assert!(ALLOWED_LEAVES.contains(&k), "{c:?} lowered to a {k:?} leaf");
             }
         }
     }
@@ -1630,7 +1683,7 @@ mod tests {
         }
 
         // An island this build renders as nothing closes the gap its slot held.
-        for ty in ["widget", "table"] {
+        for ty in ["widget", "table", "image"] {
             for text in ["a/{}/b", "a-{}-b", "a-{}?b", "a-{}5b", "a.{}..b", "a..{}.b"] {
                 let text = text.replace("{}", &ISLAND_SLOT.to_string());
                 let rt = Content::new(text.clone(), vec![Line::new(LineKind::Para)])
@@ -1713,6 +1766,7 @@ mod tests {
             (EscapeCtx::Markup, "3--5"),
             (EscapeCtx::Markup, "wait..."),
             (EscapeCtx::Markup, "-5 and -?x"),
+            (EscapeCtx::Markup, "a\u{0085}b\u{2028}c"),
             (EscapeCtx::StringLit, "fn add(a, b)"),
             (EscapeCtx::StringLit, "a\"b\\c"),
             (EscapeCtx::StringLit, "tab\there"),
@@ -1967,6 +2021,15 @@ mod tests {
     }
 
     #[test]
+    fn an_image_island_draws_nothing_and_is_counted() {
+        let ec = emit("before ![alt](assets/logo.svg) after\n\n![x](y.png)");
+        assert!(!ec.markup.contains("#image"), "got {:?}", ec.markup);
+        assert!(!ec.markup.contains("assets/logo.svg"), "got {:?}", ec.markup);
+        assert_eq!(ec.declined_images, 2);
+        assert_eq!(emit("no images here").declined_images, 0);
+    }
+
+    #[test]
     fn segment_shape() {
         assert_eq!(
             emit("a  \nb  \nc").segments.len(),
@@ -2056,10 +2119,6 @@ mod tests {
         assert_eq!(emit("`--force`; x").markup, "#raw(\"--force\")\\; x\n\n");
         assert_eq!(emit("**W**; x").markup, "#strong[W]\\; x\n\n");
         assert_eq!(emit("a\\\n; b").markup, "a#linebreak()\\; b\n\n");
-        assert_eq!(
-            emit("![i](u)(y)").markup,
-            "#image(\"u\", alt: \"i\")\\(y)\n\n"
-        );
         assert_eq!(emit("a\\\n(b)").markup, "a#linebreak()\\(b)\n\n");
         // Typst ends the expression on trivia, and on a `.` no identifier follows.
         assert_eq!(emit("`x` (y)").markup, "#raw(\"x\") (y)\n\n");

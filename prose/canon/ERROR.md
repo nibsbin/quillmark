@@ -22,7 +22,11 @@ severity.
 
 **`Diagnostic`**: severity, optional error `code`, `message`, optional `location` (text anchor: file/line/column), optional `path` (document-model anchor, dotted/bracketed path into the typed `Document`, set by schema validation/coercion), optional `hint`, `source_chain` (omitted from serialization when empty). `location` and `path` are independent and may co-exist.
 
-**`ParseError`**: parsing-stage error enum, `InputTooLarge`, `TooManyFields`, `TooManyCards`, `InvalidStructure`, `EmptyInput`, `MissingQuill`, `InvalidQuillReference`, `YamlErrorWithLocation`; converts to `Diagnostic` via `to_diagnostic()`. The `InvalidQuillReference` case (`parse::invalid_quill_reference`) attaches the canonical `$quill` grammar (`quill_ref_hint()`) as the diagnostic hint. That hint is the single source of truth for the reference grammar: bindings surface it verbatim (e.g. WASM `Document.quillRefHint`) rather than re-stating the rule.
+**`ParseError`**: parsing-stage error enum, `InputTooLarge`, `TooManyFields`, `TooManyCards`, `InvalidStructure`, `EmptyInput`, `MissingQuill`, `InvalidQuillReference`, `BodyImport`, `YamlErrorWithLocation`; converts to `Diagnostic` via `to_diagnostic()`. The `InvalidQuillReference` case (`parse::invalid_quill_reference`) attaches the canonical `$quill` grammar (`quill_ref_hint()`) as the diagnostic hint. That hint is the single source of truth for the reference grammar: bindings surface it verbatim (e.g. WASM `Document.quillRefHint`) rather than re-stating the rule.
+
+The diagnostic's `message` is the variant's `Display` rendering, so the
+`#[error]` attribute is the one place a variant's English is spelled and a Rust
+caller formatting `{err}` reads the same sentence a binding reads off `message`.
 
 **`YamlError`**: the one adapter every `serde-saphyr` error passes through. Sanitizes the message (the engine appends its own Rust API names (`from_multiple`, `DuplicateKeyPolicy`) which `yaml_hints::enrich_yaml_error` strips), derives the hint, and carries the 1-indexed line/column the engine located; `to_diagnostic(code, file)` renders all three. The emit side has no input to point at, so it carries neither position nor hint.
 
@@ -43,8 +47,8 @@ for the one-error-diagnostic case every engine-side refusal takes;
 `into_diagnostics()` consumes). There is no failure taxonomy beyond the
 diagnostics themselves: the machine-routable identity of a failure is each
 diagnostic's namespaced `code` (`parse::*`, `validation::*`, `quill::*`,
-`edit::*`, `typst::*`, `pdfform::*`, `backend::*`, `engine::*`): consumers
-route on codes, not on a type. Multi-problem stages (validation, quill config, backend
+`edit::*`, `typst::*`, `pdfform::*`, `pdf::*`, `backend::*`, `engine::*`):
+consumers route on codes, not on a type. Multi-problem stages (validation, quill config, backend
 compilation) carry several diagnostics so every problem reaches the caller in
 one pass. `Display` follows the count-based message rule shared with both
 bindings: the primary diagnostic's message for a single diagnostic, an
@@ -57,7 +61,20 @@ for a backend session that does not override the incremental-`update` seam
 (both built-in backends override it); `backend::format_not_supported`: the
 requested format is outside the backend's `supported_formats`, one code on
 every backend so a caller matches the condition once;
+`backend::invalid_raster_scale`: a `RenderOptions.ppi` or a `render_rgba` scale
+that is not finite and positive, or that would rasterize a page past
+`MAX_RASTER_PIXELS` — ppi and canvas scale are the same quantity in two units,
+so they share the code and the message names which one was passed;
+`backend::page_index_out_of_bounds` / `backend::page_selection_not_supported`:
+a `RenderOptions::pages` selection naming a page the document does not have, or
+asked of a format the backend emits whole (PDF on both built-in backends), both
+minted by the shared constructors in `crates/core/src/backend.rs`;
 `engine::backend_not_found`: the quill's declared backend is not registered.
+
+`pdf::*` is the AcroForm stamping spine's own namespace (`pdf::parse`,
+`pdf::write`, `pdf::rotated_page`, `pdf::bad_rect`, …): `quillmark-pdf` carries
+the code on its `PdfError` and the `From` impl forwards it intact into a
+`RenderError`, so a spine refusal routes the same whichever backend drove it.
 
 **`edit::*`: mutator diagnostics.** Document and card mutators fail with the
 `EditError` enum (`crates/core/src/document/edit.rs`), one namespaced code per
@@ -68,17 +85,32 @@ peer of the render-path namespaces. Identity is the code, never message text:
 routing coercion-vs-undeclared is `edit::field_coercion_failed` vs.
 `edit::unknown_field`, read off `diagnostics[0].code`.
 
+Building a card from a `CardWire` (`makeCard` / `insertCard`) is the same
+surface reached without an address, so it refuses under the same codes:
+`WireError` carries the `EditError` its addressed twin raises, and
+`WireError::code()` is that code. Two of its codes are not `edit::*`, or not
+reachable elsewhere. A malformed `quill` string carries
+`parse::invalid_quill_reference` and the grammar hint, the code core mints
+wherever a reference is parsed. And `edit::invalid_payload` is reachable from
+this door only: it is the item list, not a field, that is malformed (a duplicate
+key, a field count past the §8 bound, a `$` entry twice, a comment spanning
+lines), and a per-field mutator cannot build one.
+
 **`RenderResult`**: successful result carrying artifacts, output format, and non-fatal `Vec<Diagnostic>` warnings
 
 ## Warning flow
 
-Warnings travel the same `Diagnostic` currency as errors, on five producer
+Warnings travel the same `Diagnostic` currency as errors, on six producer
 families:
 
 - **Parse warnings**: the `warnings` on the `Parsed` that `Document::parse`
   returns (e.g. a `~~~` opener missing its blank line). The CLI render and the
-  WASM one-shot render splice them into `RenderResult.warnings` ahead of any
-  compile warnings.
+  WASM one-shot render splice the whole `Parsed.warnings` carrier — this family
+  plus the two below that `Quill::parse` appends to it — into
+  `RenderResult.warnings` ahead of any compile warnings. In WASM the surface
+  that merges is the runtime `Engine.render`, reading the carrier off the
+  caller's `doc.warnings`: the backend-memory clone it renders is built by
+  `Document.fromStored`, which carries none.
 - **`conform::*`: resting-form warnings.** `Quill::conform` returns one per
   declared content field whose value the strict write refuses, and
   `Quill::parse` appends them to the `Parsed.warnings` the parse produced. Each
@@ -111,6 +143,15 @@ families:
   Core cannot *detect* a plate dropping a construct — the absence of ink is
   not a signal a backend reports — so this family is a declaration, not an
   observation: nothing verifies it, and an undeclared drop stays silent.
+- **`backend::declined_construct`: observed-decline warnings.** The twin above,
+  from the other side. A backend that declines a construct *outright* is the
+  observer core is not, so it says so itself: one diagnostic per (content
+  field, construct) carrying `backend`, `construct` and `count` in `args` and
+  the field's `DocPath` in `path`, minted by `quillmark_core::declined_construct`
+  so the two lanes cannot drift into two key sets. Per field, not per body, and
+  at the compile that dropped the construct, so it rides the session's compile
+  warnings. The Typst backend declines `image` in content
+  ([CONVERT.md](CONVERT.md#declined-images)); nothing else declines anything.
 - **Compile warnings**: the Typst backend maps the compiler's non-fatal
   diagnostics (font fallback, overfull pages, …) through the same span
   resolution as errors. They are state of the session's current compile:
@@ -121,12 +162,16 @@ families:
   `open` → `render` path.
 
 Ordering in a merged `RenderResult.warnings` is pipeline order: parse
-warnings first, then compile warnings. No dedup *across* families: they
-cannot overlap (the pre-render families anchor `path` or a markdown
-`location`, compile warnings a `location` in Typst sources).
+warnings first, then compile warnings. No dedup *across* families, and one
+pair overlaps: a quill declaring `unsupported: [image]` on a body the Typst
+backend also declines draws both codes at one `path`. Two producers state two
+facts there, the quill's declaration and the backend's observation, on either
+side of a crate boundary the merge is the first place to see. A reader wanting
+one line collapses them itself.
 `plate::unsupported_construct` dedups *within* itself, at the walk, for
 the reason the others need not: it is the one family whose producer sees
-every occurrence at once.
+every occurrence at once. `backend::declined_construct` does the same, per
+field.
 
 ## Bindings Error Delegation
 
@@ -372,6 +417,7 @@ Three outcomes, and the wire tells them apart only with this table in hand, sinc
 | `edit::root_only_entry` | `key` | structured |
 | `edit::import` | — | fallback |
 | `edit::content_apply` | — | fallback |
+| `edit::invalid_payload` | — | fallback |
 | `conform::invalid_field_name` | `field` | structured |
 | `conform::value_too_deep` | `max` | structured |
 | `conform::field_not_inline` | `field`, `codec` | structured |
@@ -387,6 +433,7 @@ Three outcomes, and the wire tells them apart only with this table in hand, sinc
 | `parse::missing_quill` | — | fallback |
 | `parse::body_import` | — | fallback |
 | `plate::unsupported_construct` | `construct`, `count` | structured |
+| `backend::declined_construct` | `backend`, `construct`, `count` | structured |
 
 `parse::missing_quill` looks code-determined and is not: it picks one of three sentences by re-reading the source, and no field records which.
 

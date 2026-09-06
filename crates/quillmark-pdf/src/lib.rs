@@ -18,7 +18,7 @@ mod error;
 ///
 /// **Workspace-internal; not covered by this crate's semver.** `pub` only so
 /// `quillmark-pdfform` can reach it. The supported surface is [`stamp`],
-/// [`regions_of`], [`page_media_boxes`], [`PdfUpdate`], and the types they name.
+/// [`regions_of`], [`page_canvas_boxes`], [`PdfUpdate`], and the types they name.
 #[doc(hidden)]
 pub mod reader;
 mod stamp;
@@ -34,11 +34,23 @@ pub use reader::ObjectIndex;
 pub use stamp::{regions_of, stamp, StampOptions, CHECKBOX_ON_STATE};
 pub use update::PdfUpdate;
 
-/// The `/MediaBox` of every page of `base`, normalized to `[x0, y0, x1, y1]`
-/// (lower-left, upper-right), in document order. A backend owning top-left
-/// page-relative rects flips against these before building a [`FieldSpec`].
-pub fn page_media_boxes(base: &[u8]) -> Result<Vec<[f32; 4]>, PdfError> {
-    reader::page_media_boxes(base)
+const CODE_BAD_RECT: &str = "pdf::bad_rect";
+
+/// The canvas box of every page of `base` — `/CropBox` intersected with
+/// `/MediaBox`, normalized to `[x0, y0, x1, y1]` (lower-left, upper-right) — in
+/// document order. Both boxes resolve along the page's ancestor chain, and a
+/// page declaring no `/CropBox` takes its `/MediaBox`.
+///
+/// This is the box a viewer displays and a rasterizer draws, so a backend owning
+/// top-left page-relative rects flips against it before building a
+/// [`FieldSpec`], and page-canvas geometry measures from its lower-left corner.
+///
+/// # Errors
+///
+/// `pdf::degenerate_page_box` when a page's canvas box is under a point per
+/// side: nothing renders on it.
+pub fn page_canvas_boxes(base: &[u8]) -> Result<Vec<[f32; 4]>, PdfError> {
+    reader::page_canvas_boxes(base)
 }
 
 /// One fully-resolved form field: the backend-agnostic currency of the spine.
@@ -87,6 +99,23 @@ impl FieldSpec {
             font_size: None,
             align: TextAlign::default(),
         }
+    }
+
+    /// `Err` with code `pdf::bad_rect` unless every [`rect`](Self::rect)
+    /// coordinate is finite. `rect` is public and every writer here prints a
+    /// float verbatim, so an unchecked one reaches a widget `/Rect` or a drawn
+    /// content stream as `NaN`/`inf`, a token no PDF number grammar admits.
+    pub fn assert_finite_rect(&self) -> Result<(), PdfError> {
+        if self.rect.iter().all(|v| v.is_finite()) {
+            return Ok(());
+        }
+        Err(PdfError::new(
+            CODE_BAD_RECT,
+            format!(
+                "field `{}` has a non-finite /Rect: {:?}",
+                self.name, self.rect
+            ),
+        ))
     }
 }
 

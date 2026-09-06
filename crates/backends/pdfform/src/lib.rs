@@ -78,11 +78,11 @@ impl Backend for PdfformBackend {
         let spec = FormSpec::parse(form_json)
             .map_err(|e| RenderError::coded(e.code(), e.to_string()))?;
 
-        // Page boxes drive the top-left → bottom-left flip (honouring a
-        // non-zero page origin), and reading them surfaces a malformed base early.
-        let page_boxes = quillmark_pdf::page_media_boxes(&base_pdf)?;
+        // Canvas boxes drive the top-left → bottom-left flip and the canvas
+        // coordinate space, and reading them surfaces a malformed base early.
+        let canvas_boxes = quillmark_pdf::page_canvas_boxes(&base_pdf)?;
 
-        let bound = bind::bind_widgets(&spec, source.config(), &page_boxes)
+        let bound = bind::bind_widgets(&spec, source.config(), &canvas_boxes)
             .map_err(|e| RenderError::coded(e.code(), e.to_string()))?;
 
         let field_specs = resolve_field_specs(&bound, json_data);
@@ -94,7 +94,7 @@ impl Backend for PdfformBackend {
                 base_pdf,
                 bound,
                 field_specs,
-                page_boxes,
+                canvas_boxes,
                 flat,
             }),
             source.config().clone(),
@@ -139,8 +139,10 @@ struct PdfformSession {
     base_pdf: Vec<u8>,
     bound: Vec<BoundWidget>,
     field_specs: Vec<FieldSpec>,
-    /// Cached so `page_size_pt` need not reparse.
-    page_boxes: Vec<[f32; 4]>,
+    /// Per page, `/CropBox` ∩ `/MediaBox`: the box hayro rasterizes, whose
+    /// lower-left corner is the canvas origin. Cached so `page_size_pt` need not
+    /// reparse.
+    canvas_boxes: Vec<[f32; 4]>,
     /// The base with `field_specs` baked in, parsed: the render paths hold
     /// pages rather than bytes to reparse per paint.
     flat: HayroPdf,
@@ -157,37 +159,49 @@ impl SessionHandle for PdfformSession {
             ));
         }
 
+        if format == OutputFormat::Pdf {
+            if opts.pages.is_some() {
+                return Err(quillmark_core::page_selection_not_supported(format));
+            }
+
+            // PDF output is always an interactive AcroForm; value-flattening
+            // backs only the raster paths, never a PDF deliverable.
+            let producer = opts.producer.clone().unwrap_or_else(default_producer);
+            let stamp_opts = StampOptions::default().with_producer(producer);
+            let stamped = stamp(self.base_pdf.clone(), &self.field_specs, &stamp_opts)?;
+
+            return Ok(RenderResult::new(
+                vec![Artifact::new(stamped, OutputFormat::Pdf)],
+                OutputFormat::Pdf,
+            ));
+        }
+
+        let pages = quillmark_core::selected_pages(opts.pages.as_deref(), self.flat.pages().len())?;
         if format == OutputFormat::Svg {
-            return self.render_svg();
+            return self.render_svg(&pages);
         }
-        if format == OutputFormat::Png {
-            let scale = opts.ppi_or_default() / 72.0;
-            return self.render_png(scale);
-        }
-
-        // PDF output is always an interactive AcroForm; value-flattening backs
-        // only the raster paths, never a PDF deliverable.
-        let producer = opts.producer.clone().unwrap_or_else(default_producer);
-        let stamp_opts = StampOptions::default().with_producer(producer);
-        let stamped = stamp(self.base_pdf.clone(), &self.field_specs, &stamp_opts)?;
-
-        Ok(RenderResult::new(
-            vec![Artifact::new(stamped, OutputFormat::Pdf)],
-            OutputFormat::Pdf,
-        ))
+        self.render_png(&pages, quillmark_core::raster_scale(opts.ppi_or_default())?)
     }
 
     fn page_count(&self) -> usize {
-        self.page_boxes.len()
+        self.canvas_boxes.len()
     }
 
     fn page_size_pt(&self, page: usize) -> Option<(f32, f32)> {
-        let [x0, y0, x1, y1] = *self.page_boxes.get(page)?;
+        let [x0, y0, x1, y1] = *self.canvas_boxes.get(page)?;
         Some((x1 - x0, y1 - y0))
     }
 
-    fn render_rgba(&self, page: usize, scale: f32) -> Option<(u32, u32, Vec<u8>)> {
-        let p = self.flat.pages().get(page)?;
+    fn render_rgba(
+        &self,
+        page: usize,
+        scale: f32,
+    ) -> Result<Option<(u32, u32, Vec<u8>)>, RenderError> {
+        let Some(p) = self.flat.pages().get(page) else {
+            return Ok(None);
+        };
+        let (width_pt, height_pt) = p.render_dimensions();
+        quillmark_core::check_raster(scale, width_pt, height_pt)?;
         let cache = RenderCache::new();
         let interp = standard_font_settings();
         let render_settings = scaled_render_settings(scale);
@@ -199,11 +213,22 @@ impl SessionHandle for PdfformSession {
             .into_iter()
             .flat_map(|px| [px.r, px.g, px.b, px.a])
             .collect();
-        Some((w, h, bytes))
+        Ok(Some((w, h, bytes)))
     }
 
+    /// A widget's `/Rect` is user space, which starts at the canvas box's
+    /// lower-left corner rather than at `(0, 0)`; the raster puts that corner at
+    /// the origin, so a region measures from it.
     fn regions(&self) -> Vec<RenderedRegion> {
-        regions_of(&self.field_specs)
+        let mut regions = regions_of(&self.field_specs);
+        for region in &mut regions {
+            let Some([x0, y0, ..]) = self.canvas_boxes.get(region.page) else {
+                continue;
+            };
+            let [rx0, ry0, rx1, ry1] = region.rect;
+            region.rect = [rx0 - x0, ry0 - y0, rx1 - x0, ry1 - y0];
+        }
+        regions
     }
 
     /// Specs and flat PDF swap together only after both succeed. The background
@@ -225,23 +250,22 @@ impl SessionHandle for PdfformSession {
         self.field_specs = field_specs;
         self.flat = flat;
 
-        Ok(ChangeSet::new(self.page_boxes.len(), dirty_pages))
+        Ok(ChangeSet::new(self.canvas_boxes.len(), dirty_pages))
     }
 }
 
 impl PdfformSession {
-    fn render_svg(&self) -> Result<RenderResult, RenderError> {
+    fn render_svg(&self, pages: &[usize]) -> Result<RenderResult, RenderError> {
         let interp = standard_font_settings();
         let svg_settings = SvgRenderSettings {
             bg_color: [255, 255, 255, 255],
         };
-        let artifacts: Vec<Artifact> = self
-            .flat
-            .pages()
+        let all = self.flat.pages();
+        let artifacts: Vec<Artifact> = pages
             .iter()
-            .map(|page| {
+            .map(|&idx| {
                 let cache = SvgCache::new();
-                let svg = hayro_svg_convert(page, &cache, &interp, &svg_settings);
+                let svg = hayro_svg_convert(&all[idx], &cache, &interp, &svg_settings);
                 Artifact::new(svg.into_bytes(), OutputFormat::Svg)
             })
             .collect();
@@ -250,12 +274,16 @@ impl PdfformSession {
     }
 
     /// `scale` is device pixels per PDF point (`ppi / 72`).
-    fn render_png(&self, scale: f32) -> Result<RenderResult, RenderError> {
+    fn render_png(&self, pages: &[usize], scale: f32) -> Result<RenderResult, RenderError> {
         let interp = standard_font_settings();
         let render_settings = scaled_render_settings(scale);
 
-        let mut artifacts = Vec::with_capacity(self.flat.pages().len());
-        for page in self.flat.pages().iter() {
+        let all = self.flat.pages();
+        let mut artifacts = Vec::with_capacity(pages.len());
+        for &idx in pages {
+            let page = &all[idx];
+            let (width_pt, height_pt) = page.render_dimensions();
+            quillmark_core::check_raster(scale, width_pt, height_pt)?;
             let cache = RenderCache::new();
             let pixmap = hayro_render(page, &cache, &interp, &render_settings);
             let png = pixmap.into_png().map_err(|e| {

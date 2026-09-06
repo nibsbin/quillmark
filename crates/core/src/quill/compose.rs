@@ -43,7 +43,7 @@ impl Quill {
 /// The document→data compile is a pure config read: coercion, validation,
 /// normalization, and blank-fill consult only the parsed schemas, never the
 /// quill's file tree. Living on [`QuillConfig`] lets a consumer that only
-/// compiles data (e.g. a live session's `apply`) retain the config alone
+/// compiles data (e.g. a live session's `update`) retain the config alone
 /// rather than the whole quill with its font/package bytes.
 impl QuillConfig {
     /// Applies coercion, validation, normalization, and **blank-filled render**:
@@ -219,11 +219,14 @@ impl Quill {
     /// warnings (`validation::must_fill`, `validation::out_of_variant`,
     /// `validation::example_unchanged`); the rest are blockers.
     ///
-    /// **A blocker here means the document does not render.** Values are judged
-    /// in the form the render floor builds from them (`conform_value` at
-    /// `Leniency::Render`), so a bare scalar for an `array`, `"3"` for an
-    /// `integer`, and a length-1 array for a `string` are valid. The leniencies
-    /// are listed under `prose/canon/SCHEMAS.md` §"Type coercion".
+    /// **A blocker here means the document does not render, and a value the
+    /// render floor refuses is a blocker here.** Values are judged in the form
+    /// the floor builds from them (`conform_value` at `Leniency::Render`), so a
+    /// bare scalar for an `array`, `"3"` for an `integer`, and a length-1 array
+    /// for a `string` are valid, while a value the floor cannot conform is a
+    /// `validation::type_mismatch` even where its authored shape reads
+    /// well-typed. The leniencies are listed under `prose/canon/SCHEMAS.md`
+    /// §"Type coercion".
     ///
     /// `validation::must_fill` has **two triggers**, covering disjoint failures
     /// under one code: a `!must_fill` marker the document carries

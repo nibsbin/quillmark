@@ -2,19 +2,21 @@ use pyo3::conversion::IntoPyObjectExt;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::pycell::{PyRef, PyRefMut};
-use pyo3::types::{PyDict, PyList};
+use pyo3::types::{PyBytes, PyDict, PyList};
 use pyo3::Bound;
 
 use quillmark::{
     quill_from_path, Diagnostic, Document, Location, OutputFormat, Quill, Quillmark, RenderResult,
 };
+use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Instant;
 
 use crate::enums::{PyOutputFormat, PySeverity};
 use crate::errors::{
-    convert_edit_error, convert_edit_errors, convert_edit_errors_at, convert_render_error,
-    raise_with_diagnostics,
+    card_index, convert_edit_error, convert_edit_errors, convert_edit_errors_at,
+    convert_render_error, convert_wire_error, page_indices, raise_with_diagnostics,
 };
 
 #[pyclass(name = "Quillmark")]
@@ -33,8 +35,14 @@ impl PyQuillmark {
 
     /// Render `doc` against `quill` in one shot, resolving `quill`'s backend on
     /// this engine. The default `output_format` falls back to the backend's
-    /// first supported format. Raises `QuillmarkError` (`engine::backend_not_found`)
-    /// when the backend is not registered.
+    /// first supported format. `ppi` (raster formats only, default 144) must be
+    /// finite, above 0, and small enough to keep every rendered page under
+    /// 268435456 pixels. Raises `QuillmarkError` (`engine::backend_not_found`)
+    /// when the backend is not registered, or `backend::invalid_raster_scale`
+    /// for a `ppi` outside that range.
+    ///
+    /// `pages` selects 0-based page indices counting from the first page; a
+    /// negative one selects no page and raises like an index past the last.
     #[pyo3(signature = (quill, doc, format=None, ppi=None, pages=None, producer=None, regions=false))]
     #[allow(clippy::too_many_arguments)] // kwargs mirror RenderOptions 1:1; the signature IS the Python API
     fn render(
@@ -43,14 +51,14 @@ impl PyQuillmark {
         doc: PyRef<'_, PyDocument>,
         format: Option<PyOutputFormat>,
         ppi: Option<f32>,
-        pages: Option<Vec<usize>>,
+        pages: Option<Vec<isize>>,
         producer: Option<String>,
         regions: bool,
     ) -> PyResult<PyRenderResult> {
         let mut opts = quillmark_core::RenderOptions::default();
         opts.output_format = format.map(OutputFormat::from);
         opts.ppi = ppi;
-        opts.pages = pages;
+        opts.pages = pages.map(page_indices).transpose()?;
         opts.producer = producer;
         opts.regions = regions;
         let start = Instant::now();
@@ -64,10 +72,7 @@ impl PyQuillmark {
         result
             .warnings
             .splice(0..0, doc.parse_warnings.iter().cloned());
-        Ok(PyRenderResult {
-            inner: result,
-            render_time_ms: elapsed_ms,
-        })
+        PyRenderResult::new(doc.py(), result, elapsed_ms)
     }
 
     /// The output formats `quill`'s backend can emit. Raises `QuillmarkError`
@@ -131,18 +136,16 @@ impl PyQuill {
 
     #[getter]
     fn quill_ref(&self) -> String {
-        let source = &self.inner;
-        let version = source
-            .metadata()
-            .get("version")
-            .and_then(|v| v.as_str())
-            .unwrap_or("0.0.0");
-        format!("{}@{}", source.name(), version)
+        format!("{}@{}", self.inner.name(), self.inner.config().version)
     }
 
     /// Identity snapshot mirroring the `quill:` section of `Quill.yaml`. A pure
     /// config read: capability lives on the engine, as
     /// `Quillmark.supported_formats(quill)`.
+    ///
+    /// The five standard keys come first in their declared order, then the
+    /// extra keys sorted by name, so the dict's key order is a function of the
+    /// quill alone.
     #[getter]
     fn metadata<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let source = &self.inner;
@@ -155,13 +158,13 @@ impl PyQuill {
         dict.set_item("author", &config.author)?;
         dict.set_item("description", &config.description)?;
 
-        for (key, value) in source.metadata() {
-            if quillmark_core::STANDARD_METADATA_KEYS.contains(&key.as_str()) {
-                continue;
-            }
-            if dict.contains(key)? {
-                continue;
-            }
+        let extras: BTreeMap<&str, &quillmark_core::QuillValue> = source
+            .metadata()
+            .iter()
+            .filter(|(key, _)| !quillmark_core::STANDARD_METADATA_KEYS.contains(&key.as_str()))
+            .map(|(key, value)| (key.as_str(), value))
+            .collect();
+        for (key, value) in extras {
             dict.set_item(key, quillvalue_to_py(py, value)?)?;
         }
 
@@ -482,11 +485,16 @@ impl PyDocument {
 
     /// One composable card by index, same dict shape as `main`, so reading one
     /// need not project every card via `cards`. An out-of-range `index` raises
-    /// `IndexOutOfRange`.
-    fn card<'py>(&self, py: Python<'py>, index: usize) -> PyResult<Bound<'py, PyDict>> {
+    /// `IndexOutOfRange`; indices count from the front, so a negative one is out
+    /// of range rather than the last card.
+    fn card<'py>(&self, py: Python<'py>, index: isize) -> PyResult<Bound<'py, PyDict>> {
         let len = self.inner.cards().len();
+        let index = card_index(index, len)?;
         let card = self.inner.card(index).ok_or_else(|| {
-            convert_edit_error(quillmark_core::EditError::IndexOutOfRange { index, len })
+            convert_edit_error(
+                quillmark_core::EditError::IndexOutOfRange { index, len },
+                &quillmark_core::DocPath::new(),
+            )
         })?;
         card_to_pydict(py, card)
     }
@@ -509,12 +517,13 @@ impl PyDocument {
         &mut self,
         py: Python<'py>,
         name: &str,
-        card: Option<usize>,
+        card: Option<isize>,
     ) -> PyResult<Bound<'py, PyAny>> {
+        let base = self.addr_base(card);
         match self
             .addr_card_mut(card)?
             .remove_field(name)
-            .map_err(convert_edit_error)?
+            .map_err(|e| convert_edit_error(e, &base))?
         {
             Some(v) => quillvalue_to_py(py, &v),
             None => py.None().into_bound_py_any(py),
@@ -527,11 +536,12 @@ impl PyDocument {
     /// output; pass `{}` for an explicit empty `$ext`. Prefer `store_ext_namespace`
     /// to write one slot without clobbering sibling consumers'.
     #[pyo3(signature = (value, card=None))]
-    fn store_ext(&mut self, value: Bound<'_, PyAny>, card: Option<usize>) -> PyResult<()> {
+    fn store_ext(&mut self, value: Bound<'_, PyAny>, card: Option<isize>) -> PyResult<()> {
         let map = py_to_object(&value, "store_ext")?;
+        let base = self.addr_base(card);
         self.addr_card_mut(card)?
             .store_ext(map)
-            .map_err(convert_edit_error)?;
+            .map_err(|e| convert_edit_error(e, &base))?;
         Ok(())
     }
 
@@ -542,7 +552,7 @@ impl PyDocument {
     fn remove_ext<'py>(
         &mut self,
         py: Python<'py>,
-        card: Option<usize>,
+        card: Option<isize>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let prev = self.addr_card_mut(card)?.remove_ext();
         ext_map_to_py(py, prev)
@@ -557,12 +567,13 @@ impl PyDocument {
         &mut self,
         namespace: &str,
         value: Bound<'_, PyAny>,
-        card: Option<usize>,
+        card: Option<isize>,
     ) -> PyResult<()> {
         let json = py_to_json(&value)?;
+        let base = self.addr_base(card);
         self.addr_card_mut(card)?
             .store_ext_namespace(namespace, json)
-            .map_err(convert_edit_error)?;
+            .map_err(|e| convert_edit_error(e, &base))?;
         Ok(())
     }
 
@@ -575,7 +586,7 @@ impl PyDocument {
         &mut self,
         py: Python<'py>,
         namespace: &str,
-        card: Option<usize>,
+        card: Option<isize>,
     ) -> PyResult<Bound<'py, PyAny>> {
         ext_value_to_py(py, self.addr_card_mut(card)?.remove_ext_namespace(namespace))
     }
@@ -585,10 +596,11 @@ impl PyDocument {
     /// new cards of that kind spawn with.
     fn store_seed_overlay(&mut self, card_kind: &str, overlay: Bound<'_, PyAny>) -> PyResult<()> {
         let json = py_to_json(&overlay)?;
+        // `$seed` is config-space, so an error here carries no field anchor.
         self.inner
             .main_mut()
             .store_seed_overlay(card_kind, json)
-            .map_err(convert_edit_error)?;
+            .map_err(|e| convert_edit_error(e, &quillmark_core::DocPath::new()))?;
         Ok(())
     }
 
@@ -644,64 +656,101 @@ impl PyDocument {
             serde_json::Value::String(body.unwrap_or_default()),
         );
         wire.payload_items = payload_items;
-        let card = quillmark_core::Card::try_from(wire)
-            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let card = quillmark_core::Card::try_from(wire).map_err(convert_wire_error)?;
         card_to_pydict(py, &card)
     }
 
     /// Place a composable card. `at` picks the position: `None` appends, `Some(i)`
-    /// inserts at index `i` (`0..=card_count`; out of range raises
-    /// `IndexOutOfRange`). `card` is a `Card` dict, as `make_card`, `cards`,
-    /// `remove_card`, and `seed_card` return.
+    /// inserts at index `i` (`0..=card_count`; out of range, negative included,
+    /// raises `IndexOutOfRange`). `card` is a `Card` dict, as `make_card`,
+    /// `cards`, `remove_card`, and `seed_card` return.
     #[pyo3(signature = (card, at=None))]
-    fn insert_card(&mut self, card: Bound<'_, PyAny>, at: Option<usize>) -> PyResult<()> {
+    fn insert_card(&mut self, card: Bound<'_, PyAny>, at: Option<isize>) -> PyResult<()> {
         let core_card = py_dict_to_card(&card)?;
+        let at = at
+            .map(|at| card_index(at, self.inner.cards().len()))
+            .transpose()?;
+        // A kind error anchors at the target slot; an append has no slot yet, so
+        // its kind error carries no anchor.
+        let base = at.map_or_else(quillmark_core::DocPath::new, |i| {
+            quillmark_core::DocPath::card(None, i)
+        });
         match at {
             None => self.inner.push_card(core_card),
             Some(index) => self.inner.insert_card(index, core_card),
         }
-        .map_err(convert_edit_error)
+        .map_err(|e| convert_edit_error(e, &base))
     }
 
+    /// Remove the composable card at `index`, returning it as a dict or `None`
+    /// when the index addresses no card, a negative one included.
     fn remove_card<'py>(
         &mut self,
         py: Python<'py>,
-        index: usize,
+        index: isize,
     ) -> PyResult<Option<Bound<'py, PyDict>>> {
+        let Ok(index) = usize::try_from(index) else {
+            return Ok(None);
+        };
         match self.inner.remove_card(index) {
             Some(card) => Ok(Some(card_to_pydict(py, &card)?)),
             None => Ok(None),
         }
     }
 
-    fn move_card(&mut self, from_idx: usize, to_idx: usize) -> PyResult<()> {
+    fn move_card(&mut self, from_idx: isize, to_idx: isize) -> PyResult<()> {
+        let len = self.inner.cards().len();
+        let from_idx = card_index(from_idx, len)?;
+        let to_idx = card_index(to_idx, len)?;
         self.inner
             .move_card(from_idx, to_idx)
-            .map_err(convert_edit_error)
+            .map_err(|e| convert_edit_error(e, &quillmark_core::DocPath::new()))
     }
 
-    fn set_card_kind(&mut self, index: usize, new_kind: &str) -> PyResult<()> {
+    fn set_card_kind(&mut self, index: isize, new_kind: &str) -> PyResult<()> {
+        let index = card_index(index, self.inner.cards().len())?;
         self.inner
             .set_card_kind(index, new_kind)
-            .map_err(convert_edit_error)
+            .map_err(|e| convert_edit_error(e, &quillmark_core::DocPath::card(None, index)))
     }
 
 }
 
 impl PyDocument {
-    fn card_mut_or_raise(&mut self, index: usize) -> PyResult<&mut quillmark_core::Card> {
+    fn card_mut_or_raise(&mut self, index: isize) -> PyResult<&mut quillmark_core::Card> {
         let len = self.inner.cards().len();
+        let index = card_index(index, len)?;
         self.inner.card_mut(index).ok_or_else(|| {
-            convert_edit_error(quillmark_core::EditError::IndexOutOfRange { index, len })
+            convert_edit_error(
+                quillmark_core::EditError::IndexOutOfRange { index, len },
+                &quillmark_core::DocPath::new(),
+            )
         })
     }
 
-    fn addr_card_mut(&mut self, card: Option<usize>) -> PyResult<&mut quillmark_core::Card> {
+    fn addr_card_mut(&mut self, card: Option<isize>) -> PyResult<&mut quillmark_core::Card> {
         match card {
             None => Ok(self.inner.main_mut()),
             Some(index) => self.card_mut_or_raise(index),
         }
     }
+
+    /// The anchor root the `card` selector names, main for `None`. An index that
+    /// addresses no card anchors nowhere, the call it precedes raising for it.
+    fn addr_base(&self, card: Option<isize>) -> quillmark_core::DocPath {
+        match card {
+            None => quillmark_core::DocPath::main(),
+            Some(index) => usize::try_from(index).map_or_else(
+                |_| quillmark_core::DocPath::new(),
+                |index| card_base(&self.inner, index),
+            ),
+        }
+    }
+}
+
+/// The card root at `index`, kind-qualified from the stored `$kind`.
+fn card_base(doc: &Document, index: usize) -> quillmark_core::DocPath {
+    quillmark_core::DocPath::card(doc.cards().get(index).and_then(|c| c.kind()), index)
 }
 
 /// A `Document` bound to its `Quill` for typed writes, from `Quill.writer(doc)`.
@@ -733,7 +782,7 @@ impl PyWriter {
             .inner
             .writer(&mut doc.inner)
             .set(name, qv)
-            .map_err(convert_edit_error)
+            .map_err(|e| convert_edit_error(e, &quillmark_core::DocPath::main()))
     }
 
     /// Typed-commit several main-card fields atomically: nothing is applied on
@@ -747,7 +796,7 @@ impl PyWriter {
             .inner
             .writer(&mut doc.inner)
             .set_all(batch)
-            .map_err(convert_edit_errors)
+            .map_err(|errs| convert_edit_errors(errs, &quillmark_core::DocPath::main()))
     }
 
     /// Write the document in the values form: the write twin of
@@ -792,7 +841,7 @@ impl PyWriter {
             .writer(&mut doc.inner)
             .revise_body(markdown)
             .map(|_| ())
-            .map_err(convert_edit_error)
+            .map_err(|e| convert_edit_error(e, &quillmark_core::DocPath::main()))
     }
 
     /// Revise the content main-card field `name` from authored text: typed *and*
@@ -811,14 +860,15 @@ impl PyWriter {
             .writer(&mut doc.inner)
             .revise_field(name, text)
             .map(|_| ())
-            .map_err(convert_edit_error)
+            .map_err(|e| convert_edit_error(e, &quillmark_core::DocPath::main()))
     }
 
     /// Build a composable card of `kind`, typed-commit `fields` onto it, set its
     /// body from optional markdown, and place it. `at` picks the position: `None`
-    /// appends, `Some(i)` inserts at index `i`. Transactional: a rejected field
-    /// (raising a per-field diagnostic bundle) or an invalid kind, body, or
-    /// position leaves the document untouched.
+    /// appends, `Some(i)` inserts at index `i`, and a position out of range, a
+    /// negative one included, raises. Transactional: a rejected field (raising a
+    /// per-field diagnostic bundle) or an invalid kind, body, or position leaves
+    /// the document untouched.
     #[pyo3(signature = (kind, fields=None, body=None, at=None))]
     fn add_card(
         &self,
@@ -826,7 +876,7 @@ impl PyWriter {
         kind: &str,
         fields: Option<Bound<'_, PyDict>>,
         body: Option<String>,
-        at: Option<usize>,
+        at: Option<isize>,
     ) -> PyResult<()> {
         let batch = match fields {
             Some(f) => pydict_to_field_batch(&f)?,
@@ -834,20 +884,28 @@ impl PyWriter {
         };
         let quill = self.quill.borrow(py);
         let mut doc = self.doc.borrow_mut(py);
+        let at = at
+            .map(|at| card_index(at, doc.inner.cards().len()))
+            .transpose()?;
+        // The card is built before it joins the document, so field errors anchor
+        // at bare names (empty base).
         quill
             .inner
             .writer(&mut doc.inner)
             .add_card(kind, batch, body.as_deref(), at)
-            .map_err(convert_edit_errors)
+            .map_err(|errs| convert_edit_errors(errs, &quillmark_core::DocPath::new()))
     }
 
     /// Remove the composable card at `index`, returning it as a dict or `None`
-    /// when the index is out of range.
+    /// when the index is out of range, a negative one included.
     fn remove_card<'py>(
         &self,
         py: Python<'py>,
-        index: usize,
+        index: isize,
     ) -> PyResult<Option<Bound<'py, PyDict>>> {
+        let Ok(index) = usize::try_from(index) else {
+            return Ok(None);
+        };
         let mut doc = self.doc.borrow_mut(py);
         match doc.inner.remove_card(index) {
             Some(card) => Ok(Some(card_to_pydict(py, &card)?)),
@@ -859,7 +917,7 @@ impl PyWriter {
     /// lazily at the write, so this never raises. The cursor is ephemeral: a
     /// `remove_card`/`add_card` between binding and writing silently retargets
     /// it; re-resolve the index at write time when cards may move.
-    fn card(&self, py: Python<'_>, index: usize) -> PyCardWriter {
+    fn card(&self, py: Python<'_>, index: isize) -> PyCardWriter {
         PyCardWriter {
             quill: self.quill.clone_ref(py),
             doc: self.doc.clone_ref(py),
@@ -870,19 +928,26 @@ impl PyWriter {
 
 /// A composable card bound to its `Quill` for typed writes, from `Writer.card`.
 /// Same verbs as `Writer`, targeting the card at its bound index; each write
-/// raises `edit::index_out_of_range` if that index is out of range.
+/// raises `edit::index_out_of_range` if that index is out of range, a negative
+/// one included.
 #[pyclass(name = "CardWriter")]
 pub struct PyCardWriter {
     quill: Py<PyQuill>,
     doc: Py<PyDocument>,
-    index: usize,
+    index: isize,
+}
+
+impl PyCardWriter {
+    fn bound_index(&self, doc: &PyDocument) -> PyResult<usize> {
+        card_index(self.index, doc.inner.cards().len())
+    }
 }
 
 #[pymethods]
 impl PyCardWriter {
     /// The bound card index.
     #[getter]
-    fn index(&self) -> usize {
+    fn index(&self) -> isize {
         self.index
     }
 
@@ -892,8 +957,12 @@ impl PyCardWriter {
     fn kind(&self, py: Python<'_>) -> PyResult<Option<String>> {
         let quill = self.quill.borrow(py);
         let mut doc = self.doc.borrow_mut(py);
+        let index = self.bound_index(&doc)?;
+        let base = card_base(&doc.inner, index);
         let mut writer = quill.inner.writer(&mut doc.inner);
-        let card = writer.card(self.index).map_err(convert_edit_error)?;
+        let card = writer
+            .card(index)
+            .map_err(|e| convert_edit_error(e, &base))?;
         Ok(card.kind().map(|k| k.to_string()))
     }
 
@@ -904,13 +973,15 @@ impl PyCardWriter {
         let qv = py_to_quillvalue(&value)?;
         let quill = self.quill.borrow(py);
         let mut doc = self.doc.borrow_mut(py);
+        let index = self.bound_index(&doc)?;
+        let base = card_base(&doc.inner, index);
         quill
             .inner
             .writer(&mut doc.inner)
-            .card(self.index)
-            .map_err(convert_edit_error)?
+            .card(index)
+            .map_err(|e| convert_edit_error(e, &base))?
             .set(name, qv)
-            .map_err(convert_edit_error)
+            .map_err(|e| convert_edit_error(e, &base))
     }
 
     /// Typed-commit several fields on this card atomically: same per-field
@@ -919,12 +990,14 @@ impl PyCardWriter {
         let batch = pydict_to_field_batch(&fields)?;
         let quill = self.quill.borrow(py);
         let mut doc = self.doc.borrow_mut(py);
+        let index = self.bound_index(&doc)?;
+        let base = card_base(&doc.inner, index);
         let mut writer = quill.inner.writer(&mut doc.inner);
         writer
-            .card(self.index)
-            .map_err(convert_edit_error)?
+            .card(index)
+            .map_err(|e| convert_edit_error(e, &base))?
             .set_all(batch)
-            .map_err(convert_edit_errors)
+            .map_err(|errs| convert_edit_errors(errs, &base))
     }
 
     /// Revise this card's body from markdown (edit semantics), discarding the
@@ -932,14 +1005,16 @@ impl PyCardWriter {
     fn revise_body(&self, py: Python<'_>, markdown: &str) -> PyResult<()> {
         let quill = self.quill.borrow(py);
         let mut doc = self.doc.borrow_mut(py);
+        let index = self.bound_index(&doc)?;
+        let base = card_base(&doc.inner, index);
         quill
             .inner
             .writer(&mut doc.inner)
-            .card(self.index)
-            .map_err(convert_edit_error)?
+            .card(index)
+            .map_err(|e| convert_edit_error(e, &base))?
             .revise_body(markdown)
             .map(|_| ())
-            .map_err(convert_edit_error)
+            .map_err(|e| convert_edit_error(e, &base))
     }
 
     /// The card twin of `Writer.revise_field`. Raises `edit::unknown_field` for
@@ -947,13 +1022,15 @@ impl PyCardWriter {
     fn revise_field(&self, py: Python<'_>, name: &str, text: &str) -> PyResult<()> {
         let quill = self.quill.borrow(py);
         let mut doc = self.doc.borrow_mut(py);
+        let index = self.bound_index(&doc)?;
+        let base = card_base(&doc.inner, index);
         let mut writer = quill.inner.writer(&mut doc.inner);
         writer
-            .card(self.index)
-            .map_err(convert_edit_error)?
+            .card(index)
+            .map_err(|e| convert_edit_error(e, &base))?
             .revise_field(name, text)
             .map(|_| ())
-            .map_err(convert_edit_error)
+            .map_err(|e| convert_edit_error(e, &base))
     }
 
     /// Write this card in the values form: `Writer.set_values` restricted to
@@ -968,10 +1045,12 @@ impl PyCardWriter {
             .map_err(|e| PyValueError::new_err(format!("set_values: invalid values shape: {e}")))?;
         let quill = self.quill.borrow(py);
         let mut doc = self.doc.borrow_mut(py);
+        let index = self.bound_index(&doc)?;
+        let base = card_base(&doc.inner, index);
         let mut writer = quill.inner.writer(&mut doc.inner);
         writer
-            .card(self.index)
-            .map_err(convert_edit_error)?
+            .card(index)
+            .map_err(|e| convert_edit_error(e, &base))?
             .set_values(&values)
             .map_err(convert_edit_errors_at)
     }
@@ -1011,7 +1090,7 @@ impl PyReader {
             .inner
             .reader(&doc.inner)
             .get(name)
-            .map_err(convert_edit_error)?;
+            .map_err(|e| convert_edit_error(e, &quillmark_core::DocPath::main()))?;
         read_value_to_py(py, read)
     }
 
@@ -1031,7 +1110,7 @@ impl PyReader {
             .inner
             .reader(&doc.inner)
             .get_content(name)
-            .map_err(convert_edit_error)?;
+            .map_err(|e| convert_edit_error(e, &quillmark_core::DocPath::main()))?;
         content_to_py(py, read)
     }
 
@@ -1061,7 +1140,7 @@ impl PyReader {
             .inner
             .reader(&doc.inner)
             .get_content_at(name, &at)
-            .map_err(convert_edit_error)?;
+            .map_err(|e| convert_edit_error(e, &quillmark_core::DocPath::main()))?;
         content_to_py(py, read)
     }
 
@@ -1097,7 +1176,7 @@ impl PyReader {
     /// A `CardReader` for the composable card at `index`. The index is checked
     /// lazily at the read, so this never raises. The cursor is ephemeral: a
     /// `remove_card`/`add_card` between binding and reading silently retargets it.
-    fn card(&self, py: Python<'_>, index: usize) -> PyCardReader {
+    fn card(&self, py: Python<'_>, index: isize) -> PyCardReader {
         PyCardReader {
             quill: self.quill.clone_ref(py),
             doc: self.doc.clone_ref(py),
@@ -1108,19 +1187,26 @@ impl PyReader {
 
 /// A composable card bound to its `Quill` for interpreted reads, from
 /// `Reader.card`. Same verbs as `Reader`, reading the card at its bound index; each
-/// read raises `edit::index_out_of_range` if that index is out of range.
+/// read raises `edit::index_out_of_range` if that index is out of range, a
+/// negative one included.
 #[pyclass(name = "CardReader")]
 pub struct PyCardReader {
     quill: Py<PyQuill>,
     doc: Py<PyDocument>,
-    index: usize,
+    index: isize,
+}
+
+impl PyCardReader {
+    fn bound_index(&self, doc: &PyDocument) -> PyResult<usize> {
+        card_index(self.index, doc.inner.cards().len())
+    }
 }
 
 #[pymethods]
 impl PyCardReader {
     /// The bound card index.
     #[getter]
-    fn index(&self) -> usize {
+    fn index(&self) -> isize {
         self.index
     }
 
@@ -1130,8 +1216,12 @@ impl PyCardReader {
     fn kind(&self, py: Python<'_>) -> PyResult<Option<String>> {
         let quill = self.quill.borrow(py);
         let doc = self.doc.borrow(py);
+        let index = self.bound_index(&doc)?;
+        let base = card_base(&doc.inner, index);
         let reader = quill.inner.reader(&doc.inner);
-        let card = reader.card(self.index).map_err(convert_edit_error)?;
+        let card = reader
+            .card(index)
+            .map_err(|e| convert_edit_error(e, &base))?;
         Ok(card.kind().map(|k| k.to_string()))
     }
 
@@ -1141,12 +1231,14 @@ impl PyCardReader {
     fn get<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
         let quill = self.quill.borrow(py);
         let doc = self.doc.borrow(py);
+        let index = self.bound_index(&doc)?;
+        let base = card_base(&doc.inner, index);
         let reader = quill.inner.reader(&doc.inner);
         let read = reader
-            .card(self.index)
-            .map_err(convert_edit_error)?
+            .card(index)
+            .map_err(|e| convert_edit_error(e, &base))?
             .get(name)
-            .map_err(convert_edit_error)?;
+            .map_err(|e| convert_edit_error(e, &base))?;
         read_value_to_py(py, read)
     }
 
@@ -1155,12 +1247,14 @@ impl PyCardReader {
     fn get_content<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
         let quill = self.quill.borrow(py);
         let doc = self.doc.borrow(py);
+        let index = self.bound_index(&doc)?;
+        let base = card_base(&doc.inner, index);
         let reader = quill.inner.reader(&doc.inner);
         let read = reader
-            .card(self.index)
-            .map_err(convert_edit_error)?
+            .card(index)
+            .map_err(|e| convert_edit_error(e, &base))?
             .get_content(name)
-            .map_err(convert_edit_error)?;
+            .map_err(|e| convert_edit_error(e, &base))?;
         content_to_py(py, read)
     }
 
@@ -1175,12 +1269,14 @@ impl PyCardReader {
         let at = path_from_py(path, "get_content_at")?;
         let quill = self.quill.borrow(py);
         let doc = self.doc.borrow(py);
+        let index = self.bound_index(&doc)?;
+        let base = card_base(&doc.inner, index);
         let reader = quill.inner.reader(&doc.inner);
         let read = reader
-            .card(self.index)
-            .map_err(convert_edit_error)?
+            .card(index)
+            .map_err(|e| convert_edit_error(e, &base))?
             .get_content_at(name, &at)
-            .map_err(convert_edit_error)?;
+            .map_err(|e| convert_edit_error(e, &base))?;
         content_to_py(py, read)
     }
 
@@ -1189,10 +1285,12 @@ impl PyCardReader {
     fn values<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let quill = self.quill.borrow(py);
         let doc = self.doc.borrow(py);
+        let index = self.bound_index(&doc)?;
+        let base = card_base(&doc.inner, index);
         let reader = quill.inner.reader(&doc.inner);
         let values = reader
-            .card(self.index)
-            .map_err(convert_edit_error)?
+            .card(index)
+            .map_err(|e| convert_edit_error(e, &base))?
             .values();
         let json = serde_json::to_value(&values)
             .map_err(|e| PyValueError::new_err(format!("values: serialization failed: {e}")))?;
@@ -1203,14 +1301,18 @@ impl PyCardReader {
     /// for a bad bound index.
     fn body_markdown(&self, py: Python<'_>) -> PyResult<String> {
         let doc = self.doc.borrow(py);
+        let index = self.bound_index(&doc)?;
         let card = doc
             .inner
-            .card(self.index)
+            .card(index)
             .ok_or_else(|| {
-                convert_edit_error(quillmark_core::EditError::IndexOutOfRange {
-                    index: self.index,
-                    len: doc.inner.cards().len(),
-                })
+                convert_edit_error(
+                    quillmark_core::EditError::IndexOutOfRange {
+                        index,
+                        len: doc.inner.cards().len(),
+                    },
+                    &quillmark_core::DocPath::new(),
+                )
             })?;
         Ok(card.body_markdown())
     }
@@ -1218,36 +1320,58 @@ impl PyCardReader {
 
 #[pyclass(name = "RenderResult")]
 pub struct PyRenderResult {
-    pub(crate) inner: RenderResult,
-    pub(crate) render_time_ms: f64,
+    artifacts: Vec<Py<PyArtifact>>,
+    warnings: Vec<Py<PyDiagnostic>>,
+    output_format: OutputFormat,
+    regions: Vec<quillmark_core::RenderedRegion>,
+    render_time_ms: f64,
+}
+
+impl PyRenderResult {
+    fn new(py: Python<'_>, result: RenderResult, render_time_ms: f64) -> PyResult<Self> {
+        Ok(Self {
+            artifacts: result
+                .artifacts
+                .into_iter()
+                .map(|a| {
+                    Py::new(
+                        py,
+                        PyArtifact {
+                            inner: Arc::from(a.bytes),
+                            format: a.output_format,
+                        },
+                    )
+                })
+                .collect::<PyResult<_>>()?,
+            warnings: result
+                .warnings
+                .into_iter()
+                .map(|inner| Py::new(py, PyDiagnostic { inner }))
+                .collect::<PyResult<_>>()?,
+            output_format: result.output_format,
+            regions: result.regions,
+            render_time_ms,
+        })
+    }
 }
 
 #[pymethods]
 impl PyRenderResult {
+    /// Every read hands back the same `Artifact` objects in a new list,
+    /// copying no artifact bytes.
     #[getter]
-    fn artifacts(&self) -> Vec<PyArtifact> {
-        self.inner
-            .artifacts
-            .iter()
-            .map(|a| PyArtifact {
-                inner: a.bytes.clone(),
-                format: a.output_format,
-            })
-            .collect()
+    fn artifacts(&self, py: Python<'_>) -> Vec<Py<PyArtifact>> {
+        self.artifacts.iter().map(|a| a.clone_ref(py)).collect()
     }
 
     #[getter]
-    fn warnings(&self) -> Vec<PyDiagnostic> {
-        self.inner
-            .warnings
-            .iter()
-            .map(|d| PyDiagnostic { inner: d.clone() })
-            .collect()
+    fn warnings(&self, py: Python<'_>) -> Vec<Py<PyDiagnostic>> {
+        self.warnings.iter().map(|d| d.clone_ref(py)).collect()
     }
 
     #[getter]
     fn format(&self) -> PyOutputFormat {
-        self.inner.output_format.into()
+        self.output_format.into()
     }
 
     /// Wall-clock time spent inside `render`, in milliseconds.
@@ -1266,8 +1390,7 @@ impl PyRenderResult {
     /// `field` and union the segment rects for the whole-field box.
     #[getter]
     fn regions<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyDict>>> {
-        self.inner
-            .regions
+        self.regions
             .iter()
             .map(|r| {
                 let d = PyDict::new(py);
@@ -1284,15 +1407,17 @@ impl PyRenderResult {
 #[pyclass(name = "Artifact", from_py_object)]
 #[derive(Clone)]
 pub struct PyArtifact {
-    pub(crate) inner: Vec<u8>,
+    pub(crate) inner: Arc<[u8]>,
     pub(crate) format: OutputFormat,
 }
 
 #[pymethods]
 impl PyArtifact {
+    /// Copies the rendered buffer into a new `bytes` on each read; `save`
+    /// writes it without a copy.
     #[getter]
-    fn bytes(&self) -> Vec<u8> {
-        self.inner.clone()
+    fn bytes<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
+        PyBytes::new(py, &self.inner)
     }
 
     #[getter]
@@ -1469,84 +1594,37 @@ fn read_value_to_py<'py>(
     }
 }
 
-/// The dict keeps Python's snake_case `payload_items`; the item entries
-/// themselves match the WASM `Card` shape verbatim.
+/// `CardWire`'s serde shape with the two divergences Python's surface owns: the
+/// top-level key is snake_case `payload_items`, and an absent `quill` / `ext` /
+/// `seed` is an explicit `None` rather than a missing key. Item entries match
+/// the WASM `Card` shape verbatim.
 fn card_to_pydict<'py>(
     py: Python<'py>,
     card: &quillmark_core::Card,
 ) -> PyResult<Bound<'py, PyDict>> {
     let wire = quillmark_core::CardWire::from(card);
+    let json = serde_json::to_value(&wire).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let serde_json::Value::Object(mut map) = json else {
+        return Err(PyValueError::new_err("card wire is not a JSON object"));
+    };
+
+    // `CardWire` declares the three right after `kind`, so filling them left to
+    // right lands each at its own index and keeps one key order for every card.
+    for (offset, key) in ["quill", "ext", "seed"].into_iter().enumerate() {
+        if !map.contains_key(key) {
+            map.shift_insert(offset + 1, key.to_string(), serde_json::Value::Null);
+        }
+    }
+
     let d = PyDict::new(py);
-    d.set_item("kind", &wire.kind)?;
-    d.set_item("quill", wire.quill.as_deref())?;
-
-    let items = PyList::empty(py);
-    for item in &wire.payload_items {
-        let entry = PyDict::new(py);
-        match item {
-            quillmark_core::PayloadItemWire::Field {
-                key,
-                value,
-                fill,
-                nested_fills,
-            } => {
-                entry.set_item("type", "field")?;
-                entry.set_item("key", key)?;
-                entry.set_item("value", json_to_py(py, value)?)?;
-                entry.set_item("fill", *fill)?;
-                // Paths to `!must_fill` markers nested inside `value`, which is
-                // itself fill-free. Omitted when empty; `py_dict_to_card` reads
-                // it back.
-                if !nested_fills.is_empty() {
-                    let nf = serde_json::to_value(nested_fills)
-                        .map_err(|e| PyValueError::new_err(e.to_string()))?;
-                    entry.set_item("nestedFills", json_to_py(py, &nf)?)?;
-                }
-            }
-            quillmark_core::PayloadItemWire::Comment { text, inline } => {
-                entry.set_item("type", "comment")?;
-                entry.set_item("text", text)?;
-                entry.set_item("inline", *inline)?;
-            }
-            // `#[non_exhaustive]`: raising beats appending an untyped entry the
-            // caller cannot read.
-            _ => {
-                let msg = "this build cannot project one of the card's payload items";
-                return Err(crate::errors::raise_with_diagnostics(
-                    vec![quillmark_core::Diagnostic::new(
-                        quillmark_core::Severity::Error,
-                        msg.to_string(),
-                    )
-                    .with_code("edit::unprojectable_payload_item".to_string())],
-                    msg.to_string(),
-                ));
-            }
-        }
-        items.append(entry)?;
+    for (key, value) in &map {
+        let key = if key == "payloadItems" {
+            "payload_items"
+        } else {
+            key.as_str()
+        };
+        d.set_item(key, json_to_py(py, value)?)?;
     }
-    d.set_item("payload_items", items)?;
-
-    match &wire.ext {
-        Some(ext_map) => {
-            d.set_item(
-                "ext",
-                json_to_py(py, &serde_json::Value::Object(ext_map.clone()))?,
-            )?;
-        }
-        None => d.set_item("ext", py.None())?,
-    }
-
-    match &wire.seed {
-        Some(seed_map) => {
-            d.set_item(
-                "seed",
-                json_to_py(py, &serde_json::Value::Object(seed_map.clone()))?,
-            )?;
-        }
-        None => d.set_item("seed", py.None())?,
-    }
-
-    d.set_item("body", json_to_py(py, &wire.body)?)?;
     Ok(d)
 }
 
@@ -1754,6 +1832,6 @@ fn py_dict_to_card(value: &Bound<'_, PyAny>) -> PyResult<quillmark_core::Card> {
             "card must be a Card dict {{ kind, payload_items?, body? }}: {e}"
         ))
     })?;
-    quillmark_core::Card::try_from(wire).map_err(|e| PyValueError::new_err(e.to_string()))
+    quillmark_core::Card::try_from(wire).map_err(convert_wire_error)
 }
 
