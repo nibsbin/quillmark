@@ -345,13 +345,13 @@ mod tests {
     fn yaml_error_locates_and_sanitizes() {
         let err = QuillValue::from_yaml_str("a: 1\nb: [unclosed\n")
             .expect_err("malformed YAML must not parse");
-        let (line, column) = (
-            err.line().expect("the engine locates a parse failure"),
-            err.column().expect("column pairs with line"),
-        );
         let diag = err.to_diagnostic("quill::yaml_parse_error", "Quill.yaml");
         let loc = diag.location.expect("a located error carries a Location");
-        assert_eq!((loc.line, loc.column, loc.file.as_str()), (line, column, "Quill.yaml"));
+        assert_eq!(loc.file, "Quill.yaml");
+        assert!(
+            loc.line >= 2 && loc.column >= 1,
+            "1-indexed position at or past the unclosed sequence: {loc:?}"
+        );
         assert_eq!(diag.code.as_deref(), Some("quill::yaml_parse_error"));
     }
 

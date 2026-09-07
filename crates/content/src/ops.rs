@@ -169,14 +169,6 @@ impl Default for ChangeBundle {
 }
 
 impl ChangeBundle {
-    /// A bundle carrying `delta` and no ops: the per-keystroke splice.
-    pub fn from_delta(delta: Delta) -> Self {
-        ChangeBundle {
-            delta,
-            ..Default::default()
-        }
-    }
-
     fn is_delta_only(&self) -> bool {
         self.island_ops.is_empty() && self.line_ops.is_empty() && self.mark_ops.is_empty()
     }
@@ -2101,9 +2093,12 @@ mod tests {
 
         let paste = format!("x{ISLAND_SLOT}y");
         assert_eq!(
-            rt.apply_field_change(&ChangeBundle::from_delta(Delta {
-                ops: vec![Op::Retain(1), Op::Insert(paste)],
-            })),
+            rt.apply_field_change(&ChangeBundle {
+                delta: Delta {
+                    ops: vec![Op::Retain(1), Op::Insert(paste)],
+                },
+                ..Default::default()
+            }),
             Err(ApplyError::IslandSlotInInsert)
         );
         assert_eq!(rt, before, "the refusal commits nothing");
@@ -2148,8 +2143,11 @@ mod tests {
         let held = rt.islands[0].clone();
         assert_eq!(before.lines[1].kind, LineKind::Island);
 
-        rt.apply_field_change(&ChangeBundle::from_delta(diff(&before.text, "intro\n")))
-            .unwrap();
+        rt.apply_field_change(&ChangeBundle {
+            delta: diff(&before.text, "intro\n"),
+            ..Default::default()
+        })
+        .unwrap();
         assert!(rt.islands.is_empty());
         assert_eq!(rt.lines[1].kind, LineKind::Para, "demoted, not failed");
 

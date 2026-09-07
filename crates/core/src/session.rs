@@ -125,13 +125,8 @@ pub trait SessionHandle: Send + Sync + 'static {
     /// both lanes overrides this to hand a widget the tie, as the Typst backend
     /// does.
     fn field_at(&self, page: usize, x: f32, y: f32, tol: f32) -> Option<String> {
-        self.regions()
-            .into_iter()
-            .rev()
-            .filter_map(|r| Some((r.distance(page, x, y)?, r)))
-            .filter(|(d, _)| *d <= tol)
-            .min_by(|(a, _), (b, _)| a.total_cmp(b))
-            .map(|(_, r)| r.field)
+        let regions = self.regions();
+        crate::region::nearest_region(&regions, page, x, y, tol).map(|(_, r)| r.field.clone())
     }
 
     /// A point → **content position** in a content field: the fine-grained

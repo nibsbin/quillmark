@@ -46,7 +46,9 @@ pub type Result<T> = std::result::Result<T, CliError>;
 pub fn print_cli_error(err: &CliError) {
     match err {
         CliError::Render(render_err) => {
-            quillmark_core::error::print_errors(render_err);
+            for diag in render_err.diagnostics() {
+                eprintln!("{}", diag.fmt_pretty());
+            }
         }
         CliError::Parse(parse_err) => {
             eprintln!("{}", parse_err.to_diagnostic().fmt_pretty());

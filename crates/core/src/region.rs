@@ -94,18 +94,11 @@ impl RenderedRegion {
         self
     }
 
-    /// Whether the point (`x`, `y`, PDF points, bottom-left origin) on `page`
-    /// falls inside this region, edges inclusive. Every `field_at` hit-test
-    /// shares this predicate.
-    pub fn contains(&self, page: usize, x: f32, y: f32) -> bool {
-        self.distance(page, x, y) == Some(0.0)
-    }
-
-    /// Gap in PDF points from the point to this region's rect, zero inside it.
-    /// `None` on another page, or when either side is not finite. What a
-    /// tolerant hit-test ranks by, so a tolerance of zero admits exactly what
-    /// [`contains`](Self::contains) does, and an absent gap is one no tolerance
-    /// reaches.
+    /// Gap in PDF points from the point (`x`, `y`, bottom-left origin) to this
+    /// region's rect, zero inside it, edges inclusive. `None` on another page,
+    /// or when either side is not finite. What a tolerant hit-test ranks by, so
+    /// a tolerance of zero admits exactly the points inside, and an absent gap
+    /// is one no tolerance reaches.
     ///
     /// The finite check is load-bearing: `f32::max` returns the non-NaN side, so
     /// a NaN on either side otherwise collapses both axes to zero and reads as
@@ -118,6 +111,28 @@ impl RenderedRegion {
             dx.hypot(dy)
         })
     }
+}
+
+/// The region nearest the point (`x`, `y`, PDF points, bottom-left origin) on
+/// `page`, paired with its gap in the same points, among the regions no further
+/// than `tol` from it.
+///
+/// `tol` is a gap, not a box: zero admits containment alone, and widening it
+/// only reaches further, never unseating a nearer region. A tie goes to the
+/// **last** matching region of `regions`, the later-painted placement.
+pub fn nearest_region(
+    regions: &[RenderedRegion],
+    page: usize,
+    x: f32,
+    y: f32,
+    tol: f32,
+) -> Option<(f32, &RenderedRegion)> {
+    regions
+        .iter()
+        .rev()
+        .filter_map(|r| Some((r.distance(page, x, y)?, r)))
+        .filter(|(d, _)| *d <= tol)
+        .min_by(|(a, _), (b, _)| a.total_cmp(b))
 }
 
 /// The whole-field highlight boxes for `field`, derived from a region set: one
@@ -414,16 +429,13 @@ mod tests {
             (f32::INFINITY, f32::INFINITY),
             (f32::NEG_INFINITY, 15.0),
         ] {
-            assert!(!region.contains(0, x, y), "({x}, {y}) reads as inside");
             assert_ne!(region.distance(0, x, y), Some(0.0), "({x}, {y}) reads as zero gap");
         }
-        assert!(region.contains(0, 15.0, 15.0));
         assert_eq!(region.distance(0, 15.0, 15.0), Some(0.0));
 
         // The rect is the other side of the same check: one non-finite box in a
         // `regions()` set answers every click on its page.
         let bad = RenderedRegion::new("subject".to_string(), 0, [f32::NAN; 4]);
-        assert!(!bad.contains(0, 999.0, 999.0));
         assert_eq!(bad.distance(0, 999.0, 999.0), None);
     }
 

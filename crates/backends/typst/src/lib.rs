@@ -400,13 +400,7 @@ impl SessionHandle for TypstSession {
 impl TypstSession {
     /// The nearest widget within `tol` and its gap, later-painted on a tie.
     fn widget_at(&self, page: usize, x: f32, y: f32, tol: f32) -> Option<(f32, String)> {
-        self.live
-            .widget_regions
-            .iter()
-            .rev()
-            .filter_map(|r| Some((r.distance(page, x, y)?, r)))
-            .filter(|(d, _)| *d <= tol)
-            .min_by(|(a, _), (b, _)| a.total_cmp(b))
+        quillmark_core::region::nearest_region(&self.live.widget_regions, page, x, y, tol)
             .map(|(d, r)| (d, r.field.clone()))
     }
 

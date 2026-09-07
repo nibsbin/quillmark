@@ -68,21 +68,6 @@ impl YamlError {
         &self.message
     }
 
-    /// The concrete textual fix, when the failure is one this crate recognizes.
-    pub fn hint(&self) -> Option<&str> {
-        self.hint.as_deref()
-    }
-
-    /// 1-indexed line of the failure, when the engine located one.
-    pub fn line(&self) -> Option<u32> {
-        self.line
-    }
-
-    /// 1-indexed column of the failure, paired with [`Self::line`].
-    pub fn column(&self) -> Option<u32> {
-        self.column
-    }
-
     /// A diagnostic under `code`, carrying the hint and (when the engine
     /// located the failure) a [`Location`] against `file`.
     pub fn to_diagnostic(&self, code: &str, file: &str) -> Diagnostic {
@@ -488,11 +473,22 @@ impl RenderError {
     }
 
     /// A failure carrying one error diagnostic under `code`, the shape most
-    /// engine-side refusals take. A diagnostic needing a hint, a path or args
-    /// builds one and goes through [`from_diag`](Self::from_diag).
+    /// engine-side refusals take. One needing a hint takes
+    /// [`coded_hint`](Self::coded_hint); one needing a path or args builds its
+    /// diagnostic and goes through [`from_diag`](Self::from_diag).
     pub fn coded(code: &str, message: impl Into<String>) -> Self {
         Self::from_diag(
             Diagnostic::new(Severity::Error, message.into()).with_code(code.to_string()),
+        )
+    }
+
+    /// [`coded`](Self::coded) plus the concrete fix, the shape a refusal takes
+    /// when the caller can act on it.
+    pub fn coded_hint(code: &str, message: impl Into<String>, hint: impl Into<String>) -> Self {
+        Self::from_diag(
+            Diagnostic::new(Severity::Error, message.into())
+                .with_code(code.to_string())
+                .with_hint(hint.into()),
         )
     }
 
@@ -551,12 +547,6 @@ impl RenderResult {
             output_format,
             regions: Vec::new(),
         }
-    }
-}
-
-pub fn print_errors(err: &RenderError) {
-    for d in err.diagnostics() {
-        eprintln!("{}", d.fmt_pretty());
     }
 }
 
