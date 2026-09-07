@@ -134,7 +134,7 @@ Plate authors style output with Typst's standard `#set` directives:
 #set par(justify: true, leading: 0.65em)
 ```
 
-See the [Typst tutorial](https://typst.app/docs/tutorial/) for the full styling vocabulary. For worked plates that combine data access with real layout, see the `usaf_memo` and `taro` examples in `crates/quillmark/examples/`.
+See the [Typst tutorial](https://typst.app/docs/tutorial/) for the full styling vocabulary. For worked plates that combine data access with real layout, read the `plate.typ` of the `usaf_memo` and `taro` quills in `crates/fixtures/resources/quills/`.
 
 ## Signature Fields
 

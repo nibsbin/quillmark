@@ -59,8 +59,7 @@ pub use session::{
     ApplyError, Assoc, ChangeBundle, ChangeSet, Delta, IslandOp, LineOp, LiveSession, MarkOp, Op,
 };
 
-/// The canonical content model, re-exported so a consumer of the document
-/// mutators need not depend on `quillmark-content` directly.
+/// The canonical content model, the pre-built value the document mutators accept.
 pub use quillmark_content::Content;
 
 pub mod quill;
