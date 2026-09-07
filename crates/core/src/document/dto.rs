@@ -1696,7 +1696,7 @@ title: Hi
     }
 
     #[test]
-    fn v0_93_0_round_trips_as_fixed_point() {
+    fn v0_112_0_round_trips_as_fixed_point() {
         let doc = sample();
         let first = serde_json::to_string(&doc).unwrap();
         let restored: Document = serde_json::from_str(&first).unwrap();
@@ -1740,7 +1740,7 @@ title: Hi
              \"type\":\"table\"}],\
              \"lines\":[{\"containers\":[],\"kind\":\"island\"}],\
              \"marks\":[],\"text\":\"\u{FFFC}\"}",
-            "regenerated @0.93.0 golden: cells are structured text+marks"
+            "cells are structured text+marks"
         );
 
         let again: Document = serde_json::from_str(blob).unwrap();

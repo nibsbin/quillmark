@@ -10,9 +10,8 @@
 //! [`PayloadItem::Meta`] that owns it, as `nested_comments` with paths relative
 //! to that item's value tree.
 //!
-//! [`Payload`] exposes both ordered iteration over the raw items and map-keyed
-//! access (`get`, `iter`, `insert`, `remove`). The map-style accessors filter to
-//! [`PayloadItem::Field`]; `$` entries have dedicated typed accessors.
+//! The map-keyed accessors filter to [`PayloadItem::Field`]; `$` entries have
+//! dedicated typed accessors.
 
 use indexmap::IndexMap;
 use serde_json::{Map as JsonMap, Value as JsonValue};
