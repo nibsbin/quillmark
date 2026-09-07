@@ -57,8 +57,6 @@ pub(crate) struct PreScan {
     /// value tree by the assembler. Top-level fills ride on `PreItem::Field`.
     pub nested_fills: Vec<Vec<PathSegment>>,
     pub warnings: Vec<Diagnostic>,
-    /// `!must_fill` on mappings: turned into `ParseError::InvalidStructure` by the parser.
-    pub fill_target_errors: Vec<String>,
 }
 
 /// The emitted YAML lines paired with the source line each came from.
@@ -680,9 +678,8 @@ fn strip_fill_tag(trimmed: &str) -> Option<&str> {
 }
 
 /// Inspect a field value for the `!must_fill` tag and other (noncanonical)
-/// tags, recording their diagnostics onto `out`: a noncanonical tag warns, and
-/// a fill tag targeting a mapping is rejected (scalars and sequences are
-/// allowed). Returns `(fill, value_without_tag, had_other_tag)`.
+/// tags, warning onto `out` for a noncanonical tag. Returns
+/// `(fill, value_without_tag, had_other_tag)`.
 fn record_fill_and_tags(out: &mut PreScan, value: &str, key: &str) -> (bool, String, bool) {
     let trimmed = value.trim_start();
     let leading_ws_len = value.len() - trimmed.len();
@@ -693,12 +690,6 @@ fn record_fill_and_tags(out: &mut PreScan, value: &str, key: &str) -> (bool, Str
 
     if let Some(rest) = strip_fill_tag(trimmed) {
         let rest_trim = rest.trim_start();
-        if rest_trim.starts_with('{') {
-            out.fill_target_errors.push(format!(
-                "`!must_fill` on key `{}` targets a mapping; `!must_fill` is supported on scalars and sequences only",
-                key
-            ));
-        }
         let reconstructed = if rest_trim.is_empty() {
             value[..leading_ws_len].to_string()
         } else {
@@ -1003,8 +994,8 @@ mod tests {
         let input = "x: !must_fill [1, 2]\n";
         let out = prescan_fence_content(input);
         assert!(
-            out.fill_target_errors.is_empty(),
-            "expected no error; !must_fill on sequences is supported"
+            out.warnings.is_empty(),
+            "expected no diagnostic; !must_fill on sequences is supported"
         );
         assert_eq!(
             out.items,
@@ -1112,15 +1103,6 @@ mod tests {
         assert!(out.cleaned_yaml.contains("- second"));
     }
 
-    #[test]
-    fn fill_on_flow_mapping_errors() {
-        let input = "x: !must_fill {a: 1}\n";
-        let out = prescan_fence_content(input);
-        assert!(
-            !out.fill_target_errors.is_empty(),
-            "expected error; !must_fill on mappings is rejected"
-        );
-    }
     #[test]
     fn comment_after_plain_scalar_with_apostrophe() {
         // YAML: in a plain scalar, `'` is an ordinary character; the

@@ -126,26 +126,25 @@ fn build_card(card: &CardSchema) -> Card {
 /// ordered by declaration order. Group order follows the card's `ui.groups`
 /// registry when present.
 fn append_fields(items: &mut Vec<PayloadItem>, card: &CardSchema) {
-    let registry: Option<Vec<&str>> = card
+    let registry: Vec<&str> = card
         .ui
         .as_ref()
         .and_then(|u| u.groups.as_ref())
-        .map(|r| r.0.iter().map(|g| g.id.as_str()).collect());
-    for field in group_fields(card.fields.values(), registry.as_deref()) {
+        .map(|r| r.0.iter().map(|g| g.id.as_str()).collect())
+        .unwrap_or_default();
+    for field in group_fields(card.fields.values(), &registry) {
         append_field(items, field);
     }
 }
 
-/// Order fields by `ui.group` (ungrouped lead, then grouped clusters),
-/// preserving declaration order within each cluster (`fields` arrives in
-/// declaration order and the clustering is stable). Grouped clusters follow
-/// the `registry` declaration order when a registry is present, else first-
-/// appearance order (the deprecated implicit-group fallback); for a migrated
-/// quill the two are identical. Grouping is purely positional (no banner); the
-/// clusters are flattened into a single field stream.
+/// Order fields by `ui.group` (ungrouped lead, then grouped clusters in
+/// `registry` declaration order), preserving declaration order within each
+/// cluster (`fields` arrives in declaration order and the clustering is
+/// stable). Grouping is purely positional (no banner); the clusters are
+/// flattened into a single field stream.
 fn group_fields<'a, I: IntoIterator<Item = &'a FieldSchema>>(
     fields: I,
-    registry: Option<&[&str]>,
+    registry: &[&str],
 ) -> Vec<&'a FieldSchema> {
     let mut groups: Vec<(Option<&str>, Vec<&FieldSchema>)> = Vec::new();
     for field in fields {
@@ -155,16 +154,17 @@ fn group_fields<'a, I: IntoIterator<Item = &'a FieldSchema>>(
             None => groups.push((group, vec![field])),
         }
     }
-    // Ungrouped is the implicit leading pseudo-group (rank 0). Grouped clusters
-    // sort by registry position shifted past it (`pos + 1`); with no registry
-    // every group ties at `usize::MAX` and the stable sort preserves first
-    // appearance.
+    // Ungrouped is the implicit leading pseudo-group (rank 0); a grouped cluster
+    // ranks by its registry position shifted past it. Load rejects a `ui.group`
+    // the card's registry does not declare (`quill::unknown_group`,
+    // `quill::implicit_group`), so the lookup resolves for any config that came
+    // through it; a hand-built one sorts its stray group last.
     groups.sort_by_key(|(g, _)| match g {
         None => 0,
         Some(id) => registry
-            .and_then(|order| order.iter().position(|o| o == id))
-            .map(|pos| pos + 1)
-            .unwrap_or(usize::MAX),
+            .iter()
+            .position(|o| o == id)
+            .map_or(usize::MAX, |pos| pos + 1),
     });
     groups.into_iter().flat_map(|(_, fields)| fields).collect()
 }
@@ -895,10 +895,11 @@ card_kinds:
         let t = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
+  ui: { groups: [addressing, letterhead] }
   fields:
-    memo_for: { type: array, items: { type: string }, ui: { group: Addressing } }
-    subject: { type: string, ui: { group: Addressing } }
-    letterhead_title: { type: string, default: HQ, ui: { group: Letterhead } }
+    memo_for: { type: array, items: { type: string }, ui: { group: addressing } }
+    subject: { type: string, ui: { group: addressing } }
+    letterhead_title: { type: string, default: HQ, ui: { group: letterhead } }
     notes: { type: string }
 "#)
         .blueprint();
