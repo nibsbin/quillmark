@@ -181,7 +181,7 @@ A page whose canvas box is under a point per side carries no canvas to place any
 
 ### Schema versioning and unknown keys
 
-`schema` follows the convention `quillmark/form@<version>`, hand-set at the last format change (never auto-derived from a crate version). The current format is **`quillmark/form@0.2.0`**. Unknown *keys* are **ignored, not rejected**, so the format can grow additively, but a retired *version* is rejected: a `form@0.1.0` file (which restated `type`/`options`/`multiline` on each field) fails to load with `pdfform::form_schema_version`.
+`schema` follows the convention `quillmark/form@<version>`, hand-set at the last format change (never auto-derived from a crate version). The current format is **`quillmark/form@0.2.0`**. Unknown *keys* are **ignored, not rejected**, so the format can grow additively, but any other *version* is rejected: a `form@0.1.0` file (which restated `type`/`options`/`multiline` on each field) fails to load with `pdfform::invalid_form_json`.
 
 ### Opinionated styling
 

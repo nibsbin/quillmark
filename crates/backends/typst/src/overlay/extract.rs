@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 
-use typst::foundations::{Label, Selector, Value};
+use typst::foundations::{Dict, FromValue, Label, Selector, Str, Value};
 use typst::introspection::{Introspector, Location};
 use typst::utils::PicoStr;
 use typst_layout::PagedDocument;
@@ -53,18 +53,18 @@ pub(crate) fn extract(doc: &PagedDocument) -> Result<Vec<FieldPlacement>, Render
                 ))
             }
         };
-        if read_str(&dict, "kind")? != FIELD_LABEL {
+        if get::<Str>(&dict, "kind")?.as_str() != FIELD_LABEL {
             // User attached <__qm_field__> to unrelated metadata; ignore it.
             continue;
         }
-        let name = read_str(&dict, "name")?;
-        let schema_field = read_opt_str(&dict, "field")?;
-        let field_type = read_str(&dict, "field-type")?;
-        let width = read_f64(&dict, "width")?;
-        let height = read_f64(&dict, "height")?;
-        let kind = read_field_kind(&dict, &field_type)?;
+        let name = get::<Str>(&dict, "name")?.to_string();
+        let schema_field = get::<Option<Str>>(&dict, "field")?.map(|s| s.to_string());
+        let field_type = get::<Str>(&dict, "field-type")?;
+        let width = get::<f64>(&dict, "width")?;
+        let height = get::<f64>(&dict, "height")?;
+        let kind = read_field_kind(&dict, field_type.as_str())?;
         let font = read_font(&dict)?;
-        let font_size = read_opt_f64(&dict, "size")?.map(|s| s as f32);
+        let font_size = get::<Option<f64>>(&dict, "size")?.map(|s| s as f32);
         let align = read_align(&dict)?;
         let loc = c
             .location()
@@ -105,20 +105,21 @@ pub(crate) fn extract(doc: &PagedDocument) -> Result<Vec<FieldPlacement>, Render
     Ok(placements)
 }
 
-fn read_field_kind(
-    d: &typst::foundations::Dict,
-    field_type: &str,
-) -> Result<FieldKind, RenderError> {
+fn read_field_kind(d: &Dict, field_type: &str) -> Result<FieldKind, RenderError> {
     match field_type {
         "text" => Ok(FieldKind::Text {
-            multiline: read_value_bool(d, "multiline")?.unwrap_or(false),
+            multiline: get::<Option<bool>>(d, "multiline")?.unwrap_or(false),
             value: read_value_str(d, "value")?,
         }),
         "checkbox" => Ok(FieldKind::Checkbox {
-            checked: read_value_bool(d, "value")?.unwrap_or(false),
+            checked: get::<Option<bool>>(d, "value")?.unwrap_or(false),
         }),
         "choice" => Ok(FieldKind::Choice {
-            options: read_str_array(d, "options")?,
+            options: get::<Option<Vec<Str>>>(d, "options")?
+                .unwrap_or_default()
+                .into_iter()
+                .map(|s| s.to_string())
+                .collect(),
             value: read_value_str(d, "value")?,
         }),
         "signature" => Ok(FieldKind::Signature),
@@ -131,8 +132,8 @@ fn read_field_kind(
 
 /// The helper's asserts already reject anything outside these sets, so an
 /// unknown string here means the metadata was hand-forged, not mistyped.
-fn read_font(d: &typst::foundations::Dict) -> Result<FormFont, RenderError> {
-    match read_str(d, "font")?.as_str() {
+fn read_font(d: &Dict) -> Result<FormFont, RenderError> {
+    match get::<Str>(d, "font")?.as_str() {
         "helvetica" => Ok(FormFont::Helvetica),
         "times" => Ok(FormFont::Times),
         "courier" => Ok(FormFont::Courier),
@@ -143,8 +144,8 @@ fn read_font(d: &typst::foundations::Dict) -> Result<FormFont, RenderError> {
     }
 }
 
-fn read_align(d: &typst::foundations::Dict) -> Result<TextAlign, RenderError> {
-    match read_str(d, "align")?.as_str() {
+fn read_align(d: &Dict) -> Result<TextAlign, RenderError> {
+    match get::<Str>(d, "align")?.as_str() {
         "left" => Ok(TextAlign::Left),
         "center" => Ok(TextAlign::Center),
         "right" => Ok(TextAlign::Right),
@@ -155,78 +156,21 @@ fn read_align(d: &typst::foundations::Dict) -> Result<TextAlign, RenderError> {
     }
 }
 
-fn read_opt_f64(d: &typst::foundations::Dict, key: &str) -> Result<Option<f64>, RenderError> {
-    match d.get(key) {
-        Ok(Value::None) | Err(_) => Ok(None),
-        _ => read_f64(d, key).map(Some),
-    }
-}
-
-fn read_str(d: &typst::foundations::Dict, key: &str) -> Result<String, RenderError> {
-    match d.get(key) {
-        Ok(Value::Str(s)) => Ok(s.to_string()),
-        Ok(other) => Err(RenderError::coded(
-            CODE_INTERNAL,
-            format!("expected metadata.{key} to be str, got {}", other.ty()),
-        )),
-        Err(_) => Err(RenderError::coded(CODE_INTERNAL, format!("metadata.{key} missing"))),
-    }
-}
-
-fn read_f64(d: &typst::foundations::Dict, key: &str) -> Result<f64, RenderError> {
-    match d.get(key) {
-        Ok(Value::Float(f)) => Ok(*f),
-        Ok(Value::Int(i)) => Ok(*i as f64),
-        Ok(other) => Err(RenderError::coded(
-            CODE_INTERNAL,
-            format!("expected metadata.{key} to be float, got {}", other.ty()),
-        )),
-        Err(_) => Err(RenderError::coded(CODE_INTERNAL, format!("metadata.{key} missing"))),
-    }
-}
-
-fn read_opt_str(d: &typst::foundations::Dict, key: &str) -> Result<Option<String>, RenderError> {
-    match d.get(key) {
-        Ok(Value::Str(s)) => Ok(Some(s.to_string())),
-        Ok(Value::None) => Ok(None),
-        Ok(other) => Err(RenderError::coded(
-            CODE_INTERNAL,
-            format!(
-                "expected metadata.{key} to be str or none, got {}",
-                other.ty()
-            ),
-        )),
-        Err(_) => Ok(None),
-    }
-}
-
-fn read_str_array(d: &typst::foundations::Dict, key: &str) -> Result<Vec<String>, RenderError> {
-    match d.get(key) {
-        Ok(Value::Array(arr)) => arr
-            .iter()
-            .map(|v| match v {
-                Value::Str(s) => Ok(s.to_string()),
-                other => Err(RenderError::coded(
-                    CODE_INTERNAL,
-                    format!(
-                        "expected metadata.{key} elements to be str, got {}",
-                        other.ty()
-                    ),
-                )),
-            })
-            .collect(),
-        Ok(Value::None) => Ok(Vec::new()),
-        Ok(other) => Err(RenderError::coded(
-            CODE_INTERNAL,
-            format!("expected metadata.{key} to be an array, got {}", other.ty()),
-        )),
-        Err(_) => Ok(Vec::new()),
-    }
+/// A missing key reads as `none`: an optional target then yields `None`, a
+/// required one fails the cast.
+fn get<T: FromValue>(d: &Dict, key: &str) -> Result<T, RenderError> {
+    d.get(key)
+        .cloned()
+        .unwrap_or(Value::None)
+        .cast()
+        .map_err(|e| {
+            RenderError::coded(CODE_INTERNAL, format!("metadata.{key}: {}", e.message()))
+        })
 }
 
 /// An empty string yields `None` so the widget carries no `/V` (mirrors
 /// pdfform's `coerce_text`).
-fn read_value_str(d: &typst::foundations::Dict, key: &str) -> Result<Option<String>, RenderError> {
+fn read_value_str(d: &Dict, key: &str) -> Result<Option<String>, RenderError> {
     let s = match d.get(key) {
         Ok(Value::Str(s)) => s.to_string(),
         Ok(Value::Int(i)) => i.to_string(),
@@ -244,20 +188,6 @@ fn read_value_str(d: &typst::foundations::Dict, key: &str) -> Result<Option<Stri
         }
     };
     Ok((!s.is_empty()).then_some(s))
-}
-
-fn read_value_bool(d: &typst::foundations::Dict, key: &str) -> Result<Option<bool>, RenderError> {
-    match d.get(key) {
-        Ok(Value::Bool(b)) => Ok(Some(*b)),
-        Ok(Value::None) | Err(_) => Ok(None),
-        Ok(other) => Err(RenderError::coded(
-            CODE_INTERNAL,
-            format!(
-                "expected metadata.{key} to be bool or none, got {}",
-                other.ty()
-            ),
-        )),
-    }
 }
 
 /// Quote the name first so downstream parsers can extract it with a stable
