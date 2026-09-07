@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+- feat(core)!: **five `quillmark-core` document verbs with no caller are
+  gone.** `Document::to_plate_json` was the schema-free spelling of the
+  crate-internal `to_plate_json_gated` every render already takes, so the
+  plate export leaves the public Rust surface; no binding ever carried it.
+  `Document::card_kinds` had one caller, a test. `impl IntoIterator for
+  &Payload` duplicated `Payload::iter`. `MetaKey::ALL` and
+  `MetaKey::is_root_only` enumerated a two-member set to find `Seed`, which
+  both call sites name directly. `PathStepWire` and the `CommentPathSegment`
+  alias were a second and third name for `PathSegment`, which carries the
+  untagged serde form itself, so `PayloadItemWire::Field`'s `nested_fills` is
+  `Vec<Vec<PathSegment>>`. The bytes do not move: a nested-fill path crosses
+  the wire as the JSON it always did, a string per key and a number per index.
+- feat(core,content)!: **unread accessors leave `quillmark-core` and
+  `quillmark-content`.** `YamlError::line` / `column` / `hint` had no caller
+  outside one test; a consumer reads the position off `to_diagnostic`.
+  `RenderedRegion::contains` had none outside its own, and `field_at` never
+  shared it — it ranks by `distance` under a tolerance. `print_errors` had one
+  caller and now lives in it, the CLI. `normalize_document` returns a
+  `Document` rather than a `Result` it never filled. `Delta::apply`, which
+  panicked on a delta built against a longer revision, folds into the checked
+  `try_apply`; `ChangeBundle::from_delta` had two callers, both tests. Two
+  additions come with them: `RenderError::coded_hint`, the coded-plus-hint
+  shape four `backend.rs` refusals built by hand, and `region::nearest_region`,
+  the tolerant search `SessionHandle::field_at` and the Typst backend each
+  carried a copy of.
 - fix(docs): **the 57 comments and doc claims that contradicted the code now
   state it.** The user-visible ones: the Typst backend never searched system
   fonts, so its docs stop promising `#set text(font: "Arial")` and name what a
