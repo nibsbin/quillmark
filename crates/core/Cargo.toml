@@ -15,8 +15,7 @@ publish = true
 # The leaf crate owning the Content content model, canonical serialization, edit
 # deltas, and markdown codecs. `core` depends on it for the storage/body content
 # type and the markdown-string normalizer; the parser (pulldown) it carries is
-# reachable only through the codecs, so no-feature `pkg/core` still ships without
-# it (tree-shaken until a body/import path is wired: issue #831 phase 2).
+# reachable only through the codecs, so no-feature `pkg/core` ships without it.
 quillmark-content = { workspace = true }
 serde = { workspace = true }
 serde-saphyr = { workspace = true }

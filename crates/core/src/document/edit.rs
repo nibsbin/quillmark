@@ -3,9 +3,8 @@
 //! Every successful mutator leaves user field names matching
 //! `[A-Za-z_][A-Za-z0-9_]*`, composable `$kind`s valid, and values inside the
 //! §8 depth bound, so the result is safely serializable via
-//! [`Document::to_plate_json`]. Mutators never modify `warnings`: those are
-//! parse-time observations. `$ext`/`$seed` are opaque mappings that carry no
-//! field-name invariant, but do carry the depth bound.
+//! [`Document::to_plate_json`]. `$ext`/`$seed` are opaque mappings that carry
+//! no field-name invariant, but do carry the depth bound.
 
 use std::collections::BTreeMap;
 

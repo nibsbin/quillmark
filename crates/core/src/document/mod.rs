@@ -13,8 +13,6 @@ use crate::error::ParseError;
 use crate::version::QuillReference;
 use crate::Diagnostic;
 
-/// The single markdown→content boundary for card bodies: every path that starts
-/// from an authored markdown string routes through here.
 pub(crate) fn import_body(md: &str) -> Result<Normalized, ImportError> {
     if md.is_empty() {
         Ok(Normalized::empty())

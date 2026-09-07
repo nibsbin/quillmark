@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- fix(docs): **the 57 comments and doc claims that contradicted the code now
+  state it.** The user-visible ones: the Typst backend never searched system
+  fonts, so its docs stop promising `#set text(font: "Arial")` and name what a
+  world loads (`assets/fonts/*`, `packages/**`, the embedded Figtree fallback);
+  the quickstart teaches `quill.parse`, the bound door, rather than the
+  transport door; `@quillmark/wasm` has no `/runtime` subpath, and the seven
+  places that named one now spell the package's sole export.
+- fix(content): **`change_bundle_from_value` reads camelCase keys only.** The
+  snake_case fallback served a Python content lane that does not exist; every
+  caller sends `islandOps`/`lineOps`/`markOps`.
+- fix(typst): the font loader drops its `woff`/`woff2` extension arms, which
+  parsed nothing, and the data codegen drops its skip of a `__meta__` key
+  nothing produces.
 - fix(core): **a `ParseError` spells its English once.** `to_diagnostic()`
   renders the variant's `Display` instead of a second copy of the same
   sentence, and the copies had drifted: `InvalidStructure` displayed under an

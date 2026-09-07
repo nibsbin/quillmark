@@ -1,4 +1,4 @@
-//! Value type for unified representation of TOML/YAML/JSON values.
+//! Value type for unified representation of YAML/JSON values.
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};

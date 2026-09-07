@@ -174,7 +174,7 @@ The two constructors taking no handle reach no wasm: `new Engine()` validates a 
 
 Ships **multiple artifacts from one crate** behind a single public root export. The root `@quillmark/wasm` is a hand-written **canonical runtime layer** that hands out the internal Typst-less **core** build's `Document` + `Quill` (load / validate / schema / seed / blueprint) verbatim and adds an `Engine` render dispatcher.
 
-Each backend (Typst and pdfform) is a **private** build with its own linear memory, lazily loaded on the first render: there is no public `/core` or `/render` subpath. The core build is ~0.66 MB gzip; the Typst backend ~8 MB (Typst dominates), loaded only when something renders.
+Each backend (Typst and pdfform) is a **private** build with its own linear memory, lazily loaded on the first render: there is no public `/core` or `/render` subpath. Core is small and eager; the Typst backend is megabytes (Typst dominates) and loads only when something renders. `scripts/build-wasm.sh` enforces core's gzip ceiling, failing the build when Typst leaks back into the no-features build.
 
 Backend handles never escape the `Engine`: it clones the quill tree + `doc.toStored()` into the backend's memory as serialized data and frees the clones.
 

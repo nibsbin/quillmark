@@ -62,7 +62,7 @@ The `$`-prefixed keys must be accessed via `.at("$...")` because Typst identifie
 
 Helper contents (generated in `backends/typst/helper.rs` from `lib.typ.template`):
 
-- `data`: a backend-generated Typst dictionary **literal** of all fields, no runtime processing, no `__meta__` sentinel. `Codegen::emit_value` lowered every value at generation time, dispatching on the schema node beside it.
+- `data`: a backend-generated Typst dictionary **literal** of all fields, no runtime processing. `Codegen::emit_value` lowered every value at generation time, dispatching on the schema node beside it.
 - **The lowering walk.** `helper::lowering` classifies one schema node; the walk
   recurses on shape and does nothing else:
 

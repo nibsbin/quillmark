@@ -9,8 +9,9 @@
 //! ## Canonicalizations (documented, not bugs)
 //!
 //! - **Soft breaks → space; hard breaks → a `continues` line**, kept distinct
-//!   from a paragraph boundary. A hard break inside a heading is a space, ATX
-//!   headings being unable to carry one.
+//!   from a paragraph boundary. Inside a heading a hard break is a space
+//!   instead, a heading being one line; a setext heading spans two source lines
+//!   and can carry one.
 //! - **Adjacent sibling containers keep their boundary.** Two consecutive lists
 //!   of one shape, and two consecutive block quotes, are told apart by
 //!   `Container::instance`, minted here and canonicalized by `normalize`.
@@ -450,8 +451,7 @@ impl Builder {
                 Event::SoftBreak => self.push_inline(" "),
                 Event::HardBreak => {
                     match self.cur.as_ref().map(|l| &l.kind) {
-                        // ATX headings can't carry a hard break in markdown, so
-                        // one inside a heading canonicalizes to a space.
+                        // A heading is one line.
                         Some(LineKind::Heading { .. }) => self.push_inline(" "),
                         // Elsewhere, arm a continuation line so the block stays
                         // one block and export re-emits a hard break.
@@ -1367,9 +1367,8 @@ mod tests {
     }
 
     #[test]
-    fn heading_cannot_carry_hard_break() {
-        // ATX headings are single-line, so the heading→space canonicalization
-        // in HardBreak handling is defensive: markdown import cannot reach it.
+    fn atx_heading_cannot_carry_a_hard_break() {
+        // A setext heading can, and reaches the heading→space arm.
         let rt = imp("## a  \nb");
         assert_eq!(rt.text, "a\nb");
         assert_eq!(rt.lines.len(), 2);

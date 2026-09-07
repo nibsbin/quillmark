@@ -46,9 +46,8 @@ for the one-error-diagnostic case every engine-side refusal takes;
 `diagnostics()` borrows,
 `into_diagnostics()` consumes). There is no failure taxonomy beyond the
 diagnostics themselves: the machine-routable identity of a failure is each
-diagnostic's namespaced `code` (`parse::*`, `validation::*`, `quill::*`,
-`edit::*`, `typst::*`, `pdfform::*`, `pdf::*`, `backend::*`, `engine::*`):
-consumers route on codes, not on a type. Multi-problem stages (validation, quill config, backend
+diagnostic's namespaced `code`, and consumers route on codes, not on a type.
+Multi-problem stages (validation, quill config, backend
 compilation) carry several diagnostics so every problem reaches the caller in
 one pass. `Display` follows the count-based message rule shared with both
 bindings: the primary diagnostic's message for a single diagnostic, an

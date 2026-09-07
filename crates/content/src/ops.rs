@@ -284,27 +284,21 @@ pub fn island_op_from_value(v: &Value) -> Result<IslandOp, ParseError> {
 
 /// Lower a committed change bundle object (`{delta?, islandOps?, lineOps?,
 /// markOps?}`) to core ops. A missing `delta` is the identity (no text change);
-/// a missing/`null` op array is empty. Both camelCase and snake_case keys are
-/// accepted, so the one reader serves the wasm and Python surfaces. The error is
-/// a message string the binding wraps in its own error type.
+/// a missing/`null` op array is empty. The error is a message string the
+/// binding wraps in its own error type.
 pub fn change_bundle_from_value(v: &Value) -> Result<ChangeBundle, String> {
     let obj = v
         .as_object()
         .ok_or("bundle must be an object { delta?, islandOps?, lineOps?, markOps? }")?;
-    let get = |snake: &str, camel: &str| obj.get(snake).or_else(|| obj.get(camel));
     let delta = match obj.get("delta") {
         Some(Value::Null) | None => Delta { ops: Vec::new() },
         Some(d) => Delta::deserialize(d).map_err(|e| format!("invalid delta: {e}"))?,
     };
     Ok(ChangeBundle {
         delta,
-        island_ops: op_array(
-            get("island_ops", "islandOps"),
-            island_op_from_value,
-            "islandOps",
-        )?,
-        line_ops: op_array(get("line_ops", "lineOps"), line_op_from_value, "lineOps")?,
-        mark_ops: op_array(get("mark_ops", "markOps"), mark_op_from_value, "markOps")?,
+        island_ops: op_array(obj.get("islandOps"), island_op_from_value, "islandOps")?,
+        line_ops: op_array(obj.get("lineOps"), line_op_from_value, "lineOps")?,
+        mark_ops: op_array(obj.get("markOps"), mark_op_from_value, "markOps")?,
     })
 }
 

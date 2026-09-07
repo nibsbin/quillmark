@@ -259,7 +259,7 @@ mod tests {
     }
 
     #[test]
-    fn test_version_parsing_two_segment_backward_compat() {
+    fn test_version_parsing_two_segment_fills_patch_zero() {
         let v = Version::from_str("2.1").unwrap();
         assert_eq!(v.major, 2);
         assert_eq!(v.minor, 1);

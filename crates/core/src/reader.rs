@@ -642,8 +642,6 @@ card_kinds:
         );
     }
 
-    /// The string lane, which decoded through the markdown codec until it read
-    /// its own declared type.
     #[test]
     fn parse_lane_plaintext_reads_through_the_literal_codec() {
         let config = config();

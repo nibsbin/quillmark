@@ -17,8 +17,7 @@ mod error;
 /// Byte-level reads over an existing PDF.
 ///
 /// **Workspace-internal; not covered by this crate's semver.** `pub` only so
-/// `quillmark-pdfform` can reach it. The supported surface is [`stamp`],
-/// [`regions_of`], [`page_canvas_boxes`], [`PdfUpdate`], and the types they name.
+/// `quillmark-pdfform` can reach it.
 #[doc(hidden)]
 pub mod reader;
 mod stamp;

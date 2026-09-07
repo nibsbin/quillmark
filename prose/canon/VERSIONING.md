@@ -83,14 +83,10 @@ The one real hazard is a long-lived process holding a cached Quill across a
 deploy that rewrote the ref; a restart resolves it.
 
 Every cache between a document and its rendered output keys on this invariant,
-and none of them exposes an invalidation API, **by design**:
-
-- quiver's quill cache holds one `Quill` per canonical ref for the `Quiver`
-  instance's lifetime;
-- app-level services cache that same instance per canonical ref;
-- the wasm `Engine` caches backend-memory clones in a `WeakMap` keyed on the
-  canonical `Quill` instance, so a clone's lifetime follows the instance.
+and none of them exposes an invalidation API, **by design**: the wasm `Engine`
+caches backend-memory clones in a `WeakMap` keyed on the canonical `Quill`
+instance, so a clone's lifetime follows the instance. A consumer holding one
+`Quill` per canonical ref inherits the same rule.
 
 "Invalidate" therefore means *replace the instance*: a new `Quill` at a new
-ref, or a new `Quiver`, and the downstream caches follow automatically
-(WeakMap + weak refs).
+ref, and the downstream caches follow automatically (WeakMap + weak refs).

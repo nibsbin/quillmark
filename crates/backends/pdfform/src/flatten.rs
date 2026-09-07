@@ -9,8 +9,8 @@
 //! true of any background with balanced `q`/`Q` and no dangling `cm`. Colour and
 //! text state carry no such guarantee — a `/Contents` array is one stream, and
 //! neither `BT` nor an unpaired `0.9 g` or `3 Tr` is undone — so each drawn
-//! value opens by asserting the defaults the stamped `/DA` writes. Backs the
-//! SVG/PNG raster outputs only; the AcroForm PDF deliverable is stamped.
+//! value opens by asserting the defaults the stamped `/DA` writes. Backs every
+//! rendered output but the AcroForm PDF deliverable, which is stamped.
 
 use quillmark_pdf::{
     reader::{

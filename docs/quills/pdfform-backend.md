@@ -246,7 +246,7 @@ the WASM `paint()` raster path (`render_rgba`), not an `OutputFormat`. See
 
 The PDF is the real deliverable. By design (Technique A: real fields plus `NeedAppearances`, no baked appearance streams), **values appear only in viewers that synthesize appearances**: Acrobat, Chrome/pdfium, Preview.app, pdf.js's forms layer. A flat, non-interactive rasterizer renders the fields blank.
 
-To get values into the SVG/PNG/canvas output, the backend pre-flattens them: it bakes each value into the page content stream (via a raster tree, hayro) so the raster is complete rather than background-only. This flattening backs the SVG/PNG/canvas surfaces only: never the AcroForm PDF deliverable, which is always stamped.
+To get values into the SVG/PNG/canvas output, the backend pre-flattens them: it bakes each value into the page content stream so the raster is complete rather than background-only. This flattening backs the SVG/PNG/canvas surfaces only: never the AcroForm PDF deliverable, which is always stamped.
 
 ### Flatten fidelity limits
 

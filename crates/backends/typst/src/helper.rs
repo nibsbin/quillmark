@@ -241,9 +241,6 @@ impl<'m> Codegen<'m> {
     fn emit_data(&mut self, obj: &serde_json::Map<String, serde_json::Value>) -> String {
         let mut items = Vec::with_capacity(obj.len());
         for (key, value) in sorted(obj) {
-            if key == "__meta__" {
-                continue;
-            }
             if key == "$cards" {
                 if let Some(cards) = value.as_array() {
                     items.push(format!("\"$cards\": {}", self.emit_cards(cards)));

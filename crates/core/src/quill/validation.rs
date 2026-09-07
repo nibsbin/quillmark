@@ -792,7 +792,6 @@ fn validate_variant(
 }
 
 /// Validate a single document value against a field schema at the given path.
-/// Used internally; exposed for testing.
 pub(crate) fn validate_field(
     field: &FieldSchema,
     value: &QuillValue,

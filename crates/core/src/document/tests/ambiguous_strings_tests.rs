@@ -1,7 +1,5 @@
 //! Strings that a YAML 1.1 parser would silently coerce to booleans, integers,
-//! or dates, or misread as anchors/aliases/tags. The canonical emitter (§9)
-//! double-quotes every string scalar with JSON-style escaping, which is what
-//! buys the round-trip guarantee tested here.
+//! or dates, or misread as anchors/aliases/tags. Each round-trips as a string.
 use crate::document::Document;
 
 fn ambiguous_strings_fixture() -> String {
@@ -53,7 +51,6 @@ fn assert_string_field(doc: &Document, key: &str, expected: &str, when: &str) {
 #[test]
 fn ambiguous_strings_round_trip() {
     // `on`, `off`, `yes`, `no`, `true`, `false` are YAML 1.1 booleans.
-    // Quillmark always emits them double-quoted so they re-parse as strings.
     let word_booleans: &[(&str, &str)] = &[
         ("on_word", "on"),
         ("off_word", "off"),

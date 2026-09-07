@@ -1,8 +1,7 @@
 //! Font and size policy for values the flatten path draws itself.
 //!
 //! An AcroForm widget uses `/Helv 0 Tf` and lets the viewer auto-size, but the
-//! flatten path must commit to a concrete font and size. Keeping that decision
-//! here is what makes preview and flattening agree exactly.
+//! flatten path must commit to a concrete font and size.
 
 /// Base-14 Helvetica `/BaseFont`, for text and choice values.
 pub(crate) const TEXT_FONT: &[u8] = b"Helvetica";

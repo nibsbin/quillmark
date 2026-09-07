@@ -439,7 +439,7 @@ mod tests {
     }
 
     #[test]
-    fn main_field_named_for_a_root_no_longer_collides() {
+    fn main_field_named_for_a_root_is_not_a_root() {
         round_trip(DocPath::main().field("cards"), "main.cards");
         round_trip(DocPath::main().field("main"), "main.main");
         // No index, so a config-space chain rather than a card.
