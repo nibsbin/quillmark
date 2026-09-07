@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+- feat(core)!: **five retired `Quill.yaml` keys lose their tailored migration
+  message, and an implicit group is a load error.** `must_fill`, `enum`,
+  `ui.order`, the `richtext(inline)` type token and `markdown` were retired
+  across 0.94, 0.104 and 0.108, each with a hand-written sentence naming its
+  replacement. All five still fail to load, now under the same
+  `quill::field_parse_error` code with serde's unknown-key text and no hint.
+  Separately, a `ui.group` on a card with no `ui.groups` registry is
+  `quill::implicit_group` at **error** severity, the promotion that warning's
+  own text scheduled. Note for a WASM or Python host: that warning never
+  reached you — `Quill::from_tree` drops config warnings (#1625) — so the
+  error is the first notice. Declare the registry; a group has one
+  declaration site.
+- feat(typst,pdfform,cli)!: **`pdfform::form_schema_version` retires, and the
+  CLI loses three flags.** A `form@0.1.0` file still fails to load, now as an
+  unrecognised tag under `pdfform::invalid_form_json`; the retired-version
+  arm and its migration pointer are gone. `render --verbose` is deleted, so
+  `--quiet` states what it suppresses on its own: the warning block and the
+  output-destination line. `schema -o` and `blueprint -o` are deleted — both
+  commands write to stdout, where `>` does the rest; `render -o` is
+  unchanged. `validate` now reads `plate_file` from the loaded quill rather
+  than the filesystem, so a plate the load excludes fails validation, which
+  is what rendering it already did; `cli::plate_file_escapes_quill` and
+  `cli::plate_file_missing` stay distinct.
+- feat(content)!: **a block-only island takes a line of its own in the model,
+  not only on the way out.** `to_markdown` broke the line around such a slot
+  at write time, so the model could hold a shape markdown cannot spell.
+  `Content::normalize` performs the break, `validate` states it as
+  `Invariant::BlockIslandNotAlone`, and the export writes the lines it is
+  given. A stored blob carrying the shape still loads, now already split with
+  its marks rebased — the content `to_markdown` would have written. An
+  accepted `LineOp::Join` that runs a slot back into its prose is taken apart
+  again by the mint; the authored lane still refuses the placement up front.
+  `normalize_markdown` narrows to `pub(crate)`.
 - feat(core)!: **five `quillmark-core` document verbs with no caller are
   gone.** `Document::to_plate_json` was the schema-free spelling of the
   crate-internal `to_plate_json_gated` every render already takes, so the
