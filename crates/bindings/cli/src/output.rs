@@ -3,14 +3,11 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-/// Write `bytes` to stdout.
 pub fn write_stdout(bytes: &[u8]) -> Result<()> {
     io::stdout().write_all(bytes)?;
     Ok(())
 }
 
-/// Write `bytes` to `path`, creating its parent directories, naming the
-/// destination on stdout when `announce`.
 pub fn write_file(path: &Path, bytes: &[u8], announce: bool) -> Result<()> {
     if let Some(parent) = path.parent() {
         if !parent.exists() {
@@ -24,7 +21,6 @@ pub fn write_file(path: &Path, bytes: &[u8], announce: bool) -> Result<()> {
     Ok(())
 }
 
-/// The input markdown path with its extension replaced by `format`.
 pub fn derive_output_path(markdown_path: &Path, format: &str) -> PathBuf {
     let mut output = markdown_path.to_path_buf();
     output.set_extension(format);

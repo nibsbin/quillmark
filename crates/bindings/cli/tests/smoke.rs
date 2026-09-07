@@ -143,7 +143,6 @@ fn an_unloadable_quill_is_not_an_invalid_argument() {
     );
 }
 
-/// The two commands that take `-o`.
 #[test]
 fn output_flag_writes_the_named_file() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -173,7 +172,6 @@ fn output_flag_creates_parent_directories() {
     }
 }
 
-/// The one command that reaches a backend, seeded (no markdown argument).
 #[test]
 fn render_writes_a_pdf() {
     let dir = tempfile::tempdir().expect("tempdir");

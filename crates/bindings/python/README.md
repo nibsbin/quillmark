@@ -10,8 +10,7 @@ Maintained by [TTQ](https://tonguetoquill.com).
 pip install quillmark
 ```
 
-The package is typed: it ships `py.typed` and stubs for the whole surface, so
-mypy, Pyright, and IDE completion see real signatures rather than `Any`.
+The package is typed: it ships `py.typed` and stubs for the whole surface.
 
 ## Quick Start
 
@@ -39,18 +38,9 @@ result.artifacts[0].save("output.pdf")
 
 Field I/O flows through `quill.writer(doc)` and `quill.reader(doc)`, the
 schema-bound write/read front doors. `Document` carries the quill-free surface:
-parse, storage, structure, `$ext` / `$seed`, and `remove_field`. The opaque field
-store and the anchor-preserving content lane are WASM-only by scope, as are the
-render session and canvas preview; Python renders in one shot via
-`engine.render`. Names follow `snake_case`, and the shared model (the `Document`
-/ `Card` shapes, `Diagnostic`s, the storage DTO) is identical to
-[`@quillmark/wasm`](../wasm)'s.
-
-A `Quill` is portable, declarative config data, and `quill.metadata` a pure,
-infallible snapshot of the `quill:` section: `name`, `version`, `backend`,
-`author`, `description`, then any extra keys in sorted order. The engine
-resolves the declared backend, so only the format probe (`supported_formats`)
-and `render` raise `engine::backend_not_found`.
+parse, storage, structure, `$ext` / `$seed`, and `remove_field`. Names follow
+`snake_case`, and the shared model (the `Document` / `Card` shapes,
+`Diagnostic`s, the storage DTO) is identical to [`@quillmark/wasm`](../wasm)'s.
 
 ### `Quillmark`
 
@@ -69,7 +59,7 @@ quill = Quill.from_path("path/to/quill")  # pure config load: no backend resolve
 quill.backend_id            # "typst" (declared backend)
 quill.blueprint             # auto-generated annotated Markdown blueprint
 quill.schema                # structured dict of the quill's document schema
-quill.metadata              # pure config snapshot of the quill: section (never raises)
+quill.metadata              # `name`, `version`, `backend`, `author`, `description`, extras sorted
 quill.quill_ref             # "name@version"
 
 doc     = quill.parse(markdown)           # the bound door: parse + conform, the primary ingestion path
@@ -225,21 +215,14 @@ namespaced `edit::*` `code` on `diagnostics[0]`: `edit::invalid_field_name`,
 …. `make_card` / `insert_card` refuse a card's contents under those same codes.
 Route on `diagnostics[0].code`, never on message text.
 
-One thing raises `ValueError` instead: an argument this binding cannot convert
-at all — a non-finite float, an int past 64 bits, a type with no JSON form, a
-dict that is not the shape the surface reads. The engine never sees the call, so
-no diagnostic describes it.
-
 Card and page indices count from the front, so a negative one addresses nothing
 rather than the last card or page: it takes the same answer as an index past the
 end — `edit::index_out_of_range` where the verb raises, `None` where
 `remove_card` answers absence.
 
-Each one anchors at a rooted document path: `path` is `main.<field>` for a main
-field, `cards.<kind>[<i>].<field>` for a card field, and `cards[<i>]` for a
-structural out-of-range op, whichever verb refused. A card `add_card` rejects
-before placing it has no slot yet, so its bundle keys the bare `$kind` / `$body`
-or field name.
+Each refusal anchors at a rooted document path: `main.<field>` for a main field,
+`cards.<kind>[<i>].<field>` for a card field, `cards[<i>]` for a structural
+out-of-range op.
 
 ## Changelog
 

@@ -11,10 +11,6 @@ import pytest
 
 from quillmark import Document, Quill
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 QUILL_YAML_CONTENT = """quill:
   name: py_validate_smoke
   version: "1.0"
@@ -56,10 +52,6 @@ def _md(*lines):
     return f"~~~card-yaml\n$quill: py_validate_smoke\n$kind: main\n{fields}~~~\n"
 
 
-# ---------------------------------------------------------------------------
-# Tests: validate()
-# ---------------------------------------------------------------------------
-
 def test_validate_returns_empty_list_for_clean_document(tmp_path):
     """A complete, well-formed document produces no diagnostics."""
     quill = make_quill(tmp_path)
@@ -95,10 +87,6 @@ def test_validate_json_serializable(tmp_path):
     assert isinstance(dumped, str)
     assert len(json.loads(dumped)) == len(diags)
 
-
-# ---------------------------------------------------------------------------
-# Tests: seed_document (the Document-path starter; replaces blank_main/blank_card)
-# ---------------------------------------------------------------------------
 
 def test_seed_document_commits_examples(tmp_path):
     """seed_document returns a Document committing example values and leaving
@@ -152,10 +140,6 @@ def test_document_seed_and_store_seed_overlay_round_trip(tmp_path):
     doc.remove_seed_overlay("note")
     assert seed_of(doc, "note") is None
 
-
-# ---------------------------------------------------------------------------
-# Tests: the bound door (parse / conform)
-# ---------------------------------------------------------------------------
 
 BOUND_QUILL_YAML = """quill:
   name: py_bound_smoke

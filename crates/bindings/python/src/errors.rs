@@ -1,25 +1,9 @@
-//! Two classes, on either side of the boundary.
-//!
-//! A refusal the engine minted — an edit, a render, a validation — raises
-//! `QuillmarkError` carrying a non-empty `.diagnostics` list; the
-//! `EditError::<Variant>` prefix lives in the message, not the type.
-//!
-//! A negative index is a refusal of that first kind: addressing nothing is what
-//! an out-of-range index is, so it raises under the code an index past the end
-//! carries.
-//!
-//! An argument the binding cannot convert at all — a non-finite float, an int
-//! past 64 bits, a type with no JSON form, a malformed `path` sequence, a dict
-//! whose shape is not the one the surface reads — raises `ValueError` before the
-//! engine is called. No diagnostic describes it, and `ValueError` is what a
-//! Python caller catches for its own argument. The WASM binding has one shape
-//! for both.
-//!
-//! The line runs between shape and content: a card dict that will not
-//! deserialize is a `ValueError`, while one that deserializes and then violates
-//! an invariant — a malformed field name, a `$quill` that is not a reference, a
-//! `!must_fill` on a mapping — is the engine's refusal and raises
-//! `QuillmarkError` under its code.
+//! A refusal the engine minted raises `QuillmarkError` carrying a non-empty
+//! `.diagnostics` list; an argument the binding cannot convert at all raises
+//! `ValueError` before the engine is called, described by no diagnostic. The line
+//! runs between shape and content: a card dict that will not deserialize is a
+//! `ValueError`, one that deserializes and then violates an invariant is the
+//! engine's refusal.
 
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
@@ -29,9 +13,9 @@ use std::collections::BTreeMap;
 
 create_exception!(_quillmark, QuillmarkError, PyException);
 
-/// Resolve a card index the caller passed. Indices count from the front, so a
-/// negative one is out of range whatever `len` is; a non-negative index past the
-/// end is the calling verb's own to answer.
+/// Resolve a card index the caller passed, refusing a negative one whatever
+/// `len` is; a non-negative index past the end is the calling verb's own to
+/// answer.
 ///
 /// Index parameters are signed for this: a `usize` parameter refuses a negative
 /// int in extraction, raising the `OverflowError` no contract here mentions. The

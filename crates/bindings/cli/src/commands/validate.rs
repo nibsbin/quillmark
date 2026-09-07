@@ -46,10 +46,8 @@ impl ValidationResult {
 }
 
 pub fn execute(args: ValidateArgs) -> Result<()> {
-    // Gated on the directory: the loader below owns the missing-path message,
-    // and an ungated pre-check answers a typo'd path with the bundle's contents
-    // again. What it adds is the path on a real directory, which the tree
-    // loader cannot name.
+    // Gated on the directory: the loader below owns the missing-path message.
+    // What this adds is the path on a real directory, which it cannot name.
     let quill_yaml_path = args.quill_path.join("Quill.yaml");
     if args.quill_path.is_dir() && !quill_yaml_path.exists() {
         return Err(CliError::InvalidArgument(format!(

@@ -1,12 +1,3 @@
-"""Tests for the API requirements.
-
-Python is a Tier-1 binding: field I/O flows through `quill.writer(doc)` /
-`quill.reader(doc)`. `Document` carries the quill-free surface: parse, storage,
-structure, `$ext` / `$seed`, and `remove_field`. There is no opaque field store
-and no content lane (`overwrite` / `revise` / `apply_change` + codec); those are
-WASM-only by scope.
-"""
-
 import datetime
 
 import pytest
@@ -150,10 +141,6 @@ def test_blank_document_renders(engine):
     assert len(result.artifacts) > 0
     assert len(result.artifacts[0].bytes) > 0
 
-
-# ---------------------------------------------------------------------------
-# Document surface: quill-free structure, removal, and $ext
-# ---------------------------------------------------------------------------
 
 SIMPLE_MD = "~~~card-yaml\n$quill: test_quill\n$kind: main\ntitle: Hello\nauthor: Alice\n~~~\n\nBody text.\n"
 
@@ -529,11 +516,6 @@ def test_invariants_after_mutation_sequence():
     assert doc.quill_ref == "test_quill"
 
 
-# ---------------------------------------------------------------------------
-# Emitter integration tests (fromMarkdown → mutate → emit → re-parse)
-# ---------------------------------------------------------------------------
-
-
 def test_to_markdown_general_round_trip():
     """A typed-writer mutation survives emit → re-parse with structure intact."""
     quill = _taro_quill()
@@ -598,9 +580,6 @@ def test_to_markdown_ambiguous_string_survival():
     assert field(card, "str_null") == "null"
     assert field(card, "octal_str") == "01234"
     assert field(card, "date_str") == "2024-01-15"
-
-
-# ── Tier-1 typed writer: quill.writer(doc) front door ────────────────────────
 
 
 def test_writer_front_door_set_and_reads():
@@ -767,8 +746,8 @@ def test_writer_revise_field_rejects_inline_and_unknown():
 
 
 def test_typed_set_clears_must_fill_marker():
-    """With the opaque store gone, seed → validate(must_fill) → typed `set` is the
-    fill lifecycle: the typed commit lands a real value and clears the marker."""
+    """seed → validate(must_fill) → typed `set` is the fill lifecycle: the typed
+    commit lands a real value and clears the marker."""
     quill = _taro_quill()
     doc = Document.from_markdown(
         "~~~card-yaml\n$quill: taro@0.1.0\n$kind: main\ntitle: !must_fill\n~~~\n"
@@ -787,9 +766,6 @@ def test_typed_set_clears_must_fill_marker():
     quill.writer(doc).set("title", "Real Title")
     assert fills("main.title") == []
     assert field(doc.main, "title") == "Real Title"
-
-
-# ── Tier-1 typed reader: quill.reader(doc) front door ──────────────────────────
 
 
 def test_view_interprets_by_declared_type():
@@ -819,8 +795,7 @@ def test_view_absence_returns_none_unknown_name_raises():
 def test_view_richtext_holding_scalar_raises_mismatch():
     """A present value that does not decode as richtext raises FieldDecode.
 
-    Seated quill-free via `from_markdown` (a bare number under a richtext field),
-    since the opaque store is gone."""
+    Seated quill-free via `from_markdown`: a bare number under a richtext field."""
     quill = _richtext_form_quill()
     doc = Document.from_markdown(
         "~~~card-yaml\n$quill: richtext_form@0.1.0\n$kind: main\nbio: 3\n~~~\n"
@@ -867,8 +842,6 @@ def test_view_get_content_absence_unknown_and_non_content():
     with raises_edit_code("edit::field_not_content"):
         taro.reader(tdoc).get_content("author")
 
-
-# ── Tier-1 typed reader: the nested content read ───────────────────────────────
 
 ELEMENT_QUILL_YAML = """quill:
   name: element_test

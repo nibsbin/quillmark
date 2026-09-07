@@ -11,9 +11,6 @@ pub use types::{
     PyQuillmark, PyRenderResult, PyReader, PyWriter,
 };
 
-// Field I/O flows through `quill.writer(doc)` / `quill.reader(doc)`. The opaque
-// store and the anchor-preserving content lane are WASM-only by scope.
-
 #[pymodule]
 fn _quillmark(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyQuillmark>()?;
