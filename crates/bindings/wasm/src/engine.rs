@@ -6,6 +6,7 @@ use js_sys::{Array, Uint8Array};
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
+use tsify::Ts;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(typescript_custom_section)]
@@ -570,10 +571,10 @@ impl Quillmark {
         &self,
         quill: &Quill,
         doc: &Document,
-        opts: Option<RenderOptions>,
-    ) -> Result<RenderResult, JsValue> {
+        opts: Option<Ts<RenderOptions>>,
+    ) -> Result<Ts<RenderResult>, JsValue> {
         let start = now_ms();
-        let rust_opts: quillmark_core::RenderOptions = opts.unwrap_or_default().into();
+        let rust_opts = render_options_or_throw(opts)?;
         let result = self
             .inner
             .render(&quill.inner, &doc.inner, &rust_opts)
@@ -582,7 +583,7 @@ impl Quillmark {
             doc.parse_warnings.iter().cloned().map(Into::into).collect();
         warnings.extend(result.warnings.into_iter().map(Into::into));
         let kinds: Vec<Option<&str>> = doc.inner.cards().iter().map(|c| c.kind()).collect();
-        Ok(RenderResult {
+        to_ts_or_throw(&RenderResult {
             artifacts: result.artifacts.into_iter().map(Into::into).collect(),
             warnings,
             output_format: result.output_format.into(),
@@ -915,9 +916,9 @@ impl Document {
     /// Render a Diagnostic as the canonical pretty-printed text, so it looks
     /// identical whichever consumer surfaces it.
     #[wasm_bindgen(js_name = formatDiagnostic)]
-    pub fn format_diagnostic(diag: Diagnostic) -> String {
-        let core: quillmark_core::Diagnostic = diag.into();
-        core.fmt_pretty()
+    pub fn format_diagnostic(diag: Ts<Diagnostic>) -> Result<String, JsValue> {
+        let core: quillmark_core::Diagnostic = from_ts_or_throw(&diag)?.into();
+        Ok(core.fmt_pretty())
     }
 
     /// Emit canonical Quillmark Markdown. Round-trip safe: re-parsing the
@@ -2544,6 +2545,37 @@ fn serialize_inner<T: serde::Serialize + ?Sized>(
         .map_err(|e| WasmError::from(format!("{what}: serialization failed: {e}")).to_js_value())
 }
 
+/// [`serialize_or_throw`] for a value crossing as its own declared TypeScript
+/// type, under that type's `tsify` serialization config.
+#[cfg(any(feature = "typst", feature = "pdfform"))]
+fn to_ts_or_throw<T: tsify::Tsify + Serialize>(value: &T) -> Result<Ts<T>, JsValue> {
+    Ts::from_rust(value).map_err(|e| WasmError::from(e.to_string()).to_js_value())
+}
+
+/// The read direction of [`to_ts_or_throw`].
+fn from_ts_or_throw<T: tsify::Tsify + serde::de::DeserializeOwned>(
+    value: &Ts<T>,
+) -> Result<T, JsValue>
+where
+    T::JsType: Clone,
+{
+    value
+        .to_rust()
+        .map_err(|e| WasmError::from(e.to_string()).to_js_value())
+}
+
+/// The render verbs' shared argument read: an absent `options` is the default.
+#[cfg(any(feature = "typst", feature = "pdfform"))]
+fn render_options_or_throw(
+    opts: Option<Ts<RenderOptions>>,
+) -> Result<quillmark_core::RenderOptions, JsValue> {
+    let opts = match opts {
+        Some(ts) => from_ts_or_throw(&ts)?,
+        None => RenderOptions::default(),
+    };
+    Ok(opts.into())
+}
+
 fn json_value_to_js(value: Option<serde_json::Value>) -> Result<JsValue, JsValue> {
     match value {
         Some(v) => serialize_or_throw(&v, "ext value"),
@@ -2800,29 +2832,29 @@ impl LiveSession {
     /// Distinct from [`applyChange`](Document::apply_change), which splices ops
     /// into a document; this recompiles a document the caller already mutated.
     #[wasm_bindgen(js_name = update)]
-    pub fn update(&mut self, doc: &Document) -> Result<ChangeSet, JsValue> {
+    pub fn update(&mut self, doc: &Document) -> Result<Ts<ChangeSet>, JsValue> {
         let cs = self
             .inner
             .update(&doc.inner)
             .map_err(|e| WasmError::from(e).to_js_value())?;
         self.card_kinds = card_kinds_of(&doc.inner);
-        Ok(ChangeSet {
+        to_ts_or_throw(&ChangeSet {
             page_count: cs.page_count,
             dirty_pages: cs.dirty_pages,
         })
     }
 
     #[wasm_bindgen(js_name = render)]
-    pub fn render(&self, opts: Option<RenderOptions>) -> Result<RenderResult, JsValue> {
+    pub fn render(&self, opts: Option<Ts<RenderOptions>>) -> Result<Ts<RenderResult>, JsValue> {
         let start = now_ms();
-        let rust_opts: quillmark_core::RenderOptions = opts.unwrap_or_default().into();
+        let rust_opts = render_options_or_throw(opts)?;
 
         let result = self
             .inner
             .render(&rust_opts)
             .map_err(|e| WasmError::from(e).to_js_value())?;
 
-        Ok(RenderResult {
+        to_ts_or_throw(&RenderResult {
             artifacts: result.artifacts.into_iter().map(Into::into).collect(),
             warnings: result.warnings.into_iter().map(Into::into).collect(),
             output_format: result.output_format.into(),
@@ -2900,13 +2932,14 @@ impl LiveSession {
         x: f32,
         y: f32,
         tol_pt: Option<f32>,
-    ) -> Option<ContentHit> {
+    ) -> Result<Option<Ts<ContentHit>>, JsValue> {
         self.inner
             .position_at(page, x, y, tol_pt.unwrap_or(0.0))
             .map(|mut hit| {
                 hit.field = plate_to_docpath(&hit.field, &self.kinds());
-                hit.into()
+                to_ts_or_throw(&ContentHit::from(hit))
             })
+            .transpose()
     }
 
     /// A content position → **caret rect**, the reverse of `positionAt`: the box
@@ -2914,13 +2947,16 @@ impl LiveSession {
     /// `FieldRegion.rect`, its `span` collapsed to `[pos, pos]`. `undefined` when
     /// the field places no tracked content or the offset maps to no drawn glyph.
     #[wasm_bindgen(js_name = locate)]
-    pub fn locate(&self, field: &str, pos: usize) -> Option<FieldRegion> {
+    pub fn locate(&self, field: &str, pos: usize) -> Result<Option<Ts<FieldRegion>>, JsValue> {
         let kinds = self.kinds();
         let plate = docpath_to_plate(field, &kinds);
-        self.inner.locate(&plate, pos).map(|mut r| {
-            r.field = plate_to_docpath(&r.field, &kinds);
-            r.into()
-        })
+        self.inner
+            .locate(&plate, pos)
+            .map(|mut r| {
+                r.field = plate_to_docpath(&r.field, &kinds);
+                to_ts_or_throw(&FieldRegion::from(r))
+            })
+            .transpose()
     }
 
     /// Page dimensions in points (1 pt = 1/72 inch).

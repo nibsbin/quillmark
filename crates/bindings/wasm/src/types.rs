@@ -2,11 +2,15 @@ use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 use wasm_bindgen::prelude::*;
 
+// `Tsify` declares the TypeScript type; values cross through `tsify::Ts<T>`,
+// whose JS handle the wasm-bindgen shim owns and frees. The `into_wasm_abi` /
+// `from_wasm_abi` ABI impls throw mid-conversion while holding that handle,
+// which strands it (tsify#65), so no type here derives them.
+
 /// Output formats supported by backends. Gated behind the engine surface so
 /// tsify omits it from the core bundle, which has no rendering surface.
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "lowercase")]
 pub enum OutputFormat {
     Pdf,
@@ -40,7 +44,6 @@ impl From<quillmark_core::OutputFormat> for OutputFormat {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
     Error,
@@ -68,7 +71,6 @@ impl From<Severity> for quillmark_core::Severity {
 
 /// Source location for errors and warnings
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct Location {
     pub file: String,
@@ -94,7 +96,7 @@ impl From<Location> for quillmark_core::Location {
 
 /// Diagnostic message (error or warning)
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi, hashmap_as_object)]
+#[tsify(hashmap_as_object)]
 #[serde(rename_all = "camelCase")]
 pub struct Diagnostic {
     pub severity: Severity,
@@ -158,7 +160,6 @@ impl From<Diagnostic> for quillmark_core::Diagnostic {
 /// Rendered artifact (PDF, SVG, etc.).
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct Artifact {
     pub format: OutputFormat,
@@ -193,7 +194,7 @@ impl From<quillmark_core::Artifact> for Artifact {
 /// Result of a render operation.
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi, hashmap_as_object)]
+#[tsify(hashmap_as_object)]
 #[serde(rename_all = "camelCase")]
 pub struct RenderResult {
     pub artifacts: Vec<Artifact>,
@@ -213,7 +214,6 @@ const _: () = assert!(<RenderResult as tsify::Tsify>::SERIALIZATION_CONFIG.hashm
 /// removed pages are implied by `pageCount`.
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct ChangeSet {
     pub page_count: usize,
@@ -231,7 +231,6 @@ pub struct ChangeSet {
 /// whitespace stays uncovered; `LiveSession.fieldBoxes(field)` owns that union.
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct FieldRegion {
     /// Canonical `DocPath` field address (e.g. `"cards.indorsement[1].from"`):
@@ -264,7 +263,6 @@ impl From<quillmark_core::RenderedRegion> for FieldRegion {
 /// the finest this API offers, `segment` the floor it degrades to.
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub enum HitGranularity {
     /// `pos` is the first content char of the cluster under the point. Place
@@ -293,7 +291,6 @@ impl From<quillmark_core::HitGranularity> for HitGranularity {
 /// `locate`.
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct ContentHit {
     /// Canonical `DocPath` field address (same grammar as `FieldRegion.field`).
@@ -319,7 +316,6 @@ impl From<quillmark_core::ContentHit> for ContentHit {
 /// Options for rendering.
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct RenderOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
