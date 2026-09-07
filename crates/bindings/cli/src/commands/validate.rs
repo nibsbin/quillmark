@@ -22,18 +22,9 @@ struct ValidationResult {
 }
 
 impl ValidationResult {
-    fn new() -> Self {
-        Self { issues: Vec::new() }
-    }
-
-    fn add_error(&mut self, message: impl Into<String>, code: &str) {
+    fn add(&mut self, severity: Severity, message: impl Into<String>, code: &str) {
         self.issues
-            .push(Diagnostic::new(Severity::Error, message.into()).with_code(code.to_string()));
-    }
-
-    fn add_warning(&mut self, message: impl Into<String>, code: &str) {
-        self.issues
-            .push(Diagnostic::new(Severity::Warning, message.into()).with_code(code.to_string()));
+            .push(Diagnostic::new(severity, message.into()).with_code(code.to_string()));
     }
 
     fn count(&self, severity: Severity) -> usize {
@@ -60,7 +51,7 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
         println!("Validating quill at: {}", args.quill_path.display());
     }
 
-    let mut result = ValidationResult::new();
+    let mut result = ValidationResult::default();
 
     // `_with_warnings` keeps the config warnings the plain loader drops.
     let (quill, config_warnings) = quillmark::quill_from_path_with_warnings(&args.quill_path)?;
@@ -113,7 +104,8 @@ fn validate_file_references(
             .components()
             .any(|c| !matches!(c, std::path::Component::Normal(_)))
         {
-            result.add_error(
+            result.add(
+                Severity::Error,
                 format!(
                     "plate_file '{}' must be a relative path within the quill (no '..' or absolute components)",
                     plate_file
@@ -123,7 +115,8 @@ fn validate_file_references(
         } else {
             let plate_path = quill_path.join(rel);
             if !plate_path.exists() {
-                result.add_error(
+                result.add(
+                    Severity::Error,
                     format!("Referenced plate_file '{}' does not exist", plate_file),
                     "cli::plate_file_missing",
                 );
@@ -147,7 +140,8 @@ fn validate_field_schemas(
             .trim()
             .is_empty()
         {
-            result.add_warning(
+            result.add(
+                Severity::Warning,
                 format!("{context} '{field_name}': missing or empty description"),
                 "cli::missing_description",
             );
@@ -163,7 +157,8 @@ fn validate_card_schema(card_name: &str, card_schema: &CardSchema, result: &mut 
         .trim()
         .is_empty()
     {
-        result.add_warning(
+        result.add(
+            Severity::Warning,
             format!("card '{}': missing or empty description", card_name),
             "cli::missing_description",
         );
