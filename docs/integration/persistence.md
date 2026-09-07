@@ -37,7 +37,4 @@ Within a schema version, serialization is **byte-deterministic**: equal document
 
 A row still carrying an older schema tag migrates forward on read; that migrated form's bytes become stable once you **rewrite the row under its current tag** (read-repair).
 
-!!! note "`to_plate_json` is not storage"
-    `Document.to_plate_json` (Rust core only) is a lossy, one-way export to backends: never a persistence format. Use the storage JSON above.
-
 Full model: [DOCUMENT_STORAGE.md](https://github.com/borb-sh/quillmark/blob/main/prose/canon/DOCUMENT_STORAGE.md).

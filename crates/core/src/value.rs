@@ -35,11 +35,15 @@ enum Kind {
     Object(IndexMap<String, Node>),
 }
 
-/// One step of a path into a value tree: an object key or an array index.
+/// One step of a path into a value tree: an object key or an array index. The
+/// canonical path-segment type for the whole crate, covering nested-comment and
+/// nested-fill paths alike.
 ///
-/// This is the canonical path-segment type for the whole crate; the document
-/// layer aliases it as `CommentPathSegment` for nested-comment paths.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// Serializes **untagged** (a key as a JSON string, an index as a JSON number),
+/// so a path crosses the binding wire as a plain JS array like
+/// `["addr", "street"]` or `["recipients", 0, "name"]`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(untagged)]
 #[non_exhaustive]
 pub enum PathSegment {
     Key(String),

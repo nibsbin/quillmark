@@ -14,7 +14,8 @@ use serde_json::Value as JsonValue;
 use serde_saphyr::{FlowMap, FlowSeq, SerializerOptions};
 
 use super::payload::PayloadItem;
-use super::prescan::{CommentPathSegment, NestedComment};
+use super::prescan::NestedComment;
+use crate::value::PathSegment;
 use super::{Card, Document};
 
 impl Document {
@@ -155,9 +156,9 @@ fn emit_meta_block(
 /// block's comment and `!must_fill` tables.
 #[derive(Clone, Copy)]
 struct EmitCtx<'a> {
-    path: &'a [CommentPathSegment],
+    path: &'a [PathSegment],
     nested: &'a [NestedComment],
-    fills: &'a [Vec<CommentPathSegment>],
+    fills: &'a [Vec<PathSegment>],
 }
 
 impl<'a> EmitCtx<'a> {
@@ -167,12 +168,12 @@ impl<'a> EmitCtx<'a> {
         fills: &[],
     };
 
-    fn at(self, path: &'a [CommentPathSegment]) -> Self {
+    fn at(self, path: &'a [PathSegment]) -> Self {
         Self { path, ..self }
     }
 
     /// Fill sets are small, so a linear scan beats building a hash set per field.
-    fn is_fill(self, path: &[CommentPathSegment]) -> bool {
+    fn is_fill(self, path: &[PathSegment]) -> bool {
         self.fills.iter().any(|p| p.as_slice() == path)
     }
 }
@@ -488,7 +489,7 @@ fn emit_mapping_children(
         emit_own_line_pending(out, ctx, i, child_indent);
         let trailer = find_inline_trailer(out, ctx, i, child_indent);
         let mut child_path = ctx.path.to_vec();
-        child_path.push(CommentPathSegment::Key(k.clone()));
+        child_path.push(PathSegment::Key(k.clone()));
         let child_fill = ctx.is_fill(&child_path);
         emit_field_at(
             out,
@@ -514,7 +515,7 @@ fn emit_sequence_children(
         emit_own_line_pending(out, ctx, i, base_indent);
         let trailer = find_inline_trailer(out, ctx, i, base_indent);
         let mut child_path = ctx.path.to_vec();
-        child_path.push(CommentPathSegment::Index(i));
+        child_path.push(PathSegment::Index(i));
         emit_sequence_item(out, item, base_indent, ctx.at(&child_path), trailer);
     }
     emit_own_line_pending(out, ctx, items.len(), base_indent);
@@ -557,7 +558,7 @@ fn emit_sequence_item(
                 }
                 let inner_trailer = find_inline_trailer(out, ctx, i, base_indent + 2);
                 let mut child_path = ctx.path.to_vec();
-                child_path.push(CommentPathSegment::Key(k.clone()));
+                child_path.push(PathSegment::Key(k.clone()));
                 let child_fill = ctx.is_fill(&child_path);
                 if first {
                     let line_trailer = inline_trailer.or(inner_trailer);
@@ -852,11 +853,11 @@ mod tests {
         assert_scalar_round_trips(serde_json::json!("\x01\x1F"));
     }
 
-    fn p(key: &str) -> Vec<CommentPathSegment> {
-        vec![CommentPathSegment::Key(key.to_string())]
+    fn p(key: &str) -> Vec<PathSegment> {
+        vec![PathSegment::Key(key.to_string())]
     }
 
-    fn ctx(path: &[CommentPathSegment]) -> EmitCtx<'_> {
+    fn ctx(path: &[PathSegment]) -> EmitCtx<'_> {
         EmitCtx {
             path,
             ..EmitCtx::EMPTY

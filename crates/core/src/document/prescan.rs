@@ -10,6 +10,7 @@
 //! `!must_fill` is the only recognized fill tag; every other custom tag is
 //! dropped with a `parse::unsupported_yaml_tag` warning, value kept.
 
+use crate::value::PathSegment;
 use crate::Diagnostic;
 use crate::Severity;
 
@@ -22,10 +23,6 @@ pub(crate) enum PreItem {
     Comment { text: String, inline: bool },
 }
 
-/// One segment of a path into the parsed YAML structure, aliased to the
-/// crate-wide [`crate::value::PathSegment`].
-pub use crate::value::PathSegment as CommentPathSegment;
-
 /// A comment inside a nested mapping or sequence.
 ///
 /// `container_path` locates the immediate parent. For own-line comments
@@ -36,7 +33,7 @@ pub use crate::value::PathSegment as CommentPathSegment;
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct NestedComment {
-    pub container_path: Vec<CommentPathSegment>,
+    pub container_path: Vec<PathSegment>,
     pub position: usize,
     pub text: String,
     pub inline: bool,
@@ -58,7 +55,7 @@ pub(crate) struct PreScan {
     /// Paths of nested fields tagged `!must_fill`, relative to the fence root
     /// (the first segment is the owning top-level key). Applied onto the
     /// value tree by the assembler. Top-level fills ride on `PreItem::Field`.
-    pub nested_fills: Vec<Vec<CommentPathSegment>>,
+    pub nested_fills: Vec<Vec<PathSegment>>,
     pub warnings: Vec<Diagnostic>,
     /// `!must_fill` on mappings: turned into `ParseError::InvalidStructure` by the parser.
     pub fill_target_errors: Vec<String>,
@@ -81,7 +78,7 @@ impl Cleaned {
 #[derive(Debug)]
 struct Frame {
     indent: usize,
-    path: Vec<CommentPathSegment>,
+    path: Vec<PathSegment>,
     child_count: usize,
 }
 
@@ -164,10 +161,10 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
             let frame = &mut stack[frame_idx];
             let item_index = frame.child_count;
             frame.child_count += 1;
-            let parent_path: Vec<CommentPathSegment> = frame.path.clone();
-            let item_path: Vec<CommentPathSegment> = {
+            let parent_path: Vec<PathSegment> = frame.path.clone();
+            let item_path: Vec<PathSegment> = {
                 let mut p = parent_path.clone();
-                p.push(CommentPathSegment::Index(item_index));
+                p.push(PathSegment::Index(item_index));
                 p
             };
             while stack.len() > frame_idx + 1 {
@@ -199,7 +196,7 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
                 unsupported_fill_tag |= value_has_unsupported_fill_tag(&value_without_tag);
                 if fill {
                     let mut key_path = item_path.clone();
-                    key_path.push(CommentPathSegment::Key(key.clone()));
+                    key_path.push(PathSegment::Key(key.clone()));
                     out.nested_fills.push(key_path);
                 }
                 if fill || had_non_fill_tag {
@@ -259,7 +256,7 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
 
                 let root = &mut stack[0];
                 root.child_count += 1;
-                let key_path = vec![CommentPathSegment::Key(key.clone())];
+                let key_path = vec![PathSegment::Key(key.clone())];
 
                 while stack.len() > 1 {
                     stack.pop();
@@ -296,10 +293,10 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
             let frame = &mut stack[frame_idx];
             let key_index = frame.child_count;
             frame.child_count += 1;
-            let parent_path: Vec<CommentPathSegment> = frame.path.clone();
-            let key_path: Vec<CommentPathSegment> = {
+            let parent_path: Vec<PathSegment> = frame.path.clone();
+            let key_path: Vec<PathSegment> = {
                 let mut p = parent_path.clone();
-                p.push(CommentPathSegment::Key(key.clone()));
+                p.push(PathSegment::Key(key.clone()));
                 p
             };
             while stack.len() > frame_idx + 1 {
@@ -891,19 +888,19 @@ mod tests {
             out.nested_comments,
             vec![
                 NestedComment {
-                    container_path: vec![CommentPathSegment::Key("arr".to_string())],
+                    container_path: vec![PathSegment::Key("arr".to_string())],
                     position: 0,
                     text: "before-first".to_string(),
                     inline: false,
                 },
                 NestedComment {
-                    container_path: vec![CommentPathSegment::Key("arr".to_string())],
+                    container_path: vec![PathSegment::Key("arr".to_string())],
                     position: 1,
                     text: "between".to_string(),
                     inline: false,
                 },
                 NestedComment {
-                    container_path: vec![CommentPathSegment::Key("arr".to_string())],
+                    container_path: vec![PathSegment::Key("arr".to_string())],
                     position: 2,
                     text: "after-last".to_string(),
                     inline: false,
@@ -925,7 +922,7 @@ mod tests {
         assert_eq!(
             out.nested_comments,
             vec![NestedComment {
-                container_path: vec![CommentPathSegment::Key("outer".to_string())],
+                container_path: vec![PathSegment::Key("outer".to_string())],
                 position: 0,
                 text: "comment".to_string(),
                 inline: false,
@@ -941,8 +938,8 @@ mod tests {
             out.nested_comments,
             vec![NestedComment {
                 container_path: vec![
-                    CommentPathSegment::Key("outer".to_string()),
-                    CommentPathSegment::Key("inner".to_string()),
+                    PathSegment::Key("outer".to_string()),
+                    PathSegment::Key("inner".to_string()),
                 ],
                 position: 0,
                 text: "deep".to_string(),
@@ -959,8 +956,8 @@ mod tests {
             out.nested_comments,
             vec![NestedComment {
                 container_path: vec![
-                    CommentPathSegment::Key("items".to_string()),
-                    CommentPathSegment::Index(0),
+                    PathSegment::Key("items".to_string()),
+                    PathSegment::Index(0),
                 ],
                 position: 1,
                 text: "inside-first".to_string(),
@@ -976,7 +973,7 @@ mod tests {
         assert_eq!(
             out.nested_comments,
             vec![NestedComment {
-                container_path: vec![CommentPathSegment::Key("arr".to_string())],
+                container_path: vec![PathSegment::Key("arr".to_string())],
                 position: 0,
                 text: "tail".to_string(),
                 inline: true,
@@ -993,7 +990,7 @@ mod tests {
         assert_eq!(
             out.nested_comments,
             vec![NestedComment {
-                container_path: vec![CommentPathSegment::Key("outer".to_string())],
+                container_path: vec![PathSegment::Key("outer".to_string())],
                 position: 0,
                 text: "tail".to_string(),
                 inline: true,

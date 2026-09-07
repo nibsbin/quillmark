@@ -26,9 +26,8 @@ value with content as its codec's text, sparse, and carrying neither anchors
 nor `$quill` ([SCHEMAS.md](SCHEMAS.md) § "The values form"). It is an API
 shape, never a row.
 
-`Document::to_plate_json` also exists as a lossy, one-way export to
-Plate-shaped backends; it is core-only (not exposed by the WASM or Python
-bindings) and never a storage option.
+The plate JSON a render hands a backend is a lossy, one-way export,
+crate-internal to `quillmark-core` and never a storage option.
 
 ## Design Principles
 
@@ -76,7 +75,7 @@ strings (parsed back via `QuillReference::from_str`). The discriminator on
 payload items is `type` (not `kind`) to keep it unambiguous next to the
 `$kind` metadata semantic. The full variant set is `quill | kind | id |
 ext | seed | field | comment`; the `ext` and `seed` variants carry the
-`$ext` / `$seed` maps verbatim and are stripped from `to_plate_json()`
+`$ext` / `$seed` maps verbatim and are stripped from the plate JSON
 before backends see it.
 Load-time warnings (a parse's, plus the `conform::*` diagnostics when the
 document came through the bound door) live on the `Parsed` record, not on

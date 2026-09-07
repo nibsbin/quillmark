@@ -183,7 +183,7 @@ pub use edit::EditError;
 pub use meta::{is_valid_kind_name, validate_composable_kind, CardKindError};
 pub use payload::{MetaKey, Payload, PayloadItem};
 // Reachable through `PayloadItem`'s `nested_comments` fields, so nameable from here.
-pub use prescan::{CommentPathSegment, NestedComment};
+pub use prescan::NestedComment;
 pub use wire::{CardWire, PayloadItemWire, WireError};
 
 /// Authoring-format rules for the `~~~` card-yaml markdown surface, surfaced
@@ -372,8 +372,7 @@ impl SeedOverlay {
     }
 }
 
-/// A fully-parsed Quillmark document. Serde routes through [`StoredDocument`];
-/// for the plate wire shape see [`Document::to_plate_json`].
+/// A fully-parsed Quillmark document. Serde routes through [`StoredDocument`].
 ///
 /// Parse-time warnings are *not* document state: they ride out-of-band on
 /// [`Parsed`] from [`Document::parse`], the single owner. Equality and the
@@ -462,12 +461,6 @@ impl Document {
         &mut self.cards
     }
 
-    /// The ordered card kinds, `None` per kindless card: the shape
-    /// [`regions_to_doc_path`](crate::regions_to_doc_path) takes.
-    pub fn card_kinds(&self) -> Vec<Option<&str>> {
-        self.cards.iter().map(|c| c.kind()).collect()
-    }
-
     /// A single composable card by index: the immutable twin of
     /// [`card_mut`](Document::card_mut), so reading one card's payload does not
     /// require materializing every card via [`cards`](Document::cards). `None`
@@ -502,24 +495,15 @@ impl Document {
     /// never `$`-prefixed (they match `[A-Za-z_][A-Za-z0-9_]*`).
     ///
     /// `$kind` is document-defined and omitted for a kindless card (never a
-    /// fabricated `""`). This method is schema-free and emits `$body` for every
-    /// card and the root; the schema-gated render plate
-    /// (`QuillConfig::compile_data`) instead calls `to_plate_json_gated` with the
-    /// per-card body-presence it resolved, so a card whose kind enables no body
-    /// carries no `$body`: issue 1030's "absent on undefined".
-    pub fn to_plate_json(&self) -> serde_json::Value {
-        // Schema-free: the root and every card carry `$body`.
-        self.to_plate_json_gated(true, None)
-    }
-
-    /// [`to_plate_json`](Self::to_plate_json) with the body-presence decision
-    /// supplied by the caller: the root carries `$body` iff `main_body`, and card
-    /// *i* iff `card_bodies` is `None` (all present) or `card_bodies[i]` holds.
-    /// The schema-gated render plate (`QuillConfig::compile_data`) passes the
-    /// body-enabled bit it already resolved per card, so a body-disabled card
-    /// never carries `$body` (issue 1030, "absent on undefined") and the decision
-    /// is never re-derived from the serialized plate. `Document` stays schema-free:
-    /// it receives the decision, not a schema.
+    /// fabricated `""`).
+    ///
+    /// Body presence is the caller's decision: the root carries `$body` iff
+    /// `main_body`, and card *i* iff `card_bodies` is `None` (all present) or
+    /// `card_bodies[i]` holds. The schema-gated render plate
+    /// (`QuillConfig::compile_data`) passes the body-enabled bit it already
+    /// resolved per card, so a card whose kind enables no body carries no
+    /// `$body`, and the decision is never re-derived from the serialized plate.
+    /// `Document` stays schema-free: it receives the decision, not a schema.
     pub(crate) fn to_plate_json_gated(
         &self,
         main_body: bool,

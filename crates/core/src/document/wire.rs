@@ -47,7 +47,7 @@ pub enum PayloadItemWire {
             alias = "nested_fills",
             skip_serializing_if = "Vec::is_empty"
         )]
-        nested_fills: Vec<Vec<PathStepWire>>,
+        nested_fills: Vec<Vec<PathSegment>>,
     },
     /// A YAML comment line (text excludes the leading `#`).
     Comment {
@@ -56,35 +56,6 @@ pub enum PayloadItemWire {
         #[serde(default)]
         inline: bool,
     },
-}
-
-/// One step in a nested fill path: an object key or an array index. Serializes
-/// **untagged** (a key as a JSON string, an index as a JSON number) so a path
-/// is a plain JS array like `["addr", "street"]` or `["recipients", 0, "name"]`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-#[non_exhaustive]
-pub enum PathStepWire {
-    Index(usize),
-    Key(String),
-}
-
-impl From<&PathSegment> for PathStepWire {
-    fn from(seg: &PathSegment) -> Self {
-        match seg {
-            PathSegment::Key(k) => PathStepWire::Key(k.clone()),
-            PathSegment::Index(i) => PathStepWire::Index(*i),
-        }
-    }
-}
-
-impl From<&PathStepWire> for PathSegment {
-    fn from(seg: &PathStepWire) -> Self {
-        match seg {
-            PathStepWire::Key(k) => PathSegment::Key(k.clone()),
-            PathStepWire::Index(i) => PathSegment::Index(*i),
-        }
-    }
 }
 
 /// Canonical live wire form of a [`Card`]. See the module docs.
@@ -219,10 +190,7 @@ impl From<&Card> for CardWire {
                 PayloadItem::Field {
                     key, value, fill, ..
                 } => {
-                    let nested_fills = value
-                        .nonroot_fill_paths()
-                        .map(|p| p.iter().map(PathStepWire::from).collect())
-                        .collect();
+                    let nested_fills = value.nonroot_fill_paths().collect();
                     wire.payload_items.push(PayloadItemWire::Field {
                         key: key.clone(),
                         value: value.as_json().clone(),
@@ -261,8 +229,7 @@ impl TryFrom<CardWire> for Card {
                     super::edit::validate_field(&key, &value).map_err(refuse)?;
                     let mut qv = QuillValue::from_json(value);
                     for path in &nested_fills {
-                        let segs: Vec<PathSegment> = path.iter().map(PathSegment::from).collect();
-                        qv.set_fill_at(&segs);
+                        qv.set_fill_at(path);
                     }
                     // The fill-target check reads the wire's nested markers off
                     // the value, so it runs after `set_fill_at`.
@@ -362,11 +329,43 @@ mod tests {
         assert_eq!(back, card, "nested fill must survive Card → wire → Card");
     }
 
+    /// A `nestedFills` path is untagged JSON — a string per key, a number per
+    /// index — so it crosses the binding wire as a plain JS array.
+    #[test]
+    fn nested_fill_path_segments_are_untagged() {
+        let mut value = QuillValue::from_json(json!({"to": [{"name": null}]}));
+        assert!(value.set_fill_at(&[
+            PathSegment::Key("to".to_string()),
+            PathSegment::Index(0),
+            PathSegment::Key("name".to_string()),
+        ]));
+        let payload = Payload::from_items(vec![PayloadItem::Field {
+            key: "recipients".to_string(),
+            value,
+            fill: false,
+            nested_comments: Vec::new(),
+        }]);
+        let wire = CardWire::from(&Card::from_parts(
+            payload,
+            quillmark_content::Normalized::empty(),
+        ));
+
+        let as_json = serde_json::to_value(&wire).unwrap();
+        assert_eq!(
+            as_json["payloadItems"][0]["nestedFills"],
+            json!([["to", 0, "name"]]),
+            "a key rides as a JSON string and an index as a JSON number"
+        );
+
+        let back: CardWire = serde_json::from_value(as_json).expect("JSON → wire");
+        assert_eq!(back, wire, "an untagged path deserializes back unchanged");
+    }
+
     /// The emitted `key: !must_fill` has no line for a block mapping, so the
     /// wire refuses one where parse does — at the root and nested.
     #[test]
     fn card_wire_refuses_a_fill_marked_mapping() {
-        let field = |key: &str, value: JsonValue, fill: bool, nested: Vec<Vec<PathStepWire>>| {
+        let field = |key: &str, value: JsonValue, fill: bool, nested: Vec<Vec<PathSegment>>| {
             let mut wire = CardWire::new("note".to_string(), JsonValue::Null);
             wire.payload_items.push(PayloadItemWire::Field {
                 key: key.to_string(),
@@ -384,7 +383,7 @@ mod tests {
             "{err:?}"
         );
 
-        let nested = vec![vec![PathStepWire::Key("inner".to_string())]];
+        let nested = vec![vec![PathSegment::Key("inner".to_string())]];
         let err = Card::try_from(field("addr", json!({"inner": {"a": 1}}), false, nested))
             .expect_err("a nested fill on a mapping is refused");
         assert!(

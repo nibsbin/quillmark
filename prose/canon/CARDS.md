@@ -117,7 +117,7 @@ Per-card editor state: display renames, collapse flags, agent
 annotations, anything bespoke to a UI consumer: belongs in the card's
 `$ext` system-metadata key, **not** in user fields. `$ext` is an opaque
 mapping that round-trips through Markdown and the storage DTO but is
-stripped from `Document::to_plate_json()` before backends see it, so
+stripped from the plate JSON before backends see it, so
 template renders are not affected by editor state. Consumers
 namespace inside the map (`$ext.editor`, `$ext.agent`, …) to avoid
 collisions when more than one tool carries state on the same card. See

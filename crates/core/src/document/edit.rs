@@ -2,9 +2,9 @@
 //!
 //! Every successful mutator leaves user field names matching
 //! `[A-Za-z_][A-Za-z0-9_]*`, composable `$kind`s valid, and values inside the
-//! §8 depth bound, so the result is safely serializable via
-//! [`Document::to_plate_json`]. `$ext`/`$seed` are opaque mappings that carry
-//! no field-name invariant, but do carry the depth bound.
+//! §8 depth bound, so the result is safely serializable to the backend plate.
+//! `$ext`/`$seed` are opaque mappings that carry no field-name invariant, but
+//! do carry the depth bound.
 
 use std::collections::BTreeMap;
 
@@ -630,12 +630,9 @@ impl Document {
                 key: "$quill".to_string(),
             });
         }
-        if let Some(key) = MetaKey::ALL
-            .iter()
-            .find(|k| k.is_root_only() && card.payload().meta(**k).is_some())
-        {
+        if card.seed().is_some() {
             return Err(EditError::RootOnlyEntry {
-                key: key.as_str().to_string(),
+                key: MetaKey::Seed.as_str().to_string(),
             });
         }
         Ok(())
@@ -782,7 +779,7 @@ impl Card {
     /// when none existed. Passing an empty map records an explicit `$ext: {}`.
     ///
     /// `$ext` carries out-of-band consumer state (editor renames, agent
-    /// annotations, …) and is stripped from [`Document::to_plate_json`], so a
+    /// annotations, …) and is stripped from the backend plate, so a
     /// write here can never affect a render. Nested comments attached to a
     /// replaced `$ext` are dropped. Returns [`EditError::ValueTooDeep`] when the
     /// map nests past the §8 depth limit: `$ext` flows through the recursive

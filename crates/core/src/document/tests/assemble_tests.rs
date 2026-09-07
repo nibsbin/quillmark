@@ -1597,7 +1597,7 @@ for: ORG
 Card body here.
 ";
     let doc = Document::parse(markdown).unwrap().document;
-    let json = doc.to_plate_json();
+    let json = doc.to_plate_json_gated(true, None);
 
     assert_eq!(json["$quill"], "usaf_memo");
     assert_eq!(json["title"], "Test");
@@ -1622,7 +1622,7 @@ fn test_to_plate_json_kindless_card_omits_kind() {
         quillmark_content::Normalized::empty(),
     ));
 
-    let json = doc.to_plate_json();
+    let json = doc.to_plate_json_gated(true, None);
     let card = &json["$cards"][0];
     assert!(
         card.get("$kind").is_none(),
@@ -1641,7 +1641,7 @@ fn test_to_plate_json_quill_first() {
     )
     .unwrap()
     .document;
-    let json = doc.to_plate_json();
+    let json = doc.to_plate_json_gated(true, None);
     let obj = json.as_object().unwrap();
     let keys: Vec<&String> = obj.keys().collect();
     assert_eq!(keys[0], "$quill");

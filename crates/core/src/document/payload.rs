@@ -16,8 +16,8 @@
 use indexmap::IndexMap;
 use serde_json::{Map as JsonMap, Value as JsonValue};
 
-use super::prescan::{CommentPathSegment, NestedComment};
-use crate::value::QuillValue;
+use super::prescan::NestedComment;
+use crate::value::{PathSegment, QuillValue};
 use crate::version::QuillReference;
 
 /// Which out-of-band system-metadata map a [`PayloadItem::Meta`] carries.
@@ -38,10 +38,6 @@ pub enum MetaKey {
 }
 
 impl MetaKey {
-    /// Lets a rule keyed on a property ([`is_root_only`](Self::is_root_only))
-    /// enumerate rather than name the members it happens to match today.
-    pub const ALL: [MetaKey; 2] = [MetaKey::Ext, MetaKey::Seed];
-
     /// The literal source key (`"$ext"` / `"$seed"`).
     pub fn as_str(self) -> &'static str {
         match self {
@@ -67,11 +63,6 @@ impl MetaKey {
         }
     }
 
-    /// `true` when the key may appear on the root card only (rejected on
-    /// composable cards), like `$quill`.
-    pub fn is_root_only(self) -> bool {
-        matches!(self, MetaKey::Seed)
-    }
 }
 
 /// One entry in a [`Payload`]: a typed `$` system metadata entry, a user field,
@@ -203,8 +194,8 @@ impl Payload {
                 continue;
             };
             let target_key = match first {
-                CommentPathSegment::Key(k) => k.clone(),
-                CommentPathSegment::Index(_) => continue,
+                PathSegment::Key(k) => k.clone(),
+                PathSegment::Index(_) => continue,
             };
 
             let relative = NestedComment {
@@ -264,7 +255,7 @@ impl Payload {
             };
             for nc in comments {
                 let mut path = Vec::with_capacity(nc.container_path.len() + 1);
-                path.push(CommentPathSegment::Key(prefix.clone()));
+                path.push(PathSegment::Key(prefix.clone()));
                 path.extend(nc.container_path.iter().cloned());
                 out.push(NestedComment {
                     container_path: path,
@@ -543,24 +534,6 @@ impl Payload {
             }
         }
         map
-    }
-}
-
-impl<'a> IntoIterator for &'a Payload {
-    type Item = (&'a String, &'a QuillValue);
-    type IntoIter = std::iter::FilterMap<
-        std::slice::Iter<'a, PayloadItem>,
-        fn(&'a PayloadItem) -> Option<(&'a String, &'a QuillValue)>,
-    >;
-
-    fn into_iter(self) -> Self::IntoIter {
-        fn filter(item: &PayloadItem) -> Option<(&String, &QuillValue)> {
-            match item {
-                PayloadItem::Field { key, value, .. } => Some((key, value)),
-                _ => None,
-            }
-        }
-        self.items.iter().filter_map(filter)
     }
 }
 
