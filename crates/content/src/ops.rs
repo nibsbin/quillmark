@@ -471,7 +471,7 @@ impl Content {
         Ok(())
     }
 
-    fn rebase_marks(&mut self, delta: &Delta) {
+    pub(crate) fn rebase_marks(&mut self, delta: &Delta) {
         for m in &mut self.marks {
             if m.start == m.end {
                 let p = delta.map_pos(m.start, Assoc::Before);
@@ -2217,6 +2217,18 @@ mod tests {
             island: table("isl-t"),
         }]))
         .expect("the block island's own slot is a whole line");
+    }
+
+    /// `Join` names two lines rather than an island, so it is the accepted op
+    /// that can run a block island's slot back into prose. The mint takes the
+    /// line apart again, so the placement holds however the content was reached.
+    #[test]
+    fn a_join_onto_a_block_island_line_is_undone_by_the_mint() {
+        let mut rt = from_markdown("ab\n\n| H |\n| --- |\n| a |").unwrap();
+        let before = rt.clone();
+        rt.apply_line_ops(&[LineOp::Join { line: 0 }]).unwrap();
+        assert_eq!(rt.validate(), Ok(()));
+        assert_eq!(rt, before, "the slot stayed in the paragraph");
     }
 
     /// An inserted island's id is caller-supplied on an anchor id's terms:

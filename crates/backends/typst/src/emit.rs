@@ -1672,7 +1672,9 @@ mod tests {
         }
 
         // An island this build renders as nothing closes the gap its slot held.
-        for ty in ["widget", "table", "image"] {
+        // The types here are the ones whose slot can sit inside a run at all: a
+        // block-only type's takes a line of its own, so no run closes over it.
+        for ty in ["widget", "image"] {
             for text in ["a/{}/b", "a-{}-b", "a-{}?b", "a-{}5b", "a.{}..b", "a..{}.b"] {
                 let text = text.replace("{}", &ISLAND_SLOT.to_string());
                 let rt = Content::new(text.clone(), vec![Line::new(LineKind::Para)])

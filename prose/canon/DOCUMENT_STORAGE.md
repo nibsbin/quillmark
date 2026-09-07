@@ -395,9 +395,13 @@ as pipes inside the paragraph, which re-imports as prose with the island gone.
 The authored lanes refuse the placement — `ApplyError::BlockIslandNotAlone` from
 `IslandOp::Insert` and from a `Set` that retypes an inline island, a shape error
 from `serial::from_authored_value` — so a host learns at the write. Storage takes
-what it holds and the projection settles it: `export::to_markdown` breaks the
-line around the slot, so the prose on each side becomes its own block and the
-island keeps the line its markup needs.
+what it holds and the **mint** settles it: `Content::normalize` breaks the line
+around the slot, so the prose on each side becomes its own block and the island
+keeps the line its markup needs. The break lands once, on the way in, which is
+what lets `Content::validate` state the rule
+(`Invariant::BlockIslandNotAlone`) for every content the crate hands out — the
+markdown write then reads a shape that is already right rather than repairing
+one on the way past.
 
 The opaque attrs are hash input like everything else in the canonical form, so
 they are recursively key-sorted along with the rest (see Byte-stability). What
