@@ -605,13 +605,13 @@ main:
 }
 
 #[test]
-fn failed_apply_keeps_serving_last_good_regions() {
+fn failed_update_keeps_serving_last_good_regions() {
     // A failed compile has already written the next injection's helper source
     // into the world, but the served document's spans must keep resolving
     // against the compile they came from.
     const YAML: &str = r#"
 quill:
-  name: failed_apply_regions
+  name: failed_update_regions
   version: 0.1.0
   backend: typst
   description: transactional regions test

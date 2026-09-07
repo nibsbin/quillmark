@@ -8,8 +8,8 @@
 use quillmark_core::{FileTreeNode, Quill};
 use std::collections::HashMap;
 
-/// No fonts dir is needed (Typst's embedded defaults render text) and the
-/// backend injects the helper package.
+/// No fonts dir is needed (the backend's embedded Figtree faces render text)
+/// and the backend injects the helper package.
 pub fn quill(yaml: &str, files: &[(&str, &[u8])]) -> Quill {
     let mut map = HashMap::new();
     map.insert(

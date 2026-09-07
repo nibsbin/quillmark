@@ -224,10 +224,7 @@ impl QuillWorld {
                 let Some(ext) = font_path.extension() else {
                     continue;
                 };
-                if !matches!(
-                    ext.to_string_lossy().to_lowercase().as_str(),
-                    "ttf" | "otf" | "woff" | "woff2"
-                ) {
+                if !matches!(ext.to_string_lossy().to_lowercase().as_str(), "ttf" | "otf") {
                     continue;
                 }
                 if let Some(contents) = source.files().get_file(&font_path) {

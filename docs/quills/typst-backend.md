@@ -1,10 +1,10 @@
 # Typst Backend
 
-The Typst backend generates PDF, SVG, and PNG documents using the [Typst](https://typst.app/) typesetting system. It converts card-yaml payload fields to Typst markup, injects them into the plate as JSON via a helper package, and compiles to the requested format.
+The Typst backend generates PDF, SVG, and PNG documents using the [Typst](https://typst.app/) typesetting system. It converts card-yaml payload fields to Typst markup, injects them into the plate via a generated helper package, and compiles to the requested format.
 
 ## Data Access
 
-Plates are plain Typst code. Document metadata reaches the plate as a JSON dictionary exposed by the virtual `@local/quillmark-helper` package:
+Plates are plain Typst code. Document metadata reaches the plate as a Typst dictionary literal exposed by the virtual `@local/quillmark-helper` package:
 
 ```typst
 #import "@local/quillmark-helper:0.1.0": data
@@ -100,7 +100,9 @@ Browse the full catalog at [Typst Universe](https://typst.app/universe/).
 
 ## Fonts
 
-System-installed fonts are available directly (`#set text(font: "Arial")`). To bundle fonts with the Quill, drop them in `assets/fonts/`:
+A Quill carries its own fonts. The backend loads every `.ttf` and `.otf` under `assets/fonts/` and inside vendored `packages/`, an asset font winning a family a package also ships. A Quill bundling none renders in the embedded Figtree faces. The host's installed fonts are not among them, so `#set text(font: "Arial")` names a family the compile cannot find.
+
+To bundle fonts with the Quill, drop them in `assets/fonts/`:
 
 ```
 my-quill/
