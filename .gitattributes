@@ -4,23 +4,10 @@
 # serialiser still emits \n), so the tree is pinned to LF everywhere instead.
 * text=auto eol=lf
 
-# Every branch appends its release note under the changelog's `## Unreleased`
-# heading, at the same line, so this was the one merge conflict most branches
-# had and never an interesting one. `union` takes both sides of a conflicting
-# hunk instead of writing markers, so two branches each adding an entry merge to
-# both entries.
-#
-# It resolves silently: two branches editing the *same* entry merge to the union
-# of both, with nothing to flag it. A deletion is not a state the union can hold
-# either, so an entry retracted on one branch returns with the next merge from a
-# branch that predates the retraction. Tolerable for prose no build step parses,
-# which is why it stays scoped to the changelog — a union-merged Cargo.lock is
-# duplicate `[[package]]` entries and a file cargo cannot read.
-#
-# Real git applies it: a local merge, a rebase, a CI runner. GitHub's merge
-# machinery reads its own attributes rather than this file, so a PR page can
-# still report the conflict that a local `git merge origin/main` resolves by
-# itself.
+# Every branch appends its entry under `## Unreleased` at the same line. `union`
+# takes both sides of a conflicting hunk, so two such branches merge to both
+# entries. Scoped to prose no build step parses: it resolves silently, and a
+# retracted entry returns from a branch predating the retraction.
 CHANGELOG.md merge=union
 
 # Vendored upstream assets, byte-identical to what their projects ship.
