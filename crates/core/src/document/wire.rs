@@ -256,13 +256,17 @@ impl TryFrom<CardWire> for Card {
                     fill,
                     nested_fills,
                 } => {
-                    validate_wire_field(&key, &value)?;
+                    let refuse =
+                        |v| WireError::Edit(super::edit::edit_error_from_violation(&key, v));
+                    super::edit::validate_field(&key, &value).map_err(refuse)?;
                     let mut qv = QuillValue::from_json(value);
                     for path in &nested_fills {
                         let segs: Vec<PathSegment> = path.iter().map(PathSegment::from).collect();
                         qv.set_fill_at(&segs);
                     }
-                    validate_wire_fill_targets(&key, &qv, fill)?;
+                    // The fill-target check reads the wire's nested markers off
+                    // the value, so it runs after `set_fill_at`.
+                    super::edit::validate_fill_targets(&qv, fill).map_err(refuse)?;
                     Ok(PayloadItem::Field {
                         key,
                         value: qv,
@@ -320,27 +324,6 @@ fn body_from_wire(body: &JsonValue) -> Result<Normalized, WireError> {
             e,
         ))
     })
-}
-
-/// Validate a wire field against the payload invariant (see
-/// `edit::validate_field`), mapping a violation to the [`EditError`] its
-/// addressed mutator raises.
-fn validate_wire_field(key: &str, value: &JsonValue) -> Result<(), WireError> {
-    super::edit::validate_field(key, value).map_err(|v| wire_field_error(key, v))
-}
-
-/// Call after `set_fill_at` has applied the wire's nested markers: the check
-/// reads them off the value.
-fn validate_wire_fill_targets(
-    key: &str,
-    value: &QuillValue,
-    fill: bool,
-) -> Result<(), WireError> {
-    super::edit::validate_fill_targets(value, fill).map_err(|v| wire_field_error(key, v))
-}
-
-fn wire_field_error(key: &str, v: super::edit::FieldViolation) -> WireError {
-    WireError::Edit(super::edit::edit_error_from_violation(key, v))
 }
 
 #[cfg(test)]

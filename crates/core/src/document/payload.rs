@@ -468,42 +468,24 @@ impl Payload {
     /// and comments are untouched; replacing a field discards its
     /// `nested_comments` (the new value tree may not carry matching positions).
     ///
-    /// Validates the field name and value depth here, so "a constructed document
-    /// cannot be invalid" holds even for the direct `Payload` path reachable
-    /// through [`Card::payload_mut`](super::Card::payload_mut). Pre-validated
-    /// callers use `insert_unchecked`.
-    pub(crate) fn insert(
-        &mut self,
-        key: impl Into<String>,
-        value: QuillValue,
-    ) -> Result<Option<QuillValue>, super::edit::FieldViolation> {
-        let key = key.into();
-        super::edit::validate_field(&key, value.as_json())?;
-        super::edit::validate_fill_targets(&value, false)?;
-        Ok(self.insert_item(key, value, false))
-    }
-
-    /// Insert or update a user field and mark it a `!must_fill` placeholder;
-    /// same rules and boundary validation as [`insert`](Self::insert).
-    pub(crate) fn insert_fill(
-        &mut self,
-        key: impl Into<String>,
-        value: QuillValue,
-    ) -> Result<Option<QuillValue>, super::edit::FieldViolation> {
-        let key = key.into();
-        super::edit::validate_field(&key, value.as_json())?;
-        super::edit::validate_fill_targets(&value, true)?;
-        Ok(self.insert_item(key, value, true))
-    }
-
-    /// [`insert`](Self::insert) without the field-invariant check, for callers
-    /// that have already validated the exact stored `(name, value)`.
+    /// Carries no field-invariant check: the caller has already validated the
+    /// exact stored `(name, value)`, as `Card::store_field` does.
     pub(crate) fn insert_unchecked(
         &mut self,
         key: impl Into<String>,
         value: QuillValue,
     ) -> Option<QuillValue> {
         self.insert_item(key.into(), value, false)
+    }
+
+    /// [`insert_unchecked`](Self::insert_unchecked) marking the field a
+    /// `!must_fill` placeholder.
+    pub(crate) fn insert_fill_unchecked(
+        &mut self,
+        key: impl Into<String>,
+        value: QuillValue,
+    ) -> Option<QuillValue> {
+        self.insert_item(key.into(), value, true)
     }
 
     /// Insert or replace field `key` with `value`, setting its fill marker.
@@ -595,7 +577,7 @@ mod tests {
         let mut fm = Payload::new();
         fm.set_quill("foo@0.1".parse().unwrap());
         fm.set_kind("main");
-        fm.insert("title", qv("Hello")).unwrap();
+        fm.insert_unchecked("title", qv("Hello"));
         let last = fm.items().last().unwrap();
         assert!(matches!(last, PayloadItem::Field { key, .. } if key == "title"));
     }
@@ -603,9 +585,9 @@ mod tests {
     #[test]
     fn insert_existing_preserves_position() {
         let mut fm = Payload::new();
-        fm.insert("a", qv("1")).unwrap();
-        fm.insert("b", qv("2")).unwrap();
-        fm.insert("a", qv("updated")).unwrap();
+        fm.insert_unchecked("a", qv("1"));
+        fm.insert_unchecked("b", qv("2"));
+        fm.insert_unchecked("a", qv("updated"));
         let keys: Vec<&String> = fm.keys().collect();
         assert_eq!(keys, vec!["a", "b"]);
         assert_eq!(fm.get("a").unwrap().as_str(), Some("updated"));
@@ -614,35 +596,15 @@ mod tests {
     #[test]
     fn insert_clears_fill() {
         let mut fm = Payload::new();
-        fm.insert_fill("k", qv("placeholder")).unwrap();
+        fm.insert_fill_unchecked("k", qv("placeholder"));
         assert!(fm.is_fill("k"));
-        fm.insert("k", qv("user value")).unwrap();
+        fm.insert_unchecked("k", qv("user value"));
         assert!(!fm.is_fill("k"));
     }
 
     #[test]
-    fn insert_enforces_the_field_invariant() {
-        use super::super::edit::FieldViolation;
-
+    fn unchecked_insert_stores_what_it_is_handed() {
         let mut fm = Payload::new();
-        assert_eq!(fm.insert("bad name", qv("v")), Err(FieldViolation::InvalidName));
-        assert_eq!(fm.insert("$id", qv("v")), Err(FieldViolation::InvalidName));
-        assert_eq!(
-            fm.insert_fill("bad name", qv("v")),
-            Err(FieldViolation::InvalidName)
-        );
-
-        let mut deep = serde_json::json!(0);
-        for _ in 0..(quillmark_content::MAX_JSON_DEPTH + 5) {
-            deep = serde_json::json!([deep]);
-        }
-        assert_eq!(
-            fm.insert("field", QuillValue::from_json(deep)),
-            Err(FieldViolation::TooDeep)
-        );
-
-        assert!(fm.items().is_empty());
-
         fm.insert_unchecked("bad name", qv("v"));
         assert_eq!(fm.items().len(), 1);
     }
@@ -652,7 +614,7 @@ mod tests {
         let mut fm = Payload::new();
         fm.set_quill("foo@0.1".parse().unwrap());
         fm.set_kind("main");
-        let _ = fm.insert("title", qv("Hello"));
+        fm.insert_unchecked("title", qv("Hello"));
         let items = fm.items().to_vec();
         let mut items_with_comment = items;
         items_with_comment.insert(2, PayloadItem::comment("c"));

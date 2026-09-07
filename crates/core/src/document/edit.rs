@@ -710,9 +710,10 @@ impl Card {
     /// Returns [`EditError::InvalidFieldName`] when `name` does not match
     /// `[A-Za-z_][A-Za-z0-9_]*`.
     pub fn store_field(&mut self, name: &str, value: impl Into<QuillValue>) -> Result<(), EditError> {
-        self.payload_mut()
-            .insert(name.to_string(), value.into())
-            .map_err(|v| edit_error_from_violation(name, v))?;
+        let value = value.into();
+        check_field(name, value.as_json())?;
+        validate_fill_targets(&value, false).map_err(|v| edit_error_from_violation(name, v))?;
+        self.payload_mut().insert_unchecked(name.to_string(), value);
         Ok(())
     }
 
@@ -720,9 +721,11 @@ impl Card {
     /// `Null` emits as `key: !must_fill`; other values as
     /// `key: !must_fill <value>`. Validation as [`Card::store_field`].
     pub fn store_fill(&mut self, name: &str, value: impl Into<QuillValue>) -> Result<(), EditError> {
+        let value = value.into();
+        check_field(name, value.as_json())?;
+        validate_fill_targets(&value, true).map_err(|v| edit_error_from_violation(name, v))?;
         self.payload_mut()
-            .insert_fill(name.to_string(), value.into())
-            .map_err(|v| edit_error_from_violation(name, v))?;
+            .insert_fill_unchecked(name.to_string(), value);
         Ok(())
     }
 
@@ -1183,6 +1186,36 @@ mod tests {
                 .to_string(),
             "cards.indorsement[1].signature_block"
         );
+    }
+
+    #[test]
+    fn the_store_verbs_enforce_the_field_invariant() {
+        let qv = QuillValue::from_json;
+        let mut card = Card::new("note").unwrap();
+
+        for name in ["bad name", "$id"] {
+            assert_eq!(
+                card.store_field(name, qv(serde_json::json!("v"))),
+                Err(EditError::InvalidFieldName(name.to_string()))
+            );
+            assert_eq!(
+                card.store_fill(name, qv(serde_json::json!("v"))),
+                Err(EditError::InvalidFieldName(name.to_string()))
+            );
+        }
+
+        let mut deep = serde_json::json!(0);
+        for _ in 0..(quillmark_content::MAX_JSON_DEPTH + 5) {
+            deep = serde_json::json!([deep]);
+        }
+        assert_eq!(
+            card.store_field("field", qv(deep)),
+            Err(EditError::ValueTooDeep {
+                max: quillmark_content::MAX_JSON_DEPTH
+            })
+        );
+
+        assert!(card.payload().is_empty());
     }
 
     #[test]
