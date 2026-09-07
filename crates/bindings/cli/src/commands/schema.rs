@@ -1,6 +1,5 @@
 use crate::commands::load_quill;
 use crate::errors::{CliError, Result};
-use crate::output::write_file;
 use clap::Parser;
 use std::path::PathBuf;
 
@@ -9,10 +8,6 @@ pub struct SchemaArgs {
     /// Path to quill directory
     #[arg(value_name = "QUILL_PATH")]
     quill: PathBuf,
-
-    /// Output file path (optional)
-    #[arg(short, long, value_name = "FILE")]
-    output: Option<PathBuf>,
 }
 
 pub fn execute(args: SchemaArgs) -> Result<()> {
@@ -23,11 +18,7 @@ pub fn execute(args: SchemaArgs) -> Result<()> {
         .schema_yaml()
         .map_err(|e| CliError::InvalidArgument(format!("Failed to serialize schema: {}", e)))?;
 
-    if let Some(output_path) = args.output {
-        write_file(&output_path, schema_yaml.as_bytes(), false)?;
-    } else {
-        println!("{}", schema_yaml);
-    }
+    println!("{}", schema_yaml);
 
     Ok(())
 }

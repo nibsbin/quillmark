@@ -143,33 +143,27 @@ fn an_unloadable_quill_is_not_an_invalid_argument() {
     );
 }
 
-#[test]
-fn output_flag_writes_the_named_file() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let quill = taro();
-
-    for (cmd, name) in [("schema", "schema.yaml"), ("blueprint", "blueprint.md")] {
-        let path = dir.path().join(name);
-        ok(&[cmd, quill.to_str().unwrap(), "-o", path.to_str().unwrap()]);
-        let written = std::fs::read_to_string(&path).expect("the -o file exists");
-        assert!(!written.trim().is_empty(), "{cmd} -o wrote an empty file");
-    }
-}
-
-/// `-o` names a directory that does not exist yet, as `render -o` allows, and
-/// the file still lands there without a word on stdout.
+/// `-o` names a directory that does not exist yet, and the artifact still lands
+/// there.
 #[test]
 fn output_flag_creates_parent_directories() {
     let dir = tempfile::tempdir().expect("tempdir");
     let quill = taro();
+    let path = dir.path().join("nested").join("deeper").join("out.pdf");
 
-    for (cmd, name) in [("schema", "s.yaml"), ("blueprint", "b.md")] {
-        let path = dir.path().join("nested").join(cmd).join(name);
-        let stdout = ok(&[cmd, quill.to_str().unwrap(), "-o", path.to_str().unwrap()]);
-        assert!(stdout.is_empty(), "{cmd} -o wrote to stdout: {stdout}");
-        let written = std::fs::read_to_string(&path).expect("the -o file exists");
-        assert!(!written.trim().is_empty(), "{cmd} -o wrote an empty file");
-    }
+    ok(&[
+        "render",
+        quill.to_str().unwrap(),
+        "-o",
+        path.to_str().unwrap(),
+    ]);
+
+    let bytes = std::fs::read(&path).expect("the -o file exists");
+    assert!(
+        bytes.starts_with(b"%PDF-"),
+        "output is not a PDF (first bytes: {:?})",
+        &bytes[..bytes.len().min(8)]
+    );
 }
 
 #[test]
@@ -193,13 +187,28 @@ fn render_writes_a_pdf() {
     );
 }
 
-/// A `--verbose` line on stdout does not garble a message, it corrupts the PDF
-/// the caller is redirecting.
+/// A warning line on stdout does not garble a message, it corrupts the PDF the
+/// caller is redirecting: `usaf_memo` declines a `***`, so this render warns.
 #[test]
-fn verbose_does_not_contaminate_the_stdout_artifact() {
-    let quill = taro();
-    let out = run(&["render", quill.to_str().unwrap(), "--stdout", "--verbose"]);
-    assert!(out.status.success(), "render --stdout --verbose failed");
+fn chatter_does_not_contaminate_the_stdout_artifact() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let doc = dir.path().join("rule.md");
+    std::fs::write(
+        &doc,
+        "~~~card-yaml\n$quill: usaf_memo\n$kind: main\n~~~\n\none\n\n***\n\ntwo\n",
+    )
+    .expect("write the input document");
+
+    let memo = quillmark_fixtures::quills_path("usaf_memo");
+    let out = run(&[
+        "render",
+        memo.to_str().unwrap(),
+        doc.to_str().unwrap(),
+        "--stdout",
+    ]);
+
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "render --stdout failed: {stderr}");
     assert!(
         out.stdout.starts_with(b"%PDF-"),
         "stdout starts with {:?}, not PDF bytes",
@@ -210,8 +219,8 @@ fn verbose_does_not_contaminate_the_stdout_artifact() {
         "stdout has trailing bytes after the PDF trailer"
     );
     assert!(
-        !out.stderr.is_empty(),
-        "--verbose emitted nothing on stderr, so the chatter went somewhere else"
+        stderr.contains("plate::unsupported_construct"),
+        "the warning went somewhere other than stderr: {stderr}"
     );
 }
 
@@ -421,26 +430,39 @@ fn format_casing_does_not_reach_the_output_filename() {
     );
 }
 
-/// `--quiet` wins over `--verbose`: no progress line reaches stderr.
+/// `--quiet` silences both streams a successful render writes: the warning on
+/// stderr and the destination line on stdout. `usaf_memo` declines a `***`, so
+/// this render has a warning to suppress.
 #[test]
-fn quiet_silences_verbose() {
+fn quiet_silences_the_warning_and_the_destination_line() {
     let dir = tempfile::tempdir().expect("tempdir");
+    let doc = dir.path().join("rule.md");
+    std::fs::write(
+        &doc,
+        "~~~card-yaml\n$quill: usaf_memo\n$kind: main\n~~~\n\none\n\n***\n\ntwo\n",
+    )
+    .expect("write the input document");
     let out_path = dir.path().join("out.pdf");
-    let quill = taro();
+    let memo = quillmark_fixtures::quills_path("usaf_memo");
 
     let out = run(&[
         "render",
-        quill.to_str().unwrap(),
+        memo.to_str().unwrap(),
+        doc.to_str().unwrap(),
         "-o",
         out_path.to_str().unwrap(),
-        "--verbose",
         "--quiet",
     ]);
+
     assert!(out.status.success(), "exited {:?}", out.status.code());
     assert!(
         out.stderr.is_empty(),
-        "--quiet let --verbose through:\n{}",
+        "--quiet let the warning through:\n{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    assert!(out.stdout.is_empty(), "--quiet let the destination line through");
+    assert!(
+        out.stdout.is_empty(),
+        "--quiet let the destination line through:\n{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
 }

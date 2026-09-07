@@ -1,6 +1,7 @@
 use crate::errors::{CliError, Result};
 use clap::Parser;
-use quillmark_core::quill::{CardSchema, FieldSchema, QuillConfig};
+use quillmark::Quill;
+use quillmark_core::quill::{CardSchema, FieldSchema};
 use quillmark_core::{Diagnostic, Severity};
 use indexmap::IndexMap;
 use std::path::{Path, PathBuf};
@@ -68,7 +69,7 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
         println!("  Defaults extracted: {}", config.main.defaults().len());
     }
 
-    validate_file_references(&args.quill_path, config, &mut result);
+    validate_file_references(&quill, &mut result);
 
     validate_field_schemas(&config.main.fields, &mut result, "field");
 
@@ -85,16 +86,12 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
     }
 }
 
-fn validate_file_references(
-    quill_path: &Path,
-    config: &QuillConfig,
-    result: &mut ValidationResult,
-) {
-    // `plate_file` comes from the untrusted Quill.yaml, so reject anything but
-    // a simple relative filename before touching the filesystem: an absolute
-    // `Path::join` replaces the base and `..` escapes the quill root, either of
-    // which turns `plate_path.exists()` into a host path-probing oracle.
-    if let Some(plate_file) = config
+fn validate_file_references(quill: &Quill, result: &mut ValidationResult) {
+    // The tree lookup answers `None` to a path that escapes the quill and to one
+    // that is simply absent, so the component test runs first and names which of
+    // the two a `plate_file` from an untrusted Quill.yaml hit.
+    if let Some(plate_file) = quill
+        .config()
         .backend_config
         .get("plate_file")
         .and_then(|v| v.as_str())
@@ -112,15 +109,12 @@ fn validate_file_references(
                 ),
                 "cli::plate_file_escapes_quill",
             );
-        } else {
-            let plate_path = quill_path.join(rel);
-            if !plate_path.exists() {
-                result.add(
-                    Severity::Error,
-                    format!("Referenced plate_file '{}' does not exist", plate_file),
-                    "cli::plate_file_missing",
-                );
-            }
+        } else if quill.files().get_file(rel).is_none() {
+            result.add(
+                Severity::Error,
+                format!("Referenced plate_file '{}' does not exist", plate_file),
+                "cli::plate_file_missing",
+            );
         }
     }
 }

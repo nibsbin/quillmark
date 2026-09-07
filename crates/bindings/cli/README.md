@@ -42,14 +42,13 @@ rendered instead, so a quill previews without any authored input.
 - `-f, --format <FORMAT>` — `pdf` (default), `svg`, or `png`
 - `--stdout` — write the artifact to stdout; all chatter moves to stderr
 - `--output-data <DATA_FILE>` — also write the compiled JSON data handed to the backend
-- `-v, --verbose` — progress detail on stderr
-- `--quiet` — suppress non-error output
+- `--quiet` — suppress warnings and the output-destination line
 
-### `quillmark schema <QUILL_PATH> [-o <FILE>]`
+### `quillmark schema <QUILL_PATH>`
 
 Prints the quill's field schema as YAML.
 
-### `quillmark blueprint <QUILL_PATH> [-o <FILE>]`
+### `quillmark blueprint <QUILL_PATH>`
 
 Prints an annotated Markdown blueprint: a starting document with every declared
 field, `!must_fill` where a value is expected.
