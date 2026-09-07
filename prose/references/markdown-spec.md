@@ -280,9 +280,10 @@ of:
 | `name@latest` | latest overall (explicit) |
 | `name` | latest overall (default: `@version` omitted) |
 
-Quill names match `/^[a-z_][a-z0-9_]*$/`. Resolution of partial selectors to
-concrete versions is performed by the quill registry; this spec fixes only
-the surface syntax accepted on the `$quill` line.
+Quill names match `/^[a-z_][a-z0-9_]*$/`. The selector is a pin, not a
+resolver: this spec fixes the surface syntax accepted on the `$quill` line,
+and matching a partial selector against a set of installed versions belongs to
+a layer above the engine.
 
 ## 4. Block Detection
 

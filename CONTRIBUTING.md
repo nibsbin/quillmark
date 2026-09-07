@@ -37,7 +37,9 @@ The changelog is seeded from commit subjects, so the `!` marker is where a break
 
 ## Binding tests
 
-**WASM:** repo root → `./scripts/build-wasm.sh` → `cd crates/bindings/wasm` → `npm install` (first time) → `npm run test`
+**WASM:** repo root → `./scripts/build-wasm.sh --ci` → `cd crates/bindings/wasm` → `npm install` (first time) → `npm run test`
+
+`--ci` is the fast-compile profile; bare `build-wasm.sh` is the optimized publish build.
 
 **Python:** `cd crates/bindings/python` → `uv venv` → `source .venv/bin/activate` → `uv pip install maturin pytest` → `maturin develop` → `pytest`
 

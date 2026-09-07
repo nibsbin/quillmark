@@ -11,7 +11,7 @@
     ## Basic Usage
 
     ```python
-    from quillmark import Document, Quill, Quillmark, OutputFormat
+    from quillmark import Quill, Quillmark, OutputFormat
 
     engine = Quillmark()                       # backend registry + render dispatcher
     quill = Quill.from_path("path/to/quill")   # portable, declarative config data
@@ -25,7 +25,8 @@
     # Hello World
     """
 
-    doc = Document.from_markdown(markdown)
+    # The bound door: parse and conform against the quill that will render it.
+    doc = quill.parse(markdown)
     result = engine.render(quill, doc, OutputFormat.PDF)
 
     with open("output.pdf", "wb") as f:
@@ -50,7 +51,7 @@
     // Typst loads lazily on the first render.
     import { init, Engine } from "@quillmark/wasm";
 
-    const { Quill, Document } = await init();
+    const { Quill } = await init();
 
     const enc = new TextEncoder();
 
@@ -68,7 +69,8 @@
 
     # Hello World`;
 
-    const doc = Document.fromMarkdown(markdown);
+    // The bound door: parse and conform against the quill that will render it.
+    const doc = quill.parse(markdown);
 
     // Rendering goes through the Engine. Its methods are async: the first call
     // lazily loads the Typst backend binary; the canonical quill crosses into

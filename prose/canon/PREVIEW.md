@@ -31,28 +31,13 @@ per-keystroke cost is *incremental recompile + repaint of `dirty ∩ visible`*.
 
 ## The seam
 
-`core` carries a backend-neutral session seam on `SessionHandle`; the WASM
-painter dispatches through it generically, never downcasting to a backend
-session type:
-
-```rust
-// quillmark-core
-pub trait SessionHandle: Send + Sync + 'static {
-    fn render(&self, opts: &RenderOptions) -> Result<RenderResult, RenderError>;
-    fn page_count(&self) -> usize;
-
-    // Edit seam: default Err = "update unsupported".
-    fn update(&mut self, json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> { ... }
-
-    // Canvas seam: default None = "no painter".
-    fn page_size_pt(&self, page: usize) -> Option<(f32, f32)> { None }
-    fn render_rgba(&self, page: usize, scale: f32)
-        -> Result<Option<(u32, u32, Vec<u8>)>, RenderError> { Ok(None) }
-
-    // Warnings seam: the current compile's non-fatal diagnostics; default empty.
-    fn warnings(&self) -> &[Diagnostic] { &[] }
-}
-```
+`core` carries a backend-neutral session seam on `SessionHandle`
+(`crates/core/src/session.rs`); the WASM painter dispatches through it
+generically, never downcasting to a backend session type. Past `render` and
+`page_count`, every method carries a default that reads as *absent*: `update`
+an `Err`, the canvas, geometry, and warnings reads `None` or empty. A backend
+answers the ones it can, and its capabilities are exactly the defaults it
+overrode.
 
 A backend opts into canvas by overriding the two seam methods; there is
 no separate capability flag. Capability is **derived** from the seam:

@@ -33,11 +33,10 @@ env:
 # `publish-crates`, the last point a failure still costs nothing.
 #
 # A gate reading a file the diff rarely touches earns its runner elsewhere.
-# Dependabot alerts watch Cargo.lock continuously, quiet weeks included. A local
-# `cargo audit` reports RUSTSEC-2026-0194 and -0195, both quick-xml <0.41,
-# reached only through citationberg -> hayagriva -> typst-library, and pinned by
-# that tree rather than by this workspace: not actionable here. No `rust-version`
-# exists to verify.
+# Dependabot alerts watch Cargo.lock continuously, quiet weeks included, and what
+# a local `cargo audit` surfaces is pinned by the typst dependency tree rather
+# than by this workspace: not actionable here. No `rust-version` exists to
+# verify.
 
 jobs:
   lint:
@@ -74,17 +73,15 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
 
-      # Clippy is not gated: `cargo doc -Dwarnings` is the standing lint gate. A
-      # clippy gate (a11caa45) bought a clippy-clean tree for more CI time than
-      # it was worth (68c3751a). Do not re-add a "make clippy clean" pass
-      # expecting CI to enforce it; record the policy change here first.
+      # Clippy is not gated: `cargo doc -Dwarnings` is the standing lint gate,
+      # and a clippy gate costs more CI time than a clippy-clean tree is worth.
+      # Do not re-add one expecting CI to enforce it; record the policy change
+      # here first.
       #
-      # `--workspace`, not a bare `cargo doc`: bare walks default-members, and
-      # a crate outside it is never linted, the blind spot that let two broken
-      # `Delta` links accumulate on the JS surface (#1034) and four more in
-      # quillmark-content, which is published, so its rustdoc is what docs.rs
-      # serves. Every member documents on the host toolchain, the wasm32
-      # cdylib included (it carries an rlib target too), so this needs no
+      # `--workspace`, not a bare `cargo doc`: bare walks default-members, so a
+      # crate outside it is never linted, and a published crate's rustdoc is
+      # what docs.rs serves. Every member documents on the host toolchain, the
+      # wasm32 cdylib included (it carries an rlib target too), so this needs no
       # `--exclude` and a crate added outside default-members is covered the
       # day it lands.
       - name: Build docs

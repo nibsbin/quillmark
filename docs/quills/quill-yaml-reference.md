@@ -473,7 +473,7 @@ The two registry forms are interchangeable: a bare sequence of ids (`[addressing
 
 `group` applies only to card-level fields (those directly under a card's `fields:`). Grouping never descends into an object's properties or an array's items, so a `group` on a nested property is a hard error (`quill::nested_group_not_supported`) rather than a silently inert knob.
 
-**Implicit groups (deprecated).** A `ui.group` with no `ui.groups` registry on the card works: each distinct value is an implicit group whose label *is* the value, ordered by first appearance. It emits a `quill::implicit_group` deprecation warning and will become an error in a future release. Declare a registry to silence it.
+**Implicit groups (deprecated).** A `ui.group` with no `ui.groups` registry on the card works: each distinct value is an implicit group whose label *is* the value, ordered by first appearance. It emits a `quill::implicit_group` warning. Declare a registry to silence it.
 
 ### field order
 

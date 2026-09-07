@@ -1,6 +1,6 @@
 # prose/
 
-Long-form project documentation, in four tiers by maturity:
+Long-form project documentation, in two tiers:
 
 - **`canon/`**, canonical documentation: high-level, stable captures of the
   codebase's systems, specifications, and intent. The settled truth. Start at
@@ -10,14 +10,8 @@ Long-form project documentation, in four tiers by maturity:
   reference is self-contained: it makes no outbound links to other prose
   docs, so it can be cited freely from canon, user docs, and code comments
   without forming a cycle.
-- **`proposals/`**: fleshed-out proposed changes, not yet implemented. Each is
-  a concrete plan. Removed once landed or abandoned.
-- **`plans/`**, working plans for multi-phase reworks in flight: the
-  integration HQ for a change too large for a single proposal. One subdirectory
-  per rework. Removed once the rework lands.
 
-Canonical docs never reference proposals or plans. References never link
-out to other prose docs.
+References never link out to other prose docs.
 
 ## Canon and `docs/`
 
