@@ -1663,10 +1663,6 @@ impl QuillConfig {
         chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
     }
 
-    fn is_valid_quill_name(name: &str) -> bool {
-        name == "__default__" || Self::is_snake_case_identifier(name)
-    }
-
     /// Parse QuillConfig from YAML content while collecting non-fatal warnings.
     ///
     /// Returns `Ok((config, warnings))` on success, or `Err(errors)` containing all
@@ -1729,7 +1725,7 @@ impl QuillConfig {
         // Extract required fields: collect all missing-field errors before returning.
         let name = match quill_section.get("name").and_then(|v| v.as_str()) {
             Some(n) => {
-                if !Self::is_valid_quill_name(n) {
+                if !Self::is_snake_case_identifier(n) {
                     errors.push(
                         Diagnostic::new(
                             Severity::Error,
