@@ -21,7 +21,7 @@ const staticsOf = (C) =>
 
 // Importing this file at all is itself a case: module evaluation must touch no
 // wasm, and runtime.js patches `Quill.prototype` at import.
-describe('@quillmark/wasm/runtime: the static surface, before init', () => {
+describe('@quillmark/wasm: the static surface, before init', () => {
   // The premise, without which every case below passes vacuously. Core is a
   // `--target web` build: its classes export synchronously and its functions
   // throw until something instantiates it.

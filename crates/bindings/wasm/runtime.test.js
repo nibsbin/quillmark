@@ -1,5 +1,5 @@
 /**
- * The canonical `@quillmark/wasm/runtime` API end to end: a CORE quill and
+ * The canonical `@quillmark/wasm` API end to end: a CORE quill and
  * document handed to `Engine` render correctly, the engine cloning them into the
  * Typst backend's memory on demand without the caller ever seeing a backend
  * handle.
@@ -92,7 +92,7 @@ const PKG_DIR = path.resolve(import.meta.dirname, '..', '..', '..', 'pkg')
 const fieldOf = (card, key) =>
   card.payloadItems.find((i) => i.type === 'field' && i.key === key)?.value
 
-describe('@quillmark/wasm/runtime: surface', () => {
+describe('@quillmark/wasm: surface', () => {
   // IMPLEMENTATION PIN: the gate hands out the internal core build's classes
   // verbatim (never wraps). There is exactly one public entry point, so this is
   // an internal structural fact rather than a cross-entry-point contract. If it
@@ -161,7 +161,7 @@ describe('@quillmark/wasm/runtime: surface', () => {
 // `basic.test.js`. What is the sugar's own, and what these pin: each verb
 // forwards to the right ABI call with the right address, and errors propagate
 // rather than being swallowed.
-describe('@quillmark/wasm/runtime: DocumentWriter / CardWriter (bind the quill once)', () => {
+describe('@quillmark/wasm: DocumentWriter / CardWriter (bind the quill once)', () => {
   const EDITOR_QUILL_YAML = `quill:
   name: editor_test
   version: "1.0"
@@ -322,7 +322,7 @@ card_kinds:
 // once and read each field by its declared type (a richtext field to markdown,
 // every other type verbatim) with schema authority, so an unknown field name
 // throws rather than reading back `undefined` off the quill-free `Document`.
-describe('@quillmark/wasm/runtime: DocumentReader / CardReader (the schema-plane read)', () => {
+describe('@quillmark/wasm: DocumentReader / CardReader (the schema-plane read)', () => {
   const VIEW_QUILL_YAML = `quill:
   name: view_test
   version: "1.0"
@@ -642,7 +642,7 @@ card_kinds:
 // take, so a main-card batch write reads as intent (`storeFields(MAIN_CARD_ADDR,
 // fields)`) rather than as an anonymous `{}`. It IS `{}` (frozen), so it is a
 // pure alias: `{}` and `undefined` stay equally valid.
-describe('@quillmark/wasm/runtime: MAIN_CARD_ADDR (the named main-card address)', () => {
+describe('@quillmark/wasm: MAIN_CARD_ADDR (the named main-card address)', () => {
   it('is a frozen, empty card address: {} with a name', () => {
     expect(MAIN_CARD_ADDR).toEqual({})
     expect(Object.isFrozen(MAIN_CARD_ADDR)).toBe(true)
@@ -667,7 +667,7 @@ describe('@quillmark/wasm/runtime: MAIN_CARD_ADDR (the named main-card address)'
   })
 })
 
-describe('@quillmark/wasm/runtime: open-set membership guards', () => {
+describe('@quillmark/wasm: open-set membership guards', () => {
   // One known name per axis, not the whole table: membership is a `Set.has`,
   // uniform across members, and the tables themselves are pinned against the
   // Rust constants by `crates/bindings/wasm/tests/known_names_drift.rs`.
@@ -694,7 +694,7 @@ describe('@quillmark/wasm/runtime: open-set membership guards', () => {
   })
 })
 
-describe('@quillmark/wasm/runtime: container run boundaries', () => {
+describe('@quillmark/wasm: container run boundaries', () => {
   const LIST = { container: 'list_item', attrs: { ordered: false, start: 1, ordinal: 0 } }
   const QUOTE = { container: 'quote' }
   const content = (a, b) => ({
@@ -749,7 +749,7 @@ describe('@quillmark/wasm/runtime: container run boundaries', () => {
   })
 })
 
-describe('@quillmark/wasm/runtime: Engine (hidden core→backend crossing)', () => {
+describe('@quillmark/wasm: Engine (hidden core→backend crossing)', () => {
   // Warm the lazy Typst-backend import + first Typst compile once, outside any
   // timed test. `Engine.render` dynamically `import()`s the backend wasm binary
   // on first render: a one-time cost (large module instantiation) that on a
@@ -1314,7 +1314,7 @@ main:
 // real handle has (the shape most likely to slip a check), and a second copy of
 // the built core artifact on disk, which is a genuinely different class over a
 // different linear memory.
-describe('@quillmark/wasm/runtime: handles from another copy (duplicate install)', () => {
+describe('@quillmark/wasm: handles from another copy (duplicate install)', () => {
   const foreignDoc = (doc) => ({ toStored: () => doc.toStored() })
   const foreignQuill = (quill) => ({
     toTree: () => quill.toTree(),
