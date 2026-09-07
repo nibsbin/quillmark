@@ -487,12 +487,7 @@ impl PyDocument {
     fn card<'py>(&self, py: Python<'py>, index: isize) -> PyResult<Bound<'py, PyDict>> {
         let len = self.inner.cards().len();
         let index = card_index(index, len)?;
-        let card = self.inner.card(index).ok_or_else(|| {
-            convert_edit_error(
-                quillmark_core::EditError::IndexOutOfRange { index, len },
-                &quillmark_core::DocPath::new(),
-            )
-        })?;
+        let card = self.inner.card(index).ok_or_else(|| index_error(index, len))?;
         card_to_pydict(py, card)
     }
 
@@ -715,12 +710,7 @@ impl PyDocument {
     fn card_mut_or_raise(&mut self, index: isize) -> PyResult<&mut quillmark_core::Card> {
         let len = self.inner.cards().len();
         let index = card_index(index, len)?;
-        self.inner.card_mut(index).ok_or_else(|| {
-            convert_edit_error(
-                quillmark_core::EditError::IndexOutOfRange { index, len },
-                &quillmark_core::DocPath::new(),
-            )
-        })
+        self.inner.card_mut(index).ok_or_else(|| index_error(index, len))
     }
 
     fn addr_card_mut(&mut self, card: Option<isize>) -> PyResult<&mut quillmark_core::Card> {
@@ -746,6 +736,13 @@ impl PyDocument {
 /// The card root at `index`, kind-qualified from the stored `$kind`.
 fn card_base(doc: &Document, index: usize) -> quillmark_core::DocPath {
     quillmark_core::DocPath::card(doc.cards().get(index).and_then(|c| c.kind()), index)
+}
+
+fn index_error(index: usize, len: usize) -> PyErr {
+    convert_edit_error(
+        quillmark_core::EditError::IndexOutOfRange { index, len },
+        &quillmark_core::DocPath::new(),
+    )
 }
 
 /// A `Document` bound to its `Quill` for typed writes, from `Quill.writer(doc)`.
@@ -1281,15 +1278,7 @@ impl PyCardReader {
         let card = doc
             .inner
             .card(index)
-            .ok_or_else(|| {
-                convert_edit_error(
-                    quillmark_core::EditError::IndexOutOfRange {
-                        index,
-                        len: doc.inner.cards().len(),
-                    },
-                    &quillmark_core::DocPath::new(),
-                )
-            })?;
+            .ok_or_else(|| index_error(index, doc.inner.cards().len()))?;
         Ok(card.body_markdown())
     }
 }
