@@ -12,8 +12,8 @@ use std::borrow::Cow;
 
 /// A position in a [`Content`], counted in Unicode scalar values (USV): never
 /// bytes, never UTF-16 units. One astral char is 1 USV / 4 UTF-8 bytes / 2
-/// UTF-16 units. Conversions to/from the JS (UTF-16) and Rust (UTF-8)
-/// boundaries live in [`crate::usv`].
+/// UTF-16 units. [`crate::usv`] converts one to the UTF-8 byte offset Rust
+/// slicing needs.
 pub type Usv = usize;
 
 /// U+FFFC OBJECT REPLACEMENT CHARACTER: the single-USV slot an island occupies
@@ -1117,12 +1117,10 @@ impl Content {
     /// not reuse one (its serialization would parse back as the built-in,
     /// silently dropping its attrs: non-injective).
     ///
-    /// Two enforcement points. [`Content::validate`] catches an in-process Rust
-    /// construction. The wire never reaches it, since a decoder resolves the
-    /// built-in name before the `Unknown` fallthrough, so the authored lane
-    /// ([`serial::from_authored_value`](crate::serial::from_authored_value), the
-    /// op-wire readers) rejects the shape up front while storage decode stays
-    /// lenient.
+    /// [`Content::validate`] is the one enforcement point, and an in-process
+    /// Rust construction the one way in: every decoder resolves a built-in name
+    /// before the `Unknown` fallthrough, so no wire value produces a
+    /// reserved-tag `Unknown` for a lane to reject.
     ///
     /// This list and its two siblings are re-spelled by hand on the TypeScript
     /// surface and pinned to these constants by

@@ -302,7 +302,7 @@ fn insert_attrs(m: &mut Map<String, Value>, attrs: Cow<'_, Value>) {
 }
 
 /// Encode a [`LineKind`] into its canonical `kind` object (`{"kind":"para"}`,
-/// `{"kind":"heading","level":n}`, …).
+/// `{"attrs":{"level":n},"kind":"heading"}`, …).
 pub fn line_kind_to_value(kind: &LineKind) -> Value {
     Value::Object(line_kind_fields(kind))
 }
