@@ -62,7 +62,6 @@ impl MetaKey {
             MetaKey::Seed => 3,
         }
     }
-
 }
 
 /// One entry in a [`Payload`]: a typed `$` system metadata entry, a user field,

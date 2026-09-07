@@ -2456,6 +2456,26 @@ fn enum_blank_ignores_a_declared_blank_member() {
     );
 }
 
+/// The three retired keys whose rejection is `deny_unknown_fields` on
+/// `FieldSchemaDef` and `UiFieldSchema` rather than a named arm: nothing else
+/// states that a quill written against them still fails to load, and the key
+/// naming itself in the message is what routes an author to the guide.
+#[test]
+fn the_retired_keys_are_still_load_errors() {
+    for (field, key) in [
+        ("    s:\n      type: string\n      must_fill: true\n", "must_fill"),
+        ("    color:\n      type: string\n      enum: [a, b]\n", "enum"),
+        ("    title:\n      type: string\n      ui: { order: 3 }\n", "order"),
+    ] {
+        let err = quill_with_field(field).unwrap_err();
+        assert!(
+            err.iter().any(|d| d.code.as_deref() == Some("quill::field_parse_error")
+                && d.message.contains(key)),
+            "`{key}:` should fail load naming the key, got: {err:?}"
+        );
+    }
+}
+
 #[test]
 fn richtext_inline_type_token_is_rejected_at_load() {
     let err = quill_with_field("    tag:\n      type: richtext(inline)\n").unwrap_err();
