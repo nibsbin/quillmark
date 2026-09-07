@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- fix(wasm): **a failed conversion at the typed boundary throws instead of
+  stranding the JS handle.** `RenderOptions`, `RenderResult`, `Diagnostic`,
+  `ChangeSet`, `ContentHit` and `FieldRegion` cross as `tsify::Ts<T>`, whose
+  handle the wasm-bindgen shim owns and frees; the deprecated `into_wasm_abi` /
+  `from_wasm_abi` impls they carried leaked it on the way out (tsify#65), and
+  took the module down with a trap rather than a catchable error when
+  serialization failed. The TypeScript surface is byte-identical, and the crate
+  compiles warning-free, so the next deprecation is visible.
 - fix(docs): **the 57 comments and doc claims that contradicted the code now
   state it.** The user-visible ones: the Typst backend never searched system
   fonts, so its docs stop promising `#set text(font: "Arial")` and name what a
