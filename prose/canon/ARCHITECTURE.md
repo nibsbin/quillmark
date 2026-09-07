@@ -60,7 +60,8 @@ them onto the base `form.pdf` as real interactive fields (Technique A:
 
 The PDF deliverable is always an interactive AcroForm. The backend also emits
 SVG and PNG (and a WASM canvas raster) by pre-flattening values into the page
-content streams (hayro raster). Field geometry is a session-level query
+content streams and rasterizing that with hayro. Field geometry is a
+session-level query
 (`LiveSession::regions()`): per-field geometry keyed on the schema field path,
 no bound value. Quill-authoring surface:
 [docs/quills/pdfform-backend.md](../../docs/quills/pdfform-backend.md); preview
@@ -72,11 +73,8 @@ The shared PDF stamp spine: Typst-free, `pdf-writer`-only leaf infrastructure
 consumed by `quillmark-pdfform`. A minimal byte-level reader plus a single
 incremental-update appender that splices a fresh `/AcroForm` (and `/Info`
 `/Producer` stamp) onto a base PDF. Deliberately small: it hard-errors on
-out-of-contract input (xref streams, encryption, indirect `/Annots`,
-non-zero-generation base objects, a base that already carries an `/AcroForm`,
-a non-finite widget `/Rect`, a page `/Rotate` it cannot resolve to zero, a page
-box that is not a direct array of numbers, a canvas box under a point per side)
-rather than parsing the full format.
+out-of-contract input rather than parsing the full format; `reader`'s module
+docs carry that input contract.
 
 ### `bindings/*`
 
@@ -90,9 +88,9 @@ Test resources under `resources/`. Helper functions for test setup.
 
 ### `quillmark-fuzz`
 
-Property-based fuzz tests (proptest) over YAML/Markdown parsing, Markdown→Typst
-conversion and escaping, emit roundtripping, filter injection safety, and type
-coercion.
+Property-based fuzz tests (proptest) over the boundaries that take arbitrary
+input. Per-target coverage:
+[crates/fuzz/README.md](../../crates/fuzz/README.md).
 
 ## Core Interfaces
 
