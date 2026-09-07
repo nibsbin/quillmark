@@ -45,10 +45,6 @@ def make_quill(tmp_path, yaml_content=QUILL_YAML_CONTENT, plate=PLATE_TYP):
     return Quill.from_path(str(quill_dir))
 
 
-# ---------------------------------------------------------------------------
-# Schema surface: `required:` is gone; cells are inferred from `default:`.
-# ---------------------------------------------------------------------------
-
 def test_schema_has_no_required_key(tmp_path):
     """The schema dict never carries a `required:` key on a field.
 
@@ -82,10 +78,6 @@ def test_schema_reports_declared_default(tmp_path):
     assert fields["status"]["default"] == "draft"
 
 
-# ---------------------------------------------------------------------------
-# Blueprint surface: annotations and markers
-# ---------------------------------------------------------------------------
-
 def test_blueprint_must_fill_marker(tmp_path):
     quill = make_quill(tmp_path)
     bp = quill.blueprint
@@ -107,7 +99,6 @@ def test_blueprint_defaulted_value(tmp_path):
     # The defaulted `status` field renders its default value with a type-only
     # annotation. The exact format is `status: draft # string`.
     assert "status: draft" in bp, f"expected default in blueprint; got:\n{bp}"
-    # Shippability is the value cell: the `; delete-ok` tag is gone entirely.
     assert "delete-ok" not in bp, (
         f"expected no `; delete-ok` tag in blueprint; got:\n{bp}"
     )
@@ -125,10 +116,6 @@ def test_blueprint_no_legacy_required_optional_tags(tmp_path):
         f"`; optional` tag must not appear in blueprint:\n{bp}"
     )
 
-
-# ---------------------------------------------------------------------------
-# Validation surface: new diagnostic codes
-# ---------------------------------------------------------------------------
 
 def test_render_tolerates_must_fill_marker(engine, tmp_path):
     """A ``!must_fill`` marker left in the document is non-fatal.

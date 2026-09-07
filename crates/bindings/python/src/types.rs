@@ -37,9 +37,10 @@ impl PyQuillmark {
     /// this engine. The default `output_format` falls back to the backend's
     /// first supported format. `ppi` (raster formats only, default 144) must be
     /// finite, above 0, and small enough to keep every rendered page under
-    /// 268435456 pixels. Raises `QuillmarkError` (`engine::backend_not_found`)
-    /// when the backend is not registered, or `backend::invalid_raster_scale`
-    /// for a `ppi` outside that range.
+    /// [`MAX_RASTER_PIXELS`](quillmark_core::MAX_RASTER_PIXELS). Raises
+    /// `QuillmarkError` (`engine::backend_not_found`) when the backend is not
+    /// registered, or `backend::invalid_raster_scale` for a `ppi` outside that
+    /// range.
     ///
     /// `pages` selects 0-based page indices counting from the first page; a
     /// negative one selects no page and raises like an index past the last.
@@ -106,9 +107,8 @@ pub struct PyQuill {
 
 #[pymethods]
 impl PyQuill {
-    /// Load a quill from a filesystem directory. Pure config load: no backend,
-    /// no engine; the declared backend is resolved at render time by a
-    /// `Quillmark` engine.
+    /// Load a quill from a filesystem directory: a pure config load, the
+    /// declared backend resolved at render time by a `Quillmark` engine.
     #[staticmethod]
     fn from_path(path: PathBuf) -> PyResult<PyQuill> {
         let quill = quill_from_path(&path).map_err(convert_render_error)?;
@@ -204,9 +204,8 @@ impl PyQuill {
 
     /// Parse `markdown` and conform it against this quill: the primary ingestion
     /// path, and the bound twin of the schema-free `Document.from_markdown`. The
-    /// returned document rests at its canonical form (a `richtext` field as a
-    /// content object, a `plaintext` field as its literal string), so its stored
-    /// shape no longer depends on which lane built it.
+    /// returned document rests at its canonical form: a `richtext` field as a
+    /// content object, a `plaintext` field as its literal string.
     ///
     /// Parse warnings and the `conform::*` diagnostics both land on
     /// `doc.warnings`. Raises `QuillmarkError` on a parse failure, or when
@@ -374,7 +373,7 @@ impl PyDocument {
         quillmark_core::document::STORAGE_V0_112_0
     }
 
-    /// Canonical card-yaml authoring rules. Constant across calls; cache it.
+    /// Canonical card-yaml authoring rules.
     #[staticmethod]
     fn format_rules() -> &'static str {
         quillmark_core::document::FORMAT_RULES
@@ -483,10 +482,8 @@ impl PyDocument {
         Ok(result)
     }
 
-    /// One composable card by index, same dict shape as `main`, so reading one
-    /// need not project every card via `cards`. An out-of-range `index` raises
-    /// `IndexOutOfRange`; indices count from the front, so a negative one is out
-    /// of range rather than the last card.
+    /// One composable card by index, same dict shape as `main`. An out-of-range
+    /// `index` raises `IndexOutOfRange`.
     fn card<'py>(&self, py: Python<'py>, index: isize) -> PyResult<Bound<'py, PyDict>> {
         let len = self.inner.cards().len();
         let index = card_index(index, len)?;
@@ -511,7 +508,8 @@ impl PyDocument {
 
 
     /// Remove a payload field, returning its previous value or `None`. `card`
-    /// selects the target (`None` main; out-of-range raises).
+    /// selects the target, here as on every `card=` verb: `None` the main card,
+    /// an index the composable card at that position (out of range raises).
     #[pyo3(signature = (name, card=None))]
     fn remove_field<'py>(
         &mut self,
@@ -531,10 +529,10 @@ impl PyDocument {
     }
 
     /// Replace the opaque `$ext` map on a card. `value` must be a dict; raises
-    /// `ValueError` otherwise. `card` selects the target (`None` main; out-of-range raises).
-    /// `$ext` carries out-of-band consumer state and never reaches the rendered
-    /// output; pass `{}` for an explicit empty `$ext`. Prefer `store_ext_namespace`
-    /// to write one slot without clobbering sibling consumers'.
+    /// `ValueError` otherwise. `$ext` carries out-of-band consumer state and never
+    /// reaches the rendered output; pass `{}` for an explicit empty `$ext`. Prefer
+    /// `store_ext_namespace` to write one slot without clobbering sibling
+    /// consumers'.
     #[pyo3(signature = (value, card=None))]
     fn store_ext(&mut self, value: Bound<'_, PyAny>, card: Option<isize>) -> PyResult<()> {
         let map = py_to_object(&value, "store_ext")?;
@@ -546,8 +544,7 @@ impl PyDocument {
     }
 
     /// Remove the `$ext` map from a card entirely, returning the previous map or
-    /// `None`. `card` selects the target (`None` main; out-of-range raises).
-    /// Discards every namespace at once; prefer `remove_ext_namespace`.
+    /// `None`. Discards every namespace at once; prefer `remove_ext_namespace`.
     #[pyo3(signature = (card=None))]
     fn remove_ext<'py>(
         &mut self,
@@ -560,8 +557,7 @@ impl PyDocument {
 
     /// Merge `value` into a card's `$ext` map under `namespace`, creating the map
     /// when absent and replacing any existing value at that key. Sibling
-    /// namespaces are preserved. `card` selects the target (`None` main;
-    /// out-of-range raises).
+    /// namespaces are preserved.
     #[pyo3(signature = (namespace, value, card=None))]
     fn store_ext_namespace(
         &mut self,
@@ -580,7 +576,6 @@ impl PyDocument {
     /// Remove `namespace` from a card's `$ext` map, returning the value stored
     /// there or `None`; sibling namespaces survive, and the `$ext` entry drops
     /// entirely once its last namespace is removed (not left as `$ext: {}`).
-    /// `card` selects the target (`None` main; out-of-range raises).
     #[pyo3(signature = (namespace, card=None))]
     fn remove_ext_namespace<'py>(
         &mut self,
@@ -661,9 +656,9 @@ impl PyDocument {
     }
 
     /// Place a composable card. `at` picks the position: `None` appends, `Some(i)`
-    /// inserts at index `i` (`0..=card_count`; out of range, negative included,
-    /// raises `IndexOutOfRange`). `card` is a `Card` dict, as `make_card`,
-    /// `cards`, `remove_card`, and `seed_card` return.
+    /// inserts at index `i` (`0..=card_count`; out of range raises
+    /// `IndexOutOfRange`). `card` is a `Card` dict, as `make_card`, `cards`,
+    /// `remove_card`, and `seed_card` return.
     #[pyo3(signature = (card, at=None))]
     fn insert_card(&mut self, card: Bound<'_, PyAny>, at: Option<isize>) -> PyResult<()> {
         let core_card = py_dict_to_card(&card)?;
@@ -683,7 +678,7 @@ impl PyDocument {
     }
 
     /// Remove the composable card at `index`, returning it as a dict or `None`
-    /// when the index addresses no card, a negative one included.
+    /// when the index addresses no card.
     fn remove_card<'py>(
         &mut self,
         py: Python<'py>,
@@ -754,10 +749,8 @@ fn card_base(doc: &Document, index: usize) -> quillmark_core::DocPath {
 }
 
 /// A `Document` bound to its `Quill` for typed writes, from `Quill.writer(doc)`.
-/// Speaks names, values, and markdown: no address, content dict, or delta. It
-/// re-borrows both objects per call (pyo3 objects carry no lifetime, so unlike
-/// core's `TypedWriter` it cannot keep the borrow), so it is ephemeral by
-/// convention: bind, write, discard.
+/// It re-borrows both objects per call, pyo3 objects carrying no lifetime to hold
+/// the borrow, so it is ephemeral by convention: bind, write, discard.
 #[pyclass(name = "Writer")]
 pub struct PyWriter {
     quill: Py<PyQuill>,
@@ -800,24 +793,18 @@ impl PyWriter {
     }
 
     /// Write the document in the values form: the write twin of
-    /// `reader.values()`.
+    /// `reader.values()`. An absent key is untouched; a present one replaces its
+    /// axis, so `fields` is the whole truth for declared names and an unnamed one
+    /// is removed. All-or-nothing: nothing is applied on error, and each refused
+    /// cell is one diagnostic under its own `path` (`main.qty`,
+    /// `cards.line_item[0].desc`); a `values` this binding cannot read as the
+    /// shape raises `ValueError` before any of it is applied.
     ///
-    /// An absent key is untouched; a present one replaces its axis: `fields`
-    /// is the whole truth for declared names (an unnamed one is removed; an
-    /// undeclared one the card holds is accepted unchanged and refused
-    /// changed), `cards` is the card list, `body` the body, `ext=None`
-    /// removes `$ext` and `{}` records an explicit empty one. All-or-nothing:
-    /// nothing is applied on error and every refused cell is one diagnostic
-    /// carrying its own `path` (`main.qty`, `cards.line_item[0].desc`).
-    ///
-    /// A cell whose value equals its projection is not written, so handing back
-    /// an unedited `values()` read changes no bytes. A changed content cell is
-    /// a cold import — `revise_field` per cell is what keeps its anchors — and
-    /// cards match by position and kind, so deleting or reordering an entry
-    /// rewrites every card after it.
-    ///
-    /// Raises `ValueError` for a `values` this binding cannot read as the
-    /// shape, before any of it is applied.
+    /// A cell equal to its projection is not written, so handing back an unedited
+    /// `values()` read changes no bytes. A changed content cell is a cold import
+    /// (`revise_field` per cell is what keeps its anchors), and cards match by
+    /// position and kind, so deleting or reordering one rewrites every card after
+    /// it.
     fn set_values(&self, py: Python<'_>, values: &Bound<'_, PyAny>) -> PyResult<()> {
         let json = py_to_json(values)?;
         let values: quillmark_core::DocumentValues = serde_json::from_value(json)
@@ -845,13 +832,12 @@ impl PyWriter {
     }
 
     /// Revise the content main-card field `name` from authored text: typed *and*
-    /// anchor-preserving, the only field write that keeps a JS editor's anchors
-    /// on a shared document (`set` cold-imports). The codec comes from the
+    /// anchor-preserving, where `set` cold-imports. The codec comes from the
     /// declared type: `richtext` diffs markdown, `plaintext` the literal text.
     /// Surviving anchors rebase, then the diffed result is schema-conformed, so a
     /// `richtext(inline)` field rejects a multi-block result with
     /// `edit::field_not_inline`. Raises `edit::unknown_field` for an undeclared
-    /// name. The text `Delta` is discarded: that lane is WASM-only.
+    /// name. The text `Delta` is discarded.
     fn revise_field(&self, py: Python<'_>, name: &str, text: &str) -> PyResult<()> {
         let quill = self.quill.borrow(py);
         let mut doc = self.doc.borrow_mut(py);
@@ -865,10 +851,10 @@ impl PyWriter {
 
     /// Build a composable card of `kind`, typed-commit `fields` onto it, set its
     /// body from optional markdown, and place it. `at` picks the position: `None`
-    /// appends, `Some(i)` inserts at index `i`, and a position out of range, a
-    /// negative one included, raises. Transactional: a rejected field (raising a
-    /// per-field diagnostic bundle) or an invalid kind, body, or position leaves
-    /// the document untouched.
+    /// appends, `Some(i)` inserts at index `i`, and a position out of range
+    /// raises. Transactional: a rejected field (raising a per-field diagnostic
+    /// bundle) or an invalid kind, body, or position leaves the document
+    /// untouched.
     #[pyo3(signature = (kind, fields=None, body=None, at=None))]
     fn add_card(
         &self,
@@ -897,7 +883,7 @@ impl PyWriter {
     }
 
     /// Remove the composable card at `index`, returning it as a dict or `None`
-    /// when the index is out of range, a negative one included.
+    /// when the index is out of range.
     fn remove_card<'py>(
         &self,
         py: Python<'py>,
@@ -928,8 +914,7 @@ impl PyWriter {
 
 /// A composable card bound to its `Quill` for typed writes, from `Writer.card`.
 /// Same verbs as `Writer`, targeting the card at its bound index; each write
-/// raises `edit::index_out_of_range` if that index is out of range, a negative
-/// one included.
+/// raises `edit::index_out_of_range` for an index out of range.
 #[pyclass(name = "CardWriter")]
 pub struct PyCardWriter {
     quill: Py<PyQuill>,
@@ -1057,13 +1042,8 @@ impl PyCardWriter {
 }
 
 /// A `Document` bound to its `Quill` for interpreted reads, from
-/// `Quill.reader(doc)`: the read twin of `Writer`, and the only field read
-/// surface, since `Document` carries no quill-free one. One `get` reads each
-/// field by its declared type — a richtext field to its markdown projection, a
-/// plaintext field to its literal text, every other type verbatim — with schema
-/// authority: an undeclared name raises `edit::unknown_field` rather than reading
-/// back `None`. Re-borrows both objects per call, so it is ephemeral by
-/// convention: bind, read, discard.
+/// `Quill.reader(doc)`: the read twin of `Writer`. Re-borrows both objects per
+/// call, so it is ephemeral by convention: bind, read, discard.
 #[pyclass(name = "Reader")]
 pub struct PyReader {
     quill: Py<PyQuill>,
@@ -1115,11 +1095,10 @@ impl PyReader {
     }
 
     /// Read the Content nested inside a composite field at `path`: `[0]` an
-    /// element of an `array<richtext>`, `["motto"]` an object's content property,
-    /// `[1, "notes"]` a leaf under both, `["controlled_by"]` a variant's cell. The
-    /// codec is the leaf's declared type's, resolved through the field schema's
-    /// `items` / `properties` / `variants`, so the element's storage form is not
-    /// the caller's business. An empty `path` is `get_content`.
+    /// element of an `array<richtext>`, `[1, "notes"]` a leaf under an array and
+    /// an object both. The codec is the leaf's declared type's, resolved through
+    /// the field schema's `items` / `properties` / `variants`. An empty `path` is
+    /// `get_content`.
     ///
     /// `None` when the field is absent and when `path` names nothing in the stored
     /// value: an editor's row index goes stale between derive and read, so absence
@@ -1154,16 +1133,14 @@ impl PyReader {
     /// The whole document in the values form: `{"fields", "body", "cards",
     /// "ext"}`, the main card's fields with every content leaf as its codec's
     /// text (`richtext` markdown, `plaintext` literal) and everything else as
-    /// stored, its body as markdown, its `$ext` (`None` when it carries none),
-    /// and every composable card as `{"kind", "fields", "body", "ext"}` with
-    /// `kind` `None` for a kindless card. A present-null field is `None`.
+    /// stored, its body as markdown, its `$ext`, and every composable card as
+    /// `{"kind", "fields", "body", "ext"}`. A present-null field is `None`.
     ///
-    /// Every key is present, so the dict is a valid `writer.set_values` input
-    /// and handing it back unedited changes no bytes. Sparse: an absent field
-    /// is an absent key, never its `default`. Never raises: a content leaf
-    /// that decodes under neither encoding rides out as stored where `get`
-    /// would raise. A projection, never a storage format: persist with
-    /// `to_stored`.
+    /// Every key is present, so the dict is a valid `writer.set_values` input and
+    /// handing it back unedited changes no bytes. Sparse: an absent field is an
+    /// absent key, never its `default`. Never raises: a content leaf that decodes
+    /// under neither encoding rides out as stored where `get` would raise. A
+    /// projection, never a storage format: persist with `to_stored`.
     fn values<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let quill = self.quill.borrow(py);
         let doc = self.doc.borrow(py);
@@ -1186,9 +1163,8 @@ impl PyReader {
 }
 
 /// A composable card bound to its `Quill` for interpreted reads, from
-/// `Reader.card`. Same verbs as `Reader`, reading the card at its bound index; each
-/// read raises `edit::index_out_of_range` if that index is out of range, a
-/// negative one included.
+/// `Reader.card`. Same verbs as `Reader`, reading the card at its bound index;
+/// each read raises `edit::index_out_of_range` for an index out of range.
 #[pyclass(name = "CardReader")]
 pub struct PyCardReader {
     quill: Py<PyQuill>,
@@ -1452,9 +1428,8 @@ pub struct PyDiagnostic {
 
 #[pymethods]
 impl PyDiagnostic {
-    /// Canonical pretty-printed diagnostic text: the same rendering the CLI
-    /// and WASM (`Document.formatDiagnostic`) emit, so a diagnostic reads
-    /// identically no matter which surface shows it.
+    /// Canonical pretty-printed diagnostic text: the same rendering the CLI and
+    /// WASM (`Document.formatDiagnostic`) emit.
     fn __str__(&self) -> String {
         self.inner.fmt_pretty()
     }
@@ -1702,15 +1677,11 @@ fn py_to_json(value: &Bound<'_, PyAny>) -> PyResult<serde_json::Value> {
     py_to_json_at(value, 0)
 }
 
-/// Depth-bounded so this recursion cannot overflow the native stack on an
-/// adversarially deep Python object, and so the value is rejected at the same
-/// shape the core payload boundary would reject it.
-///
-/// The cutoff is **container levels**, matching core's
-/// [`json_depth_exceeds`](quillmark_core::json_depth_exceeds): a scalar leaf is
-/// never charged a level, so the guard fires only on the recursing branches.
-/// `depth` is the 0-based depth of the current node, so a container at `depth`
-/// is the `(depth + 1)`-th nesting level.
+/// Depth-bounded so an adversarially deep Python object cannot overflow the
+/// native stack, and is refused at the shape core's
+/// [`json_depth_exceeds`](quillmark_core::json_depth_exceeds) refuses. The cutoff
+/// counts container levels, `depth` being the 0-based depth of the current node,
+/// so a scalar leaf is never charged one.
 fn py_to_json_at(value: &Bound<'_, PyAny>, depth: usize) -> PyResult<serde_json::Value> {
     use pyo3::types::{PyBool, PyDate, PyFloat, PyInt, PyList, PyString, PyTime};
 

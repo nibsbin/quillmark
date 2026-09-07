@@ -175,8 +175,8 @@ jobs:
       - name: Build WASM
         run: ./scripts/build-wasm.sh --ci
 
-      # `install`, not `ci`: package-lock.json is gitignored (.gitignore:45), so
-      # a fresh checkout has no lockfile for `ci` to install from.
+      # `install`, not `ci`: package-lock.json is gitignored, so a fresh
+      # checkout has no lockfile for `ci` to install from.
       - name: Install npm dependencies
         working-directory: crates/bindings/wasm
         run: npm install

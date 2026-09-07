@@ -81,7 +81,6 @@ pub fn execute(args: RenderArgs) -> Result<()> {
                 Some(markdown_path.clone()),
             )
         } else {
-            // No input file: the seed renders without any caller-supplied values.
             if verbose {
                 eprintln!("Using seeded document from quill");
             }
@@ -131,7 +130,6 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         &RenderOptions::default().with_output_format(output_format),
     )?;
 
-    // One channel for downstream tooling.
     result.warnings.splice(0..0, parse_warnings);
 
     if !result.warnings.is_empty() && !args.quiet {

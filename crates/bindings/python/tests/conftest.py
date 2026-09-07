@@ -1,10 +1,3 @@
-"""Shared test fixtures for quillmark tests.
-
-These fixtures prefer using the canonical repository fixtures located in
-`crates/fixtures/resources`. If those resources cannot be found the
-original simple fallbacks are used so tests remain robust in odd layouts.
-"""
-
 from contextlib import contextmanager
 from pathlib import Path
 import pytest
@@ -54,12 +47,6 @@ def taro_quill_dir():
 
 @pytest.fixture
 def engine():
-    """A fresh `Quillmark` engine: the render / capability dispatcher.
-
-    A `Quill` is engine-free, validated data (`Quill.from_path`); rendering
-    (`render`) and the format probe (`supported_formats`) are asked of the
-    engine, against a quill.
-    """
     return Quillmark()
 
 

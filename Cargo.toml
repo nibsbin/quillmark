@@ -26,39 +26,28 @@ resolver = "2"
 [workspace.package]
 version = "0.112.0"
 edition = "2024"
-# No `rust-version`. The floor the Typst toolchain forces moves when that tree
-# moves, so a declared floor holds only while something rebuilds the workspace
-# on it. Nothing does, and an unverified floor is worse than none: it reads as a
-# promise and the resolver enforces it on consumers. Declare one again the day
-# something verifies it.
+# No `rust-version`: nothing rebuilds the workspace on a floor to verify one,
+# and the resolver enforces an unverified floor on consumers.
 include = ["src/**", "Cargo.toml", "README*", "LICENSE*"]
 readme = "README.md"
 license = "Apache-2.0"
 homepage = "https://borb-sh.github.io/quillmark/"
 
 [workspace.dependencies]
-# Core dependencies
 serde = { version = "~1.0", features = ["derive"] }
 serde-saphyr = "~1.2"
 serde_json = { version = "~1.0", features = ["preserve_order"] }
-
-
 thiserror = "~2.0"
 toml = "~1.1"
-
-# File globbing
 glob = "0.3.3"
-
-# Ordered map: preserves insertion order for deterministic serialization
-indexmap = { version = "2", features = ["serde"] }
-
-# Unicode normalization
 unicode-normalization = "0.1"
 
-# Char-level diff (Myers/LCS) for richtext edit deltas
+# Preserves insertion order, so serialization is deterministic.
+indexmap = { version = "2", features = ["serde"] }
+
+# Char-level diff (Myers/LCS) for richtext edit deltas.
 similar = "3.1"
 
-# Typst backend dependencies
 pulldown-cmark = "0.13.0"
 time = { version = "0.3.44", features = ["formatting", "parsing"] }
 # Pinned to the version the Typst toolchain (typst-pdf → krilla) already forces,
@@ -83,7 +72,6 @@ quillmark = { version = "0.112.0", path = "crates/quillmark" }
 js-sys = "0.3"
 wasm-bindgen = "0.2"
 
-# Test and dev dependencies
 tempfile = "~3.27"
 proptest = "~1.11"
 quillmark-fixtures = { path = "crates/fixtures" }
@@ -92,38 +80,28 @@ quillmark-fixtures = { path = "crates/fixtures" }
 lopdf = "0.44"
 
 [profile.dev]
-opt-level = 0
-debug = true
-strip = "none"
-debug-assertions = true
-overflow-checks = true
-lto = false
-panic = 'unwind'
-incremental = true
-codegen-units = 256
-rpath = false
 split-debuginfo = "unpacked" # Faster on macOS/Linux
 [profile.dev.package."*"]
 debug = false
 opt-level = 0
 
 [profile.release]
-opt-level = 3      # Optimize for speed (not "z")
-lto = "thin"       # Good speed improvement, reasonable compile time
-codegen-units = 16 # Balance parallelization with optimization
-panic = "abort"    # Smaller binary, slightly faster
-strip = true       # Remove debug symbols (size)
+opt-level = 3
+lto = "thin"
+codegen-units = 16
+panic = "abort"
+strip = true
 
-# WASM-specific optimizations
+# Size, not speed: this is the published bundle.
 [profile.wasm-release]
 inherits = "release"
-opt-level = "z"      # Optimize for size (WASM benefits greatly)
-lto = true           # Full LTO for maximum size reduction
-codegen-units = 1    # Single codegen unit for best optimization
-panic = "abort"      # Smaller binary
-strip = true         # Remove debug symbols
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
 [profile.wasm-release.package."*"]
-opt-level = "z" # Optimize all dependencies for size
+opt-level = "z"
 
 # Fast-compiling WASM profile for CI / local iteration. Produces a larger,
 # unoptimized binary: only correctness matters here, not size.

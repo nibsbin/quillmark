@@ -67,10 +67,8 @@ fn body_text(card: &CardSchema, fallback_kind: &str) -> String {
     format!("\n{}\n", text)
 }
 
-/// The body text a kind declaring no `body.example` shows. Shared with the
-/// `validation::example_unchanged` walk, which recognizes it in a document: the
-/// two are one string or the placeholder ships unnoticed.
-pub(super) fn body_placeholder(kind: &str) -> String {
+/// The body text a kind declaring no `body.example` shows.
+fn body_placeholder(kind: &str) -> String {
     format!("Write {kind} body here.")
 }
 
