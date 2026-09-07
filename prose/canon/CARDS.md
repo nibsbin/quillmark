@@ -13,7 +13,7 @@ Cards are structured-data blocks inline within document content. All cards are s
 pub struct CardSchema {
     pub name: String,
     pub description: Option<String>,
-    pub fields: BTreeMap<String, FieldSchema>,
+    pub fields: IndexMap<String, FieldSchema>,
     pub ui: Option<UiCardSchema>,
     pub body: Option<BodyCardSchema>,
 }

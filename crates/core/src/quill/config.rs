@@ -67,14 +67,16 @@ pub struct QuillConfig {
     /// Named, composable card-kind schemas (parsed from the Quill.yaml
     /// `card_kinds:` section). Does not include `main`.
     pub card_kinds: Vec<CardSchema>,
-    /// Backend to use for rendering (e.g., "typst", "html")
+    /// Names the backend that renders this quill: a registered
+    /// [`Backend::id`](crate::Backend::id).
     pub backend: String,
-    /// Version of the Quillmark spec
+    /// The quill's own semantic version, checked at render against the
+    /// selector a document's `$quill` carries.
     pub version: String,
     /// Author of the project
     pub author: String,
     /// Backend-specific configuration parsed from the top-level YAML section
-    /// whose key matches `backend` (e.g. `[typst]`, `[html]`).
+    /// whose key matches `backend`.
     #[serde(default)]
     pub backend_config: HashMap<String, QuillValue>,
 }
@@ -1472,7 +1474,9 @@ impl QuillConfig {
                 )
                 .with_code(format!("quill::{slot}_format_violation"))
                 .with_hint(format!("Provide a valid {format} value for the {slot}.")),
-                // UnknownCard, BodyDisabled do not apply to schema literals.
+                // UnknownCard and BodyDisabled cannot arise on a literal.
+                // NotInline and NotPlain can, and `literal_content` reports
+                // them at load.
                 _ => continue,
             };
             errors.push(diag);

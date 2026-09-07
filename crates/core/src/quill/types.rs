@@ -22,7 +22,6 @@ pub struct UiFieldSchema {
     pub group: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub compact: Option<bool>,
-    /// Valid on `string` fields (plain text with newlines preserved) and `richtext` fields.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub multiline: Option<bool>,
     /// Label for an `enum`'s blank option. Absent, a consumer renders a
@@ -508,7 +507,8 @@ pub struct FieldSchema {
     /// authors want; documents shape only and never renders as the value.
     pub example: Option<QuillValue>,
     pub ui: Option<UiFieldSchema>,
-    /// Restricts valid values on string fields. Serializes as `enum`.
+    /// The members of an `enum` field; no other type accepts them.
+    /// Serializes as `values`.
     pub enum_values: Option<Vec<String>>,
     /// Per-member field sets on an `enum` field: the fields that exist only in
     /// the world where the discriminant holds that member. Keyed by member (a

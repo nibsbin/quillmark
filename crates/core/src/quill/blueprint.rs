@@ -17,8 +17,9 @@ use serde_json::{Map as JsonMap, Value as JsonValue};
 impl QuillConfig {
     /// Generate the canonical annotated Markdown blueprint for this quill:
     /// the authoring surface handed to LLMs and humans, with every must-fill
-    /// cell carrying the `!must_fill` marker. See module docs for the annotation
-    /// grammar; the function is total over any valid `QuillConfig`.
+    /// cell carrying the `!must_fill` marker. The annotation grammar is
+    /// `prose/canon/BLUEPRINT.md` §Annotation grammar; the function is total
+    /// over any valid `QuillConfig`.
     ///
     /// The "filled-out" twin of the blueprint is **seeding**
     /// ([`Quill::seed_document`](crate::Quill::seed_document)), a committed
