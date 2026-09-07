@@ -236,7 +236,7 @@ export type ContentLineKind =
  * back as continuation paragraphs of the first, markers gone. The field is
  * required, so a checker reports the omission; it cannot report a `0` stamped on
  * both, which is the same write. A codec flattening a tree takes them from
- * `assignInstances` in `@quillmark/wasm/runtime` rather than by hand. Any
+ * `assignInstances` in `@quillmark/wasm` rather than by hand. Any
  * distinct pair works; a write is canonicalized to `0`/`1`.
  *
  * Reading is not the mirror of writing. Every read spells the field, the `0` on
@@ -260,7 +260,7 @@ export type ContentContainer =
 /** A mark over char range `[start, end)` into `Content.text`. The open `type`
  * arm blocks discriminant narrowing, so read a payload-carrying arm behind its
  * guard: `isLinkMark` (`attrs.url`) / `isAnchorMark` (`attrs.id`), from
- * `@quillmark/wasm/runtime`. An `anchor`'s `id` is a caller-supplied opaque
+ * `@quillmark/wasm`. An `anchor`'s `id` is a caller-supplied opaque
  * handle, unique per `Content` and invariant while the mark lives (positions
  * rebase, the id never does); it has no markdown projection and survives only
  * through the edit lane. */
@@ -304,7 +304,7 @@ export type ContentLossClass = "lossless" | "degraded" | "unrepresentable" | (st
  * open set: `props` is `TableProps` for `table` and `ImageProps` for `image`,
  * and any other type round-trips with opaque `props`. The open arm blocks
  * narrowing, so read `props` behind the `isTableIsland` / `isImageIsland`
- * guards (from `@quillmark/wasm/runtime`). */
+ * guards (from `@quillmark/wasm`). */
 export type ContentIsland = {
     id: string;
     loss: ContentLossClass;
@@ -636,8 +636,8 @@ impl Quill {
     ///
     /// This is how a quill crosses a WASM linear-memory boundary as data: a
     /// `Quill` built in one build cannot be passed to an engine in another, so
-    /// `@quillmark/wasm/runtime` re-feeds this tree to the backend build's
-    /// `Quill.fromTree` on demand.
+    /// the `@quillmark/wasm` runtime layer re-feeds this tree to the backend
+    /// build's `Quill.fromTree` on demand.
     #[wasm_bindgen(js_name = toTree, unchecked_return_type = "Map<string, Uint8Array>")]
     pub fn to_tree(&self) -> JsValue {
         let map = js_sys::Map::new();
@@ -948,11 +948,8 @@ impl Document {
     /// Replace this document's contents **in place** from a versioned storage DTO
     /// string: the mutating twin of [`fromStored`](Document::from_stored).
     /// Parse-time `warnings` are cleared. Throws on an invalid DTO, leaving the
-    /// document unchanged.
-    ///
-    /// The cross-WASM-memory `Document` bridge: mutate a document on a
-    /// backend-memory clone, then write the state back into the caller's
-    /// canonical document, without the caller re-binding its variable.
+    /// document unchanged. A caller holding the document need not re-bind its
+    /// variable.
     #[wasm_bindgen(js_name = loadStored)]
     pub fn load_stored(&mut self, json: &str) -> Result<(), JsValue> {
         let inner: quillmark_core::Document = serde_json::from_str(json).map_err(|e| {

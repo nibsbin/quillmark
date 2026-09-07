@@ -1,7 +1,7 @@
 /**
  * The Document API over the canonical flow:
  * `Quill.fromTree(tree)` → `Document.fromMarkdown(markdown)` →
- * `engine.render(quill, doc, opts)`, against the bundler build.
+ * `engine.render(quill, doc, opts)`, against the Typst backend build.
  */
 
 import { describe, it, expect } from 'vitest'
@@ -1537,10 +1537,6 @@ describe('Document editor surface: $ext mutators', () => {
     expectEditCode(() => doc.removeExtNamespace({ card: 5 }, 'a'), 'edit::index_out_of_range')
   })
 })
-
-// ---------------------------------------------------------------------------
-// open + session.render
-// ---------------------------------------------------------------------------
 
 describe('Document editor surface: $ext reads', () => {
   it('getExt returns the whole map, undefined when the card carries none', () => {

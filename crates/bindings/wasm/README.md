@@ -243,10 +243,11 @@ an absent field; only an out-of-range card throws); field writes throw on a body
 address. `getStored` is the verbatim transport read, distinct from the interpreted
 `quill.reader(doc).get`; `bodyMarkdown` is the body markdown read (a `CardAddr`; a field's
 markdown is read through `quill.reader(doc).get(field)`). A content field's stored
-form follows how the document was built (a canonical content object when the
-typed writer committed it, the authored string when a markdown parse produced
-it), so for the `Content` either way read `quill.reader(doc).getContent(addr)`, which
-decodes through the codec the field's declared type names. Card-scoped verbs take a
+form rests per its declared codec through the bound door (a `richtext` field as
+the content object, a `plaintext` field as its literal string), and as authored
+through the transport door. For the `Content` either way read
+`quill.reader(doc).getContent(addr)`, which decodes through the codec the
+field's declared type names. Card-scoped verbs take a
 `CardAddr` (`{ card? }`) first: `doc.getExt({ card: 2 })`, and the batch below.
 
 Batch mutation: `doc.storeFields({}, {...})` / `doc.storeFields({ card: index }, {...})`
@@ -255,7 +256,7 @@ the thrown error carries one diagnostic per offending field (`path` = field
 name). The address is first (never shape-overloaded, since `card` is a legal
 field name), and parses strictly: a stray key throws rather than silently
 reading as `{}`. The main card is `{}`, or **`MAIN_CARD_ADDR`** (from
-`@quillmark/wasm/runtime`), a frozen alias that spells the intent:
+`@quillmark/wasm`), a frozen alias that spells the intent:
 `doc.storeFields(MAIN_CARD_ADDR, {...})`.
 
 ### Typed writes: `commit*` is the default, `store*` is the quill-free primitive

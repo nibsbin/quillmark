@@ -1,4 +1,5 @@
-// @quillmark/wasm/runtime: canonical consumer API.
+// The canonical consumer API, and the package's sole export: `@quillmark/wasm`
+// resolves here.
 //
 // The render-side types are defined HERE as the backend-neutral render contract,
 // not sourced from any one private backend build; `runtime.types.test-d.ts`
@@ -511,7 +512,7 @@ export interface EngineOptions {
 	 * `Quill.backendId`). Each value is a `BackendDescriptor`: `formats`/`canvas`
 	 * are required, so capability probes are ALWAYS free (no binary load, no quill
 	 * clone). Malformed entries throw at construction. The default registry maps
-	 * `"typst"` to the bundled Typst build.
+	 * `"typst"` and `"pdfform"` to the bundled backend builds.
 	 */
 	backends?: Record<string, BackendDescriptor>;
 }

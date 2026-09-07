@@ -1,6 +1,7 @@
 /* @ts-self-types="./runtime.d.ts" */
 //
-// @quillmark/wasm/runtime: the canonical consumer API.
+// The canonical consumer API, and the package's sole export: `@quillmark/wasm`
+// resolves here.
 //
 // The package ships multiple WASM binaries with SEPARATE linear memories: a
 // Typst-less `core` build (small, eager) that is the canonical home of
@@ -911,7 +912,7 @@ export class Engine {
  */
 export class LiveSession {
 	/**
-	 * @param {{ pageCount: number, backendId: string, supportsCanvas: boolean, warnings: any[], update: Function, render: Function, regions: Function, pageSize: Function, paint: Function, free: Function }} inner backend-build LiveSession (typst or pdfform)
+	 * @param {object} inner backend-build LiveSession (typst or pdfform), whose members the delegations below name
 	 * @param {{ Document: { fromStored(json: string): any } }} mod the session's backend build, used to materialize `update` documents in its linear memory
 	 */
 	constructor(inner, mod) {
