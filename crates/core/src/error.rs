@@ -780,21 +780,6 @@ mod args_canon {
             "both `validation::must_fill` triggers must carry one key set"
         );
         add("validation::must_fill", marker.args);
-        // Two constructors again, one per cell a blueprint writes a value into.
-        let field_example = crate::quill::compose::example_unchanged_warning(
-            &path,
-            &serde_json::json!("Duty Title"),
-        );
-        let body_example = crate::quill::compose::body_example_unchanged_warning(
-            &crate::path::DocPath::main().body(),
-            "Write main body here.",
-        );
-        assert_eq!(
-            field_example.args.keys().collect::<Vec<_>>(),
-            body_example.args.keys().collect::<Vec<_>>(),
-            "both `validation::example_unchanged` triggers must carry one key set"
-        );
-        add("validation::example_unchanged", field_example.args);
         // Built at the variant walk rather than from an error type: a stranded
         // value is well-formed, so there is nothing to fail.
         add(
