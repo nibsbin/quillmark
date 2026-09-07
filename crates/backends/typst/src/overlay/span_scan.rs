@@ -1389,10 +1389,9 @@ main:
             .expect("import");
         let data =
             serde_json::json!({ "intro": quillmark_content::serial::to_canonical_value(&rt) });
-        let transformed = crate::transformed_data(&data);
         let mut world = QuillWorld::new(&q, &plate).expect("world");
         let (windows, _) = world
-            .inject_helper_package(transformed.as_ref(), &meta)
+            .inject_helper_package(&data, &meta)
             .expect("inject");
         let (doc, _) = compile_document(&world).expect("compile");
         let helper = world
@@ -1452,10 +1451,9 @@ main:
             let meta = crate::SchemaMeta::from_schema_json(schema.as_json());
             let data =
                 serde_json::json!({ "body": quillmark_content::serial::to_canonical_value(&rt) });
-            let transformed = crate::transformed_data(&data);
             let mut world = QuillWorld::new(&q, &plate).expect("world");
             let (windows, _) = world
-                .inject_helper_package(transformed.as_ref(), &meta)
+                .inject_helper_package(&data, &meta)
                 .expect("inject");
             let (doc, _) = compile_document(&world).expect("compile");
             let helper = world
@@ -1876,10 +1874,9 @@ main:
             quillmark_content::import::from_markdown("- Item ONE\n- Item TWO").expect("import");
         let data =
             serde_json::json!({ "body": quillmark_content::serial::to_canonical_value(&rt) });
-        let transformed = crate::transformed_data(&data);
         let mut world = QuillWorld::new(&q, &plate).expect("world");
         let (windows, _) = world
-            .inject_helper_package(transformed.as_ref(), &meta)
+            .inject_helper_package(&data, &meta)
             .expect("inject");
         let (doc, _) = compile_document(&world).expect("compile");
         let helper = world
@@ -1955,10 +1952,9 @@ main:
         let plate_src = crate::read_plate(&q).expect("plate");
         let schema = quillmark_core::quill::build_transform_schema(q.config());
         let meta = crate::SchemaMeta::from_schema_json(schema.as_json());
-        let transformed = crate::transformed_data(&data);
         let mut world = QuillWorld::new(&q, &plate_src).expect("world");
         let (mut windows, _) = world
-            .inject_helper_package(transformed.as_ref(), &meta)
+            .inject_helper_package(&data, &meta)
             .expect("inject");
         let main_id = world.main();
         let src = world.source(main_id).expect("main source");

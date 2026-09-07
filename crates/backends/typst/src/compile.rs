@@ -106,8 +106,7 @@ pub(crate) fn render_document_pages(
                 OutputFormat::Pdf,
             ))
         }
-        // Forced by `#[non_exhaustive]`; `TypstSession::render` already rejects
-        // formats outside `SUPPORTED_FORMATS`.
+        // Forced by `#[non_exhaustive]`.
         other => Err(quillmark_core::unsupported_format(
             other,
             "typst",

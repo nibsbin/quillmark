@@ -4,7 +4,7 @@ use crate::world::QuillWorld;
 use quillmark_core::{Diagnostic, Location, Severity};
 use typst::diag::SourceDiagnostic;
 
-pub fn map_typst_errors(errors: &[SourceDiagnostic], world: &QuillWorld) -> Vec<Diagnostic> {
+pub(crate) fn map_typst_errors(errors: &[SourceDiagnostic], world: &QuillWorld) -> Vec<Diagnostic> {
     errors
         .iter()
         .map(|e| map_single_diagnostic(e, world))
