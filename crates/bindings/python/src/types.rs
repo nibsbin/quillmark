@@ -44,8 +44,7 @@ impl PyQuillmark {
     ///
     /// `pages` selects 0-based page indices counting from the first page; a
     /// negative one selects no page and raises like an index past the last.
-    #[pyo3(signature = (quill, doc, format=None, ppi=None, pages=None, producer=None, regions=false))]
-    #[allow(clippy::too_many_arguments)] // kwargs mirror RenderOptions 1:1; the signature IS the Python API
+    #[pyo3(signature = (quill, doc, format=None, ppi=None, pages=None, regions=false))]
     fn render(
         &self,
         quill: &PyQuill,
@@ -53,14 +52,12 @@ impl PyQuillmark {
         format: Option<PyOutputFormat>,
         ppi: Option<f32>,
         pages: Option<Vec<isize>>,
-        producer: Option<String>,
         regions: bool,
     ) -> PyResult<PyRenderResult> {
         let mut opts = quillmark_core::RenderOptions::default();
         opts.output_format = format.map(OutputFormat::from);
         opts.ppi = ppi;
         opts.pages = pages.map(page_indices).transpose()?;
-        opts.producer = producer;
         opts.regions = regions;
         let start = Instant::now();
         let mut result = self

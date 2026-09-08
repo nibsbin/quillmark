@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- refactor(core,wasm,python)!: **the `producer` render option goes; the
+  `/Producer` stamp it overrode stays.** `RenderOptions::producer` and
+  `with_producer`, the WASM `RenderOptions.producer` key and Python's
+  `producer=` keyword are deleted. No first-party caller set it, and the engine
+  carried the string through four crates and two bindings to reach a writer a
+  host can reach directly. Every rendered PDF still carries
+  `Quillmark <version>`: the default now sits in `quillmark-pdf`'s
+  `StampOptions::default()`, one `format!` over `version.workspace = true` in
+  place of a `default_producer()` in each backend. `StampOptions::producer`
+  becomes a plain `String` and `with_producer` goes with the `Option`, so
+  `stamp` always appends its `/Info` revision where a producer-less call over
+  an empty field list returned the base bytes; both backends always passed a
+  producer, so no render changes.
 - refactor(pdfform)!: **the SVG and PNG output formats go; canvas paint stays.**
   `supported_formats` reports `[Pdf]`, so a `render` asking for either fails
   under `backend::format_not_supported` and `quillmark render --format png` on

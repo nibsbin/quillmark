@@ -264,7 +264,6 @@ class Quillmark:
         format: OutputFormat | None = None,
         ppi: float | None = None,
         pages: list[int] | None = None,
-        producer: str | None = None,
         regions: bool = False,
     ) -> RenderResult: ...
     def supported_formats(self, quill: Quill) -> list[OutputFormat]: ...
