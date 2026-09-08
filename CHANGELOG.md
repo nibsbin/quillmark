@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- refactor(core,wasm,python)!: **the `$ext` namespace verbs collapse into the
+  whole-map three.** `storeExtNamespace` / `removeExtNamespace` /
+  `getExtNamespace`, the Python `store_ext_namespace` / `remove_ext_namespace`,
+  and the `Card::store_ext_namespace` / `remove_ext_namespace` they delegated
+  to are deleted. `getExt` / `storeExt` / `removeExt` (Python `store_ext` /
+  `remove_ext`) keep the whole surface, `card` selector included: `$ext` is a
+  map the engine never inspects, so a namespace write is
+  `{...getExt(addr), [ns]: v}` on the client and the read shape is the write
+  shape. The one behavior the spread does not carry is the drop-when-empty —
+  `removeExtNamespace` dropped `$ext` with its last namespace where
+  `storeExt({})` records an explicit `$ext: {}` — for which `removeExt` is the
+  call. Stored bytes, the Markdown round trip and the plate strip are
+  untouched.
 - refactor(core,wasm,python)!: **the `producer` render option goes; the
   `/Producer` stamp it overrode stays.** `RenderOptions::producer` and
   `with_producer`, the WASM `RenderOptions.producer` key and Python's
