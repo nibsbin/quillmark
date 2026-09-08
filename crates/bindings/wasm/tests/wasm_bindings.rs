@@ -2,6 +2,7 @@
 //! `serde_wasm_bindgen` boundary produces the right JS types under a real
 //! browser's instantiation, so the assertions stay at the crossing.
 
+use tsify::{Ts, Tsify};
 use wasm_bindgen_test::*;
 
 use quillmark_wasm::{Document, Quill, Quillmark, RenderOptions};
@@ -9,6 +10,20 @@ use quillmark_wasm::{Document, Quill, Quillmark, RenderOptions};
 mod common;
 
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+// The engine's typed surface crosses as `Ts<T>`, the JS handle itself, so these
+// two conversions are part of what these tests exercise.
+fn default_opts() -> Ts<RenderOptions> {
+    Ts::from_rust(&RenderOptions::default()).expect("RenderOptions crosses")
+}
+
+fn rust_of<T>(value: &Ts<T>) -> T
+where
+    T: Tsify + serde::de::DeserializeOwned,
+    T::JsType: Clone,
+{
+    value.to_rust().expect("value crosses back")
+}
 
 fn small_quill_tree() -> wasm_bindgen::JsValue {
     common::tree(&[
@@ -29,9 +44,11 @@ fn test_render_from_document() {
     let quill = Quill::from_tree(small_quill_tree()).expect("quill failed");
 
     let doc = Document::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
-    let result = engine
-        .render(&quill, &doc, Some(RenderOptions::default()))
-        .expect("render from Document failed");
+    let result = rust_of(
+        &engine
+            .render(&quill, &doc, Some(default_opts()))
+            .expect("render from Document failed"),
+    );
 
     assert!(
         !result.artifacts.is_empty(),
@@ -48,23 +65,17 @@ fn test_render_from_document() {
 /// serializer reverting to `Array<number>`.
 #[wasm_bindgen_test]
 fn test_artifact_bytes_is_uint8array() {
-    use serde::Serialize;
     use wasm_bindgen::{JsCast, JsValue};
 
     let engine = Quillmark::new();
     let quill = Quill::from_tree(small_quill_tree()).expect("quill failed");
     let doc = Document::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
     let result = engine
-        .render(&quill, &doc, Some(RenderOptions::default()))
+        .render(&quill, &doc, Some(default_opts()))
         .expect("render failed");
-    assert!(!result.artifacts.is_empty(), "should produce artifacts");
 
-    // The same serializer Tsify uses for `into_wasm_abi`.
-    let serializer = serde_wasm_bindgen::Serializer::new();
-    let js_result = result
-        .serialize(&serializer)
-        .expect("RenderResult serialization");
-    let artifacts = js_sys::Reflect::get(&js_result, &JsValue::from_str("artifacts"))
+    // `js_value()` is the object the boundary handed out, not a re-serialization.
+    let artifacts = js_sys::Reflect::get(&result.js_value(), &JsValue::from_str("artifacts"))
         .expect("artifacts present");
     let arr = js_sys::Array::from(&artifacts);
     assert!(arr.length() > 0, "artifacts array non-empty");
@@ -88,9 +99,11 @@ fn test_open_session_render() {
     let session = engine.open(&quill, &doc).expect("open failed");
     assert!(session.page_count() > 0, "session should expose page count");
 
-    let result = session
-        .render(Some(RenderOptions::default()))
-        .expect("session render failed");
+    let result = rust_of(
+        &session
+            .render(Some(default_opts()))
+            .expect("session render failed"),
+    );
     assert!(!result.artifacts.is_empty(), "should produce artifacts");
 }
 
@@ -138,11 +151,19 @@ fn test_session_region_shapes_cross_the_boundary() {
         rect[0].as_f64().unwrap() as f32 + 5.0,
         rect[3].as_f64().unwrap() as f32 - 3.0,
     );
-    let hit = session
-        .position_at(page, cx, cy, None)
-        .expect("positionAt inside content resolves");
+    let hit = rust_of(
+        &session
+            .position_at(page, cx, cy, None)
+            .expect("positionAt crosses")
+            .expect("positionAt inside content resolves"),
+    );
     assert_eq!(hit.field, "body");
-    let caret = session.locate("body", hit.pos).expect("locate");
+    let caret = rust_of(
+        &session
+            .locate("body", hit.pos)
+            .expect("locate crosses")
+            .expect("locate resolves"),
+    );
     assert_eq!(caret.span, Some([hit.pos, hit.pos]));
 }
 
@@ -184,12 +205,16 @@ fn test_quill_from_object_tree() {
 
     let doc = Document::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
     let doc2 = Document::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
-    let r_map = engine
-        .render(&from_map, &doc, Some(RenderOptions::default()))
-        .expect("render from Map form");
-    let r_obj = engine
-        .render(&from_obj, &doc2, Some(RenderOptions::default()))
-        .expect("render from object form");
+    let r_map = rust_of(
+        &engine
+            .render(&from_map, &doc, Some(default_opts()))
+            .expect("render from Map form"),
+    );
+    let r_obj = rust_of(
+        &engine
+            .render(&from_obj, &doc2, Some(default_opts()))
+            .expect("render from object form"),
+    );
     assert_eq!(r_map.artifacts.len(), r_obj.artifacts.len());
 }
 
