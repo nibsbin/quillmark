@@ -13,6 +13,11 @@
   the door every binding took and the one that dropped them, so the channel's
   output — `quill::implicit_group` and `quill::body_example_unused` — was
   visible only to the CLI's `validate`.
+- fix(pdfform): **a PNG render refuses a page index past the flattened
+  document** under `backend::page_index_out_of_bounds` rather than skipping it.
+  `selected_pages` bounds the indices against the same page list, so a miss is
+  the two disagreeing; a short artifact list reads as a document with fewer
+  pages.
 - feat(core)!: **five retired `Quill.yaml` keys lose their tailored migration
   message, and an implicit group is a load error.** `must_fill`, `enum`,
   `ui.order`, the `richtext(inline)` type token and `markdown` were retired

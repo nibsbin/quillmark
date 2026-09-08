@@ -292,8 +292,18 @@ impl PdfformSession {
 
         let mut artifacts = Vec::with_capacity(pages.len());
         for &idx in pages {
+            // `selected_pages` bounded these against the same page list, so a
+            // miss is the two disagreeing. Refuse: a short artifact list reads
+            // as a document with fewer pages.
             let Some(pixmap) = self.raster(idx, &interp, &render_settings)? else {
-                continue;
+                return Err(RenderError::coded_hint(
+                    "backend::page_index_out_of_bounds",
+                    format!(
+                        "page {idx} is past the flattened document's {} pages",
+                        self.flat.pages().len()
+                    ),
+                    "Read the session's page count before requesting pages.",
+                ));
             };
             let png = pixmap.into_png().map_err(|e| {
                 RenderError::coded(
