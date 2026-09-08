@@ -131,6 +131,10 @@ The two differ in error shape: the pure constructor hands back the raw
 it in `RenderError`. Either way the `Quill` carries no backend: rendering goes
 through the `Quillmark` engine (`engine.render` / `engine.open`).
 
+Advisory diagnostics ride the loaded quill rather than the constructor's return
+value, so both doors keep them and a host reads them when it likes:
+`Quill::warnings()`, `quill.warnings` in WASM and Python.
+
 `FileTreeNode` exposes the file and directory reads over the bundle. Paths use
 forward slashes, the root is `""`, absolute paths and `..` traversal are
 rejected, and every file reads back as `&[u8]`.

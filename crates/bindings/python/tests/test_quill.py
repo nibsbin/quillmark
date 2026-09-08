@@ -34,6 +34,26 @@ def test_quill_from_path_bad_backend_loads_then_fails_at_render(tmp_path):
         Quillmark().render(quill, doc, OutputFormat.PDF)
 
 
+def test_warnings_carry_the_loads_advisories(taro_quill_dir, tmp_path):
+    """A config warning reaches the host off the loaded quill. Before, only the
+    CLI's own loader door kept them and a Python host could not read them at
+    all."""
+    assert Quill.from_path(str(taro_quill_dir)).warnings == []
+
+    quill_dir = tmp_path / "warn_quill"
+    quill_dir.mkdir()
+    (quill_dir / "Quill.yaml").write_text(
+        'quill:\n  name: "warn"\n  version: "1.0"\n  backend: "typst"\n  description: "W"\n'
+        "main:\n  fields:\n    title: { type: string }\n"
+        "card_kinds:\n  skills:\n    body:\n      enabled: false\n"
+        "      example: This example is unused\n"
+        "    fields:\n      items: { type: array, items: { type: string } }\n"
+    )
+
+    quill = Quill.from_path(str(quill_dir))
+    assert [d.code for d in quill.warnings] == ["quill::body_example_unused"]
+
+
 def test_metadata_orders_standard_keys_then_extras_sorted(tmp_path):
     """metadata's key order is a function of the quill: the five standard keys
     in their declared order, then the extra keys sorted by name."""

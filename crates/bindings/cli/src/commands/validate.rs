@@ -54,11 +54,10 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
 
     let mut result = ValidationResult::default();
 
-    // `_with_warnings` keeps the config warnings the plain loader drops.
-    let (quill, config_warnings) = quillmark::quill_from_path_with_warnings(&args.quill_path)?;
+    let quill = quillmark::quill_from_path(&args.quill_path)?;
     let config = quill.config();
 
-    result.issues.extend(config_warnings);
+    result.issues.extend(quill.warnings().iter().cloned());
 
     if args.verbose {
         println!("  Quill name: {}", config.name);

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- feat(core,wasm,python)!: **a quill carries the load's advisory diagnostics,
+  so they reach a binding host at last.** `Quill::warnings()` is new, mirrored
+  as `quill.warnings` in WASM and Python, and it answers whatever
+  `QuillConfig::from_yaml_with_warnings` collected. Every construction door
+  keeps them, which retires the two that existed only because the field was
+  missing: `Quill::from_tree_with_warnings` and
+  `quillmark::quill_from_path_with_warnings` are gone, and `from_tree` /
+  `quill_from_path` are the whole surface. Closes #1625: `Quill::from_tree` was
+  the door every binding took and the one that dropped them, so the channel's
+  output — `quill::implicit_group` and `quill::body_example_unused` — was
+  visible only to the CLI's `validate`.
 - feat(core)!: **five retired `Quill.yaml` keys lose their tailored migration
   message, and an implicit group is a load error.** `must_fill`, `enum`,
   `ui.order`, the `richtext(inline)` type token and `markdown` were retired

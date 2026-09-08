@@ -59,6 +59,7 @@ pub struct Quill {
     pub(crate) metadata: HashMap<String, QuillValue>,
     pub(crate) config: QuillConfig,
     pub(crate) files: FileTreeNode,
+    pub(crate) warnings: Vec<crate::Diagnostic>,
 }
 
 impl Quill {
@@ -80,6 +81,14 @@ impl Quill {
     /// The parsed schema configuration.
     pub fn config(&self) -> &QuillConfig {
         &self.config
+    }
+
+    /// The advisory diagnostics the load collected: what is wrong with this
+    /// quill short of refusing it. They ride the quill so every construction
+    /// door keeps them, and a host reads them whenever it likes rather than at
+    /// the one moment the loader returns.
+    pub fn warnings(&self) -> &[crate::Diagnostic] {
+        &self.warnings
     }
 
     /// A schema-bound [`TypedWriter`](crate::TypedWriter) over `doc`: the front

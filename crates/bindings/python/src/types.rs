@@ -121,6 +121,18 @@ impl PyQuill {
         self.inner.backend_id().to_string()
     }
 
+    /// The advisory diagnostics of the load that produced this quill: what is
+    /// wrong with it short of refusing it. A quill that loads clean answers
+    /// `[]`.
+    #[getter]
+    fn warnings(&self) -> Vec<PyDiagnostic> {
+        self.inner
+            .warnings()
+            .iter()
+            .map(|d| PyDiagnostic { inner: d.clone() })
+            .collect()
+    }
+
     /// Bind this quill's schema to `doc` for typed writes. See [`PyWriter`] for
     /// the re-borrow/ephemerality contract.
     fn writer(slf: Py<Self>, doc: Py<PyDocument>) -> PyWriter {

@@ -254,6 +254,44 @@ fn test_from_tree() {
     assert!(quill.metadata.contains_key("description"));
 }
 
+/// The advisory channel reaches whoever holds the quill. `from_tree` is the
+/// door every binding takes, and a warning that only the loader's return value
+/// carried was a warning no binding host could ever read.
+#[test]
+fn a_config_warning_rides_the_loaded_quill() {
+    let quill_yaml = br#"quill: { name: warn, version: "1.0", backend: typst, description: w }
+main:
+  fields:
+    title: { type: string }
+card_kinds:
+  skills:
+    body:
+      enabled: false
+      example: This example is unused
+    fields:
+      items: { type: array, items: { type: string } }
+"#
+    .to_vec();
+
+    let mut files = HashMap::new();
+    files.insert(
+        "Quill.yaml".to_string(),
+        FileTreeNode::File {
+            contents: quill_yaml,
+        },
+    );
+    let quill = Quill::from_tree(FileTreeNode::Directory { files }).expect("loads");
+
+    assert_eq!(
+        quill
+            .warnings()
+            .iter()
+            .filter_map(|d| d.code.as_deref())
+            .collect::<Vec<_>>(),
+        ["quill::body_example_unused"]
+    );
+}
+
 #[test]
 fn test_to_tree_round_trips_from_tree() {
     let quill_yaml = b"quill:\n  name: roundtrip\n  version: \"1.0\"\n  backend: typst\n  description: Round-trip test\n".to_vec();
