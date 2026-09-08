@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- test(wasm): **the `run_in_browser` test file goes; what it looked like it
+  covered is covered by suites that run.** `tests/wasm_bindings.rs` held nine
+  `#[wasm_bindgen_test]` cases and no runner — nothing under `.github/`,
+  `scripts/` or `.cargo/` names wasm-pack or a browser harness, and
+  `cargo test --workspace` compiles the file and runs zero tests out of it.
+  Every assertion it made is made by a suite that does run: `basic.test.js`
+  for the render, `Uint8Array`, storage-DTO, object-tree, metadata/schema and
+  clone cases, `canvas.test.js` for the region / `positionAt` / `locate`
+  crossing, `core.test.js` for the seed verbs, `quill/tests.rs` for a field's
+  `ui` in the schema, and `content_regions.rs` for the caret span. One was
+  uncovered — `seedCard` on an undeclared kind answering `undefined` rather
+  than throwing — and `core.test.js` now asserts it. `wasm-bindgen-test`
+  leaves the dev-dependencies with the file.
 - refactor(core,wasm,python)!: **the `$ext` namespace verbs collapse into the
   whole-map three.** `storeExtNamespace` / `removeExtNamespace` /
   `getExtNamespace`, the Python `store_ext_namespace` / `remove_ext_namespace`,
