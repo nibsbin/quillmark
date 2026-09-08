@@ -58,12 +58,11 @@ scratch. It resolves card values against the quill's `form.json` spec and stamps
 them onto the base `form.pdf` as real interactive fields (Technique A:
 `NeedAppearances`, no baked appearance streams).
 
-The PDF deliverable is always an interactive AcroForm. The backend also emits
-SVG and PNG (and a WASM canvas raster) by pre-flattening values into the page
-content streams and rasterizing that with hayro. Field geometry is a
-session-level query
-(`LiveSession::regions()`): per-field geometry keyed on the schema field path,
-no bound value. Quill-authoring surface:
+The PDF deliverable is always an interactive AcroForm, the one output format
+this backend emits. It paints a WASM canvas raster by pre-flattening values into
+the page content streams and rasterizing that with hayro. Field geometry is a
+session-level query (`LiveSession::regions()`): per-field geometry keyed on the
+schema field path, no bound value. Quill-authoring surface:
 [docs/quills/pdfform-backend.md](../../docs/quills/pdfform-backend.md); preview
 seam: [PREVIEW.md](PREVIEW.md).
 
