@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- refactor(core,wasm)!: **the pre-session `supportsCanvas` probe is deleted at
+  every layer.** `Quillmark::supports_canvas`,
+  `quillmark_core::formats_support_canvas`, the WASM
+  `Engine.supportsCanvas(quill)` and `LiveSession.supportsCanvas` getters, and
+  the `canvas` key of a runtime `BackendDescriptor` all go; a descriptor's
+  manifest is `formats` alone. The probe keyed on output formats — true iff the
+  backend emitted PNG or SVG — while canvas paint is a `SessionHandle` seam a
+  backend overrides independently of the formats it emits, so the two could
+  disagree; every backend the workspace ships paints, so it answered `true` in
+  every build. `LiveSession::supports_canvas()` stays: it is derived from the
+  seam it gates and cannot drift. A JS consumer opens the session and handles
+  the throw `paint` / `pageSize` already owe a compile with nothing to paint.
 - refactor(all)!: **the crate-compatibility ceremony is withdrawn:
   `#[non_exhaustive]`, the `Backend` seal, public `register_backend`, and the
   SemVer promise `COMPATIBILITY.md` carried.** The attribute leaves the 86

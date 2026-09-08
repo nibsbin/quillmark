@@ -44,11 +44,10 @@ no separate capability flag. Capability is **derived** from the seam:
 `LiveSession::supports_canvas()` is true exactly when the session exposes
 `page_size_pt` for its pages, so `paint`/`pageSize` succeed precisely when the
 session reports canvas: the gate cannot drift from the implementation because
-there is nothing to keep in sync. For a pre-session estimate (a GUI deciding
-whether to mount a canvas UI before opening a session), the engine's
-`supportsCanvas(quill)` derives a hint from the backend's output formats
-(`quillmark_core::formats_support_canvas`: a backend that emits a visual-page
-format, PNG or SVG, can paint); the session-level answer is authoritative.
+there is nothing to keep in sync. There is no pre-session estimate. A binding
+consumer opens the session and handles the throw `paint`/`pageSize` already
+owe a zero-page compile; a painterless backend, which the workspace ships
+none of, would answer through the same throw.
 
 ## Live edits: `update` and `ChangeSet`
 
@@ -322,7 +321,6 @@ backend); `Quill` is declarative data. Canvas is in the backend builds only.
 
 ```ts
 class Engine {
-  supportsCanvas(quill: Quill): Promise<boolean>;     // probe before mounting canvas UI / open()
   supportedFormats(quill: Quill): Promise<OutputFormat[]>;
   open(quill: Quill, doc: Document): Promise<LiveSession>;
   render(quill: Quill, doc: Document, opts?: RenderOptions): Promise<RenderResult>;
@@ -331,7 +329,6 @@ class Engine {
 class LiveSession {
   readonly pageCount: number;
   readonly backendId: string;
-  readonly supportsCanvas: boolean;
   readonly warnings: Diagnostic[];
 
   update(doc: Document): ChangeSet;     // in-place recompile; transactional
@@ -485,6 +482,15 @@ by `runtime.test.js`.
   canvas backend is overriding the two seam methods (`page_size_pt` /
   `render_rgba`): capability is then derived from the seam, with no separate
   flag to flip and no binding to touch.
+- **No pre-session canvas probe.** The only capability answer is the session's
+  own `supports_canvas()` and the throw `paint`/`pageSize` owe when it is
+  false. A pre-session probe answers for the backend rather than for the
+  compile, so a consumer gating its canvas UI on one still has to handle the
+  throw a zero-page document raises; keyed on output formats it also answers
+  for the wrong thing, since `render_rgba` is a seam a backend can override
+  while emitting PDF alone. Every backend the workspace ships paints, so the
+  probe had one answer everywhere; a painterless backend would need a declared
+  flag, and there is none to declare it for.
 - **`update` reports dirty pages, not new handles.** Page identity is the index;
   a `ChangeSet` is data. Nothing borrowed from a previous compile outlives an
   edit because reads resolve against the current compile at call time.
@@ -552,7 +558,7 @@ by `runtime.test.js`.
 
 ## Lifecycle and consumer flow
 
-`supportsCanvas` → `open` → `paint` per visible page → `update` on edit →
+`open` → `paint` per visible page → `update` on edit →
 repaint `dirtyPages ∩ visible`. The [quickstart's canvas
 section](../../docs/getting-started/quickstart.md#live-preview-canvas) is the
 worked loop.
