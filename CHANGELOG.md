@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- docs: **the twenty pre-0.100 migration guides leave the published site.**
+  `wasm-0.77-to-0.80.md` through `0.99-to-0.100.md` and the `0.92-to-0.102.md`
+  span guide go, with their rows in the Migration overview: 5,519 lines routing
+  a consumer onto `RenderSession`, `` ```card `` fences, `QUILL:` frontmatter,
+  `$id` and `!fill`, none of which any release since 0.100 carries in any form.
+  The guides from 0.100 onward stay. What keeps a pre-0.100 stored blob loading
+  is the reader in `crates/core/src/document/dto.rs`, specified in
+  `prose/canon/DOCUMENT_STORAGE.md`; no guide was ever load-bearing for it.
+  `mkdocs.yml` states the nav exclusion as `/migrations/*.md`, one line in
+  place of the 33 a release had to extend. Entries below still name the
+  deleted paths: a changelog records the moment it was written.
 - test(wasm): **the `run_in_browser` test file goes; what it looked like it
   covered is covered by suites that run.** `tests/wasm_bindings.rs` held nine
   `#[wasm_bindgen_test]` cases and no runner — nothing under `.github/`,
