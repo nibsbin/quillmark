@@ -266,11 +266,6 @@ pub fn project_kind(
         | SchemaType::PlainText { .. } => WidgetType::Text {
             multiline: is_multiline(field),
         },
-        // The loader requires `values:` on an enum, so this arm is unreachable;
-        // it keeps the match total.
-        SchemaType::Enum => WidgetType::Choice {
-            options: blank_first(field.enum_values.as_deref().unwrap_or_default()),
-        },
         // `resolve::coerce_text` joins an array's elements with newlines, so the
         // widget is multiline whatever `ui` says: a single-line one collapses
         // the value the flattened raster stacks.

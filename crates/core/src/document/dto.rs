@@ -48,7 +48,8 @@ use quillmark_content::Normalized;
 
 use super::meta::validate_composable_kind;
 use super::payload::{MetaKey, Payload, PayloadItem};
-use super::prescan::{CommentPathSegment, NestedComment};
+use super::prescan::NestedComment;
+use crate::value::PathSegment;
 use super::{Card, Document};
 use crate::value::QuillValue;
 use crate::version::QuillReference;
@@ -320,7 +321,7 @@ pub struct NestedCommentV0_92_0 {
     pub inline: bool,
 }
 
-/// Frozen `0.92.0` representation of a [`CommentPathSegment`]. Also used for
+/// Frozen `0.92.0` representation of a [`PathSegment`]. Also used for
 /// `nested_fills` path segments.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum CommentPathSegmentV0_92_0 {
@@ -441,11 +442,11 @@ impl From<&NestedComment> for NestedCommentV0_92_0 {
     }
 }
 
-impl From<&CommentPathSegment> for CommentPathSegmentV0_92_0 {
-    fn from(seg: &CommentPathSegment) -> Self {
+impl From<&PathSegment> for CommentPathSegmentV0_92_0 {
+    fn from(seg: &PathSegment) -> Self {
         match seg {
-            CommentPathSegment::Key(k) => CommentPathSegmentV0_92_0::Key(k.clone()),
-            CommentPathSegment::Index(i) => CommentPathSegmentV0_92_0::Index(*i),
+            PathSegment::Key(k) => CommentPathSegmentV0_92_0::Key(k.clone()),
+            PathSegment::Index(i) => CommentPathSegmentV0_92_0::Index(*i),
         }
     }
 }
@@ -682,8 +683,8 @@ impl TryFrom<PayloadItemV0_92_0> for PayloadItem {
                 validate_field(&key, &value).map_err(malformed)?;
                 let mut qv = QuillValue::from_json(value);
                 for path in nested_fills {
-                    let segs: Vec<CommentPathSegment> =
-                        path.into_iter().map(CommentPathSegment::from).collect();
+                    let segs: Vec<PathSegment> =
+                        path.into_iter().map(PathSegment::from).collect();
                     qv.set_fill_at(&segs);
                 }
                 validate_fill_targets(&qv, fill).map_err(malformed)?;
@@ -715,7 +716,7 @@ impl From<NestedCommentV0_92_0> for NestedComment {
             container_path: nc
                 .container_path
                 .into_iter()
-                .map(CommentPathSegment::from)
+                .map(PathSegment::from)
                 .collect(),
             position: nc.position,
             text: nc.text,
@@ -724,11 +725,11 @@ impl From<NestedCommentV0_92_0> for NestedComment {
     }
 }
 
-impl From<CommentPathSegmentV0_92_0> for CommentPathSegment {
+impl From<CommentPathSegmentV0_92_0> for PathSegment {
     fn from(seg: CommentPathSegmentV0_92_0) -> Self {
         match seg {
-            CommentPathSegmentV0_92_0::Key(k) => CommentPathSegment::Key(k),
-            CommentPathSegmentV0_92_0::Index(i) => CommentPathSegment::Index(i),
+            CommentPathSegmentV0_92_0::Key(k) => PathSegment::Key(k),
+            CommentPathSegmentV0_92_0::Index(i) => PathSegment::Index(i),
         }
     }
 }
@@ -802,7 +803,7 @@ pub struct NestedCommentV0_81_0 {
     pub inline: bool,
 }
 
-/// Frozen `0.81.0` representation of a [`CommentPathSegment`].
+/// Frozen `0.81.0` representation of a [`PathSegment`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum CommentPathSegmentV0_81_0 {
     Key(String),
@@ -964,7 +965,7 @@ pub struct NestedCommentV0_82_0 {
     pub inline: bool,
 }
 
-/// Frozen `0.82.0` representation of a [`CommentPathSegment`].
+/// Frozen `0.82.0` representation of a [`PathSegment`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum CommentPathSegmentV0_82_0 {
     Key(String),

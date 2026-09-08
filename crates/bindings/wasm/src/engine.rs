@@ -656,6 +656,15 @@ impl Quill {
         self.inner.backend_id().to_string()
     }
 
+    /// The advisory diagnostics of the load that produced this quill: what is
+    /// wrong with it short of refusing it. A quill that loads clean answers
+    /// `[]`.
+    #[wasm_bindgen(getter, js_name = warnings, unchecked_return_type = "Diagnostic[]")]
+    pub fn warnings(&self) -> Result<JsValue, JsValue> {
+        let diags: Vec<Diagnostic> = self.inner.warnings().iter().cloned().map(Into::into).collect();
+        serialize_or_throw(&diags, "warnings")
+    }
+
     #[wasm_bindgen(getter, js_name = blueprint)]
     pub fn blueprint(&self) -> String {
         self.inner.config().blueprint()

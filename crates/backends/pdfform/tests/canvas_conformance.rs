@@ -70,11 +70,11 @@ fn pdfform_canvas_raster_is_complete() {
         .find(|r| r.page == 0 && r.field == "full_name")
         .expect("a region for the bound text field on page 0");
 
-    let [x0, y0, x1, y1] = region.rect;
-    let left = (x0 * scale).floor().max(0.0) as u32;
-    let right = ((x1 * scale).ceil() as u32).min(px_w);
-    let top = ((height_pt - y1) * scale).floor().max(0.0) as u32;
-    let bottom = (((height_pt - y0) * scale).ceil() as u32).min(px_h);
+    let (l, t, r, b) = region_box_px(region.rect, height_pt, scale);
+    let left = l.clamp(0, px_w as i64) as u32;
+    let right = r.clamp(0, px_w as i64) as u32;
+    let top = t.clamp(0, px_h as i64) as u32;
+    let bottom = b.clamp(0, px_h as i64) as u32;
 
     assert!(
         left < right && top < bottom,
@@ -82,27 +82,14 @@ fn pdfform_canvas_raster_is_complete() {
          x[{left},{right}) y[{top},{bottom}) in {px_w}x{px_h}"
     );
 
-    let mut ink = 0u64; // non-white, opaque
-    let mut opaque = 0u64;
-    for y in top..bottom {
-        for x in left..right {
-            let i = ((y as usize) * (px_w as usize) + (x as usize)) * 4;
-            let (r, g, b, a) = (rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]);
-            if a == 255 {
-                opaque += 1;
-                if r < 250 || g < 250 || b < 250 {
-                    ink += 1;
-                }
-            }
-        }
-    }
+    let (ink, opaque) = ink_bounds(&rgba, px_w, (left, top, right, bottom));
 
     assert!(
         opaque > 0,
         "field region box must contain opaque page-background pixels"
     );
     assert!(
-        ink > 0,
+        ink.is_some(),
         "field region box must contain non-white opaque pixels"
     );
 }
@@ -197,30 +184,47 @@ fn geometry_lands_on_the_ink(form_pdf: Vec<u8>) {
         .into_iter()
         .find(|r| r.page == 0 && r.field == "full_name")
         .expect("a region for the bound text field");
-    let [x0, y0, x1, y1] = region.rect;
-    let box_px = (
-        (x0 * scale).floor() as i64,
-        ((height_pt - y1) * scale).floor() as i64,
-        (x1 * scale).ceil() as i64,
-        ((height_pt - y0) * scale).ceil() as i64,
-    );
+    let box_px = region_box_px(region.rect, height_pt, scale);
 
-    let ink = ink_bounds(&rgba, px_w, px_h).expect("the field value draws ink");
+    let (ink, _) = ink_bounds(&rgba, px_w, (0, 0, px_w, px_h));
+    let ink = ink.expect("the field value draws ink");
     assert!(
         ink.0 >= box_px.0 && ink.1 >= box_px.1 && ink.2 <= box_px.2 && ink.3 <= box_px.3,
         "ink at {ink:?} must lie inside the field's region box {box_px:?} in {px_w}x{px_h}"
     );
 }
 
-/// The `(left, top, right, bottom)` pixel bounds of every non-white opaque
-/// pixel, or `None` when the raster is blank.
-fn ink_bounds(rgba: &[u8], px_w: u32, px_h: u32) -> Option<(i64, i64, i64, i64)> {
+/// The `(left, top, right, bottom)` pixel box a region's rect covers, unclamped
+/// so it can be compared against a bbox that a caller measured itself.
+fn region_box_px(rect: [f32; 4], height_pt: f32, scale: f32) -> (i64, i64, i64, i64) {
+    let [x0, y0, x1, y1] = rect;
+    (
+        (x0 * scale).floor() as i64,
+        ((height_pt - y1) * scale).floor() as i64,
+        (x1 * scale).ceil() as i64,
+        ((height_pt - y0) * scale).ceil() as i64,
+    )
+}
+
+/// Inside the pixel box `(left, top, right, bottom)`: the bounds of every
+/// non-white opaque pixel — `None` when the box holds none — and how many
+/// opaque pixels the box holds at all.
+fn ink_bounds(
+    rgba: &[u8],
+    px_w: u32,
+    (left, top, right, bottom): (u32, u32, u32, u32),
+) -> (Option<(i64, i64, i64, i64)>, u64) {
     let mut bounds: Option<(i64, i64, i64, i64)> = None;
-    for y in 0..px_h as i64 {
-        for x in 0..px_w as i64 {
+    let mut opaque = 0u64;
+    for y in top as i64..bottom as i64 {
+        for x in left as i64..right as i64 {
             let i = ((y as usize) * (px_w as usize) + (x as usize)) * 4;
             let (r, g, b, a) = (rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]);
-            if a == 255 && (r < 250 || g < 250 || b < 250) {
+            if a != 255 {
+                continue;
+            }
+            opaque += 1;
+            if r < 250 || g < 250 || b < 250 {
                 bounds = Some(match bounds {
                     None => (x, y, x + 1, y + 1),
                     Some((l, t, rt, bt)) => (l.min(x), t.min(y), rt.max(x + 1), bt.max(y + 1)),
@@ -228,7 +232,7 @@ fn ink_bounds(rgba: &[u8], px_w: u32, px_h: u32) -> Option<(i64, i64, i64, i64)>
             }
         }
     }
-    bounds
+    (bounds, opaque)
 }
 
 /// A one-page background drawing nothing, with `media` as its `/MediaBox` and

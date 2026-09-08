@@ -14,9 +14,6 @@ const fail = (file, msg) => problems.push(`${file}: ${msg}`);
 // A file path (a slashed token with a dotted basename) inside an anchor.
 // Keys on path shape, not an extension list, so a new file type can't slip past.
 const FILE_IN_ANCHOR = /[\w-]+\/[\w/-]*\.[a-z0-9]+\b/;
-// A markdown link target into the proposal/plan tiers, segment-anchored so a
-// path like `parked-proposals/` doesn't trip it.
-const PLAN_LINK = /\]\([^)]*\/(?:proposals|plans)\//;
 // A relative markdown link target to a .md file (an outbound prose link).
 const PROSE_LINK = /\]\((?!https?:)[^)]*\.md(?=[)#])/;
 // A backticked slashed token: an anchor's folder reference.
@@ -65,9 +62,6 @@ for (const name of mdFiles('prose/canon')) {
   const file = join('prose/canon', name);
   const text = readFileSync(file, 'utf8');
   const lines = text.split('\n');
-
-  const planLink = text.match(PLAN_LINK);
-  if (planLink) fail(file, `links into proposals/ or plans/ (\`${planLink[0]}\`): canon never references them`);
 
   if (name === 'INDEX.md') continue; // the index has no spine
 

@@ -805,16 +805,6 @@ struct Wrap {
     open: String,
 }
 
-fn wrap_open(kind: &MarkKind) -> String {
-    match kind {
-        MarkKind::Strong => "#strong[".to_string(),
-        MarkKind::Emph => "#emph[".to_string(),
-        MarkKind::Underline => "#underline[".to_string(),
-        MarkKind::Strike => "#strike[".to_string(),
-        _ => String::new(),
-    }
-}
-
 /// Clip wrapping marks out of atomic `#raw(...)` interiors and drop any a span
 /// swallowed whole, via the shared
 /// [`clip_range_to_atomic`](quillmark_content::export::clip_range_to_atomic).
@@ -936,13 +926,12 @@ fn wraps_and_codes(marks: &[Mark], lo: usize, hi: usize) -> (Vec<Wrap>, Vec<(usi
         }
         match &m.kind {
             MarkKind::Code => codes.push((s, e)),
-            MarkKind::Strong | MarkKind::Emph | MarkKind::Underline | MarkKind::Strike => {
-                wraps.push(Wrap {
-                    start: s,
-                    end: e,
-                    open: wrap_open(&m.kind),
-                });
+            MarkKind::Strong => wraps.push(Wrap { start: s, end: e, open: "#strong[".into() }),
+            MarkKind::Emph => wraps.push(Wrap { start: s, end: e, open: "#emph[".into() }),
+            MarkKind::Underline => {
+                wraps.push(Wrap { start: s, end: e, open: "#underline[".into() })
             }
+            MarkKind::Strike => wraps.push(Wrap { start: s, end: e, open: "#strike[".into() }),
             MarkKind::Link { url } => wraps.push(Wrap {
                 start: s,
                 end: e,
@@ -1683,7 +1672,9 @@ mod tests {
         }
 
         // An island this build renders as nothing closes the gap its slot held.
-        for ty in ["widget", "table", "image"] {
+        // The types here are the ones whose slot can sit inside a run at all: a
+        // block-only type's takes a line of its own, so no run closes over it.
+        for ty in ["widget", "image"] {
             for text in ["a/{}/b", "a-{}-b", "a-{}?b", "a-{}5b", "a.{}..b", "a..{}.b"] {
                 let text = text.replace("{}", &ISLAND_SLOT.to_string());
                 let rt = Content::new(text.clone(), vec![Line::new(LineKind::Para)])

@@ -546,7 +546,7 @@ the render floor's `default: → blank` (`blank`, [SCHEMAS.md](SCHEMAS.md)
 | Rust | `QuillConfig::blueprint() -> String`; the filled-out twin is `Quill::seed_document() -> Document` |
 | Wasm | `Quill.blueprint` getter; `Quill.seedDocument()` |
 | Python | `Quill.blueprint` property; `Quill.seed_document()` |
-| CLI | `quillmark blueprint <QUILL_PATH> [-o <FILE>]`; `render` with no input file renders the **seeded** document |
+| CLI | `quillmark blueprint <QUILL_PATH>`; `render` with no input file renders the **seeded** document |
 
 The Rust example `cargo run -p quillmark-core --example print_blueprint
 -- <quill_name> [<version>]` prints the blueprint for any bundled

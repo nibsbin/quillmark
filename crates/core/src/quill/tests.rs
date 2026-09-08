@@ -254,6 +254,44 @@ fn test_from_tree() {
     assert!(quill.metadata.contains_key("description"));
 }
 
+/// The advisory channel reaches whoever holds the quill. `from_tree` is the
+/// door every binding takes, and a warning that only the loader's return value
+/// carried was a warning no binding host could ever read.
+#[test]
+fn a_config_warning_rides_the_loaded_quill() {
+    let quill_yaml = br#"quill: { name: warn, version: "1.0", backend: typst, description: w }
+main:
+  fields:
+    title: { type: string }
+card_kinds:
+  skills:
+    body:
+      enabled: false
+      example: This example is unused
+    fields:
+      items: { type: array, items: { type: string } }
+"#
+    .to_vec();
+
+    let mut files = HashMap::new();
+    files.insert(
+        "Quill.yaml".to_string(),
+        FileTreeNode::File {
+            contents: quill_yaml,
+        },
+    );
+    let quill = Quill::from_tree(FileTreeNode::Directory { files }).expect("loads");
+
+    assert_eq!(
+        quill
+            .warnings()
+            .iter()
+            .filter_map(|d| d.code.as_deref())
+            .collect::<Vec<_>>(),
+        ["quill::body_example_unused"]
+    );
+}
+
 #[test]
 fn test_to_tree_round_trips_from_tree() {
     let quill_yaml = b"quill:\n  name: roundtrip\n  version: \"1.0\"\n  backend: typst\n  description: Round-trip test\n".to_vec();
@@ -783,6 +821,8 @@ quill:
   description: Test field order
 
 main:
+  ui:
+    groups: [test_group]
   fields:
     first:
       type: string
@@ -794,7 +834,7 @@ main:
       type: string
       description: Third field
       ui:
-        group: Test Group
+        group: test_group
     fourth:
       type: string
       description: Fourth field
@@ -808,7 +848,7 @@ main:
     let third = config.main.fields.get("third").unwrap();
     assert_eq!(
         third.ui.as_ref().unwrap().group,
-        Some("Test Group".to_string())
+        Some("test_group".to_string())
     );
 }
 
@@ -1136,28 +1176,6 @@ main:
 }
 
 #[test]
-fn authored_ui_order_on_card_field_is_rejected() {
-    let yaml = r#"
-quill: { name: x, version: "1.0", backend: typst, description: x }
-main:
-  fields:
-    title: { type: string, ui: { order: 3 } }
-"#;
-    let err = QuillConfig::from_yaml_with_warnings(yaml).unwrap_err();
-    let hit = err
-        .iter()
-        .find(|d| d.message.contains("ui.order is no longer accepted"))
-        .expect("expected ui.order rejection");
-    assert!(
-        hit.hint
-            .as_deref()
-            .is_some_and(|h| h.contains("reorder the fields")),
-        "expected migration hint, got: {:?}",
-        hit.hint
-    );
-}
-
-#[test]
 fn ui_group_on_object_property_is_rejected() {
     let yaml = r#"
 quill: { name: x, version: "1.0", backend: typst, description: x }
@@ -1179,8 +1197,10 @@ fn ui_group_on_card_level_field_is_still_accepted() {
     let yaml = r#"
 quill: { name: x, version: "1.0", backend: typst, description: x }
 main:
+  ui:
+    groups: [addressing]
   fields:
-    subject: { type: string, ui: { group: Addressing } }
+    subject: { type: string, ui: { group: addressing } }
 "#;
     let config = QuillConfig::from_yaml(yaml).unwrap();
     assert_eq!(
@@ -1188,7 +1208,7 @@ main:
             .ui
             .as_ref()
             .and_then(|u| u.group.as_deref()),
-        Some("Addressing")
+        Some("addressing")
     );
 }
 
@@ -1248,15 +1268,15 @@ main:
 }
 
 #[test]
-fn implicit_group_without_registry_warns() {
+fn implicit_group_without_registry_is_rejected() {
     let yaml = r#"
 quill: { name: x, version: "1.0", backend: typst, description: x }
 main:
   fields:
     subject: { type: string, ui: { group: Addressing } }
 "#;
-    let (_config, warnings) = QuillConfig::from_yaml_with_warnings(yaml).unwrap();
-    assert!(warnings
+    let err = QuillConfig::from_yaml_with_warnings(yaml).unwrap_err();
+    assert!(err
         .iter()
         .any(|d| d.code.as_deref() == Some("quill::implicit_group")));
 }
@@ -2474,6 +2494,26 @@ fn enum_blank_ignores_a_declared_blank_member() {
     );
 }
 
+/// The three retired keys whose rejection is `deny_unknown_fields` on
+/// `FieldSchemaDef` and `UiFieldSchema` rather than a named arm: nothing else
+/// states that a quill written against them still fails to load, and the key
+/// naming itself in the message is what routes an author to the guide.
+#[test]
+fn the_retired_keys_are_still_load_errors() {
+    for (field, key) in [
+        ("    s:\n      type: string\n      must_fill: true\n", "must_fill"),
+        ("    color:\n      type: string\n      enum: [a, b]\n", "enum"),
+        ("    title:\n      type: string\n      ui: { order: 3 }\n", "order"),
+    ] {
+        let err = quill_with_field(field).unwrap_err();
+        assert!(
+            err.iter().any(|d| d.code.as_deref() == Some("quill::field_parse_error")
+                && d.message.contains(key)),
+            "`{key}:` should fail load naming the key, got: {err:?}"
+        );
+    }
+}
+
 #[test]
 fn richtext_inline_type_token_is_rejected_at_load() {
     let err = quill_with_field("    tag:\n      type: richtext(inline)\n").unwrap_err();
@@ -2483,14 +2523,6 @@ fn richtext_inline_type_token_is_rejected_at_load() {
                 && d.message.contains("richtext(inline)")
         }),
         "type: richtext(inline) should be a load error, got: {err:?}"
-    );
-    assert!(
-        err.iter().any(|d| {
-            d.hint
-                .as_deref()
-                .is_some_and(|h| h.contains("inline: true"))
-        }),
-        "load error should hint at inline: true, got: {err:?}"
     );
 }
 
@@ -2953,88 +2985,6 @@ fn enum_membership_is_validated_on_a_document_value() {
         &crate::path::DocPath::main().field("color"),
     );
     assert!(ok.is_empty(), "an in-domain value validates, got: {ok:?}");
-}
-
-#[test]
-fn the_enum_modifier_is_a_load_error_on_every_type() {
-    for field in [
-        "    color:\n      type: string\n      enum: [a, b]\n",
-        "    color:\n      type: enum\n      enum: [a, b]\n",
-        "    n:\n      type: integer\n      enum: [a, b]\n",
-    ] {
-        let err = quill_with_field(field).unwrap_err();
-        assert!(
-            err.iter()
-                .any(|d| d.code.as_deref() == Some("quill::field_parse_error")
-                    && d.message.contains("enum: is retired")
-                    && d.message.contains("values:")),
-            "enum: should fail load with a migration message, got: {err:?}"
-        );
-    }
-}
-
-/// Every legacy declaration fails load, and the message names the one migration
-/// that shape takes: four are a deletion, and the fifth is the judgment call.
-#[test]
-fn the_must_fill_key_is_a_load_error_naming_its_migration() {
-    for (field, route) in [
-        (
-            "    s:\n      type: string\n      must_fill: true\n",
-            "obliged already",
-        ),
-        (
-            "    s:\n      type: string\n      default: draft\n      must_fill: false\n",
-            "unobliged already",
-        ),
-        (
-            "    s:\n      type: string\n      must_fill: false\n",
-            "write `default: \"\"`",
-        ),
-        (
-            "    n:\n      type: integer\n      must_fill: false\n",
-            "write `default: 0`",
-        ),
-        (
-            "    tags:\n      type: array\n      items: { type: string }\n      must_fill: false\n",
-            "write `default: []`",
-        ),
-        (
-            "    s:\n      type: string\n      default: draft\n      must_fill: true\n",
-            "move it to `example: \"draft\"`",
-        ),
-        (
-            "    c:\n      type: object\n      properties: { name: { type: string } }\n      \
-             must_fill: false\n",
-            "each property carries its own obligation",
-        ),
-    ] {
-        let err = quill_with_field(field).unwrap_err();
-        assert!(
-            err.iter()
-                .any(|d| d.code.as_deref() == Some("quill::field_parse_error")
-                    && d.message.contains("must_fill: is retired")
-                    && d.message.contains(route)),
-            "must_fill: should fail load routing to `{route}`, got: {err:?}"
-        );
-    }
-}
-
-/// The key is rejected wherever a field schema is, not only at card level.
-#[test]
-fn the_must_fill_key_is_rejected_at_every_depth() {
-    for field in [
-        "    c:\n      type: object\n      properties: { name: { type: string, must_fill: true } }\n",
-        "    tags:\n      type: array\n      items: { type: string, must_fill: true }\n",
-        "    c:\n      type: enum\n      values: [a]\n      variants: { a: { poc: { type: string, must_fill: true } } }\n",
-    ] {
-        let err = quill_with_field(field).unwrap_err();
-        assert!(
-            err.iter()
-                .any(|d| d.code.as_deref() == Some("quill::field_parse_error")
-                    && d.message.contains("must_fill: is retired")),
-            "a nested must_fill: should fail load, got: {err:?}"
-        );
-    }
 }
 
 #[test]

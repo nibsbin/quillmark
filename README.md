@@ -60,21 +60,6 @@ cargo run --example usaf_memo
 cargo run --example taro
 ```
 
-## Project Structure
-
-- **crates/core** - Core parsing, schema, and backend traits
-- **crates/content** - Document content model
-- **crates/quillmark** - Rust orchestration API
-- **crates/backends/typst** - Typst backend
-- **crates/quillmark-pdf** - Typst-free AcroForm PDF-stamping spine
-- **crates/backends/pdfform** - Typst-free PDF-form backend (built on quillmark-pdf)
-- **crates/bindings/python** - Python bindings
-- **crates/bindings/wasm** - WebAssembly bindings
-- **crates/bindings/cli** - Command-line interface
-- **crates/fixtures** - Test fixtures and sample Quill templates
-- **crates/fuzz** - Property-based fuzzing tests
-- **prose/canon** - Design documentation
-
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).

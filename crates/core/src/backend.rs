@@ -41,13 +41,10 @@ pub trait Backend: sealed::Sealed + Send + Sync + std::fmt::Debug {
 /// [`Backend::supported_formats`], under `backend::format_not_supported`.
 /// `backend` names the backend in the message; `supported` becomes the hint.
 pub fn unsupported_format(format: OutputFormat, backend: &str, supported: &[OutputFormat]) -> RenderError {
-    RenderError::from_diag(
-        crate::Diagnostic::new(
-            crate::Severity::Error,
-            format!("{format:?} not supported by the {backend} backend"),
-        )
-        .with_code("backend::format_not_supported".to_string())
-        .with_hint(format!("Supported formats: {supported:?}")),
+    RenderError::coded_hint(
+        "backend::format_not_supported",
+        format!("{format:?} not supported by the {backend} backend"),
+        format!("Supported formats: {supported:?}"),
     )
 }
 
@@ -105,11 +102,7 @@ pub fn declined_construct(
 pub const MAX_RASTER_PIXELS: u64 = 16_384 * 16_384;
 
 fn invalid_raster_scale(message: String, hint: &str) -> RenderError {
-    RenderError::from_diag(
-        crate::Diagnostic::new(crate::Severity::Error, message)
-            .with_code("backend::invalid_raster_scale".to_string())
-            .with_hint(hint.to_string()),
-    )
+    RenderError::coded_hint("backend::invalid_raster_scale", message, hint)
 }
 
 /// Device pixels per point for a raster render at `ppi`, under
@@ -169,15 +162,12 @@ pub fn selected_pages(
         .filter(|&i| i >= page_count)
         .collect();
     if !out_of_bounds.is_empty() {
-        return Err(RenderError::from_diag(
-            crate::Diagnostic::new(
-                crate::Severity::Error,
-                format!(
-                    "Page index out of bounds (page_count={page_count}); offending indices: {out_of_bounds:?}"
-                ),
-            )
-            .with_code("backend::page_index_out_of_bounds".to_string())
-            .with_hint("Read the session's page count before requesting pages.".to_string()),
+        return Err(RenderError::coded_hint(
+            "backend::page_index_out_of_bounds",
+            format!(
+                "Page index out of bounds (page_count={page_count}); offending indices: {out_of_bounds:?}"
+            ),
+            "Read the session's page count before requesting pages.",
         ));
     }
 
@@ -188,16 +178,10 @@ pub fn selected_pages(
 /// under `backend::page_selection_not_supported`. `format` names it in the
 /// message.
 pub fn page_selection_not_supported(format: OutputFormat) -> RenderError {
-    RenderError::from_diag(
-        crate::Diagnostic::new(
-            crate::Severity::Error,
-            format!("{format:?} output does not support page selection"),
-        )
-        .with_code("backend::page_selection_not_supported".to_string())
-        .with_hint(
-            "Drop the page selection to render the whole document, or ask for a per-page format."
-                .to_string(),
-        ),
+    RenderError::coded_hint(
+        "backend::page_selection_not_supported",
+        format!("{format:?} output does not support page selection"),
+        "Drop the page selection to render the whole document, or ask for a per-page format.",
     )
 }
 

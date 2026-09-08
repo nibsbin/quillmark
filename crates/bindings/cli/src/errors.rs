@@ -1,5 +1,4 @@
 use quillmark_core::RenderError;
-use std::fmt;
 
 /// [`print_cli_error`] renders full diagnostics for the render and parse
 /// variants, a plain line for `Io` and `InvalidArgument`, and nothing for
@@ -12,20 +11,6 @@ pub enum CliError {
     InvalidArgument(String),
     Reported,
 }
-
-impl fmt::Display for CliError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CliError::Io(e) => write!(f, "I/O error: {}", e),
-            CliError::Render(e) => write!(f, "{}", e),
-            CliError::Parse(e) => write!(f, "Parse error: {}", e),
-            CliError::InvalidArgument(msg) => write!(f, "Invalid argument: {}", msg),
-            CliError::Reported => write!(f, "diagnostics reported"),
-        }
-    }
-}
-
-impl std::error::Error for CliError {}
 
 impl From<std::io::Error> for CliError {
     fn from(err: std::io::Error) -> Self {
@@ -61,7 +46,9 @@ pub type Result<T> = std::result::Result<T, CliError>;
 pub fn print_cli_error(err: &CliError) {
     match err {
         CliError::Render(render_err) => {
-            quillmark_core::error::print_errors(render_err);
+            for diag in render_err.diagnostics() {
+                eprintln!("{}", diag.fmt_pretty());
+            }
         }
         CliError::Parse(parse_err) => {
             eprintln!("{}", parse_err.to_diagnostic().fmt_pretty());

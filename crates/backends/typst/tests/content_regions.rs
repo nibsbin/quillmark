@@ -8,14 +8,7 @@ use quillmark_core::Backend;
 use quillmark_typst::TypstBackend;
 
 mod common;
-use common::quill_with_plate as quill;
-
-/// These tests drive `Backend::open` directly, so they build the content the
-/// way `compile_data` would rather than passing a raw markdown string.
-fn content(markdown: &str) -> serde_json::Value {
-    let rt = quillmark_content::import::from_markdown(markdown).expect("import");
-    quillmark_content::serial::to_canonical_value(&rt)
-}
+use common::{content, quill_with_plate as quill};
 
 #[test]
 fn content_fields_emit_frame_regions() {

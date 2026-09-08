@@ -1,4 +1,4 @@
-//! A card block with no `$kind:` line is a *kindless* card. `to_plate_json`
+//! A card block with no `$kind:` line is a *kindless* card. The plate JSON
 //! omits `$kind` for one rather than fabricating `""`, so a plate that reads the
 //! discriminator with a bare `card.at("$kind")` would panic the Typst compile on
 //! it. It never gets the chance: every route from a document to plate data

@@ -13,7 +13,7 @@ pub(crate) use extract::extract;
 pub(crate) use span_scan::{scalar_windows, unclosed_claims, FieldWindow, Scan};
 
 /// Mirrors the spine's [`FieldType`] but carries the *resolved* Typst value.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug)]
 pub(crate) enum FieldKind {
     Text {
         multiline: bool,
@@ -29,7 +29,7 @@ pub(crate) enum FieldKind {
 
 /// One form field's geometry in Typst (top-left origin) points, plus its
 /// kind/value payload.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug)]
 pub(crate) struct FieldPlacement {
     pub name: String,
     /// The `field:` argument; `None` when the plate omits it, and the widget

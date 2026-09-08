@@ -111,8 +111,8 @@ classification:
   example: UNCLASSIFIED
 ```
 
-There is no `must_fill:` key: declaring one is a load error naming the `default:`
-or `example:` to write instead.
+There is no `must_fill:` key: declaring one is a load error. Write the `default:`
+or `example:` that carries the obligation instead.
 
 An obliged field is one that carries the `!must_fill` marker in the blueprint,
 is stamped when seeding commits its `example`, and raises the non-fatal
@@ -473,13 +473,13 @@ The two registry forms are interchangeable: a bare sequence of ids (`[addressing
 
 `group` applies only to card-level fields (those directly under a card's `fields:`). Grouping never descends into an object's properties or an array's items, so a `group` on a nested property is a hard error (`quill::nested_group_not_supported`) rather than a silently inert knob.
 
-**Implicit groups (deprecated).** A `ui.group` with no `ui.groups` registry on the card works: each distinct value is an implicit group whose label *is* the value, ordered by first appearance. It emits a `quill::implicit_group` warning. Declare a registry to silence it.
+The registry is required: a `ui.group` on a card with no `ui.groups` is a load error (`quill::implicit_group`). A group has one declaration site, and it is the registry.
 
 ### field order
 
 Field display order is **declaration order**: the order the keys appear in `Quill.yaml`. This holds at every level: card-level fields, and the properties of a typed dictionary or typed-table row. The order is carried structurally (the schema's field maps preserve key order, and `schema()` re-emits that order), so no per-field knob is involved.
 
-There is no `ui.order` key: an authored `ui: { order: N }` is a load error (`quill::field_parse_error`) directing you to reorder the fields instead. To move a field, move its block in `Quill.yaml`.
+There is no `ui.order` key: an authored `ui: { order: N }` is a load error (`quill::field_parse_error`). To move a field, move its block in `Quill.yaml`.
 
 ### `blank_title`
 

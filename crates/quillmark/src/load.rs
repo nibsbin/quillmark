@@ -5,26 +5,19 @@ use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::path::{Path, PathBuf};
 
-use quillmark_core::{Diagnostic, FileTreeNode, Quill, QuillIgnore, RenderError};
+use quillmark_core::{FileTreeNode, Quill, QuillIgnore, RenderError};
 
 /// Load a quill from a filesystem directory. Honours a root `.quillignore`,
 /// else a default ignore set.
 ///
 /// A pure config load: the declared backend is resolved later, at render time.
-/// For an in-memory tree, call [`Quill::from_tree`].
+/// For an in-memory tree, call [`Quill::from_tree`]. Advisory diagnostics ride
+/// the quill, readable from [`Quill::warnings`].
 pub fn quill_from_path<P: AsRef<Path>>(path: P) -> Result<Quill, RenderError> {
-    quill_from_path_with_warnings(path).map(|(quill, _)| quill)
-}
-
-/// [`quill_from_path`], keeping the config's advisory diagnostics rather than
-/// dropping them.
-pub fn quill_from_path_with_warnings<P: AsRef<Path>>(
-    path: P,
-) -> Result<(Quill, Vec<Diagnostic>), RenderError> {
     let tree = load_tree_from_path(path.as_ref()).map_err(|e| {
         RenderError::coded("quill::load_failed", format!("Failed to load quill: {e}"))
     })?;
-    Quill::from_tree_with_warnings(tree).map_err(RenderError::new)
+    Quill::from_tree(tree).map_err(RenderError::new)
 }
 
 /// Walk a filesystem path into an in-memory [`FileTreeNode`], for a caller that

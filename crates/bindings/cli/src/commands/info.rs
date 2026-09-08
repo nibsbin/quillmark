@@ -87,23 +87,15 @@ fn print_human_readable(quill: &quillmark::Quill) {
     let config = quill.config();
     println!("Quill: {}", quill.name());
 
-    if let Some(description) = metadata.get("description") {
-        if let Some(desc_str) = description.as_str() {
-            if !desc_str.is_empty() {
-                println!("  Description: {}", desc_str);
+    for (key, label, skip_empty) in [
+        ("description", "Description:", true),
+        ("version", "Version:", false),
+        ("author", "Author:", false),
+    ] {
+        if let Some(value) = metadata.get(key).and_then(|v| v.as_str()) {
+            if !(skip_empty && value.is_empty()) {
+                println!("  {:<12} {}", label, value);
             }
-        }
-    }
-
-    if let Some(version) = metadata.get("version") {
-        if let Some(ver_str) = version.as_str() {
-            println!("  Version:     {}", ver_str);
-        }
-    }
-
-    if let Some(author) = metadata.get("author") {
-        if let Some(auth_str) = author.as_str() {
-            println!("  Author:      {}", auth_str);
         }
     }
 

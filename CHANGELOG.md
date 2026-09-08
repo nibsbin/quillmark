@@ -2,6 +2,80 @@
 
 ## Unreleased
 
+- feat(core,wasm,python)!: **a quill carries the load's advisory diagnostics,
+  so they reach a binding host at last.** `Quill::warnings()` is new, mirrored
+  as `quill.warnings` in WASM and Python, and it answers whatever
+  `QuillConfig::from_yaml_with_warnings` collected. Every construction door
+  keeps them, which retires the two that existed only because the field was
+  missing: `Quill::from_tree_with_warnings` and
+  `quillmark::quill_from_path_with_warnings` are gone, and `from_tree` /
+  `quill_from_path` are the whole surface. Closes #1625: `Quill::from_tree` was
+  the door every binding took and the one that dropped them, so the channel's
+  output — `quill::implicit_group` and `quill::body_example_unused` — was
+  visible only to the CLI's `validate`.
+- fix(pdfform): **a PNG render refuses a page index past the flattened
+  document** under `backend::page_index_out_of_bounds` rather than skipping it.
+  `selected_pages` bounds the indices against the same page list, so a miss is
+  the two disagreeing; a short artifact list reads as a document with fewer
+  pages.
+- feat(core)!: **five retired `Quill.yaml` keys lose their tailored migration
+  message, and an implicit group is a load error.** `must_fill`, `enum`,
+  `ui.order`, the `richtext(inline)` type token and `markdown` were retired
+  across 0.94, 0.104 and 0.108, each with a hand-written sentence naming its
+  replacement. All five still fail to load, now under the same
+  `quill::field_parse_error` code with serde's unknown-key text and no hint.
+  Separately, a `ui.group` on a card with no `ui.groups` registry is
+  `quill::implicit_group` at **error** severity, the promotion that warning's
+  own text scheduled. Note for a WASM or Python host: that warning never
+  reached you — `Quill::from_tree` drops config warnings (#1625) — so the
+  error is the first notice. Declare the registry; a group has one
+  declaration site.
+- feat(typst,pdfform,cli)!: **`pdfform::form_schema_version` retires, and the
+  CLI loses three flags.** A `form@0.1.0` file still fails to load, now as an
+  unrecognised tag under `pdfform::invalid_form_json`; the retired-version
+  arm and its migration pointer are gone. `render --verbose` is deleted, so
+  `--quiet` states what it suppresses on its own: the warning block and the
+  output-destination line. `schema -o` and `blueprint -o` are deleted — both
+  commands write to stdout, where `>` does the rest; `render -o` is
+  unchanged. `validate` now reads `plate_file` from the loaded quill rather
+  than the filesystem, so a plate the load excludes fails validation, which
+  is what rendering it already did; `cli::plate_file_escapes_quill` and
+  `cli::plate_file_missing` stay distinct.
+- feat(content)!: **a block-only island takes a line of its own in the model,
+  not only on the way out.** `to_markdown` broke the line around such a slot
+  at write time, so the model could hold a shape markdown cannot spell.
+  `Content::normalize` performs the break, `validate` states it as
+  `Invariant::BlockIslandNotAlone`, and the export writes the lines it is
+  given. A stored blob carrying the shape still loads, now already split with
+  its marks rebased — the content `to_markdown` would have written. An
+  accepted `LineOp::Join` that runs a slot back into its prose is taken apart
+  again by the mint; the authored lane still refuses the placement up front.
+  `normalize_markdown` narrows to `pub(crate)`.
+- feat(core)!: **five `quillmark-core` document verbs with no caller are
+  gone.** `Document::to_plate_json` was the schema-free spelling of the
+  crate-internal `to_plate_json_gated` every render already takes, so the
+  plate export leaves the public Rust surface; no binding ever carried it.
+  `Document::card_kinds` had one caller, a test. `impl IntoIterator for
+  &Payload` duplicated `Payload::iter`. `MetaKey::ALL` and
+  `MetaKey::is_root_only` enumerated a two-member set to find `Seed`, which
+  both call sites name directly. `PathStepWire` and the `CommentPathSegment`
+  alias were a second and third name for `PathSegment`, which carries the
+  untagged serde form itself, so `PayloadItemWire::Field`'s `nested_fills` is
+  `Vec<Vec<PathSegment>>`. The bytes do not move: a nested-fill path crosses
+  the wire as the JSON it always did, a string per key and a number per index.
+- feat(core,content)!: **unread accessors leave `quillmark-core` and
+  `quillmark-content`.** `YamlError::line` / `column` / `hint` had no caller
+  outside one test; a consumer reads the position off `to_diagnostic`.
+  `RenderedRegion::contains` had none outside its own, and `field_at` never
+  shared it — it ranks by `distance` under a tolerance. `print_errors` had one
+  caller and now lives in it, the CLI. `normalize_document` returns a
+  `Document` rather than a `Result` it never filled. `Delta::apply`, which
+  panicked on a delta built against a longer revision, folds into the checked
+  `try_apply`; `ChangeBundle::from_delta` had two callers, both tests. Two
+  additions come with them: `RenderError::coded_hint`, the coded-plus-hint
+  shape four `backend.rs` refusals built by hand, and `region::nearest_region`,
+  the tolerant search `SessionHandle::field_at` and the Typst backend each
+  carried a copy of.
 - fix(wasm): **a failed conversion at the typed boundary throws instead of
   stranding the JS handle.** `RenderOptions`, `RenderResult`, `Diagnostic`,
   `ChangeSet`, `ContentHit` and `FieldRegion` cross as `tsify::Ts<T>`, whose

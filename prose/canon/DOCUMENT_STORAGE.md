@@ -26,9 +26,8 @@ value with content as its codec's text, sparse, and carrying neither anchors
 nor `$quill` ([SCHEMAS.md](SCHEMAS.md) § "The values form"). It is an API
 shape, never a row.
 
-`Document::to_plate_json` also exists as a lossy, one-way export to
-Plate-shaped backends; it is core-only (not exposed by the WASM or Python
-bindings) and never a storage option.
+The plate JSON a render hands a backend is a lossy, one-way export,
+crate-internal to `quillmark-core` and never a storage option.
 
 ## Design Principles
 
@@ -76,7 +75,7 @@ strings (parsed back via `QuillReference::from_str`). The discriminator on
 payload items is `type` (not `kind`) to keep it unambiguous next to the
 `$kind` metadata semantic. The full variant set is `quill | kind | id |
 ext | seed | field | comment`; the `ext` and `seed` variants carry the
-`$ext` / `$seed` maps verbatim and are stripped from `to_plate_json()`
+`$ext` / `$seed` maps verbatim and are stripped from the plate JSON
 before backends see it.
 Load-time warnings (a parse's, plus the `conform::*` diagnostics when the
 document came through the bound door) live on the `Parsed` record, not on
@@ -396,9 +395,13 @@ as pipes inside the paragraph, which re-imports as prose with the island gone.
 The authored lanes refuse the placement — `ApplyError::BlockIslandNotAlone` from
 `IslandOp::Insert` and from a `Set` that retypes an inline island, a shape error
 from `serial::from_authored_value` — so a host learns at the write. Storage takes
-what it holds and the projection settles it: `export::to_markdown` breaks the
-line around the slot, so the prose on each side becomes its own block and the
-island keeps the line its markup needs.
+what it holds and the **mint** settles it: `Content::normalize` breaks the line
+around the slot, so the prose on each side becomes its own block and the island
+keeps the line its markup needs. The break lands once, on the way in, which is
+what lets `Content::validate` state the rule
+(`Invariant::BlockIslandNotAlone`) for every content the crate hands out — the
+markdown write then reads a shape that is already right rather than repairing
+one on the way past.
 
 The opaque attrs are hash input like everything else in the canonical form, so
 they are recursively key-sorted along with the rest (see Byte-stability). What

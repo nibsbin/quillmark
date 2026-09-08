@@ -6,12 +6,12 @@
 //! regardless of which side of the `$` boundary that is.
 
 use crate::error::ParseError;
-use crate::value::QuillValue;
+use crate::value::{PathSegment, QuillValue};
 use crate::{Diagnostic, Severity};
 
 use super::fences::{find_metadata_blocks, RootFault};
 use super::meta::{extract_meta_items, meta_key};
-use super::payload::{Payload, PayloadItem};
+use super::payload::{MetaKey, Payload, PayloadItem};
 use quillmark_content::Normalized;
 
 /// The parse-time half of the markdown→content boundary
@@ -19,7 +19,7 @@ use quillmark_content::Normalized;
 fn import_body_or_parse_error(md: &str) -> Result<Normalized, ParseError> {
     super::import_body(md).map_err(|e| ParseError::BodyImport(e.to_string()))
 }
-use super::prescan::{prescan_fence_content, CommentPathSegment, NestedComment, PreItem, PreScan};
+use super::prescan::{prescan_fence_content, NestedComment, PreItem, PreScan};
 use super::{Card, Document};
 
 /// A `MissingQuill` message naming the specific malformation. LLM authors hit a
@@ -123,7 +123,7 @@ pub(super) struct MetadataBlock {
     /// Pre-scan nested comments (with structural paths).
     pub(super) pre_nested_comments: Vec<NestedComment>,
     /// Pre-scan nested `!must_fill` paths (rooted at the owning top-level key).
-    pub(super) pre_nested_fills: Vec<Vec<CommentPathSegment>>,
+    pub(super) pre_nested_fills: Vec<Vec<PathSegment>>,
     /// Pre-scan warnings (unknown-tag strips, ...).
     pub(super) pre_warnings: Vec<Diagnostic>,
 }
@@ -191,10 +191,6 @@ pub(super) fn build_block(
     }
 
     let mut pre = prescan_fence_content(raw_content);
-
-    if let Some(err) = pre.fill_target_errors.first() {
-        return Err(ParseError::InvalidStructure(err.clone()));
-    }
 
     // `!must_fill` is not permitted on `$` metadata keys: those are extracted into
     // typed values and have no placeholder semantics.
@@ -392,7 +388,7 @@ pub(super) fn decompose_with_warnings(
         if block
             .meta_items
             .iter()
-            .any(|m| matches!(m, PayloadItem::Meta { key, .. } if key.is_root_only()))
+            .any(|m| matches!(m, PayloadItem::Meta { key: MetaKey::Seed, .. }))
         {
             return Err(ParseError::InvalidStructure(
                 "A composable card-yaml block must not carry `$seed`: only the \
@@ -451,7 +447,7 @@ fn build_payload(
     meta_items: Vec<PayloadItem>,
     pre_items: Vec<PreItem>,
     pre_nested_comments: Vec<NestedComment>,
-    pre_nested_fills: Vec<Vec<CommentPathSegment>>,
+    pre_nested_fills: Vec<Vec<PathSegment>>,
     yaml_value: Option<serde_json::Value>,
 ) -> Result<Payload, ParseError> {
     let mut mapping = match yaml_value {
@@ -541,10 +537,10 @@ fn build_payload(
 fn apply_nested_fills(
     key: &str,
     value: &mut QuillValue,
-    pre_nested_fills: &[Vec<CommentPathSegment>],
+    pre_nested_fills: &[Vec<PathSegment>],
 ) -> Result<(), ParseError> {
     for path in pre_nested_fills {
-        let Some((CommentPathSegment::Key(first), rest)) = path.split_first() else {
+        let Some((PathSegment::Key(first), rest)) = path.split_first() else {
             continue;
         };
         if first != key || rest.is_empty() {
@@ -573,11 +569,11 @@ fn apply_nested_fills(
 /// `PayloadItem::Meta` value is a plain tree with no fill carrier, so the marker
 /// reaches neither storage nor emit; the value under it survives, as in every
 /// other unpreservable marker position.
-fn meta_rooted_fill_warnings(nested_fills: &[Vec<CommentPathSegment>]) -> Vec<Diagnostic> {
+fn meta_rooted_fill_warnings(nested_fills: &[Vec<PathSegment>]) -> Vec<Diagnostic> {
     nested_fills
         .iter()
         .filter(|path| {
-            matches!(path.first(), Some(CommentPathSegment::Key(k)) if k.starts_with('$'))
+            matches!(path.first(), Some(PathSegment::Key(k)) if k.starts_with('$'))
         })
         .map(|path| {
             Diagnostic::new(
@@ -595,7 +591,7 @@ fn meta_rooted_fill_warnings(nested_fills: &[Vec<CommentPathSegment>]) -> Vec<Di
 
 /// Render a structural path as a dotted/bracketed string for diagnostics,
 /// e.g. `addr.street` or `recipients[0].name`.
-fn render_path(path: &[CommentPathSegment]) -> String {
+fn render_path(path: &[PathSegment]) -> String {
     path.iter()
         .fold(crate::path::DocPath::new(), |p, seg| p.segment(seg))
         .to_string()

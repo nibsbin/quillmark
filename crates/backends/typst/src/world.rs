@@ -44,7 +44,7 @@ static FALLBACK_ITALIC: &[u8] = include_bytes!("fonts/Figtree-Italic.ttf");
 
 /// Typst `World` implementation for quill-based compilation. Packages load from
 /// `{quill}/packages/` and assets from `{quill}/assets/`.
-pub struct QuillWorld {
+pub(crate) struct QuillWorld {
     library: LazyHash<Library>,
     book: LazyHash<FontBook>,
     fonts: Vec<Font>,
@@ -58,7 +58,7 @@ pub struct QuillWorld {
 }
 
 impl QuillWorld {
-    pub fn new(
+    pub(crate) fn new(
         source: &Quill,
         main: &str,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {

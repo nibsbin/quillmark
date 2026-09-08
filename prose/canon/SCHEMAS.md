@@ -867,8 +867,8 @@ until somebody accepts the suggestion the document renders the blank rather than
 asserting a value nobody chose.
 
 There is no `must_fill:` key and no `required:` one. Declaring `must_fill:` is a
-load error (`quill::field_parse_error`), and the message names the `default:` or
-`example:` that field carries in its place.
+load error (`quill::field_parse_error`): `default:` carries the obligation in its
+place.
 
 Obligation is a **warning, never a gate**: an unauthored must-fill field
 blank-fills and renders, and the signal is the non-fatal

@@ -63,7 +63,7 @@ impl QuillConfig {
         // rungs dropped. `resolve()` runs the total (keep-raw) conform for its own
         // fallibility-free path; both cut the same [`ladder_sourced`].
         let coerced = self.coerce_and_validate(doc)?;
-        let normalized = normalize_document(coerced)?;
+        let normalized = normalize_document(coerced);
 
         let final_main = Card::from_parts(
             rebuild_payload_with_meta(
@@ -80,7 +80,7 @@ impl QuillConfig {
         // undefined". Capture it here, where the schema is already in hand for
         // field lowering, and hand it to the plate builder, so the decision is
         // never re-derived from the serialized plate. (`$kind`, the document-
-        // defined half, is gated structurally by `to_plate_json`.)
+        // defined half, is gated structurally by the plate builder.)
         let mut card_bodies: Vec<bool> = Vec::with_capacity(normalized.cards().len());
         let cards_resolved: Vec<Card> = normalized
             .cards()
@@ -779,7 +779,7 @@ fn schema_cards<'a>(
 /// Append a `validation::must_fill` warning for each marker in `card`'s fields.
 fn collect_fill_diags(card: &Card, base: &DocPath, out: &mut Vec<Diagnostic>) {
     let payload = card.payload();
-    for (key, value) in payload {
+    for (key, value) in payload.iter() {
         let field_path = base.field(key);
         // Root marker (the field-level `fill` flag) plus any nested markers
         // carried on the value tree, each rebased onto the field path.

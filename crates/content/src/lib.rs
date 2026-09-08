@@ -28,7 +28,6 @@ pub use model::{
     Container, Fidelity, Invariant, Island, Line, LineKind, LineKindMismatch, Loss, Mark, MarkKind,
     Content, Usv,
 };
-pub use normalize::normalize_markdown;
 pub use ops::{
     change_bundle_from_value, island_op_from_value, line_op_from_value, mark_op_from_value,
     ApplyError, ChangeBundle, IslandOp, LineOp, MarkOp,

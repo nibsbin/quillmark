@@ -438,6 +438,6 @@ Because those codes carry no args, every consumer template falls back on them by
 
 **Source chain**: `with_source` walks an attached cause eagerly into `source_chain`. No Rust formatter prints it: `fmt_pretty` covers severity, message, code, location, and hint only. It reaches consumers through serialization instead: WASM as the `source_chain` field, Python as `Diagnostic.source_chain`.
 
-**Consolidated printing**: `print_errors()` pretty-prints every diagnostic a `RenderError` carries.
+**Consolidated printing**: the CLI pretty-prints every diagnostic a `RenderError` carries, one per line, to stderr.
 
 **Machine-readable**: all diagnostic types implement `serde::Serialize`.

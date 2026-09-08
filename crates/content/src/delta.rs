@@ -98,37 +98,11 @@ impl Delta {
         })
     }
 
-    /// Apply to `base`, producing the new text. Base beyond what the ops
-    /// consume is retained implicitly, so a *short* delta may name only the
-    /// region it changes. **Panics** if the ops consume *more* base than exists:
-    /// a delta built against a longer revision. This is the trusted-provenance
-    /// path; where the base's provenance isn't trusted use [`Self::try_apply`],
-    /// which returns the mismatch as an error.
-    pub fn apply(&self, base: &str) -> String {
-        let chars: Vec<char> = base.chars().collect();
-        let mut out = String::new();
-        let mut i = 0usize;
-        for op in &self.ops {
-            match op {
-                // Over-long Retain/Delete index past `chars` and panic here:
-                // the intended failure on a wrong-revision base.
-                Op::Retain(n) => {
-                    out.extend(&chars[i..i + n]);
-                    i += n;
-                }
-                Op::Delete(n) => i += n,
-                Op::Insert(s) => out.push_str(s),
-            }
-        }
-        out.extend(&chars[i..]);
-        out
-    }
-
-    /// [`Self::apply`], but returns [`BaseLengthMismatch`] instead of panicking
-    /// when the ops consume *more* base than `base` has. Implicit trailing
-    /// retain is the contract, matching [`map_pos`](Self::map_pos), so a
-    /// producer naming only the changed region need not pad a trailing
-    /// [`Op::Retain`].
+    /// Apply to `base`, producing the new text, or [`BaseLengthMismatch`] when
+    /// the ops consume *more* base than `base` has: a delta built against a
+    /// longer revision. Base beyond what the ops consume is retained
+    /// implicitly, matching [`map_pos`](Self::map_pos), so a producer naming
+    /// only the region it changes need not pad a trailing [`Op::Retain`].
     ///
     /// Cost of the leniency: a short delta carries no full-base-length check, so
     /// one replayed against a wrong but *longer* base applies silently.
@@ -138,7 +112,21 @@ impl Delta {
         if expected > actual {
             return Err(BaseLengthMismatch { expected, actual });
         }
-        Ok(self.apply(base))
+        let chars: Vec<char> = base.chars().collect();
+        let mut out = String::new();
+        let mut i = 0usize;
+        for op in &self.ops {
+            match op {
+                Op::Retain(n) => {
+                    out.extend(&chars[i..i + n]);
+                    i += n;
+                }
+                Op::Delete(n) => i += n,
+                Op::Insert(s) => out.push_str(s),
+            }
+        }
+        out.extend(&chars[i..]);
+        Ok(out)
     }
 
     /// Map a base char position to its new position. `assoc` decides the side of
@@ -466,13 +454,13 @@ mod tests {
     #[test]
     fn diff_apply_round_trips() {
         let d = diff("the quick brown fox", "the slow brown fox");
-        assert_eq!(d.apply("the quick brown fox"), "the slow brown fox");
+        assert_eq!(d.try_apply("the quick brown fox").unwrap(), "the slow brown fox");
     }
 
     #[test]
     fn map_pos_insertion() {
         let d = diff("abcdef", "abcXYdef");
-        assert_eq!(d.apply("abcdef"), "abcXYdef");
+        assert_eq!(d.try_apply("abcdef").unwrap(), "abcXYdef");
         assert_eq!(d.map_pos(2, Assoc::After), 2);
         assert_eq!(d.map_pos(4, Assoc::Before), 6);
     }
@@ -525,15 +513,6 @@ mod tests {
                 actual: 5,
             })
         );
-    }
-
-    #[test]
-    #[should_panic]
-    fn apply_panics_on_over_long_delta() {
-        let over = Delta {
-            ops: vec![Op::Retain(9)],
-        };
-        let _ = over.apply("hello");
     }
 
     #[test]
@@ -618,7 +597,7 @@ mod tests {
     #[test]
     fn disjoint_edits_are_separate_ops() {
         let d = diff("aaaMIDDLEbbb", "AAAMIDDLEZZZ");
-        assert_eq!(d.apply("aaaMIDDLEbbb"), "AAAMIDDLEZZZ");
+        assert_eq!(d.try_apply("aaaMIDDLEbbb").unwrap(), "AAAMIDDLEZZZ");
         let retained: usize = d
             .ops
             .iter()
@@ -687,7 +666,7 @@ mod tests {
             "large single-line diff took {elapsed:?}, expected well under the 2s budget"
         );
 
-        assert_eq!(d.apply(&base), new);
+        assert_eq!(d.try_apply(&base).unwrap(), new);
     }
 
     #[test]
@@ -697,7 +676,7 @@ mod tests {
         let base = format!("shared-prefix-{}-shared-suffix", filler(20_000, 0));
         let new = format!("shared-prefix-{}-shared-suffix", filler(20_000, 5));
         let d = diff(&base, &new);
-        assert_eq!(d.apply(&base), new);
+        assert_eq!(d.try_apply(&base).unwrap(), new);
 
         let Some(Op::Retain(prefix_len)) = d.ops.first() else {
             panic!("expected a leading Retain for the shared prefix: {:?}", d.ops);

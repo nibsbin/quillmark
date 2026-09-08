@@ -865,6 +865,14 @@ pub enum Invariant {
     /// never re-reads the segment, so an unchecked mismatch is silent text loss
     /// (an `Island`-tagged prose line projects to its resolved island alone).
     LineKindMismatch { line: usize, mismatch: LineKindMismatch },
+    /// A block-only island's slot
+    /// ([`KnownIslandType::block_only`](crate::KnownIslandType::block_only))
+    /// shares its line with other content. A table's markdown is a block, so
+    /// there is no inline spelling: written mid-paragraph it lands as pipes the
+    /// re-import reads as prose, with the island gone. `normalize` breaks the
+    /// line around the slot; the lanes that author one refuse the placement
+    /// ([`ApplyError::BlockIslandNotAlone`](crate::ApplyError::BlockIslandNotAlone)).
+    BlockIslandNotAlone { at: Usv },
     /// A line's container path is nested deeper than
     /// [`MAX_NESTING_DEPTH`](crate::MAX_NESTING_DEPTH). The Typst emitter
     /// recurses one frame per container and refuses a deeper path rather than
@@ -921,6 +929,43 @@ pub fn line_kind_mismatch(kind: &LineKind, seg: &str) -> Option<LineKindMismatch
 /// splice would fill.
 pub(crate) fn is_whole_line(chars: &[char], start: Usv, end: Usv) -> bool {
     (start == 0 || chars.get(start - 1) == Some(&'\n')) && matches!(chars.get(end), None | Some('\n'))
+}
+
+/// Every block-only island's slot that shares its line with other content, in
+/// text order: the single reading behind [`Invariant::BlockIslandNotAlone`], the
+/// authored lane's refusal, and the break [`Content::normalize`] performs, so
+/// the three cannot drift.
+pub(crate) fn inline_block_islands<'a>(
+    chars: &'a [char],
+    islands: &'a [Island],
+) -> impl Iterator<Item = Usv> + 'a {
+    chars
+        .iter()
+        .enumerate()
+        .filter(|&(_, &c)| c == ISLAND_SLOT)
+        .zip(islands)
+        .filter(|&((at, _), island)| {
+            crate::island::island_is_block_only(island) && !is_whole_line(chars, at, at + 1)
+        })
+        .map(|((at, _), _)| at)
+}
+
+/// One piece of a line [`Content::split_block_islands`] broke, covering `span`:
+/// the slot's own piece is the island's line, the prose pieces keep the line's
+/// role, and only the first can still continue the block above.
+fn fragment_line(line: &Line, span: std::ops::Range<Usv>, breaks: &[Usv], first: bool) -> Line {
+    if span.len() == 1 && breaks.binary_search(&span.start).is_ok() {
+        return Line {
+            kind: LineKind::Island,
+            containers: line.containers.clone(),
+            continues: false,
+        };
+    }
+    Line {
+        kind: line.kind.clone(),
+        containers: line.containers.clone(),
+        continues: first && line.continues,
+    }
 }
 
 /// The [`LineKind`] a line whose sole content is one [`ISLAND_SLOT`] carries in
@@ -1031,11 +1076,12 @@ impl Content {
         self.text.chars().filter(|c| *c == '\n').count() + 1
     }
 
-    /// Normalize in place: canonicalize container `ordinal`/`instance`, drop
-    /// zero-width formatting, union same-kind formatting that is adjacent or
-    /// overlapping, recursively key-sort island props and unknown-mark attrs,
-    /// then sort marks canonically. Idempotent: the fixed point the canonical
-    /// serialization commits to.
+    /// Normalize in place: canonicalize container `ordinal`/`instance`, break a
+    /// line around a block-only island's slot, drop zero-width formatting, union
+    /// same-kind formatting that is adjacent or overlapping, recursively
+    /// key-sort island props and unknown-mark attrs, then sort marks
+    /// canonically. Idempotent: the fixed point the canonical serialization
+    /// commits to.
     pub fn normalize(&mut self) {
         canonicalize_containers(&mut self.lines);
         // A splice writes text, never kinds: typing into a table line leaves it
@@ -1064,6 +1110,7 @@ impl Content {
                 }
             }
         }
+        self.split_block_islands();
         // Two accepted ops leave a `continues` line under a block it cannot
         // continue: `Join` across differing paths, where both projections
         // already read the flag as dead, and `SetKind` retagging the line
@@ -1111,6 +1158,78 @@ impl Content {
             }
         }
         self.marks = normalize_marks(std::mem::take(&mut self.marks));
+    }
+
+    /// Give a block-only island's slot the line its markup needs: a `\n` on each
+    /// side that has other content, so the prose around it becomes its own block
+    /// and the slot is alone. Markdown writes a table as a block, and left
+    /// inline it emits pipes into the middle of a paragraph, which re-imports as
+    /// prose with the island gone.
+    ///
+    /// The lanes that *author* an island refuse the placement up front
+    /// ([`ApplyError::BlockIslandNotAlone`](crate::ApplyError::BlockIslandNotAlone)),
+    /// so what reaches here is a stored blob carrying the shape and an accepted
+    /// `Join` that ran a slot back into its prose.
+    fn split_block_islands(&mut self) {
+        use crate::delta::{Delta, Op};
+
+        if !self.islands.iter().any(crate::island::island_is_block_only)
+            || self.lines.len() != self.segment_count()
+        {
+            return;
+        }
+        let chars: Vec<char> = self.text.chars().collect();
+        let breaks: Vec<Usv> = inline_block_islands(&chars, &self.islands).collect();
+        if breaks.is_empty() {
+            return;
+        }
+        // Where the `\n` goes, in the text's own coordinates, so every cut sits
+        // strictly inside a line and the fragments below stay in step with it.
+        let mut cuts: Vec<Usv> = Vec::with_capacity(breaks.len() * 2);
+        for &at in &breaks {
+            if at > 0 && chars[at - 1] != '\n' {
+                cuts.push(at);
+            }
+            if chars.get(at + 1).is_some_and(|&c| c != '\n') {
+                cuts.push(at + 1);
+            }
+        }
+        cuts.dedup(); // two adjacent slots name the boundary between them twice
+
+        let mut lines = Vec::with_capacity(self.lines.len() + cuts.len());
+        let mut cut = cuts.iter().copied().peekable();
+        let mut pos = 0usize;
+        for (line, seg) in self.lines.iter().zip(self.text.split('\n')) {
+            let end = pos + seg.chars().count();
+            let mut start = pos;
+            let mut first = true;
+            while let Some(p) = cut.next_if(|&p| p < end) {
+                lines.push(fragment_line(line, start..p, &breaks, first));
+                (start, first) = (p, false);
+            }
+            lines.push(fragment_line(line, start..end, &breaks, first));
+            pos = end + 1;
+        }
+
+        let mut text = String::with_capacity(self.text.len() + cuts.len());
+        let mut at_cut = cuts.iter().copied().peekable();
+        for (i, &c) in chars.iter().enumerate() {
+            if at_cut.next_if_eq(&i).is_some() {
+                text.push('\n');
+            }
+            text.push(c);
+        }
+        let mut ops = Vec::with_capacity(cuts.len() * 2);
+        let mut last = 0usize;
+        for &p in &cuts {
+            ops.push(Op::Retain(p - last));
+            ops.push(Op::Insert("\n".to_string()));
+            last = p;
+        }
+
+        self.text = text;
+        self.lines = lines;
+        self.rebase_marks(&Delta { ops });
     }
 
     /// Mark `type` names the projection reserves; an [`MarkKind::Unknown`] may
@@ -1202,8 +1321,11 @@ impl Content {
                 return Err(Invariant::ContinuesSingleLineBlock { line: i + 1 });
             }
         }
-        // Only the formatting-mark edge test below reads it.
-        let chars: Vec<char> = if self.marks.iter().any(|m| m.kind.is_formatting()) {
+        // The formatting-mark edge test and the block-island placement test are
+        // its only readers.
+        let reads_chars = self.marks.iter().any(|m| m.kind.is_formatting())
+            || self.islands.iter().any(crate::island::island_is_block_only);
+        let chars: Vec<char> = if reads_chars {
             self.text.chars().collect()
         } else {
             Vec::new()
@@ -1276,6 +1398,9 @@ impl Content {
                     max: crate::MAX_NESTING_DEPTH,
                 });
             }
+        }
+        if let Some(at) = inline_block_islands(&chars, &self.islands).next() {
+            return Err(Invariant::BlockIslandNotAlone { at });
         }
         // Table-cell marks: the prose range/zero-width/reserved-tag rules again,
         // but each mark is bounded by its own cell's text length (in USV). Cells

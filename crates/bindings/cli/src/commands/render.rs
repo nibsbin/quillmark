@@ -29,10 +29,6 @@ pub struct RenderArgs {
     #[arg(long)]
     stdout: bool,
 
-    /// Show detailed processing information
-    #[arg(short, long)]
-    verbose: bool,
-
     /// Suppress all non-error output
     #[arg(long)]
     quiet: bool,
@@ -42,19 +38,8 @@ pub struct RenderArgs {
     output_data: Option<PathBuf>,
 }
 
-// Progress chatter goes to stderr: under `--stdout` the artifact owns stdout,
-// and a `--verbose` line there would land inside the emitted PDF.
 pub fn execute(args: RenderArgs) -> Result<()> {
-    let verbose = args.verbose && !args.quiet;
-    if verbose {
-        eprintln!("Loading quill from: {}", args.quill.display());
-    }
-
     let quill = load_quill(&args.quill)?;
-
-    if verbose {
-        eprintln!("Quill loaded: {}", quill.name());
-    }
 
     let (parsed, parse_warnings, markdown_path_for_output) =
         if let Some(ref markdown_path) = args.markdown_file {
@@ -65,40 +50,18 @@ pub fn execute(args: RenderArgs) -> Result<()> {
                 )));
             }
 
-            if verbose {
-                eprintln!("Reading markdown from: {}", markdown_path.display());
-            }
-
             let markdown = fs::read_to_string(markdown_path)?;
             let output = quill.parse(&markdown)?;
 
-            if verbose {
-                eprintln!("Markdown parsed successfully");
-            }
-            (
-                output.document,
-                output.warnings,
-                Some(markdown_path.clone()),
-            )
+            (output.document, output.warnings, Some(markdown_path.clone()))
         } else {
-            if verbose {
-                eprintln!("Using seeded document from quill");
-            }
             (quill.seed_document(), Vec::new(), None)
         };
-
-    if verbose {
-        eprintln!("Render-ready quill for backend: {}", quill.backend_id());
-    }
 
     let output_format = args
         .format
         .parse::<OutputFormat>()
         .map_err(|e| CliError::InvalidArgument(e.to_string()))?;
-
-    if verbose {
-        eprintln!("Rendering to format: {:?}", output_format);
-    }
 
     if let Some(data_path) = args.output_data {
         let json_data = quill.compile_data(&parsed).map_err(CliError::Render)?;
@@ -118,9 +81,6 @@ pub fn execute(args: RenderArgs) -> Result<()> {
                 e
             )))
         })?;
-        if verbose {
-            eprintln!("JSON data written to: {}", data_path.display());
-        }
     }
 
     let engine = Quillmark::new();
@@ -170,10 +130,6 @@ pub fn execute(args: RenderArgs) -> Result<()> {
                 write_file(&path, &artifact.bytes, !args.quiet)?;
             }
         }
-    }
-
-    if verbose {
-        eprintln!("Rendering completed successfully");
     }
 
     Ok(())

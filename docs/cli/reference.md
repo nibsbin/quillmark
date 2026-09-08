@@ -30,11 +30,10 @@ The file must open with a `~~~` block containing a `$quill:` key identifying the
 - `-o <PATH>` / `--output <PATH>`: Output file path (default: input filename with format extension, e.g. `input.pdf`; `example.<format>` when no markdown file is given)
 - `-f <FORMAT>` / `--format <FORMAT>`: Output format: `pdf`, `svg`, `png` (default: `pdf`)
 - `--output-data <DATA_FILE>`: Write compiled JSON data to a file
-- `-v` / `--verbose`: Show detailed processing information on stderr
-- `--quiet`: Suppress all non-error output: `--verbose` chatter, warnings and the output-destination line
+- `--quiet`: Suppress warnings and the output-destination line; errors still print
 - `--stdout`: Write the artifact to stdout instead of a file (and ignore `-o`); refused when the render produces more than one page
 
-**Streams:** under `--stdout` the artifact owns stdout, and progress, warnings, and errors all go to stderr, so `quillmark render ./my-quill input.md --stdout --verbose > out.pdf` writes a valid PDF. Without `--stdout`, the one stdout line is `Output written to: <path>`, which `--quiet` suppresses.
+**Streams:** under `--stdout` the artifact owns stdout, and warnings and errors go to stderr, so `quillmark render ./my-quill input.md --stdout > out.pdf` writes a valid PDF. Without `--stdout`, the one stdout line is `Output written to: <path>`, which `--quiet` suppresses.
 
 **Pages:** `svg` and `png` render one artifact per page. A multi-page document writes one numbered file per page — `out.svg` becomes `out-1.svg`, `out-2.svg`, … — so no unnumbered file claims to be the whole document. `--stdout` carries one artifact and refuses a multi-page render.
 
@@ -62,16 +61,12 @@ quillmark render ./my-quill
 Output the quill's field schema as YAML, including main-card and card-kind field definitions with UI hints.
 
 ```bash
-quillmark schema [OPTIONS] <QUILL_PATH>
+quillmark schema <QUILL_PATH>
 ```
 
 **Arguments:**
 
 - `<QUILL_PATH>`: Path to quill directory
-
-**Options:**
-
-- `-o <FILE>` / `--output <FILE>`: Output file (default: stdout)
 
 **Examples:**
 
@@ -80,7 +75,7 @@ quillmark schema [OPTIONS] <QUILL_PATH>
 quillmark schema ./my-quill
 
 # Save schema to file
-quillmark schema ./my-quill -o schema.yaml
+quillmark schema ./my-quill > schema.yaml
 ```
 
 ### blueprint
@@ -88,16 +83,12 @@ quillmark schema ./my-quill -o schema.yaml
 Print a quill's Markdown blueprint: an annotated document showing the quill's fields, constraints, and examples, itself a valid document an author can fill in.
 
 ```bash
-quillmark blueprint [OPTIONS] <QUILL_PATH>
+quillmark blueprint <QUILL_PATH>
 ```
 
 **Arguments:**
 
 - `<QUILL_PATH>`: Path to quill directory
-
-**Options:**
-
-- `-o <FILE>` / `--output <FILE>`: Output file (default: stdout)
 
 **Examples:**
 
@@ -106,7 +97,7 @@ quillmark blueprint [OPTIONS] <QUILL_PATH>
 quillmark blueprint ./my-quill
 
 # Save blueprint to file
-quillmark blueprint ./my-quill -o blueprint.md
+quillmark blueprint ./my-quill > blueprint.md
 ```
 
 ### validate

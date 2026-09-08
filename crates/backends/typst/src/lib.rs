@@ -20,7 +20,6 @@ mod helper;
 mod overlay;
 mod world;
 
-use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use quillmark_core::{
@@ -284,27 +283,9 @@ pub(crate) fn page_hashes(document: &typst_layout::PagedDocument) -> Vec<u128> {
         .collect()
 }
 
-/// The seam already carries the render shape, so no per-field transform happens
-/// here; codegen validates each date at the site it parses it. Borrows
-/// `json_data` unchanged for the object case: only a non-object input allocates.
-fn transformed_data(json_data: &serde_json::Value) -> Cow<'_, serde_json::Value> {
-    match json_data.is_object() {
-        true => Cow::Borrowed(json_data),
-        false => Cow::Owned(serde_json::Value::Object(serde_json::Map::new())),
-    }
-}
-
 impl SessionHandle for TypstSession {
     fn render(&self, opts: &RenderOptions) -> Result<RenderResult, RenderError> {
         let format = opts.output_format.unwrap_or(OutputFormat::Pdf);
-
-        if !SUPPORTED_FORMATS.contains(&format) {
-            return Err(quillmark_core::unsupported_format(
-                format,
-                "typst",
-                SUPPORTED_FORMATS,
-            ));
-        }
 
         compile::render_document_pages(
             &self.live.document,
@@ -323,10 +304,9 @@ impl SessionHandle for TypstSession {
     /// Transactional: the live compile swaps in whole only after [`recompile`]
     /// succeeds, so on `Err` every read keeps serving the last-good one.
     fn update(&mut self, json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> {
-        let data = transformed_data(json_data);
         let compiled = recompile(
             &mut self.world,
-            data.as_ref(),
+            json_data,
             &self.schema_meta,
             &self.scalar_windows,
         )?;
@@ -420,13 +400,7 @@ impl SessionHandle for TypstSession {
 impl TypstSession {
     /// The nearest widget within `tol` and its gap, later-painted on a tie.
     fn widget_at(&self, page: usize, x: f32, y: f32, tol: f32) -> Option<(f32, String)> {
-        self.live
-            .widget_regions
-            .iter()
-            .rev()
-            .filter_map(|r| Some((r.distance(page, x, y)?, r)))
-            .filter(|(d, _)| *d <= tol)
-            .min_by(|(a, _), (b, _)| a.total_cmp(b))
+        quillmark_core::region::nearest_region(&self.live.widget_regions, page, x, y, tol)
             .map(|(d, r)| (d, r.field.clone()))
     }
 
@@ -476,7 +450,6 @@ impl Backend for TypstBackend {
 
         let transform_schema = build_transform_schema(source.config());
         let schema_meta = SchemaMeta::from_schema_json(transform_schema.as_json());
-        let data = transformed_data(json_data);
         // Built in two steps rather than through `new_with_data` so codegen's own
         // diagnostic code survives: boxing it into the world-creation error would
         // relabel a bad date `typst::world_creation`.
@@ -507,7 +480,7 @@ impl Backend for TypstBackend {
                 })
                 .collect()
         };
-        let live = recompile(&mut world, data.as_ref(), &schema_meta, &scalar_windows)?;
+        let live = recompile(&mut world, json_data, &schema_meta, &scalar_windows)?;
         let session = TypstSession {
             world,
             schema_meta,
@@ -565,7 +538,7 @@ fn read_plate(source: &Quill) -> Result<String, RenderError> {
 /// shape spans both, and a richtext field, an `object` declaring no
 /// `properties`, offers no step at all. An array always offers its index step,
 /// whatever its element.
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default)]
 pub(crate) struct AddressNode {
     pub(crate) props: BTreeMap<String, AddressNode>,
     pub(crate) item: Option<Box<AddressNode>>,
@@ -768,9 +741,9 @@ mod tests {
             let plate_content = read_plate(quill).expect("plate");
             let transform_schema = build_transform_schema(quill.config());
             let schema_meta = SchemaMeta::from_schema_json(transform_schema.as_json());
-            let data = transformed_data(&json);
+            let data = &json;
             let (world, _windows) =
-                world::QuillWorld::new_with_data(quill, &plate_content, data.as_ref(), &schema_meta)
+                world::QuillWorld::new_with_data(quill, &plate_content, data, &schema_meta)
                     .expect("world");
             let (document, _warnings) = compile::compile_document(&world).expect("compile");
             page_hashes(&document)
@@ -817,9 +790,9 @@ mod tests {
             let plate_content = read_plate(&q).expect("plate");
             let transform_schema = build_transform_schema(q.config());
             let schema_meta = SchemaMeta::from_schema_json(transform_schema.as_json());
-            let data = transformed_data(&json);
+            let data = &json;
             let (world, _w) =
-                world::QuillWorld::new_with_data(&q, &plate_content, data.as_ref(), &schema_meta)
+                world::QuillWorld::new_with_data(&q, &plate_content, data, &schema_meta)
                     .expect("world");
             let (document, _warn) = compile::compile_document(&world).expect("compile");
             let intro = document.introspector();
@@ -899,9 +872,9 @@ mod tests {
             let plate_content = read_plate(&q).expect("plate");
             let transform_schema = build_transform_schema(q.config());
             let schema_meta = SchemaMeta::from_schema_json(transform_schema.as_json());
-            let data = transformed_data(&json);
+            let data = &json;
             let (world, _w) =
-                world::QuillWorld::new_with_data(&q, &plate_content, data.as_ref(), &schema_meta)
+                world::QuillWorld::new_with_data(&q, &plate_content, data, &schema_meta)
                     .expect("world");
             let (_doc, warnings) = compile::compile_document(&world).expect("compile");
             warnings

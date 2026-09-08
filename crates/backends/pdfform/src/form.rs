@@ -16,12 +16,8 @@ pub const SCHEMA_PREFIX: &str = "quillmark/form@";
 /// The `form.json` format version this backend reads.
 pub const SCHEMA_VERSION: &str = "0.2.0";
 
-/// The retired format version, rejected with migration guidance.
-const RETIRED_VERSION_MAJOR_MINOR: &str = "0.1";
 /// The accepted major.minor; a matching patch is tolerated.
 const SUPPORTED_MAJOR_MINOR: &str = "0.2";
-
-const MIGRATION_GUIDE: &str = "docs/migrations/0.93-to-0.94.md";
 
 /// A parsed `form.json`. The `schema` tag is version-gated separately
 /// ([`SchemaTag`]) before this is deserialized, and ignored here.
@@ -99,9 +95,6 @@ pub enum FormParseError {
     Json(serde_json::Error),
     /// The `schema` tag is not a recognized `quillmark/form@…` string.
     BadSchema(String),
-    /// The retired `form@0.1.0` format, distinguished from a foreign tag so it
-    /// can carry a migration pointer.
-    RetiredVersion(String),
     /// Two fields/widgets share a `name`. AcroForm top-level field names must be
     /// unique per form; colliding `/T`s render as one malformed field.
     DuplicateField(String),
@@ -115,13 +108,6 @@ impl std::fmt::Display for FormParseError {
                 f,
                 "form.json `schema` is {s:?}, expected a \"{SCHEMA_PREFIX}{SCHEMA_VERSION}\" tag"
             ),
-            FormParseError::RetiredVersion(s) => write!(
-                f,
-                "form.json `schema` is {s:?}; the `form@{RETIRED_VERSION_MAJOR_MINOR}.x` format is \
-                 retired: bound fields no longer restate `type`/`options`/`multiline` (they are \
-                 derived from the quill schema). Migrate to \"{SCHEMA_PREFIX}{SCHEMA_VERSION}\"; \
-                 see {MIGRATION_GUIDE}"
-            ),
             FormParseError::DuplicateField(name) => write!(
                 f,
                 "form.json declares field name {name:?} more than once; field names must be unique"
@@ -133,16 +119,13 @@ impl std::fmt::Display for FormParseError {
 impl FormParseError {
     /// The stable diagnostic code for this error.
     pub fn code(&self) -> &'static str {
-        match self {
-            FormParseError::RetiredVersion(_) => "pdfform::form_schema_version",
-            _ => "pdfform::invalid_form_json",
-        }
+        "pdfform::invalid_form_json"
     }
 }
 
 /// Deserialized ahead of the full spec so the version gate runs before
-/// field-shape validation: a `0.1.0` file's fields do not deserialize into a
-/// [`BoundField`], and it must get the migration error, not a JSON one.
+/// field-shape validation: a `form@0.1.0` file's fields do not deserialize into
+/// a [`BoundField`], and it must get the version error, not a JSON one.
 #[derive(Debug, Deserialize)]
 struct SchemaTag {
     schema: String,
@@ -183,8 +166,6 @@ fn check_version(schema: &str) -> Result<(), FormParseError> {
         .ok_or_else(|| FormParseError::BadSchema(schema.to_string()))?;
     if version_matches(version, SUPPORTED_MAJOR_MINOR) {
         Ok(())
-    } else if version_matches(version, RETIRED_VERSION_MAJOR_MINOR) {
-        Err(FormParseError::RetiredVersion(schema.to_string()))
     } else {
         Err(FormParseError::BadSchema(schema.to_string()))
     }
@@ -229,7 +210,7 @@ mod tests {
     }
 
     #[test]
-    fn retired_v1_with_v1_shaped_fields_still_gets_migration_error() {
+    fn v1_with_v1_shaped_fields_fails_the_version_gate_not_the_field_shape() {
         let json = br#"{
           "schema": "quillmark/form@0.1.0",
           "fields": [
@@ -240,10 +221,10 @@ mod tests {
           ]
         }"#;
         match FormSpec::parse(json) {
-            Err(e @ FormParseError::RetiredVersion(_)) => {
-                assert_eq!(e.code(), "pdfform::form_schema_version");
+            Err(e @ FormParseError::BadSchema(_)) => {
+                assert_eq!(e.code(), "pdfform::invalid_form_json");
             }
-            other => panic!("expected RetiredVersion, got {other:?}"),
+            other => panic!("expected BadSchema, got {other:?}"),
         }
     }
 

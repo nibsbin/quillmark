@@ -50,8 +50,8 @@ pub use types::{Artifact, OutputFormat, RenderOptions};
 
 pub mod region;
 pub use region::{
-    doc_path_to_plate_addr, field_boxes, plate_addr_to_doc_path, regions_to_doc_path, ContentHit,
-    HitGranularity, RenderedRegion,
+    doc_path_to_plate_addr, field_boxes, nearest_region, plate_addr_to_doc_path,
+    regions_to_doc_path, ContentHit, HitGranularity, RenderedRegion,
 };
 
 pub mod session;

@@ -143,7 +143,7 @@ fn fix_html_comment_fences(s: &str) -> String {
 
 /// Applies all markdown normalizations in order: CRLF → LF, bidi controls
 /// dropped and line separators spaced, HTML comment fence repair.
-pub fn normalize_markdown(markdown: &str) -> String {
+pub(crate) fn normalize_markdown(markdown: &str) -> String {
     let cleaned = normalize_line_endings(markdown);
     let cleaned = admit_chars(&cleaned);
     fix_html_comment_fences(&cleaned)

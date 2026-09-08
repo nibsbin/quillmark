@@ -12,7 +12,8 @@ use crate::value::QuillValue;
 /// display order, carried structurally by the schema's ordered field maps
 /// ([`CardSchema::fields`], [`FieldSchema::properties`]) and by key order on
 /// the emitted-schema wire.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 #[non_exhaustive]
 pub struct UiFieldSchema {
     /// Display label for the field: decoupled from the snake_case wire key.
@@ -30,40 +31,6 @@ pub struct UiFieldSchema {
     /// because the blank is not a member.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub blank_title: Option<String>,
-}
-
-/// Shared by the [`UiFieldSchema`] deserializer's error and
-/// `QuillConfig::field_parse_hint`'s hint text, so the two can't drift.
-pub(crate) const UI_ORDER_REMOVED_MSG: &str = "ui.order is no longer accepted; \
-     field display order is declaration order: reorder the fields in Quill.yaml instead";
-
-/// Wire shape of a `ui:` block. `order` is declared so its rejection carries
-/// the migration message rather than serde's generic unknown-key error.
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct UiFieldSchemaDef {
-    title: Option<String>,
-    group: Option<String>,
-    order: Option<serde_json::Value>,
-    compact: Option<bool>,
-    multiline: Option<bool>,
-    blank_title: Option<String>,
-}
-
-impl<'de> Deserialize<'de> for UiFieldSchema {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let def = UiFieldSchemaDef::deserialize(deserializer)?;
-        if def.order.is_some() {
-            return Err(serde::de::Error::custom(UI_ORDER_REMOVED_MSG));
-        }
-        Ok(UiFieldSchema {
-            title: def.title,
-            group: def.group,
-            compact: def.compact,
-            multiline: def.multiline,
-            blank_title: def.blank_title,
-        })
-    }
 }
 
 /// A block construct a body can hold: the block kinds the content model
@@ -164,8 +131,7 @@ pub struct UiCardSchema {
     /// The card's group registry: the visible table of contents that names
     /// every group a field may reference and fixes their display order. A
     /// field's `ui.group` is a *reference* into this registry, validated at
-    /// load. Absent when the card declares no groups (or uses the deprecated
-    /// implicit-group form).
+    /// load. Absent when the card declares no groups.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub groups: Option<GroupRegistry>,
 }
@@ -438,17 +404,9 @@ impl Serialize for FieldType {
     }
 }
 
-/// Shared by this deserializer's error and `QuillConfig::field_parse_hint`'s
-/// hint text, so the two can't drift.
-pub(crate) const RICHTEXT_INLINE_TOKEN_MSG: &str =
-    "richtext(inline) is no longer accepted as a type token; use type: richtext with inline: true";
-
 impl<'de> Deserialize<'de> for FieldType {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let s = String::deserialize(deserializer)?;
-        if s.trim() == "richtext(inline)" {
-            return Err(serde::de::Error::custom(RICHTEXT_INLINE_TOKEN_MSG));
-        }
         FieldType::from_str(&s)
             .ok_or_else(|| serde::de::Error::custom(format!("unknown field type: {s:?}")))
     }
@@ -479,9 +437,8 @@ pub const VARIANT_DISCRIMINANT_KEY: &str = "value";
 ///
 /// Obligation is a warning, never a gate: an unauthored must-fill field
 /// blank-fills and renders, and the only signal is the non-fatal
-/// `validation::must_fill` warning. There is no separate `required:` axis, and
-/// no `must_fill:` key — [`from_quill_value`](Self::from_quill_value) rejects
-/// one, routing the declaration back to `default:`.
+/// `validation::must_fill` warning. There is no separate `required:` axis and
+/// no `must_fill:` key.
 ///
 /// The richtext single-line constraint has **one** carrier: the
 /// `FieldType::RichText { inline }` enum. The wire's sibling `inline:` key folds
@@ -549,16 +506,7 @@ struct FieldSchemaDef {
     pub description: Option<String>,
     pub default: Option<QuillValue>,
     pub example: Option<QuillValue>,
-    /// The retired `must_fill:` key, parsed only to reject it by name and route
-    /// the author to `default:`
-    /// ([`FieldSchema::retired_must_fill`](FieldSchema::retired_must_fill)).
-    pub must_fill: Option<bool>,
     pub ui: Option<UiFieldSchema>,
-    /// The retired `enum:` modifier, parsed only to reject it by name: under
-    /// `deny_unknown_fields` an absent binding reports "unknown field `enum`"
-    /// with no route to `values:`.
-    #[serde(rename = "enum")]
-    pub enum_key: Option<Vec<String>>,
     /// The domain of a `type: enum` field, and the only spelling of one.
     /// Lands in [`FieldSchema::enum_values`].
     pub values: Option<Vec<String>>,
@@ -570,12 +518,6 @@ struct FieldSchemaDef {
     // Element schema for arrays.
     pub items: Option<serde_json::Value>,
     pub inline: Option<bool>,
-}
-
-/// A schema literal as `Quill.yaml` would spell it. JSON is a YAML subset, so
-/// the JSON form quotes straight back into the file.
-fn literal(value: &QuillValue) -> String {
-    serde_json::to_string(value.as_json()).unwrap_or_else(|_| "null".to_string())
 }
 
 impl FieldSchema {
@@ -660,9 +602,9 @@ impl FieldSchema {
         // here, so `FieldType::RichText { inline }` (and its `PlainText` sibling)
         // is the one carrier thereafter.
         let r#type = Self::resolve_prose_inline(def.r#type, def.inline)?;
-        // `type: enum` requires `values:`; `values:` on any other type, and
-        // `enum:` on any type at all, is a hard error.
-        let enum_values = Self::resolve_enum_values(&r#type, def.enum_key, def.values)?;
+        // `type: enum` requires `values:`; `values:` on any other type is a
+        // hard error.
+        let enum_values = Self::resolve_enum_values(&r#type, def.values)?;
         let schema = Self {
             name: key.clone(),
             r#type,
@@ -724,56 +666,7 @@ impl FieldSchema {
             default_content: None,
             example_content: None,
         };
-        // Last, so the rejection reads the resolved field: the migration it
-        // names turns on the type and `default:`.
-        match def.must_fill {
-            Some(declared) => Err(Self::retired_must_fill(declared, &schema)),
-            None => Ok(schema),
-        }
-    }
-
-    /// The migration for a declared `must_fill:`, classified by the rest of the
-    /// declaration: the key alone does not say which one the field takes.
-    fn retired_must_fill(declared: bool, schema: &FieldSchema) -> String {
-        let head = "must_fill: is retired; obligation derives from default:'s absence";
-        let namespace = matches!(schema.r#type, FieldType::Object) && schema.properties.is_some();
-        let route = match (namespace, declared, schema.default.is_some()) {
-            (true, _, _) => "remove it — a typed dictionary is a namespace, and each property \
-                             carries its own obligation"
-                .to_string(),
-            (_, true, false) => {
-                "remove it — a field with no default: is obliged already".to_string()
-            }
-            (_, false, true) => {
-                "remove it — a field with a default: is unobliged already".to_string()
-            }
-            (_, false, false) => format!(
-                "write `default: {}` instead — a defaulted cell is the skippable one",
-                Self::blank_literal(schema)
-            ),
-            (_, true, true) => format!(
-                "keep the default: to render {value} unasked, or move it to `example: {value}` to \
-                 ask — an example seeds under the !must_fill marker and never renders, so an \
-                 untouched document renders {blank}",
-                value = literal(schema.default.as_ref().expect("default is present")),
-                blank = Self::blank_literal(schema),
-            ),
-        };
-        format!("{head}, so {route}")
-    }
-
-    /// The blank as an author writes it into `default:`. Not
-    /// [`blank`](crate::quill::blank), which builds the *resting* form: a prose
-    /// field's is `""` rather than the empty content, and a variant container's
-    /// is the blank discriminant rather than the container.
-    fn blank_literal(schema: &FieldSchema) -> &'static str {
-        match schema.r#type {
-            FieldType::Array => "[]",
-            FieldType::Integer | FieldType::Number => "0",
-            FieldType::Boolean => "false",
-            FieldType::Object => "{}",
-            _ => "\"\"",
-        }
+        Ok(schema)
     }
 
     /// Fold the sibling `inline:` key into a prose type's enum payload. Both
@@ -801,21 +694,11 @@ impl FieldSchema {
 
     /// Resolve the domain into [`FieldSchema::enum_values`]. `type: enum`
     /// requires a non-empty `values:` list and is the one spelling of a finite
-    /// domain; `values:` elsewhere, and `enum:` anywhere, is an error. The
-    /// `enum:` message is a migration instruction: it is the only diagnostic a
-    /// quill written against the modifier ever receives.
+    /// domain; `values:` elsewhere is an error.
     fn resolve_enum_values(
         r#type: &FieldType,
-        enum_key: Option<Vec<String>>,
         values_key: Option<Vec<String>>,
     ) -> Result<Option<Vec<String>>, String> {
-        if enum_key.is_some() {
-            return Err(
-                "enum: is retired; declare a finite string domain as type: enum with a \
-                 values: list"
-                    .to_string(),
-            );
-        }
         match r#type {
             FieldType::Enum => match values_key {
                 Some(v) if !v.is_empty() => Ok(Some(v)),

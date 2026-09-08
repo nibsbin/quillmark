@@ -22,13 +22,15 @@ quill:
   backend: typst
   description: Full
 main:
+  ui:
+    groups: [meta]
   fields:
     status:
       type: enum
       values: [draft, final]
       default: draft
       ui:
-        group: Meta
+        group: meta
     page_count:
       type: integer
 card_kinds:
@@ -44,7 +46,7 @@ card_kinds:
         let yaml = config.schema_yaml().unwrap();
         assert!(yaml.contains("values:") && yaml.contains("type: integer"));
         assert!(yaml.contains("card_kinds:") && yaml.contains("indorsement:"));
-        assert!(yaml.contains("ui:") && yaml.contains("group: Meta"));
+        assert!(yaml.contains("ui:") && yaml.contains("group: meta"));
     }
 
     #[test]

@@ -8,10 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Diagnostic, Severity, diag_args};
 use crate::value::QuillValue;
 
-use super::types::{
-    BODY_CARD_SCHEMA_KEYS, RICHTEXT_INLINE_TOKEN_MSG, UI_CARD_SCHEMA_KEYS, UI_ORDER_REMOVED_MSG,
-    VARIANT_DISCRIMINANT_KEY,
-};
+use super::types::{BODY_CARD_SCHEMA_KEYS, UI_CARD_SCHEMA_KEYS, VARIANT_DISCRIMINANT_KEY};
 use super::{BodyCardSchema, CardSchema, FieldSchema, FieldType, GroupRegistry, UiCardSchema};
 
 /// Canonical string text for a bare scalar unambiguously representable as a
@@ -1237,17 +1234,10 @@ impl QuillConfig {
     ///
     /// With a registry present, `ui.group` is a *reference*: registry ids carry
     /// the same snake_case discipline as field keys and must be unique, and a
-    /// reference to an id the registry does not declare is `quill::unknown_group`
-    /// (the "no mixing implicit and declared" rule falls out of this, with a
-    /// registry there is no implicit fallback). With no registry, each `ui.group`
-    /// is a deprecated implicit group (label-as-identity) and the card earns one
-    /// `quill::implicit_group` warning.
-    fn validate_card_groups(
-        label: &str,
-        card: &CardSchema,
-        errors: &mut Vec<Diagnostic>,
-        warnings: &mut Vec<Diagnostic>,
-    ) {
+    /// reference to an id the registry does not declare is `quill::unknown_group`.
+    /// A `ui.group` with no registry to reference is `quill::implicit_group`,
+    /// one per card.
+    fn validate_card_groups(label: &str, card: &CardSchema, errors: &mut Vec<Diagnostic>) {
         let referenced: Vec<&str> = card
             .fields
             .values()
@@ -1302,13 +1292,12 @@ impl QuillConfig {
             }
             None => {
                 if !referenced.is_empty() {
-                    warnings.push(
+                    errors.push(
                         Diagnostic::new(
-                            Severity::Warning,
+                            Severity::Error,
                             format!(
-                                "{label} uses ui.group without a ui.groups registry (implicit \
-                                 groups). Declare the groups under the card's ui.groups; implicit \
-                                 groups are deprecated and become an error in a future release."
+                                "{label} uses ui.group without a ui.groups registry. Declare the \
+                                 groups under the card's ui.groups."
                             ),
                         )
                         .with_code("quill::implicit_group".to_string())
@@ -1632,23 +1621,6 @@ impl QuillConfig {
                     "'title' is not a valid field key; use 'description' instead.".to_string(),
                 );
             }
-            if obj
-                .get("ui")
-                .and_then(|u| u.as_object())
-                .is_some_and(|u| u.contains_key("order"))
-            {
-                return Some(format!("{UI_ORDER_REMOVED_MSG}."));
-            }
-            if obj.get("type").and_then(|v| v.as_str()) == Some("richtext(inline)") {
-                return Some(format!("{RICHTEXT_INLINE_TOKEN_MSG}."));
-            }
-            if obj.get("type").and_then(|v| v.as_str()) == Some("markdown") {
-                return Some(
-                    "'markdown' is no longer a field type; use type: richtext (block) \
-                     or type: richtext with inline: true."
-                        .to_string(),
-                );
-            }
         }
         None
     }
@@ -1661,10 +1633,6 @@ impl QuillConfig {
         }
 
         chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
-    }
-
-    fn is_valid_quill_name(name: &str) -> bool {
-        name == "__default__" || Self::is_snake_case_identifier(name)
     }
 
     /// Parse QuillConfig from YAML content while collecting non-fatal warnings.
@@ -1729,7 +1697,7 @@ impl QuillConfig {
         // Extract required fields: collect all missing-field errors before returning.
         let name = match quill_section.get("name").and_then(|v| v.as_str()) {
             Some(n) => {
-                if !Self::is_valid_quill_name(n) {
+                if !Self::is_snake_case_identifier(n) {
                     errors.push(
                         Diagnostic::new(
                             Severity::Error,
@@ -2090,7 +2058,7 @@ impl QuillConfig {
 
         // Validate each card's group registry and its fields' group references.
         for (label, card) in &labeled {
-            Self::validate_card_groups(label, card, &mut errors, &mut warnings);
+            Self::validate_card_groups(label, card, &mut errors);
         }
 
         // Error when `body.example` contains a line that the document parser

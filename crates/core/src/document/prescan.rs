@@ -10,6 +10,7 @@
 //! `!must_fill` is the only recognized fill tag; every other custom tag is
 //! dropped with a `parse::unsupported_yaml_tag` warning, value kept.
 
+use crate::value::PathSegment;
 use crate::Diagnostic;
 use crate::Severity;
 
@@ -22,10 +23,6 @@ pub(crate) enum PreItem {
     Comment { text: String, inline: bool },
 }
 
-/// One segment of a path into the parsed YAML structure, aliased to the
-/// crate-wide [`crate::value::PathSegment`].
-pub use crate::value::PathSegment as CommentPathSegment;
-
 /// A comment inside a nested mapping or sequence.
 ///
 /// `container_path` locates the immediate parent. For own-line comments
@@ -36,7 +33,7 @@ pub use crate::value::PathSegment as CommentPathSegment;
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct NestedComment {
-    pub container_path: Vec<CommentPathSegment>,
+    pub container_path: Vec<PathSegment>,
     pub position: usize,
     pub text: String,
     pub inline: bool,
@@ -58,10 +55,8 @@ pub(crate) struct PreScan {
     /// Paths of nested fields tagged `!must_fill`, relative to the fence root
     /// (the first segment is the owning top-level key). Applied onto the
     /// value tree by the assembler. Top-level fills ride on `PreItem::Field`.
-    pub nested_fills: Vec<Vec<CommentPathSegment>>,
+    pub nested_fills: Vec<Vec<PathSegment>>,
     pub warnings: Vec<Diagnostic>,
-    /// `!must_fill` on mappings: turned into `ParseError::InvalidStructure` by the parser.
-    pub fill_target_errors: Vec<String>,
 }
 
 /// The emitted YAML lines paired with the source line each came from.
@@ -81,7 +76,7 @@ impl Cleaned {
 #[derive(Debug)]
 struct Frame {
     indent: usize,
-    path: Vec<CommentPathSegment>,
+    path: Vec<PathSegment>,
     child_count: usize,
 }
 
@@ -164,10 +159,10 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
             let frame = &mut stack[frame_idx];
             let item_index = frame.child_count;
             frame.child_count += 1;
-            let parent_path: Vec<CommentPathSegment> = frame.path.clone();
-            let item_path: Vec<CommentPathSegment> = {
+            let parent_path: Vec<PathSegment> = frame.path.clone();
+            let item_path: Vec<PathSegment> = {
                 let mut p = parent_path.clone();
-                p.push(CommentPathSegment::Index(item_index));
+                p.push(PathSegment::Index(item_index));
                 p
             };
             while stack.len() > frame_idx + 1 {
@@ -199,7 +194,7 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
                 unsupported_fill_tag |= value_has_unsupported_fill_tag(&value_without_tag);
                 if fill {
                     let mut key_path = item_path.clone();
-                    key_path.push(CommentPathSegment::Key(key.clone()));
+                    key_path.push(PathSegment::Key(key.clone()));
                     out.nested_fills.push(key_path);
                 }
                 if fill || had_non_fill_tag {
@@ -259,7 +254,7 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
 
                 let root = &mut stack[0];
                 root.child_count += 1;
-                let key_path = vec![CommentPathSegment::Key(key.clone())];
+                let key_path = vec![PathSegment::Key(key.clone())];
 
                 while stack.len() > 1 {
                     stack.pop();
@@ -296,10 +291,10 @@ pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
             let frame = &mut stack[frame_idx];
             let key_index = frame.child_count;
             frame.child_count += 1;
-            let parent_path: Vec<CommentPathSegment> = frame.path.clone();
-            let key_path: Vec<CommentPathSegment> = {
+            let parent_path: Vec<PathSegment> = frame.path.clone();
+            let key_path: Vec<PathSegment> = {
                 let mut p = parent_path.clone();
-                p.push(CommentPathSegment::Key(key.clone()));
+                p.push(PathSegment::Key(key.clone()));
                 p
             };
             while stack.len() > frame_idx + 1 {
@@ -389,32 +384,30 @@ fn line_has_unsupported_fill_tag(line: &str) -> bool {
 /// True when a fill tag in `text` stands where YAML reads a node: after flow
 /// punctuation, or — when `head_is_node` — at the head of `text` itself.
 fn fill_tag_in_node_position(text: &str, head_is_node: bool) -> bool {
-    for tag in FILL_TAGS {
-        let mut from = 0;
-        while let Some(rel) = text[from..].find(tag) {
-            let at = from + rel;
-            let after = at + tag.len();
-            // Trailing boundary: a real tag ends at whitespace, flow
-            // punctuation, or end of text, not mid-word (`!fillet`).
-            let trailing_ok = text[after..]
-                .chars()
-                .next()
-                .is_none_or(|c| c.is_whitespace() || matches!(c, ',' | '}' | ']'));
-            // Leading boundary: the tag sits directly after `{` / `[` / `,`,
-            // or after whitespace following `:` / `-` / `,` / `{` / `[`.
-            let before = text[..at].trim_end_matches([' ', '\t']);
-            let had_ws = before.len() != at;
-            let leading_ok = match before.chars().last() {
-                Some('{') | Some('[') | Some(',') => true,
-                Some(':') | Some('-') => had_ws,
-                None => head_is_node,
-                _ => false,
-            };
-            if trailing_ok && leading_ok {
-                return true;
-            }
-            from = after;
+    let mut from = 0;
+    while let Some(rel) = text[from..].find(FILL_TAG) {
+        let at = from + rel;
+        let after = at + FILL_TAG.len();
+        // Trailing boundary: a real tag ends at whitespace, flow
+        // punctuation, or end of text, not mid-word (`!fillet`).
+        let trailing_ok = text[after..]
+            .chars()
+            .next()
+            .is_none_or(|c| c.is_whitespace() || matches!(c, ',' | '}' | ']'));
+        // Leading boundary: the tag sits directly after `{` / `[` / `,`,
+        // or after whitespace following `:` / `-` / `,` / `{` / `[`.
+        let before = text[..at].trim_end_matches([' ', '\t']);
+        let had_ws = before.len() != at;
+        let leading_ok = match before.chars().last() {
+            Some('{') | Some('[') | Some(',') => true,
+            Some(':') | Some('-') => had_ws,
+            None => head_is_node,
+            _ => false,
+        };
+        if trailing_ok && leading_ok {
+            return true;
         }
+        from = after;
     }
     false
 }
@@ -671,69 +664,41 @@ fn split_flow_trailing_comment(value: &str) -> (String, Option<String>) {
 /// The placeholder tag. `!must_fill` is the only recognized fill tag; any
 /// other custom tag is treated as a noncanonical tag: dropped with a
 /// `parse::unsupported_yaml_tag` warning.
-const FILL_TAGS: [&str; 1] = ["!must_fill"];
+const FILL_TAG: &str = "!must_fill";
 
-/// If `trimmed` begins with a fill tag (either the bare tag or the tag
+/// If `trimmed` begins with the fill tag (either the bare tag or the tag
 /// followed by whitespace), return the remainder after the tag. A tag that
 /// is merely a prefix of a longer word (e.g. `!fillet`) does not match.
 fn strip_fill_tag(trimmed: &str) -> Option<&str> {
-    for tag in FILL_TAGS {
-        if trimmed == tag {
-            return Some("");
-        }
-        if let Some(rest) = trimmed.strip_prefix(tag) {
-            if rest.starts_with(' ') || rest.starts_with('\t') {
-                return Some(rest);
-            }
-        }
+    if trimmed == FILL_TAG {
+        return Some("");
     }
-    None
+    let rest = trimmed.strip_prefix(FILL_TAG)?;
+    (rest.starts_with(' ') || rest.starts_with('\t')).then_some(rest)
 }
 
-/// Inspect a field value for the `!must_fill` tag and other (noncanonical) tags.
-///
-/// Returns `(fill, value_without_tag, had_other_tag, fill_target_err)`.
-/// `fill_target_err` is set when the fill tag targets a mapping (rejected;
-/// scalars and sequences are allowed).
-fn inspect_fill_and_tags(value: &str, key: &str) -> (bool, String, bool, Option<String>) {
+/// Inspect a field value for the `!must_fill` tag and other (noncanonical)
+/// tags, warning onto `out` for a noncanonical tag. Returns
+/// `(fill, value_without_tag, had_other_tag)`.
+fn record_fill_and_tags(out: &mut PreScan, value: &str, key: &str) -> (bool, String, bool) {
     let trimmed = value.trim_start();
     let leading_ws_len = value.len() - trimmed.len();
 
     if trimmed.is_empty() {
-        return (false, value.to_string(), false, None);
+        return (false, value.to_string(), false);
     }
 
     if let Some(rest) = strip_fill_tag(trimmed) {
         let rest_trim = rest.trim_start();
-        let err = if rest_trim.starts_with('{') {
-            Some(format!(
-                "`!must_fill` on key `{}` targets a mapping; `!must_fill` is supported on scalars and sequences only",
-                key
-            ))
-        } else {
-            None
-        };
         let reconstructed = if rest_trim.is_empty() {
             value[..leading_ws_len].to_string()
         } else {
             format!(" {}", rest_trim)
         };
-        return (true, reconstructed, false, err);
+        return (true, reconstructed, false);
     }
 
     if trimmed.starts_with('!') {
-        return (false, value.to_string(), true, None);
-    }
-
-    (false, value.to_string(), false, None)
-}
-
-/// [`inspect_fill_and_tags`] with its diagnostics recorded onto `out`,
-/// returning `(fill, value_without_tag, had_other_tag)`.
-fn record_fill_and_tags(out: &mut PreScan, value: &str, key: &str) -> (bool, String, bool) {
-    let (fill, value_without_tag, had_non_fill_tag, fill_target_err) =
-        inspect_fill_and_tags(value, key);
-    if had_non_fill_tag {
         out.warnings.push(
             Diagnostic::new(
                 Severity::Warning,
@@ -744,11 +709,10 @@ fn record_fill_and_tags(out: &mut PreScan, value: &str, key: &str) -> (bool, Str
             )
             .with_code("parse::unsupported_yaml_tag".to_string()),
         );
+        return (false, value.to_string(), true);
     }
-    if let Some(err) = fill_target_err {
-        out.fill_target_errors.push(err);
-    }
-    (fill, value_without_tag, had_non_fill_tag)
+
+    (false, value.to_string(), false)
 }
 
 #[cfg(test)]
@@ -915,19 +879,19 @@ mod tests {
             out.nested_comments,
             vec![
                 NestedComment {
-                    container_path: vec![CommentPathSegment::Key("arr".to_string())],
+                    container_path: vec![PathSegment::Key("arr".to_string())],
                     position: 0,
                     text: "before-first".to_string(),
                     inline: false,
                 },
                 NestedComment {
-                    container_path: vec![CommentPathSegment::Key("arr".to_string())],
+                    container_path: vec![PathSegment::Key("arr".to_string())],
                     position: 1,
                     text: "between".to_string(),
                     inline: false,
                 },
                 NestedComment {
-                    container_path: vec![CommentPathSegment::Key("arr".to_string())],
+                    container_path: vec![PathSegment::Key("arr".to_string())],
                     position: 2,
                     text: "after-last".to_string(),
                     inline: false,
@@ -949,7 +913,7 @@ mod tests {
         assert_eq!(
             out.nested_comments,
             vec![NestedComment {
-                container_path: vec![CommentPathSegment::Key("outer".to_string())],
+                container_path: vec![PathSegment::Key("outer".to_string())],
                 position: 0,
                 text: "comment".to_string(),
                 inline: false,
@@ -965,8 +929,8 @@ mod tests {
             out.nested_comments,
             vec![NestedComment {
                 container_path: vec![
-                    CommentPathSegment::Key("outer".to_string()),
-                    CommentPathSegment::Key("inner".to_string()),
+                    PathSegment::Key("outer".to_string()),
+                    PathSegment::Key("inner".to_string()),
                 ],
                 position: 0,
                 text: "deep".to_string(),
@@ -983,8 +947,8 @@ mod tests {
             out.nested_comments,
             vec![NestedComment {
                 container_path: vec![
-                    CommentPathSegment::Key("items".to_string()),
-                    CommentPathSegment::Index(0),
+                    PathSegment::Key("items".to_string()),
+                    PathSegment::Index(0),
                 ],
                 position: 1,
                 text: "inside-first".to_string(),
@@ -1000,7 +964,7 @@ mod tests {
         assert_eq!(
             out.nested_comments,
             vec![NestedComment {
-                container_path: vec![CommentPathSegment::Key("arr".to_string())],
+                container_path: vec![PathSegment::Key("arr".to_string())],
                 position: 0,
                 text: "tail".to_string(),
                 inline: true,
@@ -1017,7 +981,7 @@ mod tests {
         assert_eq!(
             out.nested_comments,
             vec![NestedComment {
-                container_path: vec![CommentPathSegment::Key("outer".to_string())],
+                container_path: vec![PathSegment::Key("outer".to_string())],
                 position: 0,
                 text: "tail".to_string(),
                 inline: true,
@@ -1030,8 +994,8 @@ mod tests {
         let input = "x: !must_fill [1, 2]\n";
         let out = prescan_fence_content(input);
         assert!(
-            out.fill_target_errors.is_empty(),
-            "expected no error; !must_fill on sequences is supported"
+            out.warnings.is_empty(),
+            "expected no diagnostic; !must_fill on sequences is supported"
         );
         assert_eq!(
             out.items,
@@ -1139,15 +1103,6 @@ mod tests {
         assert!(out.cleaned_yaml.contains("- second"));
     }
 
-    #[test]
-    fn fill_on_flow_mapping_errors() {
-        let input = "x: !must_fill {a: 1}\n";
-        let out = prescan_fence_content(input);
-        assert!(
-            !out.fill_target_errors.is_empty(),
-            "expected error; !must_fill on mappings is rejected"
-        );
-    }
     #[test]
     fn comment_after_plain_scalar_with_apostrophe() {
         // YAML: in a plain scalar, `'` is an ordinary character; the

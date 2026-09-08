@@ -6,6 +6,8 @@ Crate layout and what each crate carries: [`ARCHITECTURE.md`](prose/canon/ARCHIT
 
 Design docs: [`prose/canon/INDEX.md`](prose/canon/INDEX.md).
 
+What earns a test a place, and what the `!` commit marker obliges: [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
 Comments default to none, and one earns its place only where the code cannot carry the fact itself. What survives states what is: present tense, unsold, no history. The `dense-prose` skill is the whole policy.
 
 - The `Cargo.toml` version is the last *released* one; CI bumps it on release.

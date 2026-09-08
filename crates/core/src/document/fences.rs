@@ -172,6 +172,15 @@ fn has_paired_dash_with_yaml_keys(lines: &Lines<'_>, opener_k: usize) -> bool {
     false
 }
 
+/// The first line below `opener_k` whose text `closes` accepts as the closer.
+fn closer_below(
+    lines: &Lines<'_>,
+    opener_k: usize,
+    closes: impl Fn(&str) -> bool,
+) -> Option<usize> {
+    ((opener_k + 1)..lines.len()).find(|&j| closes(lines.line_text(j)))
+}
+
 /// What the scanner saw where the root block should have been, when the line it
 /// found there produced no block. Carried out of the scan so the `MissingQuill`
 /// message names the malformation instead of describing the shape the author
@@ -268,20 +277,13 @@ pub(super) fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseErr
             // (CommonMark fence matching) and at column zero (spec §3.2 / D2):
             // the payload is YAML, where indentation is structural, so an
             // indented `~~~` inside a block scalar is payload, never a closer.
-            let mut closer_k: Option<usize> = None;
-            let mut j = k + 1;
-            while j < lines.len() {
-                let candidate = lines.line_text(j);
-                if !candidate.starts_with(' ') {
-                    if let Some((_, _, true)) =
-                        code_fence_on_line(candidate, Some((b'~', open_run)))
-                    {
-                        closer_k = Some(j);
-                        break;
-                    }
-                }
-                j += 1;
-            }
+            let closer_k = closer_below(&lines, k, |candidate| {
+                !candidate.starts_with(' ')
+                    && matches!(
+                        code_fence_on_line(candidate, Some((b'~', open_run))),
+                        Some((_, _, true))
+                    )
+            });
             let Some(cj) = closer_k else {
                 // Per CommonMark an unclosed `~~~` fence is an ordinary code
                 // block running to EOF, so delegate rather than erroring. The
@@ -324,16 +326,7 @@ pub(super) fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseErr
                 // deeper in a prose preamble.
                 let above_all_blank = (0..k).all(|i| lines.is_blank(i));
                 if above_all_blank {
-                    let mut closer_k: Option<usize> = None;
-                    let mut j = k + 1;
-                    while j < lines.len() {
-                        if is_dash_fence_line(lines.line_text(j)) {
-                            closer_k = Some(j);
-                            break;
-                        }
-                        j += 1;
-                    }
-                    let Some(cj) = closer_k else {
+                    let Some(cj) = closer_below(&lines, k, is_dash_fence_line) else {
                         // Per CommonMark a lone leading `---` is a thematic
                         // break, not frontmatter: no root block, so the document
                         // surfaces MissingQuill downstream.

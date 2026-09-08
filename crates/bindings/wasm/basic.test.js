@@ -1704,6 +1704,44 @@ card_kinds:
     expect(schema.card_kinds.indorsement.fields.CARD).toBeUndefined()
   })
 
+  it('surfaces the load\'s advisory diagnostics on quill.warnings', () => {
+    const clean = Quill.fromTree(
+      makeQuill({ name: 'meta_test_quill', plate: TEST_PLATE, quillYaml: META_QUILL_YAML }),
+    )
+    expect(clean.warnings).toEqual([])
+
+    const WARNING_QUILL_YAML = `quill:
+  name: warn_quill
+  version: "1.0.0"
+  backend: typst
+  description: Carries one advisory
+
+typst:
+  plate_file: plate.typ
+
+main:
+  fields:
+    title:
+      type: string
+
+card_kinds:
+  skills:
+    body:
+      enabled: false
+      example: This example is unused
+    fields:
+      items:
+        type: array
+        items:
+          type: string
+`
+    const quill = Quill.fromTree(
+      makeQuill({ name: 'warn_quill', plate: TEST_PLATE, quillYaml: WARNING_QUILL_YAML }),
+    )
+
+    expect(quill.warnings.map((d) => d.code)).toEqual(['quill::body_example_unused'])
+  })
+
   it('orders the five standard keys first, then the extra keys sorted by name', () => {
     const EXTRAS_QUILL_YAML = `quill:
   name: meta_test_quill

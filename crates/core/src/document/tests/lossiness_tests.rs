@@ -655,10 +655,12 @@ fn nested_empty_mapping_survives_round_trip() {
 
     let src = "~~~card-yaml\n$quill: q\n$kind: main\n~~~\n";
     let mut doc = Document::parse(src).unwrap().document;
-    let _ = doc.main_mut().payload_mut().insert(
-        "cfg",
-        QuillValue::from_json(serde_json::json!({ "opts": {} })),
-    );
+    doc.main_mut()
+        .store_field(
+            "cfg",
+            QuillValue::from_json(serde_json::json!({ "opts": {} })),
+        )
+        .unwrap();
 
     let emitted = doc.to_markdown();
     let doc2 = Document::parse(&emitted).unwrap().document;

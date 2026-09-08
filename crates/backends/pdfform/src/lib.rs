@@ -27,6 +27,7 @@ use quillmark_pdf::{stamp, FieldSpec, StampOptions};
 use {
     hayro::hayro_interpret::{font::FontQuery, InterpreterSettings},
     hayro::hayro_syntax::Pdf as HayroPdf,
+    hayro::vello_cpu::Pixmap,
     hayro::{render as hayro_render, RenderCache, RenderSettings},
     hayro_svg::{convert as hayro_svg_convert, RenderCache as SvgCache, SvgRenderSettings},
     std::sync::Arc,
@@ -197,15 +198,11 @@ impl SessionHandle for PdfformSession {
         page: usize,
         scale: f32,
     ) -> Result<Option<(u32, u32, Vec<u8>)>, RenderError> {
-        let Some(p) = self.flat.pages().get(page) else {
+        let Some(pixmap) =
+            self.raster(page, &standard_font_settings(), &scaled_render_settings(scale))?
+        else {
             return Ok(None);
         };
-        let (width_pt, height_pt) = p.render_dimensions();
-        quillmark_core::check_raster(scale, width_pt, height_pt)?;
-        let cache = RenderCache::new();
-        let interp = standard_font_settings();
-        let render_settings = scaled_render_settings(scale);
-        let pixmap = hayro_render(p, &cache, &interp, &render_settings);
         let w = pixmap.width() as u32;
         let h = pixmap.height() as u32;
         let bytes: Vec<u8> = pixmap
@@ -255,6 +252,21 @@ impl SessionHandle for PdfformSession {
 }
 
 impl PdfformSession {
+    fn raster(
+        &self,
+        page: usize,
+        interp: &InterpreterSettings,
+        settings: &RenderSettings,
+    ) -> Result<Option<Pixmap>, RenderError> {
+        let Some(p) = self.flat.pages().get(page) else {
+            return Ok(None);
+        };
+        let (width_pt, height_pt) = p.render_dimensions();
+        quillmark_core::check_raster(settings.x_scale, width_pt, height_pt)?;
+        let cache = RenderCache::new();
+        Ok(Some(hayro_render(p, &cache, interp, settings)))
+    }
+
     fn render_svg(&self, pages: &[usize]) -> Result<RenderResult, RenderError> {
         let interp = standard_font_settings();
         let svg_settings = SvgRenderSettings {
@@ -278,14 +290,21 @@ impl PdfformSession {
         let interp = standard_font_settings();
         let render_settings = scaled_render_settings(scale);
 
-        let all = self.flat.pages();
         let mut artifacts = Vec::with_capacity(pages.len());
         for &idx in pages {
-            let page = &all[idx];
-            let (width_pt, height_pt) = page.render_dimensions();
-            quillmark_core::check_raster(scale, width_pt, height_pt)?;
-            let cache = RenderCache::new();
-            let pixmap = hayro_render(page, &cache, &interp, &render_settings);
+            // `selected_pages` bounded these against the same page list, so a
+            // miss is the two disagreeing. Refuse: a short artifact list reads
+            // as a document with fewer pages.
+            let Some(pixmap) = self.raster(idx, &interp, &render_settings)? else {
+                return Err(RenderError::coded_hint(
+                    "backend::page_index_out_of_bounds",
+                    format!(
+                        "page {idx} is past the flattened document's {} pages",
+                        self.flat.pages().len()
+                    ),
+                    "Read the session's page count before requesting pages.",
+                ));
+            };
             let png = pixmap.into_png().map_err(|e| {
                 RenderError::coded(
                     "pdfform::png_encoding",

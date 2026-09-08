@@ -1,6 +1,6 @@
 //! Markdown import (cold): `normalize → pulldown → content`.
 //!
-//! Input is normalized by [`crate::normalize::normalize_markdown`] (CRLF→LF,
+//! Input is normalized by `normalize::normalize_markdown` (CRLF→LF,
 //! bidi controls dropped, line separators spaced, HTML comment-fence repair) so
 //! the content invariants hold by construction, then parsed with
 //! `pulldown_cmark` (CommonMark + strikethrough + pipe tables) and walked into

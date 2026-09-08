@@ -14,15 +14,13 @@ pub fn normalize_field_name(name: &str) -> String {
 
 /// Normalize every card's payload field names to Unicode NFC. Values and
 /// bodies carry through unchanged. Idempotent.
-pub fn normalize_document(
-    doc: crate::document::Document,
-) -> Result<crate::document::Document, crate::error::ParseError> {
+pub fn normalize_document(doc: crate::document::Document) -> crate::document::Document {
     use crate::document::Document;
 
     let main = normalize_card(doc.main());
     let normalized_cards: Vec<Card> = doc.cards().iter().map(normalize_card).collect();
 
-    Ok(Document::from_main_and_cards(main, normalized_cards))
+    Document::from_main_and_cards(main, normalized_cards)
 }
 
 fn normalize_card(card: &Card) -> Card {
@@ -50,8 +48,8 @@ mod tests {
             Document::parse("~~~card-yaml\n$quill: test\n$kind: main\n~~~\n\n<<content>>")
                 .unwrap()
                 .document;
-        let normalized_once = super::normalize_document(doc).unwrap();
-        let normalized_twice = super::normalize_document(normalized_once.clone()).unwrap();
+        let normalized_once = super::normalize_document(doc);
+        let normalized_twice = super::normalize_document(normalized_once.clone());
 
         assert_eq!(
             normalized_once.main().body_markdown(),
@@ -68,7 +66,7 @@ mod tests {
         )
         .unwrap()
         .document;
-        let normalized = super::normalize_document(doc).unwrap();
+        let normalized = super::normalize_document(doc);
         assert_eq!(
             normalized
                 .main()

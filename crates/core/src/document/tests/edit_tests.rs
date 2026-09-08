@@ -949,7 +949,7 @@ fn test_invariants_after_mutation_sequence() {
         }
     }
 
-    let json = doc.to_plate_json();
+    let json = doc.to_plate_json_gated(true, None);
     assert!(json.is_object());
     assert_eq!(json["$quill"].as_str(), Some("test_quill"));
     assert!(json["$cards"].is_array());

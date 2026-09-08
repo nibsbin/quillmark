@@ -1,6 +1,7 @@
 use crate::errors::{CliError, Result};
 use clap::Parser;
-use quillmark_core::quill::{CardSchema, FieldSchema, QuillConfig};
+use quillmark::Quill;
+use quillmark_core::quill::{CardSchema, FieldSchema};
 use quillmark_core::{Diagnostic, Severity};
 use indexmap::IndexMap;
 use std::path::{Path, PathBuf};
@@ -22,18 +23,9 @@ struct ValidationResult {
 }
 
 impl ValidationResult {
-    fn new() -> Self {
-        Self { issues: Vec::new() }
-    }
-
-    fn add_error(&mut self, message: impl Into<String>, code: &str) {
+    fn add(&mut self, severity: Severity, message: impl Into<String>, code: &str) {
         self.issues
-            .push(Diagnostic::new(Severity::Error, message.into()).with_code(code.to_string()));
-    }
-
-    fn add_warning(&mut self, message: impl Into<String>, code: &str) {
-        self.issues
-            .push(Diagnostic::new(Severity::Warning, message.into()).with_code(code.to_string()));
+            .push(Diagnostic::new(severity, message.into()).with_code(code.to_string()));
     }
 
     fn count(&self, severity: Severity) -> usize {
@@ -60,13 +52,12 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
         println!("Validating quill at: {}", args.quill_path.display());
     }
 
-    let mut result = ValidationResult::new();
+    let mut result = ValidationResult::default();
 
-    // `_with_warnings` keeps the config warnings the plain loader drops.
-    let (quill, config_warnings) = quillmark::quill_from_path_with_warnings(&args.quill_path)?;
+    let quill = quillmark::quill_from_path(&args.quill_path)?;
     let config = quill.config();
 
-    result.issues.extend(config_warnings);
+    result.issues.extend(quill.warnings().iter().cloned());
 
     if args.verbose {
         println!("  Quill name: {}", config.name);
@@ -77,7 +68,7 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
         println!("  Defaults extracted: {}", config.main.defaults().len());
     }
 
-    validate_file_references(&args.quill_path, config, &mut result);
+    validate_file_references(&quill, &mut result);
 
     validate_field_schemas(&config.main.fields, &mut result, "field");
 
@@ -94,16 +85,12 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
     }
 }
 
-fn validate_file_references(
-    quill_path: &Path,
-    config: &QuillConfig,
-    result: &mut ValidationResult,
-) {
-    // `plate_file` comes from the untrusted Quill.yaml, so reject anything but
-    // a simple relative filename before touching the filesystem: an absolute
-    // `Path::join` replaces the base and `..` escapes the quill root, either of
-    // which turns `plate_path.exists()` into a host path-probing oracle.
-    if let Some(plate_file) = config
+fn validate_file_references(quill: &Quill, result: &mut ValidationResult) {
+    // The tree lookup answers `None` to a path that escapes the quill and to one
+    // that is simply absent, so the component test runs first and names which of
+    // the two a `plate_file` from an untrusted Quill.yaml hit.
+    if let Some(plate_file) = quill
+        .config()
         .backend_config
         .get("plate_file")
         .and_then(|v| v.as_str())
@@ -113,21 +100,20 @@ fn validate_file_references(
             .components()
             .any(|c| !matches!(c, std::path::Component::Normal(_)))
         {
-            result.add_error(
+            result.add(
+                Severity::Error,
                 format!(
                     "plate_file '{}' must be a relative path within the quill (no '..' or absolute components)",
                     plate_file
                 ),
                 "cli::plate_file_escapes_quill",
             );
-        } else {
-            let plate_path = quill_path.join(rel);
-            if !plate_path.exists() {
-                result.add_error(
-                    format!("Referenced plate_file '{}' does not exist", plate_file),
-                    "cli::plate_file_missing",
-                );
-            }
+        } else if quill.files().get_file(rel).is_none() {
+            result.add(
+                Severity::Error,
+                format!("Referenced plate_file '{}' does not exist", plate_file),
+                "cli::plate_file_missing",
+            );
         }
     }
 }
@@ -147,7 +133,8 @@ fn validate_field_schemas(
             .trim()
             .is_empty()
         {
-            result.add_warning(
+            result.add(
+                Severity::Warning,
                 format!("{context} '{field_name}': missing or empty description"),
                 "cli::missing_description",
             );
@@ -163,7 +150,8 @@ fn validate_card_schema(card_name: &str, card_schema: &CardSchema, result: &mut 
         .trim()
         .is_empty()
     {
-        result.add_warning(
+        result.add(
+            Severity::Warning,
             format!("card '{}': missing or empty description", card_name),
             "cli::missing_description",
         );

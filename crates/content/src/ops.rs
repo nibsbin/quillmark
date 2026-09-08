@@ -169,14 +169,6 @@ impl Default for ChangeBundle {
 }
 
 impl ChangeBundle {
-    /// A bundle carrying `delta` and no ops: the per-keystroke splice.
-    pub fn from_delta(delta: Delta) -> Self {
-        ChangeBundle {
-            delta,
-            ..Default::default()
-        }
-    }
-
     fn is_delta_only(&self) -> bool {
         self.island_ops.is_empty() && self.line_ops.is_empty() && self.mark_ops.is_empty()
     }
@@ -479,7 +471,7 @@ impl Content {
         Ok(())
     }
 
-    fn rebase_marks(&mut self, delta: &Delta) {
+    pub(crate) fn rebase_marks(&mut self, delta: &Delta) {
         for m in &mut self.marks {
             if m.start == m.end {
                 let p = delta.map_pos(m.start, Assoc::Before);
@@ -2101,9 +2093,12 @@ mod tests {
 
         let paste = format!("x{ISLAND_SLOT}y");
         assert_eq!(
-            rt.apply_field_change(&ChangeBundle::from_delta(Delta {
-                ops: vec![Op::Retain(1), Op::Insert(paste)],
-            })),
+            rt.apply_field_change(&ChangeBundle {
+                delta: Delta {
+                    ops: vec![Op::Retain(1), Op::Insert(paste)],
+                },
+                ..Default::default()
+            }),
             Err(ApplyError::IslandSlotInInsert)
         );
         assert_eq!(rt, before, "the refusal commits nothing");
@@ -2148,8 +2143,11 @@ mod tests {
         let held = rt.islands[0].clone();
         assert_eq!(before.lines[1].kind, LineKind::Island);
 
-        rt.apply_field_change(&ChangeBundle::from_delta(diff(&before.text, "intro\n")))
-            .unwrap();
+        rt.apply_field_change(&ChangeBundle {
+            delta: diff(&before.text, "intro\n"),
+            ..Default::default()
+        })
+        .unwrap();
         assert!(rt.islands.is_empty());
         assert_eq!(rt.lines[1].kind, LineKind::Para, "demoted, not failed");
 
@@ -2219,6 +2217,18 @@ mod tests {
             island: table("isl-t"),
         }]))
         .expect("the block island's own slot is a whole line");
+    }
+
+    /// `Join` names two lines rather than an island, so it is the accepted op
+    /// that can run a block island's slot back into prose. The mint takes the
+    /// line apart again, so the placement holds however the content was reached.
+    #[test]
+    fn a_join_onto_a_block_island_line_is_undone_by_the_mint() {
+        let mut rt = from_markdown("ab\n\n| H |\n| --- |\n| a |").unwrap();
+        let before = rt.clone();
+        rt.apply_line_ops(&[LineOp::Join { line: 0 }]).unwrap();
+        assert_eq!(rt.validate(), Ok(()));
+        assert_eq!(rt, before, "the slot stayed in the paragraph");
     }
 
     /// An inserted island's id is caller-supplied on an anchor id's terms:
