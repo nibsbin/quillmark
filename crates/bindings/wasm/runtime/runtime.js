@@ -634,8 +634,7 @@ const DEFAULT_BACKENDS = {
 			() => import('../backends/pdfform/wasm.js'),
 			() => new URL('../backends/pdfform/wasm_bg.wasm', import.meta.url)
 		),
-		// crates/backends/pdfform/src/lib.rs SUPPORTED_FORMATS
-		formats: ['pdf', 'svg', 'png']
+		formats: ['pdf'] // crates/backends/pdfform/src/lib.rs SUPPORTED_FORMATS
 	}
 };
 

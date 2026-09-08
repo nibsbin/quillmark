@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- refactor(pdfform)!: **the SVG and PNG output formats go; canvas paint stays.**
+  `supported_formats` reports `[Pdf]`, so a `render` asking for either fails
+  under `backend::format_not_supported` and `quillmark render --format png` on
+  a pdfform quill does too. The two formats were views of the flattened form
+  consumed by nothing but their own test. `render_rgba` and the `hayro`
+  dependency stay, so a WASM consumer paints pdfform pages exactly as before:
+  paint is a `SessionHandle` seam, not an output format. `hayro-svg` goes with
+  the SVG artifact path, its only caller.
 - refactor(core,wasm)!: **the pre-session `supportsCanvas` probe is deleted at
   every layer.** `Quillmark::supports_canvas`,
   `quillmark_core::formats_support_canvas`, the WASM
@@ -42,11 +50,6 @@
   the door every binding took and the one that dropped them, so the channel's
   output — `quill::implicit_group` and `quill::body_example_unused` — was
   visible only to the CLI's `validate`.
-- fix(pdfform): **a PNG render refuses a page index past the flattened
-  document** under `backend::page_index_out_of_bounds` rather than skipping it.
-  `selected_pages` bounds the indices against the same page list, so a miss is
-  the two disagreeing; a short artifact list reads as a document with fewer
-  pages.
 - feat(core)!: **five retired `Quill.yaml` keys lose their tailored migration
   message, and an implicit group is a load error.** `must_fill`, `enum`,
   `ui.order`, the `richtext(inline)` type token and `markdown` were retired

@@ -872,7 +872,7 @@ describe('@quillmark/wasm: Engine (hidden core→backend crossing)', () => {
 
     // What the static manifest reports (no load).
     const manifestFormats = await engine.supportedFormats(quill)
-    expect([...manifestFormats].sort()).toEqual(['pdf', 'png', 'svg'])
+    expect(manifestFormats).toEqual(['pdf'])
 
     // Force the pdfform backend to load, then ask the real engine directly.
     await engine.render(quill, doc, { format: 'pdf' })

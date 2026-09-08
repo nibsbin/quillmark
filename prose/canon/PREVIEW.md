@@ -436,23 +436,22 @@ displayed size across DPI and pane-resize with no `renderScale` to thread.
 
 ## Feature / build mapping
 
-Canvas ships per-backend, compile-time aligned so the capability flag and the
-painter cannot disagree:
+Canvas ships per-backend:
 
 | Build                                     | Backend  | Canvas | Notes                                                    |
 | ----------------------------------------- | -------- | ------ | -------------------------------------------------------- |
 | `pkg/core/` (no features)                 | —        | no     | `Document` + `Quill` only; no engine, no Typst           |
 | `pkg/backends/typst/` (`typst`)           | typst    | yes    | native page raster                                       |
-| `pkg/backends/pdfform/` (`pdfform`)       | pdfform  | yes    | pre-flatten + hayro raster/SVG/PNG; `web-sys` canvas painter |
+| `pkg/backends/pdfform/` (`pdfform`)       | pdfform  | yes    | pre-flatten + hayro raster; `web-sys` canvas painter     |
 
-The pdfform backend always links its hayro raster seam, so it renders PDF, SVG,
-and PNG (`supports_canvas() == true`). The wasm `pdfform` feature pulls in
-`web-sys` unconditionally, so the pdfform build also ships the generic canvas
-*painter* (`page_size` / `paint`, dispatching through the core `SessionHandle`
-seam): there is no painterless pdfform variant. `build-wasm.sh` builds the
-three artifacts (core, typst, pdfform) sequentially; `runtime/runtime.js` maps
-each backend id to its build with a `{ formats, canvas }` manifest, drift-guarded
-by `runtime.test.js`.
+Canvas paint is independent of the output formats a backend emits: pdfform
+emits PDF alone and paints, because it always links its hayro raster seam.
+The wasm `pdfform` feature pulls in `web-sys` unconditionally, so the pdfform
+build also ships the generic canvas *painter* (`page_size` / `paint`,
+dispatching through the core `SessionHandle` seam): there is no painterless
+pdfform variant. `build-wasm.sh` builds the three artifacts (core, typst,
+pdfform) sequentially; `runtime/runtime.js` maps each backend id to its build
+with a `{ formats }` manifest, drift-guarded by `runtime.test.js`.
 
 ## Non-goals
 
