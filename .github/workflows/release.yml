@@ -355,6 +355,21 @@ jobs:
             exit 1
           fi
 
+      - name: Install cargo-cyclonedx
+        uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2.87.21
+        with:
+          tool: cargo-cyclonedx@0.5.9
+
+      # The crates linked into the wasm binary, which a scan of the npm package
+      # cannot see inside. Published in the package as sbom.cdx.json.
+      - name: Generate SBOM
+        run: |
+          cargo cyclonedx --manifest-path crates/bindings/wasm/Cargo.toml \
+            --target wasm32-unknown-unknown --format json --spec-version 1.5 \
+            --override-filename quillmark-wasm.cdx
+          cp crates/bindings/wasm/quillmark-wasm.cdx.json pkg/sbom.cdx.json
+          jq -e '.metadata.component.name == "quillmark-wasm" and (.components | length) > 0' pkg/sbom.cdx.json >/dev/null
+
       - name: Install npm test dependencies
         working-directory: crates/bindings/wasm
         run: npm install
