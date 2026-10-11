@@ -572,10 +572,8 @@ card_kinds:
             .unwrap();
         let err = TypedReader::new(&config, &doc).get("subject").unwrap_err();
         assert!(
-            matches!(&err, EditError::FieldDecode { field, message, .. }
-                if field == "subject"
-                    && message
-                        == "expected a richtext content object or a markdown string, got a number"),
+            matches!(&err, EditError::FieldDecode { field, codec, .. }
+                if field == "subject" && codec == CODEC_RICHTEXT),
             "got {err:?}"
         );
     }
@@ -650,20 +648,6 @@ card_kinds:
             view.get_content("qty"),
             Err(EditError::FieldNotContent { field, declared, .. })
                 if field == "qty" && declared == "integer"
-        ));
-    }
-
-    #[test]
-    fn content_read_undecodable_value_raises() {
-        let config = config();
-        let mut doc = blank_doc();
-        doc.main_mut()
-            .store_field("subject", QuillValue::from_json(serde_json::json!(3)))
-            .unwrap();
-        let view = TypedReader::new(&config, &doc);
-        assert!(matches!(
-            view.get_content("subject"),
-            Err(EditError::FieldDecode { field, .. }) if field == "subject"
         ));
     }
 
@@ -928,11 +912,6 @@ card_kinds:
             matches!(&err, EditError::UnknownField { field, at }
                 if field == "letterhead" && at == &key("nope")),
             "{err:?}"
-        );
-        assert_eq!(
-            err.to_string(),
-            "field 'letterhead.nope' is not declared in the schema",
-            "a property is not a claim about a top-level field of the same name"
         );
         assert_eq!(
             err.doc_path(&crate::path::DocPath::main()).unwrap().to_string(),

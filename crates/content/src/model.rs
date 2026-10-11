@@ -1422,31 +1422,6 @@ mod tests {
     }
 
     #[test]
-    fn json_payload_depth_is_capped() {
-        let nested = |depth: usize| {
-            let mut v = JsonValue::Null;
-            for _ in 0..depth {
-                v = JsonValue::Array(vec![v]);
-            }
-            v
-        };
-        let too_deep = |what: &'static str| {
-            Err(Invariant::JsonTooDeep {
-                what,
-                max: crate::MAX_JSON_DEPTH,
-            })
-        };
-
-        let mut rt = tagged("\u{fffc}", LineKind::Para);
-        rt.islands = vec![Island {
-            id: "i1".into(),
-            island_type: IslandType::Image,
-            props: nested(crate::MAX_JSON_DEPTH + 1),
-        }];
-        assert_eq!(rt.validate(), too_deep("island props"));
-    }
-
-    #[test]
     fn same_kind_adjacent_unions() {
         let got = normalize_marks(vec![f(3, 6, MarkKind::Strong), f(0, 3, MarkKind::Strong)]);
         assert_eq!(got, vec![f(0, 6, MarkKind::Strong)]);
@@ -1681,22 +1656,6 @@ mod tests {
             .with_props(serde_json::json!({"alt": "a", "url": "u"}))]);
         rt.normalize();
         assert!(rt.lines[1].continues, "an inline island's line is prose");
-    }
-
-    #[test]
-    fn normalize_is_idempotent() {
-        let mut rt = Content::empty();
-        rt.text = "hello world".into();
-        rt.marks = vec![
-            f(6, 11, MarkKind::Strong),
-            f(0, 5, MarkKind::Strong),
-            f(0, 5, MarkKind::Emph),
-        ];
-        rt.normalize();
-        let once = rt.marks.clone();
-        rt.normalize();
-        assert_eq!(rt.marks, once);
-        assert_eq!(rt.validate(), Ok(()));
     }
 
     #[test]

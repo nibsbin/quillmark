@@ -1146,45 +1146,18 @@ mod tests {
         }
     }
 
-    /// `array_fields` and `object_fields` are one shape, so one predicate reads
-    /// both steps.
     #[test]
-    fn a_typed_table_row_publishes_its_property_names() {
+    fn an_address_resolves_exactly_the_steps_its_schema_declares() {
         let meta = meta_from(serde_json::json!({
             "properties": {
+                "subject": { "type": "string" },
+                "body": richtext_field(),
+                "sections": { "type": "array", "items": richtext_field() },
                 "tags": { "type": "array", "items": { "type": "string" } },
                 "refs": { "type": "array", "items": { "type": "object", "properties": {
                     "org": { "type": "string" },
                     "num": { "type": "string" },
                 }}},
-            }
-        }));
-        // A primitive-element array offers the index step and nothing past it.
-        let tags = meta.root.resolve("tags.0").expect("tags.0");
-        assert!(tags.props.is_empty() && tags.item.is_none());
-        assert_eq!(
-            meta.root
-                .resolve("refs.0")
-                .expect("refs.0")
-                .props
-                .keys()
-                .cloned()
-                .collect::<Vec<_>>(),
-            vec!["num".to_string(), "org".to_string()],
-        );
-    }
-
-    /// A variant container's cells reach the table a typed dictionary's do,
-    /// and a richtext field stays out of it, offering no property step.
-    #[test]
-    fn object_fields_table_carries_every_declared_container() {
-        let meta = meta_from(serde_json::json!({
-            "properties": {
-                "subject": { "type": "string" },
-                "body": richtext_field(),
-                "address": { "type": "object", "properties": {
-                    "city": { "type": "string" },
-                }},
                 "classification": { "type": "object", "properties": {
                     "value": { "type": "string", "enum": ["", "CUI"] },
                     "poc": { "type": "string" },
@@ -1194,19 +1167,26 @@ mod tests {
                 "origin": { "type": "object", "properties": { "office": { "type": "string" } } },
             }}}
         }));
-        assert!(meta.root.resolve("address.city").is_some());
-        assert!(meta.root.resolve("classification.value").is_some());
-        assert!(meta.root.resolve("classification.poc").is_some());
-        // A scalar and a richtext field each offer no step.
-        assert!(meta.root.resolve("subject.anything").is_none());
-        assert!(meta.root.resolve("body.text").is_none());
+        for (path, declared) in [
+            ("sections.0", true),
+            ("tags.0", true),
+            ("refs.0.org", true),
+            ("refs.0.num", true),
+            ("classification.value", true),
+            ("classification.poc", true),
+            ("subject.0", false),
+            ("subject.anything", false),
+            ("body.0", false),
+            ("body.text", false),
+            ("sections.0.anything", false),
+            ("tags.0.anything", false),
+            ("tags.0.0", false),
+            ("refs.0.missing", false),
+        ] {
+            assert_eq!(meta.root.resolve(path).is_some(), declared, "{path}");
+        }
         assert!(meta.cards["note"].resolve("origin.office").is_some());
-
-        let (lib, _) = generate_lib_typ(&serde_json::json!({}), &meta).unwrap();
-        assert!(
-            lib.contains("\"cards\": (\"note\": (\"props\": (\"origin\": (\"props\": (\"office\": (:),),),),),)"),
-            "{lib}"
-        );
+        assert!(meta.cards["note"].resolve("origin.missing").is_none());
     }
 
     /// A richtext field is `type: object` and would answer the object arm, so

@@ -38,6 +38,7 @@ fn test_structural_violations_are_refused() {
         ("scalar $ext", "~~~card-yaml\n$quill: q\n$kind: main\n$ext: just-a-string\n~~~".to_string()),
         ("scalar $seed", "~~~card-yaml\n$quill: q\n$kind: main\n$seed: just-a-string\n~~~".to_string()),
         ("non-ASCII field name", "~~~card-yaml\n$quill: q\n$kind: main\nタイトル: x\n~~~".to_string()),
+        ("field name NFC folds to ASCII", "~~~card-yaml\n$quill: q\n$kind: main\n\u{212A}elvin: v\n~~~".to_string()),
         ("field name with a space", "~~~card-yaml\n$quill: q\n$kind: main\nbad name: v\n~~~".to_string()),
     ] {
         let err = decompose(&markdown).expect_err(label);
@@ -640,16 +641,6 @@ fn payload_field_order_preserved_after_quill_removal() {
         keys,
         vec!["sender", "recipient", "date", "subject"],
         "Payload fields must preserve insertion order"
-    );
-}
-
-#[test]
-fn a_user_field_named_id_is_untouched() {
-    let md = "~~~\n$quill: q@0.1\n~~~\n\n~~~\n$kind: note\nid: a\n~~~\n";
-    let doc = Document::parse(md).unwrap().document;
-    assert_eq!(
-        doc.cards()[0].payload().get("id").map(|v| v.as_json().clone()),
-        Some(serde_json::json!("a"))
     );
 }
 

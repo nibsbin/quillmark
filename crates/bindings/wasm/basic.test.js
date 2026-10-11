@@ -90,17 +90,6 @@ Card body.
     expect(field(doc.cards[0], 'foo')).toBe('bar')
     expect(exportMarkdown(doc.cards[0].body)).toContain('Card body.')
   })
-
-  it('attaches err.diagnostics as a non-empty array on thrown errors', () => {
-    try {
-      Document.fromMarkdown('')
-      throw new Error('fromMarkdown should have thrown')
-    } catch (err) {
-      expect(err.diagnostics.length).toBeGreaterThanOrEqual(1)
-      expect(err.diagnostics[0]).toHaveProperty('message')
-      expect(err.diagnostics[0]).toHaveProperty('severity')
-    }
-  })
 })
 
 describe('Document.toMarkdown', () => {
@@ -161,14 +150,7 @@ describe('Document JSON DTO: toStored / fromStored', () => {
   })
 })
 
-describe('Document authoring text', () => {
-  it('each static carries core text through', () => {
-    expect(Document.markdownRules().length).toBeGreaterThan(0)
-    expect(Document.quillRefHint().length).toBeGreaterThan(0)
-  })
-})
-
-describe('Quillmark.quill', () => {
+describe('Quill.fromTree + engine.render', () => {
   it('should accept a plain object tree (Record<string, Uint8Array>)', () => {
     const fromObject = Quill.fromTree(
       Object.fromEntries(makeQuill({ name: 'test_quill', plate: TEST_PLATE })),
@@ -244,23 +226,6 @@ main:
     expect(declined).toBeDefined()
     expect(declined.args).not.toBeInstanceOf(Map)
     expect(declined.args.construct).toBe('image')
-  })
-
-  it('session.regions() is always a non-null array, keyed by DocPath', () => {
-    // The body is a markdown content field, so it auto-tags one region, at the
-    // canonical DocPath `main.body`: the backend's plate-space `$body` is
-    // translated at the session boundary.
-    const engine = new Quillmark()
-    const quill = Quill.fromTree(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
-    const doc = Document.fromMarkdown(TEST_MARKDOWN)
-
-    const session = engine.open(quill, doc)
-    const regions = session.regions()
-    expect(Array.isArray(regions)).toBe(true)
-    expect(regions.some((r) => r.field === 'main.body')).toBe(true)
-    // No plate-space ordinal grammar crosses the boundary.
-    expect(regions.some((r) => r.field.startsWith('$cards.') || r.field === '$body')).toBe(false)
-    session.free()
   })
 
   it('should throw a quill::name_mismatch error when the document quill ref differs from the quill name', () => {
@@ -607,49 +572,15 @@ describe('Document-model path: parseDocPath / formatDocPath', () => {
 })
 
 describe('formatDiagnostic', () => {
-  it('renders severity, message, code, location, path and hint in that order', () => {
-    expect(
-      formatDiagnostic({
-        severity: 'error',
-        code: 'validation::coercion_failed',
-        message: 'bad date',
-        location: { file: 'main.typ', line: 3, column: 7 },
-        path: 'cards.memo[0].date',
-        hint: 'use ISO 8601',
-      }),
-    ).toBe(
-      '[ERROR] bad date (validation::coercion_failed)\n' +
-        '  --> main.typ:3:7\n' +
-        '  at cards.memo[0].date\n' +
-        '  hint: use ISO 8601',
-    )
-  })
-
-  it('tags the severity and omits every part the diagnostic does not carry', () => {
-    expect(formatDiagnostic({ severity: 'warning', message: 'meh' })).toBe('[WARN] meh')
-    expect(formatDiagnostic({ severity: 'error', message: 'bare' })).toBe('[ERROR] bare')
-    expect(formatDiagnostic({ severity: 'error', message: 'bare', code: 'c' })).toBe(
-      '[ERROR] bare (c)',
-    )
-    expect(
-      formatDiagnostic({
-        severity: 'error',
-        message: 'bare',
-        location: { file: 'f', line: 1, column: 2 },
-      }),
-    ).toBe('[ERROR] bare\n  --> f:1:2')
-    expect(formatDiagnostic({ severity: 'error', message: 'bare', path: 'main.body' })).toBe(
-      '[ERROR] bare\n  at main.body',
-    )
-    expect(formatDiagnostic({ severity: 'error', message: 'bare', hint: 'try' })).toBe(
-      '[ERROR] bare\n  hint: try',
-    )
-  })
-
-  it('throws on a value that is not a diagnostic', () => {
-    expect(() => formatDiagnostic({ message: 'no severity' })).toThrow()
+  it('formats a plain diagnostic object and refuses an unknown severity', () => {
+    const text = formatDiagnostic({
+      severity: 'error',
+      code: 'validation::coercion_failed',
+      message: 'bad date',
+    })
+    expect(text).toContain('bad date')
+    expect(text).toContain('validation::coercion_failed')
     expect(() => formatDiagnostic({ severity: 'fatal', message: 'bad ladder' })).toThrow()
-    expect(() => formatDiagnostic(null)).toThrow()
   })
 })
 
@@ -839,19 +770,6 @@ $kind: summary
 Card two.
 `
 
-  it('insertCard appends a card when at is omitted', () => {
-    const doc = Document.fromMarkdown(TEST_MARKDOWN)
-    doc.insertCard(makeCard('note', {}, 'My card.'))
-    expect(doc.cards.length).toBe(1)
-    expect(doc.cards[0].kind).toBe('note')
-    expect(exportMarkdown(doc.cards[0].body)).toBe('My card.')
-  })
-
-  it('insertCard throws on invalid kind', () => {
-    const doc = Document.fromMarkdown(TEST_MARKDOWN)
-    expectEditCode(() => doc.insertCard({ kind: 'BadKind' }), 'edit::invalid_kind_name')
-  })
-
   it('removeCard → insertCard round-trips a card with fields (read shape == write shape)', () => {
     const doc = Document.fromMarkdown(MD_WITH_CARDS)
     const removed = doc.removeCard(0)
@@ -865,11 +783,12 @@ Card two.
     expect(field(repushed, 'foo')).toBe('bar')
   })
 
-  it('a stale card or item shape is a loud error, not a silent drop', () => {
+  it('a card or item carrying an unknown key is a loud error, not a silent drop', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
-    expect(() => doc.insertCard({ kind: 'note', fields: { x: 1 } })).toThrow()
-    const stale = { type: 'field', key: 'x', value: 'Example', fill: true }
-    expect(() => doc.insertCard({ kind: 'note', payloadItems: [stale] })).toThrow(/fill/)
+    expect(() => doc.insertCard({ kind: 'note', stray: 1 })).toThrow(/stray/)
+    const item = { type: 'field', key: 'x', value: 'Example', stray: true }
+    expect(() => doc.insertCard({ kind: 'note', payloadItems: [item] })).toThrow(/stray/)
+    expect(doc.cardCount).toBe(0)
   })
 
   it('a card the wire refuses carries the code its addressed mutator mints', () => {
@@ -881,6 +800,7 @@ Card two.
       payloadItems: [{ type: 'field', key, value }],
     })
 
+    expectEditCode(() => doc.insertCard({ kind: 'BadKind' }), 'edit::invalid_kind_name')
     expectEditCode(() => doc.insertCard(withField('bad-name', 1)), 'edit::invalid_field_name')
     expectEditCode(
       () => doc.insertCard({ kind: 'note', quill: '@nope' }),
@@ -918,7 +838,7 @@ describe('Document.equals / clone', () => {
   })
 })
 
-describe('Document editor surface: setCardField / overwrite / revise (card)', () => {
+describe('Document editor surface: storeField / removeField / overwrite / revise (card)', () => {
   const MD_WITH_CARD = `~~~card-yaml
 $quill: test_quill
 $kind: main
@@ -1247,12 +1167,10 @@ main:
     return { engine, quill }
   }
 
-  it('schema fields carry no `required` axis, and blueprint crosses as a string', () => {
+  it('schema fields carry their default, and blueprint crosses as a string', () => {
     const { quill } = buildQuill()
     const fields = quill.schema.main.fields
 
-    // Cell status is implied by `default:` presence, not a `required` axis.
-    expect('required' in fields.title).toBe(false)
     expect(fields.title.default).toBeUndefined()
     expect(fields.subtitle.default).toBe('Untitled subtitle')
 

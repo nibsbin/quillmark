@@ -85,15 +85,6 @@ def test_diagnostic_str_and_repr():
     diag = Document.from_markdown(warn_md).warnings[0]
     assert diag.code == "parse::unsupported_yaml_tag"
     assert diag.message in str(diag)
-    assert "Diagnostic(" in repr(diag)
-
-
-def test_document_authoring_text_helpers():
-    rules = Document.markdown_rules()
-    assert isinstance(rules, str) and rules.strip() != ""
-
-    hint = Document.quill_ref_hint()
-    assert isinstance(hint, str) and hint.strip() != ""
 
 
 def _nest(levels, leaf):

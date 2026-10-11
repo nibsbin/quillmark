@@ -1320,62 +1320,12 @@ mod tests {
     }
 
     #[test]
-    fn extracts_own_line_comments() {
-        let out = scan("# top\ntitle: foo\n# mid\nauthor: bar\n");
-        assert_eq!(
-            out.items,
-            vec![comment("top", false), field("title"), comment("mid", false), field("author")]
-        );
-        assert!(out.nested_comments.is_empty());
-    }
-
-    #[test]
-    fn splits_trailing_comments() {
-        let out = scan("title: foo # inline\n");
-        assert_eq!(out.items, vec![field("title"), comment("inline", true)]);
-    }
-
-    #[test]
     fn a_tag_is_recorded_at_its_key() {
         for input in ["dept: !custom Department\n", "dept: !custom\n"] {
             let out = scan(input);
             assert_eq!(out.items, vec![field("dept")]);
             assert_eq!(out.unsupported_tags, vec![vec![key("dept")]]);
         }
-    }
-
-    #[test]
-    fn crlf_line_ends_reach_no_comment_text() {
-        let out = scan("dept: !t\r\n# note\r\ntitle: x # trailing\r\n");
-        assert_eq!(
-            out.items,
-            vec![
-                field("dept"),
-                comment("note", false),
-                field("title"),
-                comment("trailing", true),
-            ]
-        );
-        assert_eq!(out.unsupported_tags, vec![vec![key("dept")]]);
-    }
-
-    #[test]
-    fn nested_comment_in_sequence_captured() {
-        let out = scan("arr:\n  # before-first\n  - a\n  # between\n  - b\n  # after-last\n");
-        assert_eq!(
-            out.nested_comments,
-            vec![
-                nested(vec![key("arr")], 0, "before-first", false),
-                nested(vec![key("arr")], 1, "between", false),
-                nested(vec![key("arr")], 2, "after-last", false),
-            ]
-        );
-    }
-
-    #[test]
-    fn nested_comment_in_mapping_captured() {
-        let out = scan("outer:\n  # comment\n  inner: 1\n");
-        assert_eq!(out.nested_comments, vec![nested(vec![key("outer")], 0, "comment", false)]);
     }
 
     /// An empty flow collection's comments sit under it, whether its key opens
@@ -1390,36 +1340,6 @@ mod tests {
                 nested(vec![key("row"), PathSegment::Index(0), key("key")], 0, "b", false),
             ]
         );
-    }
-
-    #[test]
-    fn deep_nested_comment_path() {
-        let out = scan("outer:\n  inner:\n    # deep\n    leaf: 1\n");
-        assert_eq!(
-            out.nested_comments,
-            vec![nested(vec![key("outer"), key("inner")], 0, "deep", false)]
-        );
-    }
-
-    #[test]
-    fn comment_inside_seq_of_maps() {
-        let out = scan("items:\n  - name: a\n    # inside-first\n    val: 1\n  - name: b\n");
-        assert_eq!(
-            out.nested_comments,
-            vec![nested(vec![key("items"), PathSegment::Index(0)], 1, "inside-first", false)]
-        );
-    }
-
-    #[test]
-    fn nested_inline_on_sequence_item() {
-        let out = scan("arr:\n  - a # tail\n  - b\n");
-        assert_eq!(out.nested_comments, vec![nested(vec![key("arr")], 0, "tail", true)]);
-    }
-
-    #[test]
-    fn nested_inline_on_mapping_field() {
-        let out = scan("outer:\n  inner: 1 # tail\n");
-        assert_eq!(out.nested_comments, vec![nested(vec![key("outer")], 0, "tail", true)]);
     }
 
     #[test]

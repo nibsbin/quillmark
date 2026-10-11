@@ -566,12 +566,19 @@ mod tests {
     }
 
     #[test]
-    fn set_quill_inserts_at_position_zero() {
+    fn meta_setters_insert_in_canonical_order() {
         let mut fm = Payload::new();
+        fm.insert("title", qv("Hi")).unwrap();
+        fm.set_seed(JsonMap::new());
+        fm.set_ext(JsonMap::new());
         fm.set_kind("main");
         fm.set_quill("foo@0.1".parse().unwrap());
-        assert!(matches!(fm.items()[0], PayloadItem::Quill { .. }));
-        assert!(matches!(fm.items()[1], PayloadItem::Kind { .. }));
+        let items = fm.items();
+        assert!(matches!(items[0], PayloadItem::Quill { .. }));
+        assert!(matches!(items[1], PayloadItem::Kind { .. }));
+        assert!(matches!(items[2], PayloadItem::Meta { key: MetaKey::Ext, .. }));
+        assert!(matches!(items[3], PayloadItem::Meta { key: MetaKey::Seed, .. }));
+        assert!(matches!(items[4], PayloadItem::Field { .. }));
     }
 
     #[test]

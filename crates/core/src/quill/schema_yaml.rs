@@ -41,25 +41,50 @@ card_kinds:
 "#;
 
     #[test]
-    fn schema_includes_ui() {
-        let config = cfg(FULL);
-        let yaml = config.schema_yaml().unwrap();
-        assert!(yaml.contains("values:") && yaml.contains("type: integer"));
-        assert!(yaml.contains("card_kinds:") && yaml.contains("indorsement:"));
-        assert!(yaml.contains("ui:") && yaml.contains("group: meta"));
-    }
-
-    #[test]
-    fn omits_card_kinds_when_absent() {
-        let yaml = cfg(r#"
-quill: { name: solo, version: "1.0", backend: typst, description: x }
+    fn schema_keys_emit_in_declaration_order() {
+        let schema = cfg(r#"
+quill: { name: order, version: "1.0", backend: typst, description: x }
 main:
+  ui:
+    groups: [g]
   fields:
-    title: { type: string }
+    zeta:
+      type: enum
+      values: [b, a]
+      ui: { group: g }
+      default: b
+      description: d
+      title: T
+    alpha:
+      type: object
+      properties:
+        yankee: { type: string }
+        bravo: { type: integer }
+    mike:
+      type: richtext
+      inline: true
+      ui: { group: g }
+card_kinds:
+  zulu:
+    fields:
+      x: { type: string }
+  alpha:
+    fields:
+      y: { type: string }
 "#)
-        .schema_yaml()
-        .unwrap();
-        assert!(yaml.contains("main:") && !yaml.contains("card_kinds:"));
+        .schema();
+        let keys = |v: &serde_json::Value| -> Vec<String> {
+            v.as_object().unwrap().keys().cloned().collect()
+        };
+        let fields = &schema["main"]["fields"];
+        assert_eq!(keys(fields), ["zeta", "alpha", "mike"]);
+        assert_eq!(keys(&fields["alpha"]["properties"]), ["yankee", "bravo"]);
+        assert_eq!(keys(&schema["card_kinds"]), ["zulu", "alpha"]);
+        assert_eq!(
+            keys(&fields["zeta"]),
+            ["type", "title", "description", "default", "ui", "values"]
+        );
+        assert_eq!(keys(&fields["mike"]), ["type", "ui", "inline"]);
     }
 
     #[test]

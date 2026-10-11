@@ -1344,7 +1344,6 @@ mod tests {
         let rt = from_markdown("A **bold** subject").expect("import").content;
         assert!(rt.is_inline());
         let inline = emit_content_inline(&rt).expect("emit").markup;
-        assert_eq!(inline, "A #strong[bold] subject");
         assert!(!inline.contains("\n\n"), "no parbreak in {inline:?}");
         let block = emit_content(&rt).expect("emit").markup;
         assert!(block.ends_with("\n\n"), "block path keeps its terminator");

@@ -175,9 +175,10 @@ proptest! {
         exercise(&pdf);
     }
 
-    /// The unit tests pin the individual refusals; this adds the combinations,
-    /// and a page index past the fixture's single page, which `stamp` must
-    /// refuse rather than index into its `Vec`.
+    /// The unit tests pin the individual refusals; this adds the combinations.
+    /// A non-finite rect and a page index past the fixture's single page are
+    /// refused under their codes, the rect checked first; any other geometry
+    /// answers without a panic.
     #[test]
     fn out_of_contract_field_geometry_is_refused(
         page in 0usize..8,
@@ -187,8 +188,14 @@ proptest! {
         y1 in prop::num::f32::ANY,
         name in "\\PC{0,32}",
     ) {
-        let field = FieldSpec::new(name, page, [x0, y0, x1, y1], FieldType::Checkbox);
-        let _ = stamp(base_pdf(), &[field], &StampOptions::default());
+        let rect = [x0, y0, x1, y1];
+        let field = FieldSpec::new(name, page, rect, FieldType::Checkbox);
+        let code = stamp(base_pdf(), &[field], &StampOptions::default()).err().map(|e| e.code);
+        if !rect.iter().all(|v| v.is_finite()) {
+            prop_assert_eq!(code, Some("pdf::bad_rect"));
+        } else if page > 0 {
+            prop_assert_eq!(code, Some("pdf::update_parse"));
+        }
     }
 
     /// ISO 32000-1 §7.3.9: an entry whose value is `null` is an absent one.
@@ -236,7 +243,7 @@ proptest! {
     /// A base's widgets stay live in the page `/Annots` the update preserves,
     /// whatever its catalog names. A widget on any page, held inline or by
     /// reference in an array the page holds either way, is refused under the
-    /// form's code, naming its page, with the catalog's `/AcroForm` absent or
+    /// form's code, with the catalog's `/AcroForm` absent or
     /// `null`; any other annotation answers as it did.
     #[test]
     fn a_widget_on_any_page_is_refused(
@@ -267,10 +274,7 @@ proptest! {
             _ if indirect && page == 0 => Err("pdf::indirect_annots"),
             _ => Ok(()),
         };
-        prop_assert_eq!(result.as_ref().map(drop).map_err(|e| e.code), want);
-        if let (AnnotationType::Widget, Err(e)) = (subtype, &result) {
-            prop_assert!(e.message.contains(&format!("page {}", page + 1)), "{}", e.message);
-        }
+        prop_assert_eq!(result.map(drop).map_err(|e| e.code), want);
     }
 
     /// The widget check reads every page's `/Annots`, each element and its

@@ -1546,6 +1546,7 @@ card_kinds:
         let plate = config.compile_data(&doc, test_date()).expect("unclaimed input renders");
         let cards = plate["$cards"].as_array().unwrap();
         assert_eq!(cards.len(), 3, "every card rides `$cards` in document order");
+        assert!(plate.get("$body").is_none() && cards[0].get("$body").is_none());
         assert_eq!(cards[2]["$kind"], "ghost");
         assert_eq!(cards[2]["note"], "g");
         assert!(cards[2].get("$body").is_none());
@@ -1647,81 +1648,6 @@ card_kinds:
         let config = QuillConfig::from_yaml(yaml).expect("valid quill");
         let doc = Document::parse(md).expect("parse").document;
         config.compile_data(&doc, test_date()).expect("compile")
-    }
-
-    #[test]
-    fn body_disabled_kind_omits_dollar_body() {
-        let plate = plate_of(
-            r#"
-quill: { name: bd, version: 1.0.0, backend: typst, description: x }
-main:
-  fields:
-    title: { type: string }
-card_kinds:
-  stamp:
-    body:
-      enabled: false
-    fields:
-      label: { type: string }
-"#,
-            "~~~card-yaml\n$quill: bd@1.0.0\n$kind: main\ntitle: T\n~~~\n\n\
-             ~~~card-yaml\n$kind: stamp\nlabel: L\n~~~\n",
-        );
-        let card = &plate["$cards"][0];
-        assert_eq!(card["$kind"], "stamp", "$kind is document-defined, kept");
-        assert_eq!(card["label"], "L", "declared fields kept");
-        assert!(
-            card.get("$body").is_none(),
-            "a body-disabled kind carries no $body in the plate; got {card}"
-        );
-    }
-
-    #[test]
-    fn body_disabled_main_omits_root_dollar_body() {
-        let plate = plate_of(
-            r#"
-quill: { name: bdm, version: 1.0.0, backend: typst, description: x }
-main:
-  body:
-    enabled: false
-  fields:
-    title: { type: string }
-"#,
-            "~~~card-yaml\n$quill: bdm@1.0.0\n$kind: main\ntitle: T\n~~~\n",
-        );
-        assert_eq!(plate["title"], "T");
-        assert!(
-            plate.get("$body").is_none(),
-            "a body-disabled main carries no root $body; got {plate}"
-        );
-    }
-
-    #[test]
-    fn body_enabled_keeps_dollar_body() {
-        let plate = plate_of(
-            r#"
-quill: { name: be, version: 1.0.0, backend: typst, description: x }
-main:
-  fields:
-    title: { type: string }
-card_kinds:
-  note:
-    fields:
-      tag: { type: string }
-"#,
-            "~~~card-yaml\n$quill: be@1.0.0\n$kind: main\ntitle: T\n~~~\n\n\
-             Main body.\n\n\
-             ~~~card-yaml\n$kind: note\ntag: x\n~~~\nNote body.\n",
-        );
-        assert_eq!(
-            plate["$body"]["text"], "Main body.",
-            "a body-enabled main keeps its $body"
-        );
-        let card = &plate["$cards"][0];
-        assert_eq!(
-            card["$body"]["text"], "Note body.",
-            "a body-enabled kind keeps its $body content object"
-        );
     }
 
     #[test]

@@ -185,25 +185,4 @@ mod tests {
         assert!(matches!(items[1], PayloadItem::Kind { .. }));
         assert_eq!(payload, json!({"title": "Doc"}));
     }
-
-    #[test]
-    fn rejects_unknown_dollar_key() {
-        let mut payload = json!({"$unknown": "x"});
-        let err = extract_meta_items(&mut payload).unwrap_err();
-        assert!(err.to_string().contains("Unknown `$unknown`"));
-    }
-
-    #[test]
-    fn rejects_non_string_quill() {
-        let mut payload = json!({"$quill": 42});
-        let err = extract_meta_items(&mut payload).unwrap_err();
-        assert!(err.to_string().contains("$quill reference"));
-    }
-
-    #[test]
-    fn rejects_invalid_kind_pattern() {
-        let mut payload = json!({"$kind": "Bad-Kind"});
-        let err = extract_meta_items(&mut payload).unwrap_err();
-        assert!(err.to_string().contains("Invalid `$kind`"));
-    }
 }

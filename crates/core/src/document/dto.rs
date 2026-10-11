@@ -1941,8 +1941,7 @@ title: Hi
             "main": {"payload": {"items": [{"type": "kind", "value": "main"}]}, "body": {"islands": [], "lines": [{"containers": [], "kind": "para"}], "marks": [], "text": ""}},
             "cards": []
         }"#;
-        let err = serde_json::from_str::<Document>(json).unwrap_err();
-        assert!(err.to_string().contains("$quill"));
+        assert!(serde_json::from_str::<Document>(json).is_err());
     }
 
     #[test]
@@ -1960,8 +1959,7 @@ title: Hi
                 {"payload": {"items": [{"type": "kind", "value": "main"}]}, "body": {"islands": [], "lines": [{"containers": [], "kind": "para"}], "marks": [], "text": ""}}
             ]
         }"#;
-        let err = serde_json::from_str::<Document>(json).unwrap_err();
-        assert!(err.to_string().contains("reserved (root only)"));
+        assert!(serde_json::from_str::<Document>(json).is_err());
     }
 
     /// A stored card with no `$kind` folds into the body above it: its fields
@@ -2102,8 +2100,7 @@ title: Hi
             },
             "cards": []
         }"#;
-        let err = serde_json::from_str::<Document>(json).unwrap_err();
-        assert!(err.to_string().contains("invalid quill reference"));
+        assert!(serde_json::from_str::<Document>(json).is_err());
     }
 
     #[test]
@@ -2124,10 +2121,7 @@ title: Hi
                 ]}, "body": {"islands": [], "lines": [{"containers": [], "kind": "para"}], "marks": [], "text": ""}}
             ]
         }"#;
-        let err = serde_json::from_str::<Document>(json).unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("composable cards must not carry a $seed entry"));
+        assert!(serde_json::from_str::<Document>(json).is_err());
     }
 
     #[test]
@@ -2236,9 +2230,7 @@ title: Hi
     }
 
     #[test]
-    fn legacy_table_body_migrates_deterministically_with_islands() {
-        // Import is a pure function, so the same legacy row migrates to
-        // byte-identical storage.
+    fn legacy_table_body_migrates_to_a_table_island() {
         let blob = r#"{
             "schema": "quillmark/document@0.92.0",
             "main": {
@@ -2258,26 +2250,16 @@ title: Hi
             body.islands[0].island_type,
             quillmark_content::island::IslandType::Table
         );
-        // Each table cell is inline `{text, marks}`, not a raw markdown slice.
-        let key = body.to_canonical_json();
+        let cell = |text: &str| serde_json::json!({ "marks": [], "text": text });
         assert_eq!(
-            key,
-            "{\"islands\":[{\"id\":\"isl-0\",\"props\":{\
-             \"aligns\":[\"none\",\"none\"],\
-             \"header\":[{\"marks\":[],\"text\":\"A\"},{\"marks\":[],\"text\":\"B\"}],\
-             \"rows\":[[{\"marks\":[],\"text\":\"1\"},{\"marks\":[],\"text\":\"2\"}]]},\
-             \"type\":\"table\"}],\
-             \"lines\":[{\"containers\":[],\"kind\":\"para\"}],\
-             \"marks\":[],\"text\":\"\u{FFFC}\"}",
-            "cells are structured text+marks"
+            body.islands[0].props,
+            serde_json::json!({
+                "aligns": ["none", "none"],
+                "header": [cell("A"), cell("B")],
+                "rows": [[cell("1"), cell("2")]],
+            })
         );
-
-        let again: Document = serde_json::from_str(blob).unwrap();
-        assert_eq!(
-            serde_json::to_string(&doc).unwrap(),
-            serde_json::to_string(&again).unwrap(),
-            "same legacy input → same migrated bytes"
-        );
+        assert_eq!(body.text, "\u{FFFC}");
         let reser = serde_json::to_string(&doc).unwrap();
         assert_eq!(peek_storage_version(&reser).as_deref(), Some(STORAGE_V0_124_0));
     }

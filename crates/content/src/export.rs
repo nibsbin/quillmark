@@ -1679,6 +1679,7 @@ mod tests {
             ("heading_item", "- # Title\n\n  body text"),
             ("rule_item", "* ---"),
             ("thematic_break", "one\n\n***\n\ntwo"),
+            ("hard_break", "line one\\\nline two"),
             ("blockquote", "> quoted text"),
             ("link", "see [our site](https://example.com) now"),
             ("table", "| a | b |\n| --- | --- |\n| 1 | 2 |"),
@@ -1744,11 +1745,6 @@ mod tests {
     #[test]
     fn literal_asterisks_escaped() {
         round_trips("2 * 3 = 6 and a_b_c");
-    }
-
-    #[test]
-    fn hard_break_round_trips() {
-        round_trips("line one\\\nline two");
     }
 
     #[test]
@@ -2438,34 +2434,6 @@ mod tests {
         assert_eq!(rt, rt2);
         round_trips("# heading \\#\\#");
         round_trips("## title\\#");
-    }
-
-    /// An unescaped special in an image alt terminates the markup early:
-    /// `![a]b](x.png)` re-imports as prose with the image gone.
-    #[test]
-    fn image_alt_specials_round_trip() {
-        round_trips("see ![a\\]b](x.png) here");
-        round_trips("see ![a\\\\b](x.png) here");
-        round_trips("see ![a&b](x.png) here");
-        round_trips("see ![a\\*b\\_c](x.png) here");
-        let rt = from_markdown("see ![a\\]b](x.png) here").unwrap().content;
-        assert_eq!(rt.islands.len(), 1, "one image island");
-        assert_eq!(rt.islands[0].props["alt"], "a]b");
-        let md = to_markdown(&rt);
-        let rt2 = from_markdown(&md).unwrap().content;
-        assert_eq!(rt2.islands.len(), 1, "image survived, got md {md:?}");
-        assert_eq!(rt2.islands[0].props["alt"], "a]b");
-    }
-
-    #[test]
-    fn url_specials_round_trip() {
-        round_trips("a [t](<foo bar>) b");
-        round_trips("see [t](https://en.wikipedia.org/wiki/Rust_(programming_language)) x");
-        round_trips("see ![a](<x y.png>) here");
-        round_trips("see [t](<a )b>) x");
-        round_trips("see [t](<a&b>) x");
-        round_trips("see [t](<a\\<b\\>c>) x");
-        round_trips("see [t](<a\\\\b>) x");
     }
 
     #[test]

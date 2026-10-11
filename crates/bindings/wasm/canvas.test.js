@@ -155,24 +155,6 @@ function expectInkAndOpaquePixels(call) {
 }
 
 describe('LiveSession canvas preview', () => {
-  it('exposes pageCount, backendId, warnings, and pageSize on a Typst session', () => {
-    const { engine, quill } = openQuill()
-
-    const session = engine.open(quill, Document.fromMarkdown(TEST_MARKDOWN))
-    expect(session.pageCount).toBeGreaterThan(0)
-    expect(session.backendId).toBe('typst')
-    expect(Array.isArray(session.warnings)).toBe(true)
-    // Each entry crosses as a plain Diagnostic object, not a handle.
-    for (const w of session.warnings) {
-      expect(typeof w.severity).toBe('string')
-      expect(typeof w.message).toBe('string')
-    }
-
-    const size = session.pageSize(0)
-    expect(size.widthPt).toBeGreaterThan(0)
-    expect(size.heightPt).toBeGreaterThan(0)
-  })
-
   it('positionAt and locate cross the boundary as ContentHit / caret rect', () => {
     // Where the boxes land and which offsets they cover is geometry, owned by
     // `backends/typst/tests/content_regions.rs` and

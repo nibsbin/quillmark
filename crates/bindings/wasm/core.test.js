@@ -56,11 +56,10 @@ describe('@quillmark/wasm/core surface', () => {
     expect(doc).toBeInstanceOf(Document)
 
     const main = quill.seedMain()
-    expect(main).toBeDefined()
+    expect(main.kind).toBe('main')
+    expect(main.payloadItems).toEqual([])
 
-    // A seeded document validates clean (array of diagnostics, empty here).
-    const diags = quill.validate(doc)
-    expect(Array.isArray(diags)).toBe(true)
+    expect(quill.validate(doc)).toEqual([])
   })
 
   it("emptyDocument is the blank document under the quill's own reference", () => {
@@ -139,30 +138,6 @@ card_kinds:
 // The core bundle's reason to exist is the editor: the full Document mutation +
 // persistence surface must work with Typst absent, not merely be present.
 describe('@quillmark/wasm/core Document editing (Typst-free)', () => {
-  it('builds, mutates, and round-trips a document with no engine', () => {
-    const doc = Document.fromMarkdown(`~~~
-$quill: core_test
-$kind: main
-title: Draft
-~~~
-
-# Body`)
-
-    // Edit the main card and append a composable card.
-    doc.storeField('title', 'Final')
-    doc.insertCard(makeCard('note', { author: 'Alice' }, 'A note.'))
-    expect(doc.cardCount).toBe(1)
-    expect(doc.cards[0].kind).toBe('note')
-
-    doc.storeField({ card: 0, field: 'author' }, 'Bob')
-    expect(field(doc.cards[0], 'author')).toBe('Bob')
-
-    expect(Document.fromStored(doc.toStored()).equals(doc)).toBe(true)
-
-    doc.removeCard(0)
-    expect(doc.cardCount).toBe(0)
-  })
-
   it('keyed card reads mirror the card write verbs', () => {
     const doc = Document.fromMarkdown(`~~~
 $quill: core_test
@@ -199,12 +174,11 @@ title: Draft
 # Body`)
     doc.insertCard({ kind: 'note', body: 'A' })
     doc.insertCard({ kind: 'note', body: 'B' })
-    // `id` is not a CardInput key: the allow-list rejects it like any unknown.
-    expect(() => doc.insertCard({ kind: 'note', id: 'first', body: 'C' })).toThrow()
+    expect(() => doc.insertCard({ kind: 'note', stray: 'x', body: 'C' })).toThrow(/stray/)
 
     // card(i) reads one whole card without materializing the cards array.
     expect(doc.card(1).kind).toBe('note')
-    expect(doc.card(1).id).toBeUndefined()
+    expect(doc.card(1).body.text).toBe('B')
     expect(() => doc.card(2)).toThrow() // out of range is a boundary error
 
     // seedOverlay reads one $seed[kind] entry off the main card cheaply, the

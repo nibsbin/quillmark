@@ -99,25 +99,20 @@ def test_engine_render_regions_sidecar(engine, taro_quill_dir, taro_md):
     assert any(r["span"] is not None for r in body_segments)
 
 
-def test_parse_error_carries_diagnostics():
-    """Parse failures raise QuillmarkError with a non-empty `.diagnostics` list."""
+def test_parse_and_load_errors_carry_coded_diagnostics(tmp_path):
+    """A parse failure and a malformed config each raise QuillmarkError with a
+    non-empty, coded `.diagnostics` list; a malformed config fails at
+    `Quill.from_path`, not at render."""
     invalid_md = "~~~card-yaml\n$quill: test_quill\n$kind: main\ntitle: [unclosed bracket\n~~~\n"
-    with pytest.raises(QuillmarkError) as exc_info:
-        Document.from_markdown(invalid_md)
-    assert exc_info.value.diagnostics
-    assert all(d.code for d in exc_info.value.diagnostics)
-
-
-def test_quill_load_error_carries_diagnostics(tmp_path):
-    """A malformed config fails at `Quill.from_path`; only backend resolution
-    is deferred to render."""
     bogus = tmp_path / "not_a_quill"
     bogus.mkdir()
     (bogus / "Quill.yaml").write_text("quill: { name: x }\n")
 
-    with pytest.raises(QuillmarkError) as exc_info:
-        Quill.from_path(str(bogus))
-    assert exc_info.value.diagnostics
+    for call in (lambda: Document.from_markdown(invalid_md), lambda: Quill.from_path(str(bogus))):
+        with pytest.raises(QuillmarkError) as exc_info:
+            call()
+        assert exc_info.value.diagnostics
+        assert all(d.code for d in exc_info.value.diagnostics)
 
 
 def test_render_dates_a_today_field(engine, tmp_path):

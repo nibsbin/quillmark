@@ -982,35 +982,20 @@ main:
     }
 
     #[test]
-    fn date_type_mismatch_names_date_not_string() {
-        let config = config_with("    due:\n      type: date", "");
-        let doc = doc_from_fm(&[("due", json!(20260101))]);
-        let errors = validate_typed_document(&config, &doc).unwrap_err();
-        let err = errors
-            .iter()
-            .find(|e| matches!(e, ValidationError::TypeMismatch { path, .. } if path == "main.due"))
-            .expect("expected a type mismatch on main.due");
-        assert!(
-            err.to_string().contains("schema declares `date`"),
-            "message should name the date type, got: {err}"
+    fn a_string_backed_type_mismatch_names_its_declared_type() {
+        let config = config_with(
+            "    due:\n      type: date\n    lvl:\n      type: enum\n      values: [a, b]",
+            "",
         );
-        assert_eq!(err.args().get("expected"), Some(&json!("date")));
-    }
-
-    #[test]
-    fn enum_type_mismatch_names_enum_not_string() {
-        let config = config_with("    lvl:\n      type: enum\n      values: [a, b]", "");
-        let doc = doc_from_fm(&[("lvl", json!(["a", "b"]))]);
+        let doc = doc_from_fm(&[("due", json!(20260101)), ("lvl", json!(["a", "b"]))]);
         let errors = validate_typed_document(&config, &doc).unwrap_err();
-        let err = errors
-            .iter()
-            .find(|e| matches!(e, ValidationError::TypeMismatch { path, .. } if path == "main.lvl"))
-            .expect("expected a type mismatch on main.lvl");
-        assert!(
-            err.to_string().contains("schema declares `enum`"),
-            "message should name the enum type, got: {err}"
-        );
-        assert_eq!(err.args().get("expected"), Some(&json!("enum")));
+        for (field, declared) in [("main.due", "date"), ("main.lvl", "enum")] {
+            let err = errors
+                .iter()
+                .find(|e| matches!(e, ValidationError::TypeMismatch { path, .. } if path == field))
+                .unwrap_or_else(|| panic!("no type mismatch on {field}: {errors:?}"));
+            assert_eq!(err.args().get("expected"), Some(&json!(declared)), "{field}");
+        }
     }
 
     #[test]

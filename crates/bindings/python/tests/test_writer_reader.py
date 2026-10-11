@@ -194,9 +194,9 @@ def test_markdown_writes_return_their_drops_at_the_body_written():
     assert quill.reader(doc).body_markdown(card=1) == "c d"
 
 
-def test_view_interprets_by_declared_type():
-    """view.get reads richtext as markdown, a scalar as its canonical value,
-    absence as None; an undeclared name raises."""
+def test_reader_interprets_by_declared_type():
+    """reader.get reads richtext as markdown, absence as None; an undeclared
+    name raises."""
     quill = richtext_quill()
     doc = Document("sample_form@0.1.0")
     w = quill.writer(doc)
@@ -208,13 +208,8 @@ def test_view_interprets_by_declared_type():
     with raises_edit_code("edit::unknown_field"):
         v.get("nope")
 
-    taro = taro_quill()
-    tdoc = Document("taro@0.1.0")
-    taro.writer(tdoc).set("author", "Ada")
-    assert taro.reader(tdoc).get("author") == "Ada"
 
-
-def test_view_richtext_holding_scalar_raises_mismatch():
+def test_reader_richtext_holding_scalar_raises_mismatch():
     """A present value that does not decode as richtext raises FieldDecode.
 
     Seated quill-free via `from_markdown`: a bare number under a richtext field."""
@@ -226,7 +221,7 @@ def test_view_richtext_holding_scalar_raises_mismatch():
         quill.reader(doc).get("bio")
 
 
-def test_view_get_content_spans_both_storage_forms():
+def test_reader_get_content_spans_both_storage_forms():
     """get_content returns the corpus whichever lane built the document.
 
     The writer commits a canonical content dict; a markdown parse leaves the
@@ -249,7 +244,7 @@ def test_view_get_content_spans_both_storage_forms():
     assert b["marks"] == a["marks"]
 
 
-def test_view_get_content_absence_unknown_and_non_content():
+def test_reader_get_content_absence_unknown_and_non_content():
     """Absent → None; an undeclared name and a non-content type each raise."""
     quill = richtext_quill()
     assert quill.reader(Document("sample_form@0.1.0")).get_content("bio") is None
@@ -380,8 +375,8 @@ def test_get_content_at_path_and_card_selector(element_quill):
         v.get_content_at("rows", "notes")
 
 
-def test_view_body_read_is_quill_free():
-    """view.body_markdown reads the main body markdown: the quill-free body read."""
+def test_reader_body_markdown_reads_the_main_body():
+    """reader.body_markdown() with no card reads the main body markdown."""
     quill = taro_quill()
     doc = Document("taro@0.1.0")
     quill.writer(doc).revise_body("A **taro** essay.")
