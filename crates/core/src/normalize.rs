@@ -45,44 +45,29 @@ fn normalize_card(card: &Card) -> Card {
 
 #[cfg(test)]
 mod tests {
+    use crate::document::{Card, Document, Payload};
+    use crate::value::QuillValue;
 
     #[test]
-    fn test_normalize_document_idempotent() {
-        use crate::document::Document;
-
-        let doc =
-            Document::parse("~~~card-yaml\n$quill: test\n$kind: main\n~~~\n\n<<content>>")
-                .unwrap()
-                .document;
-        let normalized_once = super::normalize_document(doc);
-        let normalized_twice = super::normalize_document(normalized_once.clone());
-
-        assert_eq!(
-            normalized_once.main().body_markdown(),
-            normalized_twice.main().body_markdown()
-        );
-    }
-
-    #[test]
-    fn test_normalize_document_yaml_field_bidi_preserved() {
-        use crate::document::Document;
-
-        let doc = Document::parse(
-            "~~~card-yaml\n$quill: test\n$kind: main\ntitle: a\u{202D}b\n~~~\n",
-        )
-        .unwrap()
-        .document;
+    fn a_non_nfc_key_renames_to_nfc_in_place() {
+        let card = |kind: &str| {
+            let mut map = indexmap::IndexMap::new();
+            map.insert("a".to_string(), QuillValue::from_json(serde_json::json!(1)));
+            map.insert("cafe\u{301}".to_string(), QuillValue::from_json(serde_json::json!("hot")));
+            map.insert("z".to_string(), QuillValue::from_json(serde_json::json!(2)));
+            let mut payload = Payload::from_index_map(map);
+            payload.set_kind(kind);
+            if kind == "main" {
+                payload.set_quill("q@1.0".parse().unwrap());
+            }
+            Card::from_parts(payload, quillmark_content::model::Normalized::empty())
+        };
+        let doc = Document::from_main_and_cards(card("main"), vec![card("note")]);
         let normalized = super::normalize_document(doc);
-        assert_eq!(
-            normalized
-                .main()
-                .payload()
-                .get("title")
-                .unwrap()
-                .as_str()
-                .unwrap(),
-            "a\u{202D}b"
-        );
+        for card in std::iter::once(normalized.main()).chain(normalized.cards()) {
+            let keys: Vec<&str> = card.payload().keys().map(String::as_str).collect();
+            assert_eq!(keys, ["a", "caf\u{e9}", "z"]);
+            assert_eq!(card.payload().get("caf\u{e9}").unwrap().as_str(), Some("hot"));
+        }
     }
-
 }

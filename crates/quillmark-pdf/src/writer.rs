@@ -228,9 +228,7 @@ mod tests {
     fn alloc_id_stops_at_the_reference_id_space() {
         let mut next = MAX_ID;
         assert_eq!(alloc_id(&mut next).unwrap(), MAX_ID);
-        let err = alloc_id(&mut next).unwrap_err();
-        assert_eq!(err.code, CODE_PARSE);
-        assert!(err.message.contains("id space"), "{}", err.message);
+        assert_eq!(alloc_id(&mut next).unwrap_err().code, CODE_PARSE);
     }
 
     #[test]

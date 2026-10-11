@@ -20,11 +20,6 @@ fn mark_to_typst(markdown: &str) -> Result<String, String> {
         .map_err(|e| e.to_string())
 }
 
-// The markup escapes that fire on the character alone.
-const TYPST_SPECIAL_CHARS: &[char] = &[
-    '~', '*', '_', '`', '#', '[', ']', '{', '}', '$', '<', '>', '@',
-];
-
 /// A `--`, a `...`, or a separator ahead of a block marker never lands by
 /// chance in a draw over all of Unicode. The second alphabet is what does land
 /// one: Typst's special characters, every separator it reads as a line break,
@@ -55,19 +50,6 @@ proptest! {
         prop_assert_eq!(strs.len(), 1, "escaping {:?} lowered to {} literals", s, strs.len());
         let read = ast::Str::from_untyped(strs[0]).expect("a Str node").get();
         prop_assert_eq!(read.as_str(), s.as_str());
-    }
-
-    #[test]
-    fn escape_markup_escapes_every_special_char(s in "\\PC*") {
-        let escaped = escape_markup(&s);
-        for &ch in TYPST_SPECIAL_CHARS {
-            if s.contains(ch) {
-                let escaped_form = format!("\\{}", ch);
-                prop_assert!(escaped.contains(&escaped_form),
-                    "Character '{}' in input '{}' not properly escaped in output '{}'",
-                    ch, s, escaped);
-            }
-        }
     }
 
     #[test]

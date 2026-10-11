@@ -2166,7 +2166,6 @@ dependencies = [
  "quillmark-core",
  "quillmark-fixtures",
  "quillmark-typst",
- "serde-saphyr",
  "serde_json",
  "tempfile",
 ]

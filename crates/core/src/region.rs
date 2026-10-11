@@ -488,58 +488,28 @@ mod tests {
         doc_path_to_plate_addr(&path.parse().unwrap(), KINDS)
     }
 
-    #[test]
-    fn plate_to_docpath_resolves_the_absolute_index() {
-        assert_eq!(to_doc("$cards.note.1.on").as_deref(), Some("cards.note[2].on"));
-        assert_eq!(to_doc("$cards.note.0.on").as_deref(), Some("cards.note[0].on"));
-        assert_eq!(
-            to_doc("$cards.annotation.0.text").as_deref(),
-            Some("cards.annotation[1].text")
-        );
-        assert_eq!(to_doc("$body").as_deref(), Some("main.body"));
-        assert_eq!(
-            to_doc("$cards.note.1.$body").as_deref(),
-            Some("cards.note[2].body")
-        );
-        assert_eq!(to_doc("signature_block").as_deref(), Some("main.signature_block"));
-    }
-
-    #[test]
-    fn plate_to_docpath_parses_the_tail_segment_wise() {
-        assert_eq!(to_doc("references.0").as_deref(), Some("main.references[0]"));
-        assert_eq!(to_doc("address.city").as_deref(), Some("main.address.city"));
-        assert_eq!(
-            to_doc("$cards.note.1.refs.0").as_deref(),
-            Some("cards.note[2].refs[0]")
-        );
-        assert_eq!(
-            to_doc("$cards.note.0.addr.city").as_deref(),
-            Some("cards.note[0].addr.city")
-        );
-    }
-
     /// Covers the string leg too: a binding hands `docpath_to_plate` the
     /// *rendered* path, so a `DocPath`-only round-trip would not catch a
     /// spelling that reparses to different segments.
     #[test]
-    fn docpath_to_plate_is_the_inverse() {
-        for plate in [
-            "$body",
-            "signature_block",
-            "references.0",
-            "address.city",
-            "a.b.c.0.d",
-            "$cards.note.0.on",
-            "$cards.note.1.on",
-            "$cards.annotation.0.text",
-            "$cards.note.1.$body",
-            "$cards.note.1.refs.0",
-            "$cards.note.0.addr.city",
+    fn plate_and_docpath_translate_into_each_other() {
+        for (plate, path) in [
+            ("$body", "main.body"),
+            ("signature_block", "main.signature_block"),
+            ("references.0", "main.references[0]"),
+            ("address.city", "main.address.city"),
+            ("a.b.c.0.d", "main.a.b.c[0].d"),
+            ("$cards.note.0.on", "cards.note[0].on"),
+            ("$cards.note.1.on", "cards.note[2].on"),
+            ("$cards.annotation.0.text", "cards.annotation[1].text"),
+            ("$cards.note.1.$body", "cards.note[2].body"),
+            ("$cards.note.1.refs.0", "cards.note[2].refs[0]"),
+            ("$cards.note.0.addr.city", "cards.note[0].addr.city"),
         ] {
             let doc = plate_addr_to_doc_path(plate, KINDS).unwrap();
-            let rendered = doc.to_string();
-            assert_eq!(rendered.parse::<DocPath>().ok(), Some(doc), "string leg {plate}");
-            assert_eq!(to_plate(&rendered).as_deref(), Some(plate), "round-trip {plate}");
+            assert_eq!(doc.to_string(), path, "{plate}");
+            assert_eq!(path.parse::<DocPath>().ok(), Some(doc), "string leg {plate}");
+            assert_eq!(to_plate(path).as_deref(), Some(plate), "round-trip {plate}");
         }
     }
 

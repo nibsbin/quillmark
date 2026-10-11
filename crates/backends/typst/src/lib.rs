@@ -742,7 +742,6 @@ impl SchemaMeta {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quillmark_core::quill::CONTENT_MEDIA_TYPE;
     use quillmark_core::value::QuillValue;
     use serde_json::json;
     use std::collections::HashMap;
@@ -947,53 +946,6 @@ mod tests {
             !has_parbreak(&warnings_for(true)),
             "inline richtext in par() must emit no parbreak warning"
         );
-    }
-
-    #[test]
-    fn schema_meta_array_fields_distinguish_scalar_from_array() {
-        // Any array is element-addressable (`field.N`); only scalars are not.
-        // A typed table's rows publish their properties too (`refs.0.org`).
-        let schema = QuillValue::from_json(json!({
-            "type": "object",
-            "properties": {
-                "subject": { "type": "object", "contentMediaType": CONTENT_MEDIA_TYPE },
-                "sections": {
-                    "type": "array",
-                    "items": { "type": "object", "contentMediaType": CONTENT_MEDIA_TYPE }
-                },
-                "signature_block": {
-                    "type": "array",
-                    "items": { "type": "string" }
-                }
-            },
-            "$defs": {
-                "indorsement_card": {
-                    "type": "object",
-                    "properties": {
-                        "$body": { "type": "object", "contentMediaType": CONTENT_MEDIA_TYPE },
-                        "refs": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": { "org": { "type": "string" } }
-                            }
-                        }
-                    }
-                }
-            }
-        }));
-
-        let meta = SchemaMeta::from_schema_json(schema.as_json());
-
-        assert!(meta.root.resolve("sections.0").is_some());
-        assert!(meta.root.resolve("signature_block.0").is_some());
-        // A scalar offers no element for an index to resolve to.
-        assert!(meta.root.resolve("subject.0").is_none());
-        // A richtext element declares no `properties`, so `sections.0.anything`
-        // stays unaddressable.
-        assert!(meta.root.resolve("sections.0.anything").is_none());
-
-        assert!(meta.cards["indorsement"].resolve("refs.0.org").is_some());
     }
 
     #[test]

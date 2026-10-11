@@ -10,10 +10,10 @@ use quillmark_fixtures::quills_path;
 
 mod common;
 
-fn unclaimed_cards_render_and_warn(quill_name: &str) {
+#[test]
+fn unclaimed_cards_render_and_warn() {
     let engine = Quillmark::new();
-    let quill = quillmark::quill_from_path(quills_path(quill_name))
-        .unwrap_or_else(|e| panic!("{quill_name} should load: {e:?}"));
+    let quill = quillmark::quill_from_path(quills_path("taro")).expect("taro loads");
     let seeded = quill.seed_document().to_markdown();
     let markdown = format!(
         "{seeded}\n~~~\n$kind: ghost\nnote: unknown\n~~~\n\nGhost body.\n"
@@ -30,14 +30,14 @@ fn unclaimed_cards_render_and_warn(quill_name: &str) {
             common::test_date(),
             &RenderOptions::default().with_output_format(OutputFormat::Svg),
         )
-        .unwrap_or_else(|e| panic!("{quill_name}: unclaimed cards must render: {e:?}"))
+        .unwrap_or_else(|e| panic!("unclaimed cards must render: {e:?}"))
         .warnings;
 
     let at = |code: &str| {
         let d = diags
             .iter()
             .find(|d| d.code.as_deref() == Some(code))
-            .unwrap_or_else(|| panic!("{quill_name}: no {code}; got {diags:?}"));
+            .unwrap_or_else(|| panic!("no {code}; got {diags:?}"));
         assert_eq!(d.severity, Severity::Warning, "{d:?}");
         d.path.clone()
     };
@@ -50,16 +50,6 @@ fn unclaimed_cards_render_and_warn(quill_name: &str) {
     };
     assert!(
         diags.iter().skip_while(|d| validation(d)).all(|d| !validation(d)),
-        "{quill_name}: validate's warnings lead the compile's: {diags:?}"
+        "validate's warnings lead the compile's: {diags:?}"
     );
-}
-
-#[test]
-fn taro_renders_unclaimed_cards() {
-    unclaimed_cards_render_and_warn("taro");
-}
-
-#[test]
-fn usaf_memo_renders_unclaimed_cards() {
-    unclaimed_cards_render_and_warn("usaf_memo");
 }

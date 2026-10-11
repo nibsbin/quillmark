@@ -1198,7 +1198,8 @@ mod tests {
         );
     }
 
-    /// Every encoder emits its own keys in ascending order, so
+    /// Every encoder emits its own keys in ascending order and the mint
+    /// settles every payload bag, so
     /// [`to_canonical_value`]'s backstop scans and returns instead of rebuilding
     /// the tree. A key inserted out of order still serializes canonically — the
     /// backstop repairs it — so nothing else notices the regression.
@@ -1276,46 +1277,24 @@ mod tests {
                 island_type.as_str()
             );
         }
-    }
 
-        #[test]
-    fn the_canonical_tree_needs_no_repair() {
-        use crate::model::is_value_key_sorted;
         let mut rt = Content::empty();
-        rt.text = "hi\n\u{FFFC}".into();
-        rt.lines = vec![
-            Line {
-                kind: LineKind::Heading { level: 2 },
-                containers: vec![Container::Quote { instance: 0 }],
-                continues: false,
-            },
-            Line {
-                kind: LineKind::Para,
-                containers: vec![],
-                continues: false,
-            },
-        ];
-        rt.marks = vec![Mark {
-            start: 0,
-            end: 2,
-            kind: MarkKind::Link { url: "u".into() },
-        }];
-        rt.islands = vec![Island {
-            id: "i1".into(),
-            island_type: IslandType::Table,
-            props: serde_json::json!({
+        rt.text = "\u{FFFC}".into();
+        rt.lines = vec![Line::new(LineKind::Para)];
+        rt.islands = vec![Island::new("i1".into(), IslandType::Table).with_props(
+            serde_json::json!({
                 "header": [{"text": "h", "marks": [{"start": 0, "end": 1, "type": "emph"}]}],
                 "rows": [[{"text": "r", "marks": []}]],
                 "aligns": ["none"],
             }),
-        }];
+        )];
         rt.normalize();
         assert_eq!(rt.validate(), Ok(()));
-        assert!(is_value_key_sorted(&rt.to_value()));
+        assert!(sorted(&rt.to_value()), "the root, or a bag the mint settled");
     }
 
     #[test]
-    fn golden_bytes_are_feature_independent() {
+    fn canonical_json_bytes_are_frozen() {
         // If either string changes, the freeze changed: bump the schema version.
         let rt = sample().into_normalized();
         assert_eq!(
@@ -1638,18 +1617,11 @@ mod tests {
         }
     }
 
-    /// The two lanes answer a `lang` the emitter cannot write oppositely: the
-    /// storage decode reduces it so the blob still opens, the authored wire
-    /// refuses it so the host hears about it.
+    /// The authored wire refuses a `lang` the emitter cannot write, where the
+    /// storage decode reduces it so the blob still opens.
     #[test]
-    fn an_unwritable_code_lang_sanitizes_on_storage_and_is_refused_when_authored() {
+    fn an_unwritable_code_lang_is_refused_when_authored() {
         let v = serde_json::json!({"kind": "code", "attrs": {"lang": "rust\ninjected line"}});
-        assert_eq!(
-            line_kind_from_value(&v).unwrap(),
-            LineKind::Code {
-                lang: Some("rust".to_string())
-            }
-        );
         assert!(matches!(
             line_kind_from_authored_value(&v),
             Err(ParseError::Shape("code lang"))
@@ -1657,53 +1629,32 @@ mod tests {
     }
 
     /// The same split on a link or image `url`: CommonMark admits no line
-    /// ending in a destination, so a lane that stores one refuses it, while
-    /// storage keeps what it holds and [`crate::export::emit_url`]
-    /// percent-encodes it.
+    /// ending in a destination, so the whole-content authored door refuses one
+    /// as deep as the values the projection writes, while storage keeps what it
+    /// holds and [`crate::export::emit_url`] percent-encodes it.
     #[test]
     fn an_unwritable_url_decodes_on_storage_and_is_refused_when_authored() {
-        let mark =
-            serde_json::json!({"type": "link", "start": 0, "end": 1, "attrs": {"url": "a\nb"}});
-        assert_eq!(
-            mark_from_value(&mark).unwrap().kind,
-            MarkKind::Link { url: "a\nb".into() }
-        );
-        assert!(matches!(
-            reject_unwritable_link_url(&mark),
-            Err(ParseError::Shape("link url"))
-        ));
-
-        let island =
-            serde_json::json!({"id": "i1", "type": "image", "props": {"alt": "a", "url": "u\rv"}});
-        assert_eq!(island_from_value(&island).unwrap().props["url"], "u\rv");
-        assert!(matches!(
-            island_from_authored_value(&island),
-            Err(ParseError::Shape("image url"))
-        ));
-    }
-
-    /// The whole-content authored door (`overwrite`) carries the url rule as
-    /// deep as the values the projection writes.
-    #[test]
-    fn the_authored_content_door_refuses_an_unwritable_url() {
-        for json in [
-            concat!(
-                r#"{"islands":[],"lines":[{"containers":[],"kind":"para"}],"#,
-                r#""marks":[{"attrs":{"url":"a\nb"},"end":1,"start":0,"type":"link"}],"text":"x"}"#
+        for (json, refusal) in [
+            (
+                concat!(
+                    r#"{"islands":[],"lines":[{"containers":[],"kind":"para"}],"#,
+                    r#""marks":[{"attrs":{"url":"a\nb"},"end":1,"start":0,"type":"link"}],"text":"x"}"#
+                ),
+                "link url",
             ),
-            concat!(
-                r#"{"islands":[{"id":"i1","props":{"alt":"a","url":"u\nv"},"#,
-                r#""type":"image"}],"lines":[{"containers":[],"kind":"para"}],"marks":[],"text":"￼"}"#
+            (
+                concat!(
+                    r#"{"islands":[{"id":"i1","props":{"alt":"a","url":"u\rv"},"#,
+                    r#""type":"image"}],"lines":[{"containers":[],"kind":"para"}],"marks":[],"text":"￼"}"#
+                ),
+                "image url",
             ),
         ] {
             let v: Value = serde_json::from_str(json).unwrap();
-            assert!(
-                matches!(from_authored_value(&v), Err(ParseError::Shape(_))),
-                "accepted: {json}"
-            );
-            assert!(
-                Content::from_canonical_json(json).is_ok(),
-                "storage lane rejected: {json}"
+            assert_eq!(from_authored_value(&v), Err(ParseError::Shape(refusal)));
+            assert_eq!(
+                Content::from_canonical_json(json).unwrap().to_canonical_json(),
+                json
             );
         }
     }

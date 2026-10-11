@@ -22,7 +22,7 @@ fn create_test_quill(temp_dir: &TempDir, quill_yaml: &str) -> std::path::PathBuf
 }
 
 #[test]
-fn test_nested_null_blank_fills_in_plate() {
+fn nested_nulls_blank_fill_in_the_plate_data() {
     let temp_dir = TempDir::new().unwrap();
     let quill_path = create_test_quill(
         &temp_dir,

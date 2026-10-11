@@ -698,6 +698,23 @@ mod tests {
         let err = RenderError::new(vec![Diagnostic::new(Severity::Error, "a".to_string()), warning]);
         assert_eq!(err.to_string(), "a");
     }
+
+    #[test]
+    fn fmt_pretty_lays_out_code_location_path_and_hint() {
+        let diag = Diagnostic::new(Severity::Warning, "bad value".to_string())
+            .with_code("validation::x".to_string())
+            .with_location(Location {
+                file: "input.md".to_string(),
+                line: 3,
+                column: 7,
+            })
+            .with_path("main.title".to_string())
+            .with_hint("fix it".to_string());
+        assert_eq!(
+            diag.fmt_pretty(),
+            "[WARN] bad value (validation::x)\n  --> input.md:3:7\n  at main.title\n  hint: fix it"
+        );
+    }
 }
 
 /// The canon table in `prose/canon/ERROR.md` § "Diagnostic args" is a consumer
@@ -991,7 +1008,7 @@ card_kinds:
     fn out_of_scope_codes_carry_no_args() {
         let diags = crate::quill::QuillConfig::from_yaml_with_warnings(
             r#"
-Quill:
+quill:
   name: t
   version: "1.0"
   backend: typst
@@ -1007,11 +1024,10 @@ main:
         .expect_err("a default that contradicts its type fails config validation");
 
         assert!(
-            diags.iter().any(|d| d
-                .code
-                .as_deref()
-                .is_some_and(|c| c.starts_with("quill::"))),
-            "expected a quill:: diagnostic, got {:?}",
+            diags
+                .iter()
+                .any(|d| d.code.as_deref() == Some("quill::default_type_mismatch")),
+            "expected quill::default_type_mismatch, got {:?}",
             diags.iter().map(|d| &d.code).collect::<Vec<_>>()
         );
         for d in &diags {

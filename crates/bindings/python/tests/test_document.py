@@ -113,14 +113,12 @@ def test_wire_refusal_carries_the_mutator_code():
         doc.insert_card({"kind": "note", "quill": "@nope"})
 
 
-def test_stale_flat_input_is_a_loud_error():
-    """An unknown card key (a stale `fields`, an `id`) fails at deserialize time
-    as a ValueError rather than yielding a card missing it."""
+def test_unknown_card_key_is_a_loud_error():
+    """An unknown card key fails at deserialize time as a ValueError rather than
+    yielding a card missing it."""
     doc = Document.from_markdown(SIMPLE_MD)
-    with pytest.raises(ValueError, match="fields"):
-        doc.insert_card({"kind": "note", "fields": {"x": 1}})
-    with pytest.raises(ValueError):
-        doc.insert_card({"kind": "note", "id": "first"})
+    with pytest.raises(ValueError, match="stray"):
+        doc.insert_card({"kind": "note", "stray": 1})
     assert doc.cards == []
 
 

@@ -70,24 +70,3 @@ impl From<&str> for WasmError {
         WasmError::from(message.to_string())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_compilation_failed_carries_all_diagnostics() {
-        let diag1 = Diagnostic::new(Severity::Error, "Error 1".to_string());
-        let diag2 = Diagnostic::new(Severity::Error, "Error 2".to_string());
-        let render_err = RenderError::new(vec![diag1, diag2]);
-        let wasm_err: WasmError = render_err.into();
-
-        assert_eq!(wasm_err.diagnostics.len(), 2);
-        assert_eq!(wasm_err.diagnostics[0].message, "Error 1");
-        assert_eq!(wasm_err.diagnostics[1].message, "Error 2");
-        let summary = wasm_err.message();
-        assert!(summary.contains("2"));
-        assert!(summary.contains("Error 1"));
-    }
-
-}

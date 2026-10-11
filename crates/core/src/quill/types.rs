@@ -1078,9 +1078,9 @@ impl Serialize for FieldSchema {
             + self.properties.is_some() as usize
             + self.items.is_some() as usize
             + self.max.is_some() as usize;
-        // The emission order is what `usaf_memo/0.2.0/__golden__/schema.yaml`
-        // pins: `values` between `ui` and `variants`, `inline` trailing the
-        // block, both read off the type payload.
+        // Key order is part of `QuillConfig::schema`'s ordering contract:
+        // `values` between `ui` and `variants`, `inline` trailing the block,
+        // both read off the type payload.
         let mut map = serializer.serialize_map(Some(len))?;
         if self.optional {
             map.serialize_entry("type", &format!("{}?", self.r#type.as_str()))?;
