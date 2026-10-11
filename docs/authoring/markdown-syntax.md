@@ -6,7 +6,7 @@ For the authoritative grammar, block-detection rules, normalization, and limits,
 
 ## Foundation
 
-Body content (the prose after each [card-yaml block](card-yaml.md), including any [card](card-yaml.md#card-blocks)) is parsed as CommonMark 0.31.2. Headings, emphasis, links, images, lists, code blocks, blockquotes, thematic breaks, and inline code all behave exactly as the [CommonMark spec](https://spec.commonmark.org/0.31.2/) defines them. (An image parses, stores and round-trips, but **no backend typesets one**: the Typst backend drops it and warns under `backend::declined_construct`, because what a content image's `src` names is undecided.)
+Body content (the prose after each [card-yaml block](card-yaml.md), including any [card](card-yaml.md#card-blocks)) is parsed as CommonMark 0.31.2. Headings, emphasis, links, images, lists, code blocks, blockquotes, thematic breaks, and inline code all behave exactly as the [CommonMark spec](https://spec.commonmark.org/0.31.2/) defines them. (An image parses, stores and round-trips, but **no backend typesets one**: the Typst backend drops it and warns under `backend::declined_construct`, because no backend resolves a content image's `src`.)
 
 For the conventional syntax of these elements, refer to:
 
@@ -22,14 +22,15 @@ Quillmark enables a small, stable subset of GFM:
 | Strikethrough | `~~text~~` | Standard GFM rules; word-bounded delimiter runs. |
 | Pipe tables | `\| col \| col \|` with alignment row | Supports `:---`, `:---:`, `---:` alignment. |
 | Underline | `<u>text</u>` | An allow-listed raw-HTML tag (see [the deviation below](#raw-html-is-not-rendered-except-u-and-br)). |
+| Task lists | `- [ ] open`, `- [x] done` | A checkbox before the item's text, ticked for `[x]`. |
 
-Task lists, autolinks beyond CommonMark's, and other GFM features are **not** enabled.
+Autolinks beyond CommonMark's and other GFM features are **not** enabled.
 
 ## Table layout and elements: `qm-*` tags
 
 Markdown has no syntax for column widths, table placement or keeping a block on one page. Quillmark spells them with `qm-*` tags: HTML custom elements, which a browser or GitHub draws as just what they wrap.
 
-Each `qm-*` tag stands alone on its line, with a blank line above and below:
+Each `qm-*` tag stands on a line of its own, or beside other open and close `qm-*` tags with no text between. Quillmark reads such a line wherever it stands, tight against a paragraph or a table included, and export writes a blank line above and below it, which GitHub and other CommonMark viewers need to render the markdown it wraps:
 
 ```markdown
 <qm-keep>
@@ -40,9 +41,9 @@ J. Doe
 </qm-keep>
 ```
 
-Written tight against markdown, a tag line opens an HTML block that runs to the next blank line, and the block drops whole, markdown included, with a `parse::dropped_construct` warning whose hint names the fix. A tag inside a line, a self-closing tag (`<qm-keep/>`) and a tag left open drop too, keeping what they wrap.
+A tag inside a line of text, in a heading, emphasis or a link, or left open drops, keeping what it wraps, with a `parse::dropped_construct` warning whose hint names the fix. A self-closing tag (`<qm-keep/>`) is an open tag, as HTML reads it, so it drops too. A tag line directly under a quote's or list item's text continues it, as CommonMark reads it, so its pair belongs in that quote or item.
 
-### Table widths and placement
+### Table layout
 
 A `qm-table` around one pipe table sets its layout:
 
@@ -60,18 +61,35 @@ A `qm-table` around one pipe table sets its layout:
 |---|---|---|
 | `widths` | One weight per column: a positive whole number, or `auto` to fit the column to its content. Weights are relative, so `2 1` makes the first column twice as wide as the second. | Every column fits its content. |
 | `align` | Where the table sits: `left`, `center` or `right`. | The quill's placement. |
+| `headless` | No value: `<qm-table headless>`. The first row draws as an ordinary row, without the quill's header styling. | The first row is the header. |
 
 Text alignment within a column stays in the delimiter row (`:---:`). A `widths` with fewer entries than the table has columns leaves the rest `auto`, and one with more ignores the extra entries. A `qm-table` around anything but one table drops, keeping what it holds.
 
-### Elements
+### Cell alignment
 
-Any other `qm-<name>` pair is an element around the blocks between its tags, and the quill decides how to draw it. A name is lowercase letters and digits in words joined by single hyphens, opening with a letter, such as `qm-sig` or `qm-stamp-2`; `qm-anchor` is reserved. `qm-keep` is built into every Typst quill and keeps what it wraps on one page; around a `qm-table` it keeps the table from splitting. A quill with no renderer for an element draws what it wraps as if the tags were absent.
-
-An element around nothing is its two tags on adjacent lines, which suits a signature line or a stamp the quill draws:
+A `qm-cell` pair around a cell's whole content aligns that one cell, in the header row or the body:
 
 ```markdown
-<qm-sig>
-</qm-sig>
+| Item | Notes | Qty |
+| --- | --- | ---: |
+| <qm-cell valign="bottom">Total</qm-cell> | one<br>two | <qm-cell align="center">**42**</qm-cell> |
+```
+
+| Attribute | Value | Without it |
+|---|---|---|
+| `align` | `left`, `center` or `right`. | The column's alignment from the delimiter row. |
+| `valign` | `top`, `middle` or `bottom`. | The quill's vertical alignment. |
+
+The open tag comes first in the cell and the close tag last. A pair with anything else in the cell beside it drops, keeping what it wraps, with a `parse::dropped_construct` warning.
+
+### Elements
+
+Any other `qm-<name>` pair is an element around the blocks between its tags, and the quill decides how to draw it. A name is lowercase letters and digits in words joined by single hyphens, opening with a letter, such as `qm-sig` or `qm-stamp-2`; `qm-anchor` is reserved. `qm-keep` is built into every Typst quill and keeps what it wraps on one page; around a `qm-table` it keeps the table from splitting. A quill with no renderer for an element draws what it wraps as if the tags were absent, and the render warns `typst::unregistered_element`. The warning's hint names the elements the quill renders, so a misspelled `qm-kep` shows up there.
+
+An element around nothing is its two tags on one line, which suits a signature line or a stamp the quill draws:
+
+```markdown
+<qm-sig></qm-sig>
 ```
 
 An element's attributes are strings the quill reads, such as `<qm-stamp tone="urgent">`. An attribute name is lowercase letters, digits and `_`, opening with a letter. `style`, `class`, `id`, `href`, `src` and names opening `on` are refused, so the tags never carry markup a browser would act on.
@@ -138,8 +156,8 @@ Consequences:
 The following are not supported:
 
 - **Math** (`$…$`, `$$…$$`): `$` is treated as a literal character.
-- **Task lists**, **definition lists**: they render as the literal text written.
-- **Footnotes**: CommonMark reads `[^1]: Note` as a link reference definition, which drops the line and turns every `[^1]` into a link to `Note`. Quillmark reads it the same way.
+- **Definition lists**: they render as the literal text written.
+- **Footnotes**: a `[^1]: Note` definition drops with its note and warns under `parse::dropped_construct` (`footnote`); `[^1]` stays as the text written. Put the note in the prose instead.
 
 A link's title (`[text](url "Title")`) drops at import, with no warning. A construct the active backend has no target for, such as an image under Typst, drops at render with a `backend::declined_construct` warning; see each backend's documentation.
 

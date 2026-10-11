@@ -10,7 +10,6 @@ use crate::island::IslandType;
 use crate::normalize::{is_bidi_char, is_line_separator};
 use serde_json::Value as JsonValue;
 use std::borrow::Cow;
-use std::collections::BTreeMap;
 
 /// A position in a [`Content`], counted in Unicode scalar values (USV): never
 /// bytes, never UTF-16 units. One astral char is 1 USV / 4 UTF-8 bytes / 2
@@ -155,29 +154,15 @@ impl LineKind {
     }
 }
 
-/// The key an element's payload bag holds its name under. No attribute name
-/// opens with `$`, so the two never collide.
+/// The key an element's payload bag holds its name under. Every attribute name
+/// opens with a letter, which sorts after `$`, so the name leads the bag.
 pub const ELEMENT_NAME: &str = "$name";
-
-/// An element's payload bag: its [`ELEMENT_NAME`] beside its attributes, keys
-/// ascending.
-fn element_bag(name: &str, attrs: &BTreeMap<String, String>) -> JsonValue {
-    let mut entries: Vec<(&str, &str)> = attrs.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
-    entries.push((ELEMENT_NAME, name));
-    entries.sort_unstable();
-    JsonValue::Object(entries.into_iter().map(|(k, v)| (k.to_string(), v.into())).collect())
-}
 
 /// A payload bag from its entries, which must be listed in ascending key order:
 /// [`Content::normalize`] canonicalizes an opaque bag, and a minted one is
 /// canonical by construction.
-fn bag<const N: usize>(entries: [(&str, JsonValue); N]) -> JsonValue {
-    debug_assert!(entries.windows(2).all(|w| w[0].0 < w[1].0));
-    let mut m = serde_json::Map::with_capacity(N);
-    for (k, v) in entries {
-        m.insert(k.to_string(), v);
-    }
-    JsonValue::Object(m)
+fn bag<'a>(entries: impl IntoIterator<Item = (&'a str, JsonValue)>) -> JsonValue {
+    JsonValue::Object(entries.into_iter().map(|(k, v)| (k.to_string(), v)).collect())
 }
 
 /// Whether a payload bag holds nothing: the two spellings of "no payload" a
@@ -200,8 +185,9 @@ pub(crate) fn is_empty_bag(v: &JsonValue) -> bool {
 pub enum Container {
     /// A list item. `ordered` distinguishes `1.` from `-`; `start` is the list's
     /// first number (1 by default); `ordinal` is this item's 0-based index in
-    /// its list; `instance` tells this list from an adjacent one of the same
-    /// shape (see [`Container::instance`]).
+    /// its list; `checked` makes it a task, done or not, and is the item's
+    /// own, so a list mixes tasks and plain items; `instance` tells this list
+    /// from an adjacent one of the same shape (see [`Container::instance`]).
     ///
     /// Two *adjacent* lines belong to the same item iff their whole container
     /// path is equal. Identity is path **plus contiguity**: two sibling inner
@@ -211,18 +197,17 @@ pub enum Container {
         ordered: bool,
         start: u64,
         ordinal: u64,
+        checked: Option<bool>,
         instance: u64,
     },
     /// A block quote. Adjacent lines sharing one `Quote` are one
     /// multi-paragraph quote; two adjacent quotes differ in `instance`.
     Quote { instance: u64 },
-    /// A `qm-*` carrier element around blocks (markdown-spec §6.4): `name`
-    /// the part of its tag after `qm-`, `attrs` its attributes as written.
-    /// The member is closed and its names open: any element name the carrier
+    /// A `qm-*` carrier element around blocks (markdown-spec §6.4). The
+    /// member is closed and its names open: any element name the carrier
     /// does not reserve is one, so a new name is no storage event.
     Element {
-        name: String,
-        attrs: BTreeMap<String, String>,
+        element: crate::carrier::Element,
         instance: u64,
     },
 }
@@ -269,14 +254,18 @@ impl Container {
                 ordered,
                 start,
                 ordinal,
+                checked,
                 ..
-            } => Cow::Owned(bag([
+            } => Cow::Owned(bag(checked.map(|c| ("checked", c.into())).into_iter().chain([
                 ("ordered", (*ordered).into()),
                 ("ordinal", (*ordinal).into()),
                 ("start", (*start).into()),
-            ])),
+            ]))),
             Container::Quote { .. } => Cow::Owned(JsonValue::Null),
-            Container::Element { name, attrs, .. } => Cow::Owned(element_bag(name, attrs)),
+            Container::Element { element, .. } => Cow::Owned(bag(
+                std::iter::once((ELEMENT_NAME, element.name().into()))
+                    .chain(element.attrs().iter().map(|(k, v)| (k.as_str(), v.as_str().into()))),
+            )),
         }
     }
 
@@ -288,8 +277,8 @@ impl Container {
         }
     }
 
-    /// Whether these two are the same container shape, `ordinal` and `instance`
-    /// aside — `start` counts, so a list starting at 1 and one starting at 3
+    /// Whether these two are the same container shape, `ordinal`, `checked` and
+    /// `instance` aside — `start` counts, so a list starting at 1 and one starting at 3
     /// are two shapes, and an element's whole name and attributes do.
     ///
     /// The **identity** rule, read and written alike: two adjacent lines sit in
@@ -309,10 +298,7 @@ impl Container {
                 },
             ) => a == c && b == d,
             (Container::Quote { .. }, Container::Quote { .. }) => true,
-            (
-                Container::Element { name: a, attrs: b, .. },
-                Container::Element { name: c, attrs: d, .. },
-            ) => a == c && b == d,
+            (Container::Element { element: a, .. }, Container::Element { element: b, .. }) => a == b,
             _ => false,
         }
     }
@@ -690,11 +676,6 @@ pub enum Invariant {
     /// depth is reported, since the check bails at the first over-deep
     /// container.
     JsonTooDeep { what: &'static str, max: usize },
-    /// A [`Container::Element`] the carrier does not
-    /// [model](crate::carrier::modeled). Both wires refuse it ahead of the
-    /// model ([`ParseError::Shape`](crate::serial::ParseError::Shape)), so only
-    /// a Rust caller spelling the element reaches this.
-    BadElement(crate::carrier::Refused),
 }
 
 /// Whether a line's text contradicts its `kind`, which [`Content::normalize`]
@@ -1089,11 +1070,6 @@ impl Content {
                     max: crate::MAX_NESTING_DEPTH,
                 });
             }
-            for c in &line.containers {
-                if let Container::Element { name, attrs, .. } = c {
-                    crate::carrier::modeled(name, attrs).map_err(Invariant::BadElement)?;
-                }
-            }
         }
         // Table-cell marks: the prose range rule again, but each mark is bounded
         // by its own cell's text length (in USV).
@@ -1134,10 +1110,13 @@ struct Run {
     instance: u64,
     ordinal: u64,
     raw_ordinal: u64,
+    /// The `checked` of the item's first line, which every line of it takes.
+    checked: Option<bool>,
 }
 
 /// Canonicalize every container path: `instance` to the minimal discriminator
-/// the adjacency needs, `ordinal` to a gapless 0-based index.
+/// the adjacency needs, `ordinal` to a gapless 0-based index, and `checked` to
+/// the one its item's first line holds.
 ///
 /// Both are derived from *run structure*, which the stored path already spells:
 /// a run opens where the stored run key or the stored `instance` changes, and
@@ -1160,9 +1139,9 @@ fn canonicalize_containers(lines: &mut [Line]) {
         let mut opened_above = false;
         for d in 0..depth_len {
             let here = &line.containers[d];
-            let raw_ordinal = match here {
-                Container::ListItem { ordinal, .. } => *ordinal,
-                _ => 0,
+            let (raw_ordinal, checked) = match here {
+                Container::ListItem { ordinal, checked, .. } => (*ordinal, *checked),
+                _ => (0, None),
             };
             let continues = !opened_above
                 && state
@@ -1173,6 +1152,7 @@ fn canonicalize_containers(lines: &mut [Line]) {
                 if raw_ordinal != run.raw_ordinal {
                     run.ordinal += 1;
                     run.raw_ordinal = raw_ordinal;
+                    run.checked = checked;
                     // The run continues but the *item* changed, and an item is
                     // a parent: everything below is inside a different one, so
                     // it neither continues its predecessor nor has an adjacent
@@ -1195,12 +1175,14 @@ fn canonicalize_containers(lines: &mut [Line]) {
                     instance,
                     ordinal: 0,
                     raw_ordinal,
+                    checked,
                 });
                 opened_above = true;
             }
-            let (ordinal, instance) = (state[d].ordinal, state[d].instance);
-            if let Container::ListItem { ordinal: o, .. } = &mut line.containers[d] {
+            let Run { ordinal, instance, checked, .. } = state[d];
+            if let Container::ListItem { ordinal: o, checked: c, .. } = &mut line.containers[d] {
                 *o = ordinal;
+                *c = checked;
             }
             line.containers[d].set_instance(instance);
         }
@@ -1556,35 +1538,28 @@ mod tests {
         );
     }
 
-    /// `validate` is what a store checks before it writes: an element it passes
-    /// loads back as itself, and one it refuses never does.
+    /// The carrier refuses at construction each element storage could not
+    /// read back, so every element a container holds loads back as itself.
     #[test]
-    fn validate_refuses_the_elements_storage_cannot_read_back() {
-        use crate::carrier::Refused;
-        let element = |name: &str, attr: &str| {
+    fn a_constructed_element_reads_back() {
+        use crate::carrier::{Element, Refused};
+        let element = |name: &str, attr: &str| Element::new(name, [(attr.to_string(), "v".to_string())].into());
+        for attr in ["note", "name"] {
             let mut line = Line::new(LineKind::Para);
-            line.containers = vec![Container::Element {
-                name: name.into(),
-                attrs: [(attr.to_string(), "v".to_string())].into(),
-                instance: 0,
-            }];
-            Content::new("x".into(), vec![line])
-        };
-        let cases = [
-            (element("keep", "note"), None),
-            (element("keep", "name"), None),
-            (element("Keep", "note"), Some(Refused::Name("Keep".into()))),
-            (element("table", "widths"), Some(Refused::Reserved("table".into()))),
-            (element("anchor", "ref"), Some(Refused::Reserved("anchor".into()))),
-            (element("keep", "style"), Some(Refused::Attr("style".into()))),
-            (element("keep", "$name"), Some(Refused::Attr("$name".into()))),
-        ];
-        for (content, refused) in cases {
-            let stored = content.clone().into_normalized();
+            line.containers = vec![Container::Element { element: element("keep", attr).unwrap(), instance: 0 }];
+            let stored = Content::new("x".into(), vec![line]).into_normalized();
             let loaded = crate::serial::from_canonical_value(&crate::serial::to_canonical_value(&stored));
-            let reads_back = loaded.as_ref() == Ok(&stored);
-            assert_eq!(reads_back, refused.is_none(), "{:?}", content.lines[0].containers);
-            assert_eq!(content.validate(), refused.map_or(Ok(()), |r| Err(Invariant::BadElement(r))));
+            assert_eq!(loaded.as_ref(), Ok(&stored), "{attr}");
+        }
+        let refused = [
+            (element("Keep", "note"), Refused::Name("Keep".into())),
+            (element("table", "widths"), Refused::Reserved("table".into())),
+            (element("anchor", "ref"), Refused::Reserved("anchor".into())),
+            (element("keep", "style"), Refused::Attr("style".into())),
+            (element("keep", "$name"), Refused::Attr("$name".into())),
+        ];
+        for (element, refused) in refused {
+            assert_eq!(element, Err(refused));
         }
     }
 
@@ -1626,6 +1601,7 @@ mod tests {
                 ordered: false,
                 start: 1,
                 ordinal,
+                checked: None,
                 instance: 0,
             }]
         };

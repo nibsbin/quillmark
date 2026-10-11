@@ -94,14 +94,9 @@ pub fn to_markdown_annotated(rt: &Normalized) -> Annotated {
     let mut tags: Vec<Vec<(Usv, &str)>> = vec![Vec::new(); segments.len()];
     let mut anchors = Vec::with_capacity(found.len());
     for (start, id) in found {
-        let i = segments
-            .partition_point(|s| s.end < start)
-            .min(segments.len() - 1);
+        let (i, read) = anchor_read(&plain, start, id);
+        anchors.push(read);
         let seg = &segments[i];
-        anchors.push(AnchorRead {
-            id: id.to_string(),
-            line: seg_str(&plain, i).chars().filter(|&c| c != ISLAND_SLOT).collect(),
-        });
         let holds_tags = rt
             .lines
             .get(i)
@@ -119,6 +114,41 @@ pub fn to_markdown_annotated(rt: &Normalized) -> Annotated {
         tags: &tags,
     });
     Annotated { markdown, anchors }
+}
+
+/// The anchors [`to_markdown_annotated`] lists for `rt` whose id `keep`
+/// holds, in its order, read without projecting `rt`.
+pub fn anchors_where(rt: &Normalized, keep: impl Fn(&str) -> bool) -> Vec<AnchorRead> {
+    let mut found: Vec<(Usv, &str)> = rt
+        .marks
+        .iter()
+        .filter_map(|m| match &m.kind {
+            MarkKind::Anchor { id } if keep(id) => Some((m.start, id.as_str())),
+            _ => None,
+        })
+        .collect();
+    if found.is_empty() {
+        return Vec::new();
+    }
+    found.sort_unstable();
+    let segments = line_segments(rt);
+    let ctx = Ctx {
+        rt,
+        segments: &segments,
+        tags: &[],
+    };
+    found.into_iter().map(|(start, id)| anchor_read(&ctx, start, id).1).collect()
+}
+
+/// The anchor `id` starting at `start`, and the index of the line it sits on.
+fn anchor_read(ctx: &Ctx, start: Usv, id: &str) -> (usize, AnchorRead) {
+    let segments = ctx.segments;
+    let i = segments.partition_point(|s| s.end < start).min(segments.len() - 1);
+    let read = AnchorRead {
+        id: id.to_string(),
+        line: seg_str(ctx, i).chars().filter(|&c| c != ISLAND_SLOT).collect(),
+    };
+    (i, read)
 }
 
 fn project(ctx: &Ctx) -> String {
@@ -284,7 +314,11 @@ fn emit_block(ctx: &Ctx, range: std::ops::Range<usize>, depth: usize, out: &mut 
                 let key = done
                     .container
                     .expect("only the root frame opens without a container");
-                close_container(key, &done.buf, &mut parent.buf);
+                let lead = &lines[done.range.start];
+                let prose_head = lead.containers.len() == done.depth
+                    && lead.kind == LineKind::Para
+                    && block_island(ctx, done.range.start).is_none();
+                close_container(key, &done.buf, prose_head, &mut parent.buf);
             }
             None => out.push_str(&done.buf),
         }
@@ -301,13 +335,15 @@ fn block_separator(out: &mut String, first_block: bool) {
 }
 
 /// Close a container level: prefix each line of `inner`, the block emitted for
-/// it, with the container's markdown syntax.
-fn close_container(key: &Container, inner: &str, out: &mut String) {
+/// it, with the container's markdown syntax. `prose_head` says the level opens
+/// on a paragraph line of its own.
+fn close_container(key: &Container, inner: &str, prose_head: bool, out: &mut String) {
     match key {
         Container::ListItem {
             ordered,
             start,
             ordinal,
+            checked,
             instance,
         } => {
             // CommonMark starts a new list at a change of bullet char or of
@@ -336,21 +372,34 @@ fn close_container(key: &Container, inner: &str, out: &mut String) {
                 "+ ".to_string()
             };
             let indent = " ".repeat(marker.len());
-            // A marker run that spells a thematic break outranks the items
-            // spelling it: three nested empty bullets emit `- - - `, which
-            // re-imports as a `Rule` with the nesting gone. Changing a marker
-            // char is not the way out — a different bullet char starts a new
-            // list, resetting `ordinal` on this item and every one after it, and
-            // the empty item can have non-empty siblings. Moving the content to
-            // the next line costs no marker and no list identity, and the check
-            // runs per level, so a run of any depth breaks into pieces of two.
             let head = inner.split('\n').next().unwrap_or("");
-            if is_thematic_break(&format!("{marker}{head}")) {
-                out.push_str(marker.trim_end());
+            // Whether the item's first block moves to the line below its
+            // marker. A task marker opens its item's paragraph, so text after
+            // it on its line is read as that paragraph whatever block it
+            // spells. A marker run that spells a thematic break outranks the
+            // items spelling it: three nested empty bullets emit `- - - `,
+            // which re-imports as a `Rule` with the nesting gone. Changing a
+            // marker char is not the way out — a different bullet char starts
+            // a new list, resetting `ordinal` on this item and every one after
+            // it, and the empty item can have non-empty siblings. Moving the
+            // content costs no marker and no list identity, and the check runs
+            // per level, so a run of any depth breaks into pieces of two.
+            let (lead, below) = match checked {
+                Some(done) => (
+                    format!("{marker}{} ", if *done { "[x]" } else { "[ ]" }),
+                    !prose_head || head.is_empty(),
+                ),
+                None => (marker.clone(), is_thematic_break(&format!("{marker}{head}"))),
+            };
+            // An empty item keeps its lead's trailing space: a task marker
+            // reads as one only before whitespace, and the item can end the
+            // markdown.
+            if below && !inner.is_empty() {
+                out.push_str(lead.trim_end());
                 out.push('\n');
                 prefix_lines(inner, &indent, &indent, out);
             } else {
-                prefix_lines(inner, &marker, &indent, out);
+                prefix_lines(inner, &lead, &indent, out);
             }
         }
         Container::Quote { .. } => {
@@ -358,12 +407,7 @@ fn close_container(key: &Container, inner: &str, out: &mut String) {
             // one quote on re-import.
             prefix_quote(inner, out);
         }
-        // An element outside the carrier grammar has no spelling, so what it
-        // wraps is written bare.
-        Container::Element { name, attrs, .. } => match crate::carrier::modeled(name, attrs) {
-            Ok(element) => out.push_str(&element.wrap_block(inner)),
-            Err(_) => out.push_str(inner),
-        },
+        Container::Element { element, .. } => out.push_str(&element.wrap_block(inner)),
     }
 }
 
@@ -388,20 +432,16 @@ fn is_thematic_break(line: &str) -> bool {
     n >= 3
 }
 
-/// Prefix the first produced line with `first`, the rest with `cont`.
+/// Prefix the first produced line with `first`, the rest but blank ones with
+/// `cont`.
 fn prefix_lines(inner: &str, first: &str, cont: &str, out: &mut String) {
     for (idx, line) in inner.split('\n').enumerate() {
-        if idx == 0 {
-            out.push_str(first);
-            out.push_str(line);
-        } else {
+        if idx > 0 {
             out.push('\n');
-            if line.is_empty() {
-                // blank continuation line: no trailing indent
-            } else {
-                out.push_str(cont);
-                out.push_str(line);
-            }
+        }
+        if idx == 0 || !line.is_empty() {
+            out.push_str(if idx == 0 { first } else { cont });
+            out.push_str(line);
         }
     }
 }
@@ -506,54 +546,38 @@ fn emit_table(isl: &Island, out: &mut String) {
     if cols == 0 {
         return;
     }
-    if let Some(wrapper) = crate::carrier::table::wrapper(&isl.props) {
-        let mut table = String::new();
-        emit_pipe_table(header, rows, aligns, cols, &mut table);
-        out.push_str(&wrapper.wrap_block(&table));
-    } else {
-        emit_pipe_table(header, rows, aligns, cols, out);
-    }
-}
-
-fn emit_pipe_table(
-    header: Option<&Vec<serde_json::Value>>,
-    rows: Option<&Vec<serde_json::Value>>,
-    aligns: Option<&Vec<serde_json::Value>>,
-    cols: usize,
-    out: &mut String,
-) {
     // Cells are canonical `{text, marks}`; each cell's markdown is rebuilt from
     // that structure, so nothing re-parses markdown and `import(export(table))`
     // is a fixed point.
-    out.push_str("| ");
+    let mut table = String::from("| ");
     if let Some(h) = header {
-        out.push_str(&h.iter().map(render_cell_md).collect::<Vec<_>>().join(" | "));
+        table.push_str(&h.iter().map(render_cell_md).collect::<Vec<_>>().join(" | "));
     }
-    out.push_str(" |\n|");
+    table.push_str(" |\n|");
     for k in 0..cols {
         let a = aligns
             .and_then(|a| a.get(k))
             .and_then(|v| v.as_str())
             .unwrap_or("none");
-        out.push_str(match a {
+        table.push_str(match a {
             "left" => " :--- |",
             "center" => " :---: |",
             "right" => " ---: |",
             _ => " --- |",
         });
     }
-    if let Some(rs) = rows {
-        for row in rs {
-            if let Some(r) = row.as_array() {
-                // Pad/truncate so a ragged island (one that skipped
-                // normalization) still emits a rectangular table.
-                let mut cells: Vec<String> = r.iter().map(render_cell_md).collect();
-                cells.resize(cols, String::new());
-                out.push_str("\n| ");
-                out.push_str(&cells.join(" | "));
-                out.push_str(" |");
-            }
-        }
+    for r in rows.into_iter().flatten().filter_map(|row| row.as_array()) {
+        // Pad/truncate so a ragged island (one that skipped normalization)
+        // still emits a rectangular table.
+        let mut cells: Vec<String> = r.iter().map(render_cell_md).collect();
+        cells.resize(cols, String::new());
+        table.push_str("\n| ");
+        table.push_str(&cells.join(" | "));
+        table.push_str(" |");
+    }
+    match crate::carrier::table::wrapper(&isl.props) {
+        Some(wrapper) => out.push_str(&wrapper.wrap_block(&table)),
+        None => out.push_str(&table),
     }
 }
 
@@ -654,9 +678,7 @@ fn render_inline(ctx: &Ctx, i: usize, heading: bool) -> String {
     };
 
     let slots_before_line = seg.slots_before;
-    let tags = ctx.tags.get(i).filter(|t| !t.is_empty());
-    let mut points = tags.map(|_| Vec::with_capacity(n + 1));
-    let mut md = render_marked_core(
+    let (mut md, mut points) = render_marked_core(
         &chars,
         &code_ranges,
         &fmt,
@@ -664,7 +686,6 @@ fn render_inline(ctx: &Ctx, i: usize, heading: bool) -> String {
         escape_punct_at,
         escape_leading_block,
         false, // prose text does not escape `|`
-        points.as_mut(),
         |pos_local| {
             let before = slots_before_line
                 + chars[..pos_local]
@@ -685,13 +706,13 @@ fn render_inline(ctx: &Ctx, i: usize, heading: bool) -> String {
     if heading && md.ends_with('#') {
         let end = md.len();
         md.insert(end - 1, '\\');
-        for point in points.iter_mut().flatten().filter(|p| **p == end) {
+        for point in points.iter_mut().filter(|p| **p == end) {
             *point += 1;
         }
     }
-    match (tags, points) {
-        (Some(tags), Some(points)) => annotate(md, &points, tags),
-        _ => md,
+    match ctx.tags.get(i).filter(|t| !t.is_empty()) {
+        Some(tags) => annotate(md, &points, tags),
+        None => md,
     }
 }
 
@@ -732,9 +753,9 @@ fn annotate(md: String, points: &[usize], tags: &[(Usv, &str)]) -> String {
 
 /// The carrier's canonical spelling of an anchor `id`.
 fn anchor_tag(id: &str) -> String {
-    let tag = crate::carrier::Element::new("anchor", [("ref".to_string(), id.to_string())].into())
-        .expect("`anchor` and `ref` are in the carrier grammar");
-    format!("{}{}", tag.open_tag(), tag.close_tag())
+    crate::carrier::Element::spelling(crate::carrier::ANCHOR, [("ref".to_string(), id.to_string())].into())
+        .expect("`anchor` and `ref` are in the carrier grammar")
+        .wrap_inline("")
 }
 
 /// Route `marks` into the three lists [`render_marked_core`] takes, each range
@@ -780,10 +801,10 @@ fn bucket_marks(
 /// `|`→`\|` for cells; `island_markup_at` renders an island slot (prose) or
 /// yields `None` (cells carry no slot).
 ///
-/// `tag_points`, when given, receives each position's tag point, one entry
-/// per position `0..=n`: the byte offset in the result after the delimiters
-/// of the marks closing there and before those opening there. A position
-/// inside a code span or link takes the span's start's.
+/// Returns the markdown and each position's tag point, one entry per position
+/// `0..=n`: the byte offset in the markdown after the delimiters of the marks
+/// closing there and before those opening there. A position inside a code
+/// span or link takes the span's start's.
 ///
 /// The model permits free (Peritext-style) overlap but markdown syntax nests.
 /// The sweep closes every mark ending at a boundary and reopens the deeper
@@ -807,9 +828,8 @@ fn render_marked_core(
     escape_punct_at: Option<usize>,
     escape_leading_block: bool,
     escape_pipe: bool,
-    tag_points: Option<&mut Vec<usize>>,
     island_markup_at: impl Fn(usize) -> Option<String>,
-) -> String {
+) -> (String, Vec<usize>) {
     let n = chars.len();
 
     // A code span is emitted verbatim between backticks, so a slot inside it
@@ -888,9 +908,10 @@ fn render_marked_core(
     let is_underline = |fi: usize| matches!(fmt[fi].2, MarkKind::Underline);
 
     // One mark sweep over the marks `keep` selects (indices into `fmt`) → inline
-    // markdown, recording each position's tag point into `points`.
-    let sweep = |keep: &[bool], d: Delims, mut points: Option<&mut Vec<usize>>| -> String {
+    // markdown and its tag points.
+    let sweep = |keep: &[bool], d: Delims| -> (String, Vec<usize>) {
         let mut out = String::new();
+        let mut points = Vec::with_capacity(n + 1);
         // Marks currently open, outermost first, underlines and delimiters
         // apart. Storing the `fmt` index (not `(end, kind)`) keeps each open
         // mark's identity, so a reopened mark re-emits its OWN delimiter.
@@ -914,7 +935,7 @@ fn render_marked_core(
             if let Some(idx) = stack.iter().position(|&fi| fmt[fi].1 == pos) {
                 while stack.len() > idx {
                     let fi = stack.pop().unwrap();
-                    out.push_str(delim_close(fmt[fi].2, d));
+                    out.push_str(delim(fmt[fi].2, d));
                     if fmt[fi].1 != pos {
                         reopen.push(fi);
                     }
@@ -931,9 +952,7 @@ fn render_marked_core(
                 }
             }
             let point = out.len();
-            if let Some(points) = points.as_mut() {
-                points.push(point);
-            }
+            points.push(point);
             let fresh = opening.iter().copied().filter(|&fi| is_underline(fi));
             for fi in reopen_underlines.into_iter().rev().chain(fresh) {
                 out.push_str("<u>");
@@ -944,7 +963,7 @@ fn render_marked_core(
             // still wraps it rather than being dropped.
             let fresh = opening.iter().copied().filter(|&fi| !is_underline(fi));
             for fi in reopen.into_iter().rev().chain(fresh) {
-                out.push_str(delim_open(fmt[fi].2, d));
+                out.push_str(delim(fmt[fi].2, d));
                 stack.push(fi);
             }
             // A link is emitted atomically as [text](url). Nested marks in link
@@ -966,11 +985,11 @@ fn render_marked_core(
                     }
                 }
                 out.push_str("](");
-                emit_url(url, &mut out);
+                let mut dest = String::new();
+                emit_url(url, &mut dest);
+                push_piped(&dest, escape_pipe, &mut out);
                 out.push(')');
-                if let Some(points) = points.as_mut() {
-                    points.resize(le, point);
-                }
+                points.resize(le, point);
                 pos = le;
                 continue;
             }
@@ -994,14 +1013,12 @@ fn render_marked_core(
                 if pad {
                     out.push(' ');
                 }
-                out.push_str(&content);
+                push_piped(&content, escape_pipe, &mut out);
                 if pad {
                     out.push(' ');
                 }
                 out.push_str(&fence);
-                if let Some(points) = points.as_mut() {
-                    points.resize(ce, point);
-                }
+                points.resize(ce, point);
                 pos = ce;
                 continue;
             }
@@ -1027,10 +1044,10 @@ fn render_marked_core(
         // Clipping keeps every wrap `end` reachable, so this normally drains
         // nothing.
         while let Some(fi) = stack.pop() {
-            out.push_str(delim_close(fmt[fi].2, d));
+            out.push_str(delim(fmt[fi].2, d));
         }
         out.push_str(&"</u>".repeat(underlines.len()));
-        out
+        (out, points)
     };
 
     // Verify-and-drop safety net. An editor's `apply_mark_ops` can build a mark
@@ -1048,17 +1065,8 @@ fn render_marked_core(
     };
     let all = vec![true; fmt.len()];
     if !fmt.iter().any(|m| is_flanking(m.2)) {
-        return sweep(&all, DELIM_SPELLINGS[0], tag_points);
+        return sweep(&all, DELIM_SPELLINGS[0]);
     }
-    // The settled rendering, its tag points recorded by one more sweep of the
-    // same selection and spelling when the caller asks for them.
-    let mut tag_points = tag_points;
-    let mut settle = |out: String, keep: &[bool], d: Delims| -> String {
-        if let Some(points) = tag_points.take() {
-            sweep(keep, d, Some(points));
-        }
-        out
-    };
     // The probe wraps the fragment in `,…,`: parsed standalone, a leading `0. ` /
     // `# ` / `> ` would read as a list/heading/quote marker and drop a good mark.
     // A punctuation sentinel blocks every leading-block construct, preserves edge
@@ -1129,9 +1137,9 @@ fn render_marked_core(
     // and each is verified before it is used. Four probes at most.
     let intent = want_marks(&all);
     for &d in &DELIM_SPELLINGS {
-        let cand = sweep(&all, d, None);
-        if probe(&cand, &intent) == Some(true) {
-            return settle(cand, &all, d);
+        let cand = sweep(&all, d);
+        if probe(&cand.0, &intent) == Some(true) {
+            return cand;
         }
     }
     // The flanking marks in document order. That order is the re-add priority
@@ -1149,7 +1157,7 @@ fn render_marked_core(
         }
         mask
     };
-    let render = |keep: &[usize]| -> String { sweep(&mask_of(keep), DELIM_SPELLINGS[0], None) };
+    let render = |keep: &[usize]| sweep(&mask_of(keep), DELIM_SPELLINGS[0]);
     let survives = |md: &str, keep: &[usize]| probe(md, &want_marks(&mask_of(keep))) == Some(true);
     // Drop the whole flanking set, then re-add by halves: a chunk that survives is
     // accepted whole, one that doesn't splits and its halves are retried, a lone
@@ -1161,8 +1169,8 @@ fn render_marked_core(
     // even that fails, no re-add can fix it. A lone candidate has nowhere to
     // split, so the floor is already its answer.
     let mut out = render(&[]);
-    if cands.len() == 1 || !survives(&out, &[]) {
-        return settle(out, &mask_of(&[]), DELIM_SPELLINGS[0]);
+    if cands.len() == 1 || !survives(&out.0, &[]) {
+        return out;
     }
     let mut kept: Vec<usize> = Vec::new();
     // A chunk `(lo, hi)` and the `kept` length at which its trial is *already
@@ -1192,14 +1200,14 @@ fn render_marked_core(
         // chunk and `trial` stays in document order.
         let trial: Vec<usize> = kept.iter().chain(&cands[lo..hi]).copied().collect();
         let md = render(&trial);
-        if survives(&md, &trial) {
+        if survives(&md.0, &trial) {
             kept = trial;
             out = md;
         } else {
             split(&mut work, kept.len());
         }
     }
-    settle(out, &mask_of(&kept), DELIM_SPELLINGS[0])
+    out
 }
 
 /// Probes the verify-and-drop net will spend on one line before giving up and
@@ -1297,22 +1305,18 @@ fn clip_asterisk_overlap(fmt: &mut [(usize, usize, &MarkKind)]) {
 /// Reconstruct a table cell's markdown from its `{text, marks}`: the prose mark
 /// sweep with `|`→`\|` escaping so the cell survives re-import through
 /// `pulldown`'s pipe splitting. A cell is flat inline: no islands, no
-/// leading-block escape.
+/// leading-block escape. A cell holding an alignment is wrapped whole in its
+/// `qm-cell` pair, whose tags are punctuation at the content's edges as the
+/// net's `,` sentinels are.
 fn render_cell_md(v: &serde_json::Value) -> String {
     let (text, marks) = crate::serial::parse_cell(v);
     let chars: Vec<char> = text.chars().collect();
     let (code_ranges, fmt, links) = bucket_marks(&marks, 0, chars.len(), true);
-    render_marked_core(
-        &chars,
-        &code_ranges,
-        &fmt,
-        &links,
-        None,
-        false,
-        true,
-        None,
-        |_| None,
-    )
+    let (md, _) = render_marked_core(&chars, &code_ranges, &fmt, &links, None, false, true, |_| None);
+    match crate::carrier::cell::pair(v) {
+        Some(pair) => pair.wrap_inline(&md),
+        None => md,
+    }
 }
 
 /// Which of markdown's two spellings each asterisk-family kind is emitted with.
@@ -1336,17 +1340,9 @@ const DELIM_SPELLINGS: [Delims; 4] = [
     Delims { strong: "__", emph: "_" },
 ];
 
-fn delim_open(kind: &MarkKind, d: Delims) -> &'static str {
-    match kind {
-        MarkKind::Strong => d.strong,
-        MarkKind::Emph => d.emph,
-        MarkKind::Strike => "~~",
-        // Code/Link/Anchor and underlines are handled elsewhere.
-        _ => "",
-    }
-}
-
-fn delim_close(kind: &MarkKind, d: Delims) -> &'static str {
+/// The delimiter that opens and closes `kind`. Code, link, anchor and
+/// underline are written elsewhere.
+fn delim(kind: &MarkKind, d: Delims) -> &'static str {
     match kind {
         MarkKind::Strong => d.strong,
         MarkKind::Emph => d.emph,
@@ -1366,6 +1362,17 @@ fn edge_space_ref(c: char) -> Option<&'static str> {
         ' ' => Some("&#32;"),
         '\t' => Some("&#9;"),
         _ => None,
+    }
+}
+
+/// Push `s`, a code span's content or a link's destination, with each `|`
+/// as `\|` where `escape_pipe`: a table row splits its cells at a `|` inside
+/// either, and reads `\|` as `|` before it parses the cell.
+fn push_piped(s: &str, escape_pipe: bool, out: &mut String) {
+    if escape_pipe {
+        out.push_str(&s.replace('|', "\\|"));
+    } else {
+        out.push_str(s);
     }
 }
 
@@ -1486,6 +1493,7 @@ mod tests {
             ordered: false,
             start: 1,
             ordinal,
+            checked: None,
             instance,
         }]
     }
@@ -1495,8 +1503,20 @@ mod tests {
             ordered: true,
             start: 1,
             ordinal,
+            checked: None,
             instance,
         }]
+    }
+
+    /// A task marker opens its item's paragraph: an item opening on any other
+    /// block writes the marker alone above it, and an empty one ends on a
+    /// space, the marker reading as one only before whitespace.
+    #[test]
+    fn a_task_item_writes_its_marker_where_it_reads_back() {
+        for md in ["- [x] a\n\n- [ ]\n  # h", "1. [ ]\n   > q\n\n2. [x] ", "- a\n\n  - [ ] "] {
+            let rt = from_markdown(md).unwrap().content;
+            assert_eq!(to_markdown(&rt), md);
+        }
     }
 
     /// `instance` spells these, and the marker alternation CommonMark already
@@ -1914,6 +1934,44 @@ mod tests {
         round_trips("| A |\n| --- |\n| <u>under</u> |");
         // A literal pipe inside a cell survives via `\|` re-escaping on export.
         round_trips("| A |\n| --- |\n| a \\| b |");
+    }
+
+    /// A row splits its cells at a `|` inside a code span or a link
+    /// destination too, so export writes it `\|` there as in text.
+    #[test]
+    fn a_pipe_in_a_cells_code_span_or_link_url_stays_in_its_cell() {
+        for (body, text, url) in [
+            ("`a\\|b`", "a|b", None),
+            ("`a\\\\|b`", "a\\|b", None),
+            ("[x](https://e.com/a\\|b)", "x", Some("https://e.com/a|b")),
+            ("[x](<https://e.com/a\\\\\\|b c>)", "x", Some("https://e.com/a\\|b c")),
+        ] {
+            let md = format!("| h |\n| --- |\n| {body} |");
+            let rt = from_markdown(&md).unwrap().content;
+            let cell = &rt.islands[0].props["rows"][0][0];
+            assert_eq!(cell["text"], text, "{md:?}");
+            assert_eq!(cell["marks"][0]["attrs"]["url"].as_str(), url, "{md:?}");
+            assert_eq!(to_markdown(&rt), md, "{md:?}");
+        }
+    }
+
+    /// A cell's alignment in its set is written as a `qm-cell` pair around the
+    /// whole cell; a value outside its set is not.
+    #[test]
+    fn a_cell_alignment_exports_as_a_qm_cell_pair() {
+        let cases = [
+            (serde_json::json!({"valign": "middle", "align": "left"}), "<qm-cell align=\"left\" valign=\"middle\">**c**</qm-cell>"),
+            (serde_json::json!({"align": "center", "valign": "horizon"}), "<qm-cell align=\"center\">**c**</qm-cell>"),
+            (serde_json::json!({"align": "none", "valign": 1}), "**c**"),
+        ];
+        for (keys, cell) in cases {
+            let mut props = table().props;
+            let c = props["rows"][0][0].as_object_mut().unwrap();
+            c.extend(keys.as_object().unwrap().clone());
+            c.insert("marks".into(), serde_json::json!([{"end": 1, "start": 0, "type": "strong"}]));
+            let rt = with_islands(&ISLAND_SLOT.to_string(), vec![table().with_props(props)]);
+            assert_eq!(to_markdown(&rt), format!("| h |\n| --- |\n| {cell} |"), "{keys}");
+        }
     }
 
     #[test]
@@ -2334,21 +2392,6 @@ mod tests {
             );
             assert_eq!(to_markdown(&rt), md);
             assert_eq!(from_markdown(md).unwrap().content, rt);
-        }
-    }
-
-    /// An element the carrier cannot spell, under a reserved name or with an
-    /// attribute outside its grammar, writes nothing: its blocks stand
-    /// unwrapped.
-    #[test]
-    fn an_unspellable_element_writes_nothing() {
-        let unspellable: [(&str, std::collections::BTreeMap<String, String>); 2] =
-            [("table", [].into()), ("keep", [("onclick".to_string(), "x".to_string())].into())];
-        for (name, attrs) in unspellable {
-            let element = Container::Element { name: name.into(), attrs, instance: 0 };
-            let rt = Content::new("a".into(), vec![Line::new(LineKind::Para).with_containers(vec![element])])
-                .into_normalized();
-            assert_eq!(to_markdown(&rt), "a");
         }
     }
 

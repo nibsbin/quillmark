@@ -27,7 +27,7 @@ The background's cross-reference data is a classic `xref` table. One held in a c
 Nulling the key (PyMuPDF's `xref_set_key` sets a key to `null` rather than deleting it) strips the catalog entry alone, and the old widget annotations stay live in the page `/Annots`. A background whose page `/Annots` hold a `/Subtype /Widget`, written directly or referenced, is refused as `pdf::existing_acroform` too, whatever its catalog holds, and the message names the page.
 
 !!! note "Where the assets come from"
-    Producing a clean `form.pdf` + `form.json` from a raw source PDF (decrypt, strip, extract, verify) is the job of a separate *qualification* layer and is out of scope for the engine; the engine checks the result of the stripping, not how it was reached. V1 quills hand-author both assets; the `sample_form` fixture in `crates/fixtures/resources/quills/sample_form/` is a worked example.
+    Producing a clean `form.pdf` + `form.json` from a raw source PDF (decrypt, strip, extract, verify) is the job of a separate *quillification* layer and is out of scope for the engine; the engine checks the result of the stripping, not how it was reached. V1 quills hand-author both assets; the `sample_form` fixture in `crates/fixtures/resources/quills/sample_form/` is a worked example.
 
 ## `Quill.yaml`
 
@@ -192,7 +192,7 @@ A container has no widget shape of its own; the cells inside it do, and each bin
 
 `multiline` on a text widget comes from the schema field's `ui.multiline`, and a value holding a newline (a richtext of two paragraphs, a block scalar) widens it to multiline whatever the schema said, so the file shows every line the preview does.
 
-A text widget takes a richtext value's plaintext: the backend draws paragraphs and nothing else. A heading, rule, code block, list, quote, table or image in a content field warns `validation::declined_construct` at `validate` and `backend::declined_construct` at render, once per field and construct. The text of a heading, code block, list or quote still lands as lines; a rule, table or image lands as nothing.
+A text widget takes a richtext value's plaintext: the backend draws paragraphs and nothing else. A heading, rule, code block, list, quote, table or image in a content field warns `backend::declined_construct` at `validate` and at render, once per field and construct. The text of a heading, code block, list or quote still lands as lines; a rule, table or image lands as nothing.
 
 ### Top-left coordinates
 

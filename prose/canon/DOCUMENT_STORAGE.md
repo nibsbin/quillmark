@@ -85,8 +85,8 @@ the DTO alike.
 ### Legacy schemas (V0_116_0, V0_115_0, V0_112_0, V0_93_0, V0_92_0, V0_82_0, V0_81_0)
 
 Documents written under `"schema": "quillmark/document@0.116.0"` carry the
-current tree, over the content vocabulary without `element`
-(§ Content vocabularies), and the hop decodes the `body`.
+current tree, over the content vocabulary without `element` or a list item's
+`checked` (§ Content vocabularies), and the hop decodes the `body`.
 
 Documents written under `"schema": "quillmark/document@0.115.0"` carry the
 V0_116_0 tree, and the hop is a retag. A field item under it or any older tag
@@ -172,10 +172,9 @@ invariants on the way out as well as in, failing the write with a serializer
 error. The token a body rests on (`Normalized`) states that
 `Content::normalize` has run, which is weaker than validity: `validate`
 refuses only what `normalize` cannot repair — a forbidden character, two
-counts that disagree, a range or depth past a bound, a colliding id, an
-element outside the carrier grammar — and `Card::overwrite_body` takes a
-caller's content on that token alone. A store that checked only on load would
-accept bytes it could not read back.
+counts that disagree, a range or depth past a bound, a colliding id — and
+`Card::overwrite_body` takes a caller's content on that token alone. A store
+that checked only on load would accept bytes it could not read back.
 
 The guarantee follows from: struct field order is fixed in the frozen
 DTO tree; `Vec` fields preserve order by definition; the two disciplines
@@ -263,6 +262,13 @@ never meets a field. A new element name is no storage event, since no reader is
 frozen at a set of names; the member's arrival was one (`0.124.0`). A bag
 outside the grammar is `ParseError::Shape` on both lanes. Container identity
 compares the whole bag, `$name` among it.
+
+A task item's `checked` is a `list_item` bag entry, `true` ticked and `false`
+open, absent on an item that is no task. It is the item's, like `ordinal`: two
+items differing in it sit in one list run. A reader drops a bag key it does not
+name, so a build without `checked` would read a task list as a plain one and
+save it so; the key arrived under the tag that brought `element` (`0.124.0`),
+which that reader refuses.
 
 `island` is the one name a decoder reads that no encoder writes, and the
 exception that shows the rule's price. It names the line a block island sits on,
@@ -352,18 +358,31 @@ rewrites a cell's `text` and `marks` in place rather than minting a fresh
 `{text, marks}` object.
 
 A table island's props name `header`, `rows`, `aligns` (one per column:
-`none`, `left`, `center` or `right`) and two layout keys, each absent at its
-default and when invalid, so `from_markdown(to_markdown(c)) == c` holds:
+`none`, `left`, `center` or `right`) and three layout keys, each absent at its
+default:
 
 | Key | Value | Default |
 |---|---|---|
 | `widths` | one entry per column, an integer weight from 1 to 2⁵³ − 1 or `null` for an auto-fit column; settled to the column count | every entry `null` |
 | `align` | the table's placement: `left`, `center` or `right` | the plate's placement |
+| `headless` | `true`: `header` is the first body row, drawn as one | a header row |
 
 `widths` are weights, not lengths, so each plate decides what full width is.
 The keys ride the opaque props carrier, which an older reader round-trips, so
 adding them is no storage-version event, and a later props key joins the same
 way.
+
+A cell names two keys of its own, each absent by default:
+
+| Key | Value | Default |
+|---|---|---|
+| `align` | the cell's horizontal alignment: `left`, `center` or `right` | its column's `aligns` entry |
+| `valign` | the cell's vertical alignment: `top`, `middle` or `bottom` | the plate's |
+
+A cell's value equal to its column's is an override that stays when the
+column changes. A table or cell key holding a value outside its set is read
+as absent and rides untouched, as an unnamed key does, so
+`from_markdown(to_markdown(c)) == c` holds where every value is in its set.
 
 Two rules bound the payload:
 
@@ -631,8 +650,8 @@ turn and moves every built-in's payload into `attrs` inside that content.
 block island's line `para`. `0.116.0` writes a field item as
 `{type: field, key, value}` and refuses a document, card, payload or payload
 item carrying a key its type does not name, where every earlier tag reads past
-one. `0.124.0` leaves the tree unchanged and adds `element` to the container
-vocabulary.
+one. `0.124.0` leaves the tree unchanged, adds `element` to the container
+vocabulary and `checked` to a list item's `attrs`.
 
 The V0_92_0 hop cold-imports the stored markdown `body` string through the same
 Markdown → richtext path `Document::parse` uses, so a pathologically

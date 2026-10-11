@@ -44,7 +44,7 @@ what it is given and the mint settles it.
 
 ## Escape functions
 
-Two escapers guard the two Typst contexts; both live in `emit`:
+Three escapers guard two Typst contexts; all live in `emit`:
 
 - **`escape_markup`**: text in markup context. Escapes
   `\ // ~ * _ ` `` ` `` ` # [ ] { } $ < > @`, and the head of each shorthand
@@ -62,11 +62,22 @@ Two escapers guard the two Typst contexts; both live in `emit`:
   the paragraph. One character to one byte, so the per-character span scan
   stays exact, and the space is trivia the line-anchor guard holds open behind.
 
+  **Spaces hold their width.** Typst reads a run of spaces as one, so a space
+  with another behind it becomes `~`: `a.  b` writes `a.~ b`, two spaces wide
+  and still breakable at the last. Line layout trims a trailing `~` with the
+  space, so a run at a line's end adds nothing.
+
   **Smart quotes are the quill's.** `'` and `"` pass through, so Typst's
   language-aware substitution applies and a quill chooses with
   `#set smartquote(enabled: false)`. Escaping them here would settle that for
   every quill with no way back — unlike the shorthands, which the lexer decides
   and no set rule reaches.
+- **`escape_indent`**: the spaces, tabs and stray newlines opening a line,
+  which Typst drops whole. `escape_markup` with every space `~`, so typed
+  indentation reaches the page, cannot wrap off the word behind it, and keeps
+  the span scan 1:1. A line opens at the line anchor below and behind a
+  `#linebreak()`. A tab stays trivia: the editor draws it at its own width, and
+  no one byte matches that.
 - **`escape_string`**: text inside a Typst string literal. Escapes
   `\ " \n \r \t` and other control characters as `\u{…}`. Applied to `#link`
   URLs, code content, and code-fence language tags.
@@ -81,10 +92,10 @@ fails.
 
 That position is Typst's `at_start`, and it is four places: column 0, a list
 item's body head, the head of every content block `[…]` the emitter opens — one
-per wrap, one per table cell — and the spaces or tabs behind any of them, which
-Typst reads as trivia. A heading's body is none of them. The guard lands on the
-marker rather than ahead of the indentation: `\` before a space is Typst's
-linebreak, not an escape.
+per wrap, one per table cell — and the tabs behind any of them, which Typst
+reads as trivia. A heading's body is none of them. A `~` from `escape_indent`
+ends it. The guard lands on the marker rather than ahead of the tabs: `\`
+before whitespace is Typst's linebreak, not an escape.
 
 The same `\` guards the tail of a `#…` expression. Typst reads a `(` directly
 after one as that call's arguments, a `.` before an identifier as a field
@@ -120,8 +131,9 @@ is a lowering bug, never a document's.
 | `MarkKind::Anchor` | nothing |
 | `Container::ListItem` (bullet) | `- ` |
 | `Container::ListItem` (ordered) | `+ ` auto-numbered; the run's first item emits `N. `, which restarts Typst's running counter so an adjacent list numbers from its own `start` |
+| `Container::ListItem{checked}` (task) | the item's marker, then `#_qm-task(done)[…]` around its body (see [Tasks](#tasks)) |
 | `Container::Quote` | `#quote(block: true)[…]` |
-| `Container::Element{name, attrs}` | `#_qm-element("name", (…))[…]` (see [Elements](#elements)) |
+| `Container::Element{element}` | `#_qm-element("name", (…))[…]` (see [Elements](#elements)) |
 | `image` island | nothing, plus one `backend::declined_construct` warning per field (see [Declined images](#declined-images)) |
 | `table` island | `#table(columns: N, align: (…), table.header(…), …)` |
 
@@ -133,7 +145,9 @@ The table's layout keys lower as:
 | Knob | Lowering |
 |---|---|
 | `widths` | `columns: (2fr, 1fr, auto)`, a weight to `fr` and `null` to `auto`, in place of `columns: N` |
-| `align` | `#context align(center, table(…))`; a column at `none` takes `align.alignment`, and with no column aligned the table takes `table.align` where the plate sets one, else `align.alignment`, so the placement moves the table and no text inside it |
+| `align` | `align(center, table(…))` under `context`, with `table.cell` set to the horizontal `align.alignment` the table stands in, so the placement moves the table and no text inside it, save a horizontal alignment the plate's own `table.cell` show rule sets |
+| `headless` | `header` lowers as the first body row, outside `table.header` |
+| a cell's `align` / `valign` | `table.cell(align: right + bottom)[…]`, `middle` as `horizon`, which Typst folds with the column's alignment; a value outside its set lowers as absent |
 
 A table cell is canonical `{text, marks}`, lowered through the same mark sweep
 as prose: a formatted cell reaches `#strong[…]` / `#emph[…]` / `#raw(…)` /
@@ -151,7 +165,7 @@ leaves and containers alike: what the content nests, the markup nests.
 Anchor marks emit nothing; an `image` island emits nothing (see
 [Declined images](#declined-images)).
 Raw HTML other than an inline `<u>`, `<br>` (a hard break) and the `qm-*`
-carrier (markdown-spec §6.4) never enters the content, so it is absent here; math, task lists and definition lists
+carrier (markdown-spec §6.4) never enters the content, so it is absent here; math and definition lists
 enter it as literal text (markdown-spec §6.2, §6.3).
 
 ### Elements
@@ -171,9 +185,34 @@ content it renders:
 `attrs` is a dictionary of strings keyed by attribute name, sorted, and `(:)`
 when empty: each attribute as the document stores it.
 
+Where it draws the body alone, the dispatcher places a `<__qm_element__>`
+metadata ahead of it carrying the name and the registry's keys. The compile
+reads them back as one `typst::unregistered_element` warning per content field
+and fallen name. It counts that name's runs in the field, and its hint names
+`keep` and every registered name. The dispatcher reads one final registry, so
+a name that falls through once falls through everywhere, and a field the plate
+places twice counts once. A plate that means a name to draw plain registers
+`(attrs, body) => body`.
+
 An element's call keeps its run's structure in its `[…]`, so a run inside
 a list item stays in the item. The dispatcher's bytes fall between runs, so the
 source map holds no run for them.
+
+### Tasks
+
+A task item's body lowers into `_qm-task(done, body)`, which the helper
+defines beside `_qm-element`. It calls the renderer a plate sets on the
+helper's `tasks` state as `render(done, body)`, else draws a box ahead of the
+body, ticked when `done`. It reads the state's final value, as `elements` is
+read:
+
+```typst
+#import "@local/quillmark-helper:0.1.0": tasks
+#tasks.update(_ => (done, body) => if done { strike(body) } else { body })
+```
+
+The call opens on the marker's line and closes after the item's last block, so
+an item's later blocks and nested lists stay in it.
 
 ### Declined images
 
@@ -184,12 +223,12 @@ An `image` island lowers to nothing, and the compile that dropped it carries one
 counts wherever it sits, and a field holding one says so rather than losing it
 quietly.
 
-What such a `url` names is undecided. A document is quill-free but for
+No backend resolves such a `url`. A document is quill-free but for
 `$quill`, which is a *selector* ([VERSIONING](VERSIONING.md)) — `memo@1` admits
 1.0.0 and 1.1.0 alike — and everything else a document references is
 self-contained or declared. A path into one quill's file tree is neither, and
 no `DocPath`, `validate` signal or url space makes it either. A backend that
-resolved the string anyway would bind documents to a reading nothing versions.
+resolved the string would bind documents to a reading nothing versions.
 
 ### Island props
 
@@ -201,12 +240,12 @@ reads and the shape the WASM boundary pins:
   above); `aligns` is one `none | left | center | right` per column. Import
   normalizes to a single column count: header, every row, and `aligns` padded
   to the widest, so `columns:` and `align:` agree.
-  The optional layout keys `widths` and `align`
-  ([DOCUMENT_STORAGE.md](DOCUMENT_STORAGE.md) § "Content vocabularies") lower
-  as [above](#element-mapping); an absent one draws at its default: auto-fit,
-  at the plate's placement.
+  The optional layout keys `widths`, `align` and `headless`, and a cell's `align` and
+  `valign` ([DOCUMENT_STORAGE.md](DOCUMENT_STORAGE.md) § "Content vocabularies"),
+  lower as [above](#element-mapping); an absent one draws at its default:
+  auto-fit, at the plate's placement, in the column's alignment, under a header row.
 - **`image`** → `{ url, alt }`; `alt` is the empty string when the source omits
-  it. What `url` names is undecided (see [Declined images](#declined-images)).
+  it. No backend resolves `url` (see [Declined images](#declined-images)).
 
 The `IslandType` dispatch (`crates/content/src/island.rs`) owns these shapes
 engine-side; the WASM surface pins them as `TableProps` / `ImageProps` /

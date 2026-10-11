@@ -7,6 +7,7 @@
 //! only; SVG and PNG render an invisible placeholder.
 
 mod compile;
+mod elements;
 /// Content → Typst-markup lowering plus its per-segment source map.
 mod emit;
 mod error_mapping;
@@ -22,7 +23,7 @@ use quillmark_core::{
     backend::Backend,
     error::{Diagnostic, RenderError, RenderResult, Severity},
     quill::{
-        build_transform_schema, BlockConstruct, CalendarDate, Quill, QuillConfig,
+        build_transform_schema, CalendarDate, Quill, QuillConfig,
         QUILLMARK_ROSTER_KEY,
     },
     region::{ContentHit, RenderedRegion},
@@ -43,8 +44,6 @@ const SUPPORTED_FORMATS: &[OutputFormat] =
 /// recompiles.
 struct TypstSession {
     world: world::QuillWorld,
-    /// Walked per compile for the constructs this backend declines.
-    config: QuillConfig,
     /// Built once at `open`: the schema never changes for a session's lifetime,
     /// and codegen plus date validation read only these tables.
     schema_meta: SchemaMeta,
@@ -110,7 +109,7 @@ fn recompile(
         world,
         compile_warnings,
         &unclosed,
-        declined_warnings(config, data),
+        elements::unregistered(&document, config, data),
     );
     Ok(Compiled {
         document,
@@ -124,31 +123,13 @@ fn recompile(
     })
 }
 
-/// [`QuillConfig::declined_in_plate`] for this backend, an image's with what a
-/// plate draws instead.
-fn declined_warnings(config: &QuillConfig, data: &serde_json::Value) -> Vec<Diagnostic> {
-    let image = serde_json::Value::from(BlockConstruct::Image.as_str());
-    config
-        .declined_in_plate(TypstBackend.id(), data)
-        .into_iter()
-        .map(|diag| match diag.args.get("construct") {
-            Some(construct) if *construct == image => diag.with_hint(
-                "what a content image's url names is undecided; a plate draws a \
-                 quill asset with `#image(\"/assets/…\")`"
-                    .to_string(),
-            ),
-            _ => diag,
-        })
-        .collect()
-}
-
 /// One order, built in one place, so an `update` that swaps only what it
 /// recompiled keeps the quill's load warnings ahead of its own.
 fn session_warnings(
     world: &world::QuillWorld,
     compile: Vec<Diagnostic>,
     unclosed: &[(usize, String)],
-    declined: Vec<Diagnostic>,
+    unregistered: Vec<Diagnostic>,
 ) -> Vec<Diagnostic> {
     let mut all = world.load_warnings().to_vec();
     all.extend(compile);
@@ -164,7 +145,7 @@ fn session_warnings(
                 .to_string(),
         )
     }));
-    all.extend(declined);
+    all.extend(unregistered);
     all
 }
 
@@ -270,11 +251,15 @@ impl SessionHandle for TypstSession {
         self.live.document.pages().len()
     }
 
-    fn update(&mut self, json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> {
+    fn update(
+        &mut self,
+        config: &QuillConfig,
+        json_data: &serde_json::Value,
+    ) -> Result<ChangeSet, RenderError> {
         let compiled = recompile(
             &mut self.world,
             json_data,
-            &self.config,
+            config,
             &self.schema_meta,
             &self.scalar_windows,
         )?;
@@ -450,7 +435,6 @@ impl Backend for TypstBackend {
         })?;
         let session = TypstSession {
             world,
-            config: config.clone(),
             schema_meta,
             scalar_windows,
             live,
@@ -459,6 +443,7 @@ impl Backend for TypstBackend {
             Box::new(session),
             config.clone(),
             today,
+            json_data,
         ))
     }
 }
@@ -899,6 +884,7 @@ mod tests {
                 ordered: false,
                 start: 1,
                 ordinal,
+                checked: None,
                 instance: 0,
             }])
         };

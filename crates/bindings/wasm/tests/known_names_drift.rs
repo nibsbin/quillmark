@@ -35,12 +35,12 @@ fn container_tags() -> Vec<&'static str> {
             ordered: false,
             start: 1,
             ordinal: 0,
+            checked: None,
             instance: 0,
         },
         Container::Quote { instance: 0 },
         Container::Element {
-            name: String::new(),
-            attrs: Default::default(),
+            element: quillmark_content::carrier::Element::new("keep", Default::default()).unwrap(),
             instance: 0,
         },
     ];

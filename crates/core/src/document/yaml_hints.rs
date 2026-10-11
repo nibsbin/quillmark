@@ -7,6 +7,8 @@
 //! carried on the resulting [`crate::error::Diagnostic`] so every binding
 //! surfaces the same advice.
 
+use super::emit::saphyr_emit_scalar;
+
 /// Output of [`enrich_yaml_error`]: a cleaned message plus an optional hint.
 #[derive(Debug, Clone)]
 pub(crate) struct EnrichedYamlError {
@@ -94,9 +96,10 @@ fn derive_hint(message: &str, content: &str) -> Option<String> {
             return Some(hint);
         }
         if let Some((field, value)) = first_field_with_unquoted_colon(content) {
+            let quoted = saphyr_emit_scalar(&serde_json::Value::String(value));
             return Some(format!(
                 "Unquoted values cannot contain `:` (it starts a nested mapping key). \
-                 Quote the value: `{field}: \"{value}\"`"
+                 Quote the value: `{field}: {quoted}`"
             ));
         }
         return Some(
@@ -407,7 +410,7 @@ fn indented_top_level_key_hint(message: &str, content: &str) -> Option<String> {
     ))
 }
 
-/// The first `key: <value>` line whose unquoted value contains a second `:`,
+/// The first `key: <value>` line whose unquoted value holds a mapping `:`,
 /// which is what raises "mapping values are not allowed in this context".
 fn first_field_with_unquoted_colon(content: &str) -> Option<(String, String)> {
     for (key, value) in key_value_lines(content) {
@@ -420,7 +423,9 @@ fn first_field_with_unquoted_colon(content: &str) -> Option<(String, String)> {
         }
         // A comment's `:` is no part of the value.
         let value = uncommented(value).trim_end();
-        if value.contains(':') {
+        // `http://x` and `12:30` are plain scalars: only a `:` before a space
+        // or at the end opens a mapping.
+        if value.ends_with(':') || value.contains(": ") || value.contains(":\t") {
             return Some((key.trim().to_string(), value.to_string()));
         }
     }
@@ -563,6 +568,36 @@ mod tests {
         let enriched = enrich_yaml_error("mapping values are not allowed in this context", content);
         let hint = enriched.hint.expect("hint should be set");
         assert!(hint.contains("subtitle: \"a: b\""), "{hint}");
+    }
+
+    #[test]
+    fn hint_for_mapping_values_passes_a_plain_scalar_holding_a_colon() {
+        let content = "url: http://x\ntime: 12:30\ntitle: a: b\n";
+        let enriched = enrich_yaml_error("mapping values are not allowed in this context", content);
+        let hint = enriched.hint.expect("hint should be set");
+        assert!(hint.contains("title: \"a: b\""), "{hint}");
+    }
+
+    #[test]
+    fn the_quoted_value_a_colon_hint_suggests_parses_back_to_the_value() {
+        for (content, value) in [
+            ("title: He said \"hi\": ok\n", "He said \"hi\": ok"),
+            ("path: C:\\dir: x\n", "C:\\dir: x"),
+            ("note: it's: here\n", "it's: here"),
+        ] {
+            let raw = crate::value::parse_yaml::<serde_json::Value>(content)
+                .expect_err("an unquoted colon does not parse")
+                .to_string();
+            let hint = enrich_yaml_error(&raw, content).hint.expect("a hint");
+            let suggested = hint
+                .split_once("Quote the value: `")
+                .and_then(|(_, rest)| rest.strip_suffix('`'))
+                .unwrap_or_else(|| panic!("no suggestion in {hint}"));
+            let parsed = crate::value::parse_yaml::<serde_json::Value>(suggested)
+                .unwrap_or_else(|e| panic!("{suggested:?} does not parse: {e}"));
+            let (key, _) = content.split_once(':').unwrap();
+            assert_eq!(parsed[key], serde_json::json!(value), "{suggested}");
+        }
     }
 
     #[test]

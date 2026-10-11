@@ -37,8 +37,8 @@ Where the code falls short of an invariant, the matrix cell says so:
 construct's markdown cell it is also where the fixed point fails.
 
 The matrix reads a body. A `richtext` field's markdown string reports what
-it drops where a conform, a revise or `validate` imports it; a typed `set`
-and a card inserted with a string body drop it with no signal
+it drops where a conform, a typed `set`, a revise or `validate` imports it; a
+card inserted with a string body drops it with no signal
 ([ERROR.md](ERROR.md#warning-flow)).
 
 ## The matrix
@@ -60,7 +60,7 @@ import meets. The columns:
 | spells | the surface has a form for the construct and reads it back as written |
 | carries opaquely | the surface keeps the construct without reading it: an opaque carrier, or a markdown write through `revise` keeping an anchor by diff-rebase |
 | honors | the lowering draws it as CONVERT.md maps it |
-| declines with a signal | the surface drops it and reports so: an import under `parse::dropped_construct`, a render under `backend::declined_construct`, `validate` under `validation::declined_construct` |
+| declines with a signal | the surface drops it and reports so: an import under `parse::dropped_construct`, a render or `validate` under `backend::declined_construct`, or a render under `typst::unregistered_element` for an element |
 | refuses | the surface rejects the write |
 | silent: honored | no signal, and none is owed: the outcome is the one the construct asks for |
 | n/a | the surface never meets the construct: past the markdown column, a spelling the import does not store |
@@ -87,6 +87,7 @@ import meets. The columns:
 | `container.list_item.start`: ordered item, custom `start` | spells | spells | spells | honors | silent: honored | none |
 | `container.list_item.instance`: two adjacent ordered lists | spells | spells | spells | honors | silent: honored | none |
 | `container.list_item.instance.bullet`: two adjacent bullet lists | spells | spells | spells | drops silently | drops silently | none |
+| `container.list_item.task`: a task item, ticked and open | spells | spells | spells | honors | silent: honored | none |
 | `container.quote`: block quote | spells | spells | spells | honors | silent: honored | none |
 | `container.quote.instance`: two adjacent quotes | spells | spells | spells | honors | silent: honored | none |
 | `container.element`: an element around blocks | spells | spells | spells | honors | silent: honored | none |
@@ -94,12 +95,17 @@ import meets. The columns:
 | `container.element.instance`: two adjacent runs of one element | spells | spells | spells | honors | silent: honored | none |
 | `container.element.in_item`: an element in a list item | spells | spells | spells | honors | silent: honored | none |
 | `container.element.around_list`: an element around a list | spells | spells | spells | honors | silent: honored | none |
+| `container.element.unregistered`: an element no renderer takes | spells | spells | spells | declines with a signal | drops silently | `typst::unregistered_element` |
 
 Two adjacent bullet lists lower to items a blank line parts, which Typst reads
 as one wide list: the `instance` boundary does not reach the page.
 
 An element lowers through the helper's dispatcher, which draws it with the
 renderer a plate registers under its name ([CONVERT.md](CONVERT.md#elements)).
+One no renderer takes draws what it wraps, and only a compile reads the
+registry, so `validate` cannot report it.
+A task item's body lowers the same way, through the renderer a plate sets on
+`tasks`, else as a box ticked when done.
 
 ### Marks
 
@@ -127,19 +133,31 @@ diff-rebase alone. The row's corpus entry pins the spelling under
 | `island.table.aligns`: table with column `aligns` | spells | spells | spells | honors | silent: honored | none |
 | `island.table.cell.marks`: a cell holding marks | spells | spells | spells | honors | silent: honored | none |
 | `island.table.cell.break`: a cell's `\n`, spelled `<br>` | spells | spells | spells | honors | silent: honored | none |
+| `island.table.cell.align`: a cell's horizontal alignment | spells | spells | spells | honors | silent: honored | none |
+| `island.table.cell.valign`: a cell's vertical alignment | spells | spells | spells | honors | silent: honored | none |
+| `island.table.cell.align_valign`: both, over a cell holding marks | spells | spells | spells | honors | silent: honored | none |
 | `island.table.props.unnamed`: a props key the engine does not name | drops silently | carries opaquely | carries opaquely | drops silently | drops silently | none |
 | `island.table.cell.unnamed`: a cell key the engine does not name | drops silently | carries opaquely | carries opaquely | drops silently | drops silently | none |
+| `island.table.cell.value`: a cell `valign` outside its set | drops silently | carries opaquely | carries opaquely | drops silently | drops silently | none |
+| `island.table.props.value`: a table `align` outside its set | drops silently | carries opaquely | carries opaquely | drops silently | drops silently | none |
 | `island.table.props.widths`: column weights, `null` an auto-fit column | spells | spells | spells | honors | silent: honored | none |
 | `island.table.props.widths.auto`: every column auto-fit, the default | spells | spells | spells | silent: honored | silent: honored | none |
 | `island.table.props.align`: the table's placement | spells | spells | spells | honors | silent: honored | none |
-| `island.image` | spells | spells | spells | declines with a signal | declines with a signal | `backend::declined_construct`, `validation::declined_construct`, `image` |
+| `island.table.props.headless`: a table drawn with no header row | spells | spells | spells | honors | silent: honored | none |
+| `island.image` | spells | spells | spells | declines with a signal | declines with a signal | `backend::declined_construct`, `image` |
 
 A table re-imports from its pipe syntax, so `to_markdown` and `revise` both
 mint it without a key the engine does not name.
 
-`widths` and `align` are spelled on a `qm-table` wrapper
+`widths`, `align` and `headless` are spelled on a `qm-table` wrapper
 ([markdown-spec.md](../references/markdown-spec.md) §6.4). Each is absent at
 its default, so a default row stores no key.
+
+A cell's `align` and `valign` are spelled on a `qm-cell` pair around the cell's
+whole content (§6.4).
+
+A table or cell key holding a value outside its set rests as written and rides
+as a key the engine does not name does.
 
 ### Spellings
 
@@ -158,21 +176,24 @@ above, or markup the content does not store.
 | `html.comment` | silent: honored | n/a | n/a | n/a | n/a | none |
 | `html.tag_line.paragraph`: a type 6 tag line under paragraph text, dropping what follows to the blank line | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `div` |
 | `html.tag_line.list`: a tag line between list items, ending the list | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `div` |
-| `carrier.element.tight`: element tag lines tight around markdown, dropping it | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `qm-keep` |
+| `carrier.element.tight`: element tag lines tight around markdown | spells | spells | spells | honors | silent: honored | none |
 | `carrier.element.void`: an element around nothing | spells | spells | spells | honors | silent: honored | none |
 | `carrier.element.unclosed`: an element still open where the body ends | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `qm-keep` |
 | `carrier.element.self_closing`: a self-closing element tag | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `qm-keep` |
 | `carrier.element.inline`: an element pair inside a line | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `qm-hl` |
 | `carrier.element.attr`: an element attribute outside the grammar | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `qm-keep[onclick]` |
 | `carrier.element.stray_close`: an element close tag with nothing open | silent: honored | n/a | n/a | n/a | n/a | none |
-| `carrier.element.stray_close.tight`: an element close tag with nothing open, tight above markdown it drops | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `qm-keep` |
+| `carrier.element.stray_close.tight`: an element close tag with nothing open, tight above markdown it keeps | silent: honored | n/a | n/a | n/a | n/a | none |
 | `carrier.table`: the reserved `qm-table` around a table | spells | spells | spells | honors | silent: honored | none |
 | `carrier.table.holds_other`: a `qm-table` around anything but one table | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `qm-table` |
 | `carrier.table.attr`: a `qm-table` attribute the engine does not name | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `qm-table[foo]` |
 | `carrier.table.value`: a `qm-table` attribute value outside its spelling | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `qm-table[widths]` |
+| `carrier.cell.partial`: a `qm-cell` pair around part of a cell | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `qm-cell` |
+| `carrier.cell.value`: a `qm-cell` attribute value outside its spelling | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `qm-cell[valign]` |
 | `carrier.anchor`: an echoed `qm-anchor` | silent: honored | n/a | n/a | n/a | n/a | none |
 | `markdown.link_title`: a link's title | drops silently | n/a | n/a | n/a | n/a | none |
 | `markdown.cell_image`: an image in a table cell | drops silently | n/a | n/a | n/a | n/a | none |
+| `markdown.footnote`: a footnote definition, its reference kept as text | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `footnote` |
 
 `html.br` and `html.u` land as a hard break and an underline, so their cells
 past markdown read those constructs. What a markup row wraps imports as
@@ -215,14 +236,17 @@ fails:
 - An entry's `annotated` is `to_markdown_annotated(content)`'s markdown,
   imports, warning nothing, to `content` without its anchors, and revises a
   body holding `content` to `content`.
+- A document whose body holds `content` emits markdown, and an annotated read,
+  that each parse through `Document::parse`, warning nothing, to a body
+  holding `reimports`; the read lists each anchor of `content` at `main.body`
+  and spells `annotated`.
 - The rest runs through the fixture quill `table_demo`, against `typst` and
   `signals`.
 - The body's block in the generated helper, which is `emit_content`'s markup,
   contains every `typst` substring.
 - A one-shot render warns exactly `signals.render`.
 - `Quill::validate` on that document reports exactly `signals.validate`, and
-  its `validation::declined_construct` list (path, construct, count) is the
-  render's `backend::declined_construct` list.
+  its `backend::declined_construct` diagnostics are the render's.
 - The matrix above has a row per entry and an entry per row, and a row's
   Markdown, Typst lowering and Validate cells read `declines with a signal`
   exactly where the entry's signals warn there, its Signal cell naming each
@@ -231,15 +255,12 @@ fails:
 A row whose construct the import does not store still has its `typst`: what the
 markup wrapped reaches the page.
 
-Each binding runs the corpus through its own doors. The WASM binding's
-`parity.test.js` holds every entry to the markdown, op-wire, storage, revise
-and annotated assertions above, through `importMarkdown`, `fromMarkdown`,
-`overwrite`, `applyChange`, `fromStored`, `exportMarkdown`, `revise`, `rebase`
-and `toAnnotatedMarkdown`. Python, which has no content lane, holds each
-spelling through `Document.from_markdown`, each `content` through a stored
-load, the body read and `revise_body`, each `annotated` read through the parse
-and `revise_body`, and every entry's `signals.validate` and `signals.render`
-through `validate` and `render` (`tests/test_parity.py`).
+Each binding holds what only it can break, the crossing: every entry's
+`content` and import warnings cross out of a markdown import and a parse, and
+`content` crosses back in through a write and storage. The WASM binding's
+`parity.test.js` goes through `importMarkdown`, `fromMarkdown`, `overwrite` and
+`fromStored`; Python's `tests/test_parity.py` through `Document.from_markdown`
+and a stored load.
 
 A construct enters the engine with its row and its entry, and a change to what
 a surface does with one edits both.

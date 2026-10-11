@@ -137,11 +137,34 @@ A `qm-<name>` element renders through the helper's `elements` registry. A plate 
 #data.at("$body", default: [])
 ```
 
-The dispatcher reads the registry's final value, so the update may stand anywhere in the plate. An element around nothing, `<qm-sig>` on the line above `</qm-sig>`, calls its renderer with a body that draws nothing, `[ ]`, which suits a signature line or a stamp. `attrs` is a dictionary of the element's attributes keyed by name, each value a string with its entities decoded: `note="a &amp; b"` arrives as `"a & b"`. With no renderer registered, the built-in `keep` holds its content on one page, and any other element draws its content alone.
+The dispatcher reads the registry's final value, so the update may stand anywhere in the plate. An element around nothing, `<qm-sig></qm-sig>`, calls its renderer with a body that draws nothing, `[ ]`, which suits a signature line or a stamp. `attrs` is a dictionary of the element's attributes keyed by name, each value a string with its entities decoded: `note="a &amp; b"` arrives as `"a & b"`. With no renderer registered, the built-in `keep` holds its content on one page, and any other element draws its content alone and warns `typst::unregistered_element` at its field. To draw a name as plain content without the warning, register `(attrs, body) => body` under it.
+
+The warning rides a document-global `metadata` the dispatcher places ahead of such an element. Its label `<__qm_element__>` and `kind: "__qm_element__"` are reserved, and a plate that reads its own config through `query(metadata)` filters to its own elements, as under [form fields](#form-fields).
+
+### Task lists
+
+A task item draws a box before its content, ticked when done. A plate replaces the box by setting the helper's `tasks` state to a renderer taking whether the task is done and the item's content. This one strikes through a done task and draws no box:
+
+```typst
+#import "@local/quillmark-helper:0.1.0": data, tasks
+
+#tasks.update(_ => (done, body) => if done { strike(body) } else { body })
+```
+
+As with `elements`, the renderer is read from the state's final value, so the update may stand anywhere in the plate.
 
 ### Tables
 
-A table in content lowers to a call of Typst's `table`, so `#set table(..)` and `#show table: ..` reach it. The call always passes `columns`, and passes `align` where the document aligns a column, so a set rule's `columns` never applies and its `align` applies only to a table aligning no column. A `qm-table` wrapper's `widths` lower to `fr` tracks, `auto` for an auto-fit column, and its `align` places the table with `align(..)` without moving the text in its cells.
+A table in content lowers to a call of Typst's `table`, so `#set table(..)` and `#show table: ..` reach it. The call always passes `columns`, and passes `align` where the document aligns a column, so a set rule's `columns` never applies and its `align` applies only to a table aligning no column. A `qm-table` wrapper's `widths` lower to `fr` tracks, `auto` for an auto-fit column, and its `align` places the table with `align(..)` without moving the text in its cells. A `qm-cell` pair's `align` and `valign` lower to `table.cell(align: ..)`, `middle` as `horizon`, which Typst combines with the column's alignment, so `valign="bottom"` in a right-aligned column draws at the bottom right.
+
+A `qm-table` wrapper's `headless` lowers the first row as a body row, with no `table.header`. A show rule on `table.header` does not reach its cells, so a plate styling the header row reads whether the table has one:
+
+```typst
+#show table: it => if it.children.any(c => c.func() == table.header) {
+  show table.cell.where(y: 0): set text(weight: "bold")
+  it
+} else { it }
+```
 
 ## Modules
 
@@ -233,9 +256,9 @@ from any file.
 #image("/assets/logo.svg", width: 2cm)
 ```
 
-**A markdown image in a `richtext` field draws nothing.** `![logo](assets/logo.svg)` in document content reaches no page, and the render warns under `backend::declined_construct`, naming the field and how many images it holds; `quill.validate(doc)` warns the same under `validation::declined_construct`.
+**A markdown image in a `richtext` field draws nothing.** `![logo](assets/logo.svg)` in document content reaches no page, and the render warns under `backend::declined_construct`, naming the field and how many images it holds; `quill.validate(doc)` warns the same.
 
-What such a url names — a file in this Quill, a path beside the document, a remote address — is undecided. A document is portable across every version a `$quill` selector admits, so a path into one Quill's file tree is not a binding it can take. The construct still stores and round-trips; only the page declines it.
+The backend resolves such a url under no reading: not as a file in this Quill, a path beside the document, or a remote address. A document is portable across every version a `$quill` selector admits, so a path into one Quill's file tree is not a binding it can take. The construct still stores and round-trips; only the page declines it.
 
 ## Typesetting
 

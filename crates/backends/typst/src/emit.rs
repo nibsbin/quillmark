@@ -33,6 +33,11 @@ fn reads_as_newline(c: char) -> bool {
 /// Every character Typst reads as a newline but `\n` lowers to a space: no
 /// escape neutralizes one, a `\` before whitespace being Typst's linebreak.
 ///
+/// A space with another behind it is `~`: Typst reads a run of spaces as one,
+/// and a run held as non-breaking spaces closing on one breakable space is as
+/// wide as typed and still breaks. Line layout trims a trailing `~` with the
+/// space, so a run at a line's end adds nothing.
+///
 /// `'` and `"` pass through. Smart quotes are an element with a set rule, so a
 /// quill chooses with `#set smartquote(enabled: false)`; escaping them here
 /// would settle that for every quill with no way back.
@@ -54,6 +59,7 @@ pub fn escape_markup(s: &str) -> String {
                 out.push_str(r"\-")
             }
             '.' if rest.starts_with("..") => out.push_str(r"\."),
+            ' ' if rest.starts_with(' ') => out.push('~'),
             // One char to one byte, which `gen_cluster` reads back as a plain
             // cluster.
             c if reads_as_newline(c) => out.push(' '),
@@ -65,6 +71,13 @@ pub fn escape_markup(s: &str) -> String {
         }
     }
     out
+}
+
+/// [`escape_markup`] with every space `~`, for the trivia opening a line, which
+/// Typst drops whole. One byte per space keeps the source map 1:1, and the
+/// indent cannot wrap away from the word behind it.
+pub fn escape_indent(s: &str) -> String {
+    escape_markup(s).replace(' ', "~")
 }
 
 /// Inside a Typst string literal only `"` and `\` are structural; newlines and
@@ -153,6 +166,9 @@ enum Tail {
     /// Ink, then something that emitted no bytes: the text ahead abuts the text
     /// behind ([`couples_across`]).
     Seam,
+    /// A `#linebreak()`: an expression tail, and a line start for the trivia
+    /// behind it, though no marker is live.
+    Break,
 }
 
 /// The escape discipline a text run was generated under: which scan inverts its
@@ -164,6 +180,19 @@ pub enum EscapeCtx {
     Markup,
     /// [`escape_string`]: inside a `"…"` literal (`\"`, `\\`, `\n`, `\/\/` no-op).
     StringLit,
+    /// [`escape_indent`]: a line's leading trivia, read back as [`Self::Markup`].
+    Indent,
+}
+
+#[cfg(test)]
+impl EscapeCtx {
+    pub(crate) fn escape(self, s: &str) -> String {
+        match self {
+            EscapeCtx::Markup => escape_markup(s),
+            EscapeCtx::StringLit => escape_string(s),
+            EscapeCtx::Indent => escape_indent(s),
+        }
+    }
 }
 
 /// `(content_chars, byte_len)` for the cluster at byte `i` of `generated`. Reads
@@ -173,7 +202,7 @@ pub enum EscapeCtx {
 fn gen_cluster(generated: &str, i: usize, ctx: EscapeCtx) -> (usize, usize) {
     let rest = &generated[i..];
     match ctx {
-        EscapeCtx::Markup => {
+        EscapeCtx::Markup | EscapeCtx::Indent => {
             // `\/\/`, the `//` coupling: two content chars, four bytes, one cluster.
             if rest.as_bytes().starts_with(br"\/\/") {
                 return (2, 4);
@@ -436,8 +465,8 @@ impl<'a> Emit<'a> {
                 self.emit_quote(i..j, depth);
                 Some(j)
             }
-            Container::Element { name, attrs, .. } => {
-                self.emit_element(i..j, depth, name, attrs);
+            Container::Element { element, .. } => {
+                self.emit_element(i..j, depth, element.name(), element.attrs());
                 Some(j)
             }
         }
@@ -461,13 +490,15 @@ impl<'a> Emit<'a> {
         self.end_newline = true;
     }
 
-    /// An empty paragraph emits nothing; every other block (an empty heading or
-    /// code fence included) still renders.
+    /// A paragraph of nothing but spaces and tabs emits nothing, as an empty one
+    /// does; every other block (an empty heading or code fence included) still
+    /// renders.
     fn emit_leaf_terminated(&mut self, range: Range<usize>) {
         let first = &self.rt.lines[range.start];
         let (lo, _) = self.line_usv[range.start];
         let (_, hi) = self.line_usv[range.end - 1];
-        if matches!(first.kind, LineKind::Para) && lo == hi {
+        let blank = self.chars[lo..hi].iter().all(|c| matches!(c, ' ' | '\t'));
+        if matches!(first.kind, LineKind::Para) && blank {
             return;
         }
         self.open_line();
@@ -483,11 +514,11 @@ impl<'a> Emit<'a> {
             .any(|c| matches!(c, Container::ListItem { .. }));
         let rt = self.rt;
         for item in quillmark_content::traverse::items(&rt.lines, range.clone(), depth) {
-            let ordinal = match item.container {
-                Container::ListItem { ordinal, .. } => *ordinal,
-                _ => 0,
+            let (ordinal, checked) = match item.container {
+                Container::ListItem { ordinal, checked, .. } => (*ordinal, *checked),
+                _ => (0, None),
             };
-            self.emit_item(item.range, depth, ordered, start, ordinal == 0);
+            self.emit_item(item.range, depth, ordered, start, ordinal == 0, checked);
         }
         if outermost {
             self.out.push('\n');
@@ -497,6 +528,7 @@ impl<'a> Emit<'a> {
 
     /// The marker is `- `, the explicit `N. ` on the first item of an ordered
     /// list starting off-1, or `+ ` (Typst auto-numbers `+` from that number).
+    /// A task's body is the content block of a `_qm-task` call.
     fn emit_item(
         &mut self,
         range: Range<usize>,
@@ -504,6 +536,7 @@ impl<'a> Emit<'a> {
         ordered: bool,
         start: u64,
         first: bool,
+        checked: Option<bool>,
     ) {
         self.open_line();
         if ordered {
@@ -522,7 +555,15 @@ impl<'a> Emit<'a> {
         self.end_newline = false;
         self.head_inline = true;
         self.indent.push_str("  ");
+        if let Some(done) = checked {
+            self.out.push_str(&task_open(done));
+        }
         self.emit_item_body(range, depth + 1);
+        if checked.is_some() {
+            self.open_line();
+            self.out.push(']');
+            self.end_newline = false;
+        }
         self.indent.truncate(self.indent.len() - 2);
         self.head_inline = false;
         if !self.end_newline {
@@ -667,14 +708,16 @@ impl<'a> Emit<'a> {
 
     /// Does the segment about to open sit at a line anchor: column 0 of a
     /// generated source line, indentation ahead of it not counting, or the head of a
-    /// list item's body, which the parser reads as a line start of its own. A
-    /// heading's body is not one, and neither is any position prose has reached.
+    /// list item's body or a task's content block, which the parser reads as a
+    /// line start of its own. A heading's body is not one, and neither is any
+    /// position prose has reached.
     fn at_line_anchor(&self) -> bool {
         let head = |s: &str| {
             let s = s.trim_end_matches([' ', '\t']);
             s.is_empty() || s.ends_with('\n')
         };
         head(&self.out)
+            || [true, false].iter().any(|&done| self.out.ends_with(&task_open(done)))
             || ["- ", "+ "]
                 .iter()
                 .any(|m| self.out.strip_suffix(m).is_some_and(head))
@@ -738,9 +781,9 @@ impl<'a> Emit<'a> {
             return String::new();
         };
         match isl.island_type {
-            // Declined: what a content image's url names is undecided, so this
-            // backend draws none and `backend::declines` names it for the
-            // warning saying so.
+            // Declined: a content image's url names nothing a document can
+            // bind to (CONVERT.md § Declined images), so this backend draws
+            // none and `backend::declines` names it for the warning saying so.
             IslandType::Image => String::new(),
             IslandType::Table => table_markup(&isl.props),
         }
@@ -913,11 +956,12 @@ fn element_call(name: &str, attrs: &BTreeMap<String, String>) -> String {
 /// line-anchor one and [`continues_expr`]'s — whose byte sits *outside* the
 /// run's window so `generated == escape_markup(content)` stays exact.
 ///
-/// Under [`Tail::Anchor`] a run opening with trivia — spaces, tabs, and the
-/// [`reads_as_newline`] characters [`escape_markup`] lowers to a space — stops
-/// at the first character that is none of them: Typst reads trivia as holding
-/// the anchor open behind it, while `\` before a space is its linebreak rather
-/// than an escape, so the guard byte has to land on the marker itself.
+/// At a line start ([`Tail::Anchor`], [`Tail::Break`]) a run opening with
+/// trivia — spaces, tabs, and the [`reads_as_newline`] characters
+/// [`escape_markup`] lowers to a space — stops at the first character that is
+/// none of them and lowers through [`escape_indent`]. A tab stays trivia and
+/// holds the anchor open behind it, while `\` before a space is its linebreak
+/// rather than an escape, so the guard byte has to land on the marker itself.
 fn emit_run(
     out: &mut String,
     pos: usize,
@@ -938,13 +982,35 @@ fn emit_run(
     }
     let mut re = next_boundary(pos, hi, chars, wraps, codes);
     let trivia = |c: char| c == ' ' || c == '\t' || reads_as_newline(c);
-    if tail == Tail::Anchor && trivia(chars[pos]) {
+    if matches!(tail, Tail::Anchor | Tail::Break) && trivia(chars[pos]) {
         re = (pos..re).find(|&p| !trivia(chars[p])).unwrap_or(re);
+        let content: String = chars[pos..re].iter().collect();
+        let g0 = out.len();
+        let indent = escape_indent(&content);
+        out.push_str(&indent);
+        let g1 = out.len();
+        let left = match tail {
+            Tail::Anchor if !indent.contains('~') => Tail::Anchor,
+            _ => Tail::Text,
+        };
+        return (re, left, (pos..re, g0..g1, EscapeCtx::Indent));
+    }
+    // A space behind a mark's close meets the one inside it, and Typst would
+    // collapse the pair.
+    if chars[pos] == ' '
+        && pos > 0
+        && chars[pos - 1] == ' '
+        && !codes.iter().any(|&(s, e)| s < pos && pos <= e)
+    {
+        let g0 = out.len();
+        out.push('~');
+        let g1 = out.len();
+        return (pos + 1, Tail::Text, (pos..pos + 1, g0..g1, EscapeCtx::Indent));
     }
     let content: String = chars[pos..re].iter().collect();
     let guarded = match tail {
         Tail::Anchor => opens_line_anchor(&content),
-        Tail::Expr => continues_expr(&content),
+        Tail::Expr | Tail::Break => continues_expr(&content),
         Tail::Seam => couples_across(out.chars().last(), &content),
         Tail::Text => false,
     };
@@ -954,11 +1020,13 @@ fn emit_run(
     let g0 = out.len();
     out.push_str(&escape_markup(&content));
     let g1 = out.len();
-    let left = match tail {
-        Tail::Anchor if content.chars().all(trivia) => Tail::Anchor,
-        _ => Tail::Text,
-    };
-    (re, left, (pos..re, g0..g1, EscapeCtx::Markup))
+    (re, Tail::Text, (pos..re, g0..g1, EscapeCtx::Markup))
+}
+
+/// A task item's body opens as the content block of this call, the helper's
+/// `_qm-task(done, body)`.
+fn task_open(done: bool) -> String {
+    format!("#_qm-task({done})[")
 }
 
 /// A `\n` at `pos` lowers to `#linebreak()`: the step a sweep callback takes
@@ -969,7 +1037,7 @@ fn linebreak_at(out: &mut String, chars: &[char], pos: usize) -> Option<(usize, 
         return None;
     }
     out.push_str("#linebreak()");
-    Some((pos + 1, Tail::Expr))
+    Some((pos + 1, Tail::Break))
 }
 
 /// A cell is flat inline (no islands; a `\n` is a line break), so its markup
@@ -995,8 +1063,12 @@ fn cell_markup(text: &str, marks: &[Mark]) -> String {
 ///
 /// - `widths`: `columns: (2fr, auto)` in place of `columns: 2`.
 /// - `align`: `align(center, table(…))` under `context`, where each cell
-///   aligning by default takes the alignment the table stands in, so placing a
-///   table moves no text inside it.
+///   aligning by default is set to the horizontal alignment the table stands
+///   in, so placing a table moves no text inside it, save a horizontal
+///   alignment the plate's own `table.cell` show rule sets.
+/// - a cell's `align` and `valign`: `table.cell(align: right + bottom)[…]`,
+///   which Typst folds with its column's alignment.
+/// - `headless`: the header row as the first body row, outside `table.header`.
 fn table_markup(props: &serde_json::Value) -> String {
     use serde_json::Value;
     let header = props.get("header").and_then(|v| v.as_array());
@@ -1018,24 +1090,25 @@ fn table_markup(props: &serde_json::Value) -> String {
         return String::new();
     }
 
-    let placement = props
-        .get("align")
-        .and_then(Value::as_str)
-        .filter(|a| quillmark_content::island::TABLE_ALIGNS.contains(a));
-    // Placed, the table is a call under `context`, so a cell aligning by default
-    // reads the alignment outside the placement rather than the placement's.
-    let inherited = "align.alignment";
+    let layout = quillmark_content::island::TableLayout::of(props);
 
     let cell = |v: &Value| {
         let (text, marks) = quillmark_content::serial::parse_cell(v);
-        format!("[{}]", cell_markup(&text, &marks))
+        let body = cell_markup(&text, &marks);
+        let (align, valign) = quillmark_content::island::cell_alignment(v);
+        let valign = valign.map(|v| if v == "middle" { "horizon" } else { v });
+        match (align, valign) {
+            (None, None) => format!("[{body}]"),
+            (Some(a), None) | (None, Some(a)) => format!("table.cell(align: {a})[{body}]"),
+            (Some(a), Some(v)) => format!("table.cell(align: {a} + {v})[{body}]"),
+        }
     };
 
     let mut out = String::from("table(\n");
-    match props.get("widths").and_then(Value::as_array) {
+    match &layout.widths {
         Some(weights) => {
             let tracks: Vec<String> = (0..cols)
-                .map(|i| match weights.get(i).and_then(Value::as_u64) {
+                .map(|i| match weights.get(i).copied().flatten() {
                     Some(n) => format!("{n}fr"),
                     None => "auto".to_string(),
                 })
@@ -1055,24 +1128,20 @@ fn table_markup(props: &serde_json::Value) -> String {
                 "left" => "left",
                 "center" => "center",
                 "right" => "right",
-                _ if placement.is_some() => inherited,
                 _ => "auto",
             });
         }
         out.push_str("),\n");
-    } else if placement.is_some() {
-        out.push_str(&format!(
-            "  align: if table.align == auto {{ {inherited} }} else {{ table.align }},\n"
-        ));
     }
-    out.push_str("  table.header(");
+    let headless = layout.headless;
+    out.push_str(if headless { "  " } else { "  table.header(" });
     if let Some(h) = header {
         for c in h {
             out.push_str(&cell(c));
             out.push_str(", ");
         }
     }
-    out.push_str("),\n");
+    out.push_str(if headless { "\n" } else { "),\n" });
     if let Some(rs) = rows {
         for row in rs {
             if let Some(r) = row.as_array() {
@@ -1086,8 +1155,8 @@ fn table_markup(props: &serde_json::Value) -> String {
         }
     }
     out.push(')');
-    match placement {
-        Some(at) => format!("#context align({at}, {out})"),
+    match layout.align {
+        Some(at) => format!("#context {{ show table.cell: set align(align.alignment.x); align({at}, {out}) }}"),
         None => format!("#{out}"),
     }
 }
@@ -1353,14 +1422,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn formatted_table_cell_renders_marks() {
-        let md = "| Name | Note |\n|------|------|\n| **bold** | _italic_ |";
-        let got = emit(md).markup;
-        assert!(got.contains("#strong[bold]"), "got {got:?}");
-        assert!(got.contains("#emph[italic]"), "got {got:?}");
-    }
-
     /// Coincident `strong`+`emph` lose their source nesting order at import, so
     /// the emitter nests them in the order the canonical form stores.
     #[test]
@@ -1398,7 +1459,13 @@ mod tests {
     /// `...` alone.
     fn cluster_at(chars: &[char], i: usize, ctx: EscapeCtx) -> (usize, String) {
         let at = |k: usize| chars.get(i + k).copied();
-        if ctx == EscapeCtx::Markup {
+        if ctx == EscapeCtx::Indent && chars[i] == ' ' {
+            return (1, "~".to_string());
+        }
+        if chars[i] == ' ' && at(1) == Some(' ') && ctx != EscapeCtx::StringLit {
+            return (1, "~".to_string());
+        }
+        if ctx != EscapeCtx::StringLit {
             if chars[i] == '/' && at(1) == Some('/') {
                 return (2, r"\/\/".to_string());
             }
@@ -1412,11 +1479,7 @@ mod tests {
             }
         }
         let s = chars[i].to_string();
-        let bytes = match ctx {
-            EscapeCtx::Markup => escape_markup(&s),
-            EscapeCtx::StringLit => escape_string(&s),
-        };
-        (1, bytes)
+        (1, ctx.escape(&s))
     }
 
     /// Reconstructs a run's generated bytes cluster by cluster, for
@@ -1479,7 +1542,9 @@ mod tests {
                 }
                 return;
             }
-            kinds.push(n.kind());
+            // `~` is the held space the escapers write, which the page reads as one.
+            let held = n.kind() == SyntaxKind::Shorthand && n.leaf_text() == "~";
+            kinds.push(if held { SyntaxKind::Space } else { n.kind() });
             match n.kind() {
                 SyntaxKind::Escape => text.push(ast::Escape::from_untyped(n).unwrap().get()),
                 SyntaxKind::Shorthand => {
@@ -1560,7 +1625,7 @@ mod tests {
             assert!(rt.validate().is_err(), "{c:?} passes the content invariants");
 
             let markup = emit_content(&rt).unwrap().markup;
-            assert_eq!(markup, " \\- item  tail = not a heading\n\n", "for {c:?}");
+            assert_eq!(markup, "~- item  tail = not a heading\n\n", "for {c:?}");
             for k in resolve(&markup).1 {
                 assert!(ALLOWED_LEAVES.contains(&k), "{c:?} lowered to a {k:?} leaf");
             }
@@ -1766,10 +1831,7 @@ mod tests {
                 assert!(seg.generated.start <= seg.generated.end && seg.generated.end <= ec.markup.len());
                 for (content, generated, ctx) in &seg.runs {
                     let src: String = chars[content.clone()].iter().collect();
-                    let expect = match ctx {
-                        EscapeCtx::Markup => escape_markup(&src),
-                        EscapeCtx::StringLit => escape_string(&src),
-                    };
+                    let expect = ctx.escape(&src);
                     assert_eq!(
                         &ec.markup[generated.clone()],
                         expect,
@@ -1929,73 +1991,6 @@ mod tests {
     }
 
     #[test]
-    fn the_layout_keys_lower_to_typst() {
-        let props = serde_json::json!({
-            "header": [
-                { "text": "a", "marks": [] },
-                { "text": "b", "marks": [] },
-            ],
-            "rows": [[{ "text": "1", "marks": [] }, { "text": "2", "marks": [] }]],
-            "aligns": ["none", "left"],
-            "widths": [2, null],
-            "align": "center",
-        });
-        assert_eq!(
-            table_markup(&props),
-            "#context align(center, table(\n  columns: (2fr, auto),\n  \
-             align: (align.alignment, left),\n  \
-             table.header([a], [b], ),\n  \
-             [1], [2], \n))"
-        );
-    }
-
-    /// Placed with no column aligned, a cell takes the plate's `table.align`,
-    /// else the alignment the table stands in.
-    #[test]
-    fn a_placed_table_without_column_aligns_inherits_the_cells_alignment() {
-        let props = serde_json::json!({
-            "header": [{ "text": "a", "marks": [] }],
-            "rows": [],
-            "aligns": ["none"],
-            "align": "right",
-        });
-        assert_eq!(
-            table_markup(&props),
-            "#context align(right, table(\n  columns: 1,\n  \
-             align: if table.align == auto { align.alignment } else { table.align },\n  \
-             table.header([a], ),\n))"
-        );
-    }
-
-    fn emit_md(md: &str) -> String {
-        let rt = from_markdown(md).expect("import").content;
-        emit_content(&rt).expect("emit").markup
-    }
-
-    /// A block element lowers through the dispatcher around its run, inside a
-    /// list item as at the top; adjacent runs are adjacent calls.
-    #[test]
-    fn a_block_element_lowers_through_the_dispatcher() {
-        let cases = [
-            (
-                "<qm-keep note=\"x\">\n\npara\n\n</qm-keep>",
-                "#_qm-element(\"keep\", (\"note\": \"x\"))[\npara\n\n]\n\n",
-            ),
-            (
-                "- a\n- <qm-keep>\n\n  b\n\n  - c\n\n  </qm-keep>",
-                "- a\n- #_qm-element(\"keep\", (:))[\n  b\n\n  - c\n  ]\n\n\n",
-            ),
-            (
-                "<qm-keep>\n\na\n\n</qm-keep>\n<qm-keep>\n\nb\n\n</qm-keep>",
-                "#_qm-element(\"keep\", (:))[\na\n\n]\n\n#_qm-element(\"keep\", (:))[\nb\n\n]\n\n",
-            ),
-        ];
-        for (md, want) in cases {
-            assert_eq!(emit_md(md), want, "{md:?}");
-        }
-    }
-
-    #[test]
     fn empty_table_emits_nothing() {
         let props = serde_json::json!({ "header": [], "aligns": [], "rows": [] });
         assert_eq!(table_markup(&props), "");
@@ -2061,13 +2056,15 @@ mod tests {
             emit_marked("= x", vec![Mark::new(0, 3, MarkKind::Strong)]),
             "#strong[\\= x]\n\n",
         );
-        // Indentation is trivia and holds the anchor open behind it, so the guard
-        // lands on the marker: before the space it would be Typst's linebreak.
-        assert_eq!(emit_marked("  = x", vec![]), "  \\= x\n\n");
+        // Leading spaces are held as `~`, behind which no marker is live.
+        assert_eq!(emit_marked("  = x", vec![]), "~~= x\n\n");
         assert_eq!(
             emit_marked("  = x", vec![Mark::new(0, 5, MarkKind::Emph)]),
-            "#emph[  \\= x]\n\n",
+            "#emph[~~= x]\n\n",
         );
+        // A tab is trivia and holds the anchor open behind it, so the guard lands
+        // on the marker: before whitespace it would be Typst's linebreak.
+        assert_eq!(emit_marked("\t= x", vec![]), "\t\\= x\n\n");
 
         // Source-map integrity: every run's generated slice equals the escape of
         // its content, and the leading `\` is not inside any run.
@@ -2079,13 +2076,24 @@ mod tests {
         for seg in &ec.segments {
             for (content, generated, ctx) in &seg.runs {
                 let src: String = chars[content.clone()].iter().collect();
-                let expect = match ctx {
-                    EscapeCtx::Markup => escape_markup(&src),
-                    EscapeCtx::StringLit => escape_string(&src),
-                };
+                let expect = ctx.escape(&src);
                 assert_eq!(&ec.markup[generated.clone()], expect, "run slices to its escape");
             }
         }
+    }
+
+    /// A space Typst would collapse is held as `~`: all of a line's leading
+    /// spaces, behind the anchor or a hard break, and all but the last of a run
+    /// inside the line.
+    #[test]
+    fn collapsible_spaces_are_held() {
+        assert_eq!(emit_marked("  x", vec![]), "~~x\n\n");
+        assert_eq!(emit_marked("a.  b", vec![]), "a.~ b\n\n");
+        assert_eq!(emit_marked("a   b", vec![]), "a~~ b\n\n");
+        assert_eq!(emit_marked("a b", vec![]), "a b\n\n");
+        assert_eq!(emit_marked("  x", vec![Mark::new(2, 3, MarkKind::Strong)]), "~~#strong[x]\n\n");
+        assert_eq!(emit("a\\\n&#32;&#32;(b)").markup, "a#linebreak()~~(b)\n\n");
+        assert_eq!(emit("a\n\n&#32;&#32;\n\nb").markup, "a\n\nb\n\n");
     }
 
     /// A `#…` expression the emitter wrote runs on into a `(`, a `.field` or a

@@ -452,6 +452,15 @@ impl Payload {
         (!past.is_empty()).then_some((count, past))
     }
 
+    /// Each field, its value open to an edit that keeps the comments nested
+    /// inside it: the caller keeps every container those comments name.
+    pub(crate) fn fields_mut(&mut self) -> impl Iterator<Item = (&String, &mut QuillValue)> + '_ {
+        self.items.iter_mut().filter_map(|item| match item {
+            PayloadItem::Field { key, value } => Some((&*key, value)),
+            _ => None,
+        })
+    }
+
     /// Insert or replace field `key` with `value`. Position-preserving for an
     /// existing key, append otherwise.
     fn insert_item(
