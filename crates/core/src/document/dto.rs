@@ -1501,7 +1501,8 @@ This body and the metadata above are an indorsement card.
     #[test]
     fn rejects_unknown_schema_version() {
         let json = r#"{"schema":"quillmark/document@0.99.0","main":{}}"#;
-        assert!(serde_json::from_str::<Document>(json).is_err());
+        let err = serde_json::from_str::<Document>(json).unwrap_err().to_string();
+        assert!(err.contains("unknown variant `quillmark/document@0.99.0`"), "{err}");
     }
 
     /// The `@0.112.0` hop's whole content: a block island's line spelled
@@ -1800,7 +1801,8 @@ title: Hi
             },
             "cards": []
         }"#;
-        assert!(serde_json::from_str::<Document>(json).is_err());
+        let err = serde_json::from_str::<Document>(json).unwrap_err().to_string();
+        assert!(err.contains("unknown variant `seed`"), "{err}");
     }
 
     #[test]
@@ -1941,7 +1943,8 @@ title: Hi
             "main": {"payload": {"items": [{"type": "kind", "value": "main"}]}, "body": {"islands": [], "lines": [{"containers": [], "kind": "para"}], "marks": [], "text": ""}},
             "cards": []
         }"#;
-        assert!(serde_json::from_str::<Document>(json).is_err());
+        let err = serde_json::from_str::<Document>(json).unwrap_err().to_string();
+        assert!(err.contains("$quill"), "{err}");
     }
 
     #[test]
@@ -1959,7 +1962,8 @@ title: Hi
                 {"payload": {"items": [{"type": "kind", "value": "main"}]}, "body": {"islands": [], "lines": [{"containers": [], "kind": "para"}], "marks": [], "text": ""}}
             ]
         }"#;
-        assert!(serde_json::from_str::<Document>(json).is_err());
+        let err = serde_json::from_str::<Document>(json).unwrap_err().to_string();
+        assert!(err.contains("reserved (root only)"), "{err}");
     }
 
     /// A stored card with no `$kind` folds into the body above it: its fields
@@ -2100,7 +2104,8 @@ title: Hi
             },
             "cards": []
         }"#;
-        assert!(serde_json::from_str::<Document>(json).is_err());
+        let err = serde_json::from_str::<Document>(json).unwrap_err().to_string();
+        assert!(err.contains("invalid quill reference"), "{err}");
     }
 
     #[test]
@@ -2121,7 +2126,8 @@ title: Hi
                 ]}, "body": {"islands": [], "lines": [{"containers": [], "kind": "para"}], "marks": [], "text": ""}}
             ]
         }"#;
-        assert!(serde_json::from_str::<Document>(json).is_err());
+        let err = serde_json::from_str::<Document>(json).unwrap_err().to_string();
+        assert!(err.contains("composable cards must not carry a $seed entry"), "{err}");
     }
 
     #[test]
