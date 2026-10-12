@@ -15,7 +15,8 @@
     "core",
     "render",
     "runtime",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "sbom.cdx.json"
   ],
   "main": "./runtime/runtime.js",
   "module": "./runtime/runtime.js",

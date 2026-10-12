@@ -38,42 +38,48 @@ jobs:
       # The ci.yml dispatch.
       actions: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+        with:
+          toolchain: stable
 
       - name: Install cargo-release
-        uses: taiki-e/install-action@v2.87.21
+        uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2.87.21
         with:
           tool: cargo-release
 
       - name: Compute next version
         id: version
+        env:
+          BUMP: ${{ inputs.bump }}
+          RC: ${{ inputs.release_candidate }}
+          OVERRIDE: ${{ inputs.version_override }}
         run: |
           CURRENT=$(cargo metadata --format-version=1 --no-deps \
             | jq -r '.packages[] | select(.name == "quillmark") | .version')
 
-          NEXT=$(./scripts/next-version.sh "$CURRENT" \
-            "${{ inputs.bump }}" \
-            "${{ inputs.release_candidate }}" \
-            "${{ inputs.version_override }}")
+          NEXT=$(./scripts/next-version.sh "$CURRENT" "$BUMP" "$RC" "$OVERRIDE")
 
           echo "next=$NEXT" >> "$GITHUB_OUTPUT"
           echo "Bumping $CURRENT → $NEXT"
 
       - name: Bump workspace versions
+        env:
+          VERSION: ${{ steps.version.outputs.next }}
         run: |
-          cargo release version "${{ steps.version.outputs.next }}" \
+          cargo release version "$VERSION" \
             --workspace \
             --no-confirm \
             --execute
 
       - name: Seed changelog entry
+        env:
+          VERSION: ${{ steps.version.outputs.next }}
         run: |
-          VERSION="${{ steps.version.outputs.next }}"
           DATE=$(date +%Y-%m-%d)
 
           # Changelog baseline: the last FINAL release, so the commit range
@@ -129,8 +135,8 @@ jobs:
       - name: Push branch and open PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.next }}
         run: |
-          VERSION="${{ steps.version.outputs.next }}"
           BRANCH="release/v${VERSION}"
 
           git config user.name "github-actions[bot]"
