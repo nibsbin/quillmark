@@ -79,7 +79,7 @@ Sincerely,
 
 The helper is imported as a module, `as qm`, and every member is read through it: compute with `qm.data.x`, print with `qm.ink(qm.data, "x")`, which keeps the printed text the click-to-edit target for its field.
 
-For data access patterns, helper package details, optional fields, and `$cards` iteration, see the [Typst Backend](typst-backend.md) guide.
+For the Typst release a plate compiles against, data access patterns, helper package details, optional fields, and `$cards` iteration, see the [Typst Backend](typst-backend.md) guide.
 
 ## 4. Write a document
 

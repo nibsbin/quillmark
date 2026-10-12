@@ -2,6 +2,20 @@
 
 The Typst backend generates PDF, SVG, and PNG documents using the [Typst](https://typst.app/) typesetting system. It converts card-yaml payload fields to Typst markup, injects them into the plate via a generated helper package, and compiles to the requested format.
 
+## Typst Version
+
+Plates compile against Typst 0.15. `quillmark --version` names the exact release after its own version, and a plate reads the same value as `sys.version`.
+
+typst.app documents the newest Typst release, and its [changelog](https://typst.app/docs/changelog/) lists what each release adds. A plate using a feature added after 0.15 fails to compile.
+
+A plate compiled by an older Typst than it needs fails at the first feature that Typst lacks. An `assert` on `sys.version` fails with the reason instead:
+
+```typst
+#assert(sys.version >= version(0, 15), message: "this plate needs Typst 0.15 or later")
+```
+
+A release that moves Typst to a new minor version is a breaking change, and its [migration guide](../migrations/index.md) names the new version.
+
 ## Data Access
 
 Plates are plain Typst code. Document metadata reaches the plate as a Typst dictionary literal exposed by the virtual `@local/quillmark-helper` package, which a plate imports as a module under a name of its choosing:
@@ -223,6 +237,8 @@ entrypoint = "lib.typ"
 | `version` | yes | `major.minor.patch` |
 | `entrypoint` | yes | The file the import evaluates, relative to the package directory |
 | `namespace` | no | Defaults to `local` |
+
+No other key is read, `compiler` included: a package needing a newer Typst than the [embedded one](#typst-version) loads, then fails at the first feature that Typst lacks.
 
 A package's own `#import`s resolve the same way, so every package it depends on
 is vendored beside it. A package copied from Typst Universe ships a manifest
@@ -451,11 +467,13 @@ fields and a live preview.
 Typst reads more of the quill than a render does: any file under `--root`, a
 vendored package's files by their paths, and a package the quill does not
 vendor. A plate that compiles here can still fail to render; the
-[CLI reference](../cli/reference.md#workspace) lists what each one loads.
+[CLI reference](../cli/reference.md#workspace) lists what each one loads. The
+command also runs the installed `typst`, whose release can differ from the one
+`quillmark --version` names.
 
 ## Resources
 
-- [Typst Documentation](https://typst.app/docs/)
+- [Typst Documentation](https://typst.app/docs/), which describes the newest Typst release; [Typst Version](#typst-version) names the one plates compile against
 
 ## Next Steps
 
