@@ -1,5 +1,94 @@
 # Changelog
 
+## v0.125.0 - 2026-10-12
+
+Upgrade path: [0.124 → 0.125](docs/migrations/0.124-to-0.125.md). Every Typst
+plate migrates: the helper is version 0.2.0, imported `as qm`. Stored documents
+load as before, under the same storage tag.
+
+### Regions and the helper
+
+- feat(typst)!: **the helper is a module imported as `qm`, at version 0.2.0**,
+  and every other import fails the render as `typst::helper_import`.
+  `field-region` is `qm.region`, `ink(x).f` and `display(..)` are
+  `qm.ink(x, "f", ..)`, and every other member reads under `qm.`. No
+  dictionary carries `$ink`; `data`, every card and every typed dictionary
+  carry `$path`. (#2157)
+- feat(typst)!: **regions come from three declared producers**: ink the helper
+  generates, a `qm.region` claim and a form widget. A value the plate prints
+  itself, `#data.subject` included, surfaces no region. (#2157)
+- feat(typst)!: **a claim takes the text between its markers that has no
+  source position of its own**, list bullets included, and no header, footer,
+  background, page number, footnote or float it crosses; a claim opened
+  inside one of those takes its ink. `typst::unclosed_field_region` is
+  `typst::unclosed_region`. (#2157, #2163)
+- feat(core,cli,wasm): **`LiveSession::coverage` and `quillmark check
+  --regions` list the filled fields no click reaches**, a printed `0` or
+  `false` included. (#2157, #2160)
+
+### Sections
+
+- feat(core)!: **a card frames its fields in titled panels under
+  `sections:`**, and `ui.group` / `ui.groups` warn `quill::deprecated_groups`.
+  `schema()` still emits `ui.groups`, lists a grouped card's fields in display
+  order, and gives an object alone in its group `ui.layout: flat`. An empty
+  section fails the load. (#2156)
+
+### Validation and typed writes
+
+- feat(core)!: **`Quill::validate` warns `backend::declined_construct`, the
+  render's own diagnostic**, where it warned `validation::declined_construct`,
+  which is gone. (#2147)
+- feat(core,wasm,python)!: **a typed `set` / `setAll` returns the
+  `parse::dropped_construct` of each `richtext` string it writes**, at the
+  string's path, and `addCard` its fields' ahead of its body's. (#2147, #2160)
+- fix(acroform): **a `form@0.1.0` file gets the version message**, not a
+  field-shape error. (#2160)
+
+### Markdown
+
+- fix(core)!: **a backtick line whose info string holds a backtick opens no
+  code fence**, as CommonMark reads it, so a card block under it opens its
+  card. (#2147)
+- fix(content)!: **a newline beside a hard break imports as no space, a line
+  whose content all drops imports as no line, and U+0000 reads as U+FFFD.**
+  Content stored by 0.124 keeps its space. (#2164)
+- fix(content)!: **a raw tag inside a footnote definition warns nothing beside
+  the definition's `footnote`.** (#2160)
+- fix(content): **a replaced line pairs by its word diff whatever its word
+  count.** (#2147)
+
+### Tables
+
+- fix(typst)!: **a placed table aligns its cells as an unplaced one does**
+  under the plate's `table.align` and a vertical `table.cell` rule. (#2147)
+- fix(content)!: **a table's `align`, `widths` or `headless` outside its set
+  rests as written and reads as absent**, where normalization removed it.
+  (#2147)
+- fix(typst): **`keep` holds its run whatever the element registry holds.**
+  (#2147)
+
+### Revise
+
+- refactor(core,wasm)!: **`droppedAnchors` holds `DocumentAnchor`s, `{ id,
+  path, line }`**, matched at the exact address, and an anchor dropped from
+  content stored out of canonical order is named. `DocumentAnchor` exports
+  from the WASM package root. (#2147)
+
+### Rust
+
+- refactor(content)!: **`ImportWarning` is a struct, and
+  `Container::Element` holds a validated `carrier::Element`.** The typed
+  writer's `set` / `set_all` return `Vec<Diagnostic>`, and
+  `SessionHandle::update` takes the session's `QuillConfig`. (#2147)
+
+### CLI and packaging
+
+- feat(typst,cli): **`quillmark --version` names the linked Typst**, 0.15.
+  (#2162)
+- **`@quillmark/wasm` ships a CycloneDX SBOM of its crate graph**, and every
+  CI action is pinned by commit SHA. (#2132)
+
 ## v0.124.0 - 2026-10-10
 
 Upgrade path: [0.123 → 0.124](docs/migrations/0.123-to-0.124.md).
