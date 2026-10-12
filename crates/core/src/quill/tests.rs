@@ -509,23 +509,6 @@ fn a_malformed_container_declaration_is_refused_by_code() {
 }
 
 #[test]
-fn group_registry_list_form_orders_blueprint_by_declaration() {
-    let yaml = r#"
-quill: { name: x, version: "1.0", backend: typst, description: x }
-main:
-  ui:
-    groups: [beta, alpha]
-  fields:
-    a1: { type: string, ui: { group: alpha } }
-    b1: { type: string, ui: { group: beta } }
-"#;
-    let bp = QuillConfig::from_yaml(yaml).unwrap().blueprint();
-    let a = bp.find("a1:").unwrap();
-    let b = bp.find("b1:").unwrap();
-    assert!(b < a, "registry order (beta<alpha) must drive clustering:\n{bp}");
-}
-
-#[test]
 fn group_registry_map_form_carries_title_override() {
     let yaml = r#"
 quill: { name: x, version: "1.0", backend: typst, description: x }
@@ -573,6 +556,113 @@ fn a_bad_group_declaration_is_refused_by_code() {
     ] {
         let err = config_with_sections(&format!("main:\n{main}")).expect_err(code);
         assert!(err.iter().any(|d| d.code.as_deref() == Some(code)), "{code}: {err:?}");
+    }
+}
+
+#[test]
+fn sections_and_legacy_groups_settle_to_one_schema() {
+    let legacy = r#"
+main:
+  ui:
+    groups:
+      addressing: {}
+      unused: {}
+      letterhead: { title: "Letterhead & Seal" }
+      quals: {}
+  fields:
+    subject: { type: string, ui: { group: addressing } }
+    letterhead_title: { type: string, ui: { group: letterhead } }
+    memo_for: { type: string, ui: { group: addressing } }
+    qualifications:
+      type: object
+      ui: { group: quals }
+      properties:
+        dco: { type: boolean }
+    notes: { type: string }
+"#;
+    let sectioned = r#"
+main:
+  fields:
+    notes: { type: string }
+  sections:
+    addressing:
+      fields:
+        subject: { type: string }
+        memo_for: { type: string }
+    letterhead:
+      title: "Letterhead & Seal"
+      fields:
+        letterhead_title: { type: string }
+    quals:
+      fields:
+        qualifications:
+          type: object
+          properties:
+            dco: { type: boolean }
+"#;
+    let load = |sections| QuillConfig::from_yaml_with_warnings(&with_header(sections)).unwrap();
+    let codes = |warnings: &[Diagnostic]| -> Vec<String> {
+        warnings.iter().filter_map(|d| d.code.clone()).collect()
+    };
+    let (legacy, legacy_warnings) = load(legacy);
+    let (sectioned, sectioned_warnings) = load(sectioned);
+    assert_eq!(codes(&legacy_warnings), ["quill::deprecated_groups"]);
+    assert!(sectioned_warnings.is_empty(), "{sectioned_warnings:?}");
+
+    let schema = sectioned.schema();
+    assert_eq!(legacy.schema(), schema);
+    let keys = |v: &serde_json::Value| -> Vec<String> {
+        v.as_object().unwrap().keys().cloned().collect()
+    };
+    let main = &schema["main"];
+    assert_eq!(
+        keys(&main["fields"]),
+        ["notes", "subject", "memo_for", "letterhead_title", "qualifications"]
+    );
+    assert_eq!(keys(&main["ui"]["groups"]), ["addressing", "letterhead", "quals"]);
+    assert_eq!(main["fields"]["memo_for"]["ui"]["group"], "addressing");
+    assert_eq!(main["fields"]["qualifications"]["ui"]["layout"], "flat");
+}
+
+#[test]
+fn a_legacy_registry_naming_no_field_leaves_no_ui() {
+    let yaml = "main:\n  ui: { groups: [unused] }\n  fields:\n    a: { type: string }\n";
+    let schema = config_with_sections(yaml).unwrap().schema();
+    assert!(schema["main"].get("ui").is_none(), "{schema}");
+}
+
+#[test]
+fn a_bad_section_declaration_is_refused_by_code() {
+    for (main, code) in [
+        (
+            "  ui: { groups: [a] }\n  sections:\n    a:\n      fields:\n        s: { type: string }\n",
+            "quill::mixed_sectioning",
+        ),
+        (
+            "  sections:\n    a:\n      fields:\n        s: { type: string, ui: { group: a } }\n",
+            "quill::mixed_sectioning",
+        ),
+        (
+            "  fields:\n    s: { type: string }\n  sections:\n    a:\n      fields:\n        s: { type: string }\n",
+            "quill::duplicate_field",
+        ),
+        (
+            "  sections:\n    Letterhead:\n      fields:\n        s: { type: string }\n",
+            "quill::invalid_section_id",
+        ),
+        (
+            "  sections:\n    a:\n      feilds:\n        s: { type: string }\n",
+            "quill::invalid_card_schema",
+        ),
+        ("  sections:\n    a: [s]\n", "quill::invalid_card_schema"),
+        ("  sections:\n    a:\n      title: A\n", "quill::empty_section"),
+        ("  sections:\n    a:\n", "quill::empty_section"),
+    ] {
+        let err = config_with_sections(&format!("main:\n{main}")).expect_err(code);
+        let [diag] = err.as_slice() else {
+            panic!("{code}: one error expected, got {err:?}");
+        };
+        assert_eq!(diag.code.as_deref(), Some(code));
     }
 }
 

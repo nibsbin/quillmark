@@ -11,11 +11,12 @@ use crate::value::QuillValue;
 
 use super::types::{BODY_CARD_SCHEMA_KEYS, UI_CARD_SCHEMA_KEYS, VARIANT_DISCRIMINANT_KEY};
 use super::{
-    BodyCardSchema, CardSchema, FieldLayout, FieldSchema, FieldType, GroupRegistry, UiCardSchema,
+    BodyCardSchema, CardSchema, FieldLayout, FieldSchema, FieldType, GroupRegistry, GroupSchema,
+    UiCardSchema, UiFieldSchema,
 };
 
 /// Where a field sits in the type tree. Every type nests at every depth; this
-/// gates the two keys that do not — `ui.group`, which clusters card-level fields
+/// gates the two keys that do not — `ui.group`, which places card-level fields
 /// only, and `variants:`, which opens a world only where the position's own live
 /// shape is the schema's (`SCHEMAS.md` §"Enum variants").
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -141,17 +142,38 @@ impl QuillConfig {
 }
 
 /// One card-schema block: the `main:` section or a `card_kinds.<name>:` entry.
-/// It fixes the key set and each block's outer shape; `fields`, `ui`, `body`,
-/// and `seed` stay raw so their own parsers can report per-block diagnostics.
+/// It fixes the key set and each block's outer shape; `fields`, `sections`,
+/// `ui`, `body`, and `seed` stay raw so their own parsers can report per-block
+/// diagnostics.
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CardSchemaDef {
     pub title: Option<String>,
     pub description: Option<String>,
     pub fields: Option<serde_json::Map<String, serde_json::Value>>,
+    pub sections: Option<serde_json::Map<String, serde_json::Value>>,
     pub ui: Option<serde_json::Value>,
     pub body: Option<serde_json::Value>,
     pub seed: Option<serde_json::Value>,
+}
+
+/// One `sections.<id>:` block. A bare `<id>:` is a section holding nothing.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SectionDef {
+    title: Option<String>,
+    fields: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+/// A card's field declarations, gathered from `fields:` and then each
+/// section's, in that order.
+struct DeclaredFields {
+    fields: IndexMap<String, FieldSchema>,
+    /// Every key declared, parsed or not.
+    names: Vec<String>,
+    /// `Some` when the card declares `sections:`: each section and the names
+    /// it holds.
+    sections: Option<Vec<(GroupSchema, Vec<String>)>>,
 }
 
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
@@ -967,10 +989,9 @@ impl QuillConfig {
                 ),
             );
         }
-        // `ui.group` clusters card-level fields only: the blueprint's grouping
-        // pass never descends into object properties or array items, so a nested
-        // `group` is an inert knob. Reject it rather than let it silently do
-        // nothing, the same dead-knob class this walk exists to catch.
+        // A section frames card-level fields only, so a nested `group` is an
+        // inert knob. Reject it rather than let it silently do nothing, the
+        // same dead-knob class this walk exists to catch.
         if position != FieldPosition::Card
             && schema.ui.as_ref().and_then(|u| u.group.as_ref()).is_some()
         {
@@ -2025,6 +2046,159 @@ impl QuillConfig {
         fields
     }
 
+    /// Gather and parse a card's fields: its own `fields:`, then each section's
+    /// in declaration order, so the map comes back in display order. A section
+    /// frames card-level fields, so a name is unique across all of them
+    /// (`quill::duplicate_field`).
+    fn declared_fields(
+        def: &CardSchemaDef,
+        label: &str,
+        context: &str,
+        errors: &mut Vec<Diagnostic>,
+    ) -> DeclaredFields {
+        let mut raw = def.fields.clone().unwrap_or_default();
+        let sections = def.sections.as_ref().map(|sections| {
+            let mut out = Vec::new();
+            for (id, value) in sections {
+                let at = format!("{label}.sections.{id}");
+                if !Self::is_snake_case_identifier(id) {
+                    errors.push(
+                        Diagnostic::new(
+                            Severity::Error,
+                            format!(
+                                "Section id '{id}' on '{label}' must be snake_case (lowercase \
+                                 letters, digits, and underscores only); the display label goes \
+                                 in 'title:'."
+                            ),
+                        )
+                        .with_code("quill::invalid_section_id".to_string()),
+                    );
+                }
+                // Checked ahead of serde, which reads a sequence of the right
+                // length as a struct's fields in declaration order.
+                let section = match value {
+                    serde_json::Value::Null => Ok(SectionDef::default()),
+                    serde_json::Value::Object(_) => serde_json::from_value(value.clone()),
+                    _ => Err(serde::de::Error::custom("expected a mapping")),
+                };
+                let section: SectionDef = match section {
+                    Ok(section) => section,
+                    Err(e) => {
+                        errors.push(
+                            Diagnostic::new(
+                                Severity::Error,
+                                format!("Failed to parse '{at}': {e}"),
+                            )
+                            .with_code("quill::invalid_card_schema".to_string())
+                            .with_hint(
+                                "A section takes `title` and `fields` only.".to_string(),
+                            ),
+                        );
+                        continue;
+                    }
+                };
+                if section.fields.as_ref().is_none_or(|f| f.is_empty()) {
+                    errors.push(
+                        Diagnostic::new(
+                            Severity::Error,
+                            format!("Section '{id}' on '{label}' holds no field."),
+                        )
+                        .with_code("quill::empty_section".to_string())
+                        .with_hint(
+                            "Declare the section's fields under its `fields:`, or delete it."
+                                .to_string(),
+                        ),
+                    );
+                }
+                let mut names = Vec::new();
+                for (name, field) in section.fields.into_iter().flatten() {
+                    if raw.contains_key(&name) {
+                        errors.push(
+                            Diagnostic::new(
+                                Severity::Error,
+                                format!("'{label}' declares field '{name}' more than once."),
+                            )
+                            .with_code("quill::duplicate_field".to_string())
+                            .with_hint(
+                                "A section frames the card's own fields, so a name is unique \
+                                 across `fields:` and every section."
+                                    .to_string(),
+                            ),
+                        );
+                        continue;
+                    }
+                    raw.insert(name.clone(), field);
+                    names.push(name);
+                }
+                out.push((
+                    GroupSchema {
+                        id: id.clone(),
+                        title: section.title,
+                    },
+                    names,
+                ));
+            }
+            out
+        });
+        DeclaredFields {
+            fields: Self::parse_fields(&raw, context, errors),
+            names: raw.keys().cloned().collect(),
+            sections,
+        }
+    }
+
+    /// Lower a card's `sections:` onto the model a legacy `ui.groups` declares:
+    /// each sectioned field's `ui.group` names its section, and the sections
+    /// form the card's registry. A card that also spells `ui.group` or
+    /// `ui.groups` is `quill::mixed_sectioning` and is left as authored.
+    fn lower_sections(
+        card: &mut CardSchema,
+        sections: Vec<(GroupSchema, Vec<String>)>,
+        label: &str,
+        errors: &mut Vec<Diagnostic>,
+    ) {
+        if uses_groups(card) {
+            errors.push(
+                Diagnostic::new(
+                    Severity::Error,
+                    format!("'{label}' declares `sections:` beside `ui.group` or `ui.groups`."),
+                )
+                .with_code("quill::mixed_sectioning".to_string())
+                .with_hint(
+                    "Move each grouped field under its section and drop `ui.group` and \
+                     `ui.groups`."
+                        .to_string(),
+                ),
+            );
+            return;
+        }
+        for (section, names) in &sections {
+            for name in names {
+                if let Some(field) = card.fields.get_mut(name) {
+                    field.ui.get_or_insert_with(UiFieldSchema::default).group =
+                        Some(section.id.clone());
+                }
+            }
+        }
+        let registry = sections.into_iter().map(|(section, _)| section).collect();
+        card.ui.get_or_insert(UiCardSchema { groups: None }).groups =
+            Some(GroupRegistry(registry));
+    }
+
+    fn deprecated_groups(label: &str) -> Diagnostic {
+        Diagnostic::new(
+            Severity::Warning,
+            format!("'{label}' places fields with `ui.group`; declare them under `sections:`."),
+        )
+        .with_code("quill::deprecated_groups".to_string())
+        .with_hint(
+            "Move each grouped field under its group's section, in `ui.groups` order: \
+             `sections: { <group>: { title: <group title>, fields: { <field>: … } } }`. \
+             Ungrouped fields stay under `fields:`; drop `ui.group` and `ui.groups`."
+                .to_string(),
+        )
+    }
+
     fn field_parse_hint(field_value: &serde_json::Value) -> Option<String> {
         spells_ui_title(field_value).then(|| {
             "A field's label is its own `title:`, beside `description:`; `ui` holds no \
@@ -2337,10 +2511,7 @@ impl QuillConfig {
             .and_then(|main_val| Self::parse_card_schema_def(main_val, "main", &mut errors))
             .unwrap_or_default();
 
-        let fields = match &main_def.fields {
-            Some(fields_map) => Self::parse_fields(fields_map, "field schema", &mut errors),
-            None => IndexMap::new(),
-        };
+        let main_declared = Self::declared_fields(&main_def, "main", "field schema", &mut errors);
 
         let main_ui = Self::parse_card_ui(main_def.ui.as_ref(), "main.ui", "main", &mut errors);
 
@@ -2374,11 +2545,18 @@ impl QuillConfig {
             name: "main".to_string(),
             title: main_def.title,
             description: main_description,
-            fields,
+            fields: main_declared.fields,
             ui: main_ui.or(ui_section),
             body: main_body,
             seed: None,
         };
+        // Labels of the cards that declare `sections:`, whose registry is
+        // well-formed by construction and draws no legacy check.
+        let mut sectioned: HashSet<String> = HashSet::new();
+        if let Some(sections) = main_declared.sections {
+            Self::lower_sections(&mut main, sections, "main", &mut errors);
+            sectioned.insert("main".to_string());
+        }
 
         let mut card_kinds: Vec<CardSchema> = Vec::new();
         let mut kind_seeds = Vec::new();
@@ -2434,14 +2612,12 @@ impl QuillConfig {
                                 None => continue,
                             };
 
-                        let card_fields = match &card_def.fields {
-                            Some(card_fields_table) => Self::parse_fields(
-                                card_fields_table,
-                                &format!("card_kind '{}' field", card_name),
-                                &mut errors,
-                            ),
-                            None => IndexMap::new(),
-                        };
+                        let declared = Self::declared_fields(
+                            &card_def,
+                            &label,
+                            &format!("card_kind '{}' field", card_name),
+                            &mut errors,
+                        );
 
                         let card_ui = Self::parse_card_ui(
                             card_def.ui.as_ref(),
@@ -2463,22 +2639,24 @@ impl QuillConfig {
                             &format!("card_kind '{}'", card_name),
                             &mut errors,
                         );
-                        let card = CardSchema {
+                        let mut card = CardSchema {
                             name: card_name.clone(),
                             title: card_def.title,
                             description: card_def.description,
-                            fields: card_fields,
+                            fields: declared.fields,
                             ui: card_ui,
                             body: card_body,
                             seed: None,
                         };
+                        if let Some(sections) = declared.sections {
+                            Self::lower_sections(&mut card, sections, &label, &mut errors);
+                            sectioned.insert(label);
+                        }
                         if let Some(seed) = card_def.seed {
-                            let unparsed: Vec<String> = card_def
-                                .fields
-                                .iter()
-                                .flat_map(|raw| raw.keys())
-                                .filter(|key| !card.fields.contains_key(*key))
-                                .cloned()
+                            let unparsed: Vec<String> = declared
+                                .names
+                                .into_iter()
+                                .filter(|key| !card.fields.contains_key(key))
                                 .collect();
                             kind_seeds.push((card_kinds.len(), seed, unparsed));
                         }
@@ -2567,6 +2745,10 @@ impl QuillConfig {
         }
 
         for (label, card) in &labeled {
+            if sectioned.contains(label) || !uses_groups(card) {
+                continue;
+            }
+            warnings.push(Self::deprecated_groups(label));
             Self::validate_card_groups(label, card, &mut errors);
         }
 
@@ -2591,6 +2773,11 @@ impl QuillConfig {
             return Err(errors);
         }
 
+        settle_sections(&mut main);
+        for card in &mut card_kinds {
+            settle_sections(card);
+        }
+
         Ok((
             QuillConfig {
                 name,
@@ -2605,6 +2792,62 @@ impl QuillConfig {
             warnings,
         ))
     }
+}
+
+/// Whether a card spells the legacy group syntax: a field's `ui.group`, or the
+/// card's `ui.groups`.
+fn uses_groups(card: &CardSchema) -> bool {
+    card.ui.as_ref().is_some_and(|ui| ui.groups.is_some())
+        || card
+            .fields
+            .values()
+            .any(|field| field.ui.as_ref().is_some_and(|ui| ui.group.is_some()))
+}
+
+/// Settle a loaded card's sections, whichever syntax declared them: fields in
+/// display order (unsectioned first, then each section's in registry order), a
+/// legacy registry entry no field names dropped, and an object alone in its
+/// section drawn flat, the section being its frame.
+fn settle_sections(card: &mut CardSchema) {
+    let Some(GroupRegistry(registry)) = card.ui.as_mut().and_then(|ui| ui.groups.take()) else {
+        return;
+    };
+    let section_of = |field: &FieldSchema| field.ui.as_ref().and_then(|ui| ui.group.clone());
+    let (mut fields, mut sectioned): (IndexMap<_, _>, IndexMap<_, _>) =
+        std::mem::take(&mut card.fields)
+            .into_iter()
+            .partition(|(_, field)| section_of(field).is_none());
+    let mut kept = Vec::new();
+    for section in registry {
+        let held: Vec<String> = sectioned
+            .iter()
+            .filter(|(_, field)| section_of(field).as_ref() == Some(&section.id))
+            .map(|(name, _)| name.clone())
+            .collect();
+        if held.is_empty() {
+            continue;
+        }
+        if let [only] = held.as_slice() {
+            let field = &mut sectioned[only];
+            if field.r#type == FieldType::Object {
+                field
+                    .ui
+                    .get_or_insert_with(UiFieldSchema::default)
+                    .layout
+                    .get_or_insert(FieldLayout::Flat);
+            }
+        }
+        for name in held {
+            let (name, field) = sectioned.shift_remove_entry(&name).expect("held above");
+            fields.insert(name, field);
+        }
+        kept.push(section);
+    }
+    fields.extend(sectioned);
+    card.fields = fields;
+    card.ui = (!kept.is_empty()).then(|| UiCardSchema {
+        groups: Some(GroupRegistry(kept)),
+    });
 }
 
 /// Whether a raw field schema spells `ui.title` on itself or on any field
