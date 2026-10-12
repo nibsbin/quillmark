@@ -117,7 +117,7 @@ Why: Typst (the rendering backend) has no HTML renderer, and arbitrary HTML pass
 
 Consequences:
 
-- `<br>`, `<br/>`, `<br />` (any case) are a line break, in a paragraph or a table cell: `| line one<br>line two |`. Outside a table, a CommonMark hard break does the same: two trailing spaces before a newline, or a trailing `\` before a newline. In a paragraph, a `<br>` with no text before it on its line produces nothing. A `<br>` alone on a line opens an HTML block, below.
+- `<br>`, `<br/>`, `<br />` (any case) are a line break, in a paragraph or a table cell: `| line one<br>line two |`. Outside a table, a CommonMark hard break does the same: two trailing spaces before a newline, or a trailing `\` before a newline. In a paragraph, a `<br>` at the paragraph's start or right after another line break produces nothing, and a newline beside a line break adds no space: `line one<br>` on one line and `line two` on the next are two lines, the second unindented. A `<br>` alone on a line opens an HTML block, below.
 - HTML entities decode as CommonMark specifies: `Fish &amp; chips, &#65;BC` reads `Fish & chips, ABC`.
 - An HTML block drops as CommonMark reads it. A line starting with a tag such as `<div>`, `<center>` or `<details>` opens a block that runs to the next blank line, so markdown on the lines under it drops with it; a blank line after the tag line keeps what follows. Embedded SVG draws nothing.
 - A `<pre>`, `<script>`, `<style>` or `<textarea>` block drops whole, content included, through the end of its closing tag's line.

@@ -48,11 +48,13 @@ pub fn is_line_separator(c: char) -> bool {
 /// because it pairs with a `\n` that stays; a line separator becomes a space,
 /// both being Unicode whitespace, so dropping one would join the words it parts.
 /// No downstream escape can neutralize a separator — a `\` before whitespace is
-/// Typst's own linebreak — so it cannot survive in the text.
+/// Typst's own linebreak — so it cannot survive in the text. U+0000 is U+FFFD,
+/// as CommonMark replaces it.
 #[inline]
 pub(crate) fn admit_char(c: char) -> Option<char> {
     match c {
         '\r' => None,
+        '\0' => Some('\u{FFFD}'),
         c if is_bidi_char(c) => None,
         c if is_line_separator(c) => Some(' '),
         c => Some(c),
@@ -68,13 +70,13 @@ fn admit_chars(s: &str) -> String {
 }
 
 /// `markdown` under every normalization in order (spec §7), CRLF → LF, bidi
-/// controls dropped and line separators spaced, then the repair, handed to `f`
-/// with its parse.
+/// controls dropped, line separators spaced and U+0000 replaced, then the
+/// repair, handed to `f` with its parse.
 ///
 /// The repair rewrites the text so the parse reads the text after a comment's
 /// `-->` on its line, ends a table at a line of tags under its rows, and sets
 /// a line of carrier tags in an HTML block apart from the markdown beside it
-/// (markdown-spec §6.2, §7 step 4). Each round parses and edits only inside
+/// (markdown-spec §6.2, §7 step 5). Each round parses and edits only inside
 /// the spans that parse located, so a fence is never touched; the rounds end
 /// at one that plans no edit, whose parse `f` takes.
 pub(crate) fn parse_markdown<R>(
@@ -416,6 +418,7 @@ mod tests {
         let cases: &[(&str, &str)] = &[
             ("hello world", "hello world"),
             ("", ""),
+            ("a\0b", "a\u{FFFD}b"),
             ("**bold** text", "**bold** text"),
             ("intro\u{2028}- item", "intro - item"),
             ("intro\u{2029}= Heading", "intro = Heading"),

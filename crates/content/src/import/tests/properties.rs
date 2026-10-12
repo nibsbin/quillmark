@@ -1,6 +1,7 @@
 //! The import over raw HTML placed where authors put it: tag lines wrapping
 //! markdown at top level, in list items and in quotes, with the blank lines
-//! CommonMark wants; tags inline in prose and in cells; comments with text after them. The import
+//! CommonMark wants; tags inline in prose and in cells, some around nothing;
+//! comments with text after them. The import
 //! never panics, every word of prose outside a comment reaches the content,
 //! each dropped opening tag is counted once (a `qm-keep` tag line only when
 //! left unclosed), and the content is the fixed point of a re-import.
@@ -37,6 +38,8 @@ fn inline() -> impl Strategy<Value = Piece> {
             words: vec![a, b],
             ..Piece::default()
         }),
+        1 => word().prop_map(|w| Piece { md: format!("{w}<br>"), words: vec![w], ..Piece::default() }),
+        1 => prop_oneof![Just("[](u)"), Just("<u></u>"), Just("**[](u)**")].prop_map(|md| Piece::text(md.to_string())),
         1 => word().prop_map(|w| Piece {
             md: format!("<qm-anchor id=\"a\">{w}</qm-anchor>"),
             words: vec![w],
@@ -53,10 +56,16 @@ fn inline() -> impl Strategy<Value = Piece> {
 
 fn paragraph() -> impl Strategy<Value = Piece> {
     prop::collection::vec(
-        prop::collection::vec(inline(), 1..4).prop_map(|p| Piece::join(p, " ")),
+        prop::collection::vec(inline(), 1..4).prop_map(|p| {
+            // Markup around nothing imports nothing, and the space between two
+            // pieces is text.
+            let spaced = p.len() > 1;
+            let line = Piece::join(p, " ");
+            Piece { other: spaced || !line.words.is_empty(), ..line }
+        }),
         1..3,
     )
-    .prop_map(|lines| Piece { other: true, ..Piece::join(lines, "\n") })
+    .prop_map(|lines| Piece::join(lines, "\n"))
 }
 
 fn cell() -> impl Strategy<Value = Piece> {
@@ -143,14 +152,16 @@ fn wrapper(inner: impl Strategy<Value = Piece>) -> impl Strategy<Value = Piece> 
             }
             // A closing tag straight after a table's rows is one more row to the
             // parser, so the table runs on past it. An unclosed `qm-keep` stays
-            // innermost, so a `qm-table` around it never closes.
+            // innermost, so a `qm-table` around it never closes, and one around
+            // nothing that imports holds its empty line.
+            let void = tables == 0 && words.is_empty();
             Piece {
                 md,
                 words,
                 reported,
                 table: after_table && !closed,
                 tables,
-                other: other || name == "qm-table" || (name == "qm-keep" && !closed),
+                other: other || name == "qm-table" || (name == "qm-keep" && (!closed || void)),
                 closes: closed,
                 cell: false,
             }

@@ -20,16 +20,18 @@
 //!
 //! ## Codec limits
 //!
-//! Four shapes markdown cannot represent do **not** round-trip. A mark spanning
-//! a hard break splits into two per-line marks, and an empty first line in a
-//! hard-break block is dropped, markdown having no blank-then-forced-break
-//! syntax. An image `alt` loses its edge whitespace: the parser trims alt
-//! *after* decoding the character reference that carries an edge run everywhere
-//! else. A link or image `url` carrying a line ending comes back
+//! These shapes markdown cannot represent do **not** round-trip. A mark spanning
+//! a hard break splits into two per-line marks. An empty line in a hard-break
+//! block drops, and so does an empty paragraph beside another block, markdown
+//! spelling neither. An image `alt` loses its edge whitespace: the parser trims
+//! alt *after* decoding the character reference that carries an edge run
+//! everywhere else. A link or image `url` carrying a line ending comes back
 //! percent-encoded (`%0A`/`%0D`): CommonMark admits none in a destination, and
-//! the import decodes no percent escape. Each arises only from adversarial
-//! delimiter/break placement, a hand-built island prop, or a stored url the
-//! authored lanes refuse.
+//! the import decodes no percent escape. A `url` or `alt` carrying a character
+//! the import does not admit there (a bidi control, a line separator, a line
+//! ending in an `alt`) comes back rewritten. Each arises only from adversarial
+//! delimiter/break placement, a hand-built island prop, a stored value, or an
+//! editor's empty line.
 
 use crate::island::IslandType;
 use crate::model::{
@@ -253,14 +255,15 @@ pub fn line_segments(rt: &Content) -> Vec<Segment> {
 }
 
 /// One open level of the block walk: `at` is the next line of `range` to emit,
-/// `buf` the markdown emitted for the level so far, and `container` the one
-/// whose syntax prefixes `buf` when the level closes (`None` at the root).
+/// `head` the line opening its first block written, `buf` the markdown emitted
+/// for the level so far, and `container` the one whose syntax prefixes `buf`
+/// when the level closes (`None` at the root).
 struct Frame<'a> {
     container: Option<&'a Container>,
     at: usize,
+    head: Option<usize>,
     range: std::ops::Range<usize>,
     depth: usize,
-    first_block: bool,
     buf: String,
 }
 
@@ -269,9 +272,9 @@ impl<'a> Frame<'a> {
         Frame {
             container,
             at: range.start,
+            head: None,
             range,
             depth,
-            first_block: true,
             buf: String::new(),
         }
     }
@@ -292,18 +295,26 @@ fn emit_block(ctx: &Ctx, range: std::ops::Range<usize>, depth: usize, out: &mut 
     while let Some(frame) = stack.last_mut() {
         if frame.at < frame.range.end {
             let i = frame.at;
-            block_separator(&mut frame.buf, frame.first_block);
-            frame.first_block = false;
             if lines[i].containers.len() > frame.depth {
                 let item = crate::traverse::items(lines, i..frame.range.end, frame.depth)
                     .next()
                     .expect("a line with a container at `depth` opens an item");
+                block_separator(&mut frame.buf, frame.head.is_none());
+                frame.head.get_or_insert(i);
                 frame.at = item.range.end;
                 let child = Frame::open(Some(item.container), item.range, frame.depth + 1);
                 stack.push(child);
             } else {
                 let seg = crate::traverse::segment(lines, i..frame.range.end, frame.depth);
                 frame.at = seg.end;
+                // Markdown spells an empty paragraph with nothing, so beside
+                // another block one writes nothing; a container's only block
+                // keeps its line.
+                if is_empty_para(ctx, seg.clone()) && (frame.head.is_some() || seg.end < frame.range.end) {
+                    continue;
+                }
+                block_separator(&mut frame.buf, frame.head.is_none());
+                frame.head.get_or_insert(i);
                 emit_leaf_block(ctx, seg, &mut frame.buf);
             }
             continue;
@@ -314,10 +325,11 @@ fn emit_block(ctx: &Ctx, range: std::ops::Range<usize>, depth: usize, out: &mut 
                 let key = done
                     .container
                     .expect("only the root frame opens without a container");
-                let lead = &lines[done.range.start];
+                let head = done.head.unwrap_or(done.range.start);
+                let lead = &lines[head];
                 let prose_head = lead.containers.len() == done.depth
                     && lead.kind == LineKind::Para
-                    && block_island(ctx, done.range.start).is_none();
+                    && block_island(ctx, head).is_none();
                 close_container(key, &done.buf, prose_head, &mut parent.buf);
             }
             None => out.push_str(&done.buf),
@@ -506,8 +518,13 @@ fn emit_leaf_block(ctx: &Ctx, range: std::ops::Range<usize>, out: &mut String) {
             // heading to a space), so only the first line contributes.
             out.push_str(&render_inline(ctx, range.start, true));
         }
+        // An empty line between hard breaks writes nothing, which a trailing
+        // `\` would spell as text.
         LineKind::Para => {
-            let parts: Vec<String> = range.map(|i| render_inline(ctx, i, false)).collect();
+            let parts: Vec<String> = range
+                .map(|i| render_inline(ctx, i, false))
+                .filter(|part| !part.is_empty())
+                .collect();
             out.push_str(&parts.join("\\\n"));
         }
         // `***`, not `---`: all three break spellings import alike, but `---` is
@@ -517,6 +534,11 @@ fn emit_leaf_block(ctx: &Ctx, range: std::ops::Range<usize>, out: &mut String) {
         // prefix.
         LineKind::Rule => out.push_str("***"),
     }
+}
+
+/// Whether the block in `range` is a paragraph whose every line is empty.
+fn is_empty_para(ctx: &Ctx, range: std::ops::Range<usize>) -> bool {
+    ctx.rt.lines[range.start].kind == LineKind::Para && range.into_iter().all(|i| seg_str(ctx, i).is_empty())
 }
 
 fn seg_str<'a>(ctx: &'a Ctx, i: usize) -> &'a str {
@@ -602,17 +624,20 @@ fn emit_image(isl: &Island, out: &mut String) {
 ///
 /// Every character re-imports to itself except the two
 /// [`url_is_writable`] refuses: a line ending is illegal inside the wrap too, so
-/// it is percent-encoded and comes back in that form.
+/// it is percent-encoded, ahead of the choice of form, and comes back in that
+/// form.
 fn emit_url(url: &str, out: &mut String) {
-    if url_is_bare_safe(url) {
-        out.push_str(url);
+    let url = match url_is_writable(url) {
+        true => std::borrow::Cow::Borrowed(url),
+        false => std::borrow::Cow::Owned(url.replace('\n', "%0A").replace('\r', "%0D")),
+    };
+    if url_is_bare_safe(&url) {
+        out.push_str(&url);
         return;
     }
     out.push('<');
     for c in url.chars() {
         match c {
-            '\n' => out.push_str("%0A"),
-            '\r' => out.push_str("%0D"),
             '<' | '>' | '\\' | '&' => {
                 out.push('\\');
                 out.push(c);
@@ -1774,6 +1799,30 @@ mod tests {
         assert_eq!(back, rt);
     }
 
+    /// Markdown spells an empty paragraph, and an empty line between hard
+    /// breaks, with nothing: beside other content each writes nothing, where a
+    /// list item's would push what follows out of the list and a trailing
+    /// break's `\` would read as text. A container's only line keeps it.
+    #[test]
+    fn an_empty_line_beside_other_content_writes_nothing() {
+        let item = |checked| Container::ListItem { ordered: false, start: 1, ordinal: 0, checked, instance: 0 };
+        let quote = Container::Quote { instance: 0 };
+        for (rt, md) in [
+            (hard_break_block("a\n"), "a"),
+            (hard_break_block("a\n\nb"), "a\\\nb"),
+            (stored("\nb", vec![vec![], vec![]]), "b"),
+            (stored("\nb", vec![vec![item(None)]; 2]), "- b"),
+            (stored("\nb", vec![vec![item(Some(true))]; 2]), "- [x] b"),
+            (stored("\nb", vec![vec![item(Some(true))], vec![item(Some(true)), item(None)]]), "- [x]\n  - b"),
+            (stored("\nb", vec![vec![quote.clone()]; 2]), "> b"),
+            (stored("", vec![vec![item(Some(false))]]), "- [ ] "),
+        ] {
+            let out = to_markdown(&rt);
+            assert_eq!(out, md);
+            assert_eq!(to_markdown(&from_markdown(&out).unwrap().content), out);
+        }
+    }
+
     /// One Para block over the `\n`-separated lines of `text`, joined by hard
     /// breaks: the shape that puts a line under a paragraph line.
     fn hard_break_block(text: &str) -> Normalized {
@@ -2475,6 +2524,7 @@ mod tests {
             )])
             .into_normalized();
         let back = from_markdown(&to_markdown(&rt)).expect("re-imports").content;
+        assert_eq!(to_markdown(&back), to_markdown(&rt), "one round trip settles it");
         assert_eq!(back.text, "t x", "the display text did not leak");
         assert_eq!(
             back.marks.first().map(|m| &m.kind),

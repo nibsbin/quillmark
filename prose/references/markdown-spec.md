@@ -453,11 +453,13 @@ handles them, but produce limited or no Quillmark-specific output:
   imports as its text, `[^1]`.
 - HTML comments: accepted syntactically, not rendered (see §6.2).
 - `<br>` (any case, with attributes or a closing `/`) inside a paragraph or a
-  table cell: a hard break. In a paragraph, one with no text before it on its
-  line is dropped; in a heading it is a space. One alone on its line, a blank
-  line above it, opens an HTML block (§6.2) and drops. Outside a table, export
-  writes the CommonMark-native hard break (trailing `\\` plus newline); inside
-  a cell it writes `<br>`.
+  table cell: a hard break. In a paragraph, one at its block's start or right
+  after another break is dropped; in a heading it is a space. A soft break
+  beside a hard break, a `<br>` or CommonMark's own, is nothing, so `a<br>` on
+  one line and `b` on the next read as `a`, a break, `b`. One alone on its
+  line, a blank line above it, opens an HTML block (§6.2) and drops. Outside a
+  table, export writes the CommonMark-native hard break (trailing `\\` plus
+  newline); inside a cell it writes `<br>`.
 
 ### 6.4 The `qm-*` Carrier
 
@@ -481,7 +483,8 @@ never holds markup a downstream HTML renderer would act on (§6.2's
 rationale). An attribute outside that grammar, or one repeating a name already
 read, is refused by name. A value reads double-quoted, single-quoted or
 unquoted, and decodes `&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;` and decimal or
-hexadecimal references to a Unicode scalar value; any other `&` is text.
+hexadecimal references to a Unicode scalar value, `&#0;` reading as U+FFFD as
+CommonMark reads it; any other `&` is text.
 
 **Block only.** A carrier tag carries its construct on a tag line in a block
 of tag lines alone, and a line holding only element and `qm-table` tags is one
@@ -533,7 +536,9 @@ imports, and `parse::dropped_construct` reports it under its tag name
 where its list item, quote or body ends, a self-closing tag, which HTML reads
 as an open tag, a tag inside a line of text, and one beside a tag outside the
 carrier in a block tight against markdown, which drops what it holds with it.
-A `qm-*` tag outside the grammar is a raw tag reported the same way.
+A `qm-*` tag outside the grammar is a raw tag reported the same way. A block
+element left open counts toward the nesting bound (§8) until its list item,
+quote or body ends.
 
 **`qm-table`** is a block wrapper around one pipe table, and folds its
 attributes into the table's layout, whatever quill reads the document:
@@ -642,7 +647,8 @@ Before CommonMark parsing, each body region is normalized:
    text after one is read as a block marker the author never wrote and two
    in a row split the paragraph. All five are Unicode whitespace, so a
    space keeps the words they part apart.
-4. **Parser-guided repair.** The text is parsed, edited inside the spans that
+4. **NUL replacement.** Replace U+0000 with U+FFFD, as CommonMark §2.3 asks.
+5. **Parser-guided repair.** The text is parsed, edited inside the spans that
    parse locates, and parsed again; text in a fenced or indented code block is
    never edited.
    - On a comment's last line, text after its `-->` moves to a line of its
@@ -665,6 +671,11 @@ Before CommonMark parsing, each body region is normalized:
 
 Normalization is applied identically to the root body and every card
 body. It is not applied to YAML payload values.
+
+A character reference can still spell a character steps 1–4 rewrite. Decoded
+in text, in a link or image destination or in an image's alt text, it is
+rewritten the same way, and a destination drops a line ending. An element
+attribute keeps it (§6.4).
 
 ## 8. Limits
 
@@ -689,7 +700,11 @@ key's bytes and a fixed overhead, and the bound keeps that memory linear in the
 block.
 
 Markdown block nesting depth (100) is enforced at import time by the
-markdown→content parser (`Document::parse`); the Typst backend re-checks
+markdown→content parser (`Document::parse`): at every point of a body, the
+list items, quotes and elements open there, the marks open there and one for
+any `<u>` open there number at most 100. An element counts from its open tag
+until it closes or its list item, quote or body ends, so one left unclosed
+counts until then, and a `qm-table` wrapper counts nothing. The Typst backend re-checks
 at render as a backstop for content built without importing.
 
 ## 9. Emission Contract
