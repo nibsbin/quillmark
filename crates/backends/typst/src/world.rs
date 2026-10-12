@@ -77,9 +77,9 @@ pub(crate) static FALLBACK_FONTS: [(&str, &[u8]); 2] = [
     ("Roboto-Italic.ttf", include_bytes!("fonts/Roboto-Italic.ttf")),
 ];
 
-/// Every `.ttf` and `.otf` the quill ships, asset fonts first: `QuillWorld`
-/// gives them priority over package fonts of the same family, and `Vec` order
-/// is that priority.
+/// Every `.ttf`, `.otf`, `.ttc` and `.otc` the quill ships, asset fonts first:
+/// `QuillWorld` gives them priority over package fonts of the same family, and
+/// `Vec` order is that priority.
 pub(crate) fn quill_fonts(source: &Quill) -> Vec<(std::path::PathBuf, &[u8])> {
     let mut fonts = Vec::new();
     for glob in ["assets/fonts/*", "packages/**"] {
@@ -87,7 +87,8 @@ pub(crate) fn quill_fonts(source: &Quill) -> Vec<(std::path::PathBuf, &[u8])> {
             let Some(ext) = font_path.extension() else {
                 continue;
             };
-            if !matches!(ext.to_string_lossy().to_lowercase().as_str(), "ttf" | "otf") {
+            let ext = ext.to_string_lossy().to_lowercase();
+            if !matches!(ext.as_str(), "ttf" | "otf" | "ttc" | "otc") {
                 continue;
             }
             if let Some(contents) = source.files().get_file(&font_path) {
