@@ -1,140 +1,183 @@
 # Quickstart
 
-=== "Python"
+From nothing to a PDF. Every path below renders the same two-file quill: a
+format that declares one field, `title`, and prints it above the document body.
 
-    ## Installation
+## 1. Write a quill
+
+A quill is a directory. Create `my_quill/Quill.yaml`:
+
+```yaml
+quill:
+  name: my_quill
+  backend: typst
+  version: "1.0.0"
+  description: A title above the body
+
+main:
+  fields:
+    title:
+      type: string
+      description: The heading at the top of the page
+
+typst:
+  plate_file: plate.typ
+```
+
+and `my_quill/plate.typ`, the Typst layout that prints it:
+
+```typst
+#import "@local/quillmark-helper:0.2.0" as qm
+
+#set page(width: 6in, height: 4in, margin: 0.75in)
+
+= #qm.ink(qm.data, "title")
+
+#qm.data.at("$body", default: "")
+```
+
+## 2. Write a document
+
+Next to `my_quill/`, create `document.md`. The `~~~` block on top holds the
+fields, and `$quill` names the quill that renders them:
+
+```markdown
+~~~
+$quill: my_quill
+title: Hello, Quillmark
+~~~
+
+This paragraph is the document body. *Markdown* works here.
+```
+
+## 3. Render it
+
+=== "CLI"
 
     ```bash
-    uv pip install quillmark
+    cargo install quillmark-cli
+    quillmark render my_quill document.md
     ```
 
-    ## Basic Usage
+    The CLI builds from source, so it needs a [Rust toolchain](https://rustup.rs).
+    `render` writes `document.pdf`. `quillmark check my_quill document.md`
+    reports what the document gets wrong without rendering, and
+    `quillmark blueprint my_quill` prints the fill-in-the-blanks document the
+    quill expects.
+
+=== "Python"
+
+    ```bash
+    pip install quillmark
+    ```
 
     ```python
+    from pathlib import Path
     from quillmark import Quill, Quillmark, OutputFormat
 
-    engine = Quillmark()                       # backend registry + render dispatcher
-    quill = Quill.from_path("path/to/quill")   # portable, declarative config data
+    quill = Quill.from_path("my_quill")
+    doc = quill.parse(Path("document.md").read_text())
 
-    markdown = """~~~
-    $quill: my_quill
-    $kind: main
-    title: Example Document
-    ~~~
-
-    # Hello World
-    """
-
-    # The bound door: parse and conform against the quill that will render it.
-    doc = quill.parse(markdown)
-    result = engine.render(quill, doc, OutputFormat.PDF)
-
-    with open("output.pdf", "wb") as f:
-        f.write(result.artifacts[0].bytes)
+    result = Quillmark().render(quill, doc, OutputFormat.PDF)
+    result.artifacts[0].save("document.pdf")
     ```
 
 === "JavaScript"
-
-    ## Installation
 
     ```bash
     npm install @quillmark/wasm
     ```
 
-    ## Basic Usage
+    The package runs in Node and the browser, so this builds the quill in
+    memory rather than reading the directory:
 
     ```javascript
-    // The single root import is the canonical API: the Engine render
-    // dispatcher, plus `init`, which resolves to the internal Typst-less core
-    // build's own Quill/Document classes and is the only way to obtain them. An
-    // editor that only validates uses Quill/Document and loads no backend:
-    // Typst loads lazily on the first render.
     import { init, Engine } from "@quillmark/wasm";
 
     const { Quill } = await init();
-
     const enc = new TextEncoder();
 
-    // A Quill is portable, declarative data: no engine needed to load it.
     const quill = Quill.fromTree(new Map([
-      ["Quill.yaml", enc.encode("quill:\n  name: my_quill\n  backend: typst\n  version: 1.0.0\n  description: Demo\n\nmain:\n  fields:\n    title: { type: string }\n\ntypst:\n  plate_file: plate.typ\n")],
-      ["plate.typ", enc.encode("#import \"@local/quillmark-helper:0.2.0\" as qm\n#qm.data.at(\"$body\")\n")],
+      ["Quill.yaml", enc.encode(`quill:
+      name: my_quill
+      backend: typst
+      version: "1.0.0"
+      description: A title above the body
+
+    main:
+      fields:
+        title:
+          type: string
+          description: The heading at the top of the page
+
+    typst:
+      plate_file: plate.typ
+    `)],
+      ["plate.typ", enc.encode(`#import "@local/quillmark-helper:0.2.0" as qm
+
+    #set page(width: 6in, height: 4in, margin: 0.75in)
+
+    = #qm.ink(qm.data, "title")
+
+    #qm.data.at("$body", default: "")
+    `)],
     ]));
 
-    const markdown = `~~~
+    const doc = quill.parse(`~~~
     $quill: my_quill
-    $kind: main
-    title: Example Document
+    title: Hello, Quillmark
     ~~~
 
-    # Hello World`;
+    This paragraph is the document body. *Markdown* works here.
+    `);
 
-    // The bound door: parse and conform against the quill that will render it.
-    const doc = quill.parse(markdown);
-
-    // Rendering goes through the Engine. Its methods are async: the first call
-    // lazily loads the Typst backend binary; the canonical quill crosses into
-    // backend memory internally (no manual fromTree/fromStored needed).
     const engine = new Engine();
     const result = await engine.render(quill, doc, { format: "pdf" });
     const pdfBytes = result.artifacts[0].bytes;
     ```
 
-    `init` is idempotent and concurrency-safe, so destructure it at each entry point (route loader, hydration path, worker) rather than threading one result around: every await after the first resolves from the same memo.
+    Top-level `await` runs in Node and in a module script. A bundler targeting
+    older browsers (Vite's default does) refuses it: run the code inside an
+    `async` function, or set the build target to `es2022`.
 
-    An annotation needs no await: `Quill` and `Document` are also exported as types (`import type { Quill } from "@quillmark/wasm"`).
+    The first `render` loads the Typst backend, a separate multi-MB binary;
+    `init` alone loads only the small core, enough to parse and validate.
+    `init` is idempotent and concurrency-safe, so await it at each entry point
+    (route loader, hydration path, worker) rather than threading one result
+    around. A type annotation needs no await: `Quill` and `Document` are also
+    exported as types (`import type { Quill } from "@quillmark/wasm"`).
 
-    ## Live Preview (Canvas)
+=== "Rust"
 
-    For editor-style previews, paint pages directly into a `<canvas>` instead
-    of round-tripping through PNG/SVG. `paint` is WASM-only, both the Typst
-    and `acroform` backends support it, and it shares the cached compile with
-    the byte-output `render` path.
-
-    ```javascript
-    const session = await engine.open(quill, doc);     // compile once (async)
-
-    // Surface session-level diagnostics from compile time.
-    for (const w of session.warnings) console.warn(w.message);
-
-    function renderPage(canvas, page, userZoom = 1) {
-      canvas.style.width = "100%";                     // the box sets display size
-      if (canvas.clientWidth === 0) return;            // no layout box yet
-      const cssPxPerPt = canvas.clientWidth / session.pageSize(page).widthPt;
-      const scale = cssPxPerPt * (window.devicePixelRatio || 1) * userZoom;
-      session.paint(canvas.getContext("2d"), page, scale);
-    }
-
-    for (let p = 0; p < session.pageCount; p++) renderPage(canvases[p], p);
-
-    session.free();                                    // when doc changes
+    ```bash
+    cargo add quillmark
     ```
 
-    Key contract points:
+    ```rust
+    use quillmark::{quill_from_path, OutputFormat, Quillmark, RenderOptions};
 
-    - `scale` is backing-store pixels per point: the CSS px per point the
-      page is shown at, times `devicePixelRatio` and any in-app zoom.
-    - A canvas with no layout box (`display: none`, detached) has
-      `clientWidth` 0, and `paint` throws `backend::invalid_raster_scale` on
-      a 0 scale: skip it, and paint once a `ResizeObserver` reports a width.
-    - The painter owns `canvas.width` / `canvas.height` and rewrites them on
-      every call (so each `paint` is a full repaint: no `clearRect` needed),
-      reducing `scale` where it must so neither exceeds 16384 px. The consumer
-      owns `canvas.style.*`.
-    - `pageCount` and `pageSize(page)` reflect the session's current compile:
-      stable between edits, but re-read them after a committed `update(doc)`,
-      which recompiles in place and can change the page count
-      (`ChangeSet.pageCount`).
-    - In an edit loop, repaint `dirtyPages ∩ visible` rather than every page:
+    fn main() -> Result<(), Box<dyn std::error::Error>> {
+        let quill = quill_from_path("my_quill")?;
+        let doc = quill.parse(&std::fs::read_to_string("document.md")?)?.document;
 
-      ```javascript
-      function onEdit(editedDoc) {
-        const { pageCount, dirtyPages } = session.update(editedDoc);
-        for (const p of dirtyPages) if (isVisible(p)) renderPage(canvases[p], p);
-      }
-      ```
+        // The engine reads no clock: the caller passes the render date.
+        let today = "2026-03-14".parse()?;
+        let options = RenderOptions::default().with_output_format(OutputFormat::Pdf);
+        let result = Quillmark::new().render(&quill, &doc, today, &options)?;
 
-      `update` is transactional: if it throws, the canvas still shows the
-      last-good compile, so keep it up and surface the diagnostics.
+        std::fs::write("document.pdf", &result.artifacts[0].bytes)?;
+        Ok(())
+    }
+    ```
 
-    Full design rationale: [PREVIEW.md](https://github.com/borb-sh/quillmark/blob/main/prose/canon/PREVIEW.md).
+## Next
+
+- Get something wrong on purpose: misspell `title`, or drop the `$` from
+  `$quill`. The diagnostic names the mistake and the fix.
+- [Creating Quills](../quills/creating-quills.md): more fields, dates, and
+  repeating cards.
+- [Markdown Syntax](../authoring/markdown-syntax.md) and
+  [card-yaml Blocks](../authoring/card-yaml.md): what a document can say.
+- [Integrating Quillmark](../integration/index.md): documents built in code,
+  error handling, storage, and [live preview](../integration/live-preview.md)
+  in a canvas.

@@ -52,6 +52,7 @@ nav:
       - Error Handling: integration/error-handling.md
       - Persistence: integration/persistence.md
       - Operations: integration/operations.md
+      - Live Preview: integration/live-preview.md
   - CLI:
       - Reference: cli/reference.md
   - Reference:

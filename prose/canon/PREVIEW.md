@@ -535,6 +535,5 @@ The wasm `render` feature pulls in `web-sys`, the generic canvas *painter*
 ## Lifecycle and consumer flow
 
 `open` → `paint` per visible page → `update` on edit →
-repaint `dirtyPages ∩ visible`. The [quickstart's canvas
-section](../../docs/getting-started/quickstart.md#live-preview-canvas) is the
-worked loop.
+repaint `dirtyPages ∩ visible`. The [Live Preview](../../docs/integration/live-preview.md)
+page is the worked loop.

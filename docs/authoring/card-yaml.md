@@ -18,6 +18,17 @@ tags: ["important", "draft"]
 # Document content starts here
 ```
 
+The rules a writer meets first:
+
+- Open and close the block with a line of exactly `~~~`, at column zero. Not
+  `---` front matter, and not a backtick fence.
+- `$quill:` names the quill that renders the document. The `$` is part of
+  the key.
+- Every other line is `field: value`. Quote a value that contains `: `, as
+  in `subject: "Re: budget"`.
+- A code block in the prose takes a backtick fence: every `~~~` at column
+  zero opens a card-yaml block.
+
 ## Block Structure
 
 A card-yaml block has three parts, in order:
