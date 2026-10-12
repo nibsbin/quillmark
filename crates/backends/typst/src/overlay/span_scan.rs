@@ -20,11 +20,12 @@ use std::ops::Range;
 
 use typst::foundations::{Content, Label, Value};
 use typst::introspection::{Location, Tag};
-use typst::layout::{Frame, FrameItem, Point, Transform};
+use typst::layout::{Frame, FrameItem, PlaceElem, Point, Transform};
+use typst::model::FootnoteElem;
 use typst::pdf::ArtifactElem;
 use typst::syntax::{DiagSpan, DiagSpanKind, Source, Span};
 use typst::utils::PicoStr;
-use typst_layout::PagedDocument;
+use typst_layout::{PagedDocument, PagedIntrospector};
 
 use quillmark_core::region::{ContentHit, HitGranularity, RenderedRegion};
 
@@ -210,16 +211,17 @@ const REGION_LABEL: &str = "__qm_region__";
 #[derive(Default)]
 struct Markers {
     claims: Vec<String>,
-    /// Each open claim beside the artifact depth it opened at.
+    /// Each open claim beside the barrier depth it opened at.
     stack: Vec<(usize, usize)>,
     /// Claim indices [`unclosed_claims`] found still open at the end of the
     /// document. Keeping them off `stack` leaves their ink foreign, exactly as
     /// if the plate had emitted no marker at all.
     suppressed: Vec<usize>,
-    /// The `ArtifactElem`s the walk is inside. Typst wraps each page marginal
-    /// in one and walks a page's background and header before its body, so a
-    /// claim open across a page break would otherwise take the chrome between.
-    artifacts: Vec<Location>,
+    /// The out-of-flow ink the walk is inside: a page marginal's
+    /// `ArtifactElem`, or a [`relocated`] footnote or float by its anchor's
+    /// location. The walk meets this ink where the page puts it, around the
+    /// body's text, so a claim open across a page break would otherwise take it.
+    barriers: Vec<Location>,
 }
 
 impl Markers {
@@ -244,29 +246,38 @@ impl Markers {
             self.claims.push(path.to_string());
             let claim = self.claims.len() - 1;
             if !self.suppressed.contains(&claim) {
-                self.stack.push((claim, self.artifacts.len()));
+                self.stack.push((claim, self.barriers.len()));
             }
         } else if let Some(i) = self.stack.iter().rposition(|&(c, _)| self.claims[c] == path) {
             self.stack.truncate(i);
         }
     }
 
-    fn artifact(&mut self, loc: Location, end: bool) {
+    fn barrier(&mut self, loc: Location, end: bool) {
         if !end {
-            self.artifacts.push(loc);
-        } else if let Some(i) = self.artifacts.iter().rposition(|&l| l == loc) {
-            self.artifacts.truncate(i);
+            self.barriers.push(loc);
+        } else if let Some(i) = self.barriers.iter().rposition(|&l| l == loc) {
+            self.barriers.truncate(i);
         }
     }
 
-    /// An artifact hides every claim opened outside it, while one opened
-    /// inside (a banner claimed in the header) takes the artifact's own ink.
+    /// A barrier hides every claim opened outside it, while one opened inside
+    /// (a banner claimed in the header, a claim in a footnote) takes its ink.
     fn current(&self) -> Option<usize> {
         self.stack
             .last()
-            .filter(|&&(_, depth)| depth == self.artifacts.len())
+            .filter(|&&(_, depth)| depth == self.barriers.len())
             .map(|&(c, _)| c)
     }
+}
+
+/// A footnote entry or a float: content Typst lays out away from its anchor,
+/// in a group whose logical parent is the anchoring element. A table cell
+/// broken across pages is parented to the cell, and stays in flow.
+fn relocated(flow: &PagedIntrospector, parent: Location) -> bool {
+    flow.elements()
+        .get_by_loc(&parent)
+        .is_some_and(|e| e.is::<FootnoteElem>() || e.is::<PlaceElem>())
 }
 
 /// The location of an `ArtifactElem` start or end tag.
@@ -285,7 +296,7 @@ fn artifact_edge(tag: &Tag) -> Option<(Location, bool)> {
 pub(crate) fn unclosed_claims(doc: &PagedDocument) -> Vec<(usize, String)> {
     let mut markers = Markers::default();
     for page in doc.pages() {
-        scan_markers(&page.frame, &mut markers);
+        scan_markers(&page.frame, doc.introspector(), &mut markers);
     }
     markers
         .stack
@@ -422,13 +433,19 @@ fn node_ranges(source: &Source) -> Vec<(u64, Range<usize>)> {
 fn collect_page_hits(
     frame: &Frame,
     page: usize,
+    flow: &PagedIntrospector,
     cls: &mut Classifier,
     markers: &mut Markers,
     out: &mut Vec<Hit>,
 ) {
     walk_items(frame, Transform::identity(), page, &mut |page, item| match item {
         Item::Marker { path, close } => markers.edge(&path, close),
-        Item::Artifact { loc, end } => markers.artifact(loc, end),
+        Item::Artifact { loc, end } => markers.barrier(loc, end),
+        Item::Parent { loc, end } => {
+            if relocated(flow, loc) {
+                markers.barrier(loc, end);
+            }
+        }
         Item::Ink {
             span, glyph, aabb, ..
         } => {
@@ -450,10 +467,19 @@ fn collect_page_hits(
 /// The marker half of [`collect_page_hits`] for a page whose ink a query
 /// discards, since a claim opening there may still cover the page it wants.
 /// Skipping the per-glyph walk keeps that lookbehind linear in frame items.
-fn scan_markers(frame: &Frame, markers: &mut Markers) {
+fn scan_markers(frame: &Frame, flow: &PagedIntrospector, markers: &mut Markers) {
     for (_, item) in frame.items() {
         match item {
-            FrameItem::Group(group) => scan_markers(&group.frame, markers),
+            FrameItem::Group(group) => {
+                let barrier = group.parent.map(|p| p.location).filter(|&l| relocated(flow, l));
+                if let Some(loc) = barrier {
+                    markers.barrier(loc, false);
+                }
+                scan_markers(&group.frame, flow, markers);
+                if let Some(loc) = barrier {
+                    markers.barrier(loc, true);
+                }
+            }
             FrameItem::Tag(tag) => {
                 if let Tag::Start(elem, _) = tag {
                     if let Some((path, close)) = region_marker(elem) {
@@ -461,7 +487,7 @@ fn scan_markers(frame: &Frame, markers: &mut Markers) {
                     }
                 }
                 if let Some((loc, end)) = artifact_edge(tag) {
-                    markers.artifact(loc, end);
+                    markers.barrier(loc, end);
                 }
             }
             _ => {}
@@ -485,8 +511,13 @@ enum Item<'a> {
         close: bool,
     },
     /// An `ArtifactElem` tag. An end tag names its element only by location,
-    /// so every end tag reports, and [`Markers::artifact`] matches it.
+    /// so every end tag reports, and [`Markers::barrier`] matches it.
     Artifact {
+        loc: Location,
+        end: bool,
+    },
+    /// Entering or leaving a group with a logical parent.
+    Parent {
         loc: Location,
         end: bool,
     },
@@ -501,7 +532,14 @@ fn walk_items(frame: &Frame, ts: Transform, page: usize, visit: &mut ItemVisitor
                 let ts = ts
                     .pre_concat(Transform::translate(pos.x, pos.y))
                     .pre_concat(group.transform);
+                let parent = group.parent.map(|p| p.location);
+                if let Some(loc) = parent {
+                    visit(page, Item::Parent { loc, end: false });
+                }
                 walk_items(&group.frame, ts, page, visit);
+                if let Some(loc) = parent {
+                    visit(page, Item::Parent { loc, end: true });
+                }
             }
             FrameItem::Text(text) => {
                 let bb = text.bbox();
@@ -617,11 +655,12 @@ impl<'a> Scan<'a> {
         let mut cls = self.classifier();
         let mut markers = Markers::suppressing(self.unclosed);
         let mut hits = Vec::new();
+        let flow = self.doc.introspector();
         for (i, p) in self.doc.pages().iter().enumerate() {
             match page {
-                Some(want) if i < want => scan_markers(&p.frame, &mut markers),
+                Some(want) if i < want => scan_markers(&p.frame, flow, &mut markers),
                 Some(want) if i > want => break,
-                _ => collect_page_hits(&p.frame, i, &mut cls, &mut markers, &mut hits),
+                _ => collect_page_hits(&p.frame, i, flow, &mut cls, &mut markers, &mut hits),
             }
         }
         (hits, markers)
@@ -1031,7 +1070,14 @@ main:
         let mut cls = Classifier::new(&helper, &windows);
         let mut hits = Vec::new();
         for (page, p) in doc.pages().iter().enumerate() {
-            collect_page_hits(&p.frame, page, &mut cls, &mut Markers::default(), &mut hits);
+            collect_page_hits(
+                &p.frame,
+                page,
+                doc.introspector(),
+                &mut cls,
+                &mut Markers::default(),
+                &mut hits,
+            );
         }
         assert!(
             hits.iter()
