@@ -1,0 +1,234 @@
+# Diagnostic Codes
+
+Every `code` a `Diagnostic` can carry, by namespace. Route on these, not on `message` ([Error Handling](../integration/error-handling.md)). The list is complete: a test fails when a code is minted but not listed here, or listed here but minted nowhere. A code leaves this page only in a release whose migration guide names it.
+
+Two families are derived rather than listed:
+
+- `conform::<class>`: a warning from `Quill::conform` for a value the typed write would refuse, one for each `edit::<class>` below.
+- `quill::seed_<class>`: a card kind's `seed:` in `Quill.yaml` refused for what a document's `$seed` warns on, one for each `validation::<class>` below, with a leading `seed_` in `<class>` dropped (`validation::seed_unknown_field` is `quill::seed_unknown_field`).
+
+## `parse::`
+
+Reading a document: card-yaml, limits, body import.
+
+- `parse::body_import`
+- `parse::card_fence_missing_blank`
+- `parse::dropped_construct`
+- `parse::empty_input`
+- `parse::input_too_large`
+- `parse::invalid_quill_reference`
+- `parse::invalid_structure`
+- `parse::missing_kind`
+- `parse::missing_quill`
+- `parse::payload_not_mapping`
+- `parse::too_many_cards`
+- `parse::too_many_fields`
+- `parse::unclosed_code_block`
+- `parse::unsupported_yaml_tag`
+- `parse::yaml_error_with_location`
+
+## `validation::`
+
+A document checked against its quill's schema.
+
+- `validation::body_disabled`
+- `validation::cardinality`
+- `validation::coercion_failed`
+- `validation::enum_violation`
+- `validation::format_violation`
+- `validation::held_stored`
+- `validation::not_inline`
+- `validation::not_plain`
+- `validation::out_of_variant`
+- `validation::seed_overlay_shape`
+- `validation::seed_unknown_field`
+- `validation::seed_unknown_kind`
+- `validation::type_mismatch`
+- `validation::unknown_card`
+- `validation::unknown_field`
+
+## `quill::`
+
+Loading a quill: `Quill.yaml`, its files, its seeds.
+
+- `quill::array_missing_items`
+- `quill::array_properties_not_supported`
+- `quill::bodiless_card_kind`
+- `quill::default_format_violation`
+- `quill::default_held_stored`
+- `quill::default_not_in_enum`
+- `quill::default_on_namespace`
+- `quill::default_over_max`
+- `quill::default_type_mismatch`
+- `quill::deprecated_groups`
+- `quill::description_multiline`
+- `quill::duplicate_field`
+- `quill::duplicate_group`
+- `quill::empty_description`
+- `quill::empty_section`
+- `quill::enum_blank_member`
+- `quill::example_reference`
+- `quill::field_parse_error`
+- `quill::format_literal_reserved_char`
+- `quill::implicit_group`
+- `quill::invalid_body`
+- `quill::invalid_card_kinds`
+- `quill::invalid_card_name`
+- `quill::invalid_card_schema`
+- `quill::invalid_field_name`
+- `quill::invalid_group_id`
+- `quill::invalid_matrix_member`
+- `quill::invalid_name`
+- `quill::invalid_section_id`
+- `quill::invalid_ui`
+- `quill::invalid_utf8`
+- `quill::invalid_version`
+- `quill::items_not_supported`
+- `quill::load_failed`
+- `quill::matrix_reserved_column`
+- `quill::missing_backend`
+- `quill::missing_description`
+- `quill::missing_file`
+- `quill::missing_name`
+- `quill::missing_section`
+- `quill::missing_version`
+- `quill::mixed_sectioning`
+- `quill::name_mismatch`
+- `quill::nested_group_not_supported`
+- `quill::object_empty_properties`
+- `quill::object_missing_properties`
+- `quill::open_matrix_unsupported`
+- `quill::optional_default`
+- `quill::optional_namespace`
+- `quill::richtext_default_import`
+- `quill::seed_redundant`
+- `quill::table_column_not_leaf`
+- `quill::title_on_items`
+- `quill::title_template`
+- `quill::too_many_fields`
+- `quill::unknown_group`
+- `quill::unknown_key`
+- `quill::unknown_section`
+- `quill::variant_empty`
+- `quill::variant_field_collision`
+- `quill::variant_placement`
+- `quill::variant_reserved_field_name`
+- `quill::variant_unknown_value`
+- `quill::variants_on_non_enum`
+- `quill::version_mismatch`
+- `quill::yaml_parse_error`
+
+## `edit::`
+
+A mutator or typed write the document refuses.
+
+- `edit::content_apply`
+- `edit::field_coercion_failed`
+- `edit::field_decode`
+- `edit::field_not_content`
+- `edit::field_not_inline`
+- `edit::import`
+- `edit::index_out_of_range`
+- `edit::invalid_field_name`
+- `edit::invalid_kind_name`
+- `edit::invalid_payload`
+- `edit::reserved_kind`
+- `edit::root_only_entry`
+- `edit::unknown_field`
+- `edit::value_too_deep`
+
+## `typst::`
+
+Opening a Typst quill and compiling its plate.
+
+- `typst::compile`
+- `typst::duplicate_form_field`
+- `typst::emit`
+- `typst::file_not_found`
+- `typst::form_field_page_out_of_range`
+- `typst::helper_import`
+- `typst::helper_source`
+- `typst::invalid_utf8`
+- `typst::overlay_internal`
+- `typst::package_entrypoint_missing`
+- `typst::package_manifest`
+- `typst::path_skipped`
+- `typst::pdf_generation`
+- `typst::plate_missing`
+- `typst::plate_path_invalid`
+- `typst::png_encoding`
+- `typst::type_error`
+- `typst::unclosed_region`
+- `typst::unknown_key`
+- `typst::unknown_variable`
+- `typst::unregistered_element`
+- `typst::world_creation`
+- `typst::wrong_backend`
+
+## `acroform::`
+
+Opening an `acroform` quill and binding `form.json`.
+
+- `acroform::dangling_binding`
+- `acroform::field_page_out_of_range`
+- `acroform::invalid_form_json`
+- `acroform::missing_form_json`
+- `acroform::missing_form_pdf`
+- `acroform::stamped_parse_failed`
+- `acroform::unbindable_field`
+
+## `pdf::`
+
+The PDF reader and stamp spine both PDF-producing backends share.
+
+- `pdf::bad_rect`
+- `pdf::degenerate_page_box`
+- `pdf::encrypted`
+- `pdf::existing_acroform`
+- `pdf::indirect_annots`
+- `pdf::nonzero_generation`
+- `pdf::parse`
+- `pdf::rotated_page`
+- `pdf::stamp_parse`
+- `pdf::update_parse`
+- `pdf::write`
+- `pdf::xref_stream`
+
+## `backend::`
+
+The render contract every backend shares.
+
+- `backend::declined_construct`
+- `backend::format_not_supported`
+- `backend::invalid_date`
+- `backend::invalid_raster_scale`
+- `backend::page_index_out_of_bounds`
+- `backend::page_selection_not_supported`
+- `backend::update_unsupported`
+
+## `engine::`
+
+Backend dispatch.
+
+- `engine::backend_not_found`
+
+## `cli::`
+
+The `quillmark` command line.
+
+- `cli::backend_unresolved`
+- `cli::canonical_document_failed`
+- `cli::example_not_clean`
+- `cli::example_render_failed`
+- `cli::missing_description`
+- `cli::unreadable_document`
+
+## `runtime::`
+
+The `@quillmark/wasm` JavaScript runtime.
+
+- `runtime::backend_load_failed`
+- `runtime::init_conflict`
+- `runtime::init_failed`
+- `runtime::not_a_document`
+- `runtime::not_a_quill`
