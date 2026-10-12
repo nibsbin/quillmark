@@ -364,15 +364,8 @@ jobs:
         with:
           tool: cargo-cyclonedx@0.5.9
 
-      # The crates linked into the wasm binary, which a scan of the npm package
-      # cannot see inside. Published in the package as sbom.cdx.json.
       - name: Generate SBOM
-        run: |
-          cargo cyclonedx --manifest-path crates/bindings/wasm/Cargo.toml \
-            --target wasm32-unknown-unknown --format json --spec-version 1.5 \
-            --override-filename quillmark-wasm.cdx
-          cp crates/bindings/wasm/quillmark-wasm.cdx.json pkg/sbom.cdx.json
-          jq -e '.metadata.component.name == "quillmark-wasm" and (.components | length) > 0' pkg/sbom.cdx.json >/dev/null
+        run: ./scripts/wasm-sbom.sh
 
       - name: Install npm test dependencies
         working-directory: crates/bindings/wasm
@@ -385,11 +378,17 @@ jobs:
       - name: Upgrade npm for Trusted Publishers
         run: npm install -g npm@latest
 
+      # npm skips a `files` entry with no file behind it, so the tarball itself
+      # is checked, in the step that publishes it.
       - name: Publish @quillmark/wasm
         working-directory: pkg
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
+          if ! npm pack --dry-run --json | jq -e '.[0].files | any(.path == "sbom.cdx.json")' >/dev/null; then
+            echo "pkg/sbom.cdx.json is not in the package, refusing to publish." >&2
+            exit 1
+          fi
           if [[ "$VERSION" == *-* ]]; then
             npm publish --access public --provenance --tag next
           else
