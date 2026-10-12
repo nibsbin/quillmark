@@ -157,7 +157,7 @@ The following are not supported:
 
 - **Math** (`$…$`, `$$…$$`): `$` is treated as a literal character.
 - **Definition lists**: they render as the literal text written.
-- **Footnotes**: a `[^1]: Note` definition drops with its note and warns under `parse::dropped_construct` (`footnote`); `[^1]` stays as the text written. Put the note in the prose instead.
+- **Footnotes**: a `[^1]: Note` definition drops with its note and warns once under `parse::dropped_construct` (`footnote`), a tag inside it drawing no warning of its own; `[^1]` stays as the text written. Put the note in the prose instead.
 
 A link's title (`[text](url "Title")`) drops at import, with no warning. A construct the active backend has no target for, such as an image under Typst, drops at render with a `backend::declined_construct` warning; see each backend's documentation.
 
