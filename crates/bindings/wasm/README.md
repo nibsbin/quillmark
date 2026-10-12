@@ -2,7 +2,7 @@
 
 WebAssembly bindings for Quillmark.
 
-Maintained by [TTQ](https://tonguetoquill.com).
+Maintained by [borb-sh](https://github.com/borb-sh).
 
 ## Overview
 

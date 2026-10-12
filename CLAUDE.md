@@ -13,6 +13,7 @@ Comments default to none, and one earns its place only where the code cannot car
 - The `Cargo.toml` version is the last *released* one; CI bumps it on release.
 - A `CHANGELOG.md` conflict resolves itself: `.gitattributes` marks it `merge=union`, so merge `main` with local git rather than pressing "Update branch", which does not read it.
 - Don't run `cargo fmt`.
+- Sign off commits (`git commit -s`); [`CONTRIBUTING.md`](CONTRIBUTING.md) §"Contribution terms".
 
 ## Tests
 

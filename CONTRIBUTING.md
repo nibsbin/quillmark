@@ -4,7 +4,7 @@ Build and test loops, and the crate map: [`CLAUDE.md`](CLAUDE.md). Design docs:
 [`prose/canon/INDEX.md`](prose/canon/INDEX.md). Prose style is the `dense-prose`
 skill (`.claude/skills/dense-prose/`), canon structure is `maintain-canon`.
 
-The two rules below live here because nothing else states them.
+The rules below live here because nothing else states them.
 
 ## What earns a test a place
 
@@ -42,3 +42,9 @@ recorded and the last place to catch a missing one.
   release can change what a plate compiles to. The release's guide names the
   new Typst version, and so does `docs/quills/typst-backend.md` § "Typst
   Version". A Typst patch bump is not a `!`.
+
+## Contribution terms
+
+A contribution is licensed under Apache-2.0 (§5), the license the project
+ships under. Sign off each commit (`git commit -s`): the sign-off certifies the
+[Developer Certificate of Origin](https://developercertificate.org/) for it.

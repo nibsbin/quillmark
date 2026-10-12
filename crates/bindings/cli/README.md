@@ -2,7 +2,7 @@
 
 `quillmark`, the command-line interface to [Quillmark](https://github.com/borb-sh/quillmark): renders Markdown with card-yaml blocks through a quill into PDF, SVG, or PNG.
 
-Maintained by [TTQ](https://tonguetoquill.com).
+Maintained by [borb-sh](https://github.com/borb-sh).
 
 ## Installation
 
