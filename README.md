@@ -63,10 +63,12 @@ cargo run --example usaf_memo
 cargo run --example taro
 ```
 
+The `usaf_memo` quill reproduces the format of AFH 33-337 correspondence. Quillmark is not affiliated with or endorsed by the Department of Defense, the Department of the Air Force, or any Military Service.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
