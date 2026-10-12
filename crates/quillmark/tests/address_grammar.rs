@@ -213,7 +213,7 @@ const GRAMMAR: &[(&str, bool)] = &[
     ("extra.wing_ig.detail", false),
 ];
 
-const PREAMBLE: &str = r#"#import "@local/quillmark-helper:0.1.0": field-region
+const PREAMBLE: &str = r#"#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 400pt, height: 1200pt, margin: 20pt)
 "#;
 
@@ -263,40 +263,40 @@ fn claims(addresses: impl IntoIterator<Item = &'static str>) -> String {
     addresses
         .into_iter()
         .fold(PREAMBLE.to_string(), |mut plate, address| {
-            plate.push_str(&format!("#field-region(\"{address}\")[x]\n"));
+            plate.push_str(&format!("#qm.region(\"{address}\")[x]\n"));
             plate
         })
 }
 
 /// Every helper that takes an address, with a call the grammar admits and the
-/// same call one step past a leaf. `field-region` runs the shared pin;
-/// `form-field` and `display` carry their own copies of it, and a copy that
+/// same call one step past a leaf. `region` runs the shared pin; `form-field`
+/// and `ink` carry their own copies of it, and a copy that
 /// drifted would render the document with the field silently unbound rather
 /// than fail.
 const BINDERS: [(&str, &str, &str, &str); 3] = [
     (
-        "field-region",
-        "#field-region(\"{}\")[x]",
+        "region",
+        "#qm.region(\"{}\")[x]",
         "address.city",
         "address.city.0",
     ),
     (
         "form-field",
-        "#form-field(\"F\", type: \"text\", value: \"x\", field: \"{}\")",
+        "#qm.form-field(\"F\", type: \"text\", value: \"x\", field: \"{}\")",
         "address.city",
         "address.city.0",
     ),
     (
-        "display",
-        "#display(\"{}\", \"[year]\")",
+        "ink",
+        "#qm.ink(qm.data, \"{}\", \"[year]\")",
         "deadline",
         "deadline.0",
     ),
 ];
 
-fn bound(helper: &str, call: &str, address: &str) -> String {
+fn bound(call: &str, address: &str) -> String {
     format!(
-        "#import \"@local/quillmark-helper:0.1.0\": {helper}\n{}\n",
+        "#import \"@local/quillmark-helper:0.2.0\" as qm\n{}\n",
         call.replace("{}", address)
     )
 }
@@ -340,10 +340,10 @@ fn typst_refuses_every_address_the_grammar_refuses() {
 #[test]
 fn every_address_taking_helper_binds_the_same_grammar() {
     for (helper, call, resolves, refused) in BINDERS {
-        if let Err(err) = compile(&bound(helper, call, resolves)) {
+        if let Err(err) = compile(&bound(call, resolves)) {
             panic!("{helper} must bind {resolves:?}: {err}");
         }
-        let Err(err) = compile(&bound(helper, call, refused)) else {
+        let Err(err) = compile(&bound(call, refused)) else {
             panic!("{helper} must refuse {refused:?}");
         };
         assert!(err.contains("not a schema field address"), "{helper}: {err}");

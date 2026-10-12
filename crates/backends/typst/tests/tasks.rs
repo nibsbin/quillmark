@@ -12,14 +12,14 @@ mod common;
 use common::content;
 
 const PAGE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data, tasks
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 200pt, height: 200pt, margin: 10pt)
 "#;
 
 fn quill(plate: &str) -> Quill {
     common::quill_with_plate(
         &common::yaml("main:\n  fields: {}\n"),
-        &format!("{PAGE}{plate}#data.at(\"$body\", default: [])\n"),
+        &format!("{PAGE}{plate}#qm.data.at(\"$body\", default: [])\n"),
     )
 }
 
@@ -61,7 +61,7 @@ fn a_task_draws_its_box_and_tick() {
 #[test]
 fn the_plates_task_renderer_receives_done_and_the_body() {
     let plate = r#"
-#tasks.update(_ => (done, body) => {
+#qm.tasks.update(_ => (done, body) => {
   assert(type(done) == bool, message: repr(done))
   assert(type(body) == content, message: repr(body))
   if done { [Y ] } else { [N ] }

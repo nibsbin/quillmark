@@ -2,8 +2,11 @@
 // Version: {version}
 //
 // The Rust backend regenerates this file per render. Content fields, the
-// document data and the schema address tables are all generated source text,
-// so nothing here processes data at runtime.
+// document data, the ink table and the schema address tables are all generated
+// source text, so nothing here processes data at runtime.
+//
+// A plate imports it as a module, `#import "@local/quillmark-helper:{version}" as qm`,
+// and reads every member through that name: `qm.data`, `qm.ink(..)`.
 
 /// Backend-generated schema address tree (`fields` for the main card, `cards`
 /// keyed by kind): the schema pruned to the steps it offers, each node carrying
@@ -143,10 +146,10 @@
 
 /// Claim the ink `body` draws for schema field `field`, so `session.regions()`
 /// lists it and `session.fieldAt(..)` resolves a click on it — for a
-/// presentation the plate composes rather than reads straight off `data`: a
-/// banner keyed on `data.classification`, a package-built address block, a
-/// computed table. Layout-neutral: `body` is returned untouched, bracketed by
-/// two invisible `metadata` markers.
+/// presentation the plate composes rather than prints with `ink`: a banner
+/// keyed on `data.classification`, a package-built address block, a computed
+/// table. Layout-neutral: `body` is returned untouched, bracketed by two
+/// invisible `metadata` markers.
 ///
 /// The claim is a **fallback**, not an override: ink already tracked to a field
 /// keeps that field, so wrapping only ever adds a region and never moves one.
@@ -155,11 +158,11 @@
 ///
 /// `<__qm_region__>` and `kind: "__qm_region__"` are reserved for this
 /// hand-off; the `query(metadata)` caveat on `form-field` applies here too.
-#let field-region(field, body) = {
+#let region(field, body) = {
   assert(std.type(field) == str,
-    message: "field-region: field must be a string, got " + repr(std.type(field)))
+    message: "region: field must be a string, got " + repr(std.type(field)))
   assert(_qm-known-path(field),
-    message: "field-region: " + repr(field) + " is not a schema field address; expected a field name, an array element like \"refs.2\", a container property like \"classification.poc\", or a card path composed from the card's $path prefix")
+    message: "region: " + repr(field) + " is not a schema field address; expected a field name, an array element like \"refs.2\", a container property like \"classification.poc\", or a card path composed from the card's $path prefix")
   [#metadata((kind: "__qm_region__", field: field, close: false))<__qm_region__>]
   body
   [#metadata((kind: "__qm_region__", field: field, close: true))<__qm_region__>]
@@ -229,76 +232,60 @@
 /// `datetime(..)` (blank ⇒ `none`), a number an int or float, a typed
 /// dictionary a dict — save the content types, whose authored text is a
 /// canonical rendering and so reference their `_qm_cN` markup block. The rule
-/// holds at every depth. `$cards` carry their per-kind-ordinal `$path` prefix.
-/// Every dictionary with a field that has ink carries it under `$ink`, read
-/// with `ink`, beside its address prefix as `$path`.
+/// holds at every depth. `data`, each card and each typed dictionary carry their
+/// address prefix as `$path`, which `ink` and `roster` address by.
 #let data = {data_literal}
 
-/// The printable twin of a dictionary's fields: `ink(data).subject`,
-/// `ink(card).topic`, `ink(row).org`. Each value's glyphs are born in this
-/// generated file, so they keep their schema address through a function
-/// parameter, a loop variable, a destructuring or a package, where a plate's
-/// own `#row.org` keeps it only as a direct read.
+/// Backend-generated ink for every schema address that has some, keyed by
+/// address and written over `data`, so a value edit leaves this text as it is.
+/// Each entry is where its glyphs are born: a scalar's `[#(..)]` block, a
+/// content field's `_qm_cN` binding, a date's `display` closure, an array the
+/// array of its elements' ink.
+#let _qm-ink = {ink_literal}
+
+/// The ink at address `dict.$path + key`: content whose glyphs are born in this
+/// generated file, so they keep the address through a function parameter, a
+/// loop variable or a package.
+///
+/// `dict` is `data`, a card, a typed dictionary or a roster row's `value`, and
+/// `key` one or more address steps from it: `ink(data, "subject")`,
+/// `ink(row, "year")`, `ink(data, "address.city")`, `ink(card, "$body")`.
 ///
 /// A string, number or boolean is the content `#<value>` prints; a content
-/// field is its markup block; a date is its default `display`, and
-/// `display(dict, "due", ..)` formats it; an array is its elements' ink; a
-/// field at `none` has `none`. A field that is itself a dictionary has no ink:
-/// it carries its own. Compute with the dictionary, print its ink.
-#let ink(fields) = {
-  assert(std.type(fields) == dictionary,
-    message: "ink: expected data, a card or a typed dictionary, got " + repr(std.type(fields)))
-  fields.at("$ink", default: (:))
-}
-
-/// Backend-generated content projection for every **present** `date`/`datetime`
-/// field, keyed by schema address. Each value is a `_qm_dN` closure block, so
-/// the ink it places is born in generated source.
-#let _qm-display = {display_literal}
-
-/// A date field's **content** projection, formatted with Typst's own
-/// `datetime.display` patterns. Where `data.<field>` carries the native
-/// `datetime` (arithmetic, comparison, `.year()`, a package that wants a real
-/// date), this places rendered ink whose glyphs carry a region keyed on the
-/// field, so a date formatted through a `#let` binding, a loop variable, or a
-/// vendored package stays click-to-edit. Use `data.<field>.display(..)` where a
-/// plain `str` is wanted and no region is.
-///
-/// `field` is the date's schema address (compose a card field from the card's
-/// `$path`: `display(card.at("$path") + "on", "[year]")`), or a dictionary
-/// followed by the date's key within it: `display(row, "due", "[year]")`, the
-/// form for a row or card reached through a loop or a function. An address the
-/// schema does not have is a compile error; a blank date, or a known address
-/// carrying no date, returns `none`, so a `== none` fallback still fires.
-#let display(field, ..args) = {
-  if std.type(field) == dictionary {
-    assert("$path" in field,
-      message: "display: this dictionary carries no $path; pass data, a card, or the typed dictionary that declares the date")
-    let pos = args.pos()
-    assert(pos.len() > 0 and std.type(pos.at(0)) == str,
-      message: "display: a dictionary is followed by the date's key, as in display(row, \"due\", \"[year]\")")
-    return display(field.at("$path") + pos.at(0), ..pos.slice(1), ..args.named())
-  }
-  assert(std.type(field) == str,
-    message: "display: field must be a schema address string or a dictionary, got " + repr(std.type(field)))
-  assert(_qm-known-path(field),
-    message: "display: " + repr(field) + " is not a schema field address; expected a field name, an array element like \"refs.2\", a container property like \"classification.poc\", or a card path composed from the card's $path prefix")
-  let render = _qm-display.at(field, default: none)
-  if render != none { render(..args) }
+/// field is its markup block; a date is its `datetime.display(..args)`, the
+/// default display under no pattern; an array is its elements' ink. Blank
+/// content, a blank date, a `none` value and an address that carries no ink (a
+/// typed dictionary, a matrix) give `none`. An address the schema does not have
+/// is a compile error, and so is `args` on any address but a date's.
+#let ink(dict, key, ..args) = {
+  assert(std.type(dict) == dictionary,
+    message: "ink: expected data, a card, a typed dictionary or a roster row's value, got " + repr(std.type(dict)))
+  assert("$path" in dict,
+    message: "ink: this dictionary carries no $path; pass data, a card, a typed dictionary or a roster row's value")
+  assert(std.type(key) == str,
+    message: "ink: key must be a string, got " + repr(std.type(key)))
+  let path = dict.at("$path") + key
+  let entry = _qm-ink.at(path, default: none)
+  assert(entry != none or _qm-known-path(path),
+    message: "ink: " + repr(path) + " is not a schema field address; expected a field name, an array element like \"refs.2\", a container property like \"classification.poc\", or a card path composed from the card's $path prefix")
+  if std.type(entry) == function { return entry(..args) }
+  assert(args.pos().len() == 0 and args.named().len() == 0,
+    message: "ink: a display pattern applies to a date address, and " + repr(path) + " is not one")
+  entry
 }
 
 /// A matrix's rows, the vocabulary a plate prints: every roster member in
 /// roster order, then each item the value adds, in id order. A row is
 /// `(id, title, held, value, path)`. `held` is the member's presence, `value`
 /// its dictionary of columns (`none` where unheld), and `path` its address,
-/// which `field-region` claims. A roster member's `title` is the roster's; an
-/// added item's is its own cell, whose ink `ink(row.value).title` places.
+/// which `region` claims. A roster member's `title` is the roster's; an added
+/// item's is its own cell, whose ink `ink(row.value, "title")` places.
 ///
 /// `dict` is data, a card or the typed dictionary declaring the matrix, and
 /// `key` the matrix's name within it: `roster(data, "qualifications")`,
 /// `roster(card, "qualifications")`, `roster(row, "quals")`. The address comes
-/// from the dictionary's `$path`, which every dictionary declaring a matrix
-/// carries. An optional matrix left unanswered is `none`, and holds nothing.
+/// from the dictionary's `$path`. An optional matrix left unanswered is `none`,
+/// and holds nothing.
 #let roster(dict, key) = {
   assert(std.type(dict) == dictionary,
     message: "roster: expected data, a card or a typed dictionary, got " + repr(std.type(dict)))

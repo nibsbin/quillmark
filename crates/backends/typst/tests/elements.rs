@@ -13,13 +13,13 @@ mod common;
 use common::content;
 
 const PAGE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data, elements
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 200pt, height: 120pt, margin: 10pt)
 "#;
 
 /// A renderer that compiles only when its attributes arrive as written.
 const STAMP: &str = r#"
-#elements.update(e => e + (stamp: (attrs, body) => {
+#qm.elements.update(e => e + (stamp: (attrs, body) => {
   assert(attrs == (day: "2024-01-15", size: "4"), message: repr(attrs))
   text(fill: red, body)
 }))
@@ -28,7 +28,7 @@ const STAMP: &str = r#"
 fn quill(plate: &str) -> Quill {
     common::quill_with_plate(
         &common::yaml("main:\n  fields: {}\n"),
-        &format!("{PAGE}{plate}#data.at(\"$body\", default: [])\n"),
+        &format!("{PAGE}{plate}#qm.data.at(\"$body\", default: [])\n"),
     )
 }
 
@@ -68,7 +68,7 @@ fn the_built_in_keep_keeps_its_run_on_one_page() {
     let kept = format!("{filler}<qm-keep>\n\n{run}\n\n</qm-keep>");
     let glyphs = |svg: &String| svg.matches("<use ").count();
     let bare = pages(&quill(""), &format!("{filler}{run}"));
-    for plate in ["", "#elements.update((stamp: (attrs, body) => body))\n"] {
+    for plate in ["", "#qm.elements.update((stamp: (attrs, body) => body))\n"] {
         let kept = pages(&quill(plate), &kept);
         assert!(
             glyphs(&kept[0]) < glyphs(&bare[0]),
@@ -103,8 +103,8 @@ fn an_element_no_renderer_takes_warns_at_its_field() {
     let quill = common::quill_with_plate(
         &common::yaml("main:\n  fields: {}\n"),
         &format!(
-            "{PAGE}#data.at(\"$body\", default: [])\n#data.at(\"$body\", default: [])\n\
-             #elements.update(e => e + (stamp: (attrs, body) => text(fill: red, body)))\n"
+            "{PAGE}#qm.data.at(\"$body\", default: [])\n#qm.data.at(\"$body\", default: [])\n\
+             #qm.elements.update(e => e + (stamp: (attrs, body) => text(fill: red, body)))\n"
         ),
     );
     let markdown = "<qm-kep>\n\na\n\n</qm-kep>\n\n<qm-keep>\n\nb\n\n</qm-keep>\n\n\

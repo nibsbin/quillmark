@@ -79,10 +79,10 @@ title: Canvas Test
 # Hello canvas
 `
 
-const TEST_PLATE = `#import "@local/quillmark-helper:0.1.0": data
-= #data.title
+const TEST_PLATE = `#import "@local/quillmark-helper:0.2.0" as qm
+= #qm.data.title
 
-#data.at("$body")`
+#qm.data.at("$body")`
 
 function openQuill() {
   const engine = new Quillmark()
@@ -116,8 +116,8 @@ main:
         inline: true
 `
 
-const ARRAY_PLATE = `#import "@local/quillmark-helper:0.1.0": data
-#for r in data.references [ #r \\ ]
+const ARRAY_PLATE = `#import "@local/quillmark-helper:0.2.0" as qm
+#for r in qm.data.references [ #r \\ ]
 `
 
 const ARRAY_MARKDOWN = `~~~card-yaml

@@ -134,7 +134,7 @@ struct Hit {
 enum Key {
     /// A source window and, on a content window, the segment inside it.
     Span(usize, Option<usize>),
-    /// One `field-region` call instance, indexed into [`Markers::claims`].
+    /// One `region` call instance, indexed into [`Markers::claims`].
     Marker(usize),
 }
 
@@ -178,7 +178,7 @@ impl HitClass {
 /// `(w, None)` splits by window kind: on a segment-less window it is the whole
 /// placement's boxable key; on a content window it is inter-segment ink. Falling
 /// through to `marker` only on an unresolved span is what makes nested tracked
-/// ink outrank an enclosing `field-region`.
+/// ink outrank an enclosing `region`.
 ///
 /// A claim takes a detached glyph, which is text the plate printed (a `str`
 /// cast to content in an argument, a list bullet), but never a detached
@@ -206,11 +206,11 @@ fn hit_class(
     }
 }
 
-/// The label and metadata `kind` the helper's `field-region` stamps on its two
+/// The label and metadata `kind` the helper's `region` stamps on its two
 /// bracketing markers.
 const REGION_LABEL: &str = "__qm_region__";
 
-/// The `field-region` calls open at the current point of the frame walk, and
+/// The `region` calls open at the current point of the frame walk, and
 /// every claim the walk has discovered.
 #[derive(Default)]
 struct Markers {
@@ -278,7 +278,7 @@ fn artifact_edge(tag: &Tag) -> Option<(Location, bool)> {
     }
 }
 
-/// The `(claim, field)` of every `field-region` whose open marker reached a
+/// The `(claim, field)` of every `region` call whose open marker reached a
 /// frame but whose close never did, over the whole document. A claim an
 /// enclosing close unwound past counts as closed: its extent was bounded, so
 /// nothing ran away.
@@ -294,7 +294,7 @@ pub(crate) fn unclosed_claims(doc: &PagedDocument) -> Vec<(usize, String)> {
         .collect()
 }
 
-/// `(field, is-close)` if `elem` is one of `field-region`'s markers.
+/// `(field, is-close)` if `elem` is one of `region`'s markers.
 fn region_marker(elem: &Content) -> Option<(String, bool)> {
     if elem.label()? != Label::new(PicoStr::intern(REGION_LABEL))? {
         return None;
@@ -660,7 +660,7 @@ impl<'a> Scan<'a> {
         (hits, markers)
     }
 
-    /// Each span window's **first placement** and each `field-region` call's
+    /// Each span window's **first placement** and each `region` call's
     /// whole claim: one [`RenderedRegion`] per page a run touches, PDF
     /// bottom-left rects, sorted (page, field, key order). A claim in `unclosed`
     /// accrues nothing and so surfaces no region.
@@ -1477,9 +1477,9 @@ main:
       description: a probe field
 "#;
         const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 400pt, height: 400pt, margin: 40pt)
-#data.intro
+#qm.data.intro
 "#;
         let q = quill(YAML, PLATE);
         let plate = crate::read_plate(&q).expect("plate");
@@ -1536,9 +1536,9 @@ main:
       description: one paragraph with one decorated run
 "#;
         const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 400pt, height: 400pt, margin: 40pt)
-#data.body
+#qm.data.body
 "#;
         const TEXT: &str = "Start uline and then a long trailing plain run of text.";
         let region_width = |kind: MarkKind| -> f32 {
@@ -1962,9 +1962,9 @@ main:
       description: a two-item list
 "#;
         const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 400pt, height: 400pt, margin: 40pt)
-#data.body
+#qm.data.body
 "#;
         let q = quill(YAML, PLATE);
         let plate = crate::read_plate(&q).expect("plate");
@@ -2025,7 +2025,7 @@ quill:
   name: region_probe
   version: 0.1.0
   backend: typst
-  description: field-region claim probe
+  description: claim probe
 typst:
   plate_file: plate.typ
 main:
@@ -2114,12 +2114,12 @@ main:
     /// The premise of the wrapper: ink a package function draws carries that
     /// function's spans, so only the markers can attribute it.
     #[test]
-    fn field_region_claims_ink_no_window_tracks() {
+    fn a_claim_takes_ink_no_window_tracks() {
         const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data, field-region
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 400pt, height: 400pt, margin: 40pt)
 #let banner(level) = box(stroke: 1pt, inset: 4pt)[#upper(level)]
-#field-region("classification")[#banner("secret")]
+#qm.region("classification")[#banner("secret")]
 "#;
         let regions = probe_regions(PLATE, body("A paragraph."));
         let claimed: Vec<&RenderedRegion> = regions
@@ -2136,13 +2136,13 @@ main:
     }
 
     #[test]
-    fn field_region_yields_to_the_fields_nested_inside_it() {
+    fn a_claim_yields_to_the_fields_nested_inside_it() {
         const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data, field-region
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 400pt, height: 400pt, margin: 40pt)
-#field-region("classification")[
+#qm.region("classification")[
   #line(length: 100pt)
-  #data.body
+  #qm.data.body
 ]
 "#;
         let regions = probe_regions(PLATE, body("Body PROBETOKEN text."));
@@ -2159,9 +2159,10 @@ main:
     #[test]
     fn a_nested_scalar_reference_outranks_the_wrapper() {
         const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data, field-region
+#import "@local/quillmark-helper:0.2.0" as qm
+#let data = qm.data
 #set page(width: 400pt, height: 400pt, margin: 40pt)
-#field-region("body")[Level: #data.classification]
+#qm.region("body")[Level: #data.classification]
 "#;
         let regions = probe_regions(PLATE, body("Unused."));
         assert!(
@@ -2173,14 +2174,14 @@ main:
     /// Two calls must not collapse into one shared first placement, or a
     /// per-card wrapper would surface a single card.
     #[test]
-    fn each_field_region_call_claims_separately() {
+    fn each_region_call_claims_separately() {
         const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data, field-region
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 400pt, height: 400pt, margin: 40pt)
 #let stamp(n) = box(stroke: 1pt, inset: 4pt)[#n]
-#field-region("classification")[#stamp("one")]
+#qm.region("classification")[#stamp("one")]
 Interleaved plate chrome.
-#field-region("classification")[#stamp("two")]
+#qm.region("classification")[#stamp("two")]
 "#;
         let regions = probe_regions(PLATE, body("Unused."));
         let claimed = regions.iter().filter(|r| r.field == "classification").count();
@@ -2192,10 +2193,10 @@ Interleaved plate chrome.
     #[test]
     fn a_claim_accrues_across_an_interruption() {
         const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data, field-region
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 400pt, height: 400pt, margin: 40pt)
 #let chrome() = box(width: 40pt)[--]
-#field-region("classification")[LEFTMOST #chrome() #data.body RIGHTMOST]
+#qm.region("classification")[LEFTMOST #chrome() #qm.data.body RIGHTMOST]
 "#;
         let regions = probe_regions(PLATE, body("mid"));
         let claim = regions
@@ -2219,11 +2220,11 @@ Interleaved plate chrome.
     /// Typst never separates the two markers on its own, so the way to strand an
     /// open is a plate emitting the call's return value in parts.
     const STRANDED_OPEN: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data, field-region
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 300pt, height: 200pt, margin: 20pt)
-#let r = field-region("classification")[#box(stroke: 1pt)[X]]
+#let r = qm.region("classification")[#box(stroke: 1pt)[X]]
 #r.children.at(0)
-#data.body
+#qm.data.body
 
 PLATE TEXT
 "#;
@@ -2295,11 +2296,11 @@ PLATE TEXT
     #[test]
     fn a_balanced_claim_beside_an_unclosed_one_still_surfaces() {
         const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data, field-region
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 300pt, height: 200pt, margin: 20pt)
-#let r = field-region("classification")[#box(stroke: 1pt)[X]]
+#let r = qm.region("classification")[#box(stroke: 1pt)[X]]
 #r.children.at(0)
-#field-region("classification")[#box(stroke: 1pt)[OK]]
+#qm.region("classification")[#box(stroke: 1pt)[OK]]
 "#;
         let regions = probe_regions(PLATE, body("Body."));
         assert_eq!(
@@ -2315,11 +2316,11 @@ PLATE TEXT
     #[test]
     fn an_inner_claim_closed_by_its_enclosing_one_is_not_suppressed() {
         const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data, field-region
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 300pt, height: 200pt, margin: 20pt)
-#let inner = field-region("body")[#box(stroke: 1pt)[I]]
-#field-region("classification")[#inner.children.at(0) #box(stroke: 1pt)[C]]
-#data.body
+#let inner = qm.region("body")[#box(stroke: 1pt)[I]]
+#qm.region("classification")[#inner.children.at(0) #box(stroke: 1pt)[C]]
+#qm.data.body
 "#;
         let regions = probe_regions(PLATE, body("Text."));
         assert!(

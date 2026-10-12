@@ -145,9 +145,9 @@ card_kinds:
     );
     std::fs::write(
         dir.path().join("plate.typ"),
-        "#import \"@local/quillmark-helper:0.1.0\": data\n\
-         #data.title\n\
-         #data.at(\"$cards\").at(0).author\n",
+        "#import \"@local/quillmark-helper:0.2.0\" as qm\n\
+         #qm.data.title\n\
+         #qm.data.at(\"$cards\").at(0).author\n",
     )
     .expect("write plate.typ");
     let path = dir.path().to_str().unwrap();
@@ -481,8 +481,8 @@ card_kinds:
     );
     std::fs::write(
         dir.path().join("plate.typ"),
-        "#import \"@local/quillmark-helper:0.1.0\": data, ink\n\
-         #for card in data.at(\"$cards\") [#ink(card).title]\n",
+        "#import \"@local/quillmark-helper:0.2.0\" as qm\n\
+         #for card in qm.data.at(\"$cards\") [#qm.ink(card, \"title\")]\n",
     )
     .expect("write plate.typ");
     let doc = dir.path().join("typo.md");
@@ -668,8 +668,8 @@ main:
     );
     std::fs::write(
         dir.path().join("plate.typ"),
-        "#import \"@local/quillmark-helper:0.1.0\": data\n\
-         #assert.eq(data.issued, datetime.today())\n",
+        "#import \"@local/quillmark-helper:0.2.0\" as qm\n\
+         #assert.eq(qm.data.issued, datetime.today())\n",
     )
     .expect("write plate.typ");
     let quill = dir.path().to_str().unwrap();
@@ -726,7 +726,7 @@ fn workspace_writes_the_helper_and_prints_the_typst_command() {
     };
     let current = command("2026-03-14");
     assert!(out
-        .join("packages/local/quillmark-helper/0.1.0/lib.typ")
+        .join("packages/local/quillmark-helper/0.2.0/lib.typ")
         .is_file());
     assert!(
         current.contains(&format!("--package-path {}", out.join("packages").display()))

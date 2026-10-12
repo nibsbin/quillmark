@@ -25,11 +25,11 @@ fn body_session(body: serde_json::Value) -> LiveSession {
     open(
         "main:\n  fields:\n    body: { type: richtext }\n",
         r#"
-#import "@local/quillmark-helper:0.1.0": data
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 612pt, height: 792pt, margin: 72pt)
 #set text(size: 11pt)
 
-#data.body
+#qm.data.body
 "#,
         serde_json::json!({ "body": body }),
     )
@@ -40,7 +40,7 @@ fn content_fields_emit_frame_regions() {
     // Page chrome too: a header and footer must not truncate a placement to
     // its first page.
     const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(
   width: 612pt,
   height: 792pt,
@@ -50,9 +50,9 @@ fn content_fields_emit_frame_regions() {
 )
 #set text(size: 11pt)
 
-#data.intro
+#qm.data.intro
 
-#data.body
+#qm.data.body
 "#;
 
     // Long enough to overflow page 0 and continue.
@@ -99,14 +99,14 @@ fn content_fields_emit_frame_regions() {
 #[test]
 fn field_placed_twice_surfaces_first_region_but_field_at_resolves_every_placement() {
     const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 612pt, height: 792pt, margin: 72pt)
 
-#data.intro
+#qm.data.intro
 
 #lorem(40)
 
-#data.intro
+#qm.data.intro
 "#;
     let session = open(
         "main:\n  fields:\n    intro: { type: richtext }\n",
@@ -167,7 +167,8 @@ fn field_placed_twice_surfaces_first_region_but_field_at_resolves_every_placemen
 #[test]
 fn scalar_reference_sites_each_surface_a_region() {
     const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data
+#import "@local/quillmark-helper:0.2.0" as qm
+#let data = qm.data
 #set page(width: 612pt, height: 792pt, margin: 72pt)
 
 *#data.subject*
@@ -226,7 +227,8 @@ fn a_scalar_read_in_an_imported_module_surfaces_a_region() {
             ),
             (
                 "lib.typ",
-                b"#import \"@local/quillmark-helper:0.1.0\": data\n\
+                b"#import \"@local/quillmark-helper:0.2.0\" as qm\n\
+                  #let data = qm.data\n\
                   #let heading-line() = [*#data.subject*]\n",
             ),
         ],
@@ -249,7 +251,7 @@ fn a_scalar_read_in_an_imported_module_surfaces_a_region() {
 #[test]
 fn content_survives_a_rebuilding_show_rule() {
     const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 612pt, height: 792pt, margin: 72pt)
 
 #let BUF = state("BUF", ())
@@ -261,7 +263,7 @@ fn content_survives_a_rebuilding_show_rule() {
   it
 }
 
-#capture(data.body)
+#capture(qm.data.body)
 
 #context {
   for c in BUF.get() {
@@ -284,10 +286,10 @@ fn content_survives_a_rebuilding_show_rule() {
 #[test]
 fn markdown_array_elements_surface_indexed_regions() {
     const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 612pt, height: 792pt, margin: 72pt)
 
-#for r in data.refs {
+#for r in qm.data.refs {
   block(r)
 }
 "#;
@@ -326,13 +328,13 @@ card_kinds:
       note: { type: richtext }
 ";
     const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 612pt, height: 792pt, margin: 72pt)
 #set text(size: 11pt)
 
-#data.intro
+#qm.data.intro
 
-#for card in data.at("$cards", default: ()) {
+#for card in qm.data.at("$cards", default: ()) {
   card.at("note", default: [])
   parbreak()
 }
@@ -373,16 +375,16 @@ card_kinds:
 
 #[test]
 fn date_field_display_surfaces_a_clickable_region() {
-    // `data.issued` is the native `datetime`, so the comparison and the
-    // component read are ordinary Typst; `display` places the ink that regions.
+    // `qm.data.issued` is the native `datetime`, so the comparison and the
+    // component read are ordinary Typst; `qm.ink` places the ink that regions.
     const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data, display
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 612pt, height: 792pt, margin: 72pt)
 #set text(size: 11pt)
 
-#assert(data.issued.year() == 2026)
-#assert(data.issued < datetime(year: 2027, month: 1, day: 1))
-#display("issued", "[day padding:none] [month repr:long] [year]")
+#assert(qm.data.issued.year() == 2026)
+#assert(qm.data.issued < datetime(year: 2027, month: 1, day: 1))
+#qm.ink(qm.data, "issued", "[day padding:none] [month repr:long] [year]")
 "#;
     let session = open(
         "main:\n  fields:\n    issued: { type: date }\n",
@@ -417,18 +419,18 @@ fn date_field_display_surfaces_a_clickable_region() {
 
 #[test]
 fn card_dates_surface_per_instance_regions_through_laundering() {
-    // `scalar_windows` does not chase the shared `card.<field>` loop variable,
-    // so a card date surfaces only through its own per-instance `text(..)` node,
-    // which `display` reaches by address rather than through the value.
+    // Every iteration shares one `card` loop variable, so a card date surfaces
+    // per instance only through its own `text(..)` node, which `qm.ink` reaches
+    // by the card's address rather than through the value.
     const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data, display
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 612pt, height: 792pt, margin: 72pt)
 #set text(size: 11pt)
 
-#for card in data.at("$cards", default: ()) {
+#for card in qm.data.at("$cards", default: ()) {
   let d = card.at("on", default: none)
   if d != none {
-    display(card.at("$path") + "on", "[day padding:none] [month repr:long] [year]")
+    qm.ink(card, "on", "[day padding:none] [month repr:long] [year]")
   } else {
     [—]
   }
@@ -478,10 +480,10 @@ fn failed_update_keeps_serving_last_good_regions() {
     // into the world, but the served document's spans must keep resolving
     // against the compile they came from.
     const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 612pt, height: 792pt, margin: 72pt)
 
-#data.intro
+#qm.data.intro
 "#;
     let mut session = open(
         "main:\n  fields:\n    intro: { type: richtext }\n    when: { type: date }\n",
@@ -522,8 +524,8 @@ fn form_field_path_rejected_when_address_tables_are_empty() {
     // Empty address tables validate against the empty set: every address
     // rejects. Only absent tables are permissive.
     const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": form-field
-#form-field("S", type: "text", value: "x", field: "subject")
+#import "@local/quillmark-helper:0.2.0" as qm
+#qm.form-field("S", type: "text", value: "x", field: "subject")
 "#;
     let err = TypstBackend
         .open(
@@ -553,11 +555,11 @@ fn adversarial_codegen_inputs_still_compile() {
     use quillmark_content::model::{Content, Line, LineKind, Mark, MarkKind};
     // The plate's assert proves the int round-tripped.
     const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 400pt, height: 400pt, margin: 40pt)
-#assert(data.at("n") == -9223372036854775807 - 1)
-#data.body
-#data.overlap
+#assert(qm.data.at("n") == -9223372036854775807 - 1)
+#qm.data.body
+#qm.data.overlap
 "#;
     let overlap = Content::new("abcdef".to_string(), vec![Line::new(LineKind::Para)]).with_marks(vec![
         Mark::new(0, 4, MarkKind::Strong),
@@ -584,12 +586,12 @@ fn adversarial_codegen_inputs_still_compile() {
 #[test]
 fn overlapping_widgets_resolve_field_at_by_paint_order_not_name() {
     const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": form-field
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 300pt, height: 200pt, margin: 0pt)
 #place(top + left, dx: 60pt, dy: 60pt,
-  form-field("aaa", type: "text", field: "aaa_early", width: 40pt, height: 40pt))
+  qm.form-field("aaa", type: "text", field: "aaa_early", width: 40pt, height: 40pt))
 #place(top + left, dx: 60pt, dy: 60pt,
-  form-field("zzz", type: "text", field: "zzz_late", width: 40pt, height: 40pt))
+  qm.form-field("zzz", type: "text", field: "zzz_late", width: 40pt, height: 40pt))
 "#;
     let session = open(
         "main:\n  fields:\n    aaa_early: { type: string }\n    zzz_late: { type: string }\n",

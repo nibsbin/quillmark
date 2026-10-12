@@ -136,9 +136,9 @@ fn session_warnings(
     all.extend(unclosed.iter().map(|(_, field)| {
         Diagnostic::new(
             Severity::Warning,
-            format!("`field-region(\"{field}\")` never closed; its claim was dropped"),
+            format!("`region(\"{field}\", ..)` never closed; its claim was dropped"),
         )
-        .with_code("typst::unclosed_field_region".to_string())
+        .with_code("typst::unclosed_region".to_string())
         .with_hint(
             "both markers must reach the frame together, so emit the call's \
              return value whole rather than in parts"
@@ -372,6 +372,56 @@ fn quill_world(source: &Quill, plate: &Plate) -> Result<world::QuillWorld, Rende
     })
 }
 
+/// One `typst::helper_import` error per import of the helper a project source
+/// spells any way but `#import "@local/quillmark-helper:<version>" as <name>`.
+/// The module form is what keeps the helper's names out of a plate's own scope:
+/// the one name it binds is the one the plate chose.
+pub(crate) fn check_helper_imports(world: &world::QuillWorld) -> Result<(), RenderError> {
+    use typst::syntax::ast;
+    use typst::syntax::{DiagSpan, SyntaxNode};
+
+    fn walk(node: &SyntaxNode, world: &world::QuillWorld, out: &mut Vec<Diagnostic>) {
+        if let Some(import) = node.cast::<ast::ModuleImport>() {
+            let ast::Expr::Str(spec) = import.source() else {
+                return;
+            };
+            let spec = spec.get();
+            let helper = format!("@{}/{}:", helper::HELPER_NAMESPACE, helper::HELPER_NAME);
+            let current = format!("{helper}{}", helper::HELPER_VERSION);
+            let module_form = import.imports().is_none() && import.new_name().is_some();
+            if spec.starts_with(&helper) && (spec != current || !module_form) {
+                let mut diag = Diagnostic::new(
+                    Severity::Error,
+                    format!("the helper is imported as a module: `#import \"{current}\" as qm`"),
+                )
+                .with_code("typst::helper_import".to_string())
+                .with_hint(
+                    "read every helper member through the module name: `qm.data`, \
+                     `qm.ink(..)`, `qm.region(..)`"
+                        .to_string(),
+                );
+                diag.location =
+                    error_mapping::resolve_span_to_location(DiagSpan::from(node.span()), world);
+                out.push(diag);
+            }
+            return;
+        }
+        for child in node.children() {
+            walk(child, world, out);
+        }
+    }
+
+    let mut diags = Vec::new();
+    for source in world.project_sources() {
+        walk(source.root(), world, &mut diags);
+    }
+    if diags.is_empty() {
+        Ok(())
+    } else {
+        Err(RenderError::new(diags))
+    }
+}
+
 /// Snapshotted right after a successful compile: the text the served document's
 /// spans resolve against.
 fn helper_source(world: &world::QuillWorld) -> Result<typst::syntax::Source, RenderError> {
@@ -409,6 +459,7 @@ impl Backend for TypstBackend {
         // diagnostic code survives: boxing it into the world-creation error would
         // relabel a bad date `typst::world_creation`.
         let mut world = quill_world(source, &plate)?;
+        check_helper_imports(&world)?;
         world.set_today(today);
         // Project sources are static for the session: window their scalar
         // sites once.
@@ -759,10 +810,10 @@ mod tests {
     fn page_hashes_ignore_span_shift_when_ink_is_identical() {
         use quillmark_core::quill::FileTreeNode;
 
-        const PLATE: &str = r#"#import "@local/quillmark-helper:0.1.0": data
+        const PLATE: &str = r#"#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 300pt, height: 200pt, margin: 20pt)
 #set text(size: 11pt)
-#data.body
+#qm.data.body
 "#;
         let quill_with = |extra_field: bool| {
             let mut yaml = String::from(
@@ -819,10 +870,10 @@ mod tests {
         use typst::introspection::Introspector;
         use typst::model::{EnumElem, HeadingElem, ListElem, TermsElem};
 
-        const PLATE: &str = r#"#import "@local/quillmark-helper:0.1.0": data
+        const PLATE: &str = r#"#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 300pt, height: 400pt, margin: 20pt)
 #set text(size: 11pt)
-#data.body
+#qm.data.body
 "#;
         let quill = || {
             let yaml = "quill:\n  name: anchor\n  version: 0.1.0\n  backend: typst\n  description: line-anchor guard\ntypst:\n  plate_file: plate.typ\nmain:\n  fields:\n    body:\n      type: richtext\n      description: body\n";
@@ -900,10 +951,10 @@ mod tests {
     fn inline_field_in_par_emits_no_parbreak_warning() {
         use quillmark_core::quill::FileTreeNode;
 
-        const PLATE: &str = r#"#import "@local/quillmark-helper:0.1.0": data
+        const PLATE: &str = r#"#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 300pt, height: 200pt, margin: 20pt)
 #set text(size: 11pt)
-#par(data.subject)
+#par(qm.data.subject)
 "#;
         let quill = |inline: bool| {
             let inline_line = if inline { "      inline: true\n" } else { "" };

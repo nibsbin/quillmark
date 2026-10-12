@@ -44,17 +44,17 @@ fn acroform(
 #[test]
 fn acceptance_two_pages_two_fields() {
     let plate = r#"
-#import "@local/quillmark-helper:0.1.0": signature-field
+#import "@local/quillmark-helper:0.2.0" as qm
 
 #set page(width: 600pt, height: 400pt, margin: 50pt)
 
 Page 1.
-#signature-field("a")
+#qm.signature-field("a")
 
 #pagebreak()
 
 Page 2.
-#signature-field("b")
+#qm.signature-field("b")
 "#;
     let (doc, af, widgets) = acroform(plate, &serde_json::json!({}));
     assert_eq!(af.get(b"SigFlags").unwrap().as_i64().unwrap(), 1);
@@ -104,11 +104,11 @@ Page 2.
 #[test]
 fn acceptance_duplicate_name_errors() {
     let plate = r#"
-#import "@local/quillmark-helper:0.1.0": signature-field
+#import "@local/quillmark-helper:0.2.0" as qm
 
 #set page(width: 600pt, height: 400pt, margin: 50pt)
-#signature-field("a")
-#signature-field("a")
+#qm.signature-field("a")
+#qm.signature-field("a")
 "#;
     let err = compile(plate, &serde_json::json!({})).expect_err("expected duplicate-name error");
     let diags = err.diagnostics();
@@ -126,10 +126,10 @@ fn acceptance_duplicate_name_errors() {
 #[test]
 fn user_metadata_on_reserved_label_does_not_clobber() {
     let plate = r#"
-#import "@local/quillmark-helper:0.1.0": signature-field
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 600pt, height: 400pt, margin: 50pt)
 #metadata((kind: "something-else", note: "user's own metadata")) <__qm_field__>
-#signature-field("real_field")
+#qm.signature-field("real_field")
 "#;
     let (_, _, widgets) = acroform(plate, &serde_json::json!({}));
     assert_eq!(
@@ -155,13 +155,13 @@ fn acceptance_no_fields_no_overlay() {
 #[test]
 fn form_field_maps_each_type_and_binds_values_from_data() {
     let plate = r#"
-#import "@local/quillmark-helper:0.1.0": data, form-field
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 600pt, height: 400pt, margin: 50pt)
-#form-field("single", type: "text", value: "hello")
-#form-field("multi", type: "text", value: "a\nb", multiline: true)
-#form-field("sig", type: "signature")
-#form-field("name", type: "text", value: data.full_name)
-#form-field("count", type: "text", value: str(data.count))
+#qm.form-field("single", type: "text", value: "hello")
+#qm.form-field("multi", type: "text", value: "a\nb", multiline: true)
+#qm.form-field("sig", type: "signature")
+#qm.form-field("name", type: "text", value: qm.data.full_name)
+#qm.form-field("count", type: "text", value: str(qm.data.count))
 "#;
     let (_, af, w) = acroform(plate, &serde_json::json!({ "full_name": "Ada Lovelace", "count": 7 }));
 
@@ -183,12 +183,13 @@ fn form_field_maps_each_type_and_binds_values_from_data() {
 #[test]
 fn form_field_regions_key_on_bound_schema_field() {
     let plate = r#"
-#import "@local/quillmark-helper:0.1.0": data, form-field
+#import "@local/quillmark-helper:0.2.0" as qm
+#let data = qm.data
 #set page(width: 600pt, height: 400pt, margin: 50pt)
 #data.f_txt
-#form-field("txt", type: "text", value: data.f_txt, field: "f_txt", width: 137pt)
-#form-field("sig", type: "signature", field: "f_sig")
-#form-field("unbound", type: "text", value: "x")
+#qm.form-field("txt", type: "text", value: qm.data.f_txt, field: "f_txt", width: 137pt)
+#qm.form-field("sig", type: "signature", field: "f_sig")
+#qm.form-field("unbound", type: "text", value: "x")
 "#;
     let source = common::quill_with_plate(
         &common::yaml("main:\n  fields:\n    f_txt: { type: string }\n    f_sig: { type: string }\n"),

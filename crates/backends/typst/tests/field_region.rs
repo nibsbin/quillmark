@@ -1,4 +1,4 @@
-//! `field-region` through the public `Backend`/`LiveSession` path: what a
+//! `qm.region` through the public `Backend`/`LiveSession` path: what a
 //! preview consumer actually reads back — a click routed, a warning surfaced,
 //! and the ink a claim takes on a laid-out page. Which addresses a claim
 //! admits is stated in `quillmark/tests/address_grammar.rs`.
@@ -30,10 +30,10 @@ fn open(plate: &str) -> quillmark_core::session::LiveSession {
 fn a_claim_answers_field_at_and_an_unclosed_one_warns_through_the_session() {
     let session = open(
         r#"
-#import "@local/quillmark-helper:0.1.0": data, field-region
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 400pt, height: 200pt, margin: 40pt)
 #let banner(level) = box(stroke: 1pt, inset: 6pt)[#upper(level)]
-#field-region("classification")[#banner(data.classification)]
+#qm.region("classification")[#banner(qm.data.classification)]
 "#,
     );
     let region = session
@@ -55,9 +55,9 @@ fn a_claim_answers_field_at_and_an_unclosed_one_warns_through_the_session() {
     // cause, and only the plate author can fix it.
     let stranded = open(
         r#"
-#import "@local/quillmark-helper:0.1.0": data, field-region
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 300pt, height: 200pt, margin: 20pt, header: [PAGE CHROME])
-#let r = field-region("classification")[#box(stroke: 1pt)[X]]
+#let r = qm.region("classification")[#box(stroke: 1pt)[X]]
 #r.children.at(0)
 #lorem(300)
 "#,
@@ -65,7 +65,7 @@ fn a_claim_answers_field_at_and_an_unclosed_one_warns_through_the_session() {
     let warning = stranded
         .warnings()
         .iter()
-        .find(|d| d.code.as_deref() == Some("typst::unclosed_field_region"))
+        .find(|d| d.code.as_deref() == Some("typst::unclosed_region"))
         .expect("the unclosed claim is reported")
         .message
         .clone();
@@ -81,13 +81,13 @@ fn a_claim_lays_its_body_out_where_the_body_alone_would_land() {
     // inline flow costs 2.715pt at this body size, while shaping `AAABBBCCC`
     // as three runs instead of one costs float noise near 1e-14pt.
     let plate = r#"
-#import "@local/quillmark-helper:0.1.0": field-region
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 400pt, height: 200pt, margin: 40pt)
 #let same(what, bare, got) = assert(calc.abs(got - bare) < 0.01pt,
   message: what + " moved: " + repr(bare) + " -> " + repr(got))
 #context {
   let bare = measure[AAABBBCCC]
-  let claimed = measure[AAA#field-region("subject")[BBB]CCC]
+  let claimed = measure[AAA#qm.region("subject")[BBB]CCC]
   same("width", bare.width, claimed.width)
   same("height", bare.height, claimed.height)
 }
@@ -97,16 +97,16 @@ fn a_claim_lays_its_body_out_where_the_body_alone_would_land() {
     }
 }
 
-/// The same marker shape as `field-region`'s, neutral only because a `box`
+/// The same marker shape as `qm.region`'s, neutral only because a `box`
 /// follows it rather than text.
 #[test]
 fn a_widget_lays_out_where_its_box_alone_would_land() {
     let plate = r#"
-#import "@local/quillmark-helper:0.1.0": form-field
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 400pt, height: 200pt, margin: 40pt)
 #context {
   let bare = measure[AAA#box(width: 20pt, height: 8pt)CCC].width
-  let widget = measure[AAA#form-field("F", width: 20pt, height: 8pt)CCC].width
+  let widget = measure[AAA#qm.form-field("F", width: 20pt, height: 8pt)CCC].width
   assert(calc.abs(widget - bare) < 0.01pt,
     message: "the widget moved the line: " + repr(bare) + " -> " + repr(widget))
 }
@@ -128,9 +128,9 @@ fn center(r: &quillmark_core::region::RenderedRegion) -> (f32, f32) {
 fn a_claim_takes_detached_glyphs_its_body_prints() {
     let session = open(
         r#"
-#import "@local/quillmark-helper:0.1.0": field-region
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 400pt, height: 200pt, margin: 40pt)
-#field-region("subject", text(size: 9pt, "LIT"))
+#qm.region("subject", text(size: 9pt, "LIT"))
 "#,
     );
     let region = session
@@ -143,9 +143,9 @@ fn a_claim_takes_detached_glyphs_its_body_prints() {
 
     let session = open(
         r#"
-#import "@local/quillmark-helper:0.1.0": field-region
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 400pt, height: 200pt, margin: 40pt)
-#field-region("subject", list[AAA][BBB])
+#qm.region("subject", list[AAA][BBB])
 "#,
     );
     let region = session
@@ -183,11 +183,11 @@ fn a_decoration_stroke_inside_a_claim_stays_the_content_fields() {
                 "main:\n  fields:\n    subject: { type: string }\n    body: { type: richtext }\n",
             ),
             r#"
-#import "@local/quillmark-helper:0.1.0": data, field-region
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 400pt, height: 200pt, margin: 40pt)
 #set underline(stroke: 12pt)
 #set strike(stroke: 12pt)
-#field-region("subject")[#data.body]
+#qm.region("subject")[#qm.data.body]
 "#,
         );
         TypstBackend
@@ -231,9 +231,9 @@ fn a_decoration_stroke_inside_a_claim_stays_the_content_fields() {
 fn a_claim_open_across_a_page_break_takes_no_marginal() {
     let session = open(
         r#"
-#import "@local/quillmark-helper:0.1.0": field-region
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 300pt, height: 200pt, margin: 40pt, numbering: "1", header: [PAGE HEADER])
-#field-region("subject")[#lorem(200)]
+#qm.region("subject")[#lorem(200)]
 "#,
     );
     assert!(session.page_count() > 1, "the claim needs a page break");

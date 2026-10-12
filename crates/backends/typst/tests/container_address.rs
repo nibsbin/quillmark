@@ -117,10 +117,10 @@ fn every_read_regions_and_routes_on_the_address_it_names() {
             &[],
         ),
         (
-            "#form-field(\"Poc\", type: \"text\", value: data.classification.poc, field: \"classification.poc\")\n\
-             #field-region(\"address.city\")[#box(stroke: 1pt, inset: 4pt)[#upper(data.address.city)]]\n\
-             #field-region(\"refs.0.org\")[AFRL/RQ]\n\
-             #form-field(\"Ref0Num\", field: \"refs.0.num\", value: data.refs.at(0).num)",
+            "#qm.form-field(\"Poc\", type: \"text\", value: data.classification.poc, field: \"classification.poc\")\n\
+             #qm.region(\"address.city\")[#box(stroke: 1pt, inset: 4pt)[#upper(data.address.city)]]\n\
+             #qm.region(\"refs.0.org\")[AFRL/RQ]\n\
+             #qm.form-field(\"Ref0Num\", field: \"refs.0.num\", value: data.refs.at(0).num)",
             &["classification.poc", "address.city", "refs.0.org", "refs.0.num"],
             &[],
         ),
@@ -129,14 +129,15 @@ fn every_read_regions_and_routes_on_the_address_it_names() {
         (
             "#data.classification.note\n\
              #assert(data.classification.reply_by.year() == 2026)\n\
-             #display(\"classification.reply_by\", \"[year]\")",
+             #qm.ink(qm.data, \"classification.reply_by\", \"[year]\")",
             &["classification.note", "classification.reply_by"],
             &[],
         ),
     ];
     for (reads, surfaced, unclaimed) in cases {
         let session = open(&format!(
-            "#import \"@local/quillmark-helper:0.1.0\": data, display, field-region, form-field\n\
+            "#import \"@local/quillmark-helper:0.2.0\" as qm\n\
+             #let data = qm.data\n\
              #set page(width: 400pt, height: 200pt, margin: 40pt)\n{reads}\n"
         ));
         let regions = session.regions();
@@ -161,25 +162,22 @@ fn every_read_regions_and_routes_on_the_address_it_names() {
     }
 }
 
-/// A field printed through its dictionary's `ink` keeps its address past each
-/// shape a direct read loses it to: a function parameter, a loop variable over
-/// filtered rows, a destructuring, and a date printed or formatted inside a
-/// helper. A row's `$path` addresses the ink it composes.
+/// A field printed through `qm.ink` keeps its address past a function
+/// parameter, a loop variable over filtered rows, and a date printed or
+/// formatted inside a helper. A row's `$path` addresses the ink it composes.
 #[test]
 fn ink_keeps_the_address_through_functions_loops_and_patterns() {
     let session = open(
-        "#import \"@local/quillmark-helper:0.1.0\": data, display, field-region, ink\n\
+        "#import \"@local/quillmark-helper:0.2.0\" as qm\n\
          #set page(width: 400pt, height: 200pt, margin: 40pt)\n\
          #let shout(c) = upper(c)\n\
-         #shout(ink(data).subject)\n\
-         #ink(data).balance\n\
-         #for r in data.refs.filter(r => r.org != \"\") [#ink(r).org / \
-           #field-region(r.at(\"$path\") + \"num\")[No. #r.num.len()]]\n\
-         #let (poc, ..rest) = ink(data.classification)\n\
-         #poc\n\
-         #let due(c) = display(c, \"reply_by\", \"[year]\")\n\
-         #due(data.classification)\n\
-         #ink(data).tags.join(\", \")\n",
+         #shout(qm.ink(qm.data, \"subject\"))\n\
+         #qm.ink(qm.data, \"balance\")\n\
+         #for r in qm.data.refs.filter(r => r.org != \"\") [#qm.ink(r, \"org\") / \
+           #qm.region(r.at(\"$path\") + \"num\")[No. #r.num.len()]]\n\
+         #let due(c) = qm.ink(c, \"reply_by\", \"[year]\")\n\
+         #due(qm.data.classification)\n\
+         #qm.ink(qm.data, \"tags\").join(\", \")\n",
     );
     let regions = session.regions();
     for field in [
@@ -187,7 +185,6 @@ fn ink_keeps_the_address_through_functions_loops_and_patterns() {
         "balance",
         "refs.0.org",
         "refs.0.num",
-        "classification.poc",
         "classification.reply_by",
         "tags.0",
     ] {
@@ -201,9 +198,9 @@ fn ink_keeps_the_address_through_functions_loops_and_patterns() {
 
     // A date's ink prints its default display, laundered like any other.
     let session = open(
-        "#import \"@local/quillmark-helper:0.1.0\": data, ink\n\
-         #let stamp(c) = ink(c).reply_by\n\
-         #stamp(data.classification)\n",
+        "#import \"@local/quillmark-helper:0.2.0\" as qm\n\
+         #let stamp(c) = qm.ink(c, \"reply_by\")\n\
+         #stamp(qm.data.classification)\n",
     );
     let regions = session.regions();
     let r = regions
@@ -242,10 +239,10 @@ card_kinds:
             type: string
 "#;
     let plate = r#"
-#import "@local/quillmark-helper:0.1.0": data, field-region
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 400pt, height: 200pt, margin: 40pt)
-#for card in data.at("$cards") {
-  field-region(card.at("$path") + "origin.office")[#card.origin.office]
+#for card in qm.data.at("$cards") {
+  qm.region(card.at("$path") + "origin.office")[#card.origin.office]
 }
 "#;
     let session = TypstBackend
@@ -271,9 +268,9 @@ card_kinds:
 #[test]
 fn a_blank_date_still_projects_none() {
     let plate = r#"
-#import "@local/quillmark-helper:0.1.0": display
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 400pt, height: 200pt, margin: 40pt)
-#assert(display("classification.reply_by", "[year]") == none)
+#assert(qm.ink(qm.data, "classification.reply_by", "[year]") == none)
 "#;
     let mut blank = data();
     blank["classification"]["reply_by"] = serde_json::Value::String(String::new());
