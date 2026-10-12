@@ -2,93 +2,92 @@
 
 ## v0.125.0 - 2026-10-12
 
-- docs(content)!: a newline beside a hard break imports as no space, and U+0000 as U+FFFD
-- fix(content): a line whose content drops, a break beside a <br>, and NUL import as written
-- fix(typst)!: a footnote or float answers only to a claim opened inside it
-- docs: name the Typst plates compile against, and a minor bump as a break
-- feat(typst,cli): quillmark --version names the linked Typst
-- fix: three edge cases from the 0.124 release review
-- fix(core): coverage lists a printed 0 or false
-- test(core): the storage-format refusal tests match the error each is named for
-- docs(content)!: a tag inside a footnote definition draws no warning of its own
-- fix(core): validate reports an unselected variant cell's drops at the top level too
-- fix(acroform): a form@0.1.0 file gets the version message, not a field-shape error
-- Pass release.yml versions to scripts through env
-- fix(cli): check --regions reports the render's warnings
-- docs: a roster title guard checks the row is held first
-- docs: what a claim across a page break takes, in walk order
-- docs: typst::helper_import covers every project source, imported or not
-- refactor(typst): an address node's steps are private to the address tables
-- test(typst): a claim around a content field moves none of its regions
-- fix(typst): a claim opened inside a marginal takes the marginal's ink
-- docs(canon)!: regions from three declared producers
-- feat(core,cli,wasm): LiveSession::coverage and quillmark check --regions
-- feat(typst)!: regions come from generated ink, claims and widgets alone
-- feat(typst)!: the helper is a module imported as qm, and ink is address-keyed
-- feat(typst)!: a claim takes the detached glyphs between its markers, never a marginal
-- fix(core): an empty section is refused, and a settled card with no section emits no ui
-- feat(core)!: sections frame a card's fields, and ui.group warns
-- test: consolidate overlapping tests and drop the schema golden
-- Ship a CycloneDX SBOM of the wasm crate graph in @quillmark/wasm
-- Pin every CI action by commit SHA
-- test: drop duplicate, vacuous and legacy-pinning tests
-- test: make three tests reach the case they name
-- docs(migrations): 0.124 → 0.125
-- docs: validate's codes, footnote tags and the content invariants as they stand
-- test(quillmark): hold the parity corpus at the document level
-- test(bindings): pin the warnings a typed set returns
-- fix(wasm): export DocumentAnchor from the package root
-- fix(core): revise_import returns the import's own error
-- refactor(core): the typed writer commits through Card's own primitive
-- fix(core): name an anchor a revise drops from content stored out of canonical order
-- fix(typst)!: a placed table aligns its cells as an unplaced one does
-- fix(typst): keep holds its run whatever the registry holds
-- chore(core): drop the unused similar dependency
-- fix(content): pair a replaced line by its word diff whatever its word count
-- docs(core): drop the redundant DocPath link targets the edit.rs import resolves
-- refactor(core): one codec dispatch and one schema child walk
-- refactor(content)!: Container::Element holds a validated carrier::Element
-- refactor(core)!: richtext import drops travel with the decode
-- refactor(content)!: island owns the table and cell knob vocabulary
-- refactor(wasm)!: a dropped anchor crosses as the DocumentAnchor the annotated read lists
-- refactor(core): the whole-document revise reads anchors off the contents
-- refactor(core): one dropped_constructs maps an import's warnings
-- refactor(content): one word_similarity serves line pairing and card alignment
-- refactor(content): carrier::{TABLE, CELL, ANCHOR} name the reserved carrier elements
-- refactor(core)!: one decline code, minted once by the session
-- perf(content): hand the repair's last parse to the import
-- refactor(content): drop footnotes in the fixer, one carrier tag-line predicate
-- test(content): share one markdown generator between the import properties
-- test(content): drop two import tests the parity corpus pins
-- fix(core)!: read a code fence opener by CommonMark's rule
-- refactor(content)!: make ImportWarning a struct
-- refactor(wasm): one diags() and From impls serve the receipt mirrors
-- refactor(typst): EscapeCtx::escape replaces the restated escape match
-- refactor(typst): hint every declined construct, trim restated image tests
-- refactor(content): one image intercept for prose and table cells
-- refactor(content): derive the import builder's empty state
-- refactor(content): HTML block kinds by how they end
-- refactor(typst): seed `keep` in the element registry
-- refactor(pdf): one dict parse and one reference walk in the reader
-- refactor(content)!: one drop funnel and one wrapper name in the import
-- test(typst): fold restated element, held-space and plate tests
-- refactor(core)!: derive validation::declined_construct from the render's walk
-- refactor(wasm): build a RenderResult in one place for both render verbs
-- refactor(core): the prescan's budget refusal is a `Refusal` variant
-- refactor(content): repair takes its text mutably
-- refactor(python): raise and list diagnostics through one helper each
-- refactor(content): one list-item marker path for tasks and rule-spelling runs
-- refactor(typst): place a table by one cell show-set, drop restated lowering tests
-- refactor(content): carry island ids without an owned copy
-- refactor(content): one payload-bag builder, element decode through carrier::modeled
-- refactor(core): one import-with-warnings helper, one located-refusal arm
-- refactor(core)!: a revise names its dropped anchors off the annotated read
-- test(quillmark): read the parity entry in place of a one-use Expected
-- refactor(content): export returns tag points from every sweep, one delimiter fn
-- refactor(wasm): one serializer, null crossing as null everywhere
-- test(bindings): shrink the parity harnesses to the crossing
-- Pass release-prepare inputs through env, not script interpolation
+Upgrade path: [0.124 → 0.125](docs/migrations/0.124-to-0.125.md). Every Typst
+plate migrates: the helper is version 0.2.0, imported `as qm`. Stored documents
+load as before, under the same storage tag.
 
+### Regions and the helper
+
+- feat(typst)!: **the helper is a module imported as `qm`, at version 0.2.0**,
+  and every other import fails the render as `typst::helper_import`.
+  `field-region` is `qm.region`, `ink(x).f` and `display(..)` are
+  `qm.ink(x, "f", ..)`, and every other member reads under `qm.`. No
+  dictionary carries `$ink`; `data`, every card and every typed dictionary
+  carry `$path`. (#2157)
+- feat(typst)!: **regions come from three declared producers**: ink the helper
+  generates, a `qm.region` claim and a form widget. A value the plate prints
+  itself, `#data.subject` included, surfaces no region. (#2157)
+- feat(typst)!: **a claim takes the text between its markers that has no
+  source position of its own**, list bullets included, and no header, footer,
+  background, page number, footnote or float it crosses; a claim opened
+  inside one of those takes its ink. `typst::unclosed_field_region` is
+  `typst::unclosed_region`. (#2157, #2163)
+- feat(core,cli,wasm): **`LiveSession::coverage` and `quillmark check
+  --regions` list the filled fields no click reaches**, a printed `0` or
+  `false` included. (#2157, #2160)
+
+### Sections
+
+- feat(core)!: **a card frames its fields in titled panels under
+  `sections:`**, and `ui.group` / `ui.groups` warn `quill::deprecated_groups`.
+  `schema()` still emits `ui.groups`, lists a grouped card's fields in display
+  order, and gives an object alone in its group `ui.layout: flat`. An empty
+  section fails the load. (#2156)
+
+### Validation and typed writes
+
+- feat(core)!: **`Quill::validate` warns `backend::declined_construct`, the
+  render's own diagnostic**, where it warned `validation::declined_construct`,
+  which is gone. (#2147)
+- feat(core,wasm,python)!: **a typed `set` / `setAll` returns the
+  `parse::dropped_construct` of each `richtext` string it writes**, at the
+  string's path, and `addCard` its fields' ahead of its body's. (#2147, #2160)
+- fix(acroform): **a `form@0.1.0` file gets the version message**, not a
+  field-shape error. (#2160)
+
+### Markdown
+
+- fix(core)!: **a backtick line whose info string holds a backtick opens no
+  code fence**, as CommonMark reads it, so a card block under it opens its
+  card. (#2147)
+- fix(content)!: **a newline beside a hard break imports as no space, a line
+  whose content all drops imports as no line, and U+0000 reads as U+FFFD.**
+  Content stored by 0.124 keeps its space. (#2164)
+- fix(content)!: **a raw tag inside a footnote definition warns nothing beside
+  the definition's `footnote`.** (#2160)
+- fix(content): **a replaced line pairs by its word diff whatever its word
+  count.** (#2147)
+
+### Tables
+
+- fix(typst)!: **a placed table aligns its cells as an unplaced one does**
+  under the plate's `table.align` and a vertical `table.cell` rule. (#2147)
+- fix(content)!: **a table's `align`, `widths` or `headless` outside its set
+  rests as written and reads as absent**, where normalization removed it.
+  (#2147)
+- fix(typst): **`keep` holds its run whatever the element registry holds.**
+  (#2147)
+
+### Revise
+
+- refactor(core,wasm)!: **`droppedAnchors` holds `DocumentAnchor`s, `{ id,
+  path, line }`**, matched at the exact address, and an anchor dropped from
+  content stored out of canonical order is named. `DocumentAnchor` exports
+  from the WASM package root. (#2147)
+
+### Rust
+
+- refactor(content)!: **`ImportWarning` is a struct, and
+  `Container::Element` holds a validated `carrier::Element`.** The typed
+  writer's `set` / `set_all` return `Vec<Diagnostic>`, and
+  `SessionHandle::update` takes the session's `QuillConfig`. (#2147)
+
+### CLI and packaging
+
+- feat(typst,cli): **`quillmark --version` names the linked Typst**, 0.15.
+  (#2162)
+- **`@quillmark/wasm` ships a CycloneDX SBOM of its crate graph**, and every
+  CI action is pinned by commit SHA. (#2132)
 
 ## v0.124.0 - 2026-10-10
 
