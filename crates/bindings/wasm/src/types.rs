@@ -218,6 +218,21 @@ impl From<quillmark_core::region::RenderedRegion> for FieldRegion {
     }
 }
 
+/// One address a compiled document fills and the region address a click
+/// reaches it through: the consumer's copy of this contract is
+/// `runtime/runtime.d.ts`.
+#[cfg(feature = "render")]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldCoverage {
+    /// Canonical `DocPath` field address, as `FieldRegion.field` spells it.
+    pub field: String,
+    /// The `DocPath` of the region reaching `field`: itself, or the nearest
+    /// enclosing address a region carries. `undefined` where no click does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub covered_by: Option<String>,
+}
+
 /// How precisely a `ContentHit.pos` resolved. Never sub-cluster: `cluster` is
 /// the finest this API offers, `segment` the floor it degrades to.
 #[cfg(feature = "render")]

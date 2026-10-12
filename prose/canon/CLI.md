@@ -16,20 +16,27 @@ them.
 
 ## Contract
 
-- **`render` and `validate` need the engine.** Each constructs `Quillmark` to
-  resolve the quill's backend; `check` / `schema` / `blueprint` / `info` load the
-  quill with `quillmark::quill_from_path` and read the pure config-read
-  operations a `Quill` already carries ([QUILL.md](QUILL.md)). `validate
-  --no-render` is the config-read-only validate.
+- **`render`, `validate` and `check --regions` need the engine.** Each
+  constructs `Quillmark` to resolve the quill's backend; `check` / `schema` /
+  `blueprint` / `info` load the quill with `quillmark::quill_from_path` and read
+  the pure config-read operations a `Quill` already carries
+  ([QUILL.md](QUILL.md)). `validate --no-render` is the config-read-only
+  validate.
 - **`check` is the document's verdict, `validate` the quill's.** `check` parses
   each `MARKDOWN_FILE` through the bound door (`Quill::parse`) and prints the
   parse warnings and every `Quill::validate` diagnostic, under the file's path.
-  It compiles nothing, so a plate failure is `render`'s to find; a construct
-  the backend declines draws `backend::declined_construct`. A document that fails to read or parse draws that one
-  error (`cli::unreadable_document` for a path that is missing or not UTF-8)
-  and does not stop the rest. An
-  `Error` exits `1`; `--strict` exits `1` on a `Warning` too, for a CI gate over
-  a repository of documents.
+  Without `--regions` it compiles nothing, so a plate failure is `render`'s to
+  find; a construct the backend declines draws `backend::declined_construct`.
+  A document that fails to read or parse draws that one error
+  (`cli::unreadable_document` for a path that is missing or not UTF-8) and
+  does not stop the rest. An `Error` exits `1`; `--strict` exits `1` on a
+  `Warning` too, for a CI gate over a repository of documents.
+- **`check --regions` reports what a click cannot reach.** Each document that
+  drew no error renders once with `RenderOptions::regions`, and core's
+  `coverage` over that sidecar prints its unreachable and coarsely covered
+  addresses ([PREVIEW.md](PREVIEW.md#coverage)). The report leaves the exit
+  code alone, since a quill may leave a field unprinted on purpose; a render
+  that fails is the document's error.
 - **`render` prints what the page leaves out.** Its warnings are the parse
   carrier, then every `Quill::validate` warning, each naming unclaimed input
   ([SCHEMAS.md](SCHEMAS.md#what-blocks-a-render)) less

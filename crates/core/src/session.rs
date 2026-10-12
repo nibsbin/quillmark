@@ -2,7 +2,7 @@ use crate::quill::{CalendarDate, QuillConfig};
 use crate::{
     document::Document,
     error::{Diagnostic, RenderError, RenderResult},
-    region::{ContentHit, RenderedRegion},
+    region::{ContentHit, FieldCoverage, RenderedRegion},
     types::RenderOptions,
 };
 pub use quillmark_content::delta::{Assoc, Delta, Op};
@@ -182,6 +182,8 @@ pub struct LiveSession {
     /// The backend's warnings for the current compile, then its
     /// `backend::declined_construct` ones.
     warnings: Vec<Diagnostic>,
+    /// The plate data the current compile read, for [`coverage`](Self::coverage).
+    data: serde_json::Value,
 }
 
 impl LiveSession {
@@ -206,6 +208,7 @@ impl LiveSession {
             today,
             regions: OnceLock::new(),
             warnings: Vec::new(),
+            data: serde_json::Value::Null,
         };
         session.commit(json_data);
         session
@@ -215,6 +218,7 @@ impl LiveSession {
         self.regions.take();
         self.warnings = self.inner.warnings().to_vec();
         self.warnings.extend(self.config.declined_in_plate(json_data));
+        self.data = json_data.clone();
     }
 
     pub fn page_count(&self) -> usize {
@@ -270,6 +274,13 @@ impl LiveSession {
     /// single [`regions`](Self::regions) rect.
     pub fn field_boxes(&self, field: &str) -> Vec<RenderedRegion> {
         crate::region::field_boxes(self.cached_regions(), field)
+    }
+
+    /// Each address the current compile fills that a reader could want to
+    /// click, and the region address that reaches it, `None` where no click
+    /// does: [`crate::region::coverage`] over [`regions`](Self::regions).
+    pub fn coverage(&self) -> Vec<FieldCoverage> {
+        crate::region::coverage(&self.config, &self.data, self.cached_regions())
     }
 
     /// The schema field whose content is under a point on `page`, or within

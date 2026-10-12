@@ -7,8 +7,8 @@
 The preview surface is two verbs: `render(quill, doc, opts)`, stateless
 one-shot bytes for CLI / server / export, and `open(quill, doc)` →
 **`LiveSession`**, a persistent, incremental compiler that owns preview. Reads
-(`render`, `paint`, `pageSize`, `regions`, `fieldAt`, `positionAt`, `locate`)
-serve the session's current compile; `update(doc)` recompiles in place and
+(`render`, `paint`, `pageSize`, `regions`, `fieldAt`, `positionAt`, `locate`,
+`coverage`) serve the session's current compile; `update(doc)` recompiles in place and
 returns a `ChangeSet` naming the dirty pages. `paint` writes a rasterized page directly into a
 `CanvasRenderingContext2d`; each paint is a **complete** raster: every piece
 of page content already visible, so the consumer never composites. It is
@@ -161,8 +161,8 @@ PDF post-processing, CI coverage probes. The sidecar always describes the
 whole document: page indices are document-space even under a `pages` subset
 render. Each region carries per-field geometry keyed on the **quill schema
 field path** (the address the editor uses) plus, for content ink, the
-**content span** it covers (§ Segments and the striped union). Navigation is
-four queries, two coarse and two fine:
+**content span** it covers (§ Segments and the striped union). Five queries
+read it, three coarse and two fine:
 
 - `regions()` answers *field → rectangles* (scroll to / highlight a field),
   one box per content **segment** it draws. `fieldBoxes(field)` derives the
@@ -176,6 +176,8 @@ four queries, two coarse and two fine:
   or mapping a selection into the content model.
 - `locate(field, pos)` answers *content position → caret rect*: the reverse of
   `positionAt`, the box to draw a caret at.
+- `coverage()` answers *field → reachable?*: every address the compile fills,
+  beside the region address a click reaches it through (§ Coverage).
 
 Four producers: **generated ink** (a `richtext` or `plaintext` value —
 a body, a card's field, a scalar or an `[]` element — a date's `display`
@@ -232,6 +234,30 @@ mapping, a Typst `form-field` from its `field:` argument, both against the one
 address grammar ([PLATE_DATA.md](PLATE_DATA.md#schema-addresses)) — and surface
 a region only when they bind one: a widget with no schema field is a backend
 artifact, not a routable field.
+
+### Coverage
+
+`coverage()` on the session, and core's `coverage(config, data, regions)` over
+a one-shot sidecar, list every address the compile fills that a reader could
+want to click:
+
+- each declared leaf holding a non-blank value, at any depth;
+- a variant container's discriminant;
+- every roster member of a matrix, held or not, since the plate prints them all;
+- each cell of an item a document adds to an open matrix.
+
+Each carries `coveredBy`: the address itself where a region carries it, else
+the nearest enclosing address one does, else nothing. An enclosing address is
+coarse (a row claim reaching its cells, a whole array its elements) and is
+reported, not hidden: a click there opens more than the field.
+
+The derivation needs no backend seam. A key with a box always accrues its
+first one, an unclosed claim accrues nothing in either query, and acroform's
+regions are exactly its bound widgets, so the `field` values of `regions()` are
+the ones `fieldAt` can return. The one gap is a content field whose only ink
+falls between its segments. `quillmark check --regions` prints the report per
+document ([CLI.md](CLI.md)); it is a report, not a gate, because a quill may
+leave a field unprinted on purpose.
 
 ### Segments and the striped union
 

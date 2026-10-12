@@ -952,6 +952,9 @@ A single line of body ink.`
       // A field with no span-bearing region has no derived content box.
       expect(session.fieldBoxes('does_not_exist')).toEqual([])
 
+      // coverage: each filled address and the region reaching it, by DocPath.
+      expect(session.coverage()).toEqual([{ field: 'main.body', coveredBy: 'main.body' }])
+
       // positionAt: the fine-grained click direction, carrying the granularity
       // signal. A hit on the single line's ink is cluster-exact.
       expect(typeof session.positionAt).toBe('function')

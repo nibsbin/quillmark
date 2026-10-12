@@ -67,7 +67,7 @@ quillmark render ./my-quill
 
 ### check
 
-Check markdown documents against a quill's schema, printing every diagnostic each one draws: parse warnings, then every `validation::*` diagnostic. It does not compile the plate, so a plate failure is `render`'s to report; a construct the quill's backend declines draws `backend::declined_construct`, the warning `render` reports for it.
+Check markdown documents against a quill's schema, printing every diagnostic each one draws: parse warnings, then every `validation::*` diagnostic. Without `--regions` it does not compile the plate, so a plate failure is `render`'s to report; a construct the quill's backend declines draws `backend::declined_construct`, the warning `render` reports for it.
 
 ```bash
 quillmark check [OPTIONS] <QUILL_PATH> <MARKDOWN_FILE>...
@@ -81,6 +81,7 @@ quillmark check [OPTIONS] <QUILL_PATH> <MARKDOWN_FILE>...
 **Options:**
 
 - `--strict`: Exit `1` on any warning, not only on an error. An undeclared key and a card no kind claims both fail a strict check.
+- `--regions`: Render each document that drew no error and print, under its path, the filled fields no click on the page reaches (`unreachable`) and those only an enclosing field's region reaches (`coarse`, as `field ← enclosing`). The report never changes the exit code: a quill may leave a field such as a font size unprinted on purpose. A render that fails is the document's error.
 
 Without `--strict`, `check` exits `1` only on an error: a parse error, a value that is not its field's type, a `$quill` naming another quill.
 
@@ -92,6 +93,9 @@ quillmark check ./my-quill input.md
 
 # CI gate: fail on anything unread (an undeclared key, a card no kind claims)
 quillmark check --strict ./my-quill documents/*.md
+
+# Which filled fields a click on the preview cannot reach
+quillmark check --regions ./my-quill example.md
 ```
 
 ### schema

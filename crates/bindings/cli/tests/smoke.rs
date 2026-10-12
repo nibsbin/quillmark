@@ -435,6 +435,37 @@ fn check_lists_every_diagnostic_and_strict_fails_on_a_warning() {
     );
 }
 
+/// `check --regions` renders each document and reports, without failing it,
+/// the filled fields no click reaches and those an enclosing field's region
+/// reaches; a render that fails is the document's error.
+#[test]
+fn check_regions_reports_reach_and_fails_only_on_a_failed_render() {
+    let memo = quillmark_fixtures::quills_path("usaf_memo");
+    let example = memo.join("example.md");
+    let stdout = ok(&["check", "--regions", memo.to_str().unwrap(), example.to_str().unwrap()]);
+    assert!(
+        stdout.contains("unreachable  main.memo_style")
+            && stdout.contains("coarse       main.signature_block[0] ← main.signature_block"),
+        "{stdout}"
+    );
+
+    let dir = quill_with_config(
+        "quill:\n  name: failing\n  version: 0.1.0\n  backend: typst\n  description: d\n\
+         typst:\n  plate_file: plate.typ\n",
+    );
+    std::fs::write(dir.path().join("plate.typ"), "#panic(\"PLATE FAILURE\")\n")
+        .expect("write the plate");
+    let doc = dir.path().join("doc.md");
+    std::fs::write(&doc, "~~~card-yaml\n$quill: failing\n$kind: main\n~~~\n")
+        .expect("write the document");
+    let (quill, doc) = (dir.path().to_str().unwrap(), doc.to_str().unwrap());
+    ok(&["check", quill, doc]);
+    let out = run(&["check", "--regions", quill, doc]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(1), "{stderr}");
+    assert!(stderr.contains("PLATE FAILURE"), "{stderr}");
+}
+
 /// `render` prints the input its page leaves out, once.
 #[test]
 fn render_warns_on_unclaimed_input() {

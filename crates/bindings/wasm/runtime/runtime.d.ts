@@ -341,6 +341,22 @@ export interface FieldRegion {
 	span?: [number, number];
 }
 
+/**
+ * One address a compiled document fills, and the region address a click
+ * reaches it through. A report, not a gate: a field a quill never prints is
+ * legitimately unreachable.
+ */
+export interface FieldCoverage {
+	/** The field's canonical `DocPath` address, as {@link FieldRegion.field}. */
+	field: string;
+	/**
+	 * The `DocPath` of the region reaching `field`: `field` itself, or the
+	 * nearest enclosing address a region carries (a row claim reaching its
+	 * cells, a whole array its elements). Absent where no click reaches it.
+	 */
+	coveredBy?: string;
+}
+
 /** Result of one render. */
 export interface RenderResult {
 	artifacts: Artifact[];
@@ -510,6 +526,12 @@ export declare class LiveSession {
 	 * {@link regions} rect. Reflects the current compile.
 	 */
 	fieldBoxes(field: string): FieldRegion[];
+	/**
+	 * Every address the current compile fills that a reader could want to
+	 * click — each non-blank declared leaf, every roster member held or not —
+	 * with the region reaching it. Reflects the current compile.
+	 */
+	coverage(): FieldCoverage[];
 	/**
 	 * The schema field whose content is under a point on `page`: the canonical
 	 * `DocPath` address to focus in the editor, or `undefined` off any field's

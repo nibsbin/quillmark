@@ -2810,6 +2810,29 @@ impl LiveSession {
         serialize_or_throw(&boxes, "fieldBoxes")
     }
 
+    /// Each address the current compile fills that a reader could want to
+    /// click, and the `DocPath` of the region reaching it: the address itself,
+    /// the nearest enclosing one a region carries (a row claim reaching its
+    /// cells), or `undefined` where no click does. Reflects the current compile.
+    #[wasm_bindgen(js_name = coverage, unchecked_return_type = "FieldCoverage[]")]
+    pub fn coverage(&self) -> Result<JsValue, JsValue> {
+        let kinds = self.kinds();
+        let to_doc = |addr: String| {
+            quillmark_core::region::plate_addr_to_doc_path(&addr, &kinds)
+                .map_or(addr, |path| path.to_string())
+        };
+        let coverage: Vec<crate::types::FieldCoverage> = self
+            .inner
+            .coverage()
+            .into_iter()
+            .map(|c| crate::types::FieldCoverage {
+                field: to_doc(c.field),
+                covered_by: c.covered_by.map(to_doc),
+            })
+            .collect();
+        serialize_or_throw(&coverage, "coverage")
+    }
+
     /// The schema field whose content is under a point on `page`: the `DocPath`
     /// address to focus in the editor, or `undefined` off any field's ink.
     /// `x`/`y` are PDF points with a **bottom-left** origin, the same space as

@@ -205,6 +205,12 @@ describe('LiveSession canvas preview', () => {
     expect(caret, 'locate answers on the element address').toBeTruthy()
     expect(caret.field).toBe('main.references[0]')
 
+    // `coverage` spells both of its addresses the same way.
+    expect(session.coverage()).toContainEqual({
+      field: 'main.references[0]',
+      coveredBy: 'main.references[0]',
+    })
+
     // And the forward direction agrees: a point on the element's ink resolves
     // to the same string, so positionAt → locate composes.
     const [x0, y0, x1, y1] = region.rect
