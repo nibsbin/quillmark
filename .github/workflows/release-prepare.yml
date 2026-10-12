@@ -52,6 +52,11 @@ jobs:
         with:
           tool: cargo-release
 
+      - name: Install cargo-about
+        uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2.87.21
+        with:
+          tool: cargo-about@0.9.2
+
       - name: Compute next version
         id: version
         env:
@@ -75,6 +80,10 @@ jobs:
             --workspace \
             --no-confirm \
             --execute
+
+      # After the bump, so the workspace crates it lists carry the new version.
+      - name: Refresh third-party licenses
+        run: ./scripts/third-party-licenses.sh
 
       - name: Seed changelog entry
         env:

@@ -166,15 +166,18 @@ fi
 if [ -f "CHANGELOG.md" ]; then
     cp CHANGELOG.md pkg/
 fi
-# The workspace ships one license, at LICENSE. It is the grant package.json's
-# `license` field names, so a miss fails the build: a silent skip publishes a
-# package whose declared license has no text behind it.
-if [ -f "LICENSE" ]; then
-    cp LICENSE pkg/
-else
-    echo "error: LICENSE not found; refusing to build an unlicensed package" >&2
-    exit 1
-fi
+# LICENSE is the grant package.json's `license` field names; NOTICE and
+# THIRD_PARTY_LICENSES.md carry the notices the linked crates and the embedded
+# font require. A miss fails the build: a silent skip publishes a package
+# whose licenses have no text behind them.
+for legal in LICENSE NOTICE THIRD_PARTY_LICENSES.md; do
+    if [ -f "$legal" ]; then
+        cp "$legal" pkg/
+    else
+        echo "error: $legal not found; refusing to build a package without it" >&2
+        exit 1
+    fi
+done
 
 echo ""
 echo "WASM build complete!"
