@@ -114,7 +114,8 @@ fn decode_entities(s: &str) -> String {
 
 /// The character the reference opening `s` spells, and its length: one of the
 /// five XML entities, or a numeric reference of at most 7 decimal or 6 hex
-/// digits naming a Unicode scalar value.
+/// digits naming a Unicode scalar value, U+0000 reading as U+FFFD as
+/// CommonMark reads it.
 fn entity(s: &str) -> Option<(char, usize)> {
     for (name, c) in [("&amp;", '&'), ("&lt;", '<'), ("&gt;", '>'), ("&quot;", '"'), ("&apos;", '\'')] {
         if s.starts_with(name) {
@@ -130,7 +131,10 @@ fn entity(s: &str) -> Option<(char, usize)> {
     if n == 0 || n > max || digits.as_bytes().get(n) != Some(&b';') {
         return None;
     }
-    let c = char::from_u32(u32::from_str_radix(&digits[..n], radix).ok()?)?;
+    let c = match u32::from_str_radix(&digits[..n], radix).ok()? {
+        0 => '\u{FFFD}',
+        code => char::from_u32(code)?,
+    };
     Some((c, lead + n + 1))
 }
 
@@ -317,6 +321,7 @@ mod tests {
                 "&nbsp; &amp &#; &#x; &#xD800; &#12345678; &#x110000; & x",
             ),
             ("\"&#128512;\"", "😀"),
+            ("\"a&#0;b&#x0;\"", "a\u{FFFD}b\u{FFFD}"),
             ("\"&amp;amp;\"", "&amp;"),
         ];
         for (raw, value) in cases {

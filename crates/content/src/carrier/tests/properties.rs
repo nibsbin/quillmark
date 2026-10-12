@@ -380,7 +380,8 @@ proptest! {
         attrs in attrs(),
     ) {
         let e = Element::spelling(name.clone(), attrs.clone()).unwrap();
-        let read = Attrs { values: attrs, refused: Vec::new() };
+        let values = attrs.into_iter().map(|(k, v)| (k, v.replace('\0', "\u{FFFD}"))).collect();
+        let read = Attrs { values, refused: Vec::new() };
 
         let open = e.open_tag();
         let tag = html::tag_at(&open, 0).unwrap();

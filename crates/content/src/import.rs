@@ -20,11 +20,13 @@
 //!   a paragraph boundary. Inside a heading a hard break is a space, a heading
 //!   being one line; a setext heading spans two source lines and can carry one.
 //!   Inside a table cell a hard break is a `\n` in the cell's text. An inline
-//!   `<br>` is a hard break, dropped where no text precedes it on its line.
+//!   `<br>` is a hard break, dropped at its block's start or right after
+//!   another break, and a soft break beside a hard break is nothing.
 //! - Two adjacent sibling containers keep their boundary, told apart by
 //!   `Container::instance`, minted here and canonicalized by `normalize`.
 //! - An empty heading, code block or container keeps its line. An empty
-//!   paragraph drops, markdown having no syntax to write one back.
+//!   paragraph or continuation line drops, markdown having no syntax to write
+//!   one back, one a mark or `<u>` opened whose content all dropped included.
 //! - Island ids are minted sequentially (`isl-0`, `isl-1`, …), so import is a
 //!   deterministic function of its markdown. Export drops the ids and re-import
 //!   re-mints the same sequence.
@@ -218,15 +220,7 @@ impl Inline {
     /// boundaries going through [`Self::push_raw`]. Admitting a bare slot char
     /// would break the slot-count invariant.
     fn push_text(&mut self, s: &str) {
-        for c in s.chars() {
-            let c = match c {
-                ISLAND_SLOT => continue,
-                '\n' => ' ',
-                other => match crate::normalize::admit_char(other) {
-                    Some(c) => c,
-                    None => continue,
-                },
-            };
+        for c in admitted(s) {
             self.text.push(c);
             self.pos += 1;
         }
@@ -237,6 +231,23 @@ impl Inline {
     fn push_raw(&mut self, c: char) {
         self.text.push(c);
         self.pos += 1;
+    }
+
+    /// Take back the last char pushed, a mark at its end moving to its start.
+    fn unpush(&mut self) {
+        self.text.pop();
+        self.pos -= 1;
+        let pos = self.pos;
+        for m in &mut self.marks {
+            m.start = m.start.min(pos);
+            m.end = m.end.min(pos);
+        }
+        for (_, start) in &mut self.open {
+            *start = (*start).min(pos);
+        }
+        for (start, _) in self.underlines.iter_mut().flatten() {
+            *start = (*start).min(pos);
+        }
     }
 
     fn open_mark(&mut self, kind: MarkKind) {
@@ -353,6 +364,13 @@ struct Builder {
     /// hard break sets `continues = true`. Cleared when a block that owns its own
     /// lines (List/Quote/CodeBlock/Table) takes over.
     pending: Option<(LineKind, bool)>,
+    /// The text position after the boundary of the line a mark or `<u>` opened
+    /// [early](Self::open_early), while nothing has landed in it.
+    early: Option<usize>,
+    /// The text position after a soft break's space, and after a hard break:
+    /// a soft break beside a hard break folds into it.
+    soft_at: Option<usize>,
+    broke_at: Option<usize>,
     islands: Vec<Island>,
     containers: Vec<Container>,
     /// Parallel to `containers`: the [`Self::emitted`] count when each container
@@ -569,8 +587,44 @@ impl Builder {
         // the position *after* the block's line boundary. Otherwise the mark
         // swallows the separator and equal content from an editor vs from
         // import serializes to different canonical bytes.
-        self.ensure_open(LineKind::Para);
+        self.open_early();
         self.inline.open_mark(kind);
+    }
+
+    /// [`Self::ensure_open`] ahead of any text, for a mark or `<u>` whose start
+    /// must follow the line boundary. A line opened here that nothing fills is
+    /// an empty paragraph, which [`Self::retract_empty_line`] takes back.
+    fn open_early(&mut self) {
+        let emitted = self.emitted();
+        self.ensure_open(LineKind::Para);
+        if self.emitted() > emitted {
+            self.early = Some(self.inline.pos);
+        }
+    }
+
+    /// Take back the paragraph line [`Self::open_early`] opened where nothing
+    /// landed in it, everything it would hold having dropped. A heading keeps
+    /// its line.
+    fn retract_empty_line(&mut self) {
+        if self.early.take() != Some(self.inline.pos)
+            || !self.cur.as_ref().is_some_and(|l| l.kind == LineKind::Para)
+        {
+            return;
+        }
+        self.cur = self.lines.pop();
+        if self.cur.is_some() {
+            self.inline.unpush();
+        }
+        self.soft_at = None;
+        self.broke_at = None;
+    }
+
+    /// Whether nothing precedes the next inline on its line.
+    fn line_empty(&self) -> bool {
+        matches!(self.pending, Some((_, false)))
+            || self.cur.is_none()
+            || self.inline.text.is_empty()
+            || self.inline.text.ends_with('\n')
     }
 
     /// Minting `isl-{seq}` by position keeps import a pure function.
@@ -608,6 +662,9 @@ impl Builder {
             let event = match item {
                 Fixed::Event(event) => event,
                 Fixed::Carrier(tag) => {
+                    if tag.block {
+                        self.retract_empty_line();
+                    }
                     self.carrier_tag(tag)?;
                     continue;
                 }
@@ -628,6 +685,7 @@ impl Builder {
             // underlines it left open with it.
             if self.image_depth == 0 && self.table.is_none() && !is_inline(&event) {
                 self.inline.drop_open(&mut self.dropped);
+                self.retract_empty_line();
             }
             // Image alt collection intercepts everything until the image closes.
             if self.image_depth > 0 {
@@ -647,7 +705,7 @@ impl Builder {
                         };
                         match self.table.as_mut().and_then(|acc| acc.cell.as_mut()) {
                             Some(cell) => cell.push_text(alt),
-                            None => self.image_alt.push_str(alt),
+                            None => self.image_alt.extend(admitted(alt)),
                         }
                     }
                 }
@@ -683,29 +741,35 @@ impl Builder {
                     self.open_line(LineKind::Rule, false);
                     self.rearm_item();
                 }
-                // A soft break that would open its block's first line, all
-                // before it having dropped, is nothing.
-                Event::SoftBreak if matches!(self.pending, Some((_, false))) => {}
-                Event::SoftBreak => self.push_inline(" "),
+                // A soft break with nothing before it on its line, all before it
+                // having dropped, is nothing, and so is one beside a hard break.
+                Event::SoftBreak if self.line_empty() || self.broke_at == Some(self.inline.pos) => {}
+                Event::SoftBreak => {
+                    self.push_inline(" ");
+                    self.soft_at = Some(self.inline.pos);
+                }
                 Event::TaskListMarker(done) => {
                     if let Some(Container::ListItem { checked, .. }) = self.containers.last_mut() {
                         *checked = Some(done);
                     }
                 }
                 Event::HardBreak => {
+                    if self.soft_at.take() == Some(self.inline.pos) {
+                        self.inline.unpush();
+                    }
+                    self.broke_at = Some(self.inline.pos);
                     // A break with no text before it on its line is dropped:
                     // pulldown never emits one there, an inline `<br>` can, and
                     // arming a continuation would join the block to the one above.
-                    let line_empty = matches!(self.pending, Some((_, false)))
-                        || self.cur.is_none()
-                        || self.inline.text.is_empty()
-                        || self.inline.text.ends_with('\n');
-                    if line_empty {
+                    if self.line_empty() {
                         continue;
                     }
                     match self.cur.as_ref().map(|l| &l.kind) {
                         // A heading is one line.
-                        Some(LineKind::Heading { .. }) => self.push_inline(" "),
+                        Some(LineKind::Heading { .. }) => {
+                            self.push_inline(" ");
+                            self.broke_at = Some(self.inline.pos);
+                        }
                         // Elsewhere, arm a continuation line so the block stays
                         // one block and export re-emits a hard break.
                         _ => {
@@ -806,7 +870,7 @@ impl Builder {
                 });
             }
             Tag::Image { dest_url, .. } => {
-                self.image_url = dest_url.to_string();
+                self.image_url = admit_url(&dest_url);
                 self.image_alt.clear();
                 self.image_depth = 1;
             }
@@ -969,7 +1033,7 @@ impl Builder {
         if matches!(tag, UTag::Open { .. }) {
             // Resolve an armed line first, as a mark does, so the underline
             // starts after the line boundary.
-            self.ensure_open(LineKind::Para);
+            self.open_early();
         }
         self.inline.underline(tag);
         self.check_depth()
@@ -1120,6 +1184,7 @@ impl Builder {
 
     fn finish(mut self) -> (Content, Drops) {
         self.inline.drop_open(&mut self.dropped);
+        self.retract_empty_line();
         self.drop_unclosed_blocks();
         if let Some(last) = self.cur.take() {
             self.lines.push(last);
@@ -1151,9 +1216,26 @@ fn mark_kind(tag: &Tag) -> Option<MarkKind> {
         Tag::Emphasis => MarkKind::Emph,
         Tag::Strong => MarkKind::Strong,
         Tag::Strikethrough => MarkKind::Strike,
-        Tag::Link { dest_url, .. } => MarkKind::Link { url: dest_url.to_string() },
+        Tag::Link { dest_url, .. } => MarkKind::Link { url: admit_url(dest_url) },
         _ => return None,
     })
+}
+
+/// `s` as inline text admits it: under [`crate::normalize::admit_char`], a
+/// stray [`ISLAND_SLOT`] dropped and a stray `\n` spaced.
+fn admitted(s: &str) -> impl Iterator<Item = char> + '_ {
+    s.chars().filter_map(|c| match c {
+        ISLAND_SLOT => None,
+        '\n' => Some(' '),
+        other => crate::normalize::admit_char(other),
+    })
+}
+
+/// A link or image destination under [`crate::normalize::admit_char`], with
+/// no line ending, which a destination can hold only as a character
+/// reference and a URL parser strips.
+fn admit_url(url: &str) -> String {
+    url.chars().filter(|&c| c != '\n').filter_map(crate::normalize::admit_char).collect()
 }
 
 fn ends_mark(end: &TagEnd) -> bool {
@@ -2145,6 +2227,55 @@ pub(crate) mod tests {
         let rt = imp("**<br>a**");
         assert_eq!(rt.text, "a");
         assert_eq!(rt.marks, vec![Mark::new(0, 1, MarkKind::Strong)]);
+    }
+
+    #[test]
+    fn a_soft_break_beside_a_hard_break_is_nothing() {
+        for md in ["one<br>\ntwo", "one\n<br>two", "one<br>\n<br>two", "one\n\\\ntwo"] {
+            let rt = imp(md);
+            assert_eq!(rt.text, "one\ntwo", "{md:?}");
+            assert!(rt.lines[1].continues, "{md:?}");
+        }
+        let rt = imp("a\n**<br>b**");
+        assert_eq!(rt.text, "a\nb");
+        assert_eq!(rt.marks, vec![Mark::new(2, 3, MarkKind::Strong)]);
+        assert_eq!(imp("a<br>\nb\n===").text, "a b");
+        assert_eq!(imp("a <br>\nb").text, "a \nb", "an authored space stays");
+    }
+
+    /// A mark or `<u>` opens its line ahead of its text, so a line all it would
+    /// hold dropped from is an empty paragraph or continuation line.
+    #[test]
+    fn a_line_emptied_by_what_dropped_drops() {
+        for (md, text, depths) in [
+            ("a\n\n[](u)", "a", vec![0]),
+            ("a\n<qm-keep>\n<u>", "a", vec![0]),
+            ("a\\\n[](u)", "a", vec![0]),
+            ("a<br><u></u>", "a", vec![0]),
+            ("[](u)\nb", "b", vec![0]),
+            ("- [x] [](u)\n\n  b", "b", vec![1]),
+            ("- [](u)\n  - b", "b", vec![2]),
+            ("[](u)\n<qm-keep>\n\nb\n\n</qm-keep>", "b", vec![1]),
+        ] {
+            let rt = imp_fixed(md).content;
+            assert_eq!(rt.text, text, "{md:?}");
+            assert_eq!(rt.lines.iter().map(|l| l.containers.len()).collect::<Vec<_>>(), depths, "{md:?}");
+        }
+        let rt = imp_fixed("- [x] [](u)").content;
+        assert!(
+            matches!(rt.lines[..], [Line { ref containers, .. }] if matches!(containers[..], [Container::ListItem { checked: Some(true), .. }])),
+            "an item keeps its line: {:?}",
+            rt.lines
+        );
+        assert_eq!(imp_fixed("# [](u)").content.lines[0].kind, LineKind::Heading { level: 1 });
+    }
+
+    #[test]
+    fn a_reference_imports_as_text_admits_it_in_a_destination_and_an_alt() {
+        let rt = imp_fixed("[x](u&#x202E;&#10;v) ![a&#13;&#10;b](u&#x2028;v) n&#0;\0").content;
+        assert_eq!(rt.marks[0].kind, MarkKind::Link { url: "uv".into() });
+        assert_eq!(rt.islands[0].props, json!({"alt": "a b", "url": "u v"}));
+        assert!(rt.text.ends_with("n\u{FFFD}\u{FFFD}"), "{:?}", rt.text);
     }
 
     #[test]
