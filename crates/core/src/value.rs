@@ -57,15 +57,25 @@ pub(crate) fn depth_check_meta_map<E>(
 /// The one YAML reading every engine parse shares: only `true` and `false`,
 /// in any letter case, are booleans, and YAML 1.1's words (`y`, `no`, `On`,
 /// `OFF`) stay strings. Comments reach no value, so none is buffered, and a run
-/// of them meets no count limit.
+/// of them meets no count limit. Aliases expand to at most twice the input's
+/// scalar bytes plus [`ALIAS_SLACK`], so a block's value stays linear in its
+/// source.
 pub(crate) fn parse_yaml<'de, T: Deserialize<'de>>(
     yaml: &'de str,
 ) -> Result<T, serde_saphyr::Error> {
     serde_saphyr::from_str_with_options(
         yaml,
-        serde_saphyr::options! { strict_booleans: true, emit_comments: false },
+        serde_saphyr::options! {
+            strict_booleans: true,
+            emit_comments: false,
+            budget: serde_saphyr::budget! {
+                max_total_scalar_bytes: yaml.len().saturating_mul(2).saturating_add(ALIAS_SLACK),
+            },
+        },
     )
 }
+
+const ALIAS_SLACK: usize = 64 * 1024;
 
 impl QuillValue {
     /// Parse a YAML string under the parser's own budget, so an over-deep
@@ -154,6 +164,15 @@ impl QuillValue {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn aliases_expand_linearly_in_the_source() {
+        let anchor = "x".repeat(10_000);
+        let few: String = (0..4).map(|_| "  - *a\n").collect();
+        let many: String = (0..90).map(|_| "  - *a\n").collect();
+        assert!(QuillValue::from_yaml_str(&format!("z: &a {anchor}\nzz:\n{few}")).is_ok());
+        assert!(QuillValue::from_yaml_str(&format!("z: &a {anchor}\nzz:\n{many}")).is_err());
+    }
 
     #[test]
     fn yaml_error_locates_and_sanitizes() {
