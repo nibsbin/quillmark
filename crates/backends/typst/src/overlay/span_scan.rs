@@ -210,7 +210,8 @@ const REGION_LABEL: &str = "__qm_region__";
 #[derive(Default)]
 struct Markers {
     claims: Vec<String>,
-    stack: Vec<usize>,
+    /// Each open claim beside the artifact depth it opened at.
+    stack: Vec<(usize, usize)>,
     /// Claim indices [`unclosed_claims`] found still open at the end of the
     /// document. Keeping them off `stack` leaves their ink foreign, exactly as
     /// if the plate had emitted no marker at all.
@@ -243,9 +244,9 @@ impl Markers {
             self.claims.push(path.to_string());
             let claim = self.claims.len() - 1;
             if !self.suppressed.contains(&claim) {
-                self.stack.push(claim);
+                self.stack.push((claim, self.artifacts.len()));
             }
-        } else if let Some(i) = self.stack.iter().rposition(|&c| self.claims[c] == path) {
+        } else if let Some(i) = self.stack.iter().rposition(|&(c, _)| self.claims[c] == path) {
             self.stack.truncate(i);
         }
     }
@@ -258,9 +259,13 @@ impl Markers {
         }
     }
 
-    /// No claim is open inside an artifact.
+    /// An artifact hides every claim opened outside it, while one opened
+    /// inside (a banner claimed in the header) takes the artifact's own ink.
     fn current(&self) -> Option<usize> {
-        self.stack.last().copied().filter(|_| self.artifacts.is_empty())
+        self.stack
+            .last()
+            .filter(|&&(_, depth)| depth == self.artifacts.len())
+            .map(|&(c, _)| c)
     }
 }
 
@@ -285,7 +290,7 @@ pub(crate) fn unclosed_claims(doc: &PagedDocument) -> Vec<(usize, String)> {
     markers
         .stack
         .iter()
-        .map(|&c| (c, markers.claims[c].clone()))
+        .map(|&(c, _)| (c, markers.claims[c].clone()))
         .collect()
 }
 

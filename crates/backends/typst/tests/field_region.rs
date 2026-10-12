@@ -116,7 +116,6 @@ fn a_widget_lays_out_where_its_box_alone_would_land() {
     }
 }
 
-
 fn center(r: &quillmark_core::region::RenderedRegion) -> (f32, f32) {
     ((r.rect[0] + r.rect[2]) / 2.0, (r.rect[1] + r.rect[3]) / 2.0)
 }
@@ -226,27 +225,39 @@ fn a_decoration_stroke_inside_a_claim_stays_the_content_fields() {
 }
 
 /// Typst walks a page's background and header before its body, so a claim
-/// open across a page break meets the next page's marginals while open.
+/// open across a page break meets the next page's marginals while open. A
+/// claim opened inside a marginal is the marginal's own, and takes its ink.
 #[test]
-fn a_claim_open_across_a_page_break_takes_no_marginal() {
+fn a_marginal_answers_only_to_a_claim_opened_inside_it() {
     let session = open(
         r#"
 #import "@local/quillmark-helper:0.2.0" as qm
-#set page(width: 300pt, height: 200pt, margin: 40pt, numbering: "1", header: [PAGE HEADER])
+#set page(width: 300pt, height: 200pt, margin: 40pt, numbering: "1",
+  header: qm.region("classification")[PAGE HEADER])
 #qm.region("subject")[#lorem(200)]
 "#,
     );
     assert!(session.page_count() > 1, "the claim needs a page break");
-    let claimed: Vec<_> = session
-        .regions()
-        .into_iter()
-        .filter(|r| r.field == "subject")
-        .collect();
-    assert!(claimed.len() > 1, "the claim surfaces on each page: {claimed:?}");
-    for r in &claimed {
+    let regions = session.regions();
+    let claimed = |field: &str| -> Vec<_> { regions.iter().filter(|r| r.field == field).collect() };
+    let subject = claimed("subject");
+    assert!(subject.len() > 1, "the claim surfaces on each page: {subject:?}");
+    for r in &subject {
         assert!(
             r.rect[1] >= 39.5 && r.rect[3] <= 160.5,
             "the claim stays inside the body area: {r:?}"
+        );
+    }
+    let banners = claimed("classification");
+    assert_eq!(banners.len(), session.page_count(), "one header claim per page: {banners:?}");
+    for r in &banners {
+        assert!(r.rect[1] >= 160.0, "the header claim stays in the header: {r:?}");
+        let (cx, cy) = center(r);
+        assert_eq!(
+            session.field_at(r.page, cx, cy, 0.0).as_deref(),
+            Some("classification"),
+            "page {}'s header answers its own claim",
+            r.page
         );
     }
     for page in 0..session.page_count() {

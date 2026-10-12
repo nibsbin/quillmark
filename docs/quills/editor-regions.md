@@ -92,8 +92,9 @@ What else a claim takes:
 
 - Text Typst draws with no source position of its own is the claim's: a string turned into content inside a function call (`text(size: 9pt, "LIT")`), a list's bullets.
 - An underline or strike stroke stays with the content it decorates.
-- Ink in a page header, footer or background is never claimed, so a claim running across a page break leaves the next page's chrome and its page number alone.
-- A float or a footnote placed inside a claim is laid out elsewhere, and is never claimed.
+- A claim running across a page break leaves the header, footer, background and page number it crosses alone. A claim placed in the header or footer itself, such as a classification banner, takes that marginal's ink.
+- A float or a footnote placed inside a claim is laid out before or after the claim on its page, and is not claimed.
+- A claim running across a page break does take what Typst lays out between the two pages' bodies: the first page's footnotes, bottom floats and `foreground`, and the next page's top floats, wherever they are anchored. Wrap a foreground watermark in `pdf.artifact` to keep it out.
 
 Each **call** claims independently, so `field` need not be a literal and a wrapper used once per card yields one region per card. A card's `$path` is its address prefix, separator included, so appending a field name (`card.at("$path") + "topic"`) or `$body` spells that card's address:
 
