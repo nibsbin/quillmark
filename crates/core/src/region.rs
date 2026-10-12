@@ -163,7 +163,7 @@ pub fn field_boxes(regions: &[RenderedRegion], field: &str) -> Vec<RenderedRegio
 use std::collections::HashSet;
 
 use crate::path::{DocPath, DocSeg};
-use crate::quill::{blank, CardSchema, FieldSchema, QuillConfig, VARIANT_DISCRIMINANT_KEY};
+use crate::quill::{CardSchema, FieldSchema, QuillConfig, VARIANT_DISCRIMINANT_KEY};
 
 /// The absolute document-array index of the `ord`-th (0-based) card of `kind`.
 /// `card_kinds` is the current compile's ordered card kinds.
@@ -447,14 +447,15 @@ fn required_in_cell(
     });
 }
 
-/// `null`, an empty string, the field's own [`blank`], or content holding
-/// nothing.
+/// `null`, an empty string, or content holding nothing: a value that puts no
+/// ink on the page. A `0` or `false` prints, so it is not blank here, where
+/// validation's [`blank`](crate::quill::blank) counts it unanswered.
 fn is_blank(field: &FieldSchema, value: &serde_json::Value) -> bool {
     match value {
         serde_json::Value::Null => true,
         serde_json::Value::String(s) => s.is_empty(),
         serde_json::Value::Object(_) if field.r#type.codec().is_some() => content_is_blank(value),
-        _ => value == blank(field).as_json(),
+        _ => false,
     }
 }
 
@@ -735,8 +736,8 @@ card_kinds:
         RenderedRegion::new(field.to_string(), 0, [0.0, 0.0, 1.0, 1.0])
     }
 
-    /// Every filled leaf, every roster member and the body are required; a
-    /// blank is not. Each is reached by itself, the nearest enclosing region,
+    /// Every filled leaf, `0` included, every roster member and the body are
+    /// required; a blank is not. Each is reached by itself, the nearest enclosing region,
     /// or nothing.
     #[test]
     fn coverage_reaches_each_filled_address_through_its_nearest_region() {
@@ -773,6 +774,7 @@ card_kinds:
             .collect();
         let want: Vec<(&str, Option<&str>)> = vec![
             ("name", Some("name")),
+            ("count", None),
             ("strata.0.year", Some("strata.0")),
             ("strata.1.year", Some("strata")),
             ("strata.1.rank", Some("strata")),
