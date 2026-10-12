@@ -16,6 +16,9 @@ The binary lands at `~/.cargo/bin/quillmark`. To build from a checkout instead:
 cargo install --path crates/bindings/cli
 ```
 
+`quillmark --version` prints the CLI's version and, in parentheses, the Typst
+release plates compile against.
+
 ## Quick start
 
 ```bash
@@ -90,8 +93,9 @@ Writes what Typst's own tooling needs to compile a Typst quill's plate against
 one document (the generated helper package, the vendored packages, the fonts),
 then prints the `typst watch` command that compiles it. The helper holds that
 document's data: rerun `workspace` after the document changes. Typst reads files
-and packages a render refuses, so a plate compiling there can still fail to
-render; the [CLI reference](../../../docs/cli/reference.md#workspace) lists them.
+and packages a render refuses, and the installed `typst` can be another release
+than the embedded one, so a plate compiling there can still fail to render; the
+[CLI reference](../../../docs/cli/reference.md#workspace) lists the differences.
 
 - `-o, --output <DIR>` — workspace directory (default: `quillmark-workspace`)
 - `--today <YYYY-MM-DD>` — the render date: what a `today` date and, through the printed command's `--creation-timestamp`, a plate's `datetime.today()` render as (default: the local date)

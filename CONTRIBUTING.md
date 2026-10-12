@@ -38,3 +38,7 @@ recorded and the last place to catch a missing one.
   in `docs/migrations/index.md`; `mkdocs.yml` globs the directory, so the nav
   needs nothing. Lead the guide with the breaks no type checker reports; the
   changelog is organized by feature, which is the wrong index for an upgrade.
+- A Typst minor bump is a `!`, since a plate is Typst source and a Typst minor
+  release can change what a plate compiles to. The release's guide names the
+  new Typst version, and so does `docs/quills/typst-backend.md` § "Typst
+  Version". A Typst patch bump is not a `!`.

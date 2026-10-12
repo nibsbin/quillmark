@@ -555,6 +555,41 @@ fn a_usage_error_exits_two_with_stderr() {
     assert!(!out.stderr.is_empty(), "usage error wrote nothing to stderr");
 }
 
+/// The Typst `--version` names is the one a plate compiles against: a plate
+/// asserting `sys.version` equals it validates.
+#[test]
+fn version_names_the_typst_a_plate_compiles_against() {
+    let version = ok(&["--version"]);
+    let typst = version
+        .trim()
+        .strip_suffix(')')
+        .and_then(|v| v.split_once(" (Typst "))
+        .map(|(_, typst)| typst.to_owned())
+        .unwrap_or_else(|| panic!("`--version` names no Typst: {version}"));
+
+    let dir = quill_with_config(
+        r#"quill:
+  name: typst_version
+  version: 0.1.0
+  backend: typst
+  description: Asserts the Typst it compiles against
+typst:
+  plate_file: plate.typ
+main:
+  fields:
+    title:
+      description: title of document
+      type: string
+"#,
+    );
+    std::fs::write(
+        dir.path().join("plate.typ"),
+        format!("#assert.eq(str(sys.version), \"{typst}\")\n"),
+    )
+    .expect("write plate.typ");
+    ok(&["validate", dir.path().to_str().unwrap()]);
+}
+
 /// Every command routes a typo'd path through the loader, which names the path
 /// rather than the `Quill.yaml` a directory that does not exist cannot be
 /// missing. Exit 1 rather than any non-zero code: a panic exits differently,

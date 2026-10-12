@@ -1,7 +1,10 @@
 # Migration Guides
 
 A release that breaks the document syntax, the plate-JSON wire format, or a
-public API ships a guide for that version step. Most breaks are hard cutovers —
+public API ships a guide for that version step. So does a release that moves the
+embedded Typst to a new minor version, since a plate is Typst source: its guide
+names the new Typst version and links that version's changelog, even when no
+plate in this repository changed. Most breaks are hard cutovers —
 the old form stops parsing or compiling — so the guide is the path forward, not
 an optional read.
 
