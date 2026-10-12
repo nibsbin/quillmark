@@ -190,11 +190,9 @@ jobs:
         working-directory: pkg
         run: npm pack --dry-run --json | jq -e '.[0].files | any(.path == "sbom.cdx.json")' >/dev/null
 
-      # `install`, not `ci`: package-lock.json is gitignored, so a fresh
-      # checkout has no lockfile for `ci` to install from.
       - name: Install npm dependencies
         working-directory: crates/bindings/wasm
-        run: npm install
+        run: npm ci
 
       - name: Test WASM
         working-directory: crates/bindings/wasm
