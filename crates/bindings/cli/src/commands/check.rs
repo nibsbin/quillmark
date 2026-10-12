@@ -36,7 +36,18 @@ pub fn execute(args: CheckArgs) -> Result<()> {
         let clean = !diagnostics.iter().any(|d| d.severity == Severity::Error);
         if let (true, true, Some(document)) = (args.regions, clean, document) {
             match coverage(&quill, &document) {
-                Ok(coverage) => print_coverage(path, &coverage),
+                Ok((coverage, rendered)) => {
+                    print_coverage(path, &coverage);
+                    let fresh: Vec<Diagnostic> = rendered
+                        .into_iter()
+                        .filter(|w| {
+                            !diagnostics
+                                .iter()
+                                .any(|d| d.code == w.code && d.message == w.message)
+                        })
+                        .collect();
+                    diagnostics.extend(fresh);
+                }
                 Err(failure) => diagnostics.extend(failure),
             }
         }
@@ -100,11 +111,12 @@ fn check_document(quill: &Quill, path: &Path) -> (Vec<Diagnostic>, Option<Docume
 }
 
 /// `document`'s coverage over the regions a one-shot render reports, with each
-/// address spelled as a `DocPath`. The render's failure is the document's.
+/// address spelled as a `DocPath`, beside the render's warnings. The render's
+/// failure is the document's.
 fn coverage(
     quill: &Quill,
     document: &Document,
-) -> std::result::Result<Vec<FieldCoverage>, Vec<Diagnostic>> {
+) -> std::result::Result<(Vec<FieldCoverage>, Vec<Diagnostic>), Vec<Diagnostic>> {
     let today = super::render_date(None);
     let options = RenderOptions::default().with_regions(true);
     let rendered = Quillmark::new()
@@ -121,13 +133,14 @@ fn coverage(
     let doc_path = |addr: String| {
         quillmark::plate_addr_to_doc_path(&addr, &card_kinds).map_or(addr, |p| p.to_string())
     };
-    Ok(quillmark::coverage(quill.config(), &data, &rendered.regions)
+    let coverage = quillmark::coverage(quill.config(), &data, &rendered.regions)
         .into_iter()
         .map(|c| FieldCoverage {
             field: doc_path(c.field),
             covered_by: c.covered_by.map(doc_path),
         })
-        .collect())
+        .collect();
+    Ok((coverage, rendered.warnings))
 }
 
 /// The filled fields no click reaches, then those an enclosing field's region
