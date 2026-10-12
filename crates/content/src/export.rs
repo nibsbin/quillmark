@@ -1028,7 +1028,10 @@ fn render_marked_core(
                     if let Some(slot) = island_markup_at(pos) {
                         out.push_str(&slot);
                     }
-                } else if Some(pos) == escape_punct_at {
+                } else if Some(pos) == escape_punct_at
+                    // A bare `!` before a link's `[` would open an image.
+                    || (c == '!' && links.get(li).is_some_and(|l| l.0 == pos + 1))
+                {
                     out.push('\\');
                     out.push(c);
                 } else if let Some(esc) = edge_space_ref(c)
@@ -1594,6 +1597,13 @@ mod tests {
             rt, rt2,
             "content not a fixed point.\n  in:  {md:?}\n  mid: {md2:?}"
         );
+    }
+
+    /// A `!` before a link stays text, not the `!` of an image.
+    #[test]
+    fn a_bang_before_a_link_round_trips() {
+        round_trips("\\![i](y)");
+        round_trips("wow!![i](y)");
     }
 
     /// The link arm must route its display text through the island renderer

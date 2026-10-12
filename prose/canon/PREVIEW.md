@@ -240,7 +240,8 @@ queries, and reported as a `typst::unclosed_region` warning naming the field.
 a one-shot sidecar, list every address the compile fills that a reader could
 want to click:
 
-- each declared leaf holding a non-blank value, at any depth;
+- each declared leaf holding a value that prints, at any depth: anything but
+  `null`, an empty string or empty content, so a `0` or `false` is listed;
 - a variant container's discriminant;
 - every roster member of a matrix, held or not, since the plate prints them all;
 - each cell of an item a document adds to an open matrix.

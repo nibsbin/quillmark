@@ -22,7 +22,6 @@ const SUPPORTED_MAJOR_MINOR: &str = "0.2";
 /// A parsed `form.json`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct FormSpec {
-    schema: String,
     /// Widgets bound to a [`FieldSchema`](quillmark_core::quill::FieldSchema).
     #[serde(default)]
     pub fields: Vec<BoundField>,
@@ -117,11 +116,19 @@ impl FormParseError {
     }
 }
 
+/// Read ahead of the full spec, so an older tag gets the version error even
+/// where its fields do not fit this shape.
+#[derive(Debug, Deserialize)]
+struct SchemaTag {
+    schema: String,
+}
+
 impl FormSpec {
     /// Parse and validate a `form.json` byte slice.
     pub fn parse(bytes: &[u8]) -> Result<FormSpec, FormParseError> {
+        let tag: SchemaTag = serde_json::from_slice(bytes).map_err(FormParseError::Json)?;
+        check_version(&tag.schema)?;
         let spec: FormSpec = serde_json::from_slice(bytes).map_err(FormParseError::Json)?;
-        check_version(&spec.schema)?;
         spec.check_unique_names()?;
         Ok(spec)
     }
@@ -192,6 +199,25 @@ mod tests {
         assert_eq!(spec.fields[1].tooltip, None);
         assert_eq!(spec.widgets.len(), 1);
         assert_eq!(spec.widgets[0].kind, WidgetKind::Signature);
+    }
+
+    #[test]
+    fn v1_with_v1_shaped_fields_fails_the_version_gate_not_the_field_shape() {
+        let json = br#"{
+          "schema": "quillmark/form@0.1.0",
+          "fields": [
+            { "name": "FullName", "schema_field": "full_name", "page": 0,
+              "rect": { "x": 0, "y": 0, "w": 1, "h": 1 }, "type": "text" },
+            { "name": "Signature", "page": 0,
+              "rect": { "x": 0, "y": 2, "w": 1, "h": 1 }, "type": "signature" }
+          ]
+        }"#;
+        match FormSpec::parse(json) {
+            Err(e @ FormParseError::BadSchema(_)) => {
+                assert_eq!(e.code(), "acroform::invalid_form_json");
+            }
+            other => panic!("expected BadSchema, got {other:?}"),
+        }
     }
 
     #[test]

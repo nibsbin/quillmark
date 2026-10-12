@@ -830,3 +830,46 @@ fn a_nested_cell_is_addressable_through_the_dictionary() {
     assert_eq!(cls["properties"]["category"]["type"], json!("string"));
 }
 
+
+/// `validate` reports a drop in a cell the discriminant does not select, as
+/// `conform` does, whether the variant is a field or nested in a dictionary.
+#[test]
+fn validate_reports_an_unselected_cells_drops_at_any_depth() {
+    let quill = quill_from_yaml(
+        r#"
+quill:
+  name: variant_drops
+  version: "0.1.0"
+  backend: typst
+  description: probe
+main:
+  fields:
+    c:
+      type: enum
+      values: [A, B]
+      variants:
+        A: { y: { type: richtext } }
+    box:
+      type: object
+      properties:
+        k:
+          type: enum
+          values: [A, B]
+          variants:
+            A: { y: { type: richtext } }
+"#,
+    );
+    let md = "~~~\n$quill: variant_drops@0.1.0\nc:\n  value: B\n  y: a <span>b</span>\n\
+              box:\n  k:\n    value: B\n    y: a <span>b</span>\n~~~\n";
+    let drops = |diags: Vec<crate::error::Diagnostic>| -> Vec<String> {
+        diags
+            .into_iter()
+            .filter(|d| d.code.as_deref() == Some(crate::document::DROPPED_CONSTRUCT))
+            .map(|d| d.path.unwrap_or_default())
+            .collect()
+    };
+
+    let loaded = Document::parse(md).unwrap().document;
+    assert_eq!(drops(quill.validate(&loaded)), ["main.box.k.y", "main.c.y"]);
+    assert_eq!(drops(quill.parse(md).unwrap().warnings), ["main.c.y", "main.box.k.y"]);
+}

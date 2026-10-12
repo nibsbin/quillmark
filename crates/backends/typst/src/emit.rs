@@ -1119,19 +1119,16 @@ fn table_markup(props: &serde_json::Value) -> String {
     }
     let aligned = aligns.filter(|al| al.iter().any(|a| a.as_str().is_some_and(|s| s != "none")));
     if let Some(al) = aligned {
-        out.push_str("  align: (");
-        for (i, a) in al.iter().enumerate() {
-            if i > 0 {
-                out.push_str(", ");
-            }
-            out.push_str(match a.as_str().unwrap_or("none") {
-                "left" => "left",
-                "center" => "center",
-                "right" => "right",
+        // One entry per column: Typst cycles a shorter array from the start.
+        let tracks: Vec<&str> = (0..cols)
+            .map(|i| match al.get(i).and_then(Value::as_str) {
+                Some("left") => "left",
+                Some("center") => "center",
+                Some("right") => "right",
                 _ => "auto",
-            });
-        }
-        out.push_str("),\n");
+            })
+            .collect();
+        out.push_str(&format!("  align: ({}),\n", tracks.join(", ")));
     }
     let headless = layout.headless;
     out.push_str(if headless { "  " } else { "  table.header(" });
@@ -1974,6 +1971,15 @@ mod tests {
         });
         let out = table_markup(&props);
         assert!(out.contains("columns: 2,"), "got {out:?}");
+
+        // `align` names every column, so a short `aligns` does not cycle.
+        let props = serde_json::json!({
+            "header": [ cell("H") ],
+            "aligns": [ "right" ],
+            "rows": [ [ cell("a"), cell("b"), cell("c") ] ],
+        });
+        let out = table_markup(&props);
+        assert!(out.contains("align: (right, auto, auto),"), "got {out:?}");
     }
 
     #[test]

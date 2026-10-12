@@ -842,7 +842,8 @@ fn validate_variant(
             .to_string(),
     };
 
-    if let Some(fields) = field.variant_fields(&member) {
+    let live = field.variant_fields(&member);
+    if let Some(fields) = live {
         for (name, schema) in fields {
             if let Some(cell) = object.get(name) {
                 errors.extend(validate_value(
@@ -852,6 +853,30 @@ fn validate_variant(
                     ctx,
                     drops,
                 ));
+            }
+        }
+    }
+
+    // An unselected cell draws no error, but `conform` keeps it and reports
+    // its drops, and so does a container walk that reaches this variant.
+    if ctx == ValueContext::Document {
+        for (name, cell) in object {
+            if live.is_some_and(|fields| fields.contains_key(name)) {
+                continue;
+            }
+            let Some(schema) = field.variant_field(name) else {
+                continue;
+            };
+            let mut cell_drops = Vec::new();
+            let conformed = super::QuillConfig::conform_value(
+                &QuillValue::from_json(cell.clone()),
+                schema,
+                &path.field(name),
+                super::config::Leniency::Render,
+                &mut cell_drops,
+            );
+            if conformed.is_ok() {
+                drops.extend(cell_drops);
             }
         }
     }

@@ -129,6 +129,7 @@ pub(crate) fn read_info_source<'t>(idx: &ObjectIndex, trailer: &'t [u8]) -> Info
     if parse_indirect_ref(value).is_some() {
         return idx
             .referent(value)
+            .filter(|&id| idx.dict(id, CODE_PARSE, "/Info").is_ok())
             .map_or(InfoSource::Entries(b""), InfoSource::Object);
     }
     match as_dict(value.trim_ascii(), CODE_PARSE, "/Info") {
