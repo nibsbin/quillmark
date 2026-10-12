@@ -1,0 +1,7 @@
+contact_links:
+  - name: Question or idea
+    url: https://github.com/borb-sh/quillmark/discussions
+    about: Ask how to do something, or float an idea before it becomes an issue.
+  - name: Documentation
+    url: https://quillmark.dev/
+    about: Guides for writing documents, building quills, and integrating Quillmark.

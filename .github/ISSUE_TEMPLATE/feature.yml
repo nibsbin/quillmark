@@ -1,0 +1,15 @@
+name: Feature request
+description: Something Quillmark cannot do yet.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to produce, and where Quillmark stops you.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: A proposal, if you have one
