@@ -82,7 +82,7 @@ status_report/0.1.0/
 ~~~
 $quill: status_report
 project: Harbor Migration
-state: at risk
+state: at_risk
 ~~~
 
 The cutover rehearsal slipped a week while the data owners review the mapping.
@@ -303,6 +303,12 @@ main:
 
 `values:` on any other type is a load error, as is the retired `enum:`
 modifier on any type.
+
+A value is an id: it is what a document stores and what the plate reads, so
+renaming one changes the meaning of every document holding it. Spell it as a
+stable token (`separate_page`, not `Separate page`) and print display text from
+the plate, which maps each id to its words. Where the text is itself the
+standard, as a marking such as `UNCLASSIFIED` is, the id is that text.
 
 #### The blank: `values:` is for choices, not for the absence of one
 
