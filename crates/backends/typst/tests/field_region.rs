@@ -272,3 +272,30 @@ fn a_marginal_answers_only_to_a_claim_opened_inside_it() {
         );
     }
 }
+
+/// The claim's column is 100pt wide and every footnote and float spans the
+/// page, so a claimed note or float widens the claim's box past the column.
+/// The column is a table cell broken across pages, which Typst parents to the
+/// cell as it parents a footnote to its anchor.
+#[test]
+fn a_footnote_or_float_answers_only_to_a_claim_opened_inside_it() {
+    let session = open(
+        r#"
+#import "@local/quillmark-helper:0.2.0" as qm
+#set page(width: 300pt, height: 200pt, margin: 20pt)
+Lead#footnote[#qm.region("subject")[INSIDE] #lorem(30)]
+#qm.region("classification")[#table(columns: (100pt,), inset: 0pt, stroke: none, lorem(150))]
+#place(top, float: true, lorem(30))
+"#,
+    );
+    let regions = session.regions();
+    let column: Vec<_> = regions.iter().filter(|r| r.field == "classification").collect();
+    assert!(column.len() > 2, "the claim surfaces on each page: {column:?}");
+    for r in &column {
+        assert!(r.rect[2] <= 120.5, "the claim stays in its column: {r:?}");
+    }
+    assert!(
+        regions.iter().any(|r| r.field == "subject"),
+        "a claim inside a footnote takes the note"
+    );
+}

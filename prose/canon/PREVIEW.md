@@ -216,18 +216,15 @@ What a claim takes, beyond ink that resolves to no window:
   bullet.
 - A detached stroke or image is never the claim's: an underline or strike
   stays with the content field it decorates (§ Decisions).
-- Ink inside a page marginal (background, header, footer) is never taken by a
-  claim opened outside it, so a claim open across a page break takes none of
-  the chrome it crosses or the page number. A claim opened inside a marginal,
-  such as a banner in the header, takes the marginal's own ink.
-- A float or a footnote anchored between the markers is laid out outside walk
-  order, a top float before the open and a bottom float or a footnote after
-  the close, so a claim closing on its page never takes it.
-- The walk reaches a page's footnotes, bottom floats and `foreground`, and the
-  next page's top floats, after the page's last line of text and before the
-  next page's first, outside any marginal, so a claim open across that break
-  takes them wherever they are anchored. A foreground wrapped in
-  `pdf.artifact` is a marginal like any other.
+- Out-of-flow ink is never taken by a claim opened outside it: a page
+  marginal (background, header, footer), a footnote, or a float, wherever it
+  is anchored. A claim open across a page break takes none of the chrome it
+  crosses, the page number, or the notes and floats laid out around its text.
+  A claim opened inside, such as a banner in the header or a claim in a
+  footnote, takes that ink.
+- A page's `foreground` is the exception: Typst lays it out untagged after the
+  page's last line of text, so a claim open across that page's break takes it.
+  A foreground wrapped in `pdf.artifact` is a marginal like any other.
 
 The marker stack persists across pages so a claim can span a page break, which
 leaves a claim whose close marker never reaches a frame bounded by nothing:
@@ -458,6 +455,16 @@ The wasm `render` feature pulls in `web-sys`, the generic canvas *painter*
   the walk hides every claim opened outside it: a claim spanning a page break
   would otherwise take the chrome it crosses. A claim opened inside the
   artifact stays open there, so a header can claim its own banner.
+- **A footnote or a float is out of flow, like a marginal, not part of the
+  claim around its anchor.** Typst lays each one out in a group whose logical
+  parent is its anchor, and the walk hides outer claims inside that group as
+  it does inside an artifact. Attributing the note to the claim open at its
+  anchor, Typst's own reading order, would stretch that claim's one box per
+  page from the anchor's line to the page's foot or head, over the text
+  between; a plate that wants a note claimed claims it inside the note. The
+  anchor reading stays admissible later as a strict addition: a claim inside
+  the note is innermost under either. A table cell broken across pages is
+  parented to the cell too, and stays in flow.
 - **No region is inferred from plate syntax.** A lexical extent is not
   provenance: a window over `rr.map(s => ..)` holds the closure's body, so it
   would outrank every claim inside it, and whether a value regions would hang
