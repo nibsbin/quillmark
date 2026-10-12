@@ -34,6 +34,8 @@ Markdown authoring, the [blueprint](../quills/blueprint.md) (for LLMs), and thes
 === "JavaScript"
 
     ```javascript
+    const { Document } = await init();              // from "@quillmark/wasm"
+
     const doc = new Document("invoice");            // blank canvas
     const w = quill.writer(doc);
     w.setAll({ customer: row.name, total: row.total });

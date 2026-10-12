@@ -8,7 +8,7 @@ One thing never reaches a diagnostic: an argument the binding cannot convert at 
 
 | Field | Meaning |
 |---|---|
-| `severity` | `Error` (blocks its stage) or `Warning` (never blocks) |
+| `severity` | `Error` (blocks its stage) or `Warning` (never blocks): `Severity.ERROR` / `Severity.WARNING` in Python, `"error"` / `"warning"` in JavaScript |
 | `code` | Namespaced id; e.g. `parse::missing_quill`, `validation::type_mismatch`, `quill::version_mismatch`: the machine-routable identity |
 | `message` | Human-readable text |
 | `location` | Optional text anchor: `file`, `line` (1-based), `column` |
@@ -36,9 +36,12 @@ One thing never reaches a diagnostic: an argument the binding cannot convert at 
 === "JavaScript"
 
     ```javascript
+    import { isQuillmarkError } from "@quillmark/wasm";
+
     try {
       const result = await engine.render(quill, doc, { format: "pdf" });
     } catch (err) {
+      if (!isQuillmarkError(err)) throw err;  // not a quillmark failure
       for (const d of err.diagnostics) {     // always non-empty
         console.error(d.severity, d.code, d.message);
       }

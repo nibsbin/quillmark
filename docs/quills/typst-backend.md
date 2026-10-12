@@ -432,8 +432,8 @@ result = engine.render(quill, doc, OutputFormat.PDF)   # or .SVG, .PNG
 WASM/JS binding (rendering lives on the engine, not the quill):
 
 ```javascript
-engine.render(quill, doc, { format: 'png' });           // 144 PPI
-engine.render(quill, doc, { format: 'png', ppi: 300 });  // print quality
+await engine.render(quill, doc, { format: 'png' });           // 144 PPI
+await engine.render(quill, doc, { format: 'png', ppi: 300 });  // print quality
 ```
 
 PNG resolution is set via the `ppi` option (default **144**, 2× at 72pt/inch, suitable for retina previews):

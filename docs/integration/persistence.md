@@ -19,6 +19,8 @@ projection, never a stored row: persist with `to_stored`.
 === "JavaScript"
 
     ```javascript
+    const { Document } = await init();        // from "@quillmark/wasm"
+
     const blob = doc.toStored();
     const doc2 = Document.fromStored(blob);   // storageVersionOf(blob) first to test without throwing
     ```

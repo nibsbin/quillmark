@@ -2,7 +2,7 @@
 
 WebAssembly bindings for Quillmark.
 
-Maintained by [TTQ](https://tonguetoquill.com).
+Maintained by [borb-sh](https://github.com/borb-sh).
 
 ## Overview
 
@@ -334,7 +334,7 @@ ed.set("subject", "Q3 results");                    // strict-committed to the s
 ed.setAll({ qty: "3", subject: "Q3" });             // all-or-nothing batch
 ed.reviseField("subject", "Q3 **results**");        // typed AND anchor-preserving; returns { delta, warnings }
 ed.set("titel", "x");                               // throws UnknownField: a typo, not a fallback
-ed.card(2).set("body", "**note**");                 // composable card, resolved by its $kind
+ed.card(2).reviseBody("**note**");                  // a composable card's body; its fields take set / setAll
 ```
 
 `DocumentWriter` / `CardWriter` are pure JS holding references to your existing
@@ -351,7 +351,7 @@ const v = quill.reader(doc);
 v.get("subject");                                   // the values form: every content leaf as its codec's text, else as stored
 v.getContent("subject");                            // the same read as a `Content`, whichever lane stored it
 v.bodyMarkdown();                                   // the main body markdown (quill-free)
-v.card(0).get("body");                              // a card field, resolved by its $kind
+v.card(0).bodyMarkdown();                           // a card's body markdown; its fields read through get
 v.resolve();                                        // the render view: blank-filled, coerced, each field tagged with its rung
 ```
 
