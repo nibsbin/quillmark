@@ -13,7 +13,6 @@ signature_block:
   - Chief, Knowledge Operations
 letterhead_caption:
   - HEADQUARTERS 123D EXAMPLE WING
-letterhead_seal: ""
 classification:
   value: CUI
   controlled_by: 123 CS/SCX
