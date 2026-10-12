@@ -4,11 +4,20 @@ mod output;
 
 use clap::{Parser, Subcommand};
 use std::process;
+use std::sync::LazyLock;
+
+static VERSION: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "{} (Typst {})",
+        env!("CARGO_PKG_VERSION"),
+        quillmark::typst_version()
+    )
+});
 
 #[derive(Parser)]
 #[command(name = "quillmark")]
 #[command(about = "Command-line interface for Quillmark: a schema-driven document engine", long_about = None)]
-#[command(version)]
+#[command(version = VERSION.as_str())]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

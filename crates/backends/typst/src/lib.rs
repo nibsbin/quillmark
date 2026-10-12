@@ -501,6 +501,12 @@ pub fn plate_file(source: &Quill) -> Result<Option<String>, RenderError> {
     Ok(read_plate(source)?.file)
 }
 
+/// The release of the linked Typst compiler, which a plate reads as
+/// `sys.version`.
+pub fn typst_version() -> &'static str {
+    typst::utils::version().raw()
+}
+
 /// The plate is a Typst-only notion: its filename is declared under the
 /// `typst:` backend-config section as `plate_file` and the source lives in the
 /// quill's file bundle. A quill declaring no `plate_file` renders an empty one.

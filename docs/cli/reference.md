@@ -8,6 +8,8 @@ Command-line interface for Quillmark rendering.
 cargo install quillmark-cli
 ```
 
+`quillmark --version` prints the CLI's version and, in parentheses, the Typst release plates compile against.
+
 ## Commands
 
 ### render
@@ -257,6 +259,10 @@ still fail to render, as `typst::file_not_found`:
 | Any other file in the quill: `read("data.csv")` beside the plate, or a vendored package's `/packages/<dir>/lib.typ` by its path | Refuses it | Loads it |
 | A file the quill's load skips: a symlink, or anything under the quill's own `.git/`, `target/` or `node_modules/` | Refuses it | Loads it |
 | A package the quill does not vendor | Refuses it: Quillmark never downloads a package | Loads it from Typst's package cache, downloading an `@preview` package the cache lacks |
+
+The printed command also runs the installed `typst`, whose release can differ
+from the one `quillmark --version` names. A plate using a feature added after
+the embedded release compiles there and fails to render.
 
 Render the quill with `quillmark render` before trusting a plate that
 compiles here.

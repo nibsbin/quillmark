@@ -88,6 +88,13 @@ them.
   carries. Typst serves the plate any file under the root and fetches a
   package the quill does not vendor, both of which a render refuses; the
   [CLI reference](../../docs/cli/reference.md#workspace) tabulates the two.
+  The command runs the installed `typst`, which can be another release than
+  the one the backend links.
+- **`--version` names the linked Typst.** It reads the release from the Typst
+  crate the binary links (`quillmark::typst_version`), the value a plate reads
+  as `sys.version`. A `cargo install` without `--locked` ignores `Cargo.lock`,
+  so a build can link a newer Typst patch than the lockfile, and the version
+  line reports it.
 - **Seeded fallback.** `render` or `workspace` with no `MARKDOWN_FILE` reads the quill's
   seeded document: one card per kind carrying its kind's `seed:`, every
   other field at its `default:`/blank, so a quill renders with no input file. `render`'s output
