@@ -154,3 +154,32 @@ def test_a_render_leaves_the_load_warnings_on_the_document(engine, taro_quill_di
     result = engine.render(quill, doc, OutputFormat.SVG)
     assert "parse::dropped_construct" not in [w.code for w in result.warnings]
     assert [w.code for w in doc.warnings] == ["parse::dropped_construct"]
+
+
+def test_render_releases_the_gil(engine, taro_quill_dir, taro_md):
+    """Another Python thread runs while a render compiles."""
+    import threading
+    import time
+
+    quill = Quill.from_path(str(taro_quill_dir))
+    doc = Document.from_markdown(taro_md + "\n\nLorem ipsum dolor sit amet." * 4000)
+    ticks = []
+    stop = threading.Event()
+
+    def tick():
+        while not stop.is_set():
+            ticks.append(time.perf_counter())
+            time.sleep(0.001)
+
+    ticker = threading.Thread(target=tick)
+    ticker.start()
+    try:
+        start = time.perf_counter()
+        engine.render(quill, doc, OutputFormat.PDF)
+        end = time.perf_counter()
+    finally:
+        stop.set()
+        ticker.join()
+
+    assert end - start > 0.05
+    assert sum(start < t < end for t in ticks) >= 3

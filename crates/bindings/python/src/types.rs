@@ -50,6 +50,8 @@ impl PyQuillmark {
     /// The result's `warnings` are every `quill.validate(doc)` warning but
     /// `backend::declined_construct`, then the compile's, a decline among them;
     /// the load's stay on `doc.warnings`.
+    ///
+    /// The GIL is released while the backend compiles.
     #[pyo3(signature = (quill, doc, format=None, ppi=None, pages=None, regions=false, today=None))]
     #[allow(clippy::too_many_arguments)]
     fn render(
@@ -68,9 +70,10 @@ impl PyQuillmark {
         opts.ppi = ppi;
         opts.pages = pages.map(page_indices).transpose()?;
         opts.regions = regions;
-        let mut result = self
-            .inner
-            .render(&quill.inner, &doc.inner, today, &opts)
+        let (engine, quill, document) = (&self.inner, &quill.inner, &doc.inner);
+        let mut result = doc
+            .py()
+            .detach(|| engine.render(quill, document, today, &opts))
             .map_err(convert_render_error)?;
         let kinds: Vec<Option<&str>> = doc.inner.cards().iter().map(|c| c.kind()).collect();
         result.regions = quillmark_core::region::regions_to_doc_path(result.regions, &kinds);
