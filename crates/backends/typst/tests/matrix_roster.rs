@@ -91,8 +91,9 @@ fn roster_rows_are_the_vocabulary_in_order_from_every_container() {
 fn a_rows_path_claims_its_region() {
     let session = open(
         r#"#for row in qm.roster(qm.data, "quals") [
-  #qm.region(row.path)[#(if row.held [x] else [o]) #row.title]
-  #if row.held and "title" in row.value [#qm.ink(row.value, "title")]
+  #qm.region(row.path)[#(if row.held [x] else [o]) #(if row.held and "title" in row.value {
+    qm.ink(row.value, "title")
+  } else { row.title })]
 ]"#,
     )
     .expect("opens");

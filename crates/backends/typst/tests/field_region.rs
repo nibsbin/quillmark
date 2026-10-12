@@ -166,60 +166,64 @@ fn a_claim_takes_detached_glyphs_its_body_prints() {
     );
 }
 
-/// Typst paints an underline or strike stroke after its run's glyphs, inside
-/// their box, so a claimed stroke would split the segment's region and answer a
+/// Wrapping a content field in a claim moves none of its regions: a bullet or
+/// an enum number the claim takes sits between the field's segments, and an
+/// underline or strike stroke stays unclaimed, since Typst paints it after its
+/// run's glyphs and inside their box, where a claimed stroke would answer a
 /// click on the word beneath it.
 #[test]
-fn a_decoration_stroke_inside_a_claim_stays_the_content_fields() {
+fn a_claim_around_a_content_field_moves_none_of_its_regions() {
     use quillmark_content::model::{Content, Line, LineKind, Mark, MarkKind};
-    const TEXT: &str = "Start struck and then a long trailing plain run of text.";
-    let open_marked = |kind: MarkKind| {
-        let rt = Content::new(TEXT.to_string(), vec![Line::new(LineKind::Para)])
-            .with_marks(vec![Mark::new(6, 12, kind)])
-            .into_normalized();
+    use quillmark_core::session::LiveSession;
+    let open_body = |print: &str, body: &serde_json::Value| {
         let source = common::quill_with_plate(
             &common::yaml(
                 "main:\n  fields:\n    subject: { type: string }\n    body: { type: richtext }\n",
             ),
-            r#"
-#import "@local/quillmark-helper:0.2.0" as qm
-#set page(width: 400pt, height: 200pt, margin: 40pt)
-#set underline(stroke: 12pt)
-#set strike(stroke: 12pt)
-#qm.region("subject")[#qm.data.body]
-"#,
+            &format!(
+                "#import \"@local/quillmark-helper:0.2.0\" as qm\n\
+                 #set page(width: 400pt, height: 300pt, margin: 40pt)\n\
+                 #set underline(stroke: 12pt)\n\
+                 #set strike(stroke: 12pt)\n{print}\n"
+            ),
         );
         TypstBackend
             .open(
                 &source,
-                &serde_json::json!({
-                    "subject": "Widgets",
-                    "body": quillmark_content::serial::to_canonical_value(&rt),
-                }),
+                &serde_json::json!({ "subject": "Widgets", "body": body }),
                 common::test_date(),
             )
             .expect("open")
     };
-    let width = |session: &quillmark_core::session::LiveSession| {
-        session
-            .regions()
-            .iter()
-            .filter(|r| r.field == "body")
-            .map(|r| r.rect[2] - r.rect[0])
-            .fold(0.0f32, f32::max)
+    let of = |session: &LiveSession| -> Vec<_> {
+        session.regions().into_iter().filter(|r| r.field == "body").collect()
     };
-    let baseline = width(&open_marked(MarkKind::Strong));
-    assert!(baseline > 150.0, "sanity: the line's region is wide: {baseline}");
-    for kind in [MarkKind::Underline, MarkKind::Strike] {
-        let session = open_marked(kind.clone());
-        let w = width(&session);
-        assert!(w >= baseline * 0.9, "{kind:?} region {w} split against {baseline}");
-        let glyph = session.locate("body", 9).expect("the decorated word is drawn");
+    let decorated = quillmark_content::serial::to_canonical_value(
+        &Content::new(
+            "Start struck and underlined, then a long trailing plain run of text.".to_string(),
+            vec![Line::new(LineKind::Para)],
+        )
+        .with_marks(vec![
+            Mark::new(6, 12, MarkKind::Strike),
+            Mark::new(17, 27, MarkKind::Underline),
+        ])
+        .into_normalized(),
+    );
+    let listed = common::content("- one\n- two\n  - nested\n\n1. first\n2. second");
+    for body in [&listed, &decorated] {
+        let bare = of(&open_body("#qm.data.body", body));
+        assert!(!bare.is_empty(), "sanity: the field is drawn");
+        assert_eq!(of(&open_body("#qm.region(\"subject\")[#qm.data.body]", body)), bare);
+    }
+
+    let claimed = open_body("#qm.region(\"subject\")[#qm.data.body]", &decorated);
+    for pos in [9, 20] {
+        let glyph = claimed.locate("body", pos).expect("the decorated word is drawn");
         let (cx, cy) = center(&glyph);
         assert_eq!(
-            session.field_at(glyph.page, cx, cy, 0.0).as_deref(),
+            claimed.field_at(glyph.page, cx, cy, 0.0).as_deref(),
             Some("body"),
-            "{kind:?}: a click on the stroke band answers the content field"
+            "a click on the stroke band at {pos} answers the content field"
         );
     }
 }
