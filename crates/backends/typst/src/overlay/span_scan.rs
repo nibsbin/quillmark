@@ -19,8 +19,9 @@ use std::collections::HashMap;
 use std::ops::Range;
 
 use typst::foundations::{Content, Label, Value};
-use typst::introspection::Tag;
+use typst::introspection::{Location, Tag};
 use typst::layout::{Frame, FrameItem, Point, Transform};
+use typst::pdf::ArtifactElem;
 use typst::syntax::ast::{self, AstNode};
 use typst::syntax::{DiagSpan, DiagSpanKind, FileId, LinkedNode, Source, Span, SyntaxKind};
 use typst::utils::PicoStr;
@@ -152,10 +153,11 @@ enum HitClass {
     /// syntax). Suspends a *different* window's run like foreign ink, but is a
     /// no-op while its own window's segment is the run.
     Transparent { window: usize },
-    /// Ink from a detached span: Typst's synthesized text decorations (the
-    /// `underline`/`strike` line, drawn as a `Shape` mid-run) and list markers.
-    /// Attributable to no field, and never a run-breaker: a decoration drawn
-    /// between a field's own glyphs would otherwise orphan the rest of the line.
+    /// Ink from a detached span that no claim takes: Typst's synthesized text
+    /// decorations (the `underline`/`strike` line, drawn as a `Shape` mid-run),
+    /// and list markers outside a claim. Attributable to no field, and never a
+    /// run-breaker: a decoration drawn between a field's own glyphs would
+    /// otherwise orphan the rest of the line.
     Anonymous,
     /// No window and no open marker, but a *resolvable* span: page chrome,
     /// another field's text, vendored-package output. Breaks a run.
@@ -177,14 +179,21 @@ impl HitClass {
 /// placement's boxable key; on a content window it is inter-segment ink. Falling
 /// through to `marker` only on an unresolved span is what makes nested tracked
 /// ink outrank an enclosing `field-region`.
+///
+/// A claim takes a detached glyph, which is text the plate printed (a `str`
+/// cast to content in an argument, a list bullet), but never a detached
+/// `Shape` or `Image`: Typst paints an underline or strike stroke after its
+/// run's glyphs, inside their box, so a claimed stroke would win
+/// [`Scan::field_at`]'s tie against the content field beneath it.
 fn hit_class(
     resolved: Option<(usize, Option<usize>)>,
     detached: bool,
+    glyph: bool,
     windows: &[FieldWindow],
     marker: Option<usize>,
 ) -> HitClass {
     match resolved {
-        None if detached => HitClass::Anonymous,
+        None if detached && !(glyph && marker.is_some()) => HitClass::Anonymous,
         None => match marker {
             Some(c) => HitClass::Boxable { key: Key::Marker(c) },
             None => HitClass::Foreign,
@@ -211,6 +220,10 @@ struct Markers {
     /// document. Keeping them off `stack` leaves their ink foreign, exactly as
     /// if the plate had emitted no marker at all.
     suppressed: Vec<usize>,
+    /// The `ArtifactElem`s the walk is inside. Typst wraps each page marginal
+    /// in one and walks a page's background and header before its body, so a
+    /// claim open across a page break would otherwise take the chrome between.
+    artifacts: Vec<Location>,
 }
 
 impl Markers {
@@ -242,8 +255,26 @@ impl Markers {
         }
     }
 
+    fn artifact(&mut self, loc: Location, end: bool) {
+        if !end {
+            self.artifacts.push(loc);
+        } else if let Some(i) = self.artifacts.iter().rposition(|&l| l == loc) {
+            self.artifacts.truncate(i);
+        }
+    }
+
+    /// No claim is open inside an artifact.
     fn current(&self) -> Option<usize> {
-        self.stack.last().copied()
+        self.stack.last().copied().filter(|_| self.artifacts.is_empty())
+    }
+}
+
+/// The location of an `ArtifactElem` start or end tag.
+fn artifact_edge(tag: &Tag) -> Option<(Location, bool)> {
+    match tag {
+        Tag::Start(elem, _) if elem.is::<ArtifactElem>() => Some((elem.location()?, false)),
+        Tag::End(loc, ..) => Some((*loc, true)),
+        _ => None,
     }
 }
 
@@ -429,10 +460,14 @@ fn collect_page_hits(
 ) {
     walk_items(frame, Transform::identity(), page, &mut |page, item| match item {
         Item::Marker { path, close } => markers.edge(&path, close),
-        Item::Ink { span, aabb, .. } => {
+        Item::Artifact { loc, end } => markers.artifact(loc, end),
+        Item::Ink {
+            span, glyph, aabb, ..
+        } => {
             let class = hit_class(
                 cls.classify_seg(span),
                 span.is_detached(),
+                glyph,
                 cls.windows,
                 markers.current(),
             );
@@ -451,9 +486,14 @@ fn scan_markers(frame: &Frame, markers: &mut Markers) {
     for (_, item) in frame.items() {
         match item {
             FrameItem::Group(group) => scan_markers(&group.frame, markers),
-            FrameItem::Tag(Tag::Start(elem, _)) => {
-                if let Some((path, close)) = region_marker(elem) {
-                    markers.edge(&path, close);
+            FrameItem::Tag(tag) => {
+                if let Tag::Start(elem, _) = tag {
+                    if let Some((path, close)) = region_marker(elem) {
+                        markers.edge(&path, close);
+                    }
+                }
+                if let Some((loc, end)) = artifact_edge(tag) {
+                    markers.artifact(loc, end);
                 }
             }
             _ => {}
@@ -468,11 +508,19 @@ enum Item<'a> {
         span: Span,
         /// Intra-node byte offset.
         offset: u16,
+        /// A glyph rather than a `Shape` or `Image`.
+        glyph: bool,
         aabb: &'a dyn Fn() -> Aabb,
     },
     Marker {
         path: String,
         close: bool,
+    },
+    /// An `ArtifactElem` tag. An end tag names its element only by location,
+    /// so every end tag reports, and [`Markers::artifact`] matches it.
+    Artifact {
+        loc: Location,
+        end: bool,
     },
 }
 
@@ -503,6 +551,7 @@ fn walk_items(frame: &Frame, ts: Transform, page: usize, visit: &mut ItemVisitor
                         Item::Ink {
                             span: glyph.span.0,
                             offset: glyph.span.1,
+                            glyph: true,
                             aabb: &|| item_aabb(p, lo, hi, ts),
                         },
                     );
@@ -517,6 +566,7 @@ fn walk_items(frame: &Frame, ts: Transform, page: usize, visit: &mut ItemVisitor
                     Item::Ink {
                         span: *span,
                         offset: 0,
+                        glyph: false,
                         aabb: &|| item_aabb(p, bb.min, bb.max, ts),
                     },
                 );
@@ -529,13 +579,19 @@ fn walk_items(frame: &Frame, ts: Transform, page: usize, visit: &mut ItemVisitor
                     Item::Ink {
                         span: *span,
                         offset: 0,
+                        glyph: false,
                         aabb: &|| item_aabb(p, Point::zero(), sz, ts),
                     },
                 );
             }
-            FrameItem::Tag(Tag::Start(elem, _)) => {
-                if let Some((path, close)) = region_marker(elem) {
-                    visit(page, Item::Marker { path, close });
+            FrameItem::Tag(tag) => {
+                if let Tag::Start(elem, _) = tag {
+                    if let Some((path, close)) = region_marker(elem) {
+                        visit(page, Item::Marker { path, close });
+                    }
+                }
+                if let Some((loc, end)) = artifact_edge(tag) {
+                    visit(page, Item::Artifact { loc, end });
                 }
             }
             _ => {}
@@ -862,7 +918,10 @@ fn walk_glyphs(
     out: &mut Vec<GlyphHit>,
 ) {
     walk_items(frame, Transform::identity(), page, &mut |page, item| {
-        let Item::Ink { span, offset, aabb } = item else {
+        let Item::Ink {
+            span, offset, aabb, ..
+        } = item
+        else {
             return;
         };
         let Some((w, seg)) = cls.classify_seg(span) else {
@@ -2161,10 +2220,12 @@ Interleaved plate chrome.
     /// open is a plate emitting the call's return value in parts.
     const STRANDED_OPEN: &str = r#"
 #import "@local/quillmark-helper:0.1.0": data, field-region
-#set page(width: 300pt, height: 200pt, margin: 20pt, header: [PAGE CHROME])
+#set page(width: 300pt, height: 200pt, margin: 20pt)
 #let r = field-region("classification")[#box(stroke: 1pt)[X]]
 #r.children.at(0)
 #data.body
+
+PLATE TEXT
 "#;
 
     #[test]
@@ -2178,7 +2239,7 @@ Interleaved plate chrome.
     }
 
     /// A claim left open would own every unattributed hit to the end of the
-    /// document, page chrome included.
+    /// document.
     #[test]
     fn an_unclosed_claim_surfaces_no_region_at_all() {
         let long = body(&"A long paragraph of body text. ".repeat(60));
@@ -2189,7 +2250,7 @@ Interleaved plate chrome.
         );
         assert!(
             !regions.iter().any(|r| r.field == "classification"),
-            "the unbounded claim yields nothing rather than every page's chrome: \
+            "the unbounded claim yields nothing rather than the plate's trailing ink: \
              {:?}",
             regions
                 .iter()
@@ -2225,7 +2286,7 @@ Interleaved plate chrome.
         assert_eq!(
             p.scan(&p.unclosed()).field_at(last, cx, cy, 0.0).map(|(_, f)| f),
             None,
-            "suppressed, page chrome under a runaway claim answers to no field"
+            "suppressed, plate ink under a runaway claim answers to no field"
         );
     }
 
