@@ -30,7 +30,7 @@ edition = "2024"
 include = ["src/**", "Cargo.toml", "README*", "LICENSE*"]
 readme = "README.md"
 license = "Apache-2.0"
-homepage = "https://borb-sh.github.io/quillmark/"
+homepage = "https://quillmark.dev/"
 
 [workspace.dependencies]
 serde = { version = "~1.0", features = ["derive"] }
