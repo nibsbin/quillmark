@@ -223,11 +223,11 @@ What a claim takes, beyond ink that resolves to no window:
 - A float or a footnote anchored between the markers is laid out outside walk
   order, a top float before the open and a bottom float or a footnote after
   the close, so a claim closing on its page never takes it.
-- Typst lays out a page's footnotes, bottom floats and `foreground`, and the
-  next page's top floats, between the two pages' bodies and outside any
-  marginal, so a claim open across that break takes them wherever they are
-  anchored. A foreground wrapped in `pdf.artifact` is a marginal like any
-  other.
+- The walk reaches a page's footnotes, bottom floats and `foreground`, and the
+  next page's top floats, after the page's last line of text and before the
+  next page's first, outside any marginal, so a claim open across that break
+  takes them wherever they are anchored. A foreground wrapped in
+  `pdf.artifact` is a marginal like any other.
 
 The marker stack persists across pages so a claim can span a page break, which
 leaves a claim whose close marker never reaches a frame bounded by nothing:
