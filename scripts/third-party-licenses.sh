@@ -30,3 +30,6 @@ cargo metadata --format-version 1 --locked \
             printf '## %s %s\n\n~~~~text\n%s\n~~~~\n\n' "$name" "$version" "$(cat "$notice")" >> "$OUT"
         done
     done
+
+# Some upstream license files carry CRLF; the tree is LF (.gitattributes).
+sed -i 's/\r$//' "$OUT"
