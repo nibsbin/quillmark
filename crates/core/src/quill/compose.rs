@@ -923,10 +923,6 @@ fn collect_unknown_keys(
                 .collect();
             (unwritten, containers)
         });
-        if key == PLATE_PATH_KEY {
-            out.push(plate_path_key_warning(&path));
-            continue;
-        }
         let owner = variant_owner(key, containers);
         let suggestion = match owner {
             Some(_) => None,
@@ -1101,25 +1097,6 @@ pub(crate) fn unknown_field_warning(
             .with_arg("variant", variant.into());
     }
     diag
-}
-
-/// The key plate data spells each dictionary's address with
-/// (`prose/canon/PLATE_DATA.md`), which displaces a data key of the same name.
-const PLATE_PATH_KEY: &str = "$path";
-
-fn plate_path_key_warning(path: &DocPath) -> Diagnostic {
-    let path = path.to_string();
-    Diagnostic::new(
-        Severity::Warning,
-        format!(
-            "Field `{path}` is not declared by this quill: plate data spells each \
-             dictionary's address `{PLATE_PATH_KEY}`, so no plate reads this value."
-        ),
-    )
-    .with_code("validation::unknown_field".to_string())
-    .with_path(path)
-    .with_arg("field", PLATE_PATH_KEY.into())
-    .with_hint("Rename the key.".to_string())
 }
 
 fn matrix_title_warning(path: &DocPath) -> Diagnostic {
@@ -1630,7 +1607,7 @@ card_kinds:
         .expect("valid quill");
         let md = "~~~\n$quill: uk@1.0.0\n$kind: main\nsecretery: Grace Hopper\n\
                   outcome: { value: motion, presenter: P, extra: Z }\nmoved_by: Ada\n\
-                  address: { stret: Main, $path: spoof }\nrows:\n  - { nme: A }\n\
+                  address: { stret: Main }\nrows:\n  - { nme: A }\n\
                   quals:\n  flight_cc: { detial: x }\n~~~\n\n\
                   ~~~\n$kind: item\npresentr: Alan Turing\n~~~\n";
         let doc = Document::parse(md).expect("parse").document;
@@ -1659,7 +1636,6 @@ card_kinds:
             ("main.outcome.extra", "extra", None),
             ("main.moved_by", "moved_by", Some("outcome/motion")),
             ("main.address.stret", "stret", Some("street")),
-            ("main.address.$path", "$path", None),
             ("main.rows[0].nme", "nme", Some("name")),
             ("main.quals.flight_cc.detial", "detial", Some("detail")),
             ("cards.item[0].presentr", "presentr", Some("presenter")),

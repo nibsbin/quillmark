@@ -304,11 +304,13 @@ main:
 `values:` on any other type is a load error, as is the retired `enum:`
 modifier on any type.
 
-A value is an id: it is what a document stores and what the plate reads, so
-renaming one changes the meaning of every document holding it. Spell it as a
-stable token (`separate_page`, not `Separate page`) and print display text from
-the plate, which maps each id to its words. Where the text is itself the
-standard, as a marking such as `UNCLASSIFIED` is, the id is that text.
+A value is an id: it is what a document stores and what the plate reads.
+Renaming one stops every document holding it from validating
+(`validation::enum_violation`; see [Versioning](versioning.md)). Spell it as a
+stable token (`separate_page`, not `Separate page`). A Typst plate prints
+display text by mapping each id to its words; a PDF-form dropdown and an
+editor's picker list the ids themselves. Where the text is itself the standard,
+as a marking such as `UNCLASSIFIED` is, the id is that text.
 
 #### The blank: `values:` is for choices, not for the absence of one
 
