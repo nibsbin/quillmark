@@ -93,8 +93,9 @@ the address starts from, as `qm.ink(dict, key)`'s does:
 A claim on `row.path` makes an unticked box clickable too. An added item's
 `title` is a cell, so `qm.ink(row.value, "title")` places it with a region of its
 own. A roster member's `title` is the roster's and no address, so `qm.ink`
-refuses it: a plate reads it as `if "title" in row.value { qm.ink(row.value,
-"title") } else { row.title }`.
+refuses it, and an unheld row's `value` is `none`: a plate reads a title as
+`if row.held and "title" in row.value { qm.ink(row.value, "title") } else
+{ row.title }`.
 
 ## Typst Helper Package
 

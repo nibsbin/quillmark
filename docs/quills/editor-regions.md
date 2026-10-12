@@ -35,7 +35,7 @@ Each value's ink is born in generated code, so it keeps its field's address howe
 | a blank value (a blank date, empty content, an unanswered `type: t?`) | `none` |
 | a typed dictionary, a table, a matrix | `none`: address the cell, `qm.ink(x, "address.city")`, `qm.ink(row, "org")` |
 
-An address the schema does not have fails the render, and so does a pattern on an address that is not a date's: a roster member's `title` is the roster's, not an address, so guard with `"title" in row.value`.
+An address the schema does not have fails the render, and so does a pattern on an address that is not a date's: a roster member's `title` is the roster's, not an address, so guard with `row.held and "title" in row.value` (an unheld row's `value` is `none`).
 
 Ink is content, so styling that wraps it keeps the address: `upper`, `text(..)`, `strong`, `align`, a `box`. Computing a string needs the value, and what it prints is composed ink: `calc.round`, `str(n, base: 16)`, `.slice(..)`, `+` with a string. Claim that with [`qm.region`](#tying-composed-content-to-a-field), addressed through the dictionary's `$path`:
 

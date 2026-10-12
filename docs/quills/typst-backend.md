@@ -128,7 +128,7 @@ A [`matrix`](quill-yaml-reference.md#matrix-a-vocabulary-the-author-ticks) reach
 }
 ```
 
-Each row is `(id, title, held, value, path)`, roster members in roster order and then any items an open matrix's document adds. `value` is the member's columns, `none` where unheld, and `path` its address: claiming it with `qm.region` makes an unticked box clickable in an editor preview. An added item's `title` is a cell of its own, so `qm.ink(row.value, "title")` prints it click-to-edit; a roster member's `title` is the roster's and no address, so guard with `"title" in row.value`. `dict` is the dictionary that declares the matrix: `qm.data`, a card, or a table row.
+Each row is `(id, title, held, value, path)`, roster members in roster order and then any items an open matrix's document adds. `value` is the member's columns, `none` where unheld, and `path` its address: claiming it with `qm.region` makes an unticked box clickable in an editor preview. An added item's `title` is a cell of its own, so `qm.ink(row.value, "title")` prints it click-to-edit; a roster member's `title` is the roster's and no address, so guard with `row.held and "title" in row.value`. `dict` is the dictionary that declares the matrix: `qm.data`, a card, or a table row.
 
 ### Elements
 
