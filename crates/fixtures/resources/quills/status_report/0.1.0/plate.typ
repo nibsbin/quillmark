@@ -3,9 +3,12 @@
 #set page(paper: "us-letter", margin: 1in)
 #set text(size: 11pt)
 
+// A stored enum value is an id. The words it prints are the plate's.
+#let state-text = (on_track: "On track", at_risk: "At risk", blocked: "Blocked")
+
 // The banner's glyphs are drawn here rather than by the field, so nothing ties
 // a click on them to `state` until `qm.region` claims them.
-#let banner(level) = box(fill: luma(230), inset: 6pt, radius: 2pt)[*#upper(level)*]
+#let banner(level) = box(fill: luma(230), inset: 6pt, radius: 2pt)[*#upper(state-text.at(level))*]
 
 // An enum's blank is a value no `values:` list holds: here, nobody has said
 // where the project stands. Guarding on it is what keeps an `else` over the

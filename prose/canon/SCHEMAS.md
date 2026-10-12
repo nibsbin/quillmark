@@ -28,7 +28,7 @@ Supported field types:
 | Quill.yaml Type | Meaning |
 |---|---|
 | `string` | Open scalar UTF-8 text: a value the template computes with (URL, path, identifier, reference key), not prose it lays out |
-| `enum` | Closed string domain of **choices**; requires a `values:` list. Also accepts its blank (`""`), which is never a declared member — declaring one is a load error (`quill::enum_blank_member`). Projects to JSON-Schema `{type: string, enum: ["", …]}`. `values:` on any other type, and `enum:` on any type at all, is a load error |
+| `enum` | Closed string domain of **choices**; requires a `values:` list. Also accepts its blank (`""`), which is never a declared member — declaring one is a load error (`quill::enum_blank_member`). Projects to JSON-Schema `{type: string, enum: ["", …]}`. A value is a stored id; display text is the plate's. `values:` on any other type, and `enum:` on any type at all, is a load error |
 | `number` | Numeric value (integers and decimals) |
 | `integer` | Integer-only numeric value |
 | `boolean` | `true` / `false` |
@@ -887,7 +887,7 @@ read it.
 | elements past an array's `max:` | `validation::cardinality` | verbatim; the plate's own rule leaves the surplus off the page ([Cardinality](#cardinality)) |
 | a `$seed` overlay naming no declared kind or field, or a `$body` its kind disables | `validation::seed_unknown_kind`, `seed_unknown_field` | absent, as `$seed` always is |
 | a `$seed` overlay that is not a mapping, or a `$body` that is not a string | `validation::seed_overlay_shape` | absent |
-| a key the schema does not declare at its position, at any depth of a claimed card | `validation::unknown_field` | verbatim; absent inside a variant container |
+| a key the schema does not declare at its position, at any depth of a claimed card | `validation::unknown_field` | verbatim; absent inside a variant container, and a `$path` key absent from a Typst plate's data, which spells each typed dictionary's address with it |
 
 `validation::unknown_field` names the likeliest fix. A key one world of a
 sibling variant declares is that world's cell written beside its discriminant

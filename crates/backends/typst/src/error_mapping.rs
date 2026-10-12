@@ -3,6 +3,7 @@
 
 use crate::world::QuillWorld;
 use quillmark_core::error::{Diagnostic, Location, Severity};
+use quillmark_core::quill::PLATE_PATH_KEY;
 use typst::diag::SourceDiagnostic;
 use typst::syntax::{DiagSpan, FileId, RootedPath, VirtualPath, VirtualRoot};
 use typst::World;
@@ -26,7 +27,8 @@ fn map_single_diagnostic(error: &SourceDiagnostic, world: &QuillWorld) -> Diagno
         .hints
         .first()
         .map(|h| h.v.to_string())
-        .or_else(|| rooted_path_hint(&error.message, error.span, world));
+        .or_else(|| rooted_path_hint(&error.message, error.span, world))
+        .or_else(|| path_key_hint(&error.message));
 
     let mut diag = Diagnostic::new(severity, error.message.to_string());
     diag.code = Some(classify(&error.message).to_string());
@@ -60,6 +62,19 @@ fn rooted_path_hint(message: &str, span: DiagSpan, world: &QuillWorld) -> Option
         format!(
             "the quill root holds `{rooted}`; a path without a leading `/` resolves \
              from the directory of the file naming it"
+        )
+    })
+}
+
+/// Spreading a typed dictionary of plate data passes its `$path` as a named
+/// argument.
+fn path_key_hint(message: &str) -> Option<String> {
+    let key = message.strip_prefix("unexpected argument: ")?;
+    (key == PLATE_PATH_KEY).then(|| {
+        format!(
+            "a typed dictionary of plate data carries `{PLATE_PATH_KEY}`, its address: give \
+             the function a sink parameter such as `..rest` to take it, or spread a copy \
+             after `.remove(\"{PLATE_PATH_KEY}\")`"
         )
     })
 }

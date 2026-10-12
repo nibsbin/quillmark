@@ -123,10 +123,11 @@ Its `plate.typ`:
 --8<-- "crates/fixtures/resources/quills/status_report/0.1.0/plate.typ"
 ```
 
-Six constructs to lift from it:
+Seven constructs to lift from it:
 
 - **A date that prints.** `qm.ink(qm.data, "issued", ..)` takes the field's *address* and returns content, so the printed date stays the click-to-edit target for that field. `qm.data.issued` is the `datetime` behind it: reach for that to compare, to take components, or to hand a package a date it formats itself. See [Dates](typst-backend.md#dates).
 - **An enum left unanswered.** The blank is a value no `values:` list holds, so `qm.data.state != ""` guards it and an `else` on a branch over the declared values would render a state nobody picked. See [the blank](quill-yaml-reference.md#the-blank-values-is-for-choices-not-for-the-absence-of-one).
+- **An enum's printed text.** `state` stores an id such as `at_risk`, and `state-text` maps it to the words the banner prints. Renaming the printed text never touches a stored document. See [Enum Constraints](quill-yaml-reference.md#enum-constraints).
 - **A card loop.** `$kind` is document-defined, so `card.at("$kind", default: none)` reads it and every other kind falls through. A field declared on the kind arrives filled, which is why `card.title` is a plain read. See [Body, arrays, and cards](typst-backend.md#body-arrays-and-cards).
 - **Printing through `qm.ink`.** Every iteration of the card loop reads through one loop variable, so `card.title` printed there names no card. `qm.ink(card, "title")` is the same text born in generated code, keyed on that card's own field, and `qm.ink(card, "due", ..)` formats the date the same way. Compute with `card`, print with `qm.ink(card, ..)`. See [Print with `qm.ink`](editor-regions.md#print-with-ink).
 - **A claim on composed ink.** The banner's glyphs are drawn by the plate rather than by the field, so `qm.region("state", ..)` is what makes a click on them resolve to `state`. See [Tying Composed Content to a Field](editor-regions.md#tying-composed-content-to-a-field).
