@@ -79,13 +79,14 @@ card_kinds:
       for:
         type: string
         description: Office symbol receiving the endorsed memo.
-      signature_block:
-        type: array
-        items:
-          type: string
-        ui:
-          group: Addressing
-        description: Name, grade, and duty title.
+    sections:
+      signature:
+        fields:
+          signature_block:
+            type: array
+            items:
+              type: string
+            description: Name, grade, and duty title.
 ```
 
 `title` is the kind's display label (section headers, chips, picker entries), decoupled from the snake_case map key (`indorsement`), which is the on-the-wire `$kind` discriminator, so authors can rename the label without breaking stored documents. It is a literal naming the kind: a `{field}` token is a load error (`quill::title_template`). A consumer labels an instance from its own values, so field order decides which value leads. It sits at the top level rather than under `ui` because `ui` keys never reach the blueprint, and the blueprint prints it on the `$kind` line ([BLUEPRINT.md](BLUEPRINT.md) § "Inline annotation").
@@ -107,10 +108,13 @@ card_kinds:
         items:
           type: string
         ui:
-          group: Addressing
+          group: signature
+    ui:
+      groups:
+        signature: {}
 ```
 
-`QuillConfig::schema()` emits the schema (with `ui` and `body` hints retained) and `schema_yaml()` is the YAML wrapper. The output keeps the same `card_kinds.<name>.fields` shape as `Quill.yaml`: only the user-fillable fields, no sentinel discriminator. The `card_kinds` map key (e.g. `indorsement`) is itself the `$kind` discriminator value. The `card_kinds` key is omitted entirely when no named card-kinds are defined. See `SCHEMAS.md` for the full surface.
+`QuillConfig::schema()` emits the schema (with `ui` and `body` hints retained) and `schema_yaml()` is the YAML wrapper. The output keeps the same `card_kinds.<name>.fields` shape as `Quill.yaml`: only the user-fillable fields, every section's included, no sentinel discriminator. Sections reach it as `ui` hints ([SCHEMAS.md](SCHEMAS.md#sections)). The `card_kinds` map key (e.g. `indorsement`) is itself the `$kind` discriminator value. The `card_kinds` key is omitted entirely when no named card-kinds are defined. See `SCHEMAS.md` for the full surface.
 
 ## Markdown Syntax
 

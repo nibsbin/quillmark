@@ -10,11 +10,13 @@ A `Quill.yaml` has these top-level sections:
 quill:        # Required: format metadata
   ...
 
-main:         # Optional, main entry-point card: field schemas and optional title/ui/body
+main:         # Optional, main entry-point card: field schemas and optional title/sections/ui/body
   title:      # optional label for the card
   fields:
     ...
-  ui:         # optional UI hints (e.g. groups)
+  sections:   # optional titled panels of further fields
+    ...
+  ui:         # optional UI hints
   body:       # optional body-region config (enabled)
 
 card_kinds:   # Optional: additional composable card kinds
@@ -101,11 +103,11 @@ The cutover rehearsal slipped a week while the data owners review the mapping.
 
 The main document card holds **root-block field schemas** under `main.fields`. Optional `main.description` describes the schema itself (independent of `quill.description`, which describes the quill package), and optional `main.title` labels the card as a [card kind's `title`](#title_1) does. Optional `main.ui` sets container-level UI for that card. `quill.ui` is a fallback for `main.ui`, not a merge: any `main.ui` (even an empty `ui: {}`) wins wholesale, and `quill.ui` applies only when `main.ui` is absent.
 
-Field order under `main.fields` **is** display order in UIs: the declaration order of the keys is carried structurally through parsing and schema emission, so consumers walk the fields in key order. There is no `ui.order` knob: to reorder fields, reorder them in `Quill.yaml`.
+Field order under `main.fields` **is** display order in UIs: the declaration order of the keys is carried structurally through parsing and schema emission, so consumers walk the fields in key order. There is no `ui.order` knob: to reorder fields, reorder them in `Quill.yaml`. Fields can also sit in titled panels, under [`sections`](#sections).
 
 Field keys must be `snake_case` (`^[a-z][a-z0-9_]*$`). Capitalized field keys are reserved.
 
-A card declares at most 1000 fields — the width one card-yaml block carries — and past it the quill fails to load (`quill::too_many_fields`). The count is per card, and only these top-level keys are charged: a nested `properties` map, an array's `items`, and a `variants:` cell set all ride inside the one field that declares them.
+A card declares at most 1000 fields — the width one card-yaml block carries — and past it the quill fails to load (`quill::too_many_fields`). The count is per card, sections included, and only these top-level keys are charged: a nested `properties` map, an array's `items`, and a `variants:` cell set all ride inside the one field that declares them.
 
 ```yaml
 main:
@@ -422,8 +424,8 @@ dictionary's property — `header.classification` reads, binds and branches as
 matrix column and another variant's cell each refuse one, as does an object
 inside any of them. It
 keys only on declared members (never `""`, which owns no field set), and cannot
-declare a field named `value`. Variant fields inherit the discriminant's
-`ui.group`; declaring one inside a variant is an error. A field set shared by
+declare a field named `value`. Variant fields sit in the discriminant's
+section; a `ui.group` inside a variant is an error. A field set shared by
 several members is repeated or shared with a YAML anchor — a variant keys on one
 member — but every variant declaring a given name must declare it *identically*,
 since the name is one cell of the container whichever world brings it into play
@@ -505,7 +507,7 @@ element type but never the arity, so `default: []` and `default: [{…}]` say
 something no property declaration can. Each element it supplies is completed
 against `items` exactly as an authored element is.
 
-`ui.group` is card-level regardless of depth: grouping never descends. `variants:` reaches one step further — a card field or a typed dictionary's property carries one, and an array element, a matrix column and another variant's cell do not (see [Variants](#variants-fields-that-exist-only-for-one-choice)).
+A section holds card-level fields only: an object's properties and an array's items cannot be sectioned. `variants:` reaches one step further — a card field or a typed dictionary's property carries one, and an array element, a matrix column and another variant's cell do not (see [Variants](#variants-fields-that-exist-only-for-one-choice)).
 
 ### `max`: what the page holds
 
@@ -656,6 +658,64 @@ qualifications:
 
 Full model: [SCHEMAS.md](https://github.com/borb-sh/quillmark/blob/main/prose/canon/SCHEMAS.md#matrix); the wire shape is [PLATE_DATA.md](https://github.com/borb-sh/quillmark/blob/main/prose/canon/PLATE_DATA.md#a-matrix-field).
 
+### Sections
+
+`sections:` puts a card's fields in titled panels, which an editor draws as, say, an accordion. Each entry maps a **section id** to an optional `title` and a `fields:` map shaped exactly like the card's own:
+
+```yaml
+main:
+  fields:                      # pinned above the sections
+    subject:
+      type: string
+  sections:                    # declaration order = display order
+    addressing:                # label derived: "Addressing"
+      fields:
+        memo_for:
+          type: array
+          items: { type: string }
+        memo_from:
+          type: array
+          items: { type: string }
+    letterhead:
+      title: "Letterhead & Seal" # label overridden
+      fields:
+        letterhead_title:
+          type: string
+```
+
+A section is a frame, not data. `memo_for` is a card-level field wherever it sits: the document stores `memo_for:`, a plate reads `data.memo_for`, and moving it to another section changes no document. So a field name is unique across the card's `fields:` and every section (`quill::duplicate_field`).
+
+- **Order is position.** The card's own `fields:` come first, then each section's fields, in declaration order. Editors, seeding and the blueprint all follow it.
+- **Identity is the id, not the label.** Ids are snake_case (`quill::invalid_section_id`), and editors key per-section state on them. The label is `title:`, or derived from the id (`addressing` → "Addressing"), so renaming it breaks nothing.
+- **A section with no fields is skipped.**
+- **An object alone in its section is drawn flat:** the section is already its frame (see [`layout`](#layout)).
+
+A card may declare `sections:` with no `fields:` of its own, putting every field in a panel. A section takes `title` and `fields` only (`quill::invalid_card_schema`), and a section holds card-level fields only.
+
+#### Legacy `ui.group`
+
+The older spelling still loads: a `ui.groups` registry on the card, and a `ui.group` reference on each field naming its entry.
+
+```yaml
+main:
+  ui:
+    groups:
+      addressing: {}
+      letterhead: { title: "Letterhead & Seal" }
+  fields:
+    memo_for:
+      type: array
+      items: { type: string }
+      ui: { group: addressing }
+    letterhead_title:
+      type: string
+      ui: { group: letterhead }
+```
+
+It warns `quill::deprecated_groups` and loads exactly as its `sections:` rewrite does: ungrouped fields first, then each group's fields in registry order, whatever order they were declared in. To rewrite it, move each grouped field under its group's section in registry order, carry each registry `title:` to its section, and drop `ui.group` and `ui.groups`. A card spelling both is `quill::mixed_sectioning`.
+
+The registry's own checks still apply to the legacy spelling: a reference the registry does not declare (`quill::unknown_group`), a reference with no registry (`quill::implicit_group`), a repeated id (`quill::duplicate_group`), an id that is not snake_case (`quill::invalid_group_id`), and a `ui.group` below card level (`quill::nested_group_not_supported`). The registry is also read from `quill.ui` when `main.ui` is absent.
+
 ---
 
 ## UI Properties
@@ -666,56 +726,9 @@ The `ui` property on fields controls how form builders and wizards render the fi
 `description` or `title`. A field's label is its [`title`](#title);
 `ui` holds none, and `ui: { title: … }` is a load error whose hint names it.
 
-### `group` and the group registry
-
-Groups organize fields into visual sections. A group has two parts: a **registry** declared once on the card (`ui.groups`), and a per-field **reference** (`ui.group`) into that registry.
-
-```yaml
-main:
-  ui:
-    groups: [addressing, letterhead]   # declaration order = display order
-  fields:
-    memo_for:
-      type: array
-      items:
-        type: string
-      ui:
-        group: addressing              # a reference, validated against the registry
-
-    memo_from:
-      type: array
-      items:
-        type: string
-      ui:
-        group: addressing
-
-    letterhead_title:
-      type: string
-      ui:
-        group: letterhead
-```
-
-The registry is the card's table of contents. Its keys are **snake_case ids** (same discipline as field keys), and their declaration order fixes the group display order: the contract every consumer follows, exactly as field declaration order fixes field display order. A field's `ui.group` names one of those ids; a value with no matching registry key is a load error (`quill::unknown_group`), so a one-character typo cannot silently split a section.
-
-**Identity is the id, not the label.** Consumers derive a group's display label from its id (`addressing` → "Addressing"), just as a field label is derived from its key. Override the derived label with `title:`, which requires the mapping form of the registry:
-
-```yaml
-main:
-  ui:
-    groups:
-      addressing: {}                       # label derived: "Addressing"
-      letterhead: { title: "Letterhead & Seal" }   # label overridden
-```
-
-The two registry forms are interchangeable: a bare sequence of ids (`[addressing, letterhead]`) when no labels need overriding, or a mapping of id → attributes when they do. Renaming a label touches one line and never breaks a `ui.group` reference or persisted per-group editor state.
-
-`group` applies only to card-level fields (those directly under a card's `fields:`). Grouping never descends into an object's properties or an array's items, so a `group` on a nested property is a hard error (`quill::nested_group_not_supported`) rather than a silently inert knob.
-
-The registry is required: a `ui.group` on a card with no `ui.groups` is a load error (`quill::implicit_group`). A group has one declaration site, and it is the registry.
-
 ### field order
 
-Field display order is **declaration order**: the order the keys appear in `Quill.yaml`. This holds at every level: card-level fields, and the properties of a typed dictionary or typed-table row. The order is carried structurally (the schema's field maps preserve key order, and `schema()` re-emits that order), so no per-field knob is involved.
+Field display order is **declaration order**: the order the keys appear in `Quill.yaml`, a card's own `fields:` before its [sections](#sections). This holds at every level: card-level fields, and the properties of a typed dictionary or typed-table row. The order is carried structurally (the schema's field maps preserve key order, and `schema()` re-emits that order), so no per-field knob is involved.
 
 There is no `ui.order` key: an authored `ui: { order: N }` is a load error (`quill::field_parse_error`). To move a field, move its block in `Quill.yaml`.
 
@@ -821,26 +834,40 @@ the depth of the fields around it rather than one step in.
 
 ```yaml
 main:
-  ui:
-    groups:
-      qualifications: { title: "Qualifications & experience" }
   fields:
-    qualifications:
+    contact:
       type: object
-      description: Tick what you hold.
       ui:
-        group: qualifications
-        layout: flat        # the group's section is the frame
+        layout: flat        # its properties join the fields around it
       properties:
-        command:    { type: matrix, members: { flight_cc: Flight CC } }
-        operations: { type: matrix, members: { dco: DCO } }
+        phone: { type: string }
+        email: { type: string }
+    notes:
+      type: string
 ```
 
-An object alone in its group reads best flat: the section is already its frame,
-and one drawn inside the section would frame it twice. The editor then lets the
-section header name it and carry its `description`. Among other fields, a flat
-object keeps its label. The value, its addresses and the blueprint are
-unchanged: `qualifications.command.flight_cc` is still where the tick lives. An element of an array is a row of its own with
+Among other fields, a flat object keeps its label. An object alone in its
+section is drawn flat without asking: the section is already its frame, and one
+drawn inside the section would frame it twice. The loader writes `layout: flat`
+on it, and the editor lets the section header name it and carry its
+`description`:
+
+```yaml
+main:
+  sections:
+    qualifications:
+      title: "Qualifications & experience"
+      fields:
+        qualifications:
+          type: object
+          description: Tick what you hold.
+          properties:
+            command:    { type: matrix, members: { flight_cc: Flight CC } }
+            operations: { type: matrix, members: { dco: DCO } }
+```
+
+The value, its addresses and the blueprint are unchanged:
+`qualifications.command.flight_cc` is still where the tick lives. An element of an array is a row of its own with
 nothing around it to join, so `flat` there, or on anything but an `object`, is
 `quill::invalid_ui`.
 
@@ -854,7 +881,7 @@ leading, so a list of rows reads as a list of things rather than "Item 1, Item
 
 ## `card_kinds` Section
 
-`card_kinds` define composable, repeatable content blocks (the *kinds*: a document can then carry zero or more *instances* of each kind, interleaved with body content). Each entry is shaped exactly like `main:` (`fields`, optional `title`, `description`, `ui`, `body`); think of `main:` as the single mandatory card-kind for the document body, and `card_kinds:` as the library of additional kinds that may attach to it.
+`card_kinds` define composable, repeatable content blocks (the *kinds*: a document can then carry zero or more *instances* of each kind, interleaved with body content). Each entry is shaped exactly like `main:` (`fields`, optional `title`, `description`, `sections`, `ui`, `body`); think of `main:` as the single mandatory card-kind for the document body, and `card_kinds:` as the library of additional kinds that may attach to it.
 
 Card-kind names (the keys under `card_kinds`) must match `[a-z_][a-z0-9_]*` (leading underscore is allowed). `main` is reserved for the document root.
 
@@ -862,17 +889,16 @@ Card-kind names (the keys under `card_kinds`) must match `[a-z_][a-z0-9_]*` (lea
 card_kinds:
   indorsement:                    # Card-kind name
     description: Chain of routing endorsements.
-    ui:
-      groups: [addressing]
     fields:
-      from:
-        type: string
-        ui:
-          group: addressing
       format:
         type: enum
         values: [standard, informal, separate_page]
         default: standard
+    sections:
+      addressing:
+        fields:
+          from:
+            type: string
 ```
 
 Invalid card-kind names include:
@@ -909,6 +935,7 @@ scalar, which is fine for a few lines and wrong for a memo's worth.
 | `title`       | string | no       | The kind's label, a literal (see [`title`](#title_1)) |
 | `description` | string | no       | Help text describing the card's purpose |
 | `fields`      | object | no       | Field schemas (same structure as top-level fields) |
+| `sections`    | object | no       | Titled panels of further fields (see [Sections](#sections)) |
 | `ui`          | object | no       | Container-level UI hints (see [Card-level `ui`](#card-level-ui)) |
 | `body`        | object | no       | Body-region config (see [Card-level `body`](#card-level-body)) |
 | `seed`        | object | no       | What a new card of this kind starts with (see [Card-level `seed`](#card-level-seed)) |
@@ -942,7 +969,7 @@ names the instance.
 
 | Property | Type   | Description |
 |----------|--------|-------------|
-| `groups` | list or object | The card's group registry (see [`group` and the group registry](#group-and-the-group-registry)) |
+| `groups` | list or object | The legacy group registry (see [Legacy `ui.group`](#legacy-uigroup)) |
 
 ### Card-level `body`
 
@@ -1026,7 +1053,7 @@ Quillmark emits a public schema contract derived from `Quill.yaml`. Accessors:
 - WASM: `quill.schema` (JSON)
 - CLI: `quillmark schema <path>`
 
-`ui:` hints are preserved verbatim in the output. See [SCHEMAS.md](https://github.com/borb-sh/quillmark/blob/main/prose/canon/SCHEMAS.md) for the emitted shape.
+`ui:` hints are preserved verbatim in the output. Sections reach it as `ui` hints: the card's `ui.groups` lists them in display order with their titles, and each sectioned field carries `ui.group` naming its section. See [SCHEMAS.md](https://github.com/borb-sh/quillmark/blob/main/prose/canon/SCHEMAS.md) for the emitted shape.
 
 ---
 
@@ -1044,45 +1071,36 @@ typst:
   plate_file: plate.typ
 
 main:
-  ui:
-    groups: [header, team, financials]
   fields:
     project_name:
       type: string
-      ui:
-        group: header
 
     status:
       type: enum
       values: [on_track, at_risk, blocked]
-      ui:
-        group: header
 
     risk_description:
       type: string
       default: ""
-      ui:
-        group: header
       description: Describe the risk or blocker. Only needed when status is not on_track.
 
     date:
       type: date
-      ui:
-        group: header
 
-    team_members:
-      type: array
-      items:
-        type: string
-      default: []
-      ui:
-        group: team
+  sections:
+    team:
+      fields:
+        team_members:
+          type: array
+          items:
+            type: string
+          default: []
 
-    budget:
-      type: number
-      default: 0
-      ui:
-        group: financials
+    financials:
+      fields:
+        budget:
+          type: number
+          default: 0
 
 card_kinds:
   milestone:

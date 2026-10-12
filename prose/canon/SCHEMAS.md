@@ -12,7 +12,8 @@ Schema authoring lives in `Quill.yaml` under:
 
 - `main.fields`
 - `card_kinds.<card_name>.fields`
-- optional `ui` and `body` blocks on `main` and each card kind
+- optional `sections` ([Sections](#sections)), `ui` and `body` blocks on `main`
+  and each card kind
 
 **What earns a key here.** A key earns its place when some surface is otherwise
 *wrong*, not merely underserved, and wrong needs a witness: a document that
@@ -131,7 +132,7 @@ The ceiling is deliberate and enforced at load rather than discovered at render:
 | a variant field named `value` | `quill::variant_reserved_field_name` |
 | a name two variants declare *differently* | `quill::variant_field_collision` |
 
-A variant cell carries any type a card field may — prose, dates and containers included. Every surface reaches it through the same dispatcher a card field uses — coercion through `conform_value`, validation through `validate_value`, the render floor through `resolve_value`, lowering through the schema-node walk ([PLATE_DATA.md](PLATE_DATA.md)), the content read through `get_content_at` — so it behaves as a card-level field of that type does. What a cell does not carry is `ui.group` (it inherits the discriminant's) or `variants:` of its own.
+A variant cell carries any type a card field may — prose, dates and containers included. Every surface reaches it through the same dispatcher a card field uses — coercion through `conform_value`, validation through `validate_value`, the render floor through `resolve_value`, lowering through the schema-node walk ([PLATE_DATA.md](PLATE_DATA.md)), the content read through `get_content_at` — so it behaves as a card-level field of that type does. What a cell does not carry is a section (it sits in its discriminant's) or `variants:` of its own.
 
 **Where a world may open.** Every other container's shape is a function of the
 schema; a variant's is a function of the schema *and* the discriminant. The
@@ -371,6 +372,51 @@ The mechanism is deliberate. A type change migrates a deployed corpus with no mi
 Scalar → content is the lossy direction: the stored string enters the codec's import, markup delimiters are consumed as structure, and the authored text is not recoverable. A `subject` holding `Cost * Benefit Analysis *DRAFT*` rests verbatim under `string`; under `richtext` it rests as content whose text is `Cost * Benefit Analysis DRAFT` carrying an emph mark, the literal asterisks gone.
 
 **A declared type change is therefore a new quill version**, the rule [VERSIONING.md](VERSIONING.md) § "Ref Immutability" states for any content behind a canonical ref. Nothing enforces it: `check_quill_reference` compares the document's `$quill` name and selector against the loaded quill, and an in-place schema edit at the same version leaves both matching, so a document pinned to `name@0.2.0` conforms against a schema it was never authored under and the mismatch is unrepresentable.
+
+### Sections
+
+A card's `sections:` frames its fields as titled panels for an editor: a map of
+section id to `title` and `fields`, the `fields` map taking the field schemas a
+card's own `fields:` does.
+
+```yaml
+main:
+  fields:                 # unsectioned: pinned above the sections
+    subject: { type: string }
+  sections:
+    letterhead:
+      title: Letterhead & Seal
+      fields:
+        letterhead_title: { type: string }
+```
+
+- **A frame, never data.** A sectioned field is a card-level field. The
+  document, the plate and `validate` are inert on sections, so moving a field
+  between them changes no document, and a name is unique across the card's
+  `fields:` and every section (`quill::duplicate_field`).
+- **Position is order.** Display order is the card's `fields:`, then each
+  section's, in declaration order. Seeding, the blueprint and `schema()` share
+  it, and none of them sorts.
+- **The id is identity.** It is snake_case (`quill::invalid_section_id`), and
+  the label is `title`, else humanized from the id. A section block takes
+  `title` and `fields` only (`quill::invalid_card_schema`).
+- **A section holding no field is dropped.**
+- **An object alone in its section draws flat:** the loader writes
+  `ui.layout: flat` where the object names no layout, the section being its
+  frame.
+
+`schema()` lowers sections onto `ui` hints: the card's `ui.groups` lists them in
+display order with their titles, and each sectioned field's `ui.group` names its
+own ([Schema emission](#schema-emission)).
+
+The legacy spelling, a `ui.groups` registry on the card and a `ui.group`
+reference on each field, loads with a `quill::deprecated_groups` warning and
+settles into the same model: ungrouped fields first, then each group's in
+registry order, whatever order they were declared in. A card spelling both is
+`quill::mixed_sectioning`. The registry's own checks apply to the legacy
+spelling alone: `quill::unknown_group`, `quill::implicit_group`,
+`quill::duplicate_group`, `quill::invalid_group_id`, and
+`quill::nested_group_not_supported` for a `ui.group` below card level.
 
 ## Type coercion
 
@@ -996,7 +1042,7 @@ is the `overlay = None` case.
 
 - Field types, constraints, and `enum`/`default` annotations
 - `title` on fields and cards: a literal label, which the blueprint prints wherever it prints the description, and which no `ui` key carries, since `ui` never reaches the blueprint
-- `ui` hints on fields (`group`, `compact`, `multiline`, `blank_title`, `layout`) and on cards (the `groups` registry that `group` references). Field display order is not a hint: it is the key order of the emitted `fields`/`properties` maps (declaration order)
+- `ui` hints on fields (`group`, `compact`, `multiline`, `blank_title`, `layout`) and on cards (`groups`). A card's [sections](#sections) lower onto them: `groups` lists the sections in display order with their titles, and each sectioned field's `group` names its own. Field display order is not a hint: it is the key order of the emitted `fields`/`properties` maps (declaration order)
 - `body` blocks on cards (`enabled`)
 - `seed` on a card kind that declares one, in the `$seed.<kind>` shape
 
@@ -1046,8 +1092,9 @@ The type-gated keys:
   else. It asks that the typed dictionary draw no frame of its own: its
   properties stand at the depth of the field list around it rather than a rung
   inside it. It is presentation alone, so the value, its addresses and the
-  blueprint keep the dictionary. A lone field of its group goes flat to make the
-  group's section its frame, and what names it there is the consumer's.
+  blueprint keep the dictionary. An object alone in its section is written
+  `flat` at load, the section being its frame, and what names it there is the
+  consumer's.
 - `variants`: per-member field sets on an `enum` field, valid only there and only
   where a world may open (see [Enum variants](#enum-variants)). `schema()` emits it as
   authored, keyed by member; the transform schema instead projects the container,

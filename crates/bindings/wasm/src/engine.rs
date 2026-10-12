@@ -15,6 +15,8 @@ const METADATA_TS: &'static str = r#"
 /** UI layout hints for a single field. Display order is not a hint: key order
  * in the schema's `fields`/`properties` objects is the ordering contract. */
 export interface QuillFieldUi {
+    /** The id of the card section holding the field, a key of the card's
+     *  `ui.groups`. */
     group?: string;
     compact?: boolean;
     multiline?: boolean;
@@ -31,18 +33,18 @@ export interface QuillFieldUi {
     layout?: "table" | "flat";
 }
 
-/** One entry in a card's `ui.groups` registry: a display-label override for the
- * group id (the map key). An empty object carries no override, and the consumer
- * derives the label from the id (`memo_for` → "Memo For"). */
+/** One section in a card's `ui.groups`: a display-label override for the
+ * section id (the map key). An empty object carries no override, and the
+ * consumer derives the label from the id (`memo_for` → "Memo For"). */
 export interface QuillGroupUi {
     title?: string;
 }
 
 /** UI layout hints for a card (main or named card kind). */
 export interface QuillCardUi {
-    /** The groups a field's `ui.group` may reference, keyed by group id. Key
-     * order is the display-order contract, as with `fields`. Absent when the
-     * card declares no groups. */
+    /** The card's sections keyed by id, each holding at least one field, which
+     * names it in its `ui.group`. Key order is the display-order contract, as
+     * with `fields`. Absent when the card declares no sections. */
     groups?: Record<string, QuillGroupUi>;
 }
 

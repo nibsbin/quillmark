@@ -140,47 +140,12 @@ fn build_card(card: &CardSchema) -> Card {
     Card::from_parts(items.into_payload(), Normalized::empty())
 }
 
-/// Append every field of a card as payload items, in [`group_fields`] order.
+/// Append every field of a card as payload items, in declaration order: the
+/// loader settles sections into it (`config::settle_sections`).
 fn append_fields(items: &mut CardItems, card: &CardSchema) {
-    let registry: Vec<&str> = card
-        .ui
-        .as_ref()
-        .and_then(|u| u.groups.as_ref())
-        .map(|r| r.0.iter().map(|g| g.id.as_str()).collect())
-        .unwrap_or_default();
-    for field in group_fields(card.fields.values(), &registry) {
+    for field in card.fields.values() {
         append_field(items, field);
     }
-}
-
-/// Order fields by `ui.group`: ungrouped lead, then grouped clusters in
-/// `registry` declaration order, each cluster keeping declaration order. The
-/// clusters flatten into one field stream, grouping being positional only.
-fn group_fields<'a, I: IntoIterator<Item = &'a FieldSchema>>(
-    fields: I,
-    registry: &[&str],
-) -> Vec<&'a FieldSchema> {
-    let mut groups: Vec<(Option<&str>, Vec<&FieldSchema>)> = Vec::new();
-    for field in fields {
-        let group = field.ui.as_ref().and_then(|u| u.group.as_deref());
-        match groups.iter_mut().find(|(g, _)| *g == group) {
-            Some(slot) => slot.1.push(field),
-            None => groups.push((group, vec![field])),
-        }
-    }
-    // Ungrouped is the implicit leading pseudo-group (rank 0); a grouped cluster
-    // ranks by its registry position shifted past it. Load rejects a `ui.group`
-    // the card's registry does not declare (`quill::unknown_group`,
-    // `quill::implicit_group`), so the lookup resolves for any config that came
-    // through it; a hand-built one sorts its stray group last.
-    groups.sort_by_key(|(g, _)| match g {
-        None => 0,
-        Some(id) => registry
-            .iter()
-            .position(|o| o == id)
-            .map_or(usize::MAX, |pos| pos + 1),
-    });
-    groups.into_iter().flat_map(|(_, fields)| fields).collect()
 }
 
 /// Append one top-level field. Dispatches typed tables (`array<object>`) and
@@ -957,16 +922,21 @@ card_kinds:
     }
 
     #[test]
-    fn ui_groups_cluster_fields_without_emitting_banner() {
+    fn sections_print_in_display_order_without_a_banner() {
         let t = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
-  ui: { groups: [addressing, letterhead] }
   fields:
-    memo_for: { type: array, items: { type: string }, ui: { group: addressing } }
-    subject: { type: string, ui: { group: addressing } }
-    letterhead_title: { type: string, default: HQ, ui: { group: letterhead } }
     notes: { type: string }
+  sections:
+    addressing:
+      title: Addressing
+      fields:
+        memo_for: { type: array, items: { type: string } }
+        subject: { type: string }
+    letterhead:
+      fields:
+        letterhead_title: { type: string, default: HQ }
 "#)
         .blueprint();
         let after_quill = &t[t.find("$quill:").unwrap()..];
