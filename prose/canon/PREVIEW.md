@@ -179,61 +179,53 @@ read it, three coarse and two fine:
 - `coverage()` answers *field → reachable?*: every address the compile fills,
   beside the region address a click reaches it through (§ Coverage).
 
-Four producers: **generated ink** (a `richtext` or `plaintext` value —
-a body, a card's field, a scalar or an `[]` element — a date's `display`
-closure, and any field's `$ink` twin,
-[PLATE_DATA.md](PLATE_DATA.md#the-ink-twin)) is tracked by the
-spans its glyphs carry: the
-backend evaluates each value at its own generated call site and records the
-site's byte window, so the rendered ink resolves back to its field through
-*any* placement context, including a package that rebuilds the content (a
-`show`-rule pass that buffers and re-emits paragraphs): the origin rides the
-glyph, not a marker a rebuild could drop. **Direct scalar references**: each
-`data.<field>` / `data.at("field")` expression in the plate is its own
-tracked site; a scalar shown in header and footer surfaces both sites, and a
-reference wrapped in an expression (`#upper(data.subject)`) attributes the
-whole expression's ink to the field when it is the only reference inside it.
-A read that steps into a declared container (`data.classification.poc`,
-`data.address.at("city")`, `data.refs.at(0).org`) tracks on the **cell**, so the
-region names what the plate read rather than the container holding it; a key the
-container does not declare is no address, and the read falls back to the
-container. The steps are the address grammar's
-([PLATE_DATA.md](PLATE_DATA.md#schema-addresses)), so a scanned region is a
-name a `field-region` could claim, and each step is its own address: a
-whole-row read (`data.refs.at(0)`) names the row.
-A read through a `let` alias tracks where the chain it names would, so naming a
-container or a row before stepping into it costs no address. The alias holds only where
-the plate binds the name exactly once to one whole chain: a name a second binder
-could rebind would attribute another value's ink to the field. Only the
-occurrences that *read* the name track: an identifier spelling it as a named
-argument (`#text(size: 12pt)` under `#let size = data.size`), a dict key, or
-another value's field reads nothing off the field, and schema field names
-collide freely with the parameter names of callees the plate never defines.
-Not tracked: expressions mixing several fields (`data.from + ", " + rank` has
-no single owner), a value laundered past what the alias pass follows (a
-function parameter, a destructured binding), and card scalars read from the
-per-card loop variable (one shared expression site carries no per-instance
-identity: print the card's `$ink` twin for those).
-**Marker claims** cover the ink a plate *composes* rather than reads off a
-field: a banner keyed on `data.classification`, a package-built address block, a
-computed table. The helper's `field-region(field, body)` brackets `body` with
-two invisible `metadata` markers, and the frame walk claims for `field` every
-piece of ink between them that resolves to no window. It is a **fallback**
-claim, not an override: content blocks, scalar sites, and nested
-`field-region`s inside keep their own field, so wrapping only ever adds a
-region. Each *call* claims separately,
-so a wrapper invoked once per card with a `$path`-composed address is one
-region per card. Ink attributable to no source position at all (list bullets,
-underline rules) stays unclaimed here as everywhere. The marker stack persists
-across pages so a claim can span a page break, which leaves a claim whose close
-marker never reaches a frame bounded by nothing: those are found before the
-scan, suppressed in both the region and point queries, and reported as a
-`typst::unclosed_field_region` warning naming the field.
-**Form-field widgets** carry the path explicitly — acroform from the form
-mapping, a Typst `form-field` from its `field:` argument, both against the one
-address grammar ([PLATE_DATA.md](PLATE_DATA.md#schema-addresses)) — and surface
-a region only when they bind one: a widget with no schema field is a backend
-artifact, not a routable field.
+Three producers, each one the plate declares:
+
+- **Generated ink** is tracked by the spans its glyphs carry. A `richtext` or
+  `plaintext` value (a body, a card's field, an `[]` element) and every scalar
+  or date the plate prints through `qm.ink`
+  ([PLATE_DATA.md](PLATE_DATA.md#the-ink-table)) is evaluated at its own
+  generated site in the helper, whose byte window the backend records. The
+  rendered ink resolves back to its field through *any* placement context: a
+  function parameter, a per-card loop variable, a package that rebuilds the
+  content (a `show`-rule pass that buffers and re-emits paragraphs). The origin
+  rides the glyph, not a marker a rebuild could drop.
+- **Marker claims** cover the ink a plate *composes* rather than prints with
+  `qm.ink`: a banner keyed on `qm.data.classification`, a package-built address
+  block, a computed table. `qm.region(field, body)` brackets `body` with two
+  invisible `metadata` markers, and the frame walk claims for `field` every
+  piece of ink between them that resolves to no window. It is a **fallback**
+  claim, not an override: generated ink and nested claims inside keep their
+  own field, so wrapping only ever adds a region. Each *call* claims
+  separately, so a wrapper invoked once per card with a `$path`-composed
+  address is one region per card.
+- **Form-field widgets** carry the path explicitly: acroform from the form
+  mapping, a Typst `form-field` from its `field:` argument, both against the
+  one address grammar ([PLATE_DATA.md](PLATE_DATA.md#schema-addresses)). A
+  widget surfaces a region only when it binds one: a widget with no schema
+  field is a backend artifact, not a routable field.
+
+A value the plate prints itself (`#qm.data.subject`,
+`text(size: 9pt, qm.data.name)`) carries the plate's span, which names no
+field, so it surfaces no region: print it through `qm.ink`, or claim it.
+
+What a claim takes, beyond ink that resolves to no window:
+
+- A detached glyph between its markers is the claim's: text the plate printed,
+  such as a `str` cast to content inside a function argument, or a list's
+  bullet.
+- A detached stroke or image is never the claim's: an underline or strike
+  stays with the content field it decorates (§ Decisions).
+- Ink inside a page marginal (background, header, footer) is never the
+  claim's, so a claim open across a page break takes none of the next page's
+  chrome or its page number.
+- A float or a footnote body placed between the markers is laid out outside
+  walk order, and is never claimed.
+
+The marker stack persists across pages so a claim can span a page break, which
+leaves a claim whose close marker never reaches a frame bounded by nothing:
+those are found before the scan, suppressed in both the region and point
+queries, and reported as a `typst::unclosed_region` warning naming the field.
 
 ### Coverage
 
@@ -265,8 +257,8 @@ A content field is not one box. The backend records a per-**segment** source
 map (a segment is one paragraph, heading, or whole code fence: the content's
 `continues`-joined line run), and `regions()` returns one region per
 `(segment, page)`, each carrying `span: [start, end)`: the USV range of the
-field's `Content` that box covers. A scalar reference site, a marker claim, and
-a widget carry no `span` (`undefined`): geometry with no content address.
+field's `Content` that box covers. A scalar's or a date's ink, a marker claim,
+and a widget carry no `span` (`undefined`): geometry with no content address.
 
 The whole-field highlight is **derived, not emitted**: per `(field, page)`,
 union the `span`-bearing segment rects. The union is *striped*: it leaves
@@ -278,9 +270,9 @@ rects carry spans, first-placement-only, widget-vs-content), so a **convenience
 owns it** rather than every consumer: `fieldBoxes(field)` (on `LiveSession`,
 core `field_boxes(regions, field)` for the one-shot sidecar) folds the
 span-filter + per-page union, leaving `regions()` the low-level disjoint truth.
-It is content-only: a field placed solely as a scalar reference or a bound
-widget carries no `span` and yields nothing, its box being a single `regions()`
-rect. Equivalent to the union a consumer would write by hand:
+It is content-only: a field placed solely as a scalar's ink, a claim or a
+bound widget carries no `span` and yields nothing, its box being a single
+`regions()` rect. Equivalent to the union a consumer would write by hand:
 
 ```ts
 const boxes = session.fieldBoxes(field);        // one union rect per page
@@ -297,12 +289,12 @@ between one page's body and the next's do not end a placement; a same-page
 interruption does), not every placement: span data cannot distinguish
 package chrome interrupting one placement from a second placement of the same
 value, and a spanning union would claim the ink between them. A marker claim is
-exempt from that rule and accrues its whole extent, because `field-region`
+exempt from that rule and accrues its whole extent, because `qm.region`
 delimits that extent explicitly: an interruption inside a claim is never a
 second placement. A field's own
 ink *between* its segments (brackets, container-open syntax: usually inkless)
 is transparent: it neither accrues a box nor breaks a run. `field` is still
-not unique: segment fragments, page fragments, several scalar sites, or
+not unique: segment fragments, page fragments, several claims on one field, or
 content plus a bound widget each surface independently; consumers group by
 `field`. Later placements stay reachable through `fieldAt` / `positionAt`,
 where a concrete point identifies one drawn item unambiguously. A blank field
@@ -443,10 +435,30 @@ The wasm `render` feature pulls in `web-sys`, the generic canvas *painter*
   region name both. It does not: `fieldAt` and `positionAt` return one field, so
   a two-field region has no answer to give, and `fieldBoxes` would double-count
   it. Innermost wins instead, which is the ordinary scoping intuition and makes
-  wrapping purely additive: a `field-region` takes the ink nothing more specific
+  wrapping purely additive: a `qm.region` takes the ink nothing more specific
   took, and never moves a region off the field that generated it. Retargeting
   ink that is already tracked is therefore not expressible, and deliberately so:
   the wrapper exists for ink with *no* attribution.
+- **A claim takes the detached glyphs between its markers, never a detached
+  stroke or a marginal.** A `str` cast to content inside a function argument
+  carries a detached span, so whether a plate's text is clickable would
+  otherwise hang on what it wrapped the value in. A detached `Shape` or
+  `Image` stays unclaimed: Typst paints an underline or strike stroke after its
+  run's glyphs and inside their box, and `fieldAt` gives a tie to the
+  later-painted item, so a claimed stroke would take the click from the content
+  field beneath it. Typst wraps each page marginal in an artifact element and
+  walks a page's background and header before its body, so the walk opens no
+  claim inside an artifact: a claim spanning a page break would otherwise take
+  the next page's chrome.
+- **No region is inferred from plate syntax.** A lexical extent is not
+  provenance: a window over `rr.map(s => ..)` holds the closure's body, so it
+  would outrank every claim inside it, and whether a value regions would hang
+  on how the plate spells the read. Attribution comes from what the plate
+  declares (generated ink, a claim, a widget), so it does not move when the
+  plate is rewritten into an equivalent form. This is not a one-way door: a
+  later convenience, such as value-carried provenance or an opt-in scan, is
+  admissible only as strictly more precise than a declared producer, and it
+  ranks below a claim.
 - **Complete raster, never compose-from-regions.** Both backends hand back a
   finished page (Typst natively, acroform by baking each widget's value into the
   `/AP` stream a rasterizer draws). Regions are an overlay sidecar, not a

@@ -53,7 +53,7 @@ Four types hold text, and two questions pick one:
 1. **Does the author write prose here, or does the plate compute with the value?** A name, URL, path, or reference key is data. A bio, an abstract, or a cover letter is content.
 2. Then, for data: **is the set of allowed values closed?** (`enum` over `string`.) For content: **should `*text*` render as emphasis, or stay literal?** (`richtext` over `plaintext`.)
 
-The letter above needs no content field: its prose is the document body, which is already rich text. `plaintext` and `richtext` are for prose in a *named* field — an abstract, a summary. Any field the plate prints can be click-to-edit in an editor preview, `string` and `enum` included ([Which Reads Get Regions](editor-regions.md#which-reads-get-regions)); a content field adds navigation inside its value, where a click lands a caret in the text. A name or a reference key stays a `string`.
+The letter above needs no content field: its prose is the document body, which is already rich text. `plaintext` and `richtext` are for prose in a *named* field — an abstract, a summary. Any field the plate prints through `qm.ink` is click-to-edit in an editor preview, `string` and `enum` included ([Print with `ink`](editor-regions.md#print-with-ink)); a content field adds navigation inside its value, where a click lands a caret in the text. A name or a reference key stays a `string`.
 
 Pick before a corpus exists. Changing a declared type reinterprets every value already stored in that field, and data → content is lossy: see [Choosing among `string`, `enum`, `plaintext`, and `richtext`](quill-yaml-reference.md#choosing-among-string-enum-plaintext-and-richtext).
 
@@ -64,18 +64,20 @@ When you declare an `enum`, list only the real choices. Every enum also accepts 
 Your first plate template:
 
 ```typst
-#import "@local/quillmark-helper:0.1.0": data
+#import "@local/quillmark-helper:0.2.0" as qm
 
 #set page(margin: 1in)
 
-Dear #data.recipient,
+Dear #qm.ink(qm.data, "recipient"),
 
-#data.at("$body", default: "")
+#qm.data.at("$body", default: "")
 
 Sincerely,
 
-#data.sender
+#qm.ink(qm.data, "sender")
 ```
+
+The helper is imported as a module, `as qm`, and every member is read through it: compute with `qm.data.x`, print with `qm.ink(qm.data, "x")`, which keeps the printed text the click-to-edit target for its field.
 
 For data access patterns, helper package details, optional fields, and `$cards` iteration, see the [Typst Backend](typst-backend.md) guide.
 
@@ -123,11 +125,11 @@ Its `plate.typ`:
 
 Six constructs to lift from it:
 
-- **A date that prints.** `display("issued", ..)` takes the field's *address* and returns content, so the printed date stays the click-to-edit target for that field. `data.issued` is the `datetime` behind it: reach for that to compare, to take components, or to hand a package a date it formats itself. See [Dates](typst-backend.md#dates).
-- **An enum left unanswered.** The blank is a value no `values:` list holds, so `data.state != ""` guards it and an `else` on a branch over the declared values would render a state nobody picked. See [the blank](quill-yaml-reference.md#the-blank-values-is-for-choices-not-for-the-absence-of-one).
+- **A date that prints.** `qm.ink(qm.data, "issued", ..)` takes the field's *address* and returns content, so the printed date stays the click-to-edit target for that field. `qm.data.issued` is the `datetime` behind it: reach for that to compare, to take components, or to hand a package a date it formats itself. See [Dates](typst-backend.md#dates).
+- **An enum left unanswered.** The blank is a value no `values:` list holds, so `qm.data.state != ""` guards it and an `else` on a branch over the declared values would render a state nobody picked. See [the blank](quill-yaml-reference.md#the-blank-values-is-for-choices-not-for-the-absence-of-one).
 - **A card loop.** `$kind` is document-defined, so `card.at("$kind", default: none)` reads it and every other kind falls through. A field declared on the kind arrives filled, which is why `card.title` is a plain read. See [Body, arrays, and cards](typst-backend.md#body-arrays-and-cards).
-- **Printing through `ink`.** Every iteration of the card loop reads through one loop variable, so `card.title` printed there names no card. `ink(card).title` is the same text born in generated code, keyed on that card's own field, and `display(card, "due", ..)` formats the date the same way. Compute with `card`, print with `ink(card)`. See [Print with `ink`](editor-regions.md#print-with-ink).
-- **A claim on composed ink.** The banner's glyphs are drawn by the plate rather than by the field, so `field-region("state")` is what makes a click on them resolve to `state`. See [Tying Composed Content to a Field](editor-regions.md#tying-composed-content-to-a-field).
+- **Printing through `qm.ink`.** Every iteration of the card loop reads through one loop variable, so `card.title` printed there names no card. `qm.ink(card, "title")` is the same text born in generated code, keyed on that card's own field, and `qm.ink(card, "due", ..)` formats the date the same way. Compute with `card`, print with `qm.ink(card, ..)`. See [Print with `qm.ink`](editor-regions.md#print-with-ink).
+- **A claim on composed ink.** The banner's glyphs are drawn by the plate rather than by the field, so `qm.region("state", ..)` is what makes a click on them resolve to `state`. See [Tying Composed Content to a Field](editor-regions.md#tying-composed-content-to-a-field).
 - **`#set`.** Page and text defaults are ordinary Typst. See [Typesetting](typst-backend.md#typesetting).
 
 Both listings are included from `crates/fixtures/resources/quills/status_report/0.1.0/`, which the repository's quiver sweep renders.

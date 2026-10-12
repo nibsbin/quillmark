@@ -259,7 +259,7 @@ The four text-ish types form a 2×2 of **data vs content** × **open/plain vs cl
 | **open / literal** | `string` | `plaintext`: `*text*` stays literal |
 | **closed / formatted** | `enum`: a `values:` domain | `richtext`: `*text*` becomes emphasis |
 
-Any field the plate prints, `string` and `enum` included, can get a region and click-to-edit in editor consumers ([Which Reads Get Regions](editor-regions.md#which-reads-get-regions)). A content field rides the canonical content model and adds navigation inside its value: a click lands a caret in the text. `plaintext` and `richtext` share that entire stack and the same backend lowering, so they are indistinguishable in an editor and diverge only at emit, where the codec decides whether a delimiter is markup or a character.
+Any field the plate prints through `qm.ink`, `string` and `enum` included, gets a region and click-to-edit in editor consumers ([Print with `ink`](editor-regions.md#print-with-ink)). A content field rides the canonical content model and adds navigation inside its value: a click lands a caret in the text. `plaintext` and `richtext` share that entire stack and the same backend lowering, so they are indistinguishable in an editor and diverge only at emit, where the codec decides whether a delimiter is markup or a character.
 
 Changing a declared type reinterprets every stored value in that field at the next bound load, with no diagnostic, and data → content is the lossy direction: the stored string enters the codec's import and its delimiters are consumed as structure, leaving the literal characters unrecoverable. A declared type change is a new quill version ([Quill Versioning](versioning.md)); audit the corpus before publishing one, as under [Date and Datetime Grammars](#date-and-datetime-grammars).
 
@@ -345,7 +345,7 @@ your `values:` list stays clean.
 
 > **Writing a plate against an enum:** branch over `values ∪ blank`
 > exhaustively. An `else` fallback silently renders a variant nobody chose, and
-> `data.at(key, default: X)` is not a guard — every declared key is always
+> `qm.data.at(key, default: X)` is not a guard — every declared key is always
 > present at render, so its `default:` never fires and the blank flows through.
 
 #### Variants: fields that exist only for one choice
@@ -398,8 +398,8 @@ Two things follow, and they are the reason to reach for this over a
 the branch that selects it, which is the branch you already owe every enum:
 
 ```typst
-..if data.classification.value == "CUI" {
-  (controlled_by: data.classification.controlled_by, poc: data.classification.poc)
+..if qm.data.classification.value == "CUI" {
+  (controlled_by: qm.data.classification.controlled_by, poc: qm.data.classification.poc)
 },
 ```
 
@@ -581,22 +581,22 @@ value is. A mapping has one slot per key, so a member cannot be ticked twice.
 
 The plate receives the held set: each held member's columns, keyed by id, in
 roster order. A member the document does not tick is absent, so print the
-vocabulary through `roster`, which hands your plate every member, held or not,
+vocabulary through `qm.roster`, which hands your plate every member, held or not,
 without a copy of the roster of its own:
 
 ```typst
-#import "@local/quillmark-helper:0.1.0": data, field-region, ink, roster
+#import "@local/quillmark-helper:0.2.0" as qm
 
-#for row in roster(data, "qualifications") {
-  field-region(row.path)[#(if row.held [☒] else [☐]) #row.title]
-  if row.held [ — #ink(row.value).detail]
+#for row in qm.roster(qm.data, "qualifications") {
+  qm.region(row.path)[#(if row.held [☒] else [☐]) #row.title]
+  if row.held [ — #qm.ink(row.value, "detail")]
 }
 ```
 
 Each row is `(id, title, held, value, path)`: `value` is the member's columns,
 `none` where unheld, and `path` its address. Pass the dictionary that declares
-the matrix and its name: `roster(card, "qualifications")` on a card,
-`roster(row, "quals")` in a table row.
+the matrix and its name: `qm.roster(card, "qualifications")` on a card,
+`qm.roster(row, "quals")` in a table row.
 
 Three things to author against. Declare a `default:` on each column to say
 what a ticked member's unanswered column renders; without one it renders the
@@ -637,9 +637,9 @@ qualifications:
   id, is refused (`validation::enum_violation`, hinted toward the added
   spelling).
 - The plate receives the held roster members in roster order, then each added
-  item sorted by id, `{title, …columns}`, and `roster` returns them in that
+  item sorted by id, `{title, …columns}`, and `qm.roster` returns them in that
   order. A plate wanting another order sorts the rows itself. An added item's
-  `title` is a cell with an address, so `ink(row.value).title` prints it with
+  `title` is a cell with an address, so `qm.ink(row.value, "title")` prints it with
   its click-to-edit region, where `row.title` prints it plainly.
 - The engine does not compare titles: an added item titled as a roster member
   prints beside it.

@@ -4,36 +4,41 @@ The Typst backend generates PDF, SVG, and PNG documents using the [Typst](https:
 
 ## Data Access
 
-Plates are plain Typst code. Document metadata reaches the plate as a Typst dictionary literal exposed by the virtual `@local/quillmark-helper` package:
+Plates are plain Typst code. Document metadata reaches the plate as a Typst dictionary literal exposed by the virtual `@local/quillmark-helper` package, which a plate imports as a module under a name of its choosing:
 
 ```typst
-#import "@local/quillmark-helper:0.1.0": data
+#import "@local/quillmark-helper:0.2.0" as qm
 
-#data.title                                  // a declared field: always present
-#data.at("logo", default: none)              // an undeclared key: may be absent
+#qm.data.title.len()                    // a declared field: always present
+#qm.data.at("logo", default: none)      // an undeclared key: may be absent
+#qm.ink(qm.data, "title")               // the field printed, click-to-edit
 ```
+
+The module form is the only import the backend accepts. `: *`, `: data, ink`, a bare `#import` or another version fails the render with `typst::helper_import` at the import line. Every helper name reaches the plate through the module, so none collides with the plate's own; a plate wanting a bare name binds it, `#let data = qm.data`.
+
+The rule of thumb: **compute with `qm.data.x`, print with `qm.ink(..)`, claim composed ink with `qm.region(..)`.**
 
 Every field arrives at its **native** Typst type — a `date` as a `datetime`, a number as an int or float, an `object` as a dict — with one exception: `richtext` and `plaintext` arrive as Typst content, their text already lowered to markup, because the authored text *is* their rendering. This holds at every depth: a `date` declared inside an `object` or an `array` row is the same `datetime` a top-level one is.
 
-`data`, each card, and each typed dictionary or table row also carry a printable copy of their fields under `$ink`, read with `ink(..)`: `#ink(data).title`, `#ink(row).org`. It prints what the field prints and keeps the field's click target in an [editor preview](editor-regions.md#print-with-ink) however the plate passes it around.
+`qm.ink(dict, key)` prints a field by its address: `dict` is `qm.data`, a card, a typed dictionary or table row, or a [`roster`](#matrices) row's `value`, and `key` one or more steps from it: `#qm.ink(qm.data, "title")`, `#qm.ink(row, "org")`, `#qm.ink(qm.data, "address.city")`. It prints what the field prints and keeps the field's click target in an [editor preview](editor-regions.md#print-with-ink) however the plate passes it around. An address the schema does not have fails the render; blank content, a blank date, a typed dictionary and a matrix give `none`.
 
 ### Dates
 
-A present `type: date` / `type: datetime` field is a native `datetime`; a blank date is `none` (so `#if data.field != none` guards are unchanged):
+A present `type: date` / `type: datetime` field is a native `datetime`; a blank date is `none` (so `#if qm.data.field != none` guards are unchanged):
 
 ```typst
-#data.issued.display("[day padding:none] [month repr:long] [year]")  // native string
-#data.issued.year()                                                   // components: int
-#(data.issued < data.due)                                             // comparison, arithmetic
-#some-package(date: data.issued)                                      // any datetime-consuming package
-#display("issued", "[day padding:none] [month repr:long] [year]")     // rendered, click-to-edit
-#display(row, "due", "[year]")                                        // the same, for a row or card in hand
-#if data.issued != none { .. }                                        // presence
+#qm.data.issued.display("[day padding:none] [month repr:long] [year]")  // native string
+#qm.data.issued.year()                                                   // components: int
+#(qm.data.issued < qm.data.due)                                             // comparison, arithmetic
+#some-package(date: qm.data.issued)                                      // any datetime-consuming package
+#qm.ink(qm.data, "issued", "[day padding:none] [month repr:long] [year]")  // rendered, click-to-edit
+#qm.ink(row, "due", "[year]")                                            // the same, for a row or card in hand
+#if qm.data.issued != none { .. }                                        // presence
 ```
 
 `datetime.today()` returns the render date the host supplied, the same date a `today` field renders as. The engine reads no clock, and the host owns the time zone, so an `offset:` is ignored: `datetime.today(offset: 0)` is the host's date, not UTC's.
 
-Everything except the helper's two `display` calls is ordinary Typst, because the value is an ordinary `datetime`. `display(field, ..args)` takes the field's *schema address*, or a dictionary and the date's key within it, rather than its value, and prints the date as `datetime.display` would with the same patterns; an unknown address fails the render, and a blank date gives `none`. Reach for `data.<field>` whenever you want the value itself: math, comparison, components, or handing it to a package. The two print the same ink and differ only in [editor previews](editor-regions.md#dates-display-and-data), where `display` keeps the printed date clickable.
+Everything except the two `qm.ink` calls is ordinary Typst, because the value is an ordinary `datetime`. On a date address, `qm.ink(dict, key, ..args)` prints the date as `datetime.display` would with the same patterns, its default display with none; a blank date gives `none`, and a pattern on any other address fails the render. Reach for `qm.data.<field>` whenever you want the value itself: math, comparison, components, or handing it to a package. The two print the same text and differ only in [editor previews](editor-regions.md#dates-print-through-qmink), where `qm.ink` keeps the printed date clickable.
 
 ### Which accessor to reach for
 
@@ -41,15 +46,15 @@ A key's *declaration* decides whether it can be absent, and that decides the acc
 
 | Key | Accessor | Why |
 |---|---|---|
-| A field declared in `Quill.yaml` | `data.subtitle` | Always present: compilation blank-fills every declared field with its authored value, else the schema `default:`, else the field's [blank](#blank-values). |
-| A `$`-sigiled key (`$kind`, `$body`, `$cards`, `$path`) | `data.at("$body", default: "")` | Typst identifiers exclude `$`, *and* `$`-metadata is present only where it is defined: `$kind` on every card, `$body` only where the kind enables a body. |
-| An undeclared key, or any field of a card whose `$kind` is unknown | `data.at("logo", default: none)` | No schema fills it, so absence is real. `quill.validate(doc)` warns on it (`validation::unknown_field`, `validation::unknown_card`), so a key the plate reads belongs in `Quill.yaml`. |
+| A field declared in `Quill.yaml` | `qm.data.subtitle` | Always present: compilation blank-fills every declared field with its authored value, else the schema `default:`, else the field's [blank](#blank-values). |
+| A `$`-sigiled key (`$kind`, `$body`, `$cards`, `$path`) | `qm.data.at("$body", default: "")` | Typst identifiers exclude `$`, *and* `$`-metadata is present only where it is defined: `$kind` on every card, `$body` only where the kind enables a body. |
+| An undeclared key, or any field of a card whose `$kind` is unknown | `qm.data.at("logo", default: none)` | No schema fills it, so absence is real. `quill.validate(doc)` warns on it (`validation::unknown_field`, `validation::unknown_card`), so a key the plate reads belongs in `Quill.yaml`. |
 
-So a `default:` on a declared field is dead code, and an `#if "field" in data` guard on one is always true. When a declared field may be left blank, guard its *value*, not its presence:
+So a `default:` on a declared field is dead code, and an `#if "field" in qm.data` guard on one is always true. When a declared field may be left blank, guard its *value*, not its presence:
 
 ```typst
-#if data.subtitle != "" {
-  [Subtitle: #data.subtitle]
+#if qm.data.subtitle != "" {
+  [Subtitle: #qm.ink(qm.data, "subtitle")]
 }
 ```
 
@@ -58,7 +63,7 @@ If a default belongs anywhere, it belongs in `Quill.yaml` — a `default:` resta
 An `enum` needs this most: its blank is `""`, which is never one of its `values:`, so branch over `values ∪ blank` and never let an `else` swallow the blank into a variant nobody picked.
 
 ```typst
-#if data.seal != "" { .. }        // the blank means "no seal", not the first value
+#if qm.data.seal != "" { .. }        // the blank means "no seal", not the first value
 ```
 
 ### Blank values
@@ -67,26 +72,26 @@ What an unanswered field holds when it reaches the plate, and the guard that tes
 
 | Declared type | Blank in the plate | Guard |
 |---|---|---|
-| `string`, `enum` | `""` | `data.f != ""` |
-| `enum` with `variants:` | `(value: "")` | `data.f.value != ""` |
-| `richtext`, `plaintext` | `""` (an authored value arrives as content) | `data.f != ""` |
-| `date`, `datetime` | `none` | `data.f != none` |
-| `integer`, `number` | `0` | `data.f != 0` |
-| `boolean` | `false` | `data.f` |
-| `array` | `()` | `data.f.len() > 0` |
+| `string`, `enum` | `""` | `qm.data.f != ""` |
+| `enum` with `variants:` | `(value: "")` | `qm.data.f.value != ""` |
+| `richtext`, `plaintext` | `""` (an authored value arrives as content) | `qm.data.f != ""` |
+| `date`, `datetime` | `none` | `qm.data.f != none` |
+| `integer`, `number` | `0` | `qm.data.f != 0` |
+| `boolean` | `false` | `qm.data.f` |
+| `array` | `()` | `qm.data.f.len() > 0` |
 | `object` | a dictionary of its properties, each at its own blank | guard the properties |
-| `matrix` | `(:)`, nothing held | `"flight_cc" in data.f`, or `row.held` per [`roster`](#matrices) row |
-| any optional type (`integer?`, `boolean?`, …) | `none` | `data.f != none` |
+| `matrix` | `(:)`, nothing held | `"flight_cc" in qm.data.f`, or `row.held` per [`roster`](#matrices) row |
+| any optional type (`integer?`, `boolean?`, …) | `none` | `qm.data.f != none` |
 
-`$body` follows the content rule: `data.at("$body", default: "") != ""` is true only when the body has text.
+`$body` follows the content rule: `qm.data.at("$body", default: "") != ""` is true only when the body has text.
 
 The `0` and `false` guards cannot tell an unanswered field from an authored `0` or `false`. Where the plate must, declare the field [optional](quill-yaml-reference.md#optional-fields-t): it arrives as `none` when nobody answered it:
 
 ```typst
-#if data.quorum == none [
+#if qm.data.quorum == none [
   _Quorum not recorded._
-] else if present >= data.quorum [
-  A quorum of #data.quorum was established.
+] else if present >= qm.data.quorum [
+  A quorum of #qm.data.quorum was established.
 ]
 ```
 
@@ -94,14 +99,14 @@ Printing `none` places nothing, and `+` treats it as absent (`"Dear " + none` is
 
 ### Body, arrays, and cards
 
-The document body is exposed under the `$body` key, accessed via `data.at("$body")` because Typst identifiers exclude `$`. Arrays come through as Typst arrays. Cards live under the `$cards` key, each carrying its own `$kind` discriminator, fields, and `$body`:
+The document body is exposed under the `$body` key, accessed via `qm.data.at("$body")` because Typst identifiers exclude `$`. Arrays come through as Typst arrays. Cards live under the `$cards` key, each carrying its own `$kind` discriminator, fields, and `$body`:
 
 ```typst
-#data.at("$body", default: "")
+#qm.data.at("$body", default: "")
 
-#for author in data.authors [- #author]
+#for author in qm.data.authors [- #author]
 
-#for card in data.at("$cards", default: ()) {
+#for card in qm.data.at("$cards", default: ()) {
   if card.at("$kind", default: none) == "product" {
     [Product: #card.name — #card.at("$body", default: "")]
   }
@@ -112,29 +117,29 @@ A card whose `$kind` the quill does not declare reaches the plate carrying the `
 
 ### Matrices
 
-A [`matrix`](quill-yaml-reference.md#matrix-a-vocabulary-the-author-ticks) reaches the plate as the members the document ticks, each keyed by id to its columns; a member nobody ticked is absent. `roster(dict, key)` hands the plate the whole vocabulary instead, held or not, so it prints every box without a copy of the roster:
+A [`matrix`](quill-yaml-reference.md#matrix-a-vocabulary-the-author-ticks) reaches the plate as the members the document ticks, each keyed by id to its columns; a member nobody ticked is absent. `qm.roster(dict, key)` hands the plate the whole vocabulary instead, held or not, so it prints every box without a copy of the roster:
 
 ```typst
-#import "@local/quillmark-helper:0.1.0": data, field-region, ink, roster
+#import "@local/quillmark-helper:0.2.0" as qm
 
-#for row in roster(data, "qualifications") {
-  field-region(row.path)[#(if row.held [☒] else [☐]) #row.title]
-  if row.held [ — #ink(row.value).detail]
+#for row in qm.roster(qm.data, "qualifications") {
+  qm.region(row.path)[#(if row.held [☒] else [☐]) #row.title]
+  if row.held [ — #qm.ink(row.value, "detail")]
 }
 ```
 
-Each row is `(id, title, held, value, path)`, roster members in roster order and then any items an open matrix's document adds. `value` is the member's columns, `none` where unheld, and `path` its address: claiming it with `field-region` makes an unticked box clickable in an editor preview. An added item's `title` is a cell of its own, so `ink(row.value).title` prints it click-to-edit. `dict` is the dictionary that declares the matrix: `data`, a card, or a table row.
+Each row is `(id, title, held, value, path)`, roster members in roster order and then any items an open matrix's document adds. `value` is the member's columns, `none` where unheld, and `path` its address: claiming it with `qm.region` makes an unticked box clickable in an editor preview. An added item's `title` is a cell of its own, so `qm.ink(row.value, "title")` prints it click-to-edit; a roster member's `title` is the roster's and no address, so guard with `"title" in row.value`. `dict` is the dictionary that declares the matrix: `qm.data`, a card, or a table row.
 
 ### Elements
 
 A `qm-<name>` element renders through the helper's `elements` registry. A plate registers a renderer under the element's name, taking its attributes and its content:
 
 ```typst
-#import "@local/quillmark-helper:0.1.0": data, elements
+#import "@local/quillmark-helper:0.2.0" as qm
 
-#elements.update(e => e + (stamp: (attrs, body) => block(stroke: red, body)))
+#qm.elements.update(e => e + (stamp: (attrs, body) => block(stroke: red, body)))
 
-#data.at("$body", default: [])
+#qm.data.at("$body", default: [])
 ```
 
 The dispatcher reads the registry's final value, so the update may stand anywhere in the plate. An element around nothing, `<qm-sig></qm-sig>`, calls its renderer with a body that draws nothing, `[ ]`, which suits a signature line or a stamp. `attrs` is a dictionary of the element's attributes keyed by name, each value a string with its entities decoded: `note="a &amp; b"` arrives as `"a & b"`. With no renderer registered, the built-in `keep` holds its content on one page, and any other element draws its content alone and warns `typst::unregistered_element` at its field. To draw a name as plain content without the warning, register `(attrs, body) => body` under it.
@@ -146,9 +151,9 @@ The warning rides a document-global `metadata` the dispatcher places ahead of su
 A task item draws a box before its content, ticked when done. A plate replaces the box by setting the helper's `tasks` state to a renderer taking whether the task is done and the item's content. This one strikes through a done task and draws no box:
 
 ```typst
-#import "@local/quillmark-helper:0.1.0": data, tasks
+#import "@local/quillmark-helper:0.2.0" as qm
 
-#tasks.update(_ => (done, body) => if done { strike(body) } else { body })
+#qm.tasks.update(_ => (done, body) => if done { strike(body) } else { body })
 ```
 
 As with `elements`, the renderer is read from the state's final value, so the update may stand anywhere in the plate.
@@ -180,8 +185,9 @@ my-quill/
     └── header.typ     #import "/theme.typ": accent
 ```
 
-A module reads `data` by importing the helper itself. Its reads keep their
-click targets under the rules a plate's do ([Editor Regions](editor-regions.md)).
+A module reads the data by importing the helper itself, as a module like the
+plate does. Its prints keep their click targets under the rules a plate's do
+([Editor Regions](editor-regions.md)).
 
 ## Typst Packages
 
@@ -277,19 +283,19 @@ See the [Typst tutorial](https://typst.app/docs/tutorial/) for the full styling 
 `form-field` drops an AcroForm widget at its call site: a clickable field in PDF, reserved invisible layout space in SVG and PNG. It backs two widget kinds, text inputs and signature boxes. A plate wanting an interactive checkbox or dropdown is an `acroform` quill.
 
 ```typst
-#import "@local/quillmark-helper:0.1.0": form-field, signature-field
+#import "@local/quillmark-helper:0.2.0" as qm
 ```
 
 Value binding is the plate author's job: pass `value:` straight from your data; there is no resolver on the Typst side.
 
-`signature-field` is the ten-line wrapper for the common case — it is exactly `form-field(name, type: "signature", width: width, height: height, field: field)`, with `height` defaulting to `50pt` instead of `20pt`:
+`signature-field` is the ten-line wrapper for the common case — it is exactly `qm.form-field(name, type: "signature", width: width, height: height, field: field)`, with `height` defaulting to `50pt` instead of `20pt`:
 
 ```typst
 Approving authority:
-#signature-field("approver")
+#qm.signature-field("approver")
 
 Witness:
-#signature-field("witness", width: 220pt, height: 60pt)
+#qm.signature-field("witness", width: 220pt, height: 60pt)
 ```
 
 ### Positioning
@@ -301,7 +307,7 @@ A widget is ordinary Typst inline content sized `width × height`, laid out the 
 ```typst
 Sign here:
 
-#signature-field("approver")  // its own paragraph: 200×50pt below the label
+#qm.signature-field("approver")  // its own paragraph: 200×50pt below the label
 
 The above signature acknowledges receipt.
 ```
@@ -311,7 +317,7 @@ The above signature acknowledges receipt.
 ```typst
 // At the cursor position where the typed-name signature block begins:
 #place(dx: 0pt, dy: -3.5in,
-       signature-field("approver", width: 3in, height: 0.5in))
+       qm.signature-field("approver", width: 3in, height: 0.5in))
 ```
 
 `#place` without an alignment argument anchors the widget at the current cursor (then offsets by `dx`/`dy`); `#place(top + left, ...)` anchors to the containing block's top-left. Either way, the call consumes no flow space and the surrounding template stays put.
@@ -342,14 +348,14 @@ Inside `#box`, `#table`, `#figure`, `#footnote`, `#move`, `#pad`: a widget track
 **Text**: `value` is a string, a number, a boolean, or `none`, so it takes a data field: `string`, `enum`, `integer`, `number`, or `boolean`. A number or boolean stringifies, and a blank value emits no `/V`. A `richtext` or `plaintext` value reaches the plate as content and a `date` or `datetime` value as a `datetime`, and passing either fails the render. Set `multiline: true` for a multi-line box.
 
 ```typst
-#form-field("full_name", type: "text", value: data.name)
-#form-field("bio", type: "text", value: data.bio, multiline: true, height: 80pt)  // bio: { type: string }
+#qm.form-field("full_name", type: "text", value: qm.data.name)
+#qm.form-field("bio", type: "text", value: qm.data.bio, multiline: true, height: 80pt)  // bio: { type: string }
 ```
 
 **Signature**: `value` is ignored. PDF output gains a clickable SigField widget at the call site, which Acrobat — or any reader that supports form signing — presents as a "Sign Here" affordance.
 
 ```typst
-#form-field("approver", type: "signature", height: 50pt)
+#qm.form-field("approver", type: "signature", height: 50pt)
 ```
 
 **The widget is unsigned.** Quillmark performs no cryptography: to produce a signed PDF, run the output through pyHanko, Acrobat, endesive, or another signing tool.
@@ -359,7 +365,7 @@ Inside `#box`, `#table`, `#figure`, `#footnote`, `#move`, `#pad`: a widget track
 By default a widget's only identity is its `/T` name. Pass `field:` to additionally key the widget's region on a schema-field address, so it surfaces in the geometry sidecar (`session.regions()`) and resolves under `session.fieldAt(...)`:
 
 ```typst
-#form-field("Signature", type: "signature", field: "signature_block")
+#qm.form-field("Signature", type: "signature", field: "signature_block")
 ```
 
 `field:` is **region-only**: the `/T` widget name stays `name`; only the sidecar entry keys on `field:`. The address must be a real schema field: a bare field name, an array element like `"refs.2"`, a container property like `"classification.poc"`, or a card path built from the card's `$path` prefix (a bad address raises a Typst assert). Omit `field:` and the widget exposes no region: a click has no schema field to route to.
@@ -371,7 +377,7 @@ A one-step suffix is checked against what the field actually offers, so `"refs.2
 A widget carrying a `value:` bakes it into an appearance stream, and a viewer re-synthesizes that appearance when someone fills the field. `font`, `size`, and `align` are what both read — except that the baked stream always draws from the box's left edge, so `align` moves the value only once a viewer re-synthesizes. All three apply to `"text"` only, a signature field having no variable text, and passing a non-default there raises an assert rather than silently doing nothing.
 
 ```typst
-#form-field("memo_date", type: "text", field: "date",
+#qm.form-field("memo_date", type: "text", field: "date",
             font: "times", size: 12pt, align: "right", width: 1.2in, height: 16pt)
 ```
 
@@ -439,7 +445,7 @@ typst watch --root ./my-quill --package-path ws/packages --font-path ws/fonts --
 Edits to the plate recompile on save. The helper holds `input.md`'s data, so
 rerun `workspace` after changing the document. `--creation-timestamp` carries
 the render date, so `datetime.today()` agrees with the render's. Tinymist takes
-the same flags through `tinymist.typstExtraArgs`, for completion on `data.`
+the same flags through `tinymist.typstExtraArgs`, for completion on `qm.data.`
 fields and a live preview.
 
 Typst reads more of the quill than a render does: any file under `--root`, a
