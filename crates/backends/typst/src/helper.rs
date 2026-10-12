@@ -20,7 +20,9 @@ use crate::emit::{
 };
 use crate::SchemaMeta;
 use quillmark_content::serial::from_canonical_value;
-use quillmark_core::quill::{CONTENT_MEDIA_TYPE, QUILLMARK_INLINE_KEY, QUILLMARK_ROSTER_KEY};
+use quillmark_core::quill::{
+    CONTENT_MEDIA_TYPE, PLATE_PATH_KEY as PATH_KEY, QUILLMARK_INLINE_KEY, QUILLMARK_ROSTER_KEY,
+};
 
 pub const HELPER_VERSION: &str = "0.2.0";
 pub const HELPER_NAMESPACE: &str = "local";
@@ -514,8 +516,6 @@ impl Container {
         format!("{{{}}}", wrap_dict(self.items))
     }
 }
-
-const PATH_KEY: &str = "$path";
 
 /// What a schema node lowers to: the codegen walk's whole dispatch. Why only
 /// the content types lower to content and a date does not:

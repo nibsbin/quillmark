@@ -3,6 +3,7 @@
 
 use crate::world::QuillWorld;
 use quillmark_core::error::{Diagnostic, Location, Severity};
+use quillmark_core::quill::PLATE_PATH_KEY;
 use typst::diag::SourceDiagnostic;
 use typst::syntax::{DiagSpan, FileId, RootedPath, VirtualPath, VirtualRoot};
 use typst::World;
@@ -65,12 +66,16 @@ fn rooted_path_hint(message: &str, span: DiagSpan, world: &QuillWorld) -> Option
     })
 }
 
-/// Spreading a dictionary of plate data passes its `$path` as a named argument.
+/// Spreading a typed dictionary of plate data passes its `$path` as a named
+/// argument.
 fn path_key_hint(message: &str) -> Option<String> {
-    (message == "unexpected argument: $path").then(|| {
-        "every dictionary of plate data carries `$path`, its address: give the function a \
-         sink parameter such as `..rest` to take it, or spread the dictionary without it"
-            .to_string()
+    let key = message.strip_prefix("unexpected argument: ")?;
+    (key == PLATE_PATH_KEY).then(|| {
+        format!(
+            "a typed dictionary of plate data carries `{PLATE_PATH_KEY}`, its address: give \
+             the function a sink parameter such as `..rest` to take it, or spread a copy \
+             after `.remove(\"{PLATE_PATH_KEY}\")`"
+        )
     })
 }
 
