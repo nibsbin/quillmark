@@ -396,6 +396,89 @@ jobs:
           fi
 
   # ──────────────────────────────────────────────
+  # Publish: CLI binaries → GitHub Release assets
+  # ──────────────────────────────────────────────
+  # Linux builds against musl, static and independent of the host's glibc,
+  # as Typst's own release binaries are. The archive layout is the one
+  # `[package.metadata.binstall]` in the CLI's Cargo.toml declares, so
+  # `cargo binstall quillmark-cli` resolves these assets.
+  build-cli:
+    needs: [prepare]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-musl, os: ubuntu-latest }
+          - { target: aarch64-unknown-linux-musl, os: ubuntu-24.04-arm }
+          - { target: aarch64-apple-darwin, os: macos-latest }
+          - { target: x86_64-apple-darwin, os: macos-latest, cross: true }
+          - { target: x86_64-pc-windows-msvc, os: windows-latest }
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    env:
+      CC_x86_64_unknown_linux_musl: musl-gcc
+      CC_aarch64_unknown_linux_musl: musl-gcc
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: v${{ needs.prepare.outputs.version }}
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+
+      - name: Install musl tools
+        if: contains(matrix.target, 'musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: cli-${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --locked -p quillmark-cli --target ${{ matrix.target }}
+
+      - name: Smoke test
+        if: ${{ !matrix.cross }}
+        run: |
+          bin=target/${{ matrix.target }}/release/quillmark
+          "$bin" --version
+          "$bin" render crates/fixtures/resources/quills/usaf_memo/0.2.0 \
+            --today 2026-01-01 -o smoke.pdf --quiet
+          test -s smoke.pdf
+
+      - name: Upload to the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET: ${{ matrix.target }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          name="quillmark-cli-${TARGET}-v${VERSION}"
+          mkdir "$name"
+          if [[ "$TARGET" == *windows* ]]; then
+            cp "target/${TARGET}/release/quillmark.exe" "$name/"
+          else
+            cp "target/${TARGET}/release/quillmark" "$name/"
+          fi
+          cp LICENSE crates/bindings/cli/README.md "$name/"
+          if [[ "$TARGET" == *windows* ]]; then
+            archive="$name.zip"
+            7z a "$archive" "$name"
+          else
+            archive="$name.tar.gz"
+            tar czf "$archive" "$name"
+          fi
+          gh release upload "v${VERSION}" "$archive" --clobber
+
+  # ──────────────────────────────────────────────
   # Publish: Python → PyPI
   # ──────────────────────────────────────────────
   build-python-linux:
