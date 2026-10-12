@@ -97,7 +97,10 @@ fn classify(message: &str) -> &'static str {
     }
 }
 
-fn resolve_span_to_location(span: typst::syntax::DiagSpan, world: &QuillWorld) -> Option<Location> {
+pub(crate) fn resolve_span_to_location(
+    span: typst::syntax::DiagSpan,
+    world: &QuillWorld,
+) -> Option<Location> {
     use typst::WorldExt;
 
     // A diagnostic from an injected helper or vendored package reports

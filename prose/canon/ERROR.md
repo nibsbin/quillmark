@@ -302,6 +302,10 @@ refuses, such as one holding a `\`), and `typst::invalid_utf8`. The plate is
 the one file a refused path cannot merely skip: the world loads it at its
 declared path, and any stand-in name may belong to a file the quill holds.
 
+A project source importing the helper any way but as a module fails `open` and
+`workspace` with `typst::helper_import` before anything compiles, one error per
+import, located at it ([PLATE_DATA.md](PLATE_DATA.md#typst-helper-package)).
+
 ## Validation message contract
 
 Field-level validation diagnostics (`validation::type_mismatch`) emit a single
@@ -386,8 +390,8 @@ confused with it:
   ([CARDS.md](CARDS.md)), and the plate-space geometry address a plate's `$path`
   mints: a `.`-separated run under an optional `$cards.<kind>.<ordinal>` head,
   where an all-digit segment is an array index (`references.0`) and `$body` the
-  body terminal. A template-author contract (`form-field(field: "refs.2")`,
-  `display(..)`, every published `form.json`), so it keeps its own spelling
+  body terminal. A template-author contract (`qm.form-field(field: "refs.2")`,
+  `qm.ink(..)`, every published `form.json`), so it keeps its own spelling
   (renaming it is a blast radius) and translates to `DocPath` before it crosses.
 - **Schema-space coercion anchors**: `CoercionError` keeps its own
   `card_kinds.<kind>.<field>` / bare-field anchors, a schema-declaration

@@ -1,9 +1,9 @@
-#import "@local/quillmark-helper:0.1.0": data, display, form-field, signature-field
+#import "@local/quillmark-helper:0.2.0" as qm
 #import "@local/tonguetoquill-usaf-memo:3.0.0": backmatter, date-pattern, frontmatter, indorsement, mainmatter
 
 // A memo has no "no style" state, so the blank takes the package's default.
 // Resolved once here: `frontmatter` and the date's pattern must agree.
-#let memo_style = if data.memo_style != "" { data.memo_style } else { "usaf" }
+#let memo_style = if qm.data.memo_style != "" { qm.data.memo_style } else { "usaf" }
 
 // A blank date is dated by hand at signing, so it renders as a text widget bound
 // to the date's schema address: typeable in a PDF reader, and the one thing that
@@ -28,8 +28,8 @@
 // that span's right edge and overruns leftwards, into the whitespace a printed
 // date grows into.
 #let dating-field(name, field) = {
-  let date_size = data.font_size * 1pt
-  form-field(
+  let date_size = qm.data.font_size * 1pt
+  qm.form-field(
     name,
     type: "text",
     width: 10 * date_size,
@@ -44,15 +44,15 @@
 // Frontmatter configuration
 #show: frontmatter.with(
   // Letterhead configuration
-  letterhead_title: data.letterhead_title,
-  letterhead_caption: data.letterhead_caption,
-  letterhead_seal_subtitle: data.letterhead_seal_subtitle,
+  letterhead_title: qm.data.letterhead_title,
+  letterhead_caption: qm.data.letterhead_caption,
+  letterhead_seal_subtitle: qm.data.letterhead_seal_subtitle,
   // Every enum branch below covers `values ∪ blank`: an `else` that swallows the
   // blank renders a variant nobody picked. Here the blank omits the seal, which
   // is what `frontmatter`'s own `letterhead_seal: none` default means.
-  ..if data.letterhead_seal != "" {
+  ..if qm.data.letterhead_seal != "" {
     (letterhead_seal: image(
-      if data.letterhead_seal == "dod" {
+      if qm.data.letterhead_seal == "dod" {
         "assets/dod_seal.png"
       } else {
         "assets/dow_seal.png"
@@ -60,41 +60,41 @@
     ))
   },
 
-  // Date. `data.date` is the native `datetime` and would render identically,
+  // Date. `qm.data.date` is the native `datetime` and would render identically,
   // but its ink would be born inside the package and carry no schema address.
-  // `display` places the field's *content* projection instead: the glyphs are
-  // born in the generated helper, so the memo date stays click-to-edit however
-  // deep the package formats it. A blank date yields `none`, which seats
-  // `dating_field` in the date's slot instead.
-  date: display("date", date-pattern(memo-style: memo_style)),
+  // `qm.ink` places the field's ink instead: the glyphs are born in the
+  // generated helper, so the memo date stays click-to-edit however deep the
+  // package formats it. A blank date yields `none`, which seats `dating_field`
+  // in the date's slot instead.
+  date: qm.ink(qm.data, "date", date-pattern(memo-style: memo_style)),
   dating_field: dating-field("Date", "date"),
 
   // Receiver information
-  memo_for: data.memo_for,
+  memo_for: qm.data.memo_for,
 
   // Sender information (omitted for Memorandum for Record). Every declared
   // field arrives filled, so the empty *value* is the signal here, not absence.
-  ..if data.memo_from.len() > 0 { (memo_from: data.memo_from) },
+  ..if qm.data.memo_from.len() > 0 { (memo_from: qm.data.memo_from) },
 
   // Subject line
-  subject: data.subject,
+  subject: qm.data.subject,
 
-  references: data.references,
-  footer_tag_line: data.tag_line,
-  classification_level: data.classification.value,
-  dissemination: data.dissemination,
+  references: qm.data.references,
+  footer_tag_line: qm.data.tag_line,
+  classification_level: qm.data.classification.value,
+  dissemination: qm.data.dissemination,
 
   // CUI designation indicator block fields (DoDM 5200.48). `classification`
   // declares a `CUI` variant, so these four exist only where the discriminant
   // reads CUI and the branch is what makes reading them total: inside it every
   // declared field of that world is present, outside it none is. The package's
   // own `cui_*: none` defaults cover the worlds that omit them.
-  ..if data.classification.value == "CUI" {
+  ..if qm.data.classification.value == "CUI" {
     (
-      cui_controlled_by: data.classification.controlled_by,
-      cui_category: data.classification.category,
-      cui_limited_dissemination: data.classification.limited_dissemination,
-      cui_poc: data.classification.poc,
+      cui_controlled_by: qm.data.classification.controlled_by,
+      cui_category: qm.data.classification.category,
+      cui_limited_dissemination: qm.data.classification.limited_dissemination,
+      cui_poc: qm.data.classification.poc,
     )
   },
 
@@ -104,7 +104,7 @@
   memo_style: memo_style,
 
   // Font size
-  font_size: data.font_size * 1pt,
+  font_size: qm.data.font_size * 1pt,
 
   // List recipients in vertical list
   memo_for_cols: 1,
@@ -115,22 +115,22 @@
 // auto-numbering), but the rebuilt glyphs keep their spans, which is what
 // the backend reads regions from.
 #mainmatter[
-  #data.at("$body")
+  #qm.data.at("$body")
 ]
 
 // Backmatter
 #backmatter(
   // Signature block
-  signature_block: data.signature_block,
-  signing_field: signature-field("Signature", field: "signature_block"),
+  signature_block: qm.data.signature_block,
+  signing_field: qm.signature-field("Signature", field: "signature_block"),
 
-  cc: data.cc,
-  distribution: data.distribution,
-  attachments: data.attachments,
+  cc: qm.data.cc,
+  distribution: qm.data.distribution,
+  attachments: qm.data.attachments,
 )
 
 // Indorsements - iterate through CARDS array and filter by CARD tag
-#for (i, card) in data.at("$cards").enumerate() {
+#for (i, card) in qm.data.at("$cards").enumerate() {
   if card.at("$kind", default: none) == "indorsement" {
     // The quillmark helper leaves an unset/whitespace-only markdown body as
     // the empty string `""`; only non-empty bodies are eval'd into content.
@@ -142,14 +142,11 @@
     // it (distinct from the originating memo's date). The signing date is
     // generally unknown at compile time and filled in by hand, so a blank date
     // renders a fill-in line rather than stamping the compile date.
-    // The card's own address, composed from its `$path` prefix: `display`
-    // takes an address, so a per-card call yields a per-card region even
-    // though every iteration shares one `card` loop variable. `none` for a
-    // blank date, which is the fill-in case below.
-    let resolved_date = display(
-      card.at("$path") + "date",
-      date-pattern(memo-style: memo_style),
-    )
+    // The card's own date ink, addressed through its `$path` prefix, so a
+    // per-card call yields a per-card region even though every iteration
+    // shares one `card` loop variable. `none` for a blank date, which is the
+    // fill-in case below.
+    let resolved_date = qm.ink(card, "date", date-pattern(memo-style: memo_style))
     // A filled date regions through that call; a blank one through the widget.
     let dating_field = dating-field("Ind_" + str(i) + "_Date", card.at("$path") + "date")
     // The card's `$path` prefix composes its canonical schema addresses
@@ -165,7 +162,7 @@
       // field is there.
       to: card.at("for"),
       signature_block: card.signature_block,
-      signing_field: signature-field(
+      signing_field: qm.signature-field(
         "Ind_" + str(i) + "_Signature",
         field: card.at("$path") + "signature_block",
       ),

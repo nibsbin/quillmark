@@ -694,6 +694,13 @@ export class LiveSession {
 	}
 
 	/**
+	 * @returns {import('./runtime.d.ts').FieldCoverage[]}
+	 */
+	coverage() {
+		return this.#inner.coverage();
+	}
+
+	/**
 	 * @param {number} page
 	 * @param {number} x
 	 * @param {number} y

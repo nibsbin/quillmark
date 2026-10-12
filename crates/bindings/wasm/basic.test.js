@@ -44,9 +44,9 @@ author: Test Author
 
 This is a test document.`
 
-const TEST_PLATE = `#import "@local/quillmark-helper:0.1.0": data
-#let title = data.title
-#let body = data.at("$body")
+const TEST_PLATE = `#import "@local/quillmark-helper:0.2.0" as qm
+#let title = qm.data.title
+#let body = qm.data.at("$body")
 
 = #title
 
@@ -202,9 +202,9 @@ main:
       items:
         type: richtext
 `
-    const NOTES_PLATE = `#import "@local/quillmark-helper:0.1.0": data
+    const NOTES_PLATE = `#import "@local/quillmark-helper:0.2.0" as qm
 
-#data.at("$body")`
+#qm.data.at("$body")`
 
     const engine = new Quillmark()
     const quill = Quill.fromTree(
@@ -1122,8 +1122,8 @@ count: "not-a-number"
 // (`core/src/quill/blueprint.rs`, `core/src/quill/resolved.rs`). Here: the
 // schema DTO's shape and an unanswered cell reaching render.
 describe('value schema model', () => {
-  // The plate reads `data.title` (no default) and substitutes the optional
-  // `data.subtitle` if present, so one quill carries both cell states.
+  // The plate reads `qm.data.title` (no default) and substitutes the optional
+  // `qm.data.subtitle` if present, so one quill carries both cell states.
   const SCHEMA_QUILL_YAML = `quill:
   name: schema_test
   version: "1.0"
@@ -1144,10 +1144,10 @@ main:
       description: Document subtitle (defaulted, shippable)
 `
 
-  const SCHEMA_PLATE = `#import "@local/quillmark-helper:0.1.0": data
-#let title = data.title
-#let subtitle = data.at("subtitle", default: "")
-#let body = data.at("$body")
+  const SCHEMA_PLATE = `#import "@local/quillmark-helper:0.2.0" as qm
+#let title = qm.data.title
+#let subtitle = qm.data.at("subtitle", default: "")
+#let body = qm.data.at("$body")
 
 = #title
 

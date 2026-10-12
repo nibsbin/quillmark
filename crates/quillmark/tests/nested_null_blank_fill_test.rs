@@ -15,7 +15,7 @@ fn create_test_quill(temp_dir: &TempDir, quill_yaml: &str) -> std::path::PathBuf
     fs::write(quill_path.join("Quill.yaml"), quill_yaml).unwrap();
     fs::write(
         quill_path.join("plate.typ"),
-        "#import \"@local/quillmark-helper:0.1.0\": data\n= Document\n#data",
+        "#import \"@local/quillmark-helper:0.2.0\" as qm\n= Document\n#qm.data",
     )
     .unwrap();
     quill_path

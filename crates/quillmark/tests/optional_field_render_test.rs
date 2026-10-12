@@ -40,7 +40,7 @@ fn render(plate: &str, fields: &str) -> Result<(), String> {
     fs::write(
         quill_path.join("plate.typ"),
         format!(
-            "#import \"@local/quillmark-helper:0.1.0\": data\n{plate}\nok\n"
+            "#import \"@local/quillmark-helper:0.2.0\" as qm\n{plate}\nok\n"
         ),
     )
     .unwrap();
@@ -59,18 +59,17 @@ fn render(plate: &str, fields: &str) -> Result<(), String> {
 #[test]
 fn an_unanswered_optional_cell_is_none() {
     let plate = r#"
-#assert.eq(data.quorum, none)
-#assert.eq(data.attendees, none)
-#assert.eq(data.adjourned, none)
-#assert.eq(data.minutes, none)
-#assert.eq((data.tally.votes_against, data.tally.votes_for), (0, none))
-#assert.eq("n" + data.quorum, "n")
-#import "@local/quillmark-helper:0.1.0": display, ink
+#assert.eq(qm.data.quorum, none)
+#assert.eq(qm.data.attendees, none)
+#assert.eq(qm.data.adjourned, none)
+#assert.eq(qm.data.minutes, none)
+#assert.eq((qm.data.tally.votes_against, qm.data.tally.votes_for), (0, none))
+#assert.eq("n" + qm.data.quorum, "n")
 #for key in ("quorum", "attendees", "adjourned", "minutes") {
-  assert.eq(ink(data).at(key), none)
+  assert.eq(qm.ink(qm.data, key), none)
 }
-#assert.eq(ink(data.tally).votes_for, none)
-#assert.eq(display(data, "adjourned", "[year]"), none)
+#assert.eq(qm.ink(qm.data.tally, "votes_for"), none)
+#assert.eq(qm.ink(qm.data, "adjourned", "[year]"), none)
 "#;
     render(plate, "").expect("the plate saw every unanswered cell as none");
 }
@@ -78,11 +77,10 @@ fn an_unanswered_optional_cell_is_none() {
 #[test]
 fn an_authored_zero_is_an_answer() {
     let plate = r#"
-#assert.eq(data.quorum, 0)
-#assert.eq(data.attendees, ())
-#assert.eq(data.adjourned.year(), 2026)
-#import "@local/quillmark-helper:0.1.0": ink
-#assert.eq(ink(data).attendees, ())
+#assert.eq(qm.data.quorum, 0)
+#assert.eq(qm.data.attendees, ())
+#assert.eq(qm.data.adjourned.year(), 2026)
+#assert.eq(qm.ink(qm.data, "attendees"), ())
 "#;
     render(plate, "quorum: 0\nattendees: []\nadjourned: 2026-09-24\n")
         .expect("the plate saw each authored value as written");

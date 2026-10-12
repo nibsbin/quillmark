@@ -51,12 +51,12 @@ fn da(w: &lopdf::Dictionary) -> String {
 }
 
 const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": form-field
+#import "@local/quillmark-helper:0.2.0" as qm
 
 #set page(width: 600pt, height: 400pt, margin: 50pt)
-#form-field("plain", type: "text")
-#form-field("dated", type: "text", font: "times", size: 12pt, align: "right")
-#form-field("centred", type: "text", font: "courier", align: "center")
+#qm.form-field("plain", type: "text")
+#qm.form-field("dated", type: "text", font: "times", size: 12pt, align: "right")
+#qm.form-field("centred", type: "text", font: "courier", align: "center")
 "#;
 
 /// The base fonts `/DR` `/Font` registers, sorted.
@@ -100,10 +100,10 @@ fn the_dials_reach_da_q_and_dr() {
 fn untouched_fields_register_helvetica_alone() {
     let (doc, af, _) = acroform(
         r#"
-#import "@local/quillmark-helper:0.1.0": form-field
+#import "@local/quillmark-helper:0.2.0" as qm
 
 #set page(width: 600pt, height: 400pt, margin: 50pt)
-#form-field("a", type: "text")
+#qm.form-field("a", type: "text")
 "#,
     );
     assert_eq!(dr_base_fonts(&doc, &af), ["Helvetica"]);
@@ -121,7 +121,7 @@ fn a_dial_the_widget_cannot_honour_is_rejected() {
         ("type: \"signature\", align: \"right\"", "text fields only"),
     ] {
         let e = compile(&format!(
-            "#import \"@local/quillmark-helper:0.1.0\": form-field\n#form-field(\"t\", {call})\n"
+            "#import \"@local/quillmark-helper:0.2.0\" as qm\n#qm.form-field(\"t\", {call})\n"
         ))
         .expect_err(&format!("{call} must not compile"));
         assert!(

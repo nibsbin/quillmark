@@ -70,7 +70,9 @@ pub fn workspace(source: &Quill, json_data: &serde_json::Value) -> Result<Worksp
             "the quill declares no `typst.plate_file`".to_string(),
         ));
     };
-    let warnings = crate::quill_world(source, &plate)?.load_warnings().to_vec();
+    let world = crate::quill_world(source, &plate)?;
+    crate::check_helper_imports(&world)?;
+    let warnings = world.load_warnings().to_vec();
 
     let meta = SchemaMeta::from_config(source.config());
     let (lib_typ, _) = helper::generate_lib_typ(json_data, &meta)

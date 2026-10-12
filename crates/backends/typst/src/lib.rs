@@ -47,10 +47,6 @@ struct TypstSession {
     /// Built once at `open`: the schema never changes for a session's lifetime,
     /// and codegen plus date validation read only these tables.
     schema_meta: SchemaMeta,
-    /// Project sources are static for a session's lifetime, so these are
-    /// computed once at `open` and re-appended into the compile's windows per
-    /// update.
-    scalar_windows: Vec<overlay::FieldWindow>,
     /// Swapped whole, and only once [`recompile`] has succeeded, so on `Err`
     /// every read keeps serving the last-good compile.
     live: Compiled,
@@ -64,8 +60,8 @@ struct Compiled {
     /// stamps.
     field_specs: Vec<quillmark_pdf::FieldSpec>,
     widget_regions: Vec<RenderedRegion>,
-    /// The span scan's classification table: generated content-block windows
-    /// then the project sources' scalar reference-site windows.
+    /// The span scan's classification table: every generated ink window in the
+    /// helper, in byte order.
     windows: Vec<overlay::FieldWindow>,
     /// Span resolution goes through this snapshot, not the world: a failed
     /// `update` leaves the *next* injection's text in the world while every read
@@ -90,12 +86,10 @@ fn recompile(
     data: &serde_json::Value,
     config: &QuillConfig,
     schema_meta: &SchemaMeta,
-    scalar_windows: &[overlay::FieldWindow],
 ) -> Result<Compiled, RenderError> {
-    let mut windows = world
+    let windows = world
         .inject_helper_package(data, schema_meta)
         .map_err(|e| RenderError::coded(e.code(), e.to_string()))?;
-    windows.extend(scalar_windows.iter().cloned());
 
     let (document, compile_warnings) = compile::compile_document(world)?;
     let helper_source = helper_source(world)?;
@@ -136,9 +130,9 @@ fn session_warnings(
     all.extend(unclosed.iter().map(|(_, field)| {
         Diagnostic::new(
             Severity::Warning,
-            format!("`field-region(\"{field}\")` never closed; its claim was dropped"),
+            format!("`region(\"{field}\", ..)` never closed; its claim was dropped"),
         )
-        .with_code("typst::unclosed_field_region".to_string())
+        .with_code("typst::unclosed_region".to_string())
         .with_hint(
             "both markers must reach the frame together, so emit the call's \
              return value whole rather than in parts"
@@ -256,13 +250,7 @@ impl SessionHandle for TypstSession {
         config: &QuillConfig,
         json_data: &serde_json::Value,
     ) -> Result<ChangeSet, RenderError> {
-        let compiled = recompile(
-            &mut self.world,
-            json_data,
-            config,
-            &self.schema_meta,
-            &self.scalar_windows,
-        )?;
+        let compiled = recompile(&mut self.world, json_data, config, &self.schema_meta)?;
 
         let page_count = compiled.page_hashes.len();
         let dirty_pages = (0..page_count)
@@ -355,7 +343,6 @@ impl TypstSession {
     fn scan(&self) -> overlay::Scan<'_> {
         overlay::Scan {
             doc: &self.live.document,
-            world: &self.world,
             helper: &self.live.helper_source,
             windows: &self.live.windows,
             unclosed: &self.live.unclosed_claims,
@@ -370,6 +357,56 @@ fn quill_world(source: &Quill, plate: &Plate) -> Result<world::QuillWorld, Rende
             format!("Failed to create Typst compilation environment: {e}"),
         )
     })
+}
+
+/// One `typst::helper_import` error per import of the helper a project source
+/// spells any way but `#import "@local/quillmark-helper:<version>" as <name>`.
+/// The module form is what keeps the helper's names out of a plate's own scope:
+/// the one name it binds is the one the plate chose.
+pub(crate) fn check_helper_imports(world: &world::QuillWorld) -> Result<(), RenderError> {
+    use typst::syntax::ast;
+    use typst::syntax::{DiagSpan, SyntaxNode};
+
+    fn walk(node: &SyntaxNode, world: &world::QuillWorld, out: &mut Vec<Diagnostic>) {
+        if let Some(import) = node.cast::<ast::ModuleImport>() {
+            let ast::Expr::Str(spec) = import.source() else {
+                return;
+            };
+            let spec = spec.get();
+            let helper = format!("@{}/{}:", helper::HELPER_NAMESPACE, helper::HELPER_NAME);
+            let current = format!("{helper}{}", helper::HELPER_VERSION);
+            let module_form = import.imports().is_none() && import.new_name().is_some();
+            if spec.starts_with(&helper) && (spec != current || !module_form) {
+                let mut diag = Diagnostic::new(
+                    Severity::Error,
+                    format!("the helper is imported as a module: `#import \"{current}\" as qm`"),
+                )
+                .with_code("typst::helper_import".to_string())
+                .with_hint(
+                    "read every helper member through the module name: `qm.data`, \
+                     `qm.ink(..)`, `qm.region(..)`"
+                        .to_string(),
+                );
+                diag.location =
+                    error_mapping::resolve_span_to_location(DiagSpan::from(node.span()), world);
+                out.push(diag);
+            }
+            return;
+        }
+        for child in node.children() {
+            walk(child, world, out);
+        }
+    }
+
+    let mut diags = Vec::new();
+    for source in world.project_sources() {
+        walk(source.root(), world, &mut diags);
+    }
+    if diags.is_empty() {
+        Ok(())
+    } else {
+        Err(RenderError::new(diags))
+    }
 }
 
 /// Snapshotted right after a successful compile: the text the served document's
@@ -409,26 +446,11 @@ impl Backend for TypstBackend {
         // diagnostic code survives: boxing it into the world-creation error would
         // relabel a bad date `typst::world_creation`.
         let mut world = quill_world(source, &plate)?;
+        check_helper_imports(&world)?;
         world.set_today(today);
-        // Project sources are static for the session: window their scalar
-        // sites once.
-        let scalar_windows: Vec<overlay::FieldWindow> = world
-            .project_sources()
-            .into_iter()
-            .flat_map(|source| {
-                overlay::scalar_windows(source, &schema_meta.root)
-                    .into_iter()
-                    .map(|(path, range)| overlay::FieldWindow {
-                        path,
-                        file: source.id(),
-                        range,
-                        segments: Vec::new(),
-                    })
-            })
-            .collect();
         // No session survives to serve the load warnings, and a package they
         // name as skipped otherwise fails only as an unresolved import.
-        let live = recompile(&mut world, json_data, config, &schema_meta, &scalar_windows).map_err(|e| {
+        let live = recompile(&mut world, json_data, config, &schema_meta).map_err(|e| {
             let mut diags = e.into_diagnostics();
             diags.extend(world.load_warnings().iter().cloned());
             RenderError::new(diags)
@@ -436,7 +458,6 @@ impl Backend for TypstBackend {
         let session = TypstSession {
             world,
             schema_meta,
-            scalar_windows,
             live,
         };
         Ok(LiveSession::new(
@@ -568,8 +589,8 @@ fn plate_spelling_hint(plate_file: &str, source: &Quill) -> String {
 /// about the schema alone.
 #[derive(Debug, Default, Clone)]
 pub(crate) struct AddressNode {
-    pub(crate) props: BTreeMap<String, AddressNode>,
-    pub(crate) item: Option<Box<AddressNode>>,
+    props: BTreeMap<String, AddressNode>,
+    item: Option<Box<AddressNode>>,
     added: Option<Box<AddressNode>>,
     roster: Option<serde_json::Value>,
 }
@@ -604,22 +625,6 @@ impl AddressNode {
             added,
             roster,
         }
-    }
-
-    /// The node `path` addresses, or `None` where it takes a step the schema
-    /// does not offer. A digit segment is the index step; any other is a
-    /// property step, or an open matrix's added step.
-    pub(crate) fn resolve(&self, path: &str) -> Option<&Self> {
-        path.split('.').try_fold(self, |node, seg| {
-            match seg.bytes().all(|b| b.is_ascii_digit()) && !seg.is_empty() {
-                true => node.item.as_deref(),
-                false => node.props.get(seg).or_else(|| {
-                    node.added
-                        .as_deref()
-                        .filter(|_| QuillConfig::is_snake_case_identifier(seg))
-                }),
-            }
-        })
     }
 
     /// The generated `_qm-meta` shape: absent keys are absent steps, so a leaf
@@ -658,10 +663,10 @@ pub(crate) struct SchemaMeta {
     /// The walk's cursor source: the same recursive projection
     /// `build_transform_schema` produced, kept whole rather than flattened.
     schema: serde_json::Value,
-    /// Native rather than JSON: the span scan reads it on the AST walk, and
-    /// [`AddressNode::to_json`] serializes it for the helper either way.
-    pub(crate) root: AddressNode,
-    pub(crate) cards: BTreeMap<String, AddressNode>,
+    /// The address trees [`address_json`](Self::address_json) serializes into
+    /// [`meta_literal`](Self::meta_literal).
+    root: AddressNode,
+    cards: BTreeMap<String, AddressNode>,
     /// Serialized once: the schema is fixed for a session's lifetime, and every
     /// update splices this same literal into the generated `lib.typ`.
     meta_literal: String,
@@ -759,10 +764,10 @@ mod tests {
     fn page_hashes_ignore_span_shift_when_ink_is_identical() {
         use quillmark_core::quill::FileTreeNode;
 
-        const PLATE: &str = r#"#import "@local/quillmark-helper:0.1.0": data
+        const PLATE: &str = r#"#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 300pt, height: 200pt, margin: 20pt)
 #set text(size: 11pt)
-#data.body
+#qm.data.body
 "#;
         let quill_with = |extra_field: bool| {
             let mut yaml = String::from(
@@ -819,10 +824,10 @@ mod tests {
         use typst::introspection::Introspector;
         use typst::model::{EnumElem, HeadingElem, ListElem, TermsElem};
 
-        const PLATE: &str = r#"#import "@local/quillmark-helper:0.1.0": data
+        const PLATE: &str = r#"#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 300pt, height: 400pt, margin: 20pt)
 #set text(size: 11pt)
-#data.body
+#qm.data.body
 "#;
         let quill = || {
             let yaml = "quill:\n  name: anchor\n  version: 0.1.0\n  backend: typst\n  description: line-anchor guard\ntypst:\n  plate_file: plate.typ\nmain:\n  fields:\n    body:\n      type: richtext\n      description: body\n";
@@ -900,10 +905,10 @@ mod tests {
     fn inline_field_in_par_emits_no_parbreak_warning() {
         use quillmark_core::quill::FileTreeNode;
 
-        const PLATE: &str = r#"#import "@local/quillmark-helper:0.1.0": data
+        const PLATE: &str = r#"#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 300pt, height: 200pt, margin: 20pt)
 #set text(size: 11pt)
-#par(data.subject)
+#par(qm.data.subject)
 "#;
         let quill = |inline: bool| {
             let inline_line = if inline { "      inline: true\n" } else { "" };

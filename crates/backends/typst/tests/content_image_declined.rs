@@ -36,14 +36,14 @@ card_kinds:
 "#;
 
 const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 300pt, height: 300pt, margin: 20pt)
 
 #image("assets/logo.svg", width: 16pt)
 
-#data.at("intro", default: [])
-#data.at("$body", default: [])
-#for card in data.at("$cards", default: ()) [#card.at("$body", default: [])]
+#qm.data.at("intro", default: [])
+#qm.data.at("$body", default: [])
+#for card in qm.data.at("$cards", default: ()) [#card.at("$body", default: [])]
 "#;
 
 const LOGO: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"

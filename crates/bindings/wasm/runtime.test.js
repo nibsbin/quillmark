@@ -34,9 +34,9 @@ import {
 // door to the core surface.
 const { Quill, Document, importMarkdown, exportMarkdown } = await init()
 
-const TEST_PLATE = `#import "@local/quillmark-helper:0.1.0": data
-#let title = data.title
-#let body = data.at("$body")
+const TEST_PLATE = `#import "@local/quillmark-helper:0.2.0" as qm
+#let title = qm.data.title
+#let body = qm.data.at("$body")
 
 = #title
 
@@ -952,6 +952,9 @@ A single line of body ink.`
       // A field with no span-bearing region has no derived content box.
       expect(session.fieldBoxes('does_not_exist')).toEqual([])
 
+      // coverage: each filled address and the region reaching it, by DocPath.
+      expect(session.coverage()).toEqual([{ field: 'main.body', coveredBy: 'main.body' }])
+
       // positionAt: the fine-grained click direction, carrying the granularity
       // signal. A hit on the single line's ink is cluster-exact.
       expect(typeof session.positionAt).toBe('function')
@@ -1364,9 +1367,9 @@ main:
   fields:
     issued: { type: date, default: today }
 `
-  const PLATE = `#import "@local/quillmark-helper:0.1.0": data
-#assert.eq(data.issued, datetime.today())
-#assert.eq(data.issued, datetime(year: 2026, month: 3, day: 14))`
+  const PLATE = `#import "@local/quillmark-helper:0.2.0" as qm
+#assert.eq(qm.data.issued, datetime.today())
+#assert.eq(qm.data.issued, datetime(year: 2026, month: 3, day: 14))`
 
   const quill = () => Quill.fromTree(makeQuill({ name: 'dated', plate: PLATE, quillYaml: QUILL_YAML }))
   const doc = () => Document.fromMarkdown('~~~card-yaml\n$quill: dated\n$kind: main\n~~~\n')

@@ -30,7 +30,7 @@ fn quill(plate: &str) -> (TempDir, quillmark::Quill) {
     fs::write(quill_path.join("Quill.yaml"), QUILL_YAML).unwrap();
     fs::write(
         quill_path.join("plate.typ"),
-        format!("#import \"@local/quillmark-helper:0.1.0\": data\n{plate}\nok\n"),
+        format!("#import \"@local/quillmark-helper:0.2.0\" as qm\n{plate}\nok\n"),
     )
     .unwrap();
     let quill = quillmark::quill_from_path(&quill_path).expect("load quill");
@@ -50,9 +50,9 @@ fn svg() -> RenderOptions {
 fn the_field_and_the_plate_read_the_supplied_date() {
     let (_dir, quill) = quill(
         r#"
-#assert.eq(data.issued, datetime.today())
-#assert.eq(data.issued, datetime(year: 2026, month: 3, day: 14))
-#assert.eq(data.signed, none)
+#assert.eq(qm.data.issued, datetime.today())
+#assert.eq(qm.data.issued, datetime(year: 2026, month: 3, day: 14))
+#assert.eq(qm.data.signed, none)
 "#,
     );
     let today: CalendarDate = "2026-03-14".parse().unwrap();

@@ -48,7 +48,10 @@ pub use quillmark_core::{
         ParseDateError, Quill, QuillConfig, QuillIgnore, ValidationError, EXAMPLE_FILE,
     },
     reader::{CardReader, TypedReader},
-    region::{ContentHit, HitGranularity, RenderedRegion},
+    region::{
+        coverage, plate_addr_to_doc_path, ContentHit, FieldCoverage, HitGranularity,
+        RenderedRegion,
+    },
     session::{ChangeBundle, ChangeSet, Delta, LiveSession},
     types::{Artifact, OutputFormat, RenderOptions},
     value::{PathSegment, QuillValue},

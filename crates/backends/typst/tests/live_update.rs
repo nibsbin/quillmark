@@ -8,10 +8,10 @@ use serde_json::json;
 
 mod common;
 
-const PLATE: &str = r#"#import "@local/quillmark-helper:0.1.0": data
+const PLATE: &str = r#"#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 300pt, height: 200pt, margin: 20pt)
 #set text(size: 11pt)
-#data.at("msg")
+#qm.data.at("msg")
 "#;
 
 fn quill() -> Quill {
@@ -81,12 +81,12 @@ main:
       type: richtext
       description: a markdown note
 "#;
-    const PLATE: &str = r#"#import "@local/quillmark-helper:0.1.0": data
+    const PLATE: &str = r#"#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 300pt, height: 200pt, margin: 20pt)
 #set text(size: 11pt)
-#data.body
+#qm.data.body
 
-#data.note
+#qm.data.note
 "#;
     common::quill_with_plate(YAML, PLATE)
 }

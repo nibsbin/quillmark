@@ -1145,7 +1145,7 @@ impl PyRenderResult {
     /// bottom-left origin and page indices document-space. `field` is a `DocPath`
     /// address, as the document APIs use. Content fields carry one entry per
     /// segment (paragraph, heading, code fence) and page, each `span` the covered
-    /// USV range; widgets and scalar reference sites carry `span: None`. Group by
+    /// USV range; scalar ink, claims and widgets carry `span: None`. Group by
     /// `field` and union the segment rects for the whole-field box.
     #[getter]
     fn regions<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyDict>>> {

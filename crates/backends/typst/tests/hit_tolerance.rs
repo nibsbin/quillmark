@@ -15,13 +15,13 @@ const SCHEMA: &str = "main:\n  fields:\n    intro: { type: richtext }\n    body:
 const WIDGET_SCHEMA: &str = "main:\n  fields:\n    blank: { type: string }\n    body: { type: richtext }\n";
 
 const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 400pt, height: 300pt, margin: 30pt)
 #set text(size: 11pt)
 
-#data.intro
+#qm.data.intro
 
-#data.body
+#qm.data.body
 "#;
 
 fn open() -> LiveSession {
@@ -239,15 +239,15 @@ fn a_non_finite_point_resolves_to_nothing() {
 }
 
 const WIDGET_PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data, form-field
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 400pt, height: 300pt, margin: 30pt)
 #set text(size: 11pt)
 
-#form-field("blank", type: "text", field: "blank", width: 60pt, height: 20pt)
+#qm.form-field("blank", type: "text", field: "blank", width: 60pt, height: 20pt)
 
 #v(40pt)
 
-#data.body
+#qm.data.body
 "#;
 
 fn open_with_widget() -> LiveSession {
@@ -290,14 +290,14 @@ fn raising_the_tolerance_never_moves_a_click_to_a_farther_field() {
 }
 
 const OVERLAID_PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": data, form-field
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 400pt, height: 300pt, margin: 30pt)
 #set text(size: 11pt)
 
-#data.body
+#qm.data.body
 
 #place(top + left, dx: 40pt, dy: 40pt,
-  form-field("blank", type: "text", field: "blank", width: 60pt, height: 20pt))
+  qm.form-field("blank", type: "text", field: "blank", width: 60pt, height: 20pt))
 "#;
 
 fn open_with_overlaid_widget() -> LiveSession {

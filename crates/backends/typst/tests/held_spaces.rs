@@ -15,11 +15,11 @@ fn body_session(markdown: &str) -> LiveSession {
             &quill(
                 &yaml("main:\n  fields:\n    body: { type: richtext }\n"),
                 r#"
-#import "@local/quillmark-helper:0.1.0": data
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 612pt, height: 792pt, margin: 72pt)
 #set text(size: 11pt)
 
-#data.body
+#qm.data.body
 "#,
             ),
             &serde_json::json!({ "body": content(markdown) }),
