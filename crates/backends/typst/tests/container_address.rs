@@ -277,3 +277,30 @@ fn a_blank_date_still_projects_none() {
         .open(&common::quill_with_plate(YAML, plate), &blank, common::test_date())
         .expect("a blank date compiles");
 }
+
+/// Spreading a typed dictionary into a function passes its `$path` as a named
+/// argument; the failure hints the sink, and the sink compiles.
+#[test]
+fn spreading_a_typed_dictionary_hints_its_path_key() {
+    let plate = r#"
+#import "@local/quillmark-helper:0.2.0" as qm
+#let line(city: none, street: none) = [#street, #city]
+#line(..qm.data.address)
+"#;
+    let quill = common::quill_with_plate(YAML, plate);
+    let diags = match TypstBackend.open(&quill, &data(), common::test_date()) {
+        Ok(_) => panic!("the spread must fail"),
+        Err(e) => e.into_diagnostics(),
+    };
+    let diag = diags
+        .iter()
+        .find(|d| d.message.contains("$path"))
+        .unwrap_or_else(|| panic!("an unexpected `$path`: {diags:?}"));
+    let hint = diag.hint.as_deref().expect("a hint");
+    assert!(hint.contains("..rest"), "{hint}");
+
+    let sunk = plate.replace("street: none)", "street: none, ..rest)");
+    TypstBackend
+        .open(&common::quill_with_plate(YAML, &sunk), &data(), common::test_date())
+        .expect("the hinted sink takes `$path`");
+}

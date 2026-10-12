@@ -26,7 +26,8 @@ fn map_single_diagnostic(error: &SourceDiagnostic, world: &QuillWorld) -> Diagno
         .hints
         .first()
         .map(|h| h.v.to_string())
-        .or_else(|| rooted_path_hint(&error.message, error.span, world));
+        .or_else(|| rooted_path_hint(&error.message, error.span, world))
+        .or_else(|| path_key_hint(&error.message));
 
     let mut diag = Diagnostic::new(severity, error.message.to_string());
     diag.code = Some(classify(&error.message).to_string());
@@ -61,6 +62,15 @@ fn rooted_path_hint(message: &str, span: DiagSpan, world: &QuillWorld) -> Option
             "the quill root holds `{rooted}`; a path without a leading `/` resolves \
              from the directory of the file naming it"
         )
+    })
+}
+
+/// Spreading a dictionary of plate data passes its `$path` as a named argument.
+fn path_key_hint(message: &str) -> Option<String> {
+    (message == "unexpected argument: $path").then(|| {
+        "every dictionary of plate data carries `$path`, its address: give the function a \
+         sink parameter such as `..rest` to take it, or spread the dictionary without it"
+            .to_string()
     })
 }
 
