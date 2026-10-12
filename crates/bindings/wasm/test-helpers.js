@@ -75,13 +75,12 @@ const TEST_FONT_BYTES = new Uint8Array(readFileSync(TEST_FONT_PATH))
 
 export function makeQuill({
   name = 'test_quill',
-  version = '1.0.0',
-  plate = '#import "@local/quillmark-helper:0.1.0": data\n= Test',
+  plate = '#import "@local/quillmark-helper:0.2.0" as qm\n= Test',
   quillYaml,
 } = {}) {
   const yaml = quillYaml ?? `quill:
   name: ${name}
-  version: "${version}"
+  version: "1.0.0"
   backend: typst
   description: Test quill for smoke tests
 

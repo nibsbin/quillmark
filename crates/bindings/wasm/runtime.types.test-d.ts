@@ -13,7 +13,8 @@ import type {
 	PageSize as CanonicalPageSize,
 	FieldRegion as CanonicalFieldRegion,
 	ChangeSet as CanonicalChangeSet,
-	ContentHit as CanonicalContentHit
+	ContentHit as CanonicalContentHit,
+	FieldCoverage as CanonicalFieldCoverage
   // The BUILT copy (synced from `runtime/runtime.d.ts` by build-wasm.sh / the
   // cp step), because only there does the d.ts's own `../core/wasm.js` import
   // resolve to the generated `pkg/core` build. The two copies are byte-identical.
@@ -27,7 +28,8 @@ import type {
 	PageSize as TypstPageSize,
 	FieldRegion as TypstFieldRegion,
 	ChangeSet as TypstChangeSet,
-	ContentHit as TypstContentHit
+	ContentHit as TypstContentHit,
+	FieldCoverage as TypstFieldCoverage
 } from '../../../pkg/render/wasm';
 
 // One mutual-assignability pair per hoisted type: typst → canonical and
@@ -87,6 +89,11 @@ const contentHitB: TypstContentHit = {} as CanonicalContentHit;
 void contentHitA;
 void contentHitB;
 
+const fieldCoverageA: CanonicalFieldCoverage = {} as TypstFieldCoverage;
+const fieldCoverageB: TypstFieldCoverage = {} as CanonicalFieldCoverage;
+void fieldCoverageA;
+void fieldCoverageB;
+
 const renderResultKeys: KeysEqual<CanonicalRenderResult, TypstRenderResult> = true;
 const renderOptionsKeys: KeysEqual<CanonicalRenderOptions, TypstRenderOptions> = true;
 const artifactKeys: KeysEqual<CanonicalArtifact, TypstArtifact> = true;
@@ -94,6 +101,7 @@ const pageSizeKeys: KeysEqual<CanonicalPageSize, TypstPageSize> = true;
 const fieldRegionKeys: KeysEqual<CanonicalFieldRegion, TypstFieldRegion> = true;
 const changeSetKeys: KeysEqual<CanonicalChangeSet, TypstChangeSet> = true;
 const contentHitKeys: KeysEqual<CanonicalContentHit, TypstContentHit> = true;
+const fieldCoverageKeys: KeysEqual<CanonicalFieldCoverage, TypstFieldCoverage> = true;
 void renderResultKeys;
 void renderOptionsKeys;
 void artifactKeys;
@@ -101,6 +109,7 @@ void pageSizeKeys;
 void fieldRegionKeys;
 void changeSetKeys;
 void contentHitKeys;
+void fieldCoverageKeys;
 
 // ── Re-export presence guard ────────────────────────────────────────
 // The content edit vocabulary is DECLARED in the core build but consumed through

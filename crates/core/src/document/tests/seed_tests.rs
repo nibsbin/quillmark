@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use crate::document::tests::parse;
-use crate::document::{Document, MetaKey, PayloadItem};
+use crate::document::{Document, MetaKey};
 
 #[test]
 fn seed_round_trips_through_markdown_and_storage() {
@@ -35,24 +35,6 @@ Body.
     let restored: Document = serde_json::from_str(&json).unwrap();
     assert_eq!(doc, restored);
     assert!(json.contains("\"type\":\"seed\""), "{json}");
-}
-
-#[test]
-fn set_ext_and_set_seed_insert_in_canonical_order() {
-    let mut doc = parse("~~~card-yaml\n$quill: q@1.0\n$kind: main\ntitle: Hi\n~~~\n");
-    let mut seed = serde_json::Map::new();
-    seed.insert("indorsement".into(), json!({ "from": "X" }));
-    doc.main_mut().payload_mut().set_seed(seed);
-    let mut ext = serde_json::Map::new();
-    ext.insert("rename".into(), json!("Greeting"));
-    doc.main_mut().payload_mut().set_ext(ext);
-
-    let items = doc.main().payload().items();
-    assert!(matches!(items[0], PayloadItem::Quill { .. }));
-    assert!(matches!(items[1], PayloadItem::Kind { .. }));
-    assert!(matches!(items[2], PayloadItem::Meta { key: MetaKey::Ext, .. }));
-    assert!(matches!(items[3], PayloadItem::Meta { key: MetaKey::Seed, .. }));
-    assert!(matches!(items[4], PayloadItem::Field { .. }));
 }
 
 #[test]

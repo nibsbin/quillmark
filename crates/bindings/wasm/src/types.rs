@@ -200,7 +200,8 @@ pub struct FieldRegion {
     /// `[x0, y0, x1, y1]` in PDF points (1/72″), bottom-left origin.
     pub rect: [f32; 4],
     /// The slice this box covers: USV `[start, end)` into the field's `Content`
-    /// for one content segment, `undefined` for a scalar site or widget.
+    /// for one content segment, `undefined` for a scalar's ink, a claim or a
+    /// widget.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub span: Option<[usize; 2]>,
 }
@@ -215,6 +216,21 @@ impl From<quillmark_core::region::RenderedRegion> for FieldRegion {
             span: r.span,
         }
     }
+}
+
+/// One address a compiled document fills and the region address a click
+/// reaches it through: the consumer's copy of this contract is
+/// `runtime/runtime.d.ts`.
+#[cfg(feature = "render")]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldCoverage {
+    /// Canonical `DocPath` field address, as `FieldRegion.field` spells it.
+    pub field: String,
+    /// The `DocPath` of the region reaching `field`: itself, or the nearest
+    /// enclosing address a region carries. `undefined` where no click does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub covered_by: Option<String>,
 }
 
 /// How precisely a `ContentHit.pos` resolved. Never sub-cluster: `cluster` is
@@ -337,8 +353,6 @@ mod tests {
         assert!(json.contains("\"page\":0"));
         assert!(json.contains("\"rect\":[180.0,672.0,520.0,692.0]"));
         assert!(!json.contains("\"span\""));
-        assert!(!json.contains("\"name\""));
-        assert!(!json.contains("\"kind\""));
     }
 
     /// Built without `..`: a new field fails to compile here, then fails this

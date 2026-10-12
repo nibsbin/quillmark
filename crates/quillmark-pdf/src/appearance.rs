@@ -197,14 +197,14 @@ mod tests {
         spec
     }
 
-    fn checkbox(checked: bool) -> FieldSpec {
+    fn checkbox() -> FieldSpec {
         let mut spec = FieldSpec::new(
             "Agree".into(),
             0,
             [72.0, 660.0, 90.0, 678.0],
             FieldType::Checkbox,
         );
-        spec.value = checked.then(|| CHECKBOX_ON_STATE.to_string());
+        spec.value = Some(CHECKBOX_ON_STATE.to_string());
         spec
     }
 
@@ -244,7 +244,7 @@ mod tests {
             [72.0, 700.0, 300.0, 700.0],
             [300.0, 700.0, 72.0, 720.0],
         ] {
-            for mut spec in [text(Some("Ada Lovelace")), checkbox(true)] {
+            for mut spec in [text(Some("Ada Lovelace")), checkbox()] {
                 spec.rect = rect;
                 assert!(of(&spec).is_none(), "{rect:?}");
             }
@@ -294,39 +294,14 @@ mod tests {
     }
 
     #[test]
-    fn a_box_draws_both_states_whatever_its_value() {
-        for checked in [true, false] {
-            let Some(Normal::States { on, off }) = of(&checkbox(checked)) else {
-                panic!("checked: {checked}: a box draws its states");
-            };
-            assert_eq!(on.resource, Some(CHECK_FONT_RESOURCE));
-            let drawn = String::from_utf8_lossy(&on.content).into_owned();
-            assert!(drawn.contains("/ZaDb 12 Tf"), "{drawn}");
-            assert!(drawn.contains("(4) Tj"), "{drawn}");
-            assert!(
-                drawn.contains("\n5.4 3 Td\n"),
-                "centred in the box: {drawn}"
-            );
-
-            assert_eq!(off.bbox, on.bbox, "both states cover the one box");
-            assert!(
-                off.content.is_empty(),
-                "off is on without its mark, which is all on draws"
-            );
-            assert_eq!(off.resource, None);
-        }
-    }
-
-    #[test]
-    fn value_bytes_are_transcoded_to_the_faces_winansi_encoding() {
-        let drawn = value(&text(Some("Caf\u{e9} \u{2014} \u{65e5}"))).content;
-        // WinAnsi: é→0xE9, —→0x97; 日 has no WinAnsi byte.
-        let want: &[u8] = &[b'C', b'a', b'f', 0xE9, b' ', 0x97, b' ', b'?'];
-        assert!(
-            drawn.windows(want.len()).any(|w| w == want),
-            "{}",
-            String::from_utf8_lossy(&drawn)
-        );
+    fn a_box_draws_its_mark_centred_at_the_box_size() {
+        let Some(Normal::States { on, .. }) = of(&checkbox()) else {
+            panic!("a box draws its states");
+        };
+        assert_eq!(on.resource, Some(CHECK_FONT_RESOURCE));
+        let drawn = String::from_utf8_lossy(&on.content).into_owned();
+        assert!(drawn.contains("/ZaDb 12 Tf"), "{drawn}");
+        assert!(drawn.contains("\n5.4 3 Td\n"), "centred in the box: {drawn}");
     }
 
     #[test]

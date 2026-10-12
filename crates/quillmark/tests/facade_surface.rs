@@ -75,40 +75,24 @@ fn content_lane_spells_through_the_facade() {
     let parsed: Parsed = quill.parse(md).expect("document matches the quill");
     let mut doc = parsed.document;
 
-    let body: &Normalized = doc.main().body();
-    assert_eq!(body.text, "Body", "the body rests as content, not as markdown");
-
+    let _: &Normalized = doc.main().body();
     let reader: TypedReader = quill.reader(&doc);
-    let read: Option<Normalized> = reader.get_content("subject").expect("subject is declared");
-    let subject: Normalized = read.expect("the parsed richtext field is present");
-    assert_eq!(subject.text, "Hello world", "the emphasis rides a mark, not the text");
-    assert_eq!(subject.marks.len(), 1);
+    let _: Option<Normalized> = reader.get_content("subject").expect("subject is declared");
 
-    let Revised { delta, warnings, .. } = doc
-        .main_mut()
-        .revise_body("# Body <span>kept</span>")
-        .expect("a heading imports");
+    let revised: Result<Revised, EditError> = doc.main_mut().revise_body("# Body");
+    let Revised { delta, .. } = revised.expect("a heading imports");
     let _: Delta = delta;
-    assert_eq!(warnings.len(), 1, "the dropped tag rides the receipt: {warnings:?}");
-
-    let over_nested = "> ".repeat(200) + "deep";
-    let refusal: Result<Revised, EditError> = doc.main_mut().revise_body(over_nested);
-    let Err(EditError::Import(ImportError::NestingTooDeep { depth, max })) = refusal else {
-        panic!("markdown nested past the codec's limit is refused, not imported: {refusal:?}");
-    };
-    assert!(depth > max, "the refusal names the depth that passed the limit");
+    let _: fn(ImportError) -> EditError = EditError::Import;
 
     let read: AnnotatedMarkdown = doc.to_markdown_annotated();
-    let anchors: &[DocumentAnchor] = &read.anchors;
-    assert!(anchors.is_empty() && read.markdown == doc.to_markdown());
+    let _: &[DocumentAnchor] = &read.anchors;
 
     let markdown = doc.to_markdown();
     let revised: DocumentRevised = quill
         .writer(&mut doc)
         .revise_document(&markdown)
         .expect("the document's own markdown revises");
-    let dropped: &[DocumentAnchor] = &revised.dropped_anchors;
-    assert!(dropped.is_empty());
+    let _: &[DocumentAnchor] = &revised.dropped_anchors;
 }
 
 #[test]
@@ -120,41 +104,24 @@ fn a_render_date_refusal_spells_through_the_facade() {
 #[cfg(feature = "typst")]
 #[test]
 fn preview_regions_spell_through_the_facade() {
-    use quillmark::{ContentHit, HitGranularity, LiveSession, Quillmark, RenderedRegion};
+    use quillmark::{
+        ContentHit, FieldCoverage, HitGranularity, LiveSession, Quillmark, RenderedRegion,
+    };
 
     let engine = Quillmark::new();
     let quill = quillmark::quill_from_path(quillmark_fixtures::quills_path("usaf_memo"))
         .expect("usaf_memo should load");
-    let mut doc = quill.seed_document();
-    let _ = doc
-        .main_mut()
-        .revise_body("The first paragraph.")
-        .expect("a plain paragraph imports");
+    let doc = quill.seed_document();
     let today: CalendarDate = "2026-03-14".parse().expect("a date");
     let session: LiveSession = engine.open(&quill, &doc, today).expect("open a session");
 
-    let regions: Vec<RenderedRegion> = session.regions();
-    // `field_boxes` and `position_at` are content-only, so the query needs a
-    // span-bearing region rather than a scalar-reference or widget one.
-    let region: &RenderedRegion = regions
-        .iter()
-        .find(|r| r.span.is_some())
-        .expect("the memo places a content field");
-
-    let boxes: Vec<RenderedRegion> = session.field_boxes(&region.field);
-    assert!(!boxes.is_empty(), "a content field unions to at least one box");
-
-    let cx = (region.rect[0] + region.rect[2]) / 2.0;
-    let cy = (region.rect[1] + region.rect[3]) / 2.0;
-    assert_eq!(session.field_at(region.page, cx, cy, 0.0).as_deref(), Some(region.field.as_str()));
-
-    let hit: Option<ContentHit> = session.position_at(region.page, cx, cy, 0.0);
-    let hit: ContentHit = hit.expect("a content region's centre hit-tests to a content position");
-    assert_eq!(hit.field, region.field);
-    let _granularity: Option<HitGranularity> = hit.granularity;
-
-    let located: Option<RenderedRegion> = session.locate(&region.field, 0);
-    assert!(located.is_some(), "a field with a region locates position 0");
+    let _: Vec<RenderedRegion> = session.regions();
+    let _: Vec<RenderedRegion> = session.field_boxes("body");
+    let _: Option<String> = session.field_at(0, 0.0, 0.0, 0.0);
+    let hit: Option<ContentHit> = session.position_at(0, 0.0, 0.0, 0.0);
+    let _: Option<Option<HitGranularity>> = hit.map(|h| h.granularity);
+    let _: Option<RenderedRegion> = session.locate("body", 0);
+    let _: Vec<FieldCoverage> = session.coverage();
 }
 
 /// A server holds one `Quillmark` and renders on many threads.

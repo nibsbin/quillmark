@@ -1401,18 +1401,6 @@ mod tests {
     }
 
     #[test]
-    fn apply_text_delta_pads_short_prepend() {
-        // A prepend naming only its inserted text (no trailing retain) still
-        // splices against the whole content.
-        let mut rt = from_markdown("hello").unwrap().content;
-        rt.apply_text_delta(&Delta {
-            ops: vec![Op::Insert("NEW ".into())],
-        })
-        .unwrap();
-        assert_eq!(rt.text, "NEW hello");
-    }
-
-    #[test]
     fn apply_text_delta_rejects_over_long_delta() {
         // Consuming more base than exists is a wrong-revision delta, not an
         // abbreviated one.

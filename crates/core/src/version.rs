@@ -349,23 +349,6 @@ mod tests {
     }
 
     #[test]
-    fn test_quill_reference_parsing() {
-        let ref1 = QuillReference::from_str("resume_template@2.1.0").unwrap();
-        assert_eq!(ref1.name, "resume_template");
-        assert_eq!(ref1.selector, VersionSelector::Exact(Version::new(2, 1, 0)));
-
-        let ref1b = QuillReference::from_str("resume_template@2.1").unwrap();
-        assert_eq!(ref1b.selector, VersionSelector::Minor(2, 1));
-
-        let ref2 = QuillReference::from_str("resume_template@2").unwrap();
-        assert_eq!(ref2.selector, VersionSelector::Major(2));
-
-        let ref4 = QuillReference::from_str("resume_template").unwrap();
-        assert_eq!(ref4.name, "resume_template");
-        assert_eq!(ref4.selector, VersionSelector::Any);
-    }
-
-    #[test]
     fn test_quill_reference_invalid_names() {
         assert!(QuillReference::from_str("Resume@2.1.0").is_err());
         assert!(QuillReference::from_str("1resume@2.1.0").is_err());

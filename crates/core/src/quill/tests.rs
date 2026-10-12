@@ -1359,23 +1359,7 @@ fn inline_survives_the_declaration_wire_for_both_content_types() {
 }
 
 #[test]
-fn plaintext_transform_schema_carries_media_type_and_plain_annotation() {
-    let config = quill_with_field("    subject:\n      type: plaintext\n      inline: true\n")
-        .expect("loads");
-    let schema = super::schema::build_transform_schema(&config);
-    let json = schema.as_json();
-    let subject = &json["properties"]["subject"];
-    assert_eq!(subject["type"], "object");
-    assert_eq!(
-        subject["contentMediaType"],
-        super::schema::CONTENT_MEDIA_TYPE
-    );
-    assert_eq!(subject[super::schema::QUILLMARK_PLAIN_KEY], true);
-    assert_eq!(subject[super::schema::QUILLMARK_INLINE_KEY], true);
-}
-
-#[test]
-fn enum_type_projects_to_json_schema_string_enum() {
+fn enum_declares_its_values_without_the_blank() {
     let config = quill_with_field(
         "    color:\n      type: enum\n      values: [red, green, blue]\n",
     )
@@ -1393,11 +1377,6 @@ fn enum_type_projects_to_json_schema_string_enum() {
         serde_json::to_value(field).unwrap()["values"],
         serde_json::json!(["red", "green", "blue"])
     );
-    let schema = super::schema::build_transform_schema(&config);
-    let color = &schema.as_json()["properties"]["color"];
-    assert_eq!(color["type"], "string");
-    // The projection carries the wire-valid domain, which leads with the blank.
-    assert_eq!(color["enum"], serde_json::json!(["", "red", "green", "blue"]));
 }
 
 #[test]

@@ -12,17 +12,17 @@ use common::{quill_with_plate as quill, yaml};
 
 /// Each widget page is followed by its twin: same text, same box, filled.
 const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.1.0": form-field
+#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 200pt, height: 120pt, margin: 12pt)
 #set text(size: 20pt)
 
-Wide #form-field("inline", type: "text", field: "inline_field", width: 40pt, height: 12pt) text.
+Wide #qm.form-field("inline", type: "text", field: "inline_field", width: 40pt, height: 12pt) text.
 
 #pagebreak()
 Wide #box(width: 40pt, height: 12pt, fill: black) text.
 
 #pagebreak()
-#align(center, form-field("centered", type: "text", field: "centered_field", width: 40pt, height: 12pt))
+#align(center, qm.form-field("centered", type: "text", field: "centered_field", width: 40pt, height: 12pt))
 
 #pagebreak()
 #align(center, box(width: 40pt, height: 12pt, fill: black))

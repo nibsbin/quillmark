@@ -99,25 +99,20 @@ def test_engine_render_regions_sidecar(engine, taro_quill_dir, taro_md):
     assert any(r["span"] is not None for r in body_segments)
 
 
-def test_parse_error_carries_diagnostics():
-    """Parse failures raise QuillmarkError with a non-empty `.diagnostics` list."""
+def test_parse_and_load_errors_carry_coded_diagnostics(tmp_path):
+    """A parse failure and a malformed config each raise QuillmarkError with a
+    non-empty, coded `.diagnostics` list; a malformed config fails at
+    `Quill.from_path`, not at render."""
     invalid_md = "~~~card-yaml\n$quill: test_quill\n$kind: main\ntitle: [unclosed bracket\n~~~\n"
-    with pytest.raises(QuillmarkError) as exc_info:
-        Document.from_markdown(invalid_md)
-    assert exc_info.value.diagnostics
-    assert all(d.code for d in exc_info.value.diagnostics)
-
-
-def test_quill_load_error_carries_diagnostics(tmp_path):
-    """A malformed config fails at `Quill.from_path`; only backend resolution
-    is deferred to render."""
     bogus = tmp_path / "not_a_quill"
     bogus.mkdir()
     (bogus / "Quill.yaml").write_text("quill: { name: x }\n")
 
-    with pytest.raises(QuillmarkError) as exc_info:
-        Quill.from_path(str(bogus))
-    assert exc_info.value.diagnostics
+    for call in (lambda: Document.from_markdown(invalid_md), lambda: Quill.from_path(str(bogus))):
+        with pytest.raises(QuillmarkError) as exc_info:
+            call()
+        assert exc_info.value.diagnostics
+        assert all(d.code for d in exc_info.value.diagnostics)
 
 
 def test_render_dates_a_today_field(engine, tmp_path):
@@ -133,20 +128,20 @@ def test_render_dates_a_today_field(engine, tmp_path):
             "main:\n  fields:\n    issued: { type: date, default: today }\n"
         )
         (root / "plate.typ").write_text(
-            '#import "@local/quillmark-helper:0.1.0": data\n'
-            "#assert.eq(data.issued, datetime.today())\n"
+            '#import "@local/quillmark-helper:0.2.0" as qm\n'
+            "#assert.eq(qm.data.issued, datetime.today())\n"
             f"#assert({check})\n"
         )
         return Quill.from_path(str(root))
 
     doc = Document.from_markdown("~~~card-yaml\n$quill: dated\n$kind: main\n~~~\n")
 
-    pinned = dated_quill("pinned", "data.issued == datetime(year: 2026, month: 3, day: 14)")
+    pinned = dated_quill("pinned", "qm.data.issued == datetime(year: 2026, month: 3, day: 14)")
     engine.render(pinned, doc, OutputFormat.SVG, today=datetime.date(2026, 3, 14))
     with pytest.raises(TypeError):
         engine.render(pinned, doc, OutputFormat.SVG, today="2026-03-14")
 
-    local = dated_quill("local", "data.issued != none")
+    local = dated_quill("local", "qm.data.issued != none")
     engine.render(local, doc, OutputFormat.SVG)
 
 

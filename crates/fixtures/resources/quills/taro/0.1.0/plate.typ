@@ -1,4 +1,4 @@
-#import "@local/quillmark-helper:0.1.0": data
+#import "@local/quillmark-helper:0.2.0" as qm
 
 #set text(font: "Figtree")
 
@@ -6,27 +6,27 @@
 #show regex("(?i)taro"): it => text(fill: purple)[#it]
 
 // Filters like `String` render to code mode automatically,
-#underline(data.title)
+#underline(qm.ink(qm.data, "title"))
 
 // When using filters in markup mode,
 // add `#` before the template expression to enter code mode.
-*Author: #data.author*
+*Author: #qm.ink(qm.data, "author")*
 
-*Favorite Ice Cream: #data.ice_cream*
+*Favorite Ice Cream: #qm.ink(qm.data, "ice_cream")*
 
 
-#data.at("$body")
+#qm.data.at("$body")
 
 // Present each sub-document programatically
-#for card in data.at("$cards") {
+#for card in qm.data.at("$cards") {
   if card.at("$kind", default: none) == "quotes" [
-    *#card.author*: _#card.at("$body") _
+    *#qm.ink(card, "author")*: _#card.at("$body") _
   ]
 }
 
 
 // Include an image with a dynamic asset. `picture` is undeclared, so unlike a
 // schema field it is genuinely absent until authored.
-#if "picture" in data {
-  image(data.picture)
+#if "picture" in qm.data {
+  image(qm.data.picture)
 }

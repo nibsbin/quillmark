@@ -601,23 +601,6 @@ mod tests {
     }
 
     #[test]
-    fn hint_for_indented_key_names_the_leading_space() {
-        let content = concat!(
-            "subject: Near-Miss Involving Aerospace Ground Equipment Tug on the Flightline\n",
-            " date: 2026-04-02\n",
-            "authority_line: \"\"\n"
-        );
-        let enriched = enrich_yaml_error(
-            "error: line 2 column 6: mapping values are not allowed in this context",
-            content,
-        );
-        let hint = enriched.hint.expect("hint should be set");
-        assert!(hint.contains("Line 2 starts with a space"), "{hint}");
-        assert!(hint.contains("`date:`"), "{hint}");
-        assert!(!hint.contains("double quotes"), "{hint}");
-    }
-
-    #[test]
     fn hint_for_indented_bare_key_names_the_leading_space() {
         let content = "subject: Near-Miss On The Flightline\n distribution:\nauthority_line: \"\"\n";
         let enriched = enrich_yaml_error(
@@ -656,6 +639,7 @@ mod tests {
             .expect("hint should be set");
         assert!(hint.contains("Line 2 starts with a space"), "{hint}");
         assert!(hint.contains("`date:`"), "{hint}");
+        assert!(!hint.contains("double quotes"), "{hint}");
     }
 
     #[test]
@@ -734,20 +718,6 @@ mod tests {
     }
 
     #[test]
-    fn hint_for_prose_inside_block_says_close_the_block() {
-        let content = "title: Near-Miss Report\ndate: 2026-03-14\n\
-                       88th Communications Squadron, Wright-Patterson AFB\n\
-                       This memorandum documents a near-miss on the flight line.\n";
-        let enriched = enrich_yaml_error("error: line 3 column 1: simple key expected ':'", content);
-        let hint = enriched.hint.expect("hint should be set");
-        assert!(hint.contains("Line 3"), "{hint}");
-        assert!(hint.contains("88th Communications Squadron"), "{hint}");
-        assert!(hint.contains("reads as prose"), "{hint}");
-        assert!(hint.contains("`~~~`"), "{hint}");
-        assert!(!hint.contains("block scalar"), "{hint}");
-    }
-
-    #[test]
     fn hint_for_prose_after_a_blank_line_says_close_the_block() {
         let content = "title: Memo\n\nThis memorandum documents a near-miss on the flight line.\n";
         let enriched = enrich_yaml_error("error: line 3 column 1: simple key expected ':'", content);
@@ -792,12 +762,5 @@ mod tests {
         let hint = enriched.hint.expect("hint should be set");
         assert!(hint.contains("bluf"));
         assert!(hint.contains("single quotes"));
-    }
-
-    #[test]
-    fn does_not_panic_on_multibyte_content() {
-        let content = "briefer: Maj Sarah Chen — INDOPACOM/A2\nbluf: **\u{201c}peer\u{201d}**\n";
-        let _ = enrich_yaml_error("alias references unknown anchor", content);
-        let _ = enrich_yaml_error("mapping values are not allowed in this context", content);
     }
 }

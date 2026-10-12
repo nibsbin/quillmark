@@ -10,6 +10,8 @@
 
 use proptest::prelude::*;
 
+use super::bytes;
+use crate::quill::quill_from_yaml;
 use crate::{document::Document, quill::Quill, value::QuillValue};
 
 const QUILL_YAML: &str = r#"
@@ -56,25 +58,13 @@ const CONTENT_FIELDS: [&str; 6] = [
 ];
 
 fn quill() -> Quill {
-    let mut files = std::collections::HashMap::new();
-    files.insert(
-        "Quill.yaml".to_string(),
-        crate::quill::FileTreeNode::File {
-            contents: QUILL_YAML.as_bytes().to_vec(),
-        },
-    );
-    Quill::from_tree(crate::quill::FileTreeNode::Directory { files })
-        .expect("the property quill loads")
+    quill_from_yaml(QUILL_YAML)
 }
 
 fn blank_doc() -> Document {
     Document::parse("~~~card-yaml\n$quill: conform_properties@1.0.0\n~~~\n\nBody.\n")
         .expect("blank document parses")
         .document
-}
-
-fn bytes(doc: &Document) -> String {
-    serde_json::to_string(doc).expect("the storage DTO serializes")
 }
 
 /// Text with the characters that make the two codecs disagree: markdown

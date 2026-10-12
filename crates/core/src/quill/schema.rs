@@ -419,7 +419,7 @@ main:
     }
 
     #[test]
-    fn typed_table_emits_items_with_object_and_properties() {
+    fn each_field_shape_projects_its_schema() {
         let yaml = r#"
 quill:
   name: x
@@ -435,81 +435,86 @@ main:
         properties:
           org: { type: string }
           year: { type: integer }
-"#;
-        let schema = build_from_yaml(yaml);
-        let json = schema.as_json();
-        let refs = &json["properties"]["refs"];
-        assert_eq!(refs["type"], "array");
-        assert_eq!(refs["items"]["type"], "object");
-        assert_eq!(refs["items"]["properties"]["org"]["type"], "string");
-        assert_eq!(refs["items"]["properties"]["year"]["type"], "integer");
-    }
-
-    #[test]
-    fn scalar_array_emits_items_with_element_type() {
-        let yaml = r#"
-quill:
-  name: x
-  version: 1.0.0
-  backend: typst
-  description: x
-main:
-  fields:
     counts:
       type: array
       items: { type: integer }
-"#;
-        let schema = build_from_yaml(yaml);
-        let json = schema.as_json();
-        let counts = &json["properties"]["counts"];
-        assert_eq!(counts["type"], "array");
-        assert_eq!(counts["items"]["type"], "integer");
-    }
-
-    #[test]
-    fn markdown_array_emits_items_with_content_media_type() {
-        let yaml = r#"
-quill:
-  name: x
-  version: 1.0.0
-  backend: typst
-  description: x
-main:
-  fields:
     sections:
       type: array
       items: { type: richtext }
-"#;
-        let schema = build_from_yaml(yaml);
-        let json = schema.as_json();
-        let sections = &json["properties"]["sections"];
-        assert_eq!(sections["type"], "array");
-        assert_eq!(sections["items"]["type"], "object");
-        assert_eq!(sections["items"]["contentMediaType"], CONTENT_MEDIA_TYPE);
-    }
-
-    #[test]
-    fn typed_dict_emits_object_with_properties() {
-        let yaml = r#"
-quill:
-  name: x
-  version: 1.0.0
-  backend: typst
-  description: x
-main:
-  fields:
     address:
       type: object
       properties:
         street: { type: string }
         city: { type: string }
+    subject:
+      type: richtext
+      inline: true
+    lines:
+      type: array
+      items:
+        type: richtext
+        inline: true
+    label:
+      type: plaintext
+      inline: true
 "#;
+        let content = serde_json::json!({ "type": "object", "contentMediaType": CONTENT_MEDIA_TYPE });
+        let inline = serde_json::json!({
+            "type": "object",
+            "contentMediaType": CONTENT_MEDIA_TYPE,
+            QUILLMARK_INLINE_KEY: true,
+        });
+        let cases = [
+            (
+                "refs",
+                serde_json::json!({
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "org": { "type": "string" },
+                            "year": { "type": "integer" },
+                        },
+                    },
+                }),
+            ),
+            (
+                "counts",
+                serde_json::json!({ "type": "array", "items": { "type": "integer" } }),
+            ),
+            (
+                "sections",
+                serde_json::json!({ "type": "array", "items": content }),
+            ),
+            (
+                "address",
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "street": { "type": "string" },
+                        "city": { "type": "string" },
+                    },
+                }),
+            ),
+            ("subject", inline.clone()),
+            (
+                "lines",
+                serde_json::json!({ "type": "array", "items": inline }),
+            ),
+            (
+                "label",
+                serde_json::json!({
+                    "type": "object",
+                    "contentMediaType": CONTENT_MEDIA_TYPE,
+                    QUILLMARK_PLAIN_KEY: true,
+                    QUILLMARK_INLINE_KEY: true,
+                }),
+            ),
+        ];
         let schema = build_from_yaml(yaml);
-        let json = schema.as_json();
-        let address = &json["properties"]["address"];
-        assert_eq!(address["type"], "object");
-        assert_eq!(address["properties"]["street"]["type"], "string");
-        assert_eq!(address["properties"]["city"]["type"], "string");
+        for (field, expected) in cases {
+            assert_eq!(schema.as_json()["properties"][field], expected, "{field}");
+        }
     }
 
     #[test]
@@ -555,50 +560,6 @@ card_kinds:
                 "{def_name} $body should be richtext"
             );
         }
-    }
-
-    #[test]
-    fn inline_richtext_emits_quillmark_inline() {
-        let yaml = r#"
-quill:
-  name: x
-  version: 1.0.0
-  backend: typst
-  description: x
-main:
-  fields:
-    subject:
-      type: richtext
-      inline: true
-"#;
-        let schema = build_from_yaml(yaml);
-        let json = schema.as_json();
-        let subject = &json["properties"]["subject"];
-        assert_eq!(subject["type"], "object");
-        assert_eq!(subject["contentMediaType"], CONTENT_MEDIA_TYPE);
-        assert_eq!(subject[QUILLMARK_INLINE_KEY], true);
-    }
-
-    #[test]
-    fn inline_richtext_array_items_emit_quillmark_inline() {
-        let yaml = r#"
-quill:
-  name: x
-  version: 1.0.0
-  backend: typst
-  description: x
-main:
-  fields:
-    refs:
-      type: array
-      items:
-        type: richtext
-        inline: true
-"#;
-        let schema = build_from_yaml(yaml);
-        let json = schema.as_json();
-        let items = &json["properties"]["refs"]["items"];
-        assert_eq!(items[QUILLMARK_INLINE_KEY], true);
     }
 
     #[test]

@@ -9,9 +9,9 @@ use serde_json::json;
 
 mod common;
 
-const PLATE: &str = r#"#import "@local/quillmark-helper:0.1.0": data
+const PLATE: &str = r#"#import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 300pt, height: 200pt, margin: 20pt)
-#data.at("msg")
+#qm.data.at("msg")
 #pagebreak()
 second
 "#;

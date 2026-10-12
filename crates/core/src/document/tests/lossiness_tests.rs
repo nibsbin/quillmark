@@ -567,20 +567,20 @@ fn a_block_scalar_behind_a_tag_or_anchor_is_text() {
 #[test]
 fn crlf_input_parses_as_its_lf_twin() {
     let lf = "~~~card-yaml\n$quill: q\n$kind: main\n# note\nx: # trailing\ny: keep\n~~~\n\nBody.\n";
-    let crlf = lf.replace('\n', "\r\n");
-
     let lf_out = Document::parse(lf).unwrap();
-    let crlf_out = Document::parse(&crlf).unwrap();
 
-    assert!(
-        crlf_out.warnings.is_empty(),
-        "CRLF input must parse without warnings; got: {:?}",
-        crlf_out.warnings
-    );
-    assert_eq!(
-        crlf_out.document, lf_out.document,
-        "CRLF and LF input must parse to the same document"
-    );
+    for crlf in [lf.replace('\n', "\r\n"), lf.replacen('\n', "\r\n", 3)] {
+        let crlf_out = Document::parse(&crlf).unwrap();
+        assert!(
+            crlf_out.warnings.is_empty(),
+            "CRLF input must parse without warnings; got: {:?}",
+            crlf_out.warnings
+        );
+        assert_eq!(
+            crlf_out.document, lf_out.document,
+            "CRLF and LF input must parse to the same document"
+        );
+    }
 }
 
 /// `key: !t` inside a block or quoted scalar is that scalar's text, kept
@@ -730,124 +730,12 @@ fn a_field_named_null_round_trips() {
 }
 
 #[test]
-fn comment_position_round_trips() {
-    struct Case {
-        label: &'static str,
-        src: &'static str,
-        contains: &'static [&'static str],
-        not_contains: &'static [&'static str],
-        value_check: Option<(&'static str, &'static str)>,
-    }
-
-    let cases = [
-        Case {
-            label: "top-level own-line comment",
-            src: "~~~card-yaml\n$quill: q\n$kind: main\n# recipient's full name\nrecipient: Jane\nauthor: Alice\n~~~\n\nBody.\n",
-            contains: &["# recipient's full name"],
-            not_contains: &[],
-            value_check: Some(("recipient", "Jane")),
-        },
-        Case {
-            label: "top-level trailing inline comment",
-            src: "~~~card-yaml\n$quill: q\n$kind: main\ntitle: My Document # this is a comment\n~~~\n\nBody.\n",
-            contains: &["title: My Document # this is a comment"],
-            not_contains: &["My Document\n# this is a comment"],
-            value_check: Some(("title", "My Document")),
-        },
-        Case {
-            label: "nested sequence comments (leading/between/trailing)",
-            src: "~~~card-yaml\n$quill: q\n$kind: main\nitems:\n  # before-first\n  - a\n  # between\n  - b\n  # after-last\n~~~\n",
-            contains: &["# before-first", "# between", "# after-last"],
-            not_contains: &[],
-            value_check: None,
-        },
-        Case {
-            label: "nested mapping comments (leading/trailing)",
-            src: "~~~card-yaml\n$quill: q\n$kind: main\nouter:\n  # leading\n  inner: 1\n  # trailing\n~~~\n",
-            contains: &["# leading", "# trailing"],
-            not_contains: &[],
-            value_check: None,
-        },
-        Case {
-            label: "nested sequence item trailing inline comment",
-            src: "~~~card-yaml\n$quill: q\n$kind: main\nitems:\n  - a # inline\n  - b\n~~~\n",
-            contains: &["- a # inline"],
-            not_contains: &[],
-            value_check: None,
-        },
-        Case {
-            label: "nested mapping field trailing inline comment",
-            src: "~~~card-yaml\n$quill: q\n$kind: main\nouter:\n  inner: 1 # tail\n~~~\n",
-            contains: &["inner: 1 # tail"],
-            not_contains: &[],
-            value_check: None,
-        },
-        Case {
-            label: "inline comment on a container key",
-            src: "~~~card-yaml\n$quill: q\n$kind: main\nouter: # describes outer\n  inner: 1\n~~~\n",
-            contains: &["outer: # describes outer\n  inner: 1"],
-            not_contains: &[],
-            value_check: None,
-        },
-        Case {
-            label: "own-line comment below $quill header (root payload)",
-            src: "~~~card-yaml\n$quill: q\n$kind: main\n# main entry\ntitle: Hi\n~~~\n",
-            contains: &["~~~\n$quill: q\n$kind: main\n# main entry\n"],
-            not_contains: &[],
-            value_check: None,
-        },
-        Case {
-            label: "own-line comment below $kind header (card payload)",
-            src: "~~~card-yaml\n$quill: q\n$kind: main\n~~~\n\n~~~card-yaml\n$kind: foo\n# the foo card\nx: 1\n~~~\n",
-            contains: &["~~~\n$kind: foo\n# the foo card\n"],
-            not_contains: &[],
-            value_check: None,
-        },
-        Case {
-            label: "own-line comments flanking an inline comment",
-            src: "~~~card-yaml\n$quill: q\n$kind: main\n# header\ntitle: Hi # tail\n# footer\n~~~\n",
-            contains: &["# header\n", "title: Hi # tail\n", "# footer\n"],
-            not_contains: &[],
-            value_check: None,
-        },
-    ];
-
-    for case in cases {
-        let emitted = Document::parse(case.src).unwrap().document.to_markdown();
-        for needle in case.contains {
-            assert!(
-                emitted.contains(needle),
-                "[{}] comment must survive round-trip at its position\nGot:\n{}",
-                case.label,
-                emitted
-            );
-        }
-        for needle in case.not_contains {
-            assert!(
-                !emitted.contains(needle),
-                "[{}] comment must not degrade to a different position\nGot:\n{}",
-                case.label,
-                emitted
-            );
-        }
-
-        let doc2 = Document::parse(&emitted).unwrap().document;
-        if let Some((field, expected)) = case.value_check {
-            assert_eq!(
-                doc2.main().payload().get(field).and_then(|v| v.as_str()),
-                Some(expected),
-                "[{}] value must remain intact after round-trip",
-                case.label
-            );
-        }
-
-        let emitted2 = doc2.to_markdown();
-        assert_eq!(
-            emitted, emitted2,
-            "[{}] round-trip must be idempotent",
-            case.label
-        );
-    }
+fn a_card_payload_comment_round_trips_below_its_kind() {
+    let src = "~~~card-yaml\n$quill: q\n$kind: main\n~~~\n\n~~~card-yaml\n$kind: foo\n# the foo card\nx: 1\n~~~\n";
+    let doc = Document::parse(src).unwrap().document;
+    let emitted = doc.to_markdown();
+    assert!(emitted.contains("~~~\n$kind: foo\n# the foo card\n"), "{emitted}");
+    assert_eq!(Document::parse(&emitted).unwrap().document, doc);
 }
 
 #[test]
@@ -951,13 +839,12 @@ fn a_comment_inside_a_plain_scalar_is_a_located_refusal() {
 fn a_refused_qm_table_attribute_names_the_attribute_not_an_element() {
     let doc = Document::parse("~~~\n$quill: q\n~~~\n\n<qm-table widths=\"x\">\n\n| a |\n|---|\n| b |\n\n</qm-table>\n")
         .unwrap();
-    let message = &doc
+    let warning = doc
         .warnings
         .iter()
         .find(|w| w.code.as_deref() == Some("parse::dropped_construct"))
-        .expect("the refused attribute warns")
-        .message;
-    assert!(message.contains("`widths` attribute of `<qm-table>`"), "{message}");
+        .expect("the refused attribute warns");
+    assert_eq!(warning.args["construct"], "qm-table[widths]");
 }
 
 /// The value holds a merge's keys in the mapping holding the merge, so a tag

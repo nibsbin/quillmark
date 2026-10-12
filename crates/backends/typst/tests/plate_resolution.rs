@@ -224,6 +224,50 @@ fn a_package_file_is_located_under_its_spec() {
     assert_eq!(files, ["@local/p:0.1.0/lib.typ"], "{diags:?}");
 }
 
+/// The helper's names reach a plate only through the module name it chose, so
+/// every other import form of the helper, in the plate or a module it imports,
+/// is refused at the import, with the form that compiles in the message.
+#[test]
+fn every_helper_import_but_the_module_form_fails_at_open() {
+    for (file, import) in [
+        ("plate.typ", "#import \"@local/quillmark-helper:0.2.0\": *"),
+        ("plate.typ", "#import \"@local/quillmark-helper:0.2.0\": data, ink"),
+        ("plate.typ", "#import \"@local/quillmark-helper:0.2.0\""),
+        ("plate.typ", "#import \"@local/quillmark-helper:0.2.0\" as qm: data"),
+        ("plate.typ", "#import \"@local/quillmark-helper:0.1.0\" as qm"),
+        ("lib.typ", "#import \"@local/quillmark-helper:0.2.0\": data"),
+    ] {
+        let (plate, module) = if file == "plate.typ" {
+            (format!("hello\n{import}\n"), "#let x = 1\n".to_string())
+        } else {
+            ("#import \"lib.typ\"\nhello\n".to_string(), format!("{import}\n"))
+        };
+        let diags = open_err(&[("Quill.yaml", YAML), ("plate.typ", &plate), ("lib.typ", &module)]);
+        let [diag] = &diags[..] else {
+            panic!("{import}: one refusal: {diags:?}");
+        };
+        assert_eq!(diag.code.as_deref(), Some("typst::helper_import"), "{import}");
+        assert!(
+            diag.message.contains("#import \"@local/quillmark-helper:0.2.0\" as qm"),
+            "{import}: {}",
+            diag.message
+        );
+        let at = diag.location.as_ref().expect("the import is located");
+        let line = if file == "plate.typ" { 2 } else { 1 };
+        assert_eq!((at.file.as_str(), at.line), (file, line), "{import}");
+    }
+
+    let session = TypstBackend.open(
+        &tree_quill(&[
+            ("Quill.yaml", YAML),
+            ("plate.typ", "#import \"@local/quillmark-helper:0.2.0\" as helper\n#helper.data\n"),
+        ]),
+        &serde_json::json!({}),
+        common::test_date(),
+    );
+    assert!(session.is_ok(), "the module form compiles under any name");
+}
+
 fn open_err(files: &[(&str, &str)]) -> Vec<quillmark_core::error::Diagnostic> {
     match TypstBackend.open(&tree_quill(files), &serde_json::json!({}), common::test_date()) {
         Ok(_) => panic!("the compile must fail"),

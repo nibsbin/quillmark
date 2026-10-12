@@ -6,7 +6,14 @@
 
 Plates get document data through a backend-injected virtual Typst package, not a template engine. Data flows in two stages: `Quill::compile_data()` produces validated, blank-filled JSON in which content fields are canonical `Content` objects; `Backend::open()` generates the helper's `lib.typ`, walking each value beside its transform-schema node to lower it, no per-field markdown re-parse.
 
-One rule governs the lowering, at every depth: **a declared type means the same thing wherever it is declared, and every type lowers to its native Typst value unless it has a canonical rendering.** Only the content types have one — the authored text — so only they lower to content; a date lowers to a native `datetime`, because every rendering of `2026-01-02` is a typographic decision the plate owns. Backend-generated *ink* rides beside the value instead, under each dictionary's `$ink` (`ink(row).org`), or is reached by address (`display(addr, ..)`); either way it is born in generated source, which is what makes it laundering-proof.
+One rule governs the lowering, at every depth: **a declared type means the same
+thing wherever it is declared, and every type lowers to its native Typst value
+unless it has a canonical rendering.** Only the content types have one — the
+authored text — so only they lower to content; a date lowers to a native
+`datetime`, because every rendering of `2026-01-02` is a typographic decision
+the plate owns. Backend-generated *ink* is reached by address instead
+(`qm.ink(row, "org")`), from one table born in generated source, which is what
+makes it laundering-proof.
 
 ## Overview
 
@@ -38,7 +45,8 @@ One rule governs the lowering, at every depth: **a declared type means the same 
   `card.at("$kind", default: none)`, `card.at("$body", default: "")`: never a
   bare `card.$body`
 - A card whose `$kind` the quill does not declare keeps its place in `$cards`, fields verbatim and uncoerced, so a plate's `$cards` loop falls through on a kind it does not know ([SCHEMAS.md](SCHEMAS.md#what-blocks-a-render))
-- `data`, each card, and each typed dictionary carry `$ink`, the [ink twin](#the-ink-twin) of their fields, wherever at least one field has ink, and with it `$path`, their address prefix (`""` on `data`, `refs.0.` on a row). One declaring a matrix carries `$path` either way, for [`roster`](#a-matrix-field) to address it by. A data key spelling `$ink` or `$path` in any of them is dropped; a dictionary the schema does not type passes through verbatim, keys included
+- `data`, each card, and each typed dictionary carry `$path`, their address prefix (`""` on `data`, `refs.0.` on a row), for [`qm.ink`](#the-ink-table) and [`qm.roster`](#a-matrix-field) to address by. A matrix's own dictionary carries none, so its keys are exactly the members it holds
+- `$path` is a visible key: dictionary equality (and so `contains` and `dedup`), `keys()` and spreading see it. A data key spelling `$path` is dropped; a dictionary the schema does not type passes through verbatim, keys included
 - User payload fields sit flat at the root next to the `$` keys; field names match `[a-z_][a-z0-9_]*` and therefore never collide with `$` metadata
 
 #### A `matrix` field
@@ -62,42 +70,46 @@ equal data still produces byte-equal source.
 
 - A member's keys are the field's declared columns, each at its declared type,
   and on an added item its `title`, a `string` cell.
-- A plate branches on presence first (`"flight_cc" in data.qualifications`),
+- A plate branches on presence first (`"flight_cc" in qm.data.qualifications`),
   then reads a held member's columns without a guard.
-- Each member carries its own `$ink`; the matrix, holding only members, carries
+- Each member carries its own `$path`; the matrix, holding only members, carries
   none, so its keys are exactly the members it holds.
 
 The vocabulary the page prints, held or not, is the roster, and it reaches the
-plate once, in the generated address tables. **`roster(dict, key)`** reads it:
+plate once, in the generated address tables. **`qm.roster(dict, key)`** reads it:
 every roster member in roster order, then each added item, as rows
 `(id, title, held, value, path)`. `title` is the roster's, or an added item's
 own; `value` is the member's dictionary, `none` where unheld; `path` is the
 member's address. `dict` is the dictionary declaring the matrix, whose `$path`
-the address starts from, as `display(dict, key, ..)`'s does:
+the address starts from, as `qm.ink(dict, key)`'s does:
 
 ```typst
-#for row in roster(data, "qualifications") {
-  field-region(row.path)[#(if row.held [☒] else [☐]) #row.title]
-  if row.held [ — #ink(row.value).detail]
+#for row in qm.roster(qm.data, "qualifications") {
+  qm.region(row.path)[#(if row.held [☒] else [☐]) #row.title]
+  if row.held [ — #qm.ink(row.value, "detail")]
 }
 ```
 
 A claim on `row.path` makes an unticked box clickable too. An added item's
-`title` is a cell, so `ink(row.value).title` places it with a region of its own.
+`title` is a cell, so `qm.ink(row.value, "title")` places it with a region of its
+own. A roster member's `title` is the roster's and no address, so `qm.ink`
+refuses it, and an unheld row's `value` is `none`: a plate reads a title as
+`if row.held and "title" in row.value { qm.ink(row.value, "title") } else
+{ row.title }`.
 
 ## Typst Helper Package
 
-The Typst backend injects a virtual package `@local/quillmark-helper:<version>` that exposes the JSON to plates and provides helpers.
+The Typst backend injects a virtual package `@local/quillmark-helper:<version>` that exposes the JSON to plates and provides helpers. A plate imports it as a module, under a name it chooses:
 
 ```typst
-#import "@local/quillmark-helper:0.1.0": data
+#import "@local/quillmark-helper:0.2.0" as qm
 
-#data.title                  // plain field access
-#ink(data).title             // the same text, keeping its click target anywhere
-#data.at("$body")            // root $body: a content object when the main enables a body
-#data.date.year()            // date/datetime fields are native datetimes
-#display("date", "…")        // …and `display` places the click-to-edit rendering
-#for card in data.at("$cards") {
+#qm.data.title.len()                  // compute with the value
+#qm.ink(qm.data, "title")             // print its ink: the click target survives anywhere
+#qm.data.at("$body")                  // root $body: a content object when the main enables a body
+#qm.data.date.year()                  // date/datetime fields are native datetimes
+#qm.ink(qm.data, "date", "[year]")    // …and their ink takes a display pattern
+#for card in qm.data.at("$cards") {
   if card.at("$kind", default: none) == "indorsement" {
     // per-kind handling; $body is present only where the kind enables one,
     // so read it totally: card.<field>, card.at("$body", default: "")
@@ -105,9 +117,31 @@ The Typst backend injects a virtual package `@local/quillmark-helper:<version>` 
 }
 ```
 
+The plate rule is one sentence: compute with `qm.data.x`, print with
+`qm.ink(..)`, claim composed ink with `qm.region(..)`. A value the plate prints
+itself carries no region ([PREVIEW.md](PREVIEW.md)).
+
+**The module form is the only one.** `open` refuses any other import of the
+helper in a project source — `: *`, `: data, ink`, a bare `#import`, another
+version — with `typst::helper_import`, located at the import and naming the form
+that compiles. The only name the helper puts in a plate's scope is the one the
+plate chose, so a helper export never shadows a plate's own `ink` or `data`; a
+plate wanting the bare name binds it (`#let data = qm.data`).
+
 The `$`-prefixed keys must be accessed via `.at("$...")` because Typst identifiers do not include `$`.
 
-Helper contents (generated in `backends/typst/helper.rs` from `lib.typ.template`):
+Helper contents (generated in `backends/typst/helper.rs` from `lib.typ.template`), each read through the module name:
+
+| member | meaning |
+|---|---|
+| `data` | the data literal |
+| `ink(dict, key, ..args)` | the ink at address `dict.$path + key` ([The ink table](#the-ink-table)) |
+| `region(field, body)` | a marker claim ([PREVIEW.md](PREVIEW.md)) |
+| `roster(dict, key)` | a matrix's rows ([A `matrix` field](#a-matrix-field)) |
+| `form-field(..)`, `signature-field(..)` | a form widget, bound to a field by `field:` |
+| `tasks`, `elements` | the task-item and element renderer registries |
+
+Internals keep a `_qm-` prefix.
 
 - `data`: a backend-generated Typst dictionary **literal** of all fields, no runtime processing. `Codegen::emit_value` lowered every value at generation time, dispatching on the schema node beside it.
 - **The lowering walk.** `helper::lowering` classifies one schema node; the walk
@@ -142,67 +176,60 @@ Helper contents (generated in `backends/typst/helper.rs` from `lib.typ.template`
   A non-blank date the shared parsers reject is a `backend::invalid_date` render
   error raised from the walk, at the site that parses it, which is what makes the
   check total over depth.
-- **`ink(dict)`** → the dictionary's `$ink` twin, `(:)` where it has none. See
-  [The ink twin](#the-ink-twin).
-- **`roster(dict, key)`** → a matrix's rows, every member held or not. See
-  [A `matrix` field](#a-matrix-field).
-- **`display(field, ..args)`** → content, the one address-keyed projection.
-  `_qm-display` binds one `#let _qm_dN = (..args) => text(datetime(..).display(..args))`
-  closure per present date, keyed by schema address (`issued`, `stamps.2`,
-  `contact.reply_by`, `$cards.<kind>.<n>.<field>`; compose a card address from
-  the card's `$path`), and `display` calls it. `display(dict, key, ..)` spells
-  the address from the dictionary's `$path`. The address is validated like any
-  other (below), so a typo is a compile error rather than ink that quietly goes
-  missing; `none` comes back for a known address carrying no date — a blank one,
-  or a field that is not a date — so a `== none` fallback still fires. Formatting
-  through the date's own `display` inherits its type, so a `date`-only field throws
-  Typst's native error on an `[hour]` pattern.
 
-  The reason it is addressed rather than carried on the value is
-  **regions**. Its ink is born at the generated node, not at the plate's
-  reference site, so it survives being laundered — through a `#let` binding, a
-  loop variable, or a vendored package that formats it internally — and one node
-  per cell gives a card's date the per-instance identity a shared `card.<field>`
-  loop variable lacks. A native `datetime` handed to a package cannot do that:
-  the ink is born wherever the package places it.
-
-### The ink twin
+### The ink table
 
 A value in `data` is native, for computing; its ink is content born in
-`lib.typ`, for printing. `Codegen::emit_value` returns both from one walk, and
-each dictionary it closes gathers its fields' ink under a leading `$ink` key:
+`lib.typ`, for printing. `Codegen::emit_value` returns the value and records
+the ink of every address that has some in one table, `_qm-ink`, keyed by
+address:
 
-| field | its ink |
+| address holds | its entry |
 |---|---|
-| string, number, boolean | `[#(<literal>)]` inline, parenthesized so a negative number lexes, its window the block: it prints what `#<value>` prints |
+| string, number, boolean | `[#(data.at(..)..)]`, reading the cell off `data`; it prints what `#<value>` prints |
 | content | the `_qm_cN` binding the data cell holds |
-| date | `_qm_dN()`: the closure `display` calls, called with no pattern |
-| array of those | the array of their ink |
-| any of those at `none` | `none` |
-| typed dictionary, and an array of them | none: each carries its own `$ink` |
+| date | `(..args) => text(data.at(..)..display(..args))`; `(..args) => none` where blank |
+| array of those | the array of the elements' ink, each element also keyed on its own |
+| typed dictionary, matrix, blank content, `none` | no entry |
 
-Only declared fields have ink, so `$quill`, `$kind` and undeclared keys have
-none. A date's is its default display, so every ink prints as `#ink(x).f`; a
-pattern goes through `display(x, "f", ..)`, which finds the closure by the
-dictionary's `$path`. The twin rides on the dictionary rather than on `data` alone because rows
-are what plates filter, sort and hand to functions: a twin kept apart loses the
-pairing at the first `filter`. The cost is two visible keys, `$ink` and
-`$path`, which dictionary equality (and so `contains` and `dedup`), `keys()` and
-spreading see.
+**`qm.ink(dict, key, ..args)`** looks up `dict.$path + key`. `dict` is
+`qm.data`, a card, a typed dictionary or a roster row's `value`, and `key` one
+or more address steps from it: `"year"`, `"address.city"`, `"awards.0"`,
+`"$body"`. A miss consults `_qm-node`, so the rules are total:
 
-A scalar's ink window has no segments, so its whole first placement is one
-region, as a plate scalar site's is ([PREVIEW.md](PREVIEW.md)). `data`, each
-card and each typed dictionary is wrapped in a `{..}` code block: Typst's
-incremental reparser swaps such a block alone, and an edit changes a field and
-its ink, so an edit inside a card or a row reparses that block. A top-level
-field's edit spans `data`'s own `$ink` and the field, with `$cards` between
-them, and reparses the whole literal.
+- An address the schema does not have is a compile error: a typo, a disabled
+  card `$body`, a roster member's `title`.
+- A known address with no entry is `none`: blank content, a `none` value, a
+  typed dictionary, a matrix. A blank date's entry answers `none` too, so a
+  `== none` fallback still fires. A blank string prints nothing.
+- `args` is a date's display pattern, formatted through the date's own
+  `display`, so a `date`-only field throws Typst's native error on an `[hour]`
+  pattern. On any other address, an array of dates included, `args` is an
+  assertion error: address the element.
+
+The ink is addressed rather than carried on the value because of **regions**.
+It is born at its generated entry, not at the plate's print, so it survives
+being laundered — through a `#let` binding, a function parameter, a loop
+variable, or a vendored package that formats it internally — and one entry per
+address gives a card's field the per-instance identity a shared `card` loop
+variable lacks. A native `datetime` handed to a package cannot do that: the ink
+is born wherever the package places it. Each entry's byte range is its window;
+a scalar's has no segments, so its whole first placement is one region. An
+array's entry windows its elements beside their own entries, never around
+them, so windows never nest.
+
+The entries read their cells off `data` rather than repeating them, so a value
+edit changes the data literal and leaves the table's text alone; only an entry
+appearing or going (a blank filled, a row added) changes it. `data`, each card
+and each typed dictionary is wrapped in a `{..}` code block, a unit Typst's
+incremental reparser swaps alone, so an edit inside a card or a row reparses
+that block, not the whole literal.
 
 ### Schema addresses
 
-`form-field(field:)`, `field-region(field)` and `display(field, ..)` name a
-schema field, and the generated `_qm-meta` address tree (`_qm-node`) validates
-that name at compile time rather than leaving it silently unbound:
+`qm.form-field(field:)`, `qm.region(field, ..)` and `qm.ink(dict, key, ..)`
+name a schema field, and the generated `_qm-meta` address tree (`_qm-node`)
+validates that name at compile time rather than leaving it silently unbound:
 
 | Address | Admitted by |
 |---|---|
@@ -232,7 +259,7 @@ grammar is written twice, in two languages, and held to one table by
 steps whose keys the value decides: an array's index and a matrix's member. The
 blank-fill is total at every depth ([SCHEMAS.md](SCHEMAS.md#blank-filled-render)),
 so a declared address resolves however much of its container the document left
-out: `data.contact.address.city` is a direct read, never a guarded one. This is
+out: `qm.data.contact.address.city` is a direct read, never a guarded one. This is
 the converse of the `$`-metadata rule above — those keys are read with a total
 accessor *because* they may be absent, and a declared field may not be.
 
@@ -241,14 +268,15 @@ the same for every render. `refs.9` is admitted against one ref, a roster
 member's address whether or not the value holds it, and on an open matrix any
 key spelled as a member id, the added item's node (`qualifications.wing_ig`). A
 plate reaches either through its container: a loop over the array, or
-[`roster`](#a-matrix-field) over the matrix.
+[`qm.roster`](#a-matrix-field) over the matrix.
 
 Cards carry their canonical prefix as `$path`, so a plate composes a card
 address without reimplementing the kind+ordinal grammar:
-`field-region(card.at("$path") + "$body")`. A body is content rather than a
+`qm.region(card.at("$path") + "$body", ..)`, `qm.ink(card, "$body")`. A body
+is content rather than a
 bindable field, so a `$body` address is the plate grammar's alone: acroform's
 resolver roots none.
 
 The same addresses key the preview's region sidecar
-([PREVIEW.md](PREVIEW.md)), so a plate that reads one container property or one
-row cell surfaces a region a consumer can route back to it.
+([PREVIEW.md](PREVIEW.md)), so a plate that prints one container property or
+one row cell through `qm.ink` surfaces a region a consumer can route back to it.

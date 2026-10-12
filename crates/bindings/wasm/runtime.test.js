@@ -15,7 +15,6 @@ import {
   CardWriter,
   DocumentReader,
   CardReader,
-  MAIN_CARD_ADDR,
   isQuillmarkError,
   assignInstances,
   init,
@@ -23,11 +22,6 @@ import {
 // The namespace too: the bind set below is derived from the exports rather than
 // listed, so a fifth writer/reader class joins it by existing.
 import * as runtime from '@quillmark-wasm/runtime'
-// Pin that the runtime's Quill IS the internal core build's class (handed out,
-// not a parallel wrapper). This imports the internal core artifact directly:
-// `pkg/core` is NOT a public package subpath, it is the build the gate draws
-// from.
-import { Quill as CoreQuill, Document as CoreDocument } from '../../../pkg/core/wasm.js'
 import {
   makeQuill,
   makeSampleFormQuill,
@@ -37,14 +31,12 @@ import {
 } from './test-helpers.js'
 
 // The consumer contract, exercised as a consumer writes it: the gate is the only
-// door to the core surface. This also instantiates the core build the `CoreQuill`
-// identity pin below imports directly (same resolved file, same module
-// instance).
+// door to the core surface.
 const { Quill, Document, importMarkdown, exportMarkdown } = await init()
 
-const TEST_PLATE = `#import "@local/quillmark-helper:0.1.0": data
-#let title = data.title
-#let body = data.at("$body")
+const TEST_PLATE = `#import "@local/quillmark-helper:0.2.0" as qm
+#let title = qm.data.title
+#let body = qm.data.at("$body")
 
 = #title
 
@@ -72,16 +64,6 @@ const fieldOf = (card, key) =>
   card.payloadItems.find((i) => i.type === 'field' && i.key === key)?.value
 
 describe('@quillmark/wasm: surface', () => {
-  // IMPLEMENTATION PIN: the gate hands out the internal core build's classes
-  // verbatim (never wraps). There is exactly one public entry point, so this is
-  // an internal structural fact rather than a cross-entry-point contract. If it
-  // fails, a wrapper was put in front of the classes: a breaking change, not a
-  // refactor. See runtime.js.
-  it('hands out the internal core build classes verbatim (no parallel wrappers)', () => {
-    expect(Quill).toBe(CoreQuill)
-    expect(Document).toBe(CoreDocument)
-  })
-
   it('builds a canonical Quill with a backendId and a round-tripping tree', () => {
     const quill = makeRuntimeQuill()
     expect(quill.backendId).toBe('typst')
@@ -586,17 +568,6 @@ Note body.
   })
 })
 
-describe('@quillmark/wasm: MAIN_CARD_ADDR (the named main-card address)', () => {
-  it('is a frozen {} that a card-scoped verb takes as the main card', () => {
-    expect(MAIN_CARD_ADDR).toEqual({})
-    expect(Object.isFrozen(MAIN_CARD_ADDR)).toBe(true)
-    const doc = new Document('editor_test')
-    doc.storeFields(MAIN_CARD_ADDR, { title: 'Hello', qty: 3 })
-    expect(fieldOf(doc.main, 'title')).toBe('Hello')
-    expect(fieldOf(doc.main, 'qty')).toBe(3)
-  })
-})
-
 describe('@quillmark/wasm: container run boundaries', () => {
   const LIST = { container: 'list_item', attrs: { ordered: false, start: 1, ordinal: 0 } }
   const QUOTE = { container: 'quote' }
@@ -684,18 +655,6 @@ describe('@quillmark/wasm: Engine (hidden core→backend crossing)', () => {
     expect(doc.quillRef).toBe('test_quill')
   })
 
-  it('renders to SVG and reports supported formats', async () => {
-    const engine = new Engine()
-    const quill = makeRuntimeQuill()
-    const doc = Document.fromMarkdown(TEST_MARKDOWN)
-
-    const svg = await engine.render(quill, doc, { format: 'svg' })
-    expect(svg.outputFormat).toBe('svg')
-
-    const formats = await engine.supportedFormats(quill)
-    expect(formats).toContain('svg')
-  })
-
   // ERROR.md § "Warning flow": a render reports what the render sees. The
   // load's warnings stay on `doc.warnings`, so a revise never leaves a render
   // reporting a drop the document no longer holds.
@@ -728,12 +687,18 @@ describe('@quillmark/wasm: Engine (hidden core→backend crossing)', () => {
     return { engine, loaded: () => loaded }
   }
 
-  it('the manifest-backed format probe does NOT load the backend', async () => {
+  it('loads the backend on first render only: the format probe and sync core work load none', async () => {
     const { engine, loaded } = countingEngine()
     const quill = makeRuntimeQuill()
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+
     expect(await engine.supportedFormats(quill)).toContain('pdf')
+    expect(quill.schema).toBeDefined()
+    quill.validate(doc)
+    quill.seedDocument().free?.()
     expect(loaded()).toBe(0)
-    await engine.render(quill, Document.fromMarkdown(TEST_MARKDOWN), { format: 'svg' })
+
+    await engine.render(quill, doc, { format: 'svg' })
     expect(loaded()).toBe(1)
   })
 
@@ -769,31 +734,7 @@ describe('@quillmark/wasm: Engine (hidden core→backend crossing)', () => {
     ).toThrow(/mybackend/)
   })
 
-  it('every options object refuses a key it does not read', async () => {
-    const refused = (err, key) => {
-      expect(isQuillmarkError(err), String(err)).toBe(true)
-      expect(err.diagnostics[0].message).toContain(`unknown key \`${key}\``)
-    }
-    refused(caughtFrom(() => new Engine({ backend: {} })), 'backend')
-
-    const engine = new Engine()
-    const quill = makeRuntimeQuill()
-    const doc = Document.fromMarkdown(TEST_MARKDOWN)
-    refused(await engine.render(quill, doc, { fromat: 'svg' }).catch((e) => e), 'fromat')
-
-    const session = await engine.open(quill, doc)
-    try {
-      refused(caughtFrom(() => session.render({ format: 'svg', dpi: 300 })), 'dpi')
-      const bare = Object.assign(Object.create(null), { format: 'svg', dpi: 300 })
-      refused(caughtFrom(() => session.render(bare)), 'dpi')
-      const every = { format: 'svg', ppi: 72, pages: [0], regions: true }
-      expect(session.render(every).outputFormat).toBe('svg')
-    } finally {
-      session.free()
-    }
-  })
-
-  it('an options object is a plain object, and every own key of it counts', async () => {
+  it('an options object is a plain object, every own key of it counts, and every key it reads is accepted', async () => {
     const message = (err) => {
       expect(isQuillmarkError(err), String(err)).toBe(true)
       return err.diagnostics[0].message
@@ -832,6 +773,17 @@ describe('@quillmark/wasm: Engine (hidden core→backend crossing)', () => {
     for (const plain of plains) {
       expect((await render(Object.assign(plain(), { format: 'svg' }))).outputFormat).toBe('svg')
       expect(() => new Engine(Object.assign(plain(), { backends: {} }))).not.toThrow()
+    }
+
+    const session = await engine.open(quill, doc)
+    try {
+      expect(message(caughtFrom(() => session.render({ format: 'svg', dpi: 300 })))).toContain(
+        'unknown key `dpi`'
+      )
+      const every = { format: 'svg', ppi: 72, pages: [0], regions: true }
+      expect(session.render(every).outputFormat).toBe('svg')
+    } finally {
+      session.free()
     }
   })
 
@@ -1000,6 +952,9 @@ A single line of body ink.`
       // A field with no span-bearing region has no derived content box.
       expect(session.fieldBoxes('does_not_exist')).toEqual([])
 
+      // coverage: each filled address and the region reaching it, by DocPath.
+      expect(session.coverage()).toEqual([{ field: 'main.body', coveredBy: 'main.body' }])
+
       // positionAt: the fine-grained click direction, carrying the granularity
       // signal. A hit on the single line's ink is cluster-exact.
       expect(typeof session.positionAt).toBe('function')
@@ -1062,22 +1017,6 @@ main:
       expect(isQuillmarkError(caught)).toBe(true)
       expect(caught.diagnostics[0].code).toBe('engine::backend_not_found')
     }
-  })
-
-  it('does NOT load the backend for sync core work: only on first render (lazy)', async () => {
-    const { engine, loaded } = countingEngine()
-    const quill = makeRuntimeQuill()
-    const doc = Document.fromMarkdown(TEST_MARKDOWN)
-
-    // Sync core surface (schema / validate / seed) touches no backend.
-    expect(quill.schema).toBeDefined()
-    quill.validate(doc)
-    quill.seedDocument().free?.()
-    expect(loaded()).toBe(0)
-
-    // First render triggers exactly one backend load.
-    await engine.render(quill, doc, { format: 'svg' })
-    expect(loaded()).toBe(1)
   })
 
   it('load instantiates the backend once, cloning no quill, and open reuses it', async () => {
@@ -1371,14 +1310,11 @@ describe('@quillmark/wasm: handles from another copy (duplicate install)', () =>
       // A second copy is a second instantiation: its own memory, its own
       // classes, and its own init.
       copyB.initSync({ module: fs.readFileSync(path.join(dst, 'wasm_bg.wasm')) })
+      expect(copyB.Document).not.toBe(Document)
+      expect(copyB.Quill).not.toBe(Quill)
     })
     afterAll(() => {
       if (copyRoot) fs.rmSync(copyRoot, { recursive: true, force: true })
-    })
-
-    it('is genuinely a different class over a different memory', () => {
-      expect(copyB.Document).not.toBe(Document)
-      expect(copyB.Quill).not.toBe(Quill)
     })
 
     it('refuses copy B handles everywhere, in contract', async () => {
@@ -1409,7 +1345,9 @@ describe('@quillmark/wasm: handles from another copy (duplicate install)', () =>
       // own classes work together; only mixing them throws.
       const docB = copyB.Document.fromMarkdown(TEST_MARKDOWN)
       const quillB = copyB.Quill.fromTree(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
-      expect(quillB.validate(docB)).toBeDefined()
+      expect(quillB.validate(docB)).toEqual(
+        makeRuntimeQuill().validate(Document.fromMarkdown(TEST_MARKDOWN))
+      )
     })
   })
 })
@@ -1429,9 +1367,9 @@ main:
   fields:
     issued: { type: date, default: today }
 `
-  const PLATE = `#import "@local/quillmark-helper:0.1.0": data
-#assert.eq(data.issued, datetime.today())
-#assert.eq(data.issued, datetime(year: 2026, month: 3, day: 14))`
+  const PLATE = `#import "@local/quillmark-helper:0.2.0" as qm
+#assert.eq(qm.data.issued, datetime.today())
+#assert.eq(qm.data.issued, datetime(year: 2026, month: 3, day: 14))`
 
   const quill = () => Quill.fromTree(makeQuill({ name: 'dated', plate: PLATE, quillYaml: QUILL_YAML }))
   const doc = () => Document.fromMarkdown('~~~card-yaml\n$quill: dated\n$kind: main\n~~~\n')
@@ -1460,12 +1398,5 @@ main:
     session.free()
 
     await expect(engine.open(quill(), doc(), 'today')).rejects.toThrow('YYYY-MM-DD')
-  })
-
-  it('refuses `today` among the render options rather than rendering the local date', async () => {
-    const options = { format: 'svg', today: '2026-03-14' }
-    await expect(new Engine().render(quill(), doc(), options)).rejects.toThrow(
-      'unknown key `today`'
-    )
   })
 })

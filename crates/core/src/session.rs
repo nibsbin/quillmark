@@ -2,7 +2,7 @@ use crate::quill::{CalendarDate, QuillConfig};
 use crate::{
     document::Document,
     error::{Diagnostic, RenderError, RenderResult},
-    region::{ContentHit, RenderedRegion},
+    region::{ContentHit, FieldCoverage, RenderedRegion},
     types::RenderOptions,
 };
 pub use quillmark_content::delta::{Assoc, Delta, Op};
@@ -91,10 +91,11 @@ pub trait SessionHandle: Send + Sync + 'static {
     /// field placements with no rasterization and no byte artifact. Default
     /// empty; a backend that places schema fields overrides this.
     ///
-    /// Emit each content field's **first placement** (one region per page it
-    /// touches) plus one region per widget and per scalar reference site, so
-    /// `field` is not unique in the result. Order deterministically: widget
-    /// regions first, then content regions in (page, field, site) order.
+    /// Emit each piece of generated ink's **first placement** (one region per
+    /// page it touches, a content field's per segment), each marker claim's
+    /// extent, and one region per bound widget, so `field` is not unique in the
+    /// result. Order deterministically: widget regions first, then the rest in
+    /// (page, field, placement) order.
     fn regions(&self) -> Vec<RenderedRegion> {
         Vec::new()
     }
@@ -181,6 +182,8 @@ pub struct LiveSession {
     /// The backend's warnings for the current compile, then its
     /// `backend::declined_construct` ones.
     warnings: Vec<Diagnostic>,
+    /// The plate data the current compile read, for [`coverage`](Self::coverage).
+    data: serde_json::Value,
 }
 
 impl LiveSession {
@@ -205,6 +208,7 @@ impl LiveSession {
             today,
             regions: OnceLock::new(),
             warnings: Vec::new(),
+            data: serde_json::Value::Null,
         };
         session.commit(json_data);
         session
@@ -214,6 +218,7 @@ impl LiveSession {
         self.regions.take();
         self.warnings = self.inner.warnings().to_vec();
         self.warnings.extend(self.config.declined_in_plate(json_data));
+        self.data = json_data.clone();
     }
 
     pub fn page_count(&self) -> usize {
@@ -244,11 +249,10 @@ impl LiveSession {
         self.inner.render_rgba(page, scale)
     }
 
-    /// Schema-field geometry for the compiled session: each content field's
-    /// **first placement** (one [`RenderedRegion`] per page it touches), plus
-    /// one region per `field:`-bound widget and per direct scalar reference
-    /// site. Computed without rendering bytes; empty for backends that place no
-    /// schema fields.
+    /// Schema-field geometry for the compiled session: each piece of generated
+    /// ink's **first placement** (one [`RenderedRegion`] per page it touches),
+    /// each marker claim, and one region per `field:`-bound widget. Computed
+    /// without rendering bytes; empty for backends that place no schema fields.
     ///
     /// `field` is not unique in the result, so group by it. Later placements of
     /// one content value are **not** enumerated; for point-driven lookup over
@@ -265,11 +269,18 @@ impl LiveSession {
     }
 
     /// The whole-field highlight boxes for `field`: one union rect per page,
-    /// over the field's `span`-bearing content segments. Content only: a field
-    /// placed solely as a scalar reference or a bound widget yields nothing
-    /// here, its box being a single [`regions`](Self::regions) rect.
+    /// over the field's `span`-bearing content segments. Content only: a scalar's
+    /// ink, a claim or a bound widget yields nothing here, its box being a
+    /// single [`regions`](Self::regions) rect.
     pub fn field_boxes(&self, field: &str) -> Vec<RenderedRegion> {
         crate::region::field_boxes(self.cached_regions(), field)
+    }
+
+    /// Each address the current compile fills that a reader could want to
+    /// click, and the region address that reaches it, `None` where no click
+    /// does: [`crate::region::coverage`] over [`regions`](Self::regions).
+    pub fn coverage(&self) -> Vec<FieldCoverage> {
+        crate::region::coverage(&self.config, &self.data, self.cached_regions())
     }
 
     /// The schema field whose content is under a point on `page`, or within
@@ -468,21 +479,6 @@ main:
                 rect: [1.0, 2.0, 3.0, 4.0],
                 span: Some([0, 3]),
             }]
-        }
-        fn position_at(&self, _: usize, _: f32, _: f32, _: f32) -> Option<ContentHit> {
-            Some(ContentHit {
-                field: "subject".to_string(),
-                pos: 2,
-                granularity: Some(crate::region::HitGranularity::Cluster),
-            })
-        }
-        fn locate(&self, field: &str, pos: usize) -> Option<RenderedRegion> {
-            Some(RenderedRegion {
-                field: field.to_string(),
-                page: 0,
-                rect: [1.0, 2.0, 1.0, 4.0],
-                span: Some([pos, pos]),
-            })
         }
         fn page_size_pt(&self, page: usize) -> Option<(f32, f32)> {
             letter_page(page, self.page_count())

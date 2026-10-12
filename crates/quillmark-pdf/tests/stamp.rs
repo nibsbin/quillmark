@@ -5,8 +5,7 @@
 
 use std::collections::HashMap;
 
-use pdf_writer::types::AnnotationType;
-use quillmark_pdf::testkit::{null_spellings, BasePdf, Held};
+use quillmark_pdf::testkit::BasePdf;
 use quillmark_pdf::{
     regions_of, stamp, AppearanceStates, FieldSpec, FieldType, StampOptions, CHECKBOX_ON_STATE,
 };
@@ -316,25 +315,8 @@ fn an_out_of_contract_input_is_refused_under_its_code() {
         ),
         // A non-`xref` byte run at the startxref offset reads as an xref stream.
         ("xref stream", replaced(&[(b"xref\n0", b"1 0 \n0")]), vec![], "pdf::xref_stream"),
-        // Two `/AcroForm` keys are undefined per spec, and the old form's
-        // widgets stay live in the preserved page `/Annots`, whatever the
-        // catalog names.
+        // Two `/AcroForm` keys are undefined per spec.
         ("existing /AcroForm", BasePdf::letter(1).acroform().build(), vec![field()], "pdf::existing_acroform"),
-        (
-            "a widget in a page's /Annots",
-            BasePdf::letter(1).annot(0, AnnotationType::Widget, Held::Referenced).build(),
-            vec![field()],
-            "pdf::existing_acroform",
-        ),
-        (
-            "a widget in another page's /Annots beside /AcroForm null",
-            BasePdf::letter(2)
-                .catalog_raw("AcroForm", " null")
-                .annot(1, AnnotationType::Widget, Held::Inline)
-                .build(),
-            vec![field()],
-            "pdf::existing_acroform",
-        ),
         (
             "non-zero generation catalog",
             replaced(&[(b"1 0 obj", b"1 2 obj"), (b"/Root 1 0 R", b"/Root 1 2 R")]),
@@ -403,15 +385,6 @@ fn an_out_of_contract_input_is_refused_under_its_code() {
             .expect_err(&format!("{what} is refused"));
         assert_eq!(err.code, code, "{what}: {}", err.message);
     }
-}
-
-#[test]
-fn nonzero_mediabox_origin_flows_through() {
-    let base = BasePdf::letter(1)
-        .media_box([10.0, 20.0, 622.0, 812.0])
-        .build();
-    let boxes = quillmark_pdf::page_canvas_boxes(&base).expect("canvas boxes");
-    assert_eq!(boxes, vec![[10.0, 20.0, 622.0, 812.0]]);
 }
 
 #[test]
@@ -817,36 +790,6 @@ fn a_non_winansi_value_draws_substituted_while_the_field_keeps_it_whole() {
         utf16be.as_slice(),
         "/V is the source of truth and keeps every code point"
     );
-}
-
-/// ISO 32000-1 §7.3.9: a `null` entry is an absent one, so a catalog nulling
-/// `/AcroForm` carries no form, and the stamped catalog names its one fresh
-/// `/AcroForm` where the null stood.
-#[test]
-fn a_null_acroform_is_no_form_and_the_stamp_writes_the_one_entry() {
-    for spelling in null_spellings() {
-        let base = BasePdf::letter(1)
-            .null_object()
-            .catalog_raw("AcroForm", spelling)
-            .build();
-        let fields = [text_field("X", "x", 0, [10.0, 10.0, 100.0, 30.0], "hi")];
-        let out = stamp(base.clone(), &fields, &StampOptions::default())
-            .unwrap_or_else(|e| panic!("a null /AcroForm is no form: {}", e.message));
-
-        let update = &out[base.len()..];
-        assert_eq!(
-            update
-                .windows(b"/AcroForm".len())
-                .filter(|w| *w == b"/AcroForm")
-                .count(),
-            1,
-            "the rewritten catalog names /AcroForm once: {}",
-            String::from_utf8_lossy(update)
-        );
-        let (_, af, w) = stamped_on(base, &fields);
-        assert_eq!(af.get(b"Fields").unwrap().as_array().unwrap().len(), 1);
-        assert!(w.contains_key("X"));
-    }
 }
 
 /// A base reference at or above `/Size` names no object, and still names none

@@ -2,125 +2,113 @@
 
 A live preview maps a click on the page back to the schema field that produced the ink under it, through the geometry sidecar (`session.regions()`) and `session.fieldAt(...)`. This page is for plates whose quill will be edited that way. A quill rendered only to files can skip it: nothing here changes the output.
 
-Quillmark attributes ink on its own for a `richtext` or `plaintext` field, for any field printed through [`ink`](#print-with-ink), for a date placed with `display`, and for a scalar read written in the plate or a module it imports (`#data.subject`). A [form-field widget](typst-backend.md#binding-to-a-schema-field) opts in with `field:`. Everything else is unattributed until a `field-region` claims it.
+Regions come from three producers, each one your plate declares:
+
+- **Generated ink**: a `richtext` or `plaintext` field, and any field printed through [`qm.ink`](#print-with-ink).
+- **A claim**: [`qm.region`](#tying-composed-content-to-a-field) on ink the plate composes.
+- **A widget**: a [form field](typst-backend.md#binding-to-a-schema-field) bound with `field:`.
+
+A value the plate prints itself — `#qm.data.subject`, `#text(size: 9pt, qm.data.name)` — carries no region. One rule covers the plate: **compute with `qm.data.x`, print with `qm.ink(..)`, claim composed ink with `qm.region(..)`.** `quillmark check --regions` lists the filled fields of a document that no click reaches.
 
 ## Print with `ink`
 
-`data`, each card, and each typed dictionary or table row carry a printable copy of their fields, read with `ink`:
+`qm.ink(dict, key)` prints the field at `key` of `dict`: `qm.data`, a card, a typed dictionary or table row, or a [`roster`](typst-backend.md#matrices) row's `value`. `key` is one or more address steps from it: `"owner"`, `"address.city"`, `"tags.0"`.
 
 ```typst
-#import "@local/quillmark-helper:0.1.0": data, display, ink
+#import "@local/quillmark-helper:0.2.0" as qm
 
-#let action(item) = [#ink(item).owner, due #display(item, "due", "[month]/[day]")]
+#let action(item) = [#qm.ink(item, "owner"), due #qm.ink(item, "due", "[month]/[day]")]
 
-#for item in data.actions.filter(a => a.status == "open") {
+#for item in qm.data.actions.filter(a => a.status == "open") {
   action(item)
 }
 ```
 
-Each value's ink is born in generated code, so it keeps its field's address however far it travels: a function parameter, a loop variable, a destructuring, a `filter` or `sort`, a package. One rule: **compute with the dictionary, print its ink.** `a.status == "open"` needs the value; `ink(item).owner` is what goes on the page.
+Each value's ink is born in generated code, so it keeps its field's address however far it travels: a function parameter, a loop variable, a `filter` or `sort`, a package. `a.status == "open"` needs the value; `qm.ink(item, "owner")` is what goes on the page.
 
-| Field | `ink(x).<field>` |
+| Address holds | `qm.ink(x, "<key>")` |
 |---|---|
-| `string`, `enum`, `integer`, `number`, `boolean` | content printing what `#x.<field>` prints |
-| `richtext`, `plaintext` | the content `x.<field>` already is |
-| `date`, `datetime` | its default display (`2026-03-04`); for a pattern, `display(x, "<field>", ..)` |
-| an array of those | the array of their ink |
-| any of those whose value is `none` (a blank date, an unanswered `type: t?`) | `none` |
-| a typed dictionary or a table | nothing: each dictionary carries its own, so `ink(x.address).city`, `ink(row).org` |
+| `string`, `enum`, `integer`, `number`, `boolean` | content printing what `#x.<key>` prints |
+| `richtext`, `plaintext` | the content `x.<key>` already is |
+| `date`, `datetime` | its default display (`2026-03-04`); for a pattern, `qm.ink(x, "<key>", ..)` |
+| an array of those | the array of their ink; one element by its own address, `"tags.0"` |
+| a blank value (a blank date, empty content, an unanswered `type: t?`) | `none` |
+| a typed dictionary, a table, a matrix | `none`: address the cell, `qm.ink(x, "address.city")`, `qm.ink(row, "org")` |
 
-Ink is content, so styling that wraps it keeps the address: `upper`, `text(..)`, `strong`, `align`, a `box`. Computing a string needs the value, and what it prints is composed ink: `calc.round`, `str(n, base: 16)`, `.slice(..)`, `+` with a string. Claim that with [`field-region`](#tying-composed-content-to-a-field), addressed through the dictionary's `$path`:
+An address the schema does not have fails the render, and so does a pattern on an address that is not a date's: a roster member's `title` is the roster's, not an address, so guard with `row.held and "title" in row.value` (an unheld row's `value` is `none`).
+
+Ink is content, so styling that wraps it keeps the address: `upper`, `text(..)`, `strong`, `align`, a `box`. Computing a string needs the value, and what it prints is composed ink: `calc.round`, `str(n, base: 16)`, `.slice(..)`, `+` with a string. Claim that with [`qm.region`](#tying-composed-content-to-a-field), addressed through the dictionary's `$path`:
 
 ```typst
-#for row in data.expenses {
-  field-region(row.at("$path") + "amount")[#calc.round(row.amount, digits: 2)]
+#for row in qm.data.expenses {
+  qm.region(row.at("$path") + "amount")[#calc.round(row.amount, digits: 2)]
 }
 ```
 
-The copy lives under a `$ink` key, which `ink` reads, beside the dictionary's address prefix as `$path`, the one a card already carries. A plate that walks a typed dictionary's keys, compares one whole, or spreads a row into a call (`f(..row)`) sees both: skip `$`-prefixed keys there.
+`$path` is the dictionary's address prefix, which `qm.data`, every card and every typed dictionary carry and `qm.ink` reads. A plate that walks a typed dictionary's keys, compares one whole, or spreads a row into a call (`f(..row)`) sees it: skip `$`-prefixed keys there.
 
-## Dates: `display` and `data`
+## Dates: print through `qm.ink`
 
-- **`display(field, ..args)` renders and is clickable.** It takes the date's *schema address* (`"issued"`), or a dictionary and the date's key within it (`row, "due"`), never its value, and returns Typst *content* whose glyphs carry a region keyed on that address: the atomic, picker-editable click-to-edit target. It accepts the same patterns `datetime.display` does, and a `date`-only field inherits Typst's native error on a `[hour]` pattern. The address is checked against the schema at compile time, the same check `form-field(field:)` and `field-region` apply, so a typo fails the render instead of dropping the date from it. `none` for a blank date, so a `== none` fallback still fires.
-- **`data.<field>` is the value.** Reach for it whenever you want a `datetime` — math, comparison, components, handing it to a package. A direct plate reference (`#data.issued.display("…")` written in the plate itself) still regions, the same way any scalar reference site does.
+- **`qm.ink(x, "<date>", ..args)` renders and is clickable.** It returns Typst *content* whose glyphs carry a region keyed on the date's address: the atomic, picker-editable click-to-edit target. It accepts the same patterns `datetime.display` does, and a `date`-only field inherits Typst's native error on a `[hour]` pattern. `none` for a blank date, so a `== none` fallback still fires.
+- **`qm.data.<field>` is the value.** Reach for it whenever you want a `datetime`: math, comparison, components, handing it to a package. What the plate prints from it (`#qm.data.issued.display("…")`) carries no region.
 
-One rule: **want a value → `data.<field>`; want clickable ink → `ink(x).<field>` for the default format, `display(x, "<field>", ..)` for a pattern**, or `display("<field>", ..)` where you hold an address rather than its dictionary. The difference matters exactly when a *package* does the inking: a `datetime` handed to a package draws its glyphs wherever the package places them, so nothing ties them to your schema field, while `display`'s ink is born in generated code and keeps its address however deep it travels.
+The difference matters most when a *package* does the inking: a `datetime` handed to a package draws its glyphs wherever the package places them, so nothing ties them to your schema field, while `qm.ink`'s ink is born in generated code and keeps its address however deep it travels.
 
-## Which Reads Get Regions
+## What carries no region
 
-A scalar printed straight off `data` rather than through its ink is tracked at the expression that draws it, so where you write the read decides whether it surfaces in `session.regions()`. Naming the value first is fine: a `let` bound once to one whole `data` chain is followed, and stepping into a container through that name keeps the cell's address.
-
-```typst
-#let c = data.classification
-#c.poc                       // regions as `main.classification.poc`, same as #data.classification.poc
-```
-
-A read into a typed table works the same way, one step further: the index and
-then the row property. The session spells the address as a document path,
-`main.refs[0].org`, where `form-field(field:)` takes `refs.0.org`.
-
-```typst
-#data.refs.at(0).org         // regions as `main.refs[0].org`
-#data.refs.at(0)             // regions as `main.refs[0]` — each step is its own address
-#let row = data.refs.at(0)
-#row.org                     // regions as `main.refs[0].org` too
-```
-
-Rebind that name anywhere in its file — a second `let`, a closure parameter, a loop pattern, an assignment — and it stops being followed, because a read can no longer be tied to one value. Three shapes are past what the tracker follows at all:
-
-| Shape | Why |
-|---|---|
-| a value handed to a function (`#let f(c) = [#c.poc]`) | the parameter is a fresh name bound per call |
-| a destructured binding (`#let (poc, ..) = data.classification`) | the pattern names no chain |
-| a per-card loop variable (`#for card in data.at("$cards")`) | one shared expression site carries no per-instance identity |
-
-Each of those still renders correctly and loses only the click target, which is why nothing announces it. Print the field's [`ink`](#print-with-ink) instead to get the region back.
-
-**Backend-generated ink needs none of this.** A `richtext` value, any field's `ink`, and a date placed through `display` are born in generated code, so they keep their address through a function, a loop, or a package that rebuilds them. A *value* laundered through any of the shapes above is on the list like every other value, dates included.
+A value the plate prints itself carries the plate's own source position, which names no field. That holds however the plate spells the read or wraps it: `#qm.data.subject`, `#upper(qm.data.subject)`, `#text(size: 9pt, qm.data.name)`, a row cell in a computed table. Each renders correctly and loses only the click target, which is why nothing announces it. Print the field through [`qm.ink`](#print-with-ink), or claim the composed ink with [`qm.region`](#tying-composed-content-to-a-field). `quillmark check --regions ./my-quill doc.md` names every filled field no click reaches, and each one only an enclosing field's region reaches.
 
 ## Tying Composed Content to a Field
 
-A live preview routes a click back to the schema field that produced the ink under it, and it finds that field automatically for content it generated: a `richtext` field's markup, a `#data.subject` reference in your plate. Content your plate *composes* — a banner keyed off `data.classification`, an address block a vendored package lays out, a computed table — draws ink Quillmark cannot attribute to anything. `field-region` claims it:
+A live preview routes a click back to the schema field that produced the ink under it, and it finds that field automatically for content it generated: a `richtext` field's markup, a field printed through `qm.ink`. Content your plate *composes* — a banner keyed off `qm.data.classification`, an address block a vendored package lays out, a computed table — draws ink Quillmark cannot attribute to anything. `qm.region` claims it:
 
 ```typst
-#import "@local/quillmark-helper:0.1.0": data, field-region
+#import "@local/quillmark-helper:0.2.0" as qm
 
 #let banner(level) = box(stroke: 1pt, inset: 6pt)[#upper(level)]
 
-#field-region("classification")[#banner(data.classification)]
+#qm.region("classification")[#banner(qm.data.classification)]
 ```
 
 The banner now appears in `session.regions()` under `main.classification` and a click on it resolves through `session.fieldAt(...)`, exactly as if the field had drawn it.
 
-`body` is returned untouched, bracketed by two invisible `metadata` markers, so the wrapper changes nothing about layout or output bytes. Unlike a `form-field` widget it reserves no space and draws no click target of its own: it claims the ink that is already there.
+`body` is returned untouched, bracketed by two invisible `metadata` markers, so the wrapper changes nothing about layout or output bytes. Unlike a `qm.form-field` widget it reserves no space and draws no click target of its own: it claims the ink that is already there.
 
 ### What it claims
 
 A claim is a **fallback**, not an override. Ink already tracked to a field keeps that field, and the wrapper takes only what is left:
 
 ```typst
-#field-region("recipient")[
-  #line(length: 2in)          // no field of its own → claimed for `recipient`
-  #data.body                  // a richtext field → stays `body`
-  Prepared by #data.author    // a scalar reference → stays `author`
+#qm.region("recipient")[
+  #line(length: 2in)                       // no field of its own → claimed for `recipient`
+  #qm.data.body                            // a richtext field → stays `body`
+  Prepared by #qm.ink(qm.data, "author")   // a field's ink → stays `author`
 ]
 ```
 
-Nesting therefore reads as ordinary scoping, and wrapping never moves a region off the field that generated it. The flip side: you cannot use `field-region` to *retarget* ink that is already attributed. Ink Typst attributes to no source position at all — list bullets, underline rules — stays unclaimed here as it is everywhere else.
+Nesting therefore reads as ordinary scoping, and wrapping never moves a region off the field that generated it. The flip side: you cannot use `qm.region` to *retarget* ink that is already attributed.
+
+What else a claim takes:
+
+- Text Typst draws with no source position of its own is the claim's: a string turned into content inside a function call (`text(size: 9pt, "LIT")`), a list's bullets.
+- An underline or strike stroke stays with the content it decorates.
+- A claim running across a page break leaves the header, footer, background and page number it crosses alone. A claim placed in the header or footer itself, such as a classification banner, takes that marginal's ink.
+- A float or a footnote placed inside a claim is laid out before or after the claim on its page, and is not claimed.
+- A claim running across a page break does take what sits between one page's last line of text and the next page's first: the first page's footnotes, bottom floats and `foreground`, and the next page's top floats, wherever they are anchored. Wrap a foreground watermark in `pdf.artifact` to keep it out.
 
 Each **call** claims independently, so `field` need not be a literal and a wrapper used once per card yields one region per card. A card's `$path` is its address prefix, separator included, so appending a field name (`card.at("$path") + "topic"`) or `$body` spells that card's address:
 
 ```typst
-#for card in data.at("$cards", default: ()) {
+#for card in qm.data.at("$cards", default: ()) {
   if card.at("$kind", default: none) == "note" {
-    field-region(card.at("$path") + "$body", render-card(card))
+    qm.region(card.at("$path") + "$body", render-card(card))
   }
 }
 ```
 
-The branch names a kind with a body: a card of a kind the quill does not declare, or of one under `body.enabled: false`, has no `$body` address, and `field-region` asserts on it.
+The branch names a kind with a body: a card of a kind the quill does not declare, or of one under `body.enabled: false`, has no `$body` address, and `qm.region` asserts on it.
 
-A card's own fields need no claim: print them through `ink(card)`.
+A card's own fields need no claim: print them through `qm.ink(card, ..)`.
 
 ### Parameters and errors
 
@@ -129,8 +117,8 @@ A card's own fields need no claim: print them through `ink(card)`.
 | `field` | `str` | required (positional) | Schema address: a field name, an array element like `"refs.2"`, or a card path built from the card's `$path` prefix. |
 | `body` | any content | required (positional) | Returned unchanged; its ink is what gets claimed. |
 
-- A `field` that is not a known schema address, or is not a string, raises a Typst assert pointing at `field-region`.
+- A `field` that is not a known schema address, or is not a string, raises a Typst assert pointing at `region`.
 - A claim whose content Typst lays out somewhere else entirely (`#place`, a float) claims whatever ink lands between its markers instead; wrap the placed content rather than the `place` call.
-- Emit the call's return value whole. Splitting it — passing `.children` through separately, say — can land the opening marker in a frame without its closing one. Such a claim is bounded by nothing, so rather than let it take every unattributed piece of ink to the end of the document it is dropped entirely and reported as a `typst::unclosed_field_region` warning naming the field.
+- Emit the call's return value whole. Splitting it — passing `.children` through separately, say — can land the opening marker in a frame without its closing one. Such a claim is bounded by nothing, so rather than let it take every unattributed piece of ink to the end of the document it is dropped entirely and reported as a `typst::unclosed_region` warning naming the field.
 
 The label `<__qm_region__>` and metadata `kind: "__qm_region__"` are reserved for this hand-off: the same `query(metadata)` caveat applies.

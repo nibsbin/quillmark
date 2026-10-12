@@ -79,10 +79,10 @@ title: Canvas Test
 # Hello canvas
 `
 
-const TEST_PLATE = `#import "@local/quillmark-helper:0.1.0": data
-= #data.title
+const TEST_PLATE = `#import "@local/quillmark-helper:0.2.0" as qm
+= #qm.data.title
 
-#data.at("$body")`
+#qm.data.at("$body")`
 
 function openQuill() {
   const engine = new Quillmark()
@@ -116,8 +116,8 @@ main:
         inline: true
 `
 
-const ARRAY_PLATE = `#import "@local/quillmark-helper:0.1.0": data
-#for r in data.references [ #r \\ ]
+const ARRAY_PLATE = `#import "@local/quillmark-helper:0.2.0" as qm
+#for r in qm.data.references [ #r \\ ]
 `
 
 const ARRAY_MARKDOWN = `~~~card-yaml
@@ -155,24 +155,6 @@ function expectInkAndOpaquePixels(call) {
 }
 
 describe('LiveSession canvas preview', () => {
-  it('exposes pageCount, backendId, warnings, and pageSize on a Typst session', () => {
-    const { engine, quill } = openQuill()
-
-    const session = engine.open(quill, Document.fromMarkdown(TEST_MARKDOWN))
-    expect(session.pageCount).toBeGreaterThan(0)
-    expect(session.backendId).toBe('typst')
-    expect(Array.isArray(session.warnings)).toBe(true)
-    // Each entry crosses as a plain Diagnostic object, not a handle.
-    for (const w of session.warnings) {
-      expect(typeof w.severity).toBe('string')
-      expect(typeof w.message).toBe('string')
-    }
-
-    const size = session.pageSize(0)
-    expect(size.widthPt).toBeGreaterThan(0)
-    expect(size.heightPt).toBeGreaterThan(0)
-  })
-
   it('positionAt and locate cross the boundary as ContentHit / caret rect', () => {
     // Where the boxes land and which offsets they cover is geometry, owned by
     // `backends/typst/tests/content_regions.rs` and
@@ -222,6 +204,12 @@ describe('LiveSession canvas preview', () => {
     const caret = session.locate('main.references[0]', 0)
     expect(caret, 'locate answers on the element address').toBeTruthy()
     expect(caret.field).toBe('main.references[0]')
+
+    // `coverage` spells both of its addresses the same way.
+    expect(session.coverage()).toContainEqual({
+      field: 'main.references[0]',
+      coveredBy: 'main.references[0]',
+    })
 
     // And the forward direction agrees: a point on the element's ink resolves
     // to the same string, so positionAt → locate composes.
