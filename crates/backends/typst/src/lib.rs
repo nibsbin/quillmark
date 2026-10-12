@@ -589,8 +589,8 @@ fn plate_spelling_hint(plate_file: &str, source: &Quill) -> String {
 /// about the schema alone.
 #[derive(Debug, Default, Clone)]
 pub(crate) struct AddressNode {
-    pub(crate) props: BTreeMap<String, AddressNode>,
-    pub(crate) item: Option<Box<AddressNode>>,
+    props: BTreeMap<String, AddressNode>,
+    item: Option<Box<AddressNode>>,
     added: Option<Box<AddressNode>>,
     roster: Option<serde_json::Value>,
 }
