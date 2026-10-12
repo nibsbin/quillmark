@@ -400,7 +400,7 @@ main:
 - **The id is identity.** It is snake_case (`quill::invalid_section_id`), and
   the label is `title`, else humanized from the id. A section block takes
   `title` and `fields` only (`quill::invalid_card_schema`).
-- **A section holding no field is dropped.**
+- **A section holds a field** (`quill::empty_section`).
 - **An object alone in its section draws flat:** the loader writes
   `ui.layout: flat` where the object names no layout, the section being its
   frame.
@@ -412,7 +412,8 @@ own ([Schema emission](#schema-emission)).
 The legacy spelling, a `ui.groups` registry on the card and a `ui.group`
 reference on each field, loads with a `quill::deprecated_groups` warning and
 settles into the same model: ungrouped fields first, then each group's in
-registry order, whatever order they were declared in. A card spelling both is
+registry order, whatever order they were declared in, with a registry entry no
+field names dropped. A card spelling both is
 `quill::mixed_sectioning`. The registry's own checks apply to the legacy
 spelling alone: `quill::unknown_group`, `quill::implicit_group`,
 `quill::duplicate_group`, `quill::invalid_group_id`, and

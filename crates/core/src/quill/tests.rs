@@ -589,7 +589,6 @@ main:
       fields:
         subject: { type: string }
         memo_for: { type: string }
-    unused:
     letterhead:
       title: "Letterhead & Seal"
       fields:
@@ -626,6 +625,13 @@ main:
 }
 
 #[test]
+fn a_legacy_registry_naming_no_field_leaves_no_ui() {
+    let yaml = "main:\n  ui: { groups: [unused] }\n  fields:\n    a: { type: string }\n";
+    let schema = config_with_sections(yaml).unwrap().schema();
+    assert!(schema["main"].get("ui").is_none(), "{schema}");
+}
+
+#[test]
 fn a_bad_section_declaration_is_refused_by_code() {
     for (main, code) in [
         (
@@ -649,6 +655,8 @@ fn a_bad_section_declaration_is_refused_by_code() {
             "quill::invalid_card_schema",
         ),
         ("  sections:\n    a: [s]\n", "quill::invalid_card_schema"),
+        ("  sections:\n    a:\n      title: A\n", "quill::empty_section"),
+        ("  sections:\n    a:\n", "quill::empty_section"),
     ] {
         let err = config_with_sections(&format!("main:\n{main}")).expect_err(code);
         let [diag] = err.as_slice() else {

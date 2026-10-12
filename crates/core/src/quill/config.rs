@@ -2097,6 +2097,19 @@ impl QuillConfig {
                         continue;
                     }
                 };
+                if section.fields.as_ref().is_none_or(|f| f.is_empty()) {
+                    errors.push(
+                        Diagnostic::new(
+                            Severity::Error,
+                            format!("Section '{id}' on '{label}' holds no field."),
+                        )
+                        .with_code("quill::empty_section".to_string())
+                        .with_hint(
+                            "Declare the section's fields under its `fields:`, or delete it."
+                                .to_string(),
+                        ),
+                    );
+                }
                 let mut names = Vec::new();
                 for (name, field) in section.fields.into_iter().flatten() {
                     if raw.contains_key(&name) {
@@ -2793,8 +2806,8 @@ fn uses_groups(card: &CardSchema) -> bool {
 
 /// Settle a loaded card's sections, whichever syntax declared them: fields in
 /// display order (unsectioned first, then each section's in registry order), a
-/// section holding no field dropped from the registry, and an object alone in
-/// its section drawn flat, the section being its frame.
+/// legacy registry entry no field names dropped, and an object alone in its
+/// section drawn flat, the section being its frame.
 fn settle_sections(card: &mut CardSchema) {
     let Some(GroupRegistry(registry)) = card.ui.as_mut().and_then(|ui| ui.groups.take()) else {
         return;
@@ -2832,9 +2845,9 @@ fn settle_sections(card: &mut CardSchema) {
     }
     fields.extend(sectioned);
     card.fields = fields;
-    if !kept.is_empty() {
-        card.ui.get_or_insert(UiCardSchema { groups: None }).groups = Some(GroupRegistry(kept));
-    }
+    card.ui = (!kept.is_empty()).then(|| UiCardSchema {
+        groups: Some(GroupRegistry(kept)),
+    });
 }
 
 /// Whether a raw field schema spells `ui.title` on itself or on any field

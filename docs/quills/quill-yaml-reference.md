@@ -687,7 +687,7 @@ A section is a frame, not data. `memo_for` is a card-level field wherever it sit
 
 - **Order is position.** The card's own `fields:` come first, then each section's fields, in declaration order. Editors, seeding and the blueprint all follow it.
 - **Identity is the id, not the label.** Ids are snake_case (`quill::invalid_section_id`), and editors key per-section state on them. The label is `title:`, or derived from the id (`addressing` → "Addressing"), so renaming it breaks nothing.
-- **A section with no fields is skipped.**
+- **A section holds at least one field.** An empty one is a load error (`quill::empty_section`).
 - **An object alone in its section is drawn flat:** the section is already its frame (see [`layout`](#layout)).
 
 A card may declare `sections:` with no `fields:` of its own, putting every field in a panel. A section takes `title` and `fields` only (`quill::invalid_card_schema`), and a section holds card-level fields only.
