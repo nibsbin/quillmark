@@ -162,6 +162,38 @@ function quillmarkError(code, message, hint) {
 }
 
 /**
+ * `err` as `runtime::backend_trapped` when it is a WASM trap, else unchanged. A
+ * trap (out of memory, a panic under `panic = "abort"`) leaves the build's
+ * instance inconsistent, and the instance is module-scoped, so every later call
+ * into that build traps too.
+ * @param {unknown} err
+ * @returns {unknown}
+ */
+function backendTrap(err) {
+	if (!(err instanceof WebAssembly.RuntimeError)) return err;
+	return Object.assign(
+		quillmarkError(
+			'runtime::backend_trapped',
+			`The render build trapped (${err.message}); it cannot run again in this realm.`,
+			'A render ran out of memory or panicked. Discard the realm to recover: terminate the Worker or restart the process. For untrusted input, cap the document size.'
+		),
+		{ cause: err }
+	);
+}
+
+/**
+ * Free a per-call clone without masking an error already in flight: after a
+ * trap the clone is still marked borrowed, and `free()` would throw over it.
+ * @param {{ free(): void } | null} handle
+ * @returns {void}
+ */
+function freeClone(handle) {
+	try {
+		handle?.free();
+	} catch {}
+}
+
+/**
  * Throw on options that are not a plain object, or on a key of them, or of a
  * null-prototype object they inherit from, outside `known`. The JS twin of the
  * binding's `reject_unknown_keys`, in the uncoded shape it throws: a misspelled
@@ -571,13 +603,15 @@ export class Engine {
 		// The doc clone and `fn` share one try so the clone is freed even if a
 		// later step throws; the cached quill clone is intentionally not freed.
 		// `fn` MUST be synchronous: an async one would run against a freed clone.
-		const backendQuill = this.#cachedQuillClone(mod, backendId, quill, quillTree);
 		let backendDoc = null;
 		try {
+			const backendQuill = this.#cachedQuillClone(mod, backendId, quill, quillTree);
 			backendDoc = mod.Document.fromStored(docJson);
 			return fn({ mod, engine, quill: backendQuill, doc: backendDoc });
+		} catch (err) {
+			throw backendTrap(err);
 		} finally {
-			backendDoc?.free();
+			freeClone(backendDoc);
 		}
 	}
 
@@ -658,8 +692,10 @@ export class LiveSession {
 		try {
 			backendDoc = this.#mod.Document.fromStored(doc.toStored());
 			return this.#inner.update(backendDoc);
+		} catch (err) {
+			throw backendTrap(err);
 		} finally {
-			backendDoc?.free();
+			freeClone(backendDoc);
 		}
 	}
 
@@ -675,7 +711,11 @@ export class LiveSession {
 
 	/** @param {object} [options] */
 	render(options) {
-		return this.#inner.render(options ?? undefined);
+		try {
+			return this.#inner.render(options ?? undefined);
+		} catch (err) {
+			throw backendTrap(err);
+		}
 	}
 
 	/**
@@ -742,7 +782,11 @@ export class LiveSession {
 	 * @param {number} scale
 	 */
 	paint(ctx, page, scale) {
-		this.#inner.paint(ctx, page, scale);
+		try {
+			this.#inner.paint(ctx, page, scale);
+		} catch (err) {
+			throw backendTrap(err);
+		}
 	}
 
 	free() {
