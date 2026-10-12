@@ -17,6 +17,7 @@
 
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 
 use crate::error::PdfError;
 
@@ -912,7 +913,15 @@ pub(crate) fn open_trailer<'a>(
 #[derive(Debug)]
 pub(crate) struct Page {
     pub id: u32,
-    ancestors: Vec<u32>,
+    ancestors: Option<Rc<Ancestor>>,
+}
+
+/// One `/Pages` node and the chain above it, shared by every node below it so
+/// a deep or wide tree costs one link per node.
+#[derive(Debug)]
+pub(crate) struct Ancestor {
+    id: u32,
+    up: Option<Rc<Ancestor>>,
 }
 
 impl Page {
@@ -928,7 +937,7 @@ impl Page {
         parse: impl Fn(&[u8]) -> Option<T>,
     ) -> Option<T> {
         std::iter::once(self.id)
-            .chain(self.ancestors.iter().copied())
+            .chain(std::iter::successors(self.ancestors.as_deref(), |a| a.up.as_deref()).map(|a| a.id))
             .find_map(|id| {
                 let dict = idx.dict(id, CODE_PARSE, "page node").ok()?;
                 parse(idx.value(dict, key)?)
@@ -944,7 +953,7 @@ pub(crate) fn walk_page_tree(idx: &ObjectIndex, catalog_id: u32) -> Result<Vec<P
 
     const MAX_NODES: usize = 100_000;
     let mut out = Vec::new();
-    let mut stack = vec![(root_pages_id, Vec::<u32>::new())];
+    let mut stack: Vec<(u32, Option<Rc<Ancestor>>)> = vec![(root_pages_id, None)];
     // A node reached twice is a cyclic or shared-node `/Pages` tree: a `/Kids`
     // self-cycle would otherwise walk until MAX_NODES.
     let mut seen: HashSet<u32> = HashSet::new();
@@ -967,9 +976,7 @@ pub(crate) fn walk_page_tree(idx: &ObjectIndex, catalog_id: u32) -> Result<Vec<P
             if !(kids.starts_with(b"[") && kids.ends_with(b"]")) {
                 return Err(err(CODE_PARSE, format!("page node {node_id} /Kids is not an array")));
             }
-            let mut kid_ancestors = Vec::with_capacity(ancestors.len() + 1);
-            kid_ancestors.push(node_id);
-            kid_ancestors.extend_from_slice(&ancestors);
+            let kid_ancestors = Some(Rc::new(Ancestor { id: node_id, up: ancestors }));
             let mut kid_ids = array_elements(kids)
                 .map(|kid| {
                     parse_indirect_ref(kid).map(|(id, _)| id).ok_or_else(|| {
@@ -980,6 +987,11 @@ pub(crate) fn walk_page_tree(idx: &ObjectIndex, catalog_id: u32) -> Result<Vec<P
                     })
                 })
                 .collect::<Result<Vec<u32>, _>>()?;
+            // Every queued kid is a distinct node or a revisit error, so the
+            // cap holds before a wide `/Kids` is queued.
+            if seen.len() + stack.len() + kid_ids.len() > MAX_NODES {
+                return Err(err(CODE_PARSE, "page tree exceeds 100 000 nodes"));
+            }
             kid_ids.reverse();
             stack.extend(kid_ids.into_iter().map(|id| (id, kid_ancestors.clone())));
         } else {
@@ -1567,6 +1579,17 @@ mod tests {
                     2 0 obj\n<< /Type /Pages /Kids [2 0 R] /Count 1 >>\nendobj\n";
         let e = walk_page_tree(&ObjectIndex::new(pdf), 1).expect_err("cycle rejected");
         assert_eq!(e.code, CODE_PARSE);
+    }
+
+    #[test]
+    fn kids_past_the_node_cap_are_refused_before_they_queue() {
+        let kids = "3 0 R ".repeat(100_001);
+        let pdf = format!(
+            "%PDF\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
+             2 0 obj\n<< /Type /Pages /Kids [{kids}] >>\nendobj\n"
+        );
+        let e = walk_page_tree(&ObjectIndex::new(pdf.as_bytes()), 1).expect_err("cap holds");
+        assert!(e.message.contains("100 000"), "{}", e.message);
     }
 
     #[test]
