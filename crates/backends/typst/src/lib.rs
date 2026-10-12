@@ -47,10 +47,6 @@ struct TypstSession {
     /// Built once at `open`: the schema never changes for a session's lifetime,
     /// and codegen plus date validation read only these tables.
     schema_meta: SchemaMeta,
-    /// Project sources are static for a session's lifetime, so these are
-    /// computed once at `open` and re-appended into the compile's windows per
-    /// update.
-    scalar_windows: Vec<overlay::FieldWindow>,
     /// Swapped whole, and only once [`recompile`] has succeeded, so on `Err`
     /// every read keeps serving the last-good compile.
     live: Compiled,
@@ -64,8 +60,8 @@ struct Compiled {
     /// stamps.
     field_specs: Vec<quillmark_pdf::FieldSpec>,
     widget_regions: Vec<RenderedRegion>,
-    /// The span scan's classification table: generated content-block windows
-    /// then the project sources' scalar reference-site windows.
+    /// The span scan's classification table: every generated ink window in the
+    /// helper, in byte order.
     windows: Vec<overlay::FieldWindow>,
     /// Span resolution goes through this snapshot, not the world: a failed
     /// `update` leaves the *next* injection's text in the world while every read
@@ -90,12 +86,10 @@ fn recompile(
     data: &serde_json::Value,
     config: &QuillConfig,
     schema_meta: &SchemaMeta,
-    scalar_windows: &[overlay::FieldWindow],
 ) -> Result<Compiled, RenderError> {
-    let mut windows = world
+    let windows = world
         .inject_helper_package(data, schema_meta)
         .map_err(|e| RenderError::coded(e.code(), e.to_string()))?;
-    windows.extend(scalar_windows.iter().cloned());
 
     let (document, compile_warnings) = compile::compile_document(world)?;
     let helper_source = helper_source(world)?;
@@ -256,13 +250,7 @@ impl SessionHandle for TypstSession {
         config: &QuillConfig,
         json_data: &serde_json::Value,
     ) -> Result<ChangeSet, RenderError> {
-        let compiled = recompile(
-            &mut self.world,
-            json_data,
-            config,
-            &self.schema_meta,
-            &self.scalar_windows,
-        )?;
+        let compiled = recompile(&mut self.world, json_data, config, &self.schema_meta)?;
 
         let page_count = compiled.page_hashes.len();
         let dirty_pages = (0..page_count)
@@ -355,7 +343,6 @@ impl TypstSession {
     fn scan(&self) -> overlay::Scan<'_> {
         overlay::Scan {
             doc: &self.live.document,
-            world: &self.world,
             helper: &self.live.helper_source,
             windows: &self.live.windows,
             unclosed: &self.live.unclosed_claims,
@@ -461,25 +448,9 @@ impl Backend for TypstBackend {
         let mut world = quill_world(source, &plate)?;
         check_helper_imports(&world)?;
         world.set_today(today);
-        // Project sources are static for the session: window their scalar
-        // sites once.
-        let scalar_windows: Vec<overlay::FieldWindow> = world
-            .project_sources()
-            .into_iter()
-            .flat_map(|source| {
-                overlay::scalar_windows(source, &schema_meta.root)
-                    .into_iter()
-                    .map(|(path, range)| overlay::FieldWindow {
-                        path,
-                        file: source.id(),
-                        range,
-                        segments: Vec::new(),
-                    })
-            })
-            .collect();
         // No session survives to serve the load warnings, and a package they
         // name as skipped otherwise fails only as an unresolved import.
-        let live = recompile(&mut world, json_data, config, &schema_meta, &scalar_windows).map_err(|e| {
+        let live = recompile(&mut world, json_data, config, &schema_meta).map_err(|e| {
             let mut diags = e.into_diagnostics();
             diags.extend(world.load_warnings().iter().cloned());
             RenderError::new(diags)
@@ -487,7 +458,6 @@ impl Backend for TypstBackend {
         let session = TypstSession {
             world,
             schema_meta,
-            scalar_windows,
             live,
         };
         Ok(LiveSession::new(
@@ -657,22 +627,6 @@ impl AddressNode {
         }
     }
 
-    /// The node `path` addresses, or `None` where it takes a step the schema
-    /// does not offer. A digit segment is the index step; any other is a
-    /// property step, or an open matrix's added step.
-    pub(crate) fn resolve(&self, path: &str) -> Option<&Self> {
-        path.split('.').try_fold(self, |node, seg| {
-            match seg.bytes().all(|b| b.is_ascii_digit()) && !seg.is_empty() {
-                true => node.item.as_deref(),
-                false => node.props.get(seg).or_else(|| {
-                    node.added
-                        .as_deref()
-                        .filter(|_| QuillConfig::is_snake_case_identifier(seg))
-                }),
-            }
-        })
-    }
-
     /// The generated `_qm-meta` shape: absent keys are absent steps, so a leaf
     /// serializes as the empty dict.
     fn to_json(&self) -> serde_json::Value {
@@ -709,10 +663,10 @@ pub(crate) struct SchemaMeta {
     /// The walk's cursor source: the same recursive projection
     /// `build_transform_schema` produced, kept whole rather than flattened.
     schema: serde_json::Value,
-    /// Native rather than JSON: the span scan reads it on the AST walk, and
-    /// [`AddressNode::to_json`] serializes it for the helper either way.
-    pub(crate) root: AddressNode,
-    pub(crate) cards: BTreeMap<String, AddressNode>,
+    /// The address trees [`address_json`](Self::address_json) serializes into
+    /// [`meta_literal`](Self::meta_literal).
+    root: AddressNode,
+    cards: BTreeMap<String, AddressNode>,
     /// Serialized once: the schema is fixed for a session's lifetime, and every
     /// update splices this same literal into the generated `lib.typ`.
     meta_literal: String,

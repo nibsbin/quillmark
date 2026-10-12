@@ -184,9 +184,8 @@ fn form_field_maps_each_type_and_binds_values_from_data() {
 fn form_field_regions_key_on_bound_schema_field() {
     let plate = r#"
 #import "@local/quillmark-helper:0.2.0" as qm
-#let data = qm.data
 #set page(width: 600pt, height: 400pt, margin: 50pt)
-#data.f_txt
+#qm.ink(qm.data, "f_txt")
 #qm.form-field("txt", type: "text", value: qm.data.f_txt, field: "f_txt", width: 137pt)
 #qm.form-field("sig", type: "signature", field: "f_sig")
 #qm.form-field("unbound", type: "text", value: "x")

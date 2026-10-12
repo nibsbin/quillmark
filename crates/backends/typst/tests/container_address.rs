@@ -1,11 +1,10 @@
 //! The container property step (`classification.poc`, `address.city`) through
 //! the public `Backend`/`LiveSession` path, and the address a region carries for
-//! a plate that reads one property.
+//! a plate that prints one property.
 //!
 //! The addresses the grammar admits are stated once, against both backends and
-//! all three helpers, in `quillmark/tests/address_grammar.rs`; which read a
-//! window anchors on is stated once at `overlay::span_scan`. What is here is
-//! what only a whole session answers: the region a read surfaces and the click
+//! all three helpers, in `quillmark/tests/address_grammar.rs`. What is here is
+//! what only a whole session answers: the region a print surfaces and the click
 //! it takes.
 
 use quillmark_core::backend::Backend;
@@ -92,43 +91,44 @@ fn open(plate: &str) -> quillmark_core::session::LiveSession {
         .expect("open")
 }
 
-/// A read, a bound alias, a widget and a claim each region on the address the
-/// plate stepped to, and a click there routes to it rather than to the
-/// container holding it. The container read whole still regions on the
-/// container: the step is what narrows it.
+/// An ink print, one through a bound dictionary, a widget and a claim each
+/// region on the address the plate named, and a click there routes to it
+/// rather than to the container holding it. A container carries no ink of its
+/// own, so naming it whole prints nothing and regions nothing.
 #[test]
-fn every_read_regions_and_routes_on_the_address_it_names() {
+fn every_print_regions_and_routes_on_the_address_it_names() {
     let cases: [(&str, &[&str], &[&str]); 6] = [
         (
-            "#data.classification.poc\n#data.address.city",
+            "#qm.ink(qm.data, \"classification.poc\")\n#qm.ink(qm.data, \"address.city\")",
             &["classification.poc", "address.city"],
             &["classification", "address"],
         ),
         (
-            "#let c = data.classification\n#let a = data.at(\"address\", default: (:))\n\
-             #c.poc #c.at(\"controlled_by\") #a.city",
+            "#let c = qm.data.classification\n#let a = qm.data.at(\"address\", default: (:))\n\
+             #qm.ink(c, \"poc\") #qm.ink(c, \"controlled_by\") #qm.ink(a, \"city\")",
             &["classification.poc", "classification.controlled_by", "address.city"],
             &["classification", "address"],
         ),
-        ("#data.refs.at(0).org", &["refs.0.org"], &["refs"]),
+        ("#qm.ink(qm.data.refs.at(0), \"org\")", &["refs.0.org"], &["refs"]),
         (
-            "#data.classification.value\n#data.address.len()",
-            &["classification.value", "address"],
-            &[],
+            "#qm.ink(qm.data, \"classification.value\")\n\
+             #assert.eq(qm.ink(qm.data, \"address\"), none)",
+            &["classification.value"],
+            &["address"],
         ),
         (
-            "#qm.form-field(\"Poc\", type: \"text\", value: data.classification.poc, field: \"classification.poc\")\n\
-             #qm.region(\"address.city\")[#box(stroke: 1pt, inset: 4pt)[#upper(data.address.city)]]\n\
+            "#qm.form-field(\"Poc\", type: \"text\", value: qm.data.classification.poc, field: \"classification.poc\")\n\
+             #qm.region(\"address.city\")[#box(stroke: 1pt, inset: 4pt)[#upper(qm.data.address.city)]]\n\
              #qm.region(\"refs.0.org\")[AFRL/RQ]\n\
-             #qm.form-field(\"Ref0Num\", field: \"refs.0.num\", value: data.refs.at(0).num)",
+             #qm.form-field(\"Ref0Num\", field: \"refs.0.num\", value: qm.data.refs.at(0).num)",
             &["classification.poc", "address.city", "refs.0.org", "refs.0.num"],
             &[],
         ),
         // A variant cell of a rich type lowers exactly as a card-level one: the
         // content as a markup block, the date as a native `datetime`.
         (
-            "#data.classification.note\n\
-             #assert(data.classification.reply_by.year() == 2026)\n\
+            "#qm.data.classification.note\n\
+             #assert(qm.data.classification.reply_by.year() == 2026)\n\
              #qm.ink(qm.data, \"classification.reply_by\", \"[year]\")",
             &["classification.note", "classification.reply_by"],
             &[],
@@ -137,7 +137,6 @@ fn every_read_regions_and_routes_on_the_address_it_names() {
     for (reads, surfaced, unclaimed) in cases {
         let session = open(&format!(
             "#import \"@local/quillmark-helper:0.2.0\" as qm\n\
-             #let data = qm.data\n\
              #set page(width: 400pt, height: 200pt, margin: 40pt)\n{reads}\n"
         ));
         let regions = session.regions();

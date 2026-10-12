@@ -1,5 +1,5 @@
-//! Regions read off the laid-out frames — span-tracked content, scalar
-//! reference sites, the `form-field` `field:` binding — and the forward
+//! Regions read off the laid-out frames — span-tracked content, a scalar's
+//! ink, the `form-field` `field:` binding — and the forward
 //! `field_at`/`position_at`/`locate` navigation over them.
 
 use quillmark_core::backend::Backend;
@@ -162,60 +162,41 @@ fn field_placed_twice_surfaces_first_region_but_field_at_resolves_every_placemen
     );
 }
 
-/// Each reference site surfaces on its own, a single-reference wrapping
-/// expression included, and a click on any of them routes to the field.
+/// A scalar printed through `qm.ink` regions whatever the plate wraps it in,
+/// and a click on it routes to the field.
 #[test]
-fn scalar_reference_sites_each_surface_a_region() {
-    const PLATE: &str = r#"
-#import "@local/quillmark-helper:0.2.0" as qm
-#let data = qm.data
-#set page(width: 612pt, height: 792pt, margin: 72pt)
-
-*#data.subject*
-
-#lorem(20)
-
-#data.at("subject")
-
-#lorem(20)
-
-#upper(data.subject)
-"#;
-    let session = open(
-        "main:\n  fields:\n    subject: { type: string }\n",
-        PLATE,
-        serde_json::json!({ "subject": "Request for Quarters" }),
-    );
-    let regions = session.regions();
-    let subject: Vec<_> = regions.iter().filter(|r| r.field == "subject").collect();
-    assert_eq!(
-        subject.len(),
-        3,
-        "each scalar reference site surfaces independently: {regions:?}"
-    );
-    for pair in subject.windows(2) {
-        assert!(
-            pair[0].rect[1] > pair[1].rect[3],
-            "sites do not union: {:?} above {:?}",
-            pair[0].rect,
-            pair[1].rect
+fn a_scalars_ink_regions_through_any_wrapper() {
+    for print in [
+        r#"*#qm.ink(qm.data, "subject")*"#,
+        r#"#upper(qm.ink(qm.data, "subject"))"#,
+        r#"#text(size: 9pt, qm.ink(qm.data, "subject"))"#,
+    ] {
+        let session = open(
+            "main:\n  fields:\n    subject: { type: string }\n",
+            &format!(
+                "#import \"@local/quillmark-helper:0.2.0\" as qm\n\
+                 #set page(width: 612pt, height: 792pt, margin: 72pt)\n{print}\n"
+            ),
+            serde_json::json!({ "subject": "Request for Quarters" }),
         );
-    }
-    for r in &subject {
+        let regions = session.regions();
+        let subject: Vec<_> = regions.iter().filter(|r| r.field == "subject").collect();
+        let [r] = subject[..] else {
+            panic!("{print}: one first placement: {regions:?}");
+        };
         let (cx, cy) = centre(r.rect);
         assert_eq!(
             session.field_at(r.page, cx, cy, 0.0).as_deref(),
             Some("subject"),
-            "a click on {:?} routes to the field",
-            r.rect
+            "{print}: a click routes to the field"
         );
     }
 }
 
-/// A module the plate imports is scanned like the plate: its `data` read keeps
-/// its click target when the plate draws it through the module's function.
+/// Ink a module the plate imports prints keeps its click target when the plate
+/// draws it through the module's function.
 #[test]
-fn a_scalar_read_in_an_imported_module_surfaces_a_region() {
+fn a_scalar_printed_in_an_imported_module_surfaces_a_region() {
     let q = common::quill(
         &yaml("main:\n  fields:\n    subject: { type: string }\n"),
         &[
@@ -228,8 +209,7 @@ fn a_scalar_read_in_an_imported_module_surfaces_a_region() {
             (
                 "lib.typ",
                 b"#import \"@local/quillmark-helper:0.2.0\" as qm\n\
-                  #let data = qm.data\n\
-                  #let heading-line() = [*#data.subject*]\n",
+                  #let heading-line() = [*#qm.ink(qm.data, \"subject\")*]\n",
             ),
         ],
     );
@@ -240,7 +220,7 @@ fn a_scalar_read_in_an_imported_module_surfaces_a_region() {
     let subject = regions
         .iter()
         .find(|r| r.field == "subject")
-        .unwrap_or_else(|| panic!("the module's read surfaces a region: {regions:?}"));
+        .unwrap_or_else(|| panic!("the module's print surfaces a region: {regions:?}"));
     let (cx, cy) = centre(subject.rect);
     assert_eq!(
         session.field_at(subject.page, cx, cy, 0.0).as_deref(),

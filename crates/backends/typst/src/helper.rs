@@ -1155,49 +1155,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn an_address_resolves_exactly_the_steps_its_schema_declares() {
-        let meta = meta_from(serde_json::json!({
-            "properties": {
-                "subject": { "type": "string" },
-                "body": richtext_field(),
-                "sections": { "type": "array", "items": richtext_field() },
-                "tags": { "type": "array", "items": { "type": "string" } },
-                "refs": { "type": "array", "items": { "type": "object", "properties": {
-                    "org": { "type": "string" },
-                    "num": { "type": "string" },
-                }}},
-                "classification": { "type": "object", "properties": {
-                    "value": { "type": "string", "enum": ["", "CUI"] },
-                    "poc": { "type": "string" },
-                }},
-            },
-            "$defs": { "note_card": { "properties": {
-                "origin": { "type": "object", "properties": { "office": { "type": "string" } } },
-            }}}
-        }));
-        for (path, declared) in [
-            ("sections.0", true),
-            ("tags.0", true),
-            ("refs.0.org", true),
-            ("refs.0.num", true),
-            ("classification.value", true),
-            ("classification.poc", true),
-            ("subject.0", false),
-            ("subject.anything", false),
-            ("body.0", false),
-            ("body.text", false),
-            ("sections.0.anything", false),
-            ("tags.0.anything", false),
-            ("tags.0.0", false),
-            ("refs.0.missing", false),
-        ] {
-            assert_eq!(meta.root.resolve(path).is_some(), declared, "{path}");
-        }
-        assert!(meta.cards["note"].resolve("origin.office").is_some());
-        assert!(meta.cards["note"].resolve("origin.missing").is_none());
-    }
-
     /// A richtext field is `type: object` and would answer the object arm, so
     /// the media type must claim it first — otherwise its wire JSON walks as a
     /// dictionary and reaches the plate as raw canonical content.

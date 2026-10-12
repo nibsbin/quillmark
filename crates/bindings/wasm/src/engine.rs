@@ -2777,9 +2777,9 @@ impl LiveSession {
         render_result_to_ts(result, &self.kinds())
     }
 
-    /// Schema-field geometry for this compiled session: each content field's
-    /// **first placement** (one region per page it touches) plus widget and
-    /// scalar-reference-site regions, keyed on the canonical `DocPath` address. A
+    /// Schema-field geometry for this compiled session: each piece of generated
+    /// ink's **first placement** (one region per page it touches) plus claim and
+    /// widget regions, keyed on the canonical `DocPath` address. A
     /// field may appear more than once, so group by `field` (see `FieldRegion`).
     /// A session-level query: no render, no byte artifact. The click direction is
     /// `fieldAt`. Empty for backends that place no schema fields.
@@ -2795,9 +2795,9 @@ impl LiveSession {
 
     /// The whole-field highlight boxes for `field`: one union rect per page over
     /// the field's `span`-bearing content segments, the union `regions()` leaves
-    /// derived. **Content only**: a field placed solely as a scalar reference or
-    /// a bound widget carries no `span` and returns `[]`, its box being a single
-    /// `regions()` rect. Reflects the current compile.
+    /// derived. **Content only**: a field placed solely as a scalar's ink, a
+    /// claim or a bound widget carries no `span` and returns `[]`, its box being
+    /// a single `regions()` rect. Reflects the current compile.
     #[wasm_bindgen(js_name = fieldBoxes, unchecked_return_type = "FieldRegion[]")]
     pub fn field_boxes(&self, field: &str) -> Result<JsValue, JsValue> {
         let kinds = self.kinds();

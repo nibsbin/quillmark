@@ -91,10 +91,11 @@ pub trait SessionHandle: Send + Sync + 'static {
     /// field placements with no rasterization and no byte artifact. Default
     /// empty; a backend that places schema fields overrides this.
     ///
-    /// Emit each content field's **first placement** (one region per page it
-    /// touches) plus one region per widget and per scalar reference site, so
-    /// `field` is not unique in the result. Order deterministically: widget
-    /// regions first, then content regions in (page, field, site) order.
+    /// Emit each piece of generated ink's **first placement** (one region per
+    /// page it touches, a content field's per segment), each marker claim's
+    /// extent, and one region per bound widget, so `field` is not unique in the
+    /// result. Order deterministically: widget regions first, then the rest in
+    /// (page, field, placement) order.
     fn regions(&self) -> Vec<RenderedRegion> {
         Vec::new()
     }
@@ -244,11 +245,10 @@ impl LiveSession {
         self.inner.render_rgba(page, scale)
     }
 
-    /// Schema-field geometry for the compiled session: each content field's
-    /// **first placement** (one [`RenderedRegion`] per page it touches), plus
-    /// one region per `field:`-bound widget and per direct scalar reference
-    /// site. Computed without rendering bytes; empty for backends that place no
-    /// schema fields.
+    /// Schema-field geometry for the compiled session: each piece of generated
+    /// ink's **first placement** (one [`RenderedRegion`] per page it touches),
+    /// each marker claim, and one region per `field:`-bound widget. Computed
+    /// without rendering bytes; empty for backends that place no schema fields.
     ///
     /// `field` is not unique in the result, so group by it. Later placements of
     /// one content value are **not** enumerated; for point-driven lookup over
@@ -265,9 +265,9 @@ impl LiveSession {
     }
 
     /// The whole-field highlight boxes for `field`: one union rect per page,
-    /// over the field's `span`-bearing content segments. Content only: a field
-    /// placed solely as a scalar reference or a bound widget yields nothing
-    /// here, its box being a single [`regions`](Self::regions) rect.
+    /// over the field's `span`-bearing content segments. Content only: a scalar's
+    /// ink, a claim or a bound widget yields nothing here, its box being a
+    /// single [`regions`](Self::regions) rect.
     pub fn field_boxes(&self, field: &str) -> Vec<RenderedRegion> {
         crate::region::field_boxes(self.cached_regions(), field)
     }

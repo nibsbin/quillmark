@@ -7,9 +7,9 @@
 //! that produced it. `regions` answers *field → rectangle*, `field_at` answers
 //! *point → field*.
 //!
-//! What produces a region — content spans, direct scalar references, marker
-//! claims, form-field widgets — and why a content value placed twice surfaces
-//! only its first placement: `prose/canon/PREVIEW.md`.
+//! What produces a region — generated ink, marker claims, form-field widgets —
+//! and why a value placed twice surfaces only its first placement:
+//! `prose/canon/PREVIEW.md`.
 //!
 //! A one-shot byte render carries the same sidecar on request
 //! ([`RenderOptions::regions`](crate::types::RenderOptions)). Empty for
@@ -26,9 +26,8 @@
 /// and its region here differ by that box's origin.
 ///
 /// `field` is **not** unique within a region set: a content field breaks into
-/// one entry per segment and per page, a scalar referenced at several plate
-/// sites yields one per site, and tracked content plus a bound widget yields
-/// both. Consumers group by `field`, or take the derived per-page union from
+/// one entry per segment and per page, each marker claim on a field yields its
+/// own, and tracked content plus a bound widget yields both. Consumers group by `field`, or take the derived per-page union from
 /// [`field_boxes`].
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -45,8 +44,8 @@ pub struct RenderedRegion {
     /// `[x0, y0, x1, y1]`, PDF points, bottom-left origin.
     pub rect: [f32; 4],
     /// The content slice this box covers: USV `[start, end)` into the field's
-    /// `Content`, `None` for a scalar reference site or a widget. Omitted from
-    /// the wire when `None`.
+    /// `Content`, `None` for a scalar's or a date's ink, a claim or a widget.
+    /// Omitted from the wire when `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub span: Option<[usize; 2]>,
 }
@@ -120,7 +119,7 @@ pub fn nearest_region(
 /// the session's own. The union is a per-page *bounding* box, so it does cover
 /// inter-paragraph whitespace the input regions leave out.
 ///
-/// **Content only.** A scalar-reference site or a widget carries no `span`, so
+/// **Content only.** A scalar's ink, a claim or a widget carries no `span`, so
 /// a field placed only that way yields an empty result here: its highlight box
 /// is a single region's `rect`, read straight from the set. Each returned
 /// region carries the union `span` and the result is `page`-ascending.

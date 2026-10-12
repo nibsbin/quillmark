@@ -200,7 +200,8 @@ pub struct FieldRegion {
     /// `[x0, y0, x1, y1]` in PDF points (1/72″), bottom-left origin.
     pub rect: [f32; 4],
     /// The slice this box covers: USV `[start, end)` into the field's `Content`
-    /// for one content segment, `undefined` for a scalar site or widget.
+    /// for one content segment, `undefined` for a scalar's ink, a claim or a
+    /// widget.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub span: Option<[usize; 2]>,
 }

@@ -252,21 +252,18 @@ impl QuillWorld {
     /// `set_source` on the helper `lib.typ` makes a repeat injection (a session
     /// edit) an incremental reparse rather than a fresh parse. The helper's
     /// `typst.toml` is constant and set once at construction. Returns each
-    /// generated content block's byte window, paired with the helper file's id:
-    /// the span scan's classification table.
+    /// generated ink window: the span scan's classification table.
     pub(crate) fn inject_helper_package(
         &mut self,
         data: &serde_json::Value,
         meta: &crate::SchemaMeta,
     ) -> Result<Vec<crate::overlay::FieldWindow>, crate::emit::EmitError> {
-        let file = Self::helper_fid("lib.typ");
         let (src, windows) = helper::generate_lib_typ(data, meta)?;
-        self.set_source(file, &src);
+        self.set_source(Self::helper_fid("lib.typ"), &src);
         Ok(windows
             .into_iter()
             .map(|w| crate::overlay::FieldWindow {
                 path: w.path,
-                file,
                 range: w.block,
                 segments: w.segments,
             })
@@ -330,7 +327,7 @@ impl QuillWorld {
     }
 
     /// The plate, then every other project source in path order: the files
-    /// whose `data` reads the region scan windows.
+    /// whose helper imports `open` checks.
     pub(crate) fn project_sources(&self) -> Vec<&Source> {
         let mut modules: Vec<&Source> = self
             .sources

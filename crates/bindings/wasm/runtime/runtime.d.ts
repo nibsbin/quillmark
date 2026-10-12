@@ -333,8 +333,8 @@ export interface FieldRegion {
 	rect: [number, number, number, number];
 	/**
 	 * The content slice this box covers: USV `[start, end)` into the field's
-	 * `Content` for content ink (one segment), absent for a scalar reference
-	 * site or widget. Consumers key segment highlights on it;
+	 * `Content` for content ink (one segment), absent for a scalar's or a
+	 * date's ink, a claim or a widget. Consumers key segment highlights on it;
 	 * {@link LiveSession.fieldBoxes} unions same-page segments for the
 	 * whole-field box.
 	 */
@@ -495,19 +495,18 @@ export declare class LiveSession {
 	 * Empty for backends that place no schema fields.
 	 *
 	 * `field` is **not** unique: a content field surfaces its **first placement**
-	 * as one {@link FieldRegion} per page that placement touches, a scalar
-	 * referenced at several plate sites surfaces each site, and tracked content
-	 * plus a `field:`-bound widget yields both, widget first. Group by `field`.
-	 * Later placements of one content value are not enumerated; {@link fieldAt}
-	 * still resolves clicks on them.
+	 * as one {@link FieldRegion} per page that placement touches, each claim on
+	 * a field surfaces its own, and tracked content plus a `field:`-bound widget
+	 * yields both, widget first. Group by `field`. Later placements of one value
+	 * are not enumerated; {@link fieldAt} still resolves clicks on them.
 	 */
 	regions(): FieldRegion[];
 	/**
 	 * The whole-field highlight boxes for `field` (a canonical `DocPath` address,
 	 * as {@link regions} keys): one union rect per page over the field's
 	 * `span`-bearing content segments, the union {@link regions} leaves derived.
-	 * **Content only**: a field placed solely as a scalar reference or a bound
-	 * widget carries no `span` and returns `[]`, its box being a single
+	 * **Content only**: a field placed solely as a scalar's ink, a claim or a
+	 * bound widget carries no `span` and returns `[]`, its box being a single
 	 * {@link regions} rect. Reflects the current compile.
 	 */
 	fieldBoxes(field: string): FieldRegion[];
