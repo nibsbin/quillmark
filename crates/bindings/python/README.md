@@ -2,7 +2,7 @@
 
 Python bindings for Quillmark, a schema-driven document engine.
 
-Maintained by [borb-sh](https://github.com/borb-sh).
+Maintained by [TTQ](https://tonguetoquill.com).
 
 ## Installation
 
