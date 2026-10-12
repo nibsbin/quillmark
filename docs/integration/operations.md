@@ -29,6 +29,14 @@ The engine caches no quills: `Quillmark::render` takes a `&Quill` the caller own
 
 **No network**, so a deployment needs no egress: Quillmark never downloads a Typst package, and `QuillWorld` loads them only from `{quill}/packages/` in the quill's in-memory tree, so a plate's `#import` resolves against what the quill ships or fails. **No ambient filesystem**: a plate reads through that same tree.
 
+## Untrusted input
+
+A document is data. Its text reaches a plate escaped, never as Typst code, and it reads no file. The engine does not bound what it costs to render; the host does, as above.
+
+A quill is code. A plate is a Typst program, and an acroform quill's `form.pdf` is parsed in full; `quill_from_path` refuses symlinks and any file over 50 MiB, and caps neither file count nor total size. Load a quill from someone you do not trust inside the same bounded worker as its renders.
+
+SVG output keeps a document's links as live `href`s. A link whose scheme is `javascript:`, `vbscript:`, `data:` or `file:` renders as its text alone, but an SVG placed inline in a page is still the page's markup: show SVG from untrusted documents through `<img>`, or sanitize it first.
+
 ## Failure modes
 
 Nothing in the workspace catches unwind, so a panic is terminal on every surface: it aborts the CLI and the Python extension, and leaves the WASM module poisoned rather than erroring. Panics are bugs — report one.
