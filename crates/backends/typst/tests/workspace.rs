@@ -49,8 +49,8 @@ fn a_workspace_lays_out_packages_by_spec_and_carries_the_fallback_fonts() {
                 panic!("{path} missing from {:?}", ws.files.iter().map(|(p, _)| p).collect::<Vec<_>>())
             })
     };
-    assert!(file("packages/local/quillmark-helper/0.1.0/lib.typ").contains("Quarterly Findings"));
-    file("packages/local/quillmark-helper/0.1.0/typst.toml");
+    assert!(file("packages/local/quillmark-helper/0.2.0/lib.typ").contains("Quarterly Findings"));
+    file("packages/local/quillmark-helper/0.2.0/typst.toml");
     file("packages/preview/p/1.2.0/typst.toml");
     file("packages/preview/p/1.2.0/src/lib.typ");
     file("fonts/Roboto.ttf");
@@ -84,7 +84,7 @@ fn a_manifest_cannot_escape_the_workspace_or_replace_the_helper() {
     let absolute = manifest("/tmp/escaped", "p", "0.1.0");
     let parent = manifest("preview", "../../escaped", "0.1.0");
     let version = manifest("preview", "p", "../../escaped");
-    let helper = manifest("local", "quillmark-helper", "0.1.0");
+    let helper = manifest("local", "quillmark-helper", "0.2.0");
     let q = quill(
         "quill:\n  name: t\n  version: 0.1.0\n  backend: typst\n  description: t\n\
          typst:\n  plate_file: plate.typ\n",
@@ -110,8 +110,8 @@ fn a_manifest_cannot_escape_the_workspace_or_replace_the_helper() {
     assert_eq!(
         packages,
         [
-            std::path::Path::new("packages/local/quillmark-helper/0.1.0/lib.typ"),
-            std::path::Path::new("packages/local/quillmark-helper/0.1.0/typst.toml"),
+            std::path::Path::new("packages/local/quillmark-helper/0.2.0/lib.typ"),
+            std::path::Path::new("packages/local/quillmark-helper/0.2.0/typst.toml"),
         ],
     );
 }

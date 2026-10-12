@@ -178,8 +178,8 @@ It reads the state's final value, so a plate's update may stand after the
 content it renders:
 
 ```typst
-#import "@local/quillmark-helper:0.1.0": elements
-#elements.update(e => e + (stamp: (attrs, body) => text(fill: red, body)))
+#import "@local/quillmark-helper:0.2.0" as qm
+#qm.elements.update(e => e + (stamp: (attrs, body) => text(fill: red, body)))
 ```
 
 `attrs` is a dictionary of strings keyed by attribute name, sorted, and `(:)`
@@ -207,8 +207,8 @@ body, ticked when `done`. It reads the state's final value, as `elements` is
 read:
 
 ```typst
-#import "@local/quillmark-helper:0.1.0": tasks
-#tasks.update(_ => (done, body) => if done { strike(body) } else { body })
+#import "@local/quillmark-helper:0.2.0" as qm
+#qm.tasks.update(_ => (done, body) => if done { strike(body) } else { body })
 ```
 
 The call opens on the marker's line and closes after the item's last block, so

@@ -7,9 +7,9 @@
 //! that produced it. `regions` answers *field → rectangle*, `field_at` answers
 //! *point → field*.
 //!
-//! What produces a region — content spans, direct scalar references, marker
-//! claims, form-field widgets — and why a content value placed twice surfaces
-//! only its first placement: `prose/canon/PREVIEW.md`.
+//! What produces a region — generated ink, marker claims, form-field widgets —
+//! and why a value placed twice surfaces only its first placement:
+//! `prose/canon/PREVIEW.md`.
 //!
 //! A one-shot byte render carries the same sidecar on request
 //! ([`RenderOptions::regions`](crate::types::RenderOptions)). Empty for
@@ -26,9 +26,8 @@
 /// and its region here differ by that box's origin.
 ///
 /// `field` is **not** unique within a region set: a content field breaks into
-/// one entry per segment and per page, a scalar referenced at several plate
-/// sites yields one per site, and tracked content plus a bound widget yields
-/// both. Consumers group by `field`, or take the derived per-page union from
+/// one entry per segment and per page, each marker claim on a field yields its
+/// own, and tracked content plus a bound widget yields both. Consumers group by `field`, or take the derived per-page union from
 /// [`field_boxes`].
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -45,8 +44,8 @@ pub struct RenderedRegion {
     /// `[x0, y0, x1, y1]`, PDF points, bottom-left origin.
     pub rect: [f32; 4],
     /// The content slice this box covers: USV `[start, end)` into the field's
-    /// `Content`, `None` for a scalar reference site or a widget. Omitted from
-    /// the wire when `None`.
+    /// `Content`, `None` for a scalar's or a date's ink, a claim or a widget.
+    /// Omitted from the wire when `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub span: Option<[usize; 2]>,
 }
@@ -120,7 +119,7 @@ pub fn nearest_region(
 /// the session's own. The union is a per-page *bounding* box, so it does cover
 /// inter-paragraph whitespace the input regions leave out.
 ///
-/// **Content only.** A scalar-reference site or a widget carries no `span`, so
+/// **Content only.** A scalar's ink, a claim or a widget carries no `span`, so
 /// a field placed only that way yields an empty result here: its highlight box
 /// is a single region's `rect`, read straight from the set. Each returned
 /// region carries the union `span` and the result is `page`-ascending.
@@ -161,7 +160,10 @@ pub fn field_boxes(regions: &[RenderedRegion], field: &str) -> Vec<RenderedRegio
 // minted `DocPath` stable across `Display` → `FromStr`: a tail carried whole into
 // one `Field` renders `main.references.0`, which reparses as a field named `"0"`.
 
+use std::collections::HashSet;
+
 use crate::path::{DocPath, DocSeg};
+use crate::quill::{blank, CardSchema, FieldSchema, QuillConfig, VARIANT_DISCRIMINANT_KEY};
 
 /// The absolute document-array index of the `ord`-th (0-based) card of `kind`.
 /// `card_kinds` is the current compile's ordered card kinds.
@@ -323,6 +325,141 @@ pub fn doc_path_to_plate_addr(path: &DocPath, card_kinds: &[Option<&str>]) -> Op
         }
         _ => None,
     }
+}
+
+/// One schema address a compiled document fills, and the region address a
+/// click reaches it through.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldCoverage {
+    /// The plate-space address, as [`RenderedRegion::field`] keys it.
+    pub field: String,
+    /// `field` itself where a region carries it, else the nearest enclosing
+    /// address one does (a row claim reaching its cells, a whole array its
+    /// elements), else `None`: no click reaches the field. Omitted from the
+    /// wire when `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub covered_by: Option<String>,
+}
+
+/// Each address of the plate JSON `data` (as [`QuillConfig::compile_data`]
+/// builds it under `config`) that a reader could want to click, with what
+/// `regions` (the same compile's) reaches it through: every declared leaf
+/// holding a non-blank value — scalars, dates, content and bodies, array
+/// elements, container properties, a variant's discriminant — every roster
+/// member of a matrix, held or not, and each added item's cells. In walk order:
+/// the main card's fields in declaration order, its body, then each card.
+///
+/// The `field` values of `regions` are what `field_at` can answer, since every
+/// key with a box accrues its first one, so a `None` here is an address no
+/// click resolves to.
+pub fn coverage(
+    config: &QuillConfig,
+    data: &serde_json::Value,
+    regions: &[RenderedRegion],
+) -> Vec<FieldCoverage> {
+    let attributed: HashSet<&str> = regions.iter().map(|r| r.field.as_str()).collect();
+    let card_kinds: Vec<Option<&str>> = data
+        .get("$cards")
+        .and_then(|c| c.as_array())
+        .into_iter()
+        .flatten()
+        .map(|card| card.get("$kind").and_then(|k| k.as_str()))
+        .collect();
+    let mut required = Vec::new();
+    required_paths(config, data, &mut required);
+    required
+        .iter()
+        .filter_map(|path| doc_path_to_plate_addr(path, &card_kinds))
+        .map(|field| {
+            let covered_by = enclosing(&field)
+                .find(|addr| attributed.contains(addr))
+                .map(str::to_string);
+            FieldCoverage { field, covered_by }
+        })
+        .collect()
+}
+
+/// `addr`, then each address enclosing it, down to a top-level field or a
+/// card's field.
+fn enclosing(addr: &str) -> impl Iterator<Item = &str> {
+    let floor = if addr.starts_with("$cards.") { 4 } else { 1 };
+    std::iter::successors(Some(addr), move |a| {
+        a.rsplit_once('.')
+            .map(|(head, _)| head)
+            .filter(|head| head.split('.').count() >= floor)
+    })
+}
+
+fn required_paths(config: &QuillConfig, data: &serde_json::Value, out: &mut Vec<DocPath>) {
+    let Some(main) = data.as_object() else { return };
+    required_in_card(&config.main, main, DocPath::main(), out);
+    let cards = main.get("$cards").and_then(|c| c.as_array());
+    for (index, card) in cards.into_iter().flatten().enumerate() {
+        let Some(card) = card.as_object() else { continue };
+        let Some(kind) = card.get("$kind").and_then(|k| k.as_str()) else { continue };
+        if let Some(schema) = config.card_kind(kind) {
+            required_in_card(schema, card, DocPath::card(Some(kind), index), out);
+        }
+    }
+}
+
+fn required_in_card(
+    schema: &CardSchema,
+    card: &serde_json::Map<String, serde_json::Value>,
+    path: DocPath,
+    out: &mut Vec<DocPath>,
+) {
+    for (name, field) in &schema.fields {
+        if let Some(value) = card.get(name) {
+            required_in_cell(field, value, &path.field(name), out);
+        }
+    }
+    if card.get("$body").is_some_and(|body| !content_is_blank(body)) {
+        out.push(path.body());
+    }
+}
+
+/// The depth-invariant walk a render's values follow ([`FieldSchema::each_child`]).
+fn required_in_cell(
+    field: &FieldSchema,
+    value: &serde_json::Value,
+    path: &DocPath,
+    out: &mut Vec<DocPath>,
+) {
+    if field.is_variant_bearing() {
+        let member = value.get(VARIANT_DISCRIMINANT_KEY);
+        if member.is_some_and(|m| m.as_str().is_some_and(|m| !m.is_empty())) {
+            out.push(path.field(VARIANT_DISCRIMINANT_KEY));
+        }
+    } else if field.r#type.is_leaf() {
+        if !is_blank(field, value) {
+            out.push(path.clone());
+        }
+        return;
+    }
+    // The plate prints the whole vocabulary, so an unheld member is a field too.
+    for id in field.r#type.matrix_roster().keys() {
+        out.push(path.field(id));
+    }
+    field.each_child(value, path, &mut |child, value, at| {
+        required_in_cell(child, value, at, out)
+    });
+}
+
+/// `null`, an empty string, the field's own [`blank`], or content holding
+/// nothing.
+fn is_blank(field: &FieldSchema, value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Null => true,
+        serde_json::Value::String(s) => s.is_empty(),
+        serde_json::Value::Object(_) if field.r#type.codec().is_some() => content_is_blank(value),
+        _ => value == blank(field).as_json(),
+    }
+}
+
+fn content_is_blank(value: &serde_json::Value) -> bool {
+    quillmark_content::serial::from_canonical_value(value).map_or(true, |c| c.is_blank())
 }
 
 /// How precisely a [`ContentHit::pos`] resolved. Never sub-cluster.
@@ -557,5 +694,99 @@ mod tests {
             doc_path_to_plate_addr(&DocPath::main().body().field("x"), KINDS),
             None
         );
+    }
+
+    const YAML: &str = r#"
+quill:
+  name: coverage
+  version: 0.1.0
+  backend: typst
+  description: coverage probe
+main:
+  fields:
+    name: { type: string }
+    count: { type: integer }
+    strata:
+      type: array
+      items:
+        type: object
+        properties:
+          year: { type: integer }
+          rank: { type: string }
+    quals:
+      type: matrix
+      members: { a: A, b: B }
+      properties:
+        detail: { type: string }
+    level:
+      type: enum
+      values: [LOW, HIGH]
+      default: ""
+      variants:
+        HIGH:
+          poc: { type: string }
+card_kinds:
+  note:
+    fields:
+      on: { type: date }
+"#;
+
+    fn region(field: &str) -> RenderedRegion {
+        RenderedRegion::new(field.to_string(), 0, [0.0, 0.0, 1.0, 1.0])
+    }
+
+    /// Every filled leaf, every roster member and the body are required; a
+    /// blank is not. Each is reached by itself, the nearest enclosing region,
+    /// or nothing.
+    #[test]
+    fn coverage_reaches_each_filled_address_through_its_nearest_region() {
+        let config = QuillConfig::from_yaml(YAML).expect("config");
+        let empty = quillmark_content::serial::to_canonical_value(
+            &quillmark_content::model::Normalized::empty(),
+        );
+        let body = quillmark_content::serial::to_canonical_value(
+            &quillmark_content::import::from_markdown("A body.").expect("import").content,
+        );
+        let data = serde_json::json!({
+            "name": "Ada",
+            "count": 0,
+            "strata": [{ "year": 2026, "rank": "" }, { "year": 2027, "rank": "Maj" }],
+            "quals": { "a": { "detail": "" } },
+            "level": { "value": "HIGH", "poc": "Capt Kim" },
+            "$body": body,
+            "$cards": [
+                { "$kind": "note", "on": "2026-01-02", "$body": empty },
+                { "$kind": "other", "on": "2026-01-02" },
+                { "$kind": "note", "on": "" },
+            ],
+        });
+        let regions = [
+            region("name"),
+            region("strata.0"),
+            region("strata"),
+            region("quals.a"),
+            region("$cards.note.0.on"),
+        ];
+        let got: Vec<(String, Option<String>)> = coverage(&config, &data, &regions)
+            .into_iter()
+            .map(|c| (c.field, c.covered_by))
+            .collect();
+        let want: Vec<(&str, Option<&str>)> = vec![
+            ("name", Some("name")),
+            ("strata.0.year", Some("strata.0")),
+            ("strata.1.year", Some("strata")),
+            ("strata.1.rank", Some("strata")),
+            ("quals.a", Some("quals.a")),
+            ("quals.b", None),
+            ("level.value", None),
+            ("level.poc", None),
+            ("$body", None),
+            ("$cards.note.0.on", Some("$cards.note.0.on")),
+        ];
+        let want: Vec<(String, Option<String>)> = want
+            .into_iter()
+            .map(|(f, c)| (f.to_string(), c.map(str::to_string)))
+            .collect();
+        assert_eq!(got, want);
     }
 }

@@ -307,7 +307,7 @@ def element_quill(tmp_path):
     root = tmp_path / "element_test" / "0.1.0"
     root.mkdir(parents=True)
     (root / "Quill.yaml").write_text(ELEMENT_QUILL_YAML)
-    (root / "plate.typ").write_text('#import "@local/quillmark-helper:0.1.0": data\n')
+    (root / "plate.typ").write_text('#import "@local/quillmark-helper:0.2.0" as qm\n')
     return Quill.from_path(str(root))
 
 

@@ -1,10 +1,9 @@
-//! Generates the virtual `@local/quillmark-helper:0.1.0` package that provides
+//! Generates the virtual `@local/quillmark-helper` package that provides
 //! document data to Typst plates.
 //!
 //! `lib.typ` is regenerated per render as pure source text: no runtime data
-//! processing. What each schema node lowers to, and why the date closures
-//! behind `display` are keyed by schema address instead of carried on the
-//! value: `prose/canon/PLATE_DATA.md`.
+//! processing. What each schema node lowers to, and why ink is keyed by schema
+//! address instead of carried on the value: `prose/canon/PLATE_DATA.md`.
 //!
 //! Output is **canonical**: dict keys emit in sorted order at every level (via
 //! [`sorted`]), so equal data produces byte-equal source regardless of the
@@ -23,7 +22,7 @@ use crate::SchemaMeta;
 use quillmark_content::serial::from_canonical_value;
 use quillmark_core::quill::{CONTENT_MEDIA_TYPE, QUILLMARK_INLINE_KEY, QUILLMARK_ROSTER_KEY};
 
-pub const HELPER_VERSION: &str = "0.1.0";
+pub const HELPER_VERSION: &str = "0.2.0";
 pub const HELPER_NAMESPACE: &str = "local";
 pub const HELPER_NAME: &str = "quillmark-helper";
 
@@ -40,9 +39,10 @@ pub struct ContentMap {
     pub segments: Vec<SegmentMap>,
 }
 
-/// The source plus each content block's [`ContentMap`]. `Err` only on data
-/// the seam already refuses: a content past the nesting bound, or a non-blank
-/// date that will not parse ([`EmitError`]).
+/// The source plus each ink window's [`ContentMap`]: every content block, then
+/// every entry of the `_qm-ink` table. `Err` only on data the seam already
+/// refuses: a content past the nesting bound, or a non-blank date that will not
+/// parse ([`EmitError`]).
 pub fn generate_lib_typ(
     data: &serde_json::Value,
     meta: &SchemaMeta,
@@ -55,23 +55,24 @@ pub fn generate_lib_typ(
     if let Some(e) = cg.emit_error.take() {
         return Err(e);
     }
-    let display_literal = display_literal(&cg.display);
+    let ink_literal = ink_literal(cg.ink);
 
     // Placeholders are located in the *raw template* (trusted static text), never
     // in already-substituted output, so document data spelling a placeholder
     // cannot hijack a splice point.
     let mut out = String::with_capacity(
-        LIB_TYP_TEMPLATE.len() + cg.blocks.len() + data_literal.src.len() + display_literal.len(),
+        LIB_TYP_TEMPLATE.len() + cg.blocks.len() + data_literal.len() + ink_literal.src.len(),
     );
     let mut cursor = 0usize;
     let mut blocks_at = 0usize;
-    let mut data_at = 0usize;
+    let mut ink_at = 0usize;
     for (slot, value) in [
+        ("{version}", HELPER_VERSION),
         ("{version}", HELPER_VERSION),
         ("{meta_literal}", meta.meta_literal()),
         ("{content_blocks}", cg.blocks.as_str()),
-        ("{data_literal}", data_literal.src.as_str()),
-        ("{display_literal}", display_literal.as_str()),
+        ("{data_literal}", data_literal.as_str()),
+        ("{ink_literal}", ink_literal.src.as_str()),
     ] {
         let rel = LIB_TYP_TEMPLATE[cursor..]
             .find(slot)
@@ -80,7 +81,7 @@ pub fn generate_lib_typ(
         out.push_str(&LIB_TYP_TEMPLATE[cursor..at]);
         match slot {
             "{content_blocks}" => blocks_at = out.len(),
-            "{data_literal}" => data_at = out.len(),
+            "{ink_literal}" => ink_at = out.len(),
             _ => {}
         }
         out.push_str(value);
@@ -101,9 +102,9 @@ pub fn generate_lib_typ(
                 .collect(),
         })
         .collect();
-    windows.extend(data_literal.windows.into_iter().map(|(path, block)| ContentMap {
+    windows.extend(ink_literal.windows.into_iter().map(|(path, block)| ContentMap {
         path,
-        block: (block.start + data_at)..(block.end + data_at),
+        block: (block.start + ink_at)..(block.end + ink_at),
         segments: Vec::new(),
     }));
     Ok((out, windows))
@@ -125,8 +126,8 @@ struct Codegen<'m> {
     windows: Vec<(String, Range<usize>, Vec<SegmentMap>)>,
     counter: usize,
     emit_error: Option<EmitError>,
-    /// `(schema address, block binding)` per present date. Backs `_qm-display`.
-    display: Vec<(String, String)>,
+    /// `(schema address, entry)` per address with ink. Backs `_qm-ink`.
+    ink: Vec<(String, Frag)>,
 }
 
 impl<'m> Codegen<'m> {
@@ -137,7 +138,7 @@ impl<'m> Codegen<'m> {
             windows: Vec::new(),
             counter: 0,
             emit_error: None,
-            display: Vec::new(),
+            ink: Vec::new(),
         }
     }
 
@@ -169,99 +170,81 @@ impl<'m> Codegen<'m> {
         id
     }
 
-    /// The date sibling of [`content_block`](Self::content_block): a closure
-    /// whose `text(..)` body is where the glyphs are born, so they carry this
-    /// generated span wherever the plate finally calls it, which is what
-    /// `display(addr, ..)` survives laundering on.
-    fn display_block(&mut self, path: &str, constructor: &str) -> String {
-        let id = format!("_qm_d{}", self.display.len());
-        self.blocks.push_str("#let ");
-        self.blocks.push_str(&id);
-        self.blocks.push_str(" = (..args) => ");
-        // The window covers exactly the `text(..)` call: the node whose span the
-        // produced glyphs carry.
-        let text_start = self.blocks.len();
-        self.blocks.push_str("text(");
-        self.blocks.push_str(constructor);
-        self.blocks.push_str(".display(..args))");
-        let text_end = self.blocks.len();
-        self.blocks.push('\n');
-        self.windows
-            .push((path.to_string(), text_start..text_end, Vec::new()));
-        self.display.push((path.to_string(), id.clone()));
-        id
-    }
-
-    /// The native cell and its `_qm_dN` closure. Blank ⇒ `none` and no
-    /// closure, so a plate's `!= none` guard is untouched. A non-blank value
-    /// that will not parse raises `backend::invalid_date` from here, the one
-    /// site that parses, which is what makes the check total over depth.
-    fn date_field(&mut self, path: &str, s: &str, kind: DateKind) -> (String, Option<String>) {
+    /// The native cell. Blank ⇒ `none`, so a plate's `!= none` guard is
+    /// untouched. A non-blank value that will not parse raises
+    /// `backend::invalid_date` from here, the one site that parses, which is what
+    /// makes the check total over depth.
+    fn date_field(&mut self, path: &str, s: &str, kind: DateKind) -> Option<String> {
         match datetime_constructor(s, kind) {
-            Some(constructor) => {
-                let closure = self.display_block(path, &constructor);
-                (constructor, Some(closure))
-            }
-            None if s.is_empty() => ("none".to_string(), None),
+            Some(constructor) => Some(constructor),
+            None if s.is_empty() => None,
             None => {
                 self.emit_error.get_or_insert(EmitError::InvalidDate {
                     field: path.to_string(),
                     value: s.to_string(),
                 });
-                ("none".to_string(), None)
+                None
             }
         }
     }
 
-    /// A blank content lowers to `""`, not a block; a value that is not a valid
-    /// content (never produced by the seam) degrades to its value literal.
-    fn content_field(&mut self, path: &str, value: &serde_json::Value, inline: bool) -> String {
+    /// The data cell and, for a non-blank content, the block binding it
+    /// references. A blank content lowers to `""`, not a block; a value that is
+    /// not a valid content (never produced by the seam) degrades to its value
+    /// literal.
+    fn content_field(
+        &mut self,
+        path: &str,
+        value: &serde_json::Value,
+        inline: bool,
+    ) -> (String, Option<String>) {
         let emit = if inline {
             emit_content_inline
         } else {
             emit_content
         };
         match from_canonical_value(value) {
-            Ok(rt) if !rt.is_blank() => {
-                match emit(&rt) {
-                    Ok(ec) => self.content_block(path, ec),
-                    Err(e) => {
-                        self.emit_error.get_or_insert(e);
-                        "\"\"".to_string()
-                    }
+            Ok(rt) if !rt.is_blank() => match emit(&rt) {
+                Ok(ec) => {
+                    let id = self.content_block(path, ec);
+                    (id.clone(), Some(id))
                 }
-            }
-            Ok(_) => "\"\"".to_string(),
-            Err(_) => lit(value),
+                Err(e) => {
+                    self.emit_error.get_or_insert(e);
+                    ("\"\"".to_string(), None)
+                }
+            },
+            Ok(_) => ("\"\"".to_string(), None),
+            Err(_) => (lit(value), None),
         }
     }
 
-    fn emit_data(&mut self, obj: &serde_json::Map<String, serde_json::Value>) -> Frag {
+    fn emit_data(&mut self, obj: &serde_json::Map<String, serde_json::Value>) -> String {
         let mut dict = Container::default();
         for (key, value) in sorted(obj) {
+            let access = format!("data.at(\"{}\")", escape_string(key));
             if key == "$cards" {
                 if let Some(cards) = value.as_array() {
-                    dict.items.push(entry(key, self.emit_cards(cards)));
+                    dict.items.push(format!("\"$cards\": {}", self.emit_cards(cards, &access)));
                     continue;
                 }
             }
             let node = self.meta.field_node(key);
-            dict.anchored |= is_matrix(node);
-            dict.push(key, self.emit_value(key, node, value));
+            dict.push(key, self.emit_value(key, &access, node, value).0);
         }
         dict.finish(Some(""))
     }
 
     /// A card with no string `$kind` passes through as a value literal, assigned
     /// no ordinal or `$path`.
-    fn emit_cards(&mut self, cards: &[serde_json::Value]) -> Frag {
+    fn emit_cards(&mut self, cards: &[serde_json::Value], access: &str) -> String {
         let mut ordinals: HashMap<String, usize> = HashMap::new();
         let mut out = Vec::with_capacity(cards.len());
-        for card in cards {
+        for (i, card) in cards.iter().enumerate() {
             let obj = match card.as_object() {
                 Some(o) => o,
                 None => {
-                    out.push(Frag::from(lit(card)));
+                    out.push(lit(card));
                     continue;
                 }
             };
@@ -270,12 +253,12 @@ impl<'m> Codegen<'m> {
                     let n = ordinals.entry(kind.to_string()).or_insert(0);
                     let prefix = format!("$cards.{kind}.{n}.");
                     *n += 1;
-                    out.push(self.emit_card(obj, kind, &prefix));
+                    out.push(self.emit_card(obj, kind, &prefix, &format!("{access}.at({i})")));
                 }
-                None => out.push(Frag::from(lit(card))),
+                None => out.push(lit(card)),
             }
         }
-        Frag::wrap(out, "()")
+        wrap_array(out)
     }
 
     fn emit_card(
@@ -283,50 +266,77 @@ impl<'m> Codegen<'m> {
         obj: &serde_json::Map<String, serde_json::Value>,
         kind: &str,
         prefix: &str,
-    ) -> Frag {
+        access: &str,
+    ) -> String {
         let props = self.meta.card_props(kind);
         let mut dict = Container::default();
-        // The canonical address prefix, so plates compose schema-field addresses
-        // without reimplementing the kind+ordinal grammar.
-        dict.items.push(Frag::from(format!("\"{PATH_KEY}\": \"{}\"", escape_string(prefix))));
         for (key, value) in sorted(obj) {
             let node = props.and_then(|p| p.get(key));
-            dict.push(key, self.emit_value(&format!("{prefix}{key}"), node, value));
+            let lowered = self.emit_value(
+                &format!("{prefix}{key}"),
+                &format!("{access}.at(\"{}\")", escape_string(key)),
+                node,
+                value,
+            );
+            dict.push(key, lowered.0);
         }
-        dict.finish(None)
+        dict.finish(Some(prefix))
     }
 
     /// Lower one value against the schema node that declares it, recursing on
     /// shape, into its data expression and, where [`inks`] holds for the node,
-    /// its ink. `path` is the value's schema address, so every generated
-    /// projection keys on an address the recursion produced rather than one
-    /// reassembled.
+    /// the ink an array of it holds in its place. `path` is the value's schema
+    /// address and `access` the expression reading it off `data`, so every
+    /// `_qm-ink` entry keys on an address the recursion produced and reads the
+    /// value the data literal holds.
     ///
     /// A value whose shape contradicts its declaration reaches here through a
     /// direct `update`, never the seam, and falls to its literal with `none` ink.
     fn emit_value(
         &mut self,
         path: &str,
+        access: &str,
         node: Option<&serde_json::Value>,
         value: &serde_json::Value,
-    ) -> (Frag, Option<Frag>) {
+    ) -> (String, Option<Frag>) {
         let (expr, ink) = match (lowering(node), value) {
             (Lower::Content { inline }, serde_json::Value::Object(_)) => {
-                let expr = self.content_field(path, value, inline);
-                (Frag::from(expr.clone()), Some(Frag::from(expr)))
+                let (expr, block) = self.content_field(path, value, inline);
+                let ink = block.map(Frag::from);
+                if let Some(ink) = &ink {
+                    self.ink.push((path.to_string(), ink.clone()));
+                }
+                (expr, ink)
             }
             (Lower::Date(kind), serde_json::Value::String(s)) => {
-                // Called with no pattern, the closure places the date's default
-                // display; `display(dict, key, ..)` calls it with the plate's.
-                let (expr, closure) = self.date_field(path, s, kind);
-                let ink = closure.map_or_else(|| "none".to_string(), |c| format!("{c}()"));
-                (Frag::from(expr), Some(Frag::from(ink)))
+                // The window covers exactly the `text(..)` call: the node whose
+                // span the produced glyphs carry.
+                let text = |args: &str| Frag::window(path, format!("text({access}.display({args}))"));
+                match self.date_field(path, s, kind) {
+                    Some(constructor) => {
+                        let mut entry = Frag::from("(..args) => ");
+                        entry.append(text("..args"));
+                        self.ink.push((path.to_string(), entry));
+                        (constructor, Some(text("")))
+                    }
+                    None => {
+                        self.ink.push((path.to_string(), Frag::from("(..args) => none")));
+                        ("none".to_string(), None)
+                    }
+                }
+            }
+            // A blank date still answers a pattern, with `none`.
+            (Lower::Date(_), serde_json::Value::Null) => {
+                self.ink.push((path.to_string(), Frag::from("(..args) => none")));
+                ("none".to_string(), None)
             }
             (Lower::Array(items), serde_json::Value::Array(elems)) => {
-                let (exprs, elem_inks): (Vec<Frag>, Vec<Option<Frag>>) = elems
+                let (exprs, elem_inks): (Vec<String>, Vec<Option<Frag>>) = elems
                     .iter()
                     .enumerate()
-                    .map(|(i, elem)| self.emit_value(&format!("{path}.{i}"), items, elem))
+                    .map(|(i, elem)| {
+                        self.emit_value(&format!("{path}.{i}"), &format!("{access}.at({i})"), items, elem)
+                    })
                     .unzip();
                 let ink = inks(items).then(|| {
                     Frag::wrap(
@@ -337,17 +347,27 @@ impl<'m> Codegen<'m> {
                         "()",
                     )
                 });
-                (Frag::wrap(exprs, "()"), ink)
+                if let Some(ink) = &ink {
+                    self.ink.push((path.to_string(), ink.clone()));
+                }
+                (wrap_array(exprs), ink)
             }
             (Lower::Object(props, order, added), serde_json::Value::Object(obj)) => {
                 let mut dict = Container::default();
                 for (key, elem) in ordered(obj, &order) {
                     let node = props.get(key).or(added);
-                    dict.anchored |= is_matrix(node);
-                    let lowered = self.emit_value(&format!("{path}.{key}"), node, elem);
-                    dict.push(key, lowered);
+                    let lowered = self.emit_value(
+                        &format!("{path}.{key}"),
+                        &format!("{access}.at(\"{}\")", escape_string(key)),
+                        node,
+                        elem,
+                    );
+                    dict.push(key, lowered.0);
                 }
-                (dict.finish(Some(&format!("{path}."))), None)
+                // A matrix's own dictionary keeps exactly its members as keys:
+                // `roster` reads it through the dictionary declaring it.
+                let prefix = format!("{path}.");
+                (dict.finish((!is_matrix(node)).then_some(prefix.as_str())), None)
             }
             (
                 Lower::Native,
@@ -355,12 +375,11 @@ impl<'m> Codegen<'m> {
                 | serde_json::Value::Number(_)
                 | serde_json::Value::Bool(_),
             ) if node.is_some() => {
-                // Parenthesized: a bare `#` embed will not lex a unary minus.
-                let expr = lit(value);
-                let ink = Frag::window(path, format!("[#({expr})]"));
-                (Frag::from(expr), Some(ink))
+                let ink = Frag::window(path, format!("[#({access})]"));
+                self.ink.push((path.to_string(), ink.clone()));
+                (lit(value), Some(ink))
             }
-            _ => (Frag::from(lit(value)), None),
+            _ => (lit(value), None),
         };
         let ink = ink.or_else(|| inks(node).then(|| Frag::from("none")));
         (expr, ink)
@@ -368,8 +387,8 @@ impl<'m> Codegen<'m> {
 }
 
 /// Whether a field declared by `node` has ink: every declared type a plate
-/// prints, and an array of them. A container does not; it carries `$ink` of
-/// its own.
+/// prints, and an array of them. A container does not; it carries `$path` for
+/// its own cells' ink to address by.
 fn inks(node: Option<&serde_json::Value>) -> bool {
     let Some(n) = node else {
         return false;
@@ -382,11 +401,11 @@ fn inks(node: Option<&serde_json::Value>) -> bool {
     }
 }
 
-/// A span of generated source and the scalar ink windows inside it, as
+/// A span of generated source and the ink windows inside it, as
 /// `(schema address, byte range)` relative to the fragment's start. Composing
-/// fragments shifts their windows, so the data literal knows where each of its
-/// inline ink blocks lands without a second pass over the text.
-#[derive(Default)]
+/// fragments shifts their windows, so the ink table knows where each of its
+/// entries' glyphs are born without a second pass over the text.
+#[derive(Default, Clone)]
 struct Frag {
     src: String,
     windows: Vec<(String, Range<usize>)>,
@@ -408,7 +427,7 @@ impl From<&str> for Frag {
 }
 
 impl Frag {
-    /// One ink block whose glyphs are born inside `src`, windowed whole.
+    /// One ink expression whose glyphs are born inside `src`, windowed whole.
     fn window(path: &str, src: String) -> Self {
         Self {
             windows: vec![(path.to_string(), 0..src.len())],
@@ -449,63 +468,53 @@ impl Frag {
     }
 }
 
-/// `"key": value` as a dictionary item.
-fn entry(key: &str, value: Frag) -> Frag {
-    let mut out = Frag::from(format!("\"{}\": ", escape_string(key)));
-    out.append(value);
-    out
+/// The `_qm-ink` table: each entry keyed by its address, in sorted order so a
+/// reorder-only `update` produces byte-identical source. An array's entry and
+/// its elements' each window the elements' glyphs, side by side rather than
+/// nested.
+fn ink_literal(mut entries: Vec<(String, Frag)>) -> Frag {
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+    Frag::wrap(
+        entries
+            .into_iter()
+            .map(|(path, entry)| {
+                let mut out = Frag::from(format!("\"{}\": ", escape_string(&path)));
+                out.append(entry);
+                out
+            })
+            .collect(),
+        "(:)",
+    )
 }
 
-/// A dictionary under construction, with the `$ink` twin of its fields. A data
-/// key spelling `$ink` or `$path` is dropped, so the generated one is the only
-/// one.
+/// A dictionary under construction. A data key spelling `$path` is dropped, so
+/// the generated one is the only one.
 #[derive(Default)]
 struct Container {
-    items: Vec<Frag>,
-    ink: Vec<Frag>,
-    /// A field is a `matrix`, which `roster(dict, key)` addresses through the
-    /// dictionary's `$path`, so the path rides whether or not a field has ink.
-    anchored: bool,
+    items: Vec<String>,
 }
 
 impl Container {
-    fn push(&mut self, key: &str, (expr, ink): (Frag, Option<Frag>)) {
-        if key == INK_KEY || key == PATH_KEY {
+    fn push(&mut self, key: &str, expr: String) {
+        if key == PATH_KEY {
             return;
         }
-        self.items.push(entry(key, expr));
-        if let Some(ink) = ink {
-            self.ink.push(entry(key, ink));
-        }
+        self.items.push(format!("\"{}\": {expr}", escape_string(key)));
     }
 
-    /// `$ink` leads where a field has ink, then `path` as `$path` for
-    /// `display(dict, key, ..)` and `roster(dict, key)` to address by, where a
-    /// field has ink or is a matrix. A dictionary of containers (a `matrix`)
-    /// has neither, so it keeps exactly its members as keys. The `{..}` code
-    /// block is a unit Typst's incremental reparser swaps alone: an edit
-    /// touches a field and its ink, and inside a card or a row the block
-    /// holding both is that card or row, not the whole literal.
-    fn finish(mut self, path: Option<&str>) -> Frag {
-        let mut head = Vec::new();
-        if !self.ink.is_empty() {
-            head.push(entry(INK_KEY, Frag::wrap(self.ink, "(:)")));
+    /// `path` leads as `$path`, for `ink(dict, key)` and `roster(dict, key)` to
+    /// address by. The `{..}` code block is a unit Typst's incremental reparser
+    /// swaps alone, so a value edit inside a card or a row reparses that block,
+    /// not the whole literal.
+    fn finish(mut self, path: Option<&str>) -> String {
+        if let Some(path) = path {
+            self.items
+                .insert(0, format!("\"{PATH_KEY}\": \"{}\"", escape_string(path)));
         }
-        if let Some(path) = path.filter(|_| !head.is_empty() || self.anchored) {
-            head.push(Frag::from(format!(
-                "\"{PATH_KEY}\": \"{}\"",
-                escape_string(path)
-            )));
-        }
-        self.items.splice(0..0, head);
-        let mut out = Frag::from("{");
-        out.append(Frag::wrap(self.items, "(:)"));
-        out.push_str("}");
-        out
+        format!("{{{}}}", wrap_dict(self.items))
     }
 }
 
-const INK_KEY: &str = "$ink";
 const PATH_KEY: &str = "$path";
 
 /// What a schema node lowers to: the codegen walk's whole dispatch. Why only
@@ -582,20 +591,6 @@ pub(crate) fn node_type(node: &serde_json::Value) -> Option<&str> {
 enum DateKind {
     Date,
     DateTime,
-}
-
-/// Each present date's `_qm_dN` closure keyed by schema address, backing the
-/// `display(field, ..)` helper. Keys sort so a reorder-only `update` still
-/// produces byte-identical source.
-fn display_literal(entries: &[(String, String)]) -> String {
-    let mut sorted: Vec<&(String, String)> = entries.iter().collect();
-    sorted.sort_by(|a, b| a.0.cmp(&b.0));
-    wrap_dict(
-        sorted
-            .into_iter()
-            .map(|(path, binding)| format!("\"{}\": {}", escape_string(path), binding))
-            .collect(),
-    )
 }
 
 /// `None` for a string that does not parse (the empty string included), which
@@ -857,7 +852,7 @@ mod tests {
     }
 
     #[test]
-    fn date_fields_lower_to_native_datetimes_beside_a_display_projection() {
+    fn date_fields_lower_to_native_datetimes_beside_a_display_closure() {
         let meta = meta_from(serde_json::json!({
             "properties": {
                 "issued": { "type": "string", "format": "date" },
@@ -885,19 +880,22 @@ mod tests {
         );
         assert!(lib.contains("\"signed\": none"), "{lib}");
 
-        // Keys emit in sorted order, so `_qm_d0` is `at` and `_qm_d1` `issued`.
+        // The ink table reads the cell rather than repeating it.
         assert!(
-            lib.contains("#let _qm_d1 = (..args) => text(datetime(year: 2026, month: 7, day: 3).display(..args))"),
+            lib.contains(r#""issued": (..args) => text(data.at("issued").display(..args))"#),
             "{lib}"
         );
+        assert!(lib.contains(r#""signed": (..args) => none"#), "{lib}");
+        let windows: Vec<(&str, &str)> = windows
+            .iter()
+            .map(|w| (w.path.as_str(), &lib[w.block.clone()]))
+            .collect();
         assert!(
-            lib.contains(r#"("at": _qm_d0, "issued": _qm_d1,)"#),
-            "the display table keys by schema address: {lib}"
+            windows.contains(&("issued", r#"text(data.at("issued").display(..args))"#)),
+            "{windows:?}"
         );
-        let paths: Vec<&str> = windows.iter().map(|w| w.path.as_str()).collect();
-        assert!(paths.contains(&"issued"), "{paths:?}");
-        assert!(paths.contains(&"at"), "{paths:?}");
-        assert!(!paths.contains(&"signed"), "{paths:?}");
+        assert!(windows.iter().any(|(p, _)| *p == "at"), "{windows:?}");
+        assert!(!windows.iter().any(|(p, _)| *p == "signed"), "{windows:?}");
     }
 
     /// Every nested position the one-level nesting contract admits, for both
@@ -1004,22 +1002,22 @@ mod tests {
             "{lib}"
         );
         assert!(
-            lib.contains(r#"("$cards.note.0.on": _qm_d0,)"#),
-            "a card date's display projection keys on its per-instance address: {lib}"
+            lib.contains(r#""$cards.note.0.on": (..args) => text(data.at("$cards").at(0).at("on").display(..args))"#),
+            "a card date's ink keys on its per-instance address: {lib}"
         );
     }
 
-    /// Each printable field's ink sits beside it under `$ink` with the
-    /// dictionary's `$path`, a blank's is `none`, a date's calls its closure, a
-    /// dictionary of dictionaries carries neither, and every scalar ink block
-    /// is windowed on the address it prints.
+    /// Every printable address has one `_qm-ink` entry read off `data`, a blank
+    /// date's answering `none`, an array's is its elements' ink, and every
+    /// dictionary but a matrix carries `$path`. Each scalar entry is windowed on the
+    /// address it prints, the array's beside its elements' rather than around
+    /// them.
     #[test]
-    fn ink_twins_each_printable_field_and_windows_its_scalars() {
+    fn the_ink_table_keys_each_printable_address_and_windows_its_glyphs() {
         let meta = meta_from(serde_json::json!({ "properties": {
             "subject": { "type": "string" },
             "count": { "type": "integer" },
             "due": { "type": ["string", "null"], "format": "date" },
-            "on": { "type": "string", "format": "date" },
             "tags": { "type": "array", "items": { "type": "string" } },
             "rows": { "type": "array", "items": { "type": "object", "properties": {
                 "org": { "type": "string" },
@@ -1030,42 +1028,53 @@ mod tests {
         }}));
         let data = serde_json::json!({
             "subject": "Widgets",
-            "count": 3,
+            "count": -3,
             "due": null,
-            "on": "2026-01-02",
-            "tags": [],
-            "rows": [{ "org": "AFRL", "$ink": "spoofed", "$path": "spoofed" }],
+            "tags": ["a", "b"],
+            "rows": [{ "org": "AFRL", "$path": "spoofed" }],
             "grid": { "a": { "x": "1" } },
         });
         let (lib, windows) = generate_lib_typ(&data, &meta).unwrap();
 
         assert!(
-            lib.contains(
-                r#"#let data = {("$ink": ("count": [#(3)], "due": none, "on": _qm_d0(), "subject": [#("Widgets")], "tags": (),), "$path": "", "count": 3,"#
-            ),
-            "{lib}"
+            lib.contains(r#"#let data = {("$path": "", "count": -3, "due": none, "grid": {("$path": "grid.", "a": {("$path": "grid.a.", "x": "1",)},)}, "rows": ({("$path": "rows.0.", "org": "AFRL",)},), "subject": "Widgets","#),
+            "data keys spelling `$path` are dropped: {lib}"
         );
-        assert!(
-            lib.contains(r#""rows": ({("$ink": ("org": [#("AFRL")],), "$path": "rows.0.", "org": "AFRL",)},)"#),
-            "a row carries its own ink and path, and data keys spelling them are dropped: {lib}"
-        );
-        assert!(
-            lib.contains(r#""grid": {("a": {("$ink": ("x": [#("1")],), "$path": "grid.a.", "x": "1",)},)}"#),
-            "{lib}"
-        );
+        let table = lib
+            .lines()
+            .find(|l| l.starts_with("#let _qm-ink"))
+            .expect("the ink table");
+        for entry in [
+            r#""count": [#(data.at("count"))]"#,
+            r#""due": (..args) => none"#,
+            r#""rows.0.org": [#(data.at("rows").at(0).at("org"))]"#,
+            r#""tags": ([#(data.at("tags").at(0))], [#(data.at("tags").at(1))],)"#,
+            r#""tags.1": [#(data.at("tags").at(1))]"#,
+        ] {
+            assert!(table.contains(entry), "{entry} in {table}");
+        }
+        assert!(!table.contains("\"rows\":"), "a typed table has no ink: {table}");
 
-        let scalars: Vec<(&str, &str)> = windows
+        let windows: Vec<(&str, &str)> = windows
             .iter()
             .map(|w| (w.path.as_str(), &lib[w.block.clone()]))
             .collect();
+        assert_eq!(
+            windows.iter().filter(|(p, _)| *p == "tags.0").count(),
+            2,
+            "the array's entry and the element's each window the element: {windows:?}"
+        );
         for expected in [
-            ("count", "[#(3)]"),
-            ("subject", r#"[#("Widgets")]"#),
-            ("rows.0.org", r#"[#("AFRL")]"#),
-            ("grid.a.x", r#"[#("1")]"#),
+            ("count", r#"[#(data.at("count"))]"#),
+            ("grid.a.x", r#"[#(data.at("grid").at("a").at("x"))]"#),
+            ("rows.0.org", r#"[#(data.at("rows").at(0).at("org"))]"#),
         ] {
-            assert!(scalars.contains(&expected), "{expected:?} in {scalars:?}");
+            assert!(windows.contains(&expected), "{expected:?} in {windows:?}");
         }
+        // `data` carries `$path` with no field of its own to print.
+        let (lib, _) = generate_lib_typ(&serde_json::json!({ "grid": { "a": { "x": "1" } } }), &meta)
+            .unwrap();
+        assert!(lib.contains("#let data = {(\"$path\": \"\", \"grid\": "), "{lib}");
     }
 
     #[test]
@@ -1087,10 +1096,10 @@ mod tests {
     }
 
     /// A matrix's held set lowers its roster members in roster order and its
-    /// added items after them sorted, each against its own node. The dictionary
-    /// declaring it carries `$path` though nothing in it has ink, and the
-    /// address tables are the schema's alone, the added step and the roster
-    /// included, whatever the data holds.
+    /// added items after them sorted, each against its own node. Each member
+    /// carries `$path` and the matrix none, and the address tables are the
+    /// schema's alone, the added step and the roster included, whatever the
+    /// data holds.
     #[test]
     fn a_matrix_lowers_in_roster_order_under_static_tables() {
         let member = |title: bool| {
@@ -1128,7 +1137,7 @@ mod tests {
         for path in ["quals.wing_ig.detail", "quals.wing_ig.title"] {
             assert!(paths.contains(&path), "{path} in {paths:?}");
         }
-        assert!(lib.contains("#let data = {(\"$path\": \"\", \"quals\": "), "{lib}");
+        assert!(lib.contains("#let data = {(\"$path\": \"\", \"quals\": {(\"cyber\": {(\"$path\": \"quals.cyber.\""), "{lib}");
 
         let tables = |lib: &str| {
             lib.lines()
@@ -1144,49 +1153,6 @@ mod tests {
         ] {
             assert!(tables(&lib).contains(piece), "{piece} in {}", tables(&lib));
         }
-    }
-
-    #[test]
-    fn an_address_resolves_exactly_the_steps_its_schema_declares() {
-        let meta = meta_from(serde_json::json!({
-            "properties": {
-                "subject": { "type": "string" },
-                "body": richtext_field(),
-                "sections": { "type": "array", "items": richtext_field() },
-                "tags": { "type": "array", "items": { "type": "string" } },
-                "refs": { "type": "array", "items": { "type": "object", "properties": {
-                    "org": { "type": "string" },
-                    "num": { "type": "string" },
-                }}},
-                "classification": { "type": "object", "properties": {
-                    "value": { "type": "string", "enum": ["", "CUI"] },
-                    "poc": { "type": "string" },
-                }},
-            },
-            "$defs": { "note_card": { "properties": {
-                "origin": { "type": "object", "properties": { "office": { "type": "string" } } },
-            }}}
-        }));
-        for (path, declared) in [
-            ("sections.0", true),
-            ("tags.0", true),
-            ("refs.0.org", true),
-            ("refs.0.num", true),
-            ("classification.value", true),
-            ("classification.poc", true),
-            ("subject.0", false),
-            ("subject.anything", false),
-            ("body.0", false),
-            ("body.text", false),
-            ("sections.0.anything", false),
-            ("tags.0.anything", false),
-            ("tags.0.0", false),
-            ("refs.0.missing", false),
-        ] {
-            assert_eq!(meta.root.resolve(path).is_some(), declared, "{path}");
-        }
-        assert!(meta.cards["note"].resolve("origin.office").is_some());
-        assert!(meta.cards["note"].resolve("origin.missing").is_none());
     }
 
     /// A richtext field is `type: object` and would answer the object arm, so

@@ -46,10 +46,10 @@ main:
     // The backend pre-lowers content into the `data` dict; the plate just reads it.
     fs::write(
         quill_path.join("plate.typ"),
-        "#import \"@local/quillmark-helper:0.1.0\": data\n\
+        "#import \"@local/quillmark-helper:0.2.0\" as qm\n\
          #set page(width: 612pt, height: 792pt, margin: 72pt)\n\
          #set text(size: 11pt)\n\
-         = Doc\n#data.subject\n#for t in data.tags { block(t) }\n",
+         = Doc\n#qm.data.subject\n#for t in qm.data.tags { block(t) }\n",
     )
     .unwrap();
     quill_path

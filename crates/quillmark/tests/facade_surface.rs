@@ -104,7 +104,9 @@ fn a_render_date_refusal_spells_through_the_facade() {
 #[cfg(feature = "typst")]
 #[test]
 fn preview_regions_spell_through_the_facade() {
-    use quillmark::{ContentHit, HitGranularity, LiveSession, Quillmark, RenderedRegion};
+    use quillmark::{
+        ContentHit, FieldCoverage, HitGranularity, LiveSession, Quillmark, RenderedRegion,
+    };
 
     let engine = Quillmark::new();
     let quill = quillmark::quill_from_path(quillmark_fixtures::quills_path("usaf_memo"))
@@ -119,6 +121,7 @@ fn preview_regions_spell_through_the_facade() {
     let hit: Option<ContentHit> = session.position_at(0, 0.0, 0.0, 0.0);
     let _: Option<Option<HitGranularity>> = hit.map(|h| h.granularity);
     let _: Option<RenderedRegion> = session.locate("body", 0);
+    let _: Vec<FieldCoverage> = session.coverage();
 }
 
 /// A server holds one `Quillmark` and renders on many threads.

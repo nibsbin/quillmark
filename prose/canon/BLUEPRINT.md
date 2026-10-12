@@ -450,21 +450,21 @@ It is the worst-case-but-renderable document, so a plate that renders it
 degrades gracefully on every type-valid input shape. The contract requires:
 
 - Templates treat blanks (`""`, `0`, `false`, `[]`, empty richtext body) as
-  valid *present* input: read via `data.field`,
-  `card.at("field", default: …)`, or guarded with `if "field" in data`.
+  valid *present* input: read via `qm.data.field`,
+  `card.at("field", default: …)`, or guarded with `if "field" in qm.data`.
 - **A template branching on an `enum` covers `values ∪ blank` exhaustively.**
   The blank is valid present input for every enum, not only defaultless ones,
   so an `else` fallback silently renders a variant nobody chose — the exact
   fabrication the blank exists to close, re-opened one rung lower. Match the
   blank explicitly and decide what it means: omit the parameter, take the
   downstream package's own default, or render nothing. Note that
-  `data.at(key, default: X)` is **not** such a guard: under blank-filled
+  `qm.data.at(key, default: X)` is **not** such a guard: under blank-filled
   render every declared key is always present, so its `default:` is dead code
   and the blank flows through. Where a package asserts membership, that is a
   failed compile rather than a quiet mis-render.
 - **A template reads a variant field only inside the branch that selects its
   world.** A variant-bearing enum arrives as `{value: …}` carrying exactly the
-  live world's fields, so `data.c.value == "CUI"` is what makes `data.c.poc`
+  live world's fields, so `qm.data.c.value == "CUI"` is what makes `qm.data.c.poc`
   total; reading it outside that branch is a missing-key error on every other
   document. The exhaustive branch above is therefore not just an obligation here
   but the access path (`SCHEMAS.md` § "Enum variants").

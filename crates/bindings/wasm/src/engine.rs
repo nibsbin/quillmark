@@ -2779,9 +2779,9 @@ impl LiveSession {
         render_result_to_ts(result, &self.kinds())
     }
 
-    /// Schema-field geometry for this compiled session: each content field's
-    /// **first placement** (one region per page it touches) plus widget and
-    /// scalar-reference-site regions, keyed on the canonical `DocPath` address. A
+    /// Schema-field geometry for this compiled session: each piece of generated
+    /// ink's **first placement** (one region per page it touches) plus claim and
+    /// widget regions, keyed on the canonical `DocPath` address. A
     /// field may appear more than once, so group by `field` (see `FieldRegion`).
     /// A session-level query: no render, no byte artifact. The click direction is
     /// `fieldAt`. Empty for backends that place no schema fields.
@@ -2797,9 +2797,9 @@ impl LiveSession {
 
     /// The whole-field highlight boxes for `field`: one union rect per page over
     /// the field's `span`-bearing content segments, the union `regions()` leaves
-    /// derived. **Content only**: a field placed solely as a scalar reference or
-    /// a bound widget carries no `span` and returns `[]`, its box being a single
-    /// `regions()` rect. Reflects the current compile.
+    /// derived. **Content only**: a field placed solely as a scalar's ink, a
+    /// claim or a bound widget carries no `span` and returns `[]`, its box being
+    /// a single `regions()` rect. Reflects the current compile.
     #[wasm_bindgen(js_name = fieldBoxes, unchecked_return_type = "FieldRegion[]")]
     pub fn field_boxes(&self, field: &str) -> Result<JsValue, JsValue> {
         let kinds = self.kinds();
@@ -2810,6 +2810,29 @@ impl LiveSession {
             .map(Into::into)
             .collect();
         serialize_or_throw(&boxes, "fieldBoxes")
+    }
+
+    /// Each address the current compile fills that a reader could want to
+    /// click, and the `DocPath` of the region reaching it: the address itself,
+    /// the nearest enclosing one a region carries (a row claim reaching its
+    /// cells), or `undefined` where no click does. Reflects the current compile.
+    #[wasm_bindgen(js_name = coverage, unchecked_return_type = "FieldCoverage[]")]
+    pub fn coverage(&self) -> Result<JsValue, JsValue> {
+        let kinds = self.kinds();
+        let to_doc = |addr: String| {
+            quillmark_core::region::plate_addr_to_doc_path(&addr, &kinds)
+                .map_or(addr, |path| path.to_string())
+        };
+        let coverage: Vec<crate::types::FieldCoverage> = self
+            .inner
+            .coverage()
+            .into_iter()
+            .map(|c| crate::types::FieldCoverage {
+                field: to_doc(c.field),
+                covered_by: c.covered_by.map(to_doc),
+            })
+            .collect();
+        serialize_or_throw(&coverage, "coverage")
     }
 
     /// The schema field whose content is under a point on `page`: the `DocPath`
