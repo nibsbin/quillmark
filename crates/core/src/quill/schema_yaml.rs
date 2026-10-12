@@ -22,17 +22,16 @@ quill:
   backend: typst
   description: Full
 main:
-  ui:
-    groups: [meta]
   fields:
-    status:
-      type: enum
-      values: [draft, final]
-      default: draft
-      ui:
-        group: meta
     page_count:
       type: integer
+  sections:
+    meta:
+      fields:
+        status:
+          type: enum
+          values: [draft, final]
+          default: draft
 card_kinds:
   indorsement:
     fields:
@@ -45,13 +44,11 @@ card_kinds:
         let schema = cfg(r#"
 quill: { name: order, version: "1.0", backend: typst, description: x }
 main:
-  ui:
-    groups: [g]
   fields:
     zeta:
       type: enum
       values: [b, a]
-      ui: { group: g }
+      ui: { compact: true }
       default: b
       description: d
       title: T
@@ -63,7 +60,7 @@ main:
     mike:
       type: richtext
       inline: true
-      ui: { group: g }
+      ui: { compact: true }
 card_kinds:
   zulu:
     fields:
