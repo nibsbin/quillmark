@@ -53,15 +53,39 @@ fn missing_block_message(markdown: &str, unclosed_root: Option<&UnclosedRoot>) -
 
     let trimmed = markdown.trim_start();
 
-    if trimmed.starts_with("---")
-        && trimmed
+    if trimmed.starts_with("---") {
+        if trimmed
             .lines()
             .any(|l| l.trim_start().starts_with("$quill:"))
-    {
+        {
+            return "Missing required root card-yaml block. Your document opens with \
+                    `---` YAML front matter; card-yaml blocks are fenced with `~~~`. \
+                    Replace the opening `---` and its closing `---` with a line \
+                    containing exactly `~~~` (three tildes)."
+                .to_string();
+        }
         return "Missing required root card-yaml block. Your document opens with \
-                `---` YAML front matter; card-yaml blocks are fenced with `~~~`. \
-                Replace the opening `---` and its closing `---` with a line \
-                containing exactly `~~~` (three tildes)."
+                `---` YAML front matter; card-yaml blocks are fenced with `~~~`, \
+                and the root block declares `$quill: <name>`. Replace the opening \
+                `---` and its closing `---` with a line containing exactly `~~~` \
+                (three tildes), and add `$quill: <name>` inside."
+            .to_string();
+    }
+
+    if trimmed.starts_with("```") {
+        return "Missing required root card-yaml block. Your document opens with a \
+                backtick fence; card-yaml blocks are fenced with `~~~` (three \
+                tildes). Replace the opening and closing backtick lines with a \
+                line containing exactly `~~~`."
+            .to_string();
+    }
+
+    let first_line = markdown.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+    if first_line.trim_start().starts_with("~~~") && first_line.starts_with(char::is_whitespace) {
+        return "Missing required root card-yaml block. Your document's opening \
+                `~~~` is indented; a card-yaml fence starts at column zero. Remove \
+                the leading whitespace before both fences and the fields between \
+                them."
             .to_string();
     }
 
@@ -75,8 +99,8 @@ fn missing_block_message(markdown: &str, unclosed_root: Option<&UnclosedRoot>) -
     }
 
     "Missing required root card-yaml block. The document must open with a \
-     `~~~` block declaring `$quill: <name>` (and `$kind: main`) as \
-     the first two lines, closed by a line containing exactly `~~~`."
+     `~~~` block declaring `$quill: <name>`, closed by a line containing \
+     exactly `~~~`."
         .to_string()
 }
 
@@ -308,11 +332,15 @@ pub(super) fn decompose_with_warnings(
         .iter()
         .any(|m| matches!(m, PayloadItem::Quill { .. }));
     if !has_root_quill {
-        return Err(ParseError::MissingQuill(
-            "The document's root card-yaml block must declare `$quill: <name>` as \
-             its first line (e.g. `$quill: usaf_memo@0.2.0`)."
-                .to_string(),
-        ));
+        let msg = if root_mapping.contains_key("quill") {
+            "The document's root card-yaml block declares `quill:` without the `$`. \
+             The format is named by the system key `$quill: <name>` \
+             (e.g. `$quill: usaf_memo@0.2.0`)."
+        } else {
+            "The document's root card-yaml block must declare `$quill: <name>` \
+             (e.g. `$quill: usaf_memo@0.2.0`)."
+        };
+        return Err(ParseError::MissingQuill(msg.to_string()));
     }
 
     // The root's `$kind` is `main` by position (markdown-spec.md §3.3): an

@@ -117,17 +117,33 @@ fn test_dash_frontmatter_with_quill_names_the_fence_edit() {
     assert!(msg.contains("~~~"), "got: {msg}");
 }
 
-/// Without `$quill` the document needs both edits, so the generic shape — which
-/// names the fence *and* the key — beats the fence-only hint.
+/// Without `$quill` the document needs both edits, so the message names the
+/// fence and the key.
 #[test]
-fn test_dash_frontmatter_without_quill_reports_the_generic_shape() {
-    let err = decompose("---\nquill: usaf_memo\ntitle: Memo\n---\n\nBody\n").unwrap_err();
+fn test_dash_frontmatter_without_quill_names_the_fence_and_the_key() {
+    let err = decompose("---\ntitle: Memo\n---\n\nBody\n").unwrap_err();
     let msg = err.to_string();
-    assert!(msg.contains("$quill: <name>"), "got: {msg}");
-    assert!(
-        !msg.contains("Replace the opening `---`"),
-        "fence-only hint under-reports the missing key: {msg}"
-    );
+    assert!(msg.contains("`---` YAML front matter"), "got: {msg}");
+    assert!(msg.contains("add `$quill: <name>`"), "got: {msg}");
+}
+
+/// The first shapes a newcomer writes for the root block each draw a message
+/// naming what they wrote, under the one code.
+#[test]
+fn test_near_miss_root_blocks_name_the_mistake() {
+    for (markdown, expected) in [
+        ("```\n$quill: q\ntitle: T\n```\n\nBody\n", "backtick fence"),
+        ("  ~~~\n  $quill: q\n  ~~~\n\nBody\n", "is indented"),
+        ("~~~\nquill: q\ntitle: T\n~~~\n\nBody\n", "`quill:` without the `$`"),
+    ] {
+        let err = decompose(markdown).unwrap_err();
+        assert_eq!(
+            err.to_diagnostic().code.as_deref(),
+            Some("parse::missing_quill")
+        );
+        let msg = err.to_string();
+        assert!(msg.contains(expected), "{markdown:?} got: {msg}");
+    }
 }
 
 #[test]

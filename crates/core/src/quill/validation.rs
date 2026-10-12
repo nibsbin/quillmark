@@ -104,8 +104,8 @@ impl std::fmt::Display for ValidationError {
                     f,
                     "field `{path}` value `{value}` not in allowed set {allowed:?}"
                 )?;
-                if *open {
-                    write!(f, ". {}", open_matrix_hint())?;
+                if let Some(hint) = enum_hint(value, allowed, *open) {
+                    write!(f, ". {hint}")?;
                 }
                 Ok(())
             }
@@ -189,6 +189,16 @@ fn not_plain_hint() -> &'static str {
 fn open_matrix_hint() -> &'static str {
     "Rename the key to a member, or add the item beside the roster: key it by a \
      snake_case id and give it a `title` that is not blank."
+}
+
+fn enum_hint(value: &str, allowed: &[String], open: bool) -> Option<String> {
+    if open {
+        return Some(open_matrix_hint().to_string());
+    }
+    allowed
+        .iter()
+        .find(|member| member.eq_ignore_ascii_case(value))
+        .map(|member| format!("Did you mean `{member}`? Enum values are case-sensitive."))
 }
 
 /// Actionable exit clause for a `HeldStored` error.
@@ -306,9 +316,12 @@ impl ValidationError {
             } => Some(not_inline_hint(*trailing_newline).to_string()),
             ValidationError::NotPlain { .. } => Some(not_plain_hint().to_string()),
             ValidationError::FormatViolation { format, .. } => Some(format_hint(format)),
-            ValidationError::EnumViolation { open, .. } => {
-                open.then(|| open_matrix_hint().to_string())
-            }
+            ValidationError::EnumViolation {
+                value,
+                allowed,
+                open,
+                ..
+            } => enum_hint(value, allowed, *open),
             ValidationError::HeldStored { .. } => Some(held_stored_hint().to_string()),
         }
     }

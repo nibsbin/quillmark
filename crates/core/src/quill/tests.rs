@@ -1834,3 +1834,23 @@ fn a_cap_rides_its_own_leading_line_under_the_description() {
     .blueprint();
     assert!(!uncapped.contains("up to"), "{uncapped}");
 }
+
+#[test]
+fn an_enum_value_off_by_case_hints_the_member() {
+    let config = quill_with_field("    color:\n      type: enum\n      values: [red, blue]\n")
+        .expect("loads");
+    let errs = super::validation::validate_field(
+        config.main.fields.get("color").unwrap(),
+        &QuillValue::from_json(serde_json::json!("Red")),
+        &crate::path::DocPath::main().field("color"),
+    );
+    let hint = errs[0].hint().expect("a case-only miss carries a hint");
+    assert!(hint.contains("`red`"), "got: {hint}");
+}
+
+#[test]
+fn every_listed_field_type_name_parses_to_itself() {
+    for name in FieldType::NAMES {
+        assert_eq!(FieldType::from_str(name).map(|t| t.as_str()), Some(name));
+    }
+}
