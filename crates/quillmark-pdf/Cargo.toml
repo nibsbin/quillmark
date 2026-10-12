@@ -9,6 +9,8 @@ license.workspace = true
 documentation = "https://docs.rs/quillmark-pdf"
 homepage.workspace = true
 repository = "https://github.com/borb-sh/quillmark"
+keywords = ["pdf", "acroform", "forms", "quillmark"]
+categories = ["rendering"]
 publish = true
 
 [dependencies]

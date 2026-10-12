@@ -6,6 +6,8 @@ include.workspace = true
 license.workspace = true
 homepage.workspace = true
 repository = "https://github.com/borb-sh/quillmark"
+keywords = ["richtext", "markdown", "content-model", "quillmark"]
+categories = ["text-processing", "parser-implementations"]
 description = "Content model (splice-shaped USV text with line attributes, marks, and islands), canonical serialization, edit deltas, and richtext/plaintext codecs for Quillmark"
 # The leaf content-model crate: `quillmark-core` depends on it for the storage
 # body type, so it carries no dependency on the document engine. Published
