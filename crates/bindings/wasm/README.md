@@ -132,6 +132,10 @@ const session = await engine.open(quill, doc); // one compile, current document
 `load` reads only `quill.backendId` and clones nothing. A failed load rejects
 with `runtime::backend_load_failed`, and the next call retries.
 
+A render that traps (out of memory, a panic) rejects with
+`runtime::backend_trapped`, the `WebAssembly.RuntimeError` on `cause`. The
+build's state is then undefined: terminate the Worker or restart the process.
+
 ### The two doors: `Document.fromMarkdown` vs `quill.parse` / `quill.conform`
 
 `Document.fromMarkdown` is the quill-free **transport door** (migrations, `$ext`

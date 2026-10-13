@@ -50,10 +50,13 @@ impl PyQuillmark {
     /// The result's `warnings` are every `quill.validate(doc)` warning but
     /// `backend::declined_construct`, then the compile's, a decline among them;
     /// the load's stay on `doc.warnings`.
+    ///
+    /// The GIL is released while the backend compiles.
     #[pyo3(signature = (quill, doc, format=None, ppi=None, pages=None, regions=false, today=None))]
     #[allow(clippy::too_many_arguments)]
     fn render(
         &self,
+        py: Python<'_>,
         quill: &PyQuill,
         doc: PyRef<'_, PyDocument>,
         format: Option<PyOutputFormat>,
@@ -62,19 +65,23 @@ impl PyQuillmark {
         regions: bool,
         today: Option<Bound<'_, PyDate>>,
     ) -> PyResult<PyRenderResult> {
-        let today = render_date(doc.py(), today.map(Bound::into_any))?;
+        let today = render_date(py, today.map(Bound::into_any))?;
         let mut opts = quillmark_core::types::RenderOptions::default();
         opts.output_format = format.map(OutputFormat::from);
         opts.ppi = ppi;
         opts.pages = pages.map(page_indices).transpose()?;
         opts.regions = regions;
-        let mut result = self
-            .inner
-            .render(&quill.inner, &doc.inner, today, &opts)
+        // A clone, so the `Document` stays editable from other threads while
+        // the GIL is released.
+        let document = doc.inner.clone();
+        drop(doc);
+        let (engine, quill) = (&self.inner, &quill.inner);
+        let mut result = py
+            .detach(|| engine.render(quill, &document, today, &opts))
             .map_err(convert_render_error)?;
-        let kinds: Vec<Option<&str>> = doc.inner.cards().iter().map(|c| c.kind()).collect();
+        let kinds: Vec<Option<&str>> = document.cards().iter().map(|c| c.kind()).collect();
         result.regions = quillmark_core::region::regions_to_doc_path(result.regions, &kinds);
-        PyRenderResult::new(doc.py(), result)
+        PyRenderResult::new(py, result)
     }
 
     /// The output formats `quill`'s backend can emit. Raises `QuillmarkError`
