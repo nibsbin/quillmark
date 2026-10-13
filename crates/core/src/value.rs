@@ -57,8 +57,9 @@ pub(crate) fn depth_check_meta_map<E>(
 /// The one YAML reading every engine parse shares: only `true` and `false`,
 /// in any letter case, are booleans, and YAML 1.1's words (`y`, `no`, `On`,
 /// `OFF`) stay strings. Comments reach no value, so none is buffered, and a run
-/// of them meets no count limit. Aliases expand to at most twice the input's
-/// scalar bytes plus [`ALIAS_SLACK`], so a block's value stays linear in its
+/// of them meets no count limit. With aliases expanded, scalar and tag bytes
+/// stay under twice the input's bytes plus [`EXPANSION_SLACK`], and nodes under
+/// its bytes plus [`EXPANSION_SLACK`], so a block's value is linear in its
 /// source.
 pub(crate) fn parse_yaml<'de, T: Deserialize<'de>>(
     yaml: &'de str,
@@ -69,13 +70,14 @@ pub(crate) fn parse_yaml<'de, T: Deserialize<'de>>(
             strict_booleans: true,
             emit_comments: false,
             budget: serde_saphyr::budget! {
-                max_total_scalar_bytes: yaml.len().saturating_mul(2).saturating_add(ALIAS_SLACK),
+                max_total_scalar_bytes: yaml.len().saturating_mul(2).saturating_add(EXPANSION_SLACK),
+                max_nodes: yaml.len().saturating_add(EXPANSION_SLACK),
             },
         },
     )
 }
 
-const ALIAS_SLACK: usize = 64 * 1024;
+const EXPANSION_SLACK: usize = 4 * 1024;
 
 impl QuillValue {
     /// Parse a YAML string under the parser's own budget, so an over-deep
@@ -167,11 +169,23 @@ mod tests {
 
     #[test]
     fn aliases_expand_linearly_in_the_source() {
+        let refused = |yaml: &str| {
+            let err = QuillValue::from_yaml_str(yaml).expect_err("expansion refused");
+            assert!(err.to_string().contains("budget"), "{err}");
+        };
         let anchor = "x".repeat(10_000);
-        let few: String = (0..4).map(|_| "  - *a\n").collect();
-        let many: String = (0..90).map(|_| "  - *a\n").collect();
-        assert!(QuillValue::from_yaml_str(&format!("z: &a {anchor}\nzz:\n{few}")).is_ok());
-        assert!(QuillValue::from_yaml_str(&format!("z: &a {anchor}\nzz:\n{many}")).is_err());
+        assert!(QuillValue::from_yaml_str(&format!("z: &a {anchor}\nzz: [*a]\n")).is_ok());
+        refused(&format!("z: &a {anchor}\nzz: [{}]\n", vec!["*a"; 90].join(",")));
+
+        let tens = |alias: &str| vec![alias; 10].join(",");
+        refused(&format!(
+            "a: &a [{}]\nb: &b [{}]\nc: &c [{}]\nd: &d [{}]\ne: [{}]\n",
+            tens("[]"),
+            tens("*a"),
+            tens("*b"),
+            tens("*c"),
+            tens("*d"),
+        ));
     }
 
     #[test]
