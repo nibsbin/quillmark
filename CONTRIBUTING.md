@@ -6,8 +6,6 @@
 - A bug: an issue from the bug form, with the smallest document that reproduces it.
 - A change larger than a fix: open an issue before the pull request. Before 1.0 most releases change the API, so agree on the shape before building it.
 
-Everyone here follows the [Code of Conduct](CODE_OF_CONDUCT.md).
-
 ## Setup
 
 ```bash
