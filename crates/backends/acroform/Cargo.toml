@@ -2,13 +2,15 @@
 name = "quillmark-acroform"
 version.workspace = true
 edition.workspace = true
-include = ["src/**", "Cargo.toml", "README*", "LICENSE*"]
+include = ["src/**", "Cargo.toml", "README*", "LICENSE*", "NOTICE"]
 readme.workspace = true
 description = "Typst-free PDF-form backend for Quillmark: fills existing PDF forms via the quillmark-pdf stamping spine"
 license.workspace = true
 documentation = "https://docs.rs/quillmark-acroform"
 homepage.workspace = true
 repository = "https://github.com/borb-sh/quillmark"
+keywords = ["pdf", "acroform", "forms", "form-filling"]
+categories = ["rendering"]
 publish = true
 
 [dependencies]

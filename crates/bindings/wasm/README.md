@@ -21,25 +21,10 @@ own linear memory, lazily loaded on the first render. The Engine clones a
 `Quill` / `Document` into that memory as data and frees the clones: you never
 hold a backend object or cross a memory boundary yourself.
 
-## Build
+## Installation
 
 ```bash
-bash scripts/build-wasm.sh
-```
-
-The script builds two variants, the core (no backend) and the render build
-(default features, both backends), each with `--target web` and `--weak-refs`
-enabled (see
-[Initialization](#initialization) and [Lifecycle](#lifecycle)). It then asserts
-none of them carries a `.wasm` ESM import or a top-level await.
-
-## Test
-
-```bash
-bash scripts/build-wasm.sh
-cd crates/bindings/wasm
-npm install
-npm test
+npm install @quillmark/wasm
 ```
 
 ## Usage
@@ -567,6 +552,27 @@ try {
 ```
 
 [erm]: https://github.com/tc39/proposal-explicit-resource-management
+
+## Build
+
+```bash
+bash scripts/build-wasm.sh
+```
+
+The script builds two variants, the core (no backend) and the render build
+(default features, both backends), each with `--target web` and `--weak-refs`
+enabled (see
+[Initialization](#initialization) and [Lifecycle](#lifecycle)). It then asserts
+none of them carries a `.wasm` ESM import or a top-level await.
+
+## Test
+
+```bash
+bash scripts/build-wasm.sh
+cd crates/bindings/wasm
+npm install
+npm test
+```
 
 ## Changelog
 

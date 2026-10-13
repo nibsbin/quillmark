@@ -21,6 +21,14 @@ test = false
 # rustdoc HTML, so skip them.
 doc = false
 
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }{ archive-suffix }"
+bin-dir = "{ name }-{ target }-v{ version }/{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
+
 [dependencies]
 clap = { version = "~4.6", features = ["derive"] }
 indexmap = { workspace = true }
