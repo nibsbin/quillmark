@@ -919,9 +919,20 @@ pub(crate) struct Page {
 /// One `/Pages` node and the chain above it, shared by every node below it so
 /// a deep or wide tree costs one link per node.
 #[derive(Debug)]
-pub(crate) struct Ancestor {
+struct Ancestor {
     id: u32,
     up: Option<Rc<Ancestor>>,
+}
+
+/// Unlinks iteratively: the derived drop recurses once per link, and a chain
+/// 100 000 nodes deep overflows the stack.
+impl Drop for Ancestor {
+    fn drop(&mut self) {
+        let mut up = self.up.take();
+        while let Some(link) = up {
+            up = Rc::try_unwrap(link).ok().and_then(|mut a| a.up.take());
+        }
+    }
 }
 
 impl Page {
@@ -963,9 +974,6 @@ pub(crate) fn walk_page_tree(idx: &ObjectIndex, catalog_id: u32) -> Result<Vec<P
                 CODE_PARSE,
                 format!("page tree revisits node {node_id} (cycle or shared node)"),
             ));
-        }
-        if seen.len() > MAX_NODES {
-            return Err(err(CODE_PARSE, "page tree exceeds 100 000 nodes"));
         }
         let dict = idx.dict(node_id, CODE_PARSE, &format!("page node {node_id}"))?;
         if find_dict_value(dict, "Type").is_some_and(|typ| is_name(typ, b"/Pages")) {
@@ -1590,6 +1598,15 @@ mod tests {
         );
         let e = walk_page_tree(&ObjectIndex::new(pdf.as_bytes()), 1).expect_err("cap holds");
         assert!(e.message.contains("100 000"), "{}", e.message);
+    }
+
+    #[test]
+    fn a_deep_ancestor_chain_drops_without_recursing() {
+        let mut chain = None;
+        for id in 0..1_000_000 {
+            chain = Some(Rc::new(Ancestor { id, up: chain }));
+        }
+        drop(chain);
     }
 
     #[test]
