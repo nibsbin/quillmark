@@ -89,6 +89,18 @@ jobs:
           RUSTDOCFLAGS: -Dwarnings
         run: cargo doc --no-deps --locked --workspace
 
+      - name: Install cargo-about
+        uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2.87.21
+        with:
+          tool: cargo-about@0.9.2
+
+      # The license policy in scripts/about.toml, held on every PR so a
+      # dependency bump outside it fails here rather than at release-prepare.
+      - name: Check dependency licenses
+        run: |
+          cargo about generate --workspace --all-features --locked --fail \
+            -c scripts/about.toml -o /dev/null scripts/third-party-licenses.hbs
+
   test:
     runs-on: ubuntu-latest
     steps:
@@ -186,9 +198,12 @@ jobs:
       - name: Generate SBOM
         run: ./scripts/wasm-sbom.sh
 
-      - name: Check the package carries the SBOM
+      - name: Check the package carries the SBOM and the license texts
         working-directory: pkg
-        run: npm pack --dry-run --json | jq -e '.[0].files | any(.path == "sbom.cdx.json")' >/dev/null
+        run: |
+          npm pack --dry-run --json | jq -e '[.[0].files[].path] as $p
+            | ["sbom.cdx.json", "LICENSE", "NOTICE", "THIRD_PARTY_LICENSES.md"]
+            | all(. as $f | $p | index($f))' >/dev/null
 
       # `install`, not `ci`: package-lock.json is gitignored, so a fresh
       # checkout has no lockfile for `ci` to install from.
