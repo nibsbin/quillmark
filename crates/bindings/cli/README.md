@@ -22,7 +22,7 @@ release plates compile against.
 ## Quick start
 
 ```bash
-# Write a document to fill in: the quill's own annotated form
+# Write a document to fill in: the quill's annotated blueprint
 quillmark blueprint ./my-quill > document.md
 
 # Render a document; output defaults to document.pdf
@@ -69,7 +69,8 @@ Checks documents against the quill's schema and prints every diagnostic.
 Without `--regions` it does not compile the plate. Exits 1 where a document
 draws an error; `--strict` exits 1 on any warning too, for CI. `--regions`
 renders each document that drew no error and lists the filled fields no click
-on the page reaches.
+on the page reaches, and those only an enclosing field's region reaches; the
+list never moves the exit code.
 
 ### `quillmark schema <QUILL_PATH>`
 

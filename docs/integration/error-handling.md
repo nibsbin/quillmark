@@ -41,7 +41,7 @@ One thing never reaches a diagnostic: an argument the binding cannot convert at 
     try {
       const result = await engine.render(quill, doc, { format: "pdf" });
     } catch (err) {
-      if (!isQuillmarkError(err)) throw err;  // not a quillmark failure
+      if (!isQuillmarkError(err)) throw err;
       for (const d of err.diagnostics) {     // always non-empty
         console.error(d.severity, d.code, d.message);
       }
