@@ -4,8 +4,20 @@ Command-line interface for Quillmark rendering.
 
 ## Installation
 
+Each [GitHub Release](https://github.com/borb-sh/quillmark/releases) carries
+prebuilt binaries for Linux (x86_64, aarch64), macOS (Apple silicon, Intel) and
+Windows (x86_64). With
+[cargo-binstall](https://github.com/cargo-bins/cargo-binstall), the same
+binaries install by crate name:
+
 ```bash
-cargo install quillmark-cli
+cargo binstall quillmark-cli
+```
+
+From source, which needs a Rust toolchain:
+
+```bash
+cargo install quillmark-cli --locked
 ```
 
 `quillmark --version` prints the CLI's version and, in parentheses, the Typst release plates compile against.
