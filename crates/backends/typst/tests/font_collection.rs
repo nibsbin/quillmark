@@ -70,3 +70,27 @@ fn a_ttc_under_assets_fonts_sets_every_family_it_holds() {
         .collect();
     assert!(unknown.is_empty(), "both families resolve: {unknown:?}");
 }
+
+#[test]
+fn a_collection_header_declaring_u32_max_faces_opens_promptly() {
+    let mut ttc = b"ttcf".to_vec();
+    ttc.extend(0x0001_0000u32.to_be_bytes());
+    ttc.extend(u32::MAX.to_be_bytes());
+    ttc.extend(12u32.to_be_bytes());
+
+    let mut root = FileTreeNode::Directory {
+        files: Default::default(),
+    };
+    for (path, contents) in [
+        ("Quill.yaml", YAML.as_bytes()),
+        ("plate.typ", b"one\n".as_slice()),
+        ("assets/fonts/Huge.ttc", &ttc),
+    ] {
+        root.insert(path, FileTreeNode::File { contents: contents.to_vec() })
+            .expect("insert");
+    }
+    let q = Quill::from_tree(root).expect("load quill");
+    TypstBackend
+        .open(&q, &serde_json::json!({}), common::test_date())
+        .expect("the plate compiles");
+}
