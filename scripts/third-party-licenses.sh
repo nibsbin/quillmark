@@ -2,12 +2,10 @@
 set -e
 set -o pipefail
 
-# Writes THIRD_PARTY_LICENSES.md, which the npm package and the wheels ship
-# beside LICENSE and NOTICE: the license text of every crate linked into a
-# binary package (cargo-about, policy in scripts/about.toml), then the NOTICE
-# files those crates carry, which Apache-2.0 §4(d) passes on. Needs
-# cargo-about and jq. release-prepare.yml runs it, so each release commits the
-# file its packages ship.
+# Writes THIRD_PARTY_LICENSES.md: the license text of every crate the
+# workspace links (cargo-about, policy in scripts/about.toml), the NOTICE files
+# those crates carry, which Apache-2.0 §4(d) passes on, and the license of the
+# Roboto faces the Typst backend embeds. Needs cargo-about and jq.
 
 cd "$(dirname "$0")/.."
 
@@ -31,5 +29,8 @@ cargo metadata --format-version 1 --locked \
         done
     done
 
+printf '# Fonts\n\n## Roboto (embedded by quillmark-typst)\n\n~~~~text\n%s\n~~~~\n' \
+    "$(cat crates/backends/typst/src/fonts/OFL.txt)" >> "$OUT"
+
 # Some upstream license files carry CRLF; the tree is LF (.gitattributes).
-sed -i 's/\r$//' "$OUT"
+tr -d '\r' < "$OUT" > "$OUT.tmp" && mv "$OUT.tmp" "$OUT"

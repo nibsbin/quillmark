@@ -89,6 +89,18 @@ jobs:
           RUSTDOCFLAGS: -Dwarnings
         run: cargo doc --no-deps --locked --workspace
 
+      - name: Install cargo-about
+        uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2.87.21
+        with:
+          tool: cargo-about@0.9.2
+
+      # The license policy in scripts/about.toml, held on every PR so a
+      # dependency bump outside it fails here rather than at release-prepare.
+      - name: Check dependency licenses
+        run: |
+          cargo about generate --workspace --all-features --locked --fail \
+            -c scripts/about.toml -o /dev/null scripts/third-party-licenses.hbs
+
   test:
     runs-on: ubuntu-latest
     steps:
