@@ -395,7 +395,9 @@ confused with it:
   ([CARDS.md](CARDS.md)), and the plate-space geometry address a plate's `$path`
   mints: a `.`-separated run under an optional `$cards.<kind>.<ordinal>` head,
   where an all-digit segment is an array index (`references.0`) and `$body` the
-  body terminal. A template-author contract (`qm.form-field(field: "refs.2")`,
+  body terminal. The ordinal counts cards of that kind, where a `DocPath` card
+  index counts every card (with cards `note`, `annotation`, `note`,
+  `$cards.note.1` is `cards.note[2]`). A template-author contract (`qm.form-field(field: "refs.2")`,
   `qm.ink(..)`, every published `form.json`), so it keeps its own spelling
   (renaming it is a blast radius) and translates to `DocPath` before it crosses.
 - **Schema-space coercion anchors**: `CoercionError` keeps its own

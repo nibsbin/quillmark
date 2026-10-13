@@ -57,6 +57,7 @@ nav:
       - Reference: cli/reference.md
   - Reference:
       - Markdown Specification: reference/markdown-spec.md
+      - Diagnostic Codes: reference/diagnostic-codes.md
   - Migration: migrations/index.md
 
 # Every guide is built and reachable by URL and from the Migration overview;
