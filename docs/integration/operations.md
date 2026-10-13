@@ -38,6 +38,6 @@ The engine caches no quills: `Quillmark::render` takes a `&Quill` the caller own
 
 Nothing in the workspace catches unwind, so a panic is terminal on every surface: it aborts the CLI and the Python extension, and leaves the WASM module poisoned. Panics are bugs — report one.
 
-Under WASM, running out of linear memory (at most 4 GiB, less on some engines) traps the same way. A call that raises a `WebAssembly.RuntimeError` rejects as `runtime::backend_trapped` with it as `cause`. A trap leaves the instance's state undefined, so the runtime runs nothing on that build again: every later `Engine` call into it and every `LiveSession` read opened on it rejects with the same code and `cause`, a new `Engine` included, since the instance is module-scoped. Discard the realm.
+Under WASM, running out of linear memory (at most 4 GiB, less on some engines) traps the same way. A trap rejects as `runtime::backend_trapped`, carrying the `WebAssembly.RuntimeError` as `cause`. It leaves the instance's state undefined, and the instance is module-scoped, so a new `Engine` inherits it: discard the realm before rendering again.
 
 Ordinary failures are not panics. Every documented error path returns a `RenderError` or a parse diagnostic carrying a stable `code`; route on the code, not the message ([Error Handling](error-handling.md)).
