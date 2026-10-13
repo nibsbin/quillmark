@@ -83,8 +83,6 @@ quill's font collections load, and a WASM trap rejects coded.
   `validation::enum_violation`; the banner prints the same words. (#2167)
 - fix(fixtures): **`usaf_memo` sets in TeX Gyre Termes**, so its rendered
   output changes, and its example drops the seal. (#2173)
-- fix(acroform): **a form rasters through hayro 0.8 at its explicit size.**
-  (#2100)
 
 ### Distribution
 
@@ -95,9 +93,15 @@ quill's font collections load, and a WASM trap rejects coded.
 - chore(legal): **every package carries the full Apache-2.0 text and a
   NOTICE**, and the npm package and the wheels ship their third-party
   licenses. (#2173)
+- build(deps): **the PDF form backend rasters through hayro 0.8.** (#2100)
 - docs: **a quickstart renders one starter quill from the CLI, Python,
   JavaScript and Rust**, and the README and docs home lead with a rendered
-  memo at quillmark.dev. (#2172, #2174)
+  memo; quillmark.dev is the docs site and the package homepage. (#2172,
+  #2174)
+- docs: **snippets that threw run as written**, and backend statements match
+  the code. (#2171)
+- docs(community): **`CONTRIBUTING.md` says where questions, bugs and
+  proposals go**, with bug and feature issue forms and a PR template. (#2169)
 
 ### Release
 

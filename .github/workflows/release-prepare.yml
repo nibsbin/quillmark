@@ -145,7 +145,7 @@ jobs:
             --title "chore(release): v${VERSION}" \
             --body "Automated version bump to \`v${VERSION}\`.
 
-          **Before merging:** review and edit the \`v${VERSION}\` section at the top of \`CHANGELOG.md\` on this branch: the curated \`## Unreleased\` section, then every commit since the last release. Fold each commit the entries leave out into one, then delete the commit list. The final section becomes the GitHub Release notes, verbatim.
+          **Before merging:** review and edit the \`v${VERSION}\` section at the top of \`CHANGELOG.md\` on this branch: the curated \`## Unreleased\` section, then every commit since the last release, or the commit list alone when no section was curated. Fold each commit the entries leave out into one, then delete the commit list. The final section becomes the GitHub Release notes, verbatim.
 
           Read that section **as a whole against HEAD**, not entry by entry: later commits in a cycle supersede earlier entries, and only the whole read catches one.
 
