@@ -1,10 +1,32 @@
 # Contributing
 
-Build and test loops, and the crate map: [`CLAUDE.md`](CLAUDE.md). Design docs:
-[`prose/canon/INDEX.md`](prose/canon/INDEX.md). Prose style is the `dense-prose`
-skill (`.claude/skills/dense-prose/`), canon structure is `maintain-canon`.
+## Questions, bugs, and ideas
 
-The two rules below live here because nothing else states them.
+- A question, or an idea not yet a proposal: a blank issue.
+- A bug: an issue from the bug form, with the smallest document that reproduces it.
+- A change larger than a fix: open an issue before the pull request. Before 1.0 most releases change the API, so agree on the shape before building it.
+
+## Setup
+
+```bash
+git clone https://github.com/borb-sh/quillmark
+cd quillmark
+cargo test --workspace
+```
+
+`cargo test --workspace` is the working loop. The Python and WASM bindings take minutes to build and PR CI builds both; their local loops are in [`CLAUDE.md` § Tests](CLAUDE.md#tests). CI also gates on `RUSTDOCFLAGS=-Dwarnings cargo doc --no-deps --workspace` and `node scripts/check-canon.mjs`.
+
+## Pull requests
+
+- Every commit lands on `main` and seeds the changelog, so each subject reads `type(scope): summary`, or `type(scope)!: summary` for a break. `type` is one of `feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `ci`, `chore`; the scope is optional.
+- Don't run `cargo fmt`, and turn off format-on-save for this repository. The tree is not rustfmt-formatted, so formatting a file rewrites lines the change never touched.
+- Comments and docs follow the `dense-prose` skill (`.claude/skills/dense-prose/`): none by default, present tense, no history. Design docs start at [`prose/canon/INDEX.md`](prose/canon/INDEX.md); a change that makes a canon doc stale updates it (`maintain-canon`).
+
+## AI-assisted work
+
+Most of Quillmark's code is written by AI coding agents working for the maintainer. Each change lands through a pull request, CI, and the maintainer's review. [`CLAUDE.md`](CLAUDE.md) and `.claude/skills/` are the instructions those agents follow, and they bind human contributors the same way.
+
+AI-assisted pull requests are welcome on the same terms as any other: you ran the tests, you can explain each change, and you answer review yourself.
 
 ## What earns a test a place
 
