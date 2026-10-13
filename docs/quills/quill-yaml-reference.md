@@ -42,7 +42,7 @@ Every Quill.yaml must have a `quill` section with format metadata.
 |------------------|--------|----------|-------------|
 | `name`           | string | yes      | Unique identifier for the Quill |
 | `backend`        | string | yes      | Rendering backend (e.g. `typst`) |
-| `description`    | string | yes      | Human-readable description of the quill itself (non-empty). Independent of `main.description`, which is the optional schema description authored under `main:`. |
+| `description`    | string | yes      | Human-readable description of the quill itself (non-empty). Independent of `main.description`, which is the optional schema description authored under `main:`. One line: a line break fails the load with `quill::description_multiline`. |
 | `version`        | string | yes      | Semantic version (`MAJOR.MINOR` or `MAJOR.MINOR.PATCH`) |
 | `author`         | string | no       | Creator of the Quill (defaults to `"Unknown"`) |
 | `ui`             | object | no       | Document-level UI metadata |
@@ -123,7 +123,7 @@ main:
 |---------------|-------------------|----------|-------------|
 | `type`        | string            | yes      | Data type (see [Field Types](#field-types)); a trailing `?` makes the field [optional](#optional-fields-t) |
 | `title`       | string            | no       | The field's label, a literal (see [`title`](#title)) |
-| `description` | string            | no       | Detailed help text |
+| `description` | string            | no       | Help text, one line: a line break, `\|` block scalars included, fails the load with `quill::description_multiline`, since the blueprint prints it in a single `# …` comment |
 | `default`     | matches `type`    | no       | The value the **majority of authors want**. When the cell is omitted, the default is filled in — at any depth, whether or not the container above it was authored — and the blueprint renders that concrete value with a type-only annotation, shippable as-is (see [`default`](#default)). Declared on a **cell**: a leaf, an `array` or a `matrix`. On an `object` it is a load error (`quill::default_on_namespace`), since its properties hold their own. |
 | `values`      | array of strings  | for `enum` | The closed set of allowed string values: the **choices**. Required on every `enum` field. Declaring `""` is a load error — every enum also accepts its [blank](#the-blank-values-is-for-choices-not-for-the-absence-of-one), which the engine supplies. |
 | `ui`          | object            | no       | UI rendering hints (see [UI Properties](#ui-properties)) |
@@ -941,7 +941,7 @@ scalar, which is fine for a few lines and wrong for a memo's worth.
 | Property      | Type   | Required | Description |
 |---------------|--------|----------|-------------|
 | `title`       | string | no       | The kind's label, a literal (see [`title`](#title_1)) |
-| `description` | string | no       | Help text describing the card's purpose |
+| `description` | string | no       | Help text describing the card's purpose, one line (`quill::description_multiline`) |
 | `fields`      | object | no       | Field schemas (same structure as top-level fields) |
 | `sections`    | object | no       | Titled panels of further fields (see [Sections](#sections)) |
 | `ui`          | object | no       | Container-level UI hints (see [Card-level `ui`](#card-level-ui)) |
