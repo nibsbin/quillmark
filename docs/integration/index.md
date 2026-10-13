@@ -21,4 +21,4 @@ Both bindings share the core model, diagnostics, and storage format; they differ
 - **[Blueprint & Seeding](../quills/blueprint.md)**: the LLM/MCP authoring surface and the starter document.
 
 !!! note "Advanced: live preview"
-    Canvas / `LiveSession` editor integration (incremental `update`, `paint`, and the click/caret geometry bridge) is WASM-only and single-consumer. Its design contract lives in [PREVIEW.md](https://github.com/borb-sh/quillmark/blob/main/prose/canon/PREVIEW.md); the [Quickstart](../getting-started/quickstart.md#live-preview-canvas) has the minimal paint loop.
+    Canvas / `LiveSession` editor integration (incremental `update`, `paint`, and the click/caret geometry bridge) is WASM-only and single-consumer. Its design contract lives in [PREVIEW.md](https://github.com/borb-sh/quillmark/blob/main/prose/canon/PREVIEW.md); [Live Preview](live-preview.md) has the minimal paint loop.
