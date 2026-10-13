@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Release
+
+- ci(release): **`@quillmark/wasm` is built and tested in jobs that cannot
+  publish**, from a committed `package-lock.json`; the tests run against the
+  built tarball, and the publishing job publishes that tarball with a pinned
+  npm. The Pages permissions move to the docs deploy job, and Dependabot
+  proposes a version once it is a week old.
+
 ## v0.125.0 - 2026-10-12
 
 Upgrade path: [0.124 → 0.125](docs/migrations/0.124-to-0.125.md). Every Typst
