@@ -78,6 +78,14 @@ fn derive_hint(message: &str, content: &str) -> Option<String> {
 
     let m = message.to_ascii_lowercase();
 
+    if m.contains("budget breached") {
+        return Some(
+            "The block expands to far more than it holds, through anchors and aliases or tags: \
+             write the values out, or alias less."
+                .to_string(),
+        );
+    }
+
     // A plain scalar starting with `*` or `&` reads as a YAML alias or anchor.
     // LLMs writing `field: **bold**` trip this.
     if m.contains("alias references unknown anchor")

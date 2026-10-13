@@ -57,15 +57,27 @@ pub(crate) fn depth_check_meta_map<E>(
 /// The one YAML reading every engine parse shares: only `true` and `false`,
 /// in any letter case, are booleans, and YAML 1.1's words (`y`, `no`, `On`,
 /// `OFF`) stay strings. Comments reach no value, so none is buffered, and a run
-/// of them meets no count limit.
+/// of them meets no count limit. With aliases expanded, scalar and tag bytes
+/// stay under twice the input's bytes plus [`EXPANSION_SLACK`], and nodes under
+/// its bytes plus [`EXPANSION_SLACK`], so a block's value is linear in its
+/// source.
 pub(crate) fn parse_yaml<'de, T: Deserialize<'de>>(
     yaml: &'de str,
 ) -> Result<T, serde_saphyr::Error> {
     serde_saphyr::from_str_with_options(
         yaml,
-        serde_saphyr::options! { strict_booleans: true, emit_comments: false },
+        serde_saphyr::options! {
+            strict_booleans: true,
+            emit_comments: false,
+            budget: serde_saphyr::budget! {
+                max_total_scalar_bytes: yaml.len().saturating_mul(2).saturating_add(EXPANSION_SLACK),
+                max_nodes: yaml.len().saturating_add(EXPANSION_SLACK),
+            },
+        },
     )
 }
+
+const EXPANSION_SLACK: usize = 4 * 1024;
 
 impl QuillValue {
     /// Parse a YAML string under the parser's own budget, so an over-deep
@@ -154,6 +166,27 @@ impl QuillValue {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn aliases_expand_linearly_in_the_source() {
+        let refused = |yaml: &str| {
+            let err = QuillValue::from_yaml_str(yaml).expect_err("expansion refused");
+            assert!(err.to_string().contains("budget"), "{err}");
+        };
+        let anchor = "x".repeat(10_000);
+        assert!(QuillValue::from_yaml_str(&format!("z: &a {anchor}\nzz: [*a]\n")).is_ok());
+        refused(&format!("z: &a {anchor}\nzz: [{}]\n", vec!["*a"; 90].join(",")));
+
+        let tens = |alias: &str| vec![alias; 10].join(",");
+        refused(&format!(
+            "a: &a [{}]\nb: &b [{}]\nc: &c [{}]\nd: &d [{}]\ne: [{}]\n",
+            tens("[]"),
+            tens("*a"),
+            tens("*b"),
+            tens("*c"),
+            tens("*d"),
+        ));
+    }
 
     #[test]
     fn yaml_error_locates_and_sanitizes() {
