@@ -34,6 +34,14 @@ fn load_tree_from_path(path: &Path) -> Result<FileTreeNode, Box<dyn StdError + S
     // rather than a walk detail: unchecked, a typo'd path walks to an empty
     // tree and fails as `Quill.yaml not found in file tree`.
     if !path.is_dir() {
+        if path.is_file() {
+            return Err(format!(
+                "Quill path is a file, not a directory: {}. A quill is the directory \
+                 holding Quill.yaml.",
+                path.display()
+            )
+            .into());
+        }
         return Err(format!("Quill directory not found: {}", path.display()).into());
     }
 

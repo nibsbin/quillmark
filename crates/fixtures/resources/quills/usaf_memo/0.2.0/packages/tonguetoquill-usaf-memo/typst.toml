@@ -6,7 +6,7 @@ entrypoint = "src/lib.typ"
 repository = "https://github.com/nibsbin/tonguetoquill-usaf-memo"
 authors = ["Nibs"]
 license = "MIT"
-description = "Typeset memos that are fully compliant with AFH 33-337 'The Tongue and Quill'."
+description = "Typeset memos in the format of AFH 33-337 'The Tongue and Quill'."
 keywords = [
     "USAF",
     "Air Force",
