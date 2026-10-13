@@ -10,12 +10,14 @@ use quillmark_typst::TypstBackend;
 mod common;
 
 const URL: &str = r#"https://example.com/?a=1&b=2<c"d&amp;e&quot;f"#;
+const TILED: &str = "https://example.com/?tiled=1&b=2";
 
 #[test]
 fn link_hrefs_parse_as_xml_and_decode_to_the_url() {
+    let url = URL.replace('"', "\\\"");
     let plate = format!(
-        "#set page(width: 200pt, height: 120pt)\n#link(\"{}\")[q]\n",
-        URL.replace('"', "\\\"")
+        "#set page(width: 200pt, height: 120pt)\n#link(\"{url}\")[q]\n\
+         #rect(fill: tiling(size: (10pt, 10pt), link(\"{TILED}\", box(width: 5pt, height: 5pt, fill: red))))\n"
     );
     let quill = common::quill_with_plate(&common::yaml("main:\n  fields: {}\n"), &plate);
     let session = TypstBackend
@@ -29,7 +31,7 @@ fn link_hrefs_parse_as_xml_and_decode_to_the_url() {
     let doc = roxmltree::Document::parse(&svg).unwrap_or_else(|e| panic!("{e}: {svg}"));
     let xlink = "http://www.w3.org/1999/xlink";
     let links: Vec<_> = doc.descendants().filter(|n| n.has_tag_name("a")).collect();
-    assert_eq!(links.len(), 1);
-    assert_eq!(links[0].attribute("href"), Some(URL));
-    assert_eq!(links[0].attribute((xlink, "href")), Some(URL));
+    let hrefs: Vec<_> =
+        links.iter().map(|a| (a.attribute("href"), a.attribute((xlink, "href")))).collect();
+    assert_eq!(hrefs, [(Some(URL), Some(URL)), (Some(TILED), Some(TILED))]);
 }
