@@ -140,6 +140,17 @@ fn body_after(markdown: &str, blocks: &[MetadataBlock], idx: usize) -> String {
     }
 }
 
+fn import_card_body(
+    body: &str,
+    at: &DocPath,
+    warnings: &mut Vec<Diagnostic>,
+) -> Result<quillmark_content::model::Normalized, ParseError> {
+    super::import_body_at(body, at, warnings).map_err(|e| ParseError::BodyImport {
+        path: at.to_string(),
+        message: e.to_string(),
+    })
+}
+
 /// An intermediate representation of one `~~~ … ~~~` card-yaml block.
 #[derive(Debug)]
 pub(super) struct MetadataBlock {
@@ -390,8 +401,7 @@ pub(super) fn decompose_with_warnings(
 
     let global_body = body_after(markdown, &blocks, 0);
 
-    let main_body = super::import_body_at(&global_body, &DocPath::main_body(), &mut warnings)
-        .map_err(|e| ParseError::BodyImport(e.to_string()))?;
+    let main_body = import_card_body(&global_body, &DocPath::main_body(), &mut warnings)?;
     let main = Card::from_parts(main_payload, main_body);
 
     let mut cards: Vec<Card> = Vec::new();
@@ -465,8 +475,7 @@ pub(super) fn decompose_with_warnings(
         warnings.extend(tag_warnings(&base, &blocks[idx]));
 
         let card_body = body_after(markdown, &blocks, idx);
-        let card_body = super::import_body_at(&card_body, &base.body(), &mut warnings)
-            .map_err(|e| ParseError::BodyImport(e.to_string()))?;
+        let card_body = import_card_body(&card_body, &base.body(), &mut warnings)?;
 
         cards.push(Card::from_parts(card_payload, card_body));
     }
