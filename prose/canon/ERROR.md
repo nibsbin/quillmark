@@ -222,6 +222,11 @@ families:
   plate renders ride the hint. It rides the session's compile warnings. The
   registry is plate code, so `validate`, which compiles nothing, has no twin
   for it.
+- **`typst::missing_glyph`: input no font draws.** The Typst compile warns
+  once, naming each character of the plate data's strings that no font the
+  world loaded covers, whitespace and default-ignorables aside. Typst draws
+  such a character as a `.notdef` box, or as nothing, and reports neither.
+  It rides the session's compile warnings.
 - **Compile warnings**: the Typst backend maps the compiler's non-fatal
   diagnostics (font fallback, overfull pages, …) through the same span
   resolution as errors. They are state of the session's current compile:
@@ -394,7 +399,9 @@ confused with it:
   ([CARDS.md](CARDS.md)), and the plate-space geometry address a plate's `$path`
   mints: a `.`-separated run under an optional `$cards.<kind>.<ordinal>` head,
   where an all-digit segment is an array index (`references.0`) and `$body` the
-  body terminal. A template-author contract (`qm.form-field(field: "refs.2")`,
+  body terminal. The ordinal counts cards of that kind, where a `DocPath` card
+  index counts every card (with cards `note`, `annotation`, `note`,
+  `$cards.note.1` is `cards.note[2]`). A template-author contract (`qm.form-field(field: "refs.2")`,
   `qm.ink(..)`, every published `form.json`), so it keeps its own spelling
   (renaming it is a blast radius) and translates to `DocPath` before it crosses.
 - **Schema-space coercion anchors**: `CoercionError` keeps its own
