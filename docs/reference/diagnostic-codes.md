@@ -164,6 +164,7 @@ Opening a Typst quill and compiling its plate.
 - `typst::helper_import`
 - `typst::helper_source`
 - `typst::invalid_utf8`
+- `typst::missing_glyph`
 - `typst::overlay_internal`
 - `typst::package_entrypoint_missing`
 - `typst::package_manifest`
