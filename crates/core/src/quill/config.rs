@@ -2221,18 +2221,24 @@ impl QuillConfig {
     }
 
     fn snake_case_suggestion(name: &str) -> Option<String> {
-        let mapped: String = name
-            .to_lowercase()
-            .chars()
-            .map(|c| {
-                if c.is_ascii_lowercase() || c.is_ascii_digit() {
-                    c
-                } else {
-                    '_'
+        use unicode_normalization::{char::is_combining_mark, UnicodeNormalization};
+        let mut mapped = String::new();
+        let mut prev: Option<char> = None;
+        for c in name.nfkd().filter(|&c| !is_combining_mark(c)) {
+            if c.is_uppercase() && prev.is_some_and(|p| p.is_lowercase() || p.is_ascii_digit()) {
+                mapped.push('_');
+            }
+            for lower in c.to_lowercase() {
+                let kept = if lower.is_ascii_lowercase() || lower.is_ascii_digit() { lower } else { '_' };
+                if !(kept == '_' && mapped.ends_with('_')) {
+                    mapped.push(kept);
                 }
-            })
-            .collect();
-        let fixed = mapped.trim_start_matches(|c: char| !c.is_ascii_lowercase());
+            }
+            prev = Some(c);
+        }
+        let fixed = mapped
+            .trim_start_matches(|c: char| !c.is_ascii_lowercase())
+            .trim_end_matches('_');
         Self::is_snake_case_identifier(fixed).then(|| fixed.to_string())
     }
 

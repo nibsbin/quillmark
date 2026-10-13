@@ -25,8 +25,6 @@
 }
 
 
-// Include an image with a dynamic asset. `picture` is undeclared, so unlike a
-// schema field it is genuinely absent until authored.
-#if "picture" in qm.data {
+#if qm.data.picture != "" {
   image(qm.data.picture)
 }

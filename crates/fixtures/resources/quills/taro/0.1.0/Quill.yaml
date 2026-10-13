@@ -19,6 +19,9 @@ main:
     title:
       description: title of document
       type: string
+    picture:
+      description: path of an image under the quill's assets
+      type: string
 
 card_kinds:
   quotes:
