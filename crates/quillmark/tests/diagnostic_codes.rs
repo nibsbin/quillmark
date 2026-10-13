@@ -50,19 +50,34 @@ fn walk(dir: &Path, files: &mut Vec<PathBuf>) {
     }
 }
 
-fn minted() -> BTreeSet<String> {
+fn is_test_file(path: &Path) -> bool {
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    path.components().any(|c| c.as_os_str() == "tests")
+        || name == "tests.rs"
+        || name.ends_with("_test.rs")
+        || name.ends_with("_tests.rs")
+}
+
+/// Code literals across every source file, and across non-test files alone.
+fn minted() -> (BTreeSet<String>, BTreeSet<String>) {
     let mut files = Vec::new();
     walk(&Path::new(ROOT).join("crates"), &mut files);
-    // The WASM runtime mints `runtime::*` in JavaScript.
-    for name in ["runtime.js", "env-node.js", "env-web.js"] {
-        files.push(Path::new(ROOT).join("crates/bindings/wasm/runtime").join(name));
+    let runtime = Path::new(ROOT).join("crates/bindings/wasm/runtime");
+    for entry in std::fs::read_dir(runtime).expect("runtime dir reads") {
+        let path = entry.expect("dir entry").path();
+        if path.extension().is_some_and(|e| e == "js") {
+            files.push(path);
+        }
     }
-    let mut codes = BTreeSet::new();
+    let (mut all, mut shipped) = (BTreeSet::new(), BTreeSet::new());
     for file in files {
         let text = std::fs::read_to_string(&file).expect("source reads");
-        quoted_codes(&text, &mut codes);
+        quoted_codes(&text, &mut all);
+        if !is_test_file(&file) {
+            quoted_codes(&text, &mut shipped);
+        }
     }
-    codes
+    (all, shipped)
 }
 
 fn listed() -> BTreeSet<String> {
@@ -76,9 +91,10 @@ fn listed() -> BTreeSet<String> {
         .collect()
 }
 
-/// The page's two derived families: `conform::<edit class>` and
-/// `quill::seed_<validation class>`.
-fn derived(code: &str, listed: &BTreeSet<String>) -> bool {
+/// A code `format!` mints from another listed code: `conform::<class>` from
+/// `edit::<class>`, and `quill::seed_<class>` from `validation::<class>` or
+/// `validation::seed_<class>`.
+fn formatted_from_listed(code: &str, listed: &BTreeSet<String>) -> bool {
     if let Some(class) = code.strip_prefix("conform::") {
         return listed.contains(&format!("edit::{class}"));
     }
@@ -91,22 +107,22 @@ fn derived(code: &str, listed: &BTreeSet<String>) -> bool {
 
 #[test]
 fn every_minted_code_is_listed_and_every_listed_code_is_minted() {
-    let minted = minted();
+    let (all, shipped) = minted();
     let listed = listed();
 
-    let unlisted: Vec<_> = minted
-        .iter()
-        .filter(|c| !listed.contains(*c) && !derived(c, &listed))
-        .collect();
+    let unlisted: Vec<_> = all.difference(&listed).collect();
     assert!(
         unlisted.is_empty(),
         "minted but missing from docs/reference/diagnostic-codes.md: {unlisted:?}"
     );
 
-    let stale: Vec<_> = listed.difference(&minted).collect();
+    let stale: Vec<_> = listed
+        .iter()
+        .filter(|c| !shipped.contains(*c) && !formatted_from_listed(c, &listed))
+        .collect();
     assert!(
         stale.is_empty(),
-        "listed in docs/reference/diagnostic-codes.md but minted nowhere: {stale:?}; \
+        "listed in docs/reference/diagnostic-codes.md but minted by no non-test source: {stale:?}; \
          a removed or renamed code leaves the page in the release whose migration guide names it"
     );
 }

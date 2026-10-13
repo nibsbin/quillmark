@@ -127,7 +127,7 @@ The label `<__qm_region__>` and metadata `kind: "__qm_region__"` are reserved fo
 
 A plate spells an address in plate space; `session.regions()`, `fieldAt`, `Diagnostic.path` and `quillmark check --regions` report the same place as a document path. The two count cards differently: plate space by kind, a document path by position in the document. With cards `note`, `annotation`, `note` in that order:
 
-| Plate space (`qm.region`, `qm.ink`, `form.json`) | Document path (regions, diagnostics) |
+| Plate space (`qm.region`, `qm.ink`; `form.json` binds fields, not bodies) | Document path (regions, diagnostics) |
 |---|---|
 | `classification` | `main.classification` |
 | `refs.0.org` | `main.refs[0].org` |

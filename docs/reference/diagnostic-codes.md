@@ -1,11 +1,6 @@
 # Diagnostic Codes
 
-Every `code` a `Diagnostic` can carry, by namespace. Route on these, not on `message` ([Error Handling](../integration/error-handling.md)). The list is complete: a test fails when a code is minted but not listed here, or listed here but minted nowhere. A code leaves this page only in a release whose migration guide names it.
-
-Two families are derived rather than listed:
-
-- `conform::<class>`: a warning from `Quill::conform` for a value the typed write would refuse, one for each `edit::<class>` below.
-- `quill::seed_<class>`: a card kind's `seed:` in `Quill.yaml` refused for what a document's `$seed` warns on, one for each `validation::<class>` below, with a leading `seed_` in `<class>` dropped (`validation::seed_unknown_field` is `quill::seed_unknown_field`).
+Every `code` a `Diagnostic` can carry, by namespace. Route on these, not on `message` ([Error Handling](../integration/error-handling.md)). The list is complete. A code leaves this page only in a release whose migration guide names it.
 
 ## `parse::`
 
@@ -101,7 +96,17 @@ Loading a quill: `Quill.yaml`, its files, its seeds.
 - `quill::optional_default`
 - `quill::optional_namespace`
 - `quill::richtext_default_import`
+- `quill::seed_cardinality`
+- `quill::seed_enum_violation`
+- `quill::seed_format_violation`
+- `quill::seed_held_stored`
+- `quill::seed_not_inline`
+- `quill::seed_not_plain`
+- `quill::seed_out_of_variant`
+- `quill::seed_overlay_shape`
 - `quill::seed_redundant`
+- `quill::seed_type_mismatch`
+- `quill::seed_unknown_field`
 - `quill::table_column_not_leaf`
 - `quill::title_on_items`
 - `quill::title_template`
@@ -136,6 +141,16 @@ A mutator or typed write the document refuses.
 - `edit::root_only_entry`
 - `edit::unknown_field`
 - `edit::value_too_deep`
+
+## `conform::`
+
+A `Quill::conform` warning: a value the typed write refuses, left as authored.
+
+- `conform::field_coercion_failed`
+- `conform::field_decode`
+- `conform::field_not_inline`
+- `conform::invalid_field_name`
+- `conform::value_too_deep`
 
 ## `typst::`
 
