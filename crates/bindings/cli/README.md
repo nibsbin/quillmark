@@ -6,8 +6,20 @@ Maintained by [borb-sh](https://github.com/borb-sh).
 
 ## Installation
 
+Each [GitHub Release](https://github.com/borb-sh/quillmark/releases) carries
+prebuilt binaries for Linux (x86_64, aarch64), macOS (Apple silicon, Intel) and
+Windows (x86_64). With
+[cargo-binstall](https://github.com/cargo-bins/cargo-binstall), the same
+binaries install by crate name:
+
 ```bash
-cargo install quillmark-cli
+cargo binstall quillmark-cli
+```
+
+From source, which needs a Rust toolchain:
+
+```bash
+cargo install quillmark-cli --locked
 ```
 
 The binary lands at `~/.cargo/bin/quillmark`. To build from a checkout instead:
@@ -23,23 +35,23 @@ release plates compile against.
 
 ```bash
 # Write a document to fill in: the quill's annotated blueprint
-quillmark blueprint ./my-quill > document.md
+quillmark blueprint my_quill > document.md
 
 # Render a document; output defaults to document.pdf
-quillmark render ./my-quill document.md
+quillmark render my_quill document.md
 
 # Omit the markdown file to render the quill's seeded document
-quillmark render ./my-quill -o preview.pdf
+quillmark render my_quill -o preview.pdf
 
 # Every diagnostic a document draws; --strict fails on warnings too
-quillmark check --strict ./my-quill document.md
+quillmark check --strict my_quill document.md
 
 # Pipe the artifact instead of writing a file
-quillmark render ./my-quill document.md --stdout | lpr
+quillmark render my_quill document.md --stdout | lpr
 ```
 
-`./my-quill` is a quill directory, the one holding `Quill.yaml`. [Creating
-Quills](https://borb-sh.github.io/quillmark/quills/creating-quills/) builds one from scratch.
+`my_quill` is a quill directory, the one holding `Quill.yaml`. The
+[Quickstart](https://borb-sh.github.io/quillmark/getting-started/quickstart/) builds one.
 
 ## Commands
 

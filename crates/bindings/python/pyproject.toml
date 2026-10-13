@@ -10,7 +10,7 @@ description = "Python bindings for Quillmark - a schema-driven document engine"
 authors = [{ name = "Quillmark Contributors" }]
 readme = "README.md"
 license = "Apache-2.0"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_LICENSES.md"]
 requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -26,7 +26,7 @@ classifiers = [
 keywords = ["markdown", "pdf", "typst", "rendering", "templates"]
 
 [project.urls]
-Homepage = "https://borb-sh.github.io/quillmark/"
+Homepage = "https://quillmark.dev/"
 Repository = "https://github.com/borb-sh/quillmark"
 Changelog = "https://github.com/borb-sh/quillmark/blob/main/CHANGELOG.md"
 
