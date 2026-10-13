@@ -2,19 +2,40 @@
 
 ## Unreleased
 
-### Release
+Upgrade path: [0.125 → 0.126](docs/migrations/0.125-to-0.126.md). Script
+links, runaway YAML expansion and bodies nested past 12 levels are refused, a
+quill's font collections load, and a WASM trap rejects coded.
 
-- ci(release): **`@quillmark/wasm` is built and tested in jobs that cannot
-  publish**, from a committed `package-lock.json`; the tests run against the
-  built tarball, and the publishing job publishes that tarball with a pinned
-  npm. The Pages permissions move to the docs deploy job, and Dependabot
-  proposes a version once it is a week old.
+### Links and untrusted input
+
+- fix(typst)!: **a link whose target's scheme is `javascript:`, `vbscript:`,
+  `data:` or `file:` renders as its text alone**, where it rendered a live link
+  in PDF and SVG; so does one with an `&` before its first `/`, `?` or `#`.
+  (#2178)
+- fix(core)!: **a card-yaml block's aliases and tags expand within a budget
+  linear in its source**: past twice the block's bytes plus 4 KiB of scalars,
+  or its bytes plus 4 KiB of nodes, the block fails its YAML parse, with a
+  hint. (#2178)
+- fix(pdf): **a PDF's page tree shares ancestor chains, its node cap counts
+  queued kids, and a deep chain drops without recursing.** (#2178)
+- docs: **`SECURITY.md` says how to report a vulnerability and what counts as
+  one**, and Operations states what an integration expects of untrusted input
+  and how to bound an untrusted render. (#2176, #2178)
 
 ### Fonts
 
+- fix(typst)!: **a `.ttc` or `.otc` the quill ships loads every face it
+  holds**, where the font scan skipped it and naming its family warned
+  `unknown font family`. A quill whose only fonts are collections renders in
+  them rather than the embedded Roboto, so a plate there naming `Roboto` warns
+  `unknown font family`. (#2167)
 - fix(typst): **a quill opens promptly whatever face count its font collection
   declares**: a collection whose header declares more faces than the file
-  holds offsets for loads no faces. (#2168)
+  holds offsets for loads no faces. (#2168, #2189)
+- feat(typst): **a character no loaded font covers warns
+  `typst::missing_glyph`**, once per render, naming each uncovered character
+  of the plate data's strings, where Typst drew an empty box or nothing and
+  said neither. (#2179)
 
 ### Markdown
 
@@ -22,7 +43,74 @@
   imports renders under Typst**, where import took 100 and Typst's show-rule
   depth refused 16 quotes or 32 lists. A body past the bound fails
   `parse::body_import` at its `path`; `ParseError::BodyImport` holds
-  `{ path, message }`. (#2187)
+  `{ path, message }`. (#2187, #2190)
+
+### Bindings
+
+- fix(wasm)!: **a render that traps rejects as `runtime::backend_trapped`**,
+  the `WebAssembly.RuntimeError` on its `cause`, where it rejected as an
+  uncoded `attempted to take ownership of Rust value while it was borrowed`.
+  `Engine.render` / `open` and `LiveSession.update` / `render` / `paint` are
+  covered; a host routes on the code and discards the realm. (#2176)
+- fix(python): **`render` releases the GIL while the backend compiles**, and
+  renders a clone of the document, so other threads run and may edit it
+  meanwhile. (#2176)
+
+### Errors and suggestions
+
+- fix(core,typst,quillmark): **first-run errors name the newcomer's mistake**:
+  `---` front matter, a backtick fence holding a `$quill:` line, an indented
+  opener, `quill:` for `$quill`, an enum value off only by case, an unknown
+  field type, and a quill path that is a file. A helper assert locates at the
+  plate line that called it. (#2174)
+- fix(core): **field and quill-name suggestions read as a person would write
+  them**: `validation::unknown_field` suggests within a quarter of the key's
+  length, a tie goes to the longest shared prefix, and a truncated key
+  suggests the field it begins; `quill::invalid_name` suggests `cafe` for
+  `Café` and `my_quill` for `MyQuill`. (#2184)
+- fix(core,typst): **a data key spelled `$path` warns that plate data spells
+  each dictionary's address `$path`**, and a spread failing `unexpected
+  argument: $path` hints a sink parameter such as `..rest`. (#2167)
+- docs(reference): **the diagnostic-codes page lists every code the engine
+  mints**, and a test fails on a code minted but not listed, or listed but
+  minted nowhere. (#2175)
+
+### Fixtures
+
+- fix(fixtures)!: **`status_report`'s `state` stores `on_track`, `at_risk` and
+  `blocked`**, where it stored `on track`, `at risk` and `blocked`, at the same
+  `version: 0.1.0`. A document holding the old text fails
+  `validation::enum_violation`; the banner prints the same words. (#2167)
+- fix(fixtures): **`usaf_memo` sets in TeX Gyre Termes**, so its rendered
+  output changes, and its example drops the seal. (#2173)
+
+### Distribution
+
+- feat(cli): **prebuilt `quillmark` binaries ship on every GitHub Release**,
+  for Linux (musl, x86_64 and aarch64), macOS (arm64 and x86_64) and Windows
+  (x86_64, static C runtime), and `cargo binstall quillmark-cli` installs
+  them. (#2177)
+- chore(legal): **every package carries the full Apache-2.0 text and a
+  NOTICE**, and the npm package and the wheels ship their third-party
+  licenses. (#2173)
+- build(deps): **the PDF form backend rasters through hayro 0.8.** (#2100)
+- docs: **a quickstart renders one starter quill from the CLI, Python,
+  JavaScript and Rust**, and the README and docs home lead with a rendered
+  memo; quillmark.dev is the docs site and the package homepage. (#2172,
+  #2174)
+- docs: **snippets that threw run as written**, and backend statements match
+  the code. (#2171)
+- docs(community): **`CONTRIBUTING.md` says where questions, bugs and
+  proposals go**, with bug and feature issue forms and a PR template. (#2169)
+
+### Release
+
+- ci(release): **`@quillmark/wasm` is built and tested in jobs that cannot
+  publish**, from a committed `package-lock.json`; the tests run against the
+  built tarball, and the publishing job publishes that tarball with a pinned
+  npm. The Pages permissions move to the docs deploy job, and Dependabot
+  proposes a version once it is a week old. Publishing refuses a package
+  without its SBOM. (#2165, #2170)
 
 ## v0.125.0 - 2026-10-12
 
