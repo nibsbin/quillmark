@@ -398,10 +398,12 @@ jobs:
   # ──────────────────────────────────────────────
   # Publish: CLI binaries → GitHub Release assets
   # ──────────────────────────────────────────────
-  # Linux builds against musl, static and independent of the host's glibc,
-  # as Typst's own release binaries are. The archive layout is the one
-  # `[package.metadata.binstall]` in the CLI's Cargo.toml declares, so
-  # `cargo binstall quillmark-cli` resolves these assets.
+  # Every target links its C runtime statically: musl on Linux, +crt-static on
+  # Windows, so a host without the VC++ redistributable still runs it. The
+  # archive layout is the one `[package.metadata.binstall]` in the CLI's
+  # Cargo.toml declares, so `cargo binstall quillmark-cli` resolves these
+  # assets. The builds run dependency build scripts and so hold no write token;
+  # `upload-cli` alone writes to the Release.
   build-cli:
     needs: [prepare]
     strategy:
@@ -412,10 +414,10 @@ jobs:
           - { target: aarch64-unknown-linux-musl, os: ubuntu-24.04-arm }
           - { target: aarch64-apple-darwin, os: macos-latest }
           - { target: x86_64-apple-darwin, os: macos-latest, cross: true }
-          - { target: x86_64-pc-windows-msvc, os: windows-latest }
+          - { target: x86_64-pc-windows-msvc, os: windows-latest, rustflags: -C target-feature=+crt-static }
     runs-on: ${{ matrix.os }}
     permissions:
-      contents: write
+      contents: read
     defaults:
       run:
         shell: bash
@@ -426,6 +428,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: v${{ needs.prepare.outputs.version }}
+          persist-credentials: false
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
@@ -437,12 +440,9 @@ jobs:
         if: contains(matrix.target, 'musl')
         run: sudo apt-get update && sudo apt-get install -y musl-tools
 
-      - name: Rust cache
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          key: cli-${{ matrix.target }}
-
       - name: Build
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags }}
         run: cargo build --release --locked -p quillmark-cli --target ${{ matrix.target }}
 
       - name: Smoke test
@@ -454,29 +454,52 @@ jobs:
             --today 2026-01-01 -o smoke.pdf --quiet
           test -s smoke.pdf
 
-      - name: Upload to the GitHub Release
+      - name: Package
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TARGET: ${{ matrix.target }}
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           set -euo pipefail
           name="quillmark-cli-${TARGET}-v${VERSION}"
-          mkdir "$name"
+          mkdir -p "$name" dist
           if [[ "$TARGET" == *windows* ]]; then
             cp "target/${TARGET}/release/quillmark.exe" "$name/"
           else
             cp "target/${TARGET}/release/quillmark" "$name/"
           fi
           cp LICENSE crates/bindings/cli/README.md "$name/"
+          cp crates/backends/typst/src/fonts/OFL.txt "$name/OFL-Roboto.txt"
           if [[ "$TARGET" == *windows* ]]; then
-            archive="$name.zip"
-            7z a "$archive" "$name"
+            7z a "dist/$name.zip" "$name"
           else
-            archive="$name.tar.gz"
-            tar czf "$archive" "$name"
+            tar czf "dist/$name.tar.gz" "$name"
           fi
-          gh release upload "v${VERSION}" "$archive" --clobber
+
+      - name: Upload archive
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cli-${{ matrix.target }}
+          path: dist/*
+
+  upload-cli:
+    needs: [prepare, build-cli]
+    if: ${{ !cancelled() && needs.prepare.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download archives
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: cli-*
+          merge-multiple: true
+          path: dist/
+
+      - name: Attach to the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: gh release upload "v${VERSION}" dist/* --clobber --repo "$GITHUB_REPOSITORY"
 
   # ──────────────────────────────────────────────
   # Publish: Python → PyPI
