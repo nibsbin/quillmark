@@ -224,11 +224,10 @@ families:
   plate renders ride the hint. It rides the session's compile warnings. The
   registry is plate code, so `validate`, which compiles nothing, has no twin
   for it.
-- **`typst::missing_glyph`: input no font draws.** The Typst compile warns
-  once, naming each character of the plate data's strings that no font the
-  world loaded covers, whitespace and default-ignorables aside. Typst draws
-  such a character as a `.notdef` box, or as nothing, and reports neither.
-  It rides the session's compile warnings.
+- **`typst::missing_glyph`: text no font draws.** The Typst compile warns
+  once, naming each character the laid-out pages draw as a `.notdef` box,
+  whitespace and default-ignorables aside. It rides the session's compile
+  warnings.
 - **Compile warnings**: the Typst backend maps the compiler's non-fatal
   diagnostics (font fallback, overfull pages, …) through the same span
   resolution as errors. They are state of the session's current compile:
