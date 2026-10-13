@@ -5,7 +5,7 @@
 [![npm](https://img.shields.io/npm/v/@quillmark/wasm.svg?color=CB3837)](https://www.npmjs.com/package/@quillmark/wasm)
 [![Documentation](https://docs.rs/quillmark/badge.svg)](https://docs.rs/quillmark)
 
-Quillmark renders Markdown into typeset PDF, SVG, and PNG documents. A **quill** defines the format: a schema that validates each document's fields and fills their defaults, and a Typst template (the plate) that lays out the page. Authors write only the content.
+Quillmark renders Markdown into typeset PDF, SVG, and PNG documents. A **quill** defines the format: a schema that validates each document's fields and fills their defaults, and a plate that lays out the page (a Typst template, or a field map over an existing PDF form). Authors write only the content.
 
 <div class="grid" markdown>
 
@@ -26,7 +26,7 @@ Quillmark renders Markdown into typeset PDF, SVG, and PNG documents. A **quill**
 [Why Quillmark, and when not to use it](getting-started/why.md)
 
 !!! warning "Pre-1.0"
-    The API changes between minor releases, and each breaking release ships a guide under [Migration](migrations/index.md). A document stored with `to_stored` carries a version tag, and later releases migrate supported past versions forward on read.
+    The API changes between minor releases, and each breaking release ships a guide under [Migration](migrations/index.md). A document saved as [versioned JSON](integration/persistence.md) carries a version tag, and later releases migrate supported past versions forward on read.
 
 ## Choose your path
 
