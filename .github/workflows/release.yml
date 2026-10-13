@@ -685,6 +685,31 @@ jobs:
           merge-multiple: true
           path: dist/
 
+      # PyPI refuses any file past the project's storage cap, so a release
+      # that does not fit whole publishes none of its files rather than some.
+      - name: The release fits under the PyPI project size limit
+        env:
+          LIMIT_BYTES: ${{ vars.PYPI_PROJECT_LIMIT_BYTES || 10737418240 }}
+        run: |
+          set -euo pipefail
+          curl -fsS https://pypi.org/pypi/quillmark/json > project.json
+          python3 - <<'EOF'
+          import json, os, pathlib, sys
+          project = json.load(open("project.json"))
+          files = [f for fs in project["releases"].values() for f in fs]
+          on_pypi = {f["filename"] for f in files}
+          used = sum(f["size"] for f in files)
+          new = [p for p in pathlib.Path("dist").iterdir() if p.name not in on_pypi]
+          adding = sum(p.stat().st_size for p in new)
+          limit = int(os.environ["LIMIT_BYTES"])
+          gb = lambda n: f"{n / 2**30:.2f} GiB"
+          print(f"PyPI holds {gb(used)} of {gb(limit)}; this release adds {gb(adding)} in {len(new)} files.")
+          if used + adding > limit:
+              print(f"::error::quillmark needs {gb(used + adding - limit)} more PyPI storage: "
+                    "delete old releases or raise the limit, then re-run this job. Nothing was uploaded.")
+              sys.exit(1)
+          EOF
+
       - name: Publish to PyPI (Trusted Publishing)
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
