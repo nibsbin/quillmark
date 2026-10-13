@@ -2,7 +2,7 @@
 name = "quillmark-typst"
 version.workspace = true
 edition.workspace = true
-include = ["src/**", "Cargo.toml", "README*", "LICENSE*"]
+include = ["src/**", "Cargo.toml", "README*", "LICENSE*", "NOTICE"]
 readme.workspace = true
 description = "Typst backend for Quillmark"
 license.workspace = true
