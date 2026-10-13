@@ -543,8 +543,7 @@ jobs:
           else
             cp "target/${TARGET}/release/quillmark" "$name/"
           fi
-          cp LICENSE crates/bindings/cli/README.md "$name/"
-          cp crates/backends/typst/src/fonts/OFL.txt "$name/OFL-Roboto.txt"
+          cp LICENSE NOTICE THIRD_PARTY_LICENSES.md crates/bindings/cli/README.md "$name/"
           if [[ "$TARGET" == *windows* ]]; then
             7z a "dist/$name.zip" "$name"
           else
