@@ -36,6 +36,8 @@ The Records Portal replaces the shared drive for official records on 1 April 202
 - **Two backends**: Typst typesets new pages; `acroform` fills the fields of an existing PDF form.
 - **Written by people or by LLMs**: the schema emits a blueprint, an annotated Markdown form an LLM fills in, and validation reports diagnostics with machine-readable codes.
 
+[Try it in the browser](https://borb-sh.github.io/quillmark-js/playground): edit a document and watch the page re-render.
+
 [Why Quillmark, and when not to use it](https://quillmark.dev/getting-started/why/)
 
 [TongueToQuill](https://tonguetoquill.com) produces Air and Space Force correspondence with Quillmark. Quillmark is not affiliated with or endorsed by the Department of Defense, the Department of the Air Force, or any Military Service.

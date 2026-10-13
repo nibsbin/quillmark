@@ -23,6 +23,8 @@ Quillmark renders Markdown into typeset PDF, SVG, and PNG documents. A **quill**
 
 <small>Quillmark is not affiliated with or endorsed by the Department of Defense, the Department of the Air Force, or any Military Service.</small>
 
+[Try it in the browser](https://borb-sh.github.io/quillmark-js/playground): edit a document and watch the page re-render.
+
 [Why Quillmark, and when not to use it](getting-started/why.md)
 
 !!! warning "Pre-1.0"
