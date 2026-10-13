@@ -254,7 +254,7 @@ and the failed render carries the warning after that error.
 
 ## Fonts
 
-A Quill carries its own fonts. The backend loads every `.ttf` and `.otf` under `assets/fonts/` and inside vendored `packages/`, an asset font winning a family a package also ships. A Quill bundling none renders in the embedded Roboto, upright and italic, at any weight from 100 to 900. The host's installed fonts are not among them, so `#set text(font: "Arial")` names a family the compile cannot find.
+A Quill carries its own fonts. The backend loads every `.ttf`, `.otf`, `.ttc` and `.otc` under `assets/fonts/` and inside vendored `packages/`. A `.ttc` or `.otc` collection loads every face it holds. An asset font wins a family a package also ships. A Quill bundling none renders in the embedded Roboto, upright and italic, at any weight from 100 to 900. The host's installed fonts are not among them, so `#set text(font: "Arial")` names a family the compile cannot find.
 
 To bundle fonts with the Quill, drop them in `assets/fonts/`:
 

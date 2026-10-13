@@ -1060,6 +1060,10 @@ fn edit_distance(a: &str, b: &str) -> usize {
     prev[b.len()]
 }
 
+/// The key a Typst plate's data spells each typed dictionary's address with
+/// (`prose/canon/PLATE_DATA.md`). It displaces a data key of the same name.
+pub const PLATE_PATH_KEY: &str = "$path";
+
 pub(crate) fn unknown_field_warning(
     path: &DocPath,
     field: &str,
@@ -1077,17 +1081,22 @@ pub(crate) fn unknown_field_warning(
         }
         (None, None) => "Remove the key, or rename it to a field the quill declares.".to_string(),
     };
-    let mut diag = Diagnostic::new(
-        Severity::Warning,
+    let message = if field == PLATE_PATH_KEY {
+        format!(
+            "Field `{path}` is not declared by this quill: a Typst plate reads \
+             `{PLATE_PATH_KEY}` as the dictionary's address, so no plate reads this value."
+        )
+    } else {
         format!(
             "Field `{path}` is not declared by this quill: the value is kept, and no declared \
              field reads it."
-        ),
-    )
-    .with_code("validation::unknown_field".to_string())
-    .with_path(path)
-    .with_arg("field", field.into())
-    .with_hint(hint);
+        )
+    };
+    let mut diag = Diagnostic::new(Severity::Warning, message)
+        .with_code("validation::unknown_field".to_string())
+        .with_path(path)
+        .with_arg("field", field.into())
+        .with_hint(hint);
     if let Some(suggestion) = suggestion {
         diag = diag.with_arg("suggestion", suggestion.into());
     }
