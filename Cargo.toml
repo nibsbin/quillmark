@@ -77,6 +77,7 @@ quillmark-fixtures = { path = "crates/fixtures" }
 # PDF *reader*, test-only: reparses stamped output to assert on it. The
 # production writer is `pdf-writer`; the two are not interchangeable.
 lopdf = "0.45"
+roxmltree = "0.21"
 
 [profile.dev]
 split-debuginfo = "unpacked" # Faster on macOS/Linux

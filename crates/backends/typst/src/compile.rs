@@ -1,7 +1,11 @@
 //! Compiles a plate plus injected JSON data into a Typst paged document, then
 //! renders selected pages to output bytes (PDF, SVG, or PNG).
 
+use std::collections::HashMap;
+
 use typst::diag::Warned;
+use typst::layout::{Frame, FrameItem};
+use typst::model::Destination;
 use typst::utils::Scalar;
 use typst_layout::PagedDocument;
 use typst_pdf::PdfOptions;
@@ -43,6 +47,50 @@ pub(crate) fn compile_document(
     }
 }
 
+/// typst-svg writes a link URL into `href` and `xlink:href` with only `"`
+/// escaped, so a URL holding `&` or `<` leaves the SVG ill-formed XML. Each
+/// URL on the page is known, so an attribute value matching one's written form
+/// is rewritten in full.
+fn escape_link_hrefs(svg: String, frame: &Frame) -> String {
+    let mut urls = Vec::new();
+    collect_urls(frame, &mut urls);
+    let fixes: HashMap<String, String> = urls
+        .into_iter()
+        .filter(|url| url.contains(['&', '<']))
+        .map(|url| {
+            let written = url.replace('"', "&quot;");
+            let escaped = url.replace('&', "&amp;").replace('<', "&lt;").replace('"', "&quot;");
+            (written, escaped)
+        })
+        .collect();
+    if fixes.is_empty() {
+        return svg;
+    }
+    const OPEN: &str = "href=\"";
+    let mut out = String::with_capacity(svg.len());
+    let mut rest = svg.as_str();
+    while let Some(at) = rest.find(OPEN) {
+        let value_start = at + OPEN.len();
+        let Some(len) = rest[value_start..].find('"') else { break };
+        let value = &rest[value_start..value_start + len];
+        out.push_str(&rest[..value_start]);
+        out.push_str(fixes.get(value).map_or(value, String::as_str));
+        rest = &rest[value_start + len..];
+    }
+    out.push_str(rest);
+    out
+}
+
+fn collect_urls(frame: &Frame, urls: &mut Vec<String>) {
+    for (_, item) in frame.items() {
+        match item {
+            FrameItem::Group(group) => collect_urls(&group.frame, urls),
+            FrameItem::Link(Destination::Url(url), _) => urls.push(url.as_str().to_string()),
+            _ => {}
+        }
+    }
+}
+
 /// `field_specs` are stamped as AcroForm widgets by the PDF path only.
 pub(crate) fn render_document_pages(
     document: &PagedDocument,
@@ -62,11 +110,9 @@ pub(crate) fn render_document_pages(
             let artifacts = selected_indices
                 .into_iter()
                 .map(|idx| {
-                    Artifact::new(
-                        typst_svg::svg(&document.pages()[idx], &SvgOptions::default())
-                            .into_bytes(),
-                        OutputFormat::Svg,
-                    )
+                    let page = &document.pages()[idx];
+                    let svg = typst_svg::svg(page, &SvgOptions::default());
+                    Artifact::new(escape_link_hrefs(svg, &page.frame).into_bytes(), OutputFormat::Svg)
                 })
                 .collect();
             Ok(RenderResult::new(artifacts, OutputFormat::Svg))

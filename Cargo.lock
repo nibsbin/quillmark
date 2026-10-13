@@ -2371,6 +2371,7 @@ dependencies = [
  "quillmark-core",
  "quillmark-fixtures",
  "quillmark-pdf",
+ "roxmltree 0.21.1",
  "serde_json",
  "tempfile",
  "thiserror",
