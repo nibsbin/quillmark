@@ -10,8 +10,10 @@ quill's font collections load, and a WASM trap rejects coded.
 
 - fix(typst)!: **a link whose target's scheme is `javascript:`, `vbscript:`,
   `data:` or `file:` renders as its text alone**, where it rendered a live link
-  in PDF and SVG; so does one with an `&` before its first `/`, `?` or `#`.
-  (#2178)
+  in PDF and SVG. (#2178)
+- fix(typst): **SVG output is well-formed XML when a link's URL holds `&` or
+  `<`**, where its `href` carried them raw and an XML parser refused the file.
+  (#2194)
 - fix(core)!: **a card-yaml block's aliases and tags expand within a budget
   linear in its source**: past twice the block's bytes plus 4 KiB of scalars,
   or its bytes plus 4 KiB of nodes, the block fails its YAML parse, with a

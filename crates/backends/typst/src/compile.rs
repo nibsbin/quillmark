@@ -1,9 +1,14 @@
 //! Compiles a plate plus injected JSON data into a Typst paged document, then
 //! renders selected pages to output bytes (PDF, SVG, or PNG).
 
+use std::collections::HashMap;
+
 use typst::diag::Warned;
+use typst::layout::{Frame, FrameItem};
+use typst::model::Destination;
 use typst::utils::Scalar;
-use typst_layout::PagedDocument;
+use typst::visualize::Paint;
+use typst_layout::{Page, PagedDocument};
 use typst_pdf::PdfOptions;
 use typst_render::RenderOptions;
 use typst_svg::SvgOptions;
@@ -43,6 +48,68 @@ pub(crate) fn compile_document(
     }
 }
 
+/// typst-svg writes a link URL into `href` and `xlink:href` with only `"`
+/// escaped, so a URL holding `&` or `<` leaves the SVG ill-formed XML. Each
+/// URL on the page is known, so an attribute value matching one's written form
+/// is rewritten in full.
+fn escape_link_hrefs(svg: String, page: &Page) -> String {
+    let mut urls = Vec::new();
+    collect_urls(&page.frame, &mut urls);
+    if let Some(fill) = page.fill_or_white() {
+        collect_paint_urls(&fill, &mut urls);
+    }
+    let fixes: HashMap<String, String> = urls
+        .into_iter()
+        .filter(|url| url.contains(['&', '<']))
+        .map(|url| {
+            let written = url.replace('"', "&quot;");
+            let escaped = url.replace('&', "&amp;").replace('<', "&lt;").replace('"', "&quot;");
+            (written, escaped)
+        })
+        .collect();
+    if fixes.is_empty() {
+        return svg;
+    }
+    const OPEN: &str = "href=\"";
+    let mut out = String::with_capacity(svg.len());
+    let mut rest = svg.as_str();
+    while let Some(at) = rest.find(OPEN) {
+        let value_start = at + OPEN.len();
+        let Some(len) = rest[value_start..].find('"') else { break };
+        let value = &rest[value_start..value_start + len];
+        out.push_str(&rest[..value_start]);
+        out.push_str(fixes.get(value).map_or(value, String::as_str));
+        rest = &rest[value_start + len..];
+    }
+    out.push_str(rest);
+    out
+}
+
+/// A tiling's frame renders into the SVG too, so its links count.
+fn collect_urls(frame: &Frame, urls: &mut Vec<String>) {
+    for (_, item) in frame.items() {
+        match item {
+            FrameItem::Group(group) => collect_urls(&group.frame, urls),
+            FrameItem::Link(Destination::Url(url), _) => urls.push(url.as_str().to_string()),
+            FrameItem::Shape(shape, _) => {
+                let paints = shape.fill.iter().chain(shape.stroke.iter().map(|s| &s.paint));
+                paints.for_each(|paint| collect_paint_urls(paint, urls));
+            }
+            FrameItem::Text(text) => {
+                collect_paint_urls(&text.fill, urls);
+                text.stroke.iter().for_each(|s| collect_paint_urls(&s.paint, urls));
+            }
+            _ => {}
+        }
+    }
+}
+
+fn collect_paint_urls(paint: &Paint, urls: &mut Vec<String>) {
+    if let Paint::Tiling(tiling) = paint {
+        collect_urls(tiling.frame(), urls);
+    }
+}
+
 /// `field_specs` are stamped as AcroForm widgets by the PDF path only.
 pub(crate) fn render_document_pages(
     document: &PagedDocument,
@@ -62,11 +129,9 @@ pub(crate) fn render_document_pages(
             let artifacts = selected_indices
                 .into_iter()
                 .map(|idx| {
-                    Artifact::new(
-                        typst_svg::svg(&document.pages()[idx], &SvgOptions::default())
-                            .into_bytes(),
-                        OutputFormat::Svg,
-                    )
+                    let page = &document.pages()[idx];
+                    let svg = typst_svg::svg(page, &SvgOptions::default());
+                    Artifact::new(escape_link_hrefs(svg, page).into_bytes(), OutputFormat::Svg)
                 })
                 .collect();
             Ok(RenderResult::new(artifacts, OutputFormat::Svg))

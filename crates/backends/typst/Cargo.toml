@@ -36,6 +36,8 @@ tempfile = { workspace = true }
 proptest = { workspace = true }
 # Acceptance tests parse the injected PDF to validate AcroForm structure.
 lopdf = { workspace = true }
+# SVG output is checked with a strict XML parser.
+roxmltree = { workspace = true }
 quillmark-fixtures = { workspace = true }
 # Path-only: `quillmark` depends on this crate, so a versioned dev-dep here is
 # an unpublishable cycle; cargo strips path-only dev-deps at packaging. Tests
