@@ -47,7 +47,7 @@ makes it laundering-proof.
 - A card whose `$kind` the quill does not declare keeps its place in `$cards`, fields verbatim and uncoerced, so a plate's `$cards` loop falls through on a kind it does not know ([SCHEMAS.md](SCHEMAS.md#what-blocks-a-render))
 - `data`, each card, and each typed dictionary carry `$path`, their address prefix (`""` on `data`, `refs.0.` on a row), for [`qm.ink`](#the-ink-table) and [`qm.roster`](#a-matrix-field) to address by. A matrix's own dictionary carries none, so its keys are exactly the members it holds
 - `$path` is a visible key: dictionary equality (and so `contains` and `dedup`), `keys()` and spreading see it. A data key spelling `$path` is dropped; a dictionary the schema does not type passes through verbatim, keys included
-- User payload fields sit flat at the root next to the `$` keys; field names match `[a-z_][a-z0-9_]*` and therefore never collide with `$` metadata
+- User payload fields sit flat at the root next to the `$` keys; a field name matches `[A-Za-z_][A-Za-z0-9_]*` (a declared one `[a-z][a-z0-9_]*`, [QUILL.md](QUILL.md)) and therefore never collides with `$` metadata
 
 #### A `matrix` field
 

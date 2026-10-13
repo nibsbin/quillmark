@@ -202,7 +202,7 @@ A page whose canvas box is under a point per side carries no canvas to place any
 
 ### Schema versioning and unknown keys
 
-`schema` follows the convention `quillmark/form@<version>`, hand-set at the last format change (never auto-derived from a crate version). The current format is **`quillmark/form@0.2.0`**. Unknown *keys* are **ignored, not rejected**, so the format can grow additively, but any other *version* is rejected: a `form@0.1.0` file (which restated `type`/`options`/`multiline` on each field) fails to load with `acroform::invalid_form_json`.
+`schema` follows the convention `quillmark/form@<version>`, hand-set at the last format change (never auto-derived from a crate version). The current format is **`quillmark/form@0.2.0`**. Unknown *keys* are **ignored, not rejected**, so the format can grow additively, but a version other than `0.2` or `0.2.<patch>` is rejected: a `form@0.1.0` file (which restated `type`/`options`/`multiline` on each field) fails to load with `acroform::invalid_form_json`.
 
 ### Opinionated styling
 
@@ -275,7 +275,7 @@ Treat `/V`, not the drawn pixels, as the source of truth for what a field actual
 
 ### Regions sidecar
 
-Field geometry is a session-level query, not part of `RenderResult`: open a session and call `regions()` to get one entry per schema-bound field, keyed on its schema field path:
+Field geometry comes from a session's `regions()`, or from a one-shot render that asks for it (`RenderOptions::regions` in Rust, `regions=True` in Python, `{ regions: true }` in JavaScript), which fills `RenderResult.regions`. Either way it is one entry per schema-bound field, keyed on its schema field path:
 
 ```rust
 pub struct RenderedRegion {

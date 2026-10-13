@@ -83,7 +83,7 @@ A card-yaml block has three parts, in order:
 2. **YAML payload**: a standard YAML mapping containing both system
    metadata (`$`-prefixed reserved keys; see §3.3) and the block's data
    fields (see §3.4).
-3. **Closing fence**: exactly `~~~` (see §3.2).
+3. **Closing fence**: `~~~`, at least as long as the opener (see §3.2).
 
 The prose body begins immediately after the closing `~~~` fence and runs to
 the next opening fence or EOF.

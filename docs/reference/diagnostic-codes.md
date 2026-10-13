@@ -244,6 +244,7 @@ The `quillmark` command line.
 The `@quillmark/wasm` JavaScript runtime.
 
 - `runtime::backend_load_failed`
+- `runtime::backend_trapped`
 - `runtime::init_conflict`
 - `runtime::init_failed`
 - `runtime::not_a_document`
