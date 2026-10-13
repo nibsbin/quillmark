@@ -162,50 +162,21 @@ function quillmarkError(code, message, hint) {
 }
 
 /**
- * Build module → the trap it first raised. A trap (out of memory, a panic under
- * `panic = "abort"`) leaves the instance's borrows, stack pointer and heap
- * undefined, and the instance is module-scoped, so nothing calls into a trapped
- * build again: every later call rejects with this trap as its `cause`.
- * @type {WeakMap<object, WebAssembly.RuntimeError>}
+ * `err` as `runtime::backend_trapped` when it is a `WebAssembly.RuntimeError`,
+ * else unchanged.
+ * @param {unknown} err
+ * @returns {unknown}
  */
-const trappedBuilds = new WeakMap();
-
-/**
- * @param {WebAssembly.RuntimeError} trap
- * @returns {Error & { diagnostics: import('../core/wasm.js').Diagnostic[] }}
- */
-function trappedError(trap) {
+function backendTrap(err) {
+	if (!(err instanceof WebAssembly.RuntimeError)) return err;
 	return Object.assign(
 		quillmarkError(
 			'runtime::backend_trapped',
-			`The backend build trapped (${trap.message}); this realm does not run it again.`,
-			'A render ran out of memory or panicked. Discard the realm to recover: terminate the Worker or restart the process. For untrusted input, cap the document size.'
+			`The backend build trapped (${err.message}); its state is now undefined.`,
+			'A render ran out of memory or panicked. Discard the realm before rendering again: terminate the Worker or restart the process. For untrusted input, cap the document size.'
 		),
-		{ cause: trap }
+		{ cause: err }
 	);
-}
-
-/**
- * Throw `runtime::backend_trapped` if `mod` has trapped.
- * @param {object} mod
- * @returns {void}
- */
-function requireUntrapped(mod) {
-	const trap = trappedBuilds.get(mod);
-	if (trap) throw trappedError(trap);
-}
-
-/**
- * `err` as `runtime::backend_trapped` when it is a `WebAssembly.RuntimeError`,
- * latching `mod` as trapped; else unchanged.
- * @param {unknown} err
- * @param {object} mod
- * @returns {unknown}
- */
-function backendTrap(err, mod) {
-	if (!(err instanceof WebAssembly.RuntimeError)) return err;
-	if (!trappedBuilds.has(mod)) trappedBuilds.set(mod, err);
-	return trappedError(/** @type {WebAssembly.RuntimeError} */ (trappedBuilds.get(mod)));
 }
 
 /**
@@ -639,7 +610,6 @@ export class Engine {
 			? null
 			: quill.toTree();
 		const { mod, engine } = await this.#resolveBackend(backendId);
-		requireUntrapped(mod);
 		// The cached quill clone is intentionally not freed. `fn` MUST be
 		// synchronous: an async one would run against a freed doc clone.
 		try {
@@ -648,7 +618,7 @@ export class Engine {
 				fn({ mod, engine, quill: backendQuill, doc: backendDoc })
 			);
 		} catch (err) {
-			throw backendTrap(err, mod);
+			throw backendTrap(err);
 		}
 	}
 
@@ -720,53 +690,43 @@ export class LiveSession {
 	#mod;
 
 	/**
-	 * Run `fn` on the inner session unless its build has trapped, latching a trap
-	 * `fn` raises.
-	 * @template T
-	 * @param {(inner: any) => T} fn
-	 * @returns {T}
-	 */
-	#call(fn) {
-		requireUntrapped(this.#mod);
-		try {
-			return fn(this.#inner);
-		} catch (err) {
-			throw backendTrap(err, this.#mod);
-		}
-	}
-
-	/**
 	 * @param {Document} doc
 	 * @returns {import('./runtime.d.ts').ChangeSet}
 	 */
 	update(doc) {
 		requireLocalDoc(doc, 'session.update(doc)');
 		const docJson = doc.toStored();
-		return this.#call((inner) =>
-			withDocClone(this.#mod, docJson, (backendDoc) => inner.update(backendDoc))
-		);
+		try {
+			return withDocClone(this.#mod, docJson, (backendDoc) => this.#inner.update(backendDoc));
+		} catch (err) {
+			throw backendTrap(err);
+		}
 	}
 
 	get pageCount() {
-		return this.#call((inner) => inner.pageCount);
+		return this.#inner.pageCount;
 	}
 	get backendId() {
-		return this.#call((inner) => inner.backendId);
+		return this.#inner.backendId;
 	}
 	get warnings() {
-		return this.#call((inner) => inner.warnings);
+		return this.#inner.warnings;
 	}
 
 	/** @param {object} [options] */
 	render(options) {
-		return this.#call((inner) => inner.render(options ?? undefined));
+		try {
+			return this.#inner.render(options ?? undefined);
+		} catch (err) {
+			throw backendTrap(err);
+		}
 	}
 
 	/**
 	 * @returns {import('./runtime.d.ts').FieldRegion[]}
 	 */
 	regions() {
-		return this.#call((inner) => inner.regions());
+		return this.#inner.regions();
 	}
 
 	/**
@@ -774,14 +734,14 @@ export class LiveSession {
 	 * @returns {import('./runtime.d.ts').FieldRegion[]}
 	 */
 	fieldBoxes(field) {
-		return this.#call((inner) => inner.fieldBoxes(field));
+		return this.#inner.fieldBoxes(field);
 	}
 
 	/**
 	 * @returns {import('./runtime.d.ts').FieldCoverage[]}
 	 */
 	coverage() {
-		return this.#call((inner) => inner.coverage());
+		return this.#inner.coverage();
 	}
 
 	/**
@@ -792,7 +752,7 @@ export class LiveSession {
 	 * @returns {string | undefined}
 	 */
 	fieldAt(page, x, y, tolPt) {
-		return this.#call((inner) => inner.fieldAt(page, x, y, tolPt));
+		return this.#inner.fieldAt(page, x, y, tolPt);
 	}
 
 	/**
@@ -803,7 +763,7 @@ export class LiveSession {
 	 * @returns {import('./runtime.d.ts').ContentHit | undefined}
 	 */
 	positionAt(page, x, y, tolPt) {
-		return this.#call((inner) => inner.positionAt(page, x, y, tolPt));
+		return this.#inner.positionAt(page, x, y, tolPt);
 	}
 
 	/**
@@ -812,12 +772,12 @@ export class LiveSession {
 	 * @returns {import('./runtime.d.ts').FieldRegion | undefined}
 	 */
 	locate(field, pos) {
-		return this.#call((inner) => inner.locate(field, pos));
+		return this.#inner.locate(field, pos);
 	}
 
 	/** @param {number} page */
 	pageSize(page) {
-		return this.#call((inner) => inner.pageSize(page));
+		return this.#inner.pageSize(page);
 	}
 
 	/**
@@ -826,12 +786,15 @@ export class LiveSession {
 	 * @param {number} scale
 	 */
 	paint(ctx, page, scale) {
-		this.#call((inner) => inner.paint(ctx, page, scale));
+		try {
+			this.#inner.paint(ctx, page, scale);
+		} catch (err) {
+			throw backendTrap(err);
+		}
 	}
 
-	/** A no-op once the build has trapped: nothing calls into it again. */
 	free() {
-		if (!trappedBuilds.has(this.#mod)) this.#inner.free();
+		this.#inner.free();
 	}
 }
 
