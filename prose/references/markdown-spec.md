@@ -693,9 +693,9 @@ A conforming parser MUST also bound YAML nesting depth, at whatever depth
 its YAML parser accepts, so that deeply nested input is refused rather than
 exhausting the stack. The depth itself is the parser's to choose.
 
-Alias expansion is bounded the same way: a block whose aliases expand its
-scalars past twice the block's bytes plus 64 KiB is refused, so a block's
-value stays linear in its source.
+A block is refused as a YAML parse error when, with its aliases expanded, its
+scalar and tag bytes pass twice the block's bytes plus 4 KiB, or its nodes pass
+the block's bytes plus 4 KiB, so a block's value stays linear in its source.
 
 A block whose comments and tags record more than 64 bytes of path per byte of
 the block, plus 64 KiB, is refused as `parse::invalid_structure`: each comment

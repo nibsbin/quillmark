@@ -16,10 +16,10 @@ The threat model is in [Operations § Untrusted input](docs/integration/operatio
 
 A vulnerability, report it privately:
 
-- A document that runs Typst code, reads a file, or reaches the network.
+- A document that runs Typst code, reads a file outside its quill, or reaches the network.
 - A quill that reads outside its own file tree or reaches the network.
 - A document that panics the engine.
-- Output that carries document content into a place it can execute, such as a script link in SVG.
+- A Markdown link in a document that reaches SVG or PDF output as a script link.
 
 Not a vulnerability, open an ordinary issue:
 
