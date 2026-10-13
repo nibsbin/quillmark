@@ -703,10 +703,10 @@ and tag records the path of the collection holding it, each level costing its
 key's bytes and a fixed overhead, and the bound keeps that memory linear in the
 block.
 
-Markdown block nesting depth (100) is enforced at import time by the
+Markdown block nesting depth (12) is enforced at import time by the
 markdown→content parser (`Document::parse`): at every point of a body, the
 list items, quotes and elements open there, the marks open there and one for
-any `<u>` open there number at most 100. An element counts from its open tag
+any `<u>` open there number at most 12. An element counts from its open tag
 until it closes or its list item, quote or body ends, so one left unclosed
 counts until then, and a `qm-table` wrapper counts nothing. The Typst backend re-checks
 at render as a backstop for content built without importing.

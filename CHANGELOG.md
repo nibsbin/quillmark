@@ -16,6 +16,14 @@
   declares**: a collection whose header declares more faces than the file
   holds offsets for loads no faces. (#2168)
 
+### Markdown
+
+- fix(content)!: **a body nests at most 12 levels deep, so every body that
+  imports renders under Typst**, where import took 100 and Typst's show-rule
+  depth refused 16 quotes or 32 lists. A body past the bound fails
+  `parse::body_import` at its `path`; `ParseError::BodyImport` holds
+  `{ path, message }`. (#2187)
+
 ## v0.125.0 - 2026-10-12
 
 Upgrade path: [0.124 → 0.125](docs/migrations/0.124-to-0.125.md). Every Typst

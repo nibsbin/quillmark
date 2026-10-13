@@ -426,15 +426,19 @@ Body content.";
 }
 
 #[test]
-fn test_over_nested_body_surfaces_body_import_error() {
-    let deep = ">".repeat(crate::error::MAX_NESTING_DEPTH + 5);
-    let markdown =
-        format!("~~~card-yaml\n$quill: test_quill\n$kind: main\n~~~\n\n{deep} too deep\n");
-    let err = decompose(&markdown).unwrap_err();
-    assert_eq!(
-        err.to_diagnostic().code.as_deref(),
-        Some("parse::body_import")
+fn test_over_nested_body_surfaces_body_import_error_at_its_body() {
+    let deep = ">".repeat(crate::error::MAX_NESTING_DEPTH + 1);
+    let markdown = format!(
+        "~~~card-yaml\n$quill: test_quill\n$kind: main\n~~~\n\n{deep} too deep\n\n\
+         ~~~card-yaml\n$kind: note\n~~~\n\n{deep} too deep\n"
     );
+    let diag = decompose(&markdown).unwrap_err().to_diagnostic();
+    assert_eq!(diag.code.as_deref(), Some("parse::body_import"));
+    assert_eq!(diag.path.as_deref(), Some("main.body"));
+
+    let at_card = markdown.replacen(&deep, &deep[1..], 1);
+    let diag = decompose(&at_card).unwrap_err().to_diagnostic();
+    assert_eq!(diag.path.as_deref(), Some("cards.note[0].body"));
 }
 
 #[test]

@@ -26,6 +26,8 @@ severity.
 
 The `PayloadNotMapping` case (`parse::payload_not_mapping`) is a card-yaml payload that is YAML but not a mapping, usually tilde-fenced code. It locates at the block's opening fence, and its hint names the backtick fence, spelled with the opener's info string.
 
+The `BodyImport` case (`parse::body_import`) is a body nested past the bound (markdown spec §8), which the bound sets so that every body that imports renders under Typst. It carries the body's `path`, `main.body` or `cards.<kind>[i].body`.
+
 The `MissingKind` case (`parse::missing_kind`) is a mapping payload after the root that names no `$kind`: every block after the root is a card, and a card names its kind. The block is a card missing its kind line or tilde-fenced code whose text reads as a mapping, and the parser cannot tell which. It locates at the opening fence, and its hint names both fixes: the `$kind:` line, and the backtick fence spelled with the opener's info string.
 
 The diagnostic's `message` is the variant's `Display` rendering, so the

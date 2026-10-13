@@ -30,7 +30,7 @@ pub const MAX_INPUT_SIZE: usize = 10 * 1024 * 1024;
 
 pub const MAX_YAML_SIZE: usize = 1024 * 1024;
 
-/// Maximum nesting depth for markdown structures (100 levels). Owned by the
+/// Maximum nesting depth for markdown structures (12 levels). Owned by the
 /// markdown codecs in `quillmark-content` (the import guard) and re-exported
 /// here so the typst backend's markup converter shares one limit: a document
 /// that imports also renders, and vice versa.
@@ -304,9 +304,10 @@ pub enum ParseError {
 
     /// A card body's markdown could not be imported into the content model:
     /// today only when container nesting exceeds
-    /// [`MAX_NESTING_DEPTH`]. Code `parse::body_import`.
-    #[error("{0}")]
-    BodyImport(String),
+    /// [`MAX_NESTING_DEPTH`]. Code `parse::body_import`, at the body's
+    /// [`DocPath`](crate::path::DocPath).
+    #[error("{message}")]
+    BodyImport { path: String, message: String },
 
     /// A card-yaml block's payload reads as YAML but not as a mapping: most
     /// often code fenced with tildes, since a column-zero `~~~` always opens a
@@ -428,7 +429,7 @@ impl ParseError {
             ParseError::EmptyInput(_) => "parse::empty_input",
             ParseError::MissingQuill(_) => "parse::missing_quill",
             ParseError::InvalidQuillReference { .. } => "parse::invalid_quill_reference",
-            ParseError::BodyImport(_) => "parse::body_import",
+            ParseError::BodyImport { .. } => "parse::body_import",
             ParseError::PayloadNotMapping { .. } => "parse::payload_not_mapping",
             ParseError::MissingKind { .. } => "parse::missing_kind",
             ParseError::YamlErrorWithLocation { .. } => "parse::yaml_error_with_location",
@@ -437,7 +438,7 @@ impl ParseError {
 
     /// The facts this error's message interpolates. See [`Diagnostic::args`].
     ///
-    /// The four `String` variants contribute no keys: `EmptyInput` is one
+    /// The variants carrying prose contribute no keys: `EmptyInput` is one
     /// fixed sentence, and the rest carry prose minted per-site.
     pub fn args(&self) -> BTreeMap<String, serde_json::Value> {
         match self {
@@ -456,7 +457,7 @@ impl ParseError {
             ParseError::InvalidStructure(_) => diag_args! {},
             ParseError::EmptyInput(_) => diag_args! {},
             ParseError::MissingQuill(_) => diag_args! {},
-            ParseError::BodyImport(_) => diag_args! {},
+            ParseError::BodyImport { .. } => diag_args! {},
             // `reason` is English prose and stays in `message`.
             ParseError::InvalidQuillReference { value, reason: _ } => diag_args! {
                 "value" => value,
@@ -522,6 +523,7 @@ impl ParseError {
                     None => d,
                 }
             }
+            ParseError::BodyImport { path, .. } => diag.with_path(path.clone()),
             _ => diag,
         }
     }
@@ -649,7 +651,10 @@ fn parse_error_samples() -> Vec<ParseError> {
         ParseError::InvalidStructure("x".into()),
         ParseError::EmptyInput("x".into()),
         ParseError::MissingQuill("x".into()),
-        ParseError::BodyImport("x".into()),
+        ParseError::BodyImport {
+            path: "main.body".into(),
+            message: "x".into(),
+        },
         ParseError::InvalidQuillReference {
             value: "a@b".into(),
             reason: "x".into(),
