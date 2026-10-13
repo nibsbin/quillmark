@@ -157,17 +157,20 @@ def test_a_render_leaves_the_load_warnings_on_the_document(engine, taro_quill_di
 
 
 def test_render_releases_the_gil(engine, taro_quill_dir, taro_md):
-    """Another Python thread runs while a render compiles."""
+    """Another Python thread runs, and edits the document, while a render compiles."""
     import threading
     import time
 
     quill = Quill.from_path(str(taro_quill_dir))
-    doc = Document.from_markdown(taro_md + "\n\nLorem ipsum dolor sit amet." * 4000)
+    body = "".join(f"\n\nLorem ipsum dolor sit amet {i}." for i in range(4000))
+    doc = Document.from_markdown(taro_md + body)
+    quill_ref = doc.quill_ref
     ticks = []
     stop = threading.Event()
 
     def tick():
         while not stop.is_set():
+            doc.set_quill_ref(quill_ref)
             ticks.append(time.perf_counter())
             time.sleep(0.001)
 
