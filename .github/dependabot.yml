@@ -3,11 +3,16 @@ version: 2
 # Grouped so a routine bump week is one PR per ecosystem, not thirty. Security
 # updates are ungrouped by design; they arrive on their own so they can be
 # reviewed and merged without waiting on unrelated bumps.
+#
+# A version is proposed once it is a week old, so a compromised release has
+# time to be caught and pulled first. Security updates skip the cooldown.
 updates:
   - package-ecosystem: cargo
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       cargo:
         patterns: ['*']
@@ -18,6 +23,8 @@ updates:
     directory: /crates/bindings/wasm
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       npm:
         patterns: ['*']
@@ -27,6 +34,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ['*']
