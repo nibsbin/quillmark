@@ -16,11 +16,8 @@ on:
   # (re)deploy from the Actions tab.
   workflow_dispatch:
 
-# Allow the GITHUB_TOKEN to deploy to GitHub Pages.
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 # Allow only one concurrent deployment, skipping runs queued between the run
 # in-progress and latest queued. Do not cancel in-progress runs so deploys finish.
@@ -62,6 +59,9 @@ jobs:
       (github.event_name == 'release' && github.event.release.prerelease == false)
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
