@@ -515,14 +515,18 @@ impl Serialize for FieldType {
     }
 }
 
+fn unknown_type<E: serde::de::Error>(token: &str) -> E {
+    E::custom(format!(
+        "unknown field type: {token:?}; expected one of {}",
+        FieldType::NAMES.join(", ")
+    ))
+}
+
 impl<'de> Deserialize<'de> for FieldType {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let s = String::deserialize(deserializer)?;
         FieldType::from_str(&s)
-            .ok_or_else(|| serde::de::Error::custom(format!(
-                "unknown field type: {s:?}; expected one of {}",
-                FieldType::NAMES.join(", ")
-            )))
+            .ok_or_else(|| unknown_type(&s))
     }
 }
 
@@ -542,10 +546,7 @@ impl<'de> Deserialize<'de> for TypeToken {
             None => (s.as_str(), false),
         };
         let r#type = FieldType::from_str(token)
-            .ok_or_else(|| serde::de::Error::custom(format!(
-                "unknown field type: {s:?}; expected one of {}",
-                FieldType::NAMES.join(", ")
-            )))?;
+            .ok_or_else(|| unknown_type(&s))?;
         Ok(Self { r#type, optional })
     }
 }

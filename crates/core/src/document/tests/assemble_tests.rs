@@ -146,6 +146,15 @@ fn test_near_miss_root_blocks_name_the_mistake() {
     }
 }
 
+/// Plain Markdown with no root is not mistaken for a misfenced root block.
+#[test]
+fn test_plain_markdown_without_a_root_reports_the_generic_shape() {
+    for markdown in ["```python\nprint(1)\n```\n", "---\n\n# Title\n"] {
+        let msg = decompose(markdown).unwrap_err().to_string();
+        assert!(msg.contains("The document must open with"), "{markdown:?} got: {msg}");
+    }
+}
+
 #[test]
 fn test_missing_block_with_bare_yaml_calls_out_missing_fence() {
     let err = decompose("$quill: usaf_memo\n$kind: main\ntitle: Memo\n").unwrap_err();

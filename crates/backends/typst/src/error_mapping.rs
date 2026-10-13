@@ -36,9 +36,9 @@ fn map_single_diagnostic(error: &SourceDiagnostic, world: &QuillWorld) -> Diagno
     diag
 }
 
-/// A helper assert reports inside the helper's generated source, which the
+/// An error raised inside the helper's generated source points at a file the
 /// author neither wrote nor can open: the innermost call outside the helper is
-/// the plate line that passed the bad argument.
+/// the call site that passed the bad argument.
 fn helper_call_site(error: &SourceDiagnostic) -> Option<DiagSpan> {
     if !is_helper(error.span.id()?) {
         return None;

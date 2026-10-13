@@ -192,13 +192,11 @@ fn open_matrix_hint() -> &'static str {
 }
 
 fn enum_hint(value: &str, allowed: &[String], open: bool) -> Option<String> {
-    if open {
-        return Some(open_matrix_hint().to_string());
-    }
     allowed
         .iter()
         .find(|member| member.eq_ignore_ascii_case(value))
-        .map(|member| format!("Did you mean `{member}`? Enum values are case-sensitive."))
+        .map(|member| format!("Did you mean `{member}`? Values are case-sensitive."))
+        .or_else(|| open.then(|| open_matrix_hint().to_string()))
 }
 
 /// Actionable exit clause for a `HeldStored` error.

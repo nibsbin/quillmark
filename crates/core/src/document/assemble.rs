@@ -53,7 +53,18 @@ fn missing_block_message(markdown: &str, unclosed_root: Option<&UnclosedRoot>) -
 
     let trimmed = markdown.trim_start();
 
-    if trimmed.starts_with("---") {
+    let closed_by = |fence: &str| {
+        trimmed
+            .lines()
+            .skip(1)
+            .take_while(|l| !l.trim_end().starts_with(fence))
+            .any(|l| {
+                let l = l.trim_start();
+                l.starts_with("$quill:") || l.starts_with("quill:")
+            })
+    };
+
+    if trimmed.starts_with("---") && trimmed.lines().skip(1).any(|l| l.trim_end() == "---") {
         if trimmed
             .lines()
             .any(|l| l.trim_start().starts_with("$quill:"))
@@ -72,7 +83,7 @@ fn missing_block_message(markdown: &str, unclosed_root: Option<&UnclosedRoot>) -
             .to_string();
     }
 
-    if trimmed.starts_with("```") {
+    if trimmed.starts_with("```") && closed_by("```") {
         return "Missing required root card-yaml block. Your document opens with a \
                 backtick fence; card-yaml blocks are fenced with `~~~` (three \
                 tildes). Replace the opening and closing backtick lines with a \
@@ -83,9 +94,9 @@ fn missing_block_message(markdown: &str, unclosed_root: Option<&UnclosedRoot>) -
     let first_line = markdown.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
     if first_line.trim_start().starts_with("~~~") && first_line.starts_with(char::is_whitespace) {
         return "Missing required root card-yaml block. Your document's opening \
-                `~~~` is indented; a card-yaml fence starts at column zero. Remove \
-                the leading whitespace before both fences and the fields between \
-                them."
+                `~~~` is indented; a card-yaml fence starts at column zero. Dedent \
+                the whole block by the opener's indentation, so both fences sit at \
+                column zero and nested fields keep their relative indentation."
             .to_string();
     }
 

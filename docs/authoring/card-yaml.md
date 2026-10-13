@@ -26,8 +26,8 @@ The rules a writer meets first:
   the key.
 - Every other line is `field: value`. Quote a value that contains `: `, as
   in `subject: "Re: budget"`.
-- A code block in the prose takes a backtick fence: every `~~~` at column
-  zero opens a card-yaml block.
+- A code block in the prose takes a backtick fence: a `~~~` at column zero
+  after a blank line opens a card-yaml block.
 
 ## Block Structure
 
