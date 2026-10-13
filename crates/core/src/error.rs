@@ -702,7 +702,7 @@ mod tests {
     #[test]
     fn fmt_pretty_lays_out_code_location_path_and_hint() {
         let diag = Diagnostic::new(Severity::Warning, "bad value".to_string())
-            .with_code("validation::x".to_string())
+            .with_code("validation::type_mismatch".to_string())
             .with_location(Location {
                 file: "input.md".to_string(),
                 line: 3,
@@ -712,7 +712,7 @@ mod tests {
             .with_hint("fix it".to_string());
         assert_eq!(
             diag.fmt_pretty(),
-            "[WARN] bad value (validation::x)\n  --> input.md:3:7\n  at main.title\n  hint: fix it"
+            "[WARN] bad value (validation::type_mismatch)\n  --> input.md:3:7\n  at main.title\n  hint: fix it"
         );
     }
 }
