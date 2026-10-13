@@ -99,6 +99,19 @@ pub(crate) fn quill_fonts(source: &Quill) -> Vec<(std::path::PathBuf, &[u8])> {
     fonts
 }
 
+/// Every face in `data`. A collection whose header declares more offsets than
+/// the file holds has none.
+fn faces(data: Bytes) -> impl Iterator<Item = Font> {
+    let count = match data.first_chunk::<12>() {
+        Some([b't', b't', b'c', b'f', _, _, _, _, n @ ..]) => match u32::from_be_bytes(*n) {
+            n if n as usize <= (data.len() - 12) / 4 => n,
+            _ => 0,
+        },
+        _ => 1,
+    };
+    (0..count).filter_map(move |index| Font::new(data.clone(), index))
+}
+
 /// Typst `World` implementation for quill-based compilation, rooted at the
 /// quill: `.typ` sources load at their quill paths, packages from
 /// `{quill}/packages/` and assets from `{quill}/assets/`.
@@ -132,7 +145,7 @@ impl QuillWorld {
 
         for (_, font_data) in quill_fonts(source) {
             let font_bytes = Bytes::new(font_data.to_vec());
-            for font in Font::iter(font_bytes) {
+            for font in faces(font_bytes) {
                 book.push(font.info().clone());
                 fonts.push(font);
             }
@@ -142,7 +155,7 @@ impl QuillWorld {
         if fonts.is_empty() {
             for (_, data) in FALLBACK_FONTS {
                 let font_bytes = Bytes::new(data.to_vec());
-                for font in Font::iter(font_bytes) {
+                for font in faces(font_bytes) {
                     book.push(font.info().clone());
                     fonts.push(font);
                 }
@@ -575,6 +588,8 @@ pub(crate) fn parse_package_toml(
 
 #[cfg(test)]
 mod tests {
+    mod properties;
+
     use super::*;
 
     /// Richtext passes `'` and `"` through to Typst's smart quotes, which draw

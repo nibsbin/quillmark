@@ -10,6 +10,12 @@
   npm. The Pages permissions move to the docs deploy job, and Dependabot
   proposes a version once it is a week old.
 
+### Fonts
+
+- fix(typst): **a quill opens promptly whatever face count its font collection
+  declares**: a collection whose header declares more faces than the file
+  holds offsets for loads no faces. (#2168)
+
 ## v0.125.0 - 2026-10-12
 
 Upgrade path: [0.124 → 0.125](docs/migrations/0.124-to-0.125.md). Every Typst
