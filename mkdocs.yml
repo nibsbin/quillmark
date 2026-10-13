@@ -33,7 +33,6 @@ theme:
 nav:
   - Home: index.md
   - Getting Started:
-      - Why Quillmark: getting-started/why.md
       - Quickstart: getting-started/quickstart.md
       - Concepts: getting-started/concepts.md
   - Authoring:

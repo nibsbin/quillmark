@@ -25,8 +25,6 @@ Quillmark renders Markdown into typeset PDF, SVG, and PNG documents. A **quill**
 
 [Try it in the browser](https://borb-sh.github.io/quillmark-js/playground): edit a document and watch the page re-render.
 
-[Why Quillmark, and when not to use it](getting-started/why.md)
-
 !!! warning "Pre-1.0"
     The API changes between minor releases, and each breaking release ships a guide under [Migration](migrations/index.md). A document saved as [versioned JSON](integration/persistence.md) carries a version tag, and later releases migrate supported past versions forward on read.
 

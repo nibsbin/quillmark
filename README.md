@@ -38,8 +38,6 @@ The Records Portal replaces the shared drive for official records on 1 April 202
 
 [Try it in the browser](https://borb-sh.github.io/quillmark-js/playground): edit a document and watch the page re-render.
 
-[Why Quillmark, and when not to use it](https://quillmark.dev/getting-started/why/)
-
 [TongueToQuill](https://tonguetoquill.com) produces Air and Space Force correspondence with Quillmark. Quillmark is not affiliated with or endorsed by the Department of Defense, the Department of the Air Force, or any Military Service.
 
 Maintained by [borb-sh](https://github.com/borb-sh).
