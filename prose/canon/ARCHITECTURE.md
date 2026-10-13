@@ -82,8 +82,9 @@ The PDF deliverable is always an interactive AcroForm, the one output format
 this backend emits. It paints a WASM canvas raster by rasterizing the same
 stamp with hayro, which draws the baked appearances, each checkbox narrowed to
 the one state it shows. Field geometry is a
-session-level query (`LiveSession::regions()`): per-field geometry keyed on the
-schema field path, no bound value. Quill-authoring surface:
+session-level query (`LiveSession::regions()`), or a one-shot render's
+`RenderResult::regions` on request: per-field geometry keyed on the schema field
+path, no bound value. Quill-authoring surface:
 [docs/quills/acroform-backend.md](../../docs/quills/acroform-backend.md); preview
 seam: [PREVIEW.md](PREVIEW.md).
 

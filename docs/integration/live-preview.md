@@ -22,7 +22,7 @@ function renderPage(canvas, page, userZoom = 1) {
 
 for (let p = 0; p < session.pageCount; p++) renderPage(canvases[p], p);
 
-session.free();                                    // when doc changes
+session.free();                                    // when the editor closes
 ```
 
 Key contract points:

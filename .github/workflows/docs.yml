@@ -12,6 +12,9 @@ on:
       - 'docs/**'
       - 'mkdocs.yml'
       - '.github/workflows/docs.yml'
+      # Snippet-included into the site, which the strict build checks.
+      - 'prose/references/**'
+      - 'crates/fixtures/resources/quills/status_report/**'
   # The release deploy, dispatched by release.yml at the tag, and a manual
   # (re)deploy from the Actions tab.
   workflow_dispatch:
