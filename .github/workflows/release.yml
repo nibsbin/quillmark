@@ -298,9 +298,10 @@ jobs:
   # ──────────────────────────────────────────────
   # Build: WASM → the npm tarball
   # ──────────────────────────────────────────────
-  # Apart from publish-wasm so that the npm install and vitest run in a job that
-  # cannot mint an OIDC token: every Trusted Publisher here (crates.io, npm and
-  # PyPI) accepts any token from this workflow in the Publish environment.
+  # Three jobs. No npm dependency runs where an OIDC token can be minted: every
+  # Trusted Publisher here (crates.io, npm, PyPI) accepts any token from this
+  # workflow in the Publish environment. None runs before the tarball is
+  # uploaded, or in a job that saves a cache.
   build-wasm:
     needs: [prepare]
     runs-on: ubuntu-latest
@@ -368,14 +369,6 @@ jobs:
       - name: Generate SBOM
         run: ./scripts/wasm-sbom.sh
 
-      - name: Install npm test dependencies
-        working-directory: crates/bindings/wasm
-        run: npm ci
-
-      - name: Run WASM tests
-        working-directory: crates/bindings/wasm
-        run: npx vitest run
-
       # npm skips a `files` entry with no file behind it, so the packed file
       # list is checked. The tarball is what publish-wasm uploads, byte for byte.
       - name: Pack @quillmark/wasm
@@ -393,11 +386,47 @@ jobs:
           path: pkg/*.tgz
           if-no-files-found: error
 
+  # The suites run against the uploaded tarball, unpacked into pkg/ where they
+  # import it from.
+  test-wasm:
+    needs: [prepare, build-wasm]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: v${{ needs.prepare.outputs.version }}
+
+      - name: Download the npm tarball
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: npm-package
+          path: dist/
+
+      - name: Unpack into pkg/
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          mkdir pkg
+          tar xzf "dist/quillmark-wasm-${VERSION}.tgz" --strip-components=1 -C pkg
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+
+      - name: Install npm test dependencies
+        working-directory: crates/bindings/wasm
+        run: npm ci
+
+      - name: Run WASM tests
+        working-directory: crates/bindings/wasm
+        run: npx vitest run
+
   # ──────────────────────────────────────────────
   # Publish: WASM → npm
   # ──────────────────────────────────────────────
   publish-wasm:
-    needs: [prepare, build-wasm]
+    needs: [prepare, test-wasm]
     runs-on: ubuntu-latest
     environment: Publish
     permissions:
@@ -424,7 +453,8 @@ jobs:
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          TARBALL="dist/quillmark-wasm-${VERSION}.tgz"
+          # `./` makes it a path: npm reads a bare `dist/<name>` as a GitHub repo.
+          TARBALL="./dist/quillmark-wasm-${VERSION}.tgz"
           if [ ! -f "$TARBALL" ]; then
             echo "$TARBALL not found, refusing to publish:" >&2
             ls dist >&2

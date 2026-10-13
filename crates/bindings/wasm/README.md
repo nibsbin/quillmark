@@ -38,7 +38,7 @@ none of them carries a `.wasm` ESM import or a top-level await.
 ```bash
 bash scripts/build-wasm.sh
 cd crates/bindings/wasm
-npm install
+npm ci
 npm test
 ```
 
