@@ -28,8 +28,12 @@ use quillmark_pdf::{stamp, AppearanceStates, FieldSpec, StampOptions};
 use {
     hayro::hayro_interpret::{font::FontQuery, InterpreterSettings},
     hayro::hayro_syntax::Pdf as HayroPdf,
-    hayro::vello_cpu::Pixmap,
-    hayro::{render as hayro_render, RenderCache, RenderSettings},
+    hayro::hayro_interpret::util::TransformExt,
+    hayro::kurbo::Affine,
+    hayro::vello_cpu::color::palette::css::WHITE,
+    hayro::vello_cpu::peniko::ImageAlphaType,
+    hayro::vello_cpu::{Pixmap, RasterizerSettings, RenderContext, Resources, TargetInit},
+    hayro::{render_into, RenderCache, RenderSettings},
     std::sync::Arc,
 };
 
@@ -198,11 +202,7 @@ impl SessionHandle for AcroformSession {
         };
         let w = pixmap.width() as u32;
         let h = pixmap.height() as u32;
-        let bytes: Vec<u8> = pixmap
-            .take_unpremultiplied()
-            .into_iter()
-            .flat_map(|px| [px.r, px.g, px.b, px.a])
-            .collect();
+        let bytes = pixmap.take_rgba8(ImageAlphaType::Alpha);
         Ok(Some((w, h, bytes)))
     }
 
@@ -255,27 +255,33 @@ impl AcroformSession {
         };
         let (width_pt, height_pt) = p.render_dimensions();
         quillmark_core::backend::check_raster(scale, width_pt, height_pt)?;
-        let size = quillmark_core::backend::raster_size(scale, width_pt, height_pt);
-        let cache = RenderCache::new();
-        Ok(Some(hayro_render(
+        // The size is explicit because hayro's `render` floors the scaled page,
+        // to 0 px under one pixel, where `check_raster` counts a rounded side
+        // of at least one; `check_raster` bounds each side within `u16`.
+        let (width, height) = quillmark_core::backend::raster_size(scale, width_pt, height_pt);
+        let (width, height) = (width as u16, height as u16);
+        let mut ctx = RenderContext::new(width, height);
+        let transform =
+            Affine::scale(f64::from(scale)) * p.initial_transform(true).to_kurbo();
+        render_into(
             p,
-            &cache,
+            &RenderCache::new(),
             &standard_font_settings(),
-            &scaled_render_settings(scale, size),
-        )))
-    }
-}
-
-/// The size is explicit because hayro floors the scaled page, to 0 px under
-/// one pixel, where `check_raster` counts a rounded side of at least one.
-fn scaled_render_settings(scale: f32, (width, height): (u32, u32)) -> RenderSettings {
-    use hayro::vello_cpu::color::palette::css::WHITE;
-    RenderSettings {
-        x_scale: scale,
-        y_scale: scale,
-        width: u16::try_from(width).ok(),
-        height: u16::try_from(height).ok(),
-        bg_color: WHITE,
+            &RenderSettings::default(),
+            &mut ctx,
+            transform,
+        );
+        ctx.flush();
+        let mut pixmap = Pixmap::new(width, height);
+        ctx.render_with(
+            &mut pixmap,
+            &mut Resources::default(),
+            RasterizerSettings {
+                target_init: TargetInit::Clear(WHITE),
+                ..Default::default()
+            },
+        );
+        Ok(Some(pixmap))
     }
 }
 
