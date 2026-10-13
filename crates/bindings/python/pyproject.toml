@@ -10,7 +10,7 @@ description = "Python bindings for Quillmark - a schema-driven document engine"
 authors = [{ name = "Quillmark Contributors" }]
 readme = "README.md"
 license = "Apache-2.0"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_LICENSES.md"]
 requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 4 - Beta",
