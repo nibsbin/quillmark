@@ -162,35 +162,74 @@ function quillmarkError(code, message, hint) {
 }
 
 /**
- * `err` as `runtime::backend_trapped` when it is a WASM trap, else unchanged. A
- * trap (out of memory, a panic under `panic = "abort"`) leaves the build's
- * instance inconsistent, and the instance is module-scoped, so every later call
- * into that build traps too.
- * @param {unknown} err
- * @returns {unknown}
+ * Build module → the trap it first raised. A trap (out of memory, a panic under
+ * `panic = "abort"`) leaves the instance's borrows, stack pointer and heap
+ * undefined, and the instance is module-scoped, so nothing calls into a trapped
+ * build again: every later call rejects with this trap as its `cause`.
+ * @type {WeakMap<object, WebAssembly.RuntimeError>}
  */
-function backendTrap(err) {
-	if (!(err instanceof WebAssembly.RuntimeError)) return err;
+const trappedBuilds = new WeakMap();
+
+/**
+ * @param {WebAssembly.RuntimeError} trap
+ * @returns {Error & { diagnostics: import('../core/wasm.js').Diagnostic[] }}
+ */
+function trappedError(trap) {
 	return Object.assign(
 		quillmarkError(
 			'runtime::backend_trapped',
-			`The render build trapped (${err.message}); it cannot run again in this realm.`,
+			`The backend build trapped (${trap.message}); this realm does not run it again.`,
 			'A render ran out of memory or panicked. Discard the realm to recover: terminate the Worker or restart the process. For untrusted input, cap the document size.'
 		),
-		{ cause: err }
+		{ cause: trap }
 	);
 }
 
 /**
- * Free a per-call clone without masking an error already in flight: after a
- * trap the clone is still marked borrowed, and `free()` would throw over it.
- * @param {{ free(): void } | null} handle
+ * Throw `runtime::backend_trapped` if `mod` has trapped.
+ * @param {object} mod
  * @returns {void}
  */
-function freeClone(handle) {
+function requireUntrapped(mod) {
+	const trap = trappedBuilds.get(mod);
+	if (trap) throw trappedError(trap);
+}
+
+/**
+ * `err` as `runtime::backend_trapped` when it is a `WebAssembly.RuntimeError`,
+ * latching `mod` as trapped; else unchanged.
+ * @param {unknown} err
+ * @param {object} mod
+ * @returns {unknown}
+ */
+function backendTrap(err, mod) {
+	if (!(err instanceof WebAssembly.RuntimeError)) return err;
+	if (!trappedBuilds.has(mod)) trappedBuilds.set(mod, err);
+	return trappedError(/** @type {WebAssembly.RuntimeError} */ (trappedBuilds.get(mod)));
+}
+
+/**
+ * Run `fn` on a transient clone of `docJson` in `mod`'s memory, then free it. A
+ * call that throws can leave the clone borrowed, so its `free()` throws too, and
+ * the error in flight is the one that propagates.
+ * @param {any} mod
+ * @param {string} docJson
+ * @param {(doc: any) => any} fn
+ * @returns {any}
+ */
+function withDocClone(mod, docJson, fn) {
+	const backendDoc = mod.Document.fromStored(docJson);
+	let result;
 	try {
-		handle?.free();
-	} catch {}
+		result = fn(backendDoc);
+	} catch (err) {
+		try {
+			backendDoc.free();
+		} catch {}
+		throw err;
+	}
+	backendDoc.free();
+	return result;
 }
 
 /**
@@ -600,18 +639,16 @@ export class Engine {
 			? null
 			: quill.toTree();
 		const { mod, engine } = await this.#resolveBackend(backendId);
-		// The doc clone and `fn` share one try so the clone is freed even if a
-		// later step throws; the cached quill clone is intentionally not freed.
-		// `fn` MUST be synchronous: an async one would run against a freed clone.
-		let backendDoc = null;
+		requireUntrapped(mod);
+		// The cached quill clone is intentionally not freed. `fn` MUST be
+		// synchronous: an async one would run against a freed doc clone.
 		try {
 			const backendQuill = this.#cachedQuillClone(mod, backendId, quill, quillTree);
-			backendDoc = mod.Document.fromStored(docJson);
-			return fn({ mod, engine, quill: backendQuill, doc: backendDoc });
+			return withDocClone(mod, docJson, (backendDoc) =>
+				fn({ mod, engine, quill: backendQuill, doc: backendDoc })
+			);
 		} catch (err) {
-			throw backendTrap(err);
-		} finally {
-			freeClone(backendDoc);
+			throw backendTrap(err, mod);
 		}
 	}
 
@@ -683,46 +720,53 @@ export class LiveSession {
 	#mod;
 
 	/**
+	 * Run `fn` on the inner session unless its build has trapped, latching a trap
+	 * `fn` raises.
+	 * @template T
+	 * @param {(inner: any) => T} fn
+	 * @returns {T}
+	 */
+	#call(fn) {
+		requireUntrapped(this.#mod);
+		try {
+			return fn(this.#inner);
+		} catch (err) {
+			throw backendTrap(err, this.#mod);
+		}
+	}
+
+	/**
 	 * @param {Document} doc
 	 * @returns {import('./runtime.d.ts').ChangeSet}
 	 */
 	update(doc) {
 		requireLocalDoc(doc, 'session.update(doc)');
-		let backendDoc = null;
-		try {
-			backendDoc = this.#mod.Document.fromStored(doc.toStored());
-			return this.#inner.update(backendDoc);
-		} catch (err) {
-			throw backendTrap(err);
-		} finally {
-			freeClone(backendDoc);
-		}
+		const docJson = doc.toStored();
+		return this.#call((inner) =>
+			withDocClone(this.#mod, docJson, (backendDoc) => inner.update(backendDoc))
+		);
 	}
 
 	get pageCount() {
-		return this.#inner.pageCount;
+		return this.#call((inner) => inner.pageCount);
 	}
 	get backendId() {
-		return this.#inner.backendId;
+		return this.#call((inner) => inner.backendId);
 	}
 	get warnings() {
-		return this.#inner.warnings;
+		return this.#call((inner) => inner.warnings);
 	}
 
 	/** @param {object} [options] */
 	render(options) {
-		try {
-			return this.#inner.render(options ?? undefined);
-		} catch (err) {
-			throw backendTrap(err);
-		}
+		return this.#call((inner) => inner.render(options ?? undefined));
 	}
 
 	/**
 	 * @returns {import('./runtime.d.ts').FieldRegion[]}
 	 */
 	regions() {
-		return this.#inner.regions();
+		return this.#call((inner) => inner.regions());
 	}
 
 	/**
@@ -730,14 +774,14 @@ export class LiveSession {
 	 * @returns {import('./runtime.d.ts').FieldRegion[]}
 	 */
 	fieldBoxes(field) {
-		return this.#inner.fieldBoxes(field);
+		return this.#call((inner) => inner.fieldBoxes(field));
 	}
 
 	/**
 	 * @returns {import('./runtime.d.ts').FieldCoverage[]}
 	 */
 	coverage() {
-		return this.#inner.coverage();
+		return this.#call((inner) => inner.coverage());
 	}
 
 	/**
@@ -748,7 +792,7 @@ export class LiveSession {
 	 * @returns {string | undefined}
 	 */
 	fieldAt(page, x, y, tolPt) {
-		return this.#inner.fieldAt(page, x, y, tolPt);
+		return this.#call((inner) => inner.fieldAt(page, x, y, tolPt));
 	}
 
 	/**
@@ -759,7 +803,7 @@ export class LiveSession {
 	 * @returns {import('./runtime.d.ts').ContentHit | undefined}
 	 */
 	positionAt(page, x, y, tolPt) {
-		return this.#inner.positionAt(page, x, y, tolPt);
+		return this.#call((inner) => inner.positionAt(page, x, y, tolPt));
 	}
 
 	/**
@@ -768,12 +812,12 @@ export class LiveSession {
 	 * @returns {import('./runtime.d.ts').FieldRegion | undefined}
 	 */
 	locate(field, pos) {
-		return this.#inner.locate(field, pos);
+		return this.#call((inner) => inner.locate(field, pos));
 	}
 
 	/** @param {number} page */
 	pageSize(page) {
-		return this.#inner.pageSize(page);
+		return this.#call((inner) => inner.pageSize(page));
 	}
 
 	/**
@@ -782,15 +826,12 @@ export class LiveSession {
 	 * @param {number} scale
 	 */
 	paint(ctx, page, scale) {
-		try {
-			this.#inner.paint(ctx, page, scale);
-		} catch (err) {
-			throw backendTrap(err);
-		}
+		this.#call((inner) => inner.paint(ctx, page, scale));
 	}
 
+	/** A no-op once the build has trapped: nothing calls into it again. */
 	free() {
-		this.#inner.free();
+		if (!trappedBuilds.has(this.#mod)) this.#inner.free();
 	}
 }
 

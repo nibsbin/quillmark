@@ -1098,9 +1098,11 @@ main:
     }
   })
 
-  it('a trapped render rejects as runtime::backend_trapped, not as the borrowed clone', async () => {
+  it('a trap rejects as runtime::backend_trapped, and so does every later call into that build', async () => {
     // A trap leaves the doc clone borrowed, so its `free()` throws; the
-    // rejection must still be the trap.
+    // rejection must still be the trap. The stand-in traps once and would
+    // render afterwards, so a later rejection is the latch, not a second trap.
+    let trapped = false
     const engine = new Engine({
       backends: {
         typst: {
@@ -1114,7 +1116,9 @@ main:
                     const free = doc.free.bind(doc)
                     doc.free = () => {
                       free()
-                      throw new Error('attempted to take ownership of Rust value while it was borrowed')
+                      if (trapped) {
+                        throw new Error('attempted to take ownership of Rust value while it was borrowed')
+                      }
                     }
                     return doc
                   }
@@ -1122,15 +1126,19 @@ main:
                 return Reflect.get(target, prop, receiver)
               },
             })
-            class TrappingQuillmark {
-              render() {
-                throw new WebAssembly.RuntimeError('unreachable')
+            class TrapOnceQuillmark extends real.Quillmark {
+              render(...args) {
+                if (!trapped) {
+                  trapped = true
+                  throw new WebAssembly.RuntimeError('unreachable')
+                }
+                return super.render(...args)
               }
             }
             return new Proxy(real, {
               get(target, prop, receiver) {
                 if (prop === 'Document') return borrowedDocument
-                if (prop === 'Quillmark') return TrappingQuillmark
+                if (prop === 'Quillmark') return TrapOnceQuillmark
                 return Reflect.get(target, prop, receiver)
               },
             })
@@ -1139,11 +1147,17 @@ main:
         },
       },
     })
-    const err = await engine
-      .render(makeRuntimeQuill(), Document.fromMarkdown(TEST_MARKDOWN))
-      .catch((e) => e)
-    expect(err.diagnostics[0].code).toBe('runtime::backend_trapped')
-    expect(err.cause).toBeInstanceOf(WebAssembly.RuntimeError)
+    const quill = makeRuntimeQuill()
+    const render = () =>
+      engine.render(quill, Document.fromMarkdown(TEST_MARKDOWN), { format: 'svg' }).catch((e) => e)
+
+    const first = await render()
+    expect(first.diagnostics[0].code).toBe('runtime::backend_trapped')
+    expect(first.cause).toBeInstanceOf(WebAssembly.RuntimeError)
+
+    const later = await render()
+    expect(later.diagnostics[0].code).toBe('runtime::backend_trapped')
+    expect(later.cause).toBe(first.cause)
   })
 
   it('propagates a clone-construction failure (doc clone), leaving the quill clone cached', async () => {
