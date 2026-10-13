@@ -1,6 +1,6 @@
 site_name: Quillmark
-site_description: A schema-driven document engine
-site_url: https://borb-sh.github.io/quillmark
+site_description: Render Markdown into typeset PDF, SVG, and PNG documents through a schema-validated format
+site_url: https://quillmark.dev/
 repo_url: https://github.com/borb-sh/quillmark
 repo_name: borb-sh/quillmark
 edit_uri: edit/main/docs/
@@ -52,6 +52,7 @@ nav:
       - Error Handling: integration/error-handling.md
       - Persistence: integration/persistence.md
       - Operations: integration/operations.md
+      - Live Preview: integration/live-preview.md
   - CLI:
       - Reference: cli/reference.md
   - Reference:
@@ -63,6 +64,10 @@ nav:
 # the nav carries only the overview.
 not_in_nav: |
   /migrations/*.md
+
+# Gallery sources are shown on the home page, not served as pages.
+exclude_docs: |
+  /assets/gallery/*.md
 
 markdown_extensions:
   - pymdownx.highlight:

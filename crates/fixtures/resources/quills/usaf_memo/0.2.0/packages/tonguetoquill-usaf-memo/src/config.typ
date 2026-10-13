@@ -19,8 +19,8 @@
 // =============================================================================
 // AFH 33-337 §5: "Use 12 point Times New Roman font for text"
 
-#let DEFAULT_LETTERHEAD_FONTS = ("Copperplate CC", "NimbusRomNo9L")
-#let DEFAULT_BODY_FONTS = ("NimbusRomNo9L",)  // AFH 33-337 §5: Times New Roman required; NimbusRomNo9L is a metric-compatible clone
+#let DEFAULT_LETTERHEAD_FONTS = ("Copperplate CC", "TeX Gyre Termes")
+#let DEFAULT_BODY_FONTS = ("TeX Gyre Termes",)  // AFH 33-337 §5: Times New Roman required; TeX Gyre Termes is a metric-compatible clone
 // Static monospace face for raw/code text. Liberation Mono is metric-compatible with
 // Courier New; only the regular weight is bundled (no bold or italic variants).
 #let DEFAULT_MONO_FONTS = ("Liberation Mono",)

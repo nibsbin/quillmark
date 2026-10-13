@@ -21,7 +21,8 @@ fn map_single_diagnostic(error: &SourceDiagnostic, world: &QuillWorld) -> Diagno
         typst::diag::Severity::Warning => Severity::Warning,
     };
 
-    let location = resolve_span_to_location(error.span, world);
+    let span = helper_call_site(error).unwrap_or(error.span);
+    let location = resolve_span_to_location(span, world);
 
     let hint = error
         .hints
@@ -35,6 +36,26 @@ fn map_single_diagnostic(error: &SourceDiagnostic, world: &QuillWorld) -> Diagno
     diag.location = location;
     diag.hint = hint;
     diag
+}
+
+/// An error raised inside the helper's generated source points at a file the
+/// author neither wrote nor can open: the innermost call outside the helper is
+/// the call site that passed the bad argument.
+fn helper_call_site(error: &SourceDiagnostic) -> Option<DiagSpan> {
+    if !is_helper(error.span.id()?) {
+        return None;
+    }
+    error
+        .trace
+        .iter()
+        .map(|point| DiagSpan::from(point.span))
+        .find(|span| span.id().is_some_and(|id| !is_helper(id)))
+}
+
+fn is_helper(file: FileId) -> bool {
+    matches!(file.root(), VirtualRoot::Package(spec)
+        if spec.namespace == crate::helper::HELPER_NAMESPACE
+            && spec.name == crate::helper::HELPER_NAME)
 }
 
 const FILE_NOT_FOUND: &str = "file not found (searched at ";
@@ -277,6 +298,22 @@ mod tests {
             "the searched path stays in the message: {}",
             diag.message
         );
+    }
+
+    #[test]
+    fn a_helper_assert_locates_at_the_plate_call() {
+        let source = source_with_plate(
+            "#import \"@local/quillmark-helper:0.2.0\" as qm\n\n#qm.ink(qm.data, \"no_such_field\")\n",
+        );
+        let diags = match TypstBackend.open(&source, &serde_json::json!({}), test_date()) {
+            Ok(session) => session
+                .render(&RenderOptions::default().with_output_format(OutputFormat::Pdf))
+                .expect_err("an unknown ink address should fail to compile")
+                .into_diagnostics(),
+            Err(err) => err.into_diagnostics(),
+        };
+        let location = diags[0].location.as_ref().expect("a located diagnostic");
+        assert_eq!((location.file.as_str(), location.line), ("plate.typ", 3));
     }
 
     const EVAL_ERROR_PLATE: &str =

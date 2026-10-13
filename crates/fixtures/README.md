@@ -25,4 +25,14 @@ let usaf_memo = quillmark_fixtures::quills_path("usaf_memo");
 
 ## License
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](../../LICENSE) for details.
+Apache-2.0 ([LICENSE](../../LICENSE)), except the third-party files below, each under its own license:
+
+| Path under `resources/quills/` | License |
+|---|---|
+| `usaf_memo/0.2.0/packages/tonguetoquill-usaf-memo/` | MIT ([LICENSE](resources/quills/usaf_memo/0.2.0/packages/tonguetoquill-usaf-memo/LICENSE)) |
+| `…/tonguetoquill-usaf-memo/fonts/Cinzel/`, `CopperplateCC/`, `LiberationMono/` | SIL Open Font License 1.1, text beside each font |
+| `…/tonguetoquill-usaf-memo/fonts/TeXGyreTermes/` | GUST Font License, text beside the fonts |
+| `taro/0.1.0/assets/fonts/` (Figtree) | SIL Open Font License 1.1 ([OFL.txt](resources/quills/taro/0.1.0/assets/fonts/OFL.txt)) |
+| `usaf_memo/0.2.0/assets/dod_seal.png`, `dow_seal.png` | United States government insignia: not licensed, and their use is restricted by law |
+
+The `usaf_memo` quill reproduces the format of AFH 33-337 correspondence. Quillmark is not affiliated with or endorsed by the Department of Defense, the Department of the Air Force, or any Military Service.
