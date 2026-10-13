@@ -16,6 +16,8 @@
     "render",
     "runtime",
     "CHANGELOG.md",
+    "NOTICE",
+    "THIRD_PARTY_LICENSES.md",
     "sbom.cdx.json"
   ],
   "main": "./runtime/runtime.js",

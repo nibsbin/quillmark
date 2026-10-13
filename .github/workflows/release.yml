@@ -222,17 +222,20 @@ jobs:
             --exclude quillmark-python \
             --exclude quillmark-fixtures
 
-      # `include` lists `LICENSE*`, which resolves against the package
-      # directory, not the workspace root; each published crate carries a
-      # symlink so the Apache-2.0 text actually ships (Apache-2.0 §4(a)).
-      - name: Every published crate ships its license text
+      # `include` lists `LICENSE*` and `NOTICE`, which resolve against the
+      # package directory, not the workspace root; each published crate carries
+      # symlinks so the Apache-2.0 text and the NOTICE actually ship
+      # (Apache-2.0 §4(a), §4(d)).
+      - name: Every published crate ships its license text and NOTICE
         run: |
           status=0
           for crate in target/package/*.crate; do
-            if ! tar tzf "$crate" | grep -qE '/LICENSE$'; then
-              echo "::error::$(basename "$crate") ships no LICENSE"
-              status=1
-            fi
+            for legal in LICENSE NOTICE; do
+              if ! tar tzf "$crate" | grep -qE "/$legal\$"; then
+                echo "::error::$(basename "$crate") ships no $legal"
+                status=1
+              fi
+            done
           done
           exit $status
 
@@ -374,8 +377,10 @@ jobs:
       - name: Pack @quillmark/wasm
         working-directory: pkg
         run: |
-          if ! npm pack --json | jq -e '.[0].files | any(.path == "sbom.cdx.json")' >/dev/null; then
-            echo "pkg/sbom.cdx.json is not in the package, refusing to publish." >&2
+          if ! npm pack --json | jq -e '[.[0].files[].path] as $p
+            | ["sbom.cdx.json", "LICENSE", "NOTICE", "THIRD_PARTY_LICENSES.md"]
+            | all(. as $f | $p | index($f))' >/dev/null; then
+            echo "pkg/ lacks the SBOM or a license text, refusing to publish." >&2
             exit 1
           fi
 
