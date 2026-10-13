@@ -40,7 +40,7 @@ A document is data. Its text reaches a plate escaped, never as Typst code, and i
 
 A quill is code. A plate is a Typst program, and an acroform quill's `form.pdf` is parsed in full; `quill_from_path` skips symlinks, refuses any file over 50 MiB, and caps neither file count nor total size. Load a quill from someone you do not trust inside the same bounded worker as its renders.
 
-SVG output keeps links as live `href`s. A Markdown link in a body or rich-text field whose scheme is `javascript:`, `vbscript:`, `data:` or `file:`, or whose scheme holds an `&`, renders as its text alone. A plate that links a field value itself (`#link(..)`) passes it through as written, so that plate vets the value. An SVG placed inline in a page is the page's markup: show SVG from untrusted documents through `<img>`, or sanitize it first.
+SVG output keeps links as live `href`s. A Markdown link in a body or rich-text field whose scheme is `javascript:`, `vbscript:`, `data:` or `file:` renders as its text alone. A plate that links a field value itself (`#link(..)`) passes it through as written, so that plate vets the value. An SVG placed inline in a page is the page's markup: show SVG from untrusted documents through `<img>`, or sanitize it first.
 
 ## Failure modes
 
