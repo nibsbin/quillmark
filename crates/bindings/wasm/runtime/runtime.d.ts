@@ -440,6 +440,11 @@ export declare class Engine {
 	 *
 	 * `today` reads as on {@link open}. An `options` key outside
 	 * {@link RenderOptions} rejects, `today` among them.
+	 *
+	 * A compile that traps (out of memory, a panic) rejects as
+	 * `runtime::backend_trapped`, the `WebAssembly.RuntimeError` on `cause`, as
+	 * does a trap in {@link LiveSession}'s `update` / `render` / `paint`. The
+	 * build's state is then undefined: discard the realm.
 	 */
 	render(quill: Quill, doc: Document, options?: RenderOptions, today?: string): Promise<RenderResult>;
 

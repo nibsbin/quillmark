@@ -11,6 +11,7 @@ mod elements;
 /// Content → Typst-markup lowering plus its per-segment source map.
 mod emit;
 mod error_mapping;
+mod glyphs;
 
 mod helper;
 mod overlay;
@@ -104,6 +105,7 @@ fn recompile(
         compile_warnings,
         &unclosed,
         elements::unregistered(&document, config, data),
+        glyphs::missing(typst::World::book(&*world), data),
     );
     Ok(Compiled {
         document,
@@ -124,6 +126,7 @@ fn session_warnings(
     compile: Vec<Diagnostic>,
     unclosed: &[(usize, String)],
     unregistered: Vec<Diagnostic>,
+    missing_glyphs: Option<Diagnostic>,
 ) -> Vec<Diagnostic> {
     let mut all = world.load_warnings().to_vec();
     all.extend(compile);
@@ -140,6 +143,7 @@ fn session_warnings(
         )
     }));
     all.extend(unregistered);
+    all.extend(missing_glyphs);
     all
 }
 

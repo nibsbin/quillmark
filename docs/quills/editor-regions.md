@@ -122,3 +122,19 @@ A card's own fields need no claim: print them through `qm.ink(card, ..)`.
 - Emit the call's return value whole. Splitting it — passing `.children` through separately, say — can land the opening marker in a frame without its closing one. Such a claim is bounded by nothing, so rather than let it take every unattributed piece of ink to the end of the document it is dropped entirely and reported as a `typst::unclosed_region` warning naming the field.
 
 The label `<__qm_region__>` and metadata `kind: "__qm_region__"` are reserved for this hand-off: the same `query(metadata)` caveat applies.
+
+## The address an app reads
+
+A plate spells an address in plate space; `session.regions()`, `fieldAt`, `Diagnostic.path` and `quillmark check --regions` report the same place as a document path. The two count cards differently: plate space by kind, a document path by position in the document. With cards `note`, `annotation`, `note` in that order:
+
+| Plate space (`qm.region`, `qm.ink`; `form.json` binds fields, not bodies) | Document path (regions, diagnostics) |
+|---|---|
+| `classification` | `main.classification` |
+| `refs.0.org` | `main.refs[0].org` |
+| `$body` | `main.body` |
+| `$cards.note.0.topic` | `cards.note[0].topic` |
+| `$cards.note.1.topic` | `cards.note[2].topic` |
+| `$cards.annotation.0.text` | `cards.annotation[1].text` |
+| `$cards.note.1.$body` | `cards.note[2].body` |
+
+`cards.note[2]` is the document's third card, which is a `note`; `$cards.note.1` is its second `note`. Key an editor's click map on the document path the session reports, never on the spelling the plate uses.

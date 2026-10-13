@@ -8,11 +8,11 @@ One thing never reaches a diagnostic: an argument the binding cannot convert at 
 
 | Field | Meaning |
 |---|---|
-| `severity` | `Error` (blocks its stage) or `Warning` (never blocks) |
+| `severity` | `Error` (blocks its stage) or `Warning` (never blocks): `Severity.ERROR` / `Severity.WARNING` in Python, `"error"` / `"warning"` in JavaScript |
 | `code` | Namespaced id; e.g. `parse::missing_quill`, `validation::type_mismatch`, `quill::version_mismatch`: the machine-routable identity |
 | `message` | Human-readable text |
 | `location` | Optional text anchor: `file`, `line` (1-based), `column` |
-| `path` | Optional document-model anchor: `main.recipient`, `cards.indorsement[0].author` |
+| `path` | Optional document-model anchor: `main.recipient`, `cards.indorsement[0].author` (the document's first card, an `indorsement`; [card numbering](../quills/editor-regions.md#the-address-an-app-reads)) |
 | `hint` | Optional actionable suggestion |
 
 `location` (where in the source text) and `path` (which field in the model) are independent and may co-exist.
@@ -36,9 +36,12 @@ One thing never reaches a diagnostic: an argument the binding cannot convert at 
 === "JavaScript"
 
     ```javascript
+    import { isQuillmarkError } from "@quillmark/wasm";
+
     try {
       const result = await engine.render(quill, doc, { format: "pdf" });
     } catch (err) {
+      if (!isQuillmarkError(err)) throw err;
       for (const d of err.diagnostics) {     // always non-empty
         console.error(d.severity, d.code, d.message);
       }
@@ -51,7 +54,9 @@ A multi-problem stage (validation, quill config, backend compile) reports **ever
 
 The `code` namespaces are the routing surface:
 
-`parse::*` · `validation::*` · `quill::*` · `edit::*` (mutators) · `typst::*` · `acroform::*` · `pdf::*` (the AcroForm stamping spine both PDF-producing backends share) · `backend::*` · `engine::*`.
+`parse::*` · `validation::*` · `quill::*` · `edit::*` (mutators) · `conform::*` (`Quill::conform` warnings) · `typst::*` · `acroform::*` · `pdf::*` (the AcroForm stamping spine both PDF-producing backends share) · `backend::*` · `engine::*` · `cli::*` · `runtime::*` (the JavaScript runtime).
+
+[Diagnostic Codes](../reference/diagnostic-codes.md) lists every code.
 
 Notable codes: `quill::name_mismatch` / `quill::version_mismatch` (a well-formed document paired with the wrong quill; see [Versioning](../quills/versioning.md)); `engine::backend_not_found` (the quill's declared backend is not registered); `parse::input_too_large`, which carries the two byte-sized [§8 caps](../reference/markdown-spec.md#8-limits) — document size and YAML payload size — distinguished only by its `max` arg, while the count caps arrive as `parse::too_many_cards` and `parse::too_many_fields` (args `count`, `max`) and an over-deep payload as `parse::yaml_error_with_location`.
 

@@ -924,6 +924,7 @@ fn wraps_and_codes(marks: &[Mark], lo: usize, hi: usize) -> (Vec<Wrap>, Vec<(usi
                 wraps.push(Wrap { start: s, end: e, open: "#underline[".into() })
             }
             MarkKind::Strike => wraps.push(Wrap { start: s, end: e, open: "#strike[".into() }),
+            MarkKind::Link { url } if unsafe_link(url) => {}
             MarkKind::Link { url } => wraps.push(Wrap {
                 start: s,
                 end: e,
@@ -935,6 +936,25 @@ fn wraps_and_codes(marks: &[Mark], lo: usize, hi: usize) -> (Vec<Wrap>, Vec<(usi
     }
     codes.sort_unstable();
     (wraps, codes)
+}
+
+/// Whether `url` names a scheme a viewer may run or read locally rather than
+/// navigate to (markdown-it's `validateLink` set), read past the whitespace and
+/// controls a browser strips. Such a link renders as its text alone: SVG output
+/// keeps a link target as a live `href`, its `&` unescaped, so an XML reader
+/// decodes `jav&#x61;script:` to `javascript:`. An `&` before the path is
+/// refused for that reason.
+fn unsafe_link(url: &str) -> bool {
+    let head: String = url
+        .chars()
+        .filter(|c| !c.is_whitespace() && !c.is_control())
+        .take_while(|c| !matches!(c, '/' | '?' | '#'))
+        .collect();
+    if head.contains('&') {
+        return true;
+    }
+    let Some((scheme, _)) = head.split_once(':') else { return false };
+    matches!(scheme.to_ascii_lowercase().as_str(), "javascript" | "vbscript" | "file" | "data")
 }
 
 /// `#_qm-element(name, attrs)`, a call to the helper's dispatcher before its
@@ -1951,6 +1971,19 @@ mod tests {
             "reopen must not borrow the outer link's URL, got {out:?}"
         );
         assert!(balanced(&out));
+    }
+
+    #[test]
+    fn script_scheme_links_render_as_text() {
+        for url in ["javascript:alert(1)", " JavaScript:x", "java\tscript:x", "vbscript:x", "data:text/html,x", "file:///etc/passwd", "jav&#x61;script:x", "javascript&#58;x", "javascript&colon;x"] {
+            let out = emit_marked("abc", vec![Mark::new(0, 3, MarkKind::Link { url: url.into() })]);
+            assert!(!out.contains("#link"), "{url:?} kept its link, got {out:?}");
+            assert!(out.contains("abc"), "{url:?} lost its text, got {out:?}");
+        }
+        for url in ["https://example.com", "mailto:a@b.c", "#anchor", "data/notes.txt", "https://e.com/?a=1&b=2", "/p?q=a&b"] {
+            let out = emit_marked("abc", vec![Mark::new(0, 3, MarkKind::Link { url: url.into() })]);
+            assert!(out.contains("#link"), "{url:?} lost its link, got {out:?}");
+        }
     }
 
     /// `columns: 0` fails to compile.

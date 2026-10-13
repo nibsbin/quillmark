@@ -2,7 +2,7 @@
 
 `quillmark`, the command-line interface to [Quillmark](https://github.com/borb-sh/quillmark): renders Markdown with card-yaml blocks through a quill into PDF, SVG, or PNG.
 
-Maintained by [TTQ](https://tonguetoquill.com).
+Maintained by [borb-sh](https://github.com/borb-sh).
 
 ## Installation
 
@@ -34,18 +34,24 @@ release plates compile against.
 ## Quick start
 
 ```bash
+# Write a document to fill in: the quill's annotated blueprint
+quillmark blueprint my_quill > document.md
+
 # Render a document; output defaults to document.pdf
-quillmark render ./quills/usaf_memo document.md
+quillmark render my_quill document.md
 
 # Omit the markdown file to render the quill's seeded document
-quillmark render ./quills/usaf_memo -o preview.pdf
+quillmark render my_quill -o preview.pdf
 
 # Every diagnostic a document draws; --strict fails on warnings too
-quillmark check --strict ./quills/usaf_memo document.md
+quillmark check --strict my_quill document.md
 
 # Pipe the artifact instead of writing a file
-quillmark render ./quills/usaf_memo document.md --stdout | evince -
+quillmark render my_quill document.md --stdout | lpr
 ```
+
+`my_quill` is a quill directory, the one holding `Quill.yaml`. The
+[Quickstart](https://borb-sh.github.io/quillmark/getting-started/quickstart/) builds one.
 
 ## Commands
 
@@ -69,11 +75,14 @@ page leaves out. A render that fails still prints the parse and validation
 warnings ahead of its error, and after them the backend's warnings from loading
 the quill, such as a package skipped for its manifest.
 
-### `quillmark check [--strict] <QUILL_PATH> <MARKDOWN_FILE>...`
+### `quillmark check [--strict] [--regions] <QUILL_PATH> <MARKDOWN_FILE>...`
 
-Checks documents against the quill's schema and prints every diagnostic,
-without compiling the plate. Exits 1 where a
-document draws an error; `--strict` exits 1 on any warning too, for CI.
+Checks documents against the quill's schema and prints every diagnostic.
+Without `--regions` it does not compile the plate. Exits 1 where a document
+draws an error; `--strict` exits 1 on any warning too, for CI. `--regions`
+renders each document that drew no error and lists the filled fields no click
+on the page reaches, and those only an enclosing field's region reaches; the
+list never moves the exit code.
 
 ### `quillmark schema <QUILL_PATH>`
 

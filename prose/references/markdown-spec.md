@@ -83,7 +83,7 @@ A card-yaml block has three parts, in order:
 2. **YAML payload**: a standard YAML mapping containing both system
    metadata (`$`-prefixed reserved keys; see §3.3) and the block's data
    fields (see §3.4).
-3. **Closing fence**: exactly `~~~` (see §3.2).
+3. **Closing fence**: `~~~`, at least as long as the opener (see §3.2).
 
 The prose body begins immediately after the closing `~~~` fence and runs to
 the next opening fence or EOF.
@@ -692,6 +692,10 @@ error when any is exceeded:
 A conforming parser MUST also bound YAML nesting depth, at whatever depth
 its YAML parser accepts, so that deeply nested input is refused rather than
 exhausting the stack. The depth itself is the parser's to choose.
+
+A block is refused as a YAML parse error when, with its aliases expanded, its
+scalar and tag bytes pass twice the block's bytes plus 4 KiB, or its nodes pass
+the block's bytes plus 4 KiB, so a block's value stays linear in its source.
 
 A block whose comments and tags record more than 64 bytes of path per byte of
 the block, plus 64 KiB, is refused as `parse::invalid_structure`: each comment

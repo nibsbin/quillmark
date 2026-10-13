@@ -222,6 +222,11 @@ families:
   plate renders ride the hint. It rides the session's compile warnings. The
   registry is plate code, so `validate`, which compiles nothing, has no twin
   for it.
+- **`typst::missing_glyph`: input no font draws.** The Typst compile warns
+  once, naming each character of the plate data's strings that no font the
+  world loaded covers, whitespace and default-ignorables aside. Typst draws
+  such a character as a `.notdef` box, or as nothing, and reports neither.
+  It rides the session's compile warnings.
 - **Compile warnings**: the Typst backend maps the compiler's non-fatal
   diagnostics (font fallback, overfull pages, …) through the same span
   resolution as errors. They are state of the session's current compile:
@@ -253,6 +258,7 @@ Python and WASM bindings delegate to core types:
 **WASM delivery follows the function kind, not the failure kind.** A synchronous verb throws; a promise-returning verb rejects; nothing does both.
 
 - The promise-returning surface is `init` plus the four `Engine` verbs (`render`, `open`, `load`, `supportedFormats`). A programming error reached through one of them (a handle that is not this copy's, `runtime::not_a_quill` / `runtime::not_a_document`; an unregistered backend, `engine::backend_not_found`) arrives as a rejection like any other failure.
+- A `WebAssembly.RuntimeError` from a backend build's `render`, `open`, or `LiveSession` `update` / `render` / `paint` becomes `runtime::backend_trapped`, the trap on `cause`. The trap leaves the module-scoped instance undefined; the host discards the realm.
 - `init` is the one promise-returning export not declared `async`: its memo is returned by identity rather than re-wrapped per call. Its conflict guard therefore returns `Promise.reject(runtime::init_conflict)` where an `async` body would have converted a throw.
 - A synchronous throw from `init` would lose the rule at exactly one export, and silently: `Promise<void>` cannot declare it, so the declaration invites `init(BYTES).catch(…)` and the throw escapes.
 
@@ -394,7 +400,9 @@ confused with it:
   ([CARDS.md](CARDS.md)), and the plate-space geometry address a plate's `$path`
   mints: a `.`-separated run under an optional `$cards.<kind>.<ordinal>` head,
   where an all-digit segment is an array index (`references.0`) and `$body` the
-  body terminal. A template-author contract (`qm.form-field(field: "refs.2")`,
+  body terminal. The ordinal counts cards of that kind, where a `DocPath` card
+  index counts every card (with cards `note`, `annotation`, `note`,
+  `$cards.note.1` is `cards.note[2]`). A template-author contract (`qm.form-field(field: "refs.2")`,
   `qm.ink(..)`, every published `form.json`), so it keeps its own spelling
   (renaming it is a blast radius) and translates to `DocPath` before it crosses.
 - **Schema-space coercion anchors**: `CoercionError` keeps its own

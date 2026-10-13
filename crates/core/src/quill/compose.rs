@@ -1021,22 +1021,41 @@ fn variant_owner<'a>(
     })
 }
 
-/// The candidate `key` most likely misspells: the closest by edit distance,
-/// ignoring case, within a third of the key's length (at least one edit). The
-/// earliest declared wins a tie.
+/// The candidate `key` most likely misspells, ignoring case: the closest by
+/// edit distance within a quarter of the key's length (at least one edit),
+/// a tie going to the longest shared prefix, then to the earliest declared.
+/// With none that close, the one candidate `key` is a prefix of.
 fn nearest_name<'a>(key: &str, candidates: &[&'a str]) -> Option<&'a str> {
     let key_lower = key.to_lowercase();
     let len = key_lower.chars().count();
-    let limit = (key.chars().count() / 3).max(1);
-    candidates
+    let limit = (len / 4).max(1);
+    let shared = |lower: &str| {
+        key_lower
+            .chars()
+            .zip(lower.chars())
+            .take_while(|(a, b)| a == b)
+            .count()
+    };
+    let lowered: Vec<(String, &'a str)> =
+        candidates.iter().map(|&c| (c.to_lowercase(), c)).collect();
+    let nearest = lowered
         .iter()
-        .map(|&c| (c.to_lowercase(), c))
         // Edit distance is at least the length difference.
         .filter(|(lower, _)| lower.chars().count().abs_diff(len) <= limit)
-        .map(|(lower, c)| (edit_distance(&key_lower, &lower), c))
-        .filter(|&(d, _)| d <= limit)
-        .min_by_key(|&(d, _)| d)
-        .map(|(_, c)| c)
+        .map(|(lower, c)| (edit_distance(&key_lower, lower), std::cmp::Reverse(shared(lower)), *c))
+        .filter(|&(d, _, _)| d <= limit)
+        .min_by_key(|&(d, prefix, _)| (d, prefix))
+        .map(|(_, _, c)| c);
+    nearest.or_else(|| {
+        let mut extended = lowered
+            .iter()
+            .filter(|(lower, _)| len >= 3 && lower.starts_with(&key_lower))
+            .map(|(_, c)| *c);
+        match (extended.next(), extended.next()) {
+            (Some(only), None) => Some(only),
+            _ => None,
+        }
+    })
 }
 
 /// Optimal-string-alignment distance: insertions, deletions, substitutions,
@@ -1886,5 +1905,24 @@ main:
             plate["subtitle"], "",
             "the blank string does the same: one spelling of \"explicitly nothing\" for both"
         );
+    }
+
+    #[test]
+    fn nearest_name_ranks_misspellings_and_extends_a_truncated_key() {
+        let declared = [
+            "memo_for", "memo_from", "from_address", "signature_block", "font_size",
+            "font_family", "distribution",
+        ];
+        for (key, expected) in [
+            ("to_address", None),
+            ("memo_fro", Some("memo_from")),
+            ("memo_fr", Some("memo_for")),
+            ("signature", Some("signature_block")),
+            ("distrib", Some("distribution")),
+            ("font", None),
+            ("Memo_For", Some("memo_for")),
+        ] {
+            assert_eq!(nearest_name(key, &declared), expected, "{key}");
+        }
     }
 }

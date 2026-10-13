@@ -1,0 +1,47 @@
+name: Bug report
+description: Quillmark parsed, validated, or rendered something wrong, or failed where it should not.
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options:
+        - Rust crate
+        - Python (quillmark on PyPI)
+        - JavaScript (@quillmark/wasm)
+        - CLI (quillmark-cli)
+        - Other (docs site, a bundled quill, not sure)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Quillmark version
+      description: "`quillmark --version`, `quillmark.__version__`, or the version in your lockfile."
+    validations:
+      required: true
+  - type: input
+    id: quill
+    attributes:
+      label: Quill
+      description: "The quill's `name@version`, with a link if it is public."
+  - type: textarea
+    id: quill_source
+    attributes:
+      label: Quill.yaml and plate
+      description: Only if the quill is not public.
+  - type: textarea
+    id: document
+    attributes:
+      label: Smallest document that reproduces it
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened, and what you expected
+      description: Paste the full diagnostic, including its code (such as `quill::version_mismatch`).
+    validations:
+      required: true

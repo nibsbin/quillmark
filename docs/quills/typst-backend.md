@@ -254,7 +254,7 @@ and the failed render carries the warning after that error.
 
 ## Fonts
 
-A Quill carries its own fonts. The backend loads every `.ttf`, `.otf`, `.ttc` and `.otc` under `assets/fonts/` and inside vendored `packages/`. A `.ttc` or `.otc` collection loads every face it holds. An asset font wins a family a package also ships. A Quill bundling none renders in the embedded Roboto, upright and italic, at any weight from 100 to 900. The host's installed fonts are not among them, so `#set text(font: "Arial")` names a family the compile cannot find.
+A Quill carries its own fonts. The backend loads every `.ttf`, `.otf`, `.ttc` and `.otc` under `assets/fonts/` and inside vendored `packages/`. A `.ttc` or `.otc` collection loads every face it holds. An asset font wins a family a package also ships. A Quill bundling none renders in the embedded Roboto, upright and italic, at any weight from 100 to 900. The host's installed fonts are not among them, so `#set text(font: "Arial")` names a family the compile cannot find. A character in the document's data that no loaded font covers draws as an empty box or as nothing, and the render warns `typst::missing_glyph` naming it.
 
 To bundle fonts with the Quill, drop them in `assets/fonts/`:
 
@@ -432,8 +432,8 @@ result = engine.render(quill, doc, OutputFormat.PDF)   # or .SVG, .PNG
 WASM/JS binding (rendering lives on the engine, not the quill):
 
 ```javascript
-engine.render(quill, doc, { format: 'png' });           // 144 PPI
-engine.render(quill, doc, { format: 'png', ppi: 300 });  // print quality
+await engine.render(quill, doc, { format: 'png' });           // 144 PPI
+await engine.render(quill, doc, { format: 'png', ppi: 300 });  // print quality
 ```
 
 PNG resolution is set via the `ppi` option (default **144**, 2× at 72pt/inch, suitable for retina previews):

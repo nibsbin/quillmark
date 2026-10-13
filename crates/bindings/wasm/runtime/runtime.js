@@ -162,6 +162,48 @@ function quillmarkError(code, message, hint) {
 }
 
 /**
+ * `err` as `runtime::backend_trapped` when it is a `WebAssembly.RuntimeError`,
+ * else unchanged.
+ * @param {unknown} err
+ * @returns {unknown}
+ */
+function backendTrap(err) {
+	if (!(err instanceof WebAssembly.RuntimeError)) return err;
+	return Object.assign(
+		quillmarkError(
+			'runtime::backend_trapped',
+			`The backend build trapped (${err.message}); its state is now undefined.`,
+			'A render ran out of memory or panicked. Discard the realm before rendering again: terminate the Worker or restart the process. For untrusted input, cap the document size.'
+		),
+		{ cause: err }
+	);
+}
+
+/**
+ * Run `fn` on a transient clone of `docJson` in `mod`'s memory, then free it. A
+ * call that throws can leave the clone borrowed, so its `free()` throws too, and
+ * the error in flight is the one that propagates.
+ * @param {any} mod
+ * @param {string} docJson
+ * @param {(doc: any) => any} fn
+ * @returns {any}
+ */
+function withDocClone(mod, docJson, fn) {
+	const backendDoc = mod.Document.fromStored(docJson);
+	let result;
+	try {
+		result = fn(backendDoc);
+	} catch (err) {
+		try {
+			backendDoc.free();
+		} catch {}
+		throw err;
+	}
+	backendDoc.free();
+	return result;
+}
+
+/**
  * Throw on options that are not a plain object, or on a key of them, or of a
  * null-prototype object they inherit from, outside `known`. The JS twin of the
  * binding's `reject_unknown_keys`, in the uncoded shape it throws: a misspelled
@@ -568,16 +610,15 @@ export class Engine {
 			? null
 			: quill.toTree();
 		const { mod, engine } = await this.#resolveBackend(backendId);
-		// The doc clone and `fn` share one try so the clone is freed even if a
-		// later step throws; the cached quill clone is intentionally not freed.
-		// `fn` MUST be synchronous: an async one would run against a freed clone.
-		const backendQuill = this.#cachedQuillClone(mod, backendId, quill, quillTree);
-		let backendDoc = null;
+		// The cached quill clone is intentionally not freed. `fn` MUST be
+		// synchronous: an async one would run against a freed doc clone.
 		try {
-			backendDoc = mod.Document.fromStored(docJson);
-			return fn({ mod, engine, quill: backendQuill, doc: backendDoc });
-		} finally {
-			backendDoc?.free();
+			const backendQuill = this.#cachedQuillClone(mod, backendId, quill, quillTree);
+			return withDocClone(mod, docJson, (backendDoc) =>
+				fn({ mod, engine, quill: backendQuill, doc: backendDoc })
+			);
+		} catch (err) {
+			throw backendTrap(err);
 		}
 	}
 
@@ -654,12 +695,11 @@ export class LiveSession {
 	 */
 	update(doc) {
 		requireLocalDoc(doc, 'session.update(doc)');
-		let backendDoc = null;
+		const docJson = doc.toStored();
 		try {
-			backendDoc = this.#mod.Document.fromStored(doc.toStored());
-			return this.#inner.update(backendDoc);
-		} finally {
-			backendDoc?.free();
+			return withDocClone(this.#mod, docJson, (backendDoc) => this.#inner.update(backendDoc));
+		} catch (err) {
+			throw backendTrap(err);
 		}
 	}
 
@@ -675,7 +715,11 @@ export class LiveSession {
 
 	/** @param {object} [options] */
 	render(options) {
-		return this.#inner.render(options ?? undefined);
+		try {
+			return this.#inner.render(options ?? undefined);
+		} catch (err) {
+			throw backendTrap(err);
+		}
 	}
 
 	/**
@@ -742,7 +786,11 @@ export class LiveSession {
 	 * @param {number} scale
 	 */
 	paint(ctx, page, scale) {
-		this.#inner.paint(ctx, page, scale);
+		try {
+			this.#inner.paint(ctx, page, scale);
+		} catch (err) {
+			throw backendTrap(err);
+		}
 	}
 
 	free() {
