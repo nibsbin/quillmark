@@ -8,6 +8,7 @@
 //! `widgets` has no schema field (a signer fills it) and declares its own
 //! `type`. Unknown keys are ignored, so additive evolution needs no version bump.
 
+use quillmark_core::version::Version;
 use serde::Deserialize;
 
 /// The `schema` tag prefix every `form.json` must carry.
@@ -16,8 +17,13 @@ pub const SCHEMA_PREFIX: &str = "quillmark/form@";
 /// The `form.json` format version this backend reads.
 pub const SCHEMA_VERSION: &str = "0.2.0";
 
-/// The accepted major.minor; a matching patch is tolerated.
-const SUPPORTED_MAJOR_MINOR: &str = "0.2";
+/// The oldest version read. Any later version under the same major is read too:
+/// a minor only adds keys, which are ignored, and a break moves the major.
+const OLDEST_READ: Version = Version {
+    major: 0,
+    minor: 2,
+    patch: 0,
+};
 
 /// A parsed `form.json`.
 #[derive(Debug, Clone, Deserialize)]
@@ -155,21 +161,13 @@ impl FormSpec {
 fn check_version(schema: &str) -> Result<(), FormParseError> {
     let version = schema
         .strip_prefix(SCHEMA_PREFIX)
+        .and_then(|v| v.parse::<Version>().ok())
         .ok_or_else(|| FormParseError::BadSchema(schema.to_string()))?;
-    if version_matches(version, SUPPORTED_MAJOR_MINOR) {
+    if version.major == OLDEST_READ.major && version >= OLDEST_READ {
         Ok(())
     } else {
         Err(FormParseError::BadSchema(schema.to_string()))
     }
-}
-
-/// Matches `<major.minor>` exactly or with a `.patch` suffix, so `0.2` and
-/// `0.2.7` match `"0.2"` but `0.20` does not.
-fn version_matches(version: &str, major_minor: &str) -> bool {
-    version == major_minor
-        || version
-            .strip_prefix(major_minor)
-            .is_some_and(|rest| rest.starts_with('.'))
 }
 
 #[cfg(test)]
@@ -251,11 +249,16 @@ mod tests {
     }
 
     #[test]
-    fn version_matches_guards_adjacent_minors() {
-        assert!(version_matches("0.2", "0.2"));
-        assert!(version_matches("0.2.0", "0.2"));
-        assert!(version_matches("0.2.15", "0.2"));
-        assert!(!version_matches("0.20", "0.2"));
-        assert!(!version_matches("0.21.0", "0.2"));
+    fn a_later_minor_is_read_and_a_later_major_is_not() {
+        let tagged = |v: &str| format!(r#"{{ "schema": "quillmark/form@{v}", "fields": [] }}"#);
+        for v in ["0.2", "0.2.15", "0.3.0", "0.20"] {
+            assert!(FormSpec::parse(tagged(v).as_bytes()).is_ok(), "{v}");
+        }
+        for v in ["0.1.9", "1.0.0", "0.2.x", "0.2-rc"] {
+            assert!(
+                matches!(FormSpec::parse(tagged(v).as_bytes()), Err(FormParseError::BadSchema(_))),
+                "{v}"
+            );
+        }
     }
 }
