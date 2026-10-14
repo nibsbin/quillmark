@@ -6,7 +6,8 @@
 //! in `fields` names a `schema_field` and derives its kind, options, multiline
 //! and tooltip from the resolved schema, so the two cannot drift; a widget in
 //! `widgets` has no schema field (a signer fills it) and declares its own
-//! `type`. Unknown keys are ignored, so additive evolution needs no version bump.
+//! `type`. Unknown keys are ignored, so a later minor that only adds keys loads
+//! on any engine reading its major.
 
 use quillmark_core::version::Version;
 use serde::Deserialize;
@@ -14,11 +15,8 @@ use serde::Deserialize;
 /// The `schema` tag prefix every `form.json` must carry.
 pub const SCHEMA_PREFIX: &str = "quillmark/form@";
 
-/// The `form.json` format version this backend reads.
-pub const SCHEMA_VERSION: &str = "0.2.0";
-
-/// The oldest version read. Any later version under the same major is read too:
-/// a minor only adds keys, which are ignored, and a break moves the major.
+/// The oldest version read. Any later version under the same major is read too,
+/// and a break moves the major.
 const OLDEST_READ: Version = Version {
     major: 0,
     minor: 2,
@@ -105,7 +103,7 @@ impl std::fmt::Display for FormParseError {
             FormParseError::Json(e) => write!(f, "form.json is not valid: {e}"),
             FormParseError::BadSchema(s) => write!(
                 f,
-                "form.json `schema` is {s:?}, expected a \"{SCHEMA_PREFIX}{SCHEMA_VERSION}\" tag"
+                "form.json `schema` is {s:?}, expected a \"{SCHEMA_PREFIX}0.x\" tag, 0.2 or later"
             ),
             FormParseError::DuplicateField(name) => write!(
                 f,
