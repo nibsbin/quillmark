@@ -2260,6 +2260,40 @@ impl QuillConfig {
             .version
     }
 
+    /// `quill.requires` is `>=MAJOR.MINOR[.PATCH]`, a floor on this crate's
+    /// version, which every engine crate shares.
+    fn check_engine_floor(requires: &serde_json::Value) -> Result<(), Diagnostic> {
+        use std::str::FromStr;
+        let invalid = |shown: String| {
+            Diagnostic::new(
+                Severity::Error,
+                format!("Invalid 'requires' value {shown} in 'quill' section"),
+            )
+            .with_code("quill::invalid_requires".to_string())
+            .with_hint("Write the oldest Quillmark this quill loads on as '>=1.3' or '>=1.3.0'.".to_string())
+        };
+        let raw = requires
+            .as_str()
+            .ok_or_else(|| invalid(requires.to_string()))?;
+        let floor = raw
+            .trim()
+            .strip_prefix(">=")
+            .and_then(|v| crate::version::Version::from_str(v.trim()).ok())
+            .ok_or_else(|| invalid(format!("'{raw}'")))?;
+        let release = env!("CARGO_PKG_VERSION").split(['-', '+']).next().unwrap_or_default();
+        let engine =
+            crate::version::Version::from_str(release).expect("the crate version is semver");
+        if floor > engine {
+            return Err(Diagnostic::new(
+                Severity::Error,
+                format!("This quill requires Quillmark {floor} or newer; this is Quillmark {engine}"),
+            )
+            .with_code("quill::engine_too_old".to_string())
+            .with_hint("Upgrade Quillmark, or load an older version of this quill.".to_string()));
+        }
+        Ok(())
+    }
+
     /// Parse QuillConfig from YAML content while collecting non-fatal warnings.
     ///
     /// Returns `Ok((config, warnings))` on success, or `Err(errors)` containing all
@@ -2300,8 +2334,23 @@ impl QuillConfig {
             }
         };
 
-        const KNOWN_QUILL_KEYS: &[&str] =
-            &["name", "backend", "description", "version", "author", "ui"];
+        // Ahead of every other check: a quill written for a newer engine may
+        // carry keys this one would report as typos.
+        if let Some(requires) = quill_section.get("requires") {
+            if let Err(diag) = Self::check_engine_floor(requires) {
+                return Err(vec![diag]);
+            }
+        }
+
+        const KNOWN_QUILL_KEYS: &[&str] = &[
+            "name",
+            "backend",
+            "description",
+            "version",
+            "author",
+            "ui",
+            "requires",
+        ];
         if let Some(quill_obj) = quill_section.as_object() {
             for key in quill_obj.keys() {
                 if !KNOWN_QUILL_KEYS.contains(&key.as_str()) {

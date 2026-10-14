@@ -57,6 +57,7 @@ Loading a quill: `Quill.yaml`, its files, its seeds.
 - `quill::default_type_mismatch`
 - `quill::deprecated_groups`
 - `quill::description_multiline`
+- `quill::engine_too_old`
 - `quill::duplicate_field`
 - `quill::duplicate_group`
 - `quill::empty_description`
@@ -74,6 +75,7 @@ Loading a quill: `Quill.yaml`, its files, its seeds.
 - `quill::invalid_group_id`
 - `quill::invalid_matrix_member`
 - `quill::invalid_name`
+- `quill::invalid_requires`
 - `quill::invalid_section_id`
 - `quill::invalid_ui`
 - `quill::invalid_utf8`

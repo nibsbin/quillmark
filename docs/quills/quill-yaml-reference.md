@@ -46,6 +46,11 @@ Every Quill.yaml must have a `quill` section with format metadata.
 | `version`        | string | yes      | Semantic version (`MAJOR.MINOR` or `MAJOR.MINOR.PATCH`) |
 | `author`         | string | no       | Creator of the Quill (defaults to `"Unknown"`) |
 | `ui`             | object | no       | Document-level UI metadata |
+| `requires`       | string | no       | The oldest Quillmark this quill loads on, as `">=MAJOR.MINOR"` or `">=MAJOR.MINOR.PATCH"` |
+
+An engine older than `requires` refuses the quill with one
+`quill::engine_too_old` error, ahead of every other check, so keys it has not
+learned yet do not read as typos. Any other spelling is `quill::invalid_requires`.
 
 A backend's own settings live under its backend-named section, not in `quill:`.
 The Typst template, for example, is declared as `typst.plate_file` (see the

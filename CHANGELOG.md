@@ -6,6 +6,12 @@ Upgrade path: [0.125 → 0.126](docs/migrations/0.125-to-0.126.md). Script
 links, runaway YAML expansion and bodies nested past 12 levels are refused, a
 quill's font collections load, and a WASM trap rejects coded.
 
+### Quill.yaml
+
+- feat(core): **`quill.requires: ">=1.3"` names the oldest Quillmark a quill
+  loads on**, and an older engine refuses it with one `quill::engine_too_old`
+  error instead of reporting the keys it has not learned as typos.
+
 ### Links and untrusted input
 
 - fix(typst)!: **a link whose target's scheme is `javascript:`, `vbscript:`,

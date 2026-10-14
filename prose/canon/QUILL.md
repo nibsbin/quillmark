@@ -87,10 +87,15 @@ Field names must be `snake_case` (match `[a-z][a-z0-9_]*`). Capitalized or `$`-p
 Identity resolution:
 - `name`, `description`, `backend`, `version`, `author` are direct struct fields on `QuillConfig`. `description` (required, non-empty in the `quill:` section) describes the quill itself; it is independent of `QuillConfig.main.description`, which is the optional schema description authored under `main:` like any other card kind.
 - The `quill:` section accepts only `name`, `backend`, `description`, `version`,
-  `author`, and `ui`; an unknown key is a `quill::unknown_key` error. A
+  `author`, `ui`, and `requires`; an unknown key is a `quill::unknown_key` error. A
   backend's own settings (e.g. the Typst plate) live under the backend-named
   section, never in `quill:`, and reach a backend as
   `QuillConfig::backend_config`.
+- `quill.requires` (`">=MAJOR.MINOR[.PATCH]"`) is a floor on the engine's
+  crate version. It is read before anything else in the file, and a floor above
+  the running engine is the load's only error, `quill::engine_too_old`: strict
+  parsing would otherwise report a newer engine's keys as typos. The floor is
+  checked and not stored on `QuillConfig`.
 - `quill.ui` (a `UiCardSchema`, same shape as `card_kinds.<name>.ui`) is a fallback for `main.ui`: the `main` card uses `main.ui` when present, otherwise `quill.ui`.
 
 ## The example document
