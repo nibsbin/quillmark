@@ -132,7 +132,7 @@ main:
 card_kinds:
   note:
     fields:
-      body:
+      prose:
         type: richtext
 `
   const buildQuill = () =>
@@ -181,10 +181,9 @@ card_kinds:
 
   it('addCard commits fields and body; removeCard returns the card', () => {
     const ed = buildQuill().writer(blankDoc())
-    // `body` here is the card's richtext FIELD; the third arg is the card body.
-    expect(ed.addCard('note', { body: 'Field **body**.' }, 'Card body text.')).toEqual([])
+    expect(ed.addCard('note', { prose: 'Field **body**.' }, 'Card body text.')).toEqual([])
     expect(ed.document.cards[0].kind).toBe('note')
-    expect(exportMarkdown(fieldOf(ed.document.cards[0], 'body'))).toBe('Field **body**.')
+    expect(exportMarkdown(fieldOf(ed.document.cards[0], 'prose'))).toBe('Field **body**.')
     expect(exportMarkdown(ed.document.cards[0].body)).toBe('Card body text.')
     expect(ed.removeCard(0).kind).toBe('note')
     expect(ed.document.cards).toHaveLength(0)
@@ -201,25 +200,25 @@ card_kinds:
       '~~~card-yaml\n$quill: editor_test\n~~~\n\nMain.\n\n~~~card-yaml\n$kind: note\n~~~\n\nCard.',
     )
     const ed = buildQuill().writer(doc)
-    ed.card(0).set('body', 'Card **body**.')
-    expect(exportMarkdown(fieldOf(doc.cards[0], 'body'))).toBe('Card **body**.')
+    ed.card(0).set('prose', 'Card **body**.')
+    expect(exportMarkdown(fieldOf(doc.cards[0], 'prose'))).toBe('Card **body**.')
     expect(ed.card(0).reviseBody('Card <span>body</span> md.').warnings[0].path).toBe(
       'cards.note[0].body'
     )
     expect(exportMarkdown(doc.cards[0].body)).toBe('Card body md.')
     // card(i).reviseField is the typed, anchor-preserving field write.
-    const { delta } = ed.card(0).reviseField('body', 'Revised **field**.')
-    expect(exportMarkdown(fieldOf(doc.cards[0], 'body'))).toBe('Revised **field**.')
+    const { delta } = ed.card(0).reviseField('prose', 'Revised **field**.')
+    expect(exportMarkdown(fieldOf(doc.cards[0], 'prose'))).toBe('Revised **field**.')
     expect(Array.isArray(delta.ops)).toBe(true)
   })
 
   it('reviseDocument revises the whole document, then conforms it, clearing the load warnings', () => {
     const quill = buildQuill()
-    const doc = quill.parse('~~~card-yaml\n$quill: editor_test\n~~~\n\n<span>Body.</span>\n\n~~~card-yaml\n$kind: note\nbody: kept\n~~~\n')
+    const doc = quill.parse('~~~card-yaml\n$quill: editor_test\n~~~\n\n<span>Body.</span>\n\n~~~card-yaml\n$kind: note\nprose: kept\n~~~\n')
     expect(doc.warnings.map((w) => [w.code, w.path])).toEqual([['parse::dropped_construct', 'main.body']])
     const ed = quill.writer(doc)
     const receipt = ed.reviseDocument(
-      '~~~card-yaml\n$quill: editor_test\nsubject: Q3 **results**\n~~~\n\nBody.\n\n~~~card-yaml\n$kind: note\nbody: kept\n~~~\n',
+      '~~~card-yaml\n$quill: editor_test\nsubject: Q3 **results**\n~~~\n\nBody.\n\n~~~card-yaml\n$kind: note\nprose: kept\n~~~\n',
     )
     expect(Object.keys(receipt).sort()).toEqual(['droppedAnchors', 'warnings'])
     expect(receipt.droppedAnchors).toEqual([])
@@ -250,7 +249,7 @@ card_kinds:
     const ed = buildQuill().writer(blankDoc())
     const cardEd = ed.card(9) // lazy: constructing the CardWriter never throws
     expect(cardEd).toBeInstanceOf(CardWriter)
-    expectEditCode(() => cardEd.set('body', 'x'), 'edit::index_out_of_range')
+    expectEditCode(() => cardEd.set('prose', 'x'), 'edit::index_out_of_range')
   })
 
   it('set refuses an unknown name, a strict type mismatch and an inline violation', () => {
@@ -299,10 +298,10 @@ card_kinds:
       '~~~card-yaml\n$quill: editor_test\n~~~\n\nMain.\n\n~~~card-yaml\n$kind: note\n~~~\n\nCard.',
     )
     const ed = buildQuill().writer(doc)
-    ed.card(0).setAll({ body: 'Card **body**.' })
-    expect(exportMarkdown(fieldOf(doc.cards[0], 'body'))).toBe('Card **body**.')
+    ed.card(0).setAll({ prose: 'Card **body**.' })
+    expect(exportMarkdown(fieldOf(doc.cards[0], 'prose'))).toBe('Card **body**.')
     expectEditCode(() => ed.card(0).setAll({ stray: 'x' }), 'edit::unknown_field')
-    expectEditCode(() => ed.card(9).setAll({ body: 'x' }), 'edit::index_out_of_range')
+    expectEditCode(() => ed.card(9).setAll({ prose: 'x' }), 'edit::index_out_of_range')
   })
 })
 
@@ -356,7 +355,7 @@ main:
 card_kinds:
   note:
     fields:
-      body:
+      prose:
         type: richtext
       lines:
         type: array
@@ -370,7 +369,7 @@ card_kinds:
     const w = quill.writer(doc)
     w.set('subject', 'Q3 **results**')
     w.set('qty', '3')
-    w.addCard('note', { body: 'A *card* field.' }, 'Card body.')
+    w.addCard('note', { prose: 'A *card* field.' }, 'Card body.')
     return doc
   }
 
@@ -409,7 +408,7 @@ card_kinds:
     const quill = buildQuill()
     const v = quill.reader(seededDoc(quill))
     expect(v.card(0).kind).toBe('note')
-    expect(v.card(0).get('body')).toBe('A *card* field.')
+    expect(v.card(0).get('prose')).toBe('A *card* field.')
     expect(v.card(0).bodyMarkdown()).toBe('Card body.')
     expectEditCode(() => v.card(0).get('nope'), 'edit::unknown_field')
   })
@@ -418,7 +417,7 @@ card_kinds:
     const quill = buildQuill()
     const cardReader = quill.reader(seededDoc(quill)).card(9)
     expect(cardReader).toBeInstanceOf(CardReader)
-    expectEditCode(() => cardReader.get('body'), 'edit::index_out_of_range')
+    expectEditCode(() => cardReader.get('prose'), 'edit::index_out_of_range')
   })
 
   // The bound door is what makes a stored form a property of the codec rather
@@ -459,9 +458,9 @@ card_kinds:
     const v = quill.reader(seededDoc(quill))
     expect(v.getContent('subject').text).toBe('Q3 results')
     expect(v.getContent({}).text).toBe('Main body.')
-    expect(v.card(0).getContent('body').text).toBe('A card field.')
+    expect(v.card(0).getContent('prose').text).toBe('A card field.')
     expectEditCode(() => v.getContent('qty'), 'edit::field_not_content')
-    expectEditCode(() => v.card(9).getContent('body'), 'edit::index_out_of_range')
+    expectEditCode(() => v.card(9).getContent('prose'), 'edit::index_out_of_range')
   })
 
   // A read is also a write input, so what it hands back has to be legal to hand

@@ -9,10 +9,10 @@ use quillmark_typst::TypstBackend;
 mod common;
 use common::{content, quill_with_plate as quill, yaml};
 
-const SCHEMA: &str = "main:\n  fields:\n    intro: { type: richtext }\n    body: { type: richtext }\n";
+const SCHEMA: &str = "main:\n  fields:\n    intro: { type: richtext }\n    prose: { type: richtext }\n";
 
 /// A fill-in widget above a paragraph.
-const WIDGET_SCHEMA: &str = "main:\n  fields:\n    blank: { type: string }\n    body: { type: richtext }\n";
+const WIDGET_SCHEMA: &str = "main:\n  fields:\n    blank: { type: string }\n    prose: { type: richtext }\n";
 
 const PLATE: &str = r#"
 #import "@local/quillmark-helper:0.2.0" as qm
@@ -21,13 +21,13 @@ const PLATE: &str = r#"
 
 #qm.data.intro
 
-#qm.data.body
+#qm.data.prose
 "#;
 
 fn open() -> LiveSession {
     let data = serde_json::json!({
         "intro": content(&"Intro text that wraps across more than one line of the measure. ".repeat(3)),
-        "body": content(&"Body text that also wraps across more than one line of the measure. ".repeat(3)),
+        "prose": content(&"Body text that also wraps across more than one line of the measure. ".repeat(3)),
     });
     TypstBackend.open(&quill(&yaml(SCHEMA), PLATE), &data, common::test_date()).expect("open")
 }
@@ -173,7 +173,7 @@ fn a_tolerance_never_changes_an_answer_an_exact_hit_already_had() {
 fn open_with_a_short_line() -> LiveSession {
     let data = serde_json::json!({
         "intro": content("Short."),
-        "body": content(&"Body text that fills the measure and wraps past one line. ".repeat(3)),
+        "prose": content(&"Body text that fills the measure and wraps past one line. ".repeat(3)),
     });
     TypstBackend
         .open(&quill(&yaml(SCHEMA), PLATE), &data, common::test_date())
@@ -247,13 +247,13 @@ const WIDGET_PLATE: &str = r#"
 
 #v(40pt)
 
-#qm.data.body
+#qm.data.prose
 "#;
 
 fn open_with_widget() -> LiveSession {
     let data = serde_json::json!({
         "blank": "",
-        "body": content("Body text well below the widget."),
+        "prose": content("Body text well below the widget."),
     });
     TypstBackend
         .open(&quill(&yaml(WIDGET_SCHEMA), WIDGET_PLATE), &data, common::test_date())
@@ -294,7 +294,7 @@ const OVERLAID_PLATE: &str = r#"
 #set page(width: 400pt, height: 300pt, margin: 30pt)
 #set text(size: 11pt)
 
-#qm.data.body
+#qm.data.prose
 
 #place(top + left, dx: 40pt, dy: 40pt,
   qm.form-field("blank", type: "text", field: "blank", width: 60pt, height: 20pt))
@@ -303,7 +303,7 @@ const OVERLAID_PLATE: &str = r#"
 fn open_with_overlaid_widget() -> LiveSession {
     let data = serde_json::json!({
         "blank": "",
-        "body": content(&"Body text under and around the placed widget. ".repeat(6)),
+        "prose": content(&"Body text under and around the placed widget. ".repeat(6)),
     });
     TypstBackend
         .open(&quill(&yaml(WIDGET_SCHEMA), OVERLAID_PLATE), &data, common::test_date())

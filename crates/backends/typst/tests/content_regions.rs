@@ -23,15 +23,15 @@ fn centre(rect: [f32; 4]) -> (f32, f32) {
 /// One richtext `body` on a letter page.
 fn body_session(body: serde_json::Value) -> LiveSession {
     open(
-        "main:\n  fields:\n    body: { type: richtext }\n",
+        "main:\n  fields:\n    prose: { type: richtext }\n",
         r#"
 #import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 612pt, height: 792pt, margin: 72pt)
 #set text(size: 11pt)
 
-#qm.data.body
+#qm.data.prose
 "#,
-        serde_json::json!({ "body": body }),
+        serde_json::json!({ "prose": body }),
     )
 }
 
@@ -52,17 +52,17 @@ fn content_fields_emit_frame_regions() {
 
 #qm.data.intro
 
-#qm.data.body
+#qm.data.prose
 "#;
 
     // Long enough to overflow page 0 and continue.
     let long = "This is a markdown paragraph that wraps across several lines. ".repeat(200);
     let session = open(
-        "main:\n  fields:\n    intro: { type: richtext }\n    body: { type: richtext }\n",
+        "main:\n  fields:\n    intro: { type: richtext }\n    prose: { type: richtext }\n",
         PLATE,
         serde_json::json!({
             "intro": content("A **short** intro paragraph on the first page."),
-            "body": content(&long),
+            "prose": content(&long),
         }),
     );
     let regions = session.regions();
@@ -76,7 +76,7 @@ fn content_fields_emit_frame_regions() {
         intro[0].rect
     );
 
-    let body: Vec<_> = regions.iter().filter(|r| r.field == "body").collect();
+    let body: Vec<_> = regions.iter().filter(|r| r.field == "prose").collect();
     assert!(
         body.len() >= 2,
         "page-spanning body surfaces one fragment per page: {body:?}"
@@ -243,7 +243,7 @@ fn content_survives_a_rebuilding_show_rule() {
   it
 }
 
-#capture(qm.data.body)
+#capture(qm.data.prose)
 
 #context {
   for c in BUF.get() {
@@ -252,13 +252,13 @@ fn content_survives_a_rebuilding_show_rule() {
 }
 "#;
     let session = open(
-        "main:\n  fields:\n    body: { type: richtext }\n",
+        "main:\n  fields:\n    prose: { type: richtext }\n",
         PLATE,
-        serde_json::json!({ "body": content("A body paragraph the package rebuilds.") }),
+        serde_json::json!({ "prose": content("A body paragraph the package rebuilds.") }),
     );
     let regions = session.regions();
     assert!(
-        regions.iter().any(|r| r.field == "body"),
+        regions.iter().any(|r| r.field == "prose"),
         "a rebuilt body still surfaces a region, with no explicit tagging: {regions:?}"
     );
 }
@@ -538,7 +538,7 @@ fn adversarial_codegen_inputs_still_compile() {
 #import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 400pt, height: 400pt, margin: 40pt)
 #assert(qm.data.at("n") == -9223372036854775807 - 1)
-#qm.data.body
+#qm.data.prose
 #qm.data.overlap
 "#;
     let overlap = Content::new("abcdef".to_string(), vec![Line::new(LineKind::Para)]).with_marks(vec![
@@ -548,11 +548,11 @@ fn adversarial_codegen_inputs_still_compile() {
     TypstBackend
         .open(
             &quill(
-                &yaml("main:\n  fields:\n    body: { type: richtext }\n    overlap: { type: richtext }\n"),
+                &yaml("main:\n  fields:\n    prose: { type: richtext }\n    overlap: { type: richtext }\n"),
                 PLATE,
             ),
             &serde_json::json!({
-                "body": content("Please <u>sign here"),
+                "prose": content("Please <u>sign here"),
                 "overlap": quillmark_content::serial::to_canonical_value(&overlap.into_normalized()),
                 "n": i64::MIN,
             }),
@@ -602,7 +602,7 @@ fn segment_regions_carry_span_and_field_union_is_striped() {
     let body: Vec<_> = session
         .regions()
         .into_iter()
-        .filter(|r| r.field == "body")
+        .filter(|r| r.field == "prose")
         .collect();
     assert_eq!(
         body.len(),
@@ -638,7 +638,7 @@ fn position_at_and_locate_round_trip_a_content_offset() {
     let body: Vec<_> = session
         .regions()
         .into_iter()
-        .filter(|r| r.field == "body")
+        .filter(|r| r.field == "prose")
         .collect();
     assert_eq!(body.len(), 1, "one paragraph, one region: {body:?}");
     let region = &body[0];
@@ -647,7 +647,7 @@ fn position_at_and_locate_round_trip_a_content_offset() {
     let hit = session
         .position_at(region.page, region.rect[0] + 5.0, region.rect[3] - 3.0, 0.0)
         .expect("a click inside content resolves to a content position");
-    assert_eq!(hit.field, "body");
+    assert_eq!(hit.field, "prose");
     assert!(
         span[0] <= hit.pos && hit.pos <= span[1],
         "pos {} within span {span:?}",
@@ -660,7 +660,7 @@ fn position_at_and_locate_round_trip_a_content_offset() {
     );
 
     let caret = session
-        .locate("body", hit.pos)
+        .locate("prose", hit.pos)
         .expect("a content position locates a caret rect");
     assert_eq!(caret.page, region.page);
     assert_eq!(caret.span, Some([hit.pos, hit.pos]));
@@ -679,9 +679,9 @@ fn position_at_and_locate_round_trip_a_content_offset() {
     // One past the last character — the caret position while typing — sits at
     // the last glyph, not back at the paragraph's first.
     let text_len = TEXT.chars().count();
-    let end = session.locate("body", text_len).expect("end-of-text caret");
-    let last = session.locate("body", text_len - 1).expect("last-glyph caret");
-    let first = session.locate("body", 0).expect("first-glyph caret");
+    let end = session.locate("prose", text_len).expect("end-of-text caret");
+    let last = session.locate("prose", text_len - 1).expect("last-glyph caret");
+    let first = session.locate("prose", 0).expect("first-glyph caret");
     assert!(
         end.rect[0] >= last.rect[0] && end.rect[0] > first.rect[0],
         "end caret {:?} is at the last glyph {:?}, not the first {:?}",
@@ -708,9 +708,9 @@ fn locate_past_a_trailing_hard_break_holds_the_preceding_run() {
     assert_eq!(rt.validate(), Ok(()));
     let session = body_session(quillmark_content::serial::to_canonical_value(&rt));
 
-    let first = session.locate("body", 0).expect("first-glyph caret");
-    let last = session.locate("body", 10).expect("last-glyph caret");
-    let end = session.locate("body", 11).expect("past-the-break caret");
+    let first = session.locate("prose", 0).expect("first-glyph caret");
+    let last = session.locate("prose", 10).expect("last-glyph caret");
+    let end = session.locate("prose", 11).expect("past-the-break caret");
     assert!(
         end.rect[0] >= last.rect[0] && end.rect[0] > first.rect[0],
         "the caret past the break is at the last glyph {:?}, not the paragraph's \
@@ -729,7 +729,7 @@ fn position_at_on_a_raw_block_degrades_to_the_segment_start() {
     let body: Vec<_> = session
         .regions()
         .into_iter()
-        .filter(|r| r.field == "body")
+        .filter(|r| r.field == "prose")
         .collect();
     assert_eq!(
         body.len(),
@@ -746,7 +746,7 @@ fn position_at_on_a_raw_block_degrades_to_the_segment_start() {
     };
     let top = hit_at(code.rect[3] - 3.0).expect("a click on the first fence line resolves");
     let bottom = hit_at(code.rect[1] + 3.0).expect("a click on the last fence line resolves");
-    assert_eq!(top.field, "body");
+    assert_eq!(top.field, "prose");
     assert_eq!(
         top.pos, bottom.pos,
         "different fence lines both degrade to the one code-segment start: {top:?} {bottom:?}"

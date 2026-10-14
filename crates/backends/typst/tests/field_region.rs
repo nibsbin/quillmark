@@ -178,7 +178,7 @@ fn a_claim_around_a_content_field_moves_none_of_its_regions() {
     let open_body = |print: &str, body: &serde_json::Value| {
         let source = common::quill_with_plate(
             &common::yaml(
-                "main:\n  fields:\n    subject: { type: string }\n    body: { type: richtext }\n",
+                "main:\n  fields:\n    subject: { type: string }\n    prose: { type: richtext }\n",
             ),
             &format!(
                 "#import \"@local/quillmark-helper:0.2.0\" as qm\n\
@@ -190,13 +190,13 @@ fn a_claim_around_a_content_field_moves_none_of_its_regions() {
         TypstBackend
             .open(
                 &source,
-                &serde_json::json!({ "subject": "Widgets", "body": body }),
+                &serde_json::json!({ "subject": "Widgets", "prose": body }),
                 common::test_date(),
             )
             .expect("open")
     };
     let of = |session: &LiveSession| -> Vec<_> {
-        session.regions().into_iter().filter(|r| r.field == "body").collect()
+        session.regions().into_iter().filter(|r| r.field == "prose").collect()
     };
     let decorated = quillmark_content::serial::to_canonical_value(
         &Content::new(
@@ -211,18 +211,18 @@ fn a_claim_around_a_content_field_moves_none_of_its_regions() {
     );
     let listed = common::content("- one\n- two\n  - nested\n\n1. first\n2. second");
     for body in [&listed, &decorated] {
-        let bare = of(&open_body("#qm.data.body", body));
+        let bare = of(&open_body("#qm.data.prose", body));
         assert!(!bare.is_empty(), "sanity: the field is drawn");
-        assert_eq!(of(&open_body("#qm.region(\"subject\")[#qm.data.body]", body)), bare);
+        assert_eq!(of(&open_body("#qm.region(\"subject\")[#qm.data.prose]", body)), bare);
     }
 
-    let claimed = open_body("#qm.region(\"subject\")[#qm.data.body]", &decorated);
+    let claimed = open_body("#qm.region(\"subject\")[#qm.data.prose]", &decorated);
     for pos in [9, 20] {
-        let glyph = claimed.locate("body", pos).expect("the decorated word is drawn");
+        let glyph = claimed.locate("prose", pos).expect("the decorated word is drawn");
         let (cx, cy) = center(&glyph);
         assert_eq!(
             claimed.field_at(glyph.page, cx, cy, 0.0).as_deref(),
-            Some("body"),
+            Some("prose"),
             "a click on the stroke band at {pos} answers the content field"
         );
     }

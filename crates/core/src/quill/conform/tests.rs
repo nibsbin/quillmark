@@ -43,7 +43,7 @@ main:
 card_kinds:
   entry:
     fields:
-      body:
+      prose:
         type: richtext
       caption:
         type: plaintext
@@ -82,7 +82,7 @@ Main body.
 
 ~~~card-yaml
 $kind: entry
-body: card **body**
+prose: card **body**
 caption: raw *text*
 ~~~
 
@@ -108,7 +108,7 @@ fn parse_then_conform_equals_typed_write() {
         .unwrap();
         w.set("rows", json!([{ "cell": "row **one**" }])).unwrap();
         let mut card = w.card(0).unwrap();
-        card.set("body", "card **body**").unwrap();
+        card.set("prose", "card **body**").unwrap();
         card.set("caption", "raw *text*").unwrap();
     }
 
@@ -137,7 +137,7 @@ fn rest_is_per_codec_at_every_depth() {
     assert!(meta.get("blurb").unwrap().is_object());
 
     let card = &doc.cards()[0];
-    assert!(card.payload().get("body").unwrap().as_json().is_object());
+    assert!(card.payload().get("prose").unwrap().as_json().is_object());
     assert_eq!(
         card.payload().get("caption").unwrap().as_json(),
         &json!("raw *text*")
@@ -418,7 +418,7 @@ fn a_0_92_0_row_migrates_then_converges() {
         "cards": [{
             "payload": { "items": [
                 { "type": "kind", "value": "entry" },
-                { "type": "field", "key": "body", "value": "card **body**" },
+                { "type": "field", "key": "prose", "value": "card **body**" },
             ]},
             "body": "Entry body."
         }]
@@ -451,7 +451,7 @@ Main **body**.
 
 ~~~card-yaml
 $kind: entry
-body: card **body**
+prose: card **body**
 ~~~
 
 Entry body.
@@ -467,7 +467,7 @@ fn revise_document_revises_then_conforms() {
     let quill = quill();
     let (mut doc, _) = parse_bound(&quill, MD);
     let mut body = doc.cards()[0]
-        .field_content("body", crate::document::Codec::Richtext)
+        .field_content("prose", crate::document::Codec::Richtext)
         .unwrap()
         .unwrap()
         .into_content();
@@ -475,14 +475,14 @@ fn revise_document_revises_then_conforms() {
     body.marks.push(Mark::new(0, 4, MarkKind::Anchor { id: "k".into() }));
     doc.card_mut(0)
         .unwrap()
-        .overwrite_field("body", body.into_normalized())
+        .overwrite_field("prose", body.into_normalized())
         .unwrap();
 
     let md = MD
         .replace("subject: Q3 **results**", "subject: Q4 **results**")
         .replace(
             "\n~~~card-yaml\n$kind: entry\n",
-            "\n~~~card-yaml\n$kind: entry\nbody: a fresh card\n~~~\n\n~~~card-yaml\n$kind: entry\n",
+            "\n~~~card-yaml\n$kind: entry\nprose: a fresh card\n~~~\n\n~~~card-yaml\n$kind: entry\n",
         );
     let receipt = quill.writer(&mut doc).revise_document(&md).expect("revise");
     let (expected, warnings) = parse_bound(&quill, &md);
@@ -491,7 +491,7 @@ fn revise_document_revises_then_conforms() {
     assert_eq!(receipt.warnings, warnings);
     assert_eq!(doc.to_markdown(), expected.to_markdown());
     let anchored = doc.cards()[1]
-        .field_content("body", crate::document::Codec::Richtext)
+        .field_content("prose", crate::document::Codec::Richtext)
         .unwrap()
         .unwrap();
     assert!(anchored

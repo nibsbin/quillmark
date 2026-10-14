@@ -13,16 +13,16 @@ fn body_session(markdown: &str) -> LiveSession {
     TypstBackend
         .open(
             &quill(
-                &yaml("main:\n  fields:\n    body: { type: richtext }\n"),
+                &yaml("main:\n  fields:\n    prose: { type: richtext }\n"),
                 r#"
 #import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 612pt, height: 792pt, margin: 72pt)
 #set text(size: 11pt)
 
-#qm.data.body
+#qm.data.prose
 "#,
             ),
-            &serde_json::json!({ "body": content(markdown) }),
+            &serde_json::json!({ "prose": content(markdown) }),
             common::test_date(),
         )
         .expect("open")
@@ -33,7 +33,7 @@ fn x_of(markdown: &str, needle: char) -> f32 {
     let session = body_session(markdown);
     let rt = quillmark_content::import::from_markdown(markdown).expect("import").content;
     let pos = rt.text.chars().position(|c| c == needle).expect("needle in text");
-    session.locate("body", pos).expect("caret").rect[0]
+    session.locate("prose", pos).expect("caret").rect[0]
 }
 
 #[test]
