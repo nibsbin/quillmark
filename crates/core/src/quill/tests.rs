@@ -327,6 +327,7 @@ fn test_invalid_quill_name_hint_suggests_a_valid_name() {
         ("İstanbul", Some("istanbul")),
         ("MyQuill", Some("my_quill")),
         ("HTTPForm2", Some("httpform2")),
+        ("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", None),
     ] {
         let yaml = format!(
             "quill:\n  name: \"{name}\"\n  version: \"1.0\"\n  backend: typst\n  description: q\n"

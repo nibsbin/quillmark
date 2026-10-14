@@ -2239,7 +2239,7 @@ impl QuillConfig {
         let fixed = mapped
             .trim_start_matches(|c: char| !c.is_ascii_lowercase())
             .trim_end_matches('_');
-        Self::is_snake_case_identifier(fixed).then(|| fixed.to_string())
+        crate::version::is_quill_name(fixed).then(|| fixed.to_string())
     }
 
     /// `quill.version` as written. A plain `1.10` is the number 1.1 once

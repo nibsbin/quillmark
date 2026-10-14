@@ -52,7 +52,7 @@ quill's font collections load, and a WASM trap rejects coded.
   `$quill: borb.usaf_memo@1.2`**, the host's to resolve; the engine pairs by
   the name after the `.`. A quill name and a collection name are each
   `[a-z][a-z0-9_]*`, at most 64 characters, so `$quill` no longer admits a
-  leading `_`. `QuillReference` carries `collection`. (#2198)
+  leading `_`. `QuillReference` carries `collection`. (#2198, #2205)
 
 ### Bindings
 
