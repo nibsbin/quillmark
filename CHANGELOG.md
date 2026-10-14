@@ -35,9 +35,8 @@ quill's font collections load, and a WASM trap rejects coded.
   declares**: a collection whose header declares more faces than the file
   holds offsets for loads no faces. (#2168, #2189)
 - feat(typst): **a character no loaded font covers warns
-  `typst::missing_glyph`**, once per render, naming each uncovered character
-  of the plate data's strings, where Typst drew an empty box or nothing and
-  said neither. (#2179)
+  `typst::missing_glyph`**, once per render, naming each character the page
+  draws as an empty box, where Typst drew it and said nothing. (#2179, #2196)
 
 ### Markdown
 

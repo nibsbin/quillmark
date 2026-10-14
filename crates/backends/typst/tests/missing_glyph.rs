@@ -49,7 +49,7 @@ fn covered_text_warns_nothing() {
 fn text_the_page_never_draws_warns_nothing() {
     let quill = common::quill_with_plate(
         &common::yaml("main:\n  fields:\n    a:\n      type: string\n"),
-        "#link(\"https://例え.jp/パス\")[idn]\n",
+        "#set text(font: \"Roboto\")\n#link(\"https://例え.jp/パス\")[idn]\n",
     );
     let session = TypstBackend
         .open(&quill, &serde_json::json!({ "a": "中文" }), common::test_date())
