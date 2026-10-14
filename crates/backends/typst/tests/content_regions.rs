@@ -20,7 +20,7 @@ fn centre(rect: [f32; 4]) -> (f32, f32) {
     ((rect[0] + rect[2]) / 2.0, (rect[1] + rect[3]) / 2.0)
 }
 
-/// One richtext `body` on a letter page.
+/// One richtext `prose` on a letter page.
 fn body_session(body: serde_json::Value) -> LiveSession {
     open(
         "main:\n  fields:\n    prose: { type: richtext }\n",

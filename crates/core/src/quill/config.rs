@@ -2019,7 +2019,7 @@ impl QuillConfig {
                         format!(
                             "Invalid {context} 'body': the name is the card body's, so a \
                              field so named and the body would share one address \
-                             (`main.body`). Rename the field."
+                             (`main.body`, `cards.<kind>[i].body`). Rename the field."
                         ),
                     )
                     .with_code("quill::reserved_field_name".to_string()),
