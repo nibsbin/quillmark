@@ -46,6 +46,14 @@ quill's font collections load, and a WASM trap rejects coded.
   `parse::body_import` at its `path`; `ParseError::BodyImport` holds
   `{ path, message }`. (#2187, #2190)
 
+### Quill names
+
+- feat(core)!: **a `$quill` name may carry a collection,
+  `$quill: borb.usaf_memo@1.2`**, the host's to resolve; the engine pairs by
+  the name after the `.`. A quill name and a collection name are each
+  `[a-z][a-z0-9_]*`, at most 64 characters, so `$quill` no longer admits a
+  leading `_`. `QuillReference` carries `collection`. (#2198, #2205)
+
 ### Bindings
 
 - fix(wasm)!: **a render that traps rejects as `runtime::backend_trapped`**,

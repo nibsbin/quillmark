@@ -5,7 +5,7 @@
 
 ## TL;DR
 
-Quills declare a semantic `version` in `Quill.yaml`, and documents carry an optional `$quill: name@selector` reference. The selector is parsed and stored on `QuillReference`, but never **resolved**: the engine loads exactly one Quill from a path or in-memory file tree, never picking among versions. It is **enforced**: at render time the reference's two components are checked against the loaded Quill, and either a *name* mismatch or a *version* outside the selector is a hard error. The document is valid; it was paired with the wrong Quill, which is a footgun.
+Quills declare a semantic `version` in `Quill.yaml`, and documents carry an optional `$quill: name@selector` reference. The selector is parsed and stored on `QuillReference`, but never **resolved**: the engine loads exactly one Quill from a path or in-memory file tree, never picking among versions. It is **enforced**: at render time the reference's name and selector are checked against the loaded Quill, and either a *name* mismatch or a *version* outside the selector is a hard error. The document is valid; it was paired with the wrong Quill, which is a footgun.
 
 ## Version Format
 
@@ -41,9 +41,11 @@ $quill: my_format          # any version
 
 A selector is `MAJOR`, `MAJOR.MINOR` or `MAJOR.MINOR.PATCH`, each segment plain digits. A reference with no selector omits the `@`; there is no `@latest`.
 
+A name may carry a collection: `$quill: borb.my_format@2`. The collection is the host's, naming where to resolve the quill; a bare name leaves that choice to the host. The engine reads only the part after the `.`, so a loaded `my_format` answers a reference under any collection. A quill's own `Quill.yaml` name and its example never carry one: which collection a quill sits in is the collection's to say. A widened grammar is no storage event: a stored row naming a collection reads under the same tag, and a reader older than the grammar refuses it as an invalid quill reference.
+
 No registry consumes the selector: there is no collection of installed versions to pick from, so it is a pin, not a resolver. *Resolution* (matching `name@selector` against a set of installed versions) belongs to a higher layer; the engine loads one Quill and *enforces* the reference against it. Detection needs no registry (the engine has the loaded Quill's name and version and the document's reference) so `render` and `dry_run` both reject a mismatch with a single-diagnostic [`RenderError`](ERROR.md). They check in order:
 
-- **`quill::name_mismatch`**: the reference *name* differs from the loaded Quill. The name is the prerequisite (a selector belongs to a *named* Quill), so a name mismatch short-circuits and the version is left unevaluated.
+- **`quill::name_mismatch`**: the reference *name*, collection aside, differs from the loaded Quill. The name is the prerequisite (a selector belongs to a *named* Quill), so a name mismatch short-circuits and the version is left unevaluated.
 - **`quill::version_mismatch`**: names agree but the Quill's `version` falls outside the selector (e.g. `name@2` against `3.0.0`). `VersionSelector::matches` decides: `Exact` the identical version, `Minor` any patch in the `MAJOR.MINOR` series, `Major` any version in the `MAJOR` series, `Any` (no selector) anything.
 
 A quill mismatch is distinct from a validation failure (a malformed document): here the document is well-formed but paired with the wrong Quill, so the remedy is to render with the referenced Quill or amend `$quill`. A bare name matches any version, so correctly-targeted documents never trip either check.

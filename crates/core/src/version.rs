@@ -153,9 +153,10 @@ impl FromStr for VersionSelector {
 }
 
 /// Canonical, author-facing `$quill` reference grammar.
-const QUILL_REF_HINT: &str = "A $quill reference is `<name>` or `<name>@<selector>`. \
-The name must match `[a-z_][a-z0-9_]*` (start with a lowercase letter or underscore, then \
-lowercase letters, digits, or underscores). The optional version selector is \
+const QUILL_REF_HINT: &str = "A $quill reference is `<name>` or `<name>@<selector>`, where \
+`<name>` is a quill name or `<collection>.<name>`. Each name segment matches `[a-z][a-z0-9_]*` \
+(a lowercase letter, then lowercase letters, digits, or underscores), at most 64 characters. \
+The optional version selector is \
 `@MAJOR.MINOR.PATCH` (exactly that version), `@MAJOR.MINOR` (any patch in that minor series), \
 or `@MAJOR` (any version in that major series), each segment plain digits. The bare `<name>` \
 matches any version; there is no `@latest`.";
@@ -168,18 +169,36 @@ pub fn quill_ref_hint() -> &'static str {
     QUILL_REF_HINT
 }
 
-/// Complete reference to a Quill template with name and version selector.
+pub const MAX_QUILL_NAME_LEN: usize = 64;
+
+/// Whether `name` is a quill name: `[a-z][a-z0-9_]*`, at most
+/// [`MAX_QUILL_NAME_LEN`] bytes. A collection name is held to the same rule.
+pub fn is_quill_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    name.len() <= MAX_QUILL_NAME_LEN
+        && chars.next().is_some_and(|c| c.is_ascii_lowercase())
+        && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+}
+
+/// A `$quill` reference: `[<collection>.]<name>[@<selector>]`.
 ///
-/// Name charset: `[a-z_][a-z0-9_]*`. Selector defaults to `Any` when omitted.
+/// `name` is the quill's own `Quill.yaml` name. `collection` names the
+/// collection a host resolves it in; the engine never reads it, so a loaded
+/// quill answers a reference whatever collection it names.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct QuillReference {
+    pub collection: Option<String>,
     pub name: String,
     pub selector: VersionSelector,
 }
 
 impl QuillReference {
     pub fn new(name: String, selector: VersionSelector) -> Self {
-        Self { name, selector }
+        Self {
+            collection: None,
+            name,
+            selector,
+        }
     }
 }
 
@@ -198,16 +217,19 @@ impl FromStr for QuillReference {
             return Err("Quill name cannot be empty".to_string());
         }
 
-        let name = name_part.to_string();
+        let (collection, name) = match name_part.split_once('.') {
+            Some((collection, name)) => (Some(collection), name),
+            None => (None, name_part),
+        };
 
-        // Same charset as a card kind. Quill *config* names are stricter
-        // (`config.rs` rejects a leading underscore), so that predicate is not
-        // interchangeable with this one.
-        if !crate::document::is_valid_kind_name(&name) {
-            return Err(format!(
-                "Invalid Quill name '{}': must match [a-z_][a-z0-9_]*",
-                name
-            ));
+        for segment in collection.iter().chain([&name]) {
+            if !is_quill_name(segment) {
+                return Err(format!(
+                    "Invalid Quill name '{}': each name segment must match [a-z][a-z0-9_]* \
+                     and be at most {} characters",
+                    name_part, MAX_QUILL_NAME_LEN
+                ));
+            }
         }
 
         let selector = match version_part_opt {
@@ -215,7 +237,11 @@ impl FromStr for QuillReference {
             None => VersionSelector::Any,
         };
 
-        Ok(QuillReference { name, selector })
+        Ok(QuillReference {
+            collection: collection.map(str::to_string),
+            name: name.to_string(),
+            selector,
+        })
     }
 }
 
@@ -223,6 +249,9 @@ impl FromStr for QuillReference {
 /// reads as nothing outside a reference.
 impl fmt::Display for QuillReference {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(collection) = &self.collection {
+            write!(f, "{}.", collection)?;
+        }
         f.write_str(&self.name)?;
         match self.selector {
             VersionSelector::Exact(v) => write!(f, "@{}", v),
@@ -353,10 +382,24 @@ mod tests {
         assert!(QuillReference::from_str("Resume@2.1.0").is_err());
         assert!(QuillReference::from_str("1resume@2.1.0").is_err());
         assert!(QuillReference::from_str("resume-template@2.1.0").is_err());
-        assert!(QuillReference::from_str("resume.template@2.1.0").is_err());
+        assert!(QuillReference::from_str("_private@2.1.0").is_err());
+        assert!(QuillReference::from_str("a.b.c@2.1.0").is_err());
+        assert!(QuillReference::from_str(".resume").is_err());
+        assert!(QuillReference::from_str("borb.").is_err());
+        assert!(QuillReference::from_str("Borb.resume").is_err());
+        assert!(QuillReference::from_str(&"a".repeat(65)).is_err());
+        assert!(QuillReference::from_str(&"a".repeat(64)).is_ok());
         assert!(QuillReference::from_str("resume_template@2.1.0").is_ok());
-        assert!(QuillReference::from_str("_private@2.1.0").is_ok());
         assert!(QuillReference::from_str("template2@2.1.0").is_ok());
+    }
+
+    #[test]
+    fn a_collection_prefixes_the_name() {
+        let reference = QuillReference::from_str("borb.resume@2.1").unwrap();
+        assert_eq!(reference.collection.as_deref(), Some("borb"));
+        assert_eq!(reference.name, "resume");
+        assert_eq!(reference.selector, VersionSelector::Minor(2, 1));
+        assert_eq!(reference.to_string(), "borb.resume@2.1");
     }
 
     /// Every reference prints the one spelling that parses back to it; `Any`

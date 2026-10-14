@@ -47,6 +47,8 @@ fn the_reference_is_checked_against_the_loaded_quill() {
         ("test_quill@2.1.0", None),
         ("test_quill@2", None),
         ("test_quill@3", Some("quill::version_mismatch")),
+        ("borb.test_quill@2", None),
+        ("borb.other_quill@2", Some("quill::name_mismatch")),
         // The version is left unevaluated: a selector against another quill is moot.
         ("other_quill@3", Some("quill::name_mismatch")),
     ] {
