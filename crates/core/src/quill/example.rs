@@ -56,7 +56,10 @@ impl Quill {
         } = Document::parse(markdown).map_err(|e| vec![e.to_diagnostic()])?;
 
         let reference = document.quill_reference();
-        if reference.name != self.config.name || reference.selector != VersionSelector::Any {
+        if reference.collection.is_some()
+            || reference.name != self.config.name
+            || reference.selector != VersionSelector::Any
+        {
             return Err(vec![Diagnostic::new(
                 Severity::Error,
                 format!(

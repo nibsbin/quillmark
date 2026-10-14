@@ -28,7 +28,7 @@ typst:        # Optional: backend-specific configuration
 
 Root-level `fields:` is not supported; define the main document's field schemas under `main.fields`.
 
-`Quill.yaml` is parsed strictly. Unknown keys in the `quill:` section, unknown top-level sections, malformed `ui:` blocks, and field schemas that can't be parsed all produce errors: they are never silently dropped. Every error is collected in a single pass, so authors see all problems at once. Run `quillmark validate <quill_dir>` to surface them.
+`Quill.yaml` is parsed strictly. Unknown keys in the `quill:` section, unknown top-level sections, malformed `ui:` blocks, and field schemas that can't be parsed all produce errors: they are never silently dropped. Every error is collected in a single pass, so authors see all problems at once; the one exception is a [`requires`](#quill-section) floor the engine is below, which is reported alone. Run `quillmark validate <quill_dir>` to surface them.
 
 ---
 
@@ -36,7 +36,7 @@ Root-level `fields:` is not supported; define the main document's field schemas 
 
 Every Quill.yaml must have a `quill` section with format metadata.
 
-`quill.name` must be `snake_case` (`^[a-z][a-z0-9_]*$`).
+`quill.name` must be `snake_case` (`^[a-z][a-z0-9_]*$`), at most 64 characters.
 
 | Key              | Type   | Required | Description |
 |------------------|--------|----------|-------------|
@@ -46,6 +46,13 @@ Every Quill.yaml must have a `quill` section with format metadata.
 | `version`        | string | yes      | Semantic version (`MAJOR.MINOR` or `MAJOR.MINOR.PATCH`) |
 | `author`         | string | no       | Creator of the Quill (defaults to `"Unknown"`) |
 | `ui`             | object | no       | Document-level UI metadata |
+| `requires`       | string | no       | The oldest Quillmark this quill loads on, as `">=MAJOR.MINOR"` or `">=MAJOR.MINOR.PATCH"` |
+
+`requires` is quoted: a bare `>` opens a YAML folded scalar. An engine older
+than it refuses the quill with one `quill::engine_too_old` error, ahead of every
+other check, so keys it has not learned yet do not read as typos; an engine from
+before `requires` existed reports `requires` itself as `quill::unknown_key`. Any
+other spelling, whitespace included, is `quill::invalid_requires`.
 
 A backend's own settings live under its backend-named section, not in `quill:`.
 The Typst template, for example, is declared as `typst.plate_file` (see the

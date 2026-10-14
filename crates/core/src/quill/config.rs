@@ -2253,7 +2253,7 @@ impl QuillConfig {
         let fixed = mapped
             .trim_start_matches(|c: char| !c.is_ascii_lowercase())
             .trim_end_matches('_');
-        Self::is_snake_case_identifier(fixed).then(|| fixed.to_string())
+        crate::version::is_quill_name(fixed).then(|| fixed.to_string())
     }
 
     /// `quill.version` as written. A plain `1.10` is the number 1.1 once
@@ -2274,11 +2274,47 @@ impl QuillConfig {
             .version
     }
 
+    /// `quill.requires` is `>=MAJOR.MINOR[.PATCH]`, a floor on this crate's
+    /// version, which every engine crate shares.
+    fn check_engine_floor(requires: &serde_json::Value) -> Result<(), Diagnostic> {
+        use std::str::FromStr;
+        let invalid = |shown: String| {
+            Diagnostic::new(
+                Severity::Error,
+                format!("Invalid 'requires' value {shown} in 'quill' section"),
+            )
+            .with_code("quill::invalid_requires".to_string())
+            .with_hint("Write the oldest Quillmark this quill loads on as '>=1.3' or '>=1.3.0'.".to_string())
+        };
+        let raw = requires
+            .as_str()
+            .ok_or_else(|| invalid(requires.to_string()))?;
+        let floor = raw
+            .strip_prefix(">=")
+            .and_then(|v| crate::version::Version::from_str(v).ok())
+            .ok_or_else(|| invalid(format!("'{raw}'")))?;
+        let release = env!("CARGO_PKG_VERSION").split(['-', '+']).next().unwrap_or_default();
+        let engine =
+            crate::version::Version::from_str(release).expect("the crate version is semver");
+        if floor > engine {
+            return Err(Diagnostic::new(
+                Severity::Error,
+                format!(
+                    "This quill requires Quillmark {floor} or newer; this is Quillmark {}",
+                    env!("CARGO_PKG_VERSION")
+                ),
+            )
+            .with_code("quill::engine_too_old".to_string())
+            .with_hint("Upgrade Quillmark, or load an older version of this quill.".to_string()));
+        }
+        Ok(())
+    }
+
     /// Parse QuillConfig from YAML content while collecting non-fatal warnings.
     ///
     /// Returns `Ok((config, warnings))` on success, or `Err(errors)` containing all
-    /// parse/validation errors when the config is invalid. Errors are always collected
-    /// exhaustively: callers see every problem, not just the first.
+    /// parse/validation errors when the config is invalid. Errors are collected
+    /// exhaustively, except that `quill::engine_too_old` is reported alone.
     pub fn from_yaml_with_warnings(
         yaml_content: &str,
     ) -> Result<(Self, Vec<Diagnostic>), Vec<Diagnostic>> {
@@ -2314,8 +2350,26 @@ impl QuillConfig {
             }
         };
 
-        const KNOWN_QUILL_KEYS: &[&str] =
-            &["name", "backend", "description", "version", "author", "ui"];
+        // Ahead of every other check: a quill written for a newer engine may
+        // carry keys this one would report as typos.
+        if let Some(requires) = quill_section.get("requires") {
+            if let Err(diag) = Self::check_engine_floor(requires) {
+                if diag.code.as_deref() == Some("quill::engine_too_old") {
+                    return Err(vec![diag]);
+                }
+                errors.push(diag);
+            }
+        }
+
+        const KNOWN_QUILL_KEYS: &[&str] = &[
+            "name",
+            "backend",
+            "description",
+            "version",
+            "author",
+            "ui",
+            "requires",
+        ];
         if let Some(quill_obj) = quill_section.as_object() {
             for key in quill_obj.keys() {
                 if !KNOWN_QUILL_KEYS.contains(&key.as_str()) {
@@ -2333,14 +2387,15 @@ impl QuillConfig {
 
         let name = match quill_section.get("name").and_then(|v| v.as_str()) {
             Some(n) => {
-                if !Self::is_snake_case_identifier(n) {
+                if !crate::version::is_quill_name(n) {
                     let mut diag = Diagnostic::new(
                         Severity::Error,
                         format!(
                             "Invalid Quill name '{}': quill.name must be snake_case \
                              (a lowercase letter, then lowercase letters, digits, and \
-                             underscores).",
-                            n
+                             underscores), at most {} characters.",
+                            n,
+                            crate::version::MAX_QUILL_NAME_LEN
                         ),
                     )
                     .with_code("quill::invalid_name".to_string());

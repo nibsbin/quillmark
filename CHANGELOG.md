@@ -6,6 +6,13 @@ Upgrade path: [0.125 → 0.126](docs/migrations/0.125-to-0.126.md). Script
 links, runaway YAML expansion and bodies nested past 12 levels are refused, a
 quill's font collections load, and a WASM trap rejects coded.
 
+### Quill.yaml
+
+- feat(core): **`quill.requires: ">=1.3"` names the oldest Quillmark a quill
+  loads on**, and an engine from this release on that is below the floor
+  refuses it with one `quill::engine_too_old` error instead of reporting the
+  keys it has not learned as typos.
+
 ### Links and untrusted input
 
 - fix(typst)!: **a link whose target's scheme is `javascript:`, `vbscript:`,
@@ -35,9 +42,8 @@ quill's font collections load, and a WASM trap rejects coded.
   declares**: a collection whose header declares more faces than the file
   holds offsets for loads no faces. (#2168, #2189)
 - feat(typst): **a character no loaded font covers warns
-  `typst::missing_glyph`**, once per render, naming each uncovered character
-  of the plate data's strings, where Typst drew an empty box or nothing and
-  said neither. (#2179)
+  `typst::missing_glyph`**, once per render, naming each character the page
+  draws as an empty box, where Typst drew it and said nothing. (#2179, #2196)
 
 ### Markdown
 
@@ -46,6 +52,14 @@ quill's font collections load, and a WASM trap rejects coded.
   depth refused 16 quotes or 32 lists. A body past the bound fails
   `parse::body_import` at its `path`; `ParseError::BodyImport` holds
   `{ path, message }`. (#2187, #2190)
+
+### Quill names
+
+- feat(core)!: **a `$quill` name may carry a collection,
+  `$quill: borb.usaf_memo@1.2`**, the host's to resolve; the engine pairs by
+  the name after the `.`. A quill name and a collection name are each
+  `[a-z][a-z0-9_]*`, at most 64 characters, so `$quill` no longer admits a
+  leading `_`. `QuillReference` carries `collection`. (#2198, #2205)
 
 ### Bindings
 

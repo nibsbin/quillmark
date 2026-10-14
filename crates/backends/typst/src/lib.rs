@@ -105,7 +105,7 @@ fn recompile(
         compile_warnings,
         &unclosed,
         elements::unregistered(&document, config, data),
-        glyphs::missing(typst::World::book(&*world), data),
+        glyphs::missing(&document),
     );
     Ok(Compiled {
         document,
