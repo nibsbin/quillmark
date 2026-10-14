@@ -6,12 +6,15 @@ Upgrade path: [0.125 → 0.126](docs/migrations/0.125-to-0.126.md). Script
 links, runaway YAML expansion and bodies nested past 12 levels are refused, a
 quill's font collections load, and a WASM trap rejects coded.
 
-### Quill.yaml
+### Formats that grow
 
+- feat(acroform): **a `form.json` tagged with a later `0.x` than `0.2`
+  loads**, its unknown keys ignored as before, where any version but `0.2.x`
+  failed as `acroform::invalid_form_json`. A new major still fails. (#2208)
 - feat(core): **`quill.requires: ">=1.3"` names the oldest Quillmark a quill
   loads on**, and an engine from this release on that is below the floor
   refuses it with one `quill::engine_too_old` error instead of reporting the
-  keys it has not learned as typos.
+  keys it has not learned as typos. (#2206)
 
 ### Links and untrusted input
 
