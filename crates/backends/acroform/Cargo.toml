@@ -33,3 +33,4 @@ quillmark-fixtures = { workspace = true }
 # an unpublishable cycle; cargo strips path-only dev-deps at packaging.
 quillmark = { path = "../../quillmark" }
 lopdf = { workspace = true }
+proptest = { workspace = true }

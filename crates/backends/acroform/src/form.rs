@@ -1,6 +1,6 @@
-//! `form.json` wire types and parsing (`form@0.2.0`).
+//! `form.yaml` wire types and parsing (`form@0.2.0`).
 //!
-//! `form.json` is the durable, value-free placement + binding layer of a
+//! `form.yaml` is the durable, value-free placement + binding layer of a
 //! `acroform` quill. It carries only what the quill schema cannot know: where a
 //! widget sits (`page`/`rect`) and which logical field it binds. A bound field
 //! in `fields` names a `schema_field` and derives its kind, options, multiline
@@ -9,10 +9,14 @@
 //! `type`. Unknown keys are ignored, so a later minor that only adds keys loads
 //! on any engine reading its major.
 
+use quillmark_core::error::{Diagnostic, Severity, YamlError};
 use quillmark_core::version::Version;
 use serde::Deserialize;
 
-/// The `schema` tag prefix every `form.json` must carry.
+/// The field spec's file name at the quill root.
+pub const FORM_YAML: &str = "form.yaml";
+
+/// The `schema` tag prefix every `form.yaml` must carry.
 pub const SCHEMA_PREFIX: &str = "quillmark/form@";
 
 /// The oldest version read. Any later version under the same major is read too,
@@ -23,7 +27,7 @@ const OLDEST_READ: Version = Version {
     patch: 0,
 };
 
-/// A parsed `form.json`.
+/// A parsed `form.yaml`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct FormSpec {
     /// Widgets bound to a [`FieldSchema`](quillmark_core::quill::FieldSchema).
@@ -69,7 +73,7 @@ pub struct Rect {
     pub h: f32,
 }
 
-/// Internally tagged by `type` and flattened into the widget, so the JSON stays
+/// Internally tagged by `type` and flattened into the widget, so the mapping stays
 /// flat while invalid combinations (a `signature` with `options`) cannot parse.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
@@ -85,11 +89,12 @@ pub enum WidgetKind {
     Signature,
 }
 
-/// Why a `form.json` failed to parse.
+/// Why a `form.yaml` failed to parse.
 #[derive(Debug)]
 pub enum FormParseError {
-    /// The bytes were not valid JSON, or did not match the schema.
-    Json(serde_json::Error),
+    NotUtf8,
+    /// The text is not YAML, or does not fit the spec's shape.
+    Yaml(YamlError),
     /// The `schema` tag is not a recognized `quillmark/form@…` string.
     BadSchema(String),
     /// Two fields/widgets share a `name`. AcroForm top-level field names must be
@@ -100,14 +105,15 @@ pub enum FormParseError {
 impl std::fmt::Display for FormParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FormParseError::Json(e) => write!(f, "form.json is not valid: {e}"),
+            FormParseError::NotUtf8 => write!(f, "{FORM_YAML} is not valid UTF-8"),
+            FormParseError::Yaml(e) => write!(f, "{FORM_YAML} is not valid: {e}"),
             FormParseError::BadSchema(s) => write!(
                 f,
-                "form.json `schema` is {s:?}, expected a \"{SCHEMA_PREFIX}0.x\" tag, 0.2 or later"
+                "{FORM_YAML} `schema` is {s:?}, expected a \"{SCHEMA_PREFIX}0.x\" tag, 0.2 or later"
             ),
             FormParseError::DuplicateField(name) => write!(
                 f,
-                "form.json declares field name {name:?} more than once; field names must be unique"
+                "{FORM_YAML} declares field name {name:?} more than once; field names must be unique"
             ),
         }
     }
@@ -116,7 +122,16 @@ impl std::fmt::Display for FormParseError {
 impl FormParseError {
     /// The stable diagnostic code for this error.
     pub fn code(&self) -> &'static str {
-        "acroform::invalid_form_json"
+        "acroform::invalid_form_spec"
+    }
+
+    /// A YAML failure keeps its line and column as a `Location` in `form.yaml`.
+    pub fn to_diagnostic(&self) -> Diagnostic {
+        match self {
+            FormParseError::Yaml(e) => e.to_diagnostic(self.code(), FORM_YAML),
+            _ => Diagnostic::new(Severity::Error, self.to_string())
+                .with_code(self.code().to_string()),
+        }
     }
 }
 
@@ -128,11 +143,14 @@ struct SchemaTag {
 }
 
 impl FormSpec {
-    /// Parse and validate a `form.json` byte slice.
+    /// Parse and validate the bytes of a `form.yaml`.
     pub fn parse(bytes: &[u8]) -> Result<FormSpec, FormParseError> {
-        let tag: SchemaTag = serde_json::from_slice(bytes).map_err(FormParseError::Json)?;
+        let text = std::str::from_utf8(bytes).map_err(|_| FormParseError::NotUtf8)?;
+        let tag: SchemaTag =
+            quillmark_core::value::from_yaml_str(text).map_err(FormParseError::Yaml)?;
         check_version(&tag.schema)?;
-        let spec: FormSpec = serde_json::from_slice(bytes).map_err(FormParseError::Json)?;
+        let spec: FormSpec =
+            quillmark_core::value::from_yaml_str(text).map_err(FormParseError::Yaml)?;
         spec.check_unique_names()?;
         Ok(spec)
     }
@@ -170,6 +188,8 @@ fn check_version(schema: &str) -> Result<(), FormParseError> {
 
 #[cfg(test)]
 mod tests {
+    mod properties;
+
     use super::*;
 
     #[test]
@@ -210,7 +230,7 @@ mod tests {
         }"#;
         match FormSpec::parse(json) {
             Err(e @ FormParseError::BadSchema(_)) => {
-                assert_eq!(e.code(), "acroform::invalid_form_json");
+                assert_eq!(e.code(), "acroform::invalid_form_spec");
             }
             other => panic!("expected BadSchema, got {other:?}"),
         }
@@ -258,5 +278,14 @@ mod tests {
                 "{v}"
             );
         }
+    }
+
+    #[test]
+    fn a_yaml_1_1_boolean_word_is_refused_as_a_boolean() {
+        let multiline_yes = b"schema: quillmark/form@0.2.0
+widgets:
+  - { name: T, type: text, multiline: yes, page: 0, rect: { x: 0, y: 0, w: 1, h: 1 } }
+";
+        assert!(matches!(FormSpec::parse(multiline_yes), Err(FormParseError::Yaml(_))));
     }
 }

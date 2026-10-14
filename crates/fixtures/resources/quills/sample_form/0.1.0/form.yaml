@@ -1,0 +1,57 @@
+schema: quillmark/form@0.2.0
+
+# A bound field's widget kind and options come from the schema field it names.
+# `rect` is in PDF points, measured from the page's top-left corner.
+fields:
+  - name: FullName
+    schema_field: full_name
+    page: 0
+    rect: { x: 180, y: 100, w: 340, h: 20 }
+
+  - name: Comments
+    schema_field: comments
+    page: 0
+    rect: { x: 180, y: 140, w: 340, h: 80 }
+
+  - name: Agree
+    schema_field: agree
+    page: 0
+    rect: { x: 180, y: 240, w: 14, h: 14 }
+
+  - name: FavoriteColor
+    schema_field: favorite_color
+    page: 0
+    rect: { x: 180, y: 280, w: 340, h: 20 }
+
+  - name: Headline
+    schema_field: headline
+    page: 0
+    rect: { x: 180, y: 520, w: 340, h: 20 }
+
+  - name: Bio
+    schema_field: bio
+    page: 0
+    rect: { x: 180, y: 560, w: 340, h: 80 }
+
+# Unbound widgets are left for a signer, so each declares its own `type`.
+widgets:
+  - name: Signature
+    type: signature
+    page: 0
+    rect: { x: 180, y: 330, w: 340, h: 40 }
+
+  - name: SignerInitials
+    type: text
+    page: 0
+    rect: { x: 180, y: 390, w: 120, h: 20 }
+
+  - name: SignerConfirms
+    type: checkbox
+    page: 0
+    rect: { x: 180, y: 430, w: 14, h: 14 }
+
+  - name: SignerRole
+    type: choice
+    options: [witness, notary, guardian]
+    page: 0
+    rect: { x: 180, y: 470, w: 340, h: 20 }

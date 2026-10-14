@@ -12,13 +12,13 @@ A `acroform` quill ships **two assets at its root** instead of a plate:
 my-form/
 ├── Quill.yaml
 ├── form.pdf     # the stripped background: pages + chrome, no form fields
-└── form.json    # the value-free field reconstruction spec
+└── form.yaml    # the value-free field reconstruction spec
 ```
 
 - **`form.pdf`**, the *stripped background*: the normalized form with its `/AcroForm`, widget annotations, and page `/Annots` removed (pure pages, rules, boxes, and labels).
-- **`form.json`**, the value-free **placement + binding** layer: where each widget sits (`page`, `rect`) and which schema field it binds (`schema_field`). Everything intrinsic (widget kind, choice options, multiline, tooltip) is *derived* from the quill schema, not restated here.
+- **`form.yaml`**, the value-free **placement + binding** layer: where each widget sits (`page`, `rect`) and which schema field it binds (`schema_field`). Everything intrinsic (widget kind, choice options, multiline, tooltip) is *derived* from the quill schema, not restated here.
 
-At load the backend binds each field's value from your document data and writes the AcroForm **fresh** from `form.json` onto the background. It never reconciles a form already in `form.pdf`: a background that still carries one is refused (`pdf::existing_acroform`), since a second `/AcroForm` on the catalog is a dict the spec does not define and the old widgets would stay live in the page `/Annots`.
+At load the backend binds each field's value from your document data and writes the AcroForm **fresh** from `form.yaml` onto the background. It never reconciles a form already in `form.pdf`: a background that still carries one is refused (`pdf::existing_acroform`), since a second `/AcroForm` on the catalog is a dict the spec does not define and the old widgets would stay live in the page `/Annots`.
 
 A catalog `/AcroForm null` is no form: ISO 32000-1 §7.3.9 reads an entry whose value is `null` as absent, so the background stamps and the fresh `/AcroForm` replaces the null entry. A reference to a `null` object, or to an object the file does not hold, is `null` too (§7.3.10), so `/AcroForm 7 0 R` over `7 0 obj null endobj` is no form either. Every optional entry the backend reads off `form.pdf` reads a `null` the same way, written directly or referenced.
 
@@ -27,7 +27,7 @@ The background's cross-reference data is a classic `xref` table. One held in a c
 Nulling the key (PyMuPDF's `xref_set_key` sets a key to `null` rather than deleting it) strips the catalog entry alone, and the old widget annotations stay live in the page `/Annots`. A background whose page `/Annots` hold a `/Subtype /Widget`, written directly or referenced, is refused as `pdf::existing_acroform` too, whatever its catalog holds, and the message names the page.
 
 !!! note "Where the assets come from"
-    Producing a clean `form.pdf` + `form.json` from a raw source PDF (decrypt, strip, extract, verify) is the job of a separate *quillification* layer and is out of scope for the engine; the engine checks the result of the stripping, not how it was reached. V1 quills hand-author both assets; the `sample_form` fixture in `crates/fixtures/resources/quills/sample_form/` is a worked example.
+    Producing a clean `form.pdf` + `form.yaml` from a raw source PDF (decrypt, strip, extract, verify) is the job of a separate *quillification* layer and is out of scope for the engine; the engine checks the result of the stripping, not how it was reached. V1 quills hand-author both assets; the `sample_form` fixture in `crates/fixtures/resources/quills/sample_form/` is a worked example.
 
 ## `Quill.yaml`
 
@@ -81,74 +81,69 @@ main:
 
 See the [Quill.yaml Reference](quill-yaml-reference.md) for the full field-type vocabulary.
 
-## `form.json`
+## `form.yaml`
 
-`form.json` is a durable, version-controlled artifact: readable and diffable. It carries two populations: **bound `fields`** that reference a `schema_field` and inherit their widget kind from the schema, and **unbound `widgets`** with no schema field (a signer fills them), which declare their own `type`:
+`form.yaml` is a durable, version-controlled artifact: readable, diffable, and commentable. It carries two populations: **bound `fields`** that reference a `schema_field` and inherit their widget kind from the schema, and **unbound `widgets`** with no schema field (a signer fills them), which declare their own `type`:
 
-```json
-{
-  "schema": "quillmark/form@0.2.0",
-  "fields": [
-    {
-      "name": "FullName",
-      "schema_field": "full_name",
-      "page": 0,
-      "rect": { "x": 180, "y": 100, "w": 340, "h": 20 }
-    },
-    {
-      "name": "Comments",
-      "schema_field": "comments",
-      "page": 0,
-      "rect": { "x": 180, "y": 140, "w": 340, "h": 80 }
-    },
-    {
-      "name": "Agree",
-      "schema_field": "agree",
-      "page": 0,
-      "rect": { "x": 180, "y": 240, "w": 14, "h": 14 }
-    },
-    {
-      "name": "FavoriteColor",
-      "schema_field": "favorite_color",
-      "page": 0,
-      "rect": { "x": 180, "y": 280, "w": 340, "h": 20 }
-    },
-    {
-      "name": "Headline",
-      "schema_field": "headline",
-      "page": 0,
-      "rect": { "x": 180, "y": 520, "w": 340, "h": 20 }
-    }
-  ],
-  "widgets": [
-    {
-      "name": "Signature",
-      "type": "signature",
-      "page": 0,
-      "rect": { "x": 180, "y": 330, "w": 340, "h": 40 }
-    },
-    {
-      "name": "SignerInitials",
-      "type": "text",
-      "page": 0,
-      "rect": { "x": 180, "y": 390, "w": 120, "h": 20 }
-    },
-    {
-      "name": "SignerConfirms",
-      "type": "checkbox",
-      "page": 0,
-      "rect": { "x": 180, "y": 430, "w": 14, "h": 14 }
-    },
-    {
-      "name": "SignerRole",
-      "type": "choice",
-      "options": ["witness", "notary", "guardian"],
-      "page": 0,
-      "rect": { "x": 180, "y": 470, "w": 340, "h": 20 }
-    }
-  ]
-}
+```yaml
+schema: quillmark/form@0.2.0
+
+fields:
+  - name: FullName
+    schema_field: full_name
+    page: 0
+    rect: { x: 180, y: 100, w: 340, h: 20 }
+
+  - name: Comments
+    schema_field: comments
+    page: 0
+    rect: { x: 180, y: 140, w: 340, h: 80 }
+
+  # Box 3 on the printed form: the terms checkbox.
+  - name: Agree
+    schema_field: agree
+    page: 0
+    rect: { x: 180, y: 240, w: 14, h: 14 }
+
+  - name: FavoriteColor
+    schema_field: favorite_color
+    page: 0
+    rect: { x: 180, y: 280, w: 340, h: 20 }
+
+  - name: Headline
+    schema_field: headline
+    page: 0
+    rect: { x: 180, y: 520, w: 340, h: 20 }
+
+widgets:
+  - name: Signature
+    type: signature
+    page: 0
+    rect: { x: 180, y: 330, w: 340, h: 40 }
+
+  - name: SignerInitials
+    type: text
+    page: 0
+    rect: { x: 180, y: 390, w: 120, h: 20 }
+
+  - name: SignerConfirms
+    type: checkbox
+    page: 0
+    rect: { x: 180, y: 430, w: 14, h: 14 }
+
+  - name: SignerRole
+    type: choice
+    options: [witness, notary, guardian]
+    page: 0
+    rect: { x: 180, y: 470, w: 340, h: 20 }
 ```
+
+The file is read as `Quill.yaml` is: YAML 1.2, where only `true` and `false` are booleans, so `options: [yes, no]` holds two strings. JSON is YAML 1.2, so a generator may write JSON into `form.yaml` unchanged, with one exception: a string holding DEL, a C1 control other than U+0085, U+FFFE or U+FFFF written raw is refused by the parser, so escape such a character (`\u007f`). A YAML error, or a key missing from an entry, fails the load as `acroform::invalid_form_spec`, located at its line and column in `form.yaml`.
+
+!!! warning "Quote text holding ` #` or `: `"
+    An unquoted ` #` starts a comment, so `tooltip: Box 14b #2` reads as `Box 14b` with no error, and an unquoted `: ` fails the load. Quote such a value: `tooltip: "Box 14b #2"`.
+
+A quill holding `form.json`, beside `form.yaml` or in its place, fails to load as `acroform::legacy_form_json`; rename the file to `form.yaml`, contents unchanged.
 
 Note what is **absent** from the bound fields: no `type`, `options`, or `multiline`. `FullName` is a text box because `full_name` is a `string`; `Agree` is a checkbox because `agree` is a `boolean`; `FavoriteColor` is a dropdown whose options are the schema field's `enum` values; `Comments` is a multi-line text box because `comments` is a scalar array with `ui.multiline`. The two files cannot drift, because there is only one source of truth.
 
@@ -202,11 +197,11 @@ A page whose canvas box is under a point per side carries no canvas to place any
 
 ### Schema versioning and unknown keys
 
-`schema` follows the convention `quillmark/form@<version>`, hand-set at the last format change (never auto-derived from a crate version). The current format is **`quillmark/form@0.2.0`**. Unknown *keys* are **ignored, not rejected**, so the format grows additively under a later minor: every `0.x` from `0.2` on is read (an engine before 0.126 reads only `0.2.x`), and a new major is where a break goes. A version below `0.2` or under another major is rejected: a `form@0.1.0` file (which restated `type`/`options`/`multiline` on each field) fails to load with `acroform::invalid_form_json`.
+`schema` follows the convention `quillmark/form@<version>`, hand-set at the last format change (never auto-derived from a crate version). The current format is **`quillmark/form@0.2.0`**. Unknown *keys* are **ignored, not rejected**, so the format grows additively under a later minor: every `0.x` from `0.2` on is read (an engine before 0.126 reads only `0.2.x`), and a new major is where a break goes. A version below `0.2` or under another major is rejected: a `form@0.1.0` file (which restated `type`/`options`/`multiline` on each field) fails to load with `acroform::invalid_form_spec`.
 
 ### Opinionated styling
 
-The background owns all visual chrome; each widget is a transparent input over it. The backend therefore picks one house style (a standard font, auto-sized black text, a fixed checkbox on-state) and `form.json` carries **no** styling: no fonts, colors, borders, flag bitfields, or per-field appearance. Keep `form.json` to geometry and type.
+The background owns all visual chrome; each widget is a transparent input over it. The backend therefore picks one house style (a standard font, auto-sized black text, a fixed checkbox on-state) and `form.yaml` carries **no** styling: no fonts, colors, borders, flag bitfields, or per-field appearance. Keep `form.yaml` to geometry and type.
 
 ## Binding values
 
