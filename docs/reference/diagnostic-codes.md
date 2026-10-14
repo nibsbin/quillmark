@@ -186,13 +186,14 @@ Opening a Typst quill and compiling its plate.
 
 ## `acroform::`
 
-Opening an `acroform` quill and binding `form.json`.
+Opening an `acroform` quill and binding `form.yaml`.
 
 - `acroform::dangling_binding`
 - `acroform::field_page_out_of_range`
-- `acroform::invalid_form_json`
-- `acroform::missing_form_json`
+- `acroform::invalid_form_spec`
+- `acroform::legacy_form_json`
 - `acroform::missing_form_pdf`
+- `acroform::missing_form_spec`
 - `acroform::stamped_parse_failed`
 - `acroform::unbindable_field`
 

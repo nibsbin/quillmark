@@ -4,11 +4,21 @@
 
 Upgrade path: [0.125 → 0.126](docs/migrations/0.125-to-0.126.md). Script
 links, runaway YAML expansion and bodies nested past 12 levels are refused, a
-quill's font collections load, and a WASM trap rejects coded.
+quill's font collections load, an acroform quill's field spec is `form.yaml`,
+and a WASM trap rejects coded.
+
+### PDF forms
+
+- feat(acroform)!: **an acroform quill's field spec is `form.yaml`**, read as
+  `Quill.yaml` is, where it was `form.json`. JSON is YAML 1.2, so a renamed
+  `form.json` loads unchanged; a quill holding `form.json` fails as
+  `acroform::legacy_form_json`. `acroform::invalid_form_json` is
+  `acroform::invalid_form_spec`, located in `form.yaml`, and
+  `acroform::missing_form_json` is `acroform::missing_form_spec`. (#2210)
 
 ### Formats that grow
 
-- feat(acroform): **a `form.json` tagged with a later `0.x` than `0.2`
+- feat(acroform): **a field spec tagged with a later `0.x` than `0.2`
   loads**, its unknown keys ignored as before, where any version but `0.2.x`
   failed as `acroform::invalid_form_json`. A new major still fails. (#2208)
 - feat(core): **`quill.requires: ">=1.3"` names the oldest Quillmark a quill

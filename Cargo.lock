@@ -2280,6 +2280,7 @@ version = "0.125.0"
 dependencies = [
  "hayro 0.8.0",
  "lopdf",
+ "proptest",
  "quillmark",
  "quillmark-content",
  "quillmark-core",

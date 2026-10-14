@@ -194,17 +194,14 @@ const NARROW_LETTER: [f32; 4] = [96.0, 133.0, 500.0, 700.0];
 /// raster is the field's drawn value: the reported page size must be the
 /// raster's, and the field's region must be the box that value drew in.
 fn geometry_lands_on_the_ink(form_pdf: Vec<u8>) {
-    const FORM_JSON: &str = r#"{
-      "schema": "quillmark/form@0.2.0",
-      "fields": [
-        {
-          "name": "FullName",
-          "schema_field": "full_name",
-          "page": 0,
-          "rect": { "x": 180, "y": 90, "w": 200, "h": 20 }
-        }
-      ]
-    }"#;
+    const FORM_YAML: &str = "\
+schema: quillmark/form@0.2.0
+fields:
+  - name: FullName
+    schema_field: full_name
+    page: 0
+    rect: { x: 180, y: 90, w: 200, h: 20 }
+";
 
     let mut tree = quillmark::tree_from_path(quillmark_fixtures::quills_path("sample_form"))
         .expect("load sample_form tree");
@@ -214,12 +211,12 @@ fn geometry_lands_on_the_ink(form_pdf: Vec<u8>) {
     )
     .expect("replace form.pdf");
     tree.insert(
-        "form.json",
+        "form.yaml",
         FileTreeNode::File {
-            contents: FORM_JSON.as_bytes().to_vec(),
+            contents: FORM_YAML.as_bytes().to_vec(),
         },
     )
-    .expect("replace form.json");
+    .expect("replace form.yaml");
 
     let quill = Quill::from_tree(tree).expect("load patched quill");
     let doc = Document::parse(FILLED).expect("parse markdown").document;

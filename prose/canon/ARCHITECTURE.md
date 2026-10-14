@@ -74,7 +74,7 @@ Implements `Backend` for PDF, SVG, and PNG. Lowers each content field's `Content
 ### `backends/quillmark-acroform`
 
 The second backend: fills an existing AcroForm PDF rather than typesetting from
-scratch. It resolves card values against the quill's `form.json` spec and stamps
+scratch. It resolves card values against the quill's `form.yaml` spec and stamps
 them onto the base `form.pdf` as real interactive fields, each carrying both
 `NeedAppearances` and a baked `/AP` appearance stream.
 
@@ -123,7 +123,7 @@ Test resources under `resources/`, the parity corpus among them
 ## Data Injection
 
 `Backend::open()` receives:
-- `source`: `&Quill` with static assets/packages and config. A backend reads its own inputs from here: the Typst backend reads the template named by `typst.plate_file` from `source.files()`; acroform reads `form.pdf` / `form.json`
+- `source`: `&Quill` with static assets/packages and config. A backend reads its own inputs from here: the Typst backend reads the template named by `typst.plate_file` from `source.files()`; acroform reads `form.pdf` / `form.yaml`
 - `json_data`: JSON object after coercion, defaults, normalization
 - `today`: the render date `json_data` was compiled with, which a Typst plate's `datetime.today()` returns ([SCHEMAS.md](SCHEMAS.md#the-render-date-today))
 

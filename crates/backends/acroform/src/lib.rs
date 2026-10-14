@@ -1,7 +1,7 @@
 //! A Typst-free Quillmark backend that fills existing PDF forms. A `acroform`
 //! quill ships two assets: `form.pdf`, the stripped background (the normalized
 //! form with its `/AcroForm`, widget annotations, and page `/Annots` removed),
-//! and `form.json`, the value-free field spec. The backend binds document
+//! and `form.yaml`, the value-free field spec. The backend binds document
 //! values against `compile_data` and writes a fresh AcroForm onto the
 //! background via the `quillmark-pdf` stamping spine; it never reads or
 //! reconciles a foreign AcroForm.
@@ -11,8 +11,8 @@ mod form;
 mod resolve;
 
 use bind::BoundWidget;
-use form::FormSpec;
-use quillmark_core::quill::QuillConfig;
+use form::{FormSpec, FORM_YAML};
+use quillmark_core::quill::{FileTreeNode, QuillConfig};
 use quillmark_core::session::SessionHandle;
 use quillmark_core::{
     backend::Backend,
@@ -38,6 +38,7 @@ use {
 };
 
 const FORM_PDF: &str = "form.pdf";
+/// A field spec under this name is refused, never read.
 const FORM_JSON: &str = "form.json";
 
 const SUPPORTED_FORMATS: &[OutputFormat] = &[OutputFormat::Pdf];
@@ -71,15 +72,8 @@ impl Backend for AcroformBackend {
                 )
             })?
             .to_vec();
-        let form_json = files.get_file(FORM_JSON).ok_or_else(|| {
-            RenderError::coded(
-                "acroform::missing_form_json",
-                format!("acroform quill is missing its `{FORM_JSON}` field spec"),
-            )
-        })?;
-
-        let spec = FormSpec::parse(form_json)
-            .map_err(|e| RenderError::coded(e.code(), e.to_string()))?;
+        let spec = FormSpec::parse(form_spec_bytes(files)?)
+            .map_err(|e| RenderError::from_diag(e.to_diagnostic()))?;
 
         // Canvas boxes drive the top-left → bottom-left flip and the canvas
         // coordinate space, and reading them surfaces a malformed base early.
@@ -103,6 +97,32 @@ impl Backend for AcroformBackend {
             today,
             json_data,
         ))
+    }
+}
+
+/// `form.yaml`'s bytes. A quill holding `form.json`, alone or beside
+/// `form.yaml`, is refused: neither file is ever chosen silently.
+fn form_spec_bytes(files: &FileTreeNode) -> Result<&[u8], RenderError> {
+    match (files.get_file(FORM_YAML), files.get_file(FORM_JSON).is_some()) {
+        (Some(bytes), false) => Ok(bytes),
+        (None, true) => Err(RenderError::coded_hint(
+            "acroform::legacy_form_json",
+            format!(
+                "acroform quill ships its field spec as `{FORM_JSON}`; the backend reads `{FORM_YAML}`"
+            ),
+            format!("Rename `{FORM_JSON}` to `{FORM_YAML}`; the contents are valid as-is."),
+        )),
+        (Some(_), true) => Err(RenderError::coded_hint(
+            "acroform::legacy_form_json",
+            format!(
+                "acroform quill ships both `{FORM_YAML}` and `{FORM_JSON}`; the backend reads `{FORM_YAML}` alone"
+            ),
+            format!("Keep one: delete `{FORM_JSON}`, or rename it over `{FORM_YAML}`."),
+        )),
+        (None, false) => Err(RenderError::coded(
+            "acroform::missing_form_spec",
+            format!("acroform quill is missing its `{FORM_YAML}` field spec"),
+        )),
     }
 }
 

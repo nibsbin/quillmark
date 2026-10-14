@@ -79,14 +79,22 @@ pub(crate) fn parse_yaml<'de, T: Deserialize<'de>>(
 
 const EXPANSION_SLACK: usize = 4 * 1024;
 
+/// Deserialize `T` from YAML as `Quill.yaml` is read: under the parser's own
+/// budget, so an over-deep document errors rather than overflowing its stack,
+/// and with only `true` and `false` as booleans. A value that parses but does
+/// not fit `T`, a missing field or a mistyped one, carries a position as a
+/// syntax error does.
+pub fn from_yaml_str<T: serde::de::DeserializeOwned>(
+    yaml: &str,
+) -> Result<T, crate::error::YamlError> {
+    parse_yaml(yaml).map_err(|e| crate::error::YamlError::from_de(e, yaml))
+}
+
 impl QuillValue {
-    /// Parse a YAML string under the parser's own budget, so an over-deep
-    /// document errors rather than overflowing its stack. Only `true` and
-    /// `false` read as booleans; `yes`, `n` and `off` are strings.
+    /// Parse a YAML string as [`from_yaml_str`] reads it: `yes`, `n` and `off`
+    /// are strings.
     pub fn from_yaml_str(yaml_str: &str) -> Result<Self, crate::error::YamlError> {
-        let json_val: serde_json::Value = parse_yaml(yaml_str)
-            .map_err(|e| crate::error::YamlError::from_de(e, yaml_str))?;
-        Ok(Self::from_json(json_val))
+        from_yaml_str(yaml_str).map(Self::from_json)
     }
 
     /// The value's data.

@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc f295b90d8b66f1faa8482fec7648142e9ee6fcd0efecdbb87e70e0cbf2767584 # shrinks to spec = Object {"schema": String("quillmark/form@0.2.0"), "fields": Array [], "widgets": Array [Object {"type": String("text"), "multiline": Bool(false), "name": String(""), "page": Number(0), "rect": Object {"x": Number(0), "y": Number(0), "w": Number(395176.19303947804), "h": Number(0)}}]}
