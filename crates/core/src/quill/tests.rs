@@ -2,6 +2,7 @@ mod example_tests;
 mod matrix_tests;
 mod optional_tests;
 mod properties;
+mod requires_tests;
 mod today_tests;
 mod variant_tests;
 
