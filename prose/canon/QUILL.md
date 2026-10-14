@@ -95,7 +95,10 @@ Identity resolution:
   crate version. It is read before anything else in the file, and a floor above
   the running engine is the load's only error, `quill::engine_too_old`: strict
   parsing would otherwise report a newer engine's keys as typos. The floor is
-  checked and not stored on `QuillConfig`.
+  checked and not stored on `QuillConfig`. The engine's version is its release
+  with any prerelease suffix dropped, so a release candidate meets its own
+  release's floor, and a build of `main` carries the last released version
+  until the release bump.
 - `quill.ui` (a `UiCardSchema`, same shape as `card_kinds.<name>.ui`) is a fallback for `main.ui`: the `main` card uses `main.ui` when present, otherwise `quill.ui`.
 
 ## The example document
@@ -125,7 +128,7 @@ example's `$quill`.
 
 ## Strict Parsing
 
-`Quill.yaml` is parsed strictly: every problem the parser can detect is collected and reported in one pass as a `Vec<Diagnostic>`, rather than failing on the first error or silently dropping unsupported shapes. Specifically:
+`Quill.yaml` is parsed strictly: every problem the parser can detect is collected and reported in one pass as a `Vec<Diagnostic>`, rather than failing on the first error or silently dropping unsupported shapes. The exception is `quill::engine_too_old`, which is reported alone. Specifically:
 
 - Unknown keys in the `quill:` section error with `quill::unknown_key` (typos like `platefile` are not silently captured).
 - Unknown top-level sections error with `quill::unknown_section` (typos like `card_kind:` are not silently ignored). Root-level `fields:` gets a targeted hint pointing to `main.fields:`.

@@ -2276,9 +2276,8 @@ impl QuillConfig {
             .as_str()
             .ok_or_else(|| invalid(requires.to_string()))?;
         let floor = raw
-            .trim()
             .strip_prefix(">=")
-            .and_then(|v| crate::version::Version::from_str(v.trim()).ok())
+            .and_then(|v| crate::version::Version::from_str(v).ok())
             .ok_or_else(|| invalid(format!("'{raw}'")))?;
         let release = env!("CARGO_PKG_VERSION").split(['-', '+']).next().unwrap_or_default();
         let engine =
@@ -2286,7 +2285,10 @@ impl QuillConfig {
         if floor > engine {
             return Err(Diagnostic::new(
                 Severity::Error,
-                format!("This quill requires Quillmark {floor} or newer; this is Quillmark {engine}"),
+                format!(
+                    "This quill requires Quillmark {floor} or newer; this is Quillmark {}",
+                    env!("CARGO_PKG_VERSION")
+                ),
             )
             .with_code("quill::engine_too_old".to_string())
             .with_hint("Upgrade Quillmark, or load an older version of this quill.".to_string()));
@@ -2297,8 +2299,8 @@ impl QuillConfig {
     /// Parse QuillConfig from YAML content while collecting non-fatal warnings.
     ///
     /// Returns `Ok((config, warnings))` on success, or `Err(errors)` containing all
-    /// parse/validation errors when the config is invalid. Errors are always collected
-    /// exhaustively: callers see every problem, not just the first.
+    /// parse/validation errors when the config is invalid. Errors are collected
+    /// exhaustively, except that `quill::engine_too_old` is reported alone.
     pub fn from_yaml_with_warnings(
         yaml_content: &str,
     ) -> Result<(Self, Vec<Diagnostic>), Vec<Diagnostic>> {
@@ -2338,7 +2340,10 @@ impl QuillConfig {
         // carry keys this one would report as typos.
         if let Some(requires) = quill_section.get("requires") {
             if let Err(diag) = Self::check_engine_floor(requires) {
-                return Err(vec![diag]);
+                if diag.code.as_deref() == Some("quill::engine_too_old") {
+                    return Err(vec![diag]);
+                }
+                errors.push(diag);
             }
         }
 

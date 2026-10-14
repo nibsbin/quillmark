@@ -9,8 +9,9 @@ quill's font collections load, and a WASM trap rejects coded.
 ### Quill.yaml
 
 - feat(core): **`quill.requires: ">=1.3"` names the oldest Quillmark a quill
-  loads on**, and an older engine refuses it with one `quill::engine_too_old`
-  error instead of reporting the keys it has not learned as typos.
+  loads on**, and an engine from this release on that is below the floor
+  refuses it with one `quill::engine_too_old` error instead of reporting the
+  keys it has not learned as typos.
 
 ### Links and untrusted input
 

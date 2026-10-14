@@ -57,11 +57,11 @@ Loading a quill: `Quill.yaml`, its files, its seeds.
 - `quill::default_type_mismatch`
 - `quill::deprecated_groups`
 - `quill::description_multiline`
-- `quill::engine_too_old`
 - `quill::duplicate_field`
 - `quill::duplicate_group`
 - `quill::empty_description`
 - `quill::empty_section`
+- `quill::engine_too_old`
 - `quill::enum_blank_member`
 - `quill::example_reference`
 - `quill::field_parse_error`
