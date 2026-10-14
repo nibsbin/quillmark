@@ -372,8 +372,9 @@ kind-qualified at `cards.<kind>[<index>].<field>` (kind and document-array index
 fused so a consumer gets both without a second lookup). A card of an undeclared
 kind has no declared kind to qualify with, so `cards[<index>]`, and every field path
 under it, is the only bare-index form. Rooting keeps the
-grammar total against a field named for a root (`main.cards`, `main.main`); only
-a field literally named `body` still collides with the body terminal. Field
+grammar total against a field named for a root (`main.cards`, `main.main`), and
+a quill refuses a field named `body` (`quill::reserved_field_name`), the one field
+name that would collide with the body terminal. Field
 names and card kinds exclude `.`, `[`, `]`, so the rendered form round-trips;
 the WASM build exports `parseDocPath` / `formatDocPath` (structured
 `DocPathSeg[]` ↔ string) so a consumer routes on segments instead of regexing

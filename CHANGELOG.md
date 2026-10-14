@@ -87,6 +87,9 @@ quill's font collections load, and a WASM trap rejects coded.
 - fix(core,typst): **a data key spelled `$path` warns that plate data spells
   each dictionary's address `$path`**, and a spread failing `unexpected
   argument: $path` hints a sink parameter such as `..rest`. (#2167)
+- fix(core)!: **a quill declaring a field named `body` fails to load with
+  `quill::reserved_field_name`**, where the field and the card's body shared
+  one path, `main.body` or `cards.<kind>[i].body`. (#2207)
 - docs(reference): **the diagnostic-codes page lists every code the engine
   mints**, and a test fails on a code minted but not listed, or listed but
   minted nowhere. (#2175)

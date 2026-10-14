@@ -112,7 +112,7 @@ The main document card holds **root-block field schemas** under `main.fields`. O
 
 Field order under `main.fields` **is** display order in UIs: the declaration order of the keys is carried structurally through parsing and schema emission, so consumers walk the fields in key order. There is no `ui.order` knob: to reorder fields, reorder them in `Quill.yaml`. Fields can also sit in titled panels, under [`sections`](#sections).
 
-Field keys must be `snake_case` (`^[a-z][a-z0-9_]*$`). Capitalized field keys are reserved.
+Field keys must be `snake_case` (`^[a-z][a-z0-9_]*$`). Capitalized field keys are reserved, and `body` is refused (`quill::reserved_field_name`): it is the address of the card's own body.
 
 A card declares at most 1000 fields — the width one card-yaml block carries — and past it the quill fails to load (`quill::too_many_fields`). The count is per card, sections included, and only these top-level keys are charged: a nested `properties` map, an array's `items`, and a `variants:` cell set all ride inside the one field that declares them.
 

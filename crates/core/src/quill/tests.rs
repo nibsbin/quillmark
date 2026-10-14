@@ -317,6 +317,22 @@ fn test_quill_config_rejects_non_snake_case_identifiers() {
     .is_ok());
 }
 
+/// `body` is the body terminal of every card's path, so no field may take it.
+#[test]
+fn a_field_named_body_is_refused() {
+    for yaml in [
+        "main:\n  fields:\n    body: { type: string }\n",
+        "card_kinds:\n  note:\n    fields:\n      body: { type: richtext }\n",
+        "main:\n  sections:\n    s:\n      fields:\n        body: { type: string }\n",
+    ] {
+        let errs = QuillConfig::from_yaml_with_warnings(&with_header(yaml)).expect_err(yaml);
+        assert!(
+            errs.iter().any(|d| d.code.as_deref() == Some("quill::reserved_field_name")),
+            "{yaml}: {errs:?}"
+        );
+    }
+}
+
 #[test]
 fn test_invalid_quill_name_hint_suggests_a_valid_name() {
     for (name, suggestion) in [

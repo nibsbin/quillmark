@@ -2012,6 +2012,20 @@ impl QuillConfig {
                 );
                 continue;
             }
+            if field_name == "body" {
+                errors.push(
+                    Diagnostic::new(
+                        Severity::Error,
+                        format!(
+                            "Invalid {context} 'body': the name is the card body's, so a \
+                             field so named and the body would share one address \
+                             (`main.body`, `cards.<kind>[i].body`). Rename the field."
+                        ),
+                    )
+                    .with_code("quill::reserved_field_name".to_string()),
+                );
+                continue;
+            }
 
             let quill_value = QuillValue::from_json(field_value.clone());
             match FieldSchema::from_quill_value(field_name.clone(), &quill_value) {

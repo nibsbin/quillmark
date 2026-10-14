@@ -31,7 +31,7 @@ main:
 card_kinds:
   note:
     fields:
-      body:
+      prose:
         type: string
         default: TBD
       tag:
@@ -87,7 +87,7 @@ def test_seed_document_commits_no_field(tmp_path):
     quill = make_quill(tmp_path)
     md = quill.seed_document().to_markdown()
     assert "TBD" not in md
-    assert quill.schema["card_kinds"]["note"]["fields"]["body"]["default"] == "TBD"
+    assert quill.schema["card_kinds"]["note"]["fields"]["prose"]["default"] == "TBD"
     assert "default" not in quill.schema["main"]["fields"]["title"]
 
 

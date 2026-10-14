@@ -396,7 +396,7 @@ main:
 card_kinds:
   note:
     fields:
-      body:
+      prose:
         type: richtext
       blurb:
         type: richtext
@@ -508,11 +508,11 @@ card_kinds:
         let config = config();
         let mut doc = blank_doc();
         let mut ed = TypedWriter::new(&config, &mut doc);
-        ed.add_card("note", [("body", "**hi**")], Some("card body"), None)
+        ed.add_card("note", [("prose", "**hi**")], Some("card body"), None)
             .unwrap();
         assert_eq!(doc.cards().len(), 1);
         assert_eq!(doc.cards()[0].kind(), Some("note"));
-        assert_eq!(doc.cards()[0].field_text("body", Codec::Richtext).unwrap().unwrap(), "**hi**");
+        assert_eq!(doc.cards()[0].field_text("prose", Codec::Richtext).unwrap().unwrap(), "**hi**");
         assert_eq!(doc.cards()[0].body_markdown(), "card body");
     }
 
@@ -522,14 +522,14 @@ card_kinds:
         let mut doc = blank_doc();
         {
             let mut ed = TypedWriter::new(&config, &mut doc);
-            ed.add_card("note", [("body", "a")], None, None).unwrap();
-            ed.add_card("note", [("body", "c")], None, None).unwrap();
-            ed.add_card("note", [("body", "b")], None, Some(1)).unwrap();
+            ed.add_card("note", [("prose", "a")], None, None).unwrap();
+            ed.add_card("note", [("prose", "c")], None, None).unwrap();
+            ed.add_card("note", [("prose", "b")], None, Some(1)).unwrap();
         }
         let bodies: Vec<String> = doc
             .cards()
             .iter()
-            .map(|c| c.field_text("body", Codec::Richtext).unwrap().unwrap())
+            .map(|c| c.field_text("prose", Codec::Richtext).unwrap().unwrap())
             .collect();
         assert_eq!(bodies, ["a", "b", "c"]);
 
@@ -537,7 +537,7 @@ card_kinds:
         {
             let mut ed = TypedWriter::new(&config, &mut doc);
             let errs = ed
-                .add_card("note", [("body", "x")], None, Some(9))
+                .add_card("note", [("prose", "x")], None, Some(9))
                 .unwrap_err();
             assert_eq!(errs[0].0, "$kind");
         }
@@ -546,7 +546,7 @@ card_kinds:
         {
             let mut ed = TypedWriter::new(&config, &mut doc);
             let removed = ed.remove_card(1).unwrap();
-            assert_eq!(removed.field_text("body", Codec::Richtext).unwrap().unwrap(), "b");
+            assert_eq!(removed.field_text("prose", Codec::Richtext).unwrap().unwrap(), "b");
             assert!(ed.remove_card(5).is_none());
         }
         assert_eq!(doc.cards().len(), 2);
@@ -573,11 +573,11 @@ card_kinds:
 
         let mut ed = TypedWriter::new(&config, &mut doc);
         let mut card_ed = ed.card(0).unwrap();
-        card_ed.set("body", "**hi**").unwrap();
+        card_ed.set("prose", "**hi**").unwrap();
         let err = card_ed.set("stray", "v").unwrap_err();
         assert_eq!(err.code(), "edit::unknown_field");
 
-        assert_eq!(doc.cards()[0].field_text("body", Codec::Richtext).unwrap().unwrap(), "**hi**");
+        assert_eq!(doc.cards()[0].field_text("prose", Codec::Richtext).unwrap().unwrap(), "**hi**");
 
         let mut ed = TypedWriter::new(&config, &mut doc);
         assert!(matches!(
@@ -632,8 +632,8 @@ card_kinds:
         doc.push_card(Card::new("note").unwrap()).unwrap();
 
         let mut ed = TypedWriter::new(&config, &mut doc);
-        let _ = ed.card(0).unwrap().revise_field("body", "**hi**").unwrap();
-        assert_eq!(doc.cards()[0].field_text("body", Codec::Richtext).unwrap().unwrap(), "**hi**");
+        let _ = ed.card(0).unwrap().revise_field("prose", "**hi**").unwrap();
+        assert_eq!(doc.cards()[0].field_text("prose", Codec::Richtext).unwrap().unwrap(), "**hi**");
 
         let mut ed = TypedWriter::new(&config, &mut doc);
         assert_eq!(
@@ -663,7 +663,7 @@ card_kinds:
             )]
         };
 
-        let added = ed.add_card("note", [("body", "a")], Some("<span>x</span>"), None).unwrap();
+        let added = ed.add_card("note", [("prose", "a")], Some("<span>x</span>"), None).unwrap();
         assert_eq!(anchors(&added), dropped("cards.note[0].body"));
         let revised = ed.revise_body("<kbd>x</kbd>").unwrap();
         assert_eq!(anchors(&revised.warnings), dropped("main.body"));
@@ -675,7 +675,7 @@ card_kinds:
         assert_eq!(anchors(&revised.warnings), dropped("cards.note[0].blurb"));
         let revised = ed.card(0).unwrap().revise_field("blurb", "plain").unwrap();
         assert!(revised.warnings.is_empty());
-        let added = ed.add_card("note", [("body", "b")], Some("<span>y</span>"), Some(0)).unwrap();
+        let added = ed.add_card("note", [("prose", "b")], Some("<span>y</span>"), Some(0)).unwrap();
         assert_eq!(anchors(&added), dropped("cards.note[0].body"));
         let set = ed.set("subject", "<kbd>x</kbd>").unwrap();
         assert_eq!(anchors(&set), dropped("main.subject"));

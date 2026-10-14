@@ -1082,7 +1082,7 @@ main:
 card_kinds:
   note:
     fields:
-      body:
+      prose:
         type: string
 `
 
