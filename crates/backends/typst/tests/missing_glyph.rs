@@ -1,4 +1,4 @@
-//! Input text no loaded font covers warns `typst::missing_glyph`, naming each
+//! Laid-out text no loaded font covers warns `typst::missing_glyph`, naming each
 //! character once.
 
 use quillmark_core::backend::Backend;
@@ -9,7 +9,7 @@ mod common;
 fn missing(a: &str) -> Vec<String> {
     let quill = common::quill_with_plate(
         &common::yaml("main:\n  fields:\n    a:\n      type: string\n"),
-        "#import \"@local/quillmark-helper:0.2.0\" as qm\n#qm.data.a\n",
+        "#import \"@local/quillmark-helper:0.2.0\" as qm\n#set text(font: \"Roboto\")\n#qm.data.a\n",
     );
     let session = TypstBackend
         .open(&quill, &serde_json::json!({ "a": a }), common::test_date())
@@ -29,7 +29,7 @@ fn a_character_no_font_covers_warns_once() {
     assert_eq!(
         warnings[0],
         "no loaded font has a glyph for `中` (U+4E2D), `文` (U+6587); \
-         the page draws an empty box or nothing in its place"
+         the page draws an empty box in its place"
     );
 }
 
@@ -43,4 +43,19 @@ fn an_emoji_sequence_names_its_pictographs_alone() {
 #[test]
 fn covered_text_warns_nothing() {
     assert!(missing("plain text, ünïcödé").is_empty());
+}
+
+#[test]
+fn text_the_page_never_draws_warns_nothing() {
+    let quill = common::quill_with_plate(
+        &common::yaml("main:\n  fields:\n    a:\n      type: string\n"),
+        "#set text(font: \"Roboto\")\n#link(\"https://例え.jp/パス\")[idn]\n",
+    );
+    let session = TypstBackend
+        .open(&quill, &serde_json::json!({ "a": "中文" }), common::test_date())
+        .expect("the plate compiles");
+    assert!(session
+        .warnings()
+        .iter()
+        .all(|d| d.code.as_deref() != Some("typst::missing_glyph")));
 }
