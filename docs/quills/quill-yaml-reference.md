@@ -36,7 +36,7 @@ Root-level `fields:` is not supported; define the main document's field schemas 
 
 Every Quill.yaml must have a `quill` section with format metadata.
 
-`quill.name` must be `snake_case` (`^[a-z][a-z0-9_]*$`).
+`quill.name` must be `snake_case` (`^[a-z][a-z0-9_]*$`), at most 64 characters.
 
 | Key              | Type   | Required | Description |
 |------------------|--------|----------|-------------|

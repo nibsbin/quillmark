@@ -266,8 +266,8 @@ data payload.
 
 ### 3.5 Version Selectors
 
-The `$quill` value is `<name>` or `<name>@<version>`, where `<version>` is one
-of:
+The `$quill` value is `<name>` or `<name>@<version>`, where `<name>` is a quill
+name or `<collection>.<name>`, and `<version>` is one of:
 
 | Form | Meaning |
 |---|---|
@@ -279,7 +279,8 @@ of:
 Each version segment is ASCII digits. `name@latest` and `name@` fail as
 `parse::invalid_quill_reference`: a reference with no selector omits the `@`.
 
-Quill names match `/^[a-z_][a-z0-9_]*$/`. The selector is a pin, not a
+Quill and collection names match `/^[a-z][a-z0-9_]*$/`, at most 64
+characters each. The selector is a pin, not a
 resolver: this spec fixes the surface syntax accepted on the `$quill` line,
 and matching a partial selector against a set of installed versions belongs to
 a layer above the engine.

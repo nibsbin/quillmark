@@ -2319,14 +2319,15 @@ impl QuillConfig {
 
         let name = match quill_section.get("name").and_then(|v| v.as_str()) {
             Some(n) => {
-                if !Self::is_snake_case_identifier(n) {
+                if !crate::version::is_quill_name(n) {
                     let mut diag = Diagnostic::new(
                         Severity::Error,
                         format!(
                             "Invalid Quill name '{}': quill.name must be snake_case \
                              (a lowercase letter, then lowercase letters, digits, and \
-                             underscores).",
-                            n
+                             underscores), at most {} characters.",
+                            n,
+                            crate::version::MAX_QUILL_NAME_LEN
                         ),
                     )
                     .with_code("quill::invalid_name".to_string());
