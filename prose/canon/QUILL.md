@@ -67,9 +67,10 @@ Validation rules:
 3. File paths use `/` separators and are resolved relative to root
 
 Core reads no backend-specific assets at load time. A backend resolves its own
-inputs from the file bundle when it opens a session (the Typst backend reads its
-`typst.plate_file`; the acroform backend reads `form.pdf` / `form.yaml`), so a
-missing or malformed template surfaces as a render-time error, not a load error.
+inputs from the file bundle when it opens a session (the Typst backend reads
+`plate.typ` at the quill root, or the file `typst.plate_file` names; the
+acroform backend reads `form.pdf` / `form.yaml`), so a missing or malformed
+template surfaces as a render-time error, not a load error.
 
 ## `Quill.yaml` Rules
 
@@ -134,6 +135,7 @@ example's `$quill`.
 
 - Unknown keys in the `quill:` section error with `quill::unknown_key` (typos like `platefile` are not silently captured).
 - Unknown top-level sections error with `quill::unknown_section` (typos like `card_kind:` are not silently ignored). Root-level `fields:` gets a targeted hint pointing to `main.fields:`.
+- The backend-named section is a mapping of the keys its backend reads, the table `quillmark_core::backend::config_keys` holds per backend id. Any other key errors with `quill::unknown_backend_key`, its hint listing the valid keys, and a scalar or sequence section with `quill::invalid_backend_section`; an empty section reads as no keys. A backend id the table does not name loads its section unchecked: the render refuses the id itself.
 - `main:` and each `card_kinds.<name>:` entry parse under one card-schema shape, which accepts `title`, `description`, `fields`, `ui`, `body`, and `seed` only (`seed` on a card kind alone, [SCHEMAS.md](SCHEMAS.md#kind-seeds-and-document-overlays)): an unknown key (`feilds:`, or `sections:`, whose hint names the top-level `object` per [SCHEMAS.md](SCHEMAS.md#grouping)), or a `fields:` that is not a mapping errors with `quill::invalid_card_schema` rather than loading as a card with no fields. A `card_kinds:` that is not a mapping errors with `quill::invalid_card_kinds`.
 - Field schemas that fail to parse (e.g. a missing `type:`, or `ui.title`, whose hint names the top-level `title:`) error with `quill::field_parse_error` and an actionable hint where applicable, rather than being dropped from the schema.
 - A `title` is a literal: a `{field}` token in one errors with `quill::title_template`, and a `title` on an array's `items` with `quill::title_on_items`.

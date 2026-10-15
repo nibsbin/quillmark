@@ -5,8 +5,9 @@
 Upgrade path: [0.125 → 0.126](docs/migrations/0.125-to-0.126.md). Script
 links, runaway YAML expansion and bodies nested past 12 levels are refused, a
 quill's font collections load, an acroform quill's field spec is `form.yaml`,
-a card groups fields under a top-level `object` where it declared `sections:`,
-and a WASM trap rejects coded.
+a Typst quill's plate is `plate.typ` by name and an unknown `typst:` key fails
+the load, a card groups fields under a top-level `object` where it declared
+`sections:`, and a WASM trap rejects coded.
 
 ### PDF forms
 
@@ -22,6 +23,22 @@ and a WASM trap rejects coded.
 - feat(core)!: **a blueprint's `$kind: main` line carries `main.title` and
   `main.description` alone**, where it fell back to `quill.description`, which
   describes the package and never reaches the blueprint. (#2222)
+### Typst plates
+
+- feat(typst)!: **a Typst quill's plate is `plate.typ` at its root, found by
+  name, and `typst:` holds only the keys the backend reads.**
+  `typst.plate_file` stays, as an override. A quill holding `plate.typ` and
+  declaring no `plate_file` renders that plate, where it rendered a blank
+  page, and nothing reports the change; a `plate.typ` there that does not
+  compile fails `open` and `quillmark validate`. A quill holding no
+  `plate.typ` and declaring no `plate_file` fails to open as
+  `typst::plate_missing`, and `quillmark validate` reports it, where it
+  rendered a blank page; a `plate_file` that is not a string, or names no
+  path, fails as `typst::plate_path_invalid`. An unknown key under the
+  backend's section fails the load as `quill::unknown_backend_key`, where a
+  `typst:` key warned `typst::unknown_key` on every render, and a scalar or
+  sequence section fails as `quill::invalid_backend_section`.
+  `quillmark::typst_plate_file` returns the path, not an `Option`. (#2220)
 
 ### Grouping
 

@@ -2390,12 +2390,22 @@ impl QuillConfig {
 
         let mut backend_config = HashMap::new();
         if !backend.is_empty() {
-            if let Some(section_val) = quill_yaml_val.get(&backend) {
-                if let Some(table) = section_val.as_object() {
+            match quill_yaml_val.get(&backend) {
+                None | Some(serde_json::Value::Null) => {}
+                Some(serde_json::Value::Object(table)) => {
+                    let keys = crate::backend::config_keys(&backend);
                     for (key, value) in table {
-                        backend_config.insert(key.clone(), QuillValue::from_json(value.clone()));
+                        match keys {
+                            Some(keys) if !keys.contains(&key.as_str()) => {
+                                errors.push(crate::backend::unknown_config_key(&backend, key));
+                            }
+                            _ => {
+                                backend_config.insert(key.clone(), QuillValue::from_json(value.clone()));
+                            }
+                        }
                     }
                 }
+                Some(_) => errors.push(crate::backend::invalid_config_section(&backend)),
             }
         }
 

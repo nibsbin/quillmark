@@ -197,8 +197,6 @@ quill:
 
 typst:
   plate_file: plate.typ
-  packages:
-    - "@preview/bubble:0.2.2"
 
 main:
   fields:
@@ -228,7 +226,6 @@ main:
             .and_then(|v| v.as_str()),
         Some("plate.typ")
     );
-    assert!(config.backend_config.contains_key("packages"));
 
     assert_eq!(config.main.fields.len(), 2);
     assert!(config.main.fields.contains_key("title"));
@@ -879,6 +876,43 @@ fn test_unknown_key_in_quill_section_errors() {
     assert_eq!(err[0].code.as_deref(), Some("quill::unknown_key"));
     assert!(err[0].message.contains("auther"));
     assert!(err[0].hint.as_deref().unwrap_or("").contains("author"));
+}
+
+/// A backend's section holds only the keys its backend reads, and is a
+/// mapping or empty: Typst reads `plate_file`, acroform nothing.
+#[test]
+fn a_backend_section_holds_only_the_keys_its_backend_reads() {
+    let err = config_with_sections("typst:\n  plate_file: plate.typ\n  packages: []\n  pages: 2\n")
+        .unwrap_err();
+    let refused: Vec<_> = err
+        .iter()
+        .map(|d| (d.code.as_deref(), d.args.get("key").and_then(|k| k.as_str())))
+        .collect();
+    assert_eq!(
+        refused,
+        [
+            (Some("quill::unknown_backend_key"), Some("packages")),
+            (Some("quill::unknown_backend_key"), Some("pages")),
+        ]
+    );
+    assert!(err[0].hint.as_deref().unwrap_or("").contains("packages/"), "{:?}", err[0].hint);
+    assert!(err[1].hint.as_deref().unwrap_or("").contains("plate_file"), "{:?}", err[1].hint);
+
+    let acroform = "quill:\n  name: q\n  version: \"1.0\"\n  backend: acroform\n  description: q\n\
+                    acroform:\n  plate_file: plate.typ\n";
+    let err = QuillConfig::from_yaml_with_warnings(acroform).unwrap_err();
+    let codes: Vec<_> = err.iter().map(|d| d.code.as_deref()).collect();
+    assert_eq!(codes, [Some("quill::unknown_backend_key")]);
+
+    for section in ["typst: plate.typ\n", "typst: [plate_file]\n"] {
+        let err = config_with_sections(section).unwrap_err();
+        let codes: Vec<_> = err.iter().map(|d| d.code.as_deref()).collect();
+        assert_eq!(codes, [Some("quill::invalid_backend_section")], "{section}");
+    }
+    for section in ["typst:\n", "typst:\n  # plate_file: tpl/main.typ\n"] {
+        let config = config_with_sections(section).expect(section);
+        assert!(config.backend_config.is_empty(), "{section}");
+    }
 }
 
 #[test]

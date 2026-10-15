@@ -66,7 +66,7 @@ Notable codes: `quill::name_mismatch` / `quill::version_mismatch` (a well-formed
 
 A Typst compile classifies into four codes: `typst::file_not_found` (a file the quill's world refused — a missing asset is the common one), `typst::unknown_variable`, `typst::type_error`, and `typst::compile` for everything else, warnings included. They are a routing key only: which file was searched for, or which symbol was unknown, is read from `message`.
 
-Before any compile, opening a Typst quill can refuse its plate: `typst::plate_missing` when `typst.plate_file` names no file in the quill, `typst::plate_path_invalid` when it names one at a path Typst cannot load, and `typst::helper_import`, one per import, when any `.typ` file of the quill outside `packages/` imports the helper package any way but `#import "@local/quillmark-helper:0.2.0" as qm`, whether or not the plate imports that file.
+Before any compile, opening a Typst quill can refuse its plate: `typst::plate_missing` when the quill holds no `plate.typ` and declares no `typst.plate_file`, or `typst.plate_file` names no file in the quill, `typst::plate_path_invalid` when `typst.plate_file` is not a string, names no path, or names a file at a path Typst cannot load, and `typst::helper_import`, one per import, when any `.typ` file of the quill outside `packages/` imports the helper package any way but `#import "@local/quillmark-helper:0.2.0" as qm`, whether or not the plate imports that file.
 
 ## Warnings vs errors
 
@@ -86,7 +86,7 @@ Fatality is a two-value ladder: `Error` blocks the stage that emits it; `Warning
 
     On the CLI, `quillmark render` and `quillmark check` both print every validation warning ([CLI Reference](../cli/reference.md#check)).
 - **Compile warnings**: a backend's non-fatal diagnostics (font fallback, overfull pages), carried on `result.warnings`.
-- **Load warnings**: what the Typst backend skipped loading the quill (`typst::package_manifest`, `typst::package_entrypoint_missing`, `typst::path_skipped`) and a `typst:` key it does not read (`typst::unknown_key`), carried ahead of the compile warnings. A render or session `open` whose compile fails carries them too, in the error's `diagnostics` after its errors: an `#import` of a package skipped for its manifest fails as `typst::file_not_found`, and only the warning says why.
+- **Load warnings**: what the Typst backend skipped loading the quill (`typst::package_manifest`, `typst::package_entrypoint_missing`, `typst::path_skipped`), carried ahead of the compile warnings. A render or session `open` whose compile fails carries them too, in the error's `diagnostics` after its errors: an `#import` of a package skipped for its manifest fails as `typst::file_not_found`, and only the warning says why.
 - **`backend::declined_construct`**: a construct the backend typesets nothing for, one per content field, carrying `backend`, `construct` and `count` in `args` and the field's path. The Typst backend declines `image`: a markdown image in a `richtext` field reaches no page, because no backend resolves a content image's url. The acroform backend declines every construct but the paragraph. `quill.validate(doc)` returns the same warnings before any render.
 
 A successful render returns artifacts **and** a `warnings` list, so inspect it even on success.

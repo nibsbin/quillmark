@@ -33,7 +33,8 @@ pub const HELPER_DIR: &str = "local/quillmark-helper";
 pub struct Workspace {
     /// Paths relative to the workspace directory, every component a plain name.
     pub files: Vec<(PathBuf, Vec<u8>)>,
-    /// `typst.plate_file`, relative to the quill root.
+    /// The plate's path from the quill root: `typst.plate_file`, else
+    /// `plate.typ`.
     pub plate_file: String,
     /// The quill's load warnings, the ones a render carries: Typst reports a
     /// package skipped for its manifest only as one it cannot find.
@@ -50,8 +51,7 @@ pub struct Workspace {
 /// manifest names no valid package spec, or names the helper's, is skipped.
 ///
 /// Fails with `typst::wrong_backend` for a quill of another backend, and with
-/// each plate refusal a render's `open` raises; `typst::plate_missing` also
-/// covers a quill declaring no `typst.plate_file`.
+/// each plate refusal a render's `open` raises.
 pub fn workspace(source: &Quill, json_data: &serde_json::Value) -> Result<Workspace, RenderError> {
     if source.backend_id() != "typst" {
         return Err(RenderError::coded(
@@ -64,12 +64,6 @@ pub fn workspace(source: &Quill, json_data: &serde_json::Value) -> Result<Worksp
         ));
     }
     let plate = crate::read_plate(source)?;
-    let Some(plate_file) = plate.file.clone() else {
-        return Err(RenderError::coded(
-            "typst::plate_missing",
-            "the quill declares no `typst.plate_file`".to_string(),
-        ));
-    };
     let world = crate::quill_world(source, &plate)?;
     crate::check_helper_imports(&world)?;
     let warnings = world.load_warnings().to_vec();
@@ -136,7 +130,7 @@ pub fn workspace(source: &Quill, json_data: &serde_json::Value) -> Result<Worksp
     });
     Ok(Workspace {
         files,
-        plate_file,
+        plate_file: plate.file,
         warnings,
     })
 }
