@@ -323,7 +323,6 @@ fn a_field_named_body_is_refused() {
     for yaml in [
         "main:\n  fields:\n    body: { type: string }\n",
         "card_kinds:\n  note:\n    fields:\n      body: { type: richtext }\n",
-        "main:\n  sections:\n    s:\n      fields:\n        body: { type: string }\n",
     ] {
         let errs = QuillConfig::from_yaml_with_warnings(&with_header(yaml)).expect_err(yaml);
         assert!(
@@ -582,7 +581,7 @@ fn a_bad_group_declaration_is_refused_by_code() {
 }
 
 #[test]
-fn sections_and_legacy_groups_settle_to_one_schema() {
+fn legacy_groups_settle_in_registry_order() {
     let legacy = r#"
 main:
   ui:
@@ -602,37 +601,11 @@ main:
         dco: { type: boolean }
     notes: { type: string }
 "#;
-    let sectioned = r#"
-main:
-  fields:
-    notes: { type: string }
-  sections:
-    addressing:
-      fields:
-        subject: { type: string }
-        memo_for: { type: string }
-    letterhead:
-      title: "Letterhead & Seal"
-      fields:
-        letterhead_title: { type: string }
-    quals:
-      fields:
-        qualifications:
-          type: object
-          properties:
-            dco: { type: boolean }
-"#;
-    let load = |sections| QuillConfig::from_yaml_with_warnings(&with_header(sections)).unwrap();
-    let codes = |warnings: &[Diagnostic]| -> Vec<String> {
-        warnings.iter().filter_map(|d| d.code.clone()).collect()
-    };
-    let (legacy, legacy_warnings) = load(legacy);
-    let (sectioned, sectioned_warnings) = load(sectioned);
-    assert_eq!(codes(&legacy_warnings), ["quill::deprecated_groups"]);
-    assert!(sectioned_warnings.is_empty(), "{sectioned_warnings:?}");
+    let (config, warnings) = QuillConfig::from_yaml_with_warnings(&with_header(legacy)).unwrap();
+    let codes: Vec<String> = warnings.iter().filter_map(|d| d.code.clone()).collect();
+    assert_eq!(codes, ["quill::deprecated_groups"]);
 
-    let schema = sectioned.schema();
-    assert_eq!(legacy.schema(), schema);
+    let schema = config.schema();
     let keys = |v: &serde_json::Value| -> Vec<String> {
         v.as_object().unwrap().keys().cloned().collect()
     };
@@ -642,6 +615,7 @@ main:
         ["notes", "subject", "memo_for", "letterhead_title", "qualifications"]
     );
     assert_eq!(keys(&main["ui"]["groups"]), ["addressing", "letterhead", "quals"]);
+    assert_eq!(main["ui"]["groups"]["letterhead"]["title"], "Letterhead & Seal");
     assert_eq!(main["fields"]["memo_for"]["ui"]["group"], "addressing");
     assert_eq!(main["fields"]["qualifications"]["ui"]["layout"], "flat");
 }
@@ -654,37 +628,17 @@ fn a_legacy_registry_naming_no_field_leaves_no_ui() {
 }
 
 #[test]
-fn a_bad_section_declaration_is_refused_by_code() {
-    for (main, code) in [
-        (
-            "  ui: { groups: [a] }\n  sections:\n    a:\n      fields:\n        s: { type: string }\n",
-            "quill::mixed_sectioning",
-        ),
-        (
-            "  sections:\n    a:\n      fields:\n        s: { type: string, ui: { group: a } }\n",
-            "quill::mixed_sectioning",
-        ),
-        (
-            "  fields:\n    s: { type: string }\n  sections:\n    a:\n      fields:\n        s: { type: string }\n",
-            "quill::duplicate_field",
-        ),
-        (
-            "  sections:\n    Letterhead:\n      fields:\n        s: { type: string }\n",
-            "quill::invalid_section_id",
-        ),
-        (
-            "  sections:\n    a:\n      feilds:\n        s: { type: string }\n",
-            "quill::invalid_card_schema",
-        ),
-        ("  sections:\n    a: [s]\n", "quill::invalid_card_schema"),
-        ("  sections:\n    a:\n      title: A\n", "quill::empty_section"),
-        ("  sections:\n    a:\n", "quill::empty_section"),
+fn a_sections_block_is_refused_toward_top_level_objects() {
+    for yaml in [
+        "main:\n  sections:\n    a:\n      fields:\n        s: { type: string }\n",
+        "card_kinds:\n  note:\n    sections:\n      a:\n        fields:\n          s: { type: string }\n",
     ] {
-        let err = config_with_sections(&format!("main:\n{main}")).expect_err(code);
+        let err = config_with_sections(yaml).expect_err(yaml);
         let [diag] = err.as_slice() else {
-            panic!("{code}: one error expected, got {err:?}");
+            panic!("{yaml}: one error expected, got {err:?}");
         };
-        assert_eq!(diag.code.as_deref(), Some(code));
+        assert_eq!(diag.code.as_deref(), Some("quill::invalid_card_schema"));
+        assert!(diag.hint.as_deref().is_some_and(|h| h.contains("`object`")), "{diag:?}");
     }
 }
 

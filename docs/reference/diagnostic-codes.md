@@ -60,7 +60,6 @@ Loading a quill: `Quill.yaml`, its files, its seeds.
 - `quill::duplicate_field`
 - `quill::duplicate_group`
 - `quill::empty_description`
-- `quill::empty_section`
 - `quill::engine_too_old`
 - `quill::enum_blank_member`
 - `quill::example_reference`
@@ -76,7 +75,6 @@ Loading a quill: `Quill.yaml`, its files, its seeds.
 - `quill::invalid_matrix_member`
 - `quill::invalid_name`
 - `quill::invalid_requires`
-- `quill::invalid_section_id`
 - `quill::invalid_ui`
 - `quill::invalid_utf8`
 - `quill::invalid_version`
@@ -89,7 +87,6 @@ Loading a quill: `Quill.yaml`, its files, its seeds.
 - `quill::missing_name`
 - `quill::missing_section`
 - `quill::missing_version`
-- `quill::mixed_sectioning`
 - `quill::name_mismatch`
 - `quill::nested_group_not_supported`
 - `quill::object_empty_properties`
