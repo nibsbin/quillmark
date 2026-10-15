@@ -126,8 +126,8 @@ families:
     ([CARDS.md](CARDS.md#card-row-matrix)). It advises where a load error
     would overreach — the loader sees a correlate, not the fact.
   - `quill::deprecated_groups`: a card placing fields with the legacy
-    `ui.group`, which `sections:` spells
-    ([SCHEMAS.md](SCHEMAS.md#sections)).
+    `ui.group`, which a top-level `object` replaces, nesting the fields under
+    its id ([SCHEMAS.md](SCHEMAS.md#grouping)).
 - **Parse warnings**: the `warnings` on the `Parsed` that `Document::parse`
   returns (e.g. a `~~~` opener missing its blank line), which both bindings
   keep on `doc.warnings` beside the `conform::*` set `Quill::parse` appends.

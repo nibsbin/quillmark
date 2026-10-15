@@ -385,10 +385,10 @@ declares. A freeform `type: object` without a `properties` map is rejected at
 ## UI metadata honored
 
 Field declaration order is blueprint order, carried by the schema's ordered
-field maps: a card's own `fields:`, then each section's, in section order. The
-loader settles a legacy `ui.group` card into the same order, ungrouped fields
-first ([SCHEMAS.md](SCHEMAS.md#sections)), so the blueprint sorts nothing. A
-section emits no banner line. The other `ui:` keys (`ui.compact`,
+field maps. The loader settles a legacy `ui.group` card into display order,
+ungrouped fields first ([SCHEMAS.md](SCHEMAS.md#grouping)), so the blueprint
+sorts nothing. A group emits no banner line; a top-level `object` prints as any
+typed dictionary does, its description above it. The other `ui:` keys (`ui.compact`,
 `ui.multiline`, `ui.blank_title`, `ui.layout`) are presentation-only and do not
 affect blueprint output, so none may hold a fact a writer needs: a label is
 `title`, which the blueprint prints. `ui.layout` names a control an editor
