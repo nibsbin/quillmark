@@ -124,6 +124,9 @@ it declares `multiline: true`.
 - feat(typst): **a character no loaded font covers warns
   `typst::missing_glyph`**, once per render, naming each character the page
   draws as an empty box, where Typst drew it and said nothing. (#2179, #2196)
+- fix(typst): **a word past 64 KiB of characters no font covers renders**,
+  where reading its glyphs panicked on every format, aborting the CLI and
+  Python and trapping WASM. (#2227)
 
 ### Markdown
 
