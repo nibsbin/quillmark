@@ -26,7 +26,7 @@ typst:        # Optional: backend-specific configuration
 
 Root-level `fields:` is not supported; define the main document's field schemas under `main.fields`.
 
-`Quill.yaml` is parsed strictly. Unknown keys in the `quill:` section, unknown top-level sections, malformed `ui:` blocks, and field schemas that can't be parsed all produce errors: they are never silently dropped. Every error is collected in a single pass, so authors see all problems at once; the one exception is a [`requires`](#quill-section) floor the engine is below, which is reported alone. Run `quillmark validate <quill_dir>` to surface them.
+`Quill.yaml` is parsed strictly. Unknown keys in the `quill:` section or the backend's section, unknown top-level sections, malformed `ui:` blocks, and field schemas that can't be parsed all produce errors: they are never silently dropped. Every error is collected in a single pass, so authors see all problems at once; the one exception is a [`requires`](#quill-section) floor the engine is below, which is reported alone. Run `quillmark validate <quill_dir>` to surface them.
 
 ---
 
@@ -43,6 +43,8 @@ Every Quill.yaml must have a `quill` section with format metadata.
 | `description`    | string | yes      | Human-readable description of the quill package, for a gallery or a quill picker (non-empty). The blueprint never prints it: the root card's label is `main`'s own `title` and `description`. One line: a line break fails the load with `quill::description_multiline`. |
 | `version`        | string | yes      | Semantic version (`MAJOR.MINOR` or `MAJOR.MINOR.PATCH`) |
 | `author`         | string | no       | Creator of the Quill (defaults to `"Unknown"`) |
+| `license`        | string | no       | The quill's license, as an SPDX license expression |
+| `homepage`       | string | no       | Where the quill's source or docs live, as an absolute `http` or `https` URL |
 | `ui`             | object | no       | Document-level UI metadata |
 | `requires`       | string | no       | The oldest Quillmark this quill loads on, as `">=MAJOR.MINOR"` or `">=MAJOR.MINOR.PATCH"` |
 
@@ -52,9 +54,29 @@ other check, so keys it has not learned yet do not read as typos; an engine from
 before `requires` existed reports `requires` itself as `quill::unknown_key`. Any
 other spelling, whitespace included, is `quill::invalid_requires`.
 
+`license` is an SPDX license expression on one line, such as `MIT`,
+`Apache-2.0 OR MIT` or `GPL-3.0-or-later WITH Classpath-exception-2.0`. Each id
+is spelled as the [SPDX License List](https://spdx.org/licenses/) spells it, and
+the operators `AND`, `OR` and `WITH` are uppercase. A license off that list is
+`LicenseRef-<name>`. Anything else fails the load with `quill::invalid_license`:
+`/` for `OR`, `NOASSERTION`, a line break, or a value that is not a string. The
+hint names the fix where one is plain, such as `GPL-2.0-or-later` for
+`GPL-2.0+`. A deprecated id such as `GPL-3.0` loads, with a
+`quill::deprecated_license` warning. Spaces around the expression are dropped.
+
+`homepage` is an absolute `http` or `https` URL naming a host, such as
+`https://github.com/org/quills`. A user name or password before the host, a
+port past 65535, and an invisible formatting character such as a zero-width
+space each fail the load with `quill::invalid_homepage`, as anything else does.
+
+Neither key reaches the plate or the blueprint; both surface on
+`Quill.metadata` and `quillmark info`. They arrive in the same release as
+`requires`, so an older engine reports them as `quill::unknown_key` whether or
+not the quill sets `requires`.
+
 A backend's own settings live under its backend-named section, not in `quill:`.
-The Typst template, for example, is declared as `typst.plate_file` (see the
-[`typst` Section](#typst-section) below).
+The Typst plate's path, for example, is `typst.plate_file`, which defaults to
+`plate.typ` (see the [`typst` Section](#typst-section) below).
 
 ```yaml
 quill:
@@ -63,9 +85,6 @@ quill:
   backend: typst
   description: Typesetted USAF Official Memorandum
   author: TongueToQuill
-
-typst:
-  plate_file: plate.typ
 ```
 
 ### Example document
@@ -1063,20 +1082,29 @@ Card kinds defined here are authored as `~~~` blocks (with a `$kind: <kind>` lin
 
 ## `typst` Section
 
-Backend-specific configuration for the Typst renderer.
+The Typst backend compiles `plate.typ` at the quill root, found by name as `example.md` is. The optional `typst` section moves the plate elsewhere.
+
+```
+my_quill/1.0.0/
+├── Quill.yaml
+├── plate.typ      # the plate, with no `typst` section
+└── example.md
+```
 
 | Key          | Type   | Required | Description |
 |--------------|--------|----------|-------------|
-| `plate_file` | string | no       | Path from the quill root to the Typst template the backend compiles, steps separated by `/` |
+| `plate_file` | string | no       | Path from the quill root to the Typst template the backend compiles, steps separated by `/`. Default `plate.typ` |
 
 ```yaml
 typst:
-  plate_file: plate.typ
+  plate_file: tpl/main.typ
 ```
 
-A quill declaring no `plate_file` compiles an empty plate and renders a blank page, with no diagnostic. A `.` step or an empty one drops, so `./plate.typ` names `plate.typ` and `tpl//layout.typ` names `tpl/layout.typ`, the path every diagnostic and `quillmark workspace` give. A leading `/` or a `..` step is refused as `typst::plate_missing`, its hint naming the spelling from the quill root, and so is a `plate_file` naming no file. A `plate_file` naming a file at a path holding a `\`, which Typst refuses, fails as `typst::plate_path_invalid`: separate the path with `/`, and rename a file whose own name holds a `\`.
+A quill holding no `plate.typ` and declaring no `plate_file` fails to render as `typst::plate_missing`, its hint naming both. Core reads no backend file at load: the backend resolves the plate when it opens a session, and `quillmark validate` checks it.
 
-Any other key under `typst` is ignored, with a `typst::unknown_key` warning on each render. Packages are not declared here: a quill vendors them under `packages/`, as the [Typst Backend Guide](typst-backend.md#typst-packages) describes.
+A `.` step or an empty one drops, so `./plate.typ` names `plate.typ` and `tpl//layout.typ` names `tpl/layout.typ`, the path every diagnostic and `quillmark workspace` give. A leading `/` or a `..` step is refused as `typst::plate_missing`, its hint naming the spelling from the quill root, and so is a `plate_file` naming no file. A `plate_file` naming a file at a path holding a `\`, which Typst refuses, fails as `typst::plate_path_invalid`: separate the path with `/`, and rename a file whose own name holds a `\`. So does a `plate_file` that is not a string, or that names no path once its `.` and empty steps drop, such as `""` or `./`.
+
+Any other key under `typst` fails the load as `quill::unknown_backend_key`, its hint listing the valid keys. A `typst` section that is a scalar or a sequence fails as `quill::invalid_backend_section`, and an empty one, `typst:` alone or holding only comments, reads as no keys. A quill using a key a later release adds declares that release in [`requires`](#quill-section), so an older engine reports `quill::engine_too_old` rather than the key. Packages are not declared here: a quill vendors them under `packages/`, as the [Typst Backend Guide](typst-backend.md#typst-packages) describes.
 
 ---
 
@@ -1102,9 +1130,6 @@ quill:
   backend: typst
   description: Monthly project status report
   author: Engineering Team
-
-typst:
-  plate_file: plate.typ
 
 main:
   fields:

@@ -21,12 +21,10 @@ main:
     title:
       type: string
       description: The heading at the top of the page
-
-typst:
-  plate_file: plate.typ
 ```
 
-and `my_quill/plate.typ`, the Typst layout that prints it:
+and `my_quill/plate.typ`, the Typst layout that prints it, which the backend
+finds by its name:
 
 ```typst
 #import "@local/quillmark-helper:0.2.0" as qm
@@ -111,9 +109,6 @@ This paragraph is the document body. *Markdown* works here.
         title:
           type: string
           description: The heading at the top of the page
-
-    typst:
-      plate_file: plate.typ
     `)],
       ["plate.typ", enc.encode(`#import "@local/quillmark-helper:0.2.0" as qm
 

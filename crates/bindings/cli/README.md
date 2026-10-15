@@ -105,8 +105,8 @@ canonical document does not render.
 
 ### `quillmark info <QUILL_PATH>`
 
-Prints the quill's identity — name, version, author, backend — and its field,
-card and defaults counts.
+Prints the quill's identity from its `quill:` section, and its field, card and
+defaults counts.
 
 ### `quillmark workspace [OPTIONS] <QUILL_PATH> [MARKDOWN_FILE]`
 

@@ -26,9 +26,6 @@ quill:
   version: "1.0.0"
   description: A simple letter format
 
-typst:
-  plate_file: plate.typ
-
 main:
   fields:
     sender:
@@ -61,7 +58,7 @@ When you declare an `enum`, list only the real choices. Every enum also accepts 
 
 ## 3. Write `plate.typ`
 
-Your first plate template:
+The backend finds the plate by its name, `plate.typ` beside `Quill.yaml`. Your first plate template:
 
 ```typst
 #import "@local/quillmark-helper:0.2.0" as qm

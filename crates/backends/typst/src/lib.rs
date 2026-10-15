@@ -479,29 +479,22 @@ impl Default for TypstBackend {
     }
 }
 
+/// The plate the backend reads when the quill's `typst:` section names none.
+const PLATE_FILE: &str = "plate.typ";
+
 pub(crate) struct Plate {
-    /// `typst.plate_file` less its `.` steps and empty steps; `None` for a quill
-    /// declaring none.
-    pub(crate) file: Option<String>,
+    /// The plate's path from the quill root, less its `.` steps and empty
+    /// steps.
+    pub(crate) file: String,
     /// Where the world loads the plate.
     pub(crate) path: VirtualPath,
     pub(crate) text: String,
 }
 
-impl Plate {
-    /// A plate no `plate_file` declares, loaded as `main.typ`.
-    pub(crate) fn undeclared(text: String) -> Self {
-        Self {
-            file: None,
-            path: VirtualPath::new("main.typ").expect("\"main.typ\" is a valid virtual path"),
-            text,
-        }
-    }
-}
-
-/// `typst.plate_file` as a render reads it, or the refusal a render's `open`
-/// raises for it; `None` for a quill declaring none.
-pub fn plate_file(source: &Quill) -> Result<Option<String>, RenderError> {
+/// The plate's path from the quill root as a render reads it, or the refusal a
+/// render's `open` raises for it: `typst.plate_file` where the quill declares
+/// it, else `plate.typ`.
+pub fn plate_file(source: &Quill) -> Result<String, RenderError> {
     Ok(read_plate(source)?.file)
 }
 
@@ -511,39 +504,58 @@ pub fn typst_version() -> &'static str {
     typst::utils::version().raw()
 }
 
-/// The plate is a Typst-only notion: its filename is declared under the
-/// `typst:` backend-config section as `plate_file` and the source lives in the
-/// quill's file bundle. A quill declaring no `plate_file` renders an empty one.
+/// The plate is a Typst-only notion: `plate.typ` at the quill root, found by
+/// name, or the file `typst.plate_file` names. Core reads no backend asset at
+/// load, so a quill holding neither fails here, at `open`.
 ///
-/// A declared plate loads at its own path, so one Typst's path grammar refuses
-/// fails here: any stand-in name may belong to a file the quill holds.
+/// The plate loads at its own path, so one Typst's path grammar refuses fails
+/// here: any stand-in name may belong to a file the quill holds.
 fn read_plate(source: &Quill) -> Result<Plate, RenderError> {
-    let declared = source
-        .config()
-        .backend_config
-        .get("plate_file")
-        .and_then(|v| v.as_str());
-
-    let Some(declared) = declared else {
-        return Ok(Plate::undeclared(String::new()));
+    let no_path = |shown: String| {
+        RenderError::coded_hint(
+            "typst::plate_path_invalid",
+            format!("`typst.plate_file` is {shown}, which names no path"),
+            format!(
+                "Write `typst.plate_file` as a path from the quill root, such as \
+                 `tpl/main.typ`, or delete it to read `{PLATE_FILE}`."
+            ),
+        )
     };
-    let steps: Vec<&str> = declared
+    let declared = match source.config().backend_config.get("plate_file") {
+        None => None,
+        Some(value) => Some(value.as_str().ok_or_else(|| no_path(value.as_json().to_string()))?),
+    };
+    let named = declared.unwrap_or(PLATE_FILE);
+    let steps: Vec<&str> = named
         .split('/')
         .filter(|step| !step.is_empty() && *step != ".")
         .collect();
+    if steps.is_empty() {
+        return Err(no_path(format!("'{named}'")));
+    }
     let plate_file = steps.join("/");
 
-    let misspelled = declared.starts_with('/') || steps.contains(&"..");
+    let misspelled = named.starts_with('/') || steps.contains(&"..");
     let bytes = (!misspelled)
         .then(|| source.files().get_file(&plate_file))
         .flatten()
-        .ok_or_else(|| {
-            let message = format!("plate file '{declared}' not found in the quill's file tree");
-            if misspelled {
-                let hint = plate_spelling_hint(declared, source);
-                RenderError::coded_hint("typst::plate_missing", message, hint)
-            } else {
-                RenderError::coded("typst::plate_missing", message)
+        .ok_or_else(|| match declared {
+            None => RenderError::coded_hint(
+                "typst::plate_missing",
+                format!("the quill holds no `{PLATE_FILE}` at its root"),
+                format!(
+                    "Write the plate as `{PLATE_FILE}` beside `Quill.yaml`, or name its path \
+                     with `typst.plate_file`."
+                ),
+            ),
+            Some(declared) => {
+                let message = format!("plate file '{declared}' not found in the quill's file tree");
+                if misspelled {
+                    let hint = plate_spelling_hint(declared, source);
+                    RenderError::coded_hint("typst::plate_missing", message, hint)
+                } else {
+                    RenderError::coded("typst::plate_missing", message)
+                }
             }
         })?;
 
@@ -562,7 +574,7 @@ fn read_plate(source: &Quill) -> Result<Plate, RenderError> {
         )
     })?;
     Ok(Plate {
-        file: Some(plate_file),
+        file: plate_file,
         path,
         text,
     })

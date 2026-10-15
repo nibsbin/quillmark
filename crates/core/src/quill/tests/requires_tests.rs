@@ -6,10 +6,6 @@ fn load(requires: &str, extra: &str) -> Result<(QuillConfig, Vec<Diagnostic>), V
     ))
 }
 
-fn codes(diags: &[Diagnostic]) -> Vec<&str> {
-    diags.iter().filter_map(|d| d.code.as_deref()).collect()
-}
-
 #[test]
 fn a_floor_this_engine_meets_loads() {
     load("\">=0.1\"", "").expect("0.1 is below any released engine");
@@ -24,7 +20,10 @@ fn a_floor_this_engine_meets_loads() {
 
 #[test]
 fn a_floor_above_this_engine_is_the_one_error() {
-    let refused = load("\">=9999.0\"", "  from_the_future: true\nnew_section: {}\n")
+    let refused = load(
+        "\">=9999.0\"",
+        "  from_the_future: true\nnew_section: {}\ntypst:\n  from_the_future: true\n",
+    )
         .expect_err("9999.0 is above this engine");
     assert_eq!(codes(&refused), ["quill::engine_too_old"]);
 }

@@ -21,6 +21,12 @@ pub fn execute(args: InfoArgs) -> Result<()> {
     }
     println!("  {:<12} {}", "Version:", config.version);
     println!("  {:<12} {}", "Author:", config.author);
+    if let Some(license) = &config.license {
+        println!("  {:<12} {}", "License:", license);
+    }
+    if let Some(homepage) = &config.homepage {
+        println!("  {:<12} {}", "Homepage:", homepage);
+    }
     println!("  {:<12} {}", "Backend:", config.backend);
     println!("  {:<12} {}", "Fields:", config.main.fields.len());
 

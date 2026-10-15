@@ -114,6 +114,13 @@ pub struct QuillConfig {
     /// selector a document's `$quill` carries.
     pub version: String,
     pub author: String,
+    /// `quill.license`: an SPDX license expression.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub license: Option<String>,
+    /// `quill.homepage`: an absolute `http` or `https` URL where the quill's
+    /// source or docs live.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub homepage: Option<String>,
     /// The top-level YAML section whose key matches `backend`.
     #[serde(default)]
     pub backend_config: HashMap<String, QuillValue>,
@@ -121,7 +128,8 @@ pub struct QuillConfig {
 
 impl QuillConfig {
     /// The four fields `Quill.yaml` requires. `description`, `author`,
-    /// `card_kinds`, and `backend_config` start empty.
+    /// `card_kinds`, and `backend_config` start empty; `license` and `homepage`
+    /// start absent.
     ///
     /// This bypasses [`Self::from_yaml_with_warnings`] and its validation, so a
     /// config built here can hold shapes the parser refuses. Loading a quill
@@ -136,6 +144,8 @@ impl QuillConfig {
             backend,
             version,
             author: String::new(),
+            license: None,
+            homepage: None,
             backend_config: HashMap::new(),
         }
     }
@@ -2222,6 +2232,8 @@ impl QuillConfig {
             "description",
             "version",
             "author",
+            "license",
+            "homepage",
             "ui",
             "requires",
         ];
@@ -2381,6 +2393,9 @@ impl QuillConfig {
             .map(|s| s.to_string())
             .unwrap_or_else(|| "Unknown".to_string());
 
+        let license = super::package_meta::parse_license(quill_section, &mut errors, &mut warnings);
+        let homepage = super::package_meta::parse_homepage(quill_section, &mut errors);
+
         let body_hint = format!(
             "Valid keys under 'body' are: {}.",
             BODY_CARD_SCHEMA_KEYS.join(", ")
@@ -2390,12 +2405,22 @@ impl QuillConfig {
 
         let mut backend_config = HashMap::new();
         if !backend.is_empty() {
-            if let Some(section_val) = quill_yaml_val.get(&backend) {
-                if let Some(table) = section_val.as_object() {
+            match quill_yaml_val.get(&backend) {
+                None | Some(serde_json::Value::Null) => {}
+                Some(serde_json::Value::Object(table)) => {
+                    let keys = crate::backend::config_keys(&backend);
                     for (key, value) in table {
-                        backend_config.insert(key.clone(), QuillValue::from_json(value.clone()));
+                        match keys {
+                            Some(keys) if !keys.contains(&key.as_str()) => {
+                                errors.push(crate::backend::unknown_config_key(&backend, key));
+                            }
+                            _ => {
+                                backend_config.insert(key.clone(), QuillValue::from_json(value.clone()));
+                            }
+                        }
                     }
                 }
+                Some(_) => errors.push(crate::backend::invalid_config_section(&backend)),
             }
         }
 
@@ -2710,6 +2735,8 @@ impl QuillConfig {
                 backend,
                 version,
                 author,
+                license,
+                homepage,
                 backend_config,
             },
             warnings,

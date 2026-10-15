@@ -300,18 +300,20 @@ rather than derived from a Typst diagnostic: `typst::path_skipped` (a file
 Typst's `VirtualPath` rejected: asset or package file alike),
 `typst::package_manifest`, and `typst::package_entrypoint_missing`. Each marks a
 file the world had to skip, which otherwise surfaces only as an unresolved
-`#import` pointing at the plate instead of at the defect. The fourth,
-`typst::unknown_key`, marks a key under `typst:` the backend never
-reads: core stores that section verbatim, so nothing else would report it. They are properties of the quill, not of a compile, so
-`QuillWorld` holds them and the session serves them ahead of every compile's
-own: an `update` swaps the compile half and keeps these.
+`#import` pointing at the plate instead of at the defect. They are properties
+of the quill, not of a compile, so `QuillWorld` holds them and the session
+serves them ahead of every compile's own: an `update` swaps the compile half
+and keeps these.
 
 **Plate refusals** fail `open` and `workspace` before a world exists:
-`typst::plate_missing` (`typst.plate_file` names no file in the quill),
-`typst::plate_path_invalid` (it names one at a path Typst's `VirtualPath`
-refuses, such as one holding a `\`), and `typst::invalid_utf8`. The plate is
-the one file a refused path cannot merely skip: the world loads it at its
-declared path, and any stand-in name may belong to a file the quill holds.
+`typst::plate_missing` (the quill holds no `plate.typ` at its root and
+declares no `typst.plate_file`, or `typst.plate_file` names no file in the
+quill), `typst::plate_path_invalid` (`typst.plate_file` is not a string,
+names no path once its `.` and empty steps drop, or names a file at a path
+Typst's `VirtualPath` refuses, such as one holding a `\`), and
+`typst::invalid_utf8`. The plate is the one file a refused path
+cannot merely skip: the world loads it at its own path, and any stand-in name
+may belong to a file the quill holds.
 
 A project source importing the helper any way but as a module fails `open` and
 `workspace` with `typst::helper_import` before anything compiles, one error per
