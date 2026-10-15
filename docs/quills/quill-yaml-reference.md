@@ -187,10 +187,10 @@ One question per field: **does it have a value when nobody types anything?**
 `default` is the answer, and the only value a field declares.
 
 ```yaml
-# Nothing to suggest: the type's blank is the answer "nothing".
-internal_note:
+# The value most authors want.
+closing:
   type: string
-  default: ""
+  default: Sincerely
 
 # No default: the cell stays empty until an author answers it.
 classification:
@@ -201,9 +201,15 @@ classification:
 The blueprint renders them as:
 
 ```
-internal_note: "" # string
+closing: Sincerely # string
 classification: # enum<UNCLASSIFIED | CUI>
 ```
+
+A blank `default:` (`""`, `[]`, `{}`) is legal and renders as no default does:
+the field renders its blank either way, and the blueprint prints an empty cell.
+The schema still carries it and `resolve()` still reports the field's source as
+`default`, so an editor reading either may treat the two differently. `0` and
+`false` are values, and print.
 
 An unanswered field renders its `default:`, else its
 [blank](#the-blank-values-is-for-choices-not-for-the-absence-of-one), else
@@ -359,8 +365,8 @@ accepted in the other:
 ```
 
 `values:` enumerates *choices*. `default:`, your documents, and the projections
-all range over `values ∪ blank`. Keeping `default: ""` is how you say "nobody need
-answer this"; dropping it makes the field one an author is expected to answer.
+all range over `values ∪ blank`. `default: ""` renders as no default does;
+whether an author should answer the field is its `description`'s to say.
 
 Where the empty state is itself a decision someone makes and the document should
 record it, make it a member — `undecided`, `waived`, `n_a` — not the blank. The
@@ -527,17 +533,16 @@ address:
   # default: { street: "5000 Forbes Ave" }   # quill::default_on_namespace
   properties:
     street: { type: string, default: "5000 Forbes Ave" }
-    city:   { type: string, default: "" }    # type-empty: a skippable cell
+    city:   { type: string }
 ```
 
 The container spelling would be a second declaration of a value the property
 already holds, free to disagree with it. Each property's `default:` is reached whether or not a document authors the container
-above it, so writing `address: {}` changes nothing — which also makes a whole
-dictionary skippable by giving each property a type-empty default.
+above it, so writing `address: {}` changes nothing.
 
 An `array` **does** keep its own `default:`: `items:` fixes the
-element type but never the arity, so `default: []` and `default: [{…}]` say
-something no property declaration can. Each element it supplies is completed
+element type but never the arity, so `default: [{…}]` says something no
+property declaration can. Each element it supplies is completed
 against `items` exactly as an authored element is.
 
 A legacy `ui.group` holds card-level fields only: an object's properties and an array's items cannot join one. `variants:` reaches one step further — a card field or a typed dictionary's property carries one, and an array element, a matrix column and another variant's cell do not (see [Variants](#variants-fields-that-exist-only-for-one-choice)).
