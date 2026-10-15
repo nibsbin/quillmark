@@ -1454,13 +1454,17 @@ mod tests {
         FieldSchema::from_quill_value("field".to_string(), &value).unwrap()
     }
 
+    fn text(s: &str) -> serde_json::Value {
+        quillmark_content::serial::to_canonical_value(&quillmark_content::import::from_plaintext(s))
+    }
+
     #[test]
     fn typed_dict_preserves_undeclared_keys() {
         let schema = field(
             r#"
 type: object
 properties:
-  street: { type: string }
+  street: { type: text }
   zip: { type: integer }
 "#,
         );
@@ -1481,17 +1485,17 @@ properties:
 quill: { name: dc, version: 1.0.0, backend: typst, description: x }
 main:
   fields:
-    intro: { type: richtext }
-    banner: { type: richtext, default: "![logo](l.png)" }
+    intro: { type: richtext, multiline: true }
+    banner: { type: richtext, multiline: true, default: "![logo](l.png)" }
 card_kinds:
   note:
     fields:
       items:
         type: array
-        items: { type: richtext }
+        items: { type: richtext, multiline: true }
       more:
         type: array
-        items: { type: richtext }
+        items: { type: richtext, multiline: true }
 "#,
         );
         let md = "~~~\n$quill: dc@1.0.0\n$kind: main\nintro: see ![a](a.png)\n~~~\n\n\
@@ -1555,13 +1559,13 @@ main:
   body:
     enabled: false
   fields:
-    title: { type: string }
+    title: { type: text }
 card_kinds:
   stamp:
     body:
       enabled: false
     fields:
-      label: { type: string }
+      label: { type: text }
 "#,
         )
         .expect("valid quill");
@@ -1601,35 +1605,35 @@ card_kinds:
 quill: { name: uk, version: 1.0.0, backend: typst, description: x }
 main:
   fields:
-    secretary: { type: string }
+    secretary: { type: text }
     outcome:
       type: enum
       values: [motion, report]
       variants:
         motion:
-          moved_by: { type: string }
+          moved_by: { type: text }
         report:
-          presenter: { type: string }
+          presenter: { type: text }
     address:
       type: object
       properties:
-        street: { type: string }
+        street: { type: text }
     rows:
       type: array
       items:
         type: object
         properties:
-          name: { type: string }
+          name: { type: text }
     quals:
       type: matrix
       members:
         flight_cc: Flight CC
       properties:
-        detail: { type: string, default: "" }
+        detail: { type: text, default: "" }
 card_kinds:
   item:
     fields:
-      presenter: { type: string }
+      presenter: { type: text }
 "#,
         )
         .expect("valid quill");
@@ -1685,7 +1689,7 @@ card_kinds:
 quill: { name: ev, version: 1.0.0, backend: typst, description: x }
 main:
   fields:
-    title: { type: string }
+    title: { type: text }
     classification:
       type: enum
       values: [UNCLASSIFIED, CUI, SECRET]
@@ -1705,20 +1709,20 @@ main:
 quill: { name: env, version: 1.0.0, backend: typst, description: x }
 main:
   fields:
-    title: { type: string }
+    title: { type: text }
     marking:
       type: object
       properties:
         level:
           type: enum
           values: [UNCLASSIFIED, CUI]
-        note: { type: string }
+        note: { type: text }
 "#,
             "~~~card-yaml\n$quill: env@1.0.0\n$kind: main\ntitle: T\n~~~\n",
         );
         assert_eq!(
             plate["marking"],
-            json!({ "level": "", "note": "" }),
+            json!({ "level": "", "note": text("") }),
             "the recursive blank switches for a nested enum too; got {plate}"
         );
     }
@@ -1754,17 +1758,17 @@ main:
     contact:
       type: object
       properties:
-        name: { type: string }
-        email: { type: string, default: "hi@example.com" }
+        name: { type: text }
+        email: { type: text, default: "hi@example.com" }
         addr:
           type: object
           properties:
-            city: { type: string, default: Pgh }
+            city: { type: text, default: Pgh }
 "#;
         let absent = plate_of(YAML, "~~~card-yaml\n$quill: ac@1.0.0\n$kind: main\n~~~\n");
         assert_eq!(
             absent["contact"],
-            json!({ "name": "", "email": "hi@example.com", "addr": { "city": "Pgh" } }),
+            json!({ "name": text(""), "email": text("hi@example.com"), "addr": { "city": text("Pgh") } }),
             "an absent container cuts each cell's own ladder, at every depth; got {absent}"
         );
         // Authoring the empty map is a no-op: the same cells, the same rungs.
@@ -1789,12 +1793,12 @@ main:
     contact:
       type: object
       properties:
-        email: { type: string, default: "hi@example.com" }
+        email: { type: text, default: "hi@example.com" }
         when: { type: date, default: "2026-01-01" }
         addr:
           type: object
           properties:
-            city: { type: string, default: Pgh }
+            city: { type: text, default: Pgh }
 "#;
         let blueprint = QuillConfig::from_yaml(YAML).expect("valid quill").blueprint();
         let plate = plate_of(YAML, "~~~card-yaml\n$quill: bp@1.0.0\n$kind: main\n~~~\n");
@@ -1806,7 +1810,7 @@ main:
         }
         assert_eq!(
             plate["contact"],
-            json!({ "email": "hi@example.com", "when": "2026-01-01", "addr": { "city": "Pgh" } }),
+            json!({ "email": text("hi@example.com"), "when": "2026-01-01", "addr": { "city": text("Pgh") } }),
             "and the plate renders exactly those cells; got {plate}"
         );
     }
@@ -1825,13 +1829,13 @@ main:
       items:
         type: object
         properties:
-          who: { type: string }
-          role: { type: string, default: lead }
+          who: { type: text }
+          role: { type: text, default: lead }
 "#;
         let defaulted = plate_of(YAML, "~~~card-yaml\n$quill: ad@1.0.0\n$kind: main\n~~~\n");
         assert_eq!(
             defaulted["rows"],
-            json!([{ "who": "A", "role": "lead" }]),
+            json!([{ "who": text("A"), "role": text("lead") }]),
             "a partial default element blank-fills against `items`; got {defaulted}"
         );
         let authored = plate_of(
@@ -1850,8 +1854,8 @@ main:
             r#"
 type: object
 properties:
-  name: { type: string }
-  email: { type: string, default: "hi@example.com" }
+  name: { type: text }
+  zip: { type: integer, default: 15213 }
 "#,
         );
         assert_eq!(
@@ -1864,7 +1868,7 @@ properties:
             r#"
 type: object
 properties:
-  name: { type: string }
+  name: { type: text }
 "#,
         );
         assert_eq!(
@@ -1892,7 +1896,7 @@ main:
       type: date
       default: "2026-01-01"
     subtitle:
-      type: string
+      type: text
       default: "a default"
 "#,
             "~~~card-yaml\n$quill: dz@1.0.0\n$kind: main\nsigned_on: \"\"\nsubtitle: \"\"\n~~~\n",
@@ -1902,8 +1906,8 @@ main:
             "the blank date survives coercion and outranks the default; got {plate}"
         );
         assert_eq!(
-            plate["subtitle"], "",
-            "the blank string does the same: one spelling of \"explicitly nothing\" for both"
+            plate["subtitle"], text(""),
+            "the blank text does the same: one spelling of \"explicitly nothing\" for both"
         );
     }
 

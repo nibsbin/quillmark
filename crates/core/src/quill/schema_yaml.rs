@@ -40,7 +40,7 @@ card_kinds:
         closing: { title: Closing }
     fields:
       signature_block:
-        type: string
+        type: text
         ui: { group: closing }
 "#;
 
@@ -60,19 +60,19 @@ main:
     alpha:
       type: object
       properties:
-        yankee: { type: string }
+        yankee: { type: text }
         bravo: { type: integer }
     mike:
       type: richtext
-      inline: true
+      multiline: false
       ui: { compact: true }
 card_kinds:
   zulu:
     fields:
-      x: { type: string }
+      x: { type: text }
   alpha:
     fields:
-      y: { type: string }
+      y: { type: text }
 "#)
         .schema();
         let keys = |v: &serde_json::Value| -> Vec<String> {
@@ -86,7 +86,7 @@ card_kinds:
             keys(&fields["zeta"]),
             ["type", "title", "description", "default", "ui", "values"]
         );
-        assert_eq!(keys(&fields["mike"]), ["type", "ui", "inline"]);
+        assert_eq!(keys(&fields["mike"]), ["type", "ui", "multiline"]);
     }
 
     #[test]

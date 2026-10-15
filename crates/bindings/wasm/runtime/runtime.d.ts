@@ -665,12 +665,12 @@ export declare class DocumentWriter {
 	/**
 	 * Revise the content main-card field `name` from authored text: typed *and*
 	 * anchor-preserving. Surviving anchors rebase, then the diffed result is
-	 * schema-conformed (`richtext(inline)` rejects a multi-block result). Throws
+	 * schema-conformed (a one-paragraph `richtext` rejects a multi-block result). Throws
 	 * `UnknownField` for a name the schema does not declare. Returns the
 	 * `Revised` receipt, its warnings at the field.
 	 *
 	 * The codec comes from the declared type: `richtext` diffs markdown, while
-	 * `plaintext` diffs the literal text and never imports markdown, so a
+	 * `text` diffs the literal text and never imports markdown, so a
 	 * byte-identical revise of a value carrying escapes is a byte no-op.
 	 */
 	reviseField(name: string, text: string): Revised;
@@ -739,7 +739,7 @@ export declare class CardWriter {
  * A `Document` bound to its `Quill` for interpreted reads, from
  * {@link Quill.reader}: the read twin of {@link DocumentWriter}. One `get` reads
  * each field by its declared type — a richtext field to its markdown projection,
- * a plaintext field to its literal text, every other type verbatim.
+ * a text field to its literal text, every other type verbatim.
  *
  * The schema authority is the point: unlike the quill-free `Document.getStored`,
  * an undeclared name throws `UnknownField` rather than reading back `undefined`,

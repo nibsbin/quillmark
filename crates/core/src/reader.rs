@@ -8,7 +8,7 @@
 //! binds the schema.
 //!
 //! Every read here answers in the **values form**: the stored value with each
-//! content leaf decoded to its codec's text (`richtext` markdown, `plaintext`
+//! content leaf decoded to its codec's text (`richtext` markdown, `text`
 //! literal), at every depth the field's type tree reaches, and everything else
 //! verbatim. [`get`](TypedReader::get) reads one field in it. Scalars are
 //! never coerced by a read: `qty: "3"` reads `"3"` here and `3` in
@@ -20,7 +20,7 @@
 //!
 //! [`get_content`](TypedReader::get_content) is the same read at the other end
 //! of the codec, and is total over the storage form. It binds the quill too: a
-//! `richtext` string is markdown and a `plaintext` string is literal text, so
+//! `richtext` string is markdown and a `text` string is literal text, so
 //! the same bytes decode two ways. The body read stays quill-free — a body's
 //! type is a format fact, not a schema fact.
 //!
@@ -55,7 +55,7 @@ impl<'a> TypedReader<'a> {
     }
 
     /// Read a main-card field in the values form: every content leaf in its
-    /// type tree as its codec's text (`richtext` markdown, `plaintext` literal),
+    /// type tree as its codec's text (`richtext` markdown, `text` literal),
     /// everything else as stored. A present-null field reads `Some(null)`.
     /// `Ok(None)` when the field is absent;
     /// [`EditError::UnknownField`] for a name the schema does not declare (a typo,
@@ -207,7 +207,7 @@ fn read_field(
 /// `get_content_at`, the whole-field read being the empty `at`.
 /// [`EditError::FieldNotContent`] is answered from the schema before the payload
 /// is read: whether an address has a [`Content`](quillmark_content::model::Content) is a declared-type fact, so a
-/// `string` holding markdown-looking text is not content, and an
+/// `enum` holding markdown-looking text is not content, and an
 /// `array<richtext>` has no single [`Content`](quillmark_content::model::Content) while each of its elements does.
 fn read_content(
     card: &Card,
@@ -410,30 +410,35 @@ main:
   fields:
     subject:
       type: richtext
-      inline: true
+      multiline: false
     note:
-      type: plaintext
+      type: text
+      multiline: true
     qty:
       type: integer
     recipients:
       type: array
       items:
-        type: plaintext
+        type: text
+        multiline: true
     paragraphs:
       type: array
       items:
         type: richtext
+        multiline: true
     tags:
       type: array
       items:
-        type: string
+        type: enum
+        values: [x, y]
     letterhead:
       type: object
       properties:
         motto:
           type: richtext
+          multiline: true
         code:
-          type: string
+          type: integer
     rows:
       type: array
       items:
@@ -441,6 +446,7 @@ main:
         properties:
           notes:
             type: richtext
+            multiline: true
     plain_enum:
       type: enum
       values: [a, b]
@@ -450,9 +456,11 @@ main:
       variants:
         CUI:
           controlled_by:
-            type: plaintext
+            type: text
+            multiline: true
           banner:
             type: richtext
+            multiline: true
           count:
             type: integer
           nest:
@@ -460,15 +468,18 @@ main:
             properties:
               deep:
                 type: richtext
+                multiline: true
 card_kinds:
   note:
     fields:
       prose:
         type: richtext
+        multiline: true
       lines:
         type: array
         items:
-          type: plaintext
+          type: text
+          multiline: true
 ";
 
     fn config() -> QuillConfig {
@@ -579,7 +590,7 @@ card_kinds:
     }
 
     #[test]
-    fn parse_lane_plaintext_reads_through_the_literal_codec() {
+    fn parse_lane_text_reads_through_the_literal_codec() {
         let config = config();
         let mut doc = blank_doc();
         doc.main_mut()
@@ -767,7 +778,7 @@ card_kinds:
         assert_eq!(
             view.get_content_at("classification", &key("controlled_by")).unwrap().unwrap().text,
             "a *literal* line",
-            "a plaintext cell decodes literally, as a card-level one does"
+            "a text cell decodes literally, as a card-level one does"
         );
         assert_eq!(
             view.get_content_at("classification", &key("banner")).unwrap().unwrap().text,
@@ -885,7 +896,7 @@ card_kinds:
         assert!(matches!(
             view.get_content_at("tags", &idx(0)),
             Err(EditError::FieldNotContent { field, declared, .. })
-                if field == "tags" && declared == "string"
+                if field == "tags" && declared == "enum"
         ));
         assert!(matches!(
             view.get_content_at("qty", &idx(0)),
@@ -989,7 +1000,7 @@ card_kinds:
             let mut w = crate::writer::TypedWriter::new(&config, &mut doc);
             w.set("paragraphs", serde_json::json!(["Para **one**"])).unwrap();
             w.set("recipients", serde_json::json!(["a *literal* line"])).unwrap();
-            w.set("letterhead", serde_json::json!({"motto": "Fly **fight**", "code": "9"}))
+            w.set("letterhead", serde_json::json!({"motto": "Fly **fight**", "code": 9}))
                 .unwrap();
         }
         let view = TypedReader::new(&config, &doc);
@@ -1004,7 +1015,7 @@ card_kinds:
         );
         assert_eq!(
             view.get("letterhead").unwrap(),
-            json(serde_json::json!({"motto": "Fly **fight**", "code": "9"})),
+            json(serde_json::json!({"motto": "Fly **fight**", "code": 9})),
             "a content property projects; a scalar sibling rides verbatim"
         );
     }

@@ -764,7 +764,7 @@ mod args_canon {
                 path: "main.when".into(),
                 format: "date".into(),
             },
-            ValidationError::NotInline {
+            ValidationError::NotSingleLine {
                 path: "main.title".into(),
                 trailing_newline: true,
             },
@@ -800,9 +800,9 @@ mod args_canon {
                 at: Vec::new(),
                 declared: "integer".into(),
             },
-            EditError::FieldNotInline {
+            EditError::FieldNotSingleLine {
                 field: "body".into(),
-                codec: crate::document::edit::CODEC_PLAINTEXT.into(),
+                codec: crate::document::edit::CODEC_TEXT.into(),
                 trailing_newline: true,
             },
             EditError::FieldCoercionFailed {
@@ -825,7 +825,7 @@ mod args_canon {
         for e in [
             EditError::InvalidFieldName("9bad".into()),
             EditError::ValueTooDeep { max: 8 },
-            EditError::FieldNotInline {
+            EditError::FieldNotSingleLine {
                 field: "body".into(),
                 codec: crate::document::edit::CODEC_RICHTEXT.into(),
                 trailing_newline: true,
@@ -833,7 +833,7 @@ mod args_canon {
             EditError::FieldDecode {
                 field: "body".into(),
                 at: Vec::new(),
-                codec: crate::document::edit::CODEC_PLAINTEXT.into(),
+                codec: crate::document::edit::CODEC_TEXT.into(),
                 message: "x".into(),
             },
             EditError::FieldCoercionFailed {
@@ -911,11 +911,11 @@ typst:
 
 main:
   fields:
-    title: { type: string, default: "" }
+    title: { type: text, default: "" }
 card_kinds:
   sig:
     fields:
-      label: { type: string }
+      label: { type: text }
 "#,
         );
         let seed_diags: Vec<crate::error::Diagnostic> =
@@ -1022,7 +1022,7 @@ quill:
 main:
   fields:
     title:
-      type: string
+      type: text
       default: 42
 "#,
         )

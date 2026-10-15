@@ -15,7 +15,7 @@ const PLATE: &str = r#"#import "@local/quillmark-helper:0.2.0" as qm
 "#;
 
 fn quill() -> Quill {
-    let yaml = "quill:\n  name: live\n  version: 0.1.0\n  backend: typst\n  description: update acceptance quill\n\ntypst:\n  plate_file: plate.typ\n\nmain:\n  fields:\n    msg:\n      description: message\n      type: string\n";
+    let yaml = "quill:\n  name: live\n  version: 0.1.0\n  backend: typst\n  description: update acceptance quill\n\ntypst:\n  plate_file: plate.typ\n\nmain:\n  fields:\n    msg:\n      description: message\n      type: text\n";
     common::quill_with_plate(yaml, PLATE)
 }
 
@@ -76,9 +76,11 @@ main:
   fields:
     prose:
       type: richtext
+      multiline: true
       description: a markdown body
     note:
       type: richtext
+      multiline: true
       description: a markdown note
 "#;
     const PLATE: &str = r#"#import "@local/quillmark-helper:0.2.0" as qm

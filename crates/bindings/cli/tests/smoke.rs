@@ -96,7 +96,7 @@ main:
   fields:
     title:
       description: title of document
-      type: string
+      type: text
 "#,
     );
 
@@ -133,14 +133,14 @@ main:
   fields:
     title:
       description: title of document
-      type: string
+      type: text
 card_kinds:
   note:
     description: A note
     fields:
       author:
         description: who wrote it
-        type: string
+        type: text
 "#,
     );
     std::fs::write(
@@ -177,7 +177,7 @@ fn validate_fails_a_quill_whose_example_warns() {
     let dir = quill_with_config(
         "quill:\n  name: w\n  version: 0.1.0\n  backend: typst\n  description: w\n\
          typst:\n  plate_file: plate.typ\nmain:\n  fields:\n    \
-         title:\n      description: title of document\n      type: string\n",
+         title:\n      description: title of document\n      type: text\n",
     );
     std::fs::write(dir.path().join("plate.typ"), "hi\n").expect("write plate.typ");
     let path = dir.path().to_str().unwrap();
@@ -511,7 +511,7 @@ card_kinds:
     fields:
       title:
         description: what the task delivers
-        type: string
+        type: text
 "#,
     );
     std::fs::write(
@@ -583,7 +583,7 @@ main:
   fields:
     title:
       description: title of document
-      type: string
+      type: text
 "#,
     );
     std::fs::write(

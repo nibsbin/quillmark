@@ -33,12 +33,14 @@ main:
     enabled: false
   fields:
     subject:
-      type: plaintext
+      type: text
+      multiline: true
       default: ""
     tags:
       type: array
       items:
-        type: plaintext
+        type: text
+        multiline: true
       description: plaintext elements
 "#,
     )
@@ -140,4 +142,65 @@ fn a_plaintext_delimiter_is_one_cluster_under_click_and_caret() {
         "one content offset per cluster: an escape resolving to its own interior \
          would repeat, skip, or shift the tail"
     );
+}
+
+/// `qm.str` inverts the lowering: whatever the markup escaped, shorthanded or
+/// smart-quoted comes back as the value's verbatim text, line breaks included.
+#[test]
+fn qm_str_projects_a_text_value_to_its_verbatim_string() {
+    const ONE: &str = r#"a *b* _c_ "d" it's -- e ... f  g #h $i \j @k <l> // m ~n -1"#;
+    const MANY: &str = "first line\n  second, indented\n\nthird";
+    let lit = |s: &str| format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n"));
+    let temp_dir = TempDir::new().unwrap();
+    let quill_path = temp_dir.path().join("str_quill");
+    fs::create_dir_all(&quill_path).unwrap();
+    fs::write(
+        quill_path.join("Quill.yaml"),
+        r#"quill:
+  name: "str_quill"
+  version: "1.0.0"
+  backend: "typst"
+  description: "qm.str"
+
+typst:
+  plate_file: plate.typ
+
+main:
+  body:
+    enabled: false
+  fields:
+    one: { type: text }
+    many: { type: text, multiline: true }
+    blank: { type: text }
+    absent: { type: text? }
+"#,
+    )
+    .unwrap();
+    fs::write(
+        quill_path.join("plate.typ"),
+        format!(
+            "#import \"@local/quillmark-helper:0.2.0\" as qm\n\
+             #assert.eq(qm.str(qm.data.one), {})\n\
+             #assert.eq(qm.str(qm.data.many), {})\n\
+             #assert.eq(qm.str(qm.data.blank), \"\")\n\
+             #assert.eq(qm.str(qm.data.absent), none)\n\
+             #set document(author: qm.str(qm.data.one))\n\
+             ok\n",
+            lit(ONE),
+            lit(MANY),
+        ),
+    )
+    .unwrap();
+    let quill = quillmark::quill_from_path(&quill_path).expect("load quill");
+    let block = |s: &str| s.lines().map(|l| format!("  {l}\n")).collect::<String>();
+    let md = format!(
+        "~~~card-yaml\n$quill: str_quill\n$kind: main\none: |-\n{}many: |-\n{}blank: \"\"\n~~~\n",
+        block(ONE),
+        block(MANY),
+    );
+    let doc = Document::parse(&md).expect("parse").document;
+    let session = Quillmark::new()
+        .open(&quill, &doc, common::test_date())
+        .expect("the plate's assertions hold");
+    assert!(session.page_count() > 0);
 }

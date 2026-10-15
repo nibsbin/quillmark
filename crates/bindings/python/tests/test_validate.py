@@ -22,20 +22,20 @@ QUILL_YAML_CONTENT = """quill:
 main:
   fields:
     title:
-      type: string
+      type: text
     count:
       type: integer
     byline:
-      type: string
+      type: text
 
 card_kinds:
   note:
     fields:
       prose:
-        type: string
+        type: text
         default: TBD
       tag:
-        type: string
+        type: text
 """
 
 
@@ -136,9 +136,10 @@ main:
   fields:
     subject:
       type: richtext
-      inline: true
+      multiline: false
     note:
-      type: plaintext
+      type: text
+      multiline: true
 """
 
 

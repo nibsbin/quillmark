@@ -37,14 +37,17 @@ fn render_at(field: &str, at: &[PathSegment]) -> String {
         .to_string()
 }
 
-fn not_inline_reason(codec: &str, trailing_newline: bool) -> String {
+fn not_single_line_reason(codec: &str, trailing_newline: bool) -> String {
     if trailing_newline {
         format!(
             "the value ends in a newline, which {codec} keeps as a second line; drop it \
              (in YAML, write the value as a `|-` block or a plain scalar)"
         )
     } else {
-        format!("{codec}(inline) requires a single line with no container or island")
+        format!(
+            "{codec} requires a single line with no container or island; declare \
+             multiline: true to admit more"
+        )
     }
 }
 
@@ -66,12 +69,12 @@ pub fn is_valid_field_name(name: &str) -> bool {
 }
 
 /// The `richtext` codec name carried by [`EditError::FieldDecode`] and
-/// [`EditError::FieldNotInline`]. Frozen with the diagnostic arg: it is the
+/// [`EditError::FieldNotSingleLine`]. Frozen with the diagnostic arg: it is the
 /// schema keyword, not a display string.
 pub const CODEC_RICHTEXT: &str = "richtext";
 
-/// The `plaintext` codec. See [`CODEC_RICHTEXT`].
-pub const CODEC_PLAINTEXT: &str = "plaintext";
+/// The `text` codec. See [`CODEC_RICHTEXT`].
+pub const CODEC_TEXT: &str = "text";
 
 /// Errors returned by document and card mutators.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -123,7 +126,7 @@ pub enum EditError {
     /// A value could not become the field's content through `codec`: a JSON
     /// object that is not a canonical content, a markdown string that failed to
     /// import, a shape that is neither object nor string, or formatting under
-    /// the plain-only `plaintext` codec. `message` names which.
+    /// the plain-only `text` codec. `message` names which.
     ///
     /// `codec` is the declared type's, not the stored shape's. Absence is not
     /// this error: a missing field is `None`, and reads as the empty content.
@@ -135,7 +138,7 @@ pub enum EditError {
         /// anchor as its own segments, so `field` stays the field's name.
         at: Vec<PathSegment>,
         /// The codec that ran, named by the field's declared type:
-        /// [`CODEC_RICHTEXT`] or [`CODEC_PLAINTEXT`].
+        /// [`CODEC_RICHTEXT`] or [`CODEC_TEXT`].
         codec: String,
         message: String,
     },
@@ -158,24 +161,24 @@ pub enum EditError {
         declared: String,
     },
 
-    /// A content field written under an `inline: true` schema decoded to a
-    /// multi-line content. Both prose codecs declare `inline`, so one code
-    /// covers both and `codec` says which lane raised it.
-    #[error("{codec} field '{field}' is not inline: {}", not_inline_reason(.codec, *.trailing_newline))]
-    FieldNotInline {
+    /// A content field written under a one-line schema (no `multiline: true`)
+    /// decoded to a multi-line content. Both text codecs carry the constraint,
+    /// so one code covers both and `codec` says which lane raised it.
+    #[error("{codec} field '{field}' is not a single line: {}", not_single_line_reason(.codec, *.trailing_newline))]
+    FieldNotSingleLine {
         field: String,
-        /// The codec whose inline constraint was violated: [`CODEC_RICHTEXT`]
-        /// or [`CODEC_PLAINTEXT`].
+        /// The codec whose one-line constraint was violated: [`CODEC_RICHTEXT`]
+        /// or [`CODEC_TEXT`].
         codec: String,
         /// The value is one line plus the empty line a trailing `\n` opens,
-        /// which only the verbatim `plaintext` codec keeps.
+        /// which only the verbatim `text` codec keeps.
         trailing_newline: bool,
     },
 
     /// A typed write could not coerce the value to the field's schema type: the
     /// general failure for scalar/array/object types (a `"x"` for an `integer`,
     /// a non-object for an `object`, …). Content fields report through
-    /// [`FieldDecode`](Self::FieldDecode) / [`FieldNotInline`](Self::FieldNotInline)
+    /// [`FieldDecode`](Self::FieldDecode) / [`FieldNotSingleLine`](Self::FieldNotSingleLine)
     /// instead.
     #[error("field '{field}' could not be coerced to its schema type: {message}")]
     FieldCoercionFailed {
@@ -223,7 +226,7 @@ impl EditError {
             EditError::Import(_) => "edit::import",
             EditError::FieldDecode { .. } => "edit::field_decode",
             EditError::FieldNotContent { .. } => "edit::field_not_content",
-            EditError::FieldNotInline { .. } => "edit::field_not_inline",
+            EditError::FieldNotSingleLine { .. } => "edit::field_not_single_line",
             EditError::FieldCoercionFailed { .. } => "edit::field_coercion_failed",
             EditError::ContentApply(_) => "edit::content_apply",
             EditError::InvalidPayload(_) => "edit::invalid_payload",
@@ -267,7 +270,7 @@ impl EditError {
                 "field" => field,
                 "declared" => declared,
             },
-            EditError::FieldNotInline {
+            EditError::FieldNotSingleLine {
                 field,
                 codec,
                 trailing_newline,
@@ -314,7 +317,7 @@ impl EditError {
                 Some(at.iter().fold(base.field(f), |p, seg| p.segment(seg)))
             }
             EditError::InvalidFieldName(f)
-            | EditError::FieldNotInline { field: f, .. }
+            | EditError::FieldNotSingleLine { field: f, .. }
             | EditError::FieldCoercionFailed { field: f, .. } => Some(base.field(f)),
             EditError::IndexOutOfRange { index, .. } => Some(DocPath::card(None, *index)),
             _ => (!base.segs().is_empty()).then(|| base.clone()),
@@ -527,8 +530,8 @@ pub fn validate_payload(payload: &Payload) -> Result<(), PayloadViolation> {
 /// Map a strict-write [`CoercionError`] to the field-write [`EditError`] surface.
 ///
 /// Keys on the coercion `target`, not the field's own type, because the
-/// constraint can be nested: an `array` of `richtext(inline)` items fails with
-/// `target == "richtext(inline)"` while the field's type is `Array`.
+/// constraint can be nested: an `array` of one-line `richtext` items fails with
+/// `target == RICHTEXT_SINGLE_LINE_TARGET` while the field's type is `Array`.
 fn conform_error_to_edit(name: &str, err: CoercionError) -> EditError {
     let CoercionError::Uncoercible {
         path: _,
@@ -538,17 +541,17 @@ fn conform_error_to_edit(name: &str, err: CoercionError) -> EditError {
     } = err;
     let field = name.to_string();
     match target.as_str() {
-        "richtext(inline)" => EditError::FieldNotInline {
+        t if t == crate::quill::RICHTEXT_SINGLE_LINE_TARGET => EditError::FieldNotSingleLine {
             field,
             codec: CODEC_RICHTEXT.to_string(),
             trailing_newline: false,
         },
-        "plaintext(inline)" => EditError::FieldNotInline {
+        t if t == crate::quill::TEXT_SINGLE_LINE_TARGET => EditError::FieldNotSingleLine {
             field,
-            codec: CODEC_PLAINTEXT.to_string(),
-            trailing_newline: reason == crate::quill::PLAINTEXT_TRAILING_NEWLINE,
+            codec: CODEC_TEXT.to_string(),
+            trailing_newline: reason == crate::quill::TEXT_TRAILING_NEWLINE,
         },
-        CODEC_RICHTEXT | CODEC_PLAINTEXT => EditError::FieldDecode {
+        CODEC_RICHTEXT | CODEC_TEXT => EditError::FieldDecode {
             field,
             at: Vec::new(),
             codec: target,
@@ -1091,7 +1094,7 @@ impl Card {
     /// [`EditError::InvalidPayload`] when an absent `name` would take the card
     /// past the §8 field count.
     ///
-    /// Richtext codec: a `plaintext` field rests as its literal string, so an
+    /// Richtext codec: a `text` field rests as its literal string, so an
     /// object landed here departs that field's resting form until the next bound
     /// load ([`Quill::conform`](crate::quill::Quill::conform)) converges it.
     pub fn overwrite_field(
@@ -1131,7 +1134,7 @@ impl Card {
     /// this discards.
     ///
     /// Returns [`EditError::InvalidFieldName`] for a malformed name,
-    /// [`EditError::FieldDecode`] / [`EditError::FieldNotInline`]
+    /// [`EditError::FieldDecode`] / [`EditError::FieldNotSingleLine`]
     /// for a content field, [`EditError::FieldCoercionFailed`] for any other type
     /// mismatch, [`EditError::ValueTooDeep`] when the stored value nests
     /// past the §8 depth limit, and [`EditError::InvalidPayload`] when `name` is
@@ -1205,14 +1208,14 @@ impl Card {
     /// rebases surviving anchors, re-stores the canonical content, and returns
     /// the [`Revised`] receipt.
     ///
-    /// Schema-blind: a `richtext(inline)` violation surfaces at validate/render,
+    /// Schema-blind: a one-line `richtext` violation surfaces at validate/render,
     /// not here.
     ///
-    /// **Richtext only**, and the exclusion bites: decoding a `plaintext` field's
+    /// **Richtext only**, and the exclusion bites: decoding a `text` field's
     /// value as markdown eats its escapes (`a \*b\*` commits back as `a *b*`)
     /// and leaves a content object where that field rests as a string. The typed
     /// [`TypedWriter::revise_field`](crate::writer::TypedWriter::revise_field)
-    /// resolves the codec from the schema and is the plaintext-safe door.
+    /// resolves the codec from the schema and is the `text`-safe door.
     ///
     /// Returns [`EditError::InvalidFieldName`] for a malformed name,
     /// [`EditError::FieldDecode`] when the field is present but is not a
@@ -1230,7 +1233,7 @@ impl Card {
     /// [`revise_field`](Self::revise_field)'s anchor-rebasing diff, then the
     /// conform [`commit_field`](Self::commit_field) runs. Returns the
     /// [`Revised`] receipt, and leaves the field unchanged on any error. A
-    /// `plaintext` field imports no markdown, so its receipt holds no warning.
+    /// `text` field imports no markdown, so its receipt holds no warning.
     ///
     /// **Hidden** on the same terms as [`commit_field`](Self::commit_field): its
     /// door is
@@ -1242,12 +1245,12 @@ impl Card {
         body: impl Into<String>,
         schema: &FieldSchema,
     ) -> Result<Revised, EditError> {
-        // Decoding a `plaintext` value as markdown eats its escapes, so a
+        // Decoding a `text` value as markdown eats its escapes, so a
         // byte-identical revise of `a \*b\*` would commit `a *b*`. It has no
         // anchors to rebase either, so it takes the literal codec.
-        if matches!(schema.r#type, FieldType::PlainText { .. }) {
+        if matches!(schema.r#type, FieldType::Text { .. }) {
             return self
-                .revise_field_plaintext(name, body, schema)
+                .revise_field_text(name, body, schema)
                 .map(|delta| Revised {
                     delta,
                     warnings: Vec::new(),
@@ -1265,11 +1268,11 @@ impl Card {
         Ok(revised)
     }
 
-    /// The `plaintext` arm of [`revise_field_checked`](Self::revise_field_checked).
+    /// The `text` arm of [`revise_field_checked`](Self::revise_field_checked).
     /// No markdown import in either direction, so escapes, `*`, and `_` are
     /// ordinary characters on both sides of the diff and a byte-identical revise
     /// is a byte no-op. The `Delta` is over the literal text.
-    fn revise_field_plaintext(
+    fn revise_field_text(
         &mut self,
         name: &str,
         text: impl Into<String>,
@@ -1280,9 +1283,9 @@ impl Card {
         if !is_valid_field_name(name) {
             return Err(EditError::InvalidFieldName(name.to_string()));
         }
-        let base = match self.field_text(name, Codec::Plaintext) {
+        let base = match self.field_text(name, Codec::Text) {
             Some(Ok(text)) => text,
-            Some(Err(e)) => return Err(field_decode(name, &[], Codec::Plaintext, e)),
+            Some(Err(e)) => return Err(field_decode(name, &[], Codec::Text, e)),
             None => String::new(),
         };
         // The strict write is the codec: it runs the `from_plaintext` boundary
@@ -1294,7 +1297,7 @@ impl Card {
             stored
                 .as_json()
                 .as_str()
-                .expect("a plaintext field rests as a string"),
+                .expect("a text field rests as a string"),
         );
         self.payload_mut()
             .insert(name.to_string(), stored)
@@ -1330,7 +1333,7 @@ impl Card {
     /// past the §8 field count.
     ///
     /// **Richtext codec**: schema-blind like [`revise_field`](Self::revise_field),
-    /// so a `plaintext` field's stored string decodes here as markdown and a
+    /// so a `text` field's stored string decodes here as markdown and a
     /// splice lands it off its resting form until the next bound load.
     pub fn apply_field_change(
         &mut self,

@@ -18,7 +18,7 @@ use crate::value::QuillValue;
 pub enum ValidationError {
     TypeMismatch {
         path: String,
-        /// Schema-declared type (`string`, `integer`, …).
+        /// Schema-declared type (`text`, `integer`, …).
         expected: String,
         /// YAML-parsed type of the source token (`integer`, `number`,
         /// `boolean`, `null`, `string`, `array`, `object`).
@@ -50,19 +50,19 @@ pub enum ValidationError {
         format: String,
     },
 
-    /// An `inline: true` field whose content is not a single line: a block, a
-    /// list or quote container, or an island. Both prose codecs declare
-    /// `inline`, so this is one condition under one code, the validation twin of
-    /// [`EditError::FieldNotInline`](crate::document::EditError::FieldNotInline).
-    NotInline {
+    /// A one-line field whose content is not a single line: a block, a
+    /// list or quote container, or an island. Both prose types are one line
+    /// unless `multiline: true`, so this is one condition under one code, the validation twin of
+    /// [`EditError::FieldNotSingleLine`](crate::document::EditError::FieldNotSingleLine).
+    NotSingleLine {
         path: String,
         /// The content is one line plus the empty line a trailing `\n` opens,
-        /// as a clip-chomped YAML `|` scalar yields under `plaintext`, whose
+        /// as a clip-chomped YAML `|` scalar yields under `text`, whose
         /// verbatim codec keeps that newline.
         trailing_newline: bool,
     },
 
-    /// A `plaintext` field whose content carries marks, islands, or block
+    /// A `text` field whose content carries marks, islands, or block
     /// formatting.
     NotPlain {
         path: String,
@@ -123,21 +123,21 @@ impl std::fmt::Display for ValidationError {
                     hint = format_hint(format),
                 )
             }
-            ValidationError::NotInline {
+            ValidationError::NotSingleLine {
                 path,
                 trailing_newline,
             } => {
                 write!(
                     f,
-                    "field `{path}` declares `inline` but its content is not a single \
+                    "field `{path}` is one line but its content is not a single \
                      line: {hint}",
-                    hint = not_inline_hint(*trailing_newline),
+                    hint = not_single_line_hint(*trailing_newline),
                 )
             }
             ValidationError::NotPlain { path } => {
                 write!(
                     f,
-                    "field `{path}` is `plaintext` but its content carries formatting: {hint}",
+                    "field `{path}` is `text` but its content carries formatting: {hint}",
                     hint = not_plain_hint(),
                 )
             }
@@ -166,16 +166,16 @@ pub(crate) fn format_hint(format: &str) -> String {
     format!("A {format} is {}.", format_grammar(format))
 }
 
-/// Actionable exit clause for a `NotInline` error, codec-neutral because both
-/// prose types declare `inline`, but for the trailing newline only the verbatim
-/// `plaintext` codec keeps.
-pub(crate) fn not_inline_hint(trailing_newline: bool) -> &'static str {
+/// Actionable exit clause for a `NotSingleLine` error, codec-neutral because both
+/// prose types are one line by default, but for the trailing newline only the
+/// verbatim `text` codec keeps.
+pub(crate) fn not_single_line_hint(trailing_newline: bool) -> &'static str {
     if trailing_newline {
-        "the value ends in a newline, which `plaintext` keeps as a second line: \
+        "the value ends in a newline, which `text` keeps as a second line: \
          write it as a `|-` block or a plain scalar"
     } else {
         "keep the value to a single line (no blank lines, headings, lists, \
-         quotes, or tables), or drop `inline: true` from the schema"
+         quotes, or tables), or declare `multiline: true` in the schema"
     }
 }
 
@@ -214,7 +214,7 @@ impl ValidationError {
             | ValidationError::EnumViolation { path, .. }
             | ValidationError::HeldStored { path }
             | ValidationError::FormatViolation { path, .. }
-            | ValidationError::NotInline { path, .. }
+            | ValidationError::NotSingleLine { path, .. }
             | ValidationError::NotPlain { path, .. } => path,
         }
     }
@@ -227,7 +227,7 @@ impl ValidationError {
             ValidationError::EnumViolation { .. } => "validation::enum_violation",
             ValidationError::HeldStored { .. } => "validation::held_stored",
             ValidationError::FormatViolation { .. } => "validation::format_violation",
-            ValidationError::NotInline { .. } => "validation::not_inline",
+            ValidationError::NotSingleLine { .. } => "validation::not_single_line",
             ValidationError::NotPlain { .. } => "validation::not_plain",
         }
     }
@@ -244,7 +244,7 @@ impl ValidationError {
     /// condition `type_mismatch_hint` branches on, so a consumer picks its
     /// own exit clause from the key's presence instead of re-deriving the
     /// branch. Emitting `null` instead would read as a default spelled `null`.
-    /// `trailingNewline` follows the same rule for `not_inline_hint`, and
+    /// `trailingNewline` follows the same rule for `not_single_line_hint`, and
     /// `open` for `open_matrix_hint`.
     pub fn args(&self) -> BTreeMap<String, serde_json::Value> {
         match self {
@@ -284,7 +284,7 @@ impl ValidationError {
             ValidationError::FormatViolation { path: _, format } => diag_args! {
                 "format" => format,
             },
-            ValidationError::NotInline {
+            ValidationError::NotSingleLine {
                 path: _,
                 trailing_newline,
             } => {
@@ -309,9 +309,9 @@ impl ValidationError {
                 default,
                 ..
             } => Some(type_mismatch_hint(expected, actual, default.as_deref())),
-            ValidationError::NotInline {
+            ValidationError::NotSingleLine {
                 trailing_newline, ..
-            } => Some(not_inline_hint(*trailing_newline).to_string()),
+            } => Some(not_single_line_hint(*trailing_newline).to_string()),
             ValidationError::NotPlain { .. } => Some(not_plain_hint().to_string()),
             ValidationError::FormatViolation { format, .. } => Some(format_hint(format)),
             ValidationError::EnumViolation {
@@ -520,11 +520,11 @@ fn validate_value(
     let type_valid = match field.r#type {
         // An enum is type-valid exactly where a string is; the domain check is
         // below.
-        FieldType::String | FieldType::Enum { .. } => value.as_str().is_some(),
+        FieldType::Enum { .. } => value.as_str().is_some(),
         // A conformed value is a canonical content object; an authored
         // `default` is the codec's string. The shape pass below
-        // checks `inline` and `plain`.
-        FieldType::RichText { .. } | FieldType::PlainText { .. } => {
+        // checks single-line and plain.
+        FieldType::RichText { .. } | FieldType::Text { .. } => {
             value.as_json().is_object() || value.as_str().is_some()
         }
         FieldType::Integer => value.as_json().is_i64(),
@@ -654,23 +654,23 @@ fn validate_value(
     // schema literal it is the load-time import's.
     if type_valid {
         match field.r#type {
-            FieldType::RichText { inline: true } => {
+            FieldType::RichText { multiline: false } => {
                 let parsed = crate::document::Codec::Richtext
                     .decode_value(value.as_json())
                     .and_then(Result::ok);
                 if let Some(rt) = parsed.map(|imported| imported.content) {
                     if !rt.is_inline() {
-                        errors.push(ValidationError::NotInline {
+                        errors.push(ValidationError::NotSingleLine {
                             path: path.to_string(),
                             trailing_newline: false,
                         });
                     }
                 }
             }
-            FieldType::PlainText { inline } => {
+            FieldType::Text { multiline } => {
                 // A schema literal decodes through the literal codec, a
                 // document value being a canonical content object already.
-                if let Some(rt) = crate::document::Codec::Plaintext
+                if let Some(rt) = crate::document::Codec::Text
                     .decode_value(value.as_json())
                     .and_then(Result::ok)
                     .map(|imported| imported.content)
@@ -679,8 +679,8 @@ fn validate_value(
                         errors.push(ValidationError::NotPlain {
                             path: path.to_string(),
                         });
-                    } else if inline && !rt.is_inline() {
-                        errors.push(ValidationError::NotInline {
+                    } else if !multiline && !rt.is_inline() {
+                        errors.push(ValidationError::NotSingleLine {
                             path: path.to_string(),
                             trailing_newline: crate::document::is_line_with_trailing_newline(&rt),
                         });
@@ -987,21 +987,21 @@ main:
     }
 
     #[test]
-    fn validates_simple_string_field() {
-        let config = config_with("    title:\n      type: string", "");
+    fn validates_simple_text_field() {
+        let config = config_with("    title:\n      type: text", "");
         let doc = doc_from_fm(&[("title", json!("Memo"))]);
         assert!(validate_typed_document(&config, &doc).is_ok());
     }
 
     #[test]
-    fn rejects_simple_string_type_mismatch() {
-        let config = config_with("    title:\n      type: string\n      default: \"\"", "");
+    fn rejects_simple_text_type_mismatch() {
+        let config = config_with("    title:\n      type: text\n      default: \"\"", "");
         let doc = doc_from_fm(&[("title", json!([1, 2, 3]))]);
         let errors = validate_typed_document(&config, &doc).unwrap_err();
         assert!(has_error(&errors, |e| matches!(
             e,
             ValidationError::TypeMismatch { path, expected, actual, source_token, .. }
-            if path == "main.title" && expected == "string" && actual == "array" && source_token == "[…]"
+            if path == "main.title" && expected == "text" && actual == "array" && source_token == "[…]"
         )));
     }
 
@@ -1036,7 +1036,7 @@ main:
 
     #[test]
     fn absent_defaultless_field_raises_nothing() {
-        let config = config_with("    memo_for:\n      type: string", "");
+        let config = config_with("    memo_for:\n      type: text", "");
         let doc = doc_from_fm(&[]);
         assert!(validate_typed_document(&config, &doc).is_ok());
     }
@@ -1044,7 +1044,7 @@ main:
     #[test]
     fn present_null_is_treated_as_absent() {
         let config = config_with(
-            "    memo_for:\n      type: string\n    n:\n      type: integer",
+            "    memo_for:\n      type: text\n    n:\n      type: integer",
             "",
         );
         let doc = doc_from_fm(&[("memo_for", json!(null)), ("n", json!(null))]);
@@ -1057,7 +1057,7 @@ main:
     #[test]
     fn absent_object_property_raises_nothing() {
         let config = config_with(
-            "    recipients:\n      type: array\n      default: []\n      items:\n        type: object\n        properties:\n          name:\n            type: string\n          org:\n            type: string\n            default: \"\"",
+            "    recipients:\n      type: array\n      default: []\n      items:\n        type: object\n        properties:\n          name:\n            type: text\n          org:\n            type: text\n            default: \"\"",
             "",
         );
         let doc = doc_from_fm(&[("recipients", json!([{ "org": "HQ" }]))]);
@@ -1067,8 +1067,8 @@ main:
     #[test]
     fn validates_card_with_valid_discriminator() {
         let config = config_with(
-            "    title:\n      type: string\n      default: \"\"",
-            "card_kinds:\n  indorsement:\n    fields:\n      signature_block:\n        type: string",
+            "    title:\n      type: text\n      default: \"\"",
+            "card_kinds:\n  indorsement:\n    fields:\n      signature_block:\n        type: text",
         );
         let doc = doc_with_typed_cards(
             &[],
@@ -1083,8 +1083,8 @@ main:
     #[test]
     fn reports_card_field_paths_with_card_name_and_index() {
         let config = config_with(
-            "    title:\n      type: string\n      default: \"\"",
-            "card_kinds:\n  indorsement:\n    fields:\n      signature_block:\n        type: string",
+            "    title:\n      type: text\n      default: \"\"",
+            "card_kinds:\n  indorsement:\n    fields:\n      signature_block:\n        type: text",
         );
         let doc = doc_with_typed_cards(
             &[],
@@ -1103,7 +1103,7 @@ main:
     fn to_diagnostic_carries_path_code_and_hint() {
         let err = ValidationError::TypeMismatch {
             path: "cards.indorsement[0].signature_block".to_string(),
-            expected: "string".to_string(),
+            expected: "text".to_string(),
             actual: "integer".to_string(),
             source_token: "42".to_string(),
             default: None,
@@ -1120,42 +1120,42 @@ main:
             .as_deref()
             .expect("type_mismatch diagnostic should carry a hint");
         assert!(
-            hint.contains("string"),
+            hint.contains("text"),
             "hint missing expected type: {hint}"
         );
     }
 
     #[test]
-    fn bare_scalar_into_string_field_is_valid() {
+    fn bare_scalar_into_text_field_is_valid() {
         for value in [json!(42), json!(true), json!(1.5)] {
             let config = config_with(
-                "    build_number:\n      type: string\n      default: \"\"",
+                "    build_number:\n      type: text\n      default: \"\"",
                 "",
             );
             let doc = doc_from_fm(&[("build_number", value.clone())]);
             assert!(
                 validate_typed_document(&config, &doc).is_ok(),
-                "bare scalar {value} should validate as a string"
+                "bare scalar {value} should validate as text"
             );
         }
     }
 
     #[test]
-    fn rejects_richtext_inline_with_multi_block_content() {
-        let config = config_with("    tag:\n      type: richtext\n      inline: true", "");
+    fn rejects_single_line_richtext_with_multi_block_content() {
+        let config = config_with("    tag:\n      type: richtext\n      multiline: false", "");
         let rt = quillmark_content::import::from_markdown("one\n\ntwo").unwrap().content;
         let content = quillmark_content::serial::to_canonical_value(&rt);
         let doc = doc_from_fm(&[("tag", content)]);
         let errors = validate_typed_document(&config, &doc).unwrap_err();
         assert!(has_error(&errors, |e| matches!(
             e,
-            ValidationError::NotInline { path, .. } if path == "main.tag"
+            ValidationError::NotSingleLine { path, .. } if path == "main.tag"
         )));
     }
 
     #[test]
-    fn plaintext_inline_names_the_kept_newline_of_a_clip_chomped_block() {
-        let config = config_with("    pti:\n      type: plaintext\n      inline: true", "");
+    fn single_line_text_names_the_kept_newline_of_a_clip_chomped_block() {
+        let config = config_with("    pti:\n      type: text", "");
         let validate = |yaml_value: &str| {
             let md = format!("~~~\n$quill: native_validation@1.0.0\npti: {yaml_value}~~~\n");
             let doc = Document::parse(&md).expect("parses").document;
@@ -1165,20 +1165,20 @@ main:
         };
 
         let kept = validate("|\n  one line\n");
-        assert_eq!(kept.code.as_deref(), Some("validation::not_inline"));
+        assert_eq!(kept.code.as_deref(), Some("validation::not_single_line"));
         assert_eq!(kept.args.get("trailingNewline"), Some(&json!(true)));
         let hint = kept.hint.as_deref().unwrap();
         assert!(hint.contains("`|-`") && kept.message.ends_with(hint), "{kept:?}");
 
         let two_lines = validate("|\n  one\n  two\n");
-        assert_eq!(two_lines.code.as_deref(), Some("validation::not_inline"));
+        assert_eq!(two_lines.code.as_deref(), Some("validation::not_single_line"));
         assert!(two_lines.args.is_empty(), "{two_lines:?}");
         assert!(!two_lines.hint.unwrap().contains("`|-`"));
     }
 
     #[test]
-    fn accepts_richtext_inline_single_para_content() {
-        let config = config_with("    tag:\n      type: richtext\n      inline: true", "");
+    fn accepts_single_line_richtext_single_para_content() {
+        let config = config_with("    tag:\n      type: richtext\n      multiline: false", "");
         let rt = quillmark_content::import::from_markdown("one line only").unwrap().content;
         let content = quillmark_content::serial::to_canonical_value(&rt);
         let doc = doc_from_fm(&[("tag", content)]);

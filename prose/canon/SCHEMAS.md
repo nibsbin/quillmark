@@ -26,22 +26,29 @@ Supported field types:
 
 | Quill.yaml Type | Meaning |
 |---|---|
-| `string` | Open scalar UTF-8 text: a value the template computes with (URL, path, identifier, reference key), not prose it lays out |
-| `enum` | Closed string domain of **choices**; requires a `values:` list. Also accepts its blank (`""`), which is never a declared member — declaring one is a load error (`quill::enum_blank_member`). Projects to JSON-Schema `{type: string, enum: ["", …]}`. A value is a stored id; display text is the plate's. `values:` on any other type, and `enum:` on any type at all, is a load error |
+| `enum` | Closed string domain of **choices**; requires a `values:` list. Also accepts its blank (`""`), which is never a declared member — declaring one is a load error (`quill::enum_blank_member`). Projects to JSON-Schema `{type: string, enum: ["", …] }`. A value is a stored id; display text is the plate's. `values:` on any other type, and `enum:` on any type at all, is a load error |
 | `number` | Numeric value (integers and decimals) |
 | `integer` | Integer-only numeric value |
 | `boolean` | `true` / `false` |
-| `array` | Ordered list; requires an `items:` element schema (e.g. `items: { type: string }` for `string[]`, `items: { type: object, properties: … }` for a typed table). Optional `max:`, the element count past which the surplus leaves the page ([Cardinality](#cardinality)) |
+| `array` | Ordered list; requires an `items:` element schema (e.g. `items: { type: text }` for a list of lines, `items: { type: object, properties: … }` for a typed table). Optional `max:`, the element count past which the surplus leaves the page ([Cardinality](#cardinality)) |
 | `matrix` | A vocabulary someone ticks; requires a `members:` roster, and `open: true` admits items a document adds. A cell whose value is the set of held items: each held id maps to an object of the field's `properties:` (the columns), and an unheld member is absent. See [Matrix](#matrix) |
 | `object` | Structured map; requires `properties:` |
 | `date` | A strict calendar date `YYYY-MM-DD`, or the keyword `today` ([The render date](#the-render-date-today)). Rejects any time component (a time-bearing string is a `datetime`, not a truncated date). The common case in a document engine, so it is the unmarked date type. Stored verbatim; lowers to a native Typst `datetime(year:, month:, day:)`, with `qm.ink(dict, key, ..)` for a click-to-edit rendering (see `PLATE_DATA.md`) |
 | `datetime` | A strict offset-less wall-clock datetime `YYYY-MM-DDThh:mm[:ss]`, seconds optional (zero-filled). Rejects timezone offsets (`Z`, `±HH:MM`), the space separator, fractional seconds, and a bare date (which is a `date`). An offset is **rejected, never dropped**: the engine does no zone math, keeping wall-clock semantics end to end. Stored verbatim; lowers the same way over the six-component `datetime(year:, .., second:)` |
-| `plaintext` | Navigable **unformatted** prose over the same canonical content (`Content`) as `richtext` (same media type, nav, and regions) but a **literal** codec (`from_plaintext`/`to_plaintext`): delimiters stay literal, no markup, verbatim round-trip. Declare `inline: true` for the single-line variant. Constrained mark-/island-free (`Content::is_plain`); a formatted wire content is rejected (`validation::not_plain`), not stripped. **Rests as the literal string** — in the *document*. A plate receives the content object, exactly as for `richtext` (no backend reads the `plaintext` annotation): there is deliberately no plate-side content→`str` projection, since no plate has needed one |
-| `richtext` | Rich **formatted** prose over a canonical content (`Content`); markdown is a projection of it. Declare `inline: true` for the single-line variant (exactly one `Para` line, no container, no islands). The pre-richtext `markdown` spelling and the retired `type: richtext(inline)` token are schema load errors (`quill::field_parse_error`). **Rests as the canonical content object** |
+| `text` | Open **unformatted** text over the same canonical content (`Content`) as `richtext` (same media type, nav, and regions) but a **literal** codec (`from_plaintext`/`to_plaintext`): delimiters stay literal, no markup, verbatim round-trip. One line; `multiline: true` admits line breaks. Constrained mark-/island-free (`Content::is_plain`); a formatted wire content is rejected (`validation::not_plain`), not stripped. **Rests as the literal string** — in the *document*. A plate receives the content object, exactly as for `richtext` (no backend reads the `text` annotation), and a plate that computes with the value takes its `str` through `qm.str(..)` ([PLATE_DATA.md](PLATE_DATA.md)), lossless here because the value carries no marks |
+| `richtext` | Rich **formatted** prose over a canonical content (`Content`); markdown is a projection of it. One paragraph (exactly one `Para` line, no container, no islands); `multiline: true` admits block structure (paragraphs, lists, containers). A `richtext` spells `multiline:` either way, `true` or `false`, and its absence is a load error. The pre-richtext `markdown` spelling and the retired `type: richtext(inline)` token are schema load errors (`quill::field_parse_error`). **Rests as the canonical content object** |
+
+`multiline` is the one line-shape key: coercion, `validate`, the editor and
+acroform all read it, and it is valid only on `text` and `richtext`. The codec
+stays in the type name, so changing literal ↔ markdown is a type change. The
+retired spellings are load errors (`quill::field_parse_error`) whose message
+names the replacement: `type: plaintext` (now `text`), `type: string` (now
+`text`, read as a `str` through `qm.str`), `inline:` (one line is the default)
+and `ui.multiline` (now the field's `multiline:`).
 
 ### Optional cells
 
-A trailing `?` on a cell's type token (`integer?`, `boolean?`, `string?`,
+A trailing `?` on a cell's type token (`integer?`, `boolean?`, `text?`,
 `enum?`, `date?`, `richtext?`, `array?`, …) makes the cell **optional**: left
 unanswered, it renders `none` rather than its type's blank. The `?` moves the
 render floor and nothing else.
@@ -80,9 +87,9 @@ classification:
   values: [UNCLASSIFIED, CUI, CONFIDENTIAL, SECRET, TOP SECRET]
   variants:
     CUI:
-      controlled_by: { type: string }
-      poc:           { type: string }
-      category:      { type: string, default: "" }
+      controlled_by: { type: text }
+      poc:           { type: text }
+      category:      { type: text, default: "" }
 ```
 
 `variants:` is the one key that changes a field's **resting shape**: the field
@@ -181,14 +188,14 @@ discriminant. So every variant declaring a name must declare it identically —
 `quill::variant_field_collision` rejects disagreement at load, rather than letting
 a live value coerce under another world's type.
 
-The text-ish types form a **data vs content** × **open/plain vs closed/formatted**
-2×2: `enum` (closed data), `string` (open data), `plaintext` (plain content),
-`richtext` (formatted content). A printed field of any type can region;
-navigation inside the value is a property of the content model, so `plaintext`
-and `richtext` share the entire nav/region/preview
-stack and the same backend lowering (both carry `contentMediaType:
-application/quillmark-content+json`); `plaintext` additionally carries
-`quillmark:plain: true`, an editor-only annotation backends ignore.
+The text-ish types split **data vs content**: `enum` is closed data, a stored
+id, and `text` (plain) and `richtext` (formatted) are content. Every open text
+field is content, so the choice among them is literal vs markdown only. A
+printed field of any type can region; navigation inside the value is a property
+of the content model, so `text` and `richtext` share the entire
+nav/region/preview stack and the same backend lowering (both carry
+`contentMediaType: application/quillmark-content+json`); `text` additionally
+carries `quillmark:plain: true`, an editor-only annotation backends ignore.
 
 ### Matrix
 
@@ -205,7 +212,7 @@ qualifications:
     dco: DCO (Defensive)
   open: true                      # a document may add items; false by default
   properties:                     # the columns; empty is a checklist
-    detail: { type: plaintext, inline: true, default: "" }
+    detail: { type: text, default: "" }
 ```
 
 **A cell holding the held set.** Which members are held is the document's
@@ -251,7 +258,7 @@ itself, read through the boolean coercion.
 
 **Open.** `open: true` admits an **added item**: a key spelled as a member id
 whose mapping carries a `title`. It is held by being present, carries the
-columns a roster member does, and its `title` is a `string` cell. The domain is
+columns a roster member does, and its `title` is a one-line `text` cell. The domain is
 the roster plus those keys, so an untitled key or one no id spells is
 `enum_violation`, whose `open` arg carries the hint toward the added spelling.
 
@@ -329,16 +336,16 @@ forced, not chosen:
 | Codec | Rest | Why |
 |---|---|---|
 | `richtext` | the canonical content object | the markdown projection is lossy (anchors, island ids, content-only marks), so string rest loses identity |
-| `plaintext` | the literal string | `from_plaintext`/`to_plaintext` are inverses on plain content and `is_plain` excludes every mark, so string rest loses nothing, while object rest corrupts at emit |
+| `text` | the literal string | `from_plaintext`/`to_plaintext` are inverses on plain content and `is_plain` excludes every mark, so string rest loses nothing, while object rest corrupts at emit |
 
 Emit is schema-free: `project_content_field` routes every canonical content
 object in a field's value, at any depth, through `export::to_markdown`, and it
 cannot sniff the codec from the shape (a `richtext` content that happens to be plain is
-indistinguishable from a `plaintext` one). An object-rest `plaintext` field
+indistinguishable from a `text` one). An object-rest `text` field
 holding `a *literal* line` would therefore emit markdown-escaped
 (`a \*literal\* line`), and a re-parse would read the backslashes as
 characters. String rest removes that; the plate is unaffected, since the render
-floor still coerces `plaintext` to the content object backends receive
+floor still coerces `text` to the content object backends receive
 ([PLATE_DATA.md](PLATE_DATA.md)).
 
 Rest is enforced only for a **declared content field**: one whose type tree
@@ -368,7 +375,7 @@ Changing a field's declared type reinterprets every stored value in that field a
 
 The mechanism is deliberate. A type change migrates a deployed corpus with no migration script, and read-repair is the documented convergence path ([DOCUMENT_STORAGE.md](DOCUMENT_STORAGE.md) § "Byte-stability").
 
-Scalar → content is the lossy direction: the stored string enters the codec's import, markup delimiters are consumed as structure, and the authored text is not recoverable. A `subject` holding `Cost * Benefit Analysis *DRAFT*` rests verbatim under `string`; under `richtext` it rests as content whose text is `Cost * Benefit Analysis DRAFT` carrying an emph mark, the literal asterisks gone.
+Scalar → content is the lossy direction: the stored string enters the codec's import, markup delimiters are consumed as structure, and the authored text is not recoverable. A `subject` holding `Cost * Benefit Analysis *DRAFT*` rests verbatim under `text`; under `richtext` it rests as content whose text is `Cost * Benefit Analysis DRAFT` carrying an emph mark, the literal asterisks gone.
 
 **A declared type change is therefore a new quill version**, the rule [VERSIONING.md](VERSIONING.md) § "Ref Immutability" states for any content behind a canonical ref. Nothing enforces it: `check_quill_reference` compares the document's `$quill` name and selector against the loaded quill, and an in-place schema edit at the same version leaves both matching, so a document pinned to `name@0.2.0` conforms against a schema it was never authored under and the mismatch is unrepresentable.
 
@@ -381,12 +388,12 @@ editor and the blueprint.
 ```yaml
 main:
   fields:
-    subject: { type: string }
+    subject: { type: text }
     letterhead:
       type: object
       title: Letterhead & Seal
       properties:
-        letterhead_title: { type: string }
+        letterhead_title: { type: text }
 ```
 
 - **The group is data.** The document stores `letterhead: { letterhead_title: … }`
@@ -431,11 +438,11 @@ siblings: `counts: [true, "abc"]` under `integer` items is one mismatch, at
 names the value the author wrote, and is a `type_mismatch` even where the
 authored shape reads well-typed — a content object that is not canonical
 content, an integer past `i64` — unless a shape check already names the refusal
-(`not_inline`, `not_plain`, `format_violation`). A container's refusal is the
+(`not_single_line`, `not_plain`, `format_violation`). A container's refusal is the
 element's or property's, reported at that path.
 
 Validation adds the arbitration coercion cannot carry — the enum domain, the
-datetime grammar, indexed element paths, the inline/plain content shapes — over
+datetime grammar, indexed element paths, the line/plain content shapes — over
 the value the floor built. A scalar the floor stringifies into an enum field is
 therefore domain-checked on that string: `grade: 5` is `enum_violation`, not
 `type_mismatch`.
@@ -450,21 +457,23 @@ Coercion rules per type:
 | `array` | array wrapping plus element-wise coercion against the `items` schema; a bad element fails at its indexed path, e.g. `counts[1]` |
 | `boolean` | from the strings `true` / `false` in any letter case, or from a number by whether it is non-zero. Any other string is refused, `yes` and `off` included |
 | `number` / `integer` | from string, or from boolean (`true→1`, `false→0`). An `integer` is an `i64`; a literal past that range is refused, and only `number` carries it |
-| `string` | unwraps a length-1 string array into the bare string; identity otherwise |
+| `text` | commits the canonical content form, importing an authored string through the literal codec; the length-1-array-unwrap and bare-scalar-stringify leniencies feed the import |
 | `richtext` | commits the canonical content form (the model): an authored markdown string imports via `quillmark-content::import`, an editor-supplied content object revalidates and re-canonicalizes. The length-1-array-unwrap and bare-scalar-stringify leniencies feed the import |
 | `date` / `datetime` | per-type strict-grammar validation, stored verbatim: a `date` rejects any time component, a `datetime` rejects offsets/space/fractional/bare-date. Neither truncates |
 | `object` | property recursion |
-- **`inline` richtext enforcement.** A `richtext` field with `inline: true`
-  requires its content to be exactly one `Para` line, in no container, with no
-  islands (`Content::is_inline`). The empty content satisfies it, so a blank or
-  blank-filled inline field passes. The constraint is checked in three places:
+- **One-line enforcement.** A `text` or `richtext` field without
+  `multiline: true` requires its content to be exactly one `Para` line, in no
+  container, with no islands (`Content::is_inline`): one line for `text`, one
+  paragraph for `richtext`. The empty content satisfies it, so a blank or
+  blank-filled field passes. The constraint is checked in three places:
   coercion (`CoercionError` for a document value), validation
-  (`validation::not_inline`, the `TypeMismatch` fatality class, as a backstop for a
-  content that bypassed coercion), and load-time default import (a schema literal
-  that violates it is a load error). Blueprint still annotates inline fields as
-  `richtext(inline)<markdown>`; `build_transform_schema` emits
-  `quillmark:inline: true`
-- **`plaintext` coercion and enforcement.** A `plaintext` value rides the same
+  (`validation::not_single_line`, the `TypeMismatch` fatality class, as a
+  backstop for a content that bypassed coercion), and load-time default import
+  (a schema literal that violates it is a load error). Blueprint annotates a
+  field declaring `multiline: true` as `text(multiline)<plain>` or
+  `richtext(multiline)<markdown>`; `build_transform_schema` emits
+  `quillmark:multiline: true` on it
+- **`text` coercion and enforcement.** A `text` value rides the same
   content as `richtext`, differing only at the codec:
   - a string imports through the **literal** codec (`from_plaintext`,
     verbatim: no markdown parse, no escaping);
@@ -472,21 +481,21 @@ Coercion rules per type:
     (`Content::is_plain`: no marks, no islands, all `Para` lines) rather than
     markdown-decoded. A formatted wire content is rejected, not stripped.
 
-  Enforcement mirrors the `inline` precedent, in the same three places:
+  Enforcement mirrors the one-line constraint, in the same three places:
   coercion (`CoercionError`); validation (`validation::not_plain`, the
-  `TypeMismatch` fatality class); load-time literal import. An `inline: true`
-  plaintext field additionally requires a single line. The load-time content
-  cache (`default_content`) and the render-floor blank (the empty content) cover `plaintext` exactly as
+  `TypeMismatch` fatality class); load-time literal import. The load-time
+  content cache (`default_content`) and the render-floor blank (the empty
+  content) cover `text` exactly as
   `richtext`: both are content leaves (`field_contains_content`)
 - **`enum` domain validation.** An `enum` field coerces as a string; domain membership is a *value* check (`validation::enum_violation`), not a type check, so an out-of-domain string is well-typed but invalid. `type: enum` requires a non-empty `values:` list; `values:` on any other type is a load error (`quill::field_parse_error`), as is `enum:` on any type
-- **The domain rides the type token.** It is the `FieldType::Enum` payload, so a consumer that has matched the token holds it: the render floor, the acroform widget kind, the blueprint annotation, and the transform-schema projection to `{type: string, enum: […]}`. A variant-bearing branch enters through `variants:` with no token in hand and reads it through `FieldSchema::domain()`. A domain admits its members and the blank, so an empty one admits only the blank
+- **The domain rides the type token.** It is the `FieldType::Enum` payload, so a consumer that has matched the token holds it: the render floor, the acroform widget kind, the blueprint annotation, and the transform-schema projection to `{type: string, enum: […] }`. A variant-bearing branch enters through `variants:` with no token in hand and reads it through `FieldSchema::domain()`. A domain admits its members and the blank, so an empty one admits only the blank
 - **Null short-circuits coercion.** A null value (`field:`, `field: null`,
   `field: ~`) passes coercion unchanged for *every* type: null ≡ absent, so
   it carries no data to coerce. The value reaches the render floor and
   blank-fills (authored › `default:` › blank) exactly like an omitted
   field
-- **Bare scalars stringify into `string`/`richtext` fields.** A bare boolean,
-  integer, or number written where a `string` is expected adopts its canonical
+- **Bare scalars stringify into `text`/`richtext` fields.** A bare boolean,
+  integer, or number written where text is expected adopts its canonical
   scalar token (`true`, `47`, `1.0`) instead of failing: it is unambiguously
   text (null and collections are excluded); a `richtext` field then imports that
   token as its markdown source. The leniency is scoped to
@@ -677,7 +686,7 @@ document *carries*; `reader.resolve()` answers what the render projection
 
 `reader.get(name)` reads one main-card field in the form and
 `reader.card(i).get(name)` one field of one card. Every content leaf is its
-codec's text — `richtext` markdown, `plaintext` literal — at **every depth the
+codec's text — `richtext` markdown, `text` literal — at **every depth the
 field's type tree reaches**: an `array<richtext>` is an array of markdown
 strings, a mixed `object` projects its content property and passes its scalars
 verbatim, a variant carries its discriminant verbatim and each cell through its
@@ -750,9 +759,9 @@ domain.** It is both the render floor and the value a reader recognizes as
 
 | Type | Blank |
 |---|---|
-| `string`, `date`, `datetime` | `""` (a date's `""` lowers to Typst `none`) |
+| `date`, `datetime` | `""` (a date's `""` lowers to Typst `none`) |
 | `enum` | `""` — reserved, and never a member of `values:` |
-| `richtext`, `plaintext` | the empty content |
+| `richtext`, `text` | the empty content |
 | `array` | `[]` |
 | `matrix` | `{}`: nothing held |
 | `object` | every property at its own blank, recursively |
@@ -834,7 +843,7 @@ other than a well-formed answer falls in one of three classes:
 | Class | Input | Render | Signal |
 |---|---|---|---|
 | Unanswered | a declared cell left absent or present-null | blank-fills it | none |
-| Malformed | markup the grammar cannot read, or a value that will not read as its declared cell's type | fails | `parse::*` errors; `validation::type_mismatch`, `enum_violation`, `format_violation`, `coercion_failed`, `not_inline`, `not_plain`, `held_stored` |
+| Malformed | markup the grammar cannot read, or a value that will not read as its declared cell's type | fails | `parse::*` errors; `validation::type_mismatch`, `enum_violation`, `format_violation`, `coercion_failed`, `not_single_line`, `not_plain`, `held_stored` |
 | Unclaimed | input no declaration reads | renders; no declared cell reads it | a warning naming the input |
 
 The `validation::*` severity is the class: an `Error` is malformed, a `Warning`
@@ -919,7 +928,7 @@ Starter content for the document itself lives in a template's own body.
 
 **Seed-commits-rest.** A seeded content value — a seed's content field, and
 its `$body` — commits its codec's resting form (a richtext field and
-the body the canonical content, a plaintext field its literal string), so a
+the body the canonical content, a text field its literal string), so a
 seeded document is at rest from birth: `conform` of one is a byte no-op, and a
 seed → store → load → conform cycle cannot move a hash on a document nobody
 edited. An overlay field commits through the same strict write the typed writer
@@ -944,7 +953,7 @@ covering every position is what makes an absent companion mean "no literal"
 rather than "not reached"; a gap blank-fills and drops the author's `default:`
 silently. The cache is also the gate: a content-bearing tree with no companion
 blank-fills rather than falling through to the raw literal, which would cross as
-unimported markdown. Importing is also checking, so a nested `richtext(inline)`
+unimported markdown. Importing is also checking, so a nested one-line
 violation in a `default:` is a load error there.
 
 - **Composable cards** are seeded one instance per declared kind, each from
@@ -1029,7 +1038,7 @@ is the `overlay = None` case.
 
 - Field types, constraints, and `enum`/`default` annotations
 - `title` on fields and cards: a literal label, which the blueprint prints wherever it prints the description, and which no `ui` key carries, since `ui` never reaches the blueprint
-- `ui` hints on fields (`group`, `compact`, `multiline`, `blank_title`, `layout`) and on cards (`groups`), as settled at load ([Grouping](#grouping)). Field display order is not a hint: it is the key order of the emitted `fields`/`properties` maps (declaration order)
+- `ui` hints on fields (`group`, `compact`, `blank_title`, `layout`) and on cards (`groups`), as settled at load ([Grouping](#grouping)). Field display order is not a hint: it is the key order of the emitted `fields`/`properties` maps (declaration order)
 - `body` blocks on cards (`enabled`)
 - `seed` on a card kind that declares one, in the `$seed.<kind>` shape
 
@@ -1046,10 +1055,11 @@ Top-level schema keys: `main`, optional `card_kinds` (map keyed by card name).
 `main` and each entry in `card_kinds` share the same `CardSchema` shape:
 `fields` (map keyed by field name), optional `title`, optional `description`,
 optional `ui`, optional `body`. Each `FieldSchema` includes `type`, optional
-`title`/`description`/`default`/`enum`/`values`/`members`/`open`/`variants`/`inline`/`properties`/`items`/`max`/`ui`.
+`title`/`description`/`default`/`enum`/`values`/`members`/`open`/`variants`/`multiline`/`properties`/`items`/`max`/`ui`.
 The type-gated keys:
 
-- `inline`: valid only on the prose types (`richtext`, `plaintext`).
+- `multiline`: valid only on the text types (`text`, `richtext`), emitted on a
+  `richtext` either way and on a `text` when `true`, so the view loads back.
 - `values`: declares an `enum` field's domain, required there.
 - `members`: declares a `matrix` field's roster, required there. The member
   schemas derived from the columns are never emitted: `members` and `properties`
@@ -1063,8 +1073,8 @@ The type-gated keys:
   else. The key carries two halves:
   - A **contract**: every column is a leaf, refused at load as
     `quill::table_column_not_leaf` naming the column (`appendices[].entries`).
-    The boundary is containment, not height — prose is a column whatever its
-    `inline`, since how tall a cell renders is the consumer's judgement and what
+    The boundary is containment, not height — text is a column whatever its
+    `multiline`, since how tall a cell renders is the consumer's judgement and what
     it contains is not. `FieldType::is_leaf` is the one definition, exhaustive
     over the vocabulary; `acroform` binds an array's elements through the same
     predicate.

@@ -138,7 +138,7 @@ A card declares at most 1000 fields — the width one card-yaml block carries �
 main:
   fields:
     subject:          # Field name (used as the card-yaml payload key)
-      type: string
+      type: text
       description: Be brief and clear.
 ```
 
@@ -154,7 +154,7 @@ main:
 | `ui`          | object            | no       | UI rendering hints (see [UI Properties](#ui-properties)) |
 | `items`       | object            | for `array` | Element schema for an `array` field (a nested field schema). Required on every array. |
 | `properties`  | object            | for `object` | Nested field schemas for an `object` typed dictionary (or an array's `object`-typed `items`). Required on every `object` field. |
-| `inline`      | boolean           | no       | For `richtext` and `plaintext` only: constrain the content to a single paragraph/line (a one-line editor surface). |
+| `multiline`   | boolean           | for `richtext` | For `text` and `richtext` only: `true` admits more than one line (`text`) or block structure (`richtext`). Absent or `false`, the field is one line or one paragraph. A `richtext` declares it either way. |
 
 ### `title`
 
@@ -169,7 +169,7 @@ main:
       type: array
       title: To       # "Memo For" would confuse users unfamiliar with memo conventions
       items:
-        type: string
+        type: text
 ```
 
 The blueprint prints it ahead of the description on the field's leading line,
@@ -189,7 +189,7 @@ One question per field: **does it have a value when nobody types anything?**
 ```yaml
 # Nothing to suggest: the type's blank is the answer "nothing".
 internal_note:
-  type: string
+  type: text
   default: ""
 
 # No default: the cell stays empty until an author answers it.
@@ -201,7 +201,7 @@ classification:
 The blueprint renders them as:
 
 ```
-internal_note: "" # string
+internal_note: "" # text<plain>
 classification: # enum<UNCLASSIFIED | CUI>
 ```
 
@@ -214,7 +214,7 @@ A field declares no sample value: samples live in the quill's
 
 ```yaml
 signer:
-  type: string
+  type: text
   description: Name as signed, as in FIRST M. LAST, Capt, USAF.
 ```
 
@@ -225,16 +225,15 @@ and `Quill::validate` reports nothing about it.
 
 | Type       | Notes |
 |------------|-------|
-| `string`   | Open scalar UTF-8 text: a value the template computes with (a URL, path, identifier, or reference key), not prose it lays out |
 | `enum`     | A closed set of string values; requires a `values:` list. Also accepts its [blank](#the-blank-values-is-for-choices-not-for-the-absence-of-one) (`""`), which is not a declared member. The [schema](#reading-the-schema-programmatically) emits `values:` as declared, with no `""` |
-| `plaintext`| Navigable, **unformatted** prose over the canonical content: the same nav/regions as `richtext`, but a literal codec (delimiters stay literal, no markup). Add `inline: true` for the single-line variant |
+| `text`     | Open, **unformatted** text over the canonical content: the same nav/regions as `richtext`, but a literal codec (delimiters stay literal, no markup). One line; add `multiline: true` to admit line breaks. A plate that computes with the value reads it as a `str` through [`qm.str`](typst-backend.md#text-as-a-str) |
 | `number`   | Numeric scalar (integers and decimals) |
 | `integer`  | Integer-only numeric scalar, sized as an `i64`; a literal past that range takes `number` |
 | `boolean`  | `true` or `false` |
 | `array`    | Ordered list; requires an `items:` element schema. Optional `max:`, the element count the page holds (see [`max`](#max-what-the-page-holds)) |
 | `date`     | A strict calendar date `YYYY-MM-DD`, or `today` (see [Dated by the render](#dated-by-the-render-today)); rejects any time component |
 | `datetime` | A strict offset-less wall-clock datetime `YYYY-MM-DDThh:mm[:ss]`; rejects offsets, the space separator, fractional seconds, and bare dates |
-| `richtext` | Rich, **formatted** prose over a canonical content; backends lower it to the target format. Markdown is its import/export projection. Add `inline: true` for the single-paragraph variant |
+| `richtext` | Rich, **formatted** prose over a canonical content; backends lower it to the target format. Markdown is its import/export projection. One paragraph; `multiline: true` admits paragraphs, lists and other blocks. Declare `multiline:` either way, `true` or `false`: leaving it out is a load error |
 | `object`   | Structured map; requires a `properties:` map |
 | `matrix`   | A vocabulary the author ticks; requires a `members:` roster, and `open: true` lets a document add items. Its value is the set of held members, each an object of the field's `properties:` (see [Matrix](#matrix-a-vocabulary-the-author-ticks)) |
 
@@ -268,27 +267,33 @@ confidential:
 | `type: t` with `default:` | the default | a `t`, but `none` for a `date` or `datetime` defaulting to `""` |
 | `type: t?` | `none` | a `t` or `none` |
 
-- Any cell takes the `?`: every scalar type, `richtext`, `plaintext`, `date`, `enum`, `array` and `matrix`. An `object` and an `enum` with `variants:` do not (`quill::optional_namespace`); mark the fields inside them instead.
+- Any cell takes the `?`: every scalar type, `text`, `richtext`, `date`, `enum`, `array` and `matrix`. An `object` and an `enum` with `variants:` do not (`quill::optional_namespace`); mark the fields inside them instead.
 - `?` and `default:` are exclusive (`quill::optional_default`): a default answers for the author, so the field would never be `none`.
 - An authored value is kept as written: `0`, `false`, `""`, and `[]` are answers. On an `enum?`, `""` is the blank and reads `none`.
 
 Reading an optional field in a plate: [Blank values](typst-backend.md#blank-values).
 
-#### Choosing among `string`, `enum`, `plaintext`, and `richtext`
+#### Choosing among `enum`, `text`, and `richtext`
 
-The four text-ish types form a 2×2 of **data vs content** × **open/plain vs closed/formatted**, and two questions resolve it:
+Two questions resolve it:
 
-1. Does the author write prose here, or does the plate compute with the value? Prose is content; a name, URL, path, identifier, or reference key is data.
-2. Then: is the domain closed (`enum` over `string`), or should markdown delimiters format the text rather than stay literal (`richtext` over `plaintext`)?
+1. Is the set of allowed values closed? Then it is an `enum`, a stored id the plate branches on.
+2. Otherwise the field is open text: should markdown delimiters format it (`richtext`: `*text*` becomes emphasis) or stay literal (`text`: `*text*` stays four characters)?
 
-| | data — the plate computes with it | content — the author writes and navigates prose |
-|---|---|---|
-| **open / literal** | `string` | `plaintext`: `*text*` stays literal |
-| **closed / formatted** | `enum`: a `values:` domain | `richtext`: `*text*` becomes emphasis |
+Then decide the shape: `text` is one line and `richtext` one paragraph, and `multiline: true` admits more.
 
-Any field the plate prints through `qm.ink`, `string` and `enum` included, gets a region and click-to-edit in editor consumers ([Print with `ink`](editor-regions.md#print-with-ink)). A content field rides the canonical content model and adds navigation inside its value: a click lands a caret in the text. `plaintext` and `richtext` share that entire stack and the same backend lowering, so they are indistinguishable in an editor and diverge only at emit, where the codec decides whether a delimiter is markup or a character.
+| Declaration | Holds |
+|---|---|
+| `{ type: text }` | one line, literal |
+| `{ type: text, multiline: true }` | lines, literal |
+| `{ type: richtext, multiline: false }` | one formatted paragraph |
+| `{ type: richtext, multiline: true }` | formatted paragraphs, lists and other blocks |
 
-Changing a declared type reinterprets every stored value in that field at the next bound load, with no diagnostic, and data → content is the lossy direction: the stored string enters the codec's import and its delimiters are consumed as structure, leaving the literal characters unrecoverable. A declared type change is a new quill version ([Quill Versioning](versioning.md)); audit the corpus before publishing one, as under [Date and Datetime Grammars](#date-and-datetime-grammars).
+A name, a URL or a reference key is `text` too: the plate prints it as content, and where it computes with it (`set document(author: ..)`, `upper`, a comparison) it reads `qm.str(..)`, the verbatim string ([Text as a str](typst-backend.md#text-as-a-str)).
+
+Any field the plate prints through `qm.ink`, `enum` included, gets a region and click-to-edit in editor consumers ([Print with `ink`](editor-regions.md#print-with-ink)). A content field rides the canonical content model and adds navigation inside its value: a click lands a caret in the text. `text` and `richtext` share that entire stack and the same backend lowering, so they are indistinguishable in an editor and diverge only at emit, where the codec decides whether a delimiter is markup or a character.
+
+Changing a declared type reinterprets every stored value in that field at the next bound load, with no diagnostic, and `text` → `richtext` is the lossy direction: the stored string enters the markdown import and its delimiters are consumed as structure, leaving the literal characters unrecoverable. A declared type change is a new quill version ([Quill Versioning](versioning.md)); audit the corpus before publishing one, as under [Date and Datetime Grammars](#date-and-datetime-grammars).
 
 ### Date and Datetime Grammars
 
@@ -395,9 +400,9 @@ them under `variants:`, keyed by the member that brings them into play:
       default: ""
       variants:
         CUI:
-          controlled_by: { type: string }        # exists only on a CUI memo
-          poc:           { type: string }
-          category:      { type: string, default: "" }
+          controlled_by: { type: text }        # exists only on a CUI memo
+          poc:           { type: text }
+          category:      { type: text, default: "" }
 ```
 
 The field then holds a **container** instead of a bare string, and a document
@@ -474,7 +479,7 @@ main:
     tags:
       type: array
       items:
-        type: string
+        type: text
     counts:
       type: array
       items:
@@ -483,6 +488,7 @@ main:
       type: array
       items:
         type: richtext   # each element's content is lowered to backend markup
+        multiline: true
 ```
 
 For a **typed table** (a list of structured rows) give `items` an `object` type with its own `properties:`. Coercion recurses into each element and converts property values to their declared types:
@@ -496,12 +502,12 @@ main:
         type: object
         properties:
           category:
-            type: string
+            type: text
           score:
             type: number
 ```
 
-A document may write a single value where an array is declared: it is a spelling of a one-element array, and the schema is what disambiguates it. `tags: one` renders as `tags: [one]` does, and `quillmark check` passes it. The element is then judged against `items`, so a mapping written for `tags` is a `validation::type_mismatch` at `tags[0]`, while one written for `cells` is its one row. Likewise, a bare boolean, integer, or number written where a `string` is declared adopts its canonical scalar token (`true`, `47`, `1.0`; `1.50` reads `1.5`) instead of failing.
+A document may write a single value where an array is declared: it is a spelling of a one-element array, and the schema is what disambiguates it. `tags: one` renders as `tags: [one]` does, and `quillmark check` passes it. The element is then judged against `items`, so a mapping written for `tags` is a `validation::type_mismatch` at `tags[0]`, while one written for `cells` is its one row. Likewise, a bare boolean, integer, or number written where `text` is declared adopts its canonical scalar token (`true`, `47`, `1.0`; `1.50` reads `1.5`) instead of failing.
 
 Use `type: object` with `properties:` for a single structured mapping:
 
@@ -512,12 +518,12 @@ main:
       type: object
       properties:
         street:
-          type: string
+          type: text
         city:
-          type: string
+          type: text
 ```
 
-Containers nest freely: a property or an element is an ordinary field, so it carries whatever type a card-level field carries, itself included. `object<array<string>>`, `array<array<integer>>` and a typed table whose row holds a typed dictionary are all declarable, and each leaf is addressable by the schema address its path spells (`contact.address.city`, `grid.0.0` — see [PLATE_DATA.md](https://github.com/borb-sh/quillmark/blob/main/prose/canon/PLATE_DATA.md#schema-addresses)).
+Containers nest freely: a property or an element is an ordinary field, so it carries whatever type a card-level field carries, itself included. `object<array<text>>`, `array<array<integer>>` and a typed table whose row holds a typed dictionary are all declarable, and each leaf is addressable by the schema address its path spells (`contact.address.city`, `grid.0.0` — see [PLATE_DATA.md](https://github.com/borb-sh/quillmark/blob/main/prose/canon/PLATE_DATA.md#schema-addresses)).
 
 **A dictionary holds no `default:` of its own** — its properties do:
 
@@ -526,8 +532,8 @@ address:
   type: object
   # default: { street: "5000 Forbes Ave" }   # quill::default_on_namespace
   properties:
-    street: { type: string, default: "5000 Forbes Ave" }
-    city:   { type: string, default: "" }    # type-empty: a skippable cell
+    street: { type: text, default: "5000 Forbes Ave" }
+    city:   { type: text, default: "" }    # type-empty: a skippable cell
 ```
 
 The container spelling would be a second declaration of a value the property
@@ -554,7 +560,7 @@ experience:
   items:
     type: object
     properties:
-      duty: { type: string, default: "" }
+      duty: { type: text, default: "" }
 ```
 
 `max:` is a non-negative integer, valid only on an `array`, and a `default:`
@@ -587,8 +593,7 @@ qualifications:
     dodin_ops: DODIN Ops
   properties:                   # the columns; omit them for a plain checklist
     detail:
-      type: plaintext
-      inline: true
+      type: text
       default: ""
 ```
 
@@ -657,7 +662,7 @@ qualifications:
   open: true
   members: { flight_cc: Flight CC, dodin_ops: DODIN Ops }
   properties:
-    detail: { type: plaintext, inline: true, default: "" }
+    detail: { type: text, default: "" }
 ```
 
 ```yaml
@@ -667,7 +672,7 @@ qualifications:
 ```
 
 - An added item is held by being present and takes the same columns a member
-  does. Its `title` is a string, and a key outside the roster with no `title`
+  does. Its `title` is a one-line `text`, and a key outside the roster with no `title`
   or a blank one (`""` or whitespace alone), or one that is not a snake_case
   id, is refused (`validation::enum_violation`, hinted toward the added
   spelling).
@@ -699,7 +704,7 @@ Related fields group under a top-level `object`. Its `title` and `description` l
 main:
   fields:
     subject:
-      type: string
+      type: text
     addressing:
       type: object
       title: Addressing
@@ -707,17 +712,17 @@ main:
       properties:
         memo_for:
           type: array
-          items: { type: string }
+          items: { type: text }
         memo_from:
           type: array
-          items: { type: string }
+          items: { type: text }
           default: []
     letterhead:
       type: object
       title: "Letterhead & Seal"
       properties:
         letterhead_title:
-          type: string
+          type: text
 ```
 
 A group is data. The document nests its keys under the group's id, and a plate reads `data.addressing.memo_for`:
@@ -746,10 +751,10 @@ main:
   fields:
     memo_for:
       type: array
-      items: { type: string }
+      items: { type: text }
       ui: { group: addressing }
     letterhead_title:
-      type: string
+      type: text
       ui: { group: letterhead }
 ```
 
@@ -766,6 +771,9 @@ The `ui` property on fields controls how form builders and wizards render the fi
 `ui` keys never reach the blueprint, so a fact a writer needs belongs in
 `description` or `title`. A field's label is its [`title`](#title);
 `ui` holds none, and `ui: { title: … }` is a load error whose hint names it.
+Nor does `ui` carry a field's line shape: that is the field's own `multiline:`,
+which validation, the editor and a PDF form all read, and `ui: { multiline: … }`
+is a load error.
 
 ### field order
 
@@ -796,7 +804,7 @@ Asks an editor to set a card-level field beside its neighbours in one row, where
 
 | Packs by default | Full row by default |
 |---|---|
-| `date`, `datetime`, `enum` (without `variants:`), `integer`, `number`, `boolean` | `string`, `plaintext`, `richtext`, `array`, `object`, `matrix` |
+| `date`, `datetime`, `enum` (without `variants:`), `integer`, `number`, `boolean` | `text`, `richtext`, `array`, `object`, `matrix` |
 
 A text field packs only under `compact: true`, since its type cannot say whether a value is a rank or a subject line; `compact: false` keeps a packing type on its own row.
 
@@ -804,7 +812,7 @@ A text field packs only under `compact: true`, since its type cannot say whether
 main:
   fields:
     rank:
-      type: string
+      type: text
       ui:
         compact: true
     due:
@@ -815,38 +823,10 @@ main:
 
 It is a request: an editor grants it only where a neighbour packs too, so a packing field alone between full-row fields still takes its row.
 
-- An `array`, an `object`, an `enum` with `variants:` and a block `plaintext` or `richtext` never pack, whatever the key says, since their height grows with the document.
-- A one-line (`inline`) `plaintext` or `richtext` packs like a `string`.
+- An `array`, an `object`, an `enum` with `variants:` and a `multiline: true` `text` or `richtext` never pack, whatever the key says, since their height grows with the document.
 - On a `matrix`, `compact: true` sets the roster's members side by side instead.
 - The properties of a card-level `object`, and of an `object` nested in it, follow the same rule, so a field moved into a group keeps its row.
 - The cells of an array's records, a variant, a matrix member and a typed table are laid out by their container and read no `compact`.
-
-### `multiline`
-
-Controls the initial size of the text input for `string` and `richtext` fields. When `true`, the UI starts with a larger text box instead of a single-line input:
-
-```yaml
-main:
-  fields:
-    summary:
-      type: richtext
-      description: Executive summary
-      ui:
-        multiline: true   # start as a larger text box
-
-    notes:
-      type: string
-      description: Free-form notes
-      ui:
-        multiline: true
-
-    tagline:
-      type: richtext
-      description: One-sentence tagline
-      # no multiline: single-line input that expands on demand
-```
-
-Meaningful on `string` and `richtext` fields; ignored on other types.
 
 ### `layout`
 
@@ -864,7 +844,7 @@ main:
       items:
         type: object
         properties:
-          unit:     { type: string, default: "" }
+          unit:     { type: text, default: "" }
           duration: { type: integer, default: 0 }
 ```
 
@@ -876,7 +856,7 @@ Declaring it says two things.
 **A contract: every column is a leaf.** A column holding an `array`, an `object`
 or a `matrix` addresses below itself and is not one cell, so it is a load
 error naming the column — `quill::table_column_not_leaf` on
-`appendices[].entries`. Prose is a column whatever its `inline`: how tall a cell
+`appendices[].entries`. Text is a column whatever its `multiline`: how tall a cell
 renders is the editor's call, what it contains is not. On any field that is not a
 typed table at all, the key is `quill::invalid_ui`.
 
@@ -899,10 +879,10 @@ main:
       ui:
         layout: flat        # its properties join the fields around it
       properties:
-        phone: { type: string }
-        email: { type: string }
+        phone: { type: text }
+        email: { type: text }
     notes:
-      type: string
+      type: text
 ```
 
 Among other fields, a flat object keeps its label. An object alone in a legacy
@@ -955,7 +935,7 @@ card_kinds:
         values: [standard, informal, separate_page]
         default: standard
       from:
-        type: string
+        type: text
 ```
 
 Invalid card-kind names include:
@@ -1010,7 +990,7 @@ card_kinds:
     description: Chain of routing endorsements.
     fields:
       from:
-        type: string
+        type: text
 ```
 
 The blueprint prints it on the kind's `$kind` line, ahead of the description:
@@ -1044,7 +1024,7 @@ card_kinds:
       enabled: false    # Card has fields only, no body/content area
     fields:
       style:
-        type: string
+        type: text
 ```
 
 Loading this draws `quill::bodiless_card_kind`, which asks whether the kind is a card at all: a repeated record with no prose is a row (see [When not to declare one](#when-not-to-declare-one)). The example above stands because a page break exists for its position in the stream, which no row can occupy. `main` is never warned.
@@ -1066,7 +1046,7 @@ card_kinds:
     fields:
       signature_block:
         type: array
-        items: { type: string }
+        items: { type: text }
 ```
 
 - A document's `$seed.<kind>` replaces it whole, `$body` included: a template keeping part of the kind's seed copies that part, and `$seed.<kind>: {}` seeds nothing.
@@ -1135,14 +1115,14 @@ quill:
 main:
   fields:
     project_name:
-      type: string
+      type: text
 
     status:
       type: enum
       values: [on_track, at_risk, blocked]
 
     risk_description:
-      type: string
+      type: text
       default: ""
       description: Describe the risk or blocker. Only needed when status is not on_track.
 
@@ -1155,7 +1135,7 @@ main:
         members:
           type: array
           items:
-            type: string
+            type: text
           default: []
 
     financials:
@@ -1170,7 +1150,7 @@ card_kinds:
     description: A project milestone with target date and status.
     fields:
       name:
-        type: string
+        type: text
       target_date:
         type: date
       completed:

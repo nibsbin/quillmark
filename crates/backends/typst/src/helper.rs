@@ -21,7 +21,7 @@ use crate::emit::{
 use crate::SchemaMeta;
 use quillmark_content::serial::from_canonical_value;
 use quillmark_core::quill::{
-    CONTENT_MEDIA_TYPE, PLATE_PATH_KEY as PATH_KEY, QUILLMARK_INLINE_KEY, QUILLMARK_ROSTER_KEY,
+    CONTENT_MEDIA_TYPE, PLATE_PATH_KEY as PATH_KEY, QUILLMARK_MULTILINE_KEY, QUILLMARK_ROSTER_KEY,
 };
 
 pub const HELPER_VERSION: &str = "0.2.0";
@@ -521,7 +521,7 @@ impl Container {
 /// the content types lower to content and a date does not:
 /// `prose/canon/PLATE_DATA.md`.
 enum Lower<'a> {
-    /// `richtext` / `plaintext`, which share everything downstream of this
+    /// `richtext` / `text`, which share everything downstream of this
     /// classification. `inline` lowers to pure inline markup, with no block
     /// terminator to warn inside a paragraph.
     Content { inline: bool },
@@ -549,7 +549,7 @@ fn lowering(node: Option<&serde_json::Value>) -> Lower<'_> {
     let str_key = |key: &str| node.get(key).and_then(|v| v.as_str());
     if str_key("contentMediaType") == Some(CONTENT_MEDIA_TYPE) {
         return Lower::Content {
-            inline: node.get(QUILLMARK_INLINE_KEY).and_then(|v| v.as_bool()) == Some(true),
+            inline: node.get(QUILLMARK_MULTILINE_KEY).and_then(|v| v.as_bool()) != Some(true),
         };
     }
     match str_key("format") {
@@ -741,15 +741,15 @@ mod tests {
     }
 
     fn richtext_field() -> serde_json::Value {
-        serde_json::json!({ "type": "object", "contentMediaType": CONTENT_MEDIA_TYPE })
-    }
-
-    fn inline_richtext_field() -> serde_json::Value {
         serde_json::json!({
             "type": "object",
             "contentMediaType": CONTENT_MEDIA_TYPE,
-            "quillmark:inline": true
+            "quillmark:multiline": true
         })
+    }
+
+    fn inline_richtext_field() -> serde_json::Value {
+        serde_json::json!({ "type": "object", "contentMediaType": CONTENT_MEDIA_TYPE })
     }
 
     #[test]
@@ -773,7 +773,7 @@ mod tests {
         );
     }
 
-    /// The `quillmark:inline` flag sits on `items` for an array field.
+    /// An array field's elements lower against `items`, whose `quillmark:multiline` is absent.
     #[test]
     fn inline_array_lowers_each_element_without_parbreak() {
         let meta = meta_from(serde_json::json!({ "properties": {

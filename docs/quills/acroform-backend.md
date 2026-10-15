@@ -45,17 +45,15 @@ main:
     enabled: false
   fields:
     full_name:
-      type: string
+      type: text
       default: ""
       description: Full legal name of the applicant. Binds the FullName text field.
 
     comments:
       type: array
       items:
-        type: string
+        type: text
       default: []
-      ui:
-        multiline: true
       description: "Free-form comments; each element becomes one line of the Comments field."
 
     agree:
@@ -74,9 +72,9 @@ main:
 
     headline:
       type: richtext
-      inline: true
+      multiline: false
       default: ""
-      description: "Inline richtext bound to the Headline text field; lowered to plaintext."
+      description: "One-paragraph richtext bound to the Headline text field; lowered to plain text."
 ```
 
 See the [Quill.yaml Reference](quill-yaml-reference.md) for the full field-type vocabulary.
@@ -145,7 +143,7 @@ The file is read as `Quill.yaml` is: YAML 1.2, where only `true` and `false` are
 
 A quill holding `form.json`, beside `form.yaml` or in its place, fails to load as `acroform::legacy_form_json`; rename the file to `form.yaml`, contents unchanged.
 
-Note what is **absent** from the bound fields: no `type`, `options`, or `multiline`. `FullName` is a text box because `full_name` is a `string`; `Agree` is a checkbox because `agree` is a `boolean`; `FavoriteColor` is a dropdown whose options are the schema field's `enum` values; `Comments` is a multi-line text box because `comments` is a scalar array with `ui.multiline`. The two files cannot drift, because there is only one source of truth.
+Note what is **absent** from the bound fields: no `type`, `options`, or `multiline`. `FullName` is a text box because `full_name` is a `text`; `Agree` is a checkbox because `agree` is a `boolean`; `FavoriteColor` is a dropdown whose options are the schema field's `enum` values; `Comments` is a multi-line text box because `comments` is a scalar array, one element per line. The two files cannot drift, because there is only one source of truth.
 
 ### Bound-field keys (`fields`)
 
@@ -179,15 +177,15 @@ A bound field's kind is derived from the **capability of the resolved schema fie
 |---|---|
 | has `enum` values | **choice**, options = the enum values |
 | `boolean`, or a `matrix` member (its tick) | **checkbox** |
-| `string`, `number`, `integer`, `date`, `datetime`, `richtext`, `plaintext` | **text** |
+| `text`, `richtext`, `number`, `integer`, `date`, `datetime` | **text** |
 | array of the above (scalar or prose) | **text**: elements joined with newlines |
 | `object`, `matrix`, or array of objects | **load error** `acroform::unbindable_field` |
 
 A container has no widget shape of its own; the cells inside it do, and each binds at its own address. A matrix member's own address is its tick, a checkbox at `qualifications.flight_cc` checked when the document holds the member, and its columns are text widgets beside it (`qualifications.flight_cc.detail`). An open matrix fails to load (`quill::open_matrix_unsupported`): a form has no widget for an item a document adds.
 
-`multiline` on a text widget comes from the schema field's `ui.multiline`, and a value holding a newline (a richtext of two paragraphs, a block scalar) widens it to multiline whatever the schema said, so the file shows every line the preview does.
+`multiline` on a text widget comes from the schema field's own `multiline: true` (a scalar array is always multiline), and a value holding a newline (a richtext of two paragraphs, a block scalar) widens it to multiline whatever the schema said, so the file shows every line the preview does.
 
-A text widget takes a richtext value's plaintext: the backend draws paragraphs and nothing else. A heading, rule, code block, list, quote, table or image in a content field warns `backend::declined_construct` at `validate` and at render, once per field and construct. The text of a heading, code block, list or quote still lands as lines; a rule, table or image lands as nothing.
+A text widget takes a richtext value's plain text: the backend draws paragraphs and nothing else. A heading, rule, code block, list, quote, table or image in a content field warns `backend::declined_construct` at `validate` and at render, once per field and construct. The text of a heading, code block, list or quote still lands as lines; a rule, table or image lands as nothing.
 
 ### Top-left coordinates
 

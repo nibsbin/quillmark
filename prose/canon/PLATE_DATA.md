@@ -69,7 +69,7 @@ equal data still produces byte-equal source.
 ```
 
 - A member's keys are the field's declared columns, each at its declared type,
-  and on an added item its `title`, a `string` cell.
+  and on an added item its `title`, a one-line `text` cell.
 - A plate branches on presence first (`"flight_cc" in qm.data.qualifications`),
   then reads a held member's columns without a guard.
 - Each member carries its own `$path`; the matrix, holding only members, carries
@@ -104,7 +104,7 @@ The Typst backend injects a virtual package `@local/quillmark-helper:<version>` 
 ```typst
 #import "@local/quillmark-helper:0.2.0" as qm
 
-#qm.data.title.len()                  // compute with the value
+#qm.str(qm.data.title).len()         // compute with a text value's str
 #qm.ink(qm.data, "title")             // print its ink: the click target survives anywhere
 #qm.data.at("$body")                  // root $body: a content object when the main enables a body
 #qm.data.date.year()                  // date/datetime fields are native datetimes
@@ -138,6 +138,7 @@ Helper contents (generated in `backends/typst/helper.rs` from `lib.typ.template`
 | `ink(dict, key, ..args)` | the ink at address `dict.$path + key` ([The ink table](#the-ink-table)) |
 | `region(field, body)` | a marker claim ([PREVIEW.md](PREVIEW.md)) |
 | `roster(dict, key)` | a matrix's rows ([A `matrix` field](#a-matrix-field)) |
+| `str(value)` | a `text` value's verbatim `str` ([Text as a str](#text-as-a-str)) |
 | `form-field(..)`, `signature-field(..)` | a form widget, bound to a field by `field:` |
 | `tasks`, `elements` | the task-item and element renderer registries |
 
@@ -161,17 +162,31 @@ Internals keep a `_qm-` prefix.
   the addresses every projection keys on fall out of the recursion. A name table
   keyed on a top-level name cannot be depth-invariant; this cannot fail to be.
 
-  A `richtext(inline)` node (`quillmark:inline: true`) lowers via
+  A one-line content node (no `quillmark:multiline: true`) lowers via
   `emit::emit_content_inline` to **pure inline** markup: the single `Para`'s
   content with no block terminator, so no `parbreak`. The value therefore
   composes in an inline slot (`par(..)`, a grid cell) without Typst's "parbreak
   may not occur inside of a paragraph" warning. The flag is read at the content
-  leaf, so `array<richtext(inline)>` needs no separate rule.
+  leaf, so a one-line `array<richtext>` needs no separate rule.
 
-  A `plaintext` field rides the *same* media type (plus an editor-only
+  A `text` field rides the *same* media type (plus an editor-only
   `quillmark:plain: true`), so it classifies identically and lowers through this
   exact path. The codec differs only at authoring/coercion (literal
   `from_plaintext`), never at codegen.
+
+### Text as a str
+
+A `text` value reaches the plate as content, as `richtext` does, so it keeps
+nav, regions and click-to-edit. A plate that computes with it — a
+`set document(author:)`, which takes no content, an `upper`, a `split`, a
+comparison — reads it through **`qm.str(value)`**, the verbatim string. The
+projection inverts the lowering: a markup escape, a shorthand the emitter
+spelled `~` and a smart quote come back as the characters the value holds, a
+line break as `\n`. It is lossless on `text`, which carries no marks
+(`validation::not_plain`); on `richtext` it drops the formatting. A blank value
+lowers to `""` and an unanswered optional one to `none`, and `qm.str` passes
+both through. The string is computed, so it carries no region: print the value
+itself, or `qm.ink`, where the click target matters.
 
   A non-blank date the shared parsers reject is a `backend::invalid_date` render
   error raised from the walk, at the site that parses it, which is what makes the

@@ -66,6 +66,11 @@ fn quill_with_field(field_yaml: &str) -> Result<QuillConfig, Vec<Diagnostic>> {
     config_with_sections(&format!("main:\n  fields:\n{field_yaml}"))
 }
 
+/// The canonical content a `text` cell carries for `s`.
+fn text(s: &str) -> serde_json::Value {
+    quillmark_content::serial::to_canonical_value(&quillmark_content::import::from_plaintext(s))
+}
+
 #[test]
 fn the_ignore_set_anchors_directories_and_not_names() {
     let ignore = QuillIgnore;
@@ -108,13 +113,13 @@ fn a_config_warning_rides_the_loaded_quill() {
         br#"quill: { name: warn, version: "1.0.0", backend: typst, description: w }
 main:
   fields:
-    title: { type: string }
+    title: { type: text }
 card_kinds:
   skills:
     body:
       enabled: false
     fields:
-      items: { type: array, items: { type: string } }
+      items: { type: array, items: { type: text } }
 "#,
     )]);
 
@@ -208,9 +213,9 @@ main:
   fields:
     title:
       description: Document title
-      type: string
+      type: text
     author:
-      type: string
+      type: text
       description: Document author
 "#;
 
@@ -239,7 +244,7 @@ main:
 
     let title_field = &config.main.fields["title"];
     assert_eq!(title_field.description, Some("Document title".to_string()));
-    assert_eq!(title_field.r#type, FieldType::String);
+    assert_eq!(title_field.r#type, FieldType::Text { multiline: false });
 }
 
 /// `MAJOR.MINOR` is a selector's spelling, never a quill's version, and an
@@ -294,20 +299,20 @@ fn test_quill_config_rejects_non_snake_case_identifiers() {
             "quill::invalid_name",
         ),
         (
-            with_header("card_kinds:\n  BadCard:\n    fields:\n      title: { type: string }\n"),
+            with_header("card_kinds:\n  BadCard:\n    fields:\n      title: { type: text }\n"),
             "quill::invalid_card_name",
         ),
         // `$kind: main` never parses, so a `main` kind could hold no card.
         (
-            with_header("card_kinds:\n  main:\n    fields:\n      title: { type: string }\n"),
+            with_header("card_kinds:\n  main:\n    fields:\n      title: { type: text }\n"),
             "quill::invalid_card_name",
         ),
         (
-            with_header("main:\n  fields:\n    BadField: { type: string }\n"),
+            with_header("main:\n  fields:\n    BadField: { type: text }\n"),
             "quill::invalid_field_name",
         ),
         (
-            with_header("card_kinds:\n  profile:\n    fields:\n      DisplayName: { type: string }\n"),
+            with_header("card_kinds:\n  profile:\n    fields:\n      DisplayName: { type: text }\n"),
             "quill::invalid_field_name",
         ),
     ] {
@@ -315,7 +320,7 @@ fn test_quill_config_rejects_non_snake_case_identifiers() {
         assert!(errs.iter().any(|d| d.code.as_deref() == Some(code)), "{code}: {errs:?}");
     }
     assert!(QuillConfig::from_yaml(&with_header(
-        "card_kinds:\n  _private_card:\n    fields:\n      title: { type: string }\n"
+        "card_kinds:\n  _private_card:\n    fields:\n      title: { type: text }\n"
     ))
     .is_ok());
 }
@@ -324,8 +329,8 @@ fn test_quill_config_rejects_non_snake_case_identifiers() {
 #[test]
 fn a_field_named_body_is_refused() {
     for yaml in [
-        "main:\n  fields:\n    body: { type: string }\n",
-        "card_kinds:\n  note:\n    fields:\n      body: { type: richtext }\n",
+        "main:\n  fields:\n    body: { type: text }\n",
+        "card_kinds:\n  note:\n    fields:\n      body: { type: richtext, multiline: true }\n",
     ] {
         let errs = QuillConfig::from_yaml_with_warnings(&with_header(yaml)).expect_err(yaml);
         assert!(
@@ -370,13 +375,13 @@ fn test_config_defaults_method() {
     let yaml_content = &with_header(r#"main:
   fields:
     author:
-      type: string
+      type: text
       default: Anonymous
     status:
-      type: string
+      type: text
       default: draft
     title:
-      type: string
+      type: text
 "#);
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
@@ -395,9 +400,9 @@ fn test_parse_card_with_fields_in_yaml() {
     description: Chain of endorsements
     fields:
       name:
-        type: string
+        type: text
       org:
-        type: string
+        type: text
         default: Unknown
   myscope:
     description: My scope
@@ -422,7 +427,7 @@ fn a_card_declaring_more_fields_than_a_block_carries_is_refused_at_load() {
     let max = crate::error::MAX_FIELD_COUNT;
     let yaml = |count: usize| {
         let fields: String = (0..count)
-            .map(|i| format!("      f{i}: {{ type: string }}\n"))
+            .map(|i| format!("      f{i}: {{ type: text }}\n"))
             .collect();
         format!(
             "quill: {{ name: wide, version: \"1.0.0\", backend: typst, description: x }}\n\
@@ -454,7 +459,7 @@ fn test_quill_config_allows_card_collision() {
   fields:
     conflict:
       description: Field
-      type: string
+      type: text
 
 card_kinds:
   conflict:
@@ -482,7 +487,7 @@ fn containers_nest_at_every_position() {
           alpha:
             type: object
             properties:
-              inner: { type: string }
+              inner: { type: text }
     grid:
       type: array
       items:
@@ -493,7 +498,7 @@ fn containers_nest_at_every_position() {
       properties:
         lines:
           type: array
-          items: { type: string }
+          items: { type: text }
 "#,
     )
     .expect("loads");
@@ -509,7 +514,7 @@ fn containers_nest_at_every_position() {
     assert_eq!(grid_row.items.as_ref().expect("items").r#type, FieldType::Integer);
 
     let lines = &config.main.fields["address"].properties.as_ref().expect("properties")["lines"];
-    assert_eq!(lines.items.as_ref().expect("items").r#type, FieldType::String);
+    assert_eq!(lines.items.as_ref().expect("items").r#type, FieldType::Text { multiline: false });
 }
 
 #[test]
@@ -523,7 +528,7 @@ fn a_malformed_container_declaration_is_refused_by_code() {
         ),
         ("    m:\n      type: array\n", "quill::array_missing_items"),
         (
-            "    m:\n      type: array\n      properties:\n        org: { type: string }\n",
+            "    m:\n      type: array\n      properties:\n        org: { type: text }\n",
             "quill::array_properties_not_supported",
         ),
     ] {
@@ -542,8 +547,8 @@ main:
       addressing: {}
       letterhead: { title: "Letterhead & Seal" }
   fields:
-    a: { type: string, ui: { group: addressing } }
-    l: { type: string, ui: { group: letterhead } }
+    a: { type: text, ui: { group: addressing } }
+    l: { type: text, ui: { group: letterhead } }
 "#;
     let config = QuillConfig::from_yaml(yaml).unwrap();
     let reg = &config.main.ui.as_ref().unwrap().groups.as_ref().unwrap().0;
@@ -558,23 +563,23 @@ main:
 fn a_bad_group_declaration_is_refused_by_code() {
     for (main, code) in [
         (
-            "  ui:\n    groups: [addressing]\n  fields:\n    s: { type: string, ui: { group: letterhead } }\n",
+            "  ui:\n    groups: [addressing]\n  fields:\n    s: { type: text, ui: { group: letterhead } }\n",
             "quill::unknown_group",
         ),
         (
-            "  fields:\n    s: { type: string, ui: { group: addressing } }\n",
+            "  fields:\n    s: { type: text, ui: { group: addressing } }\n",
             "quill::implicit_group",
         ),
         (
-            "  ui:\n    groups: [addressing, addressing]\n  fields:\n    s: { type: string, ui: { group: addressing } }\n",
+            "  ui:\n    groups: [addressing, addressing]\n  fields:\n    s: { type: text, ui: { group: addressing } }\n",
             "quill::duplicate_group",
         ),
         (
-            "  ui:\n    groups: [Addressing]\n  fields:\n    s: { type: string, ui: { group: Addressing } }\n",
+            "  ui:\n    groups: [Addressing]\n  fields:\n    s: { type: text, ui: { group: Addressing } }\n",
             "quill::invalid_group_id",
         ),
         (
-            "  ui:\n    groups: [location]\n  fields:\n    a:\n      type: object\n      properties:\n        s: { type: string, ui: { group: location } }\n",
+            "  ui:\n    groups: [location]\n  fields:\n    a:\n      type: object\n      properties:\n        s: { type: text, ui: { group: location } }\n",
             "quill::nested_group_not_supported",
         ),
     ] {
@@ -594,15 +599,15 @@ main:
       letterhead: { title: "Letterhead & Seal" }
       quals: {}
   fields:
-    subject: { type: string, ui: { group: addressing } }
-    letterhead_title: { type: string, ui: { group: letterhead } }
-    memo_for: { type: string, ui: { group: addressing } }
+    subject: { type: text, ui: { group: addressing } }
+    letterhead_title: { type: text, ui: { group: letterhead } }
+    memo_for: { type: text, ui: { group: addressing } }
     qualifications:
       type: object
       ui: { group: quals }
       properties:
         dco: { type: boolean }
-    notes: { type: string }
+    notes: { type: text }
 "#;
     let (config, warnings) = QuillConfig::from_yaml_with_warnings(&with_header(legacy)).unwrap();
     let codes: Vec<String> = warnings.iter().filter_map(|d| d.code.clone()).collect();
@@ -625,7 +630,7 @@ main:
 
 #[test]
 fn a_legacy_registry_naming_no_field_leaves_no_ui() {
-    let yaml = "main:\n  ui: { groups: [unused] }\n  fields:\n    a: { type: string }\n";
+    let yaml = "main:\n  ui: { groups: [unused] }\n  fields:\n    a: { type: text }\n";
     let schema = config_with_sections(yaml).unwrap().schema();
     assert!(schema["main"].get("ui").is_none(), "{schema}");
 }
@@ -633,8 +638,8 @@ fn a_legacy_registry_naming_no_field_leaves_no_ui() {
 #[test]
 fn a_sections_block_is_refused_toward_top_level_objects() {
     for yaml in [
-        "main:\n  sections:\n    a:\n      fields:\n        s: { type: string }\n",
-        "card_kinds:\n  note:\n    sections:\n      a:\n        fields:\n          s: { type: string }\n",
+        "main:\n  sections:\n    a:\n      fields:\n        s: { type: text }\n",
+        "card_kinds:\n  note:\n    sections:\n      a:\n        fields:\n          s: { type: text }\n",
     ] {
         let err = config_with_sections(yaml).expect_err(yaml);
         let [diag] = err.as_slice() else {
@@ -653,8 +658,8 @@ main:
   ui:
     groups: [addressing, letterhead]
   fields:
-    a: { type: string, ui: { group: addressing } }
-    l: { type: string, ui: { group: letterhead } }
+    a: { type: text, ui: { group: addressing } }
+    l: { type: text, ui: { group: letterhead } }
 "#;
     let config = QuillConfig::from_yaml(yaml).unwrap();
     let ui = config.main.ui.clone().unwrap();
@@ -693,7 +698,7 @@ fn a_document_value_coerces_by_declared_type_or_names_where_it_could_not() {
     use serde_json::json;
 
     const INTS: &str = "    f:\n      type: array\n      items: { type: integer }\n";
-    const ROWS: &str = "    f:\n      type: array\n      items:\n        type: object\n        properties:\n          name: { type: string }\n          value: { type: number }\n          active: { type: boolean }\n";
+    const ROWS: &str = "    f:\n      type: array\n      items:\n        type: object\n        properties:\n          name: { type: text }\n          value: { type: number }\n          active: { type: boolean }\n";
 
     for (what, field, value, want) in [
         ("number", "    f: { type: number }\n", json!("42"), json!(42)),
@@ -721,31 +726,31 @@ fn a_document_value_coerces_by_declared_type_or_names_where_it_could_not() {
             json!("2026-04-13T20:00:00"),
             json!("2026-04-13T20:00:00"),
         ),
-        // A bare scalar into a string takes the type's canonical token.
+        // A bare scalar into text takes the type's canonical token.
         (
-            "string from a bool",
-            "    f: { type: string }\n",
+            "text from a bool",
+            "    f: { type: text }\n",
             json!(true),
-            json!("true"),
+            text("true"),
         ),
         (
-            "string from an integer",
-            "    f: { type: string }\n",
+            "text from an integer",
+            "    f: { type: text }\n",
             json!(47),
-            json!("47"),
+            text("47"),
         ),
         (
-            "string from a float",
-            "    f: { type: string }\n",
+            "text from a float",
+            "    f: { type: text }\n",
             json!(1.5),
-            json!("1.5"),
+            text("1.5"),
         ),
         ("a scalar array", INTS, json!(["1", "2"]), json!([1, 2])),
         (
             "a row's properties",
             ROWS,
             json!([{ "name": "Math", "value": "95", "active": "true" }]),
-            json!([{ "name": "Math", "value": 95, "active": true }]),
+            json!([{ "name": text("Math"), "value": 95, "active": true }]),
         ),
     ] {
         assert_eq!(coerce(field, value), Ok(want), "{what}");
@@ -812,13 +817,13 @@ fn a_title_rides_its_field_or_card_kind_into_the_schema() {
         r#"main:
   title: Memorandum
   fields:
-    contact: { type: string, title: Point of contact }
+    contact: { type: text, title: Point of contact }
     budget: { type: number, title: "Budget {FY26}" }
 card_kinds:
   note:
     title: Marginal note
     fields:
-      text: { type: string }
+      text: { type: text }
 "#,
     )
     .unwrap();
@@ -835,27 +840,27 @@ card_kinds:
 fn a_title_that_is_not_a_literal_label_is_refused_by_code() {
     for (sections, code) in [
         (
-            "main:\n  fields:\n    s: { type: string, ui: { title: Subject } }\n",
+            "main:\n  fields:\n    s: { type: text, ui: { title: Subject } }\n",
             "quill::field_parse_error",
         ),
         (
-            "main:\n  fields:\n    a:\n      type: object\n      properties:\n        s: { type: string, ui: { title: Street } }\n",
+            "main:\n  fields:\n    a:\n      type: object\n      properties:\n        s: { type: text, ui: { title: Street } }\n",
             "quill::field_parse_error",
         ),
         (
-            "card_kinds:\n  note:\n    ui: { title: Note, groups: [a] }\n    fields:\n      s: { type: string, ui: { group: a } }\n",
+            "card_kinds:\n  note:\n    ui: { title: Note, groups: [a] }\n    fields:\n      s: { type: text, ui: { group: a } }\n",
             "quill::invalid_ui",
         ),
         (
-            "card_kinds:\n  section:\n    title: \"{heading}\"\n    fields:\n      heading: { type: string }\n",
+            "card_kinds:\n  section:\n    title: \"{heading}\"\n    fields:\n      heading: { type: text }\n",
             "quill::title_template",
         ),
         (
-            "main:\n  fields:\n    s: { type: string, title: \"{Re} {s}\" }\n",
+            "main:\n  fields:\n    s: { type: text, title: \"{Re} {s}\" }\n",
             "quill::title_template",
         ),
         (
-            "main:\n  fields:\n    rows:\n      type: array\n      items:\n        type: object\n        title: Row\n        properties:\n          unit: { type: string }\n",
+            "main:\n  fields:\n    rows:\n      type: array\n      items:\n        type: object\n        title: Row\n        properties:\n          unit: { type: text }\n",
             "quill::title_on_items",
         ),
     ] {
@@ -925,7 +930,7 @@ fn a_backend_section_holds_only_the_keys_its_backend_reads() {
 fn test_root_level_fields_gets_targeted_hint() {
     let yaml_content = &with_header(r#"fields:
   author:
-    type: string
+    type: text
 "#);
 
     let err = QuillConfig::from_yaml_with_warnings(yaml_content).unwrap_err();
@@ -965,7 +970,7 @@ quill:
 main:
   fields:
     BadFieldName:
-      type: string
+      type: text
     legit:
       description: Declares no type
 "#;
@@ -987,7 +992,7 @@ fn main_refuses_every_shape_a_card_kind_refuses() {
     let cases = [
         (
             "misspelled fields",
-            "main:\n  feilds:\n    title:\n      type: string",
+            "main:\n  feilds:\n    title:\n      type: text",
         ),
         ("unknown key", "main:\n  label: Memo"),
         ("list-shaped fields", "main:\n  fields: [title, author]"),
@@ -1042,14 +1047,14 @@ fn a_literal_outside_its_declaration_is_refused_by_code() {
         ("    f:\n      type: boolean\n      default: yes\n", "quill::default_type_mismatch"),
         ("    f:\n      type: datetime\n      default: 42\n", "quill::default_type_mismatch"),
         (
-            "    f:\n      type: array\n      items: { type: string }\n      default: foo\n",
+            "    f:\n      type: array\n      items: { type: text }\n      default: foo\n",
             "quill::default_type_mismatch",
         ),
         (
-            "    f:\n      type: array\n      items: { type: string }\n      default: [1]\n",
+            "    f:\n      type: array\n      items: { type: text }\n      default: [1]\n",
             "quill::default_type_mismatch",
         ),
-        ("    f:\n      type: string\n      default: [one, two]\n", "quill::default_type_mismatch"),
+        ("    f:\n      type: text\n      default: [one, two]\n", "quill::default_type_mismatch"),
         (
             "    f:\n      type: enum\n      values: [a, b]\n      default: c\n",
             "quill::default_not_in_enum",
@@ -1059,14 +1064,14 @@ fn a_literal_outside_its_declaration_is_refused_by_code() {
         assert!(err.iter().any(|d| d.code.as_deref() == Some(code)), "{field}: {err:?}");
     }
 
-    let err = quill_with_field("    f:\n      type: string\n      default: 20.04\n").unwrap_err();
+    let err = quill_with_field("    f:\n      type: text\n      default: 20.04\n").unwrap_err();
     assert!(
         err.iter().any(|d| d.hint.as_deref().is_some_and(|h| h.contains("\"20.04\""))),
-        "an unquoted decimal under a string is hinted to its quoted form: {err:?}"
+        "an unquoted decimal under a text is hinted to its quoted form: {err:?}"
     );
 
     for field in [
-        "    f:\n      type: string\n      default: \"20.04\"\n",
+        "    f:\n      type: text\n      default: \"20.04\"\n",
         "    f:\n      type: enum\n      values: [a, b]\n      default: a\n",
     ] {
         quill_with_field(field).expect(field);
@@ -1146,19 +1151,24 @@ fn enum_blank_ignores_a_declared_blank_member() {
 
 /// A declaration the field grammar does not admit, including the retired keys
 /// `must_fill`, `enum` and `ui.order`, which `deny_unknown_fields` refuses
-/// rather than a named arm.
+/// rather than a named arm, the retired `string` and `plaintext` types and
+/// `inline` and `ui.multiline` keys, and a `richtext` leaving `multiline` unsaid.
 #[test]
 fn a_declaration_outside_the_field_grammar_is_a_field_parse_error() {
     for field in [
         "    f:\n      description: no type\n",
         "    f:\n      type: markdown\n",
         "    f:\n      type: richtext(inline)\n",
-        "    f:\n      type: string\n      inline: true\n",
+        "    f:\n      type: string\n",
+        "    f:\n      type: plaintext\n",
+        "    f:\n      type: text\n      inline: true\n",
+        "    f:\n      type: text\n      ui: { multiline: true }\n",
+        "    f:\n      type: richtext\n",
         "    f:\n      type: enum\n",
-        "    f:\n      type: string\n      values: [a, b]\n",
-        "    f:\n      type: string\n      must_fill: true\n",
-        "    f:\n      type: string\n      enum: [a, b]\n",
-        "    f:\n      type: string\n      ui: { order: 3 }\n",
+        "    f:\n      type: text\n      values: [a, b]\n",
+        "    f:\n      type: text\n      must_fill: true\n",
+        "    f:\n      type: text\n      enum: [a, b]\n",
+        "    f:\n      type: text\n      ui: { order: 3 }\n",
     ] {
         let err = quill_with_field(field).expect_err(field);
         assert!(
@@ -1168,15 +1178,15 @@ fn a_declaration_outside_the_field_grammar_is_a_field_parse_error() {
     }
 }
 #[test]
-fn inline_richtext_default_over_one_para_is_a_load_error() {
+fn single_line_richtext_default_over_one_para_is_a_load_error() {
     let err = quill_with_field(
-        "    tag:\n      type: richtext\n      inline: true\n      default: \"one\\n\\ntwo\"\n",
+        "    tag:\n      type: richtext\n      multiline: false\n      default: \"one\\n\\ntwo\"\n",
     )
     .unwrap_err();
     assert!(
         err.iter()
-            .any(|d| d.code.as_deref() == Some("validation::not_inline")),
-        "a two-paragraph inline default should fail load with validation::not_inline, got: {err:?}"
+            .any(|d| d.code.as_deref() == Some("validation::not_single_line")),
+        "a two-paragraph single-line default should fail load with validation::not_single_line, got: {err:?}"
     );
 }
 
@@ -1185,7 +1195,7 @@ fn inline_richtext_default_over_one_para_is_a_load_error() {
 /// scalar's text.
 #[test]
 fn a_bare_scalar_richtext_default_is_a_load_error() {
-    let err = quill_with_field("    tag:\n      type: richtext\n      default: 47\n").unwrap_err();
+    let err = quill_with_field("    tag:\n      type: richtext\n      multiline: true\n      default: 47\n").unwrap_err();
     assert!(
         err.iter().any(|d| d.code.as_deref() == Some("quill::richtext_default_import")),
         "{err:?}"
@@ -1201,12 +1211,14 @@ fn a_nested_content_defaults_literal_reaches_the_plate_at_every_position() {
   fields:
     top:
       type: richtext
+      multiline: true
       default: "A **top** note"
     dict:
       type: object
       properties:
         note:
           type: richtext
+          multiline: true
           default: "A **dict** note"
     rows:
       type: array
@@ -1215,11 +1227,13 @@ fn a_nested_content_defaults_literal_reaches_the_plate_at_every_position() {
         properties:
           note:
             type: richtext
+            multiline: true
             default: "A **row** note"
     literal:
       type: array
       items:
-        type: plaintext
+        type: text
+        multiline: true
         default: "A *literal* line"
     c:
       type: enum
@@ -1229,6 +1243,7 @@ fn a_nested_content_defaults_literal_reaches_the_plate_at_every_position() {
         CUI:
           note:
             type: richtext
+            multiline: true
             default: "A **variant** note"
 "#);
     let config = QuillConfig::from_yaml(&yaml).expect("nested defaults load");
@@ -1262,7 +1277,7 @@ fn a_nested_content_defaults_literal_reaches_the_plate_at_every_position() {
             "{path} keeps the default's marks: {plate}"
         );
     }
-    // A `plaintext` leaf is the other content codec, and its literal imports
+    // A `text` leaf is the other content codec, and its literal imports
     // verbatim: the asterisks are text, not emphasis.
     let literal = &plate["literal"][0];
     assert_eq!(literal["text"].as_str(), Some("A *literal* line"));
@@ -1281,17 +1296,20 @@ fn a_content_default_inside_an_absent_container_reaches_the_plate_as_content() {
       properties:
         note:
           type: richtext
+          multiline: true
           default: "A **dict** note"
     rows:
       type: array
       default: ["A **row** note"]
       items:
         type: richtext
+        multiline: true
     plain:
       type: object
       properties:
         tag:
-          type: string
+          type: enum
+          values: [bare, dressed]
           default: bare
 "#);
     let config = QuillConfig::from_yaml(&yaml).expect("container defaults load");
@@ -1328,20 +1346,20 @@ fn a_content_default_inside_an_absent_container_reaches_the_plate_as_content() {
 /// reaching the leaf rather than a validation pass of its own. The diagnostic must
 /// name the leaf's declaration path: the card field holding it is not the mistake.
 #[test]
-fn a_nested_inline_richtext_default_over_one_para_is_a_load_error() {
+fn a_nested_single_line_richtext_default_over_one_para_is_a_load_error() {
     let err = quill_with_field(concat!(
         "    dict:\n",
         "      type: object\n",
         "      properties:\n",
         "        tag:\n",
         "          type: richtext\n",
-        "          inline: true\n",
+        "          multiline: false\n",
         "          default: \"one\\n\\ntwo\"\n",
     ))
     .unwrap_err();
     assert!(
         err.iter().any(|d| {
-            d.code.as_deref() == Some("validation::not_inline")
+            d.code.as_deref() == Some("validation::not_single_line")
                 && d.message.contains("`dict.tag`")
         }),
         "the nested literal fails load, naming the leaf: {err:?}"
@@ -1349,28 +1367,27 @@ fn a_nested_inline_richtext_default_over_one_para_is_a_load_error() {
 }
 
 #[test]
-fn an_inline_plaintext_literal_ending_in_a_newline_names_the_fix() {
+fn a_single_line_text_literal_ending_in_a_newline_names_the_fix() {
     let err = quill_with_field(concat!(
         "    pti:\n",
-        "      type: plaintext\n",
-        "      inline: true\n",
+        "      type: text\n",
         "      default: |\n",
         "        one line\n",
     ))
     .unwrap_err();
     let diag = err
         .iter()
-        .find(|d| d.code.as_deref() == Some("validation::not_inline"))
+        .find(|d| d.code.as_deref() == Some("validation::not_single_line"))
         .unwrap_or_else(|| panic!("{err:?}"));
     assert!(diag.hint.as_deref().unwrap().contains("`|-`"), "{diag:?}");
 }
 
 #[test]
-fn array_of_inline_richtext_caches_each_element() {
+fn array_of_single_line_richtext_caches_each_element() {
     let config = quill_with_field(
-        "    refs:\n      type: array\n      items:\n        type: richtext\n        inline: true\n      default:\n        - \"first *ref*\"\n        - \"second ref\"\n",
+        "    refs:\n      type: array\n      items:\n        type: richtext\n        multiline: false\n      default:\n        - \"first *ref*\"\n        - \"second ref\"\n",
     )
-    .expect("array<inline richtext> loads");
+    .expect("array<single-line richtext> loads");
     let field = config.main.fields.get("refs").unwrap();
     let content = field
         .default_content
@@ -1384,23 +1401,23 @@ fn array_of_inline_richtext_caches_each_element() {
     );
 }
 
-/// `inline` at the coercion layer, for both content codecs: one block imports
-/// to content, more is refused naming the declared type.
+/// `multiline: false` at the coercion layer, for both content codecs: one
+/// block imports to content, more is refused naming the declared type.
 #[test]
-fn inline_coercion_takes_one_block_and_refuses_more_for_both_content_types() {
-    for ty in ["richtext", "plaintext"] {
-        let field = format!("    f:\n      type: {ty}\n      inline: true\n");
+fn single_line_coercion_takes_one_block_and_refuses_more_for_both_content_types() {
+    for ty in ["richtext", "text"] {
+        let field = format!("    f:\n      type: {ty}\n      multiline: false\n");
         assert!(coerce(&field, serde_json::json!("just one line")).is_ok_and(|v| v.is_object()));
         assert_eq!(
             coerce(&field, serde_json::json!("one\n\ntwo")),
-            Err(("f".to_string(), format!("{ty}(inline)")))
+            Err(("f".to_string(), format!("{ty}(single_line)")))
         );
     }
 }
 
 #[test]
 fn richtext_blank_is_empty_content() {
-    let field = FieldSchema::new("x".to_string(), FieldType::RichText { inline: false }, None);
+    let field = FieldSchema::new("x".to_string(), FieldType::RichText { multiline: true }, None);
     let floor = blank(&field);
     assert!(
         floor.as_json().is_object(),
@@ -1410,16 +1427,16 @@ fn richtext_blank_is_empty_content() {
 }
 
 #[test]
-fn plaintext_field_caches_literal_content() {
+fn text_field_caches_literal_content() {
     let config = quill_with_field(
-        "    subject:\n      type: plaintext\n      default: \"a *literal* subject\"\n",
+        "    subject:\n      type: text\n      multiline: true\n      default: \"a *literal* subject\"\n",
     )
-    .expect("plaintext default loads");
+    .expect("text default loads");
     let field = config.main.fields.get("subject").unwrap();
-    assert_eq!(field.r#type, FieldType::PlainText { inline: false });
+    assert_eq!(field.r#type, FieldType::Text { multiline: true });
     let content = field.default_content.as_ref().expect("default_content cached");
     let rt = quillmark_content::serial::from_canonical_value(content.as_json()).unwrap();
-    assert!(rt.is_plain(), "cached plaintext content is plain");
+    assert!(rt.is_plain(), "cached text content is plain");
     assert_eq!(
         quillmark_content::export::to_plaintext(&rt),
         "a *literal* subject",
@@ -1427,12 +1444,12 @@ fn plaintext_field_caches_literal_content() {
     );
 }
 
-/// A plaintext string imports verbatim, and a mark-bearing wire content is
+/// A text string imports verbatim, and a mark-bearing wire content is
 /// refused rather than stripped.
 #[test]
-fn plaintext_coercion_imports_verbatim_and_refuses_marks() {
-    const FIELD: &str = "    f:\n      type: plaintext\n";
-    let value = coerce(FIELD, serde_json::json!("*not bold* text")).expect("plaintext coerces");
+fn text_coercion_imports_verbatim_and_refuses_marks() {
+    const FIELD: &str = "    f:\n      type: text\n      multiline: true\n";
+    let value = coerce(FIELD, serde_json::json!("*not bold* text")).expect("text coerces");
     let rt = quillmark_content::serial::from_canonical_value(&value).unwrap();
     assert!(rt.marks.is_empty(), "no marks: delimiters stayed literal");
     assert_eq!(quillmark_content::export::to_plaintext(&rt), "*not bold* text");
@@ -1443,23 +1460,23 @@ fn plaintext_coercion_imports_verbatim_and_refuses_marks() {
         .into_normalized();
     assert_eq!(
         coerce(FIELD, quillmark_content::serial::to_canonical_value(&marked)),
-        Err(("f".to_string(), "plaintext".to_string()))
+        Err(("f".to_string(), "text".to_string()))
     );
 }
 
 #[test]
-fn inline_survives_the_declaration_wire_for_both_content_types() {
-    for ty in ["richtext", "plaintext"] {
+fn multiline_survives_the_declaration_wire_for_both_content_types() {
+    for ty in ["richtext", "text"] {
         let config = quill_with_field(&format!(
-            "    subject:\n      type: {ty}\n      inline: true\n"
+            "    subject:\n      type: {ty}\n      multiline: true\n"
         ))
         .expect("loads");
         let field = config.main.fields.get("subject").unwrap();
         let wire = serde_json::to_value(field).expect("serializes");
         assert_eq!(
-            wire["inline"],
+            wire["multiline"],
             serde_json::json!(true),
-            "{ty} lost `inline: true` on the wire: {wire}"
+            "{ty} lost `multiline: true` on the wire: {wire}"
         );
     }
 }
@@ -1517,16 +1534,16 @@ fn a_bodiless_card_kind_warns_and_a_bodiless_main_does_not() {
   body:
     enabled: false
   fields:
-    title: { type: string }
+    title: { type: text }
 card_kinds:
   itinerary:
     body:
       enabled: false
     fields:
-      leg: { type: string }
+      leg: { type: text }
   note:
     fields:
-      text: { type: string }
+      text: { type: text }
 "#,
     ))
     .expect("a bodiless card kind still loads");
@@ -1552,7 +1569,7 @@ card_kinds:
 fn ui_layout_table_loads_on_a_typed_table_and_is_refused_elsewhere() {
     let config = quill_with_field(
         "    tours:\n      type: array\n      ui:\n        layout: table\n      \
-         items:\n        type: object\n        properties:\n          unit: { type: string }\n",
+         items:\n        type: object\n        properties:\n          unit: { type: text }\n",
     )
     .expect("a typed table may ask for the table control");
     assert_eq!(
@@ -1568,16 +1585,16 @@ fn ui_layout_table_loads_on_a_typed_table_and_is_refused_elsewhere() {
         (
             "a scalar array",
             "    tags:\n      type: array\n      ui:\n        layout: table\n      \
-             items: { type: string }\n",
+             items: { type: text }\n",
         ),
         (
             "a typed dictionary",
             "    addr:\n      type: object\n      ui:\n        layout: table\n      \
-             properties:\n        street: { type: string }\n",
+             properties:\n        street: { type: text }\n",
         ),
         (
             "a scalar",
-            "    title:\n      type: string\n      ui:\n        layout: table\n",
+            "    title:\n      type: text\n      ui:\n        layout: table\n",
         ),
     ] {
         let err = quill_with_field(field).expect_err(label);
@@ -1597,7 +1614,7 @@ fn ui_layout_flat_loads_on_a_typed_dictionary_and_is_refused_elsewhere() {
     let config = quill_with_field(
         "    quals:\n      type: object\n      ui:\n        layout: flat\n      \
          properties:\n        home:\n          type: object\n          ui: { layout: flat }\n          \
-         properties:\n            city: { type: string }\n",
+         properties:\n            city: { type: text }\n",
     )
     .expect("a card field and a property may each go flat");
     assert_eq!(
@@ -1609,16 +1626,16 @@ fn ui_layout_flat_loads_on_a_typed_dictionary_and_is_refused_elsewhere() {
         (
             "an array's element",
             "    rows:\n      type: array\n      items:\n        type: object\n        \
-             ui: { layout: flat }\n        properties:\n          city: { type: string }\n",
+             ui: { layout: flat }\n        properties:\n          city: { type: text }\n",
         ),
         (
             "an array",
             "    rows:\n      type: array\n      ui:\n        layout: flat\n      \
-             items: { type: string }\n",
+             items: { type: text }\n",
         ),
         (
             "a scalar",
-            "    title:\n      type: string\n      ui:\n        layout: flat\n",
+            "    title:\n      type: text\n      ui:\n        layout: flat\n",
         ),
     ] {
         let err = quill_with_field(field).expect_err(label);
@@ -1632,21 +1649,21 @@ fn ui_layout_flat_loads_on_a_typed_dictionary_and_is_refused_elsewhere() {
 
 /// Declaring the key contracts that every column is a leaf, so the only decline
 /// left to a consumer is the capability one it alone can answer. The boundary is
-/// containment, not height: prose is a column whatever its `inline`.
+/// containment, not height: prose is a column whatever its `multiline`.
 #[test]
 fn a_table_column_is_a_leaf_and_a_container_column_is_refused() {
     quill_with_field(
         "    notes:\n      type: array\n      ui:\n        layout: table\n      \
          items:\n        type: object\n        properties:\n          \
-         body: { type: richtext }\n",
+         body: { type: richtext, multiline: true }\n",
     )
     .expect("a block richtext is a leaf: how tall it renders is the consumer's call");
 
     for (label, column) in [
-        ("an array column", "{ type: array, items: { type: string } }"),
+        ("an array column", "{ type: array, items: { type: text } }"),
         (
             "an object column",
-            "{ type: object, properties: { city: { type: string } } }",
+            "{ type: object, properties: { city: { type: text } } }",
         ),
     ] {
         let err = quill_with_field(&format!(
@@ -1672,7 +1689,7 @@ fn a_table_column_is_a_leaf_and_a_container_column_is_refused() {
 #[test]
 fn max_loads_on_an_array_and_is_refused_elsewhere() {
     let config =
-        quill_with_field("    rows:\n      type: array\n      max: 37\n      items: { type: string }\n")
+        quill_with_field("    rows:\n      type: array\n      max: 37\n      items: { type: text }\n")
             .expect("an array may declare its cap");
     assert_eq!(config.main.fields["rows"].max, Some(37));
     assert_eq!(
@@ -1682,7 +1699,7 @@ fn max_loads_on_an_array_and_is_refused_elsewhere() {
 
     for field in [
         "    n:\n      type: integer\n      max: 3\n",
-        "    s:\n      type: string\n      max: 3\n",
+        "    s:\n      type: text\n      max: 3\n",
     ] {
         let err = quill_with_field(field).expect_err("max off an array");
         assert!(
@@ -1693,7 +1710,7 @@ fn max_loads_on_an_array_and_is_refused_elsewhere() {
     }
 
     let negative = quill_with_field(
-        "    rows:\n      type: array\n      max: -1\n      items: { type: string }\n",
+        "    rows:\n      type: array\n      max: -1\n      items: { type: text }\n",
     )
     .expect_err("a cap is a count");
     assert!(
@@ -1710,7 +1727,7 @@ fn max_loads_on_an_array_and_is_refused_elsewhere() {
 fn a_literal_longer_than_max_is_a_load_error() {
     let err = quill_with_field(
         "    rows:\n      type: array\n      max: 2\n      default: [a, b, c]\n      \
-         items: { type: string }\n",
+         items: { type: text }\n",
     )
     .expect_err("a literal over the cap");
     assert!(
@@ -1720,7 +1737,7 @@ fn a_literal_longer_than_max_is_a_load_error() {
 
     quill_with_field(
         "    rows:\n      type: array\n      max: 2\n      default: [a, b]\n      \
-         items: { type: string }\n",
+         items: { type: text }\n",
     )
     .expect("a literal at the cap fits it");
 }
@@ -1742,7 +1759,7 @@ fn an_over_filled_array_warns_at_its_own_path() {
           tags:
             type: array
             max: 1
-            items: { type: string }
+            items: { type: text }
 "#,
     ));
     let doc = Document::parse(
@@ -1787,7 +1804,7 @@ fn a_capped_table_blueprints_within_its_own_cap() {
       items:
         type: object
         properties:
-          unit: {{ type: string, default: "" }}
+          unit: {{ type: text, default: "" }}
 "#
         )));
         let doc = Document::parse(&quill.config().blueprint())
@@ -1819,7 +1836,7 @@ fn a_cap_rides_its_own_leading_line_under_the_description() {
       max: 2
       description: The units that fit the page.
       default: [a]
-      items: { type: string }
+      items: { type: text }
     box:
       type: object
       properties:
@@ -1828,7 +1845,7 @@ fn a_cap_rides_its_own_leading_line_under_the_description() {
           max: 1
           description: Tags for the box.
           default: [t]
-          items: { type: string }
+          items: { type: text }
 "#,
     )
     .expect("a cap loads at either depth")
@@ -1844,7 +1861,7 @@ fn a_cap_rides_its_own_leading_line_under_the_description() {
     );
 
     let uncapped = config_with_sections(
-        "main:\n  fields:\n    rows:\n      type: array\n      items: { type: string }\n",
+        "main:\n  fields:\n    rows:\n      type: array\n      items: { type: text }\n",
     )
     .expect("an uncapped array loads")
     .blueprint();

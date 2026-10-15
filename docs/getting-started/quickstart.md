@@ -19,7 +19,7 @@ quill:
 main:
   fields:
     title:
-      type: string
+      type: text
       description: The heading at the top of the page
 ```
 
@@ -107,7 +107,7 @@ This paragraph is the document body. *Markdown* works here.
     main:
       fields:
         title:
-          type: string
+          type: text
           description: The heading at the top of the page
     `)],
       ["plate.typ", enc.encode(`#import "@local/quillmark-helper:0.2.0" as qm

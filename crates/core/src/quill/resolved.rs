@@ -253,6 +253,10 @@ mod tests {
         fields.iter().any(|f| f.name == name)
     }
 
+    fn text(s: &str) -> serde_json::Value {
+        quillmark_content::serial::to_canonical_value(&quillmark_content::import::from_plaintext(s))
+    }
+
     const QUILL: &str = r#"
 quill:
   name: fs_test
@@ -262,28 +266,29 @@ quill:
 main:
   fields:
     title:
-      type: string
+      type: text
     status:
-      type: string
+      type: text
       default: draft
     notes:
-      type: string
+      type: text
     intro:
       type: richtext
+      multiline: true
       default: "**hi**"
     recipients:
       type: array
       items:
         type: object
         properties:
-          name: { type: string }
+          name: { type: text }
 card_kinds:
   note:
     fields:
       author:
-        type: string
+        type: text
       tag:
-        type: string
+        type: text
 "#;
 
 
@@ -296,13 +301,13 @@ card_kinds:
         let f = &states.main.fields;
 
         assert_eq!(row(f, "title").source, FieldSource::Authored);
-        assert_eq!(row(f, "title").value.as_json(), &serde_json::json!("Hello"));
+        assert_eq!(row(f, "title").value.as_json(), &text("Hello"));
 
         assert_eq!(row(f, "status").source, FieldSource::Default);
-        assert_eq!(row(f, "status").value.as_json(), &serde_json::json!("draft"));
+        assert_eq!(row(f, "status").value.as_json(), &text("draft"));
 
         assert_eq!(row(f, "notes").source, FieldSource::Blank);
-        assert_eq!(row(f, "notes").value.as_json(), &serde_json::json!(""));
+        assert_eq!(row(f, "notes").value.as_json(), &text(""));
     }
 
     #[test]
@@ -329,7 +334,7 @@ card_kinds:
         let states = quill.resolve(&doc, test_date());
         let status = row(&states.main.fields, "status");
         assert_eq!(status.source, FieldSource::Default);
-        assert_eq!(status.value.as_json(), &serde_json::json!("draft"));
+        assert_eq!(status.value.as_json(), &text("draft"));
     }
 
     const CONTAINERS: &str = r#"
@@ -347,7 +352,7 @@ main:
     address:
       type: object
       properties:
-        street: { type: string }
+        street: { type: text }
 "#;
 
     fn shape_doc(fields: &str) -> Document {
@@ -385,7 +390,7 @@ main:
         let absent = quill.resolve(&shape_doc(""), test_date());
         let r = row(&absent.main.fields, "address");
         assert_eq!(r.source, FieldSource::Blank);
-        assert_eq!(r.value.as_json(), &serde_json::json!({ "street": "" }));
+        assert_eq!(r.value.as_json(), &serde_json::json!({ "street": text("") }));
     }
 
     // Both projections cut the one shared ladder (`ladder_sourced`), but over
@@ -489,14 +494,14 @@ quill:
 main:
   fields:
     title:
-      type: string
+      type: text
 card_kinds:
   stamp:
     body:
       enabled: false
     fields:
       label:
-        type: string
+        type: text
 "#;
 
     #[test]

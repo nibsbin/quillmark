@@ -12,7 +12,7 @@ main:
     enabled: false
   fields:
     title:
-      type: string
+      type: text
       default: Annual Roster
 
     qualifications:
@@ -27,8 +27,7 @@ main:
         cyber_200: Cyber 200
       properties:
         detail:
-          type: plaintext
-          inline: true
+          type: text
           default: ""
           description: What the tick is qualified by.
 
@@ -37,7 +36,7 @@ main:
       max: 3
       description: Endorsing officials, in routing order.
       items:
-        type: string
+        type: text
 
     tours:
       type: array
@@ -49,7 +48,7 @@ main:
         type: object
         properties:
           unit:
-            type: string
+            type: text
             default: ""
           duration:
             type: integer

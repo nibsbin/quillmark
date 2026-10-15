@@ -11,4 +11,4 @@ main:
   fields:
     title:
       description: title of document
-      type: string
+      type: text

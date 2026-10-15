@@ -9,15 +9,15 @@ mod common;
 const SCHEMA: &str = r#"
 main:
   fields:
-    name: { type: string }
-    title: { type: string }
+    name: { type: enum, values: [Ada, Grace] }
+    title: { type: enum, values: [Roster, Register] }
     stratifications:
       type: array
       items:
         type: object
         properties:
           year: { type: integer }
-          rank: { type: string }
+          rank: { type: enum, values: [Capt, Maj] }
 "#;
 
 /// A claim built inside a closure over computed rows reaches its cell, a bare

@@ -34,7 +34,20 @@ The module form is the only import the backend accepts. `: *`, `: data, ink`, a 
 
 The rule of thumb: **compute with `qm.data.x`, print with `qm.ink(..)`, claim composed ink with `qm.region(..)`.**
 
-Every field arrives at its **native** Typst type — a `date` as a `datetime`, a number as an int or float, an `object` as a dict — with one exception: `richtext` and `plaintext` arrive as Typst content, their text already lowered to markup, because the authored text *is* their rendering. This holds at every depth: a `date` declared inside an `object` or an `array` row is the same `datetime` a top-level one is.
+Every field arrives at its **native** Typst type — a `date` as a `datetime`, a number as an int or float, an `object` as a dict — with one exception: `text` and `richtext` arrive as Typst content, their text already lowered to markup, because the authored text *is* their rendering. This holds at every depth: a `date` declared inside an `object` or an `array` row is the same `datetime` a top-level one is.
+
+### Text as a str
+
+A `text` value is content, so it prints with its click target, but a plate that computes with it needs a `str`: `set document(author: ..)` takes no content, and neither do `upper`, `split`, `len` or a comparison. `qm.str(value)` returns the value's verbatim string, markup escapes, smart quotes and line breaks undone:
+
+```typst
+#set document(author: qm.str(qm.data.author))
+#let office = upper(qm.str(qm.data.office))
+#let recipients = qm.data.memo_for.map(qm.str)       // an array of text
+#if qm.str(qm.data.status) == "final" [ … ]
+```
+
+A blank value (`""`) and an unanswered optional one (`none`) pass through unchanged. The string is computed, so it carries no region: print the value itself, or `qm.ink(..)`, where the click target matters. On a `richtext` value `qm.str` drops the formatting.
 
 `qm.ink(dict, key)` prints a field by its address: `dict` is `qm.data`, a card, a typed dictionary or table row, or a [`roster`](#matrices) row's `value`, and `key` one or more steps from it: `#qm.ink(qm.data, "title")`, `#qm.ink(row, "org")`, `#qm.ink(qm.data, "address.city")`. It prints what the field prints and keeps the field's click target in an [editor preview](editor-regions.md#print-with-ink) however the plate passes it around. An address the schema does not have fails the render; blank content, a blank date, a typed dictionary and a matrix give `none`.
 
@@ -88,9 +101,9 @@ What an unanswered field holds when it reaches the plate, and the guard that tes
 
 | Declared type | Blank in the plate | Guard |
 |---|---|---|
-| `string`, `enum` | `""` | `qm.data.f != ""` |
+| `enum` | `""` | `qm.data.f != ""` |
 | `enum` with `variants:` | `(value: "")` | `qm.data.f.value != ""` |
-| `richtext`, `plaintext` | `""` (an authored value arrives as content) | `qm.data.f != ""` |
+| `text`, `richtext` | `""` (an authored value arrives as content) | `qm.data.f != ""` |
 | `date`, `datetime` | `none` | `qm.data.f != none` |
 | `integer`, `number` | `0` | `qm.data.f != 0` |
 | `boolean` | `false` | `qm.data.f` |
@@ -144,7 +157,7 @@ A [`matrix`](quill-yaml-reference.md#matrix-a-vocabulary-the-author-ticks) reach
 }
 ```
 
-Each row is `(id, title, held, value, path)`, roster members in roster order and then any items an open matrix's document adds. `value` is the member's columns, `none` where unheld, and `path` its address: claiming it with `qm.region` makes an unticked box clickable in an editor preview. An added item's `title` is a cell of its own, so `qm.ink(row.value, "title")` prints it click-to-edit; a roster member's `title` is the roster's and no address, so guard with `row.held and "title" in row.value`. `dict` is the dictionary that declares the matrix: `qm.data`, a card, or a table row.
+Each row is `(id, title, held, value, path)`, roster members in roster order and then any items an open matrix's document adds. `value` is the member's columns, `none` where unheld, and `path` its address: claiming it with `qm.region` makes an unticked box clickable in an editor preview. `title` is a `str` on every row. An added item's `title` is a cell of its own, so `qm.ink(row.value, "title")` prints it click-to-edit; a roster member's `title` is the roster's and no address, so guard with `row.held and "title" in row.value`. `dict` is the dictionary that declares the matrix: `qm.data`, a card, or a table row.
 
 ### Elements
 
@@ -363,11 +376,11 @@ Inside `#box`, `#table`, `#figure`, `#footnote`, `#move`, `#pad`: a widget track
 
 `value:` is forwarded verbatim; the Rust adapter maps it to the AcroForm value per `type`:
 
-**Text**: `value` is a string, a number, a boolean, or `none`, so it takes a data field: `string`, `enum`, `integer`, `number`, or `boolean`. A number or boolean stringifies, and a blank value emits no `/V`. A `richtext` or `plaintext` value reaches the plate as content and a `date` or `datetime` value as a `datetime`, and passing either fails the render. Set `multiline: true` for a multi-line box.
+**Text**: `value` is a string, a number, a boolean, or `none`, so it takes a data field: `enum`, `integer`, `number`, or `boolean`, or a `text` field through `qm.str(..)`. A number or boolean stringifies, and a blank value emits no `/V`. A `text` or `richtext` value reaches the plate as content and a `date` or `datetime` value as a `datetime`, and passing either as it is fails the render. Set `multiline: true` for a multi-line box.
 
 ```typst
-#qm.form-field("full_name", type: "text", value: qm.data.name)
-#qm.form-field("bio", type: "text", value: qm.data.bio, multiline: true, height: 80pt)  // bio: { type: string }
+#qm.form-field("full_name", type: "text", value: qm.str(qm.data.name))
+#qm.form-field("bio", type: "text", value: qm.str(qm.data.bio), multiline: true, height: 80pt)  // bio: { type: text, multiline: true }
 ```
 
 **Signature**: `value` is ignored. PDF output gains a clickable SigField widget at the call site, which Acrobat — or any reader that supports form signing — presents as a "Sign Here" affordance.

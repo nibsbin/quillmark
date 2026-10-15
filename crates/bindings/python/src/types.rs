@@ -234,7 +234,7 @@ impl PyQuill {
     /// Parse `markdown` and conform it against this quill: the primary ingestion
     /// path, and the bound twin of the schema-free `Document.from_markdown`. The
     /// returned document rests at its canonical form: a `richtext` field as a
-    /// content object, a `plaintext` field as its literal string.
+    /// content object, a `text` field as its literal string.
     ///
     /// Parse warnings and the `conform::*` diagnostics both land on
     /// `doc.warnings`. Raises `QuillmarkError` on a parse failure, or when
@@ -851,10 +851,10 @@ impl PyWriter {
 
     /// Revise the content field `name` from authored text: typed *and*
     /// anchor-preserving, where `set` cold-imports. The codec comes from the
-    /// declared type: `richtext` diffs markdown, `plaintext` the literal text.
+    /// declared type: `richtext` diffs markdown, `text` the literal text.
     /// Surviving anchors rebase, then the diffed result is schema-conformed, so a
-    /// `richtext(inline)` field rejects a multi-block result with
-    /// `edit::field_not_inline`. Raises `edit::unknown_field` for an undeclared
+    /// one-paragraph `richtext` field rejects a multi-block result with
+    /// `edit::field_not_single_line`. Raises `edit::unknown_field` for an undeclared
     /// name. Returns the import's `parse::dropped_construct` warnings, anchored
     /// at the field; the text `Delta` is discarded.
     #[pyo3(signature = (name, text, card=None))]

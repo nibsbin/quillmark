@@ -35,9 +35,9 @@ main:
         dodin_ops: DODIN Ops
         cyber_200: Cyber 200
       properties:
-        detail: { type: plaintext, inline: true, default: "" }
+        detail: { type: text, default: "" }
     title:
-      type: string
+      type: text
       default: ""
 "#
 }
@@ -295,9 +295,9 @@ fn an_open_matrix_prints_added_items_after_the_roster_in_id_order() {
         rewire.as_object().unwrap().keys().collect::<Vec<_>>(),
         members.keys().collect::<Vec<_>>()
     );
-    assert_eq!(wire["wing_ig"]["title"], json!("Wing IG"));
+    assert_eq!(wire["wing_ig"]["title"]["text"], json!("Wing IG"));
     assert_eq!(wire["wing_ig"]["detail"]["text"], json!("81 TRW"));
-    assert_eq!(wire["aide"]["title"], json!("Flight CC"));
+    assert_eq!(wire["aide"]["title"]["text"], json!("Flight CC"));
     assert_eq!(wire["aide"]["detail"]["text"], json!(""));
 }
 
@@ -392,17 +392,17 @@ fn a_malformed_matrix_declaration_is_refused_by_code() {
         ),
         (
             "typst",
-            "    m:\n      type: matrix\n      members: { a: A }\n      properties:\n        held: { type: string }\n",
+            "    m:\n      type: matrix\n      members: { a: A }\n      properties:\n        held: { type: text }\n",
             "quill::matrix_reserved_column",
         ),
         (
             "typst",
-            "    m:\n      type: matrix\n      members: { a: A }\n      properties:\n        title: { type: string }\n",
+            "    m:\n      type: matrix\n      members: { a: A }\n      properties:\n        title: { type: text }\n",
             "quill::matrix_reserved_column",
         ),
         ("typst", "    m:\n      type: matrix\n", "quill::field_parse_error"),
-        ("typst", "    m:\n      type: string\n      members: { a: A }\n", "quill::field_parse_error"),
-        ("typst", "    m:\n      type: string\n      open: true\n", "quill::field_parse_error"),
+        ("typst", "    m:\n      type: text\n      members: { a: A }\n", "quill::field_parse_error"),
+        ("typst", "    m:\n      type: text\n      open: true\n", "quill::field_parse_error"),
         (
             "acroform",
             "    record:\n      type: object\n      properties:\n        m: { type: matrix, open: true, members: { a: A } }\n",
@@ -457,7 +457,8 @@ fn a_members_cells_are_addressable() {
     let open = QuillConfig::from_yaml(&open_yaml()).expect("open probe loads");
     let schema = build_transform_schema(&open);
     let item = &schema.as_json()["properties"]["qualifications"]["additionalProperties"];
-    assert_eq!(item["properties"]["title"]["type"], json!("string"));
+    assert_eq!(item["properties"]["title"]["quillmark:plain"], json!(true), "{item}");
+    assert!(item["properties"]["title"].get("quillmark:multiline").is_none(), "{item}");
     assert!(item["properties"]["detail"]["contentMediaType"].is_string(), "{item}");
     assert_eq!(open.schema()["main"]["fields"]["qualifications"]["open"], json!(true));
 }
@@ -469,7 +470,7 @@ fn a_members_cells_are_addressable() {
 #[test]
 fn the_blueprint_shows_the_vocabulary_in_the_annotation_and_ticks_nothing() {
     let checklist = quill_yaml().replace(
-        "      properties:\n        detail: { type: plaintext, inline: true, default: \"\" }\n",
+        "      properties:\n        detail: { type: text, default: \"\" }\n",
         "",
     );
     let bp = QuillConfig::from_yaml(&checklist).expect("loads").blueprint();
@@ -485,7 +486,7 @@ fn the_blueprint_shows_the_vocabulary_in_the_annotation_and_ticks_nothing() {
     let bp = QuillConfig::from_yaml(&open).expect("loads").blueprint();
     assert!(
         bp.contains(concat!(
-            "# e.g. {sq_cc_candidate: true, new_item: {title: string}}\n",
+            "# e.g. {sq_cc_candidate: true, new_item: {title: text<plain>}}\n",
             "qualifications: {} # matrix<sq_cc_candidate | flight_cc | dodin_ops | cyber_200>\n",
         )),
         "{bp}"
@@ -495,7 +496,7 @@ fn the_blueprint_shows_the_vocabulary_in_the_annotation_and_ticks_nothing() {
     let taken = open.replace("        dodin_ops: DODIN Ops\n", "        new_item: New Item\n");
     let bp = QuillConfig::from_yaml(&taken).expect("loads").blueprint();
     assert!(
-        bp.contains("# e.g. {sq_cc_candidate: true, new_item_2: {title: string}}\n"),
+        bp.contains("# e.g. {sq_cc_candidate: true, new_item_2: {title: text<plain>}}\n"),
         "{bp}"
     );
 }
@@ -505,8 +506,8 @@ fn the_blueprint_shows_the_vocabulary_in_the_annotation_and_ticks_nothing() {
 #[test]
 fn an_overfull_column_warns_under_every_held_member() {
     let yaml = open_yaml().replace(
-        "detail: { type: plaintext, inline: true, default: \"\" }",
-        "units: { type: array, max: 1, items: { type: string } }",
+        "detail: { type: text, default: \"\" }",
+        "units: { type: array, max: 1, items: { type: text } }",
     );
     let quill = quill_from_yaml(&yaml);
     let found = codes_of(
@@ -533,8 +534,8 @@ fn an_overfull_column_warns_under_every_held_member() {
 /// a value the schema accepts once each typed column is answered.
 #[test]
 fn the_blueprint_hint_spells_a_held_member_with_every_column() {
-    let columns = "detail: { type: plaintext, inline: true, default: \"333 TRS/DO, 2024\" }\n        \
-                   unit: { type: string, default: HQ }\n        \
+    let columns = "detail: { type: text, default: \"333 TRS/DO, 2024\" }\n        \
+                   unit: { type: text, default: HQ }\n        \
                    earned: { type: date }\n        \
                    logged: { type: datetime }";
     let cells = "detail: \"333 TRS/DO, 2024\", unit: HQ, earned: date<YYYY-MM-DD | today>, logged: \"datetime<YYYY-MM-DDThh:mm[:ss]>\"";
@@ -543,10 +544,10 @@ fn the_blueprint_hint_spells_a_held_member_with_every_column() {
         (quill_yaml().to_string(), format!("{{sq_cc_candidate: {{{cells}}}}}")),
         (
             open_yaml(),
-            format!("{{sq_cc_candidate: {{{cells}}}, new_item: {{title: string, {cells}}}}}"),
+            format!("{{sq_cc_candidate: {{{cells}}}, new_item: {{title: text<plain>, {cells}}}}}"),
         ),
     ] {
-        let yaml = yaml.replace("detail: { type: plaintext, inline: true, default: \"\" }", columns);
+        let yaml = yaml.replace("detail: { type: text, default: \"\" }", columns);
         let bp = QuillConfig::from_yaml(&yaml).expect("loads").blueprint();
         assert!(bp.contains(&format!("# e.g. {hint}\n{annotation}")), "{bp}");
 
@@ -587,7 +588,7 @@ main:
           type: matrix
           members: { flight_cc: Flight CC }
           properties:
-            detail: { type: string, default: Ops }
+            detail: { type: text, default: Ops }
     rows:
       type: array
       items:
@@ -598,7 +599,7 @@ main:
             open: true
             members: { flight_cc: Flight CC }
             properties:
-              detail: { type: string, default: Cyber }
+              detail: { type: text, default: Cyber }
 "#;
     let bp = QuillConfig::from_yaml(yaml).expect("loads").blueprint();
     assert!(
@@ -613,7 +614,7 @@ main:
         bp.contains(concat!(
             "rows: # array<object>\n",
             "  -\n",
-            "    # e.g. {flight_cc: {detail: Cyber}, new_item: {title: string, detail: Cyber}}\n",
+            "    # e.g. {flight_cc: {detail: Cyber}, new_item: {title: text<plain>, detail: Cyber}}\n",
             "    quals: {} # matrix<flight_cc>\n",
         )),
         "{bp}"
@@ -632,8 +633,8 @@ main:
 #[test]
 fn the_tick_is_judged_by_the_render_floor_not_by_raw_truthiness() {
     let yaml = quill_yaml().replace(
-        "detail: { type: plaintext, inline: true, default: \"\" }",
-        "detail: { type: plaintext, inline: true }",
+        "detail: { type: text, default: \"\" }",
+        "detail: { type: text }",
     );
     let quill = quill_from_yaml(&yaml);
     let held_at = |fields: &str| -> bool {

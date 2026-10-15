@@ -4,7 +4,7 @@ A live preview maps a click on the page back to the schema field that produced t
 
 Regions come from three producers, each one your plate declares:
 
-- **Generated ink**: a `richtext` or `plaintext` field, and any field printed through [`qm.ink`](#print-with-ink).
+- **Generated ink**: a `text` or `richtext` field, and any field printed through [`qm.ink`](#print-with-ink).
 - **A claim**: [`qm.region`](#tying-composed-content-to-a-field) on ink the plate composes.
 - **A widget**: a [form field](typst-backend.md#binding-to-a-schema-field) bound with `field:`.
 
@@ -28,8 +28,8 @@ Each value's ink is born in generated code, so it keeps its field's address howe
 
 | Address holds | `qm.ink(x, "<key>")` |
 |---|---|
-| `string`, `enum`, `integer`, `number`, `boolean` | content printing what `#x.<key>` prints |
-| `richtext`, `plaintext` | the content `x.<key>` already is |
+| `enum`, `integer`, `number`, `boolean` | content printing what `#x.<key>` prints |
+| `text`, `richtext` | the content `x.<key>` already is |
 | `date`, `datetime` | its default display (`2026-03-04`); for a pattern, `qm.ink(x, "<key>", ..)` |
 | an array of those | the array of their ink; one element by its own address, `"tags.0"` |
 | a blank value (a blank date, empty content, an unanswered `type: t?`) | `none` |

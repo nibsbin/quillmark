@@ -28,6 +28,7 @@ main:
   fields:
     intro:
       type: richtext
+      multiline: true
       description: a paragraph carrying an image island
 card_kinds:
   note:

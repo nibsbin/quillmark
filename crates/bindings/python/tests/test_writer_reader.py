@@ -108,7 +108,7 @@ def test_writer_revise_field():
     (dropped,) = w.revise_field("bio", "make it <kbd>**bold**</kbd>")
     assert (dropped.code, dropped.path) == ("parse::dropped_construct", "main.bio")
     assert quill.reader(doc).get("bio") == "make it **bold**"
-    with raises_edit_code("edit::field_not_inline"):
+    with raises_edit_code("edit::field_not_single_line"):
         w.revise_field("headline", "line one\n\nline two")
     with raises_edit_code("edit::unknown_field"):
         w.revise_field("nope", "x")
@@ -274,15 +274,17 @@ main:
     recipients:
       type: array
       items:
-        type: plaintext
+        type: text
+        multiline: true
     paragraphs:
       type: array
       items:
         type: richtext
+        multiline: true
     tags:
       type: array
       items:
-        type: string
+        type: text
     rows:
       type: array
       items:
@@ -290,6 +292,7 @@ main:
         properties:
           notes:
             type: richtext
+            multiline: true
 
 card_kinds:
   note:
@@ -297,7 +300,8 @@ card_kinds:
       lines:
         type: array
         items:
-          type: plaintext
+          type: text
+          multiline: true
 """
 
 

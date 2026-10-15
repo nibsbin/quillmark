@@ -22,8 +22,8 @@ Bump by what the change costs a document already stored against the quill:
 
 | Bump | A stored document | Changes |
 |---|---|---|
-| **PATCH** | needs no change | Fixes, presentation changes, a new optional field, a new enum member, a `values:` reorder |
-| **MINOR** | migrates mechanically | A field renamed, a type changed with a lossless mapping (`string` → `richtext`), an enum member renamed |
+| **PATCH** | needs no change | Fixes, presentation changes, a new optional field, a new enum member, a `values:` reorder, a `text` or `richtext` field's `multiline` from `false` to `true` |
+| **MINOR** | migrates mechanically | A field renamed, a type changed with a lossless mapping (`date` → `datetime`), an enum member renamed |
 | **MAJOR** | migrates with loss of data or function | A field or enum member removed with no counterpart, a field's meaning changed |
 
 This is not standard semver. The compatibility boundary is `MAJOR.MINOR`: every
@@ -33,6 +33,10 @@ rule is the same below and above `1.0.0`, so `0.x` promises no less than `1.x`.
 Reordering a field's `values:` is PATCH: a field's blank is `""` rather than
 `values[0]`, so no document's rendered output changes. It still moves picker
 order, the blueprint's `enum` annotation, and acroform dropdown order.
+
+Turning a field's `multiline` from `true` to `false` is MAJOR unless every
+stored value is first reduced to one line: a document holding a second line or
+block stops validating (`validation::not_single_line`).
 
 ## How Authors Select Versions
 

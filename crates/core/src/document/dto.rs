@@ -1353,7 +1353,7 @@ This body and the metadata above are an indorsement card.
         let json = quillmark_content::serial::to_canonical_value(&content);
         let schema = crate::quill::FieldSchema::new(
             "intro".to_string(),
-            crate::quill::FieldType::RichText { inline: false },
+            crate::quill::FieldType::RichText { multiline: true },
             None,
         );
         doc.main_mut()

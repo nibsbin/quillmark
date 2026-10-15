@@ -1039,6 +1039,7 @@ main:
   fields:
     intro:
       type: richtext
+      multiline: true
       description: a probe field
 "#;
         const PLATE: &str = r#"
@@ -1105,6 +1106,7 @@ main:
   fields:
     prose:
       type: richtext
+      multiline: true
       description: one paragraph with one decorated run
 "#;
         const PLATE: &str = r#"
@@ -1188,6 +1190,7 @@ main:
   fields:
     prose:
       type: richtext
+      multiline: true
       description: a two-item list
 "#;
         const PLATE: &str = r#"
@@ -1261,9 +1264,11 @@ main:
   fields:
     prose:
       type: richtext
+      multiline: true
       description: the body
     classification:
-      type: string
+      type: enum
+      values: [UNCLASSIFIED, SECRET]
       description: a scalar the plate interpolates
 "#;
 

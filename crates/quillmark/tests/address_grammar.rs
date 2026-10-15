@@ -29,29 +29,29 @@ typst:
 main:
   fields:
     subject:
-      type: string
+      type: text
     deadline:
       type: date
     tags:
       type: array
       items:
-        type: string
+        type: text
     refs:
       type: array
       items:
         type: object
         properties:
-          org: { type: string }
-          num: { type: string }
+          org: { type: text }
+          num: { type: text }
           lead:
             type: object
             properties:
-              email: { type: string }
+              email: { type: text }
     address:
       type: object
       properties:
-        city: { type: string }
-        street: { type: string }
+        city: { type: text }
+        street: { type: text }
         geo:
           type: object
           properties:
@@ -59,7 +59,7 @@ main:
         lines:
           type: array
           items:
-            type: string
+            type: text
     grid:
       type: array
       items:
@@ -72,18 +72,18 @@ main:
       default: ""
       variants:
         CUI:
-          poc: { type: string }
+          poc: { type: text }
           history:
             type: array
             items:
               type: object
               properties:
-                when: { type: string }
+                when: { type: text }
     quals:
       type: matrix
       members: { flight_cc: Flight CC }
       properties:
-        detail: { type: string }
+        detail: { type: text }
     extra:
       type: matrix
       open: true
@@ -92,23 +92,23 @@ card_kinds:
   endorsement:
     fields:
       from:
-        type: string
+        type: text
       tags:
         type: array
         items:
-          type: string
+          type: text
       refs:
         type: array
         items:
           type: object
           properties:
-            org: { type: string }
-            num: { type: string }
+            org: { type: text }
+            num: { type: text }
       origin:
         type: object
         properties:
-          office: { type: string }
-          city: { type: string }
+          office: { type: text }
+          city: { type: text }
           geo:
             type: object
             properties:
@@ -119,7 +119,7 @@ card_kinds:
         default: ""
         variants:
           SECOND:
-            endorser: { type: string }
+            endorser: { type: text }
 "#;
 
 /// Every address both backends must resolve, and every one both must refuse.

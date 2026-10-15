@@ -15,13 +15,13 @@ const PROP_NAME_RE: &str = "[a-z]{1,4}";
 
 fn arb_leaf_field_type() -> impl Strategy<Value = FieldType> {
     prop_oneof![
-        Just(FieldType::String),
+        Just(FieldType::Text { multiline: false }),
         Just(FieldType::Number),
         Just(FieldType::Integer),
         Just(FieldType::Boolean),
         Just(FieldType::Date),
         Just(FieldType::DateTime),
-        Just(FieldType::RichText { inline: false }),
+        Just(FieldType::RichText { multiline: true }),
     ]
 }
 
@@ -207,7 +207,7 @@ proptest! {
                     e,
                     EditError::FieldCoercionFailed { .. }
                         | EditError::FieldDecode { .. }
-                        | EditError::FieldNotInline { .. }
+                        | EditError::FieldNotSingleLine { .. }
                         | EditError::ValueTooDeep { .. }
                         | EditError::InvalidFieldName(_)
                 ),
@@ -255,15 +255,12 @@ fn an_uncoercible_array_item_is_addressed_by_its_index() {
 }
 
 #[test]
-fn a_singleton_array_collapses_to_its_string_and_rests_there() {
-    let schema = FieldSchema::new(ROOT_FIELD.to_string(), FieldType::String, None);
+fn a_singleton_array_collapses_to_its_text_and_rests_there() {
+    let schema = FieldSchema::new(ROOT_FIELD.to_string(), FieldType::Text { multiline: false }, None);
     let config = config_with_one_field(schema);
     let fm = single_field_payload(serde_json::json!(["hello"]));
     let first = config.coerce_payload(&fm).unwrap();
     let second = config.coerce_payload(&first).unwrap();
     assert_eq!(first, second);
-    assert_eq!(
-        first.get(ROOT_FIELD).unwrap().as_json(),
-        &serde_json::Value::String("hello".to_string())
-    );
+    assert_eq!(first.get(ROOT_FIELD).unwrap().as_json(), &super::text("hello"));
 }

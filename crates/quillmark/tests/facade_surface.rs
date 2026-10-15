@@ -21,13 +21,14 @@ main:
   fields:
     subject:
       type: richtext
-      inline: true
+      multiline: false
 
 card_kinds:
   note:
     fields:
       prose:
         type: richtext
+        multiline: true
 "#;
 
 fn quill() -> Quill {

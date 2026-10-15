@@ -103,7 +103,7 @@ w.set("author", "Issa", card=0)           # every verb takes card=: None is main
 
 The read twin of `Writer`. `get` reads each field in the values form: every
 content leaf in its type tree as its codec's text (a richtext leaf to markdown, a
-plaintext leaf to its literal text), everything else as stored, never coerced.
+text leaf to its literal text), everything else as stored, never coerced.
 `get_content` is the same read at the other end of the codec, handing back the
 field's `Content` as a dict whichever lane stored it.
 

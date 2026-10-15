@@ -11,21 +11,21 @@ A quill's schema yields two ready-made documents: a **blueprint** (an annotated 
 $quill: cmu_letter@0.1 # keep verbatim
 $kind: main # A letter on CMU letterhead.
 # The recipient's name and full mailing address.
-recipient: # array<string>
+recipient: # array<text<plain>>
 # The department name for the letterhead.
-department: "" # string
+department: "" # text<plain>
 ~~~
 ```
 
 Two annotation slots, disjoint by purpose: **leading `# …` lines** carry prose (the field's `title` and description as `# <title> — <description>`) plus an `array`'s `# up to <N>` cap; the **inline `# …`** at the end of a value line carries structure, the field's `# <type>[<format>]`. A matrix shows its whole roster there — `# matrix<flight_cc | dodin_ops>` — so a reader can tick a member without looking the schema up.
 
-A matrix with columns, or an open one, adds an `# e.g.` line spelling one present member, `{flight_cc: {detail: …}}`, which names every column; an open matrix adds an item after it, `new_item: {title: string, …}`, the spelling of one a document adds. Each column shows its `default:`, else its container shape, else its `<type>[<format>]`. The members it shows are only an illustration, and this is the only `# e.g.` line a blueprint emits.
+A matrix with columns, or an open one, adds an `# e.g.` line spelling one present member, `{flight_cc: {detail: …}}`, which names every column; an open matrix adds an item after it, `new_item: {title: text<plain>, …}`, the spelling of one a document adds. Each column shows its `default:`, else its container shape, else its `<type>[<format>]`. The members it shows are only an illustration, and this is the only `# e.g.` line a blueprint emits.
 
 A card's own title and description ride its `$kind` line's inline slot, `$kind: note # <title> — <description>`, so neither reads as the first field's.
 
 Two things in the own-line slot are not annotations. An `enum` declaring `variants:` shows the cells of the world its discriminant names live, and every other world's cells commented out under a `# when <MEMBER>:` header — the same cells, with a `# ` in front, at the column they would sit at. Choose that member and delete the `# `. A typed table whose `default:` is `[]` is led by the whole field commented out, holding a row. Delete the live line and uncomment the block to add a row.
 
-The reader's one rule: an empty cell (`title: # string`) awaits a value; a concrete value is the field's `default:`, shippable as-is. An empty cell renders at the field's blank, and nothing warns about it. Every body is empty too, and a kind taking no body closes its payload with `# no body`.
+The reader's one rule: an empty cell (`title: # text<plain>`) awaits a value; a concrete value is the field's `default:`, shippable as-is. An empty cell renders at the field's blank, and nothing warns about it. Every body is empty too, and a kind taking no body closes its payload with `# no body`.
 
 ## Seeding: the starter document
 

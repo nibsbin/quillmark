@@ -43,8 +43,8 @@ pub fn blank(field: &FieldSchema) -> QuillValue {
         FieldType::Integer | FieldType::Number => json!(0),
         FieldType::Boolean => json!(false),
         // The empty content, not `""`: the seam carries canonical Content-JSON.
-        // It is single-`Para`, so it satisfies `inline` and is `plain`.
-        FieldType::RichText { .. } | FieldType::PlainText { .. } => {
+        // It is single-`Para`, so it is one line and plain.
+        FieldType::RichText { .. } | FieldType::Text { .. } => {
             quillmark_content::serial::to_canonical_value(&quillmark_content::model::Normalized::empty())
         }
         // String, Date, DateTime and an `enum`, whose blank every domain
@@ -63,13 +63,17 @@ mod tests {
         FieldSchema::from_quill_value("field".to_string(), &value).unwrap()
     }
 
+    fn empty_text() -> serde_json::Value {
+        quillmark_content::serial::to_canonical_value(&quillmark_content::model::Normalized::empty())
+    }
+
     #[test]
     fn object_with_properties_blanks_each_scalar_leaf() {
         let schema = field(
             r#"
 type: object
 properties:
-  street: { type: string }
+  street: { type: text }
   zip: { type: integer }
   active: { type: boolean }
 "#,
@@ -77,7 +81,7 @@ properties:
 
         assert_eq!(
             blank(&schema).into_json(),
-            json!({ "street": "", "zip": 0, "active": false })
+            json!({ "street": empty_text(), "zip": 0, "active": false })
         );
     }
 
@@ -87,20 +91,20 @@ properties:
             r#"
 type: object
 properties:
-  name: { type: string }
+  name: { type: text }
   address:
     type: object
     properties:
-      city: { type: string }
-      tags: { type: array, items: { type: string } }
+      city: { type: text }
+      tags: { type: array, items: { type: text } }
 "#,
         );
 
         assert_eq!(
             blank(&schema).into_json(),
             json!({
-                "name": "",
-                "address": { "city": "", "tags": [] }
+                "name": empty_text(),
+                "address": { "city": empty_text(), "tags": [] }
             })
         );
     }

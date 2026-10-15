@@ -23,7 +23,7 @@ fn centre(rect: [f32; 4]) -> (f32, f32) {
 /// One richtext `prose` on a letter page.
 fn body_session(body: serde_json::Value) -> LiveSession {
     open(
-        "main:\n  fields:\n    prose: { type: richtext }\n",
+        "main:\n  fields:\n    prose: { type: richtext, multiline: true }\n",
         r#"
 #import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 612pt, height: 792pt, margin: 72pt)
@@ -58,7 +58,7 @@ fn content_fields_emit_frame_regions() {
     // Long enough to overflow page 0 and continue.
     let long = "This is a markdown paragraph that wraps across several lines. ".repeat(200);
     let session = open(
-        "main:\n  fields:\n    intro: { type: richtext }\n    prose: { type: richtext }\n",
+        "main:\n  fields:\n    intro: { type: richtext, multiline: true }\n    prose: { type: richtext, multiline: true }\n",
         PLATE,
         serde_json::json!({
             "intro": content("A **short** intro paragraph on the first page."),
@@ -109,7 +109,7 @@ fn field_placed_twice_surfaces_first_region_but_field_at_resolves_every_placemen
 #qm.data.intro
 "#;
     let session = open(
-        "main:\n  fields:\n    intro: { type: richtext }\n",
+        "main:\n  fields:\n    intro: { type: richtext, multiline: true }\n",
         PLATE,
         serde_json::json!({ "intro": content("The same intro, placed twice.") }),
     );
@@ -167,27 +167,27 @@ fn field_placed_twice_surfaces_first_region_but_field_at_resolves_every_placemen
 #[test]
 fn a_scalars_ink_regions_through_any_wrapper() {
     for print in [
-        r#"*#qm.ink(qm.data, "subject")*"#,
-        r#"#upper(qm.ink(qm.data, "subject"))"#,
-        r#"#text(size: 9pt, qm.ink(qm.data, "subject"))"#,
+        r#"*#qm.ink(qm.data, "count")*"#,
+        r#"#upper(qm.ink(qm.data, "count"))"#,
+        r#"#text(size: 9pt, qm.ink(qm.data, "count"))"#,
     ] {
         let session = open(
-            "main:\n  fields:\n    subject: { type: string }\n",
+            "main:\n  fields:\n    count: { type: integer }\n",
             &format!(
                 "#import \"@local/quillmark-helper:0.2.0\" as qm\n\
                  #set page(width: 612pt, height: 792pt, margin: 72pt)\n{print}\n"
             ),
-            serde_json::json!({ "subject": "Request for Quarters" }),
+            serde_json::json!({ "count": 1042 }),
         );
         let regions = session.regions();
-        let subject: Vec<_> = regions.iter().filter(|r| r.field == "subject").collect();
-        let [r] = subject[..] else {
+        let count: Vec<_> = regions.iter().filter(|r| r.field == "count").collect();
+        let [r] = count[..] else {
             panic!("{print}: one first placement: {regions:?}");
         };
         let (cx, cy) = centre(r.rect);
         assert_eq!(
             session.field_at(r.page, cx, cy, 0.0).as_deref(),
-            Some("subject"),
+            Some("count"),
             "{print}: a click routes to the field"
         );
     }
@@ -198,7 +198,7 @@ fn a_scalars_ink_regions_through_any_wrapper() {
 #[test]
 fn a_scalar_printed_in_an_imported_module_surfaces_a_region() {
     let q = common::quill(
-        &yaml("main:\n  fields:\n    subject: { type: string }\n"),
+        &yaml("main:\n  fields:\n    count: { type: integer }\n"),
         &[
             (
                 "plate.typ",
@@ -209,22 +209,22 @@ fn a_scalar_printed_in_an_imported_module_surfaces_a_region() {
             (
                 "lib.typ",
                 b"#import \"@local/quillmark-helper:0.2.0\" as qm\n\
-                  #let heading-line() = [*#qm.ink(qm.data, \"subject\")*]\n",
+                  #let heading-line() = [*#qm.ink(qm.data, \"count\")*]\n",
             ),
         ],
     );
     let session = TypstBackend
-        .open(&q, &serde_json::json!({ "subject": "Request for Quarters" }), common::test_date())
+        .open(&q, &serde_json::json!({ "count": 1042 }), common::test_date())
         .expect("open");
     let regions = session.regions();
-    let subject = regions
+    let count = regions
         .iter()
-        .find(|r| r.field == "subject")
+        .find(|r| r.field == "count")
         .unwrap_or_else(|| panic!("the module's print surfaces a region: {regions:?}"));
-    let (cx, cy) = centre(subject.rect);
+    let (cx, cy) = centre(count.rect);
     assert_eq!(
-        session.field_at(subject.page, cx, cy, 0.0).as_deref(),
-        Some("subject")
+        session.field_at(count.page, cx, cy, 0.0).as_deref(),
+        Some("count")
     );
 }
 
@@ -252,7 +252,7 @@ fn content_survives_a_rebuilding_show_rule() {
 }
 "#;
     let session = open(
-        "main:\n  fields:\n    prose: { type: richtext }\n",
+        "main:\n  fields:\n    prose: { type: richtext, multiline: true }\n",
         PLATE,
         serde_json::json!({ "prose": content("A body paragraph the package rebuilds.") }),
     );
@@ -274,7 +274,7 @@ fn markdown_array_elements_surface_indexed_regions() {
 }
 "#;
     let session = open(
-        "main:\n  fields:\n    refs:\n      type: array\n      items: { type: richtext }\n",
+        "main:\n  fields:\n    refs:\n      type: array\n      items: { type: richtext, multiline: true }\n",
         PLATE,
         serde_json::json!({ "refs": [content("First reference."), content("Second reference.")] }),
     );
@@ -298,14 +298,14 @@ fn card_regions_use_canonical_kind_ordinal_path() {
     const SCHEMA: &str = "\
 main:
   fields:
-    intro: { type: richtext }
+    intro: { type: richtext, multiline: true }
 card_kinds:
   alpha:
     fields:
-      note: { type: richtext }
+      note: { type: richtext, multiline: true }
   beta:
     fields:
-      note: { type: richtext }
+      note: { type: richtext, multiline: true }
 ";
     const PLATE: &str = r#"
 #import "@local/quillmark-helper:0.2.0" as qm
@@ -466,7 +466,7 @@ fn failed_update_keeps_serving_last_good_regions() {
 #qm.data.intro
 "#;
     let mut session = open(
-        "main:\n  fields:\n    intro: { type: richtext }\n    when: { type: date }\n",
+        "main:\n  fields:\n    intro: { type: richtext, multiline: true }\n    when: { type: date }\n",
         PLATE,
         serde_json::json!({
             "intro": content("A stable paragraph the session keeps serving."),
@@ -548,7 +548,7 @@ fn adversarial_codegen_inputs_still_compile() {
     TypstBackend
         .open(
             &quill(
-                &yaml("main:\n  fields:\n    prose: { type: richtext }\n    overlap: { type: richtext }\n"),
+                &yaml("main:\n  fields:\n    prose: { type: richtext, multiline: true }\n    overlap: { type: richtext, multiline: true }\n"),
                 PLATE,
             ),
             &serde_json::json!({
@@ -574,7 +574,7 @@ fn overlapping_widgets_resolve_field_at_by_paint_order_not_name() {
   qm.form-field("zzz", type: "text", field: "zzz_late", width: 40pt, height: 40pt))
 "#;
     let session = open(
-        "main:\n  fields:\n    aaa_early: { type: string }\n    zzz_late: { type: string }\n",
+        "main:\n  fields:\n    aaa_early: { type: text }\n    zzz_late: { type: text }\n",
         PLATE,
         serde_json::json!({}),
     );

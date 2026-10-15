@@ -201,6 +201,7 @@ main:
       type: array
       items:
         type: richtext
+        multiline: true
 `
     const NOTES_PLATE = `#import "@local/quillmark-helper:0.2.0" as qm
 
@@ -991,7 +992,7 @@ main:
   description: The main card schema
   fields:
     title:
-      type: string
+      type: text
       description: The title
 
 card_kinds:
@@ -999,7 +1000,7 @@ card_kinds:
     description: Indorsement
     fields:
       signature_block:
-        type: string
+        type: text
 `
 
   it('exposes identity on metadata and schemas on dedicated getters', () => {
@@ -1062,7 +1063,7 @@ typst:
 main:
   fields:
     title:
-      type: string
+      type: text
 
 card_kinds:
   skills:
@@ -1072,7 +1073,7 @@ card_kinds:
       items:
         type: array
         items:
-          type: string
+          type: text
 `
     const quill = Quill.fromTree(
       makeQuill({ name: 'warn_quill', plate: TEST_PLATE, quillYaml: WARNING_QUILL_YAML }),
@@ -1096,7 +1097,7 @@ describe('quill.validate', () => {
 main:
   fields:
     title:
-      type: string
+      type: text
     count:
       type: integer
 
@@ -1104,7 +1105,7 @@ card_kinds:
   note:
     fields:
       prose:
-        type: string
+        type: text
 `
 
   const buildQuill = () => {
@@ -1157,10 +1158,10 @@ typst:
 main:
   fields:
     title:
-      type: string
+      type: text
       description: Document title (no default)
     subtitle:
-      type: string
+      type: text
       default: "Untitled subtitle"
       description: Document subtitle (defaulted, shippable)
 `

@@ -3,6 +3,10 @@
 
 // A memo has no "no style" state, so the blank takes the package's default.
 // Resolved once here: `frontmatter` and the date's pattern must agree.
+// The package computes with these as strings (`upper`, joins, emptiness), so
+// each `text` field reaches it through `qm.str`.
+#let strs(values) = values.map(qm.str)
+
 #let memo_style = if qm.data.memo_style != "" { qm.data.memo_style } else { "usaf" }
 
 // A blank date is dated by hand at signing, so it renders as a text widget bound
@@ -44,9 +48,9 @@
 // Frontmatter configuration
 #show: frontmatter.with(
   // Letterhead configuration
-  letterhead_title: qm.data.letterhead_title,
-  letterhead_caption: qm.data.letterhead_caption,
-  letterhead_seal_subtitle: qm.data.letterhead_seal_subtitle,
+  letterhead_title: qm.str(qm.data.letterhead_title),
+  letterhead_caption: strs(qm.data.letterhead_caption),
+  letterhead_seal_subtitle: qm.str(qm.data.letterhead_seal_subtitle),
   // Every enum branch below covers `values ∪ blank`: an `else` that swallows the
   // blank renders a variant nobody picked. Here the blank omits the seal, which
   // is what `frontmatter`'s own `letterhead_seal: none` default means.
@@ -70,11 +74,11 @@
   dating_field: dating-field("Date", "date"),
 
   // Receiver information
-  memo_for: qm.data.memo_for,
+  memo_for: strs(qm.data.memo_for),
 
   // Sender information (omitted for Memorandum for Record). Every declared
   // field arrives filled, so the empty *value* is the signal here, not absence.
-  ..if qm.data.memo_from.len() > 0 { (memo_from: qm.data.memo_from) },
+  ..if qm.data.memo_from.len() > 0 { (memo_from: strs(qm.data.memo_from)) },
 
   // Subject line
   subject: qm.data.subject,
@@ -82,7 +86,7 @@
   references: qm.data.references,
   footer_tag_line: qm.data.tag_line,
   classification_level: qm.data.classification.value,
-  dissemination: qm.data.dissemination,
+  dissemination: qm.str(qm.data.dissemination),
 
   // CUI designation indicator block fields (DoDM 5200.48). `classification`
   // declares a `CUI` variant, so these four exist only where the discriminant
@@ -91,10 +95,10 @@
   // own `cui_*: none` defaults cover the worlds that omit them.
   ..if qm.data.classification.value == "CUI" {
     (
-      cui_controlled_by: qm.data.classification.controlled_by,
-      cui_category: qm.data.classification.category,
-      cui_limited_dissemination: qm.data.classification.limited_dissemination,
-      cui_poc: qm.data.classification.poc,
+      cui_controlled_by: qm.str(qm.data.classification.controlled_by),
+      cui_category: qm.str(qm.data.classification.category),
+      cui_limited_dissemination: qm.str(qm.data.classification.limited_dissemination),
+      cui_poc: qm.str(qm.data.classification.poc),
     )
   },
 
@@ -121,12 +125,12 @@
 // Backmatter
 #backmatter(
   // Signature block
-  signature_block: qm.data.signature_block,
+  signature_block: strs(qm.data.signature_block),
   signing_field: qm.signature-field("Signature", field: "signature_block"),
 
-  cc: qm.data.cc,
-  distribution: qm.data.distribution,
-  attachments: qm.data.attachments,
+  cc: strs(qm.data.cc),
+  distribution: strs(qm.data.distribution),
+  attachments: strs(qm.data.attachments),
 )
 
 // Indorsements - iterate through CARDS array and filter by CARD tag
@@ -156,12 +160,12 @@
     // spans through the package rebuild, per-card because each card's body
     // has its own backend-generated eval site.
     indorsement(
-      from: card.from,
+      from: qm.str(card.from),
       // `for` is a Typst keyword, so this one declared field cannot be reached
       // as `card.for`; the `.at` is forced by syntax, not by any doubt that the
       // field is there.
-      to: card.at("for"),
-      signature_block: card.signature_block,
+      to: qm.str(card.at("for")),
+      signature_block: strs(card.signature_block),
       signing_field: qm.signature-field(
         "Ind_" + str(i) + "_Signature",
         field: card.at("$path") + "signature_block",

@@ -12,6 +12,8 @@ use crate::quill::{
 use crate::value::QuillValue;
 use serde_json::json;
 
+use super::text;
+
 /// A quill whose `classification` enum brings a `CUI` field set into play:
 /// `controlled_by` with no `default:`, `category` defaulted.
 fn quill_yaml() -> &'static str {
@@ -33,12 +35,12 @@ main:
       default: ""
       variants:
         CUI:
-          controlled_by: { type: string }
-          category: { type: string, default: "" }
+          controlled_by: { type: text }
+          category: { type: text, default: "" }
         SECRET:
-          declassify_on: { type: string }
+          declassify_on: { type: text }
     title:
-      type: string
+      type: text
       default: ""
 "#
 }
@@ -101,28 +103,28 @@ fn load_error(fields: &str) -> String {
 fn a_malformed_variant_declaration_is_refused_by_code() {
     for (fields, code) in [
         (
-            "    name:\n      type: string\n      variants:\n        A:\n          x: { type: string }\n",
+            "    name:\n      type: text\n      variants:\n        A:\n          x: { type: text }\n",
             "quill::variants_on_non_enum",
         ),
         (
-            "    c:\n      type: enum\n      values: [A]\n      variants:\n        B:\n          x: { type: string }\n",
+            "    c:\n      type: enum\n      values: [A]\n      variants:\n        B:\n          x: { type: text }\n",
             "quill::variant_unknown_value",
         ),
         (
-            "    c:\n      type: enum\n      values: [A]\n      variants:\n        \"\":\n          x: { type: string }\n",
+            "    c:\n      type: enum\n      values: [A]\n      variants:\n        \"\":\n          x: { type: text }\n",
             "quill::variant_unknown_value",
         ),
         (
             "    c:\n      type: enum\n      values: [\"1\"]\n      default: 1\n      \
-             variants:\n        \"1\":\n          x: { type: string }\n",
+             variants:\n        \"1\":\n          x: { type: text }\n",
             "quill::default_type_mismatch",
         ),
         (
-            "    c:\n      type: enum\n      values: [A]\n      variants:\n        A:\n          value: { type: string }\n",
+            "    c:\n      type: enum\n      values: [A]\n      variants:\n        A:\n          value: { type: text }\n",
             "quill::variant_reserved_field_name",
         ),
         (
-            "    c:\n      type: enum\n      values: [A]\n      variants:\n        A:\n          $kind: { type: string }\n",
+            "    c:\n      type: enum\n      values: [A]\n      variants:\n        A:\n          $kind: { type: text }\n",
             "quill::invalid_field_name",
         ),
         (
@@ -131,15 +133,15 @@ fn a_malformed_variant_declaration_is_refused_by_code() {
         ),
         ("    c:\n      type: enum\n      values: [A]\n      variants: {}\n", "quill::variant_empty"),
         (
-            "    c:\n      type: enum\n      values: [A]\n      variants:\n        A:\n          x: { type: string, ui: { group: g } }\n",
+            "    c:\n      type: enum\n      values: [A]\n      variants:\n        A:\n          x: { type: text, ui: { group: g } }\n",
             "quill::nested_group_not_supported",
         ),
         (
-            "    c:\n      type: enum\n      values: [A]\n      variants:\n        A:\n          x: { type: enum, values: [P], variants: { P: { y: { type: string } } } }\n",
+            "    c:\n      type: enum\n      values: [A]\n      variants:\n        A:\n          x: { type: enum, values: [P], variants: { P: { y: { type: text } } } }\n",
             "quill::variant_placement",
         ),
         (
-            "    c:\n      type: enum\n      values: [A, B]\n      variants:\n        A:\n          note: { type: string }\n        B:\n          note: { type: integer }\n",
+            "    c:\n      type: enum\n      values: [A, B]\n      variants:\n        A:\n          note: { type: text }\n        B:\n          note: { type: integer }\n",
             "quill::variant_field_collision",
         ),
     ] {
@@ -150,18 +152,23 @@ fn a_malformed_variant_declaration_is_refused_by_code() {
 /// A variant cell carries any type a card field may, containers included.
 #[test]
 fn a_variant_cell_carries_any_field_type() {
-    for ty in ["richtext", "plaintext", "date", "datetime"] {
+    for (decl, ty) in [
+        ("richtext, multiline: true", "richtext"),
+        ("text", "text"),
+        ("date", "date"),
+        ("datetime", "datetime"),
+    ] {
         let config = load(&format!(
-            "    c:\n      type: enum\n      values: [A]\n      variants:\n        A:\n          x: {{ type: {ty} }}\n"
+            "    c:\n      type: enum\n      values: [A]\n      variants:\n        A:\n          x: {{ type: {decl} }}\n"
         ))
         .unwrap_or_else(|e| panic!("type: {ty} must load inside a variant: {e:?}"));
         let cell = config.main.fields["c"].variant_field("x").expect("cell resolves");
         assert_eq!(cell.r#type.as_str(), ty);
     }
     for cell in [
-        "x: { type: object, properties: { y: { type: string } } }",
-        "x: { type: array, items: { type: string } }",
-        "x: { type: array, items: { type: object, properties: { y: { type: string } } } }",
+        "x: { type: object, properties: { y: { type: text } } }",
+        "x: { type: array, items: { type: text } }",
+        "x: { type: array, items: { type: object, properties: { y: { type: text } } } }",
     ] {
         load(&format!(
             "    c:\n      type: enum\n      values: [A]\n      variants:\n        A:\n          {cell}\n"
@@ -194,7 +201,7 @@ main:
       default: ""
       variants:
         CUI:
-          note: { type: richtext }
+          note: { type: richtext, multiline: true }
           reply_by: { type: date }
 "#;
     let config = QuillConfig::from_yaml(YAML).expect("loads");
@@ -254,8 +261,8 @@ classification:
 #[test]
 fn a_name_two_worlds_declare_identically_loads() {
     let config = QuillConfig::from_yaml(&quill_yaml().replace(
-        "        SECRET:\n          declassify_on: { type: string }",
-        "        SECRET:\n          declassify_on: { type: string }\n          controlled_by: { type: string }",
+        "        SECRET:\n          declassify_on: { type: text }",
+        "        SECRET:\n          declassify_on: { type: text }\n          controlled_by: { type: text }",
     ))
     .expect("an identically-repeated variant field loads");
     let doc = Document::parse(
@@ -264,7 +271,7 @@ fn a_name_two_worlds_declare_identically_loads() {
     .expect("parses")
     .document;
     let data = config.compile_data(&doc, test_date()).expect("compile_data succeeds");
-    assert_eq!(data["classification"]["controlled_by"], json!("SAF/AA"));
+    assert_eq!(data["classification"]["controlled_by"]["text"], json!("SAF/AA"));
 }
 
 /// A world may open where the position's own live shape is the schema's. A
@@ -281,7 +288,7 @@ fn a_world_opens_in_a_dictionary_and_nowhere_else_below_a_card() {
           values: [A]
           variants:
             A:
-              x: { type: string }
+              x: { type: text }
 "#,
     )
     .expect("a dictionary's property opens a world");
@@ -301,7 +308,7 @@ fn a_world_opens_in_a_dictionary_and_nowhere_else_below_a_card() {
             values: [A]
             variants:
               A:
-                x: { type: string }
+                x: { type: text }
 "#,
         ),
         (
@@ -316,7 +323,7 @@ fn a_world_opens_in_a_dictionary_and_nowhere_else_below_a_card() {
           values: [A]
           variants:
             A:
-              x: { type: string }
+              x: { type: text }
 "#,
         ),
         (
@@ -334,7 +341,7 @@ fn a_world_opens_in_a_dictionary_and_nowhere_else_below_a_card() {
                 values: [A]
                 variants:
                   A:
-                    x: { type: string }
+                    x: { type: text }
 "#,
         ),
     ] {
@@ -348,7 +355,7 @@ fn a_world_opens_in_a_dictionary_and_nowhere_else_below_a_card() {
 
 #[test]
 fn the_blank_of_a_variant_bearing_enum_is_the_container_holding_the_blank() {
-    let schema = field("type: enum\nvalues: [A]\nvariants:\n  A:\n    x: { type: string }\n");
+    let schema = field("type: enum\nvalues: [A]\nvariants:\n  A:\n    x: { type: text }\n");
     assert_eq!(blank(&schema).into_json(), json!({ "value": "" }));
     assert_eq!(blank(&field("type: enum\nvalues: [A]\n")).into_json(), json!(""));
 }
@@ -363,13 +370,13 @@ fn the_plate_carries_exactly_the_live_world() {
         ("classification:\n  value:\n", json!({ "value": "" })),
         (
             "classification:\n  value: CUI\n",
-            json!({ "value": "CUI", "controlled_by": "", "category": "" }),
+            json!({ "value": "CUI", "controlled_by": text(""), "category": text("") }),
         ),
         (
             "classification:\n  value: UNCLASSIFIED\n  controlled_by: SAF/AA\n",
             json!({ "value": "UNCLASSIFIED" }),
         ),
-        ("classification: SECRET\n", json!({ "value": "SECRET", "declassify_on": "" })),
+        ("classification: SECRET\n", json!({ "value": "SECRET", "declassify_on": text("") })),
     ] {
         assert_eq!(plate(&doc(fields)), want, "{fields}");
     }
@@ -381,7 +388,7 @@ fn the_discriminant_falls_to_the_default_and_carries_its_world() {
     let data = QuillConfig::from_yaml(&yaml).unwrap().compile_data(&doc(""), test_date()).unwrap();
     assert_eq!(
         data["classification"],
-        json!({ "value": "CUI", "controlled_by": "", "category": "" })
+        json!({ "value": "CUI", "controlled_by": text(""), "category": text("") })
     );
 }
 
@@ -432,7 +439,7 @@ fn resolve_reports_the_container_as_one_cell_at_its_strongest_rung() {
         let row = classification_row(&defaulted, &doc(fields));
         assert_eq!(
             row.value.as_json(),
-            &json!({ "value": "CUI", "controlled_by": controlled_by, "category": "" }),
+            &json!({ "value": "CUI", "controlled_by": text(controlled_by), "category": text("") }),
             "{fields}"
         );
         assert_eq!(row.source, source, "{fields}");
@@ -513,10 +520,10 @@ fn the_blueprint_comments_out_every_world_it_does_not_show() {
         bp.contains(concat!(
             "  value: \"\"\n",
             "  # when CUI:\n",
-            "  # controlled_by: # string\n",
-            "  # category: \"\" # string\n",
+            "  # controlled_by: # text<plain>\n",
+            "  # category: \"\" # text<plain>\n",
             "  # when SECRET:\n",
-            "  # declassify_on: # string\n",
+            "  # declassify_on: # text<plain>\n",
         )),
         "{bp}"
     );
@@ -586,14 +593,14 @@ main:
             type: object
             description: Controlling office.
             properties:
-              office: { type: string, description: Office symbol. }
-              phone: { type: string, default: "" }
+              office: { type: text, description: Office symbol. }
+              phone: { type: text, default: "" }
           citations:
             type: array
             items:
               type: object
               properties:
-                src: { type: string }
+                src: { type: text }
 "#;
     let bp = QuillConfig::from_yaml(YAML).expect("loads").blueprint();
     assert!(
@@ -601,10 +608,10 @@ main:
             "  # Controlling office.\n",
             "  controlled_by: # object\n",
             "    # Office symbol.\n",
-            "    office: # string\n",
-            "    phone: \"\" # string\n",
+            "    office: # text<plain>\n",
+            "    phone: \"\" # text<plain>\n",
             "  citations: # array<object>\n",
-            "    - src: # string\n",
+            "    - src: # text<plain>\n",
         )),
         "{bp}"
     );
@@ -626,8 +633,8 @@ fn the_transform_schema_flattens_every_world_into_one_container() {
         cls["properties"]["value"]["enum"],
         json!(["", "UNCLASSIFIED", "CUI", "SECRET"])
     );
-    assert_eq!(cls["properties"]["controlled_by"]["type"], json!("string"));
-    assert_eq!(cls["properties"]["declassify_on"]["type"], json!("string"));
+    assert_eq!(cls["properties"]["controlled_by"]["quillmark:plain"], json!(true));
+    assert_eq!(cls["properties"]["declassify_on"]["quillmark:plain"], json!(true));
     // `variants:` on the declaration view states which member owns a cell.
     for name in ["controlled_by", "category", "declassify_on"] {
         let cell = cls["properties"][name].as_object().expect("cell projects as an object");
@@ -674,7 +681,7 @@ fn a_container_shaped_schema_literal_is_a_load_error() {
         "      default: { value: CUI, note: \"A **bold** note\" }\n",
         "      variants:\n",
         "        CUI:\n",
-        "          note: { type: richtext }\n",
+        "          note: { type: richtext, multiline: true }\n",
     );
     let err = QuillConfig::from_yaml_with_warnings(yaml).unwrap_err();
     let diag = err
@@ -710,7 +717,7 @@ main:
       type: object
       description: Banner block.
       properties:
-        office: { type: string, default: "" }
+        office: { type: text, default: "" }
         classification:
           type: enum
           values: [UNCLASSIFIED, CUI]
@@ -718,8 +725,8 @@ main:
           description: Marking shown in the banner.
           variants:
             CUI:
-              controlled_by: { type: string }
-              category: { type: string, default: "" }
+              controlled_by: { type: text }
+              category: { type: text, default: "" }
 "#;
 
 fn nested_doc(fields: &str) -> Document {
@@ -741,20 +748,20 @@ fn nested_header(document: &Document) -> serde_json::Value {
 fn a_nested_world_reaches_the_plate_as_the_closed_shape() {
     assert_eq!(
         nested_header(&nested_doc("")),
-        json!({ "office": "", "classification": { "value": "" } })
+        json!({ "office": text(""), "classification": { "value": "" } })
     );
     assert_eq!(
         nested_header(&nested_doc("header:\n  classification:\n    value: CUI\n")),
         json!({
-            "office": "",
-            "classification": { "value": "CUI", "controlled_by": "", "category": "" }
+            "office": text(""),
+            "classification": { "value": "CUI", "controlled_by": text(""), "category": text("") }
         })
     );
     assert_eq!(
         nested_header(&nested_doc(
             "header:\n  classification:\n    value: UNCLASSIFIED\n    controlled_by: SAF/AA\n"
         )),
-        json!({ "office": "", "classification": { "value": "UNCLASSIFIED" } })
+        json!({ "office": text(""), "classification": { "value": "UNCLASSIFIED" } })
     );
 }
 
@@ -797,8 +804,8 @@ fn the_blueprint_seats_a_nested_worlds_cells_in_the_dictionary() {
             "  classification: # enum<UNCLASSIFIED | CUI>\n",
             "    value: \"\"\n",
             "    # when CUI:\n",
-            "    # controlled_by: # string\n",
-            "    # category: \"\" # string\n",
+            "    # controlled_by: # text<plain>\n",
+            "    # category: \"\" # text<plain>\n",
         )),
         "{bp}"
     );
@@ -813,7 +820,7 @@ fn the_blueprint_seats_a_nested_worlds_cells_in_the_dictionary() {
 
     let yaml = NESTED_YAML.replace("          default: \"\"\n", "          default: CUI\n");
     let live = QuillConfig::from_yaml(&yaml).expect("loads").blueprint();
-    assert!(live.contains("    controlled_by: # string\n"), "{live}");
+    assert!(live.contains("    controlled_by: # text<plain>\n"), "{live}");
 }
 
 /// A cell stays unconditionally addressable while only conditionally live: the
@@ -826,8 +833,8 @@ fn a_nested_cell_is_addressable_through_the_dictionary() {
     let cls = &schema.as_json()["properties"]["header"]["properties"]["classification"];
     assert_eq!(cls["type"], json!("object"));
     assert_eq!(cls["properties"]["value"]["enum"], json!(["", "UNCLASSIFIED", "CUI"]));
-    assert_eq!(cls["properties"]["controlled_by"]["type"], json!("string"));
-    assert_eq!(cls["properties"]["category"]["type"], json!("string"));
+    assert_eq!(cls["properties"]["controlled_by"]["quillmark:plain"], json!(true));
+    assert_eq!(cls["properties"]["category"]["quillmark:plain"], json!(true));
 }
 
 
@@ -848,7 +855,7 @@ main:
       type: enum
       values: [A, B]
       variants:
-        A: { y: { type: richtext } }
+        A: { y: { type: richtext, multiline: true } }
     box:
       type: object
       properties:
@@ -856,7 +863,7 @@ main:
           type: enum
           values: [A, B]
           variants:
-            A: { y: { type: richtext } }
+            A: { y: { type: richtext, multiline: true } }
 "#,
     );
     let md = "~~~\n$quill: variant_drops@0.1.0\nc:\n  value: B\n  y: a <span>b</span>\n\

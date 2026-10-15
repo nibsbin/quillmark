@@ -66,13 +66,13 @@ def _latest_version(quill_dir: Path) -> Path:
 
 
 def taro_quill():
-    """The taro fixture quill (main string fields; a `quotes` card kind)."""
+    """The taro fixture quill (main text fields; a `quotes` card kind)."""
     return Quill.from_path(str(_latest_version(QUILLS_PATH / "taro")))
 
 
 def richtext_quill():
     """The sample_form fixture quill, reached for its richtext fields (headline:
-    richtext inline, bio: richtext)."""
+    one-paragraph richtext, bio: multiline richtext)."""
     return Quill.from_path(str(_latest_version(QUILLS_PATH / "sample_form")))
 
 

@@ -705,7 +705,7 @@ quill:
   description: coverage probe
 main:
   fields:
-    name: { type: string }
+    name: { type: text }
     count: { type: integer }
     strata:
       type: array
@@ -713,19 +713,19 @@ main:
         type: object
         properties:
           year: { type: integer }
-          rank: { type: string }
+          rank: { type: text }
     quals:
       type: matrix
       members: { a: A, b: B }
       properties:
-        detail: { type: string }
+        detail: { type: text }
     level:
       type: enum
       values: [LOW, HIGH]
       default: ""
       variants:
         HIGH:
-          poc: { type: string }
+          poc: { type: text }
 card_kinds:
   note:
     fields:

@@ -17,19 +17,19 @@ quill:
 main:
   fields:
     title:
-      type: string
+      type: text
     status:
-      type: string
+      type: text
       default: draft
     notes:
-      type: string
+      type: text
 card_kinds:
   note:
     fields:
       author:
-        type: string
+        type: text
       tag:
-        type: string
+        type: text
 "#;
 
 #[test]
@@ -99,9 +99,9 @@ fn seeded_document_compiles_with_default_then_blank_for_absent_fields() {
         .compile_data(&doc, test_date())
         .expect("seeded document must compile");
 
-    assert_eq!(data.get("title").and_then(|v| v.as_str()), Some(""));
-    assert_eq!(data.get("status").and_then(|v| v.as_str()), Some("draft"));
-    assert_eq!(data.get("notes").and_then(|v| v.as_str()), Some(""));
+    assert_eq!(data["title"]["text"], "");
+    assert_eq!(data["status"]["text"], "draft");
+    assert_eq!(data["notes"]["text"], "");
 }
 
 #[test]
@@ -117,9 +117,9 @@ card_kinds:
   note:
     fields:
       alpha:
-        type: string
+        type: text
       beta:
-        type: string
+        type: text
 "#,
     );
     let ov = overlay(json!({ "beta": "B", "alpha": "A" }));
@@ -151,14 +151,14 @@ quill:
 main:
   fields:
     title:
-      type: string
+      type: text
 card_kinds:
   data:
     body:
       enabled: false
     fields:
       value:
-        type: string
+        type: text
 "#,
     );
 
@@ -232,7 +232,7 @@ quill:
 main:
   fields:
     title:
-      type: string
+      type: text
 card_kinds:
   entry:
     fields:
@@ -242,7 +242,7 @@ card_kinds:
         default: ""
         variants:
           CUI:
-            note: { type: richtext }
+            note: { type: richtext, multiline: true }
 "#;
     let quill = quill_from_yaml(VARIANT_QUILL);
     let doc = doc_with_seed(
@@ -279,7 +279,7 @@ fn a_variant_overlay_without_a_discriminant_commits_its_cells_under_the_default_
 quill: { name: seed_test, version: 1.0.0, backend: typst, description: x }
 main:
   fields:
-    title: { type: string, default: "" }
+    title: { type: text, default: "" }
 card_kinds:
   entry:
     fields:
@@ -289,8 +289,8 @@ card_kinds:
         default: CUI
         variants:
           CUI:
-            note: { type: richtext }
-      other: { type: string }
+            note: { type: richtext, multiline: true }
+      other: { type: text }
 "#,
     );
     let overlay = overlay(json!({ "classification": { "note": "hello" }, "other": "kept" }));
@@ -337,9 +337,9 @@ card_kinds:
       $body: Kind body.
     fields:
       author:
-        type: string
+        type: text
       tag:
-        type: string
+        type: text
       level:
         type: integer
 "#;
@@ -402,23 +402,23 @@ fn a_defective_kind_seed_fails_the_load() {
 quill: {{ name: bad_seed, version: "1.0.0", backend: typst, description: x }}
 main:
   fields:
-    title: {{ type: string }}
+    title: {{ type: text }}
 {main}
 card_kinds:
   note:
     body: {{ enabled: false }}
     seed: {seed}
     fields:
-      author: {{ type: string, default: Anon }}
+      author: {{ type: text, default: Anon }}
       level: {{ type: number, default: 1 }}
-      names: {{ type: array, max: 1, items: {{ type: string }} }}
-      office: {{ type: object, properties: {{ symbol: {{ type: string }} }} }}
+      names: {{ type: array, max: 1, items: {{ type: text }} }}
+      office: {{ type: object, properties: {{ symbol: {{ type: text }} }} }}
       mark:
         type: enum
         values: [U, CUI]
         default: U
         variants:
-          CUI: {{ note: {{ type: string }} }}
+          CUI: {{ note: {{ type: text }} }}
       broken: {{ type: strin }}
 "#
         )
@@ -470,13 +470,13 @@ card_kinds:
       urgent: false
       $body: Write the entry here.
     fields:
-      office: { type: object, properties: { symbol: { type: string } } }
+      office: { type: object, properties: { symbol: { type: text } } }
       mark:
         type: enum
         values: [U, CUI]
         default: U
         variants:
-          CUI: { note: { type: richtext } }
+          CUI: { note: { type: richtext, multiline: true } }
       urgent: { type: boolean, default: true }
 "#,
     );
@@ -502,8 +502,8 @@ card_kinds:
     fields:
       office:
         type: object
-        properties: {{ symbol: {{ type: string, default: 49 FW }}, room: {{ type: string }} }}
-      note: {{ type: richtext, default: "*Handle* with care." }}
+        properties: {{ symbol: {{ type: text, default: 49 FW }}, room: {{ type: text }} }}
+      note: {{ type: richtext, multiline: true, default: "*Handle* with care." }}
       due: {{ type: date, default: today }}
 "#
         )

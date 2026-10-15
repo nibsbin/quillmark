@@ -11,17 +11,17 @@ main:
   fields:
     author:
       description: Author of document
-      type: string
+      type: text
     ice_cream:
       description: favorite ice cream flavor
-      type: string
+      type: text
       default: taro
     title:
       description: title of document
-      type: string
+      type: text
     picture:
       description: path of an image under the quill's assets
-      type: string
+      type: text
 
 card_kinds:
   quotes:
@@ -30,4 +30,4 @@ card_kinds:
     fields:
       author:
         description: The person who said this quote
-        type: string
+        type: text

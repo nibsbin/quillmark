@@ -26,9 +26,9 @@ quill:
 main:
   fields:
     title:
-      type: string
+      type: text
     status:
-      type: string
+      type: text
       default: draft
     count:
       type: integer
@@ -37,7 +37,7 @@ card_kinds:
   note:
     fields:
       label:
-        type: string
+        type: text
 "#;
 
 #[test]
@@ -72,7 +72,7 @@ main:
     caption:
       type: array
       items:
-        type: string
+        type: text
     verified:
       type: boolean
     count:
@@ -80,7 +80,7 @@ main:
     ratio:
       type: number
     heading:
-      type: string
+      type: text
     grade:
       type: enum
       values: [alpha, beta]
@@ -88,8 +88,10 @@ main:
       type: date
     prose:
       type: richtext
+      multiline: true
     literal:
-      type: plaintext
+      type: text
+      multiline: true
 "#;
 
 fn lenient_doc(fields: &str) -> Document {
@@ -264,7 +266,7 @@ main:
       variants:
         cui:
           caveat:
-            type: string
+            type: text
 "#,
     );
     // The floor normalizes the bare scalar into `{value: …}`; the diagnostic

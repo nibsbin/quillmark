@@ -146,7 +146,7 @@ as authored.
 `quill.parse` is the **bound door**, and the primary ingestion path. It is
 `Document.fromMarkdown` followed by `conform`: the returned document's declared
 content fields rest at one form per codec (a `richtext` field as the canonical
-content object, a `plaintext` field as its literal string), so `getStored`
+content object, a `text` field as its literal string), so `getStored`
 answers "content object or string?" by the field's declared codec rather than by how the
 document was built. Parse warnings and the `conform::*` warnings both ride
 `doc.warnings`.
@@ -265,7 +265,7 @@ address. `getStored` is the verbatim transport read, distinct from the interpret
 `quill.reader(doc).get`; `bodyMarkdown` is the body markdown read (a `CardAddr`; a field's
 markdown is read through `quill.reader(doc).get(field)`). A content field's stored
 form rests per its declared codec through the bound door (a `richtext` field as
-the content object, a `plaintext` field as its literal string), and as authored
+the content object, a `text` field as its literal string), and as authored
 through the transport door. For the `Content` either way read
 `quill.reader(doc).getContent(addr)`, which decodes through the codec the
 field's declared type names. Card-scoped verbs take a

@@ -14,7 +14,7 @@ main:
       open: true
       members: { dco: DCO, cyber: Cyber }
       properties:
-        detail: { type: plaintext, inline: true }
+        detail: { type: text }
     later:
       type: matrix?
       members: { dco: DCO }
@@ -36,8 +36,8 @@ fn data() -> serde_json::Value {
     serde_json::json!({
         "quals": {
             "dco": { "detail": common::content("Ops") },
-            "aide": { "title": "Aide", "detail": common::content("") },
-            "wing_ig": { "title": "Wing IG", "detail": common::content("81 TRW") },
+            "aide": { "title": common::content("Aide"), "detail": common::content("") },
+            "wing_ig": { "title": common::content("Wing IG"), "detail": common::content("81 TRW") },
         },
         "later": null,
         "rows": [{ "quals": { "cyber": {} } }],
@@ -69,10 +69,10 @@ fn roster_rows_are_the_vocabulary_in_order_from_every_container() {
         r#"#let rows = qm.roster(qm.data, "quals")
 #assert.eq(rows.map(r => r.id), ("dco", "cyber", "aide", "wing_ig"))
 #assert.eq(rows.map(r => r.held), (true, false, true, true))
-#assert.eq(rows.map(r => r.title), ("DCO", "Cyber", "Aide", "Wing IG"))
+#assert.eq(rows.map(r => qm.str(r.title)), ("DCO", "Cyber", "Aide", "Wing IG"))
 #assert.eq(rows.map(r => r.path), ("quals.dco", "quals.cyber", "quals.aide", "quals.wing_ig"))
 #assert.eq(rows.at(1).value, none)
-#assert.eq(rows.at(3).value.title, "Wing IG")
+#assert.eq(qm.str(rows.at(3).value.title), "Wing IG")
 #assert.eq(qm.roster(qm.data.rows.at(0), "quals").map(r => r.held), (false, true))
 #assert.eq(qm.roster(qm.data.rows.at(0), "quals").at(1).path, "rows.0.quals.cyber")
 #let card = qm.data.at("$cards").at(0)

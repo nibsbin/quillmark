@@ -34,8 +34,6 @@ pub struct UiFieldSchema {
     pub group: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub compact: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub multiline: Option<bool>,
     /// The control the field asks for; see [`FieldLayout`].
     #[serde(skip_serializing_if = "Option::is_none")]
     pub layout: Option<FieldLayout>,
@@ -343,11 +341,10 @@ impl CardSchema {
 ///
 /// Serializes as its type token ([`as_str`](Self::as_str)) and deserializes by
 /// parsing one ([`from_str`](Self::from_str)), so the token is the whole `type:`
-/// value: the prose types' single-line shape rides the sibling `inline:` key,
+/// value: the text types' line shape rides the sibling `multiline:` key,
 /// folded into the variant payload here.
 #[derive(Debug, Clone, PartialEq)]
 pub enum FieldType {
-    String,
     Number,
     Integer,
     Boolean,
@@ -358,17 +355,19 @@ pub enum FieldType {
     /// Formatted prose over the canonical content model,
     /// [`Content`](quillmark_content::model::Content); markdown is a projection of it.
     RichText {
-        /// Exactly one `Para` line, no container, no islands. Enforced at
-        /// coercion, validation, and load-time literal import.
-        inline: bool,
+        /// Lifts the one-paragraph constraint (exactly one `Para` line, no
+        /// container, no islands) to admit block structure. The constraint is
+        /// enforced at coercion, validation, and load-time literal import.
+        multiline: bool,
     },
     /// The same [`Content`](quillmark_content::model::Content) through a *literal*
     /// codec ([`from_plaintext`](quillmark_content::import::from_plaintext) /
     /// [`to_plaintext`](quillmark_content::export::to_plaintext)): `*hi*` is four
     /// characters, verbatim both ways, never emphasis.
-    PlainText {
-        /// A single line, enforced where [`RichText`](Self::RichText)'s is.
-        inline: bool,
+    Text {
+        /// Lifts the one-line constraint, enforced where
+        /// [`RichText`](Self::RichText)'s is, to admit line breaks.
+        multiline: bool,
     },
     /// A closed string domain, `values` in declaration order. The blank (`""`)
     /// is accepted beside them and is never one of them.
@@ -389,7 +388,7 @@ pub enum FieldType {
 /// the name (`quill::matrix_reserved_column`).
 pub const MATRIX_HELD_KEY: &str = "held";
 
-/// An added item's label, a `string` cell. A roster member's label is the
+/// An added item's label, a one-line `text` cell. A roster member's label is the
 /// roster's, so a document storing one is warned (`validation::unknown_field`),
 /// and no column may take the name (`quill::matrix_reserved_column`).
 pub const MATRIX_TITLE_KEY: &str = "title";
@@ -404,13 +403,12 @@ impl FieldType {
     pub(crate) fn codec(&self) -> Option<crate::document::Codec> {
         match self {
             FieldType::RichText { .. } => Some(crate::document::Codec::Richtext),
-            FieldType::PlainText { .. } => Some(crate::document::Codec::Plaintext),
+            FieldType::Text { .. } => Some(crate::document::Codec::Text),
             _ => None,
         }
     }
 
-    pub(crate) const NAMES: [&'static str; 12] = [
-        "string",
+    pub(crate) const NAMES: [&'static str; 11] = [
         "number",
         "integer",
         "boolean",
@@ -418,19 +416,18 @@ impl FieldType {
         "object",
         "date",
         "datetime",
+        "text",
         "richtext",
-        "plaintext",
         "enum",
         "matrix",
     ];
 
-    /// The `type:` token alone. An `enum`'s domain and a prose type's `inline`
-    /// ride sibling keys that the loader's parse folds in, so both payloads
-    /// rest at their default here.
+    /// The `type:` token alone. An `enum`'s domain and a text type's
+    /// `multiline` ride sibling keys that the loader's parse folds in, so both
+    /// payloads rest at their default here.
     #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s.trim() {
-            "string" => Some(FieldType::String),
             "number" => Some(FieldType::Number),
             "integer" => Some(FieldType::Integer),
             "boolean" => Some(FieldType::Boolean),
@@ -438,8 +435,8 @@ impl FieldType {
             "object" => Some(FieldType::Object),
             "date" => Some(FieldType::Date),
             "datetime" => Some(FieldType::DateTime),
-            "richtext" => Some(FieldType::RichText { inline: false }),
-            "plaintext" => Some(FieldType::PlainText { inline: false }),
+            "text" => Some(FieldType::Text { multiline: false }),
+            "richtext" => Some(FieldType::RichText { multiline: false }),
             "enum" => Some(FieldType::Enum { values: Vec::new() }),
             "matrix" => Some(FieldType::Matrix {
                 roster: IndexMap::new(),
@@ -451,7 +448,6 @@ impl FieldType {
 
     pub fn as_str(&self) -> &'static str {
         match self {
-            FieldType::String => "string",
             FieldType::Number => "number",
             FieldType::Integer => "integer",
             FieldType::Boolean => "boolean",
@@ -459,17 +455,17 @@ impl FieldType {
             FieldType::Object => "object",
             FieldType::Date => "date",
             FieldType::DateTime => "datetime",
+            FieldType::Text { .. } => "text",
             FieldType::RichText { .. } => "richtext",
-            FieldType::PlainText { .. } => "plaintext",
             FieldType::Enum { .. } => "enum",
             FieldType::Matrix { .. } => "matrix",
         }
     }
 
     /// Whether a value of this type rests in one cell: it carries no nested
-    /// schema, so nothing addresses below it. Prose is a leaf whatever its
-    /// `inline` — how tall a cell renders is the consumer's judgement, what it
-    /// contains is not.
+    /// schema, so nothing addresses below it. Text is a leaf whatever its
+    /// `multiline` — how tall a cell renders is the consumer's judgement, what
+    /// it contains is not.
     ///
     /// The type alone answers: an `enum` is a leaf here even on a field whose
     /// [`FieldSchema::variants`] address cells below it.
@@ -478,14 +474,13 @@ impl FieldType {
     /// or does not compile.
     pub fn is_leaf(&self) -> bool {
         match self {
-            FieldType::String
-            | FieldType::Number
+            FieldType::Number
             | FieldType::Integer
             | FieldType::Boolean
             | FieldType::Date
             | FieldType::DateTime
             | FieldType::RichText { .. }
-            | FieldType::PlainText { .. }
+            | FieldType::Text { .. }
             | FieldType::Enum { .. } => true,
             FieldType::Array | FieldType::Object | FieldType::Matrix { .. } => false,
         }
@@ -515,10 +510,25 @@ impl Serialize for FieldType {
 }
 
 fn unknown_type<E: serde::de::Error>(token: &str) -> E {
-    E::custom(format!(
-        "unknown field type: {token:?}; expected one of {}",
-        FieldType::NAMES.join(", ")
-    ))
+    let retired = match token.trim().trim_end_matches('?') {
+        "plaintext" => Some(
+            "type: plaintext is now type: text, one line by default; \
+             add multiline: true where the field takes more than one line",
+        ),
+        "string" => Some(
+            "type: string is retired: declare type: text (multiline: true where the \
+             field takes more than one line), and read it in the plate as a str \
+             with qm.str(..)",
+        ),
+        _ => None,
+    };
+    match retired {
+        Some(message) => E::custom(message),
+        None => E::custom(format!(
+            "unknown field type: {token:?}; expected one of {}",
+            FieldType::NAMES.join(", ")
+        )),
+    }
 }
 
 impl<'de> Deserialize<'de> for FieldType {
@@ -561,8 +571,8 @@ pub const VARIANT_DISCRIMINANT_KEY: &str = "value";
 
 /// Schema definition for a template field.
 ///
-/// The prose types' single-line constraint and an `enum`'s domain each have
-/// **one** carrier, the [`FieldType`] payload. The wire's sibling `inline:` and
+/// The text types' line shape and an `enum`'s domain each have **one**
+/// carrier, the [`FieldType`] payload. The wire's sibling `multiline:` and
 /// `values:` keys fold into it at parse and the hand-written `Serialize`
 /// re-emits them from there, so neither can live in two places that disagree.
 ///
@@ -618,7 +628,7 @@ pub struct FieldSchema {
     /// which stay the authored carrier, so it is not serialized.
     pub member: Option<Box<FieldSchema>>,
     /// An open `matrix`'s added item as the object schema it composes under,
-    /// `{title, …columns}`, its `title` a `string` cell. Derived beside
+    /// `{title, …columns}`, its `title` a one-line `text` cell. Derived beside
     /// [`member`](Self::member), and not serialized.
     pub added_item: Option<Box<FieldSchema>>,
     /// Canonical-content form of [`default`](Self::default) for a
@@ -648,7 +658,9 @@ struct FieldSchemaDef {
     pub properties: Option<serde_json::Map<String, serde_json::Value>>,
     // Element schema for arrays.
     pub items: Option<serde_json::Value>,
-    pub inline: Option<bool>,
+    /// Whether a `text` or `richtext` field admits more than one line. Lands
+    /// in the [`FieldType::Text`] / [`FieldType::RichText`] payload.
+    pub multiline: Option<bool>,
     /// An `array`'s element cap. Lands in [`FieldSchema::max`].
     pub max: Option<u32>,
     /// The roster of a `type: matrix` field, and the only spelling of one.
@@ -740,12 +752,13 @@ impl FieldSchema {
     /// returns, and only the pair produces a schema of the shape the rest of
     /// this module reads.
     pub(crate) fn from_quill_value(key: String, value: &QuillValue) -> Result<Self, String> {
+        Self::reject_retired_keys(value.as_json())?;
         let def: FieldSchemaDef = serde_json::from_value(value.clone().into_json())
             .map_err(|e| format!("Failed to parse field schema: {}", e))?;
-        // The sole sync point for `inline:` and `values:`: past here the type
+        // The sole sync point for `multiline:` and `values:`: past here the type
         // payload is each key's one carrier.
         let optional = def.r#type.optional;
-        let r#type = Self::resolve_prose_inline(def.r#type.r#type, def.inline)?;
+        let r#type = Self::resolve_text_multiline(def.r#type.r#type, def.multiline)?;
         let r#type = Self::resolve_enum_domain(r#type, def.values)?;
         let r#type = Self::resolve_matrix_roster(r#type, def.members, def.open)?;
         let max = Self::resolve_array_max(&r#type, def.max)?;
@@ -827,7 +840,11 @@ impl FieldSchema {
         let member = |title: bool| {
             let mut cells: IndexMap<String, Box<FieldSchema>> = IndexMap::new();
             if title {
-                let title = FieldSchema::new(MATRIX_TITLE_KEY.to_string(), FieldType::String, None);
+                let title = FieldSchema::new(
+                    MATRIX_TITLE_KEY.to_string(),
+                    FieldType::Text { multiline: false },
+                    None,
+                );
                 cells.insert(MATRIX_TITLE_KEY.to_string(), Box::new(title));
             }
             // A column spelling a reserved name is `quill::matrix_reserved_column`
@@ -979,24 +996,55 @@ impl FieldSchema {
         }
     }
 
-    /// Fold the sibling `inline:` key into a prose type's payload. Every other
-    /// type rejects `inline:`, here and nowhere else.
-    fn resolve_prose_inline(
+    /// Refuse the keys the text types' line shape retired, each naming its
+    /// replacement: `inline:` (one line is the default) and `ui.multiline`
+    /// (the shape is the field's `multiline:`).
+    fn reject_retired_keys(value: &serde_json::Value) -> Result<(), String> {
+        let Some(def) = value.as_object() else {
+            return Ok(());
+        };
+        if def.contains_key("inline") {
+            return Err("inline: is retired: text and richtext are one line by default, \
+                        so delete it, and declare multiline: true on a field that takes \
+                        more than one line"
+                .to_string());
+        }
+        let ui_multiline = def
+            .get("ui")
+            .and_then(|ui| ui.as_object())
+            .is_some_and(|ui| ui.contains_key("multiline"));
+        if ui_multiline {
+            return Err("ui.multiline is retired: declare multiline: true on the field \
+                        itself (type: text or type: richtext), or delete it on any other type"
+                .to_string());
+        }
+        Ok(())
+    }
+
+    /// Fold the sibling `multiline:` key into a text type's payload. Every
+    /// other type rejects `multiline:`, here and nowhere else.
+    ///
+    /// A `richtext` must spell `multiline:` either way: the key's absence once
+    /// meant a block field, so an unmigrated one would load as one paragraph
+    /// and refuse its stored documents.
+    fn resolve_text_multiline(
         r#type: FieldType,
-        inline: Option<bool>,
+        multiline: Option<bool>,
     ) -> Result<FieldType, String> {
-        match (r#type, inline) {
-            (FieldType::RichText { .. }, inline) => Ok(FieldType::RichText {
-                inline: inline.unwrap_or(false),
-            }),
-            (FieldType::PlainText { .. }, inline) => Ok(FieldType::PlainText {
-                inline: inline.unwrap_or(false),
-            }),
-            (_, Some(_)) => Err(
-                "inline is only valid on prose types (type: richtext or type: plaintext); \
-                 omit inline or declare a prose type"
+        match (r#type, multiline) {
+            (FieldType::RichText { .. }, Some(multiline)) => Ok(FieldType::RichText { multiline }),
+            (FieldType::RichText { .. }, None) => Err(
+                "type: richtext requires multiline: true (paragraphs, lists and other \
+                 blocks) or multiline: false (one paragraph), spelled out"
                     .to_string(),
             ),
+            (FieldType::Text { .. }, multiline) => Ok(FieldType::Text {
+                multiline: multiline.unwrap_or(false),
+            }),
+            (other, Some(_)) => Err(format!(
+                "multiline: is only valid on type: text or type: richtext, not on type: {}",
+                other.as_str()
+            )),
             (other, None) => Ok(other),
         }
     }
@@ -1073,11 +1121,13 @@ impl FieldSchema {
 impl Serialize for FieldSchema {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeMap;
-        let inline = matches!(
-            self.r#type,
-            FieldType::RichText { inline: true } | FieldType::PlainText { inline: true }
-        )
-        .then_some(true);
+        // A `richtext` spells its shape either way (`resolve_text_multiline`),
+        // so the emitted declaration loads back.
+        let multiline = match self.r#type {
+            FieldType::RichText { multiline } => Some(multiline),
+            FieldType::Text { multiline: true } => Some(true),
+            _ => None,
+        };
         let values = match &self.r#type {
             FieldType::Enum { values } => Some(values),
             _ => None,
@@ -1088,7 +1138,7 @@ impl Serialize for FieldSchema {
         };
         let open = self.r#type.is_open_matrix().then_some(true);
         let len = 1
-            + inline.is_some() as usize
+            + multiline.is_some() as usize
             + self.title.is_some() as usize
             + self.description.is_some() as usize
             + self.default.is_some() as usize
@@ -1101,8 +1151,8 @@ impl Serialize for FieldSchema {
             + self.items.is_some() as usize
             + self.max.is_some() as usize;
         // Key order is part of `QuillConfig::schema`'s ordering contract:
-        // `values` between `ui` and `variants`, `inline` trailing the block,
-        // both read off the type payload.
+        // `values` between `ui` and `variants`, `multiline` trailing the
+        // block, both read off the type payload.
         let mut map = serializer.serialize_map(Some(len))?;
         if self.optional {
             map.serialize_entry("type", &format!("{}?", self.r#type.as_str()))?;
@@ -1142,8 +1192,8 @@ impl Serialize for FieldSchema {
         if let Some(v) = &self.max {
             map.serialize_entry("max", v)?;
         }
-        if let Some(v) = inline {
-            map.serialize_entry("inline", &v)?;
+        if let Some(v) = multiline {
+            map.serialize_entry("multiline", &v)?;
         }
         map.end()
     }
