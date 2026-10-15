@@ -24,7 +24,7 @@ def test_metadata_carries_a_declared_license_and_homepage(tmp_path):
     (tmp_path / "Quill.yaml").write_text(
         "quill:\n"
         "  name: licensed\n"
-        "  version: '1.0'\n"
+        "  version: '1.0.0'\n"
         "  backend: typst\n"
         "  description: A licensed quill\n"
         "  license: Apache-2.0 OR MIT\n"
