@@ -1,4 +1,7 @@
 contact_links:
+  - name: Questions and ideas
+    url: https://github.com/borb-sh/quillmark/discussions
+    about: Ask a question, or float an idea that is not yet a proposal.
   - name: Documentation
     url: https://quillmark.dev/
     about: Guides for writing documents, building quills, and integrating Quillmark.

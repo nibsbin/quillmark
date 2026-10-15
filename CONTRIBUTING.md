@@ -2,7 +2,7 @@
 
 ## Questions, bugs, and ideas
 
-- A question, or an idea not yet a proposal: a blank issue.
+- A question, or an idea not yet a proposal: [Discussions](https://github.com/borb-sh/quillmark/discussions).
 - A bug: an issue from the bug form, with the smallest document that reproduces it.
 - A change larger than a fix: open an issue before the pull request. Before 1.0 most releases change the API, so agree on the shape before building it.
 
