@@ -25,18 +25,23 @@ main:
   fields:
     page_count:
       type: integer
-  sections:
     meta:
-      fields:
+      type: object
+      title: Meta
+      properties:
         status:
           type: enum
           values: [draft, final]
           default: draft
 card_kinds:
   indorsement:
+    ui:
+      groups:
+        closing: { title: Closing }
     fields:
       signature_block:
         type: string
+        ui: { group: closing }
 "#;
 
     #[test]

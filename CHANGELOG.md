@@ -5,6 +5,7 @@
 Upgrade path: [0.125 → 0.126](docs/migrations/0.125-to-0.126.md). Script
 links, runaway YAML expansion and bodies nested past 12 levels are refused, a
 quill's font collections load, an acroform quill's field spec is `form.yaml`,
+a card groups fields under a top-level `object` where it declared `sections:`,
 and a WASM trap rejects coded.
 
 ### PDF forms
@@ -15,6 +16,16 @@ and a WASM trap rejects coded.
   `acroform::legacy_form_json`. `acroform::invalid_form_json` is
   `acroform::invalid_form_spec`, located in `form.yaml`, and
   `acroform::missing_form_json` is `acroform::missing_form_spec`. (#2210)
+
+### Grouping
+
+- feat(core)!: **a card groups fields under a top-level `object`, and a card
+  declaring `sections:` fails `quill::invalid_card_schema`**, its hint naming
+  the `object`. `quill::empty_section`, `quill::invalid_section_id`,
+  `quill::mixed_sectioning` and `quill::duplicate_field` are retired;
+  `ui.group` / `ui.groups` load with `quill::deprecated_groups`, which hints
+  the `object` rewrite. The `usaf_memo` fixture declares its fields ungrouped.
+  (#2213)
 
 ### Formats that grow
 

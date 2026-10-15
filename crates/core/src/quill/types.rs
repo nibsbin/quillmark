@@ -28,8 +28,8 @@ pub enum FieldLayout {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct UiFieldSchema {
-    /// The id of the card section holding the field: where `sections:` placed
-    /// it, or a legacy `ui.group` reference.
+    /// The id of the card group holding the field, a key of the card's
+    /// `ui.groups`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -174,9 +174,8 @@ pub(crate) const UI_CARD_SCHEMA_KEYS: &[&str] = &["groups"];
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct UiCardSchema {
-    /// The card's sections in display order, each holding at least one field:
-    /// lowered from `sections:`, or a legacy registry a field's `ui.group`
-    /// references. Absent when the card declares no sections.
+    /// The card's groups in display order, each holding at least one field
+    /// whose `ui.group` names it. Absent when the card declares no groups.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub groups: Option<GroupRegistry>,
 }

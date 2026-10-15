@@ -141,7 +141,7 @@ fn build_card(card: &CardSchema) -> Card {
 }
 
 /// Append every field of a card as payload items, in declaration order: the
-/// loader settles sections into it (`config::settle_sections`).
+/// loader settles groups into it (`config::settle_groups`).
 fn append_fields(items: &mut CardItems, card: &CardSchema) {
     for field in card.fields.values() {
         append_field(items, field);
@@ -922,21 +922,19 @@ card_kinds:
     }
 
     #[test]
-    fn sections_print_in_display_order_without_a_banner() {
+    fn groups_print_in_display_order_without_a_banner() {
         let t = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
+  ui:
+    groups:
+      addressing: { title: Addressing }
+      letterhead: {}
   fields:
+    letterhead_title: { type: string, default: HQ, ui: { group: letterhead } }
+    memo_for: { type: array, items: { type: string }, ui: { group: addressing } }
     notes: { type: string }
-  sections:
-    addressing:
-      title: Addressing
-      fields:
-        memo_for: { type: array, items: { type: string } }
-        subject: { type: string }
-    letterhead:
-      fields:
-        letterhead_title: { type: string, default: HQ }
+    subject: { type: string, ui: { group: addressing } }
 "#)
         .blueprint();
         let after_quill = &t[t.find("$quill:").unwrap()..];
