@@ -32,6 +32,7 @@ trap rejects coded.
   `[]` led by its synthetic row commented out**, the shape `default: []`
   printed, where it printed the row live and an unedited blueprint rendered one
   blank row. The blank `default:` stays legal, and no diagnostic names it.
+  (#2233)
 
 ### Typst plates
 
