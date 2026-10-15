@@ -12,10 +12,6 @@ fn load(markdown: &str) -> Quill {
     ])
 }
 
-fn codes(diags: &[Diagnostic]) -> Vec<&str> {
-    diags.iter().filter_map(|d| d.code.as_deref()).collect()
-}
-
 #[test]
 fn the_example_is_handed_out_pinned_to_its_quill_version() {
     let quill = load("~~~\n$quill: memo\nsubject: Budget review\n~~~\n\nFilled-in prose.\n");

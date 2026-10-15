@@ -981,6 +981,8 @@ describe('quill.metadata', () => {
   version: "0.2.1"
   backend: typst
   description: Metadata test
+  license: Apache-2.0 OR MIT
+  homepage: https://example.com/quills
 
 typst:
   plate_file: plate.typ
@@ -1008,12 +1010,31 @@ card_kinds:
     // metadata mirrors the `quill:` section of Quill.yaml: identity only, and
     // its key order is the one BINDINGS.md pins across both surfaces.
     const meta = quill.metadata
-    expect(Object.keys(meta)).toEqual(['name', 'version', 'backend', 'author', 'description'])
+    expect(Object.keys(meta)).toEqual([
+      'name',
+      'version',
+      'backend',
+      'author',
+      'description',
+      'license',
+      'homepage',
+    ])
     expect(meta.name).toBe('meta_test_quill')
     expect(meta.version).toBe('0.2.1')
     expect(meta.backend).toBe('typst')
     expect(meta.author).toBe('Unknown')
     expect(meta.description).toBe('Metadata test')
+    expect(meta.license).toBe('Apache-2.0 OR MIT')
+    expect(meta.homepage).toBe('https://example.com/quills')
+
+    // An undeclared license or homepage is absent, not null.
+    expect(Object.keys(Quill.fromTree(makeQuill()).metadata)).toEqual([
+      'name',
+      'version',
+      'backend',
+      'author',
+      'description',
+    ])
 
     // Plain objects, not Maps: they survive a JSON round-trip whole.
     const schema = JSON.parse(JSON.stringify(quill.schema))

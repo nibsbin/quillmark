@@ -43,6 +43,8 @@ Every Quill.yaml must have a `quill` section with format metadata.
 | `description`    | string | yes      | Human-readable description of the quill package, for a gallery or a quill picker (non-empty). The blueprint never prints it: the root card's label is `main`'s own `title` and `description`. One line: a line break fails the load with `quill::description_multiline`. |
 | `version`        | string | yes      | Semantic version (`MAJOR.MINOR` or `MAJOR.MINOR.PATCH`) |
 | `author`         | string | no       | Creator of the Quill (defaults to `"Unknown"`) |
+| `license`        | string | no       | The quill's license, as an SPDX license expression |
+| `homepage`       | string | no       | Where the quill's source or docs live, as an absolute `http` or `https` URL |
 | `ui`             | object | no       | Document-level UI metadata |
 | `requires`       | string | no       | The oldest Quillmark this quill loads on, as `">=MAJOR.MINOR"` or `">=MAJOR.MINOR.PATCH"` |
 
@@ -51,6 +53,26 @@ than it refuses the quill with one `quill::engine_too_old` error, ahead of every
 other check, so keys it has not learned yet do not read as typos; an engine from
 before `requires` existed reports `requires` itself as `quill::unknown_key`. Any
 other spelling, whitespace included, is `quill::invalid_requires`.
+
+`license` is an SPDX license expression on one line, such as `MIT`,
+`Apache-2.0 OR MIT` or `GPL-3.0-or-later WITH Classpath-exception-2.0`. Each id
+is spelled as the [SPDX License List](https://spdx.org/licenses/) spells it, and
+the operators `AND`, `OR` and `WITH` are uppercase. A license off that list is
+`LicenseRef-<name>`. Anything else fails the load with `quill::invalid_license`:
+`/` for `OR`, `NOASSERTION`, a line break, or a value that is not a string. The
+hint names the fix where one is plain, such as `GPL-2.0-or-later` for
+`GPL-2.0+`. A deprecated id such as `GPL-3.0` loads, with a
+`quill::deprecated_license` warning. Spaces around the expression are dropped.
+
+`homepage` is an absolute `http` or `https` URL naming a host, such as
+`https://github.com/org/quills`. A user name or password before the host, a
+port past 65535, and an invisible formatting character such as a zero-width
+space each fail the load with `quill::invalid_homepage`, as anything else does.
+
+Neither key reaches the plate or the blueprint; both surface on
+`Quill.metadata` and `quillmark info`. They arrive in the same release as
+`requires`, so an older engine reports them as `quill::unknown_key` whether or
+not the quill sets `requires`.
 
 A backend's own settings live under its backend-named section, not in `quill:`.
 The Typst plate's path, for example, is `typst.plate_file`, which defaults to

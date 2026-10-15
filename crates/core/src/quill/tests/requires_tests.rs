@@ -6,10 +6,6 @@ fn load(requires: &str, extra: &str) -> Result<(QuillConfig, Vec<Diagnostic>), V
     ))
 }
 
-fn codes(diags: &[Diagnostic]) -> Vec<&str> {
-    diags.iter().filter_map(|d| d.code.as_deref()).collect()
-}
-
 #[test]
 fn a_floor_this_engine_meets_loads() {
     load("\">=0.1\"", "").expect("0.1 is below any released engine");

@@ -56,6 +56,7 @@ Loading a quill: `Quill.yaml`, its files, its seeds.
 - `quill::default_over_max`
 - `quill::default_type_mismatch`
 - `quill::deprecated_groups`
+- `quill::deprecated_license`
 - `quill::description_multiline`
 - `quill::duplicate_group`
 - `quill::empty_description`
@@ -72,6 +73,8 @@ Loading a quill: `Quill.yaml`, its files, its seeds.
 - `quill::invalid_card_schema`
 - `quill::invalid_field_name`
 - `quill::invalid_group_id`
+- `quill::invalid_homepage`
+- `quill::invalid_license`
 - `quill::invalid_matrix_member`
 - `quill::invalid_name`
 - `quill::invalid_requires`

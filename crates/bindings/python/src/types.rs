@@ -190,6 +190,12 @@ impl PyQuill {
         dict.set_item("backend", &config.backend)?;
         dict.set_item("author", &config.author)?;
         dict.set_item("description", &config.description)?;
+        if let Some(license) = &config.license {
+            dict.set_item("license", license)?;
+        }
+        if let Some(homepage) = &config.homepage {
+            dict.set_item("homepage", homepage)?;
+        }
 
         Ok(dict)
     }

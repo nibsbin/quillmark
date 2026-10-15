@@ -1119,7 +1119,7 @@ names an unanswered one. Null ≡ absent holds on every surface. There is no
 
 See [BLUEPRINT.md](BLUEPRINT.md) for how `default` renders into cells.
 
-Identity fields (`name`, `version`, `backend`, `author`, `description`) live on the parent metadata object (Wasm: `Quill.metadata` getter; Python: `Quill.metadata`). Both bindings also expose `backend_id`/`backendId` directly; Python additionally exposes `quill_ref`, a derived `name@version` string.
+Identity fields (`name`, `version`, `backend`, `author`, `description`, and `license` / `homepage` when declared) live on the parent metadata object (Wasm: `Quill.metadata` getter; Python: `Quill.metadata`). Both bindings also expose `backend_id`/`backendId` directly; Python additionally exposes `quill_ref`, a derived `name@version` string.
 
 ### Bindings surface
 

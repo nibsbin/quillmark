@@ -10,6 +10,7 @@ mod fill;
 mod formats;
 mod ignore;
 mod load;
+mod package_meta;
 mod schema;
 mod schema_yaml;
 mod seed;
