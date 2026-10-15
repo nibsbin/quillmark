@@ -475,7 +475,7 @@ fn the_blueprint_shows_the_vocabulary_in_the_annotation_and_ticks_nothing() {
     let bp = QuillConfig::from_yaml(&checklist).expect("loads").blueprint();
     assert!(
         bp.contains(concat!(
-            "# Matrix probe\n",
+            "$kind: main\n",
             "qualifications: {} # matrix<sq_cc_candidate | flight_cc | dodin_ops | cyber_200>\n",
         )),
         "{bp}"

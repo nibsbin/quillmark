@@ -40,7 +40,7 @@ Every Quill.yaml must have a `quill` section with format metadata.
 |------------------|--------|----------|-------------|
 | `name`           | string | yes      | Unique identifier for the Quill |
 | `backend`        | string | yes      | Rendering backend (e.g. `typst`) |
-| `description`    | string | yes      | Human-readable description of the quill itself (non-empty). Independent of `main.description`, which is the optional schema description authored under `main:`. One line: a line break fails the load with `quill::description_multiline`. |
+| `description`    | string | yes      | Human-readable description of the quill package, for a gallery or a quill picker (non-empty). The blueprint never prints it: the root card's label is `main`'s own `title` and `description`. One line: a line break fails the load with `quill::description_multiline`. |
 | `version`        | string | yes      | Semantic version (`MAJOR.MINOR` or `MAJOR.MINOR.PATCH`) |
 | `author`         | string | no       | Creator of the Quill (defaults to `"Unknown"`) |
 | `ui`             | object | no       | Document-level UI metadata |
@@ -106,7 +106,7 @@ The cutover rehearsal slipped a week while the data owners review the mapping.
 
 ## `main` Section
 
-The main document card holds **root-block field schemas** under `main.fields`. Optional `main.description` describes the schema itself (independent of `quill.description`, which describes the quill package), and optional `main.title` labels the card as a [card kind's `title`](#title_1) does. Optional `main.ui` sets container-level UI for that card. `quill.ui` is a fallback for `main.ui`, not a merge: any `main.ui` (even an empty `ui: {}`) wins wholesale, and `quill.ui` applies only when `main.ui` is absent.
+The main document card holds **root-block field schemas** under `main.fields`. Optional `main.description` describes the root card, printed on the blueprint's `$kind: main` line (`quill.description` describes the package and is never printed there), and optional `main.title` labels the card as a [card kind's `title`](#title_1) does. Optional `main.ui` sets container-level UI for that card. `quill.ui` is a fallback for `main.ui`, not a merge: any `main.ui` (even an empty `ui: {}`) wins wholesale, and `quill.ui` applies only when `main.ui` is absent.
 
 Field order under `main.fields` **is** display order in UIs: the declaration order of the keys is carried structurally through parsing and schema emission, so consumers walk the fields in key order. There is no `ui.order` knob: to reorder fields, reorder them in `Quill.yaml`. Related fields group under a top-level `object` (see [Grouping](#grouping)).
 
@@ -772,16 +772,34 @@ It labels the blank, never a member: `values:` carries no entry for it. Consumer
 
 ### `compact`
 
-When `true`, the UI renders this field in a compact style (smaller vertical footprint).
+Asks an editor to set a card-level field beside its neighbours in one row, where it would take a row of its own. Absent, the field's type decides:
+
+| Packs by default | Full row by default |
+|---|---|
+| `date`, `datetime`, `enum` (without `variants:`), `integer`, `number`, `boolean` | `string`, `plaintext`, `richtext`, `array`, `object`, `matrix` |
+
+A text field packs only under `compact: true`, since its type cannot say whether a value is a rank or a subject line; `compact: false` keeps a packing type on its own row.
 
 ```yaml
 main:
   fields:
-    tag:
+    rank:
       type: string
       ui:
         compact: true
+    due:
+      type: date
+      ui:
+        compact: false
 ```
+
+It is a request: an editor grants it only where a neighbour packs too, so a packing field alone between full-row fields still takes its row.
+
+- An `array`, an `object`, an `enum` with `variants:` and a block `plaintext` or `richtext` never pack, whatever the key says, since their height grows with the document.
+- A one-line (`inline`) `plaintext` or `richtext` packs like a `string`.
+- On a `matrix`, `compact: true` sets the roster's members side by side instead.
+- The properties of a card-level `object`, and of an `object` nested in it, follow the same rule, so a field moved into a group keeps its row.
+- The cells of an array's records, a variant, a matrix member and a typed table are laid out by their container and read no `compact`.
 
 ### `multiline`
 
