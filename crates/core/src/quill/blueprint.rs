@@ -167,16 +167,28 @@ fn append_field(items: &mut CardItems, field: &FieldSchema) {
     append_scalar(items, field);
 }
 
+/// The `default:` a cell prints. A blank one (`""`, `[]`, `{}`) renders exactly
+/// as no default does, so it prints as none; `0` and `false` are values.
+fn shown_default(field: &FieldSchema) -> Option<&JsonValue> {
+    let default = field.default.as_ref()?.as_json();
+    let blank = match default {
+        JsonValue::String(s) => s.is_empty(),
+        JsonValue::Array(rows) => rows.is_empty(),
+        JsonValue::Object(map) => map.is_empty(),
+        _ => false,
+    };
+    (!blank).then_some(default)
+}
+
 /// A matrix's blueprint cell: its `default:`, shippable as-is as an array's is,
 /// else the empty mapping, the sparse spelling of a vocabulary nobody has
 /// ticked. The roster rides the inline annotation, so expanding every member
 /// here would show a model twenty-seven subforms to delete and filler it must
 /// not ship.
 fn matrix_cell(field: &FieldSchema) -> JsonValue {
-    match field.default.as_ref() {
-        Some(default) => default.as_json().clone(),
-        None => JsonValue::Object(JsonMap::new()),
-    }
+    shown_default(field)
+        .cloned()
+        .unwrap_or_else(|| JsonValue::Object(JsonMap::new()))
 }
 
 /// The placeholder id an open matrix's `# e.g.` line keys its added item by,
@@ -228,8 +240,8 @@ fn matrix_eg(field: &FieldSchema) -> Option<String> {
 /// its inline annotation's `<type>[<format>]`, quoted where flow syntax would
 /// split it.
 fn column_hint(col: &FieldSchema) -> String {
-    if let Some(value) = col.default.as_ref() {
-        return saphyr_emit_flow(value.as_json());
+    if let Some(value) = shown_default(col) {
+        return saphyr_emit_flow(value);
     }
     if matches!(col.r#type, FieldType::Matrix { .. }) {
         return "{}".into();
@@ -299,10 +311,7 @@ fn cap_hint(field: &FieldSchema) -> Option<String> {
 
 /// A leaf's cell: its `default:`, else empty.
 fn scalar_value(field: &FieldSchema) -> JsonValue {
-    field
-        .default
-        .as_ref()
-        .map_or(JsonValue::Null, |d| d.as_json().clone())
+    shown_default(field).cloned().unwrap_or(JsonValue::Null)
 }
 
 /// Append a scalar / scalar-array / richtext field as a single payload field
@@ -321,7 +330,7 @@ fn append_scalar(items: &mut CardItems, field: &FieldSchema) {
 /// ([`label_line`] + a matrix's `# e.g.` + [`dormant_table`] + inline type annotation,
 /// addressed by `container_path`/slot). `prefix` is the container path of the
 /// mapping relative to the value it is rendered in (`[]` for a typed dict,
-/// `[Index(0)]` for a typed table's synthetic row).
+/// `[Key(<field>), Index(0)]` for a typed table's dormant row).
 ///
 /// A property's slot is where it lands in `map`, so a caller seating its own
 /// cell first (a variant's discriminant) shifts the rest by handing over a
@@ -397,30 +406,20 @@ fn property_cell(prop: &FieldSchema, path: &[PathSegment]) -> (JsonValue, Vec<Ne
 /// A container's value plus the nested comments its subtree carries, at `path`
 /// relative to the field value (`[]` at card level).
 ///
-/// An **array** `default:` is shippable as-is, so it renders verbatim. A
-/// **typed dictionary** holds no literal (`quill::default_on_namespace`), so it
-/// always expands per property.
+/// A **typed table** is a cell: its `default:` renders verbatim, else `[]`, led
+/// by its [`dormant_table`]. A live row would ship an empty element. A **typed
+/// dictionary** holds no literal (`quill::default_on_namespace`), so it always
+/// expands per property.
 fn container_cell(field: &FieldSchema, path: &[PathSegment]) -> (JsonValue, Vec<NestedComment>) {
     if let Some(props) = typed_dict_props(field) {
         let mut map = JsonMap::new();
         let nested = build_property_mapping(&mut map, props, path);
         return (JsonValue::Object(map), nested);
     }
-
-    let row_props = typed_table_props(field).unwrap_or_else(|| {
-        unreachable!("container_cell is reached only for a typed dictionary or a typed table")
-    });
-    match field.default.as_ref().map(|d| d.as_json()) {
-        Some(default) => (default.clone(), Vec::new()),
-        None if rowless(field, row_props) => (JsonValue::Array(Vec::new()), Vec::new()),
-        None => {
-            let mut row_path = path.to_vec();
-            row_path.push(PathSegment::Index(0));
-            let mut row = JsonMap::new();
-            let nested = build_property_mapping(&mut row, row_props, &row_path);
-            (JsonValue::Array(vec![JsonValue::Object(row)]), nested)
-        }
-    }
+    let rows = shown_default(field)
+        .cloned()
+        .unwrap_or_else(|| JsonValue::Array(Vec::new()));
+    (rows, Vec::new())
 }
 
 /// A row type declaring no properties is schema-invalid in practice, and a
@@ -429,18 +428,14 @@ fn rowless(field: &FieldSchema, row_props: &IndexMap<String, Box<FieldSchema>>) 
     row_props.is_empty() || field.max == Some(0)
 }
 
-/// The lines of a `default: []` table's field holding its synthetic row, to
-/// lead the live `[]` commented out: the config-file spelling of an
-/// alternative, taken by deleting the live line and uncommenting these.
+/// The lines of an empty table's field holding a synthetic row, to lead the
+/// live `[]` commented out: the config-file spelling of an alternative, taken
+/// by deleting the live line and uncommenting these.
 fn dormant_table(field: &FieldSchema) -> Vec<String> {
     let Some(row_props) = typed_table_props(field) else {
         return Vec::new();
     };
-    let empty_default = matches!(
-        field.default.as_ref().map(|d| d.as_json()),
-        Some(JsonValue::Array(rows)) if rows.is_empty()
-    );
-    if !empty_default || rowless(field, row_props) {
+    if shown_default(field).is_some() || rowless(field, row_props) {
         return Vec::new();
     }
     let row_path = [PathSegment::Key(field.name.clone()), PathSegment::Index(0)];
@@ -644,10 +639,11 @@ main:
         );
         assert!(
             t.contains(concat!(
-                "refs: # array<object>\n",
-                "  - org: # text<plain>\n",
-                "    lead: # object\n",
-                "      email: # text<plain>\n",
+                "# refs:\n",
+                "#   - org: # text<plain>\n",
+                "#     lead: # object\n",
+                "#       email: # text<plain>\n",
+                "refs: [] # array<object>\n",
             )),
             "{t}"
         );
@@ -682,19 +678,60 @@ main:
         assert!(t.contains("    city: Reston # text<plain>\n"), "{t}");
     }
 
+    /// A blank `default:` renders as no default does, so it prints as none, at
+    /// every depth and in a matrix's `# e.g.` line; `0` and `false` are values.
     #[test]
-    fn a_blank_default_emits_a_blank_cell() {
-        let t = cfg(r#"
+    fn a_blank_default_prints_as_no_default() {
+        let quill = |blank: &str| {
+            let d = |value: &str| match blank {
+                "" => String::new(),
+                _ => format!(", default: {value}"),
+            };
+            format!(
+                r#"
+quill: {{ name: x, version: 1.0.0, backend: typst, description: x }}
+main:
+  fields:
+    note: {{ type: text{s} }}
+    issued: {{ type: date{s} }}
+    stamp: {{ type: datetime{s} }}
+    level: {{ type: enum, values: [low, high]{s} }}
+    bio: {{ type: richtext, multiline: true{s} }}
+    line: {{ type: text{s} }}
+    tags: {{ type: array, items: {{ type: text }}{a} }}
+    quals:
+      type: matrix
+      open: true
+      members: {{ cc: CC }}
+      properties: {{ detail: {{ type: text{s} }} }}{m}
+    rows: {{ type: array, items: {{ type: object, properties: {{ org: {{ type: text{s} }} }} }}{a} }}
+    address:
+      type: object
+      properties:
+        street: {{ type: text{s} }}
+        refs: {{ type: array, items: {{ type: object, properties: {{ v: {{ type: text }} }} }}{a} }}
+"#,
+                s = d("\"\""),
+                a = d("[]"),
+                m = match blank {
+                    "" => String::new(),
+                    _ => "\n      default: {}".into(),
+                },
+            )
+        };
+        let blank = cfg(&quill("blank")).blueprint();
+        assert_eq!(blank, cfg(&quill("")).blueprint());
+        assert!(!blank.contains("\"\""), "{blank}");
+
+        let valued = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
   fields:
-    note: { type: text, default: "" }
+    count: { type: integer, default: 0 }
+    active: { type: boolean, default: false }
 "#)
         .blueprint();
-        assert!(t.contains("\nnote: \"\" # text<plain>\n"), "{t}");
-
-        let doc = Document::parse(&t).expect("the blank cell parses").document;
-        assert_eq!(doc, Document::parse(&doc.to_markdown()).expect("re-emit").document);
+        assert!(valued.contains("count: 0 # integer\nactive: false # boolean\n"), "{valued}");
     }
 
     #[test]
@@ -733,7 +770,6 @@ main:
     flag: { type: boolean, default: false }
     issued: { type: date }
     published: { type: datetime }
-    refs: { type: array, default: [], items: { type: text } }
 "#)
         .blueprint();
         assert!(t.contains("title: # text<plain>\n"));
@@ -741,7 +777,6 @@ main:
         assert!(t.contains("flag: false # boolean\n"));
         assert!(t.contains("issued: # date<YYYY-MM-DD | today>\n"));
         assert!(t.contains("published: # datetime<YYYY-MM-DDThh:mm[:ss]>\n"));
-        assert!(t.contains("refs: [] # array<text<plain>>\n"));
     }
 
     #[test]
@@ -761,19 +796,6 @@ main:
             "{t}"
         );
         assert!(t.contains("tags: # array<text<plain>>\n"), "{t}");
-    }
-
-    #[test]
-    fn endorsed_empty_markdown_renders_empty_string() {
-        let t = cfg(r#"
-quill: { name: x, version: 1.0.0, backend: typst, description: x }
-main:
-  fields:
-    bio: { type: richtext, multiline: true, default: "" }
-"#)
-        .blueprint();
-        assert!(t.contains("bio: \"\" # richtext(multiline)<markdown>\n"));
-        assert!(!t.contains("|-"));
     }
 
     #[test]
@@ -938,28 +960,6 @@ main:
     }
 
     #[test]
-    fn a_defaultless_typed_table_emits_a_synthetic_row() {
-        let t = cfg(r#"
-quill: { name: x, version: 1.0.0, backend: typst, description: x }
-main:
-  fields:
-    references:
-      type: array
-      description: Cited works.
-      items:
-        type: object
-        properties:
-          org: { type: text, description: Citing organization. }
-          year: { type: integer, default: 0, description: Publication year. }
-"#)
-        .blueprint();
-        assert!(t.contains(
-            "# Cited works.\nreferences: # array<object>\n  -\n    # Citing organization.\n    org: # text<plain>\n"
-        ));
-        assert!(t.contains("    # Publication year.\n    year: 0 # integer\n"));
-    }
-
-    #[test]
     fn typed_table_endorsed_renders_default_rows() {
         let t = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
@@ -1043,12 +1043,13 @@ main:
                 "#     #   - label: # text<plain>\n",
                 "#     tags: [] # array<object>\n",
                 "attendees: [] # array<object>\n",
-                "outer: # array<object>\n",
-                "  -\n",
-                "    # inner:\n",
-                "    #   - v: # text<plain>\n",
-                "    inner: [] # array<object>\n",
-                "    z: # text<plain>\n",
+                "# outer:\n",
+                "#   -\n",
+                "#     # inner:\n",
+                "#     #   - v: # text<plain>\n",
+                "#     inner: [] # array<object>\n",
+                "#     z: # text<plain>\n",
+                "outer: [] # array<object>\n",
             )),
             "{bp}"
         );
@@ -1057,6 +1058,7 @@ main:
 
         let swapped = swap_in(&bp, "attendees: [] # array<object>");
         let swapped = swap_in(&swapped, "    tags: [] # array<object>");
+        let swapped = swap_in(&swapped, "outer: [] # array<object>");
         let swapped = swap_in(&swapped, "    inner: [] # array<object>");
         let doc = Document::parse(&swapped).expect("swapped tables must parse").document;
         let payload = doc.main().payload();
@@ -1068,14 +1070,13 @@ main:
     }
 
     #[test]
-    fn a_capped_out_table_with_empty_default_has_no_dormant_row() {
+    fn a_capped_out_table_has_no_dormant_row() {
         let t = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
   fields:
     refs:
       type: array
-      default: []
       max: 0
       items:
         type: object
@@ -1084,28 +1085,6 @@ main:
 "#)
         .blueprint();
         assert!(t.contains("refs: [] # array<object>\n~~~"), "{t}");
-    }
-
-    #[test]
-    /// A wholly skippable dictionary is spelled as a type-empty `default:` on
-    /// each property.
-    fn typed_dict_with_type_empty_property_defaults_asks_for_nothing() {
-        let t = cfg(r#"
-quill: { name: x, version: 1.0.0, backend: typst, description: x }
-main:
-  fields:
-    address:
-      type: object
-      properties:
-        street: { type: text, default: "" }
-        zip:    { type: integer, default: 0 }
-"#)
-        .blueprint();
-        assert!(
-            t.contains("address: # object\n  street: \"\" # text<plain>\n  zip: 0 # integer\n"),
-            "wrong rendering: {t}"
-        );
-        assert!(!t.contains("{}"), "no bare empty object expected: {t}");
     }
 
     #[test]
@@ -1120,13 +1099,11 @@ main:
       properties:
         street: { type: text, description: Street line. }
         city:   { type: text }
-        zip:    { type: text, default: "" }
 "#)
         .blueprint();
         assert!(t.contains("# Mailing address.\naddress: # object\n"));
         assert!(t.contains("  # Street line.\n  street: # text<plain>\n"));
         assert!(t.contains("  city: # text<plain>\n"));
-        assert!(t.contains("  zip: \"\" # text<plain>\n"));
     }
 
     #[test]
@@ -1201,28 +1178,6 @@ card_kinds:
       label: { type: text }
       pages: { type: integer, default: 1 }
 "#;
-
-    #[test]
-    fn typed_table_synthetic_row_blueprint_round_trips() {
-        let bp = cfg(r#"
-quill: { name: x, version: 1.0.0, backend: typst, description: x }
-main:
-  fields:
-    refs:
-      type: array
-      items:
-        type: object
-        properties:
-          org: { type: text, description: Citing organization. }
-          year: { type: integer, default: 0, description: Publication year. }
-"#)
-        .blueprint();
-        let doc1 = Document::parse(&bp).expect("blueprint must parse").document;
-        let doc2 = Document::parse(&doc1.to_markdown())
-            .expect("re-emit must parse")
-            .document;
-        assert_eq!(doc1, doc2, "typed-table blueprint must round-trip");
-    }
 
     #[test]
     fn blueprint_round_trips_idempotently() {

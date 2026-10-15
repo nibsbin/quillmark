@@ -13,7 +13,7 @@ $kind: main # A letter on CMU letterhead.
 # The recipient's name and full mailing address.
 recipient: # array<text<plain>>
 # The department name for the letterhead.
-department: "" # text<plain>
+department: # text<plain>
 ~~~
 ```
 
@@ -23,9 +23,9 @@ A matrix with columns, or an open one, adds an `# e.g.` line spelling one presen
 
 A card's own title and description ride its `$kind` line's inline slot, `$kind: note # <title> — <description>`, so neither reads as the first field's.
 
-Two things in the own-line slot are not annotations. An `enum` declaring `variants:` shows the cells of the world its discriminant names live, and every other world's cells commented out under a `# when <MEMBER>:` header — the same cells, with a `# ` in front, at the column they would sit at. Choose that member and delete the `# `. A typed table whose `default:` is `[]` is led by the whole field commented out, holding a row. Delete the live line and uncomment the block to add a row.
+Two things in the own-line slot are not annotations. An `enum` declaring `variants:` shows the cells of the world its discriminant names live, and every other world's cells commented out under a `# when <MEMBER>:` header — the same cells, with a `# ` in front, at the column they would sit at. Choose that member and delete the `# `. A typed table without rows of its own is the live `[]`, led by the whole field commented out, holding a row. Delete the live line and uncomment the block to add a row.
 
-The reader's one rule: an empty cell (`title: # text<plain>`) awaits a value; a concrete value is the field's `default:`, shippable as-is. An empty cell renders at the field's blank, and nothing warns about it. Every body is empty too, and a kind taking no body closes its payload with `# no body`.
+The reader's one rule: an empty cell (`title: # text<plain>`) awaits a value; a concrete value is the field's `default:`, shippable as-is. A blank `default:` (`""`, `[]`, `{}`) prints as an empty cell, since it renders as one. An empty cell renders at the field's blank, and nothing warns about it. Every body is empty too, and a kind taking no body closes its payload with `# no body`.
 
 ## Seeding: the starter document
 

@@ -9,8 +9,9 @@ a Typst quill's plate is `plate.typ` by name and an unknown `typst:` key fails
 the load, a card groups fields under a top-level `object` where it declared
 `sections:`, a quill's `version` is `MAJOR.MINOR.PATCH` and a `$quill`
 selector `@MAJOR.MINOR` or exact, a document the quill creates pins its
-`MAJOR.MINOR`, a WASM trap rejects coded, and a text field is `text` or
-`richtext`, one line unless it declares `multiline: true`.
+`MAJOR.MINOR`, a blueprint prints a blank `default:` as no default, a WASM
+trap rejects coded, and a text field is `text` or `richtext`, one line unless
+it declares `multiline: true`.
 
 ### Field types
 
@@ -47,6 +48,14 @@ selector `@MAJOR.MINOR` or exact, a document the quill creates pins its
 - feat(core)!: **a blueprint's `$kind: main` line carries `main.title` and
   `main.description` alone**, where it fell back to `quill.description`, which
   describes the package and never reaches the blueprint. (#2222)
+- feat(core)!: **a blank `default:` (`""`, `[]`, `{}`) prints in the blueprint
+  as no default does**, an empty cell where it printed `""`, since it renders
+  as one; `0` and `false` print. **A typed table without a `default:` prints
+  `[]` led by its synthetic row commented out**, the shape `default: []`
+  printed, where it printed the row live and an unedited blueprint rendered one
+  blank row. The blank `default:` stays legal, and no diagnostic names it.
+  (#2233)
+
 ### Typst plates
 
 - feat(typst)!: **a Typst quill's plate is `plate.typ` at its root, found by

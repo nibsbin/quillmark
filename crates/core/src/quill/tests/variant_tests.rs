@@ -521,7 +521,7 @@ fn the_blueprint_comments_out_every_world_it_does_not_show() {
             "  value: \"\"\n",
             "  # when CUI:\n",
             "  # controlled_by: # text<plain>\n",
-            "  # category: \"\" # text<plain>\n",
+            "  # category: # text<plain>\n",
             "  # when SECRET:\n",
             "  # declassify_on: # text<plain>\n",
         )),
@@ -594,7 +594,7 @@ main:
             description: Controlling office.
             properties:
               office: { type: text, description: Office symbol. }
-              phone: { type: text, default: "" }
+              phone: { type: text }
           citations:
             type: array
             items:
@@ -609,9 +609,10 @@ main:
             "  controlled_by: # object\n",
             "    # Office symbol.\n",
             "    office: # text<plain>\n",
-            "    phone: \"\" # text<plain>\n",
-            "  citations: # array<object>\n",
-            "    - src: # text<plain>\n",
+            "    phone: # text<plain>\n",
+            "  # citations:\n",
+            "  #   - src: # text<plain>\n",
+            "  citations: [] # array<object>\n",
         )),
         "{bp}"
     );
@@ -805,7 +806,7 @@ fn the_blueprint_seats_a_nested_worlds_cells_in_the_dictionary() {
             "    value: \"\"\n",
             "    # when CUI:\n",
             "    # controlled_by: # text<plain>\n",
-            "    # category: \"\" # text<plain>\n",
+            "    # category: # text<plain>\n",
         )),
         "{bp}"
     );
