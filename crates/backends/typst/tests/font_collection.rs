@@ -6,7 +6,7 @@ use quillmark_typst::TypstBackend;
 
 mod common;
 
-const YAML: &str = "quill:\n  name: t\n  version: \"1.0\"\n  backend: typst\n  \
+const YAML: &str = "quill:\n  name: t\n  version: \"1.0.0\"\n  backend: typst\n  \
                     description: d\n\ntypst:\n  plate_file: plate.typ\n";
 
 /// A collection of `fonts`: a `ttcf` header, then each font, 4-byte aligned,

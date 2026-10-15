@@ -14,7 +14,7 @@ use std::path::PathBuf;
 
 /// The minimal `Quill.yaml` a load needs, with `name` spelled in.
 fn manifest(name: &str) -> Vec<u8> {
-    format!("quill:\n  name: {name}\n  version: \"1.0\"\n  backend: typst\n  description: {name}\n")
+    format!("quill:\n  name: {name}\n  version: \"1.0.0\"\n  backend: typst\n  description: {name}\n")
         .into_bytes()
 }
 
@@ -48,7 +48,7 @@ fn quill_from(entries: &[(&str, &[u8])]) -> Quill {
 /// `sections` under the four required `quill:` keys. Only a test *about* the
 /// header spells its own.
 fn with_header(sections: &str) -> String {
-    format!("quill:\n  name: q\n  version: \"1.0\"\n  backend: typst\n  description: q\n{sections}")
+    format!("quill:\n  name: q\n  version: \"1.0.0\"\n  backend: typst\n  description: q\n{sections}")
 }
 
 /// The codes `diags` carry, in order.
@@ -105,7 +105,7 @@ fn test_find_files_pattern() {
 fn a_config_warning_rides_the_loaded_quill() {
     let quill = quill_from(&[(
         "Quill.yaml",
-        br#"quill: { name: warn, version: "1.0", backend: typst, description: w }
+        br#"quill: { name: warn, version: "1.0.0", backend: typst, description: w }
 main:
   fields:
     title: { type: string }
@@ -196,7 +196,7 @@ fn test_quill_config_from_yaml() {
     let yaml_content = r#"
 quill:
   name: test_config
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Test configuration parsing
   author: Test Author
@@ -222,7 +222,7 @@ main:
     assert_eq!(config.description, "Test configuration parsing");
     assert_eq!(config.main.description, None);
 
-    assert_eq!(config.version, "1.0");
+    assert_eq!(config.version, "1.0.0");
     assert_eq!(config.author, "Test Author");
 
     assert_eq!(
@@ -242,19 +242,19 @@ main:
     assert_eq!(title_field.r#type, FieldType::String);
 }
 
+/// `MAJOR.MINOR` is a selector's spelling, never a quill's version, and an
+/// unquoted `1.10` is a YAML number.
 #[test]
-fn an_unquoted_numeric_version_reads_as_written() {
+fn a_quill_version_is_major_minor_patch() {
     let load = |version: &str| {
         QuillConfig::from_yaml_with_warnings(&format!(
-            "quill:\n  name: numeric_version\n  version: {version}\n  backend: typst\n  description: Numeric version\n"
+            "quill:\n  name: q\n  version: {version}\n  backend: typst\n  description: q\n"
         ))
     };
-    for version in ["1.0", "1.10"] {
-        assert_eq!(load(version).expect(version).0.version, version);
+    for version in ["1.10.0", "\"1.10.0\""] {
+        assert_eq!(load(version).expect(version).0.version, "1.10.0");
     }
-    // An empty version would skip the document's pin; a tagged number has
-    // already lost its source text.
-    for version in ["1.1e1", "\"\"", "!!float 1.10"] {
+    for version in ["\"1.2\"", "1.10", "\"1.2.x\"", "\"1.2.3.4\"", "\"\"", "!!float 1.10", "1.1e1"] {
         let errors = load(version).expect_err(version);
         assert!(
             errors.iter().any(|d| d.code.as_deref() == Some("quill::invalid_version")),
@@ -272,11 +272,11 @@ fn a_defective_quill_header_names_what_it_is_missing() {
         ("quill:\n  backend: typst\n  description: d\n", "quill::missing_name"),
         ("quill:\n  name: test\n  description: d\n", "quill::missing_backend"),
         (
-            "quill:\n  name: test\n  version: \"1.0\"\n  backend: typst\n",
+            "quill:\n  name: test\n  version: \"1.0.0\"\n  backend: typst\n",
             "quill::missing_description",
         ),
         (
-            "quill:\n  name: test\n  version: \"1.0\"\n  backend: typst\n  description: \"   \"\n",
+            "quill:\n  name: test\n  version: \"1.0.0\"\n  backend: typst\n  description: \"   \"\n",
             "quill::empty_description",
         ),
     ] {
@@ -290,7 +290,7 @@ fn a_defective_quill_header_names_what_it_is_missing() {
 fn test_quill_config_rejects_non_snake_case_identifiers() {
     for (yaml, code) in [
         (
-            "quill:\n  name: BadQuill\n  version: \"1.0\"\n  backend: typst\n  description: q\n".to_string(),
+            "quill:\n  name: BadQuill\n  version: \"1.0.0\"\n  backend: typst\n  description: q\n".to_string(),
             "quill::invalid_name",
         ),
         (
@@ -349,7 +349,7 @@ fn test_invalid_quill_name_hint_suggests_a_valid_name() {
         ("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", None),
     ] {
         let yaml = format!(
-            "quill:\n  name: \"{name}\"\n  version: \"1.0\"\n  backend: typst\n  description: q\n"
+            "quill:\n  name: \"{name}\"\n  version: \"1.0.0\"\n  backend: typst\n  description: q\n"
         );
         let errs = QuillConfig::from_yaml_with_warnings(&yaml).unwrap_err();
         let diag = errs
@@ -425,7 +425,7 @@ fn a_card_declaring_more_fields_than_a_block_carries_is_refused_at_load() {
             .map(|i| format!("      f{i}: {{ type: string }}\n"))
             .collect();
         format!(
-            "quill: {{ name: wide, version: \"1.0\", backend: typst, description: x }}\n\
+            "quill: {{ name: wide, version: \"1.0.0\", backend: typst, description: x }}\n\
              card_kinds:\n  line_item:\n    fields:\n{fields}"
         )
     };
@@ -535,7 +535,7 @@ fn a_malformed_container_declaration_is_refused_by_code() {
 #[test]
 fn group_registry_map_form_carries_title_override() {
     let yaml = r#"
-quill: { name: x, version: "1.0", backend: typst, description: x }
+quill: { name: x, version: "1.0.0", backend: typst, description: x }
 main:
   ui:
     groups:
@@ -648,7 +648,7 @@ fn a_sections_block_is_refused_toward_top_level_objects() {
 #[test]
 fn group_registry_round_trips_through_serde_and_schema() {
     let yaml = r#"
-quill: { name: x, version: "1.0", backend: typst, description: x }
+quill: { name: x, version: "1.0.0", backend: typst, description: x }
 main:
   ui:
     groups: [addressing, letterhead]
@@ -904,7 +904,7 @@ fn a_backend_section_holds_only_the_keys_its_backend_reads() {
     assert!(err[0].hint.as_deref().unwrap_or("").contains("packages/"), "{:?}", err[0].hint);
     assert!(err[1].hint.as_deref().unwrap_or("").contains("plate_file"), "{:?}", err[1].hint);
 
-    let acroform = "quill:\n  name: q\n  version: \"1.0\"\n  backend: acroform\n  description: q\n\
+    let acroform = "quill:\n  name: q\n  version: \"1.0.0\"\n  backend: acroform\n  description: q\n\
                     acroform:\n  plate_file: plate.typ\n";
     let err = QuillConfig::from_yaml_with_warnings(acroform).unwrap_err();
     let codes: Vec<_> = err.iter().map(|d| d.code.as_deref()).collect();
@@ -957,7 +957,7 @@ fn test_multiple_errors_collected_in_one_pass() {
     let yaml_content = r#"
 quill:
   name: BadName
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Multi-error test
   platefile: foo.typ

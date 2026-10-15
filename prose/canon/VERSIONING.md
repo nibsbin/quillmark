@@ -5,28 +5,43 @@
 
 ## TL;DR
 
-Quills declare a semantic `version` in `Quill.yaml`, and documents carry an optional `$quill: name@selector` reference. The selector is parsed and stored on `QuillReference`, but never **resolved**: the engine loads exactly one Quill from a path or in-memory file tree, never picking among versions. It is **enforced**: at render time the reference's name and selector are checked against the loaded Quill, and either a *name* mismatch or a *version* outside the selector is a hard error. The document is valid; it was paired with the wrong Quill, which is a footgun.
+Quills declare a `MAJOR.MINOR.PATCH` `version` in `Quill.yaml`, bumped by what
+the change costs a stored document to migrate, and documents carry an optional
+`$quill: name@selector` reference. The selector is parsed into `QuillReference`
+but never **resolved**: the engine loads exactly one Quill, from a path or an
+in-memory file tree, and never picks among versions. It is **enforced**: at
+render a *name* mismatch or a *version* outside the selector is a hard error,
+since a valid document paired with the wrong Quill is a footgun.
 
 ## Version Format
 
-Semantic versioning: `MAJOR.MINOR.PATCH`, with two-segment `MAJOR.MINOR` also
-valid. `version` is required in the `quill:` section, and an invalid or missing
-value fails at load. Segments are plain digits: a `+`-signed one is refused, as
-is a `$quill` reference whose `@` carries no selector. The value is its source
-text, quoted or not: an unquoted `1.10` is version `1.10`, not the YAML number
-`1.1`.
+`version` is required in the `quill:` section and is `MAJOR.MINOR.PATCH`. Any
+other value, a two-segment `1.2` included, fails at load, and an unquoted `1.10`
+is a YAML number, never a version. Segments are plain digits: a `+`-signed one
+is refused, as is a `$quill` reference whose `@` carries no selector.
 
-| Increment | When |
-|-----------|------|
-| **MAJOR** | Breaking changes: layout changes, removed fields, incompatible types, an enum member removed or renamed |
-| **MINOR** | New optional fields, enhancements (backward-compatible), a new enum member |
-| **PATCH** | Bug fixes, corrections (backward-compatible) |
+## Bump Classes
+
+A bump is ranked by what it costs to migrate a document stored against the
+previous version:
+
+| Bump | A stored document | Changes |
+|------|-------------------|---------|
+| **PATCH** | needs no change | Fixes, presentation changes, a new optional field, a new enum member, a `values:` reorder |
+| **MINOR** | migrates mechanically | A field renamed, a type changed with a lossless mapping (`string` → `richtext`), an enum member renamed |
+| **MAJOR** | migrates with loss of data or function | A field or enum member removed with no counterpart, a field's meaning changed |
+
+This is not standard semver. The compatibility boundary is `MAJOR.MINOR`, the
+same below and above `1.0.0`: every patch in one `MAJOR.MINOR` series reads the
+documents an earlier patch stored unchanged, and a MINOR bump needs each one
+rewritten, mechanically. The quill's seeded, empty and example documents and
+its blueprint pin `name@MAJOR.MINOR` (`seed::main_reference`).
 
 **A `values:` reorder is render-safe.** A field's blank is `""`, not `values[0]`,
 so reordering changes no document's rendered output. It still changes picker
 order, the blueprint's `enum` annotation text, and acroform dropdown order, so it
-is a presentation change rather than a no-op. Removing or renaming a member is
-breaking: a stored document carrying it stops validating.
+is a presentation change rather than a no-op. Renaming or removing a member is
+not: a stored document carrying it stops validating.
 
 ## Document Syntax
 
@@ -35,18 +50,29 @@ The version selector rides on the root block's `$quill` system-metadata line (se
 ```
 $quill: my_format@2.1.0    # exact
 $quill: my_format@2.1      # 2.1.x
-$quill: my_format@2        # 2.x.x
 $quill: my_format          # any version
 ```
 
-A selector is `MAJOR`, `MAJOR.MINOR` or `MAJOR.MINOR.PATCH`, each segment plain digits. A reference with no selector omits the `@`; there is no `@latest`.
+A selector is `MAJOR.MINOR` or `MAJOR.MINOR.PATCH`, each segment plain digits.
+`my_format@2` fails `parse::invalid_quill_reference`: a major spans MINOR bumps,
+so it names no compatible series. A reference with no selector omits the `@`;
+there is no `@latest`.
 
-A name may carry a collection: `$quill: borb.my_format@2`. The collection is the host's, naming where to resolve the quill; a bare name leaves that choice to the host. The engine reads only the part after the `.`, so a loaded `my_format` answers a reference under any collection. A quill's own `Quill.yaml` name and its example never carry one: which collection a quill sits in is the collection's to say. A widened grammar is no storage event: a stored row naming a collection reads under the same tag, and a reader older than the grammar refuses it as an invalid quill reference.
+A name may carry a collection: `$quill: borb.my_format@2.1`. The collection is
+the host's, naming where to resolve the quill; a bare name leaves that choice to
+the host. The engine reads only the part after the `.`, so a loaded `my_format`
+answers a reference under any collection. A quill's own `Quill.yaml` name and
+its example never carry one: which collection a quill sits in is the
+collection's to say. A widened grammar is no storage event: a stored row naming
+a collection reads under the same tag, and a reader older than the grammar
+refuses it as an invalid quill reference. A narrowed grammar is a storage event
+the tag does not record: a stored row whose `$quill` it refuses, such as the
+lone major `my_format@2`, fails to load under the same tag.
 
 No registry consumes the selector: there is no collection of installed versions to pick from, so it is a pin, not a resolver. *Resolution* (matching `name@selector` against a set of installed versions) belongs to a higher layer; the engine loads one Quill and *enforces* the reference against it. Detection needs no registry (the engine has the loaded Quill's name and version and the document's reference) so `render` and `dry_run` both reject a mismatch with a single-diagnostic [`RenderError`](ERROR.md). They check in order:
 
 - **`quill::name_mismatch`**: the reference *name*, collection aside, differs from the loaded Quill. The name is the prerequisite (a selector belongs to a *named* Quill), so a name mismatch short-circuits and the version is left unevaluated.
-- **`quill::version_mismatch`**: names agree but the Quill's `version` falls outside the selector (e.g. `name@2` against `3.0.0`). `VersionSelector::matches` decides: `Exact` the identical version, `Minor` any patch in the `MAJOR.MINOR` series, `Major` any version in the `MAJOR` series, `Any` (no selector) anything.
+- **`quill::version_mismatch`**: names agree but the Quill's `version` falls outside the selector (e.g. `name@2.1` against `2.2.0`). `VersionSelector::matches` decides: `Exact` the identical version, `Minor` any patch in the `MAJOR.MINOR` series, `Any` (no selector) anything.
 
 A quill mismatch is distinct from a validation failure (a malformed document): here the document is well-formed but paired with the wrong Quill, so the remedy is to render with the referenced Quill or amend `$quill`. A bare name matches any version, so correctly-targeted documents never trip either check.
 

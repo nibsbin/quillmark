@@ -67,7 +67,7 @@ describe('@quillmark/wasm/core surface', () => {
     const empty = quill.emptyDocument()
 
     expect(empty).toBeInstanceOf(Document)
-    expect(empty.equals(new Document('core_test@1.0.0'))).toBe(true)
+    expect(empty.equals(new Document('core_test@1.0'))).toBe(true)
     expect(empty.cards.length).toBe(0)
   })
 
@@ -81,12 +81,12 @@ describe('@quillmark/wasm/core surface', () => {
     }
 
     const doc = withExample('~~~\n$quill: core_test\ntitle: A made-up title\n~~~\n').exampleDocument()
-    expect(doc.quillRef).toBe('core_test@1.0.0')
+    expect(doc.quillRef).toBe('core_test@1.0')
     expect(field(doc.main, 'title')).toBe('A made-up title')
     expect(doc.warnings).toEqual([])
 
     try {
-      withExample('~~~\n$quill: core_test@1\n~~~\n').exampleDocument()
+      withExample('~~~\n$quill: core_test@1.0\n~~~\n').exampleDocument()
       expect.unreachable('a pinned example throws')
     } catch (err) {
       expect(err.diagnostics[0].code).toBe('quill::example_reference')

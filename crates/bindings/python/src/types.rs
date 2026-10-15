@@ -292,7 +292,7 @@ impl PyQuill {
     /// The quill's example document, `None` when the quill has no
     /// `example.md` at its root: a filled-in page whose values are made up to show the
     /// quill in use, never kept. It comes back pinned to this quill's
-    /// `name@version` and conformed as `parse` conforms, its parse and
+    /// `name@MAJOR.MINOR` and conformed as `parse` conforms, its parse and
     /// `conform::*` warnings on `doc.warnings`. Raises `QuillmarkError` when
     /// the file does not parse or its `$quill` is not this quill's bare name.
     fn example_document(&self) -> PyResult<Option<PyDocument>> {

@@ -15,7 +15,7 @@ from conftest import field
 
 QUILL_YAML_CONTENT = """quill:
   name: py_validate_smoke
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Python validate smoke test
 
@@ -128,7 +128,7 @@ def test_seed_overlay_round_trip(tmp_path):
 
 BOUND_QUILL_YAML = """quill:
   name: py_bound_smoke
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Python bound-door smoke test
 
@@ -219,5 +219,5 @@ def test_example_document_is_pinned_none_without_one_and_raises_coded(tmp_path):
     assert doc.warnings == []
 
     with pytest.raises(QuillmarkError) as excinfo:
-        with_example("~~~\n$quill: py_validate_smoke@1\n~~~\n", "pinned").example_document()
+        with_example("~~~\n$quill: py_validate_smoke@1.0\n~~~\n", "pinned").example_document()
     assert excinfo.value.diagnostics[0].code == "quill::example_reference"

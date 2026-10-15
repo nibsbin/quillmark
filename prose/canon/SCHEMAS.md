@@ -391,7 +391,7 @@ main:
 
 - **The group is data.** The document stores `letterhead: { letterhead_title: … }`
   and a plate reads `data.letterhead.letterhead_title`, so moving a field
-  between groups is an address change, the same MAJOR a rename is.
+  between groups is an address change, the same MINOR bump a rename is.
 - **`sections:` is not a card key** (`quill::invalid_card_schema`, its hint
   naming the top-level `object`).
 
@@ -1135,8 +1135,9 @@ Identity fields (`name`, `version`, `backend`, `author`, `description`, and `lic
 The schema response omits discriminator fields. Consumers that need to
 construct a document derive the discriminators from elsewhere:
 
-- The root block's `$quill` value is `<name>@<version>`, built from
-  `quill.metadata.name` and `quill.metadata.version`.
+- The root block's `$quill` value is `<name>@<MAJOR.MINOR>`, built from
+  `quill.metadata.name` and the first two segments of `quill.metadata.version`,
+  as a document the quill creates carries it.
 - Each composable card's `$kind` is the key under which it is declared
   in `card_kinds` (e.g. a card listed under `card_kinds.indorsement` is
   written as `$kind: indorsement`).

@@ -45,15 +45,36 @@ fn the_reference_is_checked_against_the_loaded_quill() {
     let quill = quillmark::quill_from_path(make_quill(&temp_dir, "2.1.0")).expect("from_path failed");
     for (quill_ref, expected) in [
         ("test_quill@2.1.0", None),
-        ("test_quill@2", None),
-        ("test_quill@3", Some("quill::version_mismatch")),
-        ("borb.test_quill@2", None),
-        ("borb.other_quill@2", Some("quill::name_mismatch")),
+        ("test_quill@2.1", None),
+        ("test_quill@2.1.1", Some("quill::version_mismatch")),
+        ("test_quill@2.2", Some("quill::version_mismatch")),
+        ("borb.test_quill@2.1", None),
+        ("borb.other_quill@2.1", Some("quill::name_mismatch")),
         // The version is left unevaluated: a selector against another quill is moot.
-        ("other_quill@3", Some("quill::name_mismatch")),
+        ("other_quill@3.0", Some("quill::name_mismatch")),
     ] {
         let got = quill.dry_run(&doc(quill_ref));
         assert_eq!(got.as_ref().err().and_then(code), expected, "{quill_ref}: {got:?}");
+    }
+}
+
+/// A document the quill creates pins its `MAJOR.MINOR`: the next patch reads
+/// it, and the next minor refuses it.
+#[test]
+fn a_created_document_pins_its_quills_series() {
+    let quill_at = |version: &str| {
+        let temp_dir = TempDir::new().unwrap();
+        quillmark::quill_from_path(make_quill(&temp_dir, version)).expect("from_path failed")
+    };
+    let created = quill_at("1.2.0");
+    let blueprint = Document::parse(&created.config().blueprint())
+        .expect("parse failed")
+        .document;
+    for doc in [created.seed_document(), blueprint] {
+        let patched = quill_at("1.2.1").dry_run(&doc);
+        assert!(patched.is_ok(), "{patched:?}");
+        let next_minor = quill_at("1.3.0").dry_run(&doc);
+        assert_eq!(next_minor.as_ref().err().and_then(code), Some("quill::version_mismatch"));
     }
 }
 
@@ -67,22 +88,22 @@ fn update_rechecks_the_reference_against_the_sessions_quill() {
 
     let engine = Quillmark::new();
     let err = engine
-        .render(&quill, &doc("other_quill@3"), common::test_date(), &RenderOptions::default())
+        .render(&quill, &doc("other_quill@3.0"), common::test_date(), &RenderOptions::default())
         .expect_err("render must refuse another quill's document");
     assert_eq!(code(&err), Some("quill::name_mismatch"));
 
     let mut session = engine
-        .open(&quill, &doc("test_quill@3"), common::test_date())
+        .open(&quill, &doc("test_quill@3.0"), common::test_date())
         .expect("open against the matching quill");
     let pages = session.page_count();
 
     let err = session
-        .update(&doc("other_quill@3"))
+        .update(&doc("other_quill@3.0"))
         .expect_err("update must refuse another quill's document");
     assert_eq!(code(&err), Some("quill::name_mismatch"));
 
     let err = session
-        .update(&doc("test_quill@2"))
+        .update(&doc("test_quill@3.1"))
         .expect_err("update must refuse an out-of-selector version");
     assert_eq!(code(&err), Some("quill::version_mismatch"));
 
@@ -93,6 +114,6 @@ fn update_rechecks_the_reference_against_the_sessions_quill() {
         .render(&RenderOptions::default().with_output_format(OutputFormat::Pdf))
         .expect("reads still serve the last-good compile");
     session
-        .update(&doc("test_quill@3"))
+        .update(&doc("test_quill@3.0"))
         .expect("the matching document still applies");
 }

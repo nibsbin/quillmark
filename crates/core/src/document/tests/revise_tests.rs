@@ -156,9 +156,9 @@ fn everything_else_lands_as_the_markdown_spells_it() {
     doc.main_mut()
         .store_field("qty", QuillValue::from_json(serde_json::json!(3)))
         .unwrap();
-    let incoming = "~~~\n$quill: other@1\n# kept comment\nsubject: plain now\nqty: 4\n~~~\n";
+    let incoming = "~~~\n$quill: other@1.2\n# kept comment\nsubject: plain now\nqty: 4\n~~~\n";
     let _ = doc.revise(incoming).unwrap();
-    assert_eq!(doc.quill_reference().to_string(), "other@1");
+    assert_eq!(doc.quill_reference().to_string(), "other@1.2");
     assert_eq!(doc.main().payload().get("qty").unwrap().as_json(), &serde_json::json!(4));
     assert!(doc.cards().is_empty());
     let mut expected = parse(incoming);

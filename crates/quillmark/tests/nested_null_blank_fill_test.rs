@@ -28,7 +28,7 @@ fn nested_nulls_blank_fill_in_the_plate_data() {
         &temp_dir,
         r#"quill:
   name: "test_quill"
-  version: "1.0"
+  version: "1.0.0"
   backend: "typst"
   description: "Nested null blank-fill"
 

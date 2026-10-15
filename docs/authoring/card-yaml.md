@@ -113,10 +113,10 @@ title: Document Title
 ~~~
 ```
 
-A bare name matches any version; `@2`, `@2.1`, and `@2.1.0` pin
-progressively tighter. There is no `@latest`: write the bare name. The
-[Quill Versioning](../quills/versioning.md#how-authors-select-versions) page
-owns the full selector semantics.
+A bare name matches any version, `@2.1` any `2.1.x`, and `@2.1.0` that version
+alone. A lone major, `@2`, fails to parse, and there is no `@latest`: write the
+bare name. The [Quill Versioning](../quills/versioning.md#how-authors-select-versions)
+page owns the full selector semantics.
 
 Quill names are `[a-z][a-z0-9_]*`, at most 64 characters. A `$quill` name may
 carry the collection the quill comes from, `$quill: borb.usaf_memo@1.2`, under

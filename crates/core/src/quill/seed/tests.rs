@@ -11,7 +11,7 @@ fn overlay(value: serde_json::Value) -> SeedOverlay {
 const QUILL: &str = r#"
 quill:
   name: seed_test
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Seed test
 main:
@@ -35,13 +35,8 @@ card_kinds:
 #[test]
 fn empty_document_equals_the_hand_written_two_line_document() {
     let quill = quill_from_yaml(QUILL);
-    let config = quill.config();
-    let markdown = format!(
-        "~~~\n$quill: {}@{}\n$kind: main\n~~~\n",
-        config.name, config.version
-    );
 
-    let parsed = Document::parse(&markdown)
+    let parsed = Document::parse("~~~\n$quill: seed_test@1.0\n$kind: main\n~~~\n")
         .expect("the two-line empty document must parse")
         .document;
 
@@ -115,7 +110,7 @@ fn overlay_added_field_lands_in_declaration_position() {
         r#"
 quill:
   name: order_seed
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Seed order test
 card_kinds:
@@ -150,7 +145,7 @@ fn seed_omits_body_when_body_disabled() {
         r#"
 quill:
   name: bodyless
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Bodyless card test
 main:
@@ -231,7 +226,7 @@ fn a_variant_container_overlay_validates_clean_and_seeds() {
     const VARIANT_QUILL: &str = r#"
 quill:
   name: seed_test
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Seed variant test
 main:
@@ -331,7 +326,7 @@ card_kinds:
 const KIND_SEED_QUILL: &str = r#"
 quill:
   name: kind_seed
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Kind seed test
 card_kinds:
@@ -404,7 +399,7 @@ fn a_defective_kind_seed_fails_the_load() {
     let quill_yaml = |main: &str, seed: &str| {
         format!(
             r#"
-quill: {{ name: bad_seed, version: "1.0", backend: typst, description: x }}
+quill: {{ name: bad_seed, version: "1.0.0", backend: typst, description: x }}
 main:
   fields:
     title: {{ type: string }}
@@ -466,7 +461,7 @@ card_kinds:
 fn a_seeded_document_validates_clean_and_conforms_as_a_no_op() {
     let quill = quill_from_yaml(
         r#"
-quill: { name: deep_seed, version: "1.0", backend: typst, description: x }
+quill: { name: deep_seed, version: "1.0.0", backend: typst, description: x }
 card_kinds:
   entry:
     seed:
@@ -500,7 +495,7 @@ fn a_kind_seed_is_redundant_only_where_the_floor_renders_it() {
     let quill_yaml = |seed: &str| {
         format!(
             r#"
-quill: {{ name: floor_seed, version: "1.0", backend: typst, description: x }}
+quill: {{ name: floor_seed, version: "1.0.0", backend: typst, description: x }}
 card_kinds:
   entry:
     seed: {seed}

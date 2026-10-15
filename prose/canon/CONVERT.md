@@ -224,8 +224,8 @@ counts wherever it sits, and a field holding one says so rather than losing it
 quietly.
 
 No backend resolves such a `url`. A document is quill-free but for
-`$quill`, which is a *selector* ([VERSIONING](VERSIONING.md)) — `memo@1` admits
-1.0.0 and 1.1.0 alike — and everything else a document references is
+`$quill`, which is a *selector* ([VERSIONING](VERSIONING.md)) — `memo@1.2` admits
+1.2.0 and 1.2.1 alike — and everything else a document references is
 self-contained or declared. A path into one quill's file tree is neither, and
 no `DocPath`, `validate` signal or url space makes it either. A backend that
 resolved the string would bind documents to a reading nothing versions.

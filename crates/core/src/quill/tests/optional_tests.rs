@@ -111,7 +111,7 @@ fn a_question_mark_refuses_a_default_and_a_namespace() {
         ),
     ] {
         let yaml = format!(
-            "quill:\n  name: q\n  version: \"1.0\"\n  backend: typst\n  description: q\n\
+            "quill:\n  name: q\n  version: \"1.0.0\"\n  backend: typst\n  description: q\n\
              main:\n  fields:\n    f: {field}\n"
         );
         let err = QuillConfig::from_yaml(&yaml).expect_err(field);

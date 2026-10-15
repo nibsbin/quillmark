@@ -812,7 +812,7 @@ impl Quill {
     /// The quill's example document, `undefined` when the quill has no
     /// `example.md` at its root: a filled-in page whose values are made up to show the
     /// quill in use, never kept. It comes back pinned to this quill's
-    /// `name@version` and conformed as `parse` conforms, its parse and
+    /// `name@MAJOR.MINOR` and conformed as `parse` conforms, its parse and
     /// `conform::*` warnings on `doc.warnings`. Throws when the file does not
     /// parse or its `$quill` is not this quill's bare name.
     #[wasm_bindgen(js_name = exampleDocument)]

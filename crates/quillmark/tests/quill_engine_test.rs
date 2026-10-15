@@ -9,7 +9,7 @@ fn make_quill_dir(temp_dir: &TempDir, name: &str, backend: &str) -> std::path::P
     fs::write(
         quill_path.join("Quill.yaml"),
         format!(
-            "quill:\n  name: \"{}\"\n  version: \"1.0\"\n  backend: \"{}\"\n  description: \"Test\"\n\n{}:\n  plate_file: plate.typ\n",
+            "quill:\n  name: \"{}\"\n  version: \"1.0.0\"\n  backend: \"{}\"\n  description: \"Test\"\n\n{}:\n  plate_file: plate.typ\n",
             name, backend, backend
         ),
     )

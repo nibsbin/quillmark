@@ -10,7 +10,7 @@ use crate::{document::{Document, SeedOverlay}, quill::Quill, value::QuillValue};
 const QUILL: &str = r#"
 quill:
   name: conform_test
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Conform test
 main:
@@ -280,7 +280,7 @@ fn conform_is_a_no_op_on_a_seeded_variant_container() {
     const YAML: &str = r#"
 quill:
   name: variant_seed
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: variant seed rest
 main:

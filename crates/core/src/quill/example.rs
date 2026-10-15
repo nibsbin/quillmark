@@ -16,7 +16,7 @@ impl Quill {
     /// content someone keeps is a template.
     ///
     /// The file's `$quill` names this quill with no version selector. The
-    /// document comes back pinned to this quill's `name@version`, as
+    /// document comes back pinned to this quill's `name@MAJOR.MINOR`, as
     /// [`seed_document`](Self::seed_document)'s is, and conformed as
     /// [`parse`](Self::parse) conforms, with the parse and `conform::*`
     /// warnings on [`Parsed::warnings`]. A diagnostic located in the document
@@ -71,12 +71,12 @@ impl Quill {
             .with_code("quill::example_reference".to_string())
             .with_hint(
                 "The example is part of the quill version it sits in, and the quill pins it \
-                 to that version when it hands it out."
+                 to that version's MAJOR.MINOR series when it hands it out."
                     .to_string(),
             )]);
         }
 
-        document.set_quill_ref(super::seed::main_reference(self));
+        document.set_quill_ref(super::seed::main_reference(&self.config));
         warnings.extend(self.conform(&mut document).map_err(|e| e.into_diagnostics())?);
         Ok(Parsed { document, warnings })
     }

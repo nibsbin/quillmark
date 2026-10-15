@@ -256,7 +256,7 @@ mod tests {
     const QUILL: &str = r#"
 quill:
   name: fs_test
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Field-state tests
 main:
@@ -335,7 +335,7 @@ card_kinds:
     const CONTAINERS: &str = r#"
 quill:
   name: shape_test
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Container-shape tests
 main:
@@ -483,7 +483,7 @@ main:
     const BODY_DISABLED_QUILL: &str = r#"
 quill:
   name: bd_test
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Body-disabled test
 main:

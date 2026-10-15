@@ -13,13 +13,13 @@ fn load(markdown: &str) -> Quill {
 }
 
 #[test]
-fn the_example_is_handed_out_pinned_to_its_quill_version() {
+fn the_example_is_handed_out_pinned_to_its_quill_series() {
     let quill = load("~~~\n$quill: memo\nsubject: Budget review\n~~~\n\nFilled-in prose.\n");
 
     let parsed = quill.example_document().expect("present").expect("parses");
 
     assert!(parsed.warnings.is_empty(), "{:?}", parsed.warnings);
-    assert_eq!(parsed.document.quill_reference().to_string(), "memo@1.2.0");
+    assert_eq!(parsed.document.quill_reference().to_string(), "memo@1.2");
     assert_eq!(
         parsed.document.main().payload().get("subject").and_then(|v| v.as_str()),
         Some("Budget review")
@@ -55,7 +55,7 @@ fn the_example_is_the_root_file_by_name_and_never_refuses_a_load() {
 
 #[test]
 fn the_example_names_its_quill_with_no_selector() {
-    for reference in ["memo@1", "memo@1.2.0", "letter", "borb.memo"] {
+    for reference in ["memo@1.2", "memo@1.2.0", "letter", "borb.memo"] {
         let errors = load(&format!("~~~\n$quill: {reference}\n~~~\n"))
             .example_document()
             .expect("present")

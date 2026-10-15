@@ -69,17 +69,20 @@ fn test_missing_quill_diagnostic_code() {
     }
 }
 
+/// `memo@2` is malformed too: a major alone selects no compatible series.
 #[test]
 fn test_malformed_quill_reference_carries_code_and_grammar_hint() {
-    let err =
-        decompose("~~~card-yaml\n$quill: Resume@2.1.0\n$kind: main\n~~~\n\nBody\n").unwrap_err();
-    let diag = err.to_diagnostic();
-    assert_eq!(diag.code.as_deref(), Some("parse::invalid_quill_reference"));
-    assert_eq!(
-        diag.hint.as_deref(),
-        Some(crate::version::quill_ref_hint()),
-        "the malformed-reference diagnostic must carry the canonical grammar hint"
-    );
+    for reference in ["Resume@2.1.0", "memo@2"] {
+        let err = decompose(&format!("~~~card-yaml\n$quill: {reference}\n$kind: main\n~~~\n\nBody\n"))
+            .unwrap_err();
+        let diag = err.to_diagnostic();
+        assert_eq!(diag.code.as_deref(), Some("parse::invalid_quill_reference"), "{reference}");
+        assert_eq!(
+            diag.hint.as_deref(),
+            Some(crate::version::quill_ref_hint()),
+            "the malformed-reference diagnostic must carry the canonical grammar hint"
+        );
+    }
 }
 
 #[test]

@@ -1015,7 +1015,7 @@ card_kinds:
             r#"
 quill:
   name: t
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: A slot whose literal contradicts its declared type
 

@@ -13,7 +13,7 @@ use quillmark::{
 const QUILL: &str = r#"
 quill:
   name: facade_surface
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Facade re-export surface test
 

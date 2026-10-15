@@ -10,7 +10,7 @@ use tempfile::TempDir;
 
 const QUILL_YAML: &str = r#"quill:
   name: today_quill
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: A today field and the plate's date agree
 

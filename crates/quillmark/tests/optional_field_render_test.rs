@@ -12,7 +12,7 @@ mod common;
 
 const QUILL_YAML: &str = r#"quill:
   name: optional_quill
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Optional cells reach the plate as none
 

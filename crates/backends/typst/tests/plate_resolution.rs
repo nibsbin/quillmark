@@ -6,10 +6,10 @@ use quillmark_typst::TypstBackend;
 
 mod common;
 
-const YAML: &str = "quill:\n  name: t\n  version: \"1.0\"\n  backend: typst\n  \
+const YAML: &str = "quill:\n  name: t\n  version: \"1.0.0\"\n  backend: typst\n  \
                     description: d\n\ntypst:\n  plate_file: plate.typ\n";
 
-const BARE: &str = "quill:\n  name: t\n  version: \"1.0\"\n  backend: typst\n  description: d\n";
+const BARE: &str = "quill:\n  name: t\n  version: \"1.0.0\"\n  backend: typst\n  description: d\n";
 
 /// With no `typst:` section the plate is `plate.typ` at the quill root. A
 /// `plate_file` names another, and `plate.typ` beside it is then a module no
@@ -134,7 +134,7 @@ fn project_sources_import_as_typst_resolves_paths() {
     let diags = open_err(&[
         (
             "Quill.yaml",
-            "quill:\n  name: t\n  version: \"1.0\"\n  backend: typst\n  description: d\n\n\
+            "quill:\n  name: t\n  version: \"1.0.0\"\n  backend: typst\n  description: d\n\n\
              typst:\n  plate_file: tpl/layout.typ\n",
         ),
         (
@@ -176,7 +176,7 @@ fn project_sources_import_as_typst_resolves_paths() {
 /// search the same path, and draw the same hint.
 #[test]
 fn a_path_missed_below_the_quill_root_hints_the_rooted_file_the_root_holds() {
-    const YAML: &str = "quill:\n  name: t\n  version: \"1.0\"\n  backend: typst\n  \
+    const YAML: &str = "quill:\n  name: t\n  version: \"1.0.0\"\n  backend: typst\n  \
                         description: d\n\ntypst:\n  plate_file: tpl/layout.typ\n";
     const SVG: &str = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\"/>";
     let hint_of = |files: &[(&str, &str)]| {

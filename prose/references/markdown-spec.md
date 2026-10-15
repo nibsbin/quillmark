@@ -273,11 +273,11 @@ name or `<collection>.<name>`, and `<version>` is one of:
 |---|---|
 | `name@2.1.0` | exact version |
 | `name@2.1` | any `2.1.x` |
-| `name@2` | any `2.x.x` |
 | `name` | any version (`@version` omitted) |
 
-Each version segment is ASCII digits. `name@latest` and `name@` fail as
-`parse::invalid_quill_reference`: a reference with no selector omits the `@`.
+Each version segment is ASCII digits. `name@2`, `name@latest` and `name@` fail
+as `parse::invalid_quill_reference`: a lone major is no selector, and a
+reference with no selector omits the `@`.
 
 Quill and collection names match `/^[a-z][a-z0-9_]*$/`, at most 64
 characters each. The selector is a pin, not a
