@@ -56,7 +56,9 @@ fn collect(frame: &Frame, chars: &mut BTreeSet<char>) {
                 text.glyphs
                     .iter()
                     .filter(|g| g.id == 0)
-                    .flat_map(|g| text.text[g.range()].chars())
+                    // A glyph's range is `u16` and saturates past 64 KiB into
+                    // its item, where it can split a character.
+                    .flat_map(|g| text.text.get(g.range()).unwrap_or_default().chars())
                     .filter(|&c| !c.is_whitespace() && !c.is_control() && !is_default_ignorable(c)),
             ),
             _ => {}
