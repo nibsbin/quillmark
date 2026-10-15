@@ -205,8 +205,10 @@ closing: Sincerely # string
 classification: # enum<UNCLASSIFIED | CUI>
 ```
 
-A blank `default:` (`""`, `[]`, `{}`) is legal and changes nothing: the field
-renders its blank either way, and the blueprint prints an empty cell. `0` and
+A blank `default:` (`""`, `[]`, `{}`) is legal and renders as no default does:
+the field renders its blank either way, and the blueprint prints an empty cell.
+The schema still carries it and `resolve()` still reports the field's source as
+`default`, so an editor reading either may treat the two differently. `0` and
 `false` are values, and print.
 
 An unanswered field renders its `default:`, else its

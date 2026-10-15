@@ -1070,14 +1070,13 @@ main:
     }
 
     #[test]
-    fn a_capped_out_table_with_empty_default_has_no_dormant_row() {
+    fn a_capped_out_table_has_no_dormant_row() {
         let t = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
   fields:
     refs:
       type: array
-      default: []
       max: 0
       items:
         type: object

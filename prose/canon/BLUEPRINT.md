@@ -5,7 +5,7 @@
 ## TL;DR
 
 `blueprint()` produces an annotated Markdown document: the same shape an
-author would write, each cell holding its `default:` or left empty, with
+author would write, each cell holding its non-blank `default:` or left empty, with
 labels and constraint hints as comments. It is the **authoring surface** for
 LLM and MCP consumers; [SCHEMAS.md](SCHEMAS.md) covers the validation/form
 surface.
@@ -206,15 +206,15 @@ Examples:
 
 ## Cell values
 
-A cell's value is **`default:` › empty**. An empty cell is null, emitted as a
+A cell's value is **non-blank `default:` › empty**. An empty cell is null, emitted as a
 bare `key:` with its annotation after it (`title: # string`).
 
 A **blank** `default:` (`""`, `[]` or `{}`, the field's own blank) renders
 exactly as no default does, so it prints as none: `notes:` declaring
-`default: ""` prints `notes: # string`, and a matrix column declaring one reads
-in the `# e.g.` line as a defaultless column does. `0` and `false` are values and print
-(`count: 0 # integer`): an empty `count:` would ask for a number the quill
-already answers.
+`default: ""` prints `notes: # string`, and a matrix column declaring one
+reads in the `# e.g.` line as a defaultless column does. `0` and `false` are
+values and print (`count: 0 # integer`): an empty `count:` would ask for a
+number the quill already answers.
 
 Every cell of the live world renders as **live YAML**; a dormant variant world's
 cells are commented out, and only they are. The `# when <MEMBER>:` header says
@@ -496,7 +496,7 @@ second annotated string.
 
 | Projection | Intent | Field values | Output | Annotated? |
 |---|---|---|---|---|
-| `blueprint` | *"give me the form to fill"* | `default:` › empty | annotated string | yes |
+| `blueprint` | *"give me the form to fill"* | non-blank `default:` › empty | annotated string | yes |
 | seeding | *"give me a starter document"* | kind `seed:` › absent | committed `Document` | no |
 
 The **blueprint** column is this doc's contract (above). The **seeding**
