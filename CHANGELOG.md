@@ -9,8 +9,30 @@ a Typst quill's plate is `plate.typ` by name and an unknown `typst:` key fails
 the load, a card groups fields under a top-level `object` where it declared
 `sections:`, a quill's `version` is `MAJOR.MINOR.PATCH` and a `$quill`
 selector `@MAJOR.MINOR` or exact, a document the quill creates pins its
-`MAJOR.MINOR`, a blueprint prints a blank `default:` as no default, and a WASM
-trap rejects coded.
+`MAJOR.MINOR`, a blueprint prints a blank `default:` as no default, a WASM
+trap rejects coded, and a text field is `text` or `richtext`, one line unless
+it declares `multiline: true`.
+
+### Field types
+
+- feat(core)!: **`type: plaintext` is `type: text`, and `text` and `richtext`
+  are one line unless they declare `multiline: true`**, the one line-shape key
+  coercion, `validate`, the editor and acroform all read. `inline:` and
+  `ui.multiline` are retired and fail the load as `quill::field_parse_error`,
+  naming the replacement, and a `richtext` spells `multiline:` either way for
+  this release. `schema()` emits `quillmark:multiline: true` where it emitted
+  `quillmark:inline` on the opposite fields; the blueprint prints
+  `text(multiline)<plain>` and `richtext(multiline)<markdown>`.
+  `validation::not_inline`, `edit::field_not_inline`,
+  `conform::field_not_inline` and `quill::seed_not_inline` end in
+  `not_single_line`, and their `codec` names `text`. An acroform text widget binds multiline exactly where
+  its field declares it, so a block `richtext` no longer binds a one-line
+  widget. (#2229, #2217)
+- feat(core)!: **`type: string` is retired in favor of `text`**, and a plate
+  that computes with a text value reads its `str` through the new
+  `qm.str(..)`. A former `string` value reaches the plate as content, with nav
+  and click-to-edit, and still rests as the verbatim string. A matrix added
+  item's `title` is a one-line `text` cell. (#2230)
 
 ### PDF forms
 

@@ -13,36 +13,36 @@ main:
     memo_for:
       type: array
       items:
-        type: string
+        type: text
       description: "Organization/office symbol in UPPERCASE. To address a specific person, add their rank and name in parentheses (e.g., 'ORG/SYMBOL (LT COL JANE DOE)'). For many recipients, enter 'SEE DISTRIBUTION' and list them in the Distribution field."
 
     memo_from:
       type: array
       items:
-        type: string
+        type: text
       default: []
       description: "If recipients are on the same installation, use only the office symbol. For recipients on other installations, include the full mailing address to enable return correspondence. Omit entirely to produce a Memorandum for Record (no MEMO FROM line)."
 
     subject:
       type: richtext
-      inline: true
+      multiline: false
       description: Be brief and clear. Capitalize the first letter of each word except articles, prepositions, and conjunctions. Include suspense dates in parentheses if applicable.
 
     signature_block:
       type: array
       items:
-        type: string
+        type: text
       description: "Line 1: Name in UPPERCASE as signed, grade, and service, as in FIRST M. LAST, Capt, USAF. Line 2: Duty title."
 
     letterhead_title:
-      type: string
+      type: text
       default: DEPARTMENT OF THE AIR FORCE
       description: Change only for Joint Commands or DoW agencies.
 
     letterhead_caption:
       type: array
       items:
-        type: string
+        type: text
       description: The full organization name of your unit, as in HEADQUARTERS 123D EXAMPLE WING.
 
     letterhead_seal:
@@ -56,7 +56,7 @@ main:
       description: Department of War (DoW) or Department of Defense (DoD) seal shown in the letterhead.
 
     letterhead_seal_subtitle:
-      type: string
+      type: text
       default: ""
       ui:
         compact: true
@@ -64,7 +64,7 @@ main:
 
     tag_line:
       type: richtext
-      inline: true
+      multiline: false
       default: ""
       ui:
         compact: true
@@ -85,22 +85,22 @@ main:
       variants:
         CUI:
           controlled_by:
-            type: string
+            type: text
             description: "Office or organization that designated this information as CUI. Required by DoDM 5200.48."
           poc:
-            type: string
+            type: text
             description: "Point of contact for CUI questions, as in Capt J. Smith, DSN 555-1234, john.smith@us.af.mil. Required by DoDM 5200.48."
           category:
-            type: string
+            type: text
             default: ""
             description: "CUI category from the DoD CUI Registry (e.g., 'Privacy/MED', 'CTI', 'PRVCY'). Leave blank to omit."
           limited_dissemination:
-            type: string
+            type: text
             default: ""
             description: "Limited dissemination control shown in the indicator block (e.g., 'FEDONLY', 'NOFORN'). Independent from the banner suffix."
 
     dissemination:
-      type: string
+      type: text
       default: ""
       ui:
         compact: true
@@ -110,28 +110,28 @@ main:
       type: array
       items:
         type: richtext
-        inline: true
+        multiline: false
       default: []
       description: "References, auto-lettered (a), (b), (c) per AFH 33-337. Cite each by organization, type, date, and title; italicize publication titles with *asterisks* (standard Markdown emphasis)."
 
     cc:
       type: array
       items:
-        type: string
+        type: text
       default: []
       description: List office symbols of recipients to receive copies.
 
     distribution:
       type: array
       items:
-        type: string
+        type: text
       default: []
       description: Complete list of recipients if 'SEE DISTRIBUTION' is used in the 'Memo For' field.
 
     attachments:
       type: array
       items:
-        type: string
+        type: text
       default: []
       description: List attachments in the order they are mentioned in the memo. Briefly describe each; do not use 'as stated' or abbreviations.
 
@@ -165,15 +165,15 @@ card_kinds:
     description: Chain of routing endorsements. Each endorsement block adds an official response or forwarding action to the original memo.
     fields:
       from:
-        type: string
+        type: text
         description: Office symbol or Rank Name of the endorsing official.
       for:
-        type: string
+        type: text
         description: Office symbol or organization receiving the endorsed memo.
       signature_block:
         type: array
         items:
-          type: string
+          type: text
         description: "Line 1: Name in UPPERCASE as signed, grade, and service, as in FIRST M. LAST, Capt, USAF. Line 2: Duty title."
       format:
         type: enum

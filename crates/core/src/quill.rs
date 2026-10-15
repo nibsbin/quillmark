@@ -19,7 +19,9 @@ mod types;
 pub(crate) mod validation;
 
 pub use config::{CoercionError, QuillConfig};
-pub(crate) use config::{Leniency, PLAINTEXT_TRAILING_NEWLINE};
+pub(crate) use config::{
+    Leniency, RICHTEXT_SINGLE_LINE_TARGET, TEXT_SINGLE_LINE_TARGET, TEXT_TRAILING_NEWLINE,
+};
 pub use compose::PLATE_PATH_KEY;
 pub use conform::BoundParseError;
 pub use example::EXAMPLE_FILE;
@@ -29,7 +31,7 @@ pub use fill::blank;
 pub use formats::{parse_date, parse_datetime, CalendarDate, ParseDateError, TODAY};
 pub use ignore::QuillIgnore;
 pub use schema::{
-    build_transform_schema, CONTENT_MEDIA_TYPE, QUILLMARK_INLINE_KEY, QUILLMARK_ROSTER_KEY,
+    build_transform_schema, CONTENT_MEDIA_TYPE, QUILLMARK_MULTILINE_KEY, QUILLMARK_ROSTER_KEY,
 };
 pub use tree::FileTreeNode;
 pub use validation::ValidationError;

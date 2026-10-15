@@ -27,7 +27,7 @@ function makeCoreQuill() {
 main:
   fields:
     title:
-      type: string
+      type: text
       description: Document title
 `
   return new Map([['Quill.yaml', enc.encode(yaml)]])
@@ -102,12 +102,12 @@ describe('@quillmark/wasm/core surface', () => {
 main:
   fields:
     title:
-      type: string
+      type: text
 card_kinds:
   note:
     fields:
       author:
-        type: string
+        type: text
 `
     const quill = Quill.fromTree(new Map([['Quill.yaml', enc.encode(yaml)]]))
 

@@ -6,7 +6,7 @@
 //! For `richtext` the emitted markdown is a lossy projection (island ids,
 //! content-only marks, and a container around a non-paragraph line do not
 //! survive), so the markdown loop is a fixed point after one pass rather than
-//! the identity. `plaintext`'s literal codec is lossless both ways.
+//! the identity. `text`'s literal codec is lossless both ways.
 
 use proptest::prelude::*;
 
@@ -24,25 +24,29 @@ main:
   fields:
     rich:
       type: richtext
+      multiline: true
     rich_inline:
       type: richtext
-      inline: true
+      multiline: false
     plain:
-      type: plaintext
+      type: text
+      multiline: true
     plain_inline:
-      type: plaintext
-      inline: true
+      type: text
     riches:
       type: array
       items:
         type: richtext
+        multiline: true
     pair:
       type: object
       properties:
         label:
-          type: plaintext
+          type: text
+          multiline: true
         blurb:
           type: richtext
+          multiline: true
     qty:
       type: integer
 "#;

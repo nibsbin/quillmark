@@ -74,15 +74,15 @@ card_kinds:
     description: Chain of routing endorsements for multi-level correspondence.
     fields:
       from:
-        type: string
+        type: text
         description: Office symbol of the endorsing official.
       for:
-        type: string
+        type: text
         description: Office symbol receiving the endorsed memo.
       signature_block:
         type: array
         items:
-          type: string
+          type: text
         description: Name, grade, and duty title.
 ```
 
@@ -97,13 +97,13 @@ card_kinds:
     description: Chain of routing endorsements for multi-level correspondence.
     fields:
       from:
-        type: string
+        type: text
       for:
-        type: string
+        type: text
       signature_block:
         type: array
         items:
-          type: string
+          type: text
         ui:
           group: signature
     ui:

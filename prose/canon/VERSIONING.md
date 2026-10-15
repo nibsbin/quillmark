@@ -27,8 +27,8 @@ previous version:
 
 | Bump | A stored document | Changes |
 |------|-------------------|---------|
-| **PATCH** | needs no change | Fixes, presentation changes, a new optional field, a new enum member, a `values:` reorder |
-| **MINOR** | migrates mechanically | A field renamed, a type changed with a lossless mapping (`string` → `richtext`), an enum member renamed |
+| **PATCH** | needs no change | Fixes, presentation changes, a new optional field, a new enum member, a `values:` reorder, a `text` or `richtext` field's `multiline` from `false` to `true` |
+| **MINOR** | migrates mechanically | A field renamed, a type changed with a lossless mapping (`date` → `datetime`), an enum member renamed |
 | **MAJOR** | migrates with loss of data or function | A field or enum member removed with no counterpart, a field's meaning changed |
 
 This is not standard semver. The compatibility boundary is `MAJOR.MINOR`, the
@@ -42,6 +42,12 @@ so reordering changes no document's rendered output. It still changes picker
 order, the blueprint's `enum` annotation text, and acroform dropdown order, so it
 is a presentation change rather than a no-op. Renaming or removing a member is
 not: a stored document carrying it stops validating.
+
+**`multiline` widens one way.** From `false` to `true` it only admits more, so
+it is a PATCH. From `true` to `false` it tightens a constraint: a stored
+document holding a second line or block stops validating
+(`validation::not_single_line`), so it is a MAJOR unless each stored value is
+first reduced to one line.
 
 ## Document Syntax
 

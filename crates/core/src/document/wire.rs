@@ -265,7 +265,7 @@ mod tests {
         let json = quillmark_content::serial::to_canonical_value(&content);
         let schema = crate::quill::FieldSchema::new(
             "intro".to_string(),
-            crate::quill::FieldType::RichText { inline: false },
+            crate::quill::FieldType::RichText { multiline: true },
             None,
         );
         card.commit_field("intro", crate::value::QuillValue::from_json(json), &schema)

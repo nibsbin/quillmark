@@ -11,12 +11,14 @@ use crate::value::QuillValue;
 /// content rather than a scalar.
 pub const CONTENT_MEDIA_TYPE: &str = "application/quillmark-content+json";
 
-/// Transform-schema keyword marking a single-`Para` richtext field (`inline: true`
-/// in Quill.yaml). The blueprint spells the same fact `richtext(inline)<markdown>`;
-/// this key is the JSON Schema–shaped wire for editor and backend consumers.
-pub const QUILLMARK_INLINE_KEY: &str = "quillmark:inline";
+/// Transform-schema keyword marking a `text` or `richtext` field that admits
+/// more than one line (`multiline: true` in Quill.yaml); absent, the field is
+/// one line (`text`) or one paragraph (`richtext`). The blueprint spells the
+/// same fact `richtext(multiline)<markdown>`; this key is the JSON Schema–shaped
+/// wire for editor and backend consumers.
+pub const QUILLMARK_MULTILINE_KEY: &str = "quillmark:multiline";
 
-/// Transform-schema keyword marking a `plaintext` field: the literal-codec
+/// Transform-schema keyword marking a `text` field: the literal-codec
 /// sibling of richtext. It rides the same [`CONTENT_MEDIA_TYPE`], so backends
 /// lower it identically; this annotation only tells editors to mount a
 /// formatting-free surface and to author/project through the literal codec.
@@ -126,13 +128,7 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
         }
         match field.r#type {
             FieldType::Enum { .. } => return discriminant_schema(field),
-            FieldType::String => {
-                schema.insert(
-                    "type".to_string(),
-                    serde_json::Value::String("string".to_string()),
-                );
-            }
-            FieldType::RichText { inline } => {
+            FieldType::RichText { multiline } => {
                 // The content crosses the seam as a JSON object (canonical
                 // Content-JSON), not a string; `type: object` + the richtext
                 // media type is how a backend classifies it to lower the content.
@@ -144,15 +140,15 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
                     "contentMediaType".to_string(),
                     serde_json::Value::String(CONTENT_MEDIA_TYPE.to_string()),
                 );
-                if inline {
+                if multiline {
                     schema.insert(
-                        QUILLMARK_INLINE_KEY.to_string(),
+                        QUILLMARK_MULTILINE_KEY.to_string(),
                         serde_json::Value::Bool(true),
                     );
                 }
             }
-            FieldType::PlainText { inline } => {
-                // Plaintext rides the *same* content and media type as richtext, so
+            FieldType::Text { multiline } => {
+                // Text rides the *same* content and media type as richtext, so
                 // a backend classifies and lowers it identically: no backend edit.
                 // The distinction (literal codec, no formatting) is carried by the
                 // `quillmark:plain` annotation, which only editors consult.
@@ -165,9 +161,9 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
                     serde_json::Value::String(CONTENT_MEDIA_TYPE.to_string()),
                 );
                 schema.insert(QUILLMARK_PLAIN_KEY.to_string(), serde_json::Value::Bool(true));
-                if inline {
+                if multiline {
                     schema.insert(
-                        QUILLMARK_INLINE_KEY.to_string(),
+                        QUILLMARK_MULTILINE_KEY.to_string(),
                         serde_json::Value::Bool(true),
                     );
                 }
@@ -196,7 +192,7 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
                     serde_json::Value::String("array".to_string()),
                 );
                 // The element schema is emitted recursively, so a scalar
-                // element yields `items: {type: string}` (and a richtext element
+                // element yields `items: { type: text }` (and a richtext element
                 // carries its `contentMediaType`), while an object element yields
                 // `items: {type: object, properties: …}`.
                 if let Some(items) = &field.items {
@@ -248,7 +244,7 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
             // Distinct markers for the two date types drive the Typst backend's
             // per-type lowering (3-component vs 6-component `datetime(..)`). This
             // is the internal transform schema; the marker precedent is
-            // `quillmark:inline`.
+            // `quillmark:multiline`.
             FieldType::Date => {
                 schema.insert(
                     "type".to_string(),
@@ -280,7 +276,11 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
     if config.main.body_enabled() {
         properties.insert(
             "$body".to_string(),
-            serde_json::json!({ "type": "object", "contentMediaType": CONTENT_MEDIA_TYPE }),
+            serde_json::json!({
+                "type": "object",
+                "contentMediaType": CONTENT_MEDIA_TYPE,
+                QUILLMARK_MULTILINE_KEY: true,
+            }),
         );
     }
 
@@ -293,7 +293,11 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
         if card.body_enabled() {
             card_properties.insert(
                 "$body".to_string(),
-                serde_json::json!({ "type": "object", "contentMediaType": CONTENT_MEDIA_TYPE }),
+                serde_json::json!({
+                    "type": "object",
+                    "contentMediaType": CONTENT_MEDIA_TYPE,
+                    QUILLMARK_MULTILINE_KEY: true,
+                }),
             );
         }
         defs.insert(
@@ -433,36 +437,40 @@ main:
       items:
         type: object
         properties:
-          org: { type: string }
+          org: { type: text }
           year: { type: integer }
     counts:
       type: array
       items: { type: integer }
     sections:
       type: array
-      items: { type: richtext }
+      items: { type: richtext, multiline: true }
     address:
       type: object
       properties:
-        street: { type: string }
-        city: { type: string }
+        street: { type: text }
+        city: { type: text }
     subject:
       type: richtext
-      inline: true
+      multiline: false
     lines:
       type: array
       items:
         type: richtext
-        inline: true
+        multiline: false
     label:
-      type: plaintext
-      inline: true
+      type: text
 "#;
         let content = serde_json::json!({ "type": "object", "contentMediaType": CONTENT_MEDIA_TYPE });
-        let inline = serde_json::json!({
+        let multiline = serde_json::json!({
             "type": "object",
             "contentMediaType": CONTENT_MEDIA_TYPE,
-            QUILLMARK_INLINE_KEY: true,
+            QUILLMARK_MULTILINE_KEY: true,
+        });
+        let text = serde_json::json!({
+            "type": "object",
+            "contentMediaType": CONTENT_MEDIA_TYPE,
+            QUILLMARK_PLAIN_KEY: true,
         });
         let cases = [
             (
@@ -472,7 +480,7 @@ main:
                     "items": {
                         "type": "object",
                         "properties": {
-                            "org": { "type": "string" },
+                            "org": text,
                             "year": { "type": "integer" },
                         },
                     },
@@ -484,32 +492,21 @@ main:
             ),
             (
                 "sections",
-                serde_json::json!({ "type": "array", "items": content }),
+                serde_json::json!({ "type": "array", "items": multiline }),
             ),
             (
                 "address",
                 serde_json::json!({
                     "type": "object",
-                    "properties": {
-                        "street": { "type": "string" },
-                        "city": { "type": "string" },
-                    },
+                    "properties": { "street": text, "city": text },
                 }),
             ),
-            ("subject", inline.clone()),
+            ("subject", content.clone()),
             (
                 "lines",
-                serde_json::json!({ "type": "array", "items": inline }),
+                serde_json::json!({ "type": "array", "items": content }),
             ),
-            (
-                "label",
-                serde_json::json!({
-                    "type": "object",
-                    "contentMediaType": CONTENT_MEDIA_TYPE,
-                    QUILLMARK_PLAIN_KEY: true,
-                    QUILLMARK_INLINE_KEY: true,
-                }),
-            ),
+            ("label", text),
         ];
         let schema = build_from_yaml(yaml);
         for (field, expected) in cases {
@@ -529,17 +526,17 @@ quill:
 main:
   fields:
     title:
-      type: string
+      type: text
 
 card_kinds:
   indorsement:
     fields:
       signature_block:
-        type: string
+        type: text
   note:
     fields:
       author:
-        type: string
+        type: text
 "#;
 
         let schema = build_from_yaml(yaml);
@@ -548,6 +545,7 @@ card_kinds:
         let main_body = &json["properties"]["$body"];
         assert_eq!(main_body["type"], "object");
         assert_eq!(main_body["contentMediaType"], CONTENT_MEDIA_TYPE);
+        assert_eq!(main_body[QUILLMARK_MULTILINE_KEY], true);
 
         for def_name in ["indorsement_card", "note_card"] {
             let card_body = &json["$defs"][def_name]["properties"]["$body"];
@@ -558,6 +556,10 @@ card_kinds:
             assert_eq!(
                 card_body["contentMediaType"], CONTENT_MEDIA_TYPE,
                 "{def_name} $body should be richtext"
+            );
+            assert_eq!(
+                card_body[QUILLMARK_MULTILINE_KEY], true,
+                "{def_name} $body should lower as a block"
             );
         }
     }
@@ -576,7 +578,7 @@ main:
     enabled: false
   fields:
     title:
-      type: string
+      type: text
 
 card_kinds:
   indorsement:
@@ -584,11 +586,11 @@ card_kinds:
       enabled: false
     fields:
       signature_block:
-        type: string
+        type: text
   note:
     fields:
       author:
-        type: string
+        type: text
 "#;
 
         let schema = build_from_yaml(yaml);

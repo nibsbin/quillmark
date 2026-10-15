@@ -73,7 +73,7 @@ fn today_is_a_date_value_only() {
     };
     assert!(with_default("{ type: date, default: today }").is_ok());
     assert!(with_default("{ type: datetime, default: today }").is_err());
-    assert!(with_default("{ type: string, default: today }").is_ok());
+    assert!(with_default("{ type: text, default: today }").is_ok());
 
     assert!("today".parse::<CalendarDate>().is_err());
     assert!("2026-02-30".parse::<CalendarDate>().is_err());

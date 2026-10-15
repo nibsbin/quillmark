@@ -19,7 +19,6 @@ export interface QuillFieldUi {
      *  `ui.groups`. */
     group?: string;
     compact?: boolean;
-    multiline?: boolean;
     /** Label for an `enum`'s blank option. Absent, the consumer supplies a
      *  conventional label of its own. */
     blank_title?: string;
@@ -54,7 +53,7 @@ export interface QuillCardBody {
     enabled?: boolean;
 }
 
-export type QuillFieldType = "string" | "number" | "integer" | "boolean" | "array" | "object" | "date" | "datetime" | "richtext" | "plaintext" | "enum" | "matrix";
+export type QuillFieldType = "number" | "integer" | "boolean" | "array" | "object" | "date" | "datetime" | "text" | "richtext" | "enum" | "matrix";
 
 /** Schema entry for a single field declared in a quill's `Quill.yaml`.
  *
@@ -99,9 +98,12 @@ export interface QuillFieldSchema {
      *  out on. Valid only on an `array`. Never gates render: a document over
      *  the cap warns `validation::cardinality` and renders. */
     max?: number;
-    /** `true` on a `richtext` or `plaintext` field declared `inline`: the
-     *  single-paragraph, container-free, island-free constraint. */
-    inline?: boolean;
+    /** The line shape of a `text` or `richtext` field, valid nowhere else.
+     *  Absent or `false`, the field is one line (`text`) or one paragraph with
+     *  no container or island (`richtext`); `true` admits line breaks
+     *  (`text`) or block structure (`richtext`). A `richtext` always carries
+     *  it. */
+    multiline?: boolean;
 }
 
 /** Schema entry for the main card or a named card kind. */
@@ -746,7 +748,7 @@ impl Quill {
     /// Parse `markdown` and conform it against this quill: the primary ingestion
     /// path, and the bound twin of the schema-free `Document.fromMarkdown`. The
     /// returned document rests at its canonical form (a `richtext` field as a
-    /// content object, a `plaintext` field as its literal string), so `getStored`
+    /// content object, a `text` field as its literal string), so `getStored`
     /// answers by the field's declared codec, not by how the document was built.
     ///
     /// Parse warnings and the `conform::*` diagnostics both land on
@@ -1038,7 +1040,7 @@ impl Document {
     /// `edit::index_out_of_range`.
     ///
     /// A content field at rest has one stored form per codec: a `richtext` field
-    /// holds the canonical content object, a `plaintext` field its literal
+    /// holds the canonical content object, a `text` field its literal
     /// string. A document from the bound door (`quill.parse` / `quill.conform`)
     /// is at rest; one from the transport door may rest as authored until it is
     /// conformed, and this read reports what is there. For the `Content` either
@@ -1548,10 +1550,10 @@ impl Document {
     /// Revise the content field at `addr` from authored text, typed *and*
     /// anchor-preserving: the ABI under `writer.reviseField`. Surviving anchors
     /// rebase as in [`revise`](Self::revise), then the diffed result is
-    /// schema-conformed, so a `richtext(inline)` field rejects a multi-block
-    /// result with `edit::field_not_inline`. Returns the `Revised` receipt, its
+    /// schema-conformed, so a one-paragraph `richtext` field rejects a multi-block
+    /// result with `edit::field_not_single_line`. Returns the `Revised` receipt, its
     /// warnings anchored at the field. The codec is the declared type's:
-    /// `richtext` diffs markdown, `plaintext` literal text, which drops nothing.
+    /// `richtext` diffs markdown, `text` literal text, which drops nothing.
     ///
     /// `addr` must name a field; a body address throws, since a body carries no
     /// field schema (use [`revise`](Self::revise)). An undeclared name throws
@@ -1611,7 +1613,7 @@ impl Document {
 
     /// Typed field write at `addr`, resolving the field's schema `type` from
     /// `quill`: the stable ABI under the runtime `writer.set`. One verb for every
-    /// field type; the schema carries the `inline` constraint, so no type token
+    /// field type; the schema carries the one-line constraint, so no type token
     /// is passed.
     ///
     /// A bare string is `Addr` shorthand for `{ field }`. A body address throws,
@@ -1620,7 +1622,7 @@ impl Document {
     /// `edit::unknown_field` rather than falling to the opaque store — use
     /// [`storeField`](Document::store_field) for that. Also throws
     /// `edit::field_coercion_failed` / `edit::field_decode` /
-    /// `edit::field_not_inline` on a typed mismatch,
+    /// `edit::field_not_single_line` on a typed mismatch,
     /// `edit::invalid_field_name` on a malformed name, and
     /// `edit::index_out_of_range` on an out-of-range card.
     ///
@@ -2039,8 +2041,8 @@ fn diags(ds: impl IntoIterator<Item = quillmark_core::error::Diagnostic>) -> Vec
     ds.into_iter().map(Into::into).collect()
 }
 
-/// Whether `content` satisfies the `inline` constraint of `richtext` and
-/// `plaintext`: one `Para` line, in no container, with no islands. Judged on
+/// Whether `content` satisfies the one-line constraint of `text` and
+/// `richtext`: one `Para` line, in no container, with no islands. Judged on
 /// the normalized content, which is what a write stores. Throws if `content` is
 /// not canonical content.
 #[wasm_bindgen(js_name = isInline)]
@@ -2050,7 +2052,7 @@ pub fn is_inline(
     Ok(js_to_content(content, "isInline")?.is_inline())
 }
 
-/// Whether `content` satisfies the `plaintext` constraint: no marks, no
+/// Whether `content` satisfies the `text` constraint: no marks, no
 /// islands, every line a `Para` in no container. Judged on the normalized
 /// content, which is what a write stores. Throws if `content` is not canonical
 /// content.

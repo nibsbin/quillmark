@@ -33,7 +33,7 @@ const SCALE: f32 = 4.0;
 fn open() -> LiveSession {
     TypstBackend
         .open(&quill(
-            &yaml("main:\n  fields:\n    inline_field: { type: string }\n    centered_field: { type: string }\n"),
+            &yaml("main:\n  fields:\n    inline_field: { type: text }\n    centered_field: { type: text }\n"),
             PLATE,
         ), &serde_json::json!({}), common::test_date())
         .expect("open")

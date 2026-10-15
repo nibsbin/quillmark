@@ -37,11 +37,11 @@ main:
     addr:
       type: object
       properties:
-        street: { type: string }
-        city: { type: string }
+        street: { type: text }
+        city: { type: text }
     tags:
       type: array
-      items: { type: string }
+      items: { type: text }
 "#,
     );
     let quill = quillmark::quill_from_path(&quill_path).expect("from_path failed");
@@ -58,7 +58,9 @@ main:
         .and_then(|v| v.as_object())
         .expect("addr object");
     assert_eq!(
-        addr.get("street").and_then(|v| v.as_str()),
+        addr.get("street")
+            .and_then(|v| v.get("text"))
+            .and_then(|v| v.as_str()),
         Some(""),
         "null nested property must blank-fill, not leak null: {data}"
     );

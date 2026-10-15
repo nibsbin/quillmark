@@ -32,7 +32,7 @@ A document checked against its quill's schema.
 - `validation::enum_violation`
 - `validation::format_violation`
 - `validation::held_stored`
-- `validation::not_inline`
+- `validation::not_single_line`
 - `validation::not_plain`
 - `validation::out_of_variant`
 - `validation::seed_overlay_shape`
@@ -103,8 +103,8 @@ Loading a quill: `Quill.yaml`, its files, its seeds.
 - `quill::seed_enum_violation`
 - `quill::seed_format_violation`
 - `quill::seed_held_stored`
-- `quill::seed_not_inline`
 - `quill::seed_not_plain`
+- `quill::seed_not_single_line`
 - `quill::seed_out_of_variant`
 - `quill::seed_overlay_shape`
 - `quill::seed_redundant`
@@ -135,7 +135,7 @@ A mutator or typed write the document refuses.
 - `edit::field_coercion_failed`
 - `edit::field_decode`
 - `edit::field_not_content`
-- `edit::field_not_inline`
+- `edit::field_not_single_line`
 - `edit::import`
 - `edit::index_out_of_range`
 - `edit::invalid_field_name`
@@ -152,7 +152,7 @@ A `Quill::conform` warning: a value the typed write refuses, left as authored.
 
 - `conform::field_coercion_failed`
 - `conform::field_decode`
-- `conform::field_not_inline`
+- `conform::field_not_single_line`
 - `conform::invalid_field_name`
 - `conform::value_too_deep`
 

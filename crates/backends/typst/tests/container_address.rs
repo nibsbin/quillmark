@@ -23,7 +23,7 @@ typst:
 main:
   fields:
     subject:
-      type: string
+      type: text
       description: a scalar, which offers no step at all
     balance:
       type: integer
@@ -33,14 +33,14 @@ main:
       description: a typed dictionary
       properties:
         city:
-          type: string
+          type: text
         street:
-          type: string
+          type: text
     tags:
       type: array
       description: a primitive list, whose element offers no further step
       items:
-        type: string
+        type: text
     refs:
       type: array
       description: a typed table
@@ -48,9 +48,9 @@ main:
         type: object
         properties:
           org:
-            type: string
+            type: text
           num:
-            type: string
+            type: text
     classification:
       type: enum
       values: [UNCLASSIFIED, CUI]
@@ -59,29 +59,31 @@ main:
       variants:
         CUI:
           poc:
-            type: string
+            type: text
           controlled_by:
-            type: string
+            type: text
           note:
             type: richtext
+            multiline: true
           reply_by:
             type: date
 "#;
 
 fn data() -> serde_json::Value {
+    let text = common::content;
     serde_json::json!({
-        "subject": "Widgets",
+        "subject": text("Widgets"),
         "balance": -12,
-        "address": { "city": "Dayton", "street": "1864 Fourth St" },
+        "address": { "city": text("Dayton"), "street": text("1864 Fourth St") },
         "classification": {
             "value": "CUI",
-            "poc": "Capt J. Smith",
-            "controlled_by": "SAF/AA",
+            "poc": text("Capt J. Smith"),
+            "controlled_by": text("SAF/AA"),
             "note": common::content("Handle per **DoDM 5200.48**"),
             "reply_by": "2026-03-04",
         },
-        "tags": ["urgent"],
-        "refs": [{ "org": "AFRL/RQ", "num": "2026-01" }],
+        "tags": [text("urgent")],
+        "refs": [{ "org": text("AFRL/RQ"), "num": text("2026-01") }],
     })
 }
 
@@ -117,10 +119,10 @@ fn every_print_regions_and_routes_on_the_address_it_names() {
             &["address"],
         ),
         (
-            "#qm.form-field(\"Poc\", type: \"text\", value: qm.data.classification.poc, field: \"classification.poc\")\n\
+            "#qm.form-field(\"Poc\", type: \"text\", value: qm.str(qm.data.classification.poc), field: \"classification.poc\")\n\
              #qm.region(\"address.city\")[#box(stroke: 1pt, inset: 4pt)[#upper(qm.data.address.city)]]\n\
              #qm.region(\"refs.0.org\")[AFRL/RQ]\n\
-             #qm.form-field(\"Ref0Num\", field: \"refs.0.num\", value: qm.data.refs.at(0).num)",
+             #qm.form-field(\"Ref0Num\", field: \"refs.0.num\", value: qm.str(qm.data.refs.at(0).num))",
             &["classification.poc", "address.city", "refs.0.org", "refs.0.num"],
             &[],
         ),
@@ -173,7 +175,7 @@ fn ink_keeps_the_address_through_functions_loops_and_patterns() {
          #shout(qm.ink(qm.data, \"subject\"))\n\
          #qm.ink(qm.data, \"balance\")\n\
          #for r in qm.data.refs.filter(r => r.org != \"\") [#qm.ink(r, \"org\") / \
-           #qm.region(r.at(\"$path\") + \"num\")[No. #r.num.len()]]\n\
+           #qm.region(r.at(\"$path\") + \"num\")[No. #qm.str(r.num).len()]]\n\
          #let due(c) = qm.ink(c, \"reply_by\", \"[year]\")\n\
          #due(qm.data.classification)\n\
          #qm.ink(qm.data, \"tags\").join(\", \")\n",
@@ -235,7 +237,7 @@ card_kinds:
         type: object
         properties:
           office:
-            type: string
+            type: text
 "#;
     let plate = r#"
 #import "@local/quillmark-helper:0.2.0" as qm

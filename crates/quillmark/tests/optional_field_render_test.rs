@@ -22,9 +22,9 @@ typst:
 main:
   fields:
     quorum: { type: integer? }
-    attendees: { type: array?, items: { type: string } }
+    attendees: { type: array?, items: { type: text } }
     adjourned: { type: date? }
-    minutes: { type: richtext? }
+    minutes: { type: richtext?, multiline: true }
     tally:
       type: object
       properties:

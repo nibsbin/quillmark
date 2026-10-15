@@ -108,7 +108,7 @@ def test_writer_revise_field():
     (dropped,) = w.revise_field("bio", "make it <kbd>**bold**</kbd>")
     assert (dropped.code, dropped.path) == ("parse::dropped_construct", "main.bio")
     assert quill.reader(doc).get("bio") == "make it **bold**"
-    with raises_edit_code("edit::field_not_inline"):
+    with raises_edit_code("edit::field_not_single_line"):
         w.revise_field("headline", "line one\n\nline two")
     with raises_edit_code("edit::unknown_field"):
         w.revise_field("nope", "x")
@@ -251,13 +251,12 @@ def test_reader_get_content_absence_unknown_and_non_content():
     with raises_edit_code("edit::unknown_field"):
         quill.reader(Document("sample_form@0.1.0")).get_content("nope")
 
-    taro = taro_quill()
-    tdoc = Document("taro@0.1.0")
-    taro.writer(tdoc).set("author", "Ada")
+    doc = Document("sample_form@0.1.0")
+    quill.writer(doc).set("favorite_color", "red")
     # A declared type carrying no content answers from the schema, not the
-    # payload: `author` holds a string and is still not content.
+    # payload: `favorite_color` holds a string and is still not content.
     with raises_edit_code("edit::field_not_content"):
-        taro.reader(tdoc).get_content("author")
+        quill.reader(doc).get_content("favorite_color")
 
 
 ELEMENT_QUILL_YAML = """quill:
@@ -274,15 +273,18 @@ main:
     recipients:
       type: array
       items:
-        type: plaintext
+        type: text
+        multiline: true
     paragraphs:
       type: array
       items:
         type: richtext
+        multiline: true
     tags:
       type: array
       items:
-        type: string
+        type: enum
+        values: [x]
     rows:
       type: array
       items:
@@ -290,6 +292,7 @@ main:
         properties:
           notes:
             type: richtext
+            multiline: true
 
 card_kinds:
   note:
@@ -297,7 +300,8 @@ card_kinds:
       lines:
         type: array
         items:
-          type: plaintext
+          type: text
+          multiline: true
 """
 
 

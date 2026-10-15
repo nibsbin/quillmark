@@ -29,10 +29,10 @@ quill:
 main:
   fields:
     sender:
-      type: string
+      type: text
       description: Name of the sender
     recipient:
-      type: string
+      type: text
       description: Name of the recipient
     date:
       type: date       # a bare calendar date (YYYY-MM-DD); use `datetime` for wall-clock time-of-day
@@ -41,18 +41,18 @@ main:
 
 `name`, `backend`, `version`, and `description` are all required. `name` must be `snake_case`. Define your document's expected root-block fields under `main.fields`. Each field has a `type`, optional `default`, `description`, and validation constraints. Use `integer` for whole numbers only and `number` for values that may include decimals. For the full list of field types, UI hints, typed arrays, and enum constraints, see the [Quill.yaml Reference](quill-yaml-reference.md).
 
-Use `default` for the value most authors will accept as-is (filled in when the field is omitted); the type's blank (`""`, `[]`, `0`, `false`) is how you declare "nothing" as that value. `default` is the only value a field declares; a format hint goes in its `description`. A field with no `default` renders as an empty cell in the blueprint (`title: # string`), and left unanswered it renders its blank. See the [Quill.yaml Reference](quill-yaml-reference.md#default) for details.
+Use `default` for the value most authors will accept as-is (filled in when the field is omitted); the type's blank (`""`, `[]`, `0`, `false`) is how you declare "nothing" as that value. `default` is the only value a field declares; a format hint goes in its `description`. A field with no `default` renders as an empty cell in the blueprint (`title: # text<plain>`), and left unanswered it renders its blank. See the [Quill.yaml Reference](quill-yaml-reference.md#default) for details.
 
 ### Picking a text type
 
-Four types hold text, and two questions pick one:
+Three types hold text, and two questions pick one:
 
-1. **Does the author write prose here, or does the plate compute with the value?** A name, URL, path, or reference key is data. A bio, an abstract, or a cover letter is content.
-2. Then, for data: **is the set of allowed values closed?** (`enum` over `string`.) For content: **should `*text*` render as emphasis, or stay literal?** (`richtext` over `plaintext`.)
+1. **Is the set of allowed values closed?** Then it is an `enum`.
+2. Otherwise: **should `*text*` render as emphasis, or stay literal?** (`richtext` over `text`.)
 
-The letter above needs no content field: its prose is the document body, which is already rich text. `plaintext` and `richtext` are for prose in a *named* field — an abstract, a summary. Any field the plate prints through `qm.ink` is click-to-edit in an editor preview, `string` and `enum` included ([Print with `ink`](editor-regions.md#print-with-ink)); a content field adds navigation inside its value, where a click lands a caret in the text. A name or a reference key stays a `string`.
+`text` is one line and `richtext` one paragraph; `multiline: true` admits more, and a `richtext` declares `multiline:` either way. A name, a URL or a reference key is a one-line `text`, and an abstract or a summary is a `richtext`. The letter above needs no `richtext` field: its prose is the document body, which is already rich text. Both text types are click-to-edit in an editor preview with a caret inside the value; a plate that computes with a `text` value (`upper`, a comparison, `set document(author: ..)`) reads it through [`qm.str`](typst-backend.md#text-as-a-str).
 
-Pick before a corpus exists. Changing a declared type reinterprets every value already stored in that field, and data → content is lossy: see [Choosing among `string`, `enum`, `plaintext`, and `richtext`](quill-yaml-reference.md#choosing-among-string-enum-plaintext-and-richtext).
+Pick before a corpus exists. Changing a declared type reinterprets every value already stored in that field, and `text` → `richtext` is lossy: see [Choosing among `enum`, `text`, and `richtext`](quill-yaml-reference.md#choosing-among-enum-text-and-richtext).
 
 When you declare an `enum`, list only the real choices. Every enum also accepts a **blank** (`""`) that the engine supplies — what a document says when nobody has answered — so you never declare it, and declaring `""` in `values:` is a load error. If the empty state is itself a decision worth recording, make it a member (`undecided`, `waived`), because the blank means nobody chose and a member means someone chose "none". See [the blank](quill-yaml-reference.md#the-blank-values-is-for-choices-not-for-the-absence-of-one).
 

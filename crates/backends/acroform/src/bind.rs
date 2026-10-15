@@ -255,18 +255,17 @@ pub fn project_kind(
     };
     Ok(match &field.r#type {
         SchemaType::Boolean => WidgetType::Checkbox,
-        SchemaType::String
-        | SchemaType::Number
+        SchemaType::Number
         | SchemaType::Integer
         | SchemaType::Date
         | SchemaType::DateTime
         | SchemaType::RichText { .. }
-        | SchemaType::PlainText { .. } => WidgetType::Text {
+        | SchemaType::Text { .. } => WidgetType::Text {
             multiline: is_multiline(field),
         },
         // An array's elements are one per line, in the value `resolve` joins and
         // in what a signer types into the blank widget, so it is multiline
-        // whatever `ui` says.
+        // whatever its items declare.
         SchemaType::Array => match field.items.as_deref() {
             Some(items) if items.r#type.is_leaf() => WidgetType::Text { multiline: true },
             _ => return Err(unbindable()),
@@ -291,11 +290,10 @@ fn blank_first(values: &[String]) -> Vec<String> {
 }
 
 fn is_multiline(field: &FieldSchema) -> bool {
-    field
-        .ui
-        .as_ref()
-        .and_then(|u| u.multiline)
-        .unwrap_or(false)
+    matches!(
+        field.r#type,
+        SchemaType::Text { multiline: true } | SchemaType::RichText { multiline: true }
+    )
 }
 
 fn type_desc(field: &FieldSchema) -> String {
@@ -337,17 +335,15 @@ main:
     enabled: false
   fields:
     full_name:
-      type: string
+      type: text
     comments:
       type: array
       items:
-        type: string
-      ui:
-        multiline: true
+        type: text
     tags:
       type: array
       items:
-        type: string
+        type: text
     agree:
       type: boolean
     favorite_color:
@@ -359,46 +355,47 @@ main:
       type: datetime
     bio:
       type: richtext
+      multiline: true
     address:
       type: object
       properties:
-        street: { type: string }
-        city: { type: string }
+        street: { type: text }
+        city: { type: text }
     header:
       type: object
       properties:
-        office: { type: string }
+        office: { type: text }
         marking:
           type: enum
           values: [UNCLASSIFIED, CUI]
           default: ""
           variants:
             CUI:
-              controlled_by: { type: string }
+              controlled_by: { type: text }
     refs:
       type: array
       items:
         type: object
         properties:
-          org: { type: string }
+          org: { type: text }
     classification:
       type: enum
       values: [UNCLASSIFIED, CUI]
       default: ""
       variants:
         CUI:
-          poc: { type: string }
+          poc: { type: text }
           urgent: { type: boolean }
     quals:
       type: matrix
       members: { flight_cc: Flight CC, dco: DCO }
       properties:
-        detail: { type: string }
+        detail: { type: text }
 card_kinds:
   indorsement:
     fields:
       from:
-        type: string
+        type: text
       signed:
         type: boolean
 "#;
@@ -418,7 +415,7 @@ card_kinds:
         assert_eq!(kind("full_name").unwrap(), WidgetType::Text { multiline: false });
         assert_eq!(kind("count").unwrap(), WidgetType::Text { multiline: false });
         assert_eq!(kind("when").unwrap(), WidgetType::Text { multiline: false });
-        assert_eq!(kind("bio").unwrap(), WidgetType::Text { multiline: false });
+        assert_eq!(kind("bio").unwrap(), WidgetType::Text { multiline: true });
     }
 
     #[test]
@@ -439,8 +436,8 @@ card_kinds:
         );
     }
 
-    /// With or without `ui.multiline`: the joined value carries newlines either
-    /// way.
+    /// The items need not declare `multiline: true`: the joined value carries
+    /// newlines.
     #[test]
     fn a_scalar_array_projects_to_multiline_text() {
         assert_eq!(kind("comments").unwrap(), WidgetType::Text { multiline: true });
@@ -593,10 +590,10 @@ main:
     enabled: false
   fields:
     a:
-      type: string
+      type: text
       description: From the schema.
     b:
-      type: string
+      type: text
       description: Also schema.
 "#;
         let cfg = QuillConfig::from_yaml_with_warnings(yaml).unwrap().0;

@@ -2,15 +2,15 @@
 //!
 //! `Card::commit_field` asks the caller to fetch a [`FieldSchema`] per write.
 //! [`Quill::writer`](crate::quill::Quill::writer) binds the schema once
-//! instead, so callers issue one verb (`set`) and never pass a type token or an
-//! `inline` flag. An undeclared name is [`EditError::UnknownField`]: on the
+//! instead, so callers issue one verb (`set`) and never pass a type token or a
+//! `multiline` flag. An undeclared name is [`EditError::UnknownField`]: on the
 //! typed path it is a typo, not a fallback. Opaque storage stays available
 //! through the raw [`Card::store_field`](crate::document::Card::store_field)
 //! verb.
 //!
 //! ```ignore
 //! let mut w = quill.writer(&mut doc);
-//! w.set("subject", "Q3 results")?;       // richtext(inline) → strict content commit
+//! w.set("subject", "Q3 results")?;       // richtext → strict content commit
 //! w.set("qty", "3")?;                    // integer → strict coerce, stores 3
 //! w.card(2)?.set("desc", content_json)?;  // card kind → CardSchema → field type
 //! w.set_all([("a", "1"), ("b", "2")])?;  // batched, all-or-nothing, a merge
@@ -96,12 +96,12 @@ impl<'a> TypedWriter<'a> {
 
     /// Revise a content field on the main card from authored text: typed *and*
     /// anchor-preserving. Surviving anchors rebase and the diffed result is
-    /// schema-conformed (`richtext(inline)` rejects a multi-block result).
+    /// schema-conformed (a one-line `richtext` rejects a multi-block result).
     /// An undeclared name fails with [`EditError::UnknownField`], as
     /// [`set`](Self::set).
     ///
     /// The codec comes from the declared type: `richtext` diffs markdown and
-    /// rebases anchors; `plaintext` diffs the literal text and never imports
+    /// rebases anchors; `text` diffs the literal text and never imports
     /// markdown, so a byte-identical revise of a value carrying escapes is a
     /// byte no-op. The [`Revised`] receipt's warnings anchor at the field.
     pub fn revise_field(&mut self, name: &str, text: &str) -> Result<Revised, EditError> {
@@ -390,7 +390,7 @@ main:
   fields:
     subject:
       type: richtext
-      inline: true
+      multiline: false
     qty:
       type: integer
 card_kinds:
@@ -398,8 +398,10 @@ card_kinds:
     fields:
       prose:
         type: richtext
+        multiline: true
       blurb:
         type: richtext
+        multiline: true
 ";
 
     fn config() -> QuillConfig {
@@ -480,7 +482,7 @@ card_kinds:
         let fields: IndexMap<String, FieldSchema> = (0..=max)
             .map(|i| {
                 let name = format!("f{i}");
-                (name.clone(), FieldSchema::new(name, FieldType::String, None))
+                (name.clone(), FieldSchema::new(name, FieldType::Text { multiline: false }, None))
             })
             .collect();
         let config = QuillConfig::new(
@@ -587,7 +589,7 @@ card_kinds:
     }
 
     #[test]
-    fn revise_field_is_typed_and_rejects_unknown_and_non_inline() {
+    fn revise_field_is_typed_and_rejects_unknown_and_non_single_line() {
         let config = config();
         let mut doc = blank_doc();
         let mut ed = TypedWriter::new(&config, &mut doc);
@@ -599,29 +601,29 @@ card_kinds:
             ed.revise_field("nope", "x").unwrap_err().code(),
             "edit::unknown_field"
         );
-        // `richtext(inline)` rejects a multi-block result.
+        // A one-line `richtext` rejects a multi-block result.
         let err = ed.revise_field("subject", "a\n\nb").unwrap_err();
-        assert_eq!(err.code(), "edit::field_not_inline");
+        assert_eq!(err.code(), "edit::field_not_single_line");
         assert_eq!(doc.main().field_text("subject", Codec::Richtext).unwrap().unwrap(), "Hello");
     }
 
     #[test]
-    fn set_names_the_trailing_newline_a_plaintext_inline_value_keeps() {
+    fn set_names_the_trailing_newline_a_single_line_text_value_keeps() {
         let config = QuillConfig::from_yaml(&QUILL_YAML.replace(
             "    qty:\n",
-            "    pti:\n      type: plaintext\n      inline: true\n    qty:\n",
+            "    pti:\n      type: text\n    qty:\n",
         ))
         .unwrap();
         let mut doc = blank_doc();
         let mut ed = TypedWriter::new(&config, &mut doc);
 
         let err = ed.set("pti", QuillValue::from("x\n")).unwrap_err();
-        assert_eq!(err.code(), "edit::field_not_inline");
+        assert_eq!(err.code(), "edit::field_not_single_line");
         assert_eq!(err.args().get("trailingNewline"), Some(&serde_json::json!(true)));
         assert!(err.to_string().contains("`|-`"), "{err}");
 
         let err = ed.set("pti", QuillValue::from("x\ny")).unwrap_err();
-        assert_eq!(err.code(), "edit::field_not_inline");
+        assert_eq!(err.code(), "edit::field_not_single_line");
         assert!(!err.args().contains_key("trailingNewline"));
     }
 

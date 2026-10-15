@@ -558,31 +558,30 @@ fn declared_type_expression(field: &FieldSchema) -> String {
                 .collect();
             format!("matrix<{}>", ids.join(" | "))
         }
-        FieldType::String => "string".into(),
         FieldType::Number => "number".into(),
         FieldType::Integer => "integer".into(),
         FieldType::Boolean => "boolean".into(),
         FieldType::Object => "object".into(),
         // The type names the role; the `<markdown>` format slot names the
         // surface encoding an author writes (and `to_markdown` re-emits).
-        FieldType::RichText { inline: false } => "richtext<markdown>".into(),
-        FieldType::RichText { inline: true } => "richtext(inline)<markdown>".into(),
+        FieldType::RichText { multiline: false } => "richtext<markdown>".into(),
+        FieldType::RichText { multiline: true } => "richtext(multiline)<markdown>".into(),
         // The `<plain>` format slot names the literal codec (`from_plaintext`/
         // `to_plaintext`): content the author navigates but which takes no
         // markup, distinct from richtext's `<markdown>` surface.
-        FieldType::PlainText { inline: false } => "plaintext<plain>".into(),
-        FieldType::PlainText { inline: true } => "plaintext(inline)<plain>".into(),
+        FieldType::Text { multiline: false } => "text<plain>".into(),
+        FieldType::Text { multiline: true } => "text(multiline)<plain>".into(),
         FieldType::Date => "date<YYYY-MM-DD | today>".into(),
         FieldType::DateTime => "datetime<YYYY-MM-DDThh:mm[:ss]>".into(),
         // The element type comes from `items`; a scalar element gives
-        // `array<string>`/`array<integer>`/`array<markdown>`, an object
-        // element gives `array<object>`.
+        // `array<text<plain>>`/`array<integer>`, an object element gives
+        // `array<object>`.
         FieldType::Array => {
             let item = field
                 .items
                 .as_ref()
                 .map(|it| type_expression(it))
-                .unwrap_or_else(|| "string".into());
+                .unwrap_or_else(|| "text<plain>".into());
             format!("array<{}>", item)
         }
     }
@@ -608,42 +607,42 @@ main:
     contact:
       type: object
       properties:
-        tags: { type: array, items: { type: string } }
+        tags: { type: array, items: { type: text } }
         address:
           type: object
           properties:
-            city: { type: string, description: The city }
-            zip: { type: string, default: "00000" }
+            city: { type: text, description: The city }
+            zip: { type: text, default: "00000" }
     refs:
       type: array
       items:
         type: object
         properties:
-          org: { type: string }
+          org: { type: text }
           lead:
             type: object
             properties:
-              email: { type: string }
+              email: { type: text }
 "#)
         .blueprint();
 
         assert!(
             t.contains(concat!(
                 "contact: # object\n",
-                "  tags: # array<string>\n",
+                "  tags: # array<text<plain>>\n",
                 "  address: # object\n",
                 "    # The city\n",
-                "    city: # string\n",
-                "    zip: \"00000\" # string\n",
+                "    city: # text<plain>\n",
+                "    zip: \"00000\" # text<plain>\n",
             )),
             "{t}"
         );
         assert!(
             t.contains(concat!(
                 "# refs:\n",
-                "#   - org: # string\n",
+                "#   - org: # text<plain>\n",
                 "#     lead: # object\n",
-                "#       email: # string\n",
+                "#       email: # text<plain>\n",
                 "refs: [] # array<object>\n",
             )),
             "{t}"
@@ -671,12 +670,12 @@ main:
         address:
           type: object
           properties:
-            city: { type: string, default: Reston }
-            zip: { type: string, default: "20190" }
+            city: { type: text, default: Reston }
+            zip: { type: text, default: "20190" }
 "#)
         .blueprint();
         assert!(t.contains("  address: # object\n"), "{t}");
-        assert!(t.contains("    city: Reston # string\n"), "{t}");
+        assert!(t.contains("    city: Reston # text<plain>\n"), "{t}");
     }
 
     /// A blank `default:` renders as no default does, so it prints as none, at
@@ -693,24 +692,24 @@ main:
 quill: {{ name: x, version: 1.0.0, backend: typst, description: x }}
 main:
   fields:
-    note: {{ type: string{s} }}
+    note: {{ type: text{s} }}
     issued: {{ type: date{s} }}
     stamp: {{ type: datetime{s} }}
     level: {{ type: enum, values: [low, high]{s} }}
-    bio: {{ type: richtext{s} }}
-    line: {{ type: plaintext, inline: true{s} }}
-    tags: {{ type: array, items: {{ type: string }}{a} }}
+    bio: {{ type: richtext, multiline: true{s} }}
+    line: {{ type: text{s} }}
+    tags: {{ type: array, items: {{ type: text }}{a} }}
     quals:
       type: matrix
       open: true
       members: {{ cc: CC }}
-      properties: {{ detail: {{ type: string{s} }} }}{m}
-    rows: {{ type: array, items: {{ type: object, properties: {{ org: {{ type: string{s} }} }} }}{a} }}
+      properties: {{ detail: {{ type: text{s} }} }}{m}
+    rows: {{ type: array, items: {{ type: object, properties: {{ org: {{ type: text{s} }} }} }}{a} }}
     address:
       type: object
       properties:
-        street: {{ type: string{s} }}
-        refs: {{ type: array, items: {{ type: object, properties: {{ v: {{ type: string }} }} }}{a} }}
+        street: {{ type: text{s} }}
+        refs: {{ type: array, items: {{ type: object, properties: {{ v: {{ type: text }} }} }}{a} }}
 "#,
                 s = d("\"\""),
                 a = d("[]"),
@@ -766,14 +765,14 @@ main:
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
   fields:
-    title: { type: string }
+    title: { type: text }
     size: { type: number, default: 11 }
     flag: { type: boolean, default: false }
     issued: { type: date }
     published: { type: datetime }
 "#)
         .blueprint();
-        assert!(t.contains("title: # string\n"));
+        assert!(t.contains("title: # text<plain>\n"));
         assert!(t.contains("size: 11 # number\n"));
         assert!(t.contains("flag: false # boolean\n"));
         assert!(t.contains("issued: # date<YYYY-MM-DD | today>\n"));
@@ -787,16 +786,16 @@ quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
   fields:
     counts:   { type: array, items: { type: integer } }
-    sections: { type: array, items: { type: richtext } }
-    tags:     { type: array, items: { type: string } }
+    sections: { type: array, items: { type: richtext, multiline: true } }
+    tags:     { type: array, items: { type: text } }
 "#)
         .blueprint();
         assert!(t.contains("counts: # array<integer>\n"), "{t}");
         assert!(
-            t.contains("sections: # array<richtext<markdown>>\n"),
+            t.contains("sections: # array<richtext(multiline)<markdown>>\n"),
             "{t}"
         );
-        assert!(t.contains("tags: # array<string>\n"), "{t}");
+        assert!(t.contains("tags: # array<text<plain>>\n"), "{t}");
     }
 
     #[test]
@@ -807,11 +806,12 @@ main:
   fields:
     bio:
       type: richtext
+      multiline: true
       default: "## About me\n\nHello."
 "###)
         .blueprint();
         assert!(
-            t.contains("bio: |- # richtext<markdown>\n  ## About me\n\n  Hello.\n"),
+            t.contains("bio: |- # richtext(multiline)<markdown>\n  ## About me\n\n  Hello.\n"),
             "{t}"
         );
         let doc = Document::parse(&t).expect("the blueprint parses").document;
@@ -827,12 +827,12 @@ main:
 quill: { name: taro, version: 0.1.0, backend: typst, description: A taro order form. }
 main:
   fields:
-    flavor: { type: string, default: taro }
+    flavor: { type: text, default: taro }
 "#)
         .blueprint();
         assert!(
             t.starts_with(
-                "~~~\n$quill: taro@0.1 # keep verbatim\n$kind: main\nflavor: taro # string\n"
+                "~~~\n$quill: taro@0.1 # keep verbatim\n$kind: main\nflavor: taro # text<plain>\n"
             ),
             "{t}"
         );
@@ -846,7 +846,7 @@ quill: { name: taro, version: 0.1.0, backend: typst, description: A taro order f
 main:
   description: "   "
   fields:
-    flavor: { type: string, default: taro }
+    flavor: { type: text, default: taro }
 "#)
         .blueprint();
         assert!(
@@ -861,16 +861,16 @@ main:
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
   fields:
-    title: { type: string }
+    title: { type: text }
 card_kinds:
   note:
     description: A short note appended to the document.
     fields:
-      author: { type: string }
+      author: { type: text }
 "#)
         .blueprint();
         assert!(t.contains(
-            "~~~\n$kind: note # A short note appended to the document.\n# composable (0..N)\n# sample card; delete if not needed\nauthor: # string\n"
+            "~~~\n$kind: note # A short note appended to the document.\n# composable (0..N)\n# sample card; delete if not needed\nauthor: # text<plain>\n"
         ));
     }
 
@@ -882,25 +882,25 @@ main:
   title: Memorandum
   description: A formal memo.
   fields:
-    contact: { type: string, title: Point of contact, description: Who answers questions. }
-    office: { type: string, title: Office symbol }
+    contact: { type: text, title: Point of contact, description: Who answers questions. }
+    office: { type: text, title: Office symbol }
     address:
       type: object
       properties:
-        city: { type: string, title: City }
+        city: { type: text, title: City }
 card_kinds:
   note:
     title: Marginal note
     description: A short note.
     fields:
-      text: { type: string }
+      text: { type: text }
 "#)
         .blueprint();
         for line in [
             "$kind: main # Memorandum — A formal memo.\n",
-            "# Point of contact — Who answers questions.\ncontact: # string\n",
-            "# Office symbol\noffice: # string\n",
-            "  # City\n  city: # string\n",
+            "# Point of contact — Who answers questions.\ncontact: # text<plain>\n",
+            "# Office symbol\noffice: # text<plain>\n",
+            "  # City\n  city: # text<plain>\n",
             "$kind: note # Marginal note — A short note.\n",
         ] {
             assert!(t.contains(line), "missing {line:?}:\n{t}");
@@ -915,20 +915,20 @@ card_kinds:
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
   fields:
-    to: { type: string }
+    to: { type: text }
 card_kinds:
   note:
     fields:
-      author: { type: string }
+      author: { type: text }
   skills:
     body: { enabled: false }
     fields:
-      items: { type: array, items: { type: string } }
+      items: { type: array, items: { type: text } }
 "#)
         .blueprint();
-        assert!(t.contains("to: # string\n~~~\n\n~~~\n"), "{t}");
-        assert!(t.contains("author: # string\n~~~\n\n~~~\n"), "{t}");
-        assert!(t.ends_with("items: # array<string>\n# no body\n~~~\n"), "{t}");
+        assert!(t.contains("to: # text<plain>\n~~~\n\n~~~\n"), "{t}");
+        assert!(t.contains("author: # text<plain>\n~~~\n\n~~~\n"), "{t}");
+        assert!(t.ends_with("items: # array<text<plain>>\n# no body\n~~~\n"), "{t}");
         let doc = Document::parse(&t).expect("blueprint must parse").document;
         assert!(doc.main().body().is_blank());
         assert!(doc.cards().iter().all(|c| c.body().is_blank()));
@@ -944,10 +944,10 @@ main:
       addressing: { title: Addressing }
       letterhead: {}
   fields:
-    letterhead_title: { type: string, default: HQ, ui: { group: letterhead } }
-    memo_for: { type: array, items: { type: string }, ui: { group: addressing } }
-    notes: { type: string }
-    subject: { type: string, ui: { group: addressing } }
+    letterhead_title: { type: text, default: HQ, ui: { group: letterhead } }
+    memo_for: { type: array, items: { type: text }, ui: { group: addressing } }
+    notes: { type: text }
+    subject: { type: text, ui: { group: addressing } }
 "#)
         .blueprint();
         let after_quill = &t[t.find("$quill:").unwrap()..];
@@ -972,7 +972,7 @@ main:
       items:
         type: object
         properties:
-          org: { type: string }
+          org: { type: text }
 "#)
         .blueprint();
         assert!(t.contains("refs: # array<object>\n  - org: ACME\n"));
@@ -1019,16 +1019,16 @@ main:
       items:
         type: object
         properties:
-          name: { type: string, description: Full name. }
+          name: { type: text, description: Full name. }
           voting: { type: boolean, default: false }
-          tags: { type: array, default: [], items: { type: object, properties: { label: { type: string } } } }
+          tags: { type: array, default: [], items: { type: object, properties: { label: { type: text } } } }
     outer:
       type: array
       items:
         type: object
         properties:
-          inner: { type: array, default: [], items: { type: object, properties: { v: { type: string } } } }
-          z: { type: string }
+          inner: { type: array, default: [], items: { type: object, properties: { v: { type: text } } } }
+          z: { type: text }
 "#)
         .blueprint();
         assert!(
@@ -1037,18 +1037,18 @@ main:
                 "# attendees:\n",
                 "#   -\n",
                 "#     # Full name.\n",
-                "#     name: # string\n",
+                "#     name: # text<plain>\n",
                 "#     voting: false # boolean\n",
                 "#     # tags:\n",
-                "#     #   - label: # string\n",
+                "#     #   - label: # text<plain>\n",
                 "#     tags: [] # array<object>\n",
                 "attendees: [] # array<object>\n",
                 "# outer:\n",
                 "#   -\n",
                 "#     # inner:\n",
-                "#     #   - v: # string\n",
+                "#     #   - v: # text<plain>\n",
                 "#     inner: [] # array<object>\n",
-                "#     z: # string\n",
+                "#     z: # text<plain>\n",
                 "outer: [] # array<object>\n",
             )),
             "{bp}"
@@ -1081,7 +1081,7 @@ main:
       items:
         type: object
         properties:
-          org: { type: string }
+          org: { type: text }
 "#)
         .blueprint();
         assert!(t.contains("refs: [] # array<object>\n~~~"), "{t}");
@@ -1097,13 +1097,13 @@ main:
       type: object
       description: Mailing address.
       properties:
-        street: { type: string, description: Street line. }
-        city:   { type: string }
+        street: { type: text, description: Street line. }
+        city:   { type: text }
 "#)
         .blueprint();
         assert!(t.contains("# Mailing address.\naddress: # object\n"));
-        assert!(t.contains("  # Street line.\n  street: # string\n"));
-        assert!(t.contains("  city: # string\n"));
+        assert!(t.contains("  # Street line.\n  street: # text<plain>\n"));
+        assert!(t.contains("  city: # text<plain>\n"));
     }
 
     #[test]
@@ -1115,16 +1115,16 @@ main:
     address:
       type: object
       properties:
-        street: { type: string, default: "5000 Forbes Ave" }
-        city:   { type: string, default: Pittsburgh }
+        street: { type: text, default: "5000 Forbes Ave" }
+        city:   { type: text, default: Pittsburgh }
 "#)
         .blueprint();
         assert!(t.contains("address: # object\n"));
         assert!(
-            t.contains("  street: 5000 Forbes Ave # string\n")
-                || t.contains("  street: \"5000 Forbes Ave\" # string\n")
+            t.contains("  street: 5000 Forbes Ave # text<plain>\n")
+                || t.contains("  street: \"5000 Forbes Ave\" # text<plain>\n")
         );
-        assert!(t.contains("  city: Pittsburgh # string\n"));
+        assert!(t.contains("  city: Pittsburgh # text<plain>\n"));
     }
 
     /// A typed dictionary is a namespace, not a cell: a literal on the
@@ -1140,8 +1140,8 @@ main:
       type: object
       default: { street: "5000 Forbes Ave" }
       properties:
-        street: { type: string }
-        city:   { type: string }
+        street: { type: text }
+        city:   { type: text }
 "#,
         )
         .expect_err("must refuse");
@@ -1157,10 +1157,10 @@ quill: { name: letter, version: 1.0.0, backend: typst, description: A formal let
 main:
   fields:
     to:
-      type: string
+      type: text
       description: Recipient name.
     subject:
-      type: string
+      type: text
     date:
       type: datetime
     priority:
@@ -1169,13 +1169,13 @@ main:
       default: normal
     attachments:
       type: array
-      items: { type: string }
+      items: { type: text }
       default: []
 card_kinds:
   enclosure:
     description: An enclosure attached to the letter.
     fields:
-      label: { type: string }
+      label: { type: text }
       pages: { type: integer, default: 1 }
 "#;
 
@@ -1197,11 +1197,11 @@ card_kinds:
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
   fields:
-    version:     { type: string, default: "1.0" }
-    activation:  { type: string, default: "on" }
-    code:        { type: string, default: "01234" }
-    placeholder: { type: string, default: "null" }
-    yes_flag:    { type: string, default: "yes" }
+    version:     { type: text, default: "1.0" }
+    activation:  { type: text, default: "on" }
+    code:        { type: text, default: "01234" }
+    placeholder: { type: text, default: "null" }
+    yes_flag:    { type: text, default: "yes" }
 "#)
         .blueprint();
 

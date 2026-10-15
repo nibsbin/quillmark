@@ -274,12 +274,37 @@
   entry
 }
 
+#let _qm-str(value) = {
+  if value == none or std.type(value) == std.str { return value }
+  assert(std.type(value) == content,
+    message: "str: expected a text value, got " + repr(std.type(value)))
+  let space = [ ].func()
+  let walk(c) = {
+    let f = c.func()
+    // A markup escape (`\*`) is a `symbol`, which carries `text` as `text` does.
+    if c.has("text") and std.type(c.text) == std.str { c.text }
+    else if f == space { " " }
+    else if f == smartquote { if c.double { "\"" } else { "'" } }
+    else if f == linebreak { "\n" }
+    else if f == parbreak { "\n\n" }
+    else if c.has("children") { c.children.map(walk).join(default: "") }
+    else if c.has("body") { walk(c.body) }
+    else if c.has("child") { walk(c.child) }
+    else { "" }
+  }
+  // The generated block opens on a line break, which reads as a space, and
+  // closes on a paragraph break; a space the value holds at a line's start or
+  // beside another is `~`, a no-break space.
+  walk(value).trim(" ", at: start).trim(regex("[ \n]+"), at: end).replace("\u{a0}", " ")
+}
+
 /// A matrix's rows, the vocabulary a plate prints: every roster member in
 /// roster order, then each item the value adds, in id order. A row is
 /// `(id, title, held, value, path)`. `held` is the member's presence, `value`
 /// its dictionary of columns (`none` where unheld), and `path` its address,
-/// which `region` claims. A roster member's `title` is the roster's; an added
-/// item's is its own cell, whose ink `ink(row.value, "title")` places.
+/// which `region` claims. `title` is a `str`: a roster member's is the roster's, an added
+/// item's its own cell as `str` reads it, whose ink `ink(row.value, "title")`
+/// places.
 ///
 /// `dict` is data, a card or the typed dictionary declaring the matrix, and
 /// `key` the matrix's name within it: `roster(data, "qualifications")`,
@@ -304,8 +329,19 @@
   })
   for (id, value) in held {
     if id not in ids {
-      rows.push((id: id, title: value.title, held: true, value: value, path: path + "." + id))
+      rows.push((id: id, title: _qm-str(value.title), held: true, value: value, path: path + "." + id))
     }
   }
   rows
 }
+
+/// The text a `text` value holds, as a `str`: the verbatim string a plate
+/// computes with where content will not do (`set document(author: ..)`,
+/// `upper`, `split`, a comparison). `none` stays `none` and a `str` is itself,
+/// so an unanswered optional cell and a blank one pass through.
+///
+/// Every character of a `text` value comes back, whitespace normalized: a tab
+/// or a no-break space reads as a space, trailing whitespace drops, and a run of
+/// blank lines reads as one. On `richtext` it is the
+/// text with the formatting dropped, and an island or element gives nothing.
+#let str(value) = _qm-str(value)

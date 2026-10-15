@@ -13,7 +13,7 @@ fn body_session(markdown: &str) -> LiveSession {
     TypstBackend
         .open(
             &quill(
-                &yaml("main:\n  fields:\n    prose: { type: richtext }\n"),
+                &yaml("main:\n  fields:\n    prose: { type: richtext, multiline: true }\n"),
                 r#"
 #import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 612pt, height: 792pt, margin: 72pt)

@@ -186,7 +186,7 @@ document written by the current writer.
 **Resting form.** Byte-equality is over `Document` values, so it is only
 as useful as the model's agreement on what a given document *is*. A
 content field has one resting form per codec: a `richtext` field rests as
-the canonical content object, a `plaintext` field as its literal string
+the canonical content object, a `text` field as its literal string
 ([SCHEMAS.md](SCHEMAS.md) § "Content fields rest per codec").
 `Quill::conform` is what holds that: it walks a document's declared
 content fields through the same strict write the typed writer commits
@@ -716,7 +716,7 @@ When the `Document` wire format changes again:
    ```
 
 **A migration reaches the `body` and nothing else.** Every other stored content
-— a `richtext` or `plaintext` field, a `$seed` overlay — sits inside an opaque
+— a `richtext` or `text` field, a `$seed` overlay — sits inside an opaque
 payload value carrying no schema tag, and a walk cannot tell one from host data
 that merely looks like it (`$ext` is arbitrary by contract). So a change to the
 *content* encoding is not migratable, and has to be readable instead: the

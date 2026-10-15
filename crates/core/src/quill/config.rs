@@ -63,7 +63,7 @@ impl FieldPosition {
 ///
 /// Shared by `QuillConfig::conform_value` (to adopt the value) and
 /// `validation::validate_value` (to accept it), so coercion and validation
-/// never disagree about which bare scalars a `string` field accepts.
+/// never disagree about which bare scalars a `text` field accepts.
 pub(crate) fn scalar_as_string(value: &serde_json::Value) -> Option<String> {
     match value {
         serde_json::Value::Bool(b) => Some(b.to_string()),
@@ -215,10 +215,17 @@ impl CoercionError {
     }
 }
 
-/// The `plaintext(inline)` refusal's reason when the value is one line plus a
-/// trailing newline, the case `EditError::FieldNotInline` names apart.
-pub(crate) const PLAINTEXT_TRAILING_NEWLINE: &str =
-    "plaintext(inline) requires a single line, and the trailing newline is a second";
+/// The one-line `text` refusal's reason when the value is one line plus a
+/// trailing newline, the case `EditError::FieldNotSingleLine` names apart.
+pub(crate) const TEXT_TRAILING_NEWLINE: &str =
+    "text requires a single line, and the trailing newline is a second";
+
+/// The coercion `target` a one-line `text` refusal names, distinct from the
+/// codec's own decode target so the write surface keys on it.
+pub(crate) const TEXT_SINGLE_LINE_TARGET: &str = "text(single_line)";
+
+/// [`TEXT_SINGLE_LINE_TARGET`]'s `richtext` counterpart.
+pub(crate) const RICHTEXT_SINGLE_LINE_TARGET: &str = "richtext(single_line)";
 
 /// The leniency [`QuillConfig::conform_value`] coerces under.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -231,12 +238,12 @@ pub(crate) enum Leniency {
     /// resting form [`Quill::conform`](crate::quill::Quill::conform) lands a
     /// content field at.
     ///
-    /// "Strict" is asymmetric by target, not absolute. `string` and `array` are
-    /// universal sinks, so a scalar→`string` (`true` → `"true"`) and a
+    /// "Strict" is asymmetric by target, not absolute. `text` and `array` are
+    /// universal sinks, so a scalar→`text` (`true` → `"true"`) and a
     /// scalar→singleton-`array` wrap stay lenient even here, both crossings
     /// being lossless and unambiguous; only the lossy or ambiguous ones
     /// (scalar→`object`, `String`→`number`/`bool`, `Boolean`↔`Number`) are
-    /// rejected. So a strict write still reshapes toward `string`/`array` while
+    /// rejected. So a strict write still reshapes toward `text`/`array` while
     /// refusing to invent structure or reinterpret a scalar's type.
     Write,
 }
@@ -502,7 +509,7 @@ impl QuillConfig {
             }
             // An enum coerces as a string; domain membership is the validation
             // layer's, an out-of-domain string being a value error.
-            FieldType::String | FieldType::Enum { .. } => {
+            FieldType::Enum { .. } => {
                 if json_value.is_string() {
                     return Ok(value.clone());
                 }
@@ -519,7 +526,7 @@ impl QuillConfig {
                     )),
                 }
             }
-            FieldType::PlainText { inline } => {
+            FieldType::Text { multiline } => {
                 // The literal codec and its two rests: `SCHEMAS.md`
                 // §"Content fields rest per codec".
                 let plain_check =
@@ -527,22 +534,22 @@ impl QuillConfig {
                         if !rt.is_plain() {
                             return Err(CoercionError::uncoercible(
                                 path,
-                                "<plaintext>",
-                                "plaintext",
-                                "plaintext carries no marks, islands, or block \
+                                "<text>",
+                                "text",
+                                "text carries no marks, islands, or block \
                                      formatting (lists, quotes, headings)",
                             ));
                         }
-                        if inline && !rt.is_inline() {
+                        if !multiline && !rt.is_inline() {
                             let reason = if crate::document::is_line_with_trailing_newline(rt) {
-                                PLAINTEXT_TRAILING_NEWLINE
+                                TEXT_TRAILING_NEWLINE
                             } else {
-                                "plaintext(inline) requires a single line"
+                                "text requires a single line; declare multiline: true to admit more"
                             };
                             return Err(CoercionError::uncoercible(
                                 path,
-                                "<plaintext>",
-                                "plaintext(inline)",
+                                "<text>",
+                                TEXT_SINGLE_LINE_TARGET,
                                 reason,
                             ));
                         }
@@ -564,7 +571,7 @@ impl QuillConfig {
                             CoercionError::uncoercible(
                                 path,
                                 "<object>",
-                                "plaintext",
+                                "text",
                                 format!("not a valid content object: {e}"),
                             )
                         },
@@ -578,8 +585,8 @@ impl QuillConfig {
                         Leniency::Write => Err(CoercionError::uncoercible(
                             path,
                             json_value,
-                            "plaintext",
-                            "value is not a plaintext string or content",
+                            "text",
+                            "value is not a text string or content",
                         )),
                     };
                 };
@@ -587,7 +594,7 @@ impl QuillConfig {
                 plain_check(&rt)?;
                 Ok(commit(&rt))
             }
-            FieldType::RichText { inline } => {
+            FieldType::RichText { multiline } => {
                 // The deliberately-lenient sibling of the strict decoders
                 // (`document::canonical_richtext_value` at the write and literal
                 // sites, `Codec::Richtext.decode_value` at the wire and
@@ -598,14 +605,14 @@ impl QuillConfig {
                     CoercionError::uncoercible(
                         path,
                         "<richtext>",
-                        "richtext(inline)",
-                        "richtext(inline) requires a single paragraph line \
-                             with no list/quote container and no islands",
+                        RICHTEXT_SINGLE_LINE_TARGET,
+                        "richtext requires a single paragraph line with no list/quote \
+                             container and no islands; declare multiline: true to admit blocks",
                     )
                 };
                 let inline_check =
                     |rt: &quillmark_content::model::Content| -> Result<(), CoercionError> {
-                        if inline && !rt.is_inline() {
+                        if !multiline && !rt.is_inline() {
                             return Err(inline_err());
                         }
                         Ok(())
@@ -614,7 +621,7 @@ impl QuillConfig {
                 // variants, which the bindings key on.
                 if mode == Leniency::Write {
                     use crate::document::RichtextValueError as E;
-                    return crate::document::canonical_richtext_value(json_value, inline)
+                    return crate::document::canonical_richtext_value(json_value, !multiline)
                         .map(|(content, dropped)| {
                             drops.extend(crate::document::dropped_constructs(dropped, Some(path)));
                             QuillValue::from_json(content)
@@ -632,7 +639,7 @@ impl QuillConfig {
                                 "richtext",
                                 crate::document::Codec::Richtext.unshaped_message(json_value),
                             ),
-                            E::NotInline => inline_err(),
+                            E::NotSingleLine => inline_err(),
                         });
                 }
                 if json_value.is_object() {
@@ -675,9 +682,9 @@ impl QuillConfig {
                 let text = if let Some(s) = json_value.as_str() {
                     // The blank is a value: it survives coercion so the ladder
                     // sees a *present* cell and lets it outrank a `default:`,
-                    // as `""` does for `string`. Nulling it here would make one
+                    // as `""` does for `text`. Nulling it here would make one
                     // authored literal mean "absent" for `date` and "explicitly
-                    // nothing" for `string`.
+                    // nothing" for `text`.
                     if s.is_empty() {
                         return Ok(value.clone());
                     }
@@ -1198,7 +1205,7 @@ impl QuillConfig {
                         "quill::array_missing_items",
                         format!(
                             "Field '{owner}' has type: array but no 'items' element schema. \
-                             Declare the element type, e.g. items: {{ type: string }} \
+                             Declare the element type, e.g. items: {{ type: text }} \
                              for a list of strings or items: {{ type: object, \
                              properties: … }} for a list of objects."
                         ),
@@ -1757,9 +1764,9 @@ impl QuillConfig {
                     "Remove the key; leave the member out of the default to untick it."
                         .to_string(),
                 ),
-                // NotInline and NotPlain can arise on a literal, and
+                // NotSingleLine and NotPlain can arise on a literal, and
                 // `literal_content` reports them at load.
-                ValidationError::NotInline { .. } | ValidationError::NotPlain { .. } => continue,
+                ValidationError::NotSingleLine { .. } | ValidationError::NotPlain { .. } => continue,
             };
             errors.push(diag);
         }
@@ -1942,12 +1949,14 @@ impl QuillConfig {
                     _ => false,
                 }
             } else {
+                // Both sides compare in plate form: a `text` value's Write rest
+                // is its string, its `default:` the content the floor commits.
                 card.fields.get(name).is_some_and(|field| {
                     Self::conform_value(
                         &QuillValue::from_json(value.clone()),
                         field,
                         &DocPath::new().field(name),
-                        Leniency::Write,
+                        Leniency::Render,
                         &mut Vec::new(),
                     )
                         .is_ok_and(|seeded| {
@@ -2677,7 +2686,7 @@ impl QuillConfig {
         }
 
         // Import every richtext `default` literal: this is where
-        // `richtext(inline)` violations and malformed richtext literals surface
+        // one-line violations and malformed richtext literals surface
         // as load errors. A `default` is cached as its canonical-content
         // companion, a pure function of the Quill.yaml bytes and never
         // serialized, which the render floor reads instead of re-importing the
@@ -2827,15 +2836,18 @@ fn template_token(text: &str) -> Option<&str> {
 }
 
 /// Whether a field's type tree contains any content leaf: the gate for caching
-/// a content companion. Both `richtext` and its literal-codec sibling `plaintext`
-/// are content leaves; a scalar (`string`, `integer`, `enum`, …) never carries
-/// one; an `array<richtext>` or an `object` with a content property does.
+/// a content companion. Both `richtext` and its literal-codec sibling `text`
+/// are content leaves; a scalar (`integer`, `enum`, …) never carries one; an
+/// `array<richtext>`, an `object` with a content property and an open `matrix`
+/// (its added items' `title`) do.
 pub(crate) fn field_contains_content(field: &FieldSchema) -> bool {
     match &field.r#type {
-        FieldType::RichText { .. } | FieldType::PlainText { .. } => true,
+        FieldType::RichText { .. } | FieldType::Text { .. } => true,
         FieldType::Array => field.items.as_deref().is_some_and(field_contains_content),
         // A matrix's columns are its content-bearing cells; its member and added
-        // item schemas copy them, so the columns answer for all three.
+        // item schemas copy them, so the columns answer for all three, beside
+        // the added item's own `title`.
+        FieldType::Matrix { open: true, .. } => true,
         FieldType::Object | FieldType::Matrix { .. } => field
             .properties
             .as_ref()
@@ -2872,7 +2884,7 @@ fn same_value(a: &serde_json::Value, b: &serde_json::Value) -> bool {
 /// Populate a field's `default_content` companion cache from its markdown
 /// literal, and every nested declaration's from its own. No-op where the type
 /// tree bears no content leaf, since nothing below it does either; a failed import or a
-/// `richtext(inline)` violation is appended to `errors` as a load diagnostic. The walk covers every declaration position, for the reason
+/// one-line violation is appended to `errors` as a load diagnostic. The walk covers every declaration position, for the reason
 /// `SCHEMAS.md` §"Document seeding" gives.
 ///
 /// `card` labels the owning card and `path` the field's declaration path
@@ -2929,7 +2941,7 @@ fn populate_card_content(card: &mut CardSchema, label: &str, errors: &mut Vec<Di
 
 /// Compute the canonical-content form of a richtext-bearing `default`,
 /// importing every markdown leaf once and enforcing
-/// `richtext(inline)`. Recurses through `array` / `object` shapes, converting
+/// the one-line constraint. Recurses through `array` / `object` shapes, converting
 /// only their richtext leaves and passing other elements through unchanged.
 /// `Ok(None)` when the literal carries no importable richtext (a null value, or
 /// a field the gate already cleared as non-richtext); `Err` is a load error.
@@ -2944,9 +2956,9 @@ fn literal_content(
         return Ok(None);
     }
     match &field.r#type {
-        FieldType::RichText { inline } => {
+        FieldType::RichText { multiline } => {
             use crate::document::{ContentDecodeError as D, RichtextValueError as E};
-            crate::document::canonical_richtext_value(json, *inline)
+            crate::document::canonical_richtext_value(json, !*multiline)
                 .map(|(content, _)| Some(QuillValue::from_json(content)))
                 .map_err(|e| match e {
                     E::Decode(D::BadMarkdown(m)) => {
@@ -2959,37 +2971,40 @@ fn literal_content(
                         label,
                         "expected a markdown string (richtext literals are authored as markdown)",
                     ),
-                    E::NotInline => richtext_inline_error(label),
+                    E::NotSingleLine => single_line_error(label, "richtext"),
                 })
         }
-        FieldType::PlainText { inline } => {
+        FieldType::Text { multiline } => {
             // Shares the one object-vs-string dispatch with the validation
             // shape check.
-            let rt = match crate::document::Codec::Plaintext.decode_value(json) {
+            let rt = match crate::document::Codec::Text.decode_value(json) {
                 Some(Ok(rt)) => rt.content,
                 Some(Err(e)) => {
-                    return Err(richtext_literal_error(
+                    return Err(literal_error(
+                        "text",
                         label,
-                        &format!("not a valid richtext content: {}", e.into_message()),
+                        &format!("not a valid text content: {}", e.into_message()),
                     ))
                 }
                 None => {
-                    return Err(richtext_literal_error(
+                    return Err(literal_error(
+                        "text",
                         label,
-                        "expected a plaintext string (plaintext literals are authored as literal text)",
+                        "expected a text string (text literals are authored as literal text)",
                     ))
                 }
             };
             if !rt.is_plain() {
-                return Err(richtext_literal_error(
+                return Err(literal_error(
+                    "text",
                     label,
-                    "plaintext carries no marks, islands, or block formatting",
+                    "text carries no marks, islands, or block formatting",
                 ));
             }
-            if *inline && !rt.is_inline() {
-                let mut diag = richtext_inline_error(label);
+            if !*multiline && !rt.is_inline() {
+                let mut diag = single_line_error(label, "text");
                 if crate::document::is_line_with_trailing_newline(&rt) {
-                    diag.hint = Some(super::validation::not_inline_hint(true).to_string());
+                    diag.hint = Some(super::validation::not_single_line_hint(true).to_string());
                 }
                 return Err(diag);
             }
@@ -3062,29 +3077,35 @@ fn literal_content(
     }
 }
 
-/// A load diagnostic for a richtext schema literal that failed to import.
+/// A load diagnostic for a `richtext` schema literal that failed to import.
 fn richtext_literal_error(label: &str, reason: &str) -> Diagnostic {
+    literal_error("richtext", label, reason)
+}
+
+/// A load diagnostic for a content schema literal of `type` that failed to
+/// import.
+fn literal_error(r#type: &str, label: &str, reason: &str) -> Diagnostic {
     Diagnostic::new(
         Severity::Error,
-        format!("Failed to import richtext {label}: {reason}"),
+        format!("Failed to import {type} {label}: {reason}"),
     )
     .with_code("quill::richtext_default_import".to_string())
 }
 
-/// A load diagnostic for a `richtext(inline)` schema literal whose content spans
-/// more than a single paragraph.
-fn richtext_inline_error(label: &str) -> Diagnostic {
+/// A load diagnostic for a one-line `text` or `richtext` schema literal whose
+/// content spans more than a single line or paragraph.
+fn single_line_error(label: &str, r#type: &str) -> Diagnostic {
     Diagnostic::new(
         Severity::Error,
         format!(
-            "richtext(inline) {label} must be a single paragraph (no blank lines, \
-             headings, lists, quotes, or tables)"
+            "{type} {label} must be a single line (no blank lines, headings, lists, \
+             quotes, or tables)"
         ),
     )
-    .with_code("validation::not_inline".to_string())
-    .with_hint(
-        "Reduce the value to one paragraph, or change the field `type:` to `richtext`.".to_string(),
-    )
+    .with_code("validation::not_single_line".to_string())
+    .with_hint(format!(
+        "Reduce the value to one line, or declare `multiline: true` on the `{type}` field."
+    ))
 }
 
 #[cfg(test)]

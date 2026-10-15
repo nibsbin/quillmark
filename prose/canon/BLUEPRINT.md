@@ -99,9 +99,9 @@ Per field, in order:
 3. `# e.g. <members>`: emitted for a `matrix` declaring columns or `open`,
    whose empty `{}` cell shows neither the columns nor the spelling of an
    added item. It holds one member, present and so held:
-   `# e.g. {flight_cc: {detail: string, earned: date<YYYY-MM-DD | today>}}`, and on
+   `# e.g. {flight_cc: {detail: text<plain>, earned: date<YYYY-MM-DD | today>}}`, and on
    an open matrix an added item after it, keyed by the placeholder id
-   `new_item`: `# e.g. {flight_cc: {detail: string}, new_item: {title: string, detail: string}}`.
+   `new_item`: `# e.g. {flight_cc: {detail: text<plain>}, new_item: {title: text<plain>, detail: text<plain>}}`.
    The member is the roster's first and is illustrative only; the line exists
    to name the columns and the `title` an added item needs. Each column, and
    the added item's `title`, shows its `default:`, else its container shape,
@@ -119,8 +119,8 @@ That's it. There is no leading `# required`, `# enum:`, `# default:`, or
 Form: **`# <type>[<format>][?]`**
 
 - **Type slot** (mandatory, first): one of
-  `string`, `integer`, `number`, `boolean`, `array`, `object`,
-  `richtext`, `plaintext`, `date`, `datetime`, `enum`, `matrix`.
+  `integer`, `number`, `boolean`, `array`, `object`,
+  `text`, `richtext`, `date`, `datetime`, `enum`, `matrix`.
   Every field is labeled: there is no "self-evident" exemption.
   (`object` requires a `properties` map; freeform untyped objects are not
   supported. `object` also appears in the format slot of typed-table fields
@@ -131,11 +131,14 @@ Form: **`# <type>[<format>][?]`**
     date ([SCHEMAS.md](SCHEMAS.md#the-render-date-today));
     `datetime<YYYY-MM-DDThh:mm[:ss]>`: an offset-less wall-clock datetime (no
     offset/space/fractional forms)
-  - `richtext<markdown>`, `richtext(inline)<markdown>`: the `<markdown>` slot
-    names the surface encoding an author writes over the content model
-  - `plaintext<plain>`, `plaintext(inline)<plain>`: the `<plain>` slot names
-    the literal codec (delimiters stay literal), distinct from `<markdown>`
-  - `array<string>`, `array<integer>`, `array<object>`, `array<richtext<markdown>>`, …
+  - `richtext<markdown>`, `richtext(multiline)<markdown>`: the `<markdown>`
+    slot names the surface encoding an author writes over the content model,
+    and `(multiline)` marks a field that admits block structure, one paragraph
+    being the default
+  - `text<plain>`, `text(multiline)<plain>`: the `<plain>` slot names the
+    literal codec (delimiters stay literal), distinct from `<markdown>`, and
+    `(multiline)` a field that admits line breaks, one line being the default
+  - `array<text<plain>>`, `array<integer>`, `array<object>`, `array<richtext<markdown>>`, …
   - `enum<a | b | c>`
   - `matrix<flight_cc | dodin_ops | cyber_200 | …>`: the roster's member ids in
     declaration order, structurally the `enum` form so no third annotation is
@@ -145,12 +148,12 @@ Form: **`# <type>[<format>][?]`**
     member to invent; on an open one the ids, the annotation carrying no titles,
     are what steer it to a member rather than an added duplicate. The columns
     and the added spelling ride the leading `# e.g.` line
-  - omitted for `string`, `integer`, `number`, `boolean`, `object`
+  - omitted for `integer`, `number`, `boolean`, `object`
     (nothing meaningful to refine).
 - **Optional marker** (optional, last): a trailing `?` on an
   [optional cell](SCHEMAS.md#optional-cells)'s expression, as its `Quill.yaml`
-  `type:` spells it (`string?`, `enum<a | b>?`, `date<YYYY-MM-DD | today>?`),
-  and on an element type the same way (`array<string?>`).
+  `type:` spells it (`text<plain>?`, `enum<a | b>?`, `date<YYYY-MM-DD | today>?`),
+  and on an element type the same way (`array<text<plain>?>`).
 
 The inline annotation is **purely structural**: it carries the type (and
 optional format), nothing else. What a reader must *do* is carried by the cell:
@@ -190,15 +193,15 @@ Examples:
 
 | Line | Reading |
 |---|---|
-| `name: # string` | defaultless string: an empty cell awaiting a value |
-| `title: "Curriculum Vitae" # string` | defaulted string: concrete value, shippable as-is (keep or override) |
+| `name: # text<plain>` | defaultless text: an empty cell awaiting a value |
+| `title: "Curriculum Vitae" # text<plain>` | defaulted text: concrete value, shippable as-is (keep or override) |
 | `count: 0 # integer` | defaulted integer (type-empty default, shippable as-is) |
 | `active: false # boolean` | defaulted boolean (type-empty default, shippable as-is) |
 | `bio: # richtext<markdown>` | defaultless richtext (see "Richtext fields") |
-| `recipient: # array<string>` | defaultless array of strings |
+| `recipient: # array<text<plain>>` | defaultless array of lines |
 | `date: # date<YYYY-MM-DD \| today>` | defaultless date |
 | `severity: # enum<low \| medium \| high>` | defaultless enum |
-| `endorsements: # array<string>` under a leading `# up to 3` | a capped array: the cap is the leading line, the type the inline |
+| `endorsements: # array<text<plain>>` under a leading `# up to 3` | a capped array: the cap is the leading line, the type the inline |
 | `qualifications: {} # matrix<flight_cc \| dodin_ops>` | a matrix: the whole vocabulary in the annotation, nothing ticked; a leading `# e.g.` names its columns and an open matrix's added spelling, where it has either |
 | `$quill: cmu_letter@0.1 # keep verbatim` | quill binding metadata, emitted verbatim; the inline reminder guards against dropping the line |
 | `$kind: skill` followed by `# composable (0..N)` and `# sample card; delete if not needed` | repeat the entire `~~~` … `~~~` block per instance, or delete it if none are needed |
@@ -207,11 +210,11 @@ Examples:
 ## Cell values
 
 A cell's value is **non-blank `default:` › empty**. An empty cell is null, emitted as a
-bare `key:` with its annotation after it (`title: # string`).
+bare `key:` with its annotation after it (`title: # text<plain>`).
 
 A **blank** `default:` (`""`, `[]` or `{}`, the field's own blank) renders
 exactly as no default does, so it prints as none: `notes:` declaring
-`default: ""` prints `notes: # string`, and a matrix column declaring one
+`default: ""` prints `notes: # text<plain>`, and a matrix column declaring one
 reads in the `# e.g.` line as a defaultless column does. `0` and `false` are
 values and print (`count: 0 # integer`): an empty `count:` would ask for a
 number the quill already answers.
@@ -248,9 +251,9 @@ classification: # enum<UNCLASSIFIED | CUI | CONFIDENTIAL | SECRET | TOP SECRET>
   value: ""
   # when CUI:
   # # Office or organization that designated this information as CUI.
-  # controlled_by: # string
+  # controlled_by: # text<plain>
   # # CUI category from the DoD CUI Registry. Leave blank to omit.
-  # category: # string
+  # category: # text<plain>
 ```
 
 One builder and one emitter serve both, so a dormant world is rendered exactly
@@ -326,7 +329,7 @@ a **cell**, so it keeps its own literal. The outer key carries
 # attendees:
 #   -
 #     # Full name.
-#     name: # string
+#     name: # text<plain>
 #     voting: false # boolean
 attendees: [] # array<object>
 ```
@@ -359,11 +362,11 @@ inline `[]`.
 # The sender's mailing address.
 address: # object
   # Street address line.
-  street: # string
+  street: # text<plain>
   # City name.
-  city: # string
+  city: # text<plain>
   # ZIP or postal code.
-  zip: # string
+  zip: # text<plain>
 ```
 
 With a `default:` on the first two properties:
@@ -372,11 +375,11 @@ With a `default:` on the first two properties:
 # The sender's mailing address.
 address: # object
   # Street address line.
-  street: 5000 Forbes Ave # string
+  street: 5000 Forbes Ave # text<plain>
   # City name.
-  city: Pittsburgh # string
+  city: Pittsburgh # text<plain>
   # ZIP or postal code.
-  zip: # string
+  zip: # text<plain>
 ```
 
 A property is an ordinary field carrying whatever type a card-level field
@@ -391,7 +394,7 @@ field maps. The loader settles a legacy `ui.group` card into display order,
 ungrouped fields first ([SCHEMAS.md](SCHEMAS.md#grouping)), so the blueprint
 sorts nothing. A group emits no banner line; a top-level `object` prints as any
 typed dictionary does, its description above it. The other `ui:` keys (`ui.compact`,
-`ui.multiline`, `ui.blank_title`, `ui.layout`) are presentation-only and do not
+`ui.blank_title`, `ui.layout`) are presentation-only and do not
 affect blueprint output, so none may hold a fact a writer needs: a label is
 `title`, which the blueprint prints. `ui.layout` names a control an editor
 draws, which a text blueprint has no second shape for.
@@ -415,15 +418,15 @@ document needs none of that kind.
 $quill: cmu_letter@0.1 # keep verbatim
 $kind: main # Typeset letters that comply with Carnegie Mellon University letterhead standards.
 # The recipient's name and full mailing address.
-recipient: # array<string>
+recipient: # array<text<plain>>
 # The signer's information. Line 1: Name, as in First M. Last. Line 2: Title.
-signature_block: # array<string>
+signature_block: # array<text<plain>>
 # The department or organizational unit name for the letterhead.
-department: # string
+department: # text<plain>
 # The sender's institutional mailing address.
-address: # array<string>
+address: # array<text<plain>>
 # The department or university website URL, as in www.ece.cmu.edu.
-url: # string
+url: # text<plain>
 # The date to appear on the letter.
 date: # date<YYYY-MM-DD | today>
 ~~~

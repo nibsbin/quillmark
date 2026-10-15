@@ -233,7 +233,7 @@ pub(crate) enum Codec {
     Richtext,
     /// A string is literal text (`*hi*` stays four characters), and a content
     /// projects back verbatim.
-    Plaintext,
+    Text,
 }
 
 impl Codec {
@@ -242,7 +242,7 @@ impl Codec {
     pub(crate) fn name(self) -> &'static str {
         match self {
             Codec::Richtext => edit::CODEC_RICHTEXT,
-            Codec::Plaintext => edit::CODEC_PLAINTEXT,
+            Codec::Text => edit::CODEC_TEXT,
         }
     }
 
@@ -250,7 +250,7 @@ impl Codec {
     fn string_form(self) -> &'static str {
         match self {
             Codec::Richtext => "a markdown string",
-            Codec::Plaintext => "a string",
+            Codec::Text => "a string",
         }
     }
 
@@ -276,7 +276,7 @@ impl Codec {
             serde_json::Value::String(s) => Some(match self {
                 Codec::Richtext => import_markdown(s)
                     .map_err(|e| ContentDecodeError::BadMarkdown(e.to_string())),
-                Codec::Plaintext => Ok(whole(quillmark_content::import::from_plaintext(s))),
+                Codec::Text => Ok(whole(quillmark_content::import::from_plaintext(s))),
             }),
             _ => None,
         }
@@ -318,7 +318,7 @@ impl Codec {
     pub(crate) fn project(self, content: &Normalized) -> String {
         match self {
             Codec::Richtext => quillmark_content::export::to_markdown(content),
-            Codec::Plaintext => quillmark_content::export::to_plaintext(content),
+            Codec::Text => quillmark_content::export::to_plaintext(content),
         }
     }
 }
@@ -331,12 +331,12 @@ pub(crate) enum RichtextValueError {
     Decode(ContentDecodeError),
     /// Neither a canonical content object nor a markdown string.
     Unshaped,
-    /// `inline` is declared and the content spans more than one paragraph.
-    NotInline,
+    /// The field is one line and the content spans more than one paragraph.
+    NotSingleLine,
 }
 
 /// The contract for a richtext value that must *become* stored content: decode
-/// either accepted encoding, enforce `inline`, canonicalize, and hand back what
+/// either accepted encoding, enforce one line unless multiline, canonicalize, and hand back what
 /// the import dropped. The strict typed write and the schema-literal companion
 /// cache share it and differ only in the diagnostic they render from the error.
 pub(crate) fn canonical_richtext_value(
@@ -348,12 +348,12 @@ pub(crate) fn canonical_richtext_value(
         None => return Err(RichtextValueError::Unshaped),
     };
     if inline && !content.is_inline() {
-        return Err(RichtextValueError::NotInline);
+        return Err(RichtextValueError::NotSingleLine);
     }
     Ok((quillmark_content::serial::to_canonical_value(&content), warnings))
 }
 
-/// Whether an `inline` refusal of plain content is one line plus the empty line
+/// Whether a single-line refusal of plain content is one line plus the empty line
 /// a trailing `\n` opens: the value a clip-chomped YAML `|` scalar yields, fixed
 /// by `|-` or a plain scalar.
 pub(crate) fn is_line_with_trailing_newline(content: &quillmark_content::model::Content) -> bool {

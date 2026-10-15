@@ -83,9 +83,9 @@ def test_warnings_carry_the_loads_advisories(taro_quill_dir, tmp_path):
     quill_dir.mkdir()
     (quill_dir / "Quill.yaml").write_text(
         'quill:\n  name: "warn"\n  version: "1.0.0"\n  backend: "typst"\n  description: "W"\n'
-        "main:\n  fields:\n    title: { type: string }\n"
+        "main:\n  fields:\n    title: { type: text }\n"
         "card_kinds:\n  skills:\n    body:\n      enabled: false\n"
-        "    fields:\n      items: { type: array, items: { type: string } }\n"
+        "    fields:\n      items: { type: array, items: { type: text } }\n"
     )
 
     quill = Quill.from_path(str(quill_dir))

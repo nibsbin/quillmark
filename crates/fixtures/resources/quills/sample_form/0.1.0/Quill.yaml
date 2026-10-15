@@ -9,17 +9,15 @@ main:
     enabled: false
   fields:
     full_name:
-      type: string
+      type: text
       default: ""
       description: Full legal name of the applicant. Binds the FullName text field.
 
     comments:
       type: array
       items:
-        type: string
+        type: text
       default: []
-      ui:
-        multiline: true
       description: "Free-form comments; each element becomes one line of the Comments field."
 
     agree:
@@ -38,13 +36,12 @@ main:
 
     headline:
       type: richtext
-      inline: true
+      multiline: false
       default: ""
-      description: "Inline richtext bound to the single-line Headline text field; lowered to plaintext."
+      description: "One-paragraph richtext bound to the single-line Headline text field; lowered to plain text."
 
     bio:
       type: richtext
+      multiline: true
       default: ""
-      ui:
-        multiline: true
-      description: "Block richtext bound to the multiline Bio field; lowered to plaintext (markup dropped, islands stripped)."
+      description: "Multiline richtext bound to the multiline Bio field; lowered to plain text (markup dropped, islands stripped)."

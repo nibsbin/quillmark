@@ -186,18 +186,18 @@ fn form_field_regions_key_on_bound_schema_field() {
 #import "@local/quillmark-helper:0.2.0" as qm
 #set page(width: 600pt, height: 400pt, margin: 50pt)
 #qm.ink(qm.data, "f_txt")
-#qm.form-field("txt", type: "text", value: qm.data.f_txt, field: "f_txt", width: 137pt)
+#qm.form-field("txt", type: "text", value: qm.str(qm.data.f_txt), field: "f_txt", width: 137pt)
 #qm.form-field("sig", type: "signature", field: "f_sig")
 #qm.form-field("unbound", type: "text", value: "x")
 "#;
     let source = common::quill_with_plate(
-        &common::yaml("main:\n  fields:\n    f_txt: { type: string }\n    f_sig: { type: string }\n"),
+        &common::yaml("main:\n  fields:\n    f_txt: { type: text }\n    f_sig: { type: text }\n"),
         plate,
     );
     let session = TypstBackend
         .open(
             &source,
-            &serde_json::json!({ "f_txt": "FIRST M. LAST", "f_sig": "" }),
+            &serde_json::json!({ "f_txt": common::content("FIRST M. LAST"), "f_sig": common::content("") }),
             common::test_date(),
         )
         .expect("open");
@@ -219,7 +219,7 @@ fn form_field_regions_key_on_bound_schema_field() {
     }
 
     // The widget is a fixed-size box at the test-owned 137pt width; the content
-    // region is the ink of the placed string, telling which entry is which
+    // region is the ink of the placed value, telling which entry is which
     // without a `source` field the type does not carry.
     let txt = of("f_txt");
     assert_eq!(txt.len(), 2, "widget and content both surface: {regions:?}");

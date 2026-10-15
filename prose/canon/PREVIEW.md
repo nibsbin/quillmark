@@ -182,7 +182,7 @@ read it, three coarse and two fine:
 Three producers, each one the plate declares:
 
 - **Generated ink** is tracked by the spans its glyphs carry. A `richtext` or
-  `plaintext` value (a body, a card's field, an `[]` element) and every scalar
+  `text` value (a body, a card's field, an `[]` element) and every scalar
   or date the plate prints through `qm.ink`
   ([PLATE_DATA.md](PLATE_DATA.md#the-ink-table)) is evaluated at its own
   generated site in the helper, whose byte window the backend records. The

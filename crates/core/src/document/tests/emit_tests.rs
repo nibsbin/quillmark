@@ -209,7 +209,7 @@ Body.
 /// indented plaintext sample survives the re-parse only if the projection escapes
 /// what markdown strips at a line's edges.
 #[test]
-fn an_indented_plaintext_field_survives_emit_and_reparse() {
+fn an_indented_text_field_survives_emit_and_reparse() {
     let text = "    indented\nplain\ntrailing   ";
     let content = quillmark_content::import::from_plaintext(text);
     let md = doc_with(&[(

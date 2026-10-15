@@ -95,7 +95,7 @@ function openSession() {
   return engine.open(quill, Document.fromMarkdown(TEST_MARKDOWN))
 }
 
-// An `array<richtext(inline)>` field: the backend regions each element on its
+// An `array<richtext>` field: the backend regions each element on its
 // own plate-space address (`references.<i>`), the shape whose translation the
 // `arrayElementSession` test below pins.
 const ARRAY_QUILL_YAML = `quill:
@@ -113,7 +113,7 @@ main:
       type: array
       items:
         type: richtext
-        inline: true
+        multiline: false
 `
 
 const ARRAY_PLATE = `#import "@local/quillmark-helper:0.2.0" as qm

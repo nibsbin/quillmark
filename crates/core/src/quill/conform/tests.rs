@@ -17,22 +17,26 @@ main:
   fields:
     subject:
       type: richtext
-      inline: true
+      multiline: false
     note:
-      type: plaintext
+      type: text
+      multiline: true
     qty:
       type: integer
     tags:
       type: array
       items:
         type: richtext
+        multiline: true
     meta:
       type: object
       properties:
         label:
-          type: plaintext
+          type: text
+          multiline: true
         blurb:
           type: richtext
+          multiline: true
     rows:
       type: array
       items:
@@ -40,13 +44,16 @@ main:
         properties:
           cell:
             type: richtext
+            multiline: true
 card_kinds:
   entry:
     fields:
       prose:
         type: richtext
+        multiline: true
       caption:
-        type: plaintext
+        type: text
+        multiline: true
 "#;
 
 fn quill() -> Quill {
@@ -126,7 +133,7 @@ fn rest_is_per_codec_at_every_depth() {
     assert_eq!(
         payload.get("note").unwrap().as_json(),
         &json!("a *literal* line"),
-        "plaintext rests as the literal string, escapes and all"
+        "text rests as the literal string, escapes and all"
     );
     assert_eq!(payload.get("qty").unwrap().as_json(), &json!(3));
 
@@ -286,7 +293,7 @@ quill:
 main:
   fields:
     title:
-      type: string
+      type: text
 card_kinds:
   entry:
     fields:
@@ -296,7 +303,7 @@ card_kinds:
         default: ""
         variants:
           CUI:
-            note: { type: richtext }
+            note: { type: richtext, multiline: true }
 "#;
     let quill = quill_from_yaml(YAML);
     let overlay = SeedOverlay::from_json(&json!({
@@ -325,7 +332,7 @@ card_kinds:
 }
 
 #[test]
-fn the_plate_shape_for_plaintext_is_unchanged() {
+fn the_plate_shape_for_text_is_unchanged() {
     let quill = quill();
     let plate_note = |value: serde_json::Value| {
         let mut doc = Document::parse(
@@ -351,7 +358,7 @@ fn the_plate_shape_for_plaintext_is_unchanged() {
 }
 
 #[test]
-fn the_plaintext_revise_lane_is_literal() {
+fn the_text_revise_lane_is_literal() {
     let quill = quill();
     let md = r#"~~~card-yaml
 $quill: conform_test@1.0.0
@@ -369,7 +376,7 @@ Body.
         .expect("note is present");
     let text = text
         .as_str()
-        .expect("a plaintext field reads as its literal text")
+        .expect("a text field reads as its literal text")
         .to_string();
     assert_eq!(text, r"a \*b\* line");
 

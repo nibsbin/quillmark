@@ -19,11 +19,11 @@ main:
   fields:
     quorum: { type: integer? }
     confidential: { type: boolean? }
-    location: { type: string? }
-    attendees: { type: array?, items: { type: string } }
+    location: { type: text? }
+    attendees: { type: array?, items: { type: text } }
     result: { type: enum?, values: [carried, failed] }
     adjourned: { type: date? }
-    minutes: { type: richtext? }
+    minutes: { type: richtext?, multiline: true }
     tally:
       type: object
       properties:
@@ -37,7 +37,7 @@ fn document(fields: &str) -> Document {
 }
 
 /// `0` authored stays `0`, which is the distinction the `?` exists to draw; an
-/// authored `""` is an answer on a `string?` but the blank's own spelling on an
+/// authored `""` is an answer on a `text?` but the blank's own spelling on an
 /// `enum?`.
 #[test]
 fn an_unanswered_optional_cell_renders_none_at_every_depth() {
@@ -46,7 +46,7 @@ fn an_unanswered_optional_cell_renders_none_at_every_depth() {
     let plate = quill.config().compile_data(&doc, test_date()).expect("compiles");
 
     assert_eq!(plate["quorum"], json!(0));
-    assert_eq!(plate["location"], json!(""));
+    assert_eq!(plate["location"]["text"], json!(""), "{plate}");
     for name in ["confidential", "attendees", "result", "adjourned", "minutes"] {
         assert_eq!(plate[name], json!(null), "{name}: {plate}");
     }
@@ -102,11 +102,11 @@ fn a_question_mark_refuses_a_default_and_a_namespace() {
     for (field, code) in [
         ("{ type: integer?, default: 0 }", "quill::optional_default"),
         (
-            "{ type: object?, properties: { a: { type: string } } }",
+            "{ type: object?, properties: { a: { type: text } } }",
             "quill::optional_namespace",
         ),
         (
-            "{ type: enum?, values: [a], variants: { a: { note: { type: string } } } }",
+            "{ type: enum?, values: [a], variants: { a: { note: { type: text } } } }",
             "quill::optional_namespace",
         ),
     ] {

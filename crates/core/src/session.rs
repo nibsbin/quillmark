@@ -375,7 +375,8 @@ quill:
 main:
   fields:
     subject:
-      type: plaintext
+      type: text
+      multiline: true
 ";
 
     fn config() -> QuillConfig {

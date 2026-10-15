@@ -125,7 +125,7 @@ main:
   fields:
     subject:
       type: richtext
-      inline: true
+      multiline: false
     qty:
       type: integer
 
@@ -134,6 +134,7 @@ card_kinds:
     fields:
       prose:
         type: richtext
+        multiline: true
 `
   const buildQuill = () =>
     Quill.fromTree(makeQuill({ name: 'editor_test', plate: TEST_PLATE, quillYaml: EDITOR_QUILL_YAML }))
@@ -257,7 +258,7 @@ card_kinds:
     expectEditCode(() => ed.set('stray', 'x'), 'edit::unknown_field')
     expect(fieldOf(ed.document.main, 'stray')).toBeUndefined()
     expectEditCode(() => ed.set('qty', 'not-a-number'), 'edit::field_coercion_failed')
-    expectEditCode(() => ed.set('subject', 'line one\n\nline two'), 'edit::field_not_inline')
+    expectEditCode(() => ed.set('subject', 'line one\n\nline two'), 'edit::field_not_single_line')
   })
 
   it('a refused write carries the DocPath it anchors to, and pathFor mints the same one', () => {
@@ -320,30 +321,34 @@ main:
   fields:
     subject:
       type: richtext
-      inline: true
+      multiline: false
     note:
-      type: plaintext
+      type: text
+      multiline: true
     qty:
       type: integer
     recipients:
       type: array
       items:
-        type: plaintext
+        type: text
+        multiline: true
     paragraphs:
       type: array
       items:
         type: richtext
+        multiline: true
     tags:
       type: array
       items:
-        type: string
+        type: text
     letterhead:
       type: object
       properties:
         motto:
           type: richtext
+          multiline: true
         code:
-          type: string
+          type: text
     rows:
       type: array
       items:
@@ -351,16 +356,19 @@ main:
         properties:
           notes:
             type: richtext
+            multiline: true
 
 card_kinds:
   note:
     fields:
       prose:
         type: richtext
+        multiline: true
       lines:
         type: array
         items:
-          type: plaintext
+          type: text
+          multiline: true
 `
   const buildQuill = () =>
     Quill.fromTree(makeQuill({ name: 'view_test', plate: TEST_PLATE, quillYaml: VIEW_QUILL_YAML }))
@@ -380,13 +388,13 @@ card_kinds:
     expect(new DocumentReader(quill, seededDoc(quill))).toBeInstanceOf(DocumentReader)
   })
 
-  it('interprets by declared type: richtext → markdown, plaintext → literal, scalar → canonical', () => {
+  it('interprets by declared type: richtext → markdown, text → literal, scalar → canonical', () => {
     const quill = buildQuill()
     const doc = seededDoc(quill)
-    quill.writer(doc).set('note', 'a *literal* line') // marks verbatim under plaintext
+    quill.writer(doc).set('note', 'a *literal* line') // marks verbatim under text
     const v = quill.reader(doc)
     expect(v.get('subject')).toBe('Q3 **results**') // richtext projects to markdown
-    expect(v.get('note')).toBe('a *literal* line') // plaintext projects verbatim
+    expect(v.get('note')).toBe('a *literal* line') // text projects verbatim
     expect(v.get('qty')).toBe(3) // scalar returns canonical
   })
 
@@ -428,7 +436,7 @@ card_kinds:
       "~~~card-yaml\n$quill: view_test\nsubject: Q3 **results**\nnote: 'a *literal* line'\n~~~\n\nBody."
     const bound = quill.parse(md)
     expect(typeof bound.getStored('subject')).toBe('object') // richtext: the Content object
-    expect(bound.getStored('note')).toBe('a *literal* line') // plaintext: the literal
+    expect(bound.getStored('note')).toBe('a *literal* line') // text: the literal
     expect(bound.warnings).toEqual([])
 
     // conform is the same walk on a document that arrived any other way, and it
@@ -508,22 +516,22 @@ describe('@quillmark/wasm: reader.resolve (the resolved-value view)', () => {
 main:
   fields:
     title:
-      type: string
+      type: text
     status:
-      type: string
+      type: text
       default: draft
     notes:
-      type: string
+      type: text
     count:
       type: integer
     author:
-      type: string
+      type: text
 
 card_kinds:
   note:
     fields:
       label:
-        type: string
+        type: text
 `
 
   const buildQuill = () =>
@@ -555,7 +563,7 @@ Note body.
     )
     const f = resolved.main.fields
     expect(f.map((r) => r.name)).toEqual(['title', 'status', 'notes', 'count', 'author'])
-    expect(byName(f, 'title')).toEqual({ name: 'title', value: 'Hello', source: 'authored' })
+    expect(byName(f, 'title')).toMatchObject({ name: 'title', value: { text: 'Hello' }, source: 'authored' })
     expect(byName(f, 'status').source).toBe('default')
     expect(byName(f, 'notes').source).toBe('blank')
     expect(resolved.main.body.source).toBe('blank')
@@ -563,7 +571,7 @@ Note body.
     const card = resolved.cards[0]
     expect(card.kind).toBe('note')
     expect(card.index).toBe(0)
-    expect(byName(card.fields, 'label')).toMatchObject({ value: 'L', source: 'authored' })
+    expect(byName(card.fields, 'label')).toMatchObject({ value: { text: 'L' }, source: 'authored' })
   })
 })
 
@@ -1000,7 +1008,7 @@ A single line of body ink.`
 main:
   fields:
     title:
-      type: string
+      type: text
 `
     const quill = Quill.fromTree(new Map([['Quill.yaml', new TextEncoder().encode(yaml)]]))
     const doc = quill.seedDocument()

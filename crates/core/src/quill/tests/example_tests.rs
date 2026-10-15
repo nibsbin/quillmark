@@ -3,7 +3,7 @@
 use super::*;
 
 const MANIFEST: &str = "quill:\n  name: memo\n  version: \"1.2.0\"\n  backend: typst\n  \
-                        description: memo\nmain:\n  fields:\n    subject:\n      type: string\n";
+                        description: memo\nmain:\n  fields:\n    subject:\n      type: text\n";
 
 fn load(markdown: &str) -> Quill {
     quill_from(&[

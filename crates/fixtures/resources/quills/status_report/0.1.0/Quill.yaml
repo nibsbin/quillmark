@@ -11,7 +11,7 @@ main:
   description: One period's report on one project.
   fields:
     project:
-      type: string
+      type: text
       description: Project this report covers.
     issued:
       type: date
@@ -26,7 +26,7 @@ main:
       default: ""
       description: Where the project stands. Leave blank for no banner.
     lead:
-      type: string
+      type: text
       default: ""
       description: Who to ask about this report.
 
@@ -36,7 +36,7 @@ card_kinds:
     description: One milestone and what is left on it.
     fields:
       title:
-        type: string
+        type: text
         description: What the milestone delivers.
       due:
         type: date

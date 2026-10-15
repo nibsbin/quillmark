@@ -129,7 +129,7 @@ The data payload (everything in the YAML mapping except the `$`-prefixed
 metadata keys) is standard YAML.
 
 YAML reads an unquoted value by its shape before the schema sees it, so a
-`string` field takes what YAML read, not what you wrote. Quote these:
+`text` field takes what YAML read, not what you wrote. Quote these:
 
 | Written | Reaches the page | Write instead |
 |---|---|---|
@@ -189,7 +189,7 @@ author:
 
 Object-valued fields must be schematized in `Quill.yaml` with `type: object`
 and a `properties:` map; array-valued fields with `type: array` and an
-`items:` element schema (e.g. `items: { type: string }`, or `items: { type:
+`items:` element schema (e.g. `items: { type: text }`, or `items: { type:
 object, properties: … }` for a list of objects). See
 [Quill.yaml Reference: Field Types](../quills/quill-yaml-reference.md#field-types).
 
