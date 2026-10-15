@@ -1,7 +1,7 @@
 mod example_tests;
-mod identity_tests;
 mod matrix_tests;
 mod optional_tests;
+mod package_meta_tests;
 mod properties;
 mod requires_tests;
 mod today_tests;
@@ -49,6 +49,11 @@ fn quill_from(entries: &[(&str, &[u8])]) -> Quill {
 /// header spells its own.
 fn with_header(sections: &str) -> String {
     format!("quill:\n  name: q\n  version: \"1.0\"\n  backend: typst\n  description: q\n{sections}")
+}
+
+/// The codes `diags` carry, in order.
+fn codes(diags: &[Diagnostic]) -> Vec<&str> {
+    diags.iter().filter_map(|d| d.code.as_deref()).collect()
 }
 
 /// A config from `sections`, with the load's advisory warnings dropped.

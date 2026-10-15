@@ -47,8 +47,9 @@ indexmap = { version = "2", features = ["serde"] }
 # Char-level diff (Myers/LCS) for richtext edit deltas.
 similar = "3.1"
 
-# Ships the SPDX license list `quill.license` is checked against: an id SPDX
-# lists after this version's copy refuses until a bump.
+# Ships the SPDX license list `quill.license` is checked against, and a patch
+# release can bring a newer list: an id it adds loads on builds carrying it and
+# is refused on older ones, and an id it deprecates loads with a warning.
 spdx = "0.13.6"
 
 pulldown-cmark = "0.13.0"

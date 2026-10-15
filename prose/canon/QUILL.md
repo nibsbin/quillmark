@@ -91,11 +91,17 @@ Identity resolution:
 - `license` and `homepage` are optional package metadata, `None` when absent,
   and omitting them is never a diagnostic. Neither reaches the plate or the
   blueprint; both surface on `quill.metadata` and `quillmark info`.
-- `license` is an SPDX license expression as the `spdx` crate's strict mode
-  parses it: each id on the SPDX license list that crate ships, spelled in its
-  case, none deprecated. Any other value is `quill::invalid_license`.
-- `homepage` is an absolute `http` or `https` URL naming a host. Any other value
-  is `quill::invalid_homepage`.
+- `license` is one line holding an SPDX license expression, stored trimmed:
+  each id on the SPDX license list the `spdx` crate ships, spelled in the
+  list's case, and `AND`, `OR`, `WITH` uppercase. Any other value is
+  `quill::invalid_license`, `NOASSERTION` and an empty `LicenseRef-` included.
+- A deprecated id loads with `quill::deprecated_license`. The list rides a
+  caret dependency, so a deprecation arriving in a patch release cannot refuse
+  on one build a quill another loads.
+- `homepage` is an absolute `http` or `https` URL naming a host and no user
+  name, its port, IPv6 brackets and host code points held to what a WHATWG URL
+  parser accepts; a Unicode host is not run through IDNA. Any other value is
+  `quill::invalid_homepage`.
 - The `quill:` section accepts only `name`, `backend`, `description`, `version`,
   `author`, `license`, `homepage`, `ui`, and `requires`; an unknown key is a
   `quill::unknown_key` error. A backend's own settings (e.g. the Typst plate)

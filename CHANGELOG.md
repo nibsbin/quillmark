@@ -90,8 +90,10 @@ and a WASM trap rejects coded.
 - feat(core): **`quill.license` names a quill's license as an SPDX expression,
   and `quill.homepage` where its source or docs live.** Both are optional and
   surface on `Quill.metadata` and `quillmark info`, absent when undeclared. A
-  license off the SPDX grammar or list fails `quill::invalid_license`, and a
-  homepage that is not an absolute `http` or `https` URL fails
+  license is checked against the SPDX license list the engine ships: an id off
+  it, a lowercase operator or `/` for `OR` fails `quill::invalid_license`, and
+  a deprecated id warns `quill::deprecated_license`. A homepage that is not an
+  absolute `http` or `https` URL naming a host and no user fails
   `quill::invalid_homepage`. (#2218)
 
 ### Bindings

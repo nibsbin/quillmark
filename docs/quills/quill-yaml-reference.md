@@ -54,16 +54,25 @@ other check, so keys it has not learned yet do not read as typos; an engine from
 before `requires` existed reports `requires` itself as `quill::unknown_key`. Any
 other spelling, whitespace included, is `quill::invalid_requires`.
 
-`license` is an SPDX license expression, such as `MIT`, `Apache-2.0 OR MIT` or
-`GPL-3.0-or-later WITH Classpath-exception-2.0`, each id spelled as the
-[SPDX License List](https://spdx.org/licenses/) spells it. A license off that
-list is `LicenseRef-<name>`. A deprecated id such as `GPL-3.0`, `/` for `OR`, or
-a value that is not a string fails the load with `quill::invalid_license`.
-`homepage` is an absolute `http` or `https` URL; anything else is
-`quill::invalid_homepage`. Neither reaches the plate or the blueprint; both
-surface on `Quill.metadata` and `quillmark info`. An engine older than 0.126
-reports either key as `quill::unknown_key`, so a quill that sets one also sets
-`requires: ">=0.126"`.
+`license` is an SPDX license expression on one line, such as `MIT`,
+`Apache-2.0 OR MIT` or `GPL-3.0-or-later WITH Classpath-exception-2.0`. Each id
+is spelled as the [SPDX License List](https://spdx.org/licenses/) spells it, and
+the operators `AND`, `OR` and `WITH` are uppercase. A license off that list is
+`LicenseRef-<name>`. Anything else fails the load with `quill::invalid_license`:
+`/` for `OR`, `NOASSERTION`, a line break, or a value that is not a string. The
+hint names the fix where one is plain, such as `GPL-2.0-or-later` for
+`GPL-2.0+`. A deprecated id such as `GPL-3.0` loads, with a
+`quill::deprecated_license` warning. Spaces around the expression are dropped.
+
+`homepage` is an absolute `http` or `https` URL naming a host, such as
+`https://github.com/org/quills`. A user name or password before the host, a
+port past 65535, and an invisible formatting character such as a zero-width
+space each fail the load with `quill::invalid_homepage`, as anything else does.
+
+Neither key reaches the plate or the blueprint; both surface on
+`Quill.metadata` and `quillmark info`. They arrive in the same release as
+`requires`, so an older engine reports them as `quill::unknown_key` whether or
+not the quill sets `requires`.
 
 A backend's own settings live under its backend-named section, not in `quill:`.
 The Typst template, for example, is declared as `typst.plate_file` (see the
