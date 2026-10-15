@@ -2390,10 +2390,51 @@ impl QuillConfig {
 
         let mut backend_config = HashMap::new();
         if !backend.is_empty() {
-            if let Some(section_val) = quill_yaml_val.get(&backend) {
-                if let Some(table) = section_val.as_object() {
+            let keys = crate::backend::config_keys(&backend);
+            let valid = keys.map(|keys| match keys {
+                [] => format!("The {backend} backend reads no keys; delete the '{backend}' section."),
+                _ => format!("Valid keys under '{backend}' are: {}.", keys.join(", ")),
+            });
+            match quill_yaml_val.get(&backend).map(serde_json::Value::as_object) {
+                None => {}
+                Some(None) => {
+                    let diag = Diagnostic::new(
+                        Severity::Error,
+                        format!("'{backend}' section must be an object (mapping of its keys)"),
+                    )
+                    .with_code("quill::invalid_backend_section".to_string());
+                    errors.push(match &valid {
+                        Some(valid) => diag.with_hint(valid.clone()),
+                        None => diag,
+                    });
+                }
+                Some(Some(table)) => {
                     for (key, value) in table {
-                        backend_config.insert(key.clone(), QuillValue::from_json(value.clone()));
+                        match (keys, &valid) {
+                            (Some(keys), Some(valid)) if !keys.contains(&key.as_str()) => {
+                                let hint = if backend == "typst" && key == "packages" {
+                                    "Quillmark never downloads a package: vendor each one under \
+                                     `packages/<dir>/` with its `typst.toml`, and delete \
+                                     `typst.packages`."
+                                        .to_string()
+                                } else {
+                                    valid.clone()
+                                };
+                                errors.push(
+                                    Diagnostic::new(
+                                        Severity::Error,
+                                        format!("Unknown key '{key}' in '{backend}:' section"),
+                                    )
+                                    .with_code("quill::unknown_backend_key".to_string())
+                                    .with_arg("backend", serde_json::Value::String(backend.clone()))
+                                    .with_arg("key", serde_json::Value::String(key.clone()))
+                                    .with_hint(hint),
+                                );
+                            }
+                            _ => {
+                                backend_config.insert(key.clone(), QuillValue::from_json(value.clone()));
+                            }
+                        }
                     }
                 }
             }

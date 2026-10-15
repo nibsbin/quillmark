@@ -57,6 +57,22 @@ pub fn declines(id: &str) -> &'static [BlockConstruct] {
     }
 }
 
+/// The keys the backend `id` reads from its own `Quill.yaml` section, the
+/// top-level one named `id`. Loading refuses any other key there as
+/// `quill::unknown_backend_key`, so a key becomes valid only once its backend
+/// reads it.
+///
+/// `None` for an id the table does not name: no build of this engine renders
+/// it, so its section loads unchecked and a render refuses the id itself as
+/// `engine::backend_not_found`.
+pub fn config_keys(id: &str) -> Option<&'static [&'static str]> {
+    match id {
+        "typst" => Some(&["plate_file"]),
+        "acroform" => Some(&[]),
+        _ => None,
+    }
+}
+
 /// The warning a backend owes a content field holding a construct it typesets
 /// nothing for: `count` of `construct` in the field `path` anchors, from
 /// `backend`. One diagnostic per (field, construct), so a producer that sees

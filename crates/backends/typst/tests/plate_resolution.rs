@@ -1,4 +1,5 @@
-//! The Typst backend resolves its own plate from `typst.plate_file` at `open`.
+//! The Typst backend resolves its own plate at `open`: `plate.typ` by name, or
+//! the file `typst.plate_file` names.
 
 use quillmark_core::backend::Backend;
 use quillmark_typst::TypstBackend;
@@ -8,21 +9,55 @@ mod common;
 const YAML: &str = "quill:\n  name: t\n  version: \"1.0\"\n  backend: typst\n  \
                     description: d\n\ntypst:\n  plate_file: plate.typ\n";
 
+const BARE: &str = "quill:\n  name: t\n  version: \"1.0\"\n  backend: typst\n  description: d\n";
+
+/// With no `typst:` section the plate is `plate.typ` at the quill root. A
+/// `plate_file` names another, and `plate.typ` beside it is then a module no
+/// render compiles.
+#[test]
+fn the_plate_is_plate_typ_by_name_unless_plate_file_names_another() {
+    let by_name = tree_quill(&[("Quill.yaml", BARE), ("plate.typ", "hello\n")]);
+    assert_eq!(quillmark_typst::plate_file(&by_name).expect("plate.typ loads"), "plate.typ");
+    TypstBackend
+        .open(&by_name, &serde_json::json!({}), common::test_date())
+        .expect("plate.typ renders");
+
+    let declared = tree_quill(&[
+        ("Quill.yaml", &format!("{BARE}typst:\n  plate_file: tpl/main.typ\n")),
+        ("plate.typ", "#nowhere\n"),
+        ("tpl/main.typ", "hello\n"),
+    ]);
+    assert_eq!(quillmark_typst::plate_file(&declared).expect("the plate loads"), "tpl/main.typ");
+    TypstBackend
+        .open(&declared, &serde_json::json!({}), common::test_date())
+        .expect("the declared plate renders, and plate.typ is not compiled");
+}
+
+/// A quill holding no `plate.typ` and declaring no `plate_file` has no plate:
+/// `open` refuses it, hinting both.
+#[test]
+fn a_quill_with_no_plate_fails_at_open() {
+    let diags = open_err(&[("Quill.yaml", BARE), ("main.typ", "hello\n")]);
+    let codes: Vec<_> = diags.iter().map(|d| d.code.as_deref()).collect();
+    assert_eq!(codes, [Some("typst::plate_missing")], "{diags:?}");
+    let hint = diags[0].hint.as_deref().expect("a hint");
+    assert!(hint.contains("`plate.typ`") && hint.contains("`typst.plate_file`"), "{hint}");
+}
+
 /// A plate the quill holds at a path Typst refuses has no name the world can
-/// load it at: taking `main.typ` would shadow the quill's own `main.typ`.
+/// load it at: taking `main.typ` would shadow the quill's own `main.typ`. A
+/// `plate_file` that is not a string names no path at all.
 #[test]
 fn a_plate_file_typst_cannot_address_fails_at_open() {
-    let diags = open_err(&[
-        (
-            "Quill.yaml",
-            "quill:\n  name: t\n  version: \"1.0\"\n  backend: typst\n  description: d\n\n\
-             typst:\n  plate_file: lay\\out.typ\n",
-        ),
-        ("lay\\out.typ", "#import \"main.typ\": word\n#word\n"),
-        ("main.typ", "#let word = \"real\"\n"),
-    ]);
-    let codes: Vec<_> = diags.iter().map(|d| d.code.as_deref()).collect();
-    assert_eq!(codes, [Some("typst::plate_path_invalid")], "{diags:?}");
+    for (declared, plate) in [("lay\\out.typ", "lay\\out.typ"), ("5", "plate.typ"), ("~", "plate.typ")] {
+        let diags = open_err(&[
+            ("Quill.yaml", &YAML.replace("plate.typ", declared)),
+            (plate, "#import \"main.typ\": word\n#word\n"),
+            ("main.typ", "#let word = \"real\"\n"),
+        ]);
+        let codes: Vec<_> = diags.iter().map(|d| d.code.as_deref()).collect();
+        assert_eq!(codes, [Some("typst::plate_path_invalid")], "{declared}: {diags:?}");
+    }
 }
 
 /// A `.` step or an empty one in `plate_file` drops: the plate renders, and
@@ -40,10 +75,7 @@ fn a_plate_file_drops_its_dot_and_empty_steps() {
             ("Quill.yaml", &YAML.replace("plate.typ", declared)),
             (file, "#set text(font: \"nosuchfont\")\nhello\n"),
         ]);
-        assert_eq!(
-            quillmark_typst::plate_file(&q).expect("the plate loads").as_deref(),
-            Some(file)
-        );
+        assert_eq!(quillmark_typst::plate_file(&q).expect("the plate loads"), file);
         let session = TypstBackend
             .open(&q, &serde_json::json!({}), common::test_date())
             .expect("the plate loads");

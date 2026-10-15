@@ -26,7 +26,7 @@ fn quill(yaml: &str, files: &[(&str, &[u8])]) -> Quill {
 fn a_workspace_lays_out_packages_by_spec_and_carries_the_fallback_fonts() {
     let q = quill(
         "quill:\n  name: t\n  version: 0.1.0\n  backend: typst\n  description: t\n\
-         typst:\n  plate_file: plate.typ\nmain:\n  fields:\n    title: { type: string }\n",
+         main:\n  fields:\n    title: { type: string }\n",
         &[
             ("plate.typ", b"#import \"@preview/p:1.2.0\": x\n"),
             (
@@ -123,7 +123,7 @@ fn a_workspace_carries_the_load_warnings_a_render_does() {
 
     let q = quill(
         "quill:\n  name: t\n  version: 0.1.0\n  backend: typst\n  description: t\n\
-         typst:\n  plate_file: plate.typ\n  pages: 2\n",
+         typst:\n  plate_file: plate.typ\n",
         &[
             ("plate.typ", b"hi\n"),
             ("packages/bare/lib.typ", b"#let x = 1\n"),
@@ -136,8 +136,5 @@ fn a_workspace_carries_the_load_warnings_a_render_does() {
         .expect("the plate renders");
     assert_eq!(ws.warnings, session.warnings());
     let codes: Vec<_> = ws.warnings.iter().map(|d| d.code.as_deref()).collect();
-    assert_eq!(
-        codes,
-        [Some("typst::unknown_key"), Some("typst::package_manifest")]
-    );
+    assert_eq!(codes, [Some("typst::package_manifest")]);
 }

@@ -2,6 +2,8 @@
 
 The Typst backend generates PDF, SVG, and PNG documents using the [Typst](https://typst.app/) typesetting system. It converts card-yaml payload fields to Typst markup, injects them into the plate via a generated helper package, and compiles to the requested format.
 
+The plate is `plate.typ` at the quill root, found by name. A quill keeping it elsewhere names its path as [`typst.plate_file`](quill-yaml-reference.md#typst-section), and a quill with neither fails to render as `typst::plate_missing`.
+
 ## Typst Version
 
 Plates compile against Typst 0.15. `quillmark --version` names the exact release after its own version, and a plate reads the same value as `sys.version`.
