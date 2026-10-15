@@ -20,7 +20,7 @@ and a WASM trap rejects coded.
 
 - feat(core)!: **a blueprint's `$kind: main` line carries `main.title` and
   `main.description` alone**, where it fell back to `quill.description`, which
-  describes the package and never reaches the blueprint. (#2215)
+  describes the package and never reaches the blueprint. (#2222)
 
 ### Formats that grow
 
